@@ -194,7 +194,8 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   `magmaan_core$infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a
   DWLS/WLS ordinal fit to compute sandwich SEs and SB-family scaled statistics
   from the threshold-plus-polychoric `NACOV` and the selected DWLS/WLS weight
-  matrix.
+  matrix. For all-ordinal ULS/DWLS fits, `magmaan_core$robust_ordinal_ij`
+  adds the estimated diagonal-weight infinitesimal-jackknife covariance term.
 - Mixed robust reporting is explicit too:
   `magmaan_core$infer_mixed_ordinal_robust(fit, mixed_stats, weight = "")`.
   Mixed `NACOV`/weight and robust reporting parity is still looser than the

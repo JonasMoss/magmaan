@@ -3374,6 +3374,219 @@ robust_ordinal(spec::LatentStructure pt,
 }
 
 post_expected<OrdinalRobustResult>
+robust_ordinal_ij(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::OrdinalStats& stats,
+                  const Estimates& est,
+                  OrdinalWeightKind weights,
+                  OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (weights == OrdinalWeightKind::WLS) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: full-WLS weight influence not yet implemented "
+        "(ULS and DWLS only)"));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: per-case influence functions unavailable; recompute "
+        "ordinal stats (moment_influence is required for the IJ)"));
+  }
+  if (weights == OrdinalWeightKind::DWLS) {
+    if (stats.int_data.size() != stats.R.size()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij: complete integer data unavailable; recompute "
+          "ordinal stats with int_data to include the estimated-weight "
+          "influence"));
+    }
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const Eigen::Index p = stats.R[b].rows();
+      const Eigen::MatrixXi& Xcat = stats.int_data[b];
+      if (stats.n_levels[b].size() != static_cast<std::size_t>(p)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal_ij: n_levels length mismatch in block " +
+                std::to_string(b)));
+      }
+      if (Xcat.rows() != stats.n_obs[b] || Xcat.cols() != p) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal_ij: int_data shape mismatch in block " +
+                std::to_string(b)));
+      }
+      for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
+        for (Eigen::Index j = 0; j < Xcat.cols(); ++j) {
+          const int c = Xcat(r, j);
+          const int max_level =
+              stats.n_levels[b][static_cast<std::size_t>(j)];
+          if (c < 0 || c >= max_level) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "robust_ordinal_ij: int_data must contain complete 0-based "
+                "category codes in block " + std::to_string(b)));
+          }
+        }
+      }
+    }
+  }
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: fitted theta length does not match ordinal delta "
+        "partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: fitted evaluation failed: " + eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                              est.theta, parameterization);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: constraint reparameterization has incompatible shape"));
+  }
+
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                                                     : stats.W_dwls;
+
+  double N_total = 0.0;
+  for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
+
+  // Observed-Hessian bread A = H_α (same FD gradient as robust_ordinal).
+  auto grad_at = [&](const Eigen::VectorXd& theta)
+      -> post_expected<Eigen::VectorXd> {
+    auto ev_t = ev_or->evaluate(theta, true, false);
+    if (!ev_t.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij observed bread: evaluation failed: " +
+          ev_t.error().detail));
+    }
+    const Eigen::MatrixXd Delta = ordinal_moment_jacobian(
+        stats, *layout_or, ev_t->moments, ev_t->J_sigma, theta, parameterization);
+    Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+    Eigen::Index goff = 0;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const Eigen::Index p = stats.R[b].rows();
+      const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
+      const Eigen::VectorXd d_b = ordinal_block_residual(
+          stats, *layout_or, ev_t->moments, theta, parameterization, b);
+      const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
+      g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
+                            Ws[b] * d_b);
+      goff += mb;
+    }
+    if (!g.allFinite()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij observed bread: non-finite gradient"));
+    }
+    return g;
+  };
+  auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
+
+  // IJ meat: Σ_b (Δ_b K)ᵀ S_b (Δ_b K), S_b = Σ_i v_i v_iᵀ = VᵀV.
+  //   row_i(V) = g_iᵀ W_b + corr_iᵀ,  corr_{i,k} = d_{b,k}·(g_{i,k}² − Γ̂_kk)/Γ̂_kk²
+  // The corr term is the influence of Ŵ = diag(Γ̂)⁻¹ (Γ̂ = NACOV, the empirical
+  // covariance of the per-case influence functions g_i). ULS ⇒ W = I, corr = 0.
+  // Channel-1 (V = G·W_b) reproduces the observed-bread sandwich exactly.
+  const Eigen::Index n_alpha = K.cols();
+  Eigen::MatrixXd meat = Eigen::MatrixXd::Zero(n_alpha, n_alpha);
+  Eigen::Index off = 0;
+  Eigen::Index total_rows = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
+    const Eigen::MatrixXd& G = stats.moment_influence[b];   // n_b × mb
+    if (G.cols() != mb || G.rows() != stats.n_obs[b]) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij: moment_influence shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::VectorXd d_b = ordinal_block_residual(
+        stats, *layout_or, eval->moments, est.theta, parameterization, b);
+    Eigen::MatrixXd V = G * Ws[b];                           // n_b × mb
+    if (weights == OrdinalWeightKind::DWLS) {
+      // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
+      // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
+      // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
+      // data; DWLS was validated above to have complete 0-based integer data.
+      Eigen::MatrixXd IFG;  // n_b × mb: data-direct IF of Γ̂_kk (V̂ + Â variation)
+      Eigen::MatrixXd GD;   // n_b × mb: κ-movement IF of Γ̂_kk (FD of Γ̂ over κ)
+      auto inf_or = data::ordinal_gamma_diag_data_influence(
+          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+      IFG = std::move(*inf_or);
+      auto D_or = data::ordinal_gamma_diag_jacobian_fd(
+          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      if (!D_or.has_value()) return std::unexpected(D_or.error());
+      GD.noalias() = G * D_or->transpose();
+      for (Eigen::Index k = 0; k < mb; ++k) {
+        const double gkk = stats.NACOV[b](k, k);
+        if (!(gkk > 0.0)) continue;
+        const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
+        V.col(k) += (d_b(k) / (gkk * gkk)) * if_k;
+      }
+    }
+    const Eigen::MatrixXd S = V.transpose() * V;             // mb × mb
+    const Eigen::MatrixXd DbK =
+        Delta_full.block(off, 0, mb, Delta_full.cols()) * K; // mb × n_alpha
+    meat.noalias() += DbK.transpose() * S * DbK;
+    off += mb;
+    total_rows += mb;
+  }
+  meat = 0.5 * (meat + meat.transpose()).eval();
+
+  Eigen::LLT<Eigen::MatrixXd> llt(A);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: observed-Hessian bread is not positive definite"));
+  }
+  const Eigen::MatrixXd A_inv =
+      llt.solve(Eigen::MatrixXd::Identity(n_alpha, n_alpha));
+  Eigen::MatrixXd V_alpha = (A_inv * meat * A_inv) / (N_total * N_total);
+  V_alpha = 0.5 * (V_alpha + V_alpha.transpose()).eval();
+
+  OrdinalRobustResult out;
+  out.vcov = K * V_alpha * K.transpose();
+  out.vcov = 0.5 * (out.vcov + out.vcov.transpose()).eval();
+  out.se.resize(out.vcov.rows());
+  const double diag_tol =
+      1e-12 * std::max<double>(1.0, out.vcov.cwiseAbs().maxCoeff());
+  for (Eigen::Index i = 0; i < out.se.size(); ++i) {
+    const double v = out.vcov(i, i);
+    out.se(i) = v >= -diag_tol ? std::sqrt(std::max(0.0, v))
+                               : std::numeric_limits<double>::quiet_NaN();
+  }
+  out.chisq_standard = N_total * 2.0 * est.fmin;
+  out.df = static_cast<int>(total_rows - n_alpha);
+  return out;
+}
+
+post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
                const data::OrdinalMoments& moments,

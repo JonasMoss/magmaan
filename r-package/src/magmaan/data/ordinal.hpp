@@ -28,6 +28,27 @@ struct OrdinalStats {
   std::vector<std::vector<std::int32_t>> n_levels;
   std::vector<std::vector<std::string>> ov_names;
 
+  // Per-case stage-1 influence functions g_i (rows) of the moment vector
+  // κ̂ = [thresholds; polychorics], one n_b × m_b matrix per block. Their
+  // empirical covariance is the NACOV: (1/n_b)·Σ_i g_i g_iᵀ = NACOV[b]. Carried
+  // for the infinitesimal-jackknife sandwich (`robust_ordinal_ij`), which needs
+  // the influence of the estimated weight Ŵ = diag(NACOV)⁻¹ -- a quantity the
+  // fixed-weight observed-bread sandwich omits. Empty when not computed.
+  std::vector<Eigen::MatrixXd> moment_influence;
+
+  // 0-based integer category data (n_b × p), one matrix per block, -1 for
+  // missing. Carried so the IJ can finite-difference ∂Γ̂/∂κ (the "bread" piece of
+  // the weight influence): perturb thresholds/polychorics κ and recompute NACOV
+  // from this data via `ordinal_gamma_diag_jacobian_fd`. Empty when not computed.
+  std::vector<Eigen::MatrixXi> int_data;
+
+  // Stage-1 estimating-equation Jacobian inverse B_inv (m × m, one per block):
+  // Â⁻¹ = N·B_inv with Â the score-Jacobian, so the per-case scores recover as
+  // s_i = N⁻¹·B_inv⁻¹·g_i (g_i = moment_influence row). Carried for the IJ's
+  // Â-direct ("score-Jacobian variation") channel of the weight influence. Empty
+  // when not computed.
+  std::vector<Eigen::MatrixXd> moment_bread;
+
   // Optional pairwise-deletion diagnostics. Empty for ordinary complete/listwise
   // stats. Supports are 0-based variable indices; singleton rows are thresholds,
   // pair rows are polychorics.
@@ -266,6 +287,35 @@ ordinal_stats_from_observed_integer_data(
     const std::vector<Eigen::MatrixXd>& X,
     OrdinalPairwiseGammaKind gamma_kind = OrdinalPairwiseGammaKind::Overlap,
     bool full_wls_weight = true);
+
+// Finite-difference Jacobian D(k,l) = ∂NACOV_kk/∂κ_l of the polychoric NACOV
+// diagonal with respect to the stage-1 moments κ = [thresholds; polychorics],
+// at fixed integer data `Xcat` (0-based, n × p). This is the "bread" channel of
+// the estimated-weight influence the infinitesimal jackknife needs: perturbing
+// κ and recomputing the empirical sandwich Γ̂ = n·B_inv·INNER·B_inv'. `levels`
+// is the per-variable category count; `thresholds` is the stacked threshold
+// vector (matching NACOV's leading block); `R` the p × p polychoric matrix.
+// Returns an m × m matrix (m = #thresholds + p(p-1)/2). Complete data only.
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
+                               const std::vector<std::int32_t>& levels,
+                               const Eigen::VectorXd& thresholds,
+                               const Eigen::MatrixXd& R,
+                               double h_rel = 1e-4);
+
+// Per-case DATA-DIRECT influence of the NACOV diagonal: row i, col k is
+// IF_i(NACOV_kk) holding κ fixed -- the full sandwich influence of
+// Γ̂ = Â⁻¹V̂Â⁻¹ at case i (V̂-direct + Â-direct, i.e. score-product AND
+// score-Jacobian variation). Recomputes the per-case scores from `Xcat` at κ
+// (marginal threshold scores for the Â₁₁ block, bivariate pair scores for the
+// Â₂₁ coupling), so it captures what the influence functions alone cannot.
+// Returns n × m. Pair with `ordinal_gamma_diag_jacobian_fd` (the κ-movement
+// channel) for the complete IF of Γ̂. Complete data only.
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_diag_data_influence(const Eigen::MatrixXi& Xcat,
+                                  const std::vector<std::int32_t>& levels,
+                                  const Eigen::VectorXd& thresholds,
+                                  const Eigen::MatrixXd& R);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an

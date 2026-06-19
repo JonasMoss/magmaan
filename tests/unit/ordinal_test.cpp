@@ -15,6 +15,7 @@
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
+#include <Eigen/LU>
 
 #include "magmaan/data/h_score.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -156,6 +157,131 @@ Eigen::MatrixXd ordinal_data_from_pair_counts(const Eigen::MatrixXd& counts) {
     }
   }
   return out;
+}
+
+double std_normal_cdf(double x) noexcept {
+  if (x == std::numeric_limits<double>::infinity()) return 1.0;
+  if (x == -std::numeric_limits<double>::infinity()) return 0.0;
+  return 0.5 * std::erfc(-x / std::sqrt(2.0));
+}
+
+double std_normal_pdf(double x) noexcept {
+  if (!std::isfinite(x)) return 0.0;
+  constexpr double inv_sqrt_2pi = 0.39894228040143267794;
+  return inv_sqrt_2pi * std::exp(-0.5 * x * x);
+}
+
+struct GammaDiagInfluenceProbe {
+  Eigen::MatrixXd SC;
+  Eigen::MatrixXd B;
+  Eigen::MatrixXd Gamma;
+  std::vector<Eigen::MatrixXd> b_case;
+};
+
+GammaDiagInfluenceProbe gamma_diag_influence_probe_2var(
+    const Eigen::MatrixXi& Xcat,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R) {
+  REQUIRE(Xcat.cols() == 2);
+  REQUIRE(levels.size() == 2);
+  const Eigen::Index n = Xcat.rows();
+  Eigen::Index nth = 0;
+  std::array<Eigen::Index, 2> th_start{};
+  std::array<Eigen::Index, 2> th_len{};
+  std::array<Eigen::VectorXd, 2> th_by_var;
+  for (Eigen::Index j = 0; j < 2; ++j) {
+    th_start[static_cast<std::size_t>(j)] = nth;
+    th_len[static_cast<std::size_t>(j)] =
+        static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+    th_by_var[static_cast<std::size_t>(j)] =
+        thresholds.segment(nth, th_len[static_cast<std::size_t>(j)]);
+    nth += th_len[static_cast<std::size_t>(j)];
+  }
+  const Eigen::Index mdim = nth + 1;
+
+  Eigen::MatrixXd SC_TH = Eigen::MatrixXd::Zero(n, nth);
+  constexpr double prob_floor = 1.4901161193847656e-8;
+  const double inf = std::numeric_limits<double>::infinity();
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index j = 0; j < 2; ++j) {
+      const int c = Xcat(r, j);
+      const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+      const double lo = (c == 0) ? -inf : thj(c - 1);
+      const double hi = (c == thj.size()) ? inf : thj(c);
+      const double pr = std::max(prob_floor, std_normal_cdf(hi) - std_normal_cdf(lo));
+      const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+      if (c < thj.size()) SC_TH(r, base + c) += std_normal_pdf(thj(c)) / pr;
+      if (c > 0) SC_TH(r, base + c - 1) -= std_normal_pdf(thj(c - 1)) / pr;
+    }
+  }
+
+  auto ps = magmaan::data::ordinal_pair_scores(
+      Xcat.col(1), Xcat.col(0), R(1, 0), th_by_var[1], th_by_var[0]);
+  REQUIRE(ps.has_value());
+
+  Eigen::MatrixXd SC(n, mdim);
+  SC.leftCols(nth) = SC_TH;
+  SC.col(nth) = ps->rho;
+  const Eigen::MatrixXd INNER = SC.transpose() * SC;
+
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(mdim, mdim);
+  const Eigen::MatrixXd INNER_TH = SC_TH.transpose() * SC_TH;
+  for (Eigen::Index j = 0; j < 2; ++j) {
+    const Eigen::Index s = th_start[static_cast<std::size_t>(j)];
+    const Eigen::Index l = th_len[static_cast<std::size_t>(j)];
+    B.block(s, s, l, l) = INNER_TH.block(s, s, l, l);
+  }
+  B.block(nth, th_start[1], 1, th_len[1]) =
+      ps->rho.transpose() * ps->threshold_i;
+  B.block(nth, th_start[0], 1, th_len[0]) =
+      ps->rho.transpose() * ps->threshold_j;
+  B(nth, nth) = ps->rho.squaredNorm();
+
+  const Eigen::MatrixXd B_inv = B.inverse();
+  GammaDiagInfluenceProbe out;
+  out.SC = SC;
+  out.B = B;
+  out.Gamma = static_cast<double>(n) * B_inv * INNER * B_inv.transpose();
+  out.Gamma = 0.5 * (out.Gamma + out.Gamma.transpose()).eval();
+  out.b_case.reserve(static_cast<std::size_t>(n));
+
+  const Eigen::MatrixXd pair_a21_i = ps->rho.asDiagonal() * ps->threshold_i;
+  const Eigen::MatrixXd pair_a21_j = ps->rho.asDiagonal() * ps->threshold_j;
+  for (Eigen::Index r = 0; r < n; ++r) {
+    Eigen::MatrixXd bi = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index j = 0; j < 2; ++j) {
+      const Eigen::Index s = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index l = th_len[static_cast<std::size_t>(j)];
+      const Eigen::VectorXd sv = SC_TH.row(r).segment(s, l).transpose();
+      bi.block(s, s, l, l) = sv * sv.transpose();
+    }
+    bi(nth, nth) = ps->rho(r) * ps->rho(r);
+    bi.block(nth, th_start[1], 1, th_len[1]) = pair_a21_i.row(r);
+    bi.block(nth, th_start[0], 1, th_len[0]) = pair_a21_j.row(r);
+    out.b_case.push_back(std::move(bi));
+  }
+  return out;
+}
+
+Eigen::VectorXd finite_diff_gamma_diag_case_influence(
+    const GammaDiagInfluenceProbe& probe,
+    Eigen::Index row,
+    double eps = 1e-6) {
+  const Eigen::Index n = probe.SC.rows();
+  const Eigen::MatrixXd A = probe.B / static_cast<double>(n);
+  const Eigen::MatrixXd V =
+      (probe.SC.transpose() * probe.SC) / static_cast<double>(n);
+  const Eigen::MatrixXd A_inv = A.inverse();
+  const Eigen::MatrixXd Gamma = A_inv * V * A_inv.transpose();
+  const Eigen::VectorXd s_i = probe.SC.row(row).transpose();
+  const Eigen::MatrixXd A_eps =
+      A + eps * (probe.b_case[static_cast<std::size_t>(row)] - A);
+  const Eigen::MatrixXd V_eps = V + eps * (s_i * s_i.transpose() - V);
+  const Eigen::MatrixXd A_eps_inv = A_eps.inverse();
+  const Eigen::MatrixXd Gamma_eps =
+      A_eps_inv * V_eps * A_eps_inv.transpose();
+  return (Gamma_eps.diagonal() - Gamma.diagonal()) / eps;
 }
 
 double symmetric_condition_number(const Eigen::MatrixXd& x) {
@@ -2512,6 +2638,57 @@ TEST_CASE("Observed ordinal stats degenerate to complete-data ordinal stats") {
   CHECK(observed->NACOV[0].isApprox(complete->NACOV[0], 1e-10));
   CHECK(observed->W_dwls[0].isApprox(complete->W_dwls[0], 1e-10));
   CHECK(observed->pairwise_gamma == "overlap");
+}
+
+TEST_CASE("ordinal_gamma_diag_data_influence matches case-weight finite differences") {
+  Eigen::MatrixXd counts(3, 3);
+  counts << 11, 7, 5,
+             6, 14, 9,
+             4, 10, 12;
+  const Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  Eigen::MatrixXi Xcat = (X.cast<int>().array() - 1).matrix();
+
+  auto IFG = magmaan::data::ordinal_gamma_diag_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(IFG.has_value());
+  auto probe = gamma_diag_influence_probe_2var(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  CHECK((probe.Gamma - stats->NACOV[0]).cwiseAbs().maxCoeff() < 1e-8);
+
+  double max_abs = 0.0;
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const Eigen::VectorXd fd = finite_diff_gamma_diag_case_influence(probe, i);
+    max_abs = std::max(
+        max_abs, (IFG->row(i).transpose() - fd).cwiseAbs().maxCoeff());
+  }
+  const double scale = 1.0 + IFG->cwiseAbs().maxCoeff();
+  CHECK(max_abs < 5e-5 * scale);
+}
+
+TEST_CASE("robust_ordinal_ij rejects DWLS stats without complete integer data") {
+  Eigen::MatrixXd counts(3, 3);
+  counts << 11, 7, 5,
+             6, 14, 9,
+             4, 10, 12;
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(
+      {ordinal_data_from_pair_counts(counts)});
+  REQUIRE(stats.has_value());
+  stats->int_data.clear();
+
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  magmaan::estimate::Estimates est;
+  auto r = magmaan::estimate::robust_ordinal_ij(
+      *pt, *mr, *stats, est, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_FALSE(r.has_value());
+  CHECK(r.error().detail.find("int_data") != std::string::npos);
 }
 
 TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma variant") {

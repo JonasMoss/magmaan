@@ -3393,6 +3393,40 @@ robust_ordinal_ij(spec::LatentStructure pt,
         "robust_ordinal_ij: per-case influence functions unavailable; recompute "
         "ordinal stats (moment_influence is required for the IJ)"));
   }
+  if (weights == OrdinalWeightKind::DWLS) {
+    if (stats.int_data.size() != stats.R.size()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij: complete integer data unavailable; recompute "
+          "ordinal stats with int_data to include the estimated-weight "
+          "influence"));
+    }
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const Eigen::Index p = stats.R[b].rows();
+      const Eigen::MatrixXi& Xcat = stats.int_data[b];
+      if (stats.n_levels[b].size() != static_cast<std::size_t>(p)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal_ij: n_levels length mismatch in block " +
+                std::to_string(b)));
+      }
+      if (Xcat.rows() != stats.n_obs[b] || Xcat.cols() != p) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal_ij: int_data shape mismatch in block " +
+                std::to_string(b)));
+      }
+      for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
+        for (Eigen::Index j = 0; j < Xcat.cols(); ++j) {
+          const int c = Xcat(r, j);
+          const int max_level =
+              stats.n_levels[b][static_cast<std::size_t>(j)];
+          if (c < 0 || c >= max_level) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "robust_ordinal_ij: int_data must contain complete 0-based "
+                "category codes in block " + std::to_string(b)));
+          }
+        }
+      }
+    }
+  }
   if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -3498,27 +3532,21 @@ robust_ordinal_ij(spec::LatentStructure pt,
       // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
       // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
       // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
-      // data; without it, fall back to the V̂-direct-only ("meat") influence.
+      // data; DWLS was validated above to have complete 0-based integer data.
       Eigen::MatrixXd IFG;  // n_b × mb: data-direct IF of Γ̂_kk (V̂ + Â variation)
       Eigen::MatrixXd GD;   // n_b × mb: κ-movement IF of Γ̂_kk (FD of Γ̂ over κ)
-      const bool have_data =
-          b < stats.int_data.size() && stats.int_data[b].rows() == G.rows();
-      if (have_data) {
-        auto inf_or = data::ordinal_gamma_diag_data_influence(
-            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
-        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-        IFG = std::move(*inf_or);
-        auto D_or = data::ordinal_gamma_diag_jacobian_fd(
-            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
-        if (!D_or.has_value()) return std::unexpected(D_or.error());
-        GD.noalias() = G * D_or->transpose();
-      }
+      auto inf_or = data::ordinal_gamma_diag_data_influence(
+          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+      IFG = std::move(*inf_or);
+      auto D_or = data::ordinal_gamma_diag_jacobian_fd(
+          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      if (!D_or.has_value()) return std::unexpected(D_or.error());
+      GD.noalias() = G * D_or->transpose();
       for (Eigen::Index k = 0; k < mb; ++k) {
         const double gkk = stats.NACOV[b](k, k);
         if (!(gkk > 0.0)) continue;
-        const Eigen::VectorXd if_k =
-            have_data ? (IFG.col(k) + GD.col(k)).eval()
-                      : (G.col(k).array().square() - gkk).matrix().eval();
+        const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
         V.col(k) += (d_b(k) / (gkk * gkk)) * if_k;
       }
     }
