@@ -241,52 +241,37 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   Follow-up landed 2026-06-19: complete all-ordinal ULS/DWLS now has
   `robust_ordinal_ij`, an explicit infinitesimal-jackknife covariance that carries
   the estimated diagonal-weight term. The data-direct Γ-diagonal channel is
-  regression-tested against case-weight finite differences. The reusable
-  `robust_weighted_moment_ij` primitive is now the shared transport for
-  observed-bread weighted-moment IJ covariance: callers provide per-case moment
-  influence rows plus optional per-case estimated-weight corrections. Full WLS,
-  mixed ordinal/polyserial, MCAR/pairwise-missing variants, and ML2S adapters
-  remain out of scope. Derivation and implementation grid:
+  regression-tested against case-weight finite differences. This is the
+  Hall-Inoue estimated-weight correction for misspecified moment-GMM, specialized
+  to the moment-quadratic SEM stack. The reusable `robust_weighted_moment_ij`
+  primitive is now the shared transport for observed-bread weighted-moment IJ
+  covariance: callers provide per-case moment influence rows plus optional
+  per-case estimated-weight corrections. Full WLS, mixed ordinal/polyserial,
+  MCAR/pairwise-missing variants, and ML2S adapters remain out of scope.
+  Derivation and implementation grid:
   `docs/research/notes/weighted_moment_ij_grid.tex`.
   Open follow-ups:
-  - **Estimator-grid expansion for estimated-weight IJ.** Implement in small
-    verified slices, all using the note's four gates: fixed-weight reduction to
-    `robust_weighted_moments`, derivative checks for each new weight-influence
-    channel, resampling-jackknife agreement on deterministic fixtures, and a
-    misspecification simulation with ULS/fixed-weight negative controls.
-    1. Complete continuous LS: expose the ULS/fixed-weight IJ reduction first,
-       then use raw mean/covariance moment influence to validate GLS/NT,
-       DWLS/WLS, and DLS estimated-weight formulas.
-    2. Complete mixed ordinal/polyserial: add casewise mixed moment influence in
-       the exact mixed moment order; gate ULS first, then diagonal estimated
-       weights for polyserial rows, then full WLS.
-    3. Complete all-ordinal full WLS: generalize the current diagonal
-       `robust_ordinal_ij` path from `diag(IF(Gamma))` to full `IF(Gamma)`,
-       with diagonal extraction required to reproduce DWLS.
-    4. ML2S: add casewise saturated-EM moment influence and route
-       `TwoStageWeight::{Nt,Dwls,Adf,Dls}` through the same formulas; the NT
-       weight still has a derivative when it is built from saturated sample
-       moments.
-    5. MCAR/pairwise-missing ordinal and polyserial: design a case-aligned sparse
-       moment-row primitive with per-moment support scaling before coding; the
-       current disjoint-block IJ primitive is not enough for overlapping
-       pairwise supports.
+  - **Hall-Inoue estimated-weight IJ grid** (`weighted_moment_ij_grid.tex`).
+    Verification gates for every adapter: fixed-weight reduction to
+    `robust_weighted_moments`; derivative checks for each new weight-influence
+    channel; deterministic resampling-jackknife fixture; misspecification
+    simulation with ULS/fixed-weight negative controls. Slices: complete
+    continuous LS (ULS/fixed first, then raw mean/cov GLS/NT, DWLS/WLS, DLS);
+    complete mixed ordinal/polyserial (mixed casewise moment influence, ULS,
+    diagonal polyserial weights, full WLS); complete all-ordinal full WLS (full
+    `IF(Gamma)`, diagonal extraction must reproduce DWLS); ML2S (observed-bread
+    regime first, then casewise saturated-EM influence for
+    `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
+    continuous LS); MCAR/pairwise-missing
+    ordinal/polyserial (design case-aligned sparse moment-row primitive with
+    per-moment support scaling before coding).
   - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai
     Eq 36 / its mixed analogue; FD becomes the validation gate). Also removes the
     per-resample-SE cost that makes the studentized bootstrap expensive.
-  - **Two-stage FIML (ML2S)**: also two-stage, so its robust SE likely uses the
-    Gauss-Newton/expected Stage-2 bread -- give it the observed-bread regime too.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
     misspecified-model FIML cell in exp 35.
-  - **ULS-vs-DWLS finite-sample probe (CONFIRMED 2026-06-19)**: on a structural
-    `f3~f1` parameter, the DWLS observed-bread SE/empirical-SD ratio plateaus at
-    ~0.945 and does NOT improve with n (0.944 at N=2500, 0.946 at N=25000), while
-    ULS is ~1.0 at every n. So the DWLS gap does not vanish -- it is the omitted
-    leading-order weight term `~Wd'(u)*eps` (zero under the null, O(1) under
-    misspec); ULS (W=I fixed) has none. Resolves Lai's "unclear whether it
-    vanishes": for DWLS it doesn't. (Not yet a tracked script -- /tmp only.)
   - **(Research / "insanely cool") explicit second-order corrections**: Edgeworth /
     Cornish-Fisher / saddlepoint / Nagar variance expansion for the two-stage
     ordinal estimator. All need the same hard ingredient -- the third cumulants of
