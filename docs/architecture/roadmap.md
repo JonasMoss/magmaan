@@ -1327,9 +1327,12 @@ stop rather than any usable non-error return.
   infinitesimal-jackknife covariance from casewise moment rows plus optional
   estimated-weight influence corrections; scaled-test corrections remain
   estimator-specific. Complete continuous LS now has
-  `robust_continuous_ls_fixed_weight_ij`, the first non-ordinal adapter, which
-  treats the supplied second-stage weight as fixed and reduces to the
-  observed-bread sandwich for ULS and caller-fixed weights.
+  `robust_continuous_ls_fixed_weight_ij`, which treats the supplied
+  second-stage weight as fixed and reduces to the observed-bread sandwich for
+  ULS and caller-fixed weights, plus `robust_continuous_ls_gls_ij`, which adds
+  the Hall-Inoue correction for the sample-built normal-theory GLS weight
+  (`gmm::normal_theory_weight`). This GLS item is separate from the ML/FIML
+  robust-score normal-theory path.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the
