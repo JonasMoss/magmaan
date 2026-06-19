@@ -83,6 +83,13 @@ struct MixedOrdinalStats {
   // block. Their empirical covariance is the NACOV:
   // (1/n_b)·Σ_i g_i g_iᵀ = NACOV[b]. Empty when not computed.
   std::vector<Eigen::MatrixXd> moment_influence;
+
+  // Complete raw data blocks used to reconstruct the estimated-weight
+  // influence for mixed DWLS IJ. Ordinal columns are 1-based categories and
+  // continuous columns are the original finite values. Empty for moment-only
+  // adapters and robust/experimental mixed moment builders whose Gamma
+  // influence is not the ordinary ML/polyserial one.
+  std::vector<Eigen::MatrixXd> raw_data;
 };
 
 // Observed all-ordinal moment metadata without Gamma/NACOV or fit weights.
@@ -343,6 +350,31 @@ ordinal_gamma_data_influence(const Eigen::MatrixXi& Xcat,
                              const std::vector<std::int32_t>& levels,
                              const Eigen::VectorXd& thresholds,
                              const Eigen::MatrixXd& R);
+
+// Mixed continuous/ordinal analogue of `ordinal_gamma_diag_jacobian_fd`.
+// The differentiated moment order is MixedOrdinalStats::moments:
+// [thresholds; -continuous means; continuous variances; associations]. Complete
+// ordinary ML/polyserial data only.
+post_expected<Eigen::MatrixXd>
+mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
+                             const std::vector<std::int32_t>& ordered,
+                             const std::vector<std::int32_t>& levels,
+                             const Eigen::VectorXd& thresholds,
+                             const Eigen::VectorXd& mean,
+                             const Eigen::MatrixXd& R,
+                             double h_rel = 1e-4);
+
+// Per-case DATA-DIRECT influence of the mixed NACOV diagonal at fixed mixed
+// kappa. Pair with `mixed_gamma_diag_jacobian_fd` and
+// MixedOrdinalStats::moment_influence to form the complete estimated-weight
+// influence for mixed DWLS IJ.
+post_expected<Eigen::MatrixXd>
+mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
+                                const std::vector<std::int32_t>& ordered,
+                                const std::vector<std::int32_t>& levels,
+                                const Eigen::VectorXd& thresholds,
+                                const Eigen::VectorXd& mean,
+                                const Eigen::MatrixXd& R);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an

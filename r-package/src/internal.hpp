@@ -835,8 +835,20 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
       thl(x["thresholds"]), ovl(x["threshold_ov"]), levl(x["threshold_level"]),
       moml(x["moments"]), NAl(x["NACOV"]), Wdl(x["W_dwls"]),
       Wfl(x["W_wls"]), nlevl(x["n_levels"]);
+  const bool has_mi = x.containsElementNamed("moment_influence");
+  const bool has_raw = x.containsElementNamed("raw_data");
+  Rcpp::List mil = has_mi ? Rcpp::List(x["moment_influence"]) : Rcpp::List();
+  Rcpp::List rawl = has_raw ? Rcpp::List(x["raw_data"]) : Rcpp::List();
   Rcpp::IntegerVector nobs(x["nobs"]);
   const R_xlen_t nb = Rl.size();
+  if (has_mi && mil.size() != nb) {
+    Rcpp::stop("magmaan: %s$moment_influence has length %d but R has length %d",
+               what, static_cast<int>(mil.size()), static_cast<int>(nb));
+  }
+  if (has_raw && rawl.size() != nb) {
+    Rcpp::stop("magmaan: %s$raw_data has length %d but R has length %d",
+               what, static_cast<int>(rawl.size()), static_cast<int>(nb));
+  }
   magmaan::data::MixedOrdinalStats out;
   out.R.reserve(static_cast<std::size_t>(nb));
   out.mean.reserve(static_cast<std::size_t>(nb));
@@ -850,6 +862,8 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
   out.W_wls.reserve(static_cast<std::size_t>(nb));
   out.n_obs.reserve(static_cast<std::size_t>(nb));
   out.n_levels.reserve(static_cast<std::size_t>(nb));
+  if (has_mi) out.moment_influence.reserve(static_cast<std::size_t>(nb));
+  if (has_raw) out.raw_data.reserve(static_cast<std::size_t>(nb));
   for (R_xlen_t b = 0; b < nb; ++b) {
     out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
     out.mean.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(meanl[b])));
@@ -871,6 +885,14 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
     out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
     out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
+    if (has_mi) {
+      out.moment_influence.push_back(
+          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mil[b])));
+    }
+    if (has_raw) {
+      out.raw_data.push_back(
+          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(rawl[b])));
+    }
   }
   return out;
 }

@@ -304,6 +304,290 @@ Eigen::MatrixXd finite_diff_gamma_case_influence(
   return (Gamma_eps - Gamma) / eps;
 }
 
+struct MixedGammaDiagInfluenceProbe {
+  Eigen::MatrixXd SC;
+  Eigen::MatrixXd B;
+  Eigen::MatrixXd H;
+  Eigen::MatrixXd Gamma;
+  std::vector<Eigen::MatrixXd> b_case;
+};
+
+MixedGammaDiagInfluenceProbe mixed_gamma_diag_influence_probe(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R) {
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  Eigen::Index nth = 0;
+  Eigen::Index n_cont = 0;
+  std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), -1);
+  std::vector<Eigen::Index> th_len(static_cast<std::size_t>(p), 0);
+  std::vector<Eigen::Index> cont_pos(static_cast<std::size_t>(p), -1);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] != 0) {
+      th_start[static_cast<std::size_t>(j)] = nth;
+      th_len[static_cast<std::size_t>(j)] =
+          static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+      nth += th_len[static_cast<std::size_t>(j)];
+    } else {
+      cont_pos[static_cast<std::size_t>(j)] = n_cont++;
+    }
+  }
+  const Eigen::Index s1 = nth + 2 * n_cont;
+  const Eigen::Index n_assoc = p * (p - 1) / 2;
+  const Eigen::Index mdim = s1 + n_assoc;
+
+  Eigen::MatrixXi Xcat = Eigen::MatrixXi::Constant(n, p, -1);
+  Eigen::MatrixXd U = Eigen::MatrixXd::Zero(n, p);
+  std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] != 0) {
+      th_by_var[static_cast<std::size_t>(j)] =
+          thresholds.segment(th_start[static_cast<std::size_t>(j)],
+                             th_len[static_cast<std::size_t>(j)]);
+      for (Eigen::Index r = 0; r < n; ++r) {
+        Xcat(r, j) = static_cast<int>(X(r, j)) - 1;
+      }
+    } else {
+      U.col(j) = (X.col(j).array() - mean(j)) / std::sqrt(R(j, j));
+    }
+  }
+
+  Eigen::MatrixXd SC1 = Eigen::MatrixXd::Zero(n, s1);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+      const int c = Xcat(r, j);
+      const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+      const double lo = (c == 0) ? -std::numeric_limits<double>::infinity()
+                                 : thj(c - 1);
+      const double hi = (c == thj.size())
+                            ? std::numeric_limits<double>::infinity()
+                            : thj(c);
+      const double pr =
+          std::max(1.4901161193847656e-8, std_normal_cdf(hi) - std_normal_cdf(lo));
+      const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+      if (c < thj.size()) SC1(r, base + c) += std_normal_pdf(thj(c)) / pr;
+      if (c > 0) SC1(r, base + c - 1) -= std_normal_pdf(thj(c - 1)) / pr;
+    }
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] != 0) continue;
+    const Eigen::Index cp = cont_pos[static_cast<std::size_t>(j)];
+    const double v = R(j, j);
+    SC1.col(nth + cp) = (X.col(j).array() - mean(j)) / v;
+    SC1.col(nth + n_cont + cp) =
+        ((X.col(j).array() - mean(j)).square() - v) / (2.0 * v * v);
+  }
+
+  const Eigen::MatrixXd INNER1 = SC1.transpose() * SC1;
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(mdim, mdim);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] != 0) {
+      const Eigen::Index s = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index l = th_len[static_cast<std::size_t>(j)];
+      B.block(s, s, l, l) = INNER1.block(s, s, l, l);
+    } else {
+      const Eigen::Index mu = nth + cont_pos[static_cast<std::size_t>(j)];
+      const Eigen::Index va =
+          nth + n_cont + cont_pos[static_cast<std::size_t>(j)];
+      B(mu, mu) = INNER1(mu, mu);
+      B(va, va) = INNER1(va, va);
+      B(mu, va) = B(va, mu) = INNER1(mu, va);
+    }
+  }
+
+  Eigen::MatrixXd SC_ASSOC = Eigen::MatrixXd::Zero(n, n_assoc);
+  std::vector<Eigen::MatrixXd> pair_a21_case;
+  pair_a21_case.reserve(static_cast<std::size_t>(n_assoc));
+  Eigen::Index assoc = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+      const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+      Eigen::MatrixXd a21_case = Eigen::MatrixXd::Zero(n, s1);
+      if (oi && oj) {
+        auto ps = magmaan::data::ordinal_pair_scores(
+            Xcat.col(i), Xcat.col(j), R(i, j),
+            th_by_var[static_cast<std::size_t>(i)],
+            th_by_var[static_cast<std::size_t>(j)]);
+        REQUIRE(ps.has_value());
+        SC_ASSOC.col(assoc) = ps->rho;
+        const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
+        const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
+        B.block(s1 + assoc, si, 1, ps->threshold_i.cols()) =
+            ps->rho.transpose() * ps->threshold_i;
+        B.block(s1 + assoc, sj, 1, ps->threshold_j.cols()) =
+            ps->rho.transpose() * ps->threshold_j;
+        a21_case.block(0, si, n, ps->threshold_i.cols()) =
+            ps->rho.asDiagonal() * ps->threshold_i;
+        a21_case.block(0, sj, n, ps->threshold_j.cols()) =
+            ps->rho.asDiagonal() * ps->threshold_j;
+      } else if (oi || oj) {
+        const Eigen::Index o = oi ? i : j;
+        const Eigen::Index c = oi ? j : i;
+        Eigen::VectorXi cat(n);
+        for (Eigen::Index r = 0; r < n; ++r) cat(r) = Xcat(r, o);
+        const double sd = std::sqrt(R(c, c));
+        const double rho = R(i, j) / sd;
+        auto ps = magmaan::data::polyserial_pair_scores(
+            cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)]);
+        REQUIRE(ps.has_value());
+        SC_ASSOC.col(assoc) = ps->rho;
+        const Eigen::Index so = th_start[static_cast<std::size_t>(o)];
+        const Eigen::Index mu = nth + cont_pos[static_cast<std::size_t>(c)];
+        const Eigen::Index va =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(c)];
+        B.block(s1 + assoc, so, 1, ps->thresholds.cols()) =
+            ps->rho.transpose() * ps->thresholds;
+        B(s1 + assoc, mu) = ps->rho.dot(ps->mu_unit) / sd;
+        B(s1 + assoc, va) = ps->rho.dot(ps->var_unit) / R(c, c);
+        a21_case.block(0, so, n, ps->thresholds.cols()) =
+            ps->rho.asDiagonal() * ps->thresholds;
+        a21_case.col(mu) =
+            (ps->rho.array() * ps->mu_unit.array() / sd).matrix();
+        a21_case.col(va) =
+            (ps->rho.array() * ps->var_unit.array() / R(c, c)).matrix();
+      } else {
+        auto sc = magmaan::data::continuous_pair_normal_scores(
+            X.col(i), X.col(j), mean(i), mean(j), R(i, i), R(j, j), R(i, j));
+        REQUIRE(sc.has_value());
+        const Eigen::MatrixXd& S = sc->score_contributions;
+        const double sdi = std::sqrt(R(i, i));
+        const double sdj = std::sqrt(R(j, j));
+        const double rho = R(i, j) / (sdi * sdj);
+        const Eigen::VectorXd s_rho = sdi * sdj * S.col(4);
+        SC_ASSOC.col(assoc) = s_rho;
+        const Eigen::Index mui = nth + cont_pos[static_cast<std::size_t>(i)];
+        const Eigen::Index muj = nth + cont_pos[static_cast<std::size_t>(j)];
+        const Eigen::Index vai =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(i)];
+        const Eigen::Index vaj =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(j)];
+        const Eigen::VectorXd ch_var_i =
+            S.col(2) + (rho * sdj / (2.0 * sdi)) * S.col(4);
+        const Eigen::VectorXd ch_var_j =
+            S.col(3) + (rho * sdi / (2.0 * sdj)) * S.col(4);
+        B(s1 + assoc, mui) = s_rho.dot(S.col(0));
+        B(s1 + assoc, muj) = s_rho.dot(S.col(1));
+        B(s1 + assoc, vai) = s_rho.dot(ch_var_i);
+        B(s1 + assoc, vaj) = s_rho.dot(ch_var_j);
+        a21_case.col(mui) = (s_rho.array() * S.col(0).array()).matrix();
+        a21_case.col(muj) = (s_rho.array() * S.col(1).array()).matrix();
+        a21_case.col(vai) = (s_rho.array() * ch_var_i.array()).matrix();
+        a21_case.col(vaj) = (s_rho.array() * ch_var_j.array()).matrix();
+      }
+      B(s1 + assoc, s1 + assoc) = SC_ASSOC.col(assoc).squaredNorm();
+      pair_a21_case.push_back(std::move(a21_case));
+      ++assoc;
+    }
+  }
+
+  Eigen::MatrixXd SC(n, mdim);
+  SC.leftCols(s1) = SC1;
+  SC.rightCols(n_assoc) = SC_ASSOC;
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(mdim, mdim);
+  Eigen::Index row = 0;
+  for (Eigen::Index k = 0; k < nth; ++k) H(row++, k) = 1.0;
+  for (Eigen::Index j = 0; j < p; ++j)
+    if (ordered[static_cast<std::size_t>(j)] == 0)
+      H(row++, nth + cont_pos[static_cast<std::size_t>(j)]) = -1.0;
+  for (Eigen::Index j = 0; j < p; ++j)
+    if (ordered[static_cast<std::size_t>(j)] == 0)
+      H(row++, nth + n_cont + cont_pos[static_cast<std::size_t>(j)]) = 1.0;
+  assoc = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+      const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+      if (oi && oj) {
+        H(row, s1 + assoc) = 1.0;
+      } else if (oi || oj) {
+        const Eigen::Index c = oi ? j : i;
+        const double sd = std::sqrt(R(c, c));
+        const double rho = R(i, j) / sd;
+        H(row, s1 + assoc) = sd;
+        H(row, nth + n_cont + cont_pos[static_cast<std::size_t>(c)]) =
+            rho / (2.0 * sd);
+      } else {
+        const double sdi = std::sqrt(R(i, i));
+        const double sdj = std::sqrt(R(j, j));
+        const double rho = R(i, j) / (sdi * sdj);
+        H(row, s1 + assoc) = sdi * sdj;
+        H(row, nth + n_cont + cont_pos[static_cast<std::size_t>(i)]) =
+            rho * sdj / (2.0 * sdi);
+        H(row, nth + n_cont + cont_pos[static_cast<std::size_t>(j)]) =
+            rho * sdi / (2.0 * sdj);
+      }
+      ++row;
+      ++assoc;
+    }
+  }
+
+  MixedGammaDiagInfluenceProbe out;
+  out.SC = std::move(SC);
+  out.B = std::move(B);
+  out.H = std::move(H);
+  const Eigen::MatrixXd B_inv = out.B.inverse();
+  out.Gamma = static_cast<double>(n) * out.H * B_inv *
+              (out.SC.transpose() * out.SC) * B_inv.transpose() *
+              out.H.transpose();
+  out.Gamma = 0.5 * (out.Gamma + out.Gamma.transpose()).eval();
+  out.b_case.reserve(static_cast<std::size_t>(n));
+  for (Eigen::Index r = 0; r < n; ++r) {
+    Eigen::MatrixXd bi = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[static_cast<std::size_t>(j)] != 0) {
+        const Eigen::Index s = th_start[static_cast<std::size_t>(j)];
+        const Eigen::Index l = th_len[static_cast<std::size_t>(j)];
+        const Eigen::VectorXd sv = out.SC.row(r).segment(s, l).transpose();
+        bi.block(s, s, l, l) = sv * sv.transpose();
+      } else {
+        const Eigen::Index mu = nth + cont_pos[static_cast<std::size_t>(j)];
+        const Eigen::Index va =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(j)];
+        bi(mu, mu) = out.SC(r, mu) * out.SC(r, mu);
+        bi(mu, va) = out.SC(r, mu) * out.SC(r, va);
+        bi(va, mu) = out.SC(r, va) * out.SC(r, mu);
+        bi(va, va) = out.SC(r, va) * out.SC(r, va);
+      }
+    }
+    for (Eigen::Index k = 0; k < n_assoc; ++k) {
+      bi(s1 + k, s1 + k) = out.SC(r, s1 + k) * out.SC(r, s1 + k);
+      bi.block(s1 + k, 0, 1, s1) =
+          pair_a21_case[static_cast<std::size_t>(k)].row(r);
+    }
+    out.b_case.push_back(std::move(bi));
+  }
+  return out;
+}
+
+Eigen::VectorXd finite_diff_mixed_gamma_diag_case_influence(
+    const MixedGammaDiagInfluenceProbe& probe,
+    Eigen::Index row,
+    double eps = 1e-6) {
+  const Eigen::Index n = probe.SC.rows();
+  const Eigen::MatrixXd A = probe.B / static_cast<double>(n);
+  const Eigen::MatrixXd V =
+      (probe.SC.transpose() * probe.SC) / static_cast<double>(n);
+  const Eigen::MatrixXd A_inv = A.inverse();
+  const Eigen::MatrixXd Gamma =
+      probe.H * A_inv * V * A_inv.transpose() * probe.H.transpose();
+  const Eigen::VectorXd s_i = probe.SC.row(row).transpose();
+  const Eigen::MatrixXd A_eps =
+      A + eps * (probe.b_case[static_cast<std::size_t>(row)] - A);
+  const Eigen::MatrixXd V_eps = V + eps * (s_i * s_i.transpose() - V);
+  const Eigen::MatrixXd A_eps_inv = A_eps.inverse();
+  const Eigen::MatrixXd Gamma_eps =
+      probe.H * A_eps_inv * V_eps * A_eps_inv.transpose() *
+      probe.H.transpose();
+  return (Gamma_eps.diagonal() - Gamma.diagonal()) / eps;
+}
+
 double symmetric_condition_number(const Eigen::MatrixXd& x) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (x + x.transpose()));
   if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
@@ -4711,6 +4995,8 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   REQUIRE(stats->moment_influence.size() == 1);
   CHECK(stats->moment_influence[0].rows() == X.rows());
   CHECK(stats->moment_influence[0].cols() == stats->moments[0].size());
+  REQUIRE(stats->raw_data.size() == 1);
+  CHECK(stats->raw_data[0].isApprox(X, 0.0));
   CHECK(((stats->moment_influence[0].transpose() *
           stats->moment_influence[0]) /
          static_cast<double>(X.rows()))
@@ -4749,7 +5035,61 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->se.allFinite());
 }
 
-TEST_CASE("robust_mixed_ordinal_ij ULS matches observed-bread fixed-weight sandwich") {
+TEST_CASE("mixed Gamma diagonal influence has mixed moment order and zero mean") {
+  std::mt19937 rng(20260622);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(360, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta + 0.35 * norm(rng) > -0.35) +
+              (eta + 0.35 * norm(rng) > 0.65);
+    X(i, 1) = 0.55 * eta + 0.84 * norm(rng) + 0.25;
+    X(i, 2) = 1.0 + (0.70 * eta + 0.70 * norm(rng) > 0.10);
+    X(i, 3) = 0.45 * eta + 0.90 * norm(rng) - 0.15;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 1, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->raw_data.size() == 1);
+  REQUIRE(stats->moment_influence.size() == 1);
+
+  auto IFG = magmaan::data::mixed_gamma_diag_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D = magmaan::data::mixed_gamma_diag_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  REQUIRE(IFG.has_value());
+  REQUIRE(D.has_value());
+  const Eigen::Index m = stats->moments[0].size();
+  CHECK(IFG->rows() == X.rows());
+  CHECK(IFG->cols() == m);
+  CHECK(D->rows() == m);
+  CHECK(D->cols() == m);
+  CHECK(IFG->allFinite());
+  CHECK(D->allFinite());
+  auto probe = mixed_gamma_diag_influence_probe(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  CHECK((probe.Gamma - stats->NACOV[0]).cwiseAbs().maxCoeff() < 1e-8);
+
+  double max_abs = 0.0;
+  for (Eigen::Index i = 0; i < X.rows(); i += 41) {
+    const Eigen::VectorXd fd =
+        finite_diff_mixed_gamma_diag_case_influence(probe, i);
+    max_abs = std::max(
+        max_abs, (IFG->row(i).transpose() - fd).cwiseAbs().maxCoeff());
+  }
+  CHECK(max_abs < 8e-5 * (1.0 + IFG->cwiseAbs().maxCoeff()));
+
+  const Eigen::MatrixXd full_if =
+      *IFG + stats->moment_influence[0] * D->transpose();
+  const double scale = 1.0 + full_if.cwiseAbs().maxCoeff();
+  CHECK(IFG->colwise().mean().norm() < 1e-8 * scale);
+  CHECK(full_if.colwise().mean().norm() < 1e-6 * scale);
+}
+
+TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS and DWLS") {
   std::mt19937 rng(20260621);
   std::normal_distribution<double> norm(0.0, 1.0);
   Eigen::MatrixXd X(520, 4);
@@ -4800,10 +5140,34 @@ TEST_CASE("robust_mixed_ordinal_ij ULS matches observed-bread fixed-weight sandw
   CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
 
+  auto dwls_fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(dwls_fit.has_value(),
+      "mixed DWLS fit failed: "
+          << (dwls_fit.has_value() ? "" : dwls_fit.error().detail));
   auto dwls = magmaan::estimate::robust_mixed_ordinal_ij(
-      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
-  REQUIRE_FALSE(dwls.has_value());
-  CHECK(dwls.error().detail.find("only fixed-weight ULS") != std::string::npos);
+      *pt, *mr, *stats, *dwls_fit,
+      magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(dwls.has_value(),
+      "mixed DWLS IJ failed: " << (dwls.has_value() ? "" : dwls.error().detail));
+  CHECK(dwls->df == fixed->df);
+  CHECK(dwls->vcov.allFinite());
+  CHECK(dwls->se.allFinite());
+
+  auto no_raw = *stats;
+  no_raw.raw_data.clear();
+  auto missing = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, no_raw, *dwls_fit,
+      magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_FALSE(missing.has_value());
+  CHECK(missing.error().detail.find("raw mixed data unavailable") !=
+        std::string::npos);
+
+  auto wls = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *dwls_fit,
+      magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_FALSE(wls.has_value());
+  CHECK(wls.error().detail.find("full WLS") != std::string::npos);
 }
 
 TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {

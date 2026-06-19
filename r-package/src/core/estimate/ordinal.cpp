@@ -3792,10 +3792,10 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
                         const Estimates& est,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization) {
-  if (weights != OrdinalWeightKind::ULS) {
+  if (weights == OrdinalWeightKind::WLS) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "robust_mixed_ordinal_ij: only fixed-weight ULS is implemented; "
-        "DWLS/WLS estimated-weight corrections require mixed IF(Gamma)"));
+        "robust_mixed_ordinal_ij: full WLS requires mixed full IF(Gamma); "
+        "only ULS and DWLS are implemented"));
   }
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
@@ -3805,6 +3805,13 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "robust_mixed_ordinal_ij: per-case influence functions unavailable; "
         "recompute mixed ordinal stats (moment_influence is required for the IJ)"));
+  }
+  if (weights == OrdinalWeightKind::DWLS &&
+      stats.raw_data.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_mixed_ordinal_ij: complete raw mixed data unavailable; "
+        "ordinary ML/polyserial mixed stats are required for DWLS estimated-"
+        "weight influence"));
   }
   if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
       !p.has_value()) {
@@ -3845,10 +3852,14 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
         "incompatible shape"));
   }
 
-  std::vector<Eigen::MatrixXd> Ws;
-  Ws.reserve(stats.NACOV.size());
-  for (const auto& G : stats.NACOV)
-    Ws.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                 : stats.W_dwls;
 
   double N_total = 0.0;
   for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
@@ -3897,11 +3908,39 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
           "robust_mixed_ordinal_ij: moment_influence shape mismatch in block " +
               std::to_string(b)));
     }
+    const Eigen::VectorXd model_m = mixed_model_moments(
+        stats, *layout_or, eval->moments, est.theta, b, parameterization);
+    const Eigen::VectorXd d_b = model_m - stats.moments[b];
+    Eigen::MatrixXd correction;
+    if (weights == OrdinalWeightKind::DWLS) {
+      auto inf_or = data::mixed_gamma_diag_data_influence(
+          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+      auto D_or = data::mixed_gamma_diag_jacobian_fd(
+          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!D_or.has_value()) return std::unexpected(D_or.error());
+      if (inf_or->rows() != G.rows() || inf_or->cols() != mb ||
+          D_or->rows() != mb || D_or->cols() != mb) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_mixed_ordinal_ij: mixed Gamma diagonal influence shape "
+            "mismatch in block " + std::to_string(b)));
+      }
+      const Eigen::MatrixXd GD = G * D_or->transpose();
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index k = 0; k < mb; ++k) {
+        const double gkk = stats.NACOV[b](k, k);
+        if (!(gkk > 0.0)) continue;
+        const Eigen::VectorXd if_k = (inf_or->col(k) + GD.col(k)).eval();
+        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
+      }
+    }
     ij_blocks.push_back(WeightedMomentIJBlock{
         .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
         .weight = Ws[b],
         .moment_influence = G,
-        .weight_correction = {},
+        .weight_correction = std::move(correction),
         .n_obs = stats.n_obs[b]});
     off += mb;
   }
