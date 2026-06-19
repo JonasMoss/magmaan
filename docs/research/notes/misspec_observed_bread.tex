@@ -5,7 +5,7 @@
 \usepackage{hyperref}
 
 \title{Misspecification-Robust Standard Errors for the Moment-Quadratic
-Estimators (Observed-Hessian Bread)}
+Estimators: Observed-Hessian Bread and the Infinitesimal Jackknife}
 \author{}
 \date{\today}
 
@@ -37,7 +37,7 @@ $\Delta_b = \partial\sigma_b/\partial\theta$, and $W_b$ the estimator weight. Th
 exact Hessian is
 \[
   H(\theta) = \sum_b \frac{n_b}{N}\Big[\,\Delta_b\T W_b \Delta_b
-  \;-\; \textstyle\sum_k (W_b d_b)_k\, \partial^2\sigma_{b,k}/\partial\theta\,\partial\theta\T\,\Big].
+  \;+\; \textstyle\sum_k (W_b d_b)_k\, \partial^2\sigma_{b,k}/\partial\theta\,\partial\theta\T\,\Big].
 \]
 The first term is the Gauss--Newton (``expected'') bread $A=\Delta\T W\Delta$ that
 the prevailing robust SE uses; the second is the residual-contracted curvature.
@@ -109,9 +109,86 @@ but the practitioner uses the \emph{sample}-weight $\hat\theta$ with
 $\hat W=\hat\Gamma_D^{-1}(u)$, whose influence carries an extra term
 $\propto \hat W'(u)\,\varepsilon$ -- zero under the null (so the SE vanishes
 there), but leading order under misspecification, and omitted by Lai's / our
-derivation. ULS ($W=I$, fixed) has no such term, so it is exact. The fix is that
-analytic weight term, or ULS, or a bootstrap that resamples $\hat W$ -- not more
-$n$. Edgeworth / infinitesimal-jackknife corrections remain optional extras.
+observed-bread derivation. ULS ($W=I$, fixed) has no such term, so it is exact.
+That analytic weight term is exactly the infinitesimal jackknife of the next
+section; it recovers the missing variability with no resampling and no more $n$.
+
+\section*{The infinitesimal jackknife: the estimated-weight influence}
+
+The observed bread fixes $A$ but still treats $\hat W=\operatorname{diag}(\hat\Gamma)^{-1}$
+as a constant. Under misspecification the estimation of $\hat W$ is leading order
+(the Hall \& Inoue 2003 phenomenon for misspecified GMM): the categorical
+estimator $\hat\theta$ depends on the data through both the stage-1 moments
+$\hat\kappa=(\text{thresholds},\text{polychorics})$ and their empirical
+covariance $\hat\Gamma$, and the standard sandwich meat propagates only the
+former. The complete variance is the infinitesimal jackknife
+\[
+  \operatorname{Var}(\hat\theta)=\frac1{N^2}\sum_i \mathrm{IF}_i\,\mathrm{IF}_i\T,
+  \qquad
+  \mathrm{IF}_i = -H^{-1}\Delta\T\big[\hat W g_i + \mathrm{corr}_i\big],
+\]
+where $g_i$ is the per-case influence function of $\hat\kappa$ (magmaan already
+forms it as $N\,\mathrm{SC}\,B^{-1\T}$, $B^{-1}$ the stage-1 estimating-equation
+Jacobian inverse). The first bracket term reproduces the observed-bread sandwich
+\emph{exactly}; in particular ULS, where $\hat W=I$ is constant and
+$\mathrm{corr}_i=0$, is machine-identical to it. The second is the weight
+influence, $\mathrm{corr}_{i,k} = d_k\,\mathrm{IF}_{i,k}(\hat\Gamma)/\hat\Gamma_{kk}^2$.
+
+\paragraph{Three channels.} $\hat\Gamma=\hat A^{-1}\hat V\hat A^{-1}$ is itself a
+sandwich ($\hat V$ the score cross-products, $\hat A$ the score Jacobian), so its
+influence has three pieces, not two:
+\begin{enumerate}\itemsep0pt
+\item $\hat V$-direct (score-product wobble),
+  $\hat A^{-1}(s_is_i\T-\hat V)\hat A^{-1}$, with diagonal $g_{i,k}^2-\hat\Gamma_{kk}$;
+\item $\hat A$-direct (score-Jacobian wobble),
+  $-\hat A^{-1}\delta\hat A_i\,\hat\Gamma-\hat\Gamma\,\delta\hat A_i\hat A^{-1}$,
+  $\delta\hat A_i=b_i-\hat A$ with $b_i$ the per-case Jacobian contribution;
+\item $\kappa$-movement ($\hat A,\hat V$ shift as $\hat\kappa$ shifts),
+  $(\partial\hat\Gamma/\partial\kappa)\,g_i$.
+\end{enumerate}
+The naive ``meat $+$ FD-bread'' split keeps (1) and (3) and drops (2); since (2)
+is negative here, that split overshoots (the SE ratio runs $1.03\!\to\!1.18$
+against a target of $\approx1.08$). Channels (1)$+$(2), the per-case data-direct
+sandwich influence, collapse to the closed diagonal
+\[
+  \mathrm{IF}_{i,k}(\hat\Gamma)^{\mathrm{data}}
+  = g_{i,k}^2 + \hat\Gamma_{kk}
+    - N\big[(B^{-1} b_i\hat\Gamma)_{kk} + (\hat\Gamma b_i B^{-1})_{kk}\big],
+\]
+which reduces to the $\hat V$-direct meat when $b_i\to\hat A=B/N$ (no per-case
+Jacobian variation), a useful sanity check.
+
+\paragraph{The structural catch.} $b_i$ is \emph{not} $\operatorname{mask}(s_is_i\T)$
+and is \emph{not} recoverable from the stored $g_i$, because the blocks of the
+two-stage Jacobian $B$ use different score functions: the threshold block
+$A_{11}$ uses the \emph{marginal} univariate threshold scores, the
+threshold-polychoric coupling $A_{21}$ uses the \emph{bivariate} pair scores, and
+$A_{22}$ the polychoric scores. So the data-direct channel recomputes all
+per-case scores from the integer data (reusing the polychoric pair-score routine)
+rather than reconstructing them. No third derivatives appear: $\hat A$ is the BHHH
+(outer-product) form, so $b_i$ is built from first-order scores, and
+$\partial\hat\Gamma/\partial\kappa$ in channel (3) is finite-differenced (perturb
+$\kappa$, recompute $\hat\Gamma$ from the integer data). The analytic
+$\partial\hat\Gamma/\partial\kappa$ (third derivatives of the bivariate
+polychoric likelihood) is a deferred optimization.
+
+\paragraph{Implementation.} \texttt{ordinal\_gamma\_diag\_data\_influence}
+(channels 1+2) and \texttt{ordinal\_gamma\_diag\_jacobian\_fd} (channel 3) live in
+\path{src/data/ordinal.cpp}; \texttt{robust\_ordinal\_ij}
+(\path{src/estimate/ordinal.cpp}) assembles $\mathrm{IF}_i$ and the sandwich.
+\texttt{OrdinalStats} now carries $g_i$ (\texttt{moment\_influence}), the integer
+data (\texttt{int\_data}), and $B^{-1}$ (\texttt{moment\_bread}), round-tripped
+through R; the surface is \texttt{robust\_ordinal\_ij}. DWLS only (ULS needs no
+correction; full WLS errors for now).
+
+\paragraph{Evidence.} Coverage referee on the exp-35 structural focal ($N=2500$,
+coverage of the pseudo-true value, nominal $0.95$): true sampling SD $0.0394$;
+observed-bread SE $0.0366$ (ratio $0.93$, coverage $0.927$); the IJ SE $0.0388$
+(ratio $0.985$, coverage $0.940$, best of the three); a delete-$d$ resampling
+jackknife $0.0395$ serving only as the yardstick. The IJ recovers the true SD
+analytically to $\sim1.5\%$, with no resampling. (150 replications, so the
+coverage spread is within one Monte-Carlo standard error; the SE-vs-SD column is
+the cleaner signal. One focal, one $N$, one misspecification.)
 
 \section*{Where this sits relative to other software}
 
@@ -123,5 +200,15 @@ only. So the correct-model cell of experiment 35 is the validation oracle (the
 observed bread must coincide with the expected one there); there is no external
 ordinal observed-bread SE to gate against. This is \texttt{frontier}, not
 core lavaan parity.
+
+The infinitesimal jackknife is further out still. Continuous MLR
+(\texttt{robust.huber.white}/Mplus MLR) is misspecification-robust partly because
+ML's weight $\Sigma(\theta)^{-1}$ is model-implied, not data-estimated, so it
+carries no weight-influence term. The categorical analogue, a
+misspecification-robust SE that accounts for the \emph{estimated} weight
+$\hat W=\operatorname{diag}(\hat\Gamma)^{-1}$, has no counterpart in mainstream
+software. Its only checks are internal: ULS is machine-identical to the observed
+bread (the weight is fixed there), and a resampling jackknife serves as a
+same-target yardstick.
 
 \end{document}
