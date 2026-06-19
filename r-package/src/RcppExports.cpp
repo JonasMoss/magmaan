@@ -1286,6 +1286,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_mixed_ordinal_lr_test_satorra2000
+Rcpp::List infer_mixed_ordinal_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List mixed_stats, double T_H1, int df_H1, double T_H0, int df_H0, std::string weight, std::string a_method);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP mixed_statsSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP weightSEXP, SEXP a_methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type T_H1(T_H1SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H1(df_H1SEXP);
+    Rcpp::traits::input_parameter< double >::type T_H0(T_H0SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H0(df_H0SEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type a_method(a_methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_lr_test_satorra2000(fit_H1, fit_H0, mixed_stats, T_H1, df_H1, T_H0, df_H0, weight, a_method));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_fiml_lr_test_satorra_bentler2001
 Rcpp::List infer_fiml_lr_test_satorra_bentler2001(Rcpp::List fit_H1, Rcpp::List fit_H0, double h_step);
 RcppExport SEXP _magmaan_infer_fiml_lr_test_satorra_bentler2001(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP h_stepSEXP) {
@@ -2543,6 +2562,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 6},
     {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 6},
     {"_magmaan_infer_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ordinal_lr_test_satorra2000, 9},
+    {"_magmaan_infer_mixed_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_mixed_ordinal_lr_test_satorra2000, 9},
     {"_magmaan_infer_fiml_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra_bentler2001, 3},
     {"_magmaan_infer_fiml_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra_bentler2010, 3},
     {"_magmaan_infer_ml2s_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra_bentler2001, 3},

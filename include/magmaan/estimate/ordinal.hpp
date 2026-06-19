@@ -151,6 +151,23 @@ lr_test_satorra2000_ordinal(
     robust::SatorraAMethod a_method = robust::SatorraAMethod::Exact,
     OrdinalParameterization parameterization = OrdinalParameterization::Delta);
 
+post_expected<robust::LRSatorra2000Result>
+lr_test_satorra2000_mixed_ordinal(
+    spec::LatentStructure pt_H1,
+    const model::MatrixRep& rep_H1,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est_H1,
+    spec::LatentStructure pt_H0,
+    const model::MatrixRep& rep_H0,
+    const Estimates& est_H0,
+    OrdinalWeightKind weights,
+    double T_H0,
+    double T_H1,
+    int df_H0,
+    int df_H1,
+    robust::SatorraAMethod a_method = robust::SatorraAMethod::Exact,
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
                              const model::MatrixRep& rep,

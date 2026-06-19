@@ -138,9 +138,40 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
          call. = FALSE)
   }
   if (mixed_ordinal_H1) {
-    stop("robust_nested_lrt(): mixed-ordinal nested tests are not implemented; ",
-         "use all-ordinal DWLS/WLS fits or complete-data/FIML fits.",
-         call. = FALSE)
+    if (!identical(method, "restriction_map")) {
+      stop("robust_nested_lrt(): mixed-ordinal nested tests support ",
+           "method = 'restriction_map' only.", call. = FALSE)
+    }
+    if (!identical(gamma, "empirical")) {
+      stop("robust_nested_lrt(): mixed-ordinal nested tests use the ",
+           "polyserial/polychoric NACOV Gamma from `data`; gamma = 'NT' is ",
+           "not defined.", call. = FALSE)
+    }
+    if (is.null(data)) {
+      stop("robust_nested_lrt(): mixed-ordinal nested tests require `data` ",
+           "to be the magmaan_mixed_ordinal_data object used for fitting.",
+           call. = FALSE)
+    }
+    if (!inherits(data, "magmaan_mixed_ordinal_data")) {
+      stop("robust_nested_lrt(): mixed-ordinal nested tests require `data` ",
+           "to inherit from 'magmaan_mixed_ordinal_data'.", call. = FALSE)
+    }
+    T_H1 <- infer_chi2_stat(fit_sample_stats(fit_H1), fit_H1$fmin)
+    T_H0 <- infer_chi2_stat(fit_sample_stats(fit_H0), fit_H0$fmin)
+    resolved_weight <- weight %||% fit_H1$estimator %||% ""
+    res <- infer_mixed_ordinal_lr_test_satorra2000(
+      fit_H1, fit_H0, data,
+      T_H1 = T_H1, df_H1 = 0L,
+      T_H0 = T_H0, df_H0 = 0L,
+      weight = resolved_weight,
+      a_method = A.method)
+    res$gamma <- gamma
+    res$method <- method
+    res$A.method <- A.method
+    res$computation <- "mixed_ordinal_moment"
+    res$weight <- resolved_weight
+    class(res) <- c("magmaan_nested_test", "list")
+    return(res)
   }
   if (ordinal_H1) {
     if (!identical(method, "restriction_map")) {

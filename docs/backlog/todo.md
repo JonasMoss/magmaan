@@ -413,7 +413,12 @@ decisions in the simulation backlog.
   The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
   and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
   SNLLS bullet above). The R surface (single-fit + nested) is now done and
-  lavaan-gated; only the paper remains.
+  lavaan-gated, and `mplus_wlsmv_invariance()` now provides the ergonomic
+  Mplus-style delta ladder over all-ordinal pairwise/listwise data plus mixed
+  continuous/ordinal listwise data. It is fixture-gated against the Mplus Demo
+  DIFFTEST scalar probe (`tests/fixtures/mplus_wlsmv_invariance`) and a small
+  mixed deterministic regression; mixed pairwise missing remains deferred until
+  mixed pairwise NACOV construction exists. Only the paper remains.
   - **R surface — LANDED 2026-06-15, lavaan-gated.** `model_spec()` /
     `magmaan(...)` take `group_equal` / `group_partial` (snake_case, lavaan
     family strings); Rcpp `lavaan_lavaanify` maps strings → `GroupEqual` and ties

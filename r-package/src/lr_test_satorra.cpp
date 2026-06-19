@@ -552,6 +552,54 @@ Rcpp::List infer_ordinal_lr_test_satorra2000(Rcpp::List  fit_H1,
   return satorra2000_to_list(*r_or);
 }
 
+// infer_mixed_ordinal_lr_test_satorra2000() — polyserial/polychoric mixed
+// ordinal LS restriction-map nested test. The caller supplies the same
+// MixedOrdinalStats object used for the two fits.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_lr_test_satorra2000(Rcpp::List  fit_H1,
+                                                   Rcpp::List  fit_H0,
+                                                   Rcpp::List  mixed_stats,
+                                                   double      T_H1,
+                                                   int         df_H1,
+                                                   double      T_H0,
+                                                   int         df_H0,
+                                                   std::string weight = "",
+                                                   std::string a_method = "exact") {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::MixedOrdinalStats stats =
+      magmaanr::mixed_ordinal_stats_from_arg(mixed_stats);
+
+  if (weight.empty()) {
+    if (!fit_H1.containsElementNamed("estimator")) {
+      Rcpp::stop("infer_mixed_ordinal_lr_test_satorra2000: `weight` is required when fit_H1$estimator is absent");
+    }
+    weight = Rcpp::as<std::string>(fit_H1["estimator"]);
+  }
+  const std::string p1 = fit_H1.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H1["parameterization"])
+      : "delta";
+  const std::string p0 = fit_H0.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H0["parameterization"])
+      : "delta";
+  if (p1 != p0) {
+    Rcpp::stop("infer_mixed_ordinal_lr_test_satorra2000: H1/H0 parameterizations differ");
+  }
+
+  auto r_or = magmaan::estimate::lr_test_satorra2000_mixed_ordinal(
+      ctx_H1.pt, ctx_H1.rep, stats, est_H1,
+      ctx_H0.pt, ctx_H0.rep, est_H0,
+      parse_ordinal_weight(weight),
+      T_H0, T_H1, df_H0, df_H1,
+      parse_a_method(a_method),
+      magmaanr::ordinal_parameterization_from_string(p1));
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return satorra2000_to_list(*r_or);
+}
+
 // FIML/ML2S scalar SB2001 / SB2010 difference tests (baseline columns; not the
 // FMG-able spectrum). Reconstruct both missing-data fits, recover the FIML LRT
 // (FIML) or two-stage ML (ML2S) chi-squares and df, then call the core scalar
