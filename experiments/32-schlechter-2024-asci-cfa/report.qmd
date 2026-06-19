@@ -1,0 +1,87 @@
+---
+title: "Schlechter 2024 ASCI CFA parity"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+read_csv_safely <- function(name) {
+  p <- file.path(results_dir, name)
+  if (!file.exists(p)) return(NULL)
+  utils::read.csv(p, check.names = FALSE, stringsAsFactors = FALSE)
+}
+meta <- read_csv_safely("metadata.csv")
+fits <- read_csv_safely("model_fits.csv")
+if (is.null(meta) || is.null(fits)) {
+  stop("Missing result CSVs. Run: Rscript run_experiment.R")
+}
+fmt <- function(x, digits = 3) ifelse(is.na(x), "", formatC(x, digits = digits, format = "f"))
+```
+
+## Question
+
+Are the final Schlechter et al. (2024) Attitudes Towards Social Comparison
+Inventory measurement models inside magmaan's SEM scope? The OSF scripts include
+exploratory factor analysis, reliability, correlations, and t-tests, but the
+final ASCI measurement models are ordinary two-factor ordinal CFAs fit with
+lavaan WLSMV.
+
+## Short answer
+
+Yes, for the final single-sample ASCI CFA models. magmaan's ordinal DWLS path
+matches lavaan's WLSMV/DWLS free estimates across Study 1's held-out sample,
+Study 2 English, and Study 3 German with maximum free-parameter difference
+`r fmt(max(fits$max_abs_free_param_diff), 6)`. On lavaan's ordinal DWLS
+chi-square scale, the maximum chi-square gap is
+`r fmt(max(fits$abs_chisq_diff), 6)`. The robust scaled WLSMV statistics are
+reported as lavaan context, not as the parity target.
+
+## Evidence
+
+```{r}
+show <- fits[, c("study", "label", "nobs_lavaan", "lavaan_df",
+                 "magmaan_chisq_lavaan_scale", "lavaan_chisq",
+                 "abs_chisq_diff", "max_abs_free_param_diff",
+                 "lavaan_chisq_scaled", "lavaan_cfi_scaled",
+                 "lavaan_rmsea_scaled", "lavaan_srmr")]
+names(show) <- c("Study", "Sample", "N", "df", "magmaan DWLS T",
+                 "lavaan DWLS T", "|T diff|", "Max |param diff|",
+                 "lavaan WLSMV T", "lavaan scaled CFI",
+                 "lavaan scaled RMSEA", "lavaan SRMR")
+num_cols <- sapply(show, is.numeric)
+show[num_cols] <- lapply(show[num_cols], function(x) round(x, 6))
+knitr::kable(show, row.names = FALSE)
+```
+
+## Caveats
+
+This is a parity probe for the final CFA measurement models, not a reproduction
+of every analysis in the OSF scripts. The exploratory EFA models use lavaan's
+`efa("efa")` rotation machinery, and the paper also reports omega coefficients,
+scale-score correlations, and t-tests; those are outside magmaan's SEM target.
+
+The gender measurement-invariance ladders are partly in scope, but they are not
+included here. Configural/metric/scalar estimates are close in quick checks, but
+the ordinal fit-statistic conventions and residual-invariance step need their
+own focused probe before being presented as reproduced.
+
+## Reproduce
+
+```sh
+Rscript experiments/32-schlechter-2024-asci-cfa/run_experiment.R
+quarto render experiments/32-schlechter-2024-asci-cfa/report.qmd
+```
