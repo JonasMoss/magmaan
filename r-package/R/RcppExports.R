@@ -377,6 +377,10 @@ infer_ordinal_lr_test_satorra2000 <- function(fit_H1, fit_H0, ordinal_stats, T_H
     .Call(`_magmaan_infer_ordinal_lr_test_satorra2000`, fit_H1, fit_H0, ordinal_stats, T_H1, df_H1, T_H0, df_H0, weight, a_method)
 }
 
+infer_mixed_ordinal_lr_test_satorra2000 <- function(fit_H1, fit_H0, mixed_stats, T_H1, df_H1, T_H0, df_H0, weight = "", a_method = "exact") {
+    .Call(`_magmaan_infer_mixed_ordinal_lr_test_satorra2000`, fit_H1, fit_H0, mixed_stats, T_H1, df_H1, T_H0, df_H0, weight, a_method)
+}
+
 infer_fiml_lr_test_satorra_bentler2001 <- function(fit_H1, fit_H0, h_step = 1e-4) {
     .Call(`_magmaan_infer_fiml_lr_test_satorra_bentler2001`, fit_H1, fit_H0, h_step)
 }
@@ -668,4 +672,3 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
-

@@ -490,20 +490,24 @@ golden `parTable()` fixtures.
   the gate for the polychoric-FMG paper track; the pEBA/pOLS/PALL transforms
   remain magmaan-original with no external oracle, as on the complete-data and
   FIML paths.
-- Ordinal nested Satorra-2000 tests are wired for all-ordinal DWLS/WLS fits via
-  `nestedTest()` / `robust_nested_lrt()` when the caller supplies the same
-  `magmaan_ordinal_data` statistics object used for fitting. The C++ worker
-  builds the H1 ordinal moment Jacobian, projects through the equality
-  reparameterization, pools the `n_b/N` weighted `{A1, B1}` sandwich over
-  polychoric NACOV blocks, derives either exact parameter restrictions or the
-  lavaan-style delta tangent map, and reuses the generic Satorra-2000 reduced
-  eigenproblem. Mixed continuous/ordinal nested tests remain explicitly
-  unsupported. Validation lives in `r-package/examples/nested_test_ordinal.R`:
+- Ordinal nested Satorra-2000 tests are wired for all-ordinal and mixed
+  continuous/ordinal DWLS/WLS fits via `nestedTest()` / `robust_nested_lrt()`
+  when the caller supplies the same `magmaan_ordinal_data` or
+  `magmaan_mixed_ordinal_data` statistics object used for fitting. The C++
+  workers build the H1 ordinal/mixed moment Jacobian, project through the
+  equality reparameterization, pool the `n_b/N` weighted `{A1, B1}` sandwich over
+  polychoric/polyserial NACOV blocks, derive either exact parameter restrictions
+  or the lavaan-style delta tangent map, and reuse the generic Satorra-2000
+  reduced eigenproblem. Mixed pairwise missing remains unsupported because the
+  mixed pairwise moment/NACOV constructor does not exist yet. Validation lives
+  in `r-package/examples/nested_test_ordinal.R`:
   a single-group loading equality and a two-group configural-vs-metric ordinal
   WLSMV comparison match lavaan's `lavTestLRT(..., method = "satorra.2000",
   A.method = "exact", scaled.shifted = FALSE)` row under lavaan's ordinal WLSMV
   convention, where the displayed difference statistic/`Df diff` are the
-  spectrum-derived mean/variance-adjusted `T_adjusted`/`d0` for `m > 1`.
+  spectrum-derived mean/variance-adjusted `T_adjusted`/`d0` for `m > 1`;
+  `r-package/examples/mplus_wlsmv_invariance.R` pins the mixed listwise bridge
+  on a small deterministic mixed CFA.
 - All-ordinal pairwise-deletion sample statistics are implemented for the
   categorical LS path (`data::ordinal_stats_from_observed_integer_data`,
   surfaced in R as `missing = "pairwise"` with `pd_gamma = "overlap" |
@@ -1264,7 +1268,16 @@ stop rather than any usable non-error return.
   under pairwise missing ordinal data: overlap-Gamma magmaan gives scaled-shifted
   Δχ² `22.365850` / Δdf 22 / p `0.438242`, matching Mplus Demo DIFFTEST
   `22.366000` / Δdf 22 / p `0.438200`; the raw LS objective also matches
-  Mplus (`27.295091` vs `27.295100`). The ordinal golden chisq
+  Mplus (`27.295091` vs `27.295100`). The R helper
+  `mplus_wlsmv_invariance()` wraps that explicit Mplus-style delta ladder:
+  configural, metric (`group_equal = "loadings"`), and scalar
+  (`group_equal = c("loadings","thresholds")` plus fixed ordinal intercepts and
+  freed non-reference latent means), returning the rung fits and
+  DIFFTEST-style nested rows. It supports all-ordinal pairwise/listwise data and
+  mixed continuous/ordinal listwise data; mixed pairwise missing is rejected
+  until mixed pairwise NACOV construction exists. Checked fixtures live in
+  `tests/fixtures/mplus_wlsmv_invariance`, and the executable R regression is
+  `r-package/examples/mplus_wlsmv_invariance.R`. The ordinal golden chisq
   gates now apply the lavaan `Σ(n_g−1)F̂_g` convention rescale at 5e-3 (see
   numerical-conventions exception 4 and the test ledger). `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with

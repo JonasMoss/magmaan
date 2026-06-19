@@ -648,6 +648,9 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
 augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   pt <- partable_arg(model)
   parameterization <- attr(pt, "magmaan.parameterization", exact = TRUE) %||% "delta"
+  ge <- attr(pt, "magmaan.group_equal", exact = TRUE)
+  release_thresholds <- !is.null(ge) && (1L %in% as.integer(ge))
+  intercepts_equal <- !is.null(ge) && (2L %in% as.integer(ge))
   if (!any(pt$op == "~1")) {
     stop("augment_mixed_ordinal_partable(): mixed categorical fitting requires model_spec(..., meanstructure = TRUE)")
   }
@@ -656,18 +659,26 @@ augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   ordered <- mixed_stats$ordered
   fix_delta_variances <- function(pt) {
     for (b in seq_along(ov_by_group)) {
-      ord <- intersect(ordered, ov_by_group[[b]])
-      idx <- pt$op == "~~" &
-        pt$lhs == pt$rhs &
-        pt$lhs %in% ord &
-        pt$group == b
-      pt$free[idx] <- 0L
-      pt$ustart[idx] <- 1.0
-      idx_i <- pt$op == "~1" &
-        pt$lhs %in% ord &
-        pt$group == b
-      pt$free[idx_i] <- 0L
-      pt$ustart[idx_i] <- 0.0
+      ov <- ov_by_group[[b]]
+      for (j in seq_along(ov)) {
+        if (!ov[[j]] %in% ordered) next
+        binary <- isTRUE(as.integer(mixed_stats$n_levels[[b]][[j]]) == 2L)
+        idx <- pt$op == "~~" &
+          pt$lhs == pt$rhs &
+          pt$lhs == ov[[j]] &
+          pt$group == b
+        if (!(release_thresholds && b >= 2L && !binary)) {
+          pt$free[idx] <- 0L
+          pt$ustart[idx] <- 1.0
+        }
+        idx_i <- pt$op == "~1" &
+          pt$lhs == ov[[j]] &
+          pt$group == b
+        if (!(release_thresholds && b >= 2L && !intercepts_equal)) {
+          pt$free[idx_i] <- 0L
+          pt$ustart[idx_i] <- 0.0
+        }
+      }
     }
     free_old <- pt$free
     vals <- sort(unique(free_old[free_old > 0L]))
@@ -725,7 +736,9 @@ augment_mixed_ordinal_partable <- function(model, mixed_stats) {
         rows$free[rr] <- next_free
         rows$exo[rr] <- 0L
         rows$ustart[rr] <- th[[th_pos]]
-        rows$label[rr] <- ""
+        rows$label[rr] <- if (release_thresholds) {
+          paste0(".theq.", ov[[j]], ".t", lev)
+        } else ""
         rows$plabel[rr] <- paste0(".p", n0 + rr, ".")
         th_pos <- th_pos + 1L
       }
@@ -750,6 +763,7 @@ augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- mixed_stats$ordered
   attr(out, "magmaan.parameterization") <- parameterization
+  attr(out, "magmaan.group_equal") <- attr(pt, "magmaan.group_equal", exact = TRUE)
   out
 }
 
