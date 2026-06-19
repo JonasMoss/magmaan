@@ -96,9 +96,22 @@ nominal coverage at $\sim0.95$, and the bootstrap intervals slightly over-cover
 ($\sim0.97$). So for what actually matters---calibrated coverage---the analytic
 observed bread is sufficient; the residual SE-ratio shortfall is heavy-tail mass
 (the SD is tail-sensitive, central $95\%$ coverage is not), and the bootstrap is
-a conservative safety net rather than a necessity here. The data-dependent-weight
-term (\S and the ULS$<$DWLS gap) and explicit second-order corrections
-(Edgeworth / infinitesimal jackknife) are open directions, not requirements.
+a conservative safety net rather than a necessity here.
+
+The one residue that is \emph{not} just tail mass: for a structural
+($F\!\to\!F$) parameter under DWLS the observed-bread SE ratio plateaus below
+$1$ and does \emph{not} improve with $n$ (DWLS $0.944$ at $N=2500$, $0.946$ at
+$N=25000$ -- a $10\times$ bump moves it by $0.002$), whereas under ULS it is
+$\approx 1$ at every $n$. This resolves Lai \& Simoes's ``slightly worse under
+DWLS, unclear whether it vanishes'': it does not vanish. The new SE is the
+asymptotic variance of the \emph{fixed}-weight estimator $\bar\theta=\phi(u)$,
+but the practitioner uses the \emph{sample}-weight $\hat\theta$ with
+$\hat W=\hat\Gamma_D^{-1}(u)$, whose influence carries an extra term
+$\propto \hat W'(u)\,\varepsilon$ -- zero under the null (so the SE vanishes
+there), but leading order under misspecification, and omitted by Lai's / our
+derivation. ULS ($W=I$, fixed) has no such term, so it is exact. The fix is that
+analytic weight term, or ULS, or a bootstrap that resamples $\hat W$ -- not more
+$n$. Edgeworth / infinitesimal-jackknife corrections remain optional extras.
 
 \section*{Where this sits relative to other software}
 

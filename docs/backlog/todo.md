@@ -248,8 +248,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
     misspecified-model FIML cell in exp 35.
-  - **ULS-vs-DWLS finite-sample probe**: confirm ordinal ULS observed-bread closes
-    the finite-N gap better than DWLS (Lai's fixed-vs-data-dependent-W mechanism).
+  - **ULS-vs-DWLS finite-sample probe (CONFIRMED 2026-06-19)**: on a structural
+    `f3~f1` parameter, the DWLS observed-bread SE/empirical-SD ratio plateaus at
+    ~0.945 and does NOT improve with n (0.944 at N=2500, 0.946 at N=25000), while
+    ULS is ~1.0 at every n. So the DWLS gap does not vanish -- it is the omitted
+    leading-order weight term `~Wd'(u)*eps` (zero under the null, O(1) under
+    misspec); ULS (W=I fixed) has none. Resolves Lai's "unclear whether it
+    vanishes": for DWLS it doesn't. (Not yet a tracked script -- /tmp only.)
   - **Full two-stage influence incl. the estimated weight `Wd = Gd^-1`**: the most
     targeted analytic fix for the DWLS finite-N gap. The new SE (Lai/ours) treats
     the Stage-2 weight as fixed; add the influence-function term from `Wd(u)` being
