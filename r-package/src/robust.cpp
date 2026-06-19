@@ -862,7 +862,8 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
 // misspecification-robust covariance for the delta all-ordinal LS path. Unlike
 // infer_ordinal_robust(bread="observed"), this carries the influence of the
 // estimated weight Ŵ = diag(NACOV)⁻¹ (the cov(Γ̂) term), so it needs the
-// per-case influence functions `ordinal_stats$moment_influence`. ULS/DWLS only.
+// per-case influence functions `ordinal_stats$moment_influence`; DWLS also
+// needs complete `ordinal_stats$int_data`. ULS/DWLS only.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats,

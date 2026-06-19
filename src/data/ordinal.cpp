@@ -2122,7 +2122,7 @@ ordinal_gamma_diag_data_influence(const Eigen::MatrixXi& Xcat,
                th_len[static_cast<std::size_t>(pb.vj)]) = pb.a21j.row(ii);
     }
     const Eigen::MatrixXd M1 = B_inv * bi * Gam;
-    const Eigen::MatrixXd M2 = Gam * bi * B_inv;
+    const Eigen::MatrixXd M2 = Gam * bi.transpose() * B_inv.transpose();
     for (Eigen::Index k = 0; k < mdim; ++k) {
       const double gik = G(ii, k);
       IFG(ii, k) = gik * gik + Gam(k, k) -

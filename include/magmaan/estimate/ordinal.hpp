@@ -115,7 +115,9 @@ robust_ordinal(spec::LatentStructure pt,
 // Ŵ = diag(NACOV)⁻¹ (the cov(Γ̂) term). That term is leading-order under
 // misspecification and identically zero under the null or for ULS (W = I,
 // fixed); the channel-1 piece (v_i = W_b g_i) reproduces the observed-bread
-// sandwich exactly. Requires `stats.moment_influence`. ULS and DWLS only.
+// sandwich exactly. Requires `stats.moment_influence`; DWLS also requires
+// complete `stats.int_data` so the estimated-weight influence is not silently
+// approximated. ULS and DWLS only.
 post_expected<OrdinalRobustResult>
 robust_ordinal_ij(spec::LatentStructure pt,
                   const model::MatrixRep& rep,

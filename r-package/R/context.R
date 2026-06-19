@@ -19,10 +19,10 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
 # Parameter covariance under an explicit SE regime. `regime = "model"` uses the
 # expected / Gauss-Newton bread (efficient when the model is correct; the
 # robust.sem / WLSMV-style default); `regime = "robust"` uses the observed-Hessian
-# bread (misspecification-robust; the robust.huber.white / MLR analogue). Both
-# use the same empirical meat, so they differ ONLY in the bread and coincide as
-# the model approaches correct specification. Feed the result into
-# standardized(fit, vcov) to carry the regime choice into SE(beta).
+# bread. For ordinal DWLS this is the fixed-weight observed-bread sandwich; the
+# estimated-weight infinitesimal jackknife is exposed explicitly as
+# `magmaan_core$robust_ordinal_ij()` for all-ordinal fits. Feed the covariance
+# into standardized(fit, vcov) to carry the regime choice into SE(beta).
 vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
                              data = NULL, ...) {
   regime <- match.arg(regime)

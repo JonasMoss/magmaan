@@ -134,14 +134,14 @@ Jacobian inverse). The first bracket term reproduces the observed-bread sandwich
 $\mathrm{corr}_i=0$, is machine-identical to it. The second is the weight
 influence, $\mathrm{corr}_{i,k} = d_k\,\mathrm{IF}_{i,k}(\hat\Gamma)/\hat\Gamma_{kk}^2$.
 
-\paragraph{Three channels.} $\hat\Gamma=\hat A^{-1}\hat V\hat A^{-1}$ is itself a
+\paragraph{Three channels.} $\hat\Gamma=\hat A^{-1}\hat V\hat A^{-\T}$ is itself a
 sandwich ($\hat V$ the score cross-products, $\hat A$ the score Jacobian), so its
 influence has three pieces, not two:
 \begin{enumerate}\itemsep0pt
 \item $\hat V$-direct (score-product wobble),
   $\hat A^{-1}(s_is_i\T-\hat V)\hat A^{-1}$, with diagonal $g_{i,k}^2-\hat\Gamma_{kk}$;
 \item $\hat A$-direct (score-Jacobian wobble),
-  $-\hat A^{-1}\delta\hat A_i\,\hat\Gamma-\hat\Gamma\,\delta\hat A_i\hat A^{-1}$,
+  $-\hat A^{-1}\delta\hat A_i\,\hat\Gamma-\hat\Gamma\,\delta\hat A_i\T\hat A^{-\T}$,
   $\delta\hat A_i=b_i-\hat A$ with $b_i$ the per-case Jacobian contribution;
 \item $\kappa$-movement ($\hat A,\hat V$ shift as $\hat\kappa$ shifts),
   $(\partial\hat\Gamma/\partial\kappa)\,g_i$.
@@ -153,7 +153,8 @@ sandwich influence, collapse to the closed diagonal
 \[
   \mathrm{IF}_{i,k}(\hat\Gamma)^{\mathrm{data}}
   = g_{i,k}^2 + \hat\Gamma_{kk}
-    - N\big[(B^{-1} b_i\hat\Gamma)_{kk} + (\hat\Gamma b_i B^{-1})_{kk}\big],
+    - N\big[(B^{-1} b_i\hat\Gamma)_{kk}
+      + (\hat\Gamma b_i\T (B^{-1})\T)_{kk}\big],
 \]
 which reduces to the $\hat V$-direct meat when $b_i\to\hat A=B/N$ (no per-case
 Jacobian variation), a useful sanity check.

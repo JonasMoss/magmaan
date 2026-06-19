@@ -238,6 +238,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   their new SE and ours treat the Stage-2 weight as fixed, so neither captures its
   higher-order variability (ULS, W=I, has none -> closes cleanly); a
   case-resampling bootstrap recovers that term.
+  Follow-up landed 2026-06-19: complete all-ordinal ULS/DWLS now has
+  `robust_ordinal_ij`, an explicit infinitesimal-jackknife covariance that carries
+  the estimated diagonal-weight term. The data-direct Γ-diagonal channel is
+  regression-tested against case-weight finite differences; full WLS, mixed
+  ordinal/polyserial, and pairwise-missing variants remain out of scope.
   Open follow-ups:
   - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai
     Eq 36 / its mixed analogue; FD becomes the validation gate). Also removes the
@@ -255,16 +260,6 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     leading-order weight term `~Wd'(u)*eps` (zero under the null, O(1) under
     misspec); ULS (W=I fixed) has none. Resolves Lai's "unclear whether it
     vanishes": for DWLS it doesn't. (Not yet a tracked script -- /tmp only.)
-  - **Full two-stage influence incl. the estimated weight `Wd = Gd^-1`**: the most
-    targeted analytic fix for the DWLS finite-N gap. The new SE (Lai/ours) treats
-    the Stage-2 weight as fixed; add the influence-function term from `Wd(u)` being
-    data-dependent (`-H^-1 D'(dWd)·eps`, present only off the null since it
-    multiplies the misfit `eps`). Reuses `H`/`K`; would close the gap without a
-    bootstrap and explains the ULS-no-gap. Try this before the exotic stuff.
-  - **Infinitesimal jackknife** for BCa acceleration (and bootstrap-free variance):
-    `U_i = (-H^-1 K)·s_i` from the analytic `H`,`K` and the casewise Stage-1 scores
-    `s_i` -- zero refits. Pairs with the analytic-Hessian item; replaces the
-    grouped-jackknife stand-in in `scripts/bootstrap.R`.
   - **(Research / "insanely cool") explicit second-order corrections**: Edgeworth /
     Cornish-Fisher / saddlepoint / Nagar variance expansion for the two-stage
     ordinal estimator. All need the same hard ingredient -- the third cumulants of
