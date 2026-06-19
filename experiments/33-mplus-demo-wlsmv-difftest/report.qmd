@@ -15,6 +15,9 @@ fit_path <- file.path("results", "model_fit.csv")
 diff_path <- file.path("results", "difftest.csv")
 meta_path <- file.path("results", "metadata.csv")
 aux_path <- file.path("results", "auxiliary_check.csv")
+stress_summary_path <- file.path("results", "stress_summary.csv")
+stress_parity_path <- file.path("results", "stress_parity_summary.csv")
+stress_meta_path <- file.path("results", "stress_metadata.csv")
 if (!file.exists(fit_path) || !file.exists(diff_path)) {
   stop("Run `Rscript run_experiment.R` first.", call. = FALSE)
 }
@@ -22,12 +25,28 @@ model_fit <- read.csv(fit_path, na.strings = "")
 difftest <- read.csv(diff_path, na.strings = "")
 metadata <- read.csv(meta_path, na.strings = "")
 auxiliary <- read.csv(aux_path, na.strings = "")
+stress_summary <- if (file.exists(stress_summary_path)) {
+  read.csv(stress_summary_path, na.strings = "")
+} else {
+  data.frame()
+}
+stress_parity <- if (file.exists(stress_parity_path)) {
+  read.csv(stress_parity_path, na.strings = "")
+} else {
+  data.frame()
+}
+stress_meta <- if (file.exists(stress_meta_path)) {
+  read.csv(stress_meta_path, na.strings = "")
+} else {
+  data.frame()
+}
 
 fmt <- function(x, digits = 3) {
   ifelse(is.finite(x), sprintf(paste0("%.", digits, "f"), x), "")
 }
 fmt_p <- function(x) ifelse(is.finite(x), sprintf("%.4f", x), "")
 meta_value <- function(key) metadata$value[match(key, metadata$key)]
+stress_meta_value <- function(key) stress_meta$value[match(key, stress_meta$key)]
 
 main_methods <- rbind(
   difftest[difftest$engine == "mplus" &
@@ -65,6 +84,32 @@ fit_tab <- fit_focus[, c("engine", "variant", "model", "npar", "df",
                          "chisq_raw_fmt", "chisq_scaled_fmt", "p_scaled_fmt")]
 names(fit_tab) <- c("Engine", "Variant", "Model", "npar", "df",
                     "Raw chi-square", "Adjusted chi-square", "Adjusted p")
+
+if (nrow(stress_summary)) {
+  stress_summary$mean_stat_fmt <- fmt(stress_summary$mean_stat)
+  stress_summary$median_stat_fmt <- fmt(stress_summary$median_stat)
+  stress_summary$reject_fmt <- fmt(stress_summary$reject_rate_05, 2)
+  stress_summary$mean_p_fmt <- fmt_p(stress_summary$mean_p)
+  stress_tab <- stress_summary[, c("engine", "variant", "missing_rate",
+                                   "reps_ok", "mean_stat_fmt",
+                                   "median_stat_fmt", "reject_fmt",
+                                   "mean_p_fmt")]
+  names(stress_tab) <- c("Engine", "Variant", "Missing rate", "Reps",
+                         "Mean stat", "Median stat", "Reject rate", "Mean p")
+} else {
+  stress_tab <- data.frame()
+}
+if (nrow(stress_parity)) {
+  stress_parity$max_abs_stat_diff_fmt <- fmt(stress_parity$max_abs_stat_diff, 6)
+  stress_parity$mean_abs_stat_diff_fmt <- fmt(stress_parity$mean_abs_stat_diff,
+                                              6)
+  parity_tab <- stress_parity[, c("missing_rate", "max_abs_stat_diff_fmt",
+                                  "mean_abs_stat_diff_fmt")]
+  names(parity_tab) <- c("Missing rate", "Max |Mplus - magmaan|",
+                         "Mean |Mplus - magmaan|")
+} else {
+  parity_tab <- data.frame()
+}
 ```
 
 ## Question
@@ -89,6 +134,13 @@ overlap pairwise Gamma its raw least-squares objective and scaled-shifted
 restriction-map statistic match Mplus to rounding: `22.365850` on 22 df versus
 Mplus DIFFTEST `22.366000` on 22 df.
 
+A minimal invariant stress run reproduces the Chen-style failure mode rather
+than making it disappear. With symmetric thresholds, `N = 1000`, and 50%
+rank-dependent missingness on three group-B indicators, the Mplus/magmaan
+scalar difference statistic inflates from about 22 under complete data to about
+31 under 50% missingness. The actual Mplus Demo subset and magmaan agree to
+less than `6e-4` on the statistic.
+
 The auxiliary variable is only used to drive missingness. Mplus rejects
 `AUXILIARY = aux (m)` with categorical variables in this WLSMV setup, so this is
 a WLSMV_PD/pairwise probe rather than an auxiliary-variable probe.
@@ -107,6 +159,30 @@ objective.
 
 ```{r}
 knitr::kable(fit_tab, row.names = FALSE)
+```
+
+## Minimal Stress Run
+
+The stress script repeats the invariant configural-to-scalar comparison using
+the Mplus-style scalar syntax. It runs magmaan and lavaan for all replications
+and Mplus Demo for the first `r stress_meta_value("mplus_reps")` replications in
+each missing-rate cell:
+
+``` sh
+Rscript run_stress.R --reps 50 --mplus-reps 20 --n-total 1000 \
+  --missing-rates 0,0.5 --threshold-set symmetric --mplus-command mpdemo
+```
+
+```{r}
+if (nrow(stress_tab)) {
+  knitr::kable(stress_tab, row.names = FALSE)
+} else {
+  cat("Run `Rscript run_stress.R` to create stress results.")
+}
+```
+
+```{r}
+if (nrow(parity_tab)) knitr::kable(parity_tab, row.names = FALSE)
 ```
 
 ## Auxiliary Check
