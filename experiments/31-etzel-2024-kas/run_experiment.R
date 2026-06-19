@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# Etzel 2024 KAS common-factor slice.
+# Etzel 2024 KAS boundary probe.
 #
 # The full OSF models are Mplus known-class, complex-survey, categorical-logit
 # MLR models. This runner takes the continuous KAS component that magmaan can
