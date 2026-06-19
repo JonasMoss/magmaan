@@ -82,6 +82,33 @@ categorical models, or a paper/model requires residual covariance among ordinal
 indicators and wants lavaan-`lavPredict()` parity instead of an explicit
 unsupported-shape error.
 
+### Mplus/lavaan WLSMV invariance extensions
+
+The implemented ordinal-invariance surface covers the standard lavaan-theta
+route and the explicit Mplus-style delta ladder, but three edges stay deferred:
+mixed continuous/ordinal pairwise missing data, broader live-Mplus goldens, and
+a nicer diagnostic for lavaan's delta `group.equal` `~*~` singularity.
+
+**Alternative already available.** `mplus_wlsmv_invariance()` covers
+all-ordinal pairwise/listwise and mixed listwise/complete data; the all-ordinal
+pairwise scalar probe is Mplus-Demo-gated, the mixed listwise case is a
+deterministic regression, and lavaan-theta `group.equal` parity remains the
+standard lavaan oracle path. For lavaan-style delta, the supported guidance is
+explicit: do not gate the degenerate `group.equal` release; use theta for
+lavaan parity or the explicit Mplus-style delta helper when released-delta
+semantics are the target.
+
+**Build if.**
+
+- A mixed continuous/ordinal pairwise missing-data consumer appears: implement
+  mixed pairwise moment/NACOV construction first, then unlock
+  `missing = "pairwise"` in the helper and add Mplus Demo-scale goldens.
+- A broader Mplus parity claim is needed: add a maintainer-only Mplus fixture
+  generator and checked JSON/CSV outputs, keeping CI Mplus-free.
+- A user-facing compatibility problem recurs around lavaan delta invariance:
+  add a focused diagnostic/warning that explains why the released `~*~` rows are
+  unidentified and points users to theta or the Mplus-style helper.
+
 ## Optimizers
 
 ### Exact Hessians for IPOPT
