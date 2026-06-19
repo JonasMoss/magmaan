@@ -1857,6 +1857,281 @@ post_expected<MixedOrdinalWorkspace> mixed_ordinal_workspace_from_data(
   return out;
 }
 
+// Recompute the polychoric NACOV diagonal Γ̂_kk = n·diag(B_inv·INNER·B_inv') at a
+// GIVEN κ = (thresholds, R), holding the integer data fixed. Mirrors the
+// estimation path's score/B_inv/NACOV assembly but takes κ as input (no
+// re-estimation), so finite-differencing it over κ gives ∂Γ̂/∂κ.
+static post_expected<Eigen::VectorXd> gamma_diag_at_kappa(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R) {
+  const Eigen::Index n = Xcat.rows();
+  const Eigen::Index p = Xcat.cols();
+  Eigen::Index nth = 0;
+  for (auto k : levels) nth += static_cast<Eigen::Index>(k - 1);
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index mdim = nth + ncorr;
+
+  std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), 0);
+  std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
+  Eigen::Index off = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    th_start[static_cast<std::size_t>(j)] = off;
+    const Eigen::Index kj =
+        static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+    th_by_var[static_cast<std::size_t>(j)] = thresholds.segment(off, kj);
+    off += kj;
+  }
+
+  Eigen::MatrixXd SC_TH = Eigen::MatrixXd::Zero(n, nth);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const int c = Xcat(r, j);
+      const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+      const double lo = (c == 0) ? -kInf : thj(c - 1);
+      const double hi = (c == thj.size()) ? kInf : thj(c);
+      const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+      const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+      if (c < thj.size()) SC_TH(r, base + c) += normal_pdf(thj(c)) / pr;
+      if (c > 0) SC_TH(r, base + c - 1) -= normal_pdf(thj(c - 1)) / pr;
+    }
+  }
+
+  Eigen::MatrixXd SC_COR = Eigen::MatrixXd::Zero(n, ncorr);
+  Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(ncorr, nth);
+  Eigen::Index corr_idx = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const Eigen::VectorXi xi = Xcat.col(i);
+      const Eigen::VectorXi xj = Xcat.col(j);
+      auto ps_or = ordinal_pair_scores(xi, xj, R(i, j),
+          th_by_var[static_cast<std::size_t>(i)],
+          th_by_var[static_cast<std::size_t>(j)]);
+      if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+      const auto& ps = *ps_or;
+      SC_COR.col(corr_idx) = ps.rho;
+      const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
+      const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
+      A21.block(corr_idx, si, 1, ps.threshold_i.cols()) =
+          ps.rho.transpose() * ps.threshold_i;
+      A21.block(corr_idx, sj, 1, ps.threshold_j.cols()) =
+          ps.rho.transpose() * ps.threshold_j;
+      ++corr_idx;
+    }
+  }
+
+  Eigen::MatrixXd SC(n, mdim);
+  SC.leftCols(nth) = SC_TH;
+  SC.rightCols(ncorr) = SC_COR;
+  const Eigen::MatrixXd INNER = SC.transpose() * SC;
+
+  Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(nth, nth);
+  const Eigen::MatrixXd INNER_TH = SC_TH.transpose() * SC_TH;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+    const Eigen::Index len =
+        static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+    A11.block(start, start, len, len) = INNER_TH.block(start, start, len, len);
+  }
+  auto A11_inv_or = symmetric_inverse_pd(A11, "gamma_diag_at_kappa A11");
+  if (!A11_inv_or.has_value()) return std::unexpected(A11_inv_or.error());
+  Eigen::VectorXd A22_diag(ncorr);
+  for (Eigen::Index k = 0; k < ncorr; ++k) {
+    A22_diag(k) = SC_COR.col(k).squaredNorm();
+    if (!(A22_diag(k) > 0.0))
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "gamma_diag_at_kappa: singular polychoric score block"));
+  }
+  const Eigen::MatrixXd A22_inv = A22_diag.cwiseInverse().asDiagonal();
+
+  Eigen::MatrixXd B_inv = Eigen::MatrixXd::Zero(mdim, mdim);
+  B_inv.block(0, 0, nth, nth) = *A11_inv_or;
+  B_inv.block(nth, 0, ncorr, nth).noalias() = -A22_inv * A21 * (*A11_inv_or);
+  B_inv.block(nth, nth, ncorr, ncorr) = A22_inv;
+
+  const Eigen::MatrixXd BI_INNER = B_inv * INNER;
+  Eigen::VectorXd gdiag(mdim);
+  for (Eigen::Index k = 0; k < mdim; ++k)
+    gdiag(k) = static_cast<double>(n) * BI_INNER.row(k).dot(B_inv.row(k));
+  return gdiag;
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
+                               const std::vector<std::int32_t>& levels,
+                               const Eigen::VectorXd& thresholds,
+                               const Eigen::MatrixXd& R, double h_rel) {
+  const Eigen::Index p = Xcat.cols();
+  Eigen::Index nth = 0;
+  for (auto k : levels) nth += static_cast<Eigen::Index>(k - 1);
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index mdim = nth + ncorr;
+
+  std::vector<std::pair<Eigen::Index, Eigen::Index>> pair_of(
+      static_cast<std::size_t>(ncorr));
+  {
+    Eigen::Index ci = 0;
+    for (Eigen::Index j = 0; j < p; ++j)
+      for (Eigen::Index i = j + 1; i < p; ++i)
+        pair_of[static_cast<std::size_t>(ci++)] = {i, j};
+  }
+
+  Eigen::MatrixXd D(mdim, mdim);  // D(k,l) = ∂Γ̂_kk/∂κ_l
+  for (Eigen::Index l = 0; l < mdim; ++l) {
+    Eigen::VectorXd th_p = thresholds, th_m = thresholds;
+    Eigen::MatrixXd R_p = R, R_m = R;
+    double h;
+    if (l < nth) {
+      h = h_rel * std::max(1.0, std::abs(thresholds(l)));
+      th_p(l) += h;
+      th_m(l) -= h;
+    } else {
+      const auto [ii, jj] = pair_of[static_cast<std::size_t>(l - nth)];
+      const double base = R(ii, jj);
+      h = h_rel * std::max(1.0, std::abs(base));
+      R_p(ii, jj) = R_p(jj, ii) = base + h;
+      R_m(ii, jj) = R_m(jj, ii) = base - h;
+    }
+    auto gp = gamma_diag_at_kappa(Xcat, levels, th_p, R_p);
+    if (!gp.has_value()) return std::unexpected(gp.error());
+    auto gm = gamma_diag_at_kappa(Xcat, levels, th_m, R_m);
+    if (!gm.has_value()) return std::unexpected(gm.error());
+    D.col(l) = (*gp - *gm) / (2.0 * h);
+  }
+  return D;
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_diag_data_influence(const Eigen::MatrixXi& Xcat,
+                                  const std::vector<std::int32_t>& levels,
+                                  const Eigen::VectorXd& thresholds,
+                                  const Eigen::MatrixXd& R) {
+  const Eigen::Index n = Xcat.rows();
+  const Eigen::Index p = Xcat.cols();
+  Eigen::Index nth = 0;
+  for (auto k : levels) nth += static_cast<Eigen::Index>(k - 1);
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index mdim = nth + ncorr;
+
+  std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), 0);
+  std::vector<Eigen::Index> th_len(static_cast<std::size_t>(p), 0);
+  std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
+  Eigen::Index off = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const std::size_t jz = static_cast<std::size_t>(j);
+    th_start[jz] = off;
+    const Eigen::Index kj = static_cast<Eigen::Index>(levels[jz] - 1);
+    th_len[jz] = kj;
+    th_by_var[jz] = thresholds.segment(off, kj);
+    off += kj;
+  }
+
+  Eigen::MatrixXd SC_TH = Eigen::MatrixXd::Zero(n, nth);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const int c = Xcat(r, j);
+      const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+      const double lo = (c == 0) ? -kInf : thj(c - 1);
+      const double hi = (c == thj.size()) ? kInf : thj(c);
+      const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+      const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+      if (c < thj.size()) SC_TH(r, base + c) += normal_pdf(thj(c)) / pr;
+      if (c > 0) SC_TH(r, base + c - 1) -= normal_pdf(thj(c - 1)) / pr;
+    }
+  }
+
+  // Pair loop: correlation scores, A21, and per-case A21 contributions
+  // (rho_score · bivariate threshold score) for each pair's two variables.
+  Eigen::MatrixXd SC_COR = Eigen::MatrixXd::Zero(n, ncorr);
+  Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(ncorr, nth);
+  struct PairBiv { Eigen::Index vi, vj; Eigen::MatrixXd a21i, a21j; };
+  std::vector<PairBiv> pairs;
+  pairs.reserve(static_cast<std::size_t>(ncorr));
+  Eigen::Index corr_idx = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      auto ps_or = ordinal_pair_scores(Xcat.col(i), Xcat.col(j), R(i, j),
+          th_by_var[static_cast<std::size_t>(i)],
+          th_by_var[static_cast<std::size_t>(j)]);
+      if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+      const auto& ps = *ps_or;
+      SC_COR.col(corr_idx) = ps.rho;
+      const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
+      const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
+      A21.block(corr_idx, si, 1, ps.threshold_i.cols()) =
+          ps.rho.transpose() * ps.threshold_i;
+      A21.block(corr_idx, sj, 1, ps.threshold_j.cols()) =
+          ps.rho.transpose() * ps.threshold_j;
+      PairBiv pb;
+      pb.vi = i;
+      pb.vj = j;
+      pb.a21i = ps.rho.asDiagonal() * ps.threshold_i;  // n × th_len[i]
+      pb.a21j = ps.rho.asDiagonal() * ps.threshold_j;
+      pairs.push_back(std::move(pb));
+      ++corr_idx;
+    }
+  }
+
+  Eigen::MatrixXd SC(n, mdim);
+  SC.leftCols(nth) = SC_TH;
+  SC.rightCols(ncorr) = SC_COR;
+  const Eigen::MatrixXd INNER = SC.transpose() * SC;
+
+  Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(nth, nth);
+  const Eigen::MatrixXd INNER_TH = SC_TH.transpose() * SC_TH;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+    const Eigen::Index len = th_len[static_cast<std::size_t>(j)];
+    A11.block(start, start, len, len) = INNER_TH.block(start, start, len, len);
+  }
+  auto A11_inv_or = symmetric_inverse_pd(A11, "gamma_data_influence A11");
+  if (!A11_inv_or.has_value()) return std::unexpected(A11_inv_or.error());
+  Eigen::VectorXd A22_diag(ncorr);
+  for (Eigen::Index k = 0; k < ncorr; ++k) {
+    A22_diag(k) = SC_COR.col(k).squaredNorm();
+    if (!(A22_diag(k) > 0.0))
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "gamma_data_influence: singular polychoric score block"));
+  }
+  const Eigen::MatrixXd A22_inv = A22_diag.cwiseInverse().asDiagonal();
+
+  Eigen::MatrixXd B_inv = Eigen::MatrixXd::Zero(mdim, mdim);
+  B_inv.block(0, 0, nth, nth) = *A11_inv_or;
+  B_inv.block(nth, 0, ncorr, nth).noalias() = -A22_inv * A21 * (*A11_inv_or);
+  B_inv.block(nth, nth, ncorr, ncorr) = A22_inv;
+
+  Eigen::MatrixXd Gam = static_cast<double>(n) * B_inv * INNER * B_inv.transpose();
+  Gam = 0.5 * (Gam + Gam.transpose()).eval();
+  const Eigen::MatrixXd G = static_cast<double>(n) * SC * B_inv.transpose();  // g_i rows
+
+  Eigen::MatrixXd IFG(n, mdim);
+  for (Eigen::Index ii = 0; ii < n; ++ii) {
+    Eigen::MatrixXd bi = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index v = 0; v < p; ++v) {
+      const Eigen::Index s = th_start[static_cast<std::size_t>(v)];
+      const Eigen::Index l = th_len[static_cast<std::size_t>(v)];
+      const Eigen::VectorXd sv = SC_TH.row(ii).segment(s, l).transpose();
+      bi.block(s, s, l, l) = sv * sv.transpose();
+    }
+    for (Eigen::Index a = 0; a < ncorr; ++a)
+      bi(nth + a, nth + a) = SC_COR(ii, a) * SC_COR(ii, a);
+    for (Eigen::Index a = 0; a < ncorr; ++a) {
+      const PairBiv& pb = pairs[static_cast<std::size_t>(a)];
+      bi.block(nth + a, th_start[static_cast<std::size_t>(pb.vi)], 1,
+               th_len[static_cast<std::size_t>(pb.vi)]) = pb.a21i.row(ii);
+      bi.block(nth + a, th_start[static_cast<std::size_t>(pb.vj)], 1,
+               th_len[static_cast<std::size_t>(pb.vj)]) = pb.a21j.row(ii);
+    }
+    const Eigen::MatrixXd M1 = B_inv * bi * Gam;
+    const Eigen::MatrixXd M2 = Gam * bi * B_inv;
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double gik = G(ii, k);
+      IFG(ii, k) = gik * gik + Gam(k, k) -
+                   static_cast<double>(n) * (M1(k, k) + M2(k, k));
+    }
+  }
+  return IFG;
+}
+
 post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
                                          bool full_wls_weight) {
@@ -2121,7 +2396,7 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
         W_wls = std::move(*W_wls_or);
       }
     }
-    block_diag.moment_influence = std::move(IF);
+    block_diag.moment_influence = IF;
     block_diag.gamma = NACOV;
 
     out.stats.R.push_back(std::move(R));
@@ -2129,6 +2404,9 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
     out.stats.threshold_ov.push_back(std::move(th_ov));
     out.stats.threshold_level.push_back(std::move(th_level));
     out.stats.NACOV.push_back(std::move(NACOV));
+    out.stats.moment_influence.push_back(std::move(IF));
+    out.stats.int_data.push_back(Xcat);
+    out.stats.moment_bread.push_back(B_inv);
     out.stats.W_dwls.push_back(std::move(W_dwls));
     out.stats.W_wls.push_back(std::move(W_wls));
     out.stats.n_obs.push_back(static_cast<std::int64_t>(n));

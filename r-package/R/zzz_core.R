@@ -158,6 +158,7 @@ robust_empirical_gamma <- infer_empirical_gamma
 robust_empirical_gamma_with_means <- infer_empirical_gamma_with_means
 robust_gamma_nt <- infer_gamma_nt
 robust_ordinal <- infer_ordinal_robust
+robust_ordinal_ij <- infer_ordinal_robust_ij
 robust_mixed_ordinal <- infer_mixed_ordinal_robust
 robust_se <- infer_robust_se
 robust_se_parts <- infer_robust_se_parts
@@ -336,6 +337,7 @@ magmaan_core <- local({
       "robust_empirical_gamma_with_means",
       "robust_gamma_nt",
       "robust_ordinal",
+      "robust_ordinal_ij",
       "robust_mixed_ordinal",
       "robust_se",
       "robust_se_parts",
