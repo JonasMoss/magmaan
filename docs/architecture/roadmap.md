@@ -1234,13 +1234,17 @@ stop rather than any usable non-error return.
   The released block is fit under **theta** (the standard ordinal-invariance
   parameterization): the released scale is the free `~~` residual variance, which
   lavaan-theta reports identically, so theta_hat compares with no `~*~`
-  projection. The theta moment path subtracts the freed intercept μ from the
-  standardized thresholds `(τ−μ)/√Σ*ᵢᵢ` and threads `J_mu` (the ordinal fit now
-  evaluates with `with_mu_jacobian`) so the released intercepts carry a gradient.
-  Under **delta** lavaan's released `~*~` scale is structurally unidentified (it
-  stays pinned at 1 with a singular vcov), so delta invariance is not gated and
-  its released-block moment branch stays dormant. lavaan-gated by the bounded
-  golden `ordinal invariance (group.equal) theta fits match lavaan` over fixtures
+  projection. A shared ordinal moment-Jacobian block now covers the theta and
+  released-delta cases used by fitting and robust nested tests: theta subtracts
+  the freed intercept μ from standardized thresholds `(τ−μ)/√Σ*ᵢᵢ` and threads
+  `J_mu`; released delta differentiates `(τ−μ)δ_i` plus the implied association
+  rows, so freed latent means and released response scales carry nonzero
+  moment-Jacobian columns. Under **delta** lavaan's own released `~*~` scale is
+  structurally unidentified (it stays pinned at 1 with a singular vcov), so
+  lavaan-delta `group.equal` invariance remains ungated; the delta released
+  branch is gated only by the explicit Mplus-style scalar probe below.
+  lavaan-gated by the bounded golden `ordinal invariance (group.equal) theta
+  fits match lavaan` over fixtures
   0017 (3-cat thresholds+loadings), 0018 (binary scale-veto), 0019
   (thresholds-only), and 0020 (thresholds+loadings+intercepts / scalar),
   matching df/chisq/theta_hat. At scalar, lavaan fixes the group-2+ indicator
@@ -1254,10 +1258,13 @@ stop rather than any usable non-error return.
   on the scaled statistic because the freed latent mean makes the Satorra scaling
   more sensitive to the same LS-weight gap. Configural→thresholds is explicitly
   recorded as a df=0 equivalence (same χ²/df; lavaan cannot form a positive-df
-  `lavTestLRT` there). The theta branch of `ordinal_moment_jacobian` subtracts
-  the released μ and threads `J_mu`, without which the freed group-2 intercepts
-  and scalar latent means would have zero moment-Jacobian columns and the delta
-  restriction rank would be wrong. The ordinal golden chisq
+  `lavTestLRT` there). The Mplus Demo WLSMV DIFFTEST probe
+  (`experiments/33-mplus-demo-wlsmv-difftest`) now gates the same shared
+  released-delta moment Jacobian for the explicit 38-parameter scalar model
+  under pairwise missing ordinal data: overlap-Gamma magmaan gives scaled-shifted
+  Δχ² `22.365850` / Δdf 22 / p `0.438242`, matching Mplus Demo DIFFTEST
+  `22.366000` / Δdf 22 / p `0.438200`; the raw LS objective also matches
+  Mplus (`27.295091` vs `27.295100`). The ordinal golden chisq
   gates now apply the lavaan `Σ(n_g−1)F̂_g` convention rescale at 5e-3 (see
   numerical-conventions exception 4 and the test ledger). `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with

@@ -119,4 +119,72 @@ check_nested("configural -> metric", fit_cfg, fit_met, NULL, ge_metric)
 check_nested("metric -> scalar", fit_met, fit_sca, ge_metric, ge_scalar,
              scaled_tol = 1.5e-2)
 
+## ---- delta, Mplus-style scalar release ------------------------------------
+make_delta_df <- function(n_total = 500L, seed = 20260619L,
+                          missing_rate = .50) {
+  set.seed(seed)
+  ov <- paste0("y", 1:6)
+  thresholds <- c(-1.3, -0.47, 0.47, 1.3)
+  draw_group <- function(n, group_label) {
+    eta <- rnorm(n)
+    aux <- 0.5 * eta + sqrt(1 - 0.5^2) * rnorm(n)
+    z <- matrix(NA_real_, n, length(ov), dimnames = list(NULL, ov))
+    for (j in seq_along(ov)) {
+      z[, j] <- 0.7 * eta + rnorm(n, sd = sqrt(1 - 0.7^2))
+    }
+    out <- as.data.frame(lapply(seq_len(ncol(z)), function(j) {
+      ordered(cut(z[, j], c(-Inf, thresholds, Inf), labels = FALSE))
+    }))
+    names(out) <- ov
+    out$aux <- aux
+    out$grp <- group_label
+    out
+  }
+  n_group <- as.integer(n_total / 2L)
+  dat <- rbind(draw_group(n_group, "A"), draw_group(n_group, "B"))
+  b_rows <- which(dat$grp == "B")
+  target <- as.integer(round(missing_rate * length(b_rows)))
+  ranks <- rank(dat$aux[b_rows], ties.method = "random")
+  weights <- pmax(length(b_rows) - ranks, 0)
+  for (nm in ov[5:6]) {
+    picked <- sample.int(length(b_rows), size = target, replace = FALSE,
+                         prob = weights)
+    dat[[nm]][b_rows[picked]] <- NA
+  }
+  dat$grp <- factor(dat$grp, levels = c("A", "B"))
+  dat
+}
+
+df_delta <- make_delta_df()
+ov_delta <- paste0("y", 1:6)
+model_delta <- paste0("f =~ ", paste(ov_delta, collapse = " + "))
+model_delta_scalar <- paste(
+  model_delta,
+  "f ~ c(0, NA)*1",
+  paste(sprintf("%s ~ c(0, 0)*1", ov_delta), collapse = "\n"),
+  sep = "\n")
+spec_delta_h1 <- magmaan::model_spec(
+  model_delta, ordered = ov_delta, parameterization = "delta",
+  group = "grp", group_labels = c("A", "B"))
+spec_delta_h0 <- magmaan::model_spec(
+  model_delta_scalar, ordered = ov_delta, parameterization = "delta",
+  group = "grp", group_labels = c("A", "B"),
+  group_equal = c("loadings", "thresholds"))
+stats_delta <- core$data_ordinal_stats_from_df(
+  df_delta, spec_delta_h1, ordered = ov_delta, group = "grp",
+  missing = "pairwise", pd_gamma = "overlap", full_wls_weight = FALSE)
+fit_delta_h1 <- core$fit_dwls_ordinal(spec_delta_h1, stats_delta,
+                                      control = ctrl)
+fit_delta_h0 <- core$fit_dwls_ordinal(spec_delta_h0, stats_delta,
+                                      control = ctrl)
+res_delta <- magmaan::nestedTest(fit_delta_h1, fit_delta_h0, data = stats_delta,
+                                 method = "satorra.2000", A.method = "delta",
+                                 weight = "DWLS")
+stopifnot(identical(as.integer(res_delta$df_diff), 22L))
+stopifnot(is.finite(res_delta$T_scaled), is.finite(res_delta$p_scaled))
+stopifnot(res_delta$p_scaled >= 0, res_delta$p_scaled <= 1)
+cat(sprintf("== configural -> Mplus-style scalar (delta, pairwise) ==\n"))
+cat(sprintf("  scaled diff: magmaan = %.4f, df = %d, p = %.4f\n",
+            res_delta$T_scaled, res_delta$df_diff, res_delta$p_scaled))
+
 cat("\nnested ordinal group.equal: satorra.2000 + fmg_nested_ordinal vs lavaan: ok\n")
