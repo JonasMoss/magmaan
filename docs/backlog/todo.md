@@ -246,8 +246,31 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   observed-bread weighted-moment IJ covariance: callers provide per-case moment
   influence rows plus optional per-case estimated-weight corrections. Full WLS,
   mixed ordinal/polyserial, MCAR/pairwise-missing variants, and ML2S adapters
-  remain out of scope.
+  remain out of scope. Derivation and implementation grid:
+  `docs/research/notes/weighted_moment_ij_grid.tex`.
   Open follow-ups:
+  - **Estimator-grid expansion for estimated-weight IJ.** Implement in small
+    verified slices, all using the note's four gates: fixed-weight reduction to
+    `robust_weighted_moments`, derivative checks for each new weight-influence
+    channel, resampling-jackknife agreement on deterministic fixtures, and a
+    misspecification simulation with ULS/fixed-weight negative controls.
+    1. Complete continuous LS: expose the ULS/fixed-weight IJ reduction first,
+       then use raw mean/covariance moment influence to validate GLS/NT,
+       DWLS/WLS, and DLS estimated-weight formulas.
+    2. Complete mixed ordinal/polyserial: add casewise mixed moment influence in
+       the exact mixed moment order; gate ULS first, then diagonal estimated
+       weights for polyserial rows, then full WLS.
+    3. Complete all-ordinal full WLS: generalize the current diagonal
+       `robust_ordinal_ij` path from `diag(IF(Gamma))` to full `IF(Gamma)`,
+       with diagonal extraction required to reproduce DWLS.
+    4. ML2S: add casewise saturated-EM moment influence and route
+       `TwoStageWeight::{Nt,Dwls,Adf,Dls}` through the same formulas; the NT
+       weight still has a derivative when it is built from saturated sample
+       moments.
+    5. MCAR/pairwise-missing ordinal and polyserial: design a case-aligned sparse
+       moment-row primitive with per-moment support scaling before coding; the
+       current disjoint-block IJ primitive is not enough for overlapping
+       pairwise supports.
   - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai
     Eq 36 / its mixed analogue; FD becomes the validation gate). Also removes the
     per-resample-SE cost that makes the studentized bootstrap expensive.
