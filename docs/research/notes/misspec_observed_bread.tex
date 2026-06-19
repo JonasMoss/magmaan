@@ -85,7 +85,20 @@ loading---and the robust SE recovers it: essentially completely for continuous
 ML (standardized loading $0.69\to1.01$ of truth) and substantially for ordinal
 DWLS, the new bread ($0.78\to0.85$). The two regimes share the same empirical
 meat, so the difference is the bread alone; the ordinal sandwich is asymptotic
-and closes most, not all, of the gap at this $N$.
+and closes most, not all, of the SE ratio at this $N$ (DWLS std loading: $0.85$
+at $N=600$, $0.93$ at $N=2400$).
+
+A bootstrap arm (case resampling; percentile / BCa / studentized; coverage of
+the pseudo-true value, nominal $0.95$) sharpens the verdict. Under
+misspecification the \emph{expected}-bread interval (Muthen 1997 / lavaan
+default) under-covers at $\sim0.87$, the \emph{observed}-bread interval recovers
+nominal coverage at $\sim0.95$, and the bootstrap intervals slightly over-cover
+($\sim0.97$). So for what actually matters---calibrated coverage---the analytic
+observed bread is sufficient; the residual SE-ratio shortfall is heavy-tail mass
+(the SD is tail-sensitive, central $95\%$ coverage is not), and the bootstrap is
+a conservative safety net rather than a necessity here. The data-dependent-weight
+term (\S and the ULS$<$DWLS gap) and explicit second-order corrections
+(Edgeworth / infinitesimal jackknife) are open directions, not requirements.
 
 \section*{Where this sits relative to other software}
 
