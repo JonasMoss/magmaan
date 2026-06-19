@@ -3384,6 +3384,7 @@ mixed_ordinal_stats_from_data_impl(
   stats.W_wls.reserve(Xs.size());
   stats.n_obs.reserve(Xs.size());
   stats.n_levels.reserve(Xs.size());
+  stats.moment_influence.reserve(Xs.size());
   if (use_polyserial_dpd) out.block_diagnostics.reserve(Xs.size());
 
   for (std::size_t b = 0; b < Xs.size(); ++b) {
@@ -3825,6 +3826,7 @@ mixed_ordinal_stats_from_data_impl(
     stats.threshold_level.push_back(std::move(th_level));
     stats.moments.push_back(std::move(moment));
     stats.NACOV.push_back(std::move(NACOV));
+    stats.moment_influence.push_back(std::move(IF));
     stats.W_dwls.push_back(std::move(W_dwls));
     stats.W_wls.push_back(std::move(W_wls));
     stats.n_obs.push_back(static_cast<std::int64_t>(n));

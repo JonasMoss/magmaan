@@ -248,8 +248,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   to the moment-quadratic SEM stack. The reusable `robust_weighted_moment_ij`
   primitive is now the shared transport for observed-bread weighted-moment IJ
   covariance: callers provide per-case moment influence rows plus optional
-  per-case estimated-weight corrections. Mixed ordinal/polyserial,
-  MCAR/pairwise-missing variants, and ML2S adapters remain out of scope.
+  per-case estimated-weight corrections. Mixed ordinal/polyserial
+  estimated-weight corrections, MCAR/pairwise-missing variants, and ML2S
+  adapters remain out of scope.
   Derivation and implementation grid:
   `docs/research/notes/weighted_moment_ij_grid.tex`.
   Open follow-ups:
@@ -277,9 +278,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `robust_ordinal_ij`, using dense `IF(Gamma)` from integer data plus the
     finite-difference stage-1 kappa channel; tests gate the full case-weight
     derivative and diagonal extraction against the DWLS path.
+    Complete mixed ordinal/polyserial fixed-weight ULS **landed 2026-06-19** as
+    `robust_mixed_ordinal_ij`, with `MixedOrdinalStats::moment_influence` rows
+    reconstructed from the mixed moment builder and an exact reduction test
+    against the observed-bread fixed-weight sandwich.
     Remaining
-    slices: complete mixed ordinal/polyserial (mixed casewise moment influence,
-    ULS, diagonal polyserial weights, full WLS); ML2S
+    slices: complete mixed ordinal/polyserial diagonal estimated-weight DWLS
+    (diagonal `IF(Gamma)` for thresholds, continuous moments, polychorics,
+    polyserials, and Pearson rows); complete mixed ordinal/polyserial full WLS;
+    ML2S
     (observed-bread regime first, then casewise saturated-EM influence for
     `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
     continuous LS); MCAR/pairwise-missing
