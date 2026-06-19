@@ -332,6 +332,127 @@ normal_theory_weight_correction_block(const ContinuousLsLayout& layout,
   return correction;
 }
 
+Eigen::VectorXd empirical_gamma_mean_derivative_row(
+    const Eigen::VectorXd& h,
+    const Eigen::VectorXd& x,
+    bool has_means) {
+  const Eigen::Index p = x.size();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::VectorXd dz((has_means ? p : 0) + pstar);
+  Eigen::Index off = 0;
+  if (has_means) {
+    dz.head(p) = -h;
+    off = p;
+  }
+  Eigen::Index k = off;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      dz(k++) = -(h(r) * x(c) + x(r) * h(c));
+    }
+  }
+  return dz;
+}
+
+post_expected<gmm::Weight>
+empirical_wls_weight_from_rows(const std::vector<Eigen::MatrixXd>& rows,
+                               const std::vector<Eigen::Index>& block_rows,
+                               const char* who) {
+  if (rows.size() != block_rows.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": empirical-row block count mismatch"));
+  }
+  gmm::Weight out;
+  out.reserve(rows.size());
+  for (std::size_t b = 0; b < rows.size(); ++b) {
+    const Eigen::MatrixXd& Z = rows[b];
+    if (Z.rows() <= 0 || Z.cols() != block_rows[b]) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": empirical-row shape mismatch in block " +
+              std::to_string(b)));
+    }
+    Eigen::MatrixXd Gamma =
+        (Z.transpose() * Z) / static_cast<double>(Z.rows());
+    Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+    const std::string what =
+        std::string(who) + " empirical Gamma block " + std::to_string(b);
+    auto inv_or = inverse_sym_pd(Gamma, what.c_str());
+    if (!inv_or.has_value()) return std::unexpected(inv_or.error());
+    out.push_back(std::move(*inv_or));
+  }
+  return out;
+}
+
+post_expected<Eigen::MatrixXd>
+empirical_weight_correction_block(const ContinuousLsLayout& layout,
+                                  const data::SampleStats& samp,
+                                  const data::RawData& raw,
+                                  const Eigen::VectorXd& residual,
+                                  const Eigen::MatrixXd& moment_influence,
+                                  const Eigen::MatrixXd& weight,
+                                  std::size_t b) {
+  const Eigen::Index mb = layout.block_rows[b];
+  if (residual.size() != mb || moment_influence.cols() != mb ||
+      weight.rows() != mb || weight.cols() != mb ||
+      raw.X.size() <= b || raw.X[b].rows() != moment_influence.rows() ||
+      raw.X[b].cols() != samp.S[b].rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "empirical_weight_correction_block: shape mismatch in block " +
+            std::to_string(b)));
+  }
+
+  const Eigen::MatrixXd& X = raw.X[b];
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::VectorXd mean_b =
+      (b < samp.mean.size() && samp.mean[b].size() == p)
+          ? samp.mean[b]
+          : X.colwise().mean().transpose().eval();
+  const Eigen::MatrixXd Xc = X.rowwise() - mean_b.transpose();
+  Eigen::MatrixXd Gamma =
+      (moment_influence.transpose() * moment_influence) /
+      static_cast<double>(n);
+  Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+
+  std::vector<Eigen::MatrixXd> L;
+  L.reserve(static_cast<std::size_t>(p));
+  for (Eigen::Index r = 0; r < p; ++r) {
+    Eigen::VectorXd h = Eigen::VectorXd::Zero(p);
+    h(r) = 1.0;
+    Eigen::MatrixXd Lr = Eigen::MatrixXd::Zero(mb, mb);
+    for (Eigen::Index i = 0; i < n; ++i) {
+      const Eigen::VectorXd x = Xc.row(i).transpose();
+      const Eigen::VectorXd dz =
+          empirical_gamma_mean_derivative_row(h, x, layout.has_means);
+      const Eigen::RowVectorXd z = moment_influence.row(i);
+      Lr.noalias() += dz * z;
+      Lr.noalias() += z.transpose() * dz.transpose();
+    }
+    Lr /= static_cast<double>(n);
+    Lr = 0.5 * (Lr + Lr.transpose()).eval();
+    L.push_back(std::move(Lr));
+  }
+
+  const Eigen::RowVectorXd lhs = residual.transpose() * weight;
+  const Eigen::RowVectorXd base = -lhs * Gamma * weight;
+  const Eigen::MatrixXd Zw = moment_influence * weight;
+  std::vector<Eigen::RowVectorXd> lhs_Lw;
+  lhs_Lw.reserve(static_cast<std::size_t>(p));
+  for (Eigen::Index r = 0; r < p; ++r) {
+    lhs_Lw.push_back(lhs * L[static_cast<std::size_t>(r)] * weight);
+  }
+
+  Eigen::MatrixXd correction(n, mb);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::RowVectorXd z = moment_influence.row(i);
+    Eigen::RowVectorXd row = base + z.dot(lhs) * Zw.row(i);
+    for (Eigen::Index r = 0; r < p; ++r) {
+      row.noalias() += Xc(i, r) * lhs_Lw[static_cast<std::size_t>(r)];
+    }
+    correction.row(i) = row;
+  }
+  return correction;
+}
+
 post_expected<std::vector<Eigen::MatrixXd>>
 continuous_ls_moment_influence_blocks_from_raw(
     const data::RawData& raw,
@@ -576,7 +697,20 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
 enum class ContinuousLsIJWeightMode {
   Fixed,
   SampleNormalTheory,
+  SampleEmpiricalWls,
 };
+
+const char* continuous_ls_ij_name(ContinuousLsIJWeightMode mode) {
+  switch (mode) {
+    case ContinuousLsIJWeightMode::Fixed:
+      return "robust_continuous_ls_fixed_weight_ij";
+    case ContinuousLsIJWeightMode::SampleNormalTheory:
+      return "robust_continuous_ls_gls_ij";
+    case ContinuousLsIJWeightMode::SampleEmpiricalWls:
+      return "robust_continuous_ls_wls_ij";
+  }
+  return "robust_continuous_ls_ij";
+}
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls_ij_impl(spec::LatentStructure pt,
@@ -586,9 +720,7 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
                              const gmm::Weight& weight,
                              const data::RawData& raw,
                              ContinuousLsIJWeightMode mode) {
-  const char* who = mode == ContinuousLsIJWeightMode::Fixed
-                        ? "robust_continuous_ls_fixed_weight_ij"
-                        : "robust_continuous_ls_gls_ij";
+  const char* who = continuous_ls_ij_name(mode);
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
@@ -627,6 +759,12 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
     if (!w_or.has_value()) return std::unexpected(fit_to_post(w_or.error()));
     estimated_weight = std::move(*w_or);
     active_weight = &estimated_weight;
+  } else if (mode == ContinuousLsIJWeightMode::SampleEmpiricalWls) {
+    auto w_or = empirical_wls_weight_from_rows(
+        *rows_or, layout.block_rows, who);
+    if (!w_or.has_value()) return std::unexpected(w_or.error());
+    estimated_weight = std::move(*w_or);
+    active_weight = &estimated_weight;
   }
 
   std::vector<WeightedMomentIJBlock> ij_blocks;
@@ -643,6 +781,13 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
           continuous_block_residual(samp, eval->moments, layout, b);
       auto corr_or = normal_theory_weight_correction_block(
           layout, samp, d_b, (*rows_or)[b], *Wb, b);
+      if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+      correction = std::move(*corr_or);
+    } else if (mode == ContinuousLsIJWeightMode::SampleEmpiricalWls) {
+      const Eigen::VectorXd d_b =
+          continuous_block_residual(samp, eval->moments, layout, b);
+      auto corr_or = empirical_weight_correction_block(
+          layout, samp, raw, d_b, (*rows_or)[b], *Wb, b);
       if (!corr_or.has_value()) return std::unexpected(corr_or.error());
       correction = std::move(*corr_or);
     }
@@ -1059,6 +1204,17 @@ robust_continuous_ls_gls_ij(spec::LatentStructure pt,
   return robust_continuous_ls_ij_impl(
       std::move(pt), rep, samp, est, gmm::Weight{}, raw,
       ContinuousLsIJWeightMode::SampleNormalTheory);
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_wls_ij(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const data::RawData& raw) {
+  return robust_continuous_ls_ij_impl(
+      std::move(pt), rep, samp, est, gmm::Weight{}, raw,
+      ContinuousLsIJWeightMode::SampleEmpiricalWls);
 }
 
 post_expected<robust::ParamSpaceSandwich>

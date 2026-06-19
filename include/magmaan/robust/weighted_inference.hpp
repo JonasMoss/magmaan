@@ -215,4 +215,16 @@ robust_continuous_ls_gls_ij(spec::LatentStructure pt,
                             const Estimates& est,
                             const data::RawData& raw);
 
+// Complete-data infinitesimal-jackknife covariance for continuous WLS/ADF
+// where the dense Browne empirical-Gamma weight is estimated from the same raw
+// data used for the sample moments. With meanstructure this uses the full
+// stacked [mean; vech(cov)] empirical Gamma, including the third-moment
+// cross-block.
+post_expected<WeightedRobustResult>
+robust_continuous_ls_wls_ij(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const data::RawData& raw);
+
 }  // namespace magmaan::estimate

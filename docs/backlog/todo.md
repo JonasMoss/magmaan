@@ -260,8 +260,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `robust_continuous_ls_fixed_weight_ij`; sample-built continuous GLS
     normal-theory-weight correction **landed 2026-06-19** as
     `robust_continuous_ls_gls_ij` (this is not the ML/FIML robust-score NT
-    path); remaining continuous LS work is DWLS/WLS and DLS estimated-weight
-    corrections. Other
+    path); complete-data continuous WLS/ADF empirical-weight correction
+    **landed 2026-06-19** as `robust_continuous_ls_wls_ij`, with
+    covariance-only and meanstructure finite-difference contamination gates.
+    Remaining continuous LS work is DWLS and DLS estimated-weight corrections.
+    Other
     slices: complete mixed ordinal/polyserial (mixed casewise moment influence,
     ULS, diagonal polyserial weights, full WLS); complete all-ordinal full WLS
     (full `IF(Gamma)`, diagonal extraction must reproduce DWLS); ML2S
