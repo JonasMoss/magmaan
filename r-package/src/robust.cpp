@@ -69,6 +69,12 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
       levl(x["threshold_level"]), NAl(x["NACOV"]),
       Wdl(x["W_dwls"]), Wfl(x["W_wls"]), nlevl(x["n_levels"]);
   Rcpp::IntegerVector nobs(x["nobs"]);
+  const bool has_mi = x.containsElementNamed("moment_influence");
+  Rcpp::List mil = has_mi ? Rcpp::List(x["moment_influence"]) : Rcpp::List();
+  const bool has_id = x.containsElementNamed("int_data");
+  Rcpp::List idl = has_id ? Rcpp::List(x["int_data"]) : Rcpp::List();
+  const bool has_mb = x.containsElementNamed("moment_bread");
+  Rcpp::List mbl = has_mb ? Rcpp::List(x["moment_bread"]) : Rcpp::List();
   const R_xlen_t nb = Rl.size();
   magmaan::data::OrdinalStats out;
   out.R.reserve(static_cast<std::size_t>(nb));
@@ -95,6 +101,15 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
     out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
     out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
     out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
+    if (has_mi)
+      out.moment_influence.push_back(
+          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mil[b])));
+    if (has_id)
+      out.int_data.push_back(
+          Rcpp::as<Eigen::MatrixXi>(Rcpp::IntegerMatrix(idl[b])));
+    if (has_mb)
+      out.moment_bread.push_back(
+          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mbl[b])));
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
     out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
   }
@@ -841,6 +856,45 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
       Rcpp::_["satorra_bentler"] = satorra_bentler_to_list(r.satorra_bentler),
       Rcpp::_["mean_var_adjusted"] = mean_var_to_list(r.mean_var_adjusted),
       Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted));
+}
+
+// infer_ordinal_robust_ij() — infinitesimal-jackknife ("regime = ij")
+// misspecification-robust covariance for the delta all-ordinal LS path. Unlike
+// infer_ordinal_robust(bread="observed"), this carries the influence of the
+// estimated weight Ŵ = diag(NACOV)⁻¹ (the cov(Γ̂) term), so it needs the
+// per-case influence functions `ordinal_stats$moment_influence`. ULS/DWLS only.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats,
+                                   std::string weight = "") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  if (weight.empty()) {
+    if (fit.containsElementNamed("ordinal_computational_weight")) {
+      weight = Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
+    } else {
+      if (!fit.containsElementNamed("estimator")) {
+        Rcpp::stop("magmaan: infer_ordinal_robust_ij() needs `weight` when "
+                   "fit$estimator is absent");
+      }
+      weight = Rcpp::as<std::string>(fit["estimator"]);
+    }
+  }
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::robust_ordinal_ij(
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
+      ordinal_parameterization_from_string(parameterization_name));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  const magmaan::estimate::OrdinalRobustResult& r = *r_or;
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r.vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r.se),
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["chisq_standard"] = r.chisq_standard);
 }
 
 // [[Rcpp::export]]

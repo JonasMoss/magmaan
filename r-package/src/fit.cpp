@@ -972,7 +972,8 @@ SEXP weight_to_r(const magmaan::estimate::gmm::Weight& W) {
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
   const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
   Rcpp::List R(nb), thresholds(nb), threshold_ov(nb), threshold_level(nb),
-      moments(nb), NACOV(nb), W_dwls(nb), W_wls(nb), n_levels(nb);
+      moments(nb), NACOV(nb), W_dwls(nb), W_wls(nb), moment_influence(nb),
+      int_data(nb), moment_bread(nb), n_levels(nb);
   Rcpp::IntegerVector nobs(nb);
   for (R_xlen_t b = 0; b < nb; ++b) {
     const std::size_t bi = static_cast<std::size_t>(b);
@@ -1006,6 +1007,15 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
     W_wls[b] = bi < s.W_wls.size()
         ? Rcpp::wrap(s.W_wls[bi])
         : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    moment_influence[b] = bi < s.moment_influence.size()
+        ? Rcpp::wrap(s.moment_influence[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    int_data[b] = bi < s.int_data.size()
+        ? Rcpp::wrap(s.int_data[bi])
+        : Rcpp::wrap(Eigen::MatrixXi(0, 0));
+    moment_bread[b] = bi < s.moment_bread.size()
+        ? Rcpp::wrap(s.moment_bread[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
     nobs[b] = static_cast<int>(s.n_obs[bi]);
     n_levels[b] = Rcpp::wrap(s.n_levels[bi]);
   }
@@ -1018,6 +1028,9 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
       Rcpp::_["NACOV"] = NACOV,
       Rcpp::_["W_dwls"] = W_dwls,
       Rcpp::_["W_wls"] = W_wls,
+      Rcpp::_["moment_influence"] = moment_influence,
+      Rcpp::_["int_data"] = int_data,
+      Rcpp::_["moment_bread"] = moment_bread,
       Rcpp::_["nobs"] = nobs,
       Rcpp::_["n_levels"] = n_levels);
   if (!s.pairwise_gamma.empty()) {

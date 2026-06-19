@@ -108,6 +108,23 @@ robust_ordinal(spec::LatentStructure pt,
                    OrdinalParameterization::Delta,
                robust::Information bread = robust::Information::Expected);
 
+// Infinitesimal-jackknife (misspecification-robust, "regime = ij") covariance
+// for an all-ordinal moment-quadratic fit. Observed-Hessian bread with an IJ
+// meat Σ_i v_i v_iᵀ, v_i = W_b g_i + corr_i, that -- unlike the fixed-weight
+// observed-bread sandwich -- carries the influence of the ESTIMATED weight
+// Ŵ = diag(NACOV)⁻¹ (the cov(Γ̂) term). That term is leading-order under
+// misspecification and identically zero under the null or for ULS (W = I,
+// fixed); the channel-1 piece (v_i = W_b g_i) reproduces the observed-bread
+// sandwich exactly. Requires `stats.moment_influence`. ULS and DWLS only.
+post_expected<OrdinalRobustResult>
+robust_ordinal_ij(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::OrdinalStats& stats,
+                  const Estimates& est,
+                  OrdinalWeightKind weights,
+                  OrdinalParameterization parameterization =
+                      OrdinalParameterization::Delta);
+
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
