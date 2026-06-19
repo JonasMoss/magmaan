@@ -1,0 +1,143 @@
+---
+title: "Mplus Demo WLSMV DIFFTEST Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+fit_path <- file.path("results", "model_fit.csv")
+diff_path <- file.path("results", "difftest.csv")
+meta_path <- file.path("results", "metadata.csv")
+aux_path <- file.path("results", "auxiliary_check.csv")
+if (!file.exists(fit_path) || !file.exists(diff_path)) {
+  stop("Run `Rscript run_experiment.R` first.", call. = FALSE)
+}
+model_fit <- read.csv(fit_path, na.strings = "")
+difftest <- read.csv(diff_path, na.strings = "")
+metadata <- read.csv(meta_path, na.strings = "")
+auxiliary <- read.csv(aux_path, na.strings = "")
+
+fmt <- function(x, digits = 3) {
+  ifelse(is.finite(x), sprintf(paste0("%.", digits, "f"), x), "")
+}
+fmt_p <- function(x) ifelse(is.finite(x), sprintf("%.4f", x), "")
+meta_value <- function(key) metadata$value[match(key, metadata$key)]
+
+main_methods <- rbind(
+  difftest[difftest$engine == "mplus" &
+             difftest$method == "DIFFTEST", ],
+  difftest[difftest$engine == "lavaan" &
+             difftest$method == "satorra.2000_delta_scaled_shifted" &
+             difftest$restriction %in% c("metric", "scalar_mplus"), ],
+  difftest[difftest$engine == "magmaan" &
+             difftest$variant == "pd_gamma_overlap" &
+             difftest$method == "restriction_map_delta_scaled_shifted", ],
+  difftest[difftest$engine == "magmaan" &
+             difftest$variant == "pd_gamma_overlap" &
+             difftest$restriction %in% c("scalar_group_equal", "scalar_mplus") &
+             !is.na(difftest$error), ]
+)
+main_methods$stat_fmt <- fmt(main_methods$stat)
+main_methods$df_fmt <- fmt(main_methods$df)
+main_methods$p_fmt <- fmt_p(main_methods$p_value)
+main_methods$error[is.na(main_methods$error)] <- ""
+diff_tab <- main_methods[, c("engine", "variant", "restriction", "method",
+                             "stat_fmt", "df_fmt", "p_fmt", "error")]
+names(diff_tab) <- c("Engine", "Variant", "Restriction", "Method",
+                     "Statistic", "df", "p", "Error")
+
+fit_focus <- model_fit[
+  model_fit$model %in% c("configural", "metric", "scalar_mplus",
+                         "scalar_group_equal") &
+    (model_fit$engine != "magmaan" |
+       model_fit$variant %in% c("pd_gamma_overlap", "pd_gamma_nominal")),
+]
+fit_focus$chisq_raw_fmt <- fmt(fit_focus$chisq_raw)
+fit_focus$chisq_scaled_fmt <- fmt(fit_focus$chisq_scaled)
+fit_focus$p_scaled_fmt <- fmt_p(fit_focus$pvalue_scaled)
+fit_tab <- fit_focus[, c("engine", "variant", "model", "npar", "df",
+                         "chisq_raw_fmt", "chisq_scaled_fmt", "p_scaled_fmt")]
+names(fit_tab) <- c("Engine", "Variant", "Model", "npar", "df",
+                    "Raw chi-square", "Adjusted chi-square", "Adjusted p")
+```
+
+## Question
+
+Can the Mplus Demo be used to see what Mplus WLSMV pairwise-deletion DIFFTEST is
+doing in the Chen et al. setting, and is that statistic essentially lavaan's
+`satorra.2000` scaled-shifted difference test?
+
+## Short Answer
+
+For a demo-sized metric-invariance test, yes: Mplus DIFFTEST, lavaan's
+`lavTestLRT(..., method = "satorra.2000", A.method = "delta",
+scaled.shifted = TRUE)`, and magmaan with the overlap pairwise Gamma all give
+the same result to rounding.
+
+For the scalar-like Mplus default, lavaan can be made count-compatible with
+Mplus by freeing the group-B latent mean and fixing the observed intercepts.
+That count-compatible lavaan statistic is close but not identical to Mplus in
+this one replicate. magmaan can fit the same 38-parameter Mplus-style scalar
+model with the same explicit latent-mean/item-intercept syntax, and its raw
+least-squares objective then matches Mplus. The missing piece is the nested
+Satorra-2000 map: `robust_nested_lrt()` currently rejects this scalar comparison
+because the H0 adds a compensating latent-mean parameter while imposing loading
+and threshold equalities.
+
+The auxiliary variable is only used to drive missingness. Mplus rejects
+`AUXILIARY = aux (m)` with categorical variables in this WLSMV setup, so this is
+a WLSMV_PD/pairwise probe rather than an auxiliary-variable probe.
+
+## Nested Tests
+
+```{r}
+knitr::kable(diff_tab, row.names = FALSE)
+```
+
+## Model Fit Rows
+
+The Mplus adjusted chi-square is the printed WLSMV model-fit statistic. The raw
+chi-square is `2 * N * fmin`, included to compare the underlying least-squares
+objective.
+
+```{r}
+knitr::kable(fit_tab, row.names = FALSE)
+```
+
+## Auxiliary Check
+
+```{r}
+knitr::kable(auxiliary, row.names = FALSE)
+```
+
+## Design
+
+The data are a two-group, six-indicator, one-factor ordinal CFA, small enough
+for Mplus Demo's six-dependent-variable limit:
+
+```text
+f =~ y1 + y2 + y3 + y4 + y5 + y6
+```
+
+Both groups use loading `r meta_value("loading")` and thresholds
+`r meta_value("thresholds")`. The total sample size is
+`r meta_value("n_total")`, split evenly by group. Missingness is applied only in
+group B, on `y5` and `y6`, with target rate
+`r meta_value("missing_rate_target")`; the realized group-B rate is
+`r meta_value("missing_rate_realized_group_b_y5_y6")`.
+
+The Mplus input/output files and `h1diff.dat` are kept in
+`r meta_value("mplus_work_dir")`.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R
+quarto render report.qmd
+```
