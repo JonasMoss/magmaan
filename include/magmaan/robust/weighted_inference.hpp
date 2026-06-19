@@ -204,4 +204,15 @@ robust_continuous_ls_fixed_weight_ij(spec::LatentStructure pt,
                                      const gmm::Weight& weight,
                                      const data::RawData& raw);
 
+// Complete-data infinitesimal-jackknife covariance for continuous GLS where
+// the normal-theory weight is estimated from the sample covariance via
+// `gmm::normal_theory_weight`. This is the Hall-Inoue correction for the
+// moment-quadratic GLS estimator, not the ordinary ML/FIML robust-score path.
+post_expected<WeightedRobustResult>
+robust_continuous_ls_gls_ij(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const data::RawData& raw);
+
 }  // namespace magmaan::estimate

@@ -212,13 +212,15 @@ polyserial rows. Full WLS waits for full $\dot\Gamma_i$.
 \paragraph{Complete continuous LS.}
 For ULS with a fixed identity weight, the IJ is only a wrapper around the
 observed-bread sandwich using raw moment influence rows. This slice has landed
-as the fixed-weight continuous-LS IJ helper. GLS/NT, DWLS, WLS, and DLS are
-estimated-weight targets if their weights are built from sample moments rather
-than held fixed by the caller. The raw mean/covariance $g_i$ is analytic; the
-weight derivatives are either normal-theory
-$\Gamma_{\mathrm{NT}}(\mu,\Sigma)$ derivatives or empirical $\Gamma$
-derivatives. This remains the cheapest place to verify the full-WLS matrix
-formula.
+as the fixed-weight continuous-LS IJ helper. The sample-built GLS
+normal-theory-weight slice has also landed: this is a moment-quadratic
+estimated-weight correction, not ordinary ML/FIML robust-score normal-theory
+inference. DWLS, WLS, and DLS remain estimated-weight targets if their weights
+are built from sample moments rather than held fixed by the caller. The raw
+mean/covariance $g_i$ is analytic; the remaining weight derivatives are
+empirical $\Gamma$ derivatives or mixtures with
+$\Gamma_{\mathrm{NT}}(\mu,\Sigma)$. This remains the cheapest place to verify
+the full-WLS matrix formula.
 
 \paragraph{Two-stage FIML (ML2S).}
 Stage 1 supplies saturated EM moments and their ACOV. The required new object is

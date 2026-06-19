@@ -10,6 +10,7 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -99,6 +100,193 @@ magmaan::estimate::gmm::Weight gls_weight(const magmaan::spec::LatentStructure& 
   auto w = magmaan::estimate::gmm::normal_theory_weight(*ev, samp, theta);
   REQUIRE(w.has_value());
   return *w;
+}
+
+Eigen::Index vech_len(Eigen::Index p) {
+  return p * (p + 1) / 2;
+}
+
+Eigen::VectorXd vech_lower(const Eigen::Ref<const Eigen::MatrixXd>& M) {
+  Eigen::VectorXd out(vech_len(M.rows()));
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < M.cols(); ++c) {
+    for (Eigen::Index r = c; r < M.rows(); ++r) out(k++) = M(r, c);
+  }
+  return out;
+}
+
+void unpack_vech(const Eigen::Ref<const Eigen::VectorXd>& x,
+                 Eigen::Index p,
+                 Eigen::Ref<Eigen::MatrixXd> M) {
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      M(r, c) = x(k);
+      if (r != c) M(c, r) = x(k);
+      ++k;
+    }
+  }
+}
+
+struct TestLsLayout {
+  bool has_means = false;
+  std::vector<Eigen::Index> block_rows;
+  std::vector<Eigen::Index> mu_offsets;
+  std::vector<Eigen::Index> sigma_offsets;
+  Eigen::Index total_mu_rows = 0;
+  Eigen::Index total_sigma_rows = 0;
+};
+
+TestLsLayout make_test_layout(const magmaan::data::SampleStats& samp,
+                              const magmaan::model::ImpliedMoments& moments) {
+  TestLsLayout layout;
+  for (std::size_t b = 0; b < moments.mu.size(); ++b) {
+    if (moments.mu[b].size() > 0 && b < samp.mean.size() &&
+        samp.mean[b].size() > 0) {
+      layout.has_means = true;
+    }
+  }
+  layout.block_rows.resize(moments.sigma.size());
+  layout.mu_offsets.resize(moments.sigma.size());
+  layout.sigma_offsets.resize(moments.sigma.size());
+  for (std::size_t b = 0; b < moments.sigma.size(); ++b) {
+    const Eigen::Index p = moments.sigma[b].rows();
+    layout.mu_offsets[b] = layout.total_mu_rows;
+    if (layout.has_means) layout.total_mu_rows += p;
+    layout.sigma_offsets[b] = layout.total_sigma_rows;
+    layout.total_sigma_rows += vech_len(p);
+    layout.block_rows[b] = (layout.has_means ? p : 0) + vech_len(p);
+  }
+  return layout;
+}
+
+Eigen::MatrixXd test_jacobian_block(
+    const TestLsLayout& layout,
+    const magmaan::model::ImpliedMoments& moments,
+    const Eigen::MatrixXd& J_sigma,
+    const Eigen::MatrixXd& J_mu,
+    std::size_t b) {
+  const Eigen::Index p = moments.sigma[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index n_free = J_sigma.cols();
+  Eigen::MatrixXd Jb(layout.block_rows[b], n_free);
+  Eigen::Index off = 0;
+  if (layout.has_means) {
+    Jb.topRows(p).setZero();
+    if (b < moments.mu.size() && moments.mu[b].size() == p) {
+      Jb.topRows(p) = J_mu.block(layout.mu_offsets[b], 0, p, n_free);
+    }
+    off = p;
+  }
+  Jb.block(off, 0, pstar, n_free) =
+      J_sigma.block(layout.sigma_offsets[b], 0, pstar, n_free);
+  return Jb;
+}
+
+Eigen::VectorXd test_residual_block(const magmaan::data::SampleStats& samp,
+                                    const magmaan::model::ImpliedMoments& moments,
+                                    const TestLsLayout& layout,
+                                    std::size_t b) {
+  const Eigen::Index p = moments.sigma[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::VectorXd d(layout.block_rows[b]);
+  Eigen::Index off = 0;
+  if (layout.has_means) {
+    const Eigen::VectorXd mu_model =
+        (b < moments.mu.size() && moments.mu[b].size() == p)
+            ? moments.mu[b]
+            : Eigen::VectorXd::Zero(p);
+    const Eigen::VectorXd mean_s =
+        (b < samp.mean.size() && samp.mean[b].size() == p)
+            ? samp.mean[b]
+            : Eigen::VectorXd::Zero(p);
+    d.head(p) = mu_model - mean_s;
+    off = p;
+  }
+  d.segment(off, pstar) = vech_lower(moments.sigma[b] - samp.S[b]);
+  return d;
+}
+
+std::vector<Eigen::MatrixXd> test_moment_influence_rows(
+    const magmaan::data::RawData& raw,
+    const magmaan::data::SampleStats& samp,
+    const TestLsLayout& layout) {
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(raw.X.size());
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const Eigen::MatrixXd& X = raw.X[b];
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    const Eigen::Index pstar = vech_len(p);
+    Eigen::MatrixXd Z = Eigen::MatrixXd::Zero(n, layout.block_rows[b]);
+    const Eigen::VectorXd mean_b =
+        (b < samp.mean.size() && samp.mean[b].size() == p)
+            ? samp.mean[b]
+            : X.colwise().mean().transpose().eval();
+    const Eigen::MatrixXd Xc = X.rowwise() - mean_b.transpose();
+    const Eigen::VectorXd s_vech = vech_lower(samp.S[b]);
+    for (Eigen::Index i = 0; i < n; ++i) {
+      const Eigen::VectorXd xi = Xc.row(i).transpose();
+      Eigen::Index off = 0;
+      if (layout.has_means) {
+        Z.block(i, 0, 1, p) = xi.transpose();
+        off = p;
+      }
+      Z.block(i, off, 1, pstar) =
+          (vech_lower(Eigen::MatrixXd(xi * xi.transpose())) - s_vech)
+              .transpose();
+    }
+    out.push_back(std::move(Z));
+  }
+  return out;
+}
+
+Eigen::VectorXd test_ls_gradient(const magmaan::model::ModelEvaluator& ev,
+                                 const magmaan::data::SampleStats& samp,
+                                 const magmaan::estimate::gmm::Weight& weight,
+                                 double N_total,
+                                 const Eigen::VectorXd& theta) {
+  auto eval = ev.evaluate(theta, true, true);
+  REQUIRE(eval.has_value());
+  const TestLsLayout layout = make_test_layout(samp, eval->moments);
+  Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::MatrixXd Jb = test_jacobian_block(
+        layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+    const Eigen::VectorXd d_b =
+        test_residual_block(samp, eval->moments, layout, b);
+    const double w_b = static_cast<double>(samp.n_obs[b]) / N_total;
+    g.noalias() += w_b * (Jb.transpose() * weight[b] * d_b);
+  }
+  return g;
+}
+
+Eigen::MatrixXd finite_gls_weight_correction(
+    const magmaan::spec::LatentStructure& pt,
+    const magmaan::model::MatrixRep& rep,
+    const magmaan::data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    const TestLsLayout& layout,
+    const Eigen::VectorXd& residual,
+    const Eigen::MatrixXd& rows,
+    std::size_t b) {
+  const Eigen::Index p = samp.S[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index cov_off = layout.has_means ? p : 0;
+  Eigen::MatrixXd correction = Eigen::MatrixXd::Zero(rows.rows(), rows.cols());
+  Eigen::MatrixXd dS(p, p);
+  const double eps = 1e-6;
+  for (Eigen::Index i = 0; i < rows.rows(); ++i) {
+    unpack_vech(rows.row(i).segment(cov_off, pstar).transpose(), p, dS);
+    magmaan::data::SampleStats plus = samp;
+    magmaan::data::SampleStats minus = samp;
+    plus.S[b] += eps * dS;
+    minus.S[b] -= eps * dS;
+    const auto Wp = gls_weight(pt, rep, plus, theta);
+    const auto Wm = gls_weight(pt, rep, minus, theta);
+    correction.row(i) = -residual.transpose() * ((Wp[b] - Wm[b]) / (2.0 * eps));
+  }
+  return correction;
 }
 
 }  // namespace
@@ -355,6 +543,65 @@ TEST_CASE("robust_continuous_ls_fixed_weight_ij reduces to observed-bread sandwi
   CHECK(ij_gls->vcov.isApprox(fixed_gls->vcov, 1e-8));
   CHECK(ij_gls->se.isApprox(fixed_gls->se, 1e-8));
   CHECK(ij_gls->eigvals.size() == 0);
+}
+
+TEST_CASE("robust_continuous_ls_gls_ij matches finite-difference weight influence") {
+  auto fx = one_factor_fixture();
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+
+  auto est = magmaan::test::fit_gls(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est.has_value());
+  const auto W = gls_weight(fx.pt, fx.rep, fx.samp, est->theta);
+  auto got = magmaan::estimate::robust_continuous_ls_gls_ij(
+      fx.pt, fx.rep, fx.samp, *est, fx.raw);
+  REQUIRE(got.has_value());
+
+  auto ev_or = magmaan::model::ModelEvaluator::build(fx.pt, fx.rep);
+  REQUIRE(ev_or.has_value());
+  auto eval = ev_or->evaluate(est->theta, true, true);
+  REQUIRE(eval.has_value());
+  const TestLsLayout layout = make_test_layout(fx.samp, eval->moments);
+  const auto rows = test_moment_influence_rows(fx.raw, fx.samp, layout);
+  auto con = magmaan::estimate::build_eq_constraints(fx.pt);
+  REQUIRE(con.has_value());
+  const Eigen::MatrixXd& K = con->K();
+  const double N_total = total_n(fx.samp);
+
+  auto grad_at = [&](const Eigen::VectorXd& theta)
+      -> magmaan::post_expected<Eigen::VectorXd> {
+    return test_ls_gradient(*ev_or, fx.samp, W, N_total, theta);
+  };
+  auto bread = magmaan::estimate::observed_moment_bread_fd(
+      grad_at, est->theta, K);
+  REQUIRE(bread.has_value());
+
+  std::vector<magmaan::estimate::WeightedMomentIJBlock> blocks;
+  blocks.reserve(fx.samp.S.size());
+  for (std::size_t b = 0; b < fx.samp.S.size(); ++b) {
+    const Eigen::MatrixXd Jb = test_jacobian_block(
+        layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+    const Eigen::VectorXd d_b =
+        test_residual_block(fx.samp, eval->moments, layout, b);
+    blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
+        .jacobian = Jb,
+        .weight = W[b],
+        .moment_influence = rows[b],
+        .weight_correction = finite_gls_weight_correction(
+            fx.pt, fx.rep, fx.samp, est->theta, layout, d_b, rows[b], b),
+        .n_obs = fx.samp.n_obs[b]});
+  }
+  auto expected = magmaan::estimate::robust_weighted_moment_ij(
+      blocks, K, 2.0 * est->fmin, *bread);
+  REQUIRE(expected.has_value());
+
+  CHECK(got->df == expected->df);
+  CHECK(got->chisq_standard == doctest::Approx(expected->chisq_standard));
+  CHECK(got->vcov.isApprox(expected->vcov, 5e-7));
+  CHECK(got->se.isApprox(expected->se, 5e-7));
+  CHECK(got->eigvals.size() == 0);
 }
 
 TEST_CASE("robust_continuous_ls: GLS and WLS preserve continuous LS statistic scale") {

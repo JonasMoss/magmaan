@@ -49,6 +49,7 @@ PostError model_to_post(ModelError e) {
 using detail::vech_index;
 using detail::vech_len;
 using detail::vech_lower;
+using detail::vech_unpack;
 
 post_expected<Eigen::MatrixXd> inverse_sym_pd(const Eigen::MatrixXd& A,
                                               const char* what) {
@@ -215,6 +216,30 @@ continuous_moment_jacobian_block(const ContinuousLsLayout& layout,
   return Jb;
 }
 
+Eigen::VectorXd continuous_block_residual(const data::SampleStats& samp,
+                                          const model::ImpliedMoments& moments,
+                                          const ContinuousLsLayout& layout,
+                                          std::size_t b) {
+  const Eigen::Index p = moments.sigma[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::VectorXd d(layout.block_rows[b]);
+  Eigen::Index off = 0;
+  if (layout.has_means) {
+    const bool have_mu =
+        b < moments.mu.size() && moments.mu[b].size() == p;
+    const Eigen::VectorXd mu_model =
+        have_mu ? moments.mu[b] : Eigen::VectorXd::Zero(p);
+    const Eigen::VectorXd mean_s =
+        (b < samp.mean.size() && samp.mean[b].size() == p)
+            ? samp.mean[b]
+            : Eigen::VectorXd::Zero(p);
+    d.head(p) = mu_model - mean_s;
+    off = p;
+  }
+  d.segment(off, pstar) = vech_lower(moments.sigma[b] - samp.S[b]);
+  return d;
+}
+
 // Per-block estimator weight for the robust sandwich. An empty `weight` ⇒
 // ULS (identity); otherwise the caller-supplied block (GLS callers pass
 // `gmm::normal_theory_weight`). The sandwich is weight-scale-invariant, so
@@ -238,6 +263,73 @@ weight_block(const gmm::Weight& weight,
             std::to_string(b)));
   }
   return W;
+}
+
+Eigen::MatrixXd gamma_nt_directional(const Eigen::MatrixXd& S,
+                                     const Eigen::MatrixXd& H) {
+  const Eigen::Index p = S.rows();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(pstar, pstar);
+  for (Eigen::Index c1 = 0; c1 < p; ++c1) {
+    for (Eigen::Index r1 = c1; r1 < p; ++r1) {
+      const Eigen::Index k1 = vech_index(p, r1, c1);
+      for (Eigen::Index c2 = 0; c2 < p; ++c2) {
+        for (Eigen::Index r2 = c2; r2 < p; ++r2) {
+          const Eigen::Index k2 = vech_index(p, r2, c2);
+          out(k1, k2) =
+              H(r1, r2) * S(c1, c2) + S(r1, r2) * H(c1, c2) +
+              H(r1, c2) * S(c1, r2) + S(r1, c2) * H(c1, r2);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+post_expected<Eigen::MatrixXd>
+normal_theory_weight_correction_block(const ContinuousLsLayout& layout,
+                                      const data::SampleStats& samp,
+                                      const Eigen::VectorXd& residual,
+                                      const Eigen::MatrixXd& moment_influence,
+                                      const Eigen::MatrixXd& weight,
+                                      std::size_t b) {
+  const Eigen::Index p = samp.S[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index mb = layout.block_rows[b];
+  const Eigen::Index cov_off = layout.has_means ? p : 0;
+  if (residual.size() != mb || moment_influence.cols() != mb ||
+      weight.rows() != mb || weight.cols() != mb ||
+      cov_off + pstar != mb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "normal_theory_weight_correction_block: shape mismatch in block " +
+            std::to_string(b)));
+  }
+
+  Eigen::MatrixXd correction =
+      Eigen::MatrixXd::Zero(moment_influence.rows(), mb);
+  Eigen::MatrixXd dS(p, p);
+  const Eigen::MatrixXd& S = samp.S[b];
+  if (layout.has_means) {
+    const Eigen::MatrixXd Wmu = weight.topLeftCorner(p, p);
+    const Eigen::RowVectorXd lhs_mu = residual.head(p).transpose() * Wmu;
+    for (Eigen::Index i = 0; i < moment_influence.rows(); ++i) {
+      vech_unpack(moment_influence.row(i).segment(cov_off, pstar).transpose(),
+                  p, dS);
+      correction.row(i).head(p) = lhs_mu * dS * Wmu;
+    }
+  }
+
+  const Eigen::MatrixXd Wcov =
+      weight.block(cov_off, cov_off, pstar, pstar);
+  const Eigen::RowVectorXd lhs_cov =
+      residual.segment(cov_off, pstar).transpose() * Wcov;
+  for (Eigen::Index i = 0; i < moment_influence.rows(); ++i) {
+    vech_unpack(moment_influence.row(i).segment(cov_off, pstar).transpose(),
+                p, dS);
+    const Eigen::MatrixXd dG = gamma_nt_directional(S, dS);
+    correction.row(i).segment(cov_off, pstar) = lhs_cov * dG * Wcov;
+  }
+  return correction;
 }
 
 post_expected<std::vector<Eigen::MatrixXd>>
@@ -385,23 +477,8 @@ continuous_ls_gradient(const model::ModelEvaluator& ev,
     if (!Jb.has_value()) return std::unexpected(Jb.error());
     auto Wb = weight_block(weight, layout, b);
     if (!Wb.has_value()) return std::unexpected(Wb.error());
-    const Eigen::Index p = eval->moments.sigma[b].rows();
-    const Eigen::Index pstar = vech_len(p);
-    Eigen::VectorXd d(layout.block_rows[b]);
-    Eigen::Index off = 0;
-    if (layout.has_means) {
-      const bool have_mu = b < eval->moments.mu.size() &&
-                           eval->moments.mu[b].size() == p;
-      const Eigen::VectorXd mu_model =
-          have_mu ? eval->moments.mu[b] : Eigen::VectorXd::Zero(p);
-      const Eigen::VectorXd mean_s =
-          (b < samp.mean.size() && samp.mean[b].size() == p)
-              ? samp.mean[b]
-              : Eigen::VectorXd::Zero(p);
-      d.head(p) = mu_model - mean_s;
-      off = p;
-    }
-    d.segment(off, pstar) = vech_lower(eval->moments.sigma[b] - samp.S[b]);
+    const Eigen::VectorXd d = continuous_block_residual(samp, eval->moments,
+                                                        layout, b);
     const double w_b = static_cast<double>(samp.n_obs[b]) / N_total;
     g.noalias() += w_b * (Jb->transpose() * (*Wb) * d);
   }
@@ -496,13 +573,22 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
                                    weight, *gamma, bread);
 }
 
+enum class ContinuousLsIJWeightMode {
+  Fixed,
+  SampleNormalTheory,
+};
+
 post_expected<WeightedRobustResult>
-robust_continuous_ls_fixed_weight_ij_impl(spec::LatentStructure pt,
-                                          const model::MatrixRep& rep,
-                                          const data::SampleStats& samp,
-                                          const Estimates& est,
-                                          const gmm::Weight& weight,
-                                          const data::RawData& raw) {
+robust_continuous_ls_ij_impl(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::SampleStats& samp,
+                             const Estimates& est,
+                             const gmm::Weight& weight,
+                             const data::RawData& raw,
+                             ContinuousLsIJWeightMode mode) {
+  const char* who = mode == ContinuousLsIJWeightMode::Fixed
+                        ? "robust_continuous_ls_fixed_weight_ij"
+                        : "robust_continuous_ls_gls_ij";
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
@@ -511,13 +597,12 @@ robust_continuous_ls_fixed_weight_ij_impl(spec::LatentStructure pt,
   const Eigen::MatrixXd& K = con_or->K();
   if (K.rows() != pt.n_free()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_continuous_ls_fixed_weight_ij: constraint reparameterization "
-        "has incompatible shape"));
+        std::string(who) +
+            ": constraint reparameterization has incompatible shape"));
   }
   if (est.theta.size() != pt.n_free()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_continuous_ls_fixed_weight_ij: fitted theta length does not "
-        "match partable"));
+        std::string(who) + ": fitted theta length does not match partable"));
   }
 
   auto ev_or = model::ModelEvaluator::build(pt, rep);
@@ -532,7 +617,16 @@ robust_continuous_ls_fixed_weight_ij_impl(spec::LatentStructure pt,
   if (!rows_or.has_value()) return std::unexpected(rows_or.error());
   if (rows_or->size() != samp.S.size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_continuous_ls_fixed_weight_ij: influence block count mismatch"));
+        std::string(who) + ": influence block count mismatch"));
+  }
+
+  gmm::Weight estimated_weight;
+  const gmm::Weight* active_weight = &weight;
+  if (mode == ContinuousLsIJWeightMode::SampleNormalTheory) {
+    auto w_or = gmm::normal_theory_weight(*ev_or, samp, est.theta);
+    if (!w_or.has_value()) return std::unexpected(fit_to_post(w_or.error()));
+    estimated_weight = std::move(*w_or);
+    active_weight = &estimated_weight;
   }
 
   std::vector<WeightedMomentIJBlock> ij_blocks;
@@ -541,17 +635,26 @@ robust_continuous_ls_fixed_weight_ij_impl(spec::LatentStructure pt,
     auto Jb = continuous_moment_jacobian_block(
         layout, eval->moments, eval->J_sigma, eval->J_mu, b);
     if (!Jb.has_value()) return std::unexpected(Jb.error());
-    auto Wb = weight_block(weight, layout, b);
+    auto Wb = weight_block(*active_weight, layout, b);
     if (!Wb.has_value()) return std::unexpected(Wb.error());
+    Eigen::MatrixXd correction;
+    if (mode == ContinuousLsIJWeightMode::SampleNormalTheory) {
+      const Eigen::VectorXd d_b =
+          continuous_block_residual(samp, eval->moments, layout, b);
+      auto corr_or = normal_theory_weight_correction_block(
+          layout, samp, d_b, (*rows_or)[b], *Wb, b);
+      if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+      correction = std::move(*corr_or);
+    }
     ij_blocks.push_back(WeightedMomentIJBlock{
         .jacobian = std::move(*Jb),
         .weight = std::move(*Wb),
         .moment_influence = (*rows_or)[b],
-        .weight_correction = {},
+        .weight_correction = std::move(correction),
         .n_obs = samp.n_obs[b]});
   }
 
-  auto ob = continuous_ls_observed_bread(pt, rep, samp, est, weight, K);
+  auto ob = continuous_ls_observed_bread(pt, rep, samp, est, *active_weight, K);
   if (!ob.has_value()) return std::unexpected(ob.error());
   auto chisq = robust_ls_standard_chisq(samp, est);
   if (!chisq.has_value()) return std::unexpected(chisq.error());
@@ -943,8 +1046,19 @@ robust_continuous_ls_fixed_weight_ij(spec::LatentStructure pt,
                                      const Estimates& est,
                                      const gmm::Weight& weight,
                                      const data::RawData& raw) {
-  return robust_continuous_ls_fixed_weight_ij_impl(
-      std::move(pt), rep, samp, est, weight, raw);
+  return robust_continuous_ls_ij_impl(std::move(pt), rep, samp, est, weight,
+                                      raw, ContinuousLsIJWeightMode::Fixed);
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_gls_ij(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const data::RawData& raw) {
+  return robust_continuous_ls_ij_impl(
+      std::move(pt), rep, samp, est, gmm::Weight{}, raw,
+      ContinuousLsIJWeightMode::SampleNormalTheory);
 }
 
 post_expected<robust::ParamSpaceSandwich>

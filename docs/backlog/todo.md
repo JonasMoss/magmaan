@@ -257,8 +257,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     channel; deterministic resampling-jackknife fixture; misspecification
     simulation with ULS/fixed-weight negative controls. Slices: complete
     continuous LS fixed-weight/ULS reduction **landed 2026-06-19** as
-    `robust_continuous_ls_fixed_weight_ij`; remaining continuous LS work is raw
-    mean/cov GLS/NT, DWLS/WLS, and DLS estimated-weight corrections. Other
+    `robust_continuous_ls_fixed_weight_ij`; sample-built continuous GLS
+    normal-theory-weight correction **landed 2026-06-19** as
+    `robust_continuous_ls_gls_ij` (this is not the ML/FIML robust-score NT
+    path); remaining continuous LS work is DWLS/WLS and DLS estimated-weight
+    corrections. Other
     slices: complete mixed ordinal/polyserial (mixed casewise moment influence,
     ULS, diagonal polyserial weights, full WLS); complete all-ordinal full WLS
     (full `IF(Gamma)`, diagonal extraction must reproduce DWLS); ML2S
