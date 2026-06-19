@@ -1348,6 +1348,11 @@ stop rather than any usable non-error return.
   `d' W IF(Gamma) W`. The dense ordinal Gamma influence is finite-difference
   gated against case-weight perturbations and its diagonal extraction is pinned
   to the DWLS helper.
+  Complete mixed ordinal/polyserial fixed-weight ULS now has
+  `robust_mixed_ordinal_ij`, with mixed casewise moment influence rows stored on
+  `MixedOrdinalStats`; it reduces exactly to the observed-bread fixed-weight
+  sandwich. Mixed DWLS/WLS estimated-weight corrections still require diagonal
+  and dense mixed `IF(Gamma)` channels.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

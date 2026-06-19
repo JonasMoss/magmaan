@@ -250,10 +250,10 @@ remain useful higher-level checks.
 \paragraph{Complete mixed ordinal/polyserial.}
 The same equations apply, but $g_i$ and $\dot\Gamma_i$ must cover continuous
 means, continuous covariances, ordinal thresholds, polychorics, and polyserials
-in the exact mixed moment order. The first shippable slice is fixed-weight ULS,
-which only needs casewise $g_i$ and must reduce to the observed-bread sandwich.
-DWLS then needs diagonal $\dot\Gamma_i$ for every mixed moment, including the
-polyserial rows. Full WLS waits for full $\dot\Gamma_i$.
+in the exact mixed moment order. Fixed-weight ULS is implemented: it only needs
+casewise $g_i$ and reduces to the observed-bread sandwich. DWLS then needs
+diagonal $\dot\Gamma_i$ for every mixed moment, including the polyserial rows.
+Full WLS waits for full $\dot\Gamma_i$.
 
 \paragraph{Complete continuous LS.}
 For ULS with a fixed identity weight, the IJ is only a wrapper around the

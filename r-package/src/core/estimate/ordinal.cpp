@@ -472,8 +472,11 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "MixedOrdinalStats block counts do not match MatrixRep"));
   }
-  const auto& Ws = kind == OrdinalWeightKind::DWLS ? s.W_dwls : s.W_wls;
-  if (Ws.size() != nb || s.NACOV.size() != nb) {
+  const bool uls = kind == OrdinalWeightKind::ULS;
+  static const std::vector<Eigen::MatrixXd> kNoWeights;
+  const auto& Ws = uls ? kNoWeights
+                 : (kind == OrdinalWeightKind::DWLS ? s.W_dwls : s.W_wls);
+  if (s.NACOV.size() != nb || (!uls && Ws.size() != nb)) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "MixedOrdinalStats weight/NACOV block count does not match MatrixRep"));
   }
@@ -533,8 +536,9 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
       }
     }
     const Eigen::Index mdim = s.thresholds[b].size() + 2 * n_cont + p * (p - 1) / 2;
-    if (s.moments[b].size() != mdim || Ws[b].rows() != mdim || Ws[b].cols() != mdim ||
-        s.NACOV[b].rows() != mdim || s.NACOV[b].cols() != mdim) {
+    if (s.moments[b].size() != mdim || s.NACOV[b].rows() != mdim ||
+        s.NACOV[b].cols() != mdim ||
+        (!uls && (Ws[b].rows() != mdim || Ws[b].cols() != mdim))) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "MixedOrdinalStats moment/weight dimension mismatch in block " +
               std::to_string(b)));
@@ -546,7 +550,8 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
     if (!matrix_all_finite(s.R[b]) || !vector_all_finite(s.mean[b]) ||
         !vector_all_finite(s.thresholds[b]) ||
         !vector_all_finite(s.moments[b]) ||
-        !matrix_all_finite(Ws[b]) || !matrix_all_finite(s.NACOV[b])) {
+        !matrix_all_finite(s.NACOV[b]) ||
+        (!uls && !matrix_all_finite(Ws[b]))) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "MixedOrdinalStats contains non-finite values in block " +
               std::to_string(b)));
@@ -558,11 +563,13 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
                 std::to_string(b)));
       }
     }
-    Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
-    if (llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "MixedOrdinalStats weight matrix is not positive definite in block " +
-              std::to_string(b)));
+    if (!uls) {
+      Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats weight matrix is not positive definite in block " +
+                std::to_string(b)));
+      }
     }
   }
   return {};
@@ -1972,6 +1979,13 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
 
 fit_expected<std::vector<Eigen::MatrixXd>>
 weight_factors(const data::MixedOrdinalStats& stats, OrdinalWeightKind kind) {
+  if (kind == OrdinalWeightKind::ULS) {
+    std::vector<Eigen::MatrixXd> out;
+    out.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      out.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+    return out;
+  }
   const auto& Ws = kind == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
   std::vector<Eigen::MatrixXd> out;
   out.reserve(Ws.size());
@@ -3705,7 +3719,15 @@ robust_mixed_ordinal(spec::LatentStructure pt,
         "robust_mixed_ordinal: constraint reparameterization has incompatible shape"));
   }
 
-  const auto& Ws = weights == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                 : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls);
   std::vector<WeightedMomentBlock> blocks;
   blocks.reserve(stats.R.size());
   Eigen::Index off = 0;
@@ -3759,6 +3781,132 @@ robust_mixed_ordinal(spec::LatentStructure pt,
 
   // 2·est.fmin = F (est.fmin = ½F): robust_weighted_moments forms N·F.
   auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin, bread_override);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return ordinal_result_from_weighted(*out);
+}
+
+post_expected<OrdinalRobustResult>
+robust_mixed_ordinal_ij(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::MixedOrdinalStats& stats,
+                        const Estimates& est,
+                        OrdinalWeightKind weights,
+                        OrdinalParameterization parameterization) {
+  if (weights != OrdinalWeightKind::ULS) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_mixed_ordinal_ij: only fixed-weight ULS is implemented; "
+        "DWLS/WLS estimated-weight corrections require mixed IF(Gamma)"));
+  }
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_mixed_ordinal_ij: per-case influence functions unavailable; "
+        "recompute mixed ordinal stats (moment_influence is required for the IJ)"));
+  }
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_mixed_ordinal_ij: fitted theta length does not match mixed "
+        "delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_mixed_ordinal_ij: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      mixed_moment_jacobian(stats, *layout_or, eval->moments,
+                            eval->J_sigma, eval->J_mu, est.theta,
+                            parameterization);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_mixed_ordinal_ij: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  std::vector<Eigen::MatrixXd> Ws;
+  Ws.reserve(stats.NACOV.size());
+  for (const auto& G : stats.NACOV)
+    Ws.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+
+  double N_total = 0.0;
+  for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
+
+  auto grad_at = [&](const Eigen::VectorXd& theta)
+      -> post_expected<Eigen::VectorXd> {
+    auto ev_t = ev_or->evaluate(theta, true, true);
+    if (!ev_t.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_mixed_ordinal_ij observed bread: evaluation failed: " +
+          ev_t.error().detail));
+    }
+    const Eigen::MatrixXd Delta = mixed_moment_jacobian(
+        stats, *layout_or, ev_t->moments, ev_t->J_sigma, ev_t->J_mu, theta,
+        parameterization);
+    Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+    Eigen::Index goff = 0;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const Eigen::Index mb = stats.moments[b].size();
+      const Eigen::VectorXd model_m = mixed_model_moments(
+          stats, *layout_or, ev_t->moments, theta, b, parameterization);
+      const Eigen::VectorXd d_b = model_m - stats.moments[b];
+      const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
+      g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
+                            Ws[b] * d_b);
+      goff += mb;
+    }
+    if (!g.allFinite()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_mixed_ordinal_ij observed bread: non-finite gradient"));
+    }
+    return g;
+  };
+  auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
+
+  std::vector<WeightedMomentIJBlock> ij_blocks;
+  ij_blocks.reserve(stats.R.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = stats.moments[b].size();
+    const Eigen::MatrixXd& G = stats.moment_influence[b];
+    if (G.rows() != stats.n_obs[b] || G.cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_mixed_ordinal_ij: moment_influence shape mismatch in block " +
+              std::to_string(b)));
+    }
+    ij_blocks.push_back(WeightedMomentIJBlock{
+        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
+        .weight = Ws[b],
+        .moment_influence = G,
+        .weight_correction = {},
+        .n_obs = stats.n_obs[b]});
+    off += mb;
+  }
+
+  auto out = robust_weighted_moment_ij(ij_blocks, K, 2.0 * est.fmin, A);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }

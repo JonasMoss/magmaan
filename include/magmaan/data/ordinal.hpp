@@ -77,6 +77,12 @@ struct MixedOrdinalStats {
   std::vector<std::int64_t> n_obs;
   std::vector<std::vector<std::int32_t>> n_levels;
   std::vector<std::vector<std::string>> ov_names;
+
+  // Per-case stage-1 influence functions g_i (rows) of the mixed moment vector
+  // κ̂ = [thresholds; -means; variances; associations], one n_b × m_b matrix per
+  // block. Their empirical covariance is the NACOV:
+  // (1/n_b)·Σ_i g_i g_iᵀ = NACOV[b]. Empty when not computed.
+  std::vector<Eigen::MatrixXd> moment_influence;
 };
 
 // Observed all-ordinal moment metadata without Gamma/NACOV or fit weights.

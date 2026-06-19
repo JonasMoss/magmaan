@@ -4708,6 +4708,13 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(stats->NACOV[0].rows() == 13);
   CHECK(stats->W_dwls[0].rows() == 13);
   CHECK(stats->W_wls[0].rows() == 13);
+  REQUIRE(stats->moment_influence.size() == 1);
+  CHECK(stats->moment_influence[0].rows() == X.rows());
+  CHECK(stats->moment_influence[0].cols() == stats->moments[0].size());
+  CHECK(((stats->moment_influence[0].transpose() *
+          stats->moment_influence[0]) /
+         static_cast<double>(X.rows()))
+            .isApprox(stats->NACOV[0], 1e-10));
   CHECK(stats->R[0](0, 0) == doctest::Approx(1.0));
   CHECK(stats->R[0](1, 1) == doctest::Approx(1.0));
   CHECK(stats->R[0](2, 2) > 0.0);
@@ -4740,6 +4747,63 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->vcov.rows() == fit->theta.size());
   CHECK(rob->se.size() == fit->theta.size());
   CHECK(rob->se.allFinite());
+}
+
+TEST_CASE("robust_mixed_ordinal_ij ULS matches observed-bread fixed-weight sandwich") {
+  std::mt19937 rng(20260621);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(520, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.35);
+    X(i, 1) = 1.0 + (0.70 * eta + 0.72 * norm(rng) > 0.05);
+    X(i, 2) = 0.76 * eta + 0.64 * norm(rng) + 0.20;
+    X(i, 3) = 0.66 * eta + 0.75 * norm(rng) - 0.10;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->moment_influence.size() == 1);
+
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::ULS);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "mixed ULS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto fixed = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::ULS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Observed);
+  auto ij = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::ULS);
+  REQUIRE_MESSAGE(fixed.has_value(),
+      "fixed mixed ULS robust failed: "
+          << (fixed.has_value() ? "" : fixed.error().detail));
+  REQUIRE_MESSAGE(ij.has_value(),
+      "mixed ULS IJ failed: " << (ij.has_value() ? "" : ij.error().detail));
+  CHECK(ij->df == fixed->df);
+  CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
+  CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
+  CHECK(ij->se.isApprox(fixed->se, 1e-8));
+
+  auto dwls = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_FALSE(dwls.has_value());
+  CHECK(dwls.error().detail.find("only fixed-weight ULS") != std::string::npos);
 }
 
 TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {
