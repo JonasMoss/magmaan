@@ -18,6 +18,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/frontier/dls_weight.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -332,6 +333,45 @@ normal_theory_weight_correction_block(const ContinuousLsLayout& layout,
   return correction;
 }
 
+post_expected<Eigen::MatrixXd>
+normal_theory_gamma_correction_block(const ContinuousLsLayout& layout,
+                                     const data::SampleStats& samp,
+                                     const Eigen::VectorXd& residual,
+                                     const Eigen::MatrixXd& moment_influence,
+                                     const Eigen::MatrixXd& weight,
+                                     std::size_t b) {
+  const Eigen::Index p = samp.S[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index mb = layout.block_rows[b];
+  const Eigen::Index cov_off = layout.has_means ? p : 0;
+  if (residual.size() != mb || moment_influence.cols() != mb ||
+      weight.rows() != mb || weight.cols() != mb ||
+      cov_off + pstar != mb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "normal_theory_gamma_correction_block: shape mismatch in block " +
+            std::to_string(b)));
+  }
+
+  const Eigen::MatrixXd& S = samp.S[b];
+  const Eigen::RowVectorXd lhs = residual.transpose() * weight;
+  Eigen::MatrixXd correction =
+      Eigen::MatrixXd::Zero(moment_influence.rows(), mb);
+  Eigen::MatrixXd dS(p, p);
+  Eigen::MatrixXd dG = Eigen::MatrixXd::Zero(mb, mb);
+  for (Eigen::Index i = 0; i < moment_influence.rows(); ++i) {
+    dG.setZero();
+    vech_unpack(moment_influence.row(i).segment(cov_off, pstar).transpose(),
+                p, dS);
+    if (layout.has_means) {
+      dG.topLeftCorner(p, p) = dS;
+    }
+    dG.block(cov_off, cov_off, pstar, pstar) =
+        gamma_nt_directional(S, dS);
+    correction.row(i) = lhs * dG * weight;
+  }
+  return correction;
+}
+
 Eigen::VectorXd empirical_gamma_mean_derivative_row(
     const Eigen::VectorXd& h,
     const Eigen::VectorXd& x,
@@ -555,6 +595,37 @@ empirical_diagonal_weight_correction_block(
       ifgamma.noalias() += Xc(i, r) * Ldiag.row(r);
     }
     correction.row(i) = ifgamma.array() * scale.array();
+  }
+  return correction;
+}
+
+post_expected<Eigen::MatrixXd>
+dls_weight_correction_block(const ContinuousLsLayout& layout,
+                            const data::SampleStats& samp,
+                            const data::RawData& raw,
+                            const Eigen::VectorXd& residual,
+                            const Eigen::MatrixXd& moment_influence,
+                            const Eigen::MatrixXd& weight,
+                            frontier::DlsWeightOptions opts,
+                            std::size_t b) {
+  if (!(opts.a >= 0.0 && opts.a <= 1.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "dls_weight_correction_block: mixing scalar a must be in [0, 1]"));
+  }
+
+  Eigen::MatrixXd correction =
+      Eigen::MatrixXd::Zero(moment_influence.rows(), moment_influence.cols());
+  if (opts.a < 1.0) {
+    auto nt_or = normal_theory_gamma_correction_block(
+        layout, samp, residual, moment_influence, weight, b);
+    if (!nt_or.has_value()) return std::unexpected(nt_or.error());
+    correction.noalias() += (1.0 - opts.a) * (*nt_or);
+  }
+  if (opts.a > 0.0) {
+    auto emp_or = empirical_weight_correction_block(
+        layout, samp, raw, residual, moment_influence, weight, b);
+    if (!emp_or.has_value()) return std::unexpected(emp_or.error());
+    correction.noalias() += opts.a * (*emp_or);
   }
   return correction;
 }
@@ -805,6 +876,7 @@ enum class ContinuousLsIJWeightMode {
   SampleNormalTheory,
   SampleEmpiricalWls,
   SampleEmpiricalDwls,
+  SampleDls,
 };
 
 const char* continuous_ls_ij_name(ContinuousLsIJWeightMode mode) {
@@ -817,6 +889,8 @@ const char* continuous_ls_ij_name(ContinuousLsIJWeightMode mode) {
       return "robust_continuous_ls_wls_ij";
     case ContinuousLsIJWeightMode::SampleEmpiricalDwls:
       return "robust_continuous_ls_dwls_ij";
+    case ContinuousLsIJWeightMode::SampleDls:
+      return "robust_continuous_ls_dls_ij";
   }
   return "robust_continuous_ls_ij";
 }
@@ -828,7 +902,8 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
                              const Estimates& est,
                              const gmm::Weight& weight,
                              const data::RawData& raw,
-                             ContinuousLsIJWeightMode mode) {
+                             ContinuousLsIJWeightMode mode,
+                             frontier::DlsWeightOptions dls_opts = {}) {
   const char* who = continuous_ls_ij_name(mode);
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
@@ -880,6 +955,11 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
     if (!w_or.has_value()) return std::unexpected(w_or.error());
     estimated_weight = std::move(*w_or);
     active_weight = &estimated_weight;
+  } else if (mode == ContinuousLsIJWeightMode::SampleDls) {
+    auto w_or = frontier::dls_weight(*ev_or, samp, raw, est.theta, dls_opts);
+    if (!w_or.has_value()) return std::unexpected(fit_to_post(w_or.error()));
+    estimated_weight = std::move(*w_or);
+    active_weight = &estimated_weight;
   }
 
   std::vector<WeightedMomentIJBlock> ij_blocks;
@@ -910,6 +990,13 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
           continuous_block_residual(samp, eval->moments, layout, b);
       auto corr_or = empirical_diagonal_weight_correction_block(
           layout, samp, raw, d_b, (*rows_or)[b], *Wb, b);
+      if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+      correction = std::move(*corr_or);
+    } else if (mode == ContinuousLsIJWeightMode::SampleDls) {
+      const Eigen::VectorXd d_b =
+          continuous_block_residual(samp, eval->moments, layout, b);
+      auto corr_or = dls_weight_correction_block(
+          layout, samp, raw, d_b, (*rows_or)[b], *Wb, dls_opts, b);
       if (!corr_or.has_value()) return std::unexpected(corr_or.error());
       correction = std::move(*corr_or);
     }
@@ -1348,6 +1435,18 @@ robust_continuous_ls_dwls_ij(spec::LatentStructure pt,
   return robust_continuous_ls_ij_impl(
       std::move(pt), rep, samp, est, gmm::Weight{}, raw,
       ContinuousLsIJWeightMode::SampleEmpiricalDwls);
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_dls_ij(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const data::RawData& raw,
+                            frontier::DlsWeightOptions opts) {
+  return robust_continuous_ls_ij_impl(
+      std::move(pt), rep, samp, est, gmm::Weight{}, raw,
+      ContinuousLsIJWeightMode::SampleDls, opts);
 }
 
 post_expected<robust::ParamSpaceSandwich>

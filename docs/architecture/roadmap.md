@@ -1339,6 +1339,9 @@ stop rather than any usable non-error return.
   Complete continuous DWLS now has `robust_continuous_ls_dwls_ij`, which uses
   the empirical-Gamma diagonal weight and carries only the diagonal
   estimated-weight influence.
+  Complete continuous DLS now has `robust_continuous_ls_dls_ij`, which treats
+  the mixing scalar as fixed and carries the mixed sample-built
+  normal-theory/empirical-Gamma weight influence.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

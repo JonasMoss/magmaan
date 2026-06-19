@@ -266,9 +266,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     Complete-data continuous DWLS empirical diagonal-weight correction
     **landed 2026-06-19** as `robust_continuous_ls_dwls_ij`, with the same
     covariance-only and meanstructure contamination gates on
-    `diag(Gamma)^{-1}`. Remaining continuous LS work is DLS estimated-weight
-    correction.
-    Other
+    `diag(Gamma)^{-1}`. Complete-data continuous DLS fixed-mixing correction
+    **landed 2026-06-19** as `robust_continuous_ls_dls_ij`, with
+    covariance-only and meanstructure contamination gates on
+    `((1-a) Gamma_NT + a Gamma_ADF)^{-1}`. EB-DLS scalar-selection uncertainty
+    is a separate future scalar-IF term, not part of the fixed-`a` adapter.
+    Remaining
     slices: complete mixed ordinal/polyserial (mixed casewise moment influence,
     ULS, diagonal polyserial weights, full WLS); complete all-ordinal full WLS
     (full `IF(Gamma)`, diagonal extraction must reproduce DWLS); ML2S

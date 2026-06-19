@@ -10,6 +10,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/frontier/dls_weight.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/robust/robust.hpp"
@@ -238,5 +239,20 @@ robust_continuous_ls_dwls_ij(spec::LatentStructure pt,
                              const data::SampleStats& samp,
                              const Estimates& est,
                              const data::RawData& raw);
+
+// Complete-data infinitesimal-jackknife covariance for continuous DLS where
+// the mixed Gamma weight
+//   W = ((1-a) Gamma_NT(S) + a Gamma_ADF(raw))^{-1}
+// is estimated from the same complete data used for the sample moments. The
+// scalar `a` is treated as caller-fixed; empirical-Bayes selection uncertainty
+// would require a separate scalar-influence term.
+post_expected<WeightedRobustResult>
+robust_continuous_ls_dls_ij(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Estimates& est,
+    const data::RawData& raw,
+    frontier::DlsWeightOptions opts = {});
 
 }  // namespace magmaan::estimate

@@ -197,6 +197,15 @@ If $\Gamma_0$ is model-implied and depends only on $\theta$, its derivative
 belongs in the bread. If $\Gamma_0$ is built from saturated sample moments, as
 in two-stage FIML's normal-theory Stage-2 weight, its casewise derivative is a
 weight-IJ term.
+For complete-data continuous DLS with caller-fixed $a$,
+$\Gamma_0=\Gamma_{\mathrm{NT}}(\hat S)$ and
+$\Gamma_1=\hat\Gamma_{\mathrm{ADF}}$. The implemented row correction is the
+same convex mixture of the normal-theory and dense empirical-Gamma IF channels,
+evaluated with the DLS weight. In meanstructure layouts the normal-theory side
+is $\operatorname{blockdiag}(\hat S,\Gamma_{\mathrm{NT}}(\hat S))$ and the
+empirical side is the full stacked Browne $\hat\Gamma_{\mathrm{ADF}}$, including the
+mean--covariance cross-block. The scalar $a$ is treated as fixed; an
+empirical-Bayes rule for selecting $a$ would add a separate scalar IF term.
 
 \section{Stage-1 sandwich influence}
 
@@ -254,10 +263,12 @@ $\dot\Gamma_i$ and a finite-difference contamination gate for both
 covariance-only and meanstructure layouts. Complete-data DWLS has landed as
 the diagonal extraction of the same empirical-Gamma influence, gated by
 case-weight finite differences of $\diag(\hat\Gamma)^{-1}$ in covariance-only
-and meanstructure layouts. DLS remains an estimated-weight target if its weight
-is built from sample moments rather than held fixed by the caller. The raw
-mean/covariance $g_i$ is analytic; the remaining weight derivative is the DLS
-mixture with $\Gamma_{\mathrm{NT}}(\mu,\Sigma)$.
+and meanstructure layouts. Complete-data DLS with fixed mixing scalar has also
+landed as the convex mixture of the sample-built normal-theory and dense
+empirical-Gamma influence channels, with finite-difference gates on the mixed
+inverse weight in covariance-only and meanstructure layouts. The raw
+mean/covariance $g_i$ is analytic; EB-DLS scalar-selection uncertainty remains
+separate from the fixed-$a$ weight derivative.
 
 \paragraph{Two-stage FIML (ML2S).}
 Stage 1 supplies saturated EM moments and their ACOV. The required new object is
