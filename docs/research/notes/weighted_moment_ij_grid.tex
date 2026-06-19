@@ -135,6 +135,10 @@ In row form this is the implemented all-ordinal DWLS correction:
 \[
   v_{ik}=g_{ik}/\gamma_k + d_k\,\dot\gamma_{ik}/\gamma_k^2 .
 \]
+For complete continuous DWLS, $\dot\gamma_i$ is the diagonal of
+\eqref{eq:continuous-adf-gamma-if}. The implementation deliberately discards
+the off-diagonal empirical-Gamma influence before differentiating
+$\diag(\hat\Gamma)^{-1}$; those off-diagonal channels belong to full WLS.
 
 \subsection{Full empirical weight}
 
@@ -247,11 +251,13 @@ estimated-weight correction, not ordinary ML/FIML robust-score normal-theory
 inference. The complete-data WLS/ADF empirical-weight slice has also landed,
 using \eqref{eq:continuous-adf-gamma-if} for the full dense
 $\dot\Gamma_i$ and a finite-difference contamination gate for both
-covariance-only and meanstructure layouts. DWLS and DLS remain
-estimated-weight targets if their weights are built from sample moments rather
-than held fixed by the caller. The raw mean/covariance $g_i$ is analytic; the
-remaining weight derivatives are diagonal empirical $\Gamma$ derivatives or
-mixtures with $\Gamma_{\mathrm{NT}}(\mu,\Sigma)$.
+covariance-only and meanstructure layouts. Complete-data DWLS has landed as
+the diagonal extraction of the same empirical-Gamma influence, gated by
+case-weight finite differences of $\diag(\hat\Gamma)^{-1}$ in covariance-only
+and meanstructure layouts. DLS remains an estimated-weight target if its weight
+is built from sample moments rather than held fixed by the caller. The raw
+mean/covariance $g_i$ is analytic; the remaining weight derivative is the DLS
+mixture with $\Gamma_{\mathrm{NT}}(\mu,\Sigma)$.
 
 \paragraph{Two-stage FIML (ML2S).}
 Stage 1 supplies saturated EM moments and their ACOV. The required new object is

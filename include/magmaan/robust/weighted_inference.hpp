@@ -194,7 +194,7 @@ robust_continuous_ls(spec::LatentStructure pt,
 
 // Complete-data infinitesimal-jackknife covariance for continuous LS with a
 // fixed second-stage weight. Empty `weight` is ULS; non-empty weights are treated
-// as caller-fixed. Estimated-weight corrections for GLS/WLS/DLS are separate
+// as caller-fixed. Estimated-weight corrections for GLS/WLS/DWLS/DLS are separate
 // Hall-Inoue adapters and are not included here.
 post_expected<WeightedRobustResult>
 robust_continuous_ls_fixed_weight_ij(spec::LatentStructure pt,
@@ -226,5 +226,16 @@ robust_continuous_ls_wls_ij(spec::LatentStructure pt,
                             const data::SampleStats& samp,
                             const Estimates& est,
                             const data::RawData& raw);
+
+// Complete-data infinitesimal-jackknife covariance for continuous DWLS where
+// the diagonal Browne empirical-Gamma weight is estimated from the same raw
+// data used for the sample moments. Only the diagonal IF(Gamma) channel enters;
+// off-diagonal empirical-Gamma movement belongs to full WLS, not DWLS.
+post_expected<WeightedRobustResult>
+robust_continuous_ls_dwls_ij(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::SampleStats& samp,
+                             const Estimates& est,
+                             const data::RawData& raw);
 
 }  // namespace magmaan::estimate
