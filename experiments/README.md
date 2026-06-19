@@ -50,6 +50,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 32 | [schlechter-2024-asci-cfa](32-schlechter-2024-asci-cfa/report.qmd) | parity | complete | Do Schlechter et al.'s final ASCI ordinal CFA models match lavaan on paper data? |
 | 33 | [mplus-demo-wlsmv-difftest](33-mplus-demo-wlsmv-difftest/report.qmd) | probe | active | Does Mplus Demo WLSMV DIFFTEST for a demo-sized ordinal pairwise-missing invariance model match lavaan/magmaan Satorra-2000 statistics? |
 | 34 | [chen-ordinal-fmg-pvalues](34-chen-ordinal-fmg-pvalues/report.qmd) | probe | active | Is the WLSMV pairwise-missing scalar Type-I inflation a defect of the test/p-value family or of the missing-data mechanism (MCAR vs MAR)? |
+| 35 | [misspec-robust-se](35-misspec-robust-se/report.qmd) | probe | active | Does the observed-Hessian ("robust" regime) bread recover the true sampling SD of ordinal DWLS estimates under structural misspecification, while coinciding with the conventional SE under the null? |
 
 ## Archived
 

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -2216,6 +2217,68 @@ ordinal_residuals(const data::OrdinalStats& stats,
   return out;
 }
 
+// Raw per-block ordinal moment residual d_b = model − sample in the
+// [thresholds; lower-triangular correlations] metric, BEFORE the W-whitening
+// and sqrt(n/N) scaling that `ordinal_residuals` applies. Mirrors the per-block
+// branch of `ordinal_residuals` (keep the two in sync); used only to
+// finite-difference the misspecification-robust observed-Hessian bread.
+Eigen::VectorXd ordinal_block_residual(const data::OrdinalStats& stats,
+                                       const ThresholdLayout& layout,
+                                       const model::ImpliedMoments& moments,
+                                       const Eigen::VectorXd& theta,
+                                       OrdinalParameterization param,
+                                       std::size_t b) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::MatrixXd& Sig = moments.sigma[b];
+  Eigen::VectorXd d(nth + ncorr);
+  Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  if (block_released && !theta_param) {
+    std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+    for (Eigen::Index i = 0; i < p; ++i)
+      if (static_cast<std::size_t>(i) < layout.scale_free[b].size())
+        sf[static_cast<std::size_t>(i)] =
+            layout.scale_free[b][static_cast<std::size_t>(i)];
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      const double delta = sf[static_cast<std::size_t>(ov)]
+                               ? 1.0 / std::sqrt(Sig(ov, ov))
+                               : 1.0;
+      it(k) = (it(k) - mu) * delta;
+    }
+    d.head(nth) = it - stats.thresholds[b];
+    Eigen::Index r = 0;
+    for (Eigen::Index j = 0; j < p; ++j)
+      for (Eigen::Index i = j + 1; i < p; ++i)
+        d(nth + r++) = mixed_assoc_moment(Sig, sf, i, j,
+                                          OrdinalParameterization::Theta) -
+                       stats.R[b](i, j);
+  } else if (theta_param) {
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      it(k) = (it(k) - mu) / std::sqrt(Sig(ov, ov));
+    }
+    d.head(nth) = it - stats.thresholds[b];
+    d.tail(ncorr) = std_corr_lower(Sig) - corr_lower(stats.R[b]);
+  } else {
+    d.head(nth) = it - stats.thresholds[b];
+    d.tail(ncorr) = corr_lower(Sig) - corr_lower(stats.R[b]);
+  }
+  return d;
+}
+
 Eigen::MatrixXd ordinal_moment_jacobian_block(
     const data::OrdinalStats& stats,
     const ThresholdLayout& layout,
@@ -3068,7 +3131,8 @@ robust_ordinal(spec::LatentStructure pt,
                const data::OrdinalStats& stats,
                const Estimates& est,
                OrdinalWeightKind weights,
-               OrdinalParameterization parameterization) {
+               OrdinalParameterization parameterization,
+               robust::Information bread) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -3140,8 +3204,46 @@ robust_ordinal(spec::LatentStructure pt,
     off += mb;
   }
 
+  std::optional<Eigen::MatrixXd> bread_override;
+  if (bread == robust::Information::Observed) {
+    double N_total = 0.0;
+    for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
+    auto grad_at = [&](const Eigen::VectorXd& theta)
+        -> post_expected<Eigen::VectorXd> {
+      auto ev_t = ev_or->evaluate(theta, true, false);
+      if (!ev_t.has_value()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal observed bread: evaluation failed: " +
+            ev_t.error().detail));
+      }
+      const Eigen::MatrixXd Delta = ordinal_moment_jacobian(
+          stats, *layout_or, ev_t->moments, ev_t->J_sigma, theta,
+          parameterization);
+      Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+      Eigen::Index goff = 0;
+      for (std::size_t b = 0; b < stats.R.size(); ++b) {
+        const Eigen::Index p = stats.R[b].rows();
+        const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
+        const Eigen::VectorXd d_b = ordinal_block_residual(
+            stats, *layout_or, ev_t->moments, theta, parameterization, b);
+        const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
+        g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
+                              Ws[b] * d_b);
+        goff += mb;
+      }
+      if (!g.allFinite()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal observed bread: non-finite gradient"));
+      }
+      return g;
+    };
+    auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+    if (!ob.has_value()) return std::unexpected(ob.error());
+    bread_override = std::move(*ob);
+  }
+
   // 2·est.fmin = F (est.fmin = ½F): robust_weighted_moments forms N·F.
-  auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin);
+  auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin, bread_override);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }
@@ -3231,7 +3333,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      const data::MixedOrdinalStats& stats,
                      const Estimates& est,
                      OrdinalWeightKind weights,
-                     OrdinalParameterization parameterization) {
+                     OrdinalParameterization parameterization,
+                     robust::Information bread) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -3284,8 +3387,46 @@ robust_mixed_ordinal(spec::LatentStructure pt,
     off += mb;
   }
 
+  std::optional<Eigen::MatrixXd> bread_override;
+  if (bread == robust::Information::Observed) {
+    double N_total = 0.0;
+    for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
+    auto grad_at = [&](const Eigen::VectorXd& theta)
+        -> post_expected<Eigen::VectorXd> {
+      auto ev_t = ev_or->evaluate(theta, true, true);
+      if (!ev_t.has_value()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_mixed_ordinal observed bread: evaluation failed: " +
+            ev_t.error().detail));
+      }
+      const Eigen::MatrixXd Delta = mixed_moment_jacobian(
+          stats, *layout_or, ev_t->moments, ev_t->J_sigma, ev_t->J_mu, theta,
+          parameterization);
+      Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+      Eigen::Index goff = 0;
+      for (std::size_t b = 0; b < stats.R.size(); ++b) {
+        const Eigen::Index mb = stats.moments[b].size();
+        const Eigen::VectorXd model_m = mixed_model_moments(
+            stats, *layout_or, ev_t->moments, theta, b, parameterization);
+        const Eigen::VectorXd d_b = model_m - stats.moments[b];
+        const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
+        g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
+                              Ws[b] * d_b);
+        goff += mb;
+      }
+      if (!g.allFinite()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_mixed_ordinal observed bread: non-finite gradient"));
+      }
+      return g;
+    };
+    auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+    if (!ob.has_value()) return std::unexpected(ob.error());
+    bread_override = std::move(*ob);
+  }
+
   // 2·est.fmin = F (est.fmin = ½F): robust_weighted_moments forms N·F.
-  auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin);
+  auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin, bread_override);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }

@@ -807,7 +807,8 @@ Rcpp::NumericMatrix infer_empirical_gamma_with_means(Rcpp::NumericMatrix X) {
 //
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
-                                std::string weight = "") {
+                                std::string weight = "",
+                                std::string bread = "expected") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
@@ -827,7 +828,8 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
       : "delta";
   auto r_or = magmaan::estimate::robust_ordinal(
       ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
-      ordinal_parameterization_from_string(parameterization_name));
+      ordinal_parameterization_from_string(parameterization_name),
+      info_from_string(bread));
   if (!r_or.has_value()) stop_post(r_or.error());
   const magmaan::estimate::OrdinalRobustResult& r = *r_or;
   return Rcpp::List::create(
@@ -843,7 +845,8 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
 
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
-                                      std::string weight = "") {
+                                      std::string weight = "",
+                                      std::string bread = "expected") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
@@ -857,7 +860,8 @@ Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
       : "delta";
   auto r_or = magmaan::estimate::robust_mixed_ordinal(
       ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
-      ordinal_parameterization_from_string(parameterization_name));
+      ordinal_parameterization_from_string(parameterization_name),
+      info_from_string(bread));
   if (!r_or.has_value()) stop_post(r_or.error());
   const magmaan::estimate::OrdinalRobustResult& r = *r_or;
   return Rcpp::List::create(

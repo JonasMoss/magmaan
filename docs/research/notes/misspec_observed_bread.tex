@@ -1,0 +1,97 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\title{Misspecification-Robust Standard Errors for the Moment-Quadratic
+Estimators (Observed-Hessian Bread)}
+\author{}
+\date{\today}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\thh}{\widehat\theta}
+
+\begin{document}
+\maketitle
+
+\section*{Context}
+
+Implementation notes, not manuscript prose, for the \texttt{frontier} addition
+that gives magmaan's moment-quadratic estimators (ordinal DWLS/WLSMV/ULSMV,
+mixed/polyserial, and continuous ULS/GLS/WLS) a misspecification-robust standard
+error, selectable as one regime keyword. Continuous ML and FIML already carried
+this (their robust sandwich uses the observed Hessian by construction); the
+moment-quadratic family did not.
+
+\section*{The bread decomposition}
+
+Every moment-quadratic estimator minimizes
+\[
+  F(\theta) = \tfrac12 \sum_b \frac{n_b}{N}\, d_b(\theta)\T W_b\, d_b(\theta),
+  \qquad d_b(\theta) = \sigma_b(\theta) - s_b,
+\]
+with $s_b$ the sample moments (thresholds, polychorics, polyserials, or
+$[\mu;\operatorname{vech}\Sigma]$), $\sigma_b(\theta)$ the model-implied moments,
+$\Delta_b = \partial\sigma_b/\partial\theta$, and $W_b$ the estimator weight. The
+exact Hessian is
+\[
+  H(\theta) = \sum_b \frac{n_b}{N}\Big[\,\Delta_b\T W_b \Delta_b
+  \;-\; \textstyle\sum_k (W_b d_b)_k\, \partial^2\sigma_{b,k}/\partial\theta\,\partial\theta\T\,\Big].
+\]
+The first term is the Gauss--Newton (``expected'') bread $A=\Delta\T W\Delta$ that
+the prevailing robust SE uses; the second is the residual-contracted curvature.
+The sandwich $\operatorname{Var}(\thh)=A^{-1}BA^{-1}$ with meat
+$B=\Delta\T W\,\Gamma\, W\Delta$ ($\Gamma$ the sampling ACOV of $s$, the NACOV)
+is consistent for the variance of $\thh$ around its probability limit
+\emph{only when $A$ is the true Hessian}.
+
+\section*{Expected $=$ observed under the null}
+
+Under correct specification the residual $d_b(\thh)\to 0$ in probability, the
+curvature term vanishes, and $H\to A=\Delta\T W\Delta$. So the two breads
+coincide at the null and the ``robust'' regime costs nothing there; the expected
+bread is additionally the efficient (GLS-optimal) choice. Off the null
+$W_b d_b\not\to 0$, the breads differ, and only the observed-Hessian sandwich is
+consistent for $\operatorname{Var}(\thh)$. The error in the expected-bread SE is
+first order in the residual, so even a model one would happily retain on fit
+grounds can carry a non-trivial SE bias.
+
+\section*{Implementation}
+
+The observed bread is obtained by central-differencing the analytic per-unit
+moment-LS gradient $g(\theta)=\sum_b (n_b/N)\,\Delta_b(\theta)\T W_b d_b(\theta)$
+in full $\theta$-space (one model re-evaluation per $\theta\pm h$ coordinate),
+then reducing to the constraint-space bread $H_\alpha=K\T H_\theta K$. This
+mirrors the existing continuous-ML \texttt{information\_observed\_fd}; no analytic
+moment-Hessian is needed (a future optimization). The result is injected as a
+bread override into \texttt{robust\_weighted\_moments}; the meat ($\Gamma$/NACOV),
+degrees of freedom, and reference $\chi^2$ are untouched. The keyword is
+\texttt{bread = "expected" | "observed"}, the same vocabulary continuous ML/FIML
+already use, surfaced in R as \texttt{vcov(fit, regime = "model" | "robust")},
+which feeds \texttt{standardized(fit, vcov)} so the choice flows into
+$\mathrm{SE}(\beta)$ for free.
+
+\section*{Evidence}
+
+Experiment 35 (\path{experiments/35-misspec-robust-se}). Two-factor
+six-indicator ordinal CFA, DWLS, $N=1000$, focal factor covariance. With the
+fitted model \emph{correct}, model and robust SE coincide and both match the
+empirical sampling SD (ratios $0.98$ vs $0.98$). With a true cross-loading
+\emph{omitted}, the model SE underestimates the sampling SD (ratio $0.86$) while
+the robust SE recovers it (ratio $0.96$). The two regimes share the same NACOV
+meat, so this is the bread alone. The robust SE is an asymptotic sandwich: at
+finite $N$ and strong misspecification it closes most, not all, of the gap.
+
+\section*{Where this sits relative to other software}
+
+For continuous ML/FIML the observed-Hessian sandwich is ubiquitous
+(\texttt{robust.huber.white}/MLR in lavaan, MLR in Mplus). For the
+ordinal/WLS family it is, as far as we know, new surface: lavaan's DWLS/WLSMV
+robust SE is the Gauss--Newton/expected (\texttt{robust.sem}-style) sandwich
+only. So the correct-model cell of experiment 35 is the validation oracle (the
+observed bread must coincide with the expected one there); there is no external
+ordinal observed-bread SE to gate against. This is \texttt{frontier}, not
+core lavaan parity.
+
+\end{document}
