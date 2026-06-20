@@ -297,12 +297,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     complete-data reductions against unstructured observed-bread robust SEM
     for `TwoStageWeight::Nt` and observed-bread `robust_continuous_ls` for
     `TwoStageWeight::Adf`.
+    ML2S saturated-EM casewise moment influence primitive **landed
+    2026-06-20** as `saturated_em_moment_influence`, with complete-data
+    reduction to centered mean/covariance moment rows and missing-data
+    `IF'IF == SaturatedMoments::acov` gates.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; ML2S
-    (casewise saturated-EM influence for
+    estimated-weight adapters for
     `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
-    continuous LS); MCAR/pairwise-missing
+    continuous LS; MCAR/pairwise-missing
     ordinal/polyserial (design case-aligned sparse moment-row primitive with
     per-moment support scaling before coding).
   - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai

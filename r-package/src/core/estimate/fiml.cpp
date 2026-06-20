@@ -2955,6 +2955,83 @@ saturated_em_moments_impl(const RawData& raw,
   return out;
 }
 
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence_impl(const RawData& raw,
+                                   const FIMLCache& cache,
+                                   const FIMLH1& h1,
+                                   const SaturatedMoments& sm,
+                                   const char* caller) {
+  if (auto ok = validate_raw_shape(raw); !ok.has_value()) {
+    return std::unexpected(fit_to_post(ok.error(), caller));
+  }
+  if (auto e = validate_h1_blocks(cache, h1); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), caller));
+  }
+
+  const std::size_t B = raw.X.size();
+  if (B == 0 || cache.block_p.size() != B || sm.mean.size() != B ||
+      sm.cov.size() != B || sm.n_obs.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": empty or inconsistent block layout"));
+  }
+
+  std::vector<Eigen::Index> q_b(B);
+  std::vector<Eigen::Index> off_b(B + 1, 0);
+  Eigen::Index n_total = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index n = raw.X[b].rows();
+    const Eigen::Index p = cache.block_p[b];
+    if (raw.X[b].cols() != p || h1.mu[b].size() != p ||
+        h1.sigma[b].rows() != p || h1.sigma[b].cols() != p ||
+        sm.mean[b].size() != p || sm.cov[b].rows() != p ||
+        sm.cov[b].cols() != p || sm.n_obs[b] != n) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(caller) + ": malformed saturated block " +
+              std::to_string(b)));
+    }
+    q_b[b] = p + detail::vech_len(p);
+    off_b[b + 1] = off_b[b] + q_b[b];
+    n_total += n;
+  }
+  const Eigen::Index Q = off_b.back();
+  if (sm.H.rows() != Q || sm.H.cols() != Q || sm.acov.rows() != Q ||
+      sm.acov.cols() != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": saturated information shape mismatch"));
+  }
+
+  auto Hinv_or = invert_symmetric(sm.H,
+      std::string(caller) + ": aggregated saturated information");
+  if (!Hinv_or.has_value()) return std::unexpected(Hinv_or.error());
+  const Eigen::MatrixXd& Hinv = *Hinv_or;
+
+  Eigen::MatrixXd influence = Eigen::MatrixXd::Zero(n_total, Q);
+  Eigen::Index row_off = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    auto scores_or = fiml_saturated_scores_block(raw, b, h1.mu[b], h1.sigma[b]);
+    if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+
+    const Eigen::Index n = raw.X[b].rows();
+    const Eigen::Index q = q_b[b];
+    const Eigen::Index off = off_b[b];
+    if (scores_or->rows() != n || scores_or->cols() != q) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(caller) + ": saturated score shape mismatch in block " +
+              std::to_string(b)));
+    }
+
+    const Eigen::MatrixXd scores_log = -0.5 * (*scores_or);
+    influence.middleRows(row_off, n).noalias() =
+        scores_log * Hinv.middleRows(off, q);
+    row_off += n;
+  }
+  if (!influence.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": non-finite influence rows"));
+  }
+  return influence;
+}
+
 post_expected<SaturatedMoments>
 saturated_em_moments_from_raw(const RawData& raw,
                               double h_step,
@@ -2990,6 +3067,47 @@ saturated_em_moments(const RawData& raw,
   return saturated_em_moments_impl(raw, pack, h1, /*h_step=*/1e-4,
                                    SaturatedHessianKind::Analytic,
                                    "saturated_em_moments");
+}
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw, double h_step) {
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) {
+    return std::unexpected(fit_to_post(pack_or.error(),
+        "saturated_em_moment_influence: fiml_pack"));
+  }
+  auto h1_or = fiml_h1_moments(raw, *pack_or);
+  if (!h1_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_or.error(),
+        "saturated_em_moment_influence: H1 EM"));
+  }
+  auto sm_or = saturated_em_moments_impl(
+      raw, *pack_or, *h1_or, h_step, SaturatedHessianKind::Analytic,
+      "saturated_em_moment_influence");
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  return saturated_em_moment_influence_impl(
+      raw, pack_or->cache, *h1_or, *sm_or, "saturated_em_moment_influence");
+}
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw,
+                              const FIMLPack& pack,
+                              const FIMLH1& h1) {
+  auto sm_or = saturated_em_moments_impl(
+      raw, pack, h1, /*h_step=*/1e-4, SaturatedHessianKind::Analytic,
+      "saturated_em_moment_influence");
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  return saturated_em_moment_influence_impl(
+      raw, pack.cache, h1, *sm_or, "saturated_em_moment_influence");
+}
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw,
+                              const FIMLPack& pack,
+                              const FIMLH1& h1,
+                              const SaturatedMoments& sm) {
+  return saturated_em_moment_influence_impl(
+      raw, pack.cache, h1, sm, "saturated_em_moment_influence");
 }
 
 namespace {

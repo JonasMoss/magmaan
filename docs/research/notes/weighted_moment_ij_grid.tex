@@ -285,13 +285,28 @@ single-model regime has landed as \texttt{TwoStageBread::Observed}: it changes
 the Stage-2 bread while leaving the Stage-1 ACOV and the current fixed-weight
 robust sandwich unchanged. Complete-data gates reduce the NT path to
 unstructured observed-bread robust SEM and the ADF path to observed-bread
-\texttt{robust\_continuous\_ls}. The remaining IJ object is casewise
-saturated-moment influence under the missingness pattern. For
-\texttt{TwoStageWeight::Nt}, the weight still depends on saturated
-$\hat\Sigma$ through $\Gamma_{\mathrm{NT}}(\hat\Sigma)$, so the target estimator
-has a normal-theory weight derivative. For \texttt{Dwls}, \texttt{Adf}, and
-\texttt{Dls}, use the diagonal, full, and mixed formulas above with
-$\Gamma_{\mathrm{FIML}}$.
+\texttt{robust\_continuous\_ls}. The casewise saturated-moment influence under
+the missingness pattern has also landed as
+\texttt{saturated\_em\_moment\_influence}. Let
+$s_i(\hat\eta_S)=\partial \ell_i(\eta)/\partial\eta|_{\hat\eta_S}$ be the
+observed-pattern saturated log-likelihood score for
+$\eta=(\mu,\vech\Sigma)$, and let
+$I_\eta=-\sum_i \partial^2\ell_i(\eta)/\partial\eta\partial\eta\T|_{\hat\eta_S}$.
+The exported row is
+\begin{equation}
+  a_i\T = s_i(\hat\eta_S)\T I_\eta^{-1},
+  \qquad
+  A\T A = I_\eta^{-1}\Bigl(\sum_i s_i s_i\T\Bigr)I_\eta^{-1}
+        = \widehat{\mathrm{ACOV}}(\hat\eta_S).
+\end{equation}
+For complete data this reduces blockwise to
+$a_i=n_b^{-1}[x_i-\bar x_b,\vech\{(x_i-\bar x_b)(x_i-\bar x_b)\T-\hat\Sigma_b\}]$.
+The remaining ML2S IJ adapter is to pass these rows through the weight
+derivatives. For \texttt{TwoStageWeight::Nt}, the weight still depends on
+saturated $\hat\Sigma$ through $\Gamma_{\mathrm{NT}}(\hat\Sigma)$, so the
+target estimator has a normal-theory weight derivative. For \texttt{Dwls},
+\texttt{Adf}, and \texttt{Dls}, use the diagonal, full, and mixed formulas
+above with $\Gamma_{\mathrm{FIML}}$.
 
 \paragraph{MCAR and pairwise-missing ordinal/polyserial.}
 The current primitive assumes disjoint blocks: it sums $V_b\T V_b$ inside each
