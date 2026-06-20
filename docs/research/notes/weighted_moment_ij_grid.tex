@@ -68,6 +68,52 @@ be the observed-Hessian bread. This includes the residual-contracted curvature
 term from $d(\theta)$; it is not the Gauss-Newton bread except under correct
 specification.
 
+\subsection{Continuous-LS observed bread}
+
+For complete continuous LS, write the block moment residual as
+\[
+  d_b(\theta)=
+  \begin{bmatrix}
+    \mu_b(\theta)-\bar x_b\\
+    \vech\{\Sigma_b(\theta)-S_b\}
+  \end{bmatrix},\qquad
+  \Delta_b=\frac{\partial d_b(\theta)}{\partial\theta\T},\qquad
+  \pi_b=\frac{n_b}{N}.
+\]
+The per-unit objective is
+\[
+  F_N(\theta)=\frac12\sum_b \pi_b d_b(\theta)\T W_b d_b(\theta),
+\]
+with $W_b$ treated as fixed when differentiating the bread. Hence the
+full-parameter observed Hessian is
+\begin{equation}\label{eq:continuous-bread}
+  H_{\theta,ac}
+  =
+  \sum_b \pi_b
+  \left[
+    \Delta_{b,a}\T W_b\Delta_{b,c}
+    + h_{b,\mu}\T
+      \frac{\partial^2\mu_b}{\partial\theta_a\partial\theta_c}
+    + h_{b,\Sigma}\T
+      \vech\left\{
+      \frac{\partial^2\Sigma_b}
+           {\partial\theta_a\partial\theta_c}\right\}
+  \right],
+  \qquad h_b=W_bd_b .
+\end{equation}
+The reduced bread used by the IJ is $A=K\T H_\theta K$. Implementation computes
+the covariance curvature term through the LISREL trace contraction already used
+by analytic observed-information paths. If $x=h_{b,\Sigma}$ is in lower-vech
+order, the symmetric trace weight $G_b$ is defined by
+$G_{rr}=x_{rr}$ and $G_{rc}=G_{cr}=x_{rc}/2$ for $r\ne c$, so that
+$\tr(G_b X)=x\T\vech(X)$ for every symmetric $X$. Then the last term in
+\eqref{eq:continuous-bread} is
+$\tr\{G_b\,\partial^2\Sigma_b/
+(\partial\theta_a\partial\theta_c)\}$.
+The finite-difference bread remains the validation gate for
+\eqref{eq:continuous-bread}; it is no longer the production path for complete
+continuous LS.
+
 \section{General estimated-weight IJ}
 
 Assume the weight has the first-order expansion
@@ -277,7 +323,10 @@ landed as the convex mixture of the sample-built normal-theory and dense
 empirical-Gamma influence channels, with finite-difference gates on the mixed
 inverse weight in covariance-only and meanstructure layouts. The raw
 mean/covariance $g_i$ is analytic; EB-DLS scalar-selection uncertainty remains
-separate from the fixed-$a$ weight derivative.
+separate from the fixed-$a$ weight derivative. The continuous-LS observed bread
+now uses the analytic Hessian in \eqref{eq:continuous-bread}; the public
+finite-difference bread helper is retained as the regression oracle for the IJ
+adapters.
 
 \paragraph{Two-stage FIML (ML2S).}
 Stage 1 supplies saturated EM moments and their ACOV. The observed-bread

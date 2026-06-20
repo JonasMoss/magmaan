@@ -1349,6 +1349,11 @@ stop rather than any usable non-error return.
   Complete continuous DLS now has `robust_continuous_ls_dls_ij`, which treats
   the mixing scalar as fixed and carries the mixed sample-built
   normal-theory/empirical-Gamma weight influence.
+  Continuous-LS observed-bread computation now uses an analytic moment Hessian:
+  the Gauss-Newton `Delta' W Delta` term plus the residual-weighted LISREL
+  second-derivative contraction, reduced through the equality-constraint basis
+  `K`. The public finite-difference bread helper remains as the validation
+  oracle for the fixed-weight, GLS, WLS, DWLS, and DLS IJ tests.
   Complete all-ordinal ULS/DWLS/WLS now has `robust_ordinal_ij`: ULS reduces to
   the observed-bread fixed-weight sandwich, DWLS carries the diagonal
   estimated-Gamma influence, and WLS carries the dense `IF(Gamma)` through

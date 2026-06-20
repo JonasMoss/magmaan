@@ -313,6 +313,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `(H,J,ACOV)` stack; the adapter covers `TwoStageWeight::{Dwls,Adf,Dls}`
     and tests that the IJ path changes `vcov`/`se` while preserving the
     fixed-weight scaled-test fields.
+    Continuous-LS analytic observed bread **landed 2026-06-20** by replacing
+    the production finite-difference Hessian with the closed-form
+    `J' W J + residual-curvature` contraction from
+    `weighted_moment_ij_grid.tex`; tests keep the finite-difference bread as
+    the validation oracle for fixed-weight, GLS, WLS, DWLS, and DLS IJ paths.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; replace the ML2S missing-data
@@ -324,9 +329,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     covered by complete continuous LS; MCAR/pairwise-missing
     ordinal/polyserial (design case-aligned sparse moment-row primitive with
     per-moment support scaling before coding).
-  - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai
-    Eq 36 / its mixed analogue; FD becomes the validation gate). Also removes the
-    per-resample-SE cost that makes the studentized bootstrap expensive.
+  - **Analytic moment-Hessian remainder**: complete continuous LS now has the
+    closed-form observed bread. Still derive/code the mixed ordinal/polyserial
+    analogue and any MCAR sparse-moment analogue; FD should remain the
+    validation gate. This also removes the per-resample-SE cost that makes the
+    studentized bootstrap expensive once the remaining moment stacks stop
+    relying on FD bread.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
