@@ -155,6 +155,14 @@ def run(p=4, a0=1.0, b0=0.3):
         Mt_A = np.eye(m) - Delta_A @ np.linalg.inv(Delta_A.T @ W @ Delta_A) @ Delta_A.T @ (W - WrA)
         Mt_B = np.eye(m) - Delta_B @ np.linalg.inv(Delta_B.T @ W @ Delta_B) @ Delta_B.T @ (W - WrB)
         lam_def, imag = spectrum(Mt_B, Mt_A, W, Gamma)
+        # analytic identity: Mt' W Mt = U + R,  R = (Delta'Wr)' A^-1 (Delta'Wr) >= 0
+        for (Delta, Wr, M) in [(Delta_A, WrA, M_A), (Delta_B, WrB, M_B)]:
+            Ai = np.linalg.inv(Delta.T @ W @ Delta)
+            X = Delta.T @ Wr
+            R = X.T @ Ai @ X
+            Mt = np.eye(m) - Delta @ Ai @ Delta.T @ (W - Wr)
+            err = np.abs(Mt.T @ W @ Mt - (M.T @ W @ M + R)).max()
+            assert err < 1e-9, f"decomp identity violated: {err}"
         mA = float(np.sqrt(max(rA @ W @ rA, 0.0)))  # weighted misfit of model A
         mB = float(np.sqrt(max(rB @ W @ rB, 0.0)))  # weighted misfit of model B
         k = df_diff

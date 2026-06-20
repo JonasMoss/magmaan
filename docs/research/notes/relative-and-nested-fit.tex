@@ -312,6 +312,51 @@ intervals already calibrate) and aligned $\rs$ deforms it most. Because the
 deformation is analytic in $\rs$, the predicted miscalibration can overlay the
 simulated rejection rate.
 
+\subsection{The deformation in closed form}
+\label{sec:closedform}
+With $C=0$ the deformation has an exact form, not merely a perturbative one.
+
+\begin{proposition}[Closed-form deformation under $C=0$]
+\label{prop:closed}
+Let $H=A=\Delta\T W\Delta$ and $\widetilde M=I-\Delta A^{-1}\Delta\T(W-\Wr)$.
+Then
+\[
+  \widetilde M\T W\widetilde M = U + R,\qquad
+  U = M\T W M,\qquad
+  R = (\Delta\T\Wr)\T A^{-1}(\Delta\T\Wr)\succeq 0,
+\]
+the cross terms vanishing by the annihilator orthogonality $\Delta\T W M=0$.
+Hence the nested difference law is
+$\lambda=\operatorname{eig}[(U_{B}-U_{A}+R_{B}-R_{A})\Gamma]$ with mean
+$\mathrm{df}_{B}-\mathrm{df}_{A}+\tr[(R_{B}-R_{A})\Gamma]$.
+\end{proposition}
+
+\begin{proof}
+Write $\widetilde M=M+\delta$ with $\delta=\Delta A^{-1}\Delta\T\Wr\in\operatorname
+{col}(\Delta)$. Since $M\T W\Delta=W\Delta-W\Delta A^{-1}(\Delta\T W\Delta)=0$,
+both cross terms $M\T W\delta$ and $\delta\T WM$ vanish, and $\delta\T W\delta=
+\Wr\T\Delta A^{-1}(\Delta\T W\Delta)A^{-1}\Delta\T\Wr=(\Delta\T\Wr)\T A^{-1}
+(\Delta\T\Wr)=R$.
+\end{proof}
+
+Two consequences. First, $\Wr$ is linear in $\rs$, so $R$ is quadratic in $\rs$
+and the entire deformation is $O(\lVert\rs\rVert^{2})$. The reference law moves at
+second order in the base misfit, which is why a benign (small) misspecification
+leaves the test near nominal: the first-order effect cancels exactly. Second,
+when a model fits, $\rs=0$ gives $R=0$. In a power scenario the larger model fits
+($R_{A}=0$), so the mean can only increase, $\mathrm{df}_{B}-\mathrm{df}_{A}+\tr
+[R_{B}\Gamma]$; under a true null with a misspecified base both $R$ are present
+and the mean shift $\tr[(R_{B}-R_{A})\Gamma]$ is a competition. The numerical
+check (\texttt{relative-and-nested-fit-check.py}) confirms the identity to
+machine precision and both regimes.
+
+\begin{remark}[Why this is special to $C=0$]
+The cancellation uses $A=\Delta\T W\Delta$. With curvature the bread is $H=A+C$,
+$M\T W\Delta=W\Delta-W\Delta H^{-1}A\neq0$, and the cross terms survive. The clean
+$U+R$ split is exactly what the entanglement of Proposition~\ref{prop:nested}
+breaks; the linear test bed buys a closed form that the factor model does not have.
+\end{remark}
+
 \subsection{The substantive twin: a factor model with $C\neq0$}
 \label{sec:cfa}
 Dropping linearity costs only one extra term. For a confirmatory factor model
