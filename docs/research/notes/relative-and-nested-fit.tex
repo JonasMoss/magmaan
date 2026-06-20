@@ -1,0 +1,275 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Relative-fit and nested difference tests for estimated-weight
+  moment-quadratic estimators}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\T}{^{\mathsf{T}}}
+\newcommand{\Wr}{W_{\!r}}
+\newcommand{\rs}{r_{*}}
+\newcommand{\ths}{\theta_{*}}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The estimated-weight sandwich (companion note
+\texttt{weighted\_moment\_ij\_grid}) corrects the parameter covariance by
+adding a weight-derivative term. This note asks whether the same correction
+extends to model-comparison tests, and whether the nested difference test
+follows as a corollary. Three answers, stated up front.
+
+\begin{enumerate}
+\item The correction is proportional to the pseudo-true residual $\rs$
+  (Proposition~\ref{prop:delin}). It is identically zero for the
+  goodness-of-fit null, where the focal model is assumed correct, and present
+  for every test whose null does not assume correctness.
+\item For distinguishable models the relative-fit (Vuong) variance is a clean
+  corollary: $\omega^{2}=c\T\Gamma c$ with the weight channel carried by an
+  explicit term in $c$ (Proposition~\ref{prop:vuong}).
+\item The nested, degenerate case is \emph{not} a clean corollary. The weight
+  channel and the bread curvature both deform Satorra's projection, so the
+  naive substitution $\Gamma\mapsto(W-\Wr)\Gamma(W-\Wr)\T$ into the $U$-matrix
+  is wrong (Proposition~\ref{prop:nested}). It needs its own derivation.
+\end{enumerate}
+
+\section{Recap of the corrected influence}
+\label{sec:recap}
+
+The estimator minimises $F_{N}(\theta)=\tfrac12 r(\theta)\T\widehat{W}r(\theta)$
+with residual $r(\theta)=\eta(\theta)-u$, Jacobian $\Delta=\partial\eta/\partial
+\theta\T$, and weight $\widehat{W}=W(u)$ built from the sample moments $u$. Write
+$g_{i}$ for the moment influence function, $\Gamma=\E[g_{i}g_{i}\T]$, and $\ths$,
+$\rs=\eta(\ths)-u_{0}$ for the pseudo-true value and residual. The estimator is
+asymptotically linear with influence function $\phi_{i}=H^{-1}\Delta\T
+v_{i}$, where
+\begin{equation}
+  H = A + C,\quad A=\Delta\T W\Delta,\quad
+  C=\sum_{k}(W\rs)_{k}\nabla^{2}\eta_{k}(\ths),\quad
+  v_{i}=(W-\Wr)g_{i},
+  \label{eq:recap}
+\end{equation}
+and $\Wr=[\,\partial W/\partial u_{1}\,\rs,\ \dots,\ \partial W/\partial u_{m}\,
+\rs\,]$ is the residual-contracted weight derivative. The corrected
+moment-space meat is $\Omega=(W-\Wr)\Gamma(W-\Wr)\T$.
+
+\section{The residual governs the correction}
+\label{sec:delin}
+
+\begin{proposition}
+\label{prop:delin}
+Every estimated-weight correction in \eqref{eq:recap}, namely the curvature
+term $C$ and the weight term $\Wr$, is linear in the pseudo-true residual
+$\rs$. Hence both vanish exactly when $\rs=0$. For a test whose null fixes the
+focal model as correctly specified the correction is identically zero; for a
+test whose null leaves the focal model misspecified the correction is present.
+\end{proposition}
+
+\begin{proof}
+$C$ contracts $W\rs$ and $\Wr$ contracts $\rs$ columnwise, so both are $O(\lVert
+\rs\rVert)$ and vanish at $\rs=0$. The goodness-of-fit null sets $\eta(\ths)=
+u_{0}$, hence $\rs=0$. The relative-fit and the not-assuming-correct nested
+nulls leave $\rs\neq0$.
+\end{proof}
+
+A second, sharper reason closes the goodness-of-fit case. At that null the
+fitted residual is $r(\widehat\theta)=O_{p}(N^{-1/2})$, so the weight
+fluctuation enters the residual only through $(\widehat W-W)r(\widehat\theta)=
+O_{p}(N^{-1})$, which is negligible. The estimated weight is therefore
+asymptotically irrelevant to the fit statistic, which is why the fixed-weight
+projection theory of \cite{satorra1989} and the scaled statistic implemented in
+practice are already correct under the null.
+
+\section{Goodness of fit: the projection, unchanged}
+\label{sec:gof}
+
+For a fixed weight, expand the fitted residual at the goodness-of-fit null. With
+$H=A$ and $\Wr=0$ there,
+\[
+  \sqrt{N}\,r(\widehat\theta)=-M\sqrt{N}(u-u_{0})+o_{p}(1),
+  \qquad M=I-\Delta A^{-1}\Delta\T W,
+\]
+so $\Var(\sqrt N\,r(\widehat\theta))=M\Gamma M\T$ and the fit statistic
+$N\,r\T W r$ converges to $\sum_{j}\lambda_{j}\chi^{2}_{1,j}$ with $\lambda_{j}=
+\operatorname{eig}(U\Gamma)$ and $U=WM=W-W\Delta(\Delta\T W\Delta)^{-1}\Delta\T
+W$ \cite{satorra1989}. When $W=\Gamma^{-1}$ the product $U\Gamma$ is idempotent
+and the law collapses to $\chi^{2}_{\mathrm{df}}$; for $W\neq\Gamma^{-1}$ (DWLS,
+ULS) it is a genuine mixture, the reason the scaled statistic
+\cite{satorrabentler2001} exists. By Proposition~\ref{prop:delin} the estimated
+weight contributes nothing here.
+
+\section{Relative fit: a clean corollary}
+\label{sec:vuong}
+
+Compare two structural models $A$ and $B$ on the same indicators. The weight
+$\widehat W=W(u)$ is a function of the sample moments alone, so it is shared,
+$W_{A}=W_{B}=W$. Let $D=F_{A}(\widehat\theta_{A})-F_{B}(\widehat\theta_{B})$ be
+the sample discrepancy difference and $\rs^{A},\rs^{B}$ the two pseudo-true
+residuals.
+
+\begin{proposition}
+\label{prop:vuong}
+The discrepancy difference is asymptotically linear, $\sqrt{N}\,D=N^{-1/2}\sum_{i}
+c\T g_{i}+o_{p}(1)$, with
+\begin{equation}
+  c = -W(\rs^{A}-\rs^{B}) + \tfrac12(b^{A}-b^{B}),
+  \qquad
+  b^{A}_{l}=(\rs^{A})\T\frac{\partial W}{\partial u_{l}}\,\rs^{A},
+  \label{eq:cvec}
+\end{equation}
+and $b^{B}_{l}$ defined likewise. For distinguishable models $\omega^{2}=c\T
+\Gamma c>0$ and $\sqrt{N}\,D/\widehat\omega\to\mathcal N(0,1)$.
+\end{proposition}
+
+\begin{proof}
+View $F_{A}$ as a functional of the sampling distribution through $u$, the
+minimiser $\widehat\theta_{A}(u)$, and the weight $W(u)$. The minimiser is
+interior, so the envelope theorem removes the $\widehat\theta_{A}$ channel and
+\[
+  \mathrm{IF}_{i}(F_{A})
+  = \Bigl(\tfrac{\partial F_{A}}{\partial u}
+    + \tfrac{\partial F_{A}}{\partial W}\,DW(u_{0})\Bigr)g_{i}
+  = \bigl(-W\rs^{A}+\tfrac12 b^{A}\bigr)\T g_{i},
+\]
+using $\partial F_{A}/\partial u=-r\T W$ and $\partial(\tfrac12 r\T W r)/\partial
+W$ contracted with $DW[g_{i}]=\sum_{l}(\partial W/\partial u_{l})g_{i,l}$.
+Subtracting $\mathrm{IF}_{i}(F_{B})$ gives \eqref{eq:cvec}; the central limit
+theorem gives the normal law.
+\end{proof}
+
+The term $-W(\rs^{A}-\rs^{B})$ is the difference of weighted residuals that a
+fixed-weight account would give. The term $\tfrac12(b^{A}-b^{B})$ is the weight
+channel, quadratic in each model's own residual and contracted with the weight
+derivative. It is the testing analogue of $\Wr$ and is the new ingredient. Every
+quantity is already available: $\rs^{A},\rs^{B}$ from the two fits, $\partial
+W/\partial u$ from the same derivative the standard error uses, and $\Gamma$ from
+the stage-one moments. The relative-fit test is therefore a corollary of the
+standard-error machinery, with no projection involved because the envelope
+theorem has removed the parameter channel.
+
+\section{The nested case does not commute}
+\label{sec:nested}
+
+When $B$ is nested in $A$ the discrepancy difference degenerates under the null
+that the restriction holds, $\rs^{A}=\rs^{B}$ in the relevant directions, so
+$c=0$ and $\omega^{2}=0$. The first-order term vanishes and the limiting law is
+the second-order quadratic form, which is where the projection returns. The
+question is whether that quadratic form is Satorra's $U$-difference with the meat
+$\Gamma$ simply replaced by the corrected $\Omega$.
+
+\begin{proposition}
+\label{prop:nested}
+Off the goodness-of-fit null the fitted residual fluctuation is
+\[
+  \sqrt{N}\,(r_{A}(\widehat\theta_{A})-\rs^{A})
+  = -\widetilde M_{A}\sqrt{N}(u-u_{0})+o_{p}(1),
+  \qquad
+  \widetilde M_{A}=I-\Delta_{A}H_{A}^{-1}\Delta_{A}\T(W-\Wr^{A}),
+\]
+with $H_{A}=A_{A}+C_{A}$. The nested difference statistic converges to
+$\sum_{j}\lambda_{j}\chi^{2}_{1,j}$ with $\lambda_{j}=\operatorname{eig}\!\bigl[
+(\widetilde M_{A}\T W\widetilde M_{A}-\widetilde M_{B}\T W\widetilde M_{B})
+\Gamma\bigr]$. The generalised annihilator $\widetilde M_{A}$ carries both the
+bread curvature $C_{A}$ and the weight channel $\Wr^{A}$ inside the projector, so
+it does not equal the fixed-weight annihilator $M_{A}=I-\Delta_{A}A_{A}^{-1}
+\Delta_{A}\T W$. Consequently the law is not $\operatorname{eig}[(U_{B}-U_{A})
+\Omega]$, and the substitution $\Gamma\mapsto\Omega$ into the $U$-matrix is
+incorrect.
+\end{proposition}
+
+\begin{proof}
+Expand $r_{A}(\widehat\theta_{A})=\rs^{A}+\Delta_{A}(\widehat\theta_{A}-\ths^{A})
+-(u-u_{0})+o_{p}(N^{-1/2})$ and substitute the corrected influence
+$\sqrt N(\widehat\theta_{A}-\ths^{A})=H_{A}^{-1}\Delta_{A}\T(W-\Wr^{A})\sqrt N
+(u-u_{0})+o_{p}(1)$ from \eqref{eq:recap}. Collecting terms gives the stated
+$\widetilde M_{A}$. The second-order term of $N(F_{B}-F_{A})$ is the difference
+of the quadratic forms $z\T\widetilde M_{A}\T W\widetilde M_{A}z$ and
+$z\T\widetilde M_{B}\T W\widetilde M_{B}z$ with $z\sim\mathcal N(0,\Gamma)$, whence
+the eigenvalue characterisation. The fixed-weight reduction sets $C_{A}=0$ and
+$\Wr^{A}=0$, returning $\widetilde M_{A}=M_{A}$ and $\lambda_{j}=
+\operatorname{eig}[(U_{B}-U_{A})\Gamma]$ of \cite{satorra2000}.
+\end{proof}
+
+The correction does not factor out of the projection. The weight channel enters
+the same place as the bread curvature, inside the annihilator, so the meat and
+the projector are entangled. Computing the nested reference law requires the
+generalised annihilators $\widetilde M$ rather than a meat swap, and that is a
+separate derivation, not a corollary.
+
+\section{Verdict}
+\label{sec:verdict}
+
+The testing extension partitions cleanly. The goodness-of-fit test needs no
+correction (Proposition~\ref{prop:delin}); the prevailing scaled statistic is
+already right. The relative-fit test for distinguishable models is a corollary
+of the standard-error machinery, with $\omega^{2}=c\T\Gamma c$ and the weight
+channel \eqref{eq:cvec} computable from quantities the standard error already
+forms (Proposition~\ref{prop:vuong}). The nested difference test, in the regime
+that does not assume the larger model correct, is its own project, because the
+weight channel deforms Satorra's projection rather than its meat
+(Proposition~\ref{prop:nested}). For the manuscript this argues to keep the
+estimated-weight standard error and the distinguishable relative-fit test
+together, and to treat the nested weighted-$\chi^{2}$ law as a sequel
+\cite{vuong1989,merkleyou2016}.
+
+\begin{thebibliography}{9}
+
+\bibitem{satorra1989} Satorra, A. (1989). Alternative test criteria in
+  covariance structure analysis: a unified approach. \emph{Psychometrika},
+  54(1), 131--151.
+  \href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{satorra2000} Satorra, A. (2000). Scaled and adjusted restricted tests
+  in multi-sample analysis of moment structures. In R. D. H. Heijmans, D. S. G.
+  Pollock, \& A. Satorra (Eds.), \emph{Innovations in Multivariate Statistical
+  Analysis} (pp. 233--247). Springer.
+  \href{https://doi.org/10.1007/978-1-4615-4603-0_17}{doi:10.1007/978-1-4615-4603-0\_17}.
+
+\bibitem{satorrabentler2001} Satorra, A., \& Bentler, P. M. (2001). A scaled
+  difference chi-square test statistic for moment structure analysis.
+  \emph{Psychometrika}, 66(4), 507--514.
+  \href{https://doi.org/10.1007/BF02296192}{doi:10.1007/BF02296192}.
+
+\bibitem{vuong1989} Vuong, Q. H. (1989). Likelihood ratio tests for model
+  selection and non-nested hypotheses. \emph{Econometrica}, 57(2), 307--333.
+  \href{https://doi.org/10.2307/1912557}{doi:10.2307/1912557}.
+
+\bibitem{merkleyou2016} Merkle, E. C., You, D., \& Preacher, K. J. (2016).
+  Testing nonnested structural equation models. \emph{Psychological Methods},
+  21(2), 151--163.
+  \href{https://doi.org/10.1037/met0000038}{doi:10.1037/met0000038}.
+
+\bibitem{laisimoes2023} Lai, K., \& Sim\~oes, F. (2023). Reflecting on the
+  ``robust'' standard errors for two-stage structural equation modeling.
+  \emph{Structural Equation Modeling}, 30(5).
+
+\bibitem{hallinoue2003} Hall, A. R., \& Inoue, A. (2003). The large sample
+  behaviour of the generalized method of moments estimator in misspecified
+  models. \emph{Journal of Econometrics}, 114(2), 361--394.
+  \href{https://doi.org/10.1016/S0304-4076(03)00075-0}{doi:10.1016/S0304-4076(03)00075-0}.
+
+\end{thebibliography}
+
+\end{document}
