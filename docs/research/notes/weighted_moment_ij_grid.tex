@@ -429,11 +429,51 @@ and case-bread entries are zero, while observed threshold and pairwise
 polychoric pieces contribute to $\dot V_i$, $\dot A_i$, and the
 finite-difference $\partial\Gamma/\partial\kappa$ channel. The nominal-Gamma
 variant is an elementwise support rescaling and is therefore not represented as
-casewise IF rows. Mixed ordinal/polyserial MCAR still needs the same
-support-aligned row and $\dot\Gamma_i$ construction; the remaining gates are
-case-weight finite differences for $\dot\Gamma_i$, MCAR simulation against a
-case-resampling jackknife, and equality of pairwise-overlap covariance to the
-existing NACOV.
+casewise IF rows.
+
+The mixed ordinal/polyserial ULS slice uses the same support convention for the
+mixed moment stack
+\[
+  \kappa =
+  (\tau\T,-\mu_c\T,(\sigma_c^2)\T, a\T)\T ,
+\]
+where $a$ contains polychorics, polyserial covariances, and Pearson
+covariances in lower-triangle order. Let $s_i=(s_{1i}\T,s_{2i}\T)\T$ be the
+stage score row with variable-wise threshold/mean/variance entries zero unless
+that variable is observed, and pairwise association entries zero unless that
+pair is observed. The observed bread keeps the complete-data block form
+\[
+  B =
+  \begin{bmatrix}
+    A_{11} & 0\\
+    A_{21} & A_{22}
+  \end{bmatrix},
+  \qquad
+  \hat B^{-1} =
+  \begin{bmatrix}
+    \hat A_{11}^{-1} & 0\\
+    -\hat A_{22}^{-1}\hat A_{21}\hat A_{11}^{-1}
+      & \hat A_{22}^{-1}
+  \end{bmatrix},
+\]
+but each crossproduct is taken over the observed support of the contributing
+score rows. The casewise estimator influence on the latent stage parameter
+scale is
+\[
+  q_i = N s_i \hat B^{-\T}.
+\]
+The mixed moment row is $g_i=q_iH\T$, where $H$ maps thresholds unchanged,
+changes $\mu_c$ to $-\mu_c$, maps variances unchanged, and applies the usual
+delta terms for polyserial and continuous covariances. Thus
+\[
+  N^{-1}\sum_i g_i g_i\T = \widehat\Gamma_{\mathrm{overlap,mixed}} .
+\]
+\path{mixed_ordinal_stats_from_observed_data} materializes these rows and
+\path{robust_mixed_ordinal_ij} consumes them for ULS/fixed-weight IJ. Mixed
+DWLS/WLS still need support-aware observed mixed $\dot\Gamma_i$ helpers and
+finite-difference $\partial\Gamma/\partial\kappa$ gates; remaining validation is
+case-weight finite differences for that channel plus MCAR simulation against a
+case-resampling jackknife.
 
 \section{Verification standard}
 

@@ -5326,6 +5326,109 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->se.allFinite());
 }
 
+TEST_CASE("Observed mixed ordinal stats reduce to complete-data mixed stats") {
+  std::mt19937 rng(20260624);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(420, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta + 0.35 * norm(rng) > -0.45) +
+              (eta + 0.35 * norm(rng) > 0.55);
+    X(i, 1) = 0.62 * eta + 0.78 * norm(rng) + 0.20;
+    X(i, 2) = 1.0 + (0.68 * eta + 0.74 * norm(rng) > 0.05);
+    X(i, 3) = 0.54 * eta + 0.84 * norm(rng) - 0.15;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 1, 0}};
+  auto complete =
+      magmaan::data::mixed_ordinal_stats_from_data({X}, ordered, false);
+  auto observed =
+      magmaan::data::mixed_ordinal_stats_from_observed_data({X}, ordered, false);
+  REQUIRE(complete.has_value());
+  REQUIRE(observed.has_value());
+
+  CHECK(observed->R[0].isApprox(complete->R[0], 1e-10));
+  CHECK(observed->mean[0].isApprox(complete->mean[0], 1e-12));
+  CHECK(observed->thresholds[0].isApprox(complete->thresholds[0], 1e-12));
+  CHECK(observed->moments[0].isApprox(complete->moments[0], 1e-10));
+  CHECK(observed->moment_influence[0].isApprox(
+      complete->moment_influence[0], 1e-8));
+  CHECK(observed->NACOV[0].isApprox(complete->NACOV[0], 1e-8));
+  CHECK(observed->W_dwls[0].isApprox(complete->W_dwls[0], 1e-8));
+  CHECK(observed->raw_data.empty());
+}
+
+TEST_CASE("robust_mixed_ordinal_ij ULS supports observed MCAR") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::mt19937 rng(20260625);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(760, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta + 0.30 * norm(rng) > -0.55) +
+              (eta + 0.30 * norm(rng) > 0.45);
+    X(i, 1) = 0.70 * eta + 0.72 * norm(rng) + 0.15;
+    X(i, 2) = 1.0 + (0.72 * eta + 0.69 * norm(rng) > 0.10);
+    X(i, 3) = 0.58 * eta + 0.82 * norm(rng) - 0.10;
+  }
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    if (i % 7 == 0) X(i, 0) = nan;
+    if (i % 11 == 0) X(i, 1) = nan;
+    if (i % 13 == 0) X(i, 2) = nan;
+    if (i % 17 == 0) X(i, 3) = nan;
+  }
+
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 1, 0}};
+  auto stats =
+      magmaan::data::mixed_ordinal_stats_from_observed_data({X}, ordered, false);
+  REQUIRE_MESSAGE(stats.has_value(),
+      "observed mixed stats failed: "
+          << (stats.has_value() ? "" : stats.error().detail));
+  REQUIRE(stats->moment_influence.size() == 1);
+  CHECK(stats->moment_influence[0].rows() == X.rows());
+  CHECK(stats->moment_influence[0].cols() == stats->moments[0].size());
+  CHECK(((stats->moment_influence[0].transpose() *
+          stats->moment_influence[0]) /
+         static_cast<double>(X.rows()))
+            .isApprox(stats->NACOV[0], 1e-10));
+  CHECK(stats->raw_data.empty());
+
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x3 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x3 ~*~ 1*x3\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::ULS);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "observed mixed ULS fit failed: "
+          << (fit.has_value() ? "" : fit.error().detail));
+  auto fixed = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::ULS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Observed);
+  auto ij = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::ULS);
+  REQUIRE_MESSAGE(fixed.has_value(),
+      "observed fixed mixed robust failed: "
+          << (fixed.has_value() ? "" : fixed.error().detail));
+  REQUIRE_MESSAGE(ij.has_value(),
+      "observed mixed ULS IJ failed: "
+          << (ij.has_value() ? "" : ij.error().detail));
+  CHECK(ij->df == fixed->df);
+  CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
+  CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
+  CHECK(ij->se.isApprox(fixed->se, 1e-8));
+}
+
 TEST_CASE("mixed Gamma influence has mixed moment order and zero mean") {
   std::mt19937 rng(20260622);
   std::normal_distribution<double> norm(0.0, 1.0);
