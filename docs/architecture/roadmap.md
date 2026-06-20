@@ -1361,10 +1361,12 @@ stop rather than any usable non-error return.
   gated against case-weight perturbations and its diagonal extraction is pinned
   to the DWLS helper. For observed/pairwise-missing all-ordinal stats with
   overlap Gamma, `ordinal_stats_from_observed_integer_data` now materializes
-  case-aligned sparse moment-influence rows whose crossproduct reproduces the
-  overlap NACOV; `robust_ordinal_ij` supports those rows for ULS/fixed-weight
-  observed-bread covariance. Pairwise-missing DWLS/WLS still need a
-  support-aware estimated-Gamma influence channel.
+  case-aligned sparse moment-influence rows and missing-coded integer data.
+  The rows' crossproduct reproduces the overlap NACOV; `robust_ordinal_ij`
+  supports them for ULS/fixed-weight observed-bread covariance and uses
+  support-aware observed Gamma influence/Jacobian helpers for DWLS/WLS
+  estimated-weight corrections. The observed helpers are gated by
+  missing-pattern case-weight finite differences and complete-data reduction.
   Complete mixed ordinal/polyserial fixed-weight ULS now has
   `robust_mixed_ordinal_ij`, with mixed casewise moment influence rows stored on
   `MixedOrdinalStats`; it reduces exactly to the observed-bread fixed-weight

@@ -117,8 +117,9 @@ robust_ordinal(spec::LatentStructure pt,
 // misspecification and identically zero under the null or for ULS (W = I,
 // fixed); the channel-1 piece (v_i = W_b g_i) reproduces the observed-bread
 // sandwich exactly. Requires `stats.moment_influence`; DWLS/WLS also require
-// complete `stats.int_data` so the estimated-weight influence is not silently
-// approximated.
+// `stats.int_data`, complete for ordinary stats or missing-coded (`-1`) for
+// pairwise-overlap observed stats, so the estimated-weight influence is not
+// silently approximated.
 post_expected<OrdinalRobustResult>
 robust_ordinal_ij(spec::LatentStructure pt,
                   const model::MatrixRep& rep,
