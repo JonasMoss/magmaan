@@ -1352,10 +1352,13 @@ stop rather than any usable non-error return.
   Continuous-LS observed-bread computation now uses an analytic moment Hessian:
   the Gauss-Newton `Delta' W Delta` term plus the residual-weighted LISREL
   second-derivative contraction, reduced through the equality-constraint basis
-  `K`. The public finite-difference bread helper remains as the validation
-  oracle for the fixed-weight, GLS, WLS, DWLS, and DLS IJ tests.
+  `K`. All-ordinal and mixed ordinal/polyserial observed bread uses the same
+  analytic shape, with scalar moment curvature for thresholds, standardized
+  correlations/associations, continuous means/variances, and theta /
+  Wu-Estabrook released-scale standardization. The public finite-difference bread
+  helper remains as the validation oracle for weighted-moment bread checks.
   Complete all-ordinal ULS/DWLS/WLS now has `robust_ordinal_ij`: ULS reduces to
-  the observed-bread fixed-weight sandwich, DWLS carries the diagonal
+  the analytic observed-bread fixed-weight sandwich, DWLS carries the diagonal
   estimated-Gamma influence, and WLS carries the dense `IF(Gamma)` through
   `d' W IF(Gamma) W`. The dense ordinal Gamma influence is finite-difference
   gated against case-weight perturbations and its diagonal extraction is pinned
@@ -1369,8 +1372,8 @@ stop rather than any usable non-error return.
   missing-pattern case-weight finite differences and complete-data reduction.
   Complete mixed ordinal/polyserial fixed-weight ULS now has
   `robust_mixed_ordinal_ij`, with mixed casewise moment influence rows stored on
-  `MixedOrdinalStats`; it reduces exactly to the observed-bread fixed-weight
-  sandwich. The same entry point now supports ordinary complete-data
+  `MixedOrdinalStats`; it reduces exactly to the analytic observed-bread
+  fixed-weight sandwich. The same entry point now supports ordinary complete-data
   mixed DWLS by carrying raw mixed blocks on `MixedOrdinalStats` and combining
   mixed data-direct diagonal `IF(Gamma)` with finite-difference
   `d diag(Gamma) / d kappa` in the mixed moment order. Mixed full WLS uses the
