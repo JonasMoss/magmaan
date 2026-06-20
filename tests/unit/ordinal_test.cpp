@@ -588,6 +588,28 @@ Eigen::VectorXd finite_diff_mixed_gamma_diag_case_influence(
   return (Gamma_eps.diagonal() - Gamma.diagonal()) / eps;
 }
 
+Eigen::MatrixXd finite_diff_mixed_gamma_case_influence(
+    const MixedGammaDiagInfluenceProbe& probe,
+    Eigen::Index row,
+    double eps = 1e-6) {
+  const Eigen::Index n = probe.SC.rows();
+  const Eigen::MatrixXd A = probe.B / static_cast<double>(n);
+  const Eigen::MatrixXd V =
+      (probe.SC.transpose() * probe.SC) / static_cast<double>(n);
+  const Eigen::MatrixXd A_inv = A.inverse();
+  const Eigen::MatrixXd Gamma =
+      probe.H * A_inv * V * A_inv.transpose() * probe.H.transpose();
+  const Eigen::VectorXd s_i = probe.SC.row(row).transpose();
+  const Eigen::MatrixXd A_eps =
+      A + eps * (probe.b_case[static_cast<std::size_t>(row)] - A);
+  const Eigen::MatrixXd V_eps = V + eps * (s_i * s_i.transpose() - V);
+  const Eigen::MatrixXd A_eps_inv = A_eps.inverse();
+  const Eigen::MatrixXd Gamma_eps =
+      probe.H * A_eps_inv * V_eps * A_eps_inv.transpose() *
+      probe.H.transpose();
+  return (Gamma_eps - Gamma) / eps;
+}
+
 double symmetric_condition_number(const Eigen::MatrixXd& x) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (x + x.transpose()));
   if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
@@ -5035,7 +5057,7 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->se.allFinite());
 }
 
-TEST_CASE("mixed Gamma diagonal influence has mixed moment order and zero mean") {
+TEST_CASE("mixed Gamma influence has mixed moment order and zero mean") {
   std::mt19937 rng(20260622);
   std::normal_distribution<double> norm(0.0, 1.0);
   Eigen::MatrixXd X(360, 4);
@@ -5056,40 +5078,72 @@ TEST_CASE("mixed Gamma diagonal influence has mixed moment order and zero mean")
   auto IFG = magmaan::data::mixed_gamma_diag_data_influence(
       stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
       stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto IFG_full = magmaan::data::mixed_gamma_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
   auto D = magmaan::data::mixed_gamma_diag_jacobian_fd(
       stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
       stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D_full = magmaan::data::mixed_gamma_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
   REQUIRE(IFG.has_value());
+  REQUIRE(IFG_full.has_value());
   REQUIRE(D.has_value());
+  REQUIRE(D_full.has_value());
   const Eigen::Index m = stats->moments[0].size();
   CHECK(IFG->rows() == X.rows());
   CHECK(IFG->cols() == m);
+  CHECK(IFG_full->rows() == X.rows());
+  CHECK(IFG_full->cols() == m * m);
   CHECK(D->rows() == m);
   CHECK(D->cols() == m);
+  CHECK(D_full->rows() == m * m);
+  CHECK(D_full->cols() == m);
   CHECK(IFG->allFinite());
+  CHECK(IFG_full->allFinite());
   CHECK(D->allFinite());
+  CHECK(D_full->allFinite());
   auto probe = mixed_gamma_diag_influence_probe(
       stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
       stats->thresholds[0], stats->mean[0], stats->R[0]);
   CHECK((probe.Gamma - stats->NACOV[0]).cwiseAbs().maxCoeff() < 1e-8);
 
   double max_abs = 0.0;
+  double max_full_abs = 0.0;
   for (Eigen::Index i = 0; i < X.rows(); i += 41) {
     const Eigen::VectorXd fd =
         finite_diff_mixed_gamma_diag_case_influence(probe, i);
     max_abs = std::max(
         max_abs, (IFG->row(i).transpose() - fd).cwiseAbs().maxCoeff());
+    const Eigen::MatrixXd fd_full =
+        finite_diff_mixed_gamma_case_influence(probe, i);
+    const Eigen::VectorXd full_vec = IFG_full->row(i).transpose();
+    const Eigen::Map<const Eigen::MatrixXd> full_i(full_vec.data(), m, m);
+    max_full_abs = std::max(
+        max_full_abs, (full_i - fd_full).cwiseAbs().maxCoeff());
   }
   CHECK(max_abs < 8e-5 * (1.0 + IFG->cwiseAbs().maxCoeff()));
+  CHECK(max_full_abs < 2e-4 * (1.0 + IFG_full->cwiseAbs().maxCoeff()));
+
+  for (Eigen::Index k = 0; k < m; ++k) {
+    CHECK((IFG->col(k) - IFG_full->col(k + k * m)).norm() < 1e-10);
+    CHECK((D->row(k) - D_full->row(k + k * m)).norm() < 1e-10);
+  }
 
   const Eigen::MatrixXd full_if =
       *IFG + stats->moment_influence[0] * D->transpose();
+  const Eigen::MatrixXd full_matrix_if =
+      *IFG_full + stats->moment_influence[0] * D_full->transpose();
   const double scale = 1.0 + full_if.cwiseAbs().maxCoeff();
+  const double full_scale = 1.0 + full_matrix_if.cwiseAbs().maxCoeff();
   CHECK(IFG->colwise().mean().norm() < 1e-8 * scale);
   CHECK(full_if.colwise().mean().norm() < 1e-6 * scale);
+  CHECK(IFG_full->colwise().mean().norm() < 1e-8 * full_scale);
+  CHECK(full_matrix_if.colwise().mean().norm() < 1e-6 * full_scale);
 }
 
-TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS and DWLS") {
+TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS DWLS and WLS") {
   std::mt19937 rng(20260621);
   std::normal_distribution<double> norm(0.0, 1.0);
   Eigen::MatrixXd X(520, 4);
@@ -5163,11 +5217,26 @@ TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS and DWLS") {
   CHECK(missing.error().detail.find("raw mixed data unavailable") !=
         std::string::npos);
 
+  auto wls_fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_MESSAGE(wls_fit.has_value(),
+      "mixed WLS fit failed: "
+          << (wls_fit.has_value() ? "" : wls_fit.error().detail));
   auto wls = magmaan::estimate::robust_mixed_ordinal_ij(
-      *pt, *mr, *stats, *dwls_fit,
+      *pt, *mr, *stats, *wls_fit,
       magmaan::estimate::OrdinalWeightKind::WLS);
-  REQUIRE_FALSE(wls.has_value());
-  CHECK(wls.error().detail.find("full WLS") != std::string::npos);
+  REQUIRE_MESSAGE(wls.has_value(),
+      "mixed WLS IJ failed: " << (wls.has_value() ? "" : wls.error().detail));
+  CHECK(wls->df == fixed->df);
+  CHECK(wls->vcov.allFinite());
+  CHECK(wls->se.allFinite());
+
+  auto missing_wls = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, no_raw, *wls_fit,
+      magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_FALSE(missing_wls.has_value());
+  CHECK(missing_wls.error().detail.find("raw mixed data unavailable") !=
+        std::string::npos);
 }
 
 TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {

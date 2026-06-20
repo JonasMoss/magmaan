@@ -3791,11 +3791,6 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
                         const Estimates& est,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization) {
-  if (weights == OrdinalWeightKind::WLS) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "robust_mixed_ordinal_ij: full WLS requires mixed full IF(Gamma); "
-        "only ULS and DWLS are implemented"));
-  }
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -3805,11 +3800,11 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
         "robust_mixed_ordinal_ij: per-case influence functions unavailable; "
         "recompute mixed ordinal stats (moment_influence is required for the IJ)"));
   }
-  if (weights == OrdinalWeightKind::DWLS &&
+  if (weights != OrdinalWeightKind::ULS &&
       stats.raw_data.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "robust_mixed_ordinal_ij: complete raw mixed data unavailable; "
-        "ordinary ML/polyserial mixed stats are required for DWLS estimated-"
+        "ordinary ML/polyserial mixed stats are required for estimated-"
         "weight influence"));
   }
   if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
@@ -3858,7 +3853,8 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
       uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
   }
   const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
-                 : stats.W_dwls;
+                 : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls);
 
   double N_total = 0.0;
   for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
@@ -3933,6 +3929,29 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
         if (!(gkk > 0.0)) continue;
         const Eigen::VectorXd if_k = (inf_or->col(k) + GD.col(k)).eval();
         correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
+      }
+    } else if (weights == OrdinalWeightKind::WLS) {
+      auto inf_or = data::mixed_gamma_data_influence(
+          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+      auto D_or = data::mixed_gamma_jacobian_fd(
+          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!D_or.has_value()) return std::unexpected(D_or.error());
+      if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
+          D_or->rows() != mb * mb || D_or->cols() != mb) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_mixed_ordinal_ij: mixed full Gamma influence shape "
+            "mismatch in block " + std::to_string(b)));
+      }
+      const Eigen::RowVectorXd lhs = d_b.transpose() * Ws[b];
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index i = 0; i < G.rows(); ++i) {
+        Eigen::VectorXd if_vec = inf_or->row(i).transpose();
+        if_vec.noalias() += (*D_or) * G.row(i).transpose();
+        Eigen::Map<const Eigen::MatrixXd> IFGamma(if_vec.data(), mb, mb);
+        correction.row(i) = lhs * IFGamma * Ws[b];
       }
     }
     ij_blocks.push_back(WeightedMomentIJBlock{
