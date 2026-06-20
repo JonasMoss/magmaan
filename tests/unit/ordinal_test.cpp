@@ -644,6 +644,24 @@ double symmetric_condition_number(const Eigen::MatrixXd& x) {
   return max_eval / min_eval;
 }
 
+bool matrix_matches_with_nan(const Eigen::MatrixXd& lhs,
+                             const Eigen::MatrixXd& rhs,
+                             double tol = 0.0) {
+  if (lhs.rows() != rhs.rows() || lhs.cols() != rhs.cols()) return false;
+  for (Eigen::Index i = 0; i < lhs.rows(); ++i) {
+    for (Eigen::Index j = 0; j < lhs.cols(); ++j) {
+      const double a = lhs(i, j);
+      const double b = rhs(i, j);
+      if (!std::isfinite(a) || !std::isfinite(b)) {
+        if (std::isfinite(a) || std::isfinite(b)) return false;
+        continue;
+      }
+      if (std::abs(a - b) > tol) return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 TEST_CASE("Ordinal workspace adapters split moments from Gamma cache") {
@@ -5354,7 +5372,8 @@ TEST_CASE("Observed mixed ordinal stats reduce to complete-data mixed stats") {
       complete->moment_influence[0], 1e-8));
   CHECK(observed->NACOV[0].isApprox(complete->NACOV[0], 1e-8));
   CHECK(observed->W_dwls[0].isApprox(complete->W_dwls[0], 1e-8));
-  CHECK(observed->raw_data.empty());
+  REQUIRE(observed->raw_data.size() == 1);
+  CHECK(observed->raw_data[0].isApprox(X, 0.0));
 }
 
 TEST_CASE("robust_mixed_ordinal_ij ULS supports observed MCAR") {
@@ -5390,7 +5409,8 @@ TEST_CASE("robust_mixed_ordinal_ij ULS supports observed MCAR") {
           stats->moment_influence[0]) /
          static_cast<double>(X.rows()))
             .isApprox(stats->NACOV[0], 1e-10));
-  CHECK(stats->raw_data.empty());
+  REQUIRE(stats->raw_data.size() == 1);
+  CHECK(matrix_matches_with_nan(stats->raw_data[0], X, 0.0));
 
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
@@ -5427,6 +5447,181 @@ TEST_CASE("robust_mixed_ordinal_ij ULS supports observed MCAR") {
   CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
   CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
+}
+
+TEST_CASE("observed mixed Gamma helpers reduce to complete-data helpers") {
+  std::mt19937 rng(20260627);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(360, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta + 0.35 * norm(rng) > -0.35) +
+              (eta + 0.35 * norm(rng) > 0.60);
+    X(i, 1) = 0.58 * eta + 0.82 * norm(rng) + 0.18;
+    X(i, 2) = 1.0 + (0.70 * eta + 0.70 * norm(rng) > 0.10);
+    X(i, 3) = 0.48 * eta + 0.88 * norm(rng) - 0.12;
+  }
+
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 1, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->raw_data.size() == 1);
+
+  auto IFG = magmaan::data::mixed_gamma_diag_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto IFG_obs = magmaan::data::mixed_observed_gamma_diag_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto IFG_full = magmaan::data::mixed_gamma_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto IFG_full_obs = magmaan::data::mixed_observed_gamma_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D = magmaan::data::mixed_gamma_diag_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D_obs = magmaan::data::mixed_observed_gamma_diag_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D_full = magmaan::data::mixed_gamma_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D_full_obs = magmaan::data::mixed_observed_gamma_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  REQUIRE(IFG.has_value());
+  REQUIRE(IFG_obs.has_value());
+  REQUIRE(IFG_full.has_value());
+  REQUIRE(IFG_full_obs.has_value());
+  REQUIRE(D.has_value());
+  REQUIRE(D_obs.has_value());
+  REQUIRE(D_full.has_value());
+  REQUIRE(D_full_obs.has_value());
+  CHECK(IFG_obs->isApprox(*IFG, 1e-8));
+  CHECK(IFG_full_obs->isApprox(*IFG_full, 1e-8));
+  CHECK(D_obs->isApprox(*D, 1e-7));
+  CHECK(D_full_obs->isApprox(*D_full, 1e-7));
+}
+
+TEST_CASE("robust_mixed_ordinal_ij DWLS and WLS support observed MCAR") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::mt19937 rng(20260628);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(980, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta + 0.30 * norm(rng) > -0.50) +
+              (eta + 0.30 * norm(rng) > 0.48);
+    X(i, 1) = 0.70 * eta + 0.72 * norm(rng) + 0.12;
+    X(i, 2) = 1.0 + (0.72 * eta + 0.69 * norm(rng) > 0.08);
+    X(i, 3) = 0.58 * eta + 0.82 * norm(rng) - 0.08;
+  }
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    if (i % 7 == 0) X(i, 0) = nan;
+    if (i % 11 == 0) X(i, 1) = nan;
+    if (i % 13 == 0) X(i, 2) = nan;
+    if (i % 17 == 0) X(i, 3) = nan;
+  }
+
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 1, 0}};
+  auto stats =
+      magmaan::data::mixed_ordinal_stats_from_observed_data({X}, ordered, true);
+  REQUIRE_MESSAGE(stats.has_value(),
+      "observed mixed stats failed: "
+          << (stats.has_value() ? "" : stats.error().detail));
+  REQUIRE(stats->raw_data.size() == 1);
+  CHECK(matrix_matches_with_nan(stats->raw_data[0], X, 0.0));
+  REQUIRE(stats->W_wls.size() == 1);
+  REQUIRE(stats->W_wls[0].rows() == stats->moments[0].size());
+
+  auto IFG = magmaan::data::mixed_observed_gamma_diag_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto IFG_full = magmaan::data::mixed_observed_gamma_data_influence(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D = magmaan::data::mixed_observed_gamma_diag_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto D_full = magmaan::data::mixed_observed_gamma_jacobian_fd(
+      stats->raw_data[0], stats->ordered[0], stats->n_levels[0],
+      stats->thresholds[0], stats->mean[0], stats->R[0]);
+  REQUIRE(IFG.has_value());
+  REQUIRE(IFG_full.has_value());
+  REQUIRE(D.has_value());
+  REQUIRE(D_full.has_value());
+  const Eigen::Index m = stats->moments[0].size();
+  CHECK(IFG->rows() == X.rows());
+  CHECK(IFG->cols() == m);
+  CHECK(IFG_full->rows() == X.rows());
+  CHECK(IFG_full->cols() == m * m);
+  CHECK(D->rows() == m);
+  CHECK(D->cols() == m);
+  CHECK(D_full->rows() == m * m);
+  CHECK(D_full->cols() == m);
+  CHECK(IFG->allFinite());
+  CHECK(IFG_full->allFinite());
+  CHECK(D->allFinite());
+  CHECK(D_full->allFinite());
+  for (Eigen::Index k = 0; k < m; ++k) {
+    CHECK((IFG->col(k) - IFG_full->col(k + k * m)).norm() < 1e-10);
+    CHECK((D->row(k) - D_full->row(k + k * m)).norm() < 1e-10);
+  }
+  const Eigen::MatrixXd full_if =
+      *IFG + stats->moment_influence[0] * D->transpose();
+  const Eigen::MatrixXd full_matrix_if =
+      *IFG_full + stats->moment_influence[0] * D_full->transpose();
+  const double scale = 1.0 + full_if.cwiseAbs().maxCoeff();
+  const double full_scale = 1.0 + full_matrix_if.cwiseAbs().maxCoeff();
+  CHECK(IFG->colwise().mean().norm() < 1e-8 * scale);
+  CHECK(full_if.colwise().mean().norm() < 1e-3 * scale);
+  CHECK(IFG_full->colwise().mean().norm() < 1e-8 * full_scale);
+  CHECK(full_matrix_if.colwise().mean().norm() < 1e-3 * full_scale);
+
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x3 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x3 ~*~ 1*x3\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto dwls_fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(dwls_fit.has_value(),
+      "observed mixed DWLS fit failed: "
+          << (dwls_fit.has_value() ? "" : dwls_fit.error().detail));
+  auto dwls = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *dwls_fit,
+      magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(dwls.has_value(),
+      "observed mixed DWLS IJ failed: "
+          << (dwls.has_value() ? "" : dwls.error().detail));
+  CHECK(dwls->vcov.allFinite());
+  CHECK(dwls->se.allFinite());
+
+  auto wls_fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_MESSAGE(wls_fit.has_value(),
+      "observed mixed WLS fit failed: "
+          << (wls_fit.has_value() ? "" : wls_fit.error().detail));
+  auto wls = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *wls_fit,
+      magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_MESSAGE(wls.has_value(),
+      "observed mixed WLS IJ failed: "
+          << (wls.has_value() ? "" : wls.error().detail));
+  CHECK(wls->df == dwls->df);
+  CHECK(wls->vcov.allFinite());
+  CHECK(wls->se.allFinite());
 }
 
 TEST_CASE("mixed Gamma influence has mixed moment order and zero mean") {

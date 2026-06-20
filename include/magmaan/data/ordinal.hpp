@@ -85,11 +85,12 @@ struct MixedOrdinalStats {
   // (1/n_b)·Σ_i g_i g_iᵀ = NACOV[b]. Empty when not computed.
   std::vector<Eigen::MatrixXd> moment_influence;
 
-  // Complete raw data blocks used to reconstruct the estimated-weight
-  // influence for mixed DWLS IJ. Ordinal columns are 1-based categories and
-  // continuous columns are the original finite values. Empty for moment-only
-  // adapters and robust/experimental mixed moment builders whose Gamma
-  // influence is not the ordinary ML/polyserial one.
+  // Raw data blocks used to reconstruct the estimated-weight influence for
+  // mixed DWLS/WLS IJ. Ordinal columns are 1-based categories and continuous
+  // columns are the original values; non-finite entries mark observed-data
+  // missingness. Empty for moment-only adapters and robust/experimental mixed
+  // moment builders whose Gamma influence is not the ordinary ML/polyserial
+  // one.
   std::vector<Eigen::MatrixXd> raw_data;
 };
 
@@ -408,6 +409,31 @@ mixed_gamma_jacobian_fd(const Eigen::MatrixXd& X,
                         const Eigen::MatrixXd& R,
                         double h_rel = 1e-4);
 
+// Observed/pairwise-overlap analogue of `mixed_gamma_diag_jacobian_fd`.
+// Non-finite entries in X are missing; observed data are otherwise encoded like
+// the complete-data mixed helpers. Returns m × m for d diag(Gamma) / d kappa.
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_diag_jacobian_fd(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-4);
+
+// Observed/pairwise-overlap analogue of `mixed_gamma_jacobian_fd`. Returns
+// (m*m) × m in column-major Gamma vectorization.
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_jacobian_fd(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-4);
+
 // Per-case DATA-DIRECT influence of the mixed NACOV diagonal at fixed mixed
 // kappa. Pair with `mixed_gamma_diag_jacobian_fd` and
 // MixedOrdinalStats::moment_influence to form the complete estimated-weight
@@ -431,6 +457,27 @@ mixed_gamma_data_influence(const Eigen::MatrixXd& X,
                            const Eigen::VectorXd& thresholds,
                            const Eigen::VectorXd& mean,
                            const Eigen::MatrixXd& R);
+
+// Observed/pairwise-overlap analogue of
+// `mixed_gamma_diag_data_influence`. Non-finite entries in X are missing.
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_diag_data_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R);
+
+// Observed/pairwise-overlap analogue of `mixed_gamma_data_influence`.
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_data_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an
