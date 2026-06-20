@@ -36,6 +36,8 @@
 #include "magmaan/optim/reparameterize.hpp"
 #include "magmaan/parse/op.hpp"
 
+#include "detail_second_order.hpp"
+
 namespace magmaan::estimate {
 
 using data::SampleStats;
@@ -2711,6 +2713,562 @@ Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
   return out;
 }
 
+struct MomentCurvatureWeights {
+  Eigen::MatrixXd G;  // trace weight for Sigma
+  Eigen::VectorXd u;  // dot weight for mu
+};
+
+Eigen::Index vech_sym_index(Eigen::Index p, Eigen::Index r,
+                            Eigen::Index c) noexcept {
+  if (r < c) std::swap(r, c);
+  return vech_index(p, r, c);
+}
+
+void add_sigma_trace_weight(Eigen::Ref<Eigen::MatrixXd> G, Eigen::Index r,
+                            Eigen::Index c, double value) {
+  if (value == 0.0) return;
+  if (r == c) {
+    G(r, c) += value;
+  } else {
+    const double half = 0.5 * value;
+    G(r, c) += half;
+    G(c, r) += half;
+  }
+}
+
+double sigma_deriv(const Eigen::MatrixXd& J_sigma, Eigen::Index sigma_off,
+                   Eigen::Index p, Eigen::Index r, Eigen::Index c,
+                   Eigen::Index param) {
+  const Eigen::Index row = sigma_off + vech_sym_index(p, r, c);
+  if (row < 0 || row >= J_sigma.rows() || param < 0 || param >= J_sigma.cols()) {
+    return 0.0;
+  }
+  return J_sigma(row, param);
+}
+
+double mu_deriv(const Eigen::MatrixXd& J_mu, Eigen::Index mu_off,
+                Eigen::Index idx, Eigen::Index param) {
+  const Eigen::Index row = mu_off + idx;
+  if (row < 0 || row >= J_mu.rows() || param < 0 || param >= J_mu.cols()) {
+    return 0.0;
+  }
+  return J_mu(row, param);
+}
+
+double threshold_deriv(const ThresholdLayout& layout, std::size_t b,
+                       Eigen::Index threshold, Eigen::Index param) {
+  const std::int32_t fr = layout.free[b][static_cast<std::size_t>(threshold)];
+  return fr > 0 && static_cast<Eigen::Index>(fr - 1) == param ? 1.0 : 0.0;
+}
+
+std::vector<char> threshold_parameter_mask(const ThresholdLayout& layout,
+                                           Eigen::Index q) {
+  std::vector<char> out(static_cast<std::size_t>(q), 0);
+  for (std::size_t b = 0; b < layout.free.size(); ++b) {
+    for (const std::int32_t fr : layout.free[b]) {
+      if (fr > 0 && static_cast<Eigen::Index>(fr - 1) < q) {
+        out[static_cast<std::size_t>(fr - 1)] = 1;
+      }
+    }
+  }
+  return out;
+}
+
+void add_assoc_gradient(Eigen::Ref<Eigen::MatrixXd> G,
+                        const Eigen::MatrixXd& Sigma, Eigen::Index i,
+                        Eigen::Index j, bool std_i, bool std_j,
+                        double scale) {
+  if (scale == 0.0) return;
+  const double sij = Sigma(i, j);
+  if (!std_i && !std_j) {
+    add_sigma_trace_weight(G, i, j, scale);
+    return;
+  }
+  if (std_i && std_j) {
+    const double sii = Sigma(i, i);
+    const double sjj = Sigma(j, j);
+    const double inv_i = 1.0 / std::sqrt(sii);
+    const double inv_j = 1.0 / std::sqrt(sjj);
+    add_sigma_trace_weight(G, i, j, scale * inv_i * inv_j);
+    add_sigma_trace_weight(G, i, i,
+                           scale * (-0.5 * sij * inv_i / sii * inv_j));
+    add_sigma_trace_weight(G, j, j,
+                           scale * (-0.5 * sij * inv_i * inv_j / sjj));
+    return;
+  }
+  const Eigen::Index o = std_i ? i : j;
+  const double soo = Sigma(o, o);
+  const double inv_o = 1.0 / std::sqrt(soo);
+  add_sigma_trace_weight(G, i, j, scale * inv_o);
+  add_sigma_trace_weight(G, o, o, scale * (-0.5 * sij * inv_o / soo));
+}
+
+double assoc_extra(const Eigen::MatrixXd& Sigma, const Eigen::MatrixXd& J_sigma,
+                   Eigen::Index sigma_off, Eigen::Index p, Eigen::Index i,
+                   Eigen::Index j, bool std_i, bool std_j, Eigen::Index a,
+                   Eigen::Index b) {
+  if (!std_i && !std_j) return 0.0;
+  const double dx_a = sigma_deriv(J_sigma, sigma_off, p, i, j, a);
+  const double dx_b = sigma_deriv(J_sigma, sigma_off, p, i, j, b);
+  const double sij = Sigma(i, j);
+  if (std_i && std_j) {
+    const double sii = Sigma(i, i);
+    const double sjj = Sigma(j, j);
+    const double inv_i = 1.0 / std::sqrt(sii);
+    const double inv_j = 1.0 / std::sqrt(sjj);
+    const double di_a = sigma_deriv(J_sigma, sigma_off, p, i, i, a);
+    const double di_b = sigma_deriv(J_sigma, sigma_off, p, i, i, b);
+    const double dj_a = sigma_deriv(J_sigma, sigma_off, p, j, j, a);
+    const double dj_b = sigma_deriv(J_sigma, sigma_off, p, j, j, b);
+    const double f_xi = -0.5 * inv_i / sii * inv_j;
+    const double f_xj = -0.5 * inv_i * inv_j / sjj;
+    const double f_ii = 0.75 * sij * inv_i / (sii * sii) * inv_j;
+    const double f_jj = 0.75 * sij * inv_i * inv_j / (sjj * sjj);
+    const double f_ij = 0.25 * sij * inv_i / sii * inv_j / sjj;
+    return f_xi * (dx_a * di_b + dx_b * di_a) +
+           f_xj * (dx_a * dj_b + dx_b * dj_a) +
+           f_ii * di_a * di_b + f_jj * dj_a * dj_b +
+           f_ij * (di_a * dj_b + di_b * dj_a);
+  }
+  const Eigen::Index o = std_i ? i : j;
+  const double soo = Sigma(o, o);
+  const double inv_o = 1.0 / std::sqrt(soo);
+  const double do_a = sigma_deriv(J_sigma, sigma_off, p, o, o, a);
+  const double do_b = sigma_deriv(J_sigma, sigma_off, p, o, o, b);
+  const double f_xo = -0.5 * inv_o / soo;
+  const double f_oo = 0.75 * sij * inv_o / (soo * soo);
+  return f_xo * (dx_a * do_b + dx_b * do_a) + f_oo * do_a * do_b;
+}
+
+double scaled_threshold_extra(double value_minus_mu, double sigma_ii,
+                              double ds_a, double ds_b, double dtau_a,
+                              double dtau_b, double dmu_a, double dmu_b) {
+  const double inv = 1.0 / std::sqrt(sigma_ii);
+  const double d1 = -0.5 * inv / sigma_ii;
+  const double d2 = 0.75 * inv / (sigma_ii * sigma_ii);
+  return d1 * ((dtau_a - dmu_a) * ds_b + (dtau_b - dmu_b) * ds_a) +
+         value_minus_mu * d2 * ds_a * ds_b;
+}
+
+MomentCurvatureWeights ordinal_curvature_weights(
+    const data::OrdinalStats& stats,
+    const ThresholdLayout& layout,
+    const model::ImpliedMoments& moments,
+    const Eigen::VectorXd& theta,
+    const Eigen::VectorXd& h,
+    OrdinalParameterization param,
+    std::size_t b) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::MatrixXd& Sig = moments.sigma[b];
+  MomentCurvatureWeights out{Eigen::MatrixXd::Zero(p, p),
+                             Eigen::VectorXd::Zero(p)};
+
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  std::vector<std::int32_t> sf(static_cast<std::size_t>(p),
+                               theta_param ? 1 : 0);
+  if (block_released && !theta_param) {
+    std::fill(sf.begin(), sf.end(), 0);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
+        sf[static_cast<std::size_t>(i)] =
+            layout.scale_free[b][static_cast<std::size_t>(i)];
+      }
+    }
+  } else if (!theta_param) {
+    std::fill(sf.begin(), sf.end(), 0);
+  }
+
+  const bool subtract_mu =
+      theta_param || (block_released && !theta_param);
+  const bool have_mu = subtract_mu && b < moments.mu.size() &&
+                       moments.mu[b].size() == p;
+  const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+  for (Eigen::Index k = 0; k < nth; ++k) {
+    const double hk = h(k);
+    const Eigen::Index ov = stats.threshold_ov[b][static_cast<std::size_t>(k)];
+    const bool scaled = sf[static_cast<std::size_t>(ov)] != 0;
+    const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+    if (scaled) {
+      const double s = Sig(ov, ov);
+      const double inv = 1.0 / std::sqrt(s);
+      const double v = it(k) - mu;
+      add_sigma_trace_weight(out.G, ov, ov, hk * (-0.5 * v * inv / s));
+      if (have_mu) out.u(ov) -= hk * inv;
+    } else if (have_mu) {
+      out.u(ov) -= hk;
+    }
+  }
+
+  Eigen::Index row = nth;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      add_assoc_gradient(out.G, Sig, i, j,
+                         sf[static_cast<std::size_t>(i)] != 0,
+                         sf[static_cast<std::size_t>(j)] != 0,
+                         h(row++));
+    }
+  }
+  return out;
+}
+
+double ordinal_curvature_extra(const data::OrdinalStats& stats,
+                               const ThresholdLayout& layout,
+                               const model::ImpliedMoments& moments,
+                               const Eigen::MatrixXd& J_sigma,
+                               const Eigen::MatrixXd& J_mu,
+                               const Eigen::VectorXd& theta,
+                               const Eigen::VectorXd& h,
+                               OrdinalParameterization param,
+                               std::size_t blk,
+                               Eigen::Index sigma_off,
+                               Eigen::Index mu_off,
+                               Eigen::Index a,
+                               Eigen::Index c) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[blk].rows();
+  const Eigen::Index nth = stats.thresholds[blk].size();
+  const Eigen::MatrixXd& Sig = moments.sigma[blk];
+  const bool block_released =
+      blk < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[blk].begin(), layout.scale_free[blk].end(),
+                  [](char x) { return x != 0; });
+  std::vector<std::int32_t> sf(static_cast<std::size_t>(p),
+                               theta_param ? 1 : 0);
+  if (block_released && !theta_param) {
+    std::fill(sf.begin(), sf.end(), 0);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      if (static_cast<std::size_t>(i) < layout.scale_free[blk].size()) {
+        sf[static_cast<std::size_t>(i)] =
+            layout.scale_free[blk][static_cast<std::size_t>(i)];
+      }
+    }
+  } else if (!theta_param) {
+    std::fill(sf.begin(), sf.end(), 0);
+  }
+
+  double out = 0.0;
+  const bool subtract_mu =
+      theta_param || (block_released && !theta_param);
+  const bool have_mu = subtract_mu && blk < moments.mu.size() &&
+                       moments.mu[blk].size() == p;
+  const Eigen::VectorXd it = implied_thresholds(layout, theta, blk);
+  for (Eigen::Index k = 0; k < nth; ++k) {
+    const Eigen::Index ov =
+        stats.threshold_ov[blk][static_cast<std::size_t>(k)];
+    if (sf[static_cast<std::size_t>(ov)] == 0) continue;
+    const double tau_a = threshold_deriv(layout, blk, k, a);
+    const double tau_c = threshold_deriv(layout, blk, k, c);
+    const double mu_a = have_mu ? mu_deriv(J_mu, mu_off, ov, a) : 0.0;
+    const double mu_c = have_mu ? mu_deriv(J_mu, mu_off, ov, c) : 0.0;
+    const double ds_a = sigma_deriv(J_sigma, sigma_off, p, ov, ov, a);
+    const double ds_c = sigma_deriv(J_sigma, sigma_off, p, ov, ov, c);
+    const double mu = have_mu ? moments.mu[blk](ov) : 0.0;
+    out += h(k) * scaled_threshold_extra(
+                      it(k) - mu, Sig(ov, ov), ds_a, ds_c,
+                      tau_a, tau_c, mu_a, mu_c);
+  }
+
+  Eigen::Index row = nth;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      out += h(row) * assoc_extra(
+                          Sig, J_sigma, sigma_off, p, i, j,
+                          sf[static_cast<std::size_t>(i)] != 0,
+                          sf[static_cast<std::size_t>(j)] != 0,
+                          a, c);
+      ++row;
+    }
+  }
+  return out;
+}
+
+MomentCurvatureWeights mixed_curvature_weights(
+    const data::MixedOrdinalStats& stats,
+    const ThresholdLayout& layout,
+    const model::ImpliedMoments& moments,
+    const Eigen::VectorXd& theta,
+    const Eigen::VectorXd& h,
+    OrdinalParameterization param,
+    std::size_t b) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::MatrixXd& Sig = moments.sigma[b];
+  MomentCurvatureWeights out{Eigen::MatrixXd::Zero(p, p),
+                             Eigen::VectorXd::Zero(p)};
+
+  Eigen::Index row = 0;
+  const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+  for (Eigen::Index k = 0; k < nth; ++k) {
+    if (theta_param) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double s = Sig(ov, ov);
+      const double inv = 1.0 / std::sqrt(s);
+      add_sigma_trace_weight(out.G, ov, ov,
+                             h(row) * (-0.5 * it(k) * inv / s));
+    }
+    ++row;
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) out.u(j) -= h(row++);
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (stats.ordered[b][static_cast<std::size_t>(j)] == 0)
+      add_sigma_trace_weight(out.G, j, j, h(row++));
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool std_i = theta_param &&
+                         stats.ordered[b][static_cast<std::size_t>(i)] != 0;
+      const bool std_j = theta_param &&
+                         stats.ordered[b][static_cast<std::size_t>(j)] != 0;
+      add_assoc_gradient(out.G, Sig, i, j, std_i, std_j, h(row++));
+    }
+  }
+  return out;
+}
+
+double mixed_curvature_extra(const data::MixedOrdinalStats& stats,
+                             const ThresholdLayout& layout,
+                             const model::ImpliedMoments& moments,
+                             const Eigen::MatrixXd& J_sigma,
+                             const Eigen::VectorXd& theta,
+                             const Eigen::VectorXd& h,
+                             OrdinalParameterization param,
+                             std::size_t blk,
+                             Eigen::Index sigma_off,
+                             Eigen::Index a,
+                             Eigen::Index c) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  if (!theta_param) return 0.0;
+  const Eigen::Index p = stats.R[blk].rows();
+  const Eigen::Index nth = stats.thresholds[blk].size();
+  const Eigen::MatrixXd& Sig = moments.sigma[blk];
+  const Eigen::VectorXd it = implied_thresholds(layout, theta, blk);
+
+  double out = 0.0;
+  Eigen::Index row = 0;
+  for (Eigen::Index k = 0; k < nth; ++k) {
+    const Eigen::Index ov =
+        stats.threshold_ov[blk][static_cast<std::size_t>(k)];
+    const double tau_a = threshold_deriv(layout, blk, k, a);
+    const double tau_c = threshold_deriv(layout, blk, k, c);
+    const double ds_a = sigma_deriv(J_sigma, sigma_off, p, ov, ov, a);
+    const double ds_c = sigma_deriv(J_sigma, sigma_off, p, ov, ov, c);
+    out += h(row) * scaled_threshold_extra(
+                       it(k), Sig(ov, ov), ds_a, ds_c,
+                       tau_a, tau_c, 0.0, 0.0);
+    ++row;
+  }
+  for (Eigen::Index j = 0; j < p; ++j)
+    if (stats.ordered[blk][static_cast<std::size_t>(j)] == 0) ++row;
+  for (Eigen::Index j = 0; j < p; ++j)
+    if (stats.ordered[blk][static_cast<std::size_t>(j)] == 0) ++row;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool std_i =
+          stats.ordered[blk][static_cast<std::size_t>(i)] != 0;
+      const bool std_j =
+          stats.ordered[blk][static_cast<std::size_t>(j)] != 0;
+      out += h(row) * assoc_extra(Sig, J_sigma, sigma_off, p, i, j,
+                                  std_i, std_j, a, c);
+      ++row;
+    }
+  }
+  return out;
+}
+
+template <typename ExtraFn>
+void add_lisrel_second_order(Eigen::Ref<Eigen::MatrixXd> H,
+                             const MomentCurvatureWeights& curv,
+                             const model::BlockMatrices& bm,
+                             const std::vector<model::ParamLocation>& locs,
+                             const std::vector<char>& is_threshold,
+                             std::size_t block,
+                             bool has_mu_rows,
+                             double weight,
+                             ExtraFn extra) {
+  const Eigen::Index q = H.rows();
+  const auto blk_i = static_cast<std::int8_t>(block);
+  const auto sow =
+      detail::SecondOrderWeights::build(curv.G, bm, has_mu_rows);
+  for (Eigen::Index a = 0; a < q; ++a) {
+    for (Eigen::Index c = a; c < q; ++c) {
+      double h2 = extra(a, c);
+      if (is_threshold[static_cast<std::size_t>(a)] == 0 &&
+          is_threshold[static_cast<std::size_t>(c)] == 0 &&
+          locs[static_cast<std::size_t>(a)].block == blk_i &&
+          locs[static_cast<std::size_t>(c)].block == blk_i) {
+        const auto& la = locs[static_cast<std::size_t>(a)];
+        const auto& lb = locs[static_cast<std::size_t>(c)];
+        h2 += detail::second_sigma_trace(la, lb, sow, bm);
+        if (has_mu_rows) {
+          h2 += detail::second_mu(la, lb, bm, sow.A_alpha).dot(curv.u);
+        }
+      }
+      const double val = weight * h2;
+      H(a, c) += val;
+      if (a != c) H(c, a) += val;
+    }
+  }
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
+                                const model::MatrixRep& rep,
+                                const data::OrdinalStats& stats,
+                                const Estimates& est,
+                                const ThresholdLayout& layout,
+                                const std::vector<Eigen::MatrixXd>& Ws,
+                                const Eigen::MatrixXd& K,
+                                OrdinalParameterization parameterization) {
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  auto assembled = ev_or->assembled(est.theta);
+  if (!assembled.has_value()) return std::unexpected(model_to_post(assembled.error()));
+  auto n_or = total_n_obs(stats);
+  if (!n_or.has_value()) return std::unexpected(fit_to_post(n_or.error()));
+
+  const Eigen::Index q = est.theta.size();
+  if (K.rows() != q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal observed bread: K row count does not match theta length"));
+  }
+  const auto locs = ev_or->param_locations();
+  if (locs.size() != static_cast<std::size_t>(q)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal observed bread: parameter-location count mismatch"));
+  }
+  const std::vector<char> threshold_mask = threshold_parameter_mask(layout, q);
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
+    const Eigen::MatrixXd Delta = ordinal_moment_jacobian_block(
+        stats, layout, eval->moments, eval->J_sigma, est.theta,
+        parameterization, eval->J_mu, b, sigma_off, mu_off);
+    const Eigen::VectorXd d =
+        ordinal_block_residual(stats, layout, eval->moments, est.theta,
+                               parameterization, b);
+    if (Ws[b].rows() != mb || Ws[b].cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal observed bread: weight shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::VectorXd h = Ws[b] * d;
+    const double w_b = static_cast<double>(stats.n_obs[b]) /
+                       static_cast<double>(*n_or);
+    H.noalias() += w_b * (Delta.transpose() * Ws[b] * Delta);
+    const auto curv = ordinal_curvature_weights(
+        stats, layout, eval->moments, est.theta, h, parameterization, b);
+    const bool has_mu_rows =
+        eval->J_mu.rows() > 0 && mu_off + p <= eval->J_mu.rows();
+    add_lisrel_second_order(
+        H, curv, assembled->blocks[b], locs, threshold_mask, b, has_mu_rows,
+        w_b, [&](Eigen::Index a, Eigen::Index c) {
+          return ordinal_curvature_extra(
+              stats, layout, eval->moments, eval->J_sigma, eval->J_mu,
+              est.theta, h, parameterization, b, sigma_off, mu_off, a, c);
+        });
+    sigma_off += vech_len(p);
+    mu_off += p;
+  }
+  if (!H.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal observed bread: non-finite Hessian"));
+  }
+  H = 0.5 * (H + H.transpose()).eval();
+  Eigen::MatrixXd Halpha = K.transpose() * H * K;
+  return Eigen::MatrixXd(0.5 * (Halpha + Halpha.transpose()).eval());
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_bread_analytic(const spec::LatentStructure& pt,
+                              const model::MatrixRep& rep,
+                              const data::MixedOrdinalStats& stats,
+                              const Estimates& est,
+                              const ThresholdLayout& layout,
+                              const std::vector<Eigen::MatrixXd>& Ws,
+                              const Eigen::MatrixXd& K,
+                              OrdinalParameterization parameterization) {
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  auto assembled = ev_or->assembled(est.theta);
+  if (!assembled.has_value()) return std::unexpected(model_to_post(assembled.error()));
+  auto n_or = total_n_obs(stats);
+  if (!n_or.has_value()) return std::unexpected(fit_to_post(n_or.error()));
+
+  const Eigen::Index q = est.theta.size();
+  if (K.rows() != q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed ordinal observed bread: K row count does not match theta length"));
+  }
+  const auto locs = ev_or->param_locations();
+  if (locs.size() != static_cast<std::size_t>(q)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed ordinal observed bread: parameter-location count mismatch"));
+  }
+  const std::vector<char> threshold_mask = threshold_parameter_mask(layout, q);
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  const Eigen::MatrixXd Delta_full = mixed_moment_jacobian(
+      stats, layout, eval->moments, eval->J_sigma, eval->J_mu, est.theta,
+      parameterization);
+  Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
+  Eigen::Index moment_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index mb = stats.moments[b].size();
+    const Eigen::MatrixXd Delta = Delta_full.block(moment_off, 0, mb, q);
+    const Eigen::VectorXd d =
+        mixed_model_moments(stats, layout, eval->moments, est.theta, b,
+                            parameterization) -
+        stats.moments[b];
+    if (Ws[b].rows() != mb || Ws[b].cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed ordinal observed bread: weight shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::VectorXd h = Ws[b] * d;
+    const double w_b = static_cast<double>(stats.n_obs[b]) /
+                       static_cast<double>(*n_or);
+    H.noalias() += w_b * (Delta.transpose() * Ws[b] * Delta);
+    const auto curv = mixed_curvature_weights(
+        stats, layout, eval->moments, est.theta, h, parameterization, b);
+    const bool has_mu_rows =
+        eval->J_mu.rows() > 0 && mu_off + p <= eval->J_mu.rows();
+    add_lisrel_second_order(
+        H, curv, assembled->blocks[b], locs, threshold_mask, b, has_mu_rows,
+        w_b, [&](Eigen::Index a, Eigen::Index c) {
+          return mixed_curvature_extra(
+              stats, layout, eval->moments, eval->J_sigma, est.theta, h,
+              parameterization, b, sigma_off, a, c);
+        });
+    sigma_off += vech_len(p);
+    mu_off += p;
+    moment_off += mb;
+  }
+  if (!H.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed ordinal observed bread: non-finite Hessian"));
+  }
+  H = 0.5 * (H + H.transpose()).eval();
+  Eigen::MatrixXd Halpha = K.transpose() * H * K;
+  return Eigen::MatrixXd(0.5 * (Halpha + Halpha.transpose()).eval());
+}
+
 fit_expected<Eigen::VectorXd>
 mixed_ordinal_residuals(const data::MixedOrdinalStats& stats,
                         const ThresholdLayout& layout,
@@ -3344,38 +3902,8 @@ robust_ordinal(spec::LatentStructure pt,
 
   std::optional<Eigen::MatrixXd> bread_override;
   if (bread == robust::Information::Observed) {
-    double N_total = 0.0;
-    for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
-    auto grad_at = [&](const Eigen::VectorXd& theta)
-        -> post_expected<Eigen::VectorXd> {
-      auto ev_t = ev_or->evaluate(theta, true, false);
-      if (!ev_t.has_value()) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_ordinal observed bread: evaluation failed: " +
-            ev_t.error().detail));
-      }
-      const Eigen::MatrixXd Delta = ordinal_moment_jacobian(
-          stats, *layout_or, ev_t->moments, ev_t->J_sigma, theta,
-          parameterization);
-      Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
-      Eigen::Index goff = 0;
-      for (std::size_t b = 0; b < stats.R.size(); ++b) {
-        const Eigen::Index p = stats.R[b].rows();
-        const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
-        const Eigen::VectorXd d_b = ordinal_block_residual(
-            stats, *layout_or, ev_t->moments, theta, parameterization, b);
-        const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
-        g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
-                              Ws[b] * d_b);
-        goff += mb;
-      }
-      if (!g.allFinite()) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_ordinal observed bread: non-finite gradient"));
-      }
-      return g;
-    };
-    auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+    auto ob = ordinal_observed_bread_analytic(
+        pt, rep, stats, est, *layout_or, Ws, K, parameterization);
     if (!ob.has_value()) return std::unexpected(ob.error());
     bread_override = std::move(*ob);
   }
@@ -3492,39 +4020,8 @@ robust_ordinal_ij(spec::LatentStructure pt,
                  : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
                                                        : stats.W_wls);
 
-  double N_total = 0.0;
-  for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
-
-  // Observed-Hessian bread A = H_α (same FD gradient as robust_ordinal).
-  auto grad_at = [&](const Eigen::VectorXd& theta)
-      -> post_expected<Eigen::VectorXd> {
-    auto ev_t = ev_or->evaluate(theta, true, false);
-    if (!ev_t.has_value()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_ordinal_ij observed bread: evaluation failed: " +
-          ev_t.error().detail));
-    }
-    const Eigen::MatrixXd Delta = ordinal_moment_jacobian(
-        stats, *layout_or, ev_t->moments, ev_t->J_sigma, theta, parameterization);
-    Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
-    Eigen::Index goff = 0;
-    for (std::size_t b = 0; b < stats.R.size(); ++b) {
-      const Eigen::Index p = stats.R[b].rows();
-      const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
-      const Eigen::VectorXd d_b = ordinal_block_residual(
-          stats, *layout_or, ev_t->moments, theta, parameterization, b);
-      const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
-      g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
-                            Ws[b] * d_b);
-      goff += mb;
-    }
-    if (!g.allFinite()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_ordinal_ij observed bread: non-finite gradient"));
-    }
-    return g;
-  };
-  auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+  auto ob = ordinal_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, Ws, K, parameterization);
   if (!ob.has_value()) return std::unexpected(ob.error());
   Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
 
@@ -3773,38 +4270,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
 
   std::optional<Eigen::MatrixXd> bread_override;
   if (bread == robust::Information::Observed) {
-    double N_total = 0.0;
-    for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
-    auto grad_at = [&](const Eigen::VectorXd& theta)
-        -> post_expected<Eigen::VectorXd> {
-      auto ev_t = ev_or->evaluate(theta, true, true);
-      if (!ev_t.has_value()) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_mixed_ordinal observed bread: evaluation failed: " +
-            ev_t.error().detail));
-      }
-      const Eigen::MatrixXd Delta = mixed_moment_jacobian(
-          stats, *layout_or, ev_t->moments, ev_t->J_sigma, ev_t->J_mu, theta,
-          parameterization);
-      Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
-      Eigen::Index goff = 0;
-      for (std::size_t b = 0; b < stats.R.size(); ++b) {
-        const Eigen::Index mb = stats.moments[b].size();
-        const Eigen::VectorXd model_m = mixed_model_moments(
-            stats, *layout_or, ev_t->moments, theta, b, parameterization);
-        const Eigen::VectorXd d_b = model_m - stats.moments[b];
-        const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
-        g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
-                              Ws[b] * d_b);
-        goff += mb;
-      }
-      if (!g.allFinite()) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_mixed_ordinal observed bread: non-finite gradient"));
-      }
-      return g;
-    };
-    auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+    auto ob = mixed_observed_bread_analytic(
+        pt, rep, stats, est, *layout_or, Ws, K, parameterization);
     if (!ob.has_value()) return std::unexpected(ob.error());
     bread_override = std::move(*ob);
   }
@@ -3887,39 +4354,8 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
                  : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
                                                        : stats.W_wls);
 
-  double N_total = 0.0;
-  for (auto nb : stats.n_obs) N_total += static_cast<double>(nb);
-
-  auto grad_at = [&](const Eigen::VectorXd& theta)
-      -> post_expected<Eigen::VectorXd> {
-    auto ev_t = ev_or->evaluate(theta, true, true);
-    if (!ev_t.has_value()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_mixed_ordinal_ij observed bread: evaluation failed: " +
-          ev_t.error().detail));
-    }
-    const Eigen::MatrixXd Delta = mixed_moment_jacobian(
-        stats, *layout_or, ev_t->moments, ev_t->J_sigma, ev_t->J_mu, theta,
-        parameterization);
-    Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
-    Eigen::Index goff = 0;
-    for (std::size_t b = 0; b < stats.R.size(); ++b) {
-      const Eigen::Index mb = stats.moments[b].size();
-      const Eigen::VectorXd model_m = mixed_model_moments(
-          stats, *layout_or, ev_t->moments, theta, b, parameterization);
-      const Eigen::VectorXd d_b = model_m - stats.moments[b];
-      const double w_b = static_cast<double>(stats.n_obs[b]) / N_total;
-      g.noalias() += w_b * (Delta.block(goff, 0, mb, Delta.cols()).transpose() *
-                            Ws[b] * d_b);
-      goff += mb;
-    }
-    if (!g.allFinite()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_mixed_ordinal_ij observed bread: non-finite gradient"));
-    }
-    return g;
-  };
-  auto ob = observed_moment_bread_fd(grad_at, est.theta, K);
+  auto ob = mixed_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, Ws, K, parameterization);
   if (!ob.has_value()) return std::unexpected(ob.error());
   Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
 

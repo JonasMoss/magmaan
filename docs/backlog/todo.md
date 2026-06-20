@@ -210,10 +210,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 - **Done 2026-06-19.** Observed-Hessian ("robust" regime) bread for the
   moment-quadratic estimators (ordinal DWLS/WLSMV/ULSMV, mixed/polyserial,
   continuous ULS/GLS/WLS), which previously had only the Gauss-Newton/expected
-  bread. Built as `observed_moment_bread_fd` (central-difference of the per-unit
-  moment-LS gradient, reduced via `K`) injected as an optional `bread_override`
-  into `robust_weighted_moments`; the meat (NACOV), df, and chi-square are
-  unchanged. Selector `bread = "expected" | "observed"` (reusing
+  bread. The initial version used `observed_moment_bread_fd`
+  (central-difference of the per-unit moment-LS gradient, reduced via `K`) as an
+  optional `bread_override` into `robust_weighted_moments`; the meat (NACOV),
+  df, and chi-square are unchanged. Selector `bread = "expected" | "observed"` (reusing
   `robust::Information`) threaded through `robust_ordinal` / `robust_mixed_ordinal`
   / `robust_continuous_ls`, surfaced in R as `vcov(fit, regime = "model" |
   "robust")`, which feeds `standardized(fit, vcov)`. Continuous ML/FIML already
@@ -231,9 +231,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   This observed-bread SE *is* Lai & Simoes (2023, SEM 30:5, "Reflecting on the
   'Robust' Standard Errors..."): their new SE (Eq 34-36, `Pi_DWLS`, bread
   `H = 2 D' Gd^-1 D - 2[I (x) eps' Gd^-1] Psi`); their "robust SE" (Eq 17, Muthen
-  1997 = lavaan default) is our expected bread. We compute `H` by FD; they have
-  the closed form. Their findings match exp 35 (robust SE biased 15-40% under
-  misspec, not improving with n; new SE consistent; ULS closes better than DWLS).
+  1997 = lavaan default) is our expected bread. The initial implementation
+  computed `H` by FD; the continuous, all-ordinal, and mixed ordinal production
+  observed breads now use closed-form moment Hessians. Their findings match exp
+  35 (robust SE biased 15-40% under misspec, not improving with n; new SE
+  consistent; ULS closes better than DWLS).
   The DWLS finite-sample residual is the data-dependent weight `Wd = Gd^-1`: both
   their new SE and ours treat the Stage-2 weight as fixed, so neither captures its
   higher-order variability (ULS, W=I, has none -> closes cleanly); a
@@ -318,6 +320,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `J' W J + residual-curvature` contraction from
     `weighted_moment_ij_grid.tex`; tests keep the finite-difference bread as
     the validation oracle for fixed-weight, GLS, WLS, DWLS, and DLS IJ paths.
+    All-ordinal and mixed ordinal/polyserial analytic observed bread **landed
+    2026-06-20** by adding the same `Delta' W Delta + residual-curvature`
+    contraction for threshold, correlation, variance, mean, and polyserial
+    association moments, including theta/released-scale standardization terms.
     All-ordinal MCAR/pairwise-overlap ULS IJ **landed 2026-06-20** by
     materializing case-aligned sparse moment-influence rows in
     `ordinal_stats_from_observed_integer_data(..., Overlap)`; tests gate
@@ -351,12 +357,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
     covered by complete continuous LS.
-  - **Analytic moment-Hessian remainder**: complete continuous LS now has the
-    closed-form observed bread. Still derive/code the mixed ordinal/polyserial
-    analogue and any MCAR sparse-moment analogue; FD should remain the
-    validation gate. This also removes the per-resample-SE cost that makes the
-    studentized bootstrap expensive once the remaining moment stacks stop
-    relying on FD bread.
+  - **Done 2026-06-20.** Analytic moment-Hessian remainder: complete continuous
+    LS, all-ordinal, and mixed ordinal/polyserial observed breads now have the
+    closed-form `J' W J + residual-curvature` contraction; FD remains the
+    diagnostic validation helper rather than the production path.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
