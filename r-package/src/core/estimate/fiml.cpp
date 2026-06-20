@@ -3064,6 +3064,11 @@ sym_pd_inverse(const Eigen::MatrixXd& A, std::string what) {
   return Eigen::MatrixXd(0.5 * (inv + inv.transpose()).eval());
 }
 
+robust::Information robust_bread(TwoStageBread bread) {
+  return bread == TwoStageBread::Observed ? robust::Information::Observed
+                                          : robust::Information::Expected;
+}
+
 }  // namespace
 
 post_expected<std::vector<Eigen::MatrixXd>>
@@ -3175,7 +3180,8 @@ two_stage_em_weighted_inference_from_sm(spec::LatentStructure pt,
                                         const Estimates& est,
                                         const SaturatedMoments& sm,
                                         TwoStageWeight kind,
-                                        TwoStageDlsOptions dls) {
+                                        TwoStageDlsOptions dls,
+                                        TwoStageBread bread) {
   SampleStats samp = sample_stats_from_saturated(sm);
 
   auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
@@ -3193,7 +3199,7 @@ two_stage_em_weighted_inference_from_sm(spec::LatentStructure pt,
   }
 
   auto rr_or = robust_continuous_ls(std::move(pt), rep, samp, est,
-                                    *weight_or, gamma);
+                                    *weight_or, gamma, robust_bread(bread));
   if (!rr_or.has_value()) return std::unexpected(rr_or.error());
 
   TwoStageEMMLInference out;
@@ -3223,10 +3229,11 @@ two_stage_em_ml_inference_from_sm(spec::LatentStructure pt,
                                   const Estimates& est,
                                   const SaturatedMoments& sm,
                                   TwoStageWeight kind,
-                                  TwoStageDlsOptions dls) {
+                                  TwoStageDlsOptions dls,
+                                  TwoStageBread bread) {
   if (kind != TwoStageWeight::Nt) {
     return two_stage_em_weighted_inference_from_sm(std::move(pt), rep, est, sm,
-                                                   kind, dls);
+                                                   kind, dls, bread);
   }
   SampleStats samp = sample_stats_from_saturated(sm);
 
@@ -3243,7 +3250,7 @@ two_stage_em_ml_inference_from_sm(spec::LatentStructure pt,
   if (!gamma_se_or.has_value()) return std::unexpected(gamma_se_or.error());
   auto se_or = robust::robust_se(
       pt, rep, samp, est, *gamma_se_or,
-      robust::InferenceSpec{robust::Information::Expected,
+      robust::InferenceSpec{robust_bread(bread),
                             robust::WeightMoments::Unstructured,
                             robust::ScoreCovariance::Empirical});
   if (!se_or.has_value()) return std::unexpected(se_or.error());
@@ -3262,7 +3269,7 @@ two_stage_em_ml_inference_from_sm(spec::LatentStructure pt,
   if (!gamma_test_or.has_value()) return std::unexpected(gamma_test_or.error());
   auto uf_or = robust::build_u_factor(
       std::move(pt), rep, samp, est,
-      robust::InferenceSpec{robust::Information::Expected,
+      robust::InferenceSpec{robust_bread(bread),
                             robust::WeightMoments::Unstructured,
                             robust::ScoreCovariance::Empirical});
   if (!uf_or.has_value()) return std::unexpected(uf_or.error());
@@ -3294,11 +3301,12 @@ two_stage_em_ml_inference_impl(spec::LatentStructure pt,
                                const FIMLPack& pack,
                                const FIMLH1& h1,
                                TwoStageWeight kind,
-                               TwoStageDlsOptions dls) {
+                               TwoStageDlsOptions dls,
+                               TwoStageBread bread) {
   auto sm_or = saturated_em_moments(raw, pack, h1);
   if (!sm_or.has_value()) return std::unexpected(sm_or.error());
   return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, *sm_or,
-                                           kind, dls);
+                                           kind, dls, bread);
 }
 
 }  // namespace
@@ -3309,9 +3317,10 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const Estimates& est,
                           const SaturatedMoments& sm,
                           TwoStageWeight kind,
-                          TwoStageDlsOptions dls) {
+                          TwoStageDlsOptions dls,
+                          TwoStageBread bread) {
   return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, sm,
-                                           kind, dls);
+                                           kind, dls, bread);
 }
 
 namespace {
@@ -3324,7 +3333,8 @@ two_stage_fit_measures_from_sm(spec::LatentStructure pt,
                                TwoStageWeight kind,
                                TwoStageDlsOptions dls) {
   SampleStats samp = sample_stats_from_saturated(sm);
-  auto user_or = two_stage_em_ml_inference_from_sm(pt, rep, est, sm, kind, dls);
+  auto user_or = two_stage_em_ml_inference_from_sm(
+      pt, rep, est, sm, kind, dls, TwoStageBread::Expected);
   if (!user_or.has_value()) return std::unexpected(user_or.error());
   const TwoStageEMMLInference& user = *user_or;
   if (user.df <= 0) {
@@ -3394,7 +3404,8 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const Estimates& est,
                           double h_step,
                           TwoStageWeight kind,
-                          TwoStageDlsOptions dls) {
+                          TwoStageDlsOptions dls,
+                          TwoStageBread bread) {
   if (!(h_step > 0.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "two_stage_em_ml_inference: h_step must be > 0"));
@@ -3408,7 +3419,7 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
   }
   return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
-                                        *pack_or, *h1_or, kind, dls);
+                                        *pack_or, *h1_or, kind, dls, bread);
 }
 
 post_expected<TwoStageEMMLInference>
@@ -3419,9 +3430,10 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const FIMLPack& pack,
                           const FIMLH1& h1,
                           TwoStageWeight kind,
-                          TwoStageDlsOptions dls) {
+                          TwoStageDlsOptions dls,
+                          TwoStageBread bread) {
   return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
-                                        pack, h1, kind, dls);
+                                        pack, h1, kind, dls, bread);
 }
 
 post_expected<TwoStageFitMeasures>

@@ -291,6 +291,11 @@ golden `parTable()` fixtures.
   moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
   returning Savalei-Bentler-style sandwich SEs, ML chi-square, df, the corrected
   U-Gamma spectrum, scaling factor, and scaled chi-square.
+  `TwoStageBread::Observed` is available on the inference path for the
+  misspecification-robust Stage-2 bread regime; complete-data tests reduce it
+  to unstructured observed-bread robust SEM for the NT weight and observed-bread
+  `robust_continuous_ls` for the ADF weight. The default remains the
+  lavaan-parity expected-bread convention.
   `estimate::fiml::two_stage_fit_measures` adds the matching TS global-index
   layer: baseline scaling (`cB`), scaled CFI/TLI/RMSEA, and robust CFI/TLI/RMSEA
   with RMSEA confidence intervals and p-values. Complete-data multi-group tests
@@ -1360,6 +1365,10 @@ stop rather than any usable non-error return.
   finite-difference gated and its diagonal extraction is pinned to the DWLS
   helper. Robust/experimental mixed stage-1 variants need separate
   Gamma-influence derivations.
+  ML2S now exposes the observed-bread Stage-2 regime through
+  `TwoStageBread::Observed`; the remaining Hall-Inoue work there is the
+  casewise saturated-EM moment influence and the estimated-weight channels for
+  `TwoStageWeight::{Nt,Dwls,Adf,Dls}`.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

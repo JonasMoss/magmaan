@@ -280,14 +280,18 @@ mean/covariance $g_i$ is analytic; EB-DLS scalar-selection uncertainty remains
 separate from the fixed-$a$ weight derivative.
 
 \paragraph{Two-stage FIML (ML2S).}
-Stage 1 supplies saturated EM moments and their ACOV. The required new object is
-casewise saturated-moment influence under the missingness pattern. For
-\texttt{TwoStageWeight::Nt}, the weight still depends on saturated $\hat\Sigma$
-through $\Gamma_{\mathrm{NT}}(\hat\Sigma)$, so the target estimator has a
-normal-theory weight derivative. For \texttt{Dwls}, \texttt{Adf}, and
+Stage 1 supplies saturated EM moments and their ACOV. The observed-bread
+single-model regime has landed as \texttt{TwoStageBread::Observed}: it changes
+the Stage-2 bread while leaving the Stage-1 ACOV and the current fixed-weight
+robust sandwich unchanged. Complete-data gates reduce the NT path to
+unstructured observed-bread robust SEM and the ADF path to observed-bread
+\texttt{robust\_continuous\_ls}. The remaining IJ object is casewise
+saturated-moment influence under the missingness pattern. For
+\texttt{TwoStageWeight::Nt}, the weight still depends on saturated
+$\hat\Sigma$ through $\Gamma_{\mathrm{NT}}(\hat\Sigma)$, so the target estimator
+has a normal-theory weight derivative. For \texttt{Dwls}, \texttt{Adf}, and
 \texttt{Dls}, use the diagonal, full, and mixed formulas above with
-$\Gamma_{\mathrm{FIML}}$. The first gate is a complete-data reduction against
-continuous LS.
+$\Gamma_{\mathrm{FIML}}$.
 
 \paragraph{MCAR and pairwise-missing ordinal/polyserial.}
 The current primitive assumes disjoint blocks: it sums $V_b\T V_b$ inside each

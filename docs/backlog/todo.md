@@ -292,10 +292,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     data-direct `IF(Gamma)` plus finite-difference `d Gamma / d kappa`; tests
     gate the full case-weight derivative and diagonal extraction against the
     DWLS path.
+    ML2S observed-bread Stage-2 regime **landed 2026-06-20** as
+    `TwoStageBread::Observed` on `two_stage_em_ml_inference`, with
+    complete-data reductions against unstructured observed-bread robust SEM
+    for `TwoStageWeight::Nt` and observed-bread `robust_continuous_ls` for
+    `TwoStageWeight::Adf`.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; ML2S
-    (observed-bread regime first, then casewise saturated-EM influence for
+    (casewise saturated-EM influence for
     `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
     continuous LS); MCAR/pairwise-missing
     ordinal/polyserial (design case-aligned sparse moment-row primitive with
