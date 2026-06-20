@@ -50,10 +50,11 @@ follows as a corollary. Three answers, stated up front.
 \item For distinguishable models the relative-fit (Vuong) variance is a clean
   corollary: $\omega^{2}=c\T\Gamma c$ with the weight channel carried by an
   explicit term in $c$ (Proposition~\ref{prop:vuong}).
-\item The nested, degenerate case is \emph{not} a clean corollary. The weight
-  channel and the bread curvature both deform Satorra's projection, so the
-  naive substitution $\Gamma\mapsto(W-\Wr)\Gamma(W-\Wr)\T$ into the $U$-matrix
-  is wrong (Proposition~\ref{prop:nested}). It needs its own derivation.
+\item The nested, degenerate case is \emph{not} a clean corollary. The limiting
+  quadratic form is the Hessian of the profiled discrepancy difference, not the
+  covariance quadratic of the fitted residual fluctuation. The naive
+  substitution $\Gamma\mapsto(W-\Wr)\Gamma(W-\Wr)\T$ into the $U$-matrix is
+  wrong (Proposition~\ref{prop:nested}). It needs its own derivation.
 \end{enumerate}
 
 \section{Recap of the corrected influence}
@@ -180,48 +181,91 @@ theorem has removed the parameter channel.
 When $B$ is nested in $A$ the discrepancy difference degenerates under the null
 that the restriction holds, $\rs^{A}=\rs^{B}$ in the relevant directions, so
 $c=0$ and $\omega^{2}=0$. The first-order term vanishes and the limiting law is
-the second-order quadratic form, which is where the projection returns. The
-question is whether that quadratic form is Satorra's $U$-difference with the meat
-$\Gamma$ simply replaced by the corrected $\Omega$.
+the second-order quadratic form. The question is what second derivative that
+quadratic form uses.
+
+For one model $M$, let
+\[
+  f_{M}(u)=\min_{\theta}\tfrac12 r_{M}(\theta,u)\T W(u)r_{M}(\theta,u),
+  \qquad r_{M}(\theta,u)=\eta_{M}(\theta)-u .
+\]
+The envelope gradient of this profiled scalar discrepancy is
+\begin{equation}
+  s_{M}(u)=\nabla_{u}f_{M}(u)
+  =-W\rs^{M}+\tfrac12 b_{M},
+  \qquad
+  (b_{M})_{l}=(\rs^{M})\T\frac{\partial W}{\partial u_{l}}\rs^{M}.
+  \label{eq:profile-score}
+\end{equation}
+This is the ``score'' used below: a moment-space / profile-value score, not the
+parameter score $\partial F/\partial\theta$.
 
 \begin{proposition}
 \label{prop:nested}
-Off the goodness-of-fit null the fitted residual fluctuation is
+Suppose the nested null is true at the pseudo-true level: the larger model's
+pseudo-true point lies in the smaller model, so the two profiled values and
+profile scores agree at $u_{0}$, $f_{A}(u_{0})=f_{B}(u_{0})$ and
+$s_{A}(u_{0})=s_{B}(u_{0})$. Let
 \[
-  \sqrt{N}\,(r_{A}(\widehat\theta_{A})-\rs^{A})
-  = -\widetilde M_{A}\sqrt{N}(u-u_{0})+o_{p}(1),
-  \qquad
-  \widetilde M_{A}=I-\Delta_{A}H_{A}^{-1}\Delta_{A}\T(W-\Wr^{A}),
+  Q_{M}=D_{u}s_{M}(u_{0})
 \]
-with $H_{A}=A_{A}+C_{A}$. The nested difference statistic converges to
-$\sum_{j}\lambda_{j}\chi^{2}_{1,j}$ with $\lambda_{j}=\operatorname{eig}\!\bigl[
-(\widetilde M_{A}\T W\widetilde M_{A}-\widetilde M_{B}\T W\widetilde M_{B})
-\Gamma\bigr]$. The generalised annihilator $\widetilde M_{A}$ carries both the
-bread curvature $C_{A}$ and the weight channel $\Wr^{A}$ inside the projector, so
-it does not equal the fixed-weight annihilator $M_{A}=I-\Delta_{A}A_{A}^{-1}
-\Delta_{A}\T W$. Consequently the law is not $\operatorname{eig}[(U_{B}-U_{A})
-\Omega]$, and the substitution $\Gamma\mapsto\Omega$ into the $U$-matrix is
-incorrect.
+be the Hessian of the profiled discrepancy for model $M$. Then
+\[
+  2N\{f_{B}(\widehat u)-f_{A}(\widehat u)\}
+  \;\xrightarrow{d}\;
+  z\T (Q_{B}-Q_{A})z,\qquad z\sim N(0,\Gamma),
+\]
+and the reference spectrum is
+\[
+  \lambda_{j}=\operatorname{eig}\{(Q_{B}-Q_{A})\Gamma\}.
+\]
+For a fixed weight,
+\begin{equation}
+  Q_{M}=W-W\Delta_{M}H_{M}^{-1}\Delta_{M}\T W,
+  \qquad H_{M}=A_{M}+C_{M}.
+  \label{eq:profile-hessian-fixed}
+\end{equation}
+For an estimated weight $W(u)$, $Q_{M}$ is the derivative of
+\eqref{eq:profile-score}. It contains the fitted-residual derivative
+\[
+  D_{u}\rs^{M}[h]=
+  \Delta_{M}H_{M}^{-1}\Delta_{M}\T\{Wh-DW[h]\rs^{M}\}-h
+\]
+and the first and second derivatives of the weight map. Consequently the nested
+law is not obtained by replacing $\Gamma$ by
+$(W-\Wr)\Gamma(W-\Wr)\T$ in Satorra's fixed-weight $U$ matrix.
 \end{proposition}
 
 \begin{proof}
-Expand $r_{A}(\widehat\theta_{A})=\rs^{A}+\Delta_{A}(\widehat\theta_{A}-\ths^{A})
--(u-u_{0})+o_{p}(N^{-1/2})$ and substitute the corrected influence
-$\sqrt N(\widehat\theta_{A}-\ths^{A})=H_{A}^{-1}\Delta_{A}\T(W-\Wr^{A})\sqrt N
-(u-u_{0})+o_{p}(1)$ from \eqref{eq:recap}. Collecting terms gives the stated
-$\widetilde M_{A}$. The second-order term of $N(F_{B}-F_{A})$ is the difference
-of the quadratic forms $z\T\widetilde M_{A}\T W\widetilde M_{A}z$ and
-$z\T\widetilde M_{B}\T W\widetilde M_{B}z$ with $z\sim\mathcal N(0,\Gamma)$, whence
-the eigenvalue characterisation. The fixed-weight reduction sets $C_{A}=0$ and
-$\Wr^{A}=0$, returning $\widetilde M_{A}=M_{A}$ and $\lambda_{j}=
-\operatorname{eig}[(U_{B}-U_{A})\Gamma]$ of \cite{satorra2000}.
+Taylor expand the two profiled scalar functions around $u_{0}$:
+\[
+  f_{M}(u_{0}+N^{-1/2}z)
+  =f_{M}(u_{0})+N^{-1/2}s_{M}(u_{0})\T z
+   +\tfrac12N^{-1}z\T Q_{M}z+o_{p}(N^{-1}).
+\]
+The nested pseudo-null cancels the value and first derivative. Multiplying the
+difference by $2N$ leaves $z\T(Q_{B}-Q_{A})z+o_{p}(1)$, giving the eigenvalue
+law. For fixed $W$, differentiating the population first-order condition
+$\Delta\T W\rs=0$ gives
+$D\theta[h]=H^{-1}\Delta\T Wh$ and
+$D\rs[h]=\Delta H^{-1}\Delta\T Wh-h$. Since $s=-W\rs$ when $W$ is fixed,
+$Q[h]=-WD\rs[h]$, which is \eqref{eq:profile-hessian-fixed}. When $W=W(u)$, the
+same calculation includes $DW[h]\rs$ in the first-order condition and the
+derivative of the weight term in \eqref{eq:profile-score}; this introduces the
+first and second weight derivatives.
 \end{proof}
 
-The correction does not factor out of the projection. The weight channel enters
-the same place as the bread curvature, inside the annihilator, so the meat and
-the projector are entangled. Computing the nested reference law requires the
-generalised annihilators $\widetilde M$ rather than a meat swap, and that is a
-separate derivation, not a corollary.
+The fitted residual fluctuation is still useful for standard errors:
+\[
+  \sqrt{N}\,(\hat r_{M}-\rs^{M})
+  =-\widetilde M_{M}z+o_{p}(1),\qquad
+  \widetilde M_{M}=I-\Delta_{M}H_{M}^{-1}\Delta_{M}\T(W-\Wr^{M})
+\]
+when $W=W(u)$. But the covariance quadratic
+$\widetilde M_{M}\T W\widetilde M_{M}$ is not the Hessian of the profiled
+discrepancy unless $H_{M}=A_{M}$ and the weight terms satisfy special
+cancellations. The nested test is a profile-value problem, not a residual-vcov
+problem.
 
 \section{Specialization: complete-data DWLS on a linear covariance model}
 \label{sec:dwls}
@@ -288,33 +332,32 @@ quadratic in $g_{i}$, so its covariance reaches eighth-order moments of the data
 
 \subsection{The verification-friendly twin: normal-theory weight}
 The normal-theory weight $W=W_{\mathrm{NT}}(S)$ is a function of $u$, so it is the
-clean case. With $C=0$ and a data-estimated weight, $\Wr$ is a constant matrix,
-$\widetilde M=I-\Delta A^{-1}\Delta\T(W-\Wr)$ is constant, and the nested law is
-\[
-  \lambda_{j}=\operatorname{eig}\!\bigl[(\widetilde M_{B}\T W\widetilde M_{B}
-  -\widetilde M_{A}\T W\widetilde M_{A})\Gamma\bigr],
-\]
-all constant matrices. A fixed weight would give $\Wr=0$ and, with $C=0$, the
-undeformed Satorra law, so the data-estimated weight is exactly what produces the
-phenomenon. This isolates the weight channel from the curvature and is the
-easiest case to verify by hand and to eigendecompose.
+clean case. With $C=0$, the residual derivative uses
+$\widetilde M=I-\Delta A^{-1}\Delta\T(W-\Wr)$, but the nested test uses
+$Q=D_{u}s$, not $\widetilde M\T W\widetilde M$. A fixed weight would give
+$Q=U=W-W\Delta A^{-1}\Delta\T W$, and with $W=\Gamma^{-1}$ the usual Satorra
+spectrum collapses to $\chi^{2}_{df}$. A data-estimated normal-theory weight
+adds the derivative of the envelope score \eqref{eq:profile-score}, including
+second derivatives of $W_{\mathrm{NT}}(u)$. This isolates the weight channel from
+curvature while keeping the actual test statistic in view.
 
 \subsection{The geometry of the payoff}
-The deformation is $\widetilde M-M=\Delta A^{-1}\Delta\T\Wr$, linear in $\rs$ and
-zero at $\rs=0$. The nested statistic sees $\rs$ only through the rank-$(\mathrm{
-df}_{B}-\mathrm{df}_{A})$ map $\widetilde M_{B}-\widetilde M_{A}$ onto the
-constraint directions. The exploration is to sweep the direction of $\rs$ at
-fixed $\lVert\rs\rVert$: generate from $\Sigma_{0}=\Sigma_{B}(\theta_{*})+
-\epsilon D$ and rotate $D$ from $W$-orthogonal to the constraint space toward
-aligned. The conjecture, which the simulation tests rather than assumes, is that
-orthogonal $\rs$ leaves the law near Satorra (the benign regime where robust
-intervals already calibrate) and aligned $\rs$ deforms it most. Because the
-deformation is analytic in $\rs$, the predicted miscalibration can overlay the
-simulated rejection rate.
+The deformation of the profile Hessian is zero at $\rs=0$ and analytic in
+$\rs$. The exploration is to sweep the direction of $\rs$ at fixed
+$\lVert\rs\rVert$: generate from $\Sigma_{0}=\Sigma_{B}(\theta_{*})+\epsilon D$
+and rotate $D$ from $W$-orthogonal to the constraint space toward aligned. The
+conjecture, which the simulation tests rather than assumes, is that orthogonal
+$\rs$ leaves the law near Satorra (the benign regime where robust intervals
+already calibrate) and aligned $\rs$ deforms it most. The script
+\texttt{relative-and-nested-fit-check.py} computes $Q_{B}-Q_{A}$ by finite
+differences of the profile score and compares it with the ordinary Satorra
+spectrum and with the residual-fluctuation quadratic.
 
-\subsection{The deformation in closed form}
+\subsection{The residual deformation in closed form}
 \label{sec:closedform}
-With $C=0$ the deformation has an exact form, not merely a perturbative one.
+With $C=0$ the fitted-residual fluctuation has an exact deformation. This is a
+useful diagnostic for the standard-error machinery, but it is not the nested
+test law once the weight is data-estimated.
 
 \begin{proposition}[Closed-form deformation under $C=0$]
 \label{prop:closed}
@@ -326,9 +369,10 @@ Then
   R = (\Delta\T\Wr)\T A^{-1}(\Delta\T\Wr)\succeq 0,
 \]
 the cross terms vanishing by the annihilator orthogonality $\Delta\T W M=0$.
-Hence the nested difference law is
-$\lambda=\operatorname{eig}[(U_{B}-U_{A}+R_{B}-R_{A})\Gamma]$ with mean
-$\mathrm{df}_{B}-\mathrm{df}_{A}+\tr[(R_{B}-R_{A})\Gamma]$.
+Hence the residual-vcov quadratic has spectrum
+$\operatorname{eig}[(U_{B}-U_{A}+R_{B}-R_{A})\Gamma]$. This is not, in general,
+the spectrum of $2N(f_{B}-f_{A})$; the latter is
+$\operatorname{eig}[(Q_{B}-Q_{A})\Gamma]$ from Proposition~\ref{prop:nested}.
 \end{proposition}
 
 \begin{proof}
@@ -339,16 +383,11 @@ both cross terms $M\T W\delta$ and $\delta\T WM$ vanish, and $\delta\T W\delta=
 (\Delta\T\Wr)=R$.
 \end{proof}
 
-Two consequences. First, $\Wr$ is linear in $\rs$, so $R$ is quadratic in $\rs$
-and the entire deformation is $O(\lVert\rs\rVert^{2})$. The reference law moves at
-second order in the base misfit, which is why a benign (small) misspecification
-leaves the test near nominal: the first-order effect cancels exactly. Second,
-when a model fits, $\rs=0$ gives $R=0$. In a power scenario the larger model fits
-($R_{A}=0$), so the mean can only increase, $\mathrm{df}_{B}-\mathrm{df}_{A}+\tr
-[R_{B}\Gamma]$; under a true null with a misspecified base both $R$ are present
-and the mean shift $\tr[(R_{B}-R_{A})\Gamma]$ is a competition. The numerical
-check (\texttt{relative-and-nested-fit-check.py}) confirms the identity to
-machine precision and both regimes.
+The consequence is narrower than first hoped: $\Wr$ is linear in $\rs$, so this
+residual-vcov deformation is quadratic in $\rs$ and vanishes when a model fits.
+That statement validates the residual influence algebra, not the second-order
+law of the profiled discrepancy. The numerical check confirms the identity to
+machine precision and then separately computes the profile-Hessian law.
 
 \begin{remark}[Why this is special to $C=0$]
 The cancellation uses $A=\Delta\T W\Delta$. With curvature the bread is $H=A+C$,
@@ -359,20 +398,19 @@ breaks; the linear test bed buys a closed form that the factor model does not ha
 
 \subsection{The substantive twin: a factor model with $C\neq0$}
 \label{sec:cfa}
-Dropping linearity costs only one extra term. For a confirmatory factor model
+Dropping linearity costs the curvature term. For a confirmatory factor model
 $\Sigma(\theta)=\Lambda\Psi\Lambda\T+\Theta$ the moments are quadratic in the
 loadings, so $\nabla^{2}\eta_{k}$ is sparse and closed form (the $\lambda_{a}
 \lambda_{b}$ blocks), and $H=A+C$ with $C=\sum_{k}(W\rs)_{k}\nabla^{2}\eta_{k}
-(\ths)$ evaluated at the pseudo-true point. Everything else is unchanged: the
-DWLS weight channel \eqref{eq:dwls-v}, the casewise residual influence
-$\rho_{i}=\Delta H^{-1}\Delta\T v_{i}-g_{i}$ (now with $H$ in place of $A$), and
-the spectrum are assembled exactly as before. A natural nested pair is configural
-versus metric invariance across two groups, the difference testing equality of a
-block of loadings. The price of realism is that the deformation now superposes
-two channels, the curvature $C$ and the weight $\Wr$, so the clean attribution of
-the linear test bed is lost. The linear model certifies that the weight channel
-alone produces a nonzero effect; the factor model shows the size that effect
-reaches in a model people actually fit.
+(\ths)$ evaluated at the pseudo-true point. For fixed weights the profile Hessian
+is $Q=W-W\Delta H^{-1}\Delta\T W$, so replacing $A$ by $H$ is already necessary.
+For estimated weights, the derivative of \eqref{eq:profile-score} adds the
+weight channel on top. A natural nested pair is configural versus metric
+invariance across two groups, the difference testing equality of a block of
+loadings. The price of realism is that the deformation now superposes two
+channels, curvature and weight, so the clean attribution of the linear test bed
+is lost. The CFA check script verifies that the old residual-vcov quadratic
+breaks away from the finite-difference profile-Hessian law when $C\neq0$.
 
 \section{Verdict}
 \label{sec:verdict}
@@ -384,10 +422,13 @@ of the standard-error machinery, with $\omega^{2}=c\T\Gamma c$ and the weight
 channel \eqref{eq:cvec} computable from quantities the standard error already
 forms (Proposition~\ref{prop:vuong}). The nested difference test, in the regime
 that does not assume the larger model correct, is its own project, because the
-weight channel deforms Satorra's projection rather than its meat
-(Proposition~\ref{prop:nested}). For the manuscript this argues to keep the
-estimated-weight standard error and the distinguishable relative-fit test
-together, and to treat the nested weighted-$\chi^{2}$ law as a sequel
+object is the Hessian of the profiled discrepancy difference. The fitted
+residual influence and the parameter sandwich supply ingredients, but the
+profile-Hessian law also needs curvature and, for estimated weights, second
+derivatives of the weight map (Proposition~\ref{prop:nested}). For the
+manuscript this argues to keep the estimated-weight standard error and the
+distinguishable relative-fit test together, and to treat the nested
+weighted-$\chi^{2}$ law as a sequel
 \cite{vuong1989,merkleyou2016}.
 
 \begin{thebibliography}{9}

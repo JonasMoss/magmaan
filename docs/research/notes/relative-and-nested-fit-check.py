@@ -1,28 +1,27 @@
 """
-Numerical check for the relative-and-nested-fit note, Section 6.
+Numerical check for relative-and-nested-fit.tex.
 
-Setting: complete-data continuous, normal-theory (GLS) weight W = Gamma_NT(S)^{-1},
-linear covariance structure so C = 0. Under a normal DGP, W = Gamma^{-1} exactly,
-so the CLASSICAL nested reference law is exactly chi^2_{df_diff} (eigenvalues all
-1). Any deviation in the DEFORMED spectrum is therefore purely the estimated-weight
-channel W_r (curvature is provably absent here).
+Setting: complete-data continuous, normal-theory (GLS) weight
+W(u) = Gamma_NT(u)^{-1}, linear covariance structures so C = 0.
 
-Models on p continuous variables (compound-symmetry nested pair):
-  B: compound symmetry      Sigma = a*I + b*(J-I)                 (q=2)
-  A: common variance, free covariances  Sigma = a*I + sum c_ij E_ij   (q=1+p(p-1)/2)
-B is nested in A (all covariances equal). df_diff = p(p-1)/2 - 1.
+The nested test law in the corrected note is the Hessian of the profiled
+discrepancy difference:
 
-The deformed nested law is eig[(Mt_B' W Mt_B - Mt_A' W Mt_A) Gamma] with
-  Mt = I - Delta (Delta' W Delta)^{-1} Delta' (W - W_r),   W_r col l = (dW/du_l) r*.
-No magmaan, no src; pure numpy.
+    2N { f_B(u_hat) - f_A(u_hat) } -> z' (Q_B - Q_A) z,
+    Q_M = D_u s_M(u0),
+
+where s_M is the envelope/profile score with respect to the sample moments.  The
+old residual quadratic Mt' W Mt is printed as a comparator only; it is not the
+profile-value Hessian once the weight is data-estimated.
 """
+
 import numpy as np
 
 np.set_printoptions(precision=4, suppress=True, linewidth=120)
 
 
 def vech_idx(p):
-    return [(i, j) for j in range(p) for i in range(j, p)]  # column-major lower tri
+    return [(i, j) for j in range(p) for i in range(j, p)]
 
 
 def dup(p):
@@ -37,9 +36,8 @@ def dup(p):
 
 
 def unvech(u, p):
-    idx = vech_idx(p)
     S = np.zeros((p, p))
-    for k, (i, j) in enumerate(idx):
+    for k, (i, j) in enumerate(vech_idx(p)):
         S[i, j] = S[j, i] = u[k]
     return S
 
@@ -61,7 +59,7 @@ def jacobians(p):
     Delta_B = np.column_stack([vI, vJmI])
     cols = [vI]
     for (i, j) in idx:
-        if i != j:  # off-diagonal pair -> its own free covariance
+        if i != j:
             E = np.zeros((p, p))
             E[i, j] = E[j, i] = 1.0
             cols.append(vech(E, p))
@@ -69,61 +67,129 @@ def jacobians(p):
     return Delta_A, Delta_B
 
 
-def fit_pieces(Delta, W, u0):
+def weight(u, p, Dplus):
+    return np.linalg.inv(gamma_nt(unvech(u, p), Dplus))
+
+
+def weight_deriv(u, p, Dplus, h=1e-5):
+    out = []
+    for k in range(len(u)):
+        up = u.copy()
+        um = u.copy()
+        up[k] += h
+        um[k] -= h
+        out.append((weight(up, p, Dplus) - weight(um, p, Dplus)) / (2.0 * h))
+    return out
+
+
+def fit_linear(Delta, u, W):
     A = Delta.T @ W @ Delta
     Ainv = np.linalg.inv(A)
-    P = Delta @ Ainv @ Delta.T @ W
-    M = np.eye(len(u0)) - P
-    theta = Ainv @ Delta.T @ W @ u0
-    rstar = Delta @ theta - u0
-    return A, Ainv, M, rstar
+    theta = Ainv @ Delta.T @ W @ u
+    r = Delta @ theta - u
+    return A, Ainv, theta, r
 
 
-def weight_deriv(u0, p, Dplus, h=1e-5):
-    """central-difference dW/du_l, W(u)=gamma_nt(unvech(u))^{-1}."""
-    m = len(u0)
-    dWs = []
-    for l in range(m):
-        up = u0.copy(); up[l] += h
-        um = u0.copy(); um[l] -= h
-        Wp = np.linalg.inv(gamma_nt(unvech(up, p), Dplus))
-        Wm = np.linalg.inv(gamma_nt(unvech(um, p), Dplus))
-        dWs.append((Wp - Wm) / (2 * h))
-    return dWs  # list of m matrices, each m x m
+def profile_value(Delta, u, p, Dplus):
+    W = weight(u, p, Dplus)
+    _, _, _, r = fit_linear(Delta, u, W)
+    return 0.5 * float(r @ W @ r)
 
 
-def Wr_matrix(dWs, rstar):
-    return np.column_stack([dW @ rstar for dW in dWs])
+def profile_score(Delta, u, p, Dplus):
+    W = weight(u, p, Dplus)
+    _, _, _, r = fit_linear(Delta, u, W)
+    dWs = weight_deriv(u, p, Dplus)
+    b = np.array([float(r @ dW @ r) for dW in dWs])
+    return -W @ r + 0.5 * b
 
 
-def spectrum(MB, MA, W, Gamma):
-    Q = MB.T @ W @ MB - MA.T @ W @ MA
+def score_hessian(Delta, u, p, Dplus, h=2e-5):
+    m = len(u)
+    H = np.zeros((m, m))
+    for k in range(m):
+        up = u.copy()
+        um = u.copy()
+        up[k] += h
+        um[k] -= h
+        H[:, k] = (
+            profile_score(Delta, up, p, Dplus)
+            - profile_score(Delta, um, p, Dplus)
+        ) / (2.0 * h)
+    return 0.5 * (H + H.T)
+
+
+def value_hessian_diff(Delta_B, Delta_A, u, p, Dplus, h=2e-4):
+    m = len(u)
+    H = np.zeros((m, m))
+
+    def fdiff(x):
+        return profile_value(Delta_B, x, p, Dplus) - profile_value(Delta_A, x, p, Dplus)
+
+    for i in range(m):
+        for j in range(m):
+            ei = np.zeros(m)
+            ej = np.zeros(m)
+            ei[i] = 1.0
+            ej[j] = 1.0
+            H[i, j] = (
+                fdiff(u + h * ei + h * ej)
+                - fdiff(u + h * ei - h * ej)
+                - fdiff(u - h * ei + h * ej)
+                + fdiff(u - h * ei - h * ej)
+            ) / (4.0 * h * h)
+    return 0.5 * (H + H.T)
+
+
+def fixed_weight_q(Delta, W):
+    A = Delta.T @ W @ Delta
+    return W - W @ Delta @ np.linalg.inv(A) @ Delta.T @ W
+
+
+def residual_q(Delta, u, p, Dplus):
+    W = weight(u, p, Dplus)
+    A, Ainv, _, r = fit_linear(Delta, u, W)
+    Wr = np.column_stack([dW @ r for dW in weight_deriv(u, p, Dplus)])
+    Mt = np.eye(len(u)) - Delta @ Ainv @ Delta.T @ (W - Wr)
+    M = np.eye(len(u)) - Delta @ Ainv @ Delta.T @ W
+    R = (Delta.T @ Wr).T @ Ainv @ (Delta.T @ Wr)
+    err = np.abs(Mt.T @ W @ Mt - (M.T @ W @ M + R)).max()
+    if err > 1e-8:
+        raise AssertionError(f"residual identity failed: {err}")
+    return Mt.T @ W @ Mt
+
+
+def spectrum(Q, Gamma):
     ev = np.linalg.eigvals(Q @ Gamma)
-    return np.sort(ev.real)[::-1], np.abs(ev.imag).max()
+    return np.sort(ev.real)[::-1], float(np.abs(ev.imag).max())
 
 
-def naive_size(lams, df_diff, ndraw=400000, seed_offset=0):
-    """actual size of the naive chi^2_{df_diff} test when truth is sum lam_j Z_j^2."""
-    from numpy.random import default_rng
-    rng = default_rng(12345 + seed_offset)
-    pos = lams[np.abs(lams) > 1e-9]
-    Z2 = rng.chisquare(1, size=(ndraw, len(pos)))
-    stat = Z2 @ pos
-    # naive critical value: 0.95 quantile of chi^2_{df_diff}
-    crit = rng_chi2_q95(df_diff)
-    return np.mean(stat > crit)
-
-
-def rng_chi2_q95(df):
-    # 0.95 quantile of chi^2_df via a fine grid + survival of a large MC, or use
-    # scipy if present; fall back to a hardcoded small table.
+def chi2_q95(df):
     try:
         from scipy.stats import chi2
+
         return float(chi2.ppf(0.95, df))
     except Exception:
-        table = {1: 3.8415, 2: 5.9915, 3: 7.8147, 4: 9.4877, 5: 11.0705,
-                 6: 12.5916, 7: 14.0671, 8: 15.5073}
+        table = {
+            1: 3.8415,
+            2: 5.9915,
+            3: 7.8147,
+            4: 9.4877,
+            5: 11.0705,
+            6: 12.5916,
+            7: 14.0671,
+            8: 15.5073,
+        }
         return table[df]
+
+
+def naive_size(lams, df_diff, ndraw=300000, seed_offset=0):
+    from numpy.random import default_rng
+
+    rng = default_rng(12345 + seed_offset)
+    pos = lams[lams > 1e-9]
+    stat = rng.chisquare(1, size=(ndraw, len(pos))) @ pos
+    return float(np.mean(stat > chi2_q95(df_diff)))
 
 
 def run(p=4, a0=1.0, b0=0.3):
@@ -134,58 +200,57 @@ def run(p=4, a0=1.0, b0=0.3):
     m = p * (p + 1) // 2
 
     CS = a0 * np.eye(p) + b0 * (np.ones((p, p)) - np.eye(p))
-
-    # perturbation directions
     d = np.array([(-1) ** k for k in range(p)], float)
     d -= d.mean()
-    D_benign = np.diag(d)                       # unequal variances (orthogonal to A-vs-B)
-    D_malig = np.zeros((p, p)); D_malig[0, 1] = D_malig[1, 0] = 1.0  # one covariance
+    D_benign = np.diag(d)
+    D_malig = np.zeros((p, p))
+    D_malig[0, 1] = D_malig[1, 0] = 1.0
 
     def analyze(Sig0, label, kind):
-        # kind: "null" (correct), "size" (diff-test null TRUE, base misspecified),
-        #       "power" (diff-test null FALSE).
         u0 = vech(Sig0, p)
         Gamma = gamma_nt(Sig0, Dplus)
-        W = np.linalg.inv(Gamma)                # GLS-at-S under normality: W = Gamma^{-1}
-        _, _, M_A, rA = fit_pieces(Delta_A, W, u0)
-        _, _, M_B, rB = fit_pieces(Delta_B, W, u0)
-        lam_cls, _ = spectrum(M_B, M_A, W, Gamma)
-        dWs = weight_deriv(u0, p, Dplus)
-        WrA, WrB = Wr_matrix(dWs, rA), Wr_matrix(dWs, rB)
-        Mt_A = np.eye(m) - Delta_A @ np.linalg.inv(Delta_A.T @ W @ Delta_A) @ Delta_A.T @ (W - WrA)
-        Mt_B = np.eye(m) - Delta_B @ np.linalg.inv(Delta_B.T @ W @ Delta_B) @ Delta_B.T @ (W - WrB)
-        lam_def, imag = spectrum(Mt_B, Mt_A, W, Gamma)
-        # analytic identity: Mt' W Mt = U + R,  R = (Delta'Wr)' A^-1 (Delta'Wr) >= 0
-        for (Delta, Wr, M) in [(Delta_A, WrA, M_A), (Delta_B, WrB, M_B)]:
-            Ai = np.linalg.inv(Delta.T @ W @ Delta)
-            X = Delta.T @ Wr
-            R = X.T @ Ai @ X
-            Mt = np.eye(m) - Delta @ Ai @ Delta.T @ (W - Wr)
-            err = np.abs(Mt.T @ W @ Mt - (M.T @ W @ M + R)).max()
-            assert err < 1e-9, f"decomp identity violated: {err}"
-        mA = float(np.sqrt(max(rA @ W @ rA, 0.0)))  # weighted misfit of model A
-        mB = float(np.sqrt(max(rB @ W @ rB, 0.0)))  # weighted misfit of model B
+        W = np.linalg.inv(Gamma)
+        _, _, _, rA = fit_linear(Delta_A, u0, W)
+        _, _, _, rB = fit_linear(Delta_B, u0, W)
+
+        Q_profile = (
+            score_hessian(Delta_B, u0, p, Dplus)
+            - score_hessian(Delta_A, u0, p, Dplus)
+        )
+        Q_value = value_hessian_diff(Delta_B, Delta_A, u0, p, Dplus)
+        q_err = np.abs(Q_profile - Q_value).max()
+        if q_err > 2e-4:
+            raise AssertionError(f"profile score/value Hessians disagree: {q_err}")
+
+        Q_classic = fixed_weight_q(Delta_B, W) - fixed_weight_q(Delta_A, W)
+        Q_resid = residual_q(Delta_B, u0, p, Dplus) - residual_q(Delta_A, u0, p, Dplus)
+        lam_profile, imag = spectrum(Q_profile, Gamma)
+        lam_classic, _ = spectrum(Q_classic, Gamma)
+        lam_resid, _ = spectrum(Q_resid, Gamma)
+
         k = df_diff
+        mA = float(np.sqrt(max(rA @ W @ rA, 0.0)))
+        mB = float(np.sqrt(max(rB @ W @ rB, 0.0)))
         print(f"\n=== {label}   ||r*_A||_W={mA:.4f}  ||r*_B||_W={mB:.4f} ===")
-        print(f" classical top-{k+1}: {lam_cls[:k+1]}")
-        print(f" deformed  top-{k+1}: {lam_def[:k+1]}   (max imag {imag:.1e})")
-        print(f" reference-law mean: naive df = {k},  deformed sum(lam) = {lam_def.sum():.4f}")
+        print(f" score/value Hessian max diff: {q_err:.2e}")
+        print(f" classical fixed-W top-{k+1}: {lam_classic[:k+1]}")
+        print(f" profile-Hessian top-{k+1}: {lam_profile[:k+1]}   (max imag {imag:.1e})")
+        print(f" residual-vcov   top-{k+1}: {lam_resid[:k+1]}")
+        print(f" reference-law mean: naive df = {k}, profile sum(lam) = {lam_profile.sum():.4f}")
         if kind == "size":
-            size = naive_size(lam_def, k)
-            tag = "ANTI-CONSERVATIVE" if size > 0.05 else "conservative"
+            size = naive_size(lam_profile, k)
+            tag = "anti-conservative" if size > 0.05 else "conservative"
             print(f" naive chi^2_{k} actual Type-I at nominal 0.05: {size:.4f}  ({tag})")
         elif kind == "power":
-            print(" (power scenario: diff-test null is FALSE, A fits / B does not;")
-            print("  the spectrum deformation also shifts power, full calc needs noncentrality)")
-        return lam_def
+            print(" (power scenario: diff-test null is false; full calculation also needs noncentrality)")
 
     print(f"p={p}, df_diff={df_diff}, m={m}, CS=(var {a0}, cov {b0})")
-    print("W = Gamma_NT(S)^-1 (efficient under normality), so classical = chi^2_df exactly.")
+    print("W = Gamma_NT(S)^-1, model linear so C = 0.")
     analyze(CS, "NULL  (correct model)", "null")
-    print("\n--- SIZE: diff-test null TRUE (covariances equal), base misspecified ---")
+    print("\n--- SIZE: diff-test null true (covariances equal), base misspecified ---")
     for eps in (0.05, 0.15, 0.30):
         analyze(CS + eps * D_benign, f"SIZE: unequal variances, eps={eps}", "size")
-    print("\n--- POWER: diff-test null FALSE (one covariance differs; A fits) ---")
+    print("\n--- POWER: diff-test null false (one covariance differs; A fits) ---")
     for eps in (0.05, 0.15, 0.30):
         analyze(CS + eps * D_malig, f"POWER: one covariance, eps={eps}", "power")
 
