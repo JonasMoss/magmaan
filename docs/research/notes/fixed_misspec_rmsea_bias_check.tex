@@ -1,0 +1,328 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Fixed-Misspecification RMSEA Bias:\\A Curvature Check}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note checks the fixed-misspecification version of the RMSEA bias
+calculation. The local-drift story gives the familiar chain
+\[
+  df \quad\longrightarrow\quad \tr(U\Gamma),
+\]
+where $U$ is the first-order residual projector and $\Gamma$ is the asymptotic
+covariance of the saturated moments. Under fixed model misspecification this is
+not the full $n^{-1}$ bias of the fitted discrepancy. The population residual is
+then $O(1)$, so two terms that are invisible under exact fit or Pitman drift move
+to leading bias order:
+\[
+  \text{model curvature against the residual,}
+  \qquad
+  \text{data-dependent weight influence.}
+\]
+There is also a mundane but important bookkeeping term: if the first-stage
+moment estimator has an $O(n^{-1})$ mean bias, that bias contributes at the same
+order because the population residual is nonzero.
+
+The result below is therefore the fixed-misspecification correction
+\[
+  \E[\hat F]
+  =
+  F_0
+  +
+  \frac{1}{n}
+  \left\{
+    \tr(\widetilde U\Gamma)
+    + \beta_W
+    + 2 e'W b
+  \right\}
+  + o(n^{-1}),
+\]
+with $\widetilde U$ built from the observed population Hessian, not just the
+Gauss--Newton Hessian. For a fixed weight and an unbiased first-stage covariance
+convention this reduces to $\tr(\widetilde U\Gamma)$.
+
+\section{Setup}
+
+Let $m$ be the saturated moment vector used by the estimator. For ordinary
+complete-data covariance SEM, $m=\operatorname{vech}(\Sigma)$; for other
+settings it may include means, thresholds, polychorics, or group blocks. Assume
+the sample version has the expansion
+\begin{equation}\label{eq:mexp}
+  \hat m
+  =
+  m_0 + n^{-1/2} z + n^{-1} b_n + o_p(n^{-1}),
+  \qquad
+  z\dto N(0,\Gamma),
+  \qquad
+  \E[b_n]\to b .
+\end{equation}
+The vector $b$ is zero for an exactly unbiased first-stage convention, but it is
+not automatically zero for every covariance divisor or saturated statistic.
+
+Let the model be a smooth map $\theta\mapsto\mu(\theta)$ and define the
+quadratic discrepancy
+\begin{equation}\label{eq:Fhat}
+  \hat F
+  =
+  \min_\theta
+  r_n(\theta)'\hat W r_n(\theta),
+  \qquad
+  r_n(\theta)=\hat m-\mu(\theta).
+\end{equation}
+The pseudo-true point for the limiting weight $W$ is
+\begin{equation}\label{eq:pseudotrue}
+  \theta_\ast
+  =
+  \argmin_\theta
+  \{m_0-\mu(\theta)\}'W\{m_0-\mu(\theta)\},
+  \qquad
+  e=m_0-\mu(\theta_\ast),
+  \qquad
+  F_0=e'We .
+\end{equation}
+Write $D=\partial\mu/\partial\theta'$ at $\theta_\ast$. The population first
+order condition is
+\begin{equation}\label{eq:foc}
+  D'We=0 .
+\end{equation}
+
+Let $H_a$ be the Hessian matrix of the $a$th component of $\mu(\theta)$ at
+$\theta_\ast$. Define
+\begin{equation}\label{eq:ABK}
+  A = D'WD,
+  \qquad
+  K_{ij} = \sum_a (We)_a (H_a)_{ij},
+  \qquad
+  B=A-K .
+\end{equation}
+Here $A$ is the Gauss--Newton part and $B$ is one half of the population Hessian
+of $e'We$ with respect to $\theta$. The residual-curvature term $K$ vanishes
+under correct specification and for a locally linear model. Under fixed
+misspecification it is generally not negligible.
+
+For an estimated weight, write
+\begin{equation}\label{eq:Wexp}
+  \hat W
+  =
+  W + n^{-1/2} W_1 + n^{-1} W_2 + o_p(n^{-1}),
+\end{equation}
+with $W_1$ the mean-zero first-order influence of the weight map. Put
+\begin{equation}\label{eq:g}
+  g=W_1e,
+  \qquad
+  P=DB^{-1}D',
+  \qquad
+  \widetilde U = W-WDB^{-1}D'W = W-WPW .
+\end{equation}
+
+\section{Expansion}
+
+\begin{theorem}[Fixed-misspecification expansion]\label{thm:expansion}
+Assume \eqref{eq:mexp}--\eqref{eq:Wexp}, smoothness, full column rank $D$, and
+nonsingular $B$. Then
+\begin{equation}\label{eq:Fexp}
+  \hat F
+  =
+  F_0
+  + n^{-1/2}\{2e'Wz + e'W_1e\}
+  + n^{-1}\Phi
+  + o_p(n^{-1}),
+\end{equation}
+where
+\begin{equation}\label{eq:Phi}
+  \Phi
+  =
+  z'\widetilde U z
+  + 2g'(I-PW)z
+  - g'Pg
+  + e'W_2e
+  + 2e'Wb_n .
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Let $\hat\theta-\theta_\ast=n^{-1/2}\xi+O_p(n^{-1})$. Expanding the estimating
+equation $D(\hat\theta)'\hat W\{\hat m-\mu(\hat\theta)\}=0$ to first order and
+using $D'We=0$ gives
+\[
+  (A-K)\xi = D'(Wz+W_1e),
+  \qquad
+  \xi=B^{-1}D'(Wz+g).
+\]
+Now expand the fitted residual:
+\[
+  r_n(\hat\theta)
+  =
+  e+n^{-1/2}(z-D\xi)
+  +n^{-1}\{b_n-\eta-\tfrac12 H[\xi,\xi]\}
+  +o_p(n^{-1}),
+\]
+where $\eta$ is the second-order parameter increment and $H[\xi,\xi]$ stacks
+$\xi'H_a\xi$. In $r_n(\hat\theta)'\hat W r_n(\hat\theta)$, the population FOC
+kills the terms involving $\eta$ and leaves
+\[
+  z'Wz - 2\xi'D'Wz + \xi'B\xi
+  + 2g'(z-D\xi)
+  + e'W_2e
+  + 2e'Wb_n .
+\]
+Substituting $\xi=B^{-1}D'(Wz+g)$ and collecting terms gives
+\eqref{eq:Phi}.
+\end{proof}
+
+\begin{corollary}[Bias]\label{cor:bias}
+If $\E[W_1]=0$ and the expectations below exist, then
+\begin{equation}\label{eq:bias}
+  \E[\hat F]
+  =
+  F_0
+  + \frac{1}{n}
+  \left[
+    \tr(\widetilde U\Gamma)
+    + \beta_W
+    + 2e'Wb
+  \right]
+  + o(n^{-1}),
+\end{equation}
+where
+\begin{equation}\label{eq:betaW}
+  \beta_W
+  =
+  2\E\{g'(I-PW)z\}
+  - \E(g'Pg)
+  + e'\E(W_2)e .
+\end{equation}
+\end{corollary}
+
+For a fixed weight, $W_1=W_2=0$ and $\beta_W=0$. If additionally $b=0$, the
+whole correction is just
+\[
+  \E[\hat F]=F_0+n^{-1}\tr(\widetilde U\Gamma)+o(n^{-1}).
+\]
+Under correct specification, $e=0$, so $K=0$, $\widetilde U$ reduces to the
+usual first-order residual projector
+\[
+  U = W-WD(D'WD)^{-1}D'W ,
+\]
+and the bias reduces to $n^{-1}\tr(U\Gamma)$. Under normal-theory weighting
+with $W=\Gamma^{-1}$, this trace is $df$.
+
+\section{Consequences for RMSEA}
+
+The fixed-population RMSEA target is
+\[
+  \varepsilon_0 = \sqrt{F_0/df}.
+\]
+When $F_0>0$ is fixed, the leading distribution of $\hat F$ is not noncentral
+chi-square. It is ordinary root-$n$ normal, because the linear term in
+\eqref{eq:Fexp} is nonzero:
+\begin{equation}\label{eq:normal}
+  \sqrt n(\hat F-F_0)
+  \dto
+  N(0,\Omega_F),
+  \qquad
+  \Omega_F=\Var(2e'Wz+e'W_1e).
+\end{equation}
+The $n^{-1}$ bias correction improves centering but does not change the
+root-$n$ variance. By the delta method,
+\[
+  \sqrt n(\hat\varepsilon-\varepsilon_0)
+  \dto
+  N\!\left(0,\frac{\Omega_F}{4df^2\varepsilon_0^2}\right),
+  \qquad F_0>0 .
+\]
+Thus the noncentral-$\chi^2$ interval belongs to the exact-fit/local-drift
+regime. Under fixed misspecification, a Wald interval based on
+\eqref{eq:normal} is the natural large-sample object.
+
+On the point-estimation scale, write
+\[
+  c_{\mathrm{fix}}
+  =
+  \tr(\widetilde U\Gamma)+\beta_W+2e'Wb .
+\]
+Then a fixed-misspecification bias-corrected RMSEA estimator is
+\begin{equation}\label{eq:rmsea}
+  \hat\varepsilon_{\mathrm{fix}}
+  =
+  \sqrt{
+    \max\!\left(\frac{\hat F-c_{\mathrm{fix}}/n}{df},0\right)
+  } .
+\end{equation}
+Equivalently, if $T=n\hat F$, subtract $c_{\mathrm{fix}}$ from $T$, not
+automatically $df$ or $\tr(U\Gamma)$.
+
+\begin{remark}
+The truncation in \eqref{eq:rmsea} is asymptotically irrelevant when $F_0>0$.
+It only protects finite samples and connects the formula back to the usual
+RMSEA convention near exact fit, where the limiting law changes from the normal
+law in \eqref{eq:normal} to a quadratic form.
+\end{remark}
+
+\section{Estimator Cases}
+
+\paragraph{ULS or fixed-weight GLS.}
+This is the clean case. The weight is fixed, so $\beta_W=0$. If the saturated
+moments are centered so that $b=0$, the correction is
+$\tr(\widetilde U\Gamma)$. This is the most direct target for simulation checks:
+compare $n\{\E[\hat F]-F_0\}$ with both $\tr(U\Gamma)$ and
+$\tr(\widetilde U\Gamma)$.
+
+\paragraph{Data-weighted GLS.}
+The formula applies directly if $\hat W$ is a smooth function of $\hat m$ and
+does not also depend on $\theta$. The new object is $\beta_W$, which is at least
+linear in the residual through $g=W_1e$, with quadratic pieces through
+$g'Pg$ and $e'W_2e$. It vanishes at exact fit but is part of the same $n^{-1}$
+bias under fixed misspecification.
+
+\paragraph{ML.}
+Covariance ML is not simply a data-weighted quadratic form with a fixed
+$\theta$-free weight. It can be locally represented by a quadratic form, but the
+weight is tied to the model-implied covariance at the fitted parameter. That
+means the same shape should reappear after a direct profile-likelihood
+expansion, but the GLS $\beta_W$ term should not be copied over without doing
+that calculation. The safe next derivation is therefore ML-specific, not a
+blanket substitution into \eqref{eq:betaW}.
+
+\section{What This Says}
+
+The curvature correction is mathematically real. The fixed-misspecification
+bias uses the profile Hessian $B=A-K$, so the trace is
+$\tr(\widetilde U\Gamma)$ rather than $\tr(U\Gamma)$ unless either the residual
+or the model curvature is negligible. This is the same phenomenon as replacing
+expected information by observed Hessian in misspecification-robust standard
+errors.
+
+The $O(n^{-1})$ moment-bias term should be explicit. It is absent only after a
+choice of first-stage convention, not as a theorem. For example, an unbiased
+sample covariance convention removes it, while a different divisor may not.
+
+The most useful next step is a small, fast validation harness for the fixed ULS
+case. Once $\tr(\widetilde U\Gamma)$ is verified there, add controlled
+data-weighted GLS examples to isolate $\beta_W$, and derive ML separately from
+the profiled likelihood. That sequencing keeps the algebra testable: first
+curvature, then weight influence, then likelihood-specific cancellation.
+
+\end{document}
