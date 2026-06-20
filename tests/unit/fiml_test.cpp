@@ -1933,6 +1933,76 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
   CHECK((ml2s_dls_ij->se - rr_dls_ij->se).cwiseAbs().maxCoeff() < 1e-10);
 }
 
+TEST_CASE("two_stage_em_ml_inference: missing-data non-NT observed bread uses "
+          "FIML Gamma IJ") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(built, theta0, {24});
+
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " <<
+      (sm.has_value() ? "" : sm.error().detail));
+
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+
+  const auto check_kind =
+      [&](magmaan::estimate::fiml::TwoStageWeight kind,
+          magmaan::estimate::fiml::TwoStageDlsOptions dls) {
+        auto w = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+            *sm, kind, dls);
+        REQUIRE(w.has_value());
+        auto est = magmaan::test::fit_gmm(
+            *built.pt, *built.rep, samp, *w, {},
+            magmaan::estimate::Backend::NloptLbfgs, opts);
+        REQUIRE_MESSAGE(est.has_value(),
+            "two-stage weighted fit failed: " <<
+            (est.has_value() ? "" : est.error().detail));
+
+        auto fixed = magmaan::estimate::fiml::two_stage_em_ml_inference(
+            *built.pt, *built.rep, *est, *sm, kind, dls,
+            magmaan::estimate::fiml::TwoStageBread::Observed);
+        REQUIRE_MESSAGE(fixed.has_value(),
+            "fixed-weight observed inference failed: " <<
+            (fixed.has_value() ? "" : fixed.error().detail));
+
+        auto ij = magmaan::estimate::fiml::two_stage_em_ml_inference(
+            *built.pt, *built.rep, raw, *est, *pack, *h1, kind, dls,
+            magmaan::estimate::fiml::TwoStageBread::Observed);
+        REQUIRE_MESSAGE(ij.has_value(),
+            "missing-data IJ inference failed: " <<
+            (ij.has_value() ? "" : ij.error().detail));
+
+        REQUIRE(ij->se.size() == fixed->se.size());
+        CHECK(ij->se.allFinite());
+        CHECK(ij->vcov.allFinite());
+        CHECK(ij->chisq == doctest::Approx(fixed->chisq));
+        CHECK(same_or_both_nan(ij->chisq_scaled, fixed->chisq_scaled));
+        CHECK(same_or_both_nan(ij->scaling_factor, fixed->scaling_factor));
+        CHECK(ij->df == fixed->df);
+        CHECK(ij->eigvals.size() == fixed->eigvals.size());
+        if (ij->eigvals.size() > 0) {
+          CHECK((ij->eigvals - fixed->eigvals).cwiseAbs().maxCoeff() < 1e-12);
+        }
+        CHECK((ij->vcov - fixed->vcov).cwiseAbs().maxCoeff() > 1e-12);
+      };
+
+  check_kind(magmaan::estimate::fiml::TwoStageWeight::Dwls, {});
+  check_kind(magmaan::estimate::fiml::TwoStageWeight::Adf, {});
+  check_kind(magmaan::estimate::fiml::TwoStageWeight::Dls, {0.35});
+}
+
 TEST_CASE("nested ML2S restriction map: empirical spectrum and NT collapse") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
