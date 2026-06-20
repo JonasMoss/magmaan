@@ -1790,6 +1790,79 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
   CHECK(ml2s->scaling_factor ==
         doctest::Approx(ml2s->trace_ugamma / static_cast<double>(ml2s->df)));
   CHECK(ml2s->chisq == doctest::Approx(magmaan::inference::chi2_stat(samp, *est)));
+
+  auto ml2s_obs = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est, 1e-4,
+      magmaan::estimate::fiml::TwoStageWeight::Nt, {},
+      magmaan::estimate::fiml::TwoStageBread::Observed);
+  REQUIRE_MESSAGE(ml2s_obs.has_value(),
+      "two_stage_em_ml_inference observed failed: " <<
+      (ml2s_obs.has_value() ? "" : ml2s_obs.error().detail));
+  auto rob_obs = magmaan::robust::robust_se(
+      *built.pt, *built.rep, samp, *est, raw,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Observed,
+          magmaan::robust::WeightMoments::Unstructured,
+          magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(rob_obs.has_value());
+  CHECK((ml2s_obs->vcov - rob_obs->vcov).cwiseAbs().maxCoeff() < 1e-7);
+  CHECK((ml2s_obs->se - rob_obs->se).cwiseAbs().maxCoeff() < 1e-7);
+
+  auto uf_obs = magmaan::robust::build_u_factor(
+      *built.pt, *built.rep, samp, *est,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Observed,
+          magmaan::robust::WeightMoments::Unstructured,
+          magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf_obs.has_value());
+  auto M_obs = magmaan::robust::reduced_gamma_sample(*uf_obs, *Zc, denom);
+  REQUIRE(M_obs.has_value());
+  auto ev_obs_ref = magmaan::robust::ugamma_eigenvalues(*M_obs);
+  REQUIRE(ev_obs_ref.has_value());
+  REQUIRE(ml2s_obs->df == static_cast<int>(uf_obs->df));
+  CHECK(ml2s_obs->eigvals.size() == ev_obs_ref->size());
+  CHECK((ml2s_obs->eigvals - *ev_obs_ref).cwiseAbs().maxCoeff() < 1e-7);
+  CHECK(ml2s_obs->scaling_factor ==
+        doctest::Approx(ml2s_obs->trace_ugamma /
+                         static_cast<double>(ml2s_obs->df)));
+
+  auto w_adf = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+      *sm, magmaan::estimate::fiml::TwoStageWeight::Adf);
+  REQUIRE(w_adf.has_value());
+  auto est_adf = magmaan::test::fit_gmm(
+      *built.pt, *built.rep, samp, *w_adf, {}, magmaan::estimate::Backend::NloptLbfgs,
+      opts);
+  REQUIRE_MESSAGE(est_adf.has_value(),
+      "two-stage ADF fit failed: " <<
+      (est_adf.has_value() ? "" : est_adf.error().detail));
+  auto gamma_full = magmaan::estimate::fiml::two_stage_gamma_from_acov(
+      *sm, /*se_weighted=*/false);
+  REQUIRE(gamma_full.has_value());
+  std::vector<Eigen::MatrixXd> gamma_blocks;
+  Eigen::Index gamma_off = 0;
+  for (std::size_t bidx = 0; bidx < sm->cov.size(); ++bidx) {
+    const Eigen::Index p = sm->cov[bidx].rows();
+    const Eigen::Index q = p + p * (p + 1) / 2;
+    gamma_blocks.push_back(gamma_full->block(gamma_off, gamma_off, q, q));
+    gamma_off += q;
+  }
+  auto ml2s_adf_obs = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, *est_adf, *sm,
+      magmaan::estimate::fiml::TwoStageWeight::Adf, {},
+      magmaan::estimate::fiml::TwoStageBread::Observed);
+  auto rr_adf_obs = magmaan::estimate::robust_continuous_ls(
+      *built.pt, *built.rep, samp, *est_adf, *w_adf, gamma_blocks,
+      magmaan::robust::Information::Observed);
+  REQUIRE_MESSAGE(ml2s_adf_obs.has_value(),
+      "two_stage_em_ml_inference ADF observed failed: " <<
+      (ml2s_adf_obs.has_value() ? "" : ml2s_adf_obs.error().detail));
+  REQUIRE_MESSAGE(rr_adf_obs.has_value(),
+      "robust_continuous_ls ADF observed failed: " <<
+      (rr_adf_obs.has_value() ? "" : rr_adf_obs.error().detail));
+  CHECK((ml2s_adf_obs->vcov - rr_adf_obs->vcov).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((ml2s_adf_obs->se - rr_adf_obs->se).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((ml2s_adf_obs->eigvals - rr_adf_obs->eigvals).cwiseAbs().maxCoeff() <
+        1e-10);
 }
 
 TEST_CASE("nested ML2S restriction map: empirical spectrum and NT collapse") {

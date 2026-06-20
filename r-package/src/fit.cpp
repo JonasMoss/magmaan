@@ -3378,7 +3378,8 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
   magmaan::estimate::fiml::TwoStageDlsOptions dls;
   dls.a = dls_a;
   auto r_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
-      ctx.pt, ctx.rep, est, *sm_ptr, kind, dls);
+      ctx.pt, ctx.rep, est, *sm_ptr, kind, dls,
+      magmaan::estimate::fiml::TwoStageBread::Expected);
   if (!r_or.has_value()) stop_post(r_or.error());
   Rcpp::List out = Rcpp::List::create(
       Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),

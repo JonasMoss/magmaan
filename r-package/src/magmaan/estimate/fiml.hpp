@@ -393,6 +393,12 @@ struct TwoStageDlsOptions {
   // left as a future hook. Callers pass a fixed `a` for now.)
 };
 
+// Bread used in the Stage-2 robust sandwich. Expected is the lavaan
+// robust.two.stage/default path; Observed is the misspecification-robust
+// moment-quadratic regime used by the Hall-Inoue grid before adding any
+// estimated-weight IJ terms.
+enum class TwoStageBread { Expected, Observed };
+
 // Per-block Stage-2 weight, in the `gmm::Weight` layout: one q_b×q_b matrix per
 // block, q_b = p_b + vech_len(p_b), aligned to [mean ; vech(cov)]. `Nt`
 // reproduces the implicit normal-theory weight used by
@@ -416,7 +422,10 @@ two_stage_stage2_weight(const SaturatedMoments& sm,
 // robust.two.stage default) reproduces the normal-theory path bit-for-bit; the
 // non-NT weights route through the explicit-weight moment-quadratic robust
 // sandwich and REQUIRE `est` to be the matching weighted fit (`fit_gmm` /
-// `fit_wls` with `two_stage_stage2_weight_blocks(sm, kind, dls)`), not the ML fit.
+// `fit_wls` with `two_stage_stage2_weight_blocks(sm, kind, dls)`), not the ML
+// fit. `bread` defaults to the lavaan-parity expected-information convention;
+// `Observed` changes only the Stage-2 bread, not the Stage-1 ACOV or any
+// estimated-weight channel.
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
@@ -424,7 +433,8 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const Estimates& est,
                           double h_step = 1e-4,
                           TwoStageWeight kind = TwoStageWeight::Nt,
-                          TwoStageDlsOptions dls = {});
+                          TwoStageDlsOptions dls = {},
+                          TwoStageBread bread = TwoStageBread::Expected);
 
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
@@ -434,7 +444,8 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const FIMLPack& pack,
                           const FIMLH1& h1,
                           TwoStageWeight kind = TwoStageWeight::Nt,
-                          TwoStageDlsOptions dls = {});
+                          TwoStageDlsOptions dls = {},
+                          TwoStageBread bread = TwoStageBread::Expected);
 
 // Inference straight from a precomputed Stage-1 `SaturatedMoments`: no raw
 // data, no EM, no observed-information rebuild. Bit-identical to the raw-based
@@ -445,7 +456,8 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const Estimates& est,
                           const SaturatedMoments& sm,
                           TwoStageWeight kind = TwoStageWeight::Nt,
-                          TwoStageDlsOptions dls = {});
+                          TwoStageDlsOptions dls = {},
+                          TwoStageBread bread = TwoStageBread::Expected);
 
 post_expected<TwoStageFitMeasures>
 two_stage_fit_measures(spec::LatentStructure pt,
