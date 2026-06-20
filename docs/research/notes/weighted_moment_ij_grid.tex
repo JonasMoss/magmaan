@@ -300,13 +300,30 @@ The exported row is
         = \widehat{\mathrm{ACOV}}(\hat\eta_S).
 \end{equation}
 For complete data this reduces blockwise to
-$a_i=n_b^{-1}[x_i-\bar x_b,\vech\{(x_i-\bar x_b)(x_i-\bar x_b)\T-\hat\Sigma_b\}]$.
-The remaining ML2S IJ adapter is to pass these rows through the weight
-derivatives. For \texttt{TwoStageWeight::Nt}, the weight still depends on
-saturated $\hat\Sigma$ through $\Gamma_{\mathrm{NT}}(\hat\Sigma)$, so the
-target estimator has a normal-theory weight derivative. For \texttt{Dwls},
-\texttt{Adf}, and \texttt{Dls}, use the diagonal, full, and mixed formulas
-above with $\Gamma_{\mathrm{FIML}}$.
+\[
+  a_i = n_b^{-1}\bigl[x_i-\bar x_b,\,
+        \vech\{(x_i-\bar x_b)(x_i-\bar x_b)\T-\hat\Sigma_b\}\bigr].
+\]
+For complete raw data, the raw-data \path{two_stage_em_ml_inference}
+overload now delegates observed-bread \texttt{Dwls}, \texttt{Adf}, and
+fixed-$a$ \texttt{Dls} covariance to the already-gated continuous-LS IJ
+adapters; this is an exact reduction because saturated EM moments reduce to
+ordinary mean/covariance moments and $n_bA_b\T A_b$ reduces to Browne's complete
+data $\hat\Gamma$. The scaled-test fields remain the fixed-weight
+Satorra--Bentler quantities because Hall--Inoue test-statistic corrections are
+estimator-specific and have not been derived here.
+
+For missing data, the remaining ML2S IJ adapter is not just to reuse $a_i$.
+The \texttt{Dwls}, \texttt{Adf}, and \texttt{Dls} weights depend on
+$\Gamma_{\mathrm{FIML}}=n_b I_\eta^{-1}(\sum_i s_is_i\T)I_\eta^{-1}$, so their
+weight derivative needs the Stage-1 sandwich-Gamma influence:
+the score-product channel, the observed-information channel, and the movement
+of $(I_\eta,J_\eta)$ through $\hat\eta_S$. The default
+\texttt{TwoStageWeight::Nt} route in \path{two_stage_em_ml_inference} is
+the normal-theory ML robust-score path; the moment-quadratic GLS
+normal-theory-weight IJ correction remains available as
+\path{robust_continuous_ls_gls_ij} for complete continuous LS rather than
+being silently substituted for ML2S NT.
 
 \paragraph{MCAR and pairwise-missing ordinal/polyserial.}
 The current primitive assumes disjoint blocks: it sums $V_b\T V_b$ inside each

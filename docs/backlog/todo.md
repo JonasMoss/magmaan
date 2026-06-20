@@ -301,12 +301,21 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     2026-06-20** as `saturated_em_moment_influence`, with complete-data
     reduction to centered mean/covariance moment rows and missing-data
     `IF'IF == SaturatedMoments::acov` gates.
+    ML2S raw complete-data observed-bread covariance for non-NT Stage-2 weights
+    **landed 2026-06-20** by routing
+    `TwoStageWeight::{Dwls,Adf,Dls}` through the continuous-LS IJ adapters;
+    tests gate ADF/DWLS/DLS against
+    `robust_continuous_ls_{wls,dwls,dls}_ij`. The scaled-test fields remain
+    the fixed-weight Satorra-Bentler quantities.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; ML2S
-    estimated-weight adapters for
-    `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
-    continuous LS; MCAR/pairwise-missing
+    missing-data estimated-weight adapters for
+    `TwoStageWeight::{Dwls,Adf,Dls}` via the Stage-1 FIML sandwich-Gamma
+    influence (score-product, observed-information, and eta-movement channels);
+    the default `TwoStageWeight::Nt` path remains ordinary normal-theory
+    ML robust-score inference, while the moment-quadratic GLS IJ correction is
+    covered by complete continuous LS; MCAR/pairwise-missing
     ordinal/polyserial (design case-aligned sparse moment-row primitive with
     per-moment support scaling before coding).
   - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai

@@ -1863,6 +1863,74 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
   CHECK((ml2s_adf_obs->se - rr_adf_obs->se).cwiseAbs().maxCoeff() < 1e-10);
   CHECK((ml2s_adf_obs->eigvals - rr_adf_obs->eigvals).cwiseAbs().maxCoeff() <
         1e-10);
+
+  auto ml2s_adf_ij = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est_adf, 1e-4,
+      magmaan::estimate::fiml::TwoStageWeight::Adf, {},
+      magmaan::estimate::fiml::TwoStageBread::Observed);
+  auto rr_adf_ij = magmaan::estimate::robust_continuous_ls_wls_ij(
+      *built.pt, *built.rep, samp, *est_adf, raw);
+  REQUIRE_MESSAGE(ml2s_adf_ij.has_value(),
+      "two_stage_em_ml_inference ADF IJ failed: " <<
+      (ml2s_adf_ij.has_value() ? "" : ml2s_adf_ij.error().detail));
+  REQUIRE_MESSAGE(rr_adf_ij.has_value(),
+      "robust_continuous_ls_wls_ij failed: " <<
+      (rr_adf_ij.has_value() ? "" : rr_adf_ij.error().detail));
+  CHECK((ml2s_adf_ij->vcov - rr_adf_ij->vcov).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((ml2s_adf_ij->se - rr_adf_ij->se).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((ml2s_adf_ij->eigvals - ml2s_adf_obs->eigvals).cwiseAbs().maxCoeff() <
+        1e-10);
+
+  auto w_dwls = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+      *sm, magmaan::estimate::fiml::TwoStageWeight::Dwls);
+  REQUIRE(w_dwls.has_value());
+  auto est_dwls = magmaan::test::fit_gmm(
+      *built.pt, *built.rep, samp, *w_dwls, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est_dwls.has_value(),
+      "two-stage DWLS fit failed: " <<
+      (est_dwls.has_value() ? "" : est_dwls.error().detail));
+  auto ml2s_dwls_ij = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est_dwls, 1e-4,
+      magmaan::estimate::fiml::TwoStageWeight::Dwls, {},
+      magmaan::estimate::fiml::TwoStageBread::Observed);
+  auto rr_dwls_ij = magmaan::estimate::robust_continuous_ls_dwls_ij(
+      *built.pt, *built.rep, samp, *est_dwls, raw);
+  REQUIRE_MESSAGE(ml2s_dwls_ij.has_value(),
+      "two_stage_em_ml_inference DWLS IJ failed: " <<
+      (ml2s_dwls_ij.has_value() ? "" : ml2s_dwls_ij.error().detail));
+  REQUIRE_MESSAGE(rr_dwls_ij.has_value(),
+      "robust_continuous_ls_dwls_ij failed: " <<
+      (rr_dwls_ij.has_value() ? "" : rr_dwls_ij.error().detail));
+  CHECK((ml2s_dwls_ij->vcov - rr_dwls_ij->vcov).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((ml2s_dwls_ij->se - rr_dwls_ij->se).cwiseAbs().maxCoeff() < 1e-10);
+
+  const magmaan::estimate::fiml::TwoStageDlsOptions dls_opts{0.35};
+  auto w_dls = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+      *sm, magmaan::estimate::fiml::TwoStageWeight::Dls, dls_opts);
+  REQUIRE(w_dls.has_value());
+  auto est_dls = magmaan::test::fit_gmm(
+      *built.pt, *built.rep, samp, *w_dls, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est_dls.has_value(),
+      "two-stage DLS fit failed: " <<
+      (est_dls.has_value() ? "" : est_dls.error().detail));
+  auto ml2s_dls_ij = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est_dls, 1e-4,
+      magmaan::estimate::fiml::TwoStageWeight::Dls, dls_opts,
+      magmaan::estimate::fiml::TwoStageBread::Observed);
+  magmaan::estimate::frontier::DlsWeightOptions dls_ref_opts;
+  dls_ref_opts.a = dls_opts.a;
+  auto rr_dls_ij = magmaan::estimate::robust_continuous_ls_dls_ij(
+      *built.pt, *built.rep, samp, *est_dls, raw, dls_ref_opts);
+  REQUIRE_MESSAGE(ml2s_dls_ij.has_value(),
+      "two_stage_em_ml_inference DLS IJ failed: " <<
+      (ml2s_dls_ij.has_value() ? "" : ml2s_dls_ij.error().detail));
+  REQUIRE_MESSAGE(rr_dls_ij.has_value(),
+      "robust_continuous_ls_dls_ij failed: " <<
+      (rr_dls_ij.has_value() ? "" : rr_dls_ij.error().detail));
+  CHECK((ml2s_dls_ij->vcov - rr_dls_ij->vcov).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((ml2s_dls_ij->se - rr_dls_ij->se).cwiseAbs().maxCoeff() < 1e-10);
 }
 
 TEST_CASE("nested ML2S restriction map: empirical spectrum and NT collapse") {
