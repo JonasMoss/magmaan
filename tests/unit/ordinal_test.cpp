@@ -2962,6 +2962,9 @@ TEST_CASE("Observed ordinal stats degenerate to complete-data ordinal stats") {
   CHECK(observed->R[0].isApprox(complete->R[0], 1e-12));
   CHECK(observed->thresholds[0].isApprox(complete->thresholds[0], 1e-12));
   CHECK(observed->NACOV[0].isApprox(complete->NACOV[0], 1e-10));
+  REQUIRE(observed->moment_influence.size() == 1);
+  CHECK(observed->moment_influence[0].isApprox(
+      complete->moment_influence[0], 1e-10));
   CHECK(observed->W_dwls[0].isApprox(complete->W_dwls[0], 1e-10));
   CHECK(observed->pairwise_gamma == "overlap");
 }
@@ -3123,6 +3126,71 @@ TEST_CASE("robust_ordinal_ij ULS matches observed-bread fixed-weight sandwich") 
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
 }
 
+TEST_CASE("robust_ordinal_ij ULS supports observed MCAR ordinal stats") {
+  Eigen::MatrixXd X =
+      ordinal_test_block(20260621, 360, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55);
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    for (Eigen::Index c = 0; c < X.cols(); ++c) {
+      if (((r + 3 * c) % 17) == 0) X(r, c) = nan;
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap,
+      /*full_wls_weight=*/false);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->moment_influence.size() == 1);
+  const Eigen::MatrixXd rebuilt =
+      stats->moment_influence[0].transpose() * stats->moment_influence[0] /
+      static_cast<double>(stats->n_obs[0]);
+  CHECK(rebuilt.isApprox(stats->NACOV[0], 1e-9));
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1000;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::ULS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "ULS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto fixed = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::ULS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Observed);
+  auto ij = magmaan::estimate::robust_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::ULS);
+  REQUIRE_MESSAGE(fixed.has_value(),
+      "fixed robust failed: "
+          << (fixed.has_value() ? "" : fixed.error().detail));
+  REQUIRE_MESSAGE(ij.has_value(),
+      "IJ robust failed: " << (ij.has_value() ? "" : ij.error().detail));
+  CHECK(ij->df == fixed->df);
+  CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
+  CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
+  CHECK(ij->se.isApprox(fixed->se, 1e-8));
+}
+
 TEST_CASE("robust_ordinal_ij WLS carries dense estimated-weight channel") {
   const Eigen::MatrixXd X =
       ordinal_test_block(20260620, 420, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55);
@@ -3201,6 +3269,12 @@ TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma varian
   REQUIRE(nominal.has_value());
   CHECK(overlap->R[0].isApprox(nominal->R[0], 1e-12));
   CHECK(overlap->thresholds[0].isApprox(nominal->thresholds[0], 1e-12));
+  REQUIRE(overlap->moment_influence.size() == 1);
+  CHECK(nominal->moment_influence.empty());
+  const Eigen::MatrixXd rebuilt =
+      overlap->moment_influence[0].transpose() *
+      overlap->moment_influence[0] / static_cast<double>(X.rows());
+  CHECK(rebuilt.isApprox(overlap->NACOV[0], 1e-10));
   REQUIRE(overlap->moment_n_obs.size() == 1);
   REQUIRE(overlap->moment_overlap_n_obs.size() == 1);
   const auto& nobs = overlap->moment_n_obs[0];

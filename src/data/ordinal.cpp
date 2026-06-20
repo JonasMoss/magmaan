@@ -3296,6 +3296,9 @@ ordinal_stats_from_observed_integer_data(
   out.W_wls.reserve(Xs.size());
   out.n_obs.reserve(Xs.size());
   out.n_levels.reserve(Xs.size());
+  if (gamma_kind == OrdinalPairwiseGammaKind::Overlap) {
+    out.moment_influence.reserve(Xs.size());
+  }
   out.moment_support_i.reserve(Xs.size());
   out.moment_support_j.reserve(Xs.size());
   out.moment_n_obs.reserve(Xs.size());
@@ -3509,6 +3512,10 @@ ordinal_stats_from_observed_integer_data(
     Eigen::MatrixXd NACOV = B_inv * INNER * B_inv.transpose();
     NACOV *= static_cast<double>(n);
     NACOV = 0.5 * (NACOV + NACOV.transpose());
+    Eigen::MatrixXd IF;
+    if (gamma_kind == OrdinalPairwiseGammaKind::Overlap) {
+      IF.noalias() = static_cast<double>(n) * SC * B_inv.transpose();
+    }
 
     Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> overlap =
         observed_moment_overlap_counts(Xcat, support_i, support_j);
@@ -3555,6 +3562,9 @@ ordinal_stats_from_observed_integer_data(
     out.W_wls.push_back(std::move(W_wls));
     out.n_obs.push_back(static_cast<std::int64_t>(n));
     out.n_levels.push_back(std::move(levels));
+    if (gamma_kind == OrdinalPairwiseGammaKind::Overlap) {
+      out.moment_influence.push_back(std::move(IF));
+    }
     out.moment_support_i.push_back(std::move(support_i));
     out.moment_support_j.push_back(std::move(support_j));
     out.moment_n_obs.push_back(std::move(moment_n));

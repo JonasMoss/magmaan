@@ -318,6 +318,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `J' W J + residual-curvature` contraction from
     `weighted_moment_ij_grid.tex`; tests keep the finite-difference bread as
     the validation oracle for fixed-weight, GLS, WLS, DWLS, and DLS IJ paths.
+    All-ordinal MCAR/pairwise-overlap ULS IJ **landed 2026-06-20** by
+    materializing case-aligned sparse moment-influence rows in
+    `ordinal_stats_from_observed_integer_data(..., Overlap)`; tests gate
+    complete-data reduction, `G'G/N == NACOV`, and observed-bread ULS reduction
+    under deterministic MCAR.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; replace the ML2S missing-data
@@ -326,9 +331,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     frontier path becomes performance-critical;
     the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
-    covered by complete continuous LS; MCAR/pairwise-missing
-    ordinal/polyserial (design case-aligned sparse moment-row primitive with
-    per-moment support scaling before coding).
+    covered by complete continuous LS; MCAR/pairwise-missing all-ordinal
+    DWLS/WLS (derive pairwise-aware diagonal/dense `IF(Gamma)`), then
+    mixed/polyserial MCAR with the same support-aligned rows.
   - **Analytic moment-Hessian remainder**: complete continuous LS now has the
     closed-form observed bread. Still derive/code the mixed ordinal/polyserial
     analogue and any MCAR sparse-moment analogue; FD should remain the
