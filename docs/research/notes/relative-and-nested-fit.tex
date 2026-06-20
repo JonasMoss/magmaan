@@ -14,6 +14,7 @@
 \newcommand{\Var}{\operatorname{Var}}
 \newcommand{\Cov}{\operatorname{Cov}}
 \newcommand{\vech}{\operatorname{vech}}
+\newcommand{\diag}{\operatorname{diag}}
 \newcommand{\argmin}{\operatorname*{arg\,min}}
 \newcommand{\argmax}{\operatorname*{arg\,max}}
 \newcommand{\plim}{\operatorname*{plim}}
@@ -68,12 +69,16 @@ v_{i}$, where
 \begin{equation}
   H = A + C,\quad A=\Delta\T W\Delta,\quad
   C=\sum_{k}(W\rs)_{k}\nabla^{2}\eta_{k}(\ths),\quad
-  v_{i}=(W-\Wr)g_{i},
+  v_{i}=Wg_{i}-\dot W_{i}\,\rs,
   \label{eq:recap}
 \end{equation}
-and $\Wr=[\,\partial W/\partial u_{1}\,\rs,\ \dots,\ \partial W/\partial u_{m}\,
-\rs\,]$ is the residual-contracted weight derivative. The corrected
-moment-space meat is $\Omega=(W-\Wr)\Gamma(W-\Wr)\T$.
+where $\dot W_{i}$ is the casewise influence of the weight. When the weight is a
+function of the modelled moments $u$, $\dot W_{i}\rs=\Wr g_{i}$ with
+$\Wr=[\,\partial W/\partial u_{1}\,\rs,\ \dots,\ \partial W/\partial u_{m}\,
+\rs\,]$ the residual-contracted weight derivative, so $v_{i}=(W-\Wr)g_{i}$ and
+the corrected meat is $\Omega=(W-\Wr)\Gamma(W-\Wr)\T$. In general $\Omega=
+\Var(v_{i})$ is formed from the casewise rows; the matrix form is the special
+case used in Sections~\ref{sec:gof}--\ref{sec:nested}.
 
 \section{The residual governs the correction}
 \label{sec:delin}
@@ -217,6 +222,80 @@ the same place as the bread curvature, inside the annihilator, so the meat and
 the projector are entangled. Computing the nested reference law requires the
 generalised annihilators $\widetilde M$ rather than a meat swap, and that is a
 separate derivation, not a corollary.
+
+\section{Specialization: complete-data DWLS on a linear covariance model}
+\label{sec:dwls}
+
+The curvature term $C=\sum_{k}(W\rs)_{k}\nabla^{2}\eta_{k}(\ths)$ is the only
+place the shape of the model surface enters. It vanishes whenever $\eta$ is
+linear in $\theta$, which removes one of the two deformations and isolates the
+weight channel.
+
+\subsection{A model with $C=0$}
+Take a linear covariance structure $\Sigma(\theta)=\sum_{k}\theta_{k}G_{k}$ with
+fixed symmetric $G_{k}$, so $\eta(\theta)=\vech\Sigma(\theta)=\Delta\theta$ with
+$\Delta=[\vech G_{1},\dots,\vech G_{q}]$ constant, $\nabla^{2}\eta_{k}=0$, hence
+$C=0$ and $H=A=\Delta\T W\Delta$ constant. A concrete nested pair on $p$
+continuous variables: $B$ is compound symmetry (one variance, one covariance),
+nested in $A$ (one variance, free covariances), the difference testing equality
+of the covariances. Both are linear, so the only surviving deformation is the
+weight channel.
+
+\subsection{DWLS ingredients}
+The stage-one moments are $u=\vech(S)$ with casewise influence $g_{i}=\vech(z_{i}
+z_{i}\T)-\sigma_{0}$, $z_{i}=y_{i}-\mu$, and $\Gamma=\E[g_{i}g_{i}\T]$ the Browne
+fourth-moment matrix. DWLS uses $\widehat W=\diag(\widehat\Gamma)^{-1}$, so with
+$\gamma=\diag(\Gamma)$ the population weight is $W=\diag(\gamma)^{-1}$. The weight
+influence acts diagonally,
+\[
+  \dot w_{i,k}=-\gamma_{k}^{-2}\,\dot\gamma_{i,k},\qquad
+  \dot\gamma_{i,k}=g_{i,k}^{2}-\gamma_{k}+(\text{centring corrections}),
+\]
+where $\dot\gamma_{i,k}$ is the casewise influence of the $k$-th diagonal of
+$\widehat\Gamma$. The corrected casewise moment-space influence is
+\begin{equation}
+  v_{i,k}=\frac{g_{i,k}}{\gamma_{k}}
+          +\frac{r_{*,k}\,\dot\gamma_{i,k}}{\gamma_{k}^{2}},
+  \label{eq:dwls-v}
+\end{equation}
+which matches the implemented DWLS adapter.
+
+\begin{remark}[The DWLS weight channel is not a matrix on $g_{i}$]
+$\widehat W=\diag(\widehat\Gamma)^{-1}$ depends on fourth-order sample moments,
+not on the modelled $u=\vech(S)$. Its influence $\dot\gamma_{i,k}$ is quadratic
+in $g_{i}$ (through $g_{i,k}^{2}$), so the weight channel in \eqref{eq:dwls-v} is
+a genuine casewise quantity, not $\Wr g_{i}$ for a matrix $\Wr$. The matrix
+annihilator $\widetilde M$ of Proposition~\ref{prop:nested} therefore holds only
+when the weight is a function of $u$; for DWLS the residual influence
+$\rho_{i}=\Delta A^{-1}\Delta\T v_{i}-g_{i}$ stays casewise and carries a part
+quadratic in $g_{i}$, so its covariance reaches eighth-order moments of the data.
+\end{remark}
+
+\subsection{The verification-friendly twin: normal-theory weight}
+The normal-theory weight $W=W_{\mathrm{NT}}(S)$ is a function of $u$, so it is the
+clean case. With $C=0$ and a data-estimated weight, $\Wr$ is a constant matrix,
+$\widetilde M=I-\Delta A^{-1}\Delta\T(W-\Wr)$ is constant, and the nested law is
+\[
+  \lambda_{j}=\operatorname{eig}\!\bigl[(\widetilde M_{B}\T W\widetilde M_{B}
+  -\widetilde M_{A}\T W\widetilde M_{A})\Gamma\bigr],
+\]
+all constant matrices. A fixed weight would give $\Wr=0$ and, with $C=0$, the
+undeformed Satorra law, so the data-estimated weight is exactly what produces the
+phenomenon. This isolates the weight channel from the curvature and is the
+easiest case to verify by hand and to eigendecompose.
+
+\subsection{The geometry of the payoff}
+The deformation is $\widetilde M-M=\Delta A^{-1}\Delta\T\Wr$, linear in $\rs$ and
+zero at $\rs=0$. The nested statistic sees $\rs$ only through the rank-$(\mathrm{
+df}_{B}-\mathrm{df}_{A})$ map $\widetilde M_{B}-\widetilde M_{A}$ onto the
+constraint directions. The exploration is to sweep the direction of $\rs$ at
+fixed $\lVert\rs\rVert$: generate from $\Sigma_{0}=\Sigma_{B}(\theta_{*})+
+\epsilon D$ and rotate $D$ from $W$-orthogonal to the constraint space toward
+aligned. The conjecture, which the simulation tests rather than assumes, is that
+orthogonal $\rs$ leaves the law near Satorra (the benign regime where robust
+intervals already calibrate) and aligned $\rs$ deforms it most. Because the
+deformation is analytic in $\rs$, the predicted miscalibration can overlay the
+simulated rejection rate.
 
 \section{Verdict}
 \label{sec:verdict}
