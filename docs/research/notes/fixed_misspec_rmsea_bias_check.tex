@@ -29,9 +29,9 @@
 This note checks the fixed-misspecification version of the RMSEA bias
 calculation. The local-drift story gives the familiar chain
 \[
-  df \quad\longrightarrow\quad \tr(U\Gamma),
+  df \quad\longrightarrow\quad \tr(U_M\Gamma),
 \]
-where $U$ is the first-order residual projector and $\Gamma$ is the asymptotic
+where $U_M$ is the first-order residual projector and $\Gamma$ is the asymptotic
 covariance of the saturated moments. Under fixed model misspecification this is
 not the full $n^{-1}$ bias of the fitted discrepancy. The population residual is
 then $O(1)$, so two terms that are invisible under exact fit or Pitman drift move
@@ -53,15 +53,22 @@ The result below is therefore the fixed-misspecification correction
   +
   \frac{1}{n}
   \left\{
-    \tr(\widetilde U\Gamma)
+    \tr(Q_M\Gamma)
     + \beta_W
     + 2 e'W b
   \right\}
   + o(n^{-1}),
 \]
-with $\widetilde U$ built from the observed population Hessian, not just the
+with $Q_M$ built from the observed population Hessian, not just the
 Gauss--Newton Hessian. For a fixed weight and an unbiased first-stage covariance
-convention this reduces to $\tr(\widetilde U\Gamma)$.
+convention this reduces to $\tr(Q_M\Gamma)$.
+
+The notation is deliberate. $U_M$ is reserved for the exact-fit or
+Gauss--Newton residual projector. $Q_M$ denotes the profile Hessian of the
+fitted value function. For an absolute-fit statistic, the comparator is the
+saturated model, whose profile value is identically zero, so the quadratic form
+is $Q_M-Q_{\mathrm{sat}}=Q_M$. For a nested test, the corresponding object is
+$Q_B-Q_A$.
 
 \section{Setup}
 
@@ -134,7 +141,7 @@ with $W_1$ the mean-zero first-order influence of the weight map. Put
   \qquad
   P=DB^{-1}D',
   \qquad
-  \widetilde U = W-WDB^{-1}D'W = W-WPW .
+  Q_M = W-WDB^{-1}D'W = W-WPW .
 \end{equation}
 
 \section{Expansion}
@@ -154,7 +161,7 @@ where
 \begin{equation}\label{eq:Phi}
   \Phi
   =
-  z'\widetilde U z
+  z'Q_M z
   + 2g'(I-PW)z
   - g'Pg
   + e'W_2e
@@ -200,7 +207,7 @@ If $\E[W_1]=0$ and the expectations below exist, then
   F_0
   + \frac{1}{n}
   \left[
-    \tr(\widetilde U\Gamma)
+    \tr(Q_M\Gamma)
     + \beta_W
     + 2e'Wb
   \right]
@@ -219,14 +226,14 @@ where
 For a fixed weight, $W_1=W_2=0$ and $\beta_W=0$. If additionally $b=0$, the
 whole correction is just
 \[
-  \E[\hat F]=F_0+n^{-1}\tr(\widetilde U\Gamma)+o(n^{-1}).
+  \E[\hat F]=F_0+n^{-1}\tr(Q_M\Gamma)+o(n^{-1}).
 \]
-Under correct specification, $e=0$, so $K=0$, $\widetilde U$ reduces to the
+Under correct specification, $e=0$, so $K=0$, $Q_M$ reduces to the
 usual first-order residual projector
 \[
-  U = W-WD(D'WD)^{-1}D'W ,
+  U_M = W-WD(D'WD)^{-1}D'W ,
 \]
-and the bias reduces to $n^{-1}\tr(U\Gamma)$. Under normal-theory weighting
+and the bias reduces to $n^{-1}\tr(U_M\Gamma)$. Under normal-theory weighting
 with $W=\Gamma^{-1}$, this trace is $df$.
 
 \section{Consequences for RMSEA}
@@ -261,7 +268,7 @@ On the point-estimation scale, write
 \[
   c_{\mathrm{fix}}
   =
-  \tr(\widetilde U\Gamma)+\beta_W+2e'Wb .
+  \tr(Q_M\Gamma)+\beta_W+2e'Wb .
 \]
 Then a fixed-misspecification bias-corrected RMSEA estimator is
 \begin{equation}\label{eq:rmsea}
@@ -272,7 +279,7 @@ Then a fixed-misspecification bias-corrected RMSEA estimator is
   } .
 \end{equation}
 Equivalently, if $T=n\hat F$, subtract $c_{\mathrm{fix}}$ from $T$, not
-automatically $df$ or $\tr(U\Gamma)$.
+automatically $df$ or $\tr(U_M\Gamma)$.
 
 \begin{remark}
 The truncation in \eqref{eq:rmsea} is asymptotically irrelevant when $F_0>0$.
@@ -286,9 +293,9 @@ law in \eqref{eq:normal} to a quadratic form.
 \paragraph{ULS or fixed-weight GLS.}
 This is the clean case. The weight is fixed, so $\beta_W=0$. If the saturated
 moments are centered so that $b=0$, the correction is
-$\tr(\widetilde U\Gamma)$. This is the most direct target for simulation checks:
-compare $n\{\E[\hat F]-F_0\}$ with both $\tr(U\Gamma)$ and
-$\tr(\widetilde U\Gamma)$.
+$\tr(Q_M\Gamma)$. This is the most direct target for simulation checks:
+compare $n\{\E[\hat F]-F_0\}$ with both $\tr(U_M\Gamma)$ and
+$\tr(Q_M\Gamma)$.
 
 \paragraph{Data-weighted GLS.}
 The formula applies directly if $\hat W$ is a smooth function of $\hat m$ and
@@ -310,17 +317,16 @@ blanket substitution into \eqref{eq:betaW}.
 
 The curvature correction is mathematically real. The fixed-misspecification
 bias uses the profile Hessian $B=A-K$, so the trace is
-$\tr(\widetilde U\Gamma)$ rather than $\tr(U\Gamma)$ unless either the residual
-or the model curvature is negligible. This is the same phenomenon as replacing
-expected information by observed Hessian in misspecification-robust standard
-errors.
+$\tr(Q_M\Gamma)$ rather than $\tr(U_M\Gamma)$ unless either the residual or the
+model curvature is negligible. This is the same phenomenon as replacing expected
+information by observed Hessian in misspecification-robust standard errors.
 
 The $O(n^{-1})$ moment-bias term should be explicit. It is absent only after a
 choice of first-stage convention, not as a theorem. For example, an unbiased
 sample covariance convention removes it, while a different divisor may not.
 
 The most useful next step is a small, fast validation harness for the fixed ULS
-case. Once $\tr(\widetilde U\Gamma)$ is verified there, add controlled
+case. Once $\tr(Q_M\Gamma)$ is verified there, add controlled
 data-weighted GLS examples to isolate $\beta_W$, and derive ML separately from
 the profiled likelihood. That sequencing keeps the algebra testable: first
 curvature, then weight influence, then likelihood-specific cancellation.
