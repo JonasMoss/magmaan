@@ -3403,13 +3403,15 @@ robust_ordinal_ij(spec::LatentStructure pt,
         "robust_ordinal_ij: per-case influence functions unavailable; recompute "
         "ordinal stats (moment_influence is required for the IJ)"));
   }
+  std::vector<bool> block_has_missing(stats.R.size(), false);
   if (weights != OrdinalWeightKind::ULS) {
     if (stats.int_data.size() != stats.R.size()) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_ordinal_ij: complete integer data unavailable; recompute "
-          "ordinal stats with int_data to include the estimated-weight "
+          "robust_ordinal_ij: integer data unavailable; recompute ordinal "
+          "stats with int_data to include the estimated-weight "
           "influence"));
     }
+    const bool allow_pairwise_missing = stats.pairwise_gamma == "overlap";
     for (std::size_t b = 0; b < stats.R.size(); ++b) {
       const Eigen::Index p = stats.R[b].rows();
       const Eigen::MatrixXi& Xcat = stats.int_data[b];
@@ -3426,12 +3428,21 @@ robust_ordinal_ij(spec::LatentStructure pt,
       for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
         for (Eigen::Index j = 0; j < Xcat.cols(); ++j) {
           const int c = Xcat(r, j);
+          if (c < 0) {
+            if (!allow_pairwise_missing) {
+              return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                  "robust_ordinal_ij: missing ordinal int_data requires "
+                  "pairwise overlap Gamma in block " + std::to_string(b)));
+            }
+            block_has_missing[b] = true;
+            continue;
+          }
           const int max_level =
               stats.n_levels[b][static_cast<std::size_t>(j)];
-          if (c < 0 || c >= max_level) {
+          if (c >= max_level) {
             return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-                "robust_ordinal_ij: int_data must contain complete 0-based "
-                "category codes in block " + std::to_string(b)));
+                "robust_ordinal_ij: int_data must contain 0-based category "
+                "codes in block " + std::to_string(b)));
           }
         }
       }
@@ -3537,15 +3548,25 @@ robust_ordinal_ij(spec::LatentStructure pt,
       // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
       // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
       // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
-      // data; DWLS was validated above to have complete 0-based integer data.
+      // data; pairwise-overlap MCAR blocks use the observed-support helpers.
       Eigen::MatrixXd IFG;  // n_b × mb: data-direct IF of Γ̂_kk (V̂ + Â variation)
       Eigen::MatrixXd GD;   // n_b × mb: κ-movement IF of Γ̂_kk (FD of Γ̂ over κ)
-      auto inf_or = data::ordinal_gamma_diag_data_influence(
-          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      auto inf_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_diag_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_diag_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
       if (!inf_or.has_value()) return std::unexpected(inf_or.error());
       IFG = std::move(*inf_or);
-      auto D_or = data::ordinal_gamma_diag_jacobian_fd(
-          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      auto D_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_diag_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_diag_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
       if (!D_or.has_value()) return std::unexpected(D_or.error());
       GD.noalias() = G * D_or->transpose();
       correction = Eigen::MatrixXd::Zero(G.rows(), mb);
@@ -3559,11 +3580,21 @@ robust_ordinal_ij(spec::LatentStructure pt,
       // Full-WLS analogue: IF(Ŵ_i) = -W IF_i(Γ̂) W, so the row correction added
       // to g_i W is d' W IF_i(Γ̂) W. `IF_i(Γ̂)` combines the data-direct
       // sandwich channel with the κ-movement channel DΓ/Dκ · IF_i(κ).
-      auto inf_or = data::ordinal_gamma_data_influence(
-          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      auto inf_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
       if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-      auto D_or = data::ordinal_gamma_jacobian_fd(
-          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      auto D_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
       if (!D_or.has_value()) return std::unexpected(D_or.error());
       if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
           D_or->rows() != mb * mb || D_or->cols() != mb) {

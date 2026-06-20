@@ -206,6 +206,7 @@ GammaDiagInfluenceProbe gamma_diag_influence_probe_2var(
   for (Eigen::Index r = 0; r < n; ++r) {
     for (Eigen::Index j = 0; j < 2; ++j) {
       const int c = Xcat(r, j);
+      if (c < 0) continue;
       const auto& thj = th_by_var[static_cast<std::size_t>(j)];
       const double lo = (c == 0) ? -inf : thj(c - 1);
       const double hi = (c == thj.size()) ? inf : thj(c);
@@ -216,13 +217,28 @@ GammaDiagInfluenceProbe gamma_diag_influence_probe_2var(
     }
   }
 
+  std::vector<Eigen::Index> obs_rows;
+  obs_rows.reserve(static_cast<std::size_t>(n));
+  for (Eigen::Index r = 0; r < n; ++r) {
+    if (Xcat(r, 1) >= 0 && Xcat(r, 0) >= 0) obs_rows.push_back(r);
+  }
+  Eigen::VectorXi xi(static_cast<Eigen::Index>(obs_rows.size()));
+  Eigen::VectorXi xj(static_cast<Eigen::Index>(obs_rows.size()));
+  for (Eigen::Index r = 0; r < xi.size(); ++r) {
+    const Eigen::Index src = obs_rows[static_cast<std::size_t>(r)];
+    xi(r) = Xcat(src, 1);
+    xj(r) = Xcat(src, 0);
+  }
   auto ps = magmaan::data::ordinal_pair_scores(
-      Xcat.col(1), Xcat.col(0), R(1, 0), th_by_var[1], th_by_var[0]);
+      xi, xj, R(1, 0), th_by_var[1], th_by_var[0]);
   REQUIRE(ps.has_value());
 
   Eigen::MatrixXd SC(n, mdim);
   SC.leftCols(nth) = SC_TH;
-  SC.col(nth) = ps->rho;
+  SC.col(nth).setZero();
+  for (Eigen::Index r = 0; r < xi.size(); ++r) {
+    SC(obs_rows[static_cast<std::size_t>(r)], nth) = ps->rho(r);
+  }
   const Eigen::MatrixXd INNER = SC.transpose() * SC;
 
   Eigen::MatrixXd B = Eigen::MatrixXd::Zero(mdim, mdim);
@@ -246,8 +262,13 @@ GammaDiagInfluenceProbe gamma_diag_influence_probe_2var(
   out.Gamma = 0.5 * (out.Gamma + out.Gamma.transpose()).eval();
   out.b_case.reserve(static_cast<std::size_t>(n));
 
-  const Eigen::MatrixXd pair_a21_i = ps->rho.asDiagonal() * ps->threshold_i;
-  const Eigen::MatrixXd pair_a21_j = ps->rho.asDiagonal() * ps->threshold_j;
+  Eigen::MatrixXd pair_a21_i = Eigen::MatrixXd::Zero(n, ps->threshold_i.cols());
+  Eigen::MatrixXd pair_a21_j = Eigen::MatrixXd::Zero(n, ps->threshold_j.cols());
+  for (Eigen::Index r = 0; r < xi.size(); ++r) {
+    const Eigen::Index dst = obs_rows[static_cast<std::size_t>(r)];
+    pair_a21_i.row(dst) = ps->rho(r) * ps->threshold_i.row(r);
+    pair_a21_j.row(dst) = ps->rho(r) * ps->threshold_j.row(r);
+  }
   for (Eigen::Index r = 0; r < n; ++r) {
     Eigen::MatrixXd bi = Eigen::MatrixXd::Zero(mdim, mdim);
     for (Eigen::Index j = 0; j < 2; ++j) {
@@ -256,7 +277,7 @@ GammaDiagInfluenceProbe gamma_diag_influence_probe_2var(
       const Eigen::VectorXd sv = SC_TH.row(r).segment(s, l).transpose();
       bi.block(s, s, l, l) = sv * sv.transpose();
     }
-    bi(nth, nth) = ps->rho(r) * ps->rho(r);
+    bi(nth, nth) = SC(r, nth) * SC(r, nth);
     bi.block(nth, th_start[1], 1, th_len[1]) = pair_a21_i.row(r);
     bi.block(nth, th_start[0], 1, th_len[0]) = pair_a21_j.row(r);
     out.b_case.push_back(std::move(bi));
@@ -2965,6 +2986,8 @@ TEST_CASE("Observed ordinal stats degenerate to complete-data ordinal stats") {
   REQUIRE(observed->moment_influence.size() == 1);
   CHECK(observed->moment_influence[0].isApprox(
       complete->moment_influence[0], 1e-10));
+  REQUIRE(observed->int_data.size() == 1);
+  CHECK((observed->int_data[0] - complete->int_data[0]).cwiseAbs().maxCoeff() == 0);
   CHECK(observed->W_dwls[0].isApprox(complete->W_dwls[0], 1e-10));
   CHECK(observed->pairwise_gamma == "overlap");
 }
@@ -3048,7 +3071,108 @@ TEST_CASE("ordinal_gamma_data_influence matches case-weight finite differences")
   CHECK(max_diag < 1e-8 * scale);
 }
 
-TEST_CASE("robust_ordinal_ij rejects estimated-weight stats without complete integer data") {
+TEST_CASE("ordinal observed gamma influence handles pairwise missing data") {
+  Eigen::MatrixXd counts(3, 3);
+  counts << 11, 7, 5,
+             6, 14, 9,
+             4, 10, 12;
+  Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    if (r % 11 == 0) X(r, 0) = nan;
+    if (r % 13 == 0) X(r, 1) = nan;
+  }
+
+  auto stats = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->int_data.size() == 1);
+  const Eigen::MatrixXi& Xcat = stats->int_data[0];
+
+  auto IFG = magmaan::data::ordinal_observed_gamma_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(IFG.has_value());
+  auto IFG_diag = magmaan::data::ordinal_observed_gamma_diag_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(IFG_diag.has_value());
+  auto D = magmaan::data::ordinal_observed_gamma_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(D.has_value());
+  auto D_diag = magmaan::data::ordinal_observed_gamma_diag_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(D_diag.has_value());
+
+  const Eigen::Index m = stats->NACOV[0].rows();
+  REQUIRE(IFG->rows() == X.rows());
+  REQUIRE(IFG->cols() == m * m);
+  REQUIRE(D->rows() == m * m);
+  auto probe = gamma_diag_influence_probe_2var(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  CHECK((probe.Gamma - stats->NACOV[0]).cwiseAbs().maxCoeff() < 1e-8);
+
+  double max_abs = 0.0;
+  double max_diag = 0.0;
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const Eigen::MatrixXd fd = finite_diff_gamma_case_influence(probe, i);
+    const Eigen::VectorXd got_vec = IFG->row(i).transpose();
+    const Eigen::Map<const Eigen::MatrixXd> got(got_vec.data(), m, m);
+    max_abs = std::max(max_abs, (got - fd).cwiseAbs().maxCoeff());
+    max_diag = std::max(max_diag,
+        (got.diagonal() - IFG_diag->row(i).transpose()).cwiseAbs().maxCoeff());
+  }
+  for (Eigen::Index l = 0; l < m; ++l) {
+    const Eigen::Map<const Eigen::MatrixXd> dG(D->col(l).data(), m, m);
+    max_diag = std::max(
+        max_diag, (dG.diagonal() - D_diag->col(l)).cwiseAbs().maxCoeff());
+  }
+
+  const double scale = 1.0 + IFG->cwiseAbs().maxCoeff();
+  CHECK(max_abs < 5e-5 * scale);
+  CHECK(max_diag < 1e-8 * scale);
+}
+
+TEST_CASE("ordinal observed gamma influence reduces to complete-data influence") {
+  Eigen::MatrixXd counts(3, 3);
+  counts << 11, 7, 5,
+             6, 14, 9,
+             4, 10, 12;
+  const Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  Eigen::MatrixXi Xcat = (X.cast<int>().array() - 1).matrix();
+
+  auto complete_diag = magmaan::data::ordinal_gamma_diag_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto observed_diag = magmaan::data::ordinal_observed_gamma_diag_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto complete_full = magmaan::data::ordinal_gamma_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto observed_full = magmaan::data::ordinal_observed_gamma_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto complete_D = magmaan::data::ordinal_gamma_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto observed_D = magmaan::data::ordinal_observed_gamma_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto complete_D_diag = magmaan::data::ordinal_gamma_diag_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto observed_D_diag = magmaan::data::ordinal_observed_gamma_diag_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+
+  REQUIRE(complete_diag.has_value());
+  REQUIRE(observed_diag.has_value());
+  REQUIRE(complete_full.has_value());
+  REQUIRE(observed_full.has_value());
+  REQUIRE(complete_D.has_value());
+  REQUIRE(observed_D.has_value());
+  REQUIRE(complete_D_diag.has_value());
+  REQUIRE(observed_D_diag.has_value());
+  CHECK(observed_diag->isApprox(*complete_diag, 1e-10));
+  CHECK(observed_full->isApprox(*complete_full, 1e-10));
+  CHECK(observed_D->isApprox(*complete_D, 1e-8));
+  CHECK(observed_D_diag->isApprox(*complete_D_diag, 1e-8));
+}
+
+TEST_CASE("robust_ordinal_ij rejects estimated-weight stats without integer data") {
   Eigen::MatrixXd counts(3, 3);
   counts << 11, 7, 5,
              6, 14, 9,
@@ -3189,6 +3313,77 @@ TEST_CASE("robust_ordinal_ij ULS supports observed MCAR ordinal stats") {
   CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
   CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
+}
+
+TEST_CASE("robust_ordinal_ij DWLS and WLS support observed MCAR ordinal stats") {
+  Eigen::MatrixXd X =
+      ordinal_test_block(20260622, 520, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55);
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    for (Eigen::Index c = 0; c < X.cols(); ++c) {
+      if (((r + 5 * c) % 19) == 0) X(r, c) = nan;
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap,
+      /*full_wls_weight=*/true);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->moment_influence.size() == 1);
+  REQUIRE(stats->int_data.size() == 1);
+  REQUIRE(stats->W_wls.size() == 1);
+  REQUIRE(stats->W_wls[0].size() > 0);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  for (const auto weight : {magmaan::estimate::OrdinalWeightKind::DWLS,
+                            magmaan::estimate::OrdinalWeightKind::WLS}) {
+    auto fit = magmaan::estimate::fit_ordinal_bounded(
+        *pt, *mr, *stats, {}, weight, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE_MESSAGE(fit.has_value(),
+        "observed MCAR ordinal fit failed: "
+            << (fit.has_value() ? "" : fit.error().detail));
+
+    auto fixed = magmaan::estimate::robust_ordinal(
+        *pt, *mr, *stats, *fit, weight,
+        magmaan::estimate::OrdinalParameterization::Delta,
+        magmaan::robust::Information::Observed);
+    auto ij = magmaan::estimate::robust_ordinal_ij(
+        *pt, *mr, *stats, *fit, weight);
+    REQUIRE_MESSAGE(fixed.has_value(),
+        "fixed observed robust failed: "
+            << (fixed.has_value() ? "" : fixed.error().detail));
+    REQUIRE_MESSAGE(ij.has_value(),
+        "observed MCAR IJ robust failed: "
+            << (ij.has_value() ? "" : ij.error().detail));
+    CHECK(ij->df == fixed->df);
+    CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
+    CHECK(ij->vcov.rows() == fixed->vcov.rows());
+    CHECK(ij->vcov.cols() == fixed->vcov.cols());
+    CHECK(ij->vcov.allFinite());
+    CHECK(ij->se.allFinite());
+  }
 }
 
 TEST_CASE("robust_ordinal_ij WLS carries dense estimated-weight channel") {

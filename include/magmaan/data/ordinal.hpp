@@ -36,9 +36,10 @@ struct OrdinalStats {
   std::vector<Eigen::MatrixXd> moment_influence;
 
   // 0-based integer category data (n_b × p), one matrix per block, -1 for
-  // missing. Carried so the IJ can finite-difference ∂Γ̂/∂κ (the "bread" piece of
-  // the weight influence): perturb thresholds/polychorics κ and recompute NACOV
-  // from this data via `ordinal_gamma_diag_jacobian_fd`. Empty when not computed.
+  // missing in observed/pairwise-overlap blocks. Carried so the IJ can
+  // finite-difference ∂Γ̂/∂κ (the "bread" piece of the weight influence):
+  // perturb thresholds/polychorics κ and recompute NACOV from this data via the
+  // complete or observed Gamma Jacobian helpers. Empty when not computed.
   std::vector<Eigen::MatrixXi> int_data;
 
   // Stage-1 estimating-equation Jacobian inverse B_inv (m × m, one per block):
@@ -327,6 +328,23 @@ ordinal_gamma_jacobian_fd(const Eigen::MatrixXi& Xcat,
                           const Eigen::MatrixXd& R,
                           double h_rel = 1e-4);
 
+// Pairwise-overlap analogue of `ordinal_gamma_diag_jacobian_fd` for
+// missing-coded all-ordinal data (`-1` means missing). The observed missing
+// pattern is held fixed while κ is perturbed.
+post_expected<Eigen::MatrixXd>
+ordinal_observed_gamma_diag_jacobian_fd(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R,
+    double h_rel = 1e-4);
+
+// Pairwise-overlap analogue of `ordinal_gamma_jacobian_fd` for missing-coded
+// all-ordinal data (`-1` means missing).
+post_expected<Eigen::MatrixXd>
+ordinal_observed_gamma_jacobian_fd(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R,
+    double h_rel = 1e-4);
+
 // Per-case DATA-DIRECT influence of the NACOV diagonal: row i, col k is
 // IF_i(NACOV_kk) holding κ fixed -- the full sandwich influence of
 // Γ̂ = Â⁻¹V̂Â⁻¹ at case i (V̂-direct + Â-direct, i.e. score-product AND
@@ -350,6 +368,20 @@ ordinal_gamma_data_influence(const Eigen::MatrixXi& Xcat,
                              const std::vector<std::int32_t>& levels,
                              const Eigen::VectorXd& thresholds,
                              const Eigen::MatrixXd& R);
+
+// Pairwise-overlap analogue of `ordinal_gamma_diag_data_influence` for
+// missing-coded all-ordinal data (`-1` means missing). Returns n × m rows.
+post_expected<Eigen::MatrixXd>
+ordinal_observed_gamma_diag_data_influence(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R);
+
+// Pairwise-overlap analogue of `ordinal_gamma_data_influence` for
+// missing-coded all-ordinal data (`-1` means missing). Returns n × (m*m) rows.
+post_expected<Eigen::MatrixXd>
+ordinal_observed_gamma_data_influence(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R);
 
 // Mixed continuous/ordinal analogue of `ordinal_gamma_diag_jacobian_fd`.
 // The differentiated moment order is MixedOrdinalStats::moments:

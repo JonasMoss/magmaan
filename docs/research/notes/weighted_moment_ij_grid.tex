@@ -415,18 +415,22 @@ The current primitive assumes disjoint blocks: it sums $V_b\T V_b$ inside each
 block. Pairwise missingness has overlapping supports. The correct object is one
 case-aligned sparse row vector over the full moment stack, with zeros for
 unobserved moment components and the right $N/n_{jk}$ scaling for each
-pair-local estimator. The all-ordinal overlap-Gamma ULS slice has landed:
-\path{ordinal_stats_from_observed_integer_data(..., Overlap)} now materializes
-these rows and gates
+pair-local estimator. The all-ordinal overlap-Gamma slice has landed:
+\path{ordinal_stats_from_observed_integer_data(..., Overlap)} materializes
+these rows, carries the missing-coded integer block, and gates
 \[
   N^{-1}\sum_i g_i g_i\T = \widehat\Gamma_{\mathrm{overlap}} .
 \]
-Because ULS has $\dot W_i=0$, \path{robust_ordinal_ij} can consume the rows
+Because ULS has $\dot W_i=0$, \path{robust_ordinal_ij} consumes the rows
 directly and reduces to the observed-bread fixed-weight sandwich under MCAR or
-any pairwise-deletion pattern. The nominal-Gamma variant is an elementwise
-support rescaling and is therefore not represented as casewise IF rows.
-Estimated-weight DWLS/WLS for pairwise-missing ordinal/polyserial still needs a
-matching pairwise-aware $\dot\Gamma_i$ channel; the remaining gates are
+any pairwise-deletion pattern. For DWLS and WLS, the observed Gamma helpers
+reuse the same missing pattern at fixed $\kappa$: unsupported score components
+and case-bread entries are zero, while observed threshold and pairwise
+polychoric pieces contribute to $\dot V_i$, $\dot A_i$, and the
+finite-difference $\partial\Gamma/\partial\kappa$ channel. The nominal-Gamma
+variant is an elementwise support rescaling and is therefore not represented as
+casewise IF rows. Mixed ordinal/polyserial MCAR still needs the same
+support-aligned row and $\dot\Gamma_i$ construction; the remaining gates are
 case-weight finite differences for $\dot\Gamma_i$, MCAR simulation against a
 case-resampling jackknife, and equality of pairwise-overlap covariance to the
 existing NACOV.

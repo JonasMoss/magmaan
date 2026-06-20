@@ -323,6 +323,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `ordinal_stats_from_observed_integer_data(..., Overlap)`; tests gate
     complete-data reduction, `G'G/N == NACOV`, and observed-bread ULS reduction
     under deterministic MCAR.
+    All-ordinal MCAR/pairwise-overlap DWLS/WLS IJ **landed 2026-06-20** by
+    adding support-aware observed Gamma data-influence and Jacobian helpers;
+    tests gate missing-pattern case-weight finite differences, complete-data
+    reduction, and deterministic-MCAR DWLS/WLS fit-level IJ execution.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; replace the ML2S missing-data
@@ -331,9 +335,8 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     frontier path becomes performance-critical;
     the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
-    covered by complete continuous LS; MCAR/pairwise-missing all-ordinal
-    DWLS/WLS (derive pairwise-aware diagonal/dense `IF(Gamma)`), then
-    mixed/polyserial MCAR with the same support-aligned rows.
+    covered by complete continuous LS; mixed/polyserial MCAR with the same
+    support-aligned rows and estimated-Gamma influence.
   - **Analytic moment-Hessian remainder**: complete continuous LS now has the
     closed-form observed bread. Still derive/code the mixed ordinal/polyserial
     analogue and any MCAR sparse-moment analogue; FD should remain the
