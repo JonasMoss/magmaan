@@ -1,0 +1,509 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Higher-Order Asymptotics of the Discrepancy Function\\
+under Fixed Model and Distributional Misspecification}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\rmsea}{\widehat{\varepsilon}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The companion note \texttt{rmsea\_asymptotics.tex} fixes the meaning of RMSEA by
+a Pitman drift: the misspecification is sent to zero at the $\sqrt n$ rate so the
+test statistic converges to a (noncentral) $\chi^2$ and the noise inflation is
+the first-order Satorra--Bentler trace $\tr(U\Gamma)$. This note drops the drift.
+It expands the fitted discrepancy $\hat F$ to order $n^{-1}$ under
+\emph{fixed} misspecification in both the covariance structure ($\sigma_0$ off
+the model) and the distribution ($\Gamma\ne$ normal theory), for a general
+minimum-discrepancy estimator. The point is to see what the local sequence
+silently discards and to ask whether GLS-RMSEA differs from normal-theory RMSEA
+at all once the drift is removed.
+
+The single result is the bias expansion
+\begin{equation}\label{eq:headline}
+  \E[\hat F] \;=\; F_0 \;+\; \frac1n\Big[\;\underbrace{\tr(\tilde U\Gamma)}_{\text{generalized }df}
+  \;+\; \underbrace{\beta_W}_{\text{weight influence, }\propto e}\;\Big] \;+\; o(n^{-1}),
+\end{equation}
+with two objects that the drift kills. The trace carries the
+\emph{curvature-corrected} residual-weight matrix
+$\tilde U = V - V\dot\sigma B^{-1}\dot\sigma'V$, built from the population
+\emph{Hessian} $B=A-K$ of the discrepancy rather than its Gauss--Newton part
+$A=\dot\sigma'V\dot\sigma$; the two agree only when the residual--curvature
+coupling $K$ vanishes (correct specification, or a model linear in $\theta$). The
+remainder $\beta_W$ is the influence of an estimated weight; it is identically
+zero for a fixed weight (ULS) and vanishes as the residual $e\to0$ for any
+estimator. Three corollaries read off \eqref{eq:headline}: a
+curvature-corrected, robust bias correction for RMSEA
+(Corollary~\ref{cor:bias}); an honest Wald confidence interval that needs no
+noncentral-$\chi^2$ inversion (Corollary~\ref{cor:ci}); and the ML/GLS/ULS
+comparison (Section~\ref{sec:estimators}).
+
+Two structural remarks orient the rest. First, $\tilde U$ uses the Hessian $B$
+where the first-order projector $U$ uses $A$; this is the fit-index sibling of
+the observed-Hessian bread that replaces Fisher information in the
+misspecification-robust standard errors of \texttt{misspec\_observed\_bread.tex},
+and $\beta_W$ is the fit-index sibling of the data-dependent-weight meat term
+there. Both corrections are zero at $H_0$ and leading-order off it; the
+order-promotion is the same theorem twice. Second, in the language of
+\texttt{aic\_tic\_rmsea\_bias.tex}, $\tr(\tilde U\Gamma)$ is to $\tr(U\Gamma)$ as
+TIC's $\tr(I^{-1}J)$ is to AIC's $k$, and then one order deeper: the curvature
+term is a correction past even the first-order robust (TIC-like) trace.
+
+\section{Setup}\label{sec:setup}
+
+Stack the $p^\ast=p(p{+}1)/2$ distinct sample covariances as $s=\vech\hat\Sigma$
+(append means for a mean structure; the algebra is unchanged), with population
+limit $s\pto\sigma_0$ and
+\begin{equation}\label{eq:clt}
+  z := \sqrt n\,(s-\sigma_0)\dto N(0,\Gamma),
+\end{equation}
+$\Gamma$ the asymptotic covariance of the moments, normal-theory or not. The
+model is a smooth map $\theta\mapsto\sigma(\theta)$, $\theta\in\mathbb R^t$,
+$df=p^\ast-t$. A minimum-discrepancy estimator minimizes a quadratic form in the
+residual $r(\theta)=s-\sigma(\theta)$,
+\begin{equation}\label{eq:disc}
+  \hat F = \min_\theta\; r(\theta)'\hat V\,r(\theta),
+  \qquad \hat V\pto V,
+\end{equation}
+with weight $\hat V$ either fixed (ULS) or a smooth function of the data (GLS).
+Maximum likelihood is not exactly of this form; it is treated as the reweighted
+limit in Section~\ref{sec:estimators}.
+
+\paragraph{Pseudo-true value and population residual.}
+Let
+\begin{equation}\label{eq:pseudotrue}
+  \theta_\ast = \argmin_\theta\,(\sigma_0-\sigma(\theta))'V(\sigma_0-\sigma(\theta)),
+  \qquad e := \sigma_0-\sigma(\theta_\ast),\qquad F_0=e'Ve.
+\end{equation}
+Write $\dot\sigma=\partial\sigma/\partial\theta'$ at $\theta_\ast$
+($p^\ast\times t$, full column rank) and the model Hessian tensor
+$\ddot\sigma$, $(\ddot\sigma)_{a,ij}=\partial^2\sigma_a/\partial\theta_i\partial\theta_j$.
+The first-order condition for \eqref{eq:pseudotrue} is the $V$-orthogonality of
+the residual to the tangent space,
+\begin{equation}\label{eq:popfoc}
+  \dot\sigma'V e = 0 .
+\end{equation}
+Under correct specification $e=0$; under fixed misspecification $e=O(1)$ and
+\eqref{eq:popfoc} is all that survives of it.
+
+\paragraph{Curvature objects.}
+Define the Gauss--Newton matrix, the residual--curvature coupling, and the
+population Hessian of the discrepancy,
+\begin{equation}\label{eq:ABK}
+  A := \dot\sigma'V\dot\sigma,
+  \qquad
+  K_{ij} := (Ve)'(\ddot\sigma)_{:,ij}=\sum_a (Ve)_a(\ddot\sigma)_{a,ij},
+  \qquad
+  B := A-K = \tfrac12\,\partial^2_{\theta\theta}\big(e'Ve\big).
+\end{equation}
+$K$ is the only object in \eqref{eq:ABK} that requires both a nonzero residual
+($Ve$) and a curved model ($\ddot\sigma\ne0$); it is the misspecification
+signature. With $B$ in hand define the standard residual projector and its
+curvature-corrected analogue
+\begin{equation}\label{eq:Utilde}
+  U := V-V\dot\sigma A^{-1}\dot\sigma'V,
+  \qquad
+  \tilde U := V-V\dot\sigma B^{-1}\dot\sigma'V = V-VPV,\quad P:=\dot\sigma B^{-1}\dot\sigma'.
+\end{equation}
+$U$ is a genuine residual projector ($U\dot\sigma=0$, idempotent in the
+$V$-metric); $\tilde U$ is a perturbation of it that no longer annihilates the
+tangent ($\tilde U\dot\sigma=-V\dot\sigma B^{-1}K$), reducing to $U$ as $K\to0$.
+$U$ is the object of every limit law in the drift regime
+(\texttt{rmsea\_asymptotics.tex}); $\tilde U$ is its fixed-misspecification
+replacement.
+
+\paragraph{Weight fluctuation.}
+For an estimated weight expand
+\begin{equation}\label{eq:weightexp}
+  \hat V = V + n^{-1/2}\dot V + \tfrac12 n^{-1}\ddot V + o_p(n^{-1}),
+\end{equation}
+where $\dot V=O_p(1)$ is linear in $z$ (the derivative of the weight map along
+the moment fluctuation) and $\ddot V=O_p(1)$ is the second-order term. Write the
+residual-projected weight fluctuation
+\begin{equation}\label{eq:w}
+  w := \dot V\,e,
+\end{equation}
+an $O_p(1)$ vector that is identically zero for a fixed weight and is $O(\|e\|)$
+otherwise. For GLS, $\dot V$ is driven by the raw moment fluctuation $z$; for ML,
+by the projected fluctuation $\dot\sigma\,(\hat\theta-\theta_\ast)$
+(Section~\ref{sec:estimators}).
+
+\section{The stochastic expansion}
+
+\begin{theorem}[Second-order expansion of $\hat F$]\label{thm:main}
+Assume \eqref{eq:clt}, identification ($\dot\sigma$ full rank, $B$ nonsingular),
+a weight that does not depend on $\theta$ (ULS, GLS, or any fixed/data weight),
+and the usual smoothness. Then
+\begin{equation}\label{eq:expansion}
+  \hat F = F_0
+  + n^{-1/2}\,\big(2e'Vz + e'\dot V e\big)
+  + n^{-1}\,\Phi
+  + o_p(n^{-1}),
+\end{equation}
+with
+\begin{equation}\label{eq:Phi}
+  \Phi = z'\tilde U z
+       \;+\; 2\,w'(I-PV)z
+       \;-\; w'Pw
+       \;+\; \tfrac12\,e'\ddot V e .
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Write $u=\hat\theta-\theta_\ast=O_p(n^{-1/2})$ and split it as
+$u=n^{-1/2}\xi+O_p(n^{-1})$. Expand the residual at the estimator,
+\[
+  r(\hat\theta)=e+\rho_1+\rho_2+o_p(n^{-1}),\quad
+  \rho_1=n^{-1/2}z-\dot\sigma\,u,\quad
+  \rho_2=-\tfrac12\,(\ddot\sigma)[u,u],
+\]
+where $(\ddot\sigma)[u,u]$ has $a$-component $u'(\ddot\sigma)_{:,a}u$. The
+estimating equation $\dot\sigma(\hat\theta)'\hat V r(\hat\theta)=0$, expanded to
+$O_p(n^{-1/2})$ with $\dot\sigma(\hat\theta)=\dot\sigma+(\ddot\sigma)[u,\cdot]$
+and \eqref{eq:weightexp}, gives after using \eqref{eq:popfoc}
+\[
+  -A\,u + (\ddot\sigma)[u,\cdot]'Ve + n^{-1/2}\dot\sigma'Vz + n^{-1/2}\dot\sigma'\dot V e = o_p(n^{-1/2}).
+\]
+The second term is $Ku$ by \eqref{eq:ABK}; collecting,
+\begin{equation}\label{eq:xi}
+  (A-K)\,u = n^{-1/2}\dot\sigma'(Vz+\dot V e)+o_p(n^{-1/2})
+  \;\Longrightarrow\;
+  \xi = B^{-1}\dot\sigma'(Vz+w),\quad u=n^{-1/2}\xi.
+\end{equation}
+The weight fluctuation enters $\xi$ only through $w=\dot V e$, hence only under
+misspecification. Now substitute into
+$\hat F=(e+\rho)'\hat V(e+\rho)$, $\rho=\rho_1+\rho_2$, and use
+\eqref{eq:popfoc} twice. The cross term with $\rho_1$ collapses to the linear
+part,
+$2e'V\rho_1=2n^{-1/2}e'Vz$ (the $\dot\sigma u_1$ piece dies by
+\eqref{eq:popfoc}); the cross term with $\rho_2$ kills the second-order
+parameter increment and leaves only curvature,
+$2e'V\rho_2=-u'Ku$; and $e'\hat V e$ contributes the weight terms
+$n^{-1/2}e'\dot V e+\tfrac12 n^{-1}e'\ddot V e$. Together with
+$\rho_1'V\rho_1=n^{-1}(z'Vz-2\xi'\dot\sigma'Vz+\xi'A\xi)$ and the
+$\dot V$--$\rho_1$ cross term $2n^{-1}\,w'\!\big(z-\dot\sigma\xi\big)$, the
+$O(n^{-1})$ part is
+\[
+  \Phi = z'Vz - 2\xi'\dot\sigma'Vz + \xi'B\xi + 2w'(z-\dot\sigma\xi) + \tfrac12 e'\ddot V e,
+\]
+where $\xi'A\xi-u'Ku/n^{-1}$ combined to $\xi'B\xi$. Insert
+$\xi=B^{-1}\dot\sigma'(Vz+w)$. With $P=\dot\sigma B^{-1}\dot\sigma'$ one gets
+$\xi'B\xi=(Vz+w)'P(Vz+w)$, $\xi'\dot\sigma'Vz=(Vz+w)'PVz$ and
+$\dot\sigma\xi=P(Vz+w)$. Expanding and cancelling,
+\[
+  \Phi = z'(V-VPV)z + 2w'(I-PV)z - w'Pw + \tfrac12 e'\ddot V e,
+\]
+which is \eqref{eq:Phi} with $\tilde U=V-VPV$.
+\end{proof}
+
+\begin{remark}[The cancellation is the content]
+Everything hinges on the population FOC \eqref{eq:popfoc}. It removes the
+tangent-direction sampling noise from the linear term (leaving $2e'Vz=2e'Uz$,
+since $e'V=e'U$ by \eqref{eq:popfoc}) and removes the second-order parameter
+increment $u_2$ from the bias, so the bias needs $\xi$ only to first order. What
+remains is genuinely a residual-space object, projected by $\tilde U$.
+\end{remark}
+
+\section{Bias and the curvature-corrected df}
+
+\begin{corollary}[Generalized degrees of freedom]\label{cor:bias}
+Under the conditions of Theorem~\ref{thm:main},
+\begin{equation}\label{eq:bias}
+  \E[\hat F]=F_0+\frac1n\big[\tr(\tilde U\Gamma)+\beta_W\big]+o(n^{-1}),
+  \qquad
+  \beta_W=2\E\!\big[w'(I-PV)z\big]-\E\!\big[w'Pw\big]+\tfrac12 e'\E[\ddot V]\,e .
+\end{equation}
+For a fixed weight $\beta_W\equiv0$; for any estimator $\beta_W=O(\|e\|)$, so it
+vanishes at $H_0$. Under correct specification $e=0$, $K=0$, $\tilde U=U$ and
+\eqref{eq:bias} reduces to $\E[\hat F]=\tr(U\Gamma)/n+o(n^{-1})$, the
+Satorra--Bentler mean $c\,df=\tr(U\Gamma)$ of \texttt{rmsea\_asymptotics.tex},
+which is $df$ when $V=\Gamma^{-1}$.
+\end{corollary}
+
+\begin{proof}
+Take expectations in \eqref{eq:expansion}. The $n^{-1/2}$ term has mean zero
+($\E z=0$, $\E\dot V=0$). For the $n^{-1}$ term, $\E[z'\tilde Uz]=\tr(\tilde
+U\Gamma)$ by the quadratic-form mean and the remaining terms define $\beta_W$.
+\end{proof}
+
+The estimand correction therefore generalizes the chain
+\[
+  df \;\longrightarrow\; \tr(U\Gamma)\;\longrightarrow\;\tr(\tilde U\Gamma)+\beta_W,
+\]
+in increasing order of fidelity: $df$ assumes a correctly weighted, correctly
+distributed null; $\tr(U\Gamma)$ allows distributional misspecification but
+freezes the model at its tangent; $\tr(\tilde U\Gamma)+\beta_W$ allows fixed
+structural misspecification, correcting the projector for curvature and adding
+the weight influence. A curvature-and-weight corrected RMSEA is
+\begin{equation}\label{eq:rmseacorr}
+  \rmsea_{\mathrm{ho}}
+  = \sqrt{\max\!\Big(\frac{\hat F}{df}
+      - \frac{\tr(\hat{\tilde U}\hat\Gamma)+\hat\beta_W}{n\,df},\,0\Big)} .
+\end{equation}
+
+\begin{remark}[Curvature is real for SEM]
+$K\ne0$ requires $\ddot\sigma\ne0$. Factor and path models are nonlinear in
+$\theta$ (loadings multiply, paths compose), so $\ddot\sigma\ne0$ generically and
+the curvature term is present whenever the model is wrong. It vanishes for models
+linear in $\theta$ (e.g.\ a free covariance matrix with linear equality
+constraints), where $\tilde U=U$ exactly even under misspecification.
+\end{remark}
+
+\section{The honest interval}
+
+\begin{corollary}[CLT and Wald interval, no noncentral inversion]\label{cor:ci}
+If $F_0>0$, then from \eqref{eq:expansion}
+\begin{equation}\label{eq:clt2}
+  \sqrt n\,(\hat F-F_0)\dto N(0,\omega^2),
+  \qquad
+  \omega^2=\Var\!\big(2e'Vz+e'\dot V e\big)=(2Ve+v_e)'\Gamma(2Ve+v_e),
+\end{equation}
+where $v_e$ is the vector representing the linear functional $z\mapsto e'\dot V
+e=v_e'z$; for a fixed weight $v_e=0$ and $\omega^2=4e'V\Gamma Ve=4e'U\Gamma Ue$.
+By the delta method, with $\varepsilon=\sqrt{F_0/df}$,
+\begin{equation}\label{eq:rmseaclt}
+  \sqrt n\,(\rmsea-\varepsilon)\dto N\!\Big(0,\;\frac{\omega^2}{4\,df\,F_0}\Big),
+\end{equation}
+giving a Wald interval for $\varepsilon$ directly on the discrepancy scale.
+\end{corollary}
+
+Equation \eqref{eq:rmseaclt} is the fixed-misspecification interval: under a
+genuinely wrong model the statistic is asymptotically normal, not noncentral
+$\chi^2$, and the interval is a plain sandwich, not a CDF inversion. It
+complements rather than replaces the noncentral interval of
+\texttt{rmsea\_asymptotics.tex}: that one is built for the near-null regime
+($F_0\downarrow0$) where \eqref{eq:rmseaclt} degenerates ($\omega^2/F_0$ blows
+up), while \eqref{eq:rmseaclt} is built for clearly-misspecified models where the
+noncentral inversion is least trustworthy. The crossover is exactly where
+neither device is comfortable, which is the honest statement of where RMSEA
+interval coverage is hard.
+
+\section{What the drift discards}
+
+Put back the Pitman sequence $e_n=n^{-1/2}\delta$ with $\delta$ a fixed off-model
+direction, the regime of \texttt{rmsea\_asymptotics.tex}. Then $Ve_n=O(n^{-1/2})$
+so $K=O(n^{-1/2})\to0$, hence $B\to A$ and $\tilde U\to U$; the weight influence
+$w=\dot V e_n=O_p(n^{-1/2})\to0$, so $\beta_W\to0$; and the normal CLT
+\eqref{eq:clt2} degenerates while $n\hat F$ acquires the (noncentral) $\chi^2$
+limit. The drift annihilates precisely the two corrections this note is about.
+
+\begin{center}
+\begin{tabular}{p{0.27\linewidth}p{0.32\linewidth}p{0.31\linewidth}}
+ & fixed misspecification ($e=O(1)$) & Pitman drift ($e=n^{-1/2}\delta$)\\
+\hline
+limit law of $\hat F$ & normal, $\sqrt n(\hat F-F_0)\dto N(0,\omega^2)$ &
+$n\hat F\dto$ (noncentral) $\chi^2$ mixture\\
+noise/bias mean & $\tr(\tilde U\Gamma)$, curvature-corrected &
+$\tr(U\Gamma)=c\,df$, no curvature\\
+weight influence $\beta_W$ & $O(\|e\|)$, present & $\to0$\\
+ML vs GLS & differ (pseudo-true, $\beta_W$) & coincide to leading order\\
+interval & Wald via $\omega^2$ \eqref{eq:rmseaclt} & noncentral-$\chi^2$ inversion\\
+\end{tabular}
+\end{center}
+
+The local-asymptotics motivation is not wrong; it is a deliberate choice to work
+in the only regime where the $df$ subtraction is exact and the curvature and
+weight terms are negligible. Outside it, those terms are the leading description
+of a wrong model's fit.
+
+\section{ML, GLS, ULS}\label{sec:estimators}
+
+The three estimators share the quadratic-form weight at the data limit,
+$V=\tfrac12 D'(\Sigma_0^{-1}\otimes\Sigma_0^{-1})D$ for ML and GLS and $V=\tfrac12
+D'D$ for ULS, but they differ in where the weight is anchored, and this is what
+separates their RMSEAs once the drift is gone.
+
+\paragraph{ULS.} Fixed weight, $\dot V=0$, so $\beta_W\equiv0$ and the bias is
+purely $\tr(\tilde U\Gamma)/n$. ULS is never efficient, so $\tr(U\Gamma)\ne df$
+already at leading order regardless of normality; the curvature term is then a
+clean second correction with no weight bookkeeping. This is the cleanest place to
+exhibit $\tilde U\ne U$.
+
+\paragraph{GLS.} Weight $\hat V=V(s)$ at the sample moments, so $\dot V$ is the
+derivative of $V(\cdot)$ along the \emph{raw} fluctuation $z$. The full $\beta_W$
+is present, leading-order in the residual through the cross term
+$2\E[w'(I-PV)z]$, and $\omega^2$ in \eqref{eq:clt2} acquires the $v_e$ term.
+
+\paragraph{ML.} The ML discrepancy is not a fixed quadratic; its estimating
+equation is the reweighted normal equation
+$\dot\sigma'V(\sigma(\theta))\,(\sigma_0-\sigma(\theta))=0$ with the weight
+anchored at the \emph{fitted model} $\Sigma(\theta)$. Two consequences. First,
+the pseudo-true value solves a model-metric projection, so under fixed
+misspecification $\theta_\ast^{\mathrm{ML}}\ne\theta_\ast^{\mathrm{GLS}}$ and
+$F_0^{\mathrm{ML}}\ne F_0^{\mathrm{GLS}}$: ML-RMSEA and GLS-RMSEA estimate
+\emph{different population numbers}, already at zeroth order, because they measure
+misfit in different metrics (Olsson, Foss, Troye and Howell
+\cite{olssonetal2000}). Second, the $\theta$-dependence of the weight adds a
+discrepancy-curvature term $K_F$ to $B$ (a third derivative of $F_{\mathrm{ML}}$),
+and routes the weight fluctuation through the projected increment
+$\dot\sigma(\hat\theta-\theta_\ast)$ rather than the raw $z$. All three effects
+collapse under correct specification ($\sigma(\theta_\ast)=\sigma_0$, $e=0$),
+where ML, GLS and ULS coincide to the order that matters.
+
+So the answer to ``does GLS-RMSEA do anything that normal-theory RMSEA does
+not'' is yes, and sharper than expected: under fixed misspecification the two
+already target different estimands (different metric), and on top of that carry
+different $O(1/n)$ biases through $\beta_W$ and $B$. Under the drift, all of this
+disappears and the classical equivalence is restored. The daylight between
+estimators lives entirely in the fixed-misspecification, higher-order regime.
+
+\section{Numerical check}
+
+For ULS the weight is fixed, so $\beta_W\equiv0$ and Corollary~\ref{cor:bias}
+predicts $N\,(\E[\hat F]-F_0)\to\tr(\tilde U\Gamma)$ exactly, isolating the new
+object $\tilde U$. A one-factor model is fit to data from a two-factor population
+(six indicators, three per factor, factor correlation $0.55$), a misspecification
+the one-factor model cannot absorb: $df=9$, $F_0=0.231$, $\|e\|=0.48$, curvature
+coupling $\|K\|=0.68$. The table reports $N$ times the Monte-Carlo bias of
+$\hat F$ against the naive $\tr(U\Gamma)$ (Gauss--Newton $A$) and the
+curvature-corrected $\tr(\tilde U\Gamma)$ (Hessian $B$). The sample covariance is
+the unbiased $\div(N{-}1)$ form; the $\div N$ form carries its own $O(1/N)$
+moment bias which contaminates exactly this order. Under normality
+$\Gamma=\Gamma_{\mathrm{NT}}$ is closed form; under $t_6$ data $\Gamma$ is a
+Monte-Carlo estimate.
+
+\begin{center}
+\begin{tabular}{llccc}
+data & $N$ & $N\,(\E[\hat F]-F_0)$ (MC se) & naive $\tr(U\Gamma)$ & corrected $\tr(\tilde U\Gamma)$\\
+\hline
+normal & $200$ & $2.20\ (0.05)$ & $3.38$ & $\mathbf{2.26}$\\
+normal & $800$ & $2.24\ (0.10)$ & $3.38$ & $\mathbf{2.26}$\\
+$t_6$  & $200$ & $4.26\ (0.08)$ & $7.00$ & $\mathbf{4.74}$\\
+$t_6$  & $800$ & $4.60\ (0.16)$ & $7.00$ & $\mathbf{4.74}$\\
+\end{tabular}
+\end{center}
+
+Every cell matches the curvature-corrected trace and rejects the naive one: at
+$N=800$ the empirical bias sits within one Monte-Carlo standard error of
+$\tr(\tilde U\Gamma)$ in both data conditions, while $\tr(U\Gamma)$ is wrong by
+the full gap (more than twenty standard errors at $N=200$, normal). The small
+$N=200$ shortfall in the $t_6$ cell is the expected $O(1/N)$ remainder, which
+closes by $N=800$. The curvature term is not a third-decimal refinement: it is a
+third to a half of the entire bias. Script:
+\texttt{higher\_order\_discrepancy\_check.py}.
+
+\section{Connections and caveats}
+
+\begin{remark}[Hessian bread, weight meat: the SE sibling]
+$\tilde U$ uses the population Hessian $B=A-K$ where $U$ uses the Gauss--Newton
+$A$; under correct specification $K=0$ and they agree, the discrepancy-function
+analogue of the information equality. This is the same substitution that the
+misspecification-robust standard errors of \texttt{misspec\_observed\_bread.tex}
+make when they replace the Fisher bread by the observed Hessian, and $\beta_W$ is
+the fit-index counterpart of their data-dependent-weight meat term. Both
+corrections are $O(\|e\|)$, hence zero at $H_0$ and leading-order off it: the
+order-promotion (Newey--McFadden null irrelevance, Hall--Inoue off-null
+promotion) is one phenomenon appearing in the variance there and in the bias
+here.
+\end{remark}
+
+\begin{remark}[TIC analogy, one order deeper]
+\texttt{aic\_tic\_rmsea\_bias.tex} reads $df$ as the AIC penalty and notes the
+robust trace as its TIC analogue. Here $\tr(U\Gamma)$ is that TIC-like trace
+(first order), and $\tr(\tilde U\Gamma)+\beta_W$ is the next order. The user's
+instinct stands: the $df$ correction is AIC-like (a fixed integer), the robust
+trace is TIC-like (a sandwich trace), and the practical complaint about TIC, that
+$\tr(\hat I^{-1}\hat J)$ is noisy because $\hat J$ is a fourth-moment object,
+transfers verbatim: $\tr(\hat{\tilde U}\hat\Gamma)$ inherits the sampling
+variance of $\hat\Gamma$. The higher-order expansion is what lets one judge the
+trade: when $\|e\|$ and the kurtosis are small the AIC-like $df$ is nearly
+unbiased and lower variance; when they are not, the bias of the cheap correction
+is exactly \eqref{eq:bias} and may dominate. A structured (model-implied or
+shrunk) $\hat\Gamma$ is the natural middle estimator, the RMSEA analogue of a
+regularized TIC.
+\end{remark}
+
+\begin{remark}[Caveats]
+The truncation $\max(\cdot,0)$ in \eqref{eq:rmseacorr} re-introduces an
+$O(n^{-1/2})$ bias near $F_0=0$, where the fixed-misspecification expansion is
+least relevant and the near-null device should take over. The ML term $K_F$ and
+the projected weight fluctuation are stated, not derived; the full ML expansion
+needs the third derivative of $F_{\mathrm{ML}}$ and is left for the numerical
+companion. The expansion assumes finite fourth moments for $\Gamma$ and finite
+sixth moments for the $n^{-1}$ bias to have finite expectation; under heavier
+tails \eqref{eq:bias} is a stochastic-order statement, not a moment statement.
+\end{remark}
+
+\begin{thebibliography}{9}
+
+\bibitem{browne1984}
+Browne, M. W. (1984).
+Asymptotically distribution-free methods for the analysis of covariance
+structures.
+\emph{British Journal of Mathematical and Statistical Psychology}, 37(1),
+62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{olssonetal2000}
+Olsson, U. H., Foss, T., Troye, S. V., \& Howell, R. D. (2000).
+The performance of ML, GLS, and WLS estimation in structural equation modeling
+under conditions of misspecification and nonnormality.
+\emph{Structural Equation Modeling}, 7(4), 557--595.
+\href{https://doi.org/10.1207/S15328007SEM0704_3}{doi:10.1207/S15328007SEM0704\_3}.
+
+\bibitem{satorra1989}
+Satorra, A. (1989).
+Alternative test criteria in covariance structure analysis: A unified approach.
+\emph{Psychometrika}, 54(1), 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{satorrabentler1994}
+Satorra, A., \& Bentler, P. M. (1994).
+Corrections to test statistics and standard errors in covariance structure
+analysis. In A. von Eye \& C. C. Clogg (Eds.), \emph{Latent Variables Analysis}
+(pp.\ 399--419). Sage.
+
+\bibitem{shapiro1983}
+Shapiro, A. (1983).
+Asymptotic distribution theory in the analysis of covariance structures (a
+unified approach).
+\emph{South African Statistical Journal}, 17(1), 33--81.
+
+\bibitem{shapiro2007}
+Shapiro, A. (2007).
+Statistical inference of moment structures. In S.-Y. Lee (Ed.),
+\emph{Handbook of Latent Variable and Related Models} (pp.\ 229--260). Elsevier.
+\href{https://doi.org/10.1016/B978-044452044-9/50013-9}{doi:10.1016/B978-044452044-9/50013-9}.
+
+\bibitem{white1982}
+White, H. (1982).
+Maximum likelihood estimation of misspecified models.
+\emph{Econometrica}, 50(1), 1--25.
+\href{https://doi.org/10.2307/1912526}{doi:10.2307/1912526}.
+
+\bibitem{yuanhayashibentler2007}
+Yuan, K.-H., Hayashi, K., \& Bentler, P. M. (2007).
+Normal theory likelihood ratio statistic for mean and covariance structure
+analysis under alternative hypotheses.
+\emph{Journal of Multivariate Analysis}, 98(6), 1262--1282.
+\href{https://doi.org/10.1016/j.jmva.2006.08.005}{doi:10.1016/j.jmva.2006.08.005}.
+
+\end{thebibliography}
+
+\end{document}
