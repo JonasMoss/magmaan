@@ -22,6 +22,7 @@
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
+#include "detail_second_order.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::estimate {
@@ -50,6 +51,26 @@ using detail::vech_index;
 using detail::vech_len;
 using detail::vech_lower;
 using detail::vech_unpack;
+
+// Convert h so tr(G X) == h^T vech(X) for symmetric X.
+void vech_gradient_to_trace_weight(const Eigen::Ref<const Eigen::VectorXd>& x,
+                                   Eigen::Index p,
+                                   Eigen::Ref<Eigen::MatrixXd> G) {
+  Eigen::Index k = 0;
+  G.setZero();
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      if (r == c) {
+        G(r, c) = x(k);
+      } else {
+        const double half = 0.5 * x(k);
+        G(r, c) = half;
+        G(c, r) = half;
+      }
+      ++k;
+    }
+  }
+}
 
 post_expected<Eigen::MatrixXd> inverse_sym_pd(const Eigen::MatrixXd& A,
                                               const char* what) {
@@ -751,39 +772,110 @@ build_continuous_ls_blocks(const spec::LatentStructure& pt,
   return blocks;
 }
 
-// Per-unit moment-LS gradient g(θ) = Σ_b (n_b/N)·Δ_b(θ)ᵀ W_b d_b(θ) for a
-// continuous moment-quadratic fit (d_b = model − sample, in the [μ; vech Σ]
-// metric). Finite-differenced by `continuous_ls_observed_bread` to form the
-// observed-Hessian bread; the weight W is sample-based and θ-independent.
-post_expected<Eigen::VectorXd>
-continuous_ls_gradient(const model::ModelEvaluator& ev,
-                       const data::SampleStats& samp,
-                       const gmm::Weight& weight,
-                       double N_total,
-                       const Eigen::VectorXd& theta) {
-  auto eval = ev.evaluate(theta, true, true);
+post_expected<Eigen::MatrixXd>
+continuous_ls_observed_bread_analytic(const spec::LatentStructure& pt,
+                                      const model::MatrixRep& rep,
+                                      const data::SampleStats& samp,
+                                      const Estimates& est,
+                                      const gmm::Weight& weight,
+                                      const Eigen::MatrixXd& K) {
+  if (est.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_observed_bread: fitted theta length does not match partable"));
+  }
+  if (K.rows() != est.theta.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_observed_bread: K row count does not match theta length"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
   if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  auto assembled = ev_or->assembled(est.theta);
+  if (!assembled.has_value()) {
+    return std::unexpected(model_to_post(assembled.error()));
+  }
   if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
     return std::unexpected(v.error());
   }
+  if (assembled->blocks.size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_observed_bread: assembled block count does not match sample blocks"));
+  }
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  const double N_total = *n;
   const auto layout = make_layout(samp, eval->moments);
-  Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+  const auto locs = ev_or->param_locations();
+  const Eigen::Index q = est.theta.size();
+  if (locs.size() != static_cast<std::size_t>(q)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_observed_bread: parameter-location count mismatch"));
+  }
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
-    auto Jb = continuous_moment_jacobian_block(layout, eval->moments,
-                                               eval->J_sigma, eval->J_mu, b);
+    auto Jb = continuous_moment_jacobian_block(
+        layout, eval->moments, eval->J_sigma, eval->J_mu, b);
     if (!Jb.has_value()) return std::unexpected(Jb.error());
     auto Wb = weight_block(weight, layout, b);
     if (!Wb.has_value()) return std::unexpected(Wb.error());
-    const Eigen::VectorXd d = continuous_block_residual(samp, eval->moments,
-                                                        layout, b);
+    const Eigen::VectorXd d =
+        continuous_block_residual(samp, eval->moments, layout, b);
+    const Eigen::VectorXd h = (*Wb) * d;
     const double w_b = static_cast<double>(samp.n_obs[b]) / N_total;
-    g.noalias() += w_b * (Jb->transpose() * (*Wb) * d);
+
+    H.noalias() += w_b * (Jb->transpose() * (*Wb) * (*Jb));
+
+    const Eigen::Index p = eval->moments.sigma[b].rows();
+    const Eigen::Index pstar = vech_len(p);
+    const Eigen::Index cov_off = layout.has_means ? p : 0;
+    if (h.size() != layout.block_rows[b] || cov_off + pstar != h.size()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "continuous_ls_observed_bread: residual-gradient shape mismatch in block " +
+              std::to_string(b)));
+    }
+
+    Eigen::MatrixXd G(p, p);
+    vech_gradient_to_trace_weight(h.segment(cov_off, pstar), p, G);
+    const auto sow = detail::SecondOrderWeights::build(
+        std::move(G), assembled->blocks[b], layout.has_means);
+    const auto blk = static_cast<std::int8_t>(b);
+    std::vector<Eigen::Index> block_params;
+    block_params.reserve(locs.size());
+    for (Eigen::Index k = 0; k < q; ++k) {
+      if (locs[static_cast<std::size_t>(k)].block == blk) {
+        block_params.push_back(k);
+      }
+    }
+    for (std::size_t ai = 0; ai < block_params.size(); ++ai) {
+      const Eigen::Index a = block_params[ai];
+      const auto& la = locs[static_cast<std::size_t>(a)];
+      for (std::size_t ci = ai; ci < block_params.size(); ++ci) {
+        const Eigen::Index c = block_params[ci];
+        const auto& lb = locs[static_cast<std::size_t>(c)];
+        double h2 = detail::second_sigma_trace(la, lb, sow,
+                                               assembled->blocks[b]);
+        if (layout.has_means) {
+          h2 += h.head(p).dot(detail::second_mu(la, lb,
+                                                assembled->blocks[b],
+                                                sow.A_alpha));
+        }
+        const double val = w_b * h2;
+        H(a, c) += val;
+        if (a != c) H(c, a) += val;
+      }
+    }
   }
-  if (!g.allFinite()) {
+
+  if (!H.allFinite()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "continuous_ls_gradient: non-finite gradient"));
+        "continuous_ls_observed_bread: non-finite Hessian"));
   }
-  return g;
+  H = 0.5 * (H + H.transpose()).eval();
+  Eigen::MatrixXd Halpha = K.transpose() * H * K;
+  Halpha = 0.5 * (Halpha + Halpha.transpose()).eval();
+  return Halpha;
 }
 
 post_expected<Eigen::MatrixXd>
@@ -793,17 +885,7 @@ continuous_ls_observed_bread(const spec::LatentStructure& pt,
                              const Estimates& est,
                              const gmm::Weight& weight,
                              const Eigen::MatrixXd& K) {
-  auto ev_or = model::ModelEvaluator::build(pt, rep);
-  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  const double N_total = *n;
-  const model::ModelEvaluator ev = std::move(*ev_or);
-  auto grad_at = [&](const Eigen::VectorXd& theta)
-      -> post_expected<Eigen::VectorXd> {
-    return continuous_ls_gradient(ev, samp, weight, N_total, theta);
-  };
-  return observed_moment_bread_fd(grad_at, est.theta, K);
+  return continuous_ls_observed_bread_analytic(pt, rep, samp, est, weight, K);
 }
 
 post_expected<WeightedRobustResult>
