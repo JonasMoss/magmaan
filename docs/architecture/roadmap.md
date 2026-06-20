@@ -1382,9 +1382,13 @@ stop rather than any usable non-error return.
   rows for thresholds, continuous means/variances, polychorics, polyserial
   covariances, and Pearson covariances; the rows reproduce the overlap NACOV
   and let `robust_mixed_ordinal_ij` handle ULS/fixed-weight observed-bread
-  covariance under MCAR. Mixed observed DWLS/WLS still need support-aware
-  observed Gamma-influence helpers. Robust/experimental mixed stage-1 variants
-  need separate Gamma-influence derivations.
+  covariance under MCAR. The same entry point now routes observed mixed DWLS
+  and dense WLS through support-aware observed mixed Gamma data-influence and
+  finite-difference `d Gamma / d kappa` helpers, using NaN-coded raw blocks
+  retained on `MixedOrdinalStats`. The observed helpers reduce to the
+  complete-data mixed helpers and are covered by deterministic MCAR fit-level
+  IJ tests. Robust/experimental mixed stage-1 variants need separate
+  Gamma-influence derivations.
   ML2S now exposes the observed-bread Stage-2 regime through
   `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
   is available as `saturated_em_moment_influence`. Raw complete-data ML2S

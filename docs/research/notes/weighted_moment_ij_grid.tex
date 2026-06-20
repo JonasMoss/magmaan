@@ -469,11 +469,38 @@ delta terms for polyserial and continuous covariances. Thus
   N^{-1}\sum_i g_i g_i\T = \widehat\Gamma_{\mathrm{overlap,mixed}} .
 \]
 \path{mixed_ordinal_stats_from_observed_data} materializes these rows and
-\path{robust_mixed_ordinal_ij} consumes them for ULS/fixed-weight IJ. Mixed
-DWLS/WLS still need support-aware observed mixed $\dot\Gamma_i$ helpers and
-finite-difference $\partial\Gamma/\partial\kappa$ gates; remaining validation is
-case-weight finite differences for that channel plus MCAR simulation against a
-case-resampling jackknife.
+\path{robust_mixed_ordinal_ij} consumes them for ULS/fixed-weight IJ.
+
+For DWLS/WLS, hold the observed missingness pattern fixed and define the
+fixed-$\kappa$ stage sandwich
+\[
+  \Gamma_\theta
+  =
+  N\hat B^{-1}\left(\sum_j s_js_j\T\right)\hat B^{-\T},
+  \qquad
+  \Gamma = H\Gamma_\theta H\T .
+\]
+Let $b_i$ be the case contribution to the block-lower bread: variable-wise
+score outer products on the diagonal, association score squares in $A_{22}$,
+and the pairwise $s_{\rho i}s_{\lambda i}\T$ cross-block row in $A_{21}$, all
+zero outside the observed support for that case. At fixed $\kappa$,
+\[
+  \dot\Gamma_i
+  =
+  g_i g_i\T + \Gamma
+  -
+  N H\left\{
+    \hat B^{-1}b_i\Gamma_\theta
+    + \Gamma_\theta b_i\T\hat B^{-\T}
+  \right\}H\T .
+\]
+The observed mixed DWLS helper returns the diagonal of this matrix and the WLS
+helper returns its column-major vectorization. The missing-data
+$\partial\Gamma/\partial\kappa$ channel is finite-differenced through the same
+support-aware assembly, so the complete estimated-Gamma row is
+$\dot\Gamma_i + (\partial\Gamma/\partial\kappa)g_i$. The implementation gates
+complete-data reduction of the observed helpers, diagonal/full consistency,
+fixed-$\kappa$ centering, and deterministic-MCAR DWLS/WLS fit-level execution.
 
 \section{Verification standard}
 

@@ -3835,7 +3835,7 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
   if (weights != OrdinalWeightKind::ULS &&
       stats.raw_data.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "robust_mixed_ordinal_ij: complete raw mixed data unavailable; "
+        "robust_mixed_ordinal_ij: raw mixed data unavailable; "
         "ordinary ML/polyserial mixed stats are required for estimated-"
         "weight influence"));
   }
@@ -3938,15 +3938,25 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
     const Eigen::VectorXd model_m = mixed_model_moments(
         stats, *layout_or, eval->moments, est.theta, b, parameterization);
     const Eigen::VectorXd d_b = model_m - stats.moments[b];
+    const bool observed_raw =
+        weights == OrdinalWeightKind::ULS ? false : !stats.raw_data[b].allFinite();
     Eigen::MatrixXd correction;
     if (weights == OrdinalWeightKind::DWLS) {
-      auto inf_or = data::mixed_gamma_diag_data_influence(
-          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      auto inf_or = observed_raw
+          ? data::mixed_observed_gamma_diag_data_influence(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b])
+          : data::mixed_gamma_diag_data_influence(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b]);
       if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-      auto D_or = data::mixed_gamma_diag_jacobian_fd(
-          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      auto D_or = observed_raw
+          ? data::mixed_observed_gamma_diag_jacobian_fd(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b])
+          : data::mixed_gamma_diag_jacobian_fd(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b]);
       if (!D_or.has_value()) return std::unexpected(D_or.error());
       if (inf_or->rows() != G.rows() || inf_or->cols() != mb ||
           D_or->rows() != mb || D_or->cols() != mb) {
@@ -3963,13 +3973,21 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
         correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
       }
     } else if (weights == OrdinalWeightKind::WLS) {
-      auto inf_or = data::mixed_gamma_data_influence(
-          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      auto inf_or = observed_raw
+          ? data::mixed_observed_gamma_data_influence(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b])
+          : data::mixed_gamma_data_influence(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b]);
       if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-      auto D_or = data::mixed_gamma_jacobian_fd(
-          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      auto D_or = observed_raw
+          ? data::mixed_observed_gamma_jacobian_fd(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b])
+          : data::mixed_gamma_jacobian_fd(
+                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                stats.thresholds[b], stats.mean[b], stats.R[b]);
       if (!D_or.has_value()) return std::unexpected(D_or.error());
       if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
           D_or->rows() != mb * mb || D_or->cols() != mb) {

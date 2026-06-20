@@ -3116,6 +3116,368 @@ post_expected<MixedGammaAssembly> mixed_gamma_assembly_at_kappa(
   return out;
 }
 
+post_expected<MixedGammaAssembly> mixed_observed_gamma_assembly_at_kappa(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    bool keep_case_bread) {
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  if (n < 2 || p == 0 || R.rows() != p || R.cols() != p ||
+      mean.size() != p || ordered.size() != static_cast<std::size_t>(p) ||
+      levels.size() != static_cast<std::size_t>(p)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "mixed_observed_gamma_assembly_at_kappa: dimension mismatch"));
+  }
+
+  Eigen::Index nth = 0;
+  Eigen::Index n_cont = 0;
+  std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), -1);
+  std::vector<Eigen::Index> th_len(static_cast<std::size_t>(p), 0);
+  std::vector<Eigen::Index> cont_pos(static_cast<std::size_t>(p), -1);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+    if (oj) {
+      const auto lev = levels[static_cast<std::size_t>(j)];
+      if (lev < 2) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "mixed_observed_gamma_assembly_at_kappa: ordered variable has "
+            "fewer than two levels"));
+      }
+      th_start[static_cast<std::size_t>(j)] = nth;
+      th_len[static_cast<std::size_t>(j)] =
+          static_cast<Eigen::Index>(lev - 1);
+      nth += th_len[static_cast<std::size_t>(j)];
+    } else {
+      cont_pos[static_cast<std::size_t>(j)] = n_cont++;
+      if (!(R(j, j) > 0.0) || !std::isfinite(R(j, j)) ||
+          !std::isfinite(mean(j))) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "mixed_observed_gamma_assembly_at_kappa: continuous variable has "
+            "invalid mean/variance"));
+      }
+    }
+  }
+  if (thresholds.size() != nth) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "mixed_observed_gamma_assembly_at_kappa: threshold length mismatch"));
+  }
+
+  Eigen::MatrixXi Xcat = Eigen::MatrixXi::Constant(n, p, -1);
+  Eigen::MatrixXd U = Eigen::MatrixXd::Zero(n, p);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+    if (oj) {
+      const int lev = levels[static_cast<std::size_t>(j)];
+      for (Eigen::Index r = 0; r < n; ++r) {
+        const double v = X(r, j);
+        if (!std::isfinite(v)) continue;
+        if (std::floor(v) != v || v < 1.0 ||
+            v > static_cast<double>(lev)) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "mixed_observed_gamma_assembly_at_kappa: observed ordinal data "
+              "must be 1-based categories within the fitted levels"));
+        }
+        Xcat(r, j) = static_cast<int>(v) - 1;
+      }
+    } else {
+      const double sd = std::sqrt(R(j, j));
+      for (Eigen::Index r = 0; r < n; ++r) {
+        if (std::isfinite(X(r, j))) U(r, j) = (X(r, j) - mean(j)) / sd;
+      }
+    }
+  }
+
+  std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+    th_by_var[static_cast<std::size_t>(j)] =
+        thresholds.segment(th_start[static_cast<std::size_t>(j)],
+                           th_len[static_cast<std::size_t>(j)]);
+  }
+
+  const Eigen::Index s1 = nth + 2 * n_cont;
+  const Eigen::Index n_assoc = p * (p - 1) / 2;
+  const Eigen::Index mdim = s1 + n_assoc;
+
+  Eigen::MatrixXd SC1 = Eigen::MatrixXd::Zero(n, s1);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+      const int c = Xcat(r, j);
+      if (c < 0) continue;
+      const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+      const double lo = (c == 0) ? -kInf : thj(c - 1);
+      const double hi = (c == thj.size()) ? kInf : thj(c);
+      const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+      const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+      if (c < thj.size()) SC1(r, base + c) += normal_pdf(thj(c)) / pr;
+      if (c > 0) SC1(r, base + c - 1) -= normal_pdf(thj(c - 1)) / pr;
+    }
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] != 0) continue;
+    const Eigen::Index cp = cont_pos[static_cast<std::size_t>(j)];
+    const double v = R(j, j);
+    for (Eigen::Index r = 0; r < n; ++r) {
+      if (!std::isfinite(X(r, j))) continue;
+      const double c = X(r, j) - mean(j);
+      SC1(r, nth + cp) = c / v;
+      SC1(r, nth + n_cont + cp) = (c * c - v) / (2.0 * v * v);
+    }
+  }
+
+  const Eigen::MatrixXd INNER1 = SC1.transpose() * SC1;
+  Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(s1, s1);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] != 0) {
+      const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index len = th_len[static_cast<std::size_t>(j)];
+      A11.block(start, start, len, len) =
+          INNER1.block(start, start, len, len);
+    } else {
+      const Eigen::Index mu = nth + cont_pos[static_cast<std::size_t>(j)];
+      const Eigen::Index va =
+          nth + n_cont + cont_pos[static_cast<std::size_t>(j)];
+      A11(mu, mu) = INNER1(mu, mu);
+      A11(va, va) = INNER1(va, va);
+      A11(mu, va) = A11(va, mu) = INNER1(mu, va);
+    }
+  }
+  auto A11_inv_or = symmetric_inverse_pd(
+      A11, "mixed_observed_gamma_assembly_at_kappa A11");
+  if (!A11_inv_or.has_value()) return std::unexpected(A11_inv_or.error());
+
+  Eigen::MatrixXd SC_ASSOC = Eigen::MatrixXd::Zero(n, n_assoc);
+  Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(n_assoc, s1);
+  Eigen::VectorXd A22_diag = Eigen::VectorXd::Ones(n_assoc);
+  std::vector<Eigen::MatrixXd> pair_a21_case;
+  if (keep_case_bread) {
+    pair_a21_case.reserve(static_cast<std::size_t>(n_assoc));
+  }
+
+  Eigen::Index assoc_count = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+      const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+      std::vector<Eigen::Index> rows;
+      rows.reserve(static_cast<std::size_t>(n));
+      for (Eigen::Index r = 0; r < n; ++r) {
+        const bool i_obs = oi ? Xcat(r, i) >= 0 : std::isfinite(X(r, i));
+        const bool j_obs = oj ? Xcat(r, j) >= 0 : std::isfinite(X(r, j));
+        if (i_obs && j_obs) rows.push_back(r);
+      }
+      if (rows.size() < 2) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "mixed_observed_gamma_assembly_at_kappa: pair has fewer than two "
+            "observed rows"));
+      }
+
+      const Eigen::Index np = static_cast<Eigen::Index>(rows.size());
+      Eigen::MatrixXd a21_case;
+      if (keep_case_bread) a21_case = Eigen::MatrixXd::Zero(n, s1);
+
+      if (oi && oj) {
+        Eigen::VectorXi xi(np);
+        Eigen::VectorXi xj(np);
+        for (Eigen::Index r = 0; r < np; ++r) {
+          const Eigen::Index src = rows[static_cast<std::size_t>(r)];
+          xi(r) = Xcat(src, i);
+          xj(r) = Xcat(src, j);
+        }
+        auto ps_or = ordinal_pair_scores(
+            xi, xj, R(i, j), th_by_var[static_cast<std::size_t>(i)],
+            th_by_var[static_cast<std::size_t>(j)]);
+        if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+        const auto& ps = *ps_or;
+        for (Eigen::Index r = 0; r < np; ++r) {
+          SC_ASSOC(rows[static_cast<std::size_t>(r)], assoc_count) =
+              ps.rho(r);
+        }
+        const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
+        const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
+        A21.block(assoc_count, si, 1, ps.threshold_i.cols()) =
+            ps.rho.transpose() * ps.threshold_i;
+        A21.block(assoc_count, sj, 1, ps.threshold_j.cols()) =
+            ps.rho.transpose() * ps.threshold_j;
+        if (keep_case_bread) {
+          for (Eigen::Index r = 0; r < np; ++r) {
+            const Eigen::Index dst = rows[static_cast<std::size_t>(r)];
+            a21_case.block(dst, si, 1, ps.threshold_i.cols()) =
+                ps.rho(r) * ps.threshold_i.row(r);
+            a21_case.block(dst, sj, 1, ps.threshold_j.cols()) =
+                ps.rho(r) * ps.threshold_j.row(r);
+          }
+        }
+      } else if (oi || oj) {
+        const Eigen::Index o = oi ? i : j;
+        const Eigen::Index c = oi ? j : i;
+        Eigen::VectorXi cat(np);
+        Eigen::VectorXd u(np);
+        for (Eigen::Index r = 0; r < np; ++r) {
+          const Eigen::Index src = rows[static_cast<std::size_t>(r)];
+          cat(r) = Xcat(src, o);
+          u(r) = U(src, c);
+        }
+        const double sd = std::sqrt(R(c, c));
+        const double rho = R(i, j) / sd;
+        auto ps_or = polyserial_pair_scores(
+            cat, u, rho, th_by_var[static_cast<std::size_t>(o)]);
+        if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+        const auto& ps = *ps_or;
+        for (Eigen::Index r = 0; r < np; ++r) {
+          SC_ASSOC(rows[static_cast<std::size_t>(r)], assoc_count) =
+              ps.rho(r);
+        }
+        const Eigen::Index so = th_start[static_cast<std::size_t>(o)];
+        const Eigen::Index mu = nth + cont_pos[static_cast<std::size_t>(c)];
+        const Eigen::Index va =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(c)];
+        A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
+            ps.rho.transpose() * ps.thresholds;
+        A21(assoc_count, mu) = ps.rho.dot(ps.mu_unit) / sd;
+        A21(assoc_count, va) = ps.rho.dot(ps.var_unit) / R(c, c);
+        if (keep_case_bread) {
+          for (Eigen::Index r = 0; r < np; ++r) {
+            const Eigen::Index dst = rows[static_cast<std::size_t>(r)];
+            a21_case.block(dst, so, 1, ps.thresholds.cols()) =
+                ps.rho(r) * ps.thresholds.row(r);
+            a21_case(dst, mu) = ps.rho(r) * ps.mu_unit(r) / sd;
+            a21_case(dst, va) = ps.rho(r) * ps.var_unit(r) / R(c, c);
+          }
+        }
+      } else {
+        Eigen::VectorXd xi(np);
+        Eigen::VectorXd xj(np);
+        for (Eigen::Index r = 0; r < np; ++r) {
+          const Eigen::Index src = rows[static_cast<std::size_t>(r)];
+          xi(r) = X(src, i);
+          xj(r) = X(src, j);
+        }
+        auto sc_or = continuous_pair_normal_scores(
+            xi, xj, mean(i), mean(j), R(i, i), R(j, j), R(i, j));
+        if (!sc_or.has_value()) return std::unexpected(sc_or.error());
+        const Eigen::MatrixXd& S = sc_or->score_contributions;
+        const double sdi = std::sqrt(R(i, i));
+        const double sdj = std::sqrt(R(j, j));
+        const double rho = R(i, j) / (sdi * sdj);
+        const Eigen::VectorXd s_rho = sdi * sdj * S.col(4);
+        for (Eigen::Index r = 0; r < np; ++r) {
+          SC_ASSOC(rows[static_cast<std::size_t>(r)], assoc_count) =
+              s_rho(r);
+        }
+        const Eigen::Index mui = nth + cont_pos[static_cast<std::size_t>(i)];
+        const Eigen::Index muj = nth + cont_pos[static_cast<std::size_t>(j)];
+        const Eigen::Index vai =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(i)];
+        const Eigen::Index vaj =
+            nth + n_cont + cont_pos[static_cast<std::size_t>(j)];
+        const Eigen::VectorXd ch_var_i =
+            S.col(2) + (rho * sdj / (2.0 * sdi)) * S.col(4);
+        const Eigen::VectorXd ch_var_j =
+            S.col(3) + (rho * sdi / (2.0 * sdj)) * S.col(4);
+        A21(assoc_count, mui) = s_rho.dot(S.col(0));
+        A21(assoc_count, muj) = s_rho.dot(S.col(1));
+        A21(assoc_count, vai) = s_rho.dot(ch_var_i);
+        A21(assoc_count, vaj) = s_rho.dot(ch_var_j);
+        if (keep_case_bread) {
+          for (Eigen::Index r = 0; r < np; ++r) {
+            const Eigen::Index dst = rows[static_cast<std::size_t>(r)];
+            a21_case(dst, mui) = s_rho(r) * S(r, 0);
+            a21_case(dst, muj) = s_rho(r) * S(r, 1);
+            a21_case(dst, vai) = s_rho(r) * ch_var_i(r);
+            a21_case(dst, vaj) = s_rho(r) * ch_var_j(r);
+          }
+        }
+      }
+
+      A22_diag(assoc_count) = SC_ASSOC.col(assoc_count).squaredNorm();
+      if (A22_diag(assoc_count) <= 1e-12 ||
+          !std::isfinite(A22_diag(assoc_count))) {
+        A22_diag(assoc_count) = 1.0;
+      }
+      if (keep_case_bread) pair_a21_case.push_back(std::move(a21_case));
+      ++assoc_count;
+    }
+  }
+
+  Eigen::MatrixXd SC(n, mdim);
+  SC.leftCols(s1) = SC1;
+  SC.rightCols(n_assoc) = SC_ASSOC;
+  const Eigen::MatrixXd INNER = SC.transpose() * SC;
+
+  const Eigen::MatrixXd A22_inv = A22_diag.cwiseInverse().asDiagonal();
+  Eigen::MatrixXd B_inv = Eigen::MatrixXd::Zero(mdim, mdim);
+  B_inv.block(0, 0, s1, s1) = *A11_inv_or;
+  B_inv.block(s1, 0, n_assoc, s1).noalias() =
+      -A22_inv * A21 * (*A11_inv_or);
+  B_inv.block(s1, s1, n_assoc, n_assoc) = A22_inv;
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(mdim, mdim);
+  Eigen::Index row = 0;
+  for (Eigen::Index k = 0; k < nth; ++k) H(row++, k) = 1.0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) {
+      H(row++, nth + cont_pos[static_cast<std::size_t>(j)]) = -1.0;
+    }
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) {
+      H(row++, nth + n_cont + cont_pos[static_cast<std::size_t>(j)]) = 1.0;
+    }
+  }
+  assoc_count = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+      const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+      if (oi && oj) {
+        H(row, s1 + assoc_count) = 1.0;
+      } else if (oi || oj) {
+        const Eigen::Index c = oi ? j : i;
+        const double sd = std::sqrt(R(c, c));
+        const double rho = R(i, j) / sd;
+        H(row, s1 + assoc_count) = sd;
+        H(row, nth + n_cont + cont_pos[static_cast<std::size_t>(c)]) =
+            rho / (2.0 * sd);
+      } else {
+        const double sdi = std::sqrt(R(i, i));
+        const double sdj = std::sqrt(R(j, j));
+        const double rho = R(i, j) / (sdi * sdj);
+        H(row, s1 + assoc_count) = sdi * sdj;
+        H(row, nth + n_cont + cont_pos[static_cast<std::size_t>(i)]) =
+            rho * sdj / (2.0 * sdi);
+        H(row, nth + n_cont + cont_pos[static_cast<std::size_t>(j)]) =
+            rho * sdi / (2.0 * sdj);
+      }
+      ++row;
+      ++assoc_count;
+    }
+  }
+
+  MixedGammaAssembly out;
+  out.scores = std::move(SC);
+  out.bread_inv = std::move(B_inv);
+  out.gamma_theta =
+      static_cast<double>(n) * out.bread_inv * INNER * out.bread_inv.transpose();
+  out.gamma_theta =
+      0.5 * (out.gamma_theta + out.gamma_theta.transpose()).eval();
+  out.transform = std::move(H);
+  out.gamma = out.transform * out.gamma_theta * out.transform.transpose();
+  out.gamma = 0.5 * (out.gamma + out.gamma.transpose()).eval();
+  out.pair_a21_case = std::move(pair_a21_case);
+  out.nth = nth;
+  out.n_cont = n_cont;
+  out.s1 = s1;
+  out.n_assoc = n_assoc;
+  out.mdim = mdim;
+  return out;
+}
+
 }  // namespace
 
 namespace {
@@ -3127,9 +3489,13 @@ post_expected<Eigen::MatrixXd> mixed_gamma_data_influence_impl(
     const Eigen::VectorXd& thresholds,
     const Eigen::VectorXd& mean,
     const Eigen::MatrixXd& R,
-    bool diagonal_only) {
-  auto asm_or = mixed_gamma_assembly_at_kappa(
-      X, ordered, levels, thresholds, mean, R, true);
+    bool diagonal_only,
+    bool observed) {
+  auto asm_or = observed
+      ? mixed_observed_gamma_assembly_at_kappa(
+            X, ordered, levels, thresholds, mean, R, true)
+      : mixed_gamma_assembly_at_kappa(
+            X, ordered, levels, thresholds, mean, R, true);
   if (!asm_or.has_value()) return std::unexpected(asm_or.error());
   const MixedGammaAssembly& a = *asm_or;
   const Eigen::Index n = X.rows();
@@ -3204,7 +3570,7 @@ mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
                                 const Eigen::VectorXd& mean,
                                 const Eigen::MatrixXd& R) {
   return mixed_gamma_data_influence_impl(
-      X, ordered, levels, thresholds, mean, R, true);
+      X, ordered, levels, thresholds, mean, R, true, false);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -3215,7 +3581,31 @@ mixed_gamma_data_influence(const Eigen::MatrixXd& X,
                            const Eigen::VectorXd& mean,
                            const Eigen::MatrixXd& R) {
   return mixed_gamma_data_influence_impl(
-      X, ordered, levels, thresholds, mean, R, false);
+      X, ordered, levels, thresholds, mean, R, false, false);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_diag_data_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R) {
+  return mixed_gamma_data_influence_impl(
+      X, ordered, levels, thresholds, mean, R, true, true);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_data_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R) {
+  return mixed_gamma_data_influence_impl(
+      X, ordered, levels, thresholds, mean, R, false, true);
 }
 
 namespace {
@@ -3228,9 +3618,13 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     const Eigen::VectorXd& mean,
     const Eigen::MatrixXd& R,
     double h_rel,
-    bool diagonal_only) {
-  auto base_or = mixed_gamma_assembly_at_kappa(
-      X, ordered, levels, thresholds, mean, R, false);
+    bool diagonal_only,
+    bool observed) {
+  auto base_or = observed
+      ? mixed_observed_gamma_assembly_at_kappa(
+            X, ordered, levels, thresholds, mean, R, false)
+      : mixed_gamma_assembly_at_kappa(
+            X, ordered, levels, thresholds, mean, R, false);
   if (!base_or.has_value()) return std::unexpected(base_or.error());
   const Eigen::Index p = X.cols();
   const Eigen::Index mdim = base_or->mdim;
@@ -3321,11 +3715,17 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
       R_m(i, j) = R_m(j, i) = R(i, j) - h;
     }
 
-    auto gp_or = mixed_gamma_assembly_at_kappa(
-        X, ordered, levels, th_p, mean_p, R_p, false);
+    auto gp_or = observed
+        ? mixed_observed_gamma_assembly_at_kappa(
+              X, ordered, levels, th_p, mean_p, R_p, false)
+        : mixed_gamma_assembly_at_kappa(
+              X, ordered, levels, th_p, mean_p, R_p, false);
     if (!gp_or.has_value()) return std::unexpected(gp_or.error());
-    auto gm_or = mixed_gamma_assembly_at_kappa(
-        X, ordered, levels, th_m, mean_m, R_m, false);
+    auto gm_or = observed
+        ? mixed_observed_gamma_assembly_at_kappa(
+              X, ordered, levels, th_m, mean_m, R_m, false)
+        : mixed_gamma_assembly_at_kappa(
+              X, ordered, levels, th_m, mean_m, R_m, false);
     if (!gm_or.has_value()) return std::unexpected(gm_or.error());
     if (diagonal_only) {
       D.col(l) = (gp_or->gamma.diagonal() - gm_or->gamma.diagonal()) /
@@ -3350,7 +3750,7 @@ mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
                              const Eigen::MatrixXd& R,
                              double h_rel) {
   return mixed_gamma_jacobian_fd_impl(
-      X, ordered, levels, thresholds, mean, R, h_rel, true);
+      X, ordered, levels, thresholds, mean, R, h_rel, true, false);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -3362,7 +3762,33 @@ mixed_gamma_jacobian_fd(const Eigen::MatrixXd& X,
                         const Eigen::MatrixXd& R,
                         double h_rel) {
   return mixed_gamma_jacobian_fd_impl(
-      X, ordered, levels, thresholds, mean, R, h_rel, false);
+      X, ordered, levels, thresholds, mean, R, h_rel, false, false);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_diag_jacobian_fd(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(
+      X, ordered, levels, thresholds, mean, R, h_rel, true, true);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_jacobian_fd(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(
+      X, ordered, levels, thresholds, mean, R, h_rel, false, true);
 }
 
 post_expected<PairwiseOrdinalStats>
@@ -4355,6 +4781,7 @@ mixed_ordinal_stats_from_observed_data(
   stats.n_obs.reserve(Xs.size());
   stats.n_levels.reserve(Xs.size());
   stats.moment_influence.reserve(Xs.size());
+  stats.raw_data.reserve(Xs.size());
 
   for (std::size_t b = 0; b < Xs.size(); ++b) {
     const auto& X = Xs[b];
@@ -4813,6 +5240,7 @@ mixed_ordinal_stats_from_observed_data(
     stats.W_wls.push_back(std::move(W_wls));
     stats.n_obs.push_back(static_cast<std::int64_t>(n));
     stats.n_levels.push_back(std::move(levels));
+    stats.raw_data.push_back(X);
   }
   return stats;
 }
