@@ -148,10 +148,11 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      robust::Information bread = robust::Information::Expected);
 
 // Mixed continuous/ordinal infinitesimal-jackknife covariance. ULS is a
-// fixed-weight identity sandwich. DWLS includes the diagonal estimated-weight
-// influence and WLS includes the dense estimated-weight influence for ordinary
-// complete-data ML/polyserial mixed stats, which requires
-// `stats.moment_influence` and `stats.raw_data`.
+// fixed-weight identity sandwich and only needs `stats.moment_influence`, so it
+// also supports pairwise-overlap observed mixed stats. DWLS includes the
+// diagonal estimated-weight influence and WLS includes the dense estimated-
+// weight influence for ordinary complete-data ML/polyserial mixed stats, which
+// requires `stats.moment_influence` and `stats.raw_data`.
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal_ij(spec::LatentStructure pt,
                         const model::MatrixRep& rep,

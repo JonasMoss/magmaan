@@ -444,6 +444,18 @@ mixed_ordinal_stats_from_data(const std::vector<Eigen::MatrixXd>& X,
                               const std::vector<std::vector<std::int32_t>>& ordered,
                               bool full_wls_weight = true);
 
+// Pairwise-overlap MCAR analogue of `mixed_ordinal_stats_from_data`. Non-finite
+// entries are treated as missing; ordered columns still use observed finite
+// positive integer categories. The returned stats carry support-aware moment
+// influence rows and overlap NACOV for fixed-weight robust/ULS IJ. Estimated-
+// weight DWLS/WLS IJ is intentionally not enabled by this builder yet because
+// the mixed observed-Gamma derivative channel is separate work.
+post_expected<MixedOrdinalStats>
+mixed_ordinal_stats_from_observed_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    bool full_wls_weight = true);
+
 post_expected<MixedOrdinalPolyserialDpdStats>
 mixed_ordinal_stats_polyserial_dpd_from_data(
     const std::vector<Eigen::MatrixXd>& X,

@@ -1377,8 +1377,14 @@ stop rather than any usable non-error return.
   same raw mixed blocks with dense mixed data-direct `IF(Gamma)` and
   finite-difference `d Gamma / d kappa`; its dense case-weight derivative is
   finite-difference gated and its diagonal extraction is pinned to the DWLS
-  helper. Robust/experimental mixed stage-1 variants need separate
-  Gamma-influence derivations.
+  helper. For observed/pairwise-missing mixed ordinal/polyserial stats,
+  `mixed_ordinal_stats_from_observed_data` now materializes support-aligned
+  rows for thresholds, continuous means/variances, polychorics, polyserial
+  covariances, and Pearson covariances; the rows reproduce the overlap NACOV
+  and let `robust_mixed_ordinal_ij` handle ULS/fixed-weight observed-bread
+  covariance under MCAR. Mixed observed DWLS/WLS still need support-aware
+  observed Gamma-influence helpers. Robust/experimental mixed stage-1 variants
+  need separate Gamma-influence derivations.
   ML2S now exposes the observed-bread Stage-2 regime through
   `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
   is available as `saturated_em_moment_influence`. Raw complete-data ML2S
