@@ -241,6 +241,21 @@ nested in $A$ (one variance, free covariances), the difference testing equality
 of the covariances. Both are linear, so the only surviving deformation is the
 weight channel.
 
+\begin{remark}[A test bed, not the headline model]
+The parameter is restricted to the open cone $\{\theta:\Sigma(\theta)\succ0\}$;
+for compound symmetry this is the wedge $a-b>0$ and $a+(p-1)b>0$ in
+$\theta=(a,b)=(\text{variance},\text{covariance})$. This is an inequality
+constraint, inactive at an interior pseudo-true value, so it does not enter the
+first-order conditions or the asymptotics, and $C=0$ holds from the linearity of
+$\eta$ regardless of it. The only design requirement is to keep the
+data-generating $\theta_{*}$ interior, with no near-singular best fit. Linear
+covariance structures are a classical class (variance components, exchangeable
+and Toeplitz patterns, fixed-loading factor models), but pairing one with DWLS is
+off the beaten path. Its role here is a curvature-free check: a deformation that
+appears here cannot be curvature in disguise. The substantive case keeps a
+genuine factor model and carries $C\neq0$ (Section~\ref{sec:cfa}).
+\end{remark}
+
 \subsection{DWLS ingredients}
 The stage-one moments are $u=\vech(S)$ with casewise influence $g_{i}=\vech(z_{i}
 z_{i}\T)-\sigma_{0}$, $z_{i}=y_{i}-\mu$, and $\Gamma=\E[g_{i}g_{i}\T]$ the Browne
@@ -296,6 +311,23 @@ orthogonal $\rs$ leaves the law near Satorra (the benign regime where robust
 intervals already calibrate) and aligned $\rs$ deforms it most. Because the
 deformation is analytic in $\rs$, the predicted miscalibration can overlay the
 simulated rejection rate.
+
+\subsection{The substantive twin: a factor model with $C\neq0$}
+\label{sec:cfa}
+Dropping linearity costs only one extra term. For a confirmatory factor model
+$\Sigma(\theta)=\Lambda\Psi\Lambda\T+\Theta$ the moments are quadratic in the
+loadings, so $\nabla^{2}\eta_{k}$ is sparse and closed form (the $\lambda_{a}
+\lambda_{b}$ blocks), and $H=A+C$ with $C=\sum_{k}(W\rs)_{k}\nabla^{2}\eta_{k}
+(\ths)$ evaluated at the pseudo-true point. Everything else is unchanged: the
+DWLS weight channel \eqref{eq:dwls-v}, the casewise residual influence
+$\rho_{i}=\Delta H^{-1}\Delta\T v_{i}-g_{i}$ (now with $H$ in place of $A$), and
+the spectrum are assembled exactly as before. A natural nested pair is configural
+versus metric invariance across two groups, the difference testing equality of a
+block of loadings. The price of realism is that the deformation now superposes
+two channels, the curvature $C$ and the weight $\Wr$, so the clean attribution of
+the linear test bed is lost. The linear model certifies that the weight channel
+alone produces a nonzero effect; the factor model shows the size that effect
+reaches in a model people actually fit.
 
 \section{Verdict}
 \label{sec:verdict}
