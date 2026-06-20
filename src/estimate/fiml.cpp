@@ -3186,6 +3186,10 @@ robust::Information robust_bread(TwoStageBread bread) {
                                           : robust::Information::Expected;
 }
 
+bool raw_has_no_missing_mask(const RawData& raw) {
+  return raw.mask.empty();
+}
+
 }  // namespace
 
 post_expected<std::vector<Eigen::MatrixXd>>
@@ -3333,6 +3337,56 @@ two_stage_em_weighted_inference_from_sm(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<TwoStageEMMLInference>
+two_stage_complete_data_weighted_ij_from_sm(spec::LatentStructure pt,
+                                            const model::MatrixRep& rep,
+                                            const RawData& raw,
+                                            const Estimates& est,
+                                            const SaturatedMoments& sm,
+                                            TwoStageWeight kind,
+                                            TwoStageDlsOptions dls,
+                                            TwoStageBread bread) {
+  if (bread != TwoStageBread::Observed || !raw_has_no_missing_mask(raw) ||
+      kind == TwoStageWeight::Nt) {
+    return two_stage_em_weighted_inference_from_sm(
+        std::move(pt), rep, est, sm, kind, dls, bread);
+  }
+
+  auto base_or = two_stage_em_weighted_inference_from_sm(
+      pt, rep, est, sm, kind, dls, bread);
+  if (!base_or.has_value()) return std::unexpected(base_or.error());
+
+  SampleStats samp = sample_stats_from_saturated(sm);
+  post_expected<WeightedRobustResult> ij_or =
+      std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_em_ml_inference: unsupported Stage-2 weight"));
+  switch (kind) {
+    case TwoStageWeight::Dwls:
+      ij_or = estimate::robust_continuous_ls_dwls_ij(
+          std::move(pt), rep, samp, est, raw);
+      break;
+    case TwoStageWeight::Adf:
+      ij_or = estimate::robust_continuous_ls_wls_ij(
+          std::move(pt), rep, samp, est, raw);
+      break;
+    case TwoStageWeight::Dls: {
+      frontier::DlsWeightOptions opts;
+      opts.a = dls.a;
+      ij_or = estimate::robust_continuous_ls_dls_ij(
+          std::move(pt), rep, samp, est, raw, opts);
+      break;
+    }
+    case TwoStageWeight::Nt:
+      break;
+  }
+  if (!ij_or.has_value()) return std::unexpected(ij_or.error());
+
+  TwoStageEMMLInference out = std::move(*base_or);
+  out.vcov = std::move(ij_or->vcov);
+  out.se = std::move(ij_or->se);
+  return out;
+}
+
 // Core two-stage ML inference from already-computed Stage-1 saturated moments.
 // `raw` is intentionally absent: the only thing the inference ever needs from
 // the data are the saturated moments and their ACOV, both carried by `sm`.
@@ -3422,6 +3476,11 @@ two_stage_em_ml_inference_impl(spec::LatentStructure pt,
                                TwoStageBread bread) {
   auto sm_or = saturated_em_moments(raw, pack, h1);
   if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  if (kind != TwoStageWeight::Nt && bread == TwoStageBread::Observed &&
+      raw_has_no_missing_mask(raw)) {
+    return two_stage_complete_data_weighted_ij_from_sm(
+        std::move(pt), rep, raw, est, *sm_or, kind, dls, bread);
+  }
   return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, *sm_or,
                                            kind, dls, bread);
 }

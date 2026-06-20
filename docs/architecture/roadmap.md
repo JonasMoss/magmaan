@@ -1369,9 +1369,13 @@ stop rather than any usable non-error return.
   Gamma-influence derivations.
   ML2S now exposes the observed-bread Stage-2 regime through
   `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
-  is available as `saturated_em_moment_influence`; the remaining Hall-Inoue
-  work there is wiring the estimated-weight channels for
-  `TwoStageWeight::{Nt,Dwls,Adf,Dls}`.
+  is available as `saturated_em_moment_influence`. Raw complete-data ML2S
+  observed-bread covariance for `TwoStageWeight::{Dwls,Adf,Dls}` now reduces
+  through the continuous-LS IJ adapters; scaled-test fields remain fixed-weight.
+  The remaining Hall-Inoue work there is the missing-data FIML sandwich-Gamma
+  influence needed by `TwoStageWeight::{Dwls,Adf,Dls}`. The default NT route is
+  the ordinary normal-theory ML robust-score path; the moment-quadratic GLS IJ
+  correction remains the complete continuous-LS adapter.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the
