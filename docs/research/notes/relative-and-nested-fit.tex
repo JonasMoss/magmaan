@@ -52,9 +52,10 @@ follows as a corollary. Three answers, stated up front.
   explicit term in $c$ (Proposition~\ref{prop:vuong}).
 \item The nested, degenerate case is \emph{not} a clean corollary. The limiting
   quadratic form is the Hessian of the profiled discrepancy difference, not the
-  covariance quadratic of the fitted residual fluctuation. The naive
-  substitution $\Gamma\mapsto(W-\Wr)\Gamma(W-\Wr)\T$ into the $U$-matrix is
-  wrong (Proposition~\ref{prop:nested}). It needs its own derivation.
+  covariance quadratic of the fitted residual fluctuation. A meat-only
+  substitution $\Gamma\mapsto(W-\Wr)\Gamma(W-\Wr)\T$ into the $U$-matrix does
+  not produce that Hessian (Proposition~\ref{prop:nested}). It needs its own
+  derivation.
 \end{enumerate}
 
 \section{Recap of the corrected influence}
@@ -184,7 +185,7 @@ $c=0$ and $\omega^{2}=0$. The first-order term vanishes and the limiting law is
 the second-order quadratic form. The question is what second derivative that
 quadratic form uses.
 
-For one model $M$, let
+For one model $M$ in the common case $W=W(u)$, let
 \[
   f_{M}(u)=\min_{\theta}\tfrac12 r_{M}(\theta,u)\T W(u)r_{M}(\theta,u),
   \qquad r_{M}(\theta,u)=\eta_{M}(\theta)-u .
@@ -202,57 +203,71 @@ parameter score $\partial F/\partial\theta$.
 
 \begin{proposition}
 \label{prop:nested}
+Let $x$ be the first-stage vector with $\sqrt N(\hat x-x_{0})\to Z\sim
+N(0,\Gamma_{x})$, let $u=P x$, and let $W=W(x)$. Write
+$f_{M}(x)=\min_{\theta}\tfrac12 r_{M}(\theta,Px)\T W(x)r_{M}(\theta,Px)$ and
+$s_{M}(x)=\nabla_{x}f_{M}(x)$.
 Suppose the nested null is true at the pseudo-true level: the larger model's
 pseudo-true point lies in the smaller model, so the two profiled values and
-profile scores agree at $u_{0}$, $f_{A}(u_{0})=f_{B}(u_{0})$ and
-$s_{A}(u_{0})=s_{B}(u_{0})$. Let
+profile gradients agree at $x_{0}$.
+For directions $a,b$ in $x$-space write $h=Pa$, $k=Pb$,
+$W_{a}=DW(x_{0})[a]$, and $W_{ab}=D^{2}W(x_{0})[a,b]$. Define
 \[
-  Q_{M}=D_{u}s_{M}(u_{0})
+  L_{M}a=\Delta_{M}\T(W h-W_{a}\rs^{M})
 \]
-be the Hessian of the profiled discrepancy for model $M$. Then
+and
 \[
-  2N\{f_{B}(\widehat u)-f_{A}(\widehat u)\}
-  \;\xrightarrow{d}\;
-  z\T (Q_{B}-Q_{A})z,\qquad z\sim N(0,\Gamma),
+  T_{M}(a,b)=
+  h\T W k-h\T W_{b}\rs^{M}-k\T W_{a}\rs^{M}
+  +\tfrac12(\rs^{M})\T W_{ab}\rs^{M}.
 \]
-and the reference spectrum is
-\[
-  \lambda_{j}=\operatorname{eig}\{(Q_{B}-Q_{A})\Gamma\}.
-\]
-For a fixed weight,
+Then the full profile Hessian is the bilinear form
 \begin{equation}
-  Q_{M}=W-W\Delta_{M}H_{M}^{-1}\Delta_{M}\T W,
+  Q_{M}(a,b)=T_{M}(a,b)-(L_{M}a)\T H_{M}^{-1}(L_{M}b),
   \qquad H_{M}=A_{M}+C_{M}.
+  \label{eq:profile-hessian-general}
+\end{equation}
+The nested statistic obeys
+\[
+  2N\{f_{B}(\hat x)-f_{A}(\hat x)\}
+  \;\xrightarrow{d}\;
+  Z\T (Q_{B}-Q_{A})Z,
+\]
+with reference spectrum
+\[
+  \lambda_{j}=\operatorname{eig}\{(Q_{B}-Q_{A})\Gamma_{x}\}.
+\]
+If the weight is fixed, $W_{a}=W_{ab}=0$, $x=u$, and
+\begin{equation}
+  Q_{M}=W-W\Delta_{M}H_{M}^{-1}\Delta_{M}\T W.
   \label{eq:profile-hessian-fixed}
 \end{equation}
-For an estimated weight $W(u)$, $Q_{M}$ is the derivative of
-\eqref{eq:profile-score}. It contains the fitted-residual derivative
-\[
-  D_{u}\rs^{M}[h]=
-  \Delta_{M}H_{M}^{-1}\Delta_{M}\T\{Wh-DW[h]\rs^{M}\}-h
-\]
-and the first and second derivatives of the weight map. Consequently the nested
-law is not obtained by replacing $\Gamma$ by
-$(W-\Wr)\Gamma(W-\Wr)\T$ in Satorra's fixed-weight $U$ matrix.
+If $W=W(u)$, take $x=u$ and $P=I$. If the weight is estimated from additional
+stage-one objects, such as a diagonal or dense NACOV estimate, those objects
+must be included in $x$ and in the covariance of $Z$.
 \end{proposition}
 
 \begin{proof}
-Taylor expand the two profiled scalar functions around $u_{0}$:
+Taylor expand the two profiled scalar functions around $x_{0}$:
 \[
-  f_{M}(u_{0}+N^{-1/2}z)
-  =f_{M}(u_{0})+N^{-1/2}s_{M}(u_{0})\T z
-   +\tfrac12N^{-1}z\T Q_{M}z+o_{p}(N^{-1}).
+  f_{M}(x_{0}+N^{-1/2}Z)
+  =f_{M}(x_{0})+N^{-1/2}s_{M}(x_{0})\T Z
+   +\tfrac12N^{-1}Z\T Q_{M}Z+o_{p}(N^{-1}).
 \]
 The nested pseudo-null cancels the value and first derivative. Multiplying the
-difference by $2N$ leaves $z\T(Q_{B}-Q_{A})z+o_{p}(1)$, giving the eigenvalue
-law. For fixed $W$, differentiating the population first-order condition
-$\Delta\T W\rs=0$ gives
-$D\theta[h]=H^{-1}\Delta\T Wh$ and
-$D\rs[h]=\Delta H^{-1}\Delta\T Wh-h$. Since $s=-W\rs$ when $W$ is fixed,
-$Q[h]=-WD\rs[h]$, which is \eqref{eq:profile-hessian-fixed}. When $W=W(u)$, the
-same calculation includes $DW[h]\rs$ in the first-order condition and the
-derivative of the weight term in \eqref{eq:profile-score}; this introduces the
-first and second weight derivatives.
+difference by $2N$ leaves $Z\T(Q_{B}-Q_{A})Z+o_{p}(1)$, giving the eigenvalue
+law. For the directional formula, differentiate the population first-order
+condition $\Delta\T W\rs=0$ in direction $a$. The parameter derivative solves
+\[
+  H_{M}D\theta[a]=\Delta_{M}\T(W h-W_{a}\rs^{M})=L_{M}a.
+\]
+Thus
+$D\rs^{M}[a]=\Delta_{M}H_{M}^{-1}L_{M}a-h$. The second derivative of the
+unprofiled discrepancy with respect to the first-stage arguments, holding
+$\theta$ fixed, is $T_{M}(a,b)$. The standard profile-Hessian identity
+$f_{xx}-f_{x\theta}H^{-1}f_{\theta x}$ gives
+\eqref{eq:profile-hessian-general}; the fixed-weight matrix form follows by
+setting $W_{a}=W_{ab}=0$.
 \end{proof}
 
 The fitted residual fluctuation is still useful for standard errors:
@@ -356,8 +371,8 @@ spectrum and with the residual-fluctuation quadratic.
 \subsection{The residual deformation in closed form}
 \label{sec:closedform}
 With $C=0$ the fitted-residual fluctuation has an exact deformation. This is a
-useful diagnostic for the standard-error machinery, but it is not the nested
-test law once the weight is data-estimated.
+useful diagnostic for the standard-error machinery, separate from the
+profile-Hessian law above.
 
 \begin{proposition}[Closed-form deformation under $C=0$]
 \label{prop:closed}
@@ -383,11 +398,10 @@ both cross terms $M\T W\delta$ and $\delta\T WM$ vanish, and $\delta\T W\delta=
 (\Delta\T\Wr)=R$.
 \end{proof}
 
-The consequence is narrower than first hoped: $\Wr$ is linear in $\rs$, so this
-residual-vcov deformation is quadratic in $\rs$ and vanishes when a model fits.
-That statement validates the residual influence algebra, not the second-order
-law of the profiled discrepancy. The numerical check confirms the identity to
-machine precision and then separately computes the profile-Hessian law.
+This identity has a narrow scope: $\Wr$ is linear in $\rs$, so the residual-vcov
+deformation is quadratic in $\rs$ and vanishes when a model fits. The numerical
+check confirms the identity to machine precision and separately computes the
+profile-Hessian law.
 
 \begin{remark}[Why this is special to $C=0$]
 The cancellation uses $A=\Delta\T W\Delta$. With curvature the bread is $H=A+C$,
@@ -408,9 +422,33 @@ For estimated weights, the derivative of \eqref{eq:profile-score} adds the
 weight channel on top. A natural nested pair is configural versus metric
 invariance across two groups, the difference testing equality of a block of
 loadings. The price of realism is that the deformation now superposes two
-channels, curvature and weight, so the clean attribution of the linear test bed
-is lost. The CFA check script verifies that the old residual-vcov quadratic
-breaks away from the finite-difference profile-Hessian law when $C\neq0$.
+channels, curvature and weight. The CFA check script compares the
+residual-vcov quadratic with the finite-difference profile-Hessian law when
+$C\neq0$.
+
+\section{Next calculation}
+\label{sec:next}
+
+The next useful object is a prototype nested-test driver that estimates
+$Q_{B}-Q_{A}$ directly from the profile score and compares the resulting mixture
+with simulated values of $2N(f_{B}-f_{A})$. The clean first target is the
+normal-theory weight $W_{\mathrm{NT}}(u)$, because $x=u$, $\Gamma_{x}=\Gamma$,
+and the second derivative of $W_{\mathrm{NT}}$ is a closed-form matrix calculus
+exercise. That target isolates the profile-Hessian issue without the additional
+NACOV layer.
+
+The second target is DWLS. There $x$ should be enlarged to carry the moment
+vector and the diagonal NACOV estimator, for example $x=(u,\gamma)$ with
+$W=\diag(\gamma)^{-1}$. The terms in \eqref{eq:profile-hessian-general} are then
+simple in the weight block:
+$DW[a]_{kk}=-a_{\gamma,k}/\gamma_{k}^{2}$ and
+$D^{2}W[a,b]_{kk}=2a_{\gamma,k}b_{\gamma,k}/\gamma_{k}^{3}$. The hard part is
+not the derivative of $W$; it is the joint covariance of $(u,\gamma)$ and the
+choice of a misspecified nested null where the larger pseudo-true model still
+lies in the smaller model. A good simulation should report three spectra side by
+side: ordinary Satorra, profile-Hessian, and residual-vcov diagnostic. The
+profile-Hessian spectrum is the one to compare with the empirical nested
+statistic.
 
 \section{Verdict}
 \label{sec:verdict}

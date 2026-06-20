@@ -11,8 +11,8 @@ discrepancy difference:
     Q_M = D_u s_M(u0),
 
 where s_M is the envelope/profile score with respect to the sample moments.  The
-old residual quadratic Mt' W Mt is printed as a comparator only; it is not the
-profile-value Hessian once the weight is data-estimated.
+residual quadratic Mt' W Mt is printed as a separate standard-error diagnostic;
+the profile-value Hessian is the nested-test object.
 """
 
 import numpy as np
@@ -183,7 +183,7 @@ def chi2_q95(df):
         return table[df]
 
 
-def naive_size(lams, df_diff, ndraw=300000, seed_offset=0):
+def plain_chi2_size(lams, df_diff, ndraw=300000, seed_offset=0):
     from numpy.random import default_rng
 
     rng = default_rng(12345 + seed_offset)
@@ -236,11 +236,11 @@ def run(p=4, a0=1.0, b0=0.3):
         print(f" classical fixed-W top-{k+1}: {lam_classic[:k+1]}")
         print(f" profile-Hessian top-{k+1}: {lam_profile[:k+1]}   (max imag {imag:.1e})")
         print(f" residual-vcov   top-{k+1}: {lam_resid[:k+1]}")
-        print(f" reference-law mean: naive df = {k}, profile sum(lam) = {lam_profile.sum():.4f}")
+        print(f" reference-law mean: chi2 df = {k}, profile sum(lam) = {lam_profile.sum():.4f}")
         if kind == "size":
-            size = naive_size(lam_profile, k)
+            size = plain_chi2_size(lam_profile, k)
             tag = "anti-conservative" if size > 0.05 else "conservative"
-            print(f" naive chi^2_{k} actual Type-I at nominal 0.05: {size:.4f}  ({tag})")
+            print(f" plain chi^2_{k} actual Type-I at nominal 0.05: {size:.4f}  ({tag})")
         elif kind == "power":
             print(" (power scenario: diff-test null is false; full calculation also needs noncentrality)")
 

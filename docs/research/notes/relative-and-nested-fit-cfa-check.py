@@ -8,8 +8,8 @@ The goal is narrower and diagnostic:
   * compute the corrected profile-Hessian quadratic Q_B - Q_A by finite
     differences of the envelope/profile score;
   * verify that it matches finite differences of the profiled value;
-  * show that the old fitted-residual covariance quadratic Mt' W Mt is a
-    different object, especially once curvature C != 0.
+  * print the fitted-residual covariance quadratic Mt' W Mt as a separate
+    standard-error diagnostic, especially once curvature C != 0.
 """
 
 import numpy as np
@@ -246,7 +246,7 @@ def run(p=4):
         print(f" fixed-W obs profile  top-{k+1}: {lam_fixed_obs[:k+1]}")
         print(f" estimated-W profile  top-{k+1}: {lam_profile[:k+1]}  sum={lam_profile.sum():.4f}"
               f"  (imag {imag:.0e})")
-        print(f" residual-vcov old    top-{k+1}: {lam_resid[:k+1]}  sum={lam_resid.sum():.4f}")
+        print(f" residual-vcov diag   top-{k+1}: {lam_resid[:k+1]}  sum={lam_resid.sum():.4f}")
 
     print(f"p={p}, df_diff={df_diff}: A congeneric vs B tau-equivalent, GLS weight.")
     base = sigma_A(theta0_A, p)
