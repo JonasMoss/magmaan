@@ -307,12 +307,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     tests gate ADF/DWLS/DLS against
     `robust_continuous_ls_{wls,dwls,dls}_ij`. The scaled-test fields remain
     the fixed-weight Satorra-Bentler quantities.
+    ML2S raw missing-data observed-bread covariance for non-NT Stage-2 weights
+    **landed 2026-06-20** by adding the Stage-1 FIML sandwich-Gamma
+    influence through a case-weight finite-difference over the saturated EM
+    `(H,J,ACOV)` stack; the adapter covers `TwoStageWeight::{Dwls,Adf,Dls}`
+    and tests that the IJ path changes `vcov`/`se` while preserving the
+    fixed-weight scaled-test fields.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
-    polyserial DPD and Huber residual; ML2S
-    missing-data estimated-weight adapters for
-    `TwoStageWeight::{Dwls,Adf,Dls}` via the Stage-1 FIML sandwich-Gamma
-    influence (score-product, observed-information, and eta-movement channels);
+    polyserial DPD and Huber residual; replace the ML2S missing-data
+    finite-difference FIML sandwich-Gamma influence with analytic
+    score-product / observed-information / eta-movement derivatives if the
+    frontier path becomes performance-critical;
     the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
     covered by complete continuous LS; MCAR/pairwise-missing

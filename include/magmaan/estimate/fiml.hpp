@@ -444,11 +444,11 @@ two_stage_stage2_weight(const SaturatedMoments& sm,
 // sandwich and REQUIRE `est` to be the matching weighted fit (`fit_gmm` /
 // `fit_wls` with `two_stage_stage2_weight_blocks(sm, kind, dls)`), not the ML
 // fit. `bread` defaults to the lavaan-parity expected-information convention.
-// With raw complete data and `bread = Observed`, the non-NT weights reuse the
-// complete-data continuous-LS IJ covariance adapters for the estimated-weight
-// channel; scaled-test fields remain on the fixed-weight robust sandwich.
-// Missing-data estimated-weight channels require the FIML Stage-1 Gamma
-// influence and remain fixed-weight for now.
+// With raw data and `bread = Observed`, the non-NT weights include the
+// estimated-weight IJ covariance channel: complete data reuses the
+// continuous-LS IJ adapters, while missing data finite-differences the FIML
+// Stage-1 sandwich-Gamma influence. Scaled-test fields remain on the
+// fixed-weight robust sandwich.
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,

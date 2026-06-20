@@ -1371,11 +1371,14 @@ stop rather than any usable non-error return.
   `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
   is available as `saturated_em_moment_influence`. Raw complete-data ML2S
   observed-bread covariance for `TwoStageWeight::{Dwls,Adf,Dls}` now reduces
-  through the continuous-LS IJ adapters; scaled-test fields remain fixed-weight.
-  The remaining Hall-Inoue work there is the missing-data FIML sandwich-Gamma
-  influence needed by `TwoStageWeight::{Dwls,Adf,Dls}`. The default NT route is
-  the ordinary normal-theory ML robust-score path; the moment-quadratic GLS IJ
-  correction remains the complete continuous-LS adapter.
+  through the continuous-LS IJ adapters. Raw missing-data ML2S observed-bread
+  covariance for those non-NT weights now includes the FIML Stage-1
+  sandwich-Gamma influence via a case-weight finite-difference over the
+  saturated EM `(H,J,ACOV)` stack; scaled-test fields remain fixed-weight. The
+  remaining performance follow-up is an analytic replacement for that
+  finite-difference Gamma influence if the frontier path becomes hot. The
+  default NT route is the ordinary normal-theory ML robust-score path; the
+  moment-quadratic GLS IJ correction remains the complete continuous-LS adapter.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

@@ -313,17 +313,53 @@ data $\hat\Gamma$. The scaled-test fields remain the fixed-weight
 Satorra--Bentler quantities because Hall--Inoue test-statistic corrections are
 estimator-specific and have not been derived here.
 
-For missing data, the remaining ML2S IJ adapter is not just to reuse $a_i$.
-The \texttt{Dwls}, \texttt{Adf}, and \texttt{Dls} weights depend on
-$\Gamma_{\mathrm{FIML}}=n_b I_\eta^{-1}(\sum_i s_is_i\T)I_\eta^{-1}$, so their
-weight derivative needs the Stage-1 sandwich-Gamma influence:
-the score-product channel, the observed-information channel, and the movement
-of $(I_\eta,J_\eta)$ through $\hat\eta_S$. The default
-\texttt{TwoStageWeight::Nt} route in \path{two_stage_em_ml_inference} is
-the normal-theory ML robust-score path; the moment-quadratic GLS
-normal-theory-weight IJ correction remains available as
-\path{robust_continuous_ls_gls_ij} for complete continuous LS rather than
-being silently substituted for ML2S NT.
+For missing data, the non-NT ML2S IJ adapter cannot just reuse $a_i$ because the
+\texttt{Dwls}, \texttt{Adf}, and \texttt{Dls} weights depend on the Stage-1
+sandwich meat.  For a block, write
+\[
+  A = n_b^{-1}H,\qquad
+  B = n_b^{-1}J,\qquad
+  \Gamma_{\mathrm{FIML}} = A^{-1}BA^{-1}.
+\]
+If $s_i$ is the H1 loglikelihood score row, $h_i$ is its observed-information
+contribution, and $z_i = n_b a_i = A^{-1}s_i$ is the influence row for
+$\hat\eta_S$, then the first-order case influence of the FIML meat is
+\begin{align}
+  \dot\Gamma_i
+    &= A^{-1}(s_is_i\T - B)A^{-1}
+       - A^{-1}(h_i-A)\Gamma_{\mathrm{FIML}}
+       - \Gamma_{\mathrm{FIML}}(h_i-A)A^{-1}
+       + D_\eta\Gamma_{\mathrm{FIML}}[z_i].
+\end{align}
+The four terms are the score-product channel, the observed-information channel,
+its transpose, and the movement of $(A,B)$ through the saturated EM solution.
+The implementation landed 2026-06-20 takes the conservative route and evaluates
+this object by a central case-weight derivative:
+\[
+  \dot\Gamma_i
+    \approx n_b\,
+      \frac{\Gamma_{\mathrm{FIML}}(w_i=1+\epsilon)
+            -\Gamma_{\mathrm{FIML}}(w_i=1-\epsilon)}
+           {2\epsilon},
+\]
+where each perturbed evaluation reruns the weighted saturated EM update and
+rebuilds the weighted $(H,J,H^{-1}JH^{-1})$ stack.  This finite-difference
+derivative is slower than the closed-form expansion above, but it includes all
+channels and gives a validation target for any later analytic replacement.
+
+The estimated-weight correction row used by
+\path{robust_weighted_moment_ij} is
+\[
+  c_i = r\T W\,\dot\Gamma_i\,W,
+\]
+with $\dot\Gamma_i$ replaced by only its diagonal for \texttt{Dwls}; for
+\texttt{Dls}, $\dot\Gamma_i$ is mixed as
+$(1-a)\dot\Gamma_{\mathrm{NT},i}+a\dot\Gamma_{\mathrm{FIML},i}$ before the two
+outer $W$ factors.  The default \texttt{TwoStageWeight::Nt} route in
+\path{two_stage_em_ml_inference} remains the normal-theory ML robust-score
+path; the moment-quadratic GLS normal-theory-weight IJ correction remains
+available as \path{robust_continuous_ls_gls_ij} for complete continuous LS
+rather than being silently substituted for ML2S NT.
 
 \paragraph{MCAR and pairwise-missing ordinal/polyserial.}
 The current primitive assumes disjoint blocks: it sums $V_b\T V_b$ inside each
