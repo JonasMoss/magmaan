@@ -11,6 +11,7 @@
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/robust/robust.hpp"
 
 namespace {
 
@@ -166,6 +167,29 @@ double relative_max_abs(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B) {
   return num / den;
 }
 
+Eigen::MatrixXd complete_moment_influence_rows(
+    const magmaan::data::RawData& raw) {
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto zc_or = magmaan::robust::casewise_contributions(
+      raw, *samp_or, /*include_means=*/true);
+  REQUIRE(zc_or.has_value());
+
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(zc_or->rows(), zc_or->cols());
+  Eigen::Index row_off = 0;
+  Eigen::Index col_off = 0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const Eigen::Index n = raw.X[b].rows();
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index q = p + p * (p + 1) / 2;
+    out.block(row_off, col_off, n, q) =
+        zc_or->block(row_off, col_off, n, q) / static_cast<double>(n);
+    row_off += n;
+    col_off += q;
+  }
+  return out;
+}
+
 void check_analytic_matches_fd(const magmaan::data::RawData& raw,
                                double h_tol,
                                double acov_tol) {
@@ -250,6 +274,25 @@ TEST_CASE("saturated_em_moments: complete data reproduces MLE moments") {
   CHECK(eig.eigenvalues().minCoeff() > -1e-10);
 }
 
+TEST_CASE("saturated_em_moment_influence: complete data reduces to centered moment rows") {
+  for (const auto& raw : {complete_single_block(), two_complete_blocks()}) {
+    auto infl_or = magmaan::estimate::fiml::saturated_em_moment_influence(raw);
+    REQUIRE_MESSAGE(infl_or.has_value(),
+        "saturated_em_moment_influence failed: " <<
+        (infl_or.has_value() ? "" : infl_or.error().detail));
+    const Eigen::MatrixXd expected = complete_moment_influence_rows(raw);
+
+    REQUIRE(infl_or->rows() == expected.rows());
+    REQUIRE(infl_or->cols() == expected.cols());
+    CHECK((*infl_or - expected).cwiseAbs().maxCoeff() < 1e-10);
+
+    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw);
+    REQUIRE(sm_or.has_value());
+    const Eigen::MatrixXd acov_from_rows = infl_or->transpose() * (*infl_or);
+    CHECK((acov_from_rows - sm_or->acov).cwiseAbs().maxCoeff() < 1e-10);
+  }
+}
+
 TEST_CASE("saturated_em_moments: missingness converges and packages cleanly") {
   const auto raw = missing_single_block();
   auto out_or = magmaan::estimate::fiml::saturated_em_moments(raw);
@@ -284,6 +327,37 @@ TEST_CASE("saturated_em_moments: missingness converges and packages cleanly") {
   // Sandwich identity: H · acov · H ≡ J (to floating-point round-off).
   const Eigen::MatrixXd reconstructed = out.H * out.acov * out.H;
   CHECK((reconstructed - out.J).cwiseAbs().maxCoeff() < 1e-6);
+}
+
+TEST_CASE("saturated_em_moment_influence: missing data crossproduct reproduces saturated ACOV") {
+  for (const auto& raw : {missing_single_block(), two_missing_blocks()}) {
+    auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+    REQUIRE(pack_or.has_value());
+    auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack_or);
+    REQUIRE(h1_or.has_value());
+    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(
+        raw, *pack_or, *h1_or);
+    REQUIRE(sm_or.has_value());
+
+    auto infl_or = magmaan::estimate::fiml::saturated_em_moment_influence(
+        raw, *pack_or, *h1_or, *sm_or);
+    REQUIRE_MESSAGE(infl_or.has_value(),
+        "saturated_em_moment_influence failed: " <<
+        (infl_or.has_value() ? "" : infl_or.error().detail));
+    auto infl_rebuilt_or = magmaan::estimate::fiml::saturated_em_moment_influence(
+        raw, *pack_or, *h1_or);
+    REQUIRE(infl_rebuilt_or.has_value());
+
+    Eigen::Index n_total = 0;
+    for (const Eigen::MatrixXd& X : raw.X) n_total += X.rows();
+    REQUIRE(infl_or->rows() == n_total);
+    REQUIRE(infl_or->cols() == sm_or->H.rows());
+    CHECK((*infl_or - *infl_rebuilt_or).cwiseAbs().maxCoeff() < 1e-12);
+
+    const Eigen::MatrixXd acov_from_rows = infl_or->transpose() * (*infl_or);
+    CHECK((acov_from_rows - sm_or->acov).cwiseAbs().maxCoeff() < 1e-8);
+    CHECK(infl_or->colwise().sum().cwiseAbs().maxCoeff() < 1e-5);
+  }
 }
 
 TEST_CASE("saturated_em_moments: multi-block H and J are block-diagonal") {

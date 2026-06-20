@@ -364,6 +364,27 @@ saturated_em_moments(const RawData& raw,
                      const FIMLPack& pack,
                      const FIMLH1& h1);
 
+// Casewise influence rows for the saturated EM moment estimator eta_S. Rows are
+// stacked by raw block, columns use the same block-stacked [mu; vech(Sigma)]
+// layout as `SaturatedMoments`. With `SaturatedMoments::H` and log-likelihood
+// scores s_i, the returned rows are s_i' H^{-1}, so
+// `influence.transpose() * influence` equals `SaturatedMoments::acov`.
+// Complete data reduces to centered sample moment rows divided by the block
+// sample size.
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw, double h_step = 1e-4);
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw,
+                              const FIMLPack& pack,
+                              const FIMLH1& h1);
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw,
+                              const FIMLPack& pack,
+                              const FIMLH1& h1,
+                              const SaturatedMoments& sm);
+
 // Convert the saturated EM ACOV to the two-stage moment meat used by
 // robust.two.stage. `se_weighted = true` gives the parameter-vcov convention;
 // `false` gives the test-statistic UGamma convention.
@@ -632,6 +653,7 @@ using estimate::fiml::TwoStageEMMLInference;
 using estimate::fiml::fit_fiml;
 using estimate::fiml::fiml_extras;
 using estimate::fiml::saturated_em_moments;
+using estimate::fiml::saturated_em_moment_influence;
 using estimate::fiml::two_stage_em_ml_inference;
 
 }  // namespace magmaan::estimate

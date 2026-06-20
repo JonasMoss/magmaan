@@ -286,7 +286,9 @@ golden `parTable()` fixtures.
   information criteria, and fit-index inputs for the current fixture tranche.
 - Two-stage EM ML (`ML2S`) is a packaged missing-data estimator path alongside
   direct FIML. Stage 1 fits the saturated EM mean/covariance model and exposes
-  `(H, J, ACOV)`; Stage 2 runs complete-data ML on those saturated moments.
+  `(H, J, ACOV)` plus casewise saturated-moment influence rows through
+  `saturated_em_moment_influence`; Stage 2 runs complete-data ML on those
+  saturated moments.
   `estimate::fiml::two_stage_em_ml_inference` converts the Stage-1 ACOV to the
   moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
   returning Savalei-Bentler-style sandwich SEs, ML chi-square, df, the corrected
@@ -1366,8 +1368,9 @@ stop rather than any usable non-error return.
   helper. Robust/experimental mixed stage-1 variants need separate
   Gamma-influence derivations.
   ML2S now exposes the observed-bread Stage-2 regime through
-  `TwoStageBread::Observed`; the remaining Hall-Inoue work there is the
-  casewise saturated-EM moment influence and the estimated-weight channels for
+  `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
+  is available as `saturated_em_moment_influence`; the remaining Hall-Inoue
+  work there is wiring the estimated-weight channels for
   `TwoStageWeight::{Nt,Dwls,Adf,Dls}`.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
