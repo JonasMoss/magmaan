@@ -1354,9 +1354,12 @@ stop rather than any usable non-error return.
   sandwich. The same entry point now supports ordinary complete-data
   mixed DWLS by carrying raw mixed blocks on `MixedOrdinalStats` and combining
   mixed data-direct diagonal `IF(Gamma)` with finite-difference
-  `d diag(Gamma) / d kappa` in the mixed moment order. Mixed full WLS still
-  requires the dense mixed `IF(Gamma)` channel, and robust/experimental mixed
-  stage-1 variants need separate Gamma-influence derivations.
+  `d diag(Gamma) / d kappa` in the mixed moment order. Mixed full WLS uses the
+  same raw mixed blocks with dense mixed data-direct `IF(Gamma)` and
+  finite-difference `d Gamma / d kappa`; its dense case-weight derivative is
+  finite-difference gated and its diagonal extraction is pinned to the DWLS
+  helper. Robust/experimental mixed stage-1 variants need separate
+  Gamma-influence derivations.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

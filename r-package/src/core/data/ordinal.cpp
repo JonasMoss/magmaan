@@ -2736,13 +2736,16 @@ post_expected<MixedGammaAssembly> mixed_gamma_assembly_at_kappa(
 
 }  // namespace
 
-post_expected<Eigen::MatrixXd>
-mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
-                                const std::vector<std::int32_t>& ordered,
-                                const std::vector<std::int32_t>& levels,
-                                const Eigen::VectorXd& thresholds,
-                                const Eigen::VectorXd& mean,
-                                const Eigen::MatrixXd& R) {
+namespace {
+
+post_expected<Eigen::MatrixXd> mixed_gamma_data_influence_impl(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    bool diagonal_only) {
   auto asm_or = mixed_gamma_assembly_at_kappa(
       X, ordered, levels, thresholds, mean, R, true);
   if (!asm_or.has_value()) return std::unexpected(asm_or.error());
@@ -2753,7 +2756,8 @@ mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
       static_cast<double>(n) * a.scores * a.bread_inv.transpose();
   const Eigen::MatrixXd G = Gtheta * a.transform.transpose();
 
-  Eigen::MatrixXd IFG(n, a.mdim);
+  Eigen::MatrixXd IFG(
+      n, diagonal_only ? a.mdim : static_cast<Eigen::Index>(a.mdim * a.mdim));
   for (Eigen::Index r = 0; r < n; ++r) {
     Eigen::MatrixXd bi = Eigen::MatrixXd::Zero(a.mdim, a.mdim);
     for (Eigen::Index j = 0; j < p; ++j) {
@@ -2761,8 +2765,8 @@ mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
         Eigen::Index start = 0;
         for (Eigen::Index v = 0; v < j; ++v) {
           if (ordered[static_cast<std::size_t>(v)] != 0) {
-            start +=
-                static_cast<Eigen::Index>(levels[static_cast<std::size_t>(v)] - 1);
+            start += static_cast<Eigen::Index>(
+                levels[static_cast<std::size_t>(v)] - 1);
           }
         }
         const Eigen::Index len =
@@ -2794,22 +2798,55 @@ mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
         a.bread_inv * bi * a.gamma_theta +
         a.gamma_theta * bi.transpose() * a.bread_inv.transpose();
     const Eigen::MatrixXd HMHT = a.transform * M * a.transform.transpose();
-    for (Eigen::Index k = 0; k < a.mdim; ++k) {
-      IFG(r, k) = G(r, k) * G(r, k) + a.gamma(k, k) -
-                  static_cast<double>(n) * HMHT(k, k);
+    Eigen::MatrixXd Mi =
+        G.row(r).transpose() * G.row(r) + a.gamma -
+        static_cast<double>(n) * HMHT;
+    Mi = 0.5 * (Mi + Mi.transpose()).eval();
+    if (diagonal_only) {
+      IFG.row(r) = Mi.diagonal().transpose();
+    } else {
+      const Eigen::Map<const Eigen::VectorXd> vec(Mi.data(), Mi.size());
+      IFG.row(r) = vec.transpose();
     }
   }
   return IFG;
 }
 
+}  // namespace
+
 post_expected<Eigen::MatrixXd>
-mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
-                             const std::vector<std::int32_t>& ordered,
-                             const std::vector<std::int32_t>& levels,
-                             const Eigen::VectorXd& thresholds,
-                             const Eigen::VectorXd& mean,
-                             const Eigen::MatrixXd& R,
-                             double h_rel) {
+mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
+                                const std::vector<std::int32_t>& ordered,
+                                const std::vector<std::int32_t>& levels,
+                                const Eigen::VectorXd& thresholds,
+                                const Eigen::VectorXd& mean,
+                                const Eigen::MatrixXd& R) {
+  return mixed_gamma_data_influence_impl(
+      X, ordered, levels, thresholds, mean, R, true);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_gamma_data_influence(const Eigen::MatrixXd& X,
+                           const std::vector<std::int32_t>& ordered,
+                           const std::vector<std::int32_t>& levels,
+                           const Eigen::VectorXd& thresholds,
+                           const Eigen::VectorXd& mean,
+                           const Eigen::MatrixXd& R) {
+  return mixed_gamma_data_influence_impl(
+      X, ordered, levels, thresholds, mean, R, false);
+}
+
+namespace {
+
+post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel,
+    bool diagonal_only) {
   auto base_or = mixed_gamma_assembly_at_kappa(
       X, ordered, levels, thresholds, mean, R, false);
   if (!base_or.has_value()) return std::unexpected(base_or.error());
@@ -2818,7 +2855,7 @@ mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
   const Eigen::VectorXd kappa = mixed_moment_vector(R, mean, ordered, thresholds);
   if (kappa.size() != mdim) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "mixed_gamma_diag_jacobian_fd: mixed moment length mismatch"));
+        "mixed_gamma_jacobian_fd: mixed moment length mismatch"));
   }
 
   std::vector<Eigen::Index> cont_pos(static_cast<std::size_t>(p), -1);
@@ -2834,7 +2871,8 @@ mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
   for (Eigen::Index j = 0; j < p; ++j)
     for (Eigen::Index i = j + 1; i < p; ++i) pairs.push_back({i, j});
 
-  Eigen::MatrixXd D(mdim, mdim);
+  Eigen::MatrixXd D(
+      diagonal_only ? mdim : static_cast<Eigen::Index>(mdim * mdim), mdim);
   for (Eigen::Index l = 0; l < mdim; ++l) {
     Eigen::VectorXd th_p = thresholds, th_m = thresholds;
     Eigen::VectorXd mean_p = mean, mean_m = mean;
@@ -2907,10 +2945,42 @@ mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
     auto gm_or = mixed_gamma_assembly_at_kappa(
         X, ordered, levels, th_m, mean_m, R_m, false);
     if (!gm_or.has_value()) return std::unexpected(gm_or.error());
-    D.col(l) = (gp_or->gamma.diagonal() - gm_or->gamma.diagonal()) /
-               (2.0 * h);
+    if (diagonal_only) {
+      D.col(l) = (gp_or->gamma.diagonal() - gm_or->gamma.diagonal()) /
+                 (2.0 * h);
+    } else {
+      const Eigen::MatrixXd dG = (gp_or->gamma - gm_or->gamma) / (2.0 * h);
+      const Eigen::Map<const Eigen::VectorXd> vec(dG.data(), dG.size());
+      D.col(l) = vec;
+    }
   }
   return D;
+}
+
+}  // namespace
+
+post_expected<Eigen::MatrixXd>
+mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
+                             const std::vector<std::int32_t>& ordered,
+                             const std::vector<std::int32_t>& levels,
+                             const Eigen::VectorXd& thresholds,
+                             const Eigen::VectorXd& mean,
+                             const Eigen::MatrixXd& R,
+                             double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(
+      X, ordered, levels, thresholds, mean, R, h_rel, true);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_gamma_jacobian_fd(const Eigen::MatrixXd& X,
+                        const std::vector<std::int32_t>& ordered,
+                        const std::vector<std::int32_t>& levels,
+                        const Eigen::VectorXd& thresholds,
+                        const Eigen::VectorXd& mean,
+                        const Eigen::MatrixXd& R,
+                        double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(
+      X, ordered, levels, thresholds, mean, R, h_rel, false);
 }
 
 post_expected<PairwiseOrdinalStats>

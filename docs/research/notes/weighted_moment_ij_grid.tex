@@ -256,7 +256,9 @@ implemented for ordinary complete-data ML/polyserial mixed stats: the diagonal
 $\dot\Gamma_i$ combines the data-direct sandwich channel at fixed mixed kappa
 with a finite-difference $\partial\diag(\hat\Gamma)/\partial\kappa$ channel for
 thresholds, negative means, variances, polychorics, polyserial covariances, and
-Pearson covariance rows. Full WLS waits for full $\dot\Gamma_i$.
+Pearson covariance rows. Full WLS uses the dense mixed $\dot\Gamma_i$ with the
+same data-direct and finite-difference channels, and its diagonal extraction is
+checked against the DWLS helper.
 
 \paragraph{Complete continuous LS.}
 For ULS with a fixed identity weight, the IJ is only a wrapper around the

@@ -364,6 +364,18 @@ mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
                              const Eigen::MatrixXd& R,
                              double h_rel = 1e-4);
 
+// Mixed continuous/ordinal analogue of `ordinal_gamma_jacobian_fd`. Returns
+// (m*m) × m in column-major Gamma vectorization, with the same mixed moment
+// order as above. Complete ordinary ML/polyserial data only.
+post_expected<Eigen::MatrixXd>
+mixed_gamma_jacobian_fd(const Eigen::MatrixXd& X,
+                        const std::vector<std::int32_t>& ordered,
+                        const std::vector<std::int32_t>& levels,
+                        const Eigen::VectorXd& thresholds,
+                        const Eigen::VectorXd& mean,
+                        const Eigen::MatrixXd& R,
+                        double h_rel = 1e-4);
+
 // Per-case DATA-DIRECT influence of the mixed NACOV diagonal at fixed mixed
 // kappa. Pair with `mixed_gamma_diag_jacobian_fd` and
 // MixedOrdinalStats::moment_influence to form the complete estimated-weight
@@ -375,6 +387,18 @@ mixed_gamma_diag_data_influence(const Eigen::MatrixXd& X,
                                 const Eigen::VectorXd& thresholds,
                                 const Eigen::VectorXd& mean,
                                 const Eigen::MatrixXd& R);
+
+// Per-case DATA-DIRECT influence of the full mixed NACOV matrix at fixed mixed
+// kappa. Returns n × (m*m) in column-major Gamma vectorization. Pair with
+// `mixed_gamma_jacobian_fd` and MixedOrdinalStats::moment_influence to form the
+// complete estimated-weight influence for mixed full-WLS IJ.
+post_expected<Eigen::MatrixXd>
+mixed_gamma_data_influence(const Eigen::MatrixXd& X,
+                           const std::vector<std::int32_t>& ordered,
+                           const std::vector<std::int32_t>& levels,
+                           const Eigen::VectorXd& thresholds,
+                           const Eigen::VectorXd& mean,
+                           const Eigen::MatrixXd& R);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an
