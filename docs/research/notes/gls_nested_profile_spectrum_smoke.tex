@@ -270,51 +270,100 @@ case; it is effectively unusable for a nominal 0.05 test.
 \includegraphics[width=\linewidth]{gls_nested_profile_survival_linear085.pdf}
 \end{center}
 
-\subsection*{Three indicators already suffice}
+\subsection*{A round three-indicator conservative example}
 
-The phenomenon is not tied to four indicators. For \(p=3\), take the diagonal
+The phenomenon is not tied to four indicators, and it does not require nonround
+decimals. For \(p=3\), take the diagonal
 pseudo-null
 \[
-  \Sigma_0=\operatorname{diag}(1.35,\ 0.30,\ 1.35).
+  \Sigma_0=\operatorname{diag}(4,\ 4,\ 1).
 \]
 The same model pair is used: model \(A\) has one common variance and three free
 covariances, while model \(B\) has one common variance and one common
 covariance. The population GLS projections again coincide,
 \[
-  \Sigma_A^{*}=\Sigma_B^{*}=0.3944\,I_3,
-  \qquad f_A(\Sigma_0)=f_B(\Sigma_0)=0.2752808989.
+  \Sigma_A^{*}=\Sigma_B^{*}=\frac{4}{3}I_3,
+  \qquad f_A(\Sigma_0)=f_B(\Sigma_0)=0.25.
 \]
 The profile spectrum has only two positive weights,
 \[
-  (0.3681,\ 0.1924),
+  (0.4444,\ 0.1481),
 \]
-so the profile 0.95 cutoff is \(1.7233\), while the ordinary \(\chi^2_2\)
-cutoff is \(5.9915\). In \(12000\) replications, the profile cutoff rejected at
+so the profile 0.95 cutoff is \(1.9034\), while the ordinary \(\chi^2_2\)
+cutoff is \(5.9915\). Under the profile law, the ordinary cutoff has tail
+probability \(0.00030\). In \(12000\) replications, the profile cutoff rejected at
 \[
-  0.0499,\quad 0.0498,\quad 0.0482
+  0.0478,\quad 0.0480,\quad 0.0508
 \]
 for \(N=150,600,3000\), while the ordinary chi-square cutoff rejected at
 \[
-  0.0005,\quad 0.0000,\quad 0.0003.
+  0.0007,\quad 0.0003,\quad 0.0003.
 \]
 
 \begin{center}
-\includegraphics[width=\linewidth]{gls_nested_profile_survival_p3_alt070.pdf}
+\includegraphics[width=\linewidth]{gls_nested_profile_survival_p3_diag441.pdf}
+\end{center}
+
+\subsection*{A round one-degree liberal example}
+
+The same mechanism can also move in the opposite direction; the conservative
+examples above are not a theorem about GLS. Keep \(p=3\), but use the simpler
+nested contrast that tests one covariance:
+\[
+  B:\ \Sigma_B(a)=aI_3,\qquad
+  A:\ \Sigma_A(a,c)=
+  \begin{pmatrix}
+  a & c & 0\\
+  c & a & 0\\
+  0 & 0 & a
+  \end{pmatrix}.
+\]
+Now take
+\[
+  \Sigma_0=\operatorname{diag}(4,\ 4,\ 7).
+\]
+The true covariance between the first two variables is zero, and the first two
+variances are equal. The extra covariance parameter in \(A\) therefore remains
+zero at the population optimum even though both models are misspecified by the
+third variance. The GLS projection is
+\[
+  \Sigma_A^{*}=\Sigma_B^{*}=\frac{84}{19}I_3,
+  \qquad f_A(\Sigma_0)=f_B(\Sigma_0)=0.0394736842.
+\]
+This is again a genuine nested pseudo-null: the value and profile gradient
+differences are zero at \(\Sigma_0\). The profile spectrum is
+\[
+  (1.4654),
+\]
+so the profile 0.95 cutoff is \(5.6292\), while the ordinary \(\chi^2_1\)
+cutoff is \(3.8415\). Under the profile law, the ordinary cutoff has tail
+probability \(0.1054\), so the nominal 0.05 test is asymptotically about a
+10.5 percent test. In \(12000\) replications, the profile cutoff rejected at
+\[
+  0.0466,\quad 0.0453,\quad 0.0478
+\]
+for \(N=150,600,3000\), while the ordinary chi-square cutoff rejected at
+\[
+  0.1009,\quad 0.1048,\quad 0.1031.
+\]
+
+\begin{center}
+\includegraphics[width=\linewidth]{gls_nested_profile_survival_liberal_diag447.pdf}
 \end{center}
 
 \subsection*{Growth with the number of indicators}
 
-The badness is not a finite-\(p\) artifact. A clean construction is block
-replication. Take \(K\) independent copies of the three-indicator pseudo-null
-block above, and test the same within-block covariance equality restriction in
-each block. This is a block-diagonal SEM sequence rather than the single global
-compound-symmetry family, but it is enough to show that the issue does not
-disappear with more indicators. The ordinary reference has \(2K\) degrees of
-freedom. The profile reference is
+The conservative failure is not a finite-\(p\) artifact. A clean construction is
+block replication. Take \(K\) independent copies of the round conservative
+three-indicator pseudo-null block above, and test the same within-block
+covariance equality restriction in each block. This is a block-diagonal SEM
+sequence rather than the single global compound-symmetry family, but it is
+enough to show that the issue does not disappear with more indicators. The
+ordinary reference has \(2K\) degrees of freedom. The profile reference is
 \[
-  \sum_{k=1}^{K}\{0.3681\,\chi^2_{1k,1}+0.1924\,\chi^2_{1k,2}\}.
+  \sum_{k=1}^{K}\{0.4444\,\chi^2_{1k,1}+0.1481\,\chi^2_{1k,2}\}.
 \]
-Its mean is \(K(0.3681+0.1924)=0.5605K\), whereas the ordinary
+Its mean is \(K(0.4444+0.1481)=0.5926K\), whereas the ordinary
 \(\chi^2_{2K}\) reference has mean \(2K\). Therefore the ordinary 0.95 cutoff,
 which is \(2K+O(\sqrt K)\), lies far to the right of the true profile mixture
 mean by an order-\(K\) amount. By concentration,

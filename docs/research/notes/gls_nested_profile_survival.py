@@ -28,14 +28,39 @@ import gls_nested_profile_mc as smoke
 import gls_nested_profile_scan as scan
 
 
-def spectrum_setup(p: int, eps: float, pat: str):
+def covariance_direction(base, p: int, i: int, j: int) -> np.ndarray:
+    E = np.zeros((p, p))
+    E[i, j] = E[j, i] = 1.0
+    return base.vech(E, p)
+
+
+def model_jacobians(base, p: int, model: str):
+    if model == "cov-equality":
+        return base.jacobians(p)
+    if model == "one-cov":
+        Delta_B = base.vech(np.eye(p), p)[:, None]
+        Delta_A = np.column_stack([Delta_B[:, 0], covariance_direction(base, p, 1, 0)])
+        return Delta_A, Delta_B
+    raise ValueError(model)
+
+
+def sigma0_from_args(p: int, eps: float, pat: str, diag: str | None) -> np.ndarray:
+    if diag is None:
+        return np.eye(p) + eps * np.diag(scan.pattern(pat, p))
+    vals = np.array([float(x) for x in diag.split(",") if x], dtype=float)
+    if vals.size != p:
+        raise ValueError(f"--diag has {vals.size} entries but --p is {p}")
+    return np.diag(vals)
+
+
+def spectrum_setup(p: int, eps: float, pat: str, diag: str | None, model: str):
     base = smoke.load_base()
     Dp = base.dup(p)
     Dplus = np.linalg.inv(Dp.T @ Dp) @ Dp.T
-    Delta_A, Delta_B = base.jacobians(p)
+    Delta_A, Delta_B = model_jacobians(base, p, model)
     df_diff = Delta_A.shape[1] - Delta_B.shape[1]
 
-    Sig0 = np.eye(p) + eps * np.diag(scan.pattern(pat, p))
+    Sig0 = sigma0_from_args(p, eps, pat, diag)
     u0 = base.vech(Sig0, p)
     Gamma = base.gamma_nt(Sig0, Dplus)
     W = np.linalg.inv(Gamma)
@@ -87,12 +112,13 @@ def write_csv(path: Path, xs: np.ndarray, columns: dict[str, np.ndarray]) -> Non
             )
 
 
-def write_plot(csv_path: Path, pdf_path: Path, title: str) -> None:
+def write_plot(csv_path: Path, pdf_path: Path, title: str, df_diff: int) -> None:
     r_code = r'''
 args <- commandArgs(TRUE)
 csv_path <- args[[1]]
 pdf_path <- args[[2]]
 title <- args[[3]]
+df_diff <- as.integer(args[[4]])
 d <- read.csv(csv_path, check.names = FALSE)
 emp_cols <- grep("^emp_N", names(d), value = TRUE)
 cols <- c(profile = "#111111", chi = "#777777",
@@ -108,7 +134,8 @@ for (i in seq_along(emp_cols)) {
   lines(d$x, d[[emp_cols[[i]]]], lwd = 1.45, col = cols[[2 + i]])
 }
 abline(h = 0.05, col = "gray75", lty = 3)
-legend_labels <- c("profile mixture", expression(chi[5]^2),
+chi_label <- bquote(chi[.(df_diff)]^2)
+legend_labels <- c("profile mixture", as.expression(chi_label),
                    sub("^emp_N", "empirical N=", emp_cols))
 legend_cols <- c(cols[["profile"]], cols[["chi"]], cols[seq_len(length(emp_cols)) + 2])
 legend_lty <- c(1, 2, rep(1, length(emp_cols)))
@@ -122,7 +149,7 @@ dev.off()
         r_path = Path(fh.name)
     try:
         subprocess.run(
-            ["Rscript", str(r_path), str(csv_path), str(pdf_path), title],
+            ["Rscript", str(r_path), str(csv_path), str(pdf_path), title, str(df_diff)],
             check=True,
             stdout=subprocess.DEVNULL,
         )
@@ -134,14 +161,17 @@ def run(
     p: int,
     eps: float,
     pat: str,
+    diag: str | None,
+    model: str,
     Ns: tuple[int, ...],
     M: int,
     grid_n: int,
     out_prefix: str,
 ) -> None:
     base, Sig0, Delta_A, Delta_B, Dplus, full_lam, classic_lam, chi_lam = (
-        spectrum_setup(p, eps, pat)
+        spectrum_setup(p, eps, pat, diag, model)
     )
+    df_diff = Delta_A.shape[1] - Delta_B.shape[1]
     q995 = max(
         smoke.weighted_chisq_quantile(full_lam, 0.995),
         smoke.weighted_chisq_quantile(chi_lam, 0.995),
@@ -156,7 +186,8 @@ def run(
     profile_q95 = smoke.weighted_chisq_quantile(full_lam, 0.95)
     chi_q95 = smoke.weighted_chisq_quantile(chi_lam, 0.95)
 
-    print(f"survival smoke: p={p}, pattern={pat}, eps={eps}, Ns={list(Ns)}, M={M}")
+    design = f"diag={diag}" if diag is not None else f"pattern={pat}, eps={eps}"
+    print(f"survival smoke: p={p}, model={model}, {design}, Ns={list(Ns)}, M={M}")
     print(f"profile lambdas={full_lam}")
     print(f"profile q95={profile_q95:.4f}, chi q95={chi_q95:.4f}")
     print("N        tail_prof95  tail_chi95  supdiff_profile  supdiff_chi")
@@ -178,7 +209,7 @@ def run(
     csv_path = out_dir / f"{out_prefix}.csv"
     pdf_path = out_dir / f"{out_prefix}.pdf"
     write_csv(csv_path, xs, columns)
-    write_plot(csv_path, pdf_path, f"Nested GLS survival: {pat}, eps={eps}")
+    write_plot(csv_path, pdf_path, f"Nested GLS survival: {model}, {design}", df_diff)
     print(f"wrote {csv_path}")
     print(f"wrote {pdf_path}")
 
@@ -188,6 +219,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--p", type=int, default=4)
     parser.add_argument("--eps", type=float, default=0.15)
     parser.add_argument("--pattern", type=str, default="alternating")
+    parser.add_argument("--diag", type=str, default=None)
+    parser.add_argument("--model", type=str, default="cov-equality")
     parser.add_argument("--Ns", type=str, default="150,600,3000")
     parser.add_argument("--M", type=int, default=12000)
     parser.add_argument("--grid", type=int, default=220)
@@ -198,4 +231,14 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     Ns = tuple(int(x) for x in args.Ns.split(",") if x)
-    run(args.p, args.eps, args.pattern, Ns, args.M, args.grid, args.out_prefix)
+    run(
+        args.p,
+        args.eps,
+        args.pattern,
+        args.diag,
+        args.model,
+        Ns,
+        args.M,
+        args.grid,
+        args.out_prefix,
+    )
