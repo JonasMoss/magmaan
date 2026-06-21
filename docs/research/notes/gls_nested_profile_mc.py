@@ -21,7 +21,9 @@ no longer all one, so the smoke compares:
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
 
 import numpy as np
 
@@ -37,19 +39,68 @@ def load_base():
     return mod
 
 
-def q95(x: np.ndarray) -> float:
-    return float(np.quantile(x, 0.95))
-
-
 def qtiles(x: np.ndarray) -> tuple[float, float, float, float]:
     qs = np.quantile(x, [0.50, 0.90, 0.95, 0.99])
     return tuple(float(q) for q in qs)
 
 
-def mixture_draws(lam: np.ndarray, ndraw: int, seed: int) -> np.ndarray:
-    rng = np.random.default_rng(seed)
-    pos = lam[lam > 1e-8]
-    return rng.chisquare(1.0, size=(ndraw, pos.size)) @ pos
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def imhof_cli() -> Path:
+    root = repo_root()
+    src = Path(__file__).with_name("imhof_quantile_cli.cpp")
+    out = root / "build" / "fast" / "imhof_quantile_cli"
+    lib = root / "build" / "fast" / "libmagmaan.a"
+    quadpack = root / "build" / "fast" / "libquadpack.a"
+    eigen = root / "build" / "fast" / "_deps" / "eigen3-src"
+    if (
+        out.exists()
+        and out.stat().st_mtime >= src.stat().st_mtime
+        and out.stat().st_mtime >= lib.stat().st_mtime
+    ):
+        return out
+    if not lib.exists() or not quadpack.exists() or not eigen.exists():
+        raise RuntimeError("build/fast libraries not found; run `just fast` first")
+    cxx = os.environ.get("CXX", "c++")
+    cmd = [
+        cxx,
+        "-std=c++23",
+        "-O2",
+        "-DNDEBUG",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-DEIGEN_NO_EXCEPTIONS",
+        f"-I{root / 'include'}",
+        f"-I{eigen}",
+        str(src),
+        str(lib),
+        str(quadpack),
+        "-lm",
+        "-o",
+        str(out),
+    ]
+    subprocess.run(cmd, check=True)
+    return out
+
+
+def positive_lambdas(lam: np.ndarray) -> np.ndarray:
+    return np.array([x for x in lam if x > 1e-8], dtype=float)
+
+
+def imhof_quantile(lam: np.ndarray, prob: float) -> float:
+    pos = positive_lambdas(lam)
+    if pos.size == 0:
+        return 0.0
+    args = [str(imhof_cli()), "quantile", f"{prob:.17g}"]
+    args.extend(f"{x:.17g}" for x in pos)
+    out = subprocess.check_output(args, text=True).strip().split()
+    return float(out[0])
+
+
+def imhof_qtiles(lam: np.ndarray) -> tuple[float, float, float, float]:
+    return tuple(imhof_quantile(lam, p) for p in (0.50, 0.90, 0.95, 0.99))
 
 
 def simulate_stats(base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed):
@@ -67,7 +118,7 @@ def simulate_stats(base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed):
     return out
 
 
-def run(p=4, eps=0.15, N=1200, M=6000, mix_draws_n=300000):
+def run(p=4, eps=0.15, N=1200, M=6000):
     base = load_base()
     Dp = base.dup(p)
     Dplus = np.linalg.inv(Dp.T @ Dp) @ Dp.T
@@ -99,13 +150,15 @@ def run(p=4, eps=0.15, N=1200, M=6000, mix_draws_n=300000):
     lam_value, _ = base.spectrum(Q_value, Gamma)
     lam_classic, _ = base.spectrum(Q_classic, Gamma)
 
-    full_lam = lam_profile[lam_profile > 1e-8]
+    full_lam = positive_lambdas(lam_profile)
     top_df_lam = np.sort(full_lam)[::-1][:df_diff]
+    classic_lam = positive_lambdas(lam_classic)
+    chi_lam = np.ones(df_diff)
     emp = simulate_stats(base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed=20260621)
-    mix_full = mixture_draws(full_lam, mix_draws_n, seed=1)
-    mix_top = mixture_draws(top_df_lam, mix_draws_n, seed=2)
-    mix_chi = np.random.default_rng(3).chisquare(df_diff, size=mix_draws_n)
-    mix_classic = mixture_draws(lam_classic, mix_draws_n, seed=4)
+    q_full = imhof_qtiles(full_lam)
+    q_top = imhof_qtiles(top_df_lam)
+    q_classic = imhof_qtiles(classic_lam)
+    q_chi = imhof_qtiles(chi_lam)
 
     print(f"GLS nested finite-sample smoke: p={p}, eps={eps}, N={N}, M={M}")
     print(f"df_diff={df_diff}, f0_diff={f0_diff:.3e}, ||score diff||={np.linalg.norm(score_diff):.3e}")
@@ -116,19 +169,19 @@ def run(p=4, eps=0.15, N=1200, M=6000, mix_draws_n=300000):
     print()
     print("quantiles:          q50      q90      q95      q99")
     for label, vals in [
-        ("empirical stat", emp),
-        ("profile full ", mix_full),
-        ("profile topdf", mix_top),
-        ("classic U    ", mix_classic),
-        ("chi-square   ", mix_chi),
+        ("empirical stat", qtiles(emp)),
+        ("profile full ", q_full),
+        ("profile topdf", q_top),
+        ("classic U    ", q_classic),
+        ("chi-square   ", q_chi),
     ]:
-        print(f"{label:14s} {qtiles(vals)[0]:8.4f} {qtiles(vals)[1]:8.4f} {qtiles(vals)[2]:8.4f} {qtiles(vals)[3]:8.4f}")
+        print(f"{label:14s} {vals[0]:8.4f} {vals[1]:8.4f} {vals[2]:8.4f} {vals[3]:8.4f}")
     print()
     for label, cutoff in [
-        ("profile full q95", q95(mix_full)),
-        ("profile topdf q95", q95(mix_top)),
-        ("classic U q95", q95(mix_classic)),
-        ("chi-square q95", q95(mix_chi)),
+        ("profile full q95", q_full[2]),
+        ("profile topdf q95", q_top[2]),
+        ("classic U q95", q_classic[2]),
+        ("chi-square q95", q_chi[2]),
     ]:
         print(f"empirical tail at {label:17s}: {np.mean(emp > cutoff):.4f}  cutoff={cutoff:.4f}")
 

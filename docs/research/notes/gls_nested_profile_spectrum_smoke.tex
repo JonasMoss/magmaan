@@ -23,6 +23,11 @@ test in a continuous GLS setting. The companion scripts are
   \qquad\text{and}\qquad
   \texttt{gls\_nested\_profile\_mc.py}.
 \]
+The finite-sample script uses the C++ helper
+\texttt{imhof\_quantile\_cli.cpp}, which calls \texttt{magmaan}'s
+\texttt{robust::imhof\_upper} and inverts it by bisection for deterministic
+mixture quantiles. The only Monte Carlo in the smoke is the finite-sample data
+generation.
 
 \section{Required Objects}
 
@@ -126,8 +131,8 @@ from the same $\Sigma_0$ and refitting both GLS profiles with $W(\hat u)$.
 Reference & q50 & q90 & q95 & q99 \\
 \midrule
 Empirical statistic & 3.9382 & 8.8421 & 10.7279 & 15.4107 \\
-Profile spectrum & 3.9829 & 8.7284 & 10.5929 & 14.7434 \\
-Classical $U$ / $\chi^2_5$ & 4.3539 & 9.2525 & 11.0753 & 14.9859 \\
+Profile spectrum & 3.9817 & 8.7316 & 10.5854 & 14.7734 \\
+Classical $U$ / $\chi^2_5$ & 4.3515 & 9.2364 & 11.0705 & 15.0863 \\
 \bottomrule
 \end{tabular}
 \end{center}
