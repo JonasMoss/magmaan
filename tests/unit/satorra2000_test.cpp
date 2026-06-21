@@ -590,8 +590,9 @@ TEST_CASE("lr_test_satorra2000: low-level p-value wrap") {
   CHECK(r.p_scaled_shifted == doctest::Approx(
       magmaan::inference::chi2_pvalue(r.scaled_shifted.chi2_adj, 3)));
 
-  // Mixture p-value matches `imhof_upper` directly.
-  CHECK(r.p_mixture == doctest::Approx(magmaan::robust::imhof_upper(eig, T_diff)));
+  // Mixture p-value matches the weighted chi-square tail directly.
+  CHECK(r.p_mixture ==
+        doctest::Approx(magmaan::robust::weighted_chisq_upper(eig, T_diff)));
 }
 
 TEST_CASE("lr_test_satorra2000: degenerate (m = 0)") {
@@ -663,6 +664,45 @@ TEST_CASE("lr_test_satorra_bentler2010: uses hybrid scale") {
   CHECK(r.T_scaled == doctest::Approx(13.0 / cd));
   CHECK(r.c_H1 == doctest::Approx(c10));
   CHECK(r.c_hybrid == doctest::Approx(c10));
+}
+
+// ── Profile-Hessian contrast spectrum Q·Γ ─────────────────────────────────
+
+TEST_CASE("compute_profile_contrast_spectrum: returns positive QGamma weights") {
+  Eigen::MatrixXd Q(3, 3);
+  Q << 2.0, 0.0, 0.0,
+       0.0, 1.0, 0.0,
+       0.0, 0.0, 0.0;
+  Eigen::MatrixXd G(3, 3);
+  G << 3.0, 0.0, 0.0,
+       0.0, 5.0, 0.0,
+       0.0, 0.0, 7.0;
+
+  auto sd_or = magmaan::robust::compute_profile_contrast_spectrum(Q, G);
+  REQUIRE(sd_or.has_value());
+  const auto& sd = *sd_or;
+  REQUIRE(sd.eigenvalues.size() == 2);
+  CHECK(sd.eigenvalues(0) == doctest::Approx(5.0));
+  CHECK(sd.eigenvalues(1) == doctest::Approx(6.0));
+  CHECK(sd.trace_CinvS == doctest::Approx(11.0));
+  CHECK(sd.trace_CinvS_sq == doctest::Approx(61.0));
+  CHECK(sd.C.size() == 0);
+  CHECK(sd.S.size() == 0);
+  CHECK(sd.warnings.empty());
+}
+
+TEST_CASE("compute_profile_contrast_spectrum: flags indefinite contrasts") {
+  Eigen::MatrixXd Q(2, 2);
+  Q << 1.0, 0.0,
+       0.0, -0.25;
+  const Eigen::MatrixXd G = Eigen::MatrixXd::Identity(2, 2);
+
+  auto sd_or = magmaan::robust::compute_profile_contrast_spectrum(Q, G);
+  REQUIRE(sd_or.has_value());
+  const auto& sd = *sd_or;
+  REQUIRE(sd.eigenvalues.size() == 1);
+  CHECK(sd.eigenvalues(0) == doctest::Approx(1.0));
+  CHECK_FALSE(sd.warnings.empty());
 }
 
 // ── Method-2001 difference spectrum (U0 - U1)·Γ ───────────────────────────

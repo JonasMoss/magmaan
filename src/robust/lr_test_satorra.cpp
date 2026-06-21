@@ -18,7 +18,7 @@
 #include "magmaan/inference/inference.hpp"        // chi2_pvalue, noncentral_chisq_cdf
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/restriction.hpp"      // restriction_alpha_from_K
-#include "magmaan/robust/weighted_chisq.hpp"   // imhof_upper
+#include "magmaan/robust/weighted_chisq.hpp"   // weighted_chisq_upper
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"                // vech_len
@@ -444,7 +444,7 @@ lr_test_satorra2000(double                  T_diff,
   out.p_scaled_shifted =
       chi2_pvalue(out.scaled_shifted.chi2_adj, out.scaled_shifted.df);
 
-  out.p_mixture = imhof_upper(sd.eigenvalues, T_diff);
+  out.p_mixture = weighted_chisq_upper(sd.eigenvalues, T_diff);
   return out;
 }
 

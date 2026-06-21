@@ -388,6 +388,90 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
 }
 
 post_expected<SatorraDiffResult>
+compute_profile_contrast_spectrum(
+    const Eigen::Ref<const Eigen::MatrixXd>& Q,
+    const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+    double                                   eig_tol) {
+  const Eigen::Index q = Q.rows();
+  if (Q.cols() != q || Gamma.rows() != q || Gamma.cols() != q || q == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_profile_contrast_spectrum: Q and Gamma must be square and "
+        "the same non-zero dimension"));
+  }
+  if (!(eig_tol >= 0.0) || !std::isfinite(eig_tol)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_profile_contrast_spectrum: eig_tol must be finite and "
+        "non-negative"));
+  }
+
+  const Eigen::MatrixXd Qs = 0.5 * (Q + Q.transpose());
+  const Eigen::MatrixXd Gs = 0.5 * (Gamma + Gamma.transpose());
+
+  Eigen::MatrixXd reduced;
+  Eigen::LLT<Eigen::MatrixXd> llt(Gs);
+  if (llt.info() == Eigen::Success) {
+    const Eigen::MatrixXd R = llt.matrixL();
+    reduced = R.transpose() * Qs * R;
+  } else {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(Gs);
+    if (es_g.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_profile_contrast_spectrum: Gamma eigensolver failed"));
+    }
+    const double scale_g =
+        std::max(1.0, es_g.eigenvalues().cwiseAbs().maxCoeff());
+    if (es_g.eigenvalues().minCoeff() < -eig_tol * scale_g) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_profile_contrast_spectrum: Gamma is not symmetric PSD"));
+    }
+    const Eigen::VectorXd d =
+        es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
+    const Eigen::MatrixXd sq =
+        es_g.eigenvectors() * d.asDiagonal() * es_g.eigenvectors().transpose();
+    reduced = sq * Qs * sq;
+  }
+  reduced = 0.5 * (reduced + reduced.transpose()).eval();
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(reduced,
+                                                    Eigen::EigenvaluesOnly);
+  if (es.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_profile_contrast_spectrum: eigen-solve failed"));
+  }
+
+  const Eigen::VectorXd all = es.eigenvalues();
+  const double scale =
+      all.size() > 0 ? std::max(1.0, all.cwiseAbs().maxCoeff()) : 1.0;
+  const double tol = eig_tol * scale;
+  std::vector<double> pos;
+  std::vector<std::string> warnings;
+  pos.reserve(static_cast<std::size_t>(all.size()));
+  for (Eigen::Index k = 0; k < all.size(); ++k) {
+    if (all(k) > tol) {
+      pos.push_back(all(k));
+    } else if (all(k) < -tol) {
+      warnings.emplace_back(
+          "compute_profile_contrast_spectrum: negative contrast eigenvalue " +
+          std::to_string(all(k)) + " below tolerance " + std::to_string(tol));
+    }
+  }
+
+  Eigen::VectorXd eig(static_cast<Eigen::Index>(pos.size()));
+  for (Eigen::Index k = 0; k < eig.size(); ++k) {
+    eig(k) = pos[static_cast<std::size_t>(k)];
+  }
+
+  SatorraDiffResult out;
+  out.C              = Eigen::MatrixXd::Zero(0, 0);
+  out.S              = Eigen::MatrixXd::Zero(0, 0);
+  out.eigenvalues    = std::move(eig);
+  out.trace_CinvS    = out.eigenvalues.sum();
+  out.trace_CinvS_sq = out.eigenvalues.squaredNorm();
+  out.warnings       = std::move(warnings);
+  return out;
+}
+
+post_expected<SatorraDiffResult>
 compute_diff_spectrum_2001(const Eigen::Ref<const Eigen::MatrixXd>& U0,
                            const Eigen::Ref<const Eigen::MatrixXd>& U1,
                            const Eigen::Ref<const Eigen::MatrixXd>& Gamma,

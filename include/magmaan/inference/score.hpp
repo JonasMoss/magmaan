@@ -394,8 +394,8 @@ score_for_direction_robust(const ScoreCandidate& candidate,
 // info-orthogonal to the nuisance subspace), with u = Gᵀs and V = GᵀIG. The
 // robust version mean-scales by `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G)) / df` (the
 // Satorra-Bentler scaling at df>1) and also reports the exact eigenvalue-mixture
-// p-value `Pr(Σλⱼχ²₁ > T)` via the QUADPACK-backed `imhof_upper`, where λ are
-// the generalized eigenvalues of (GᵀB1G, GᵀA1G). At df=1 this reduces exactly to
+// p-value `Pr(Σλⱼχ²₁ > T)` via `weighted_chisq_upper`, where λ are the
+// generalized eigenvalues of (GᵀB1G, GᵀA1G). At df=1 this reduces exactly to
 // the per-row `c`.
 struct JointScoreTestResult {
   std::vector<ScoreCandidate> candidates;  // the jointly released constraints
@@ -404,7 +404,7 @@ struct JointScoreTestResult {
   double scaling_factor = 1.0; // c̄ = Σλ / df
   double mi_scaled = 0.0;      // T / c̄ (mean-scaled)
   double p_value = 1.0;        // χ²_df tail of mi_scaled (mean-scaled)
-  double p_mixture = 1.0;      // exact Pr(Σλⱼ χ²₁ > T) via imhof_upper
+  double p_mixture = 1.0;      // exact Pr(Σλⱼ χ²₁ > T)
   Eigen::VectorXd eigvals;     // λ of (GᵀA1G)⁻¹(GᵀB1G), ascending
 };
 

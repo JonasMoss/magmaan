@@ -1532,7 +1532,7 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
     out.scaling_factor = trace / static_cast<double>(df);  // c̄ = Σλ / df
     out.mi_scaled = T / out.scaling_factor;
     out.p_value = chi2_pvalue(out.mi_scaled, out.df);
-    out.p_mixture = robust::imhof_upper(lambda, T);
+    out.p_mixture = robust::weighted_chisq_upper(lambda, T);
   } else {
     out.scaling_factor = 1.0;
     out.mi_scaled = T;

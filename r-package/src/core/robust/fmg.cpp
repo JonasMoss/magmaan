@@ -198,13 +198,13 @@ fmg_test(double chi2_source,
       break;
     case FmgMethod::All:
       out.lambdas_reference = out.lambdas;
-      out.p_value = imhof_upper(out.lambdas, chi2_source);
+      out.p_value = weighted_chisq_upper(out.lambdas, chi2_source);
       break;
     case FmgMethod::PenalizedAll:
       if (out.lambdas.size() > 0) {
         out.lambdas_reference =
             0.5 * (out.lambdas.array() + out.lambdas.mean()).matrix();
-        out.p_value = imhof_upper(out.lambdas_reference, chi2_source);
+        out.p_value = weighted_chisq_upper(out.lambdas_reference, chi2_source);
       } else {
         out.p_value = nan();
       }
@@ -213,20 +213,20 @@ fmg_test(double chi2_source,
       out.lambdas_reference =
           eba_lambdas(out.lambdas, static_cast<int>(std::ceil(options.param)));
       out.p_value = (out.lambdas_reference.size() > 0)
-                        ? imhof_upper(out.lambdas_reference, chi2_source)
+                        ? weighted_chisq_upper(out.lambdas_reference, chi2_source)
                         : nan();
       break;
     case FmgMethod::Peba:
       out.lambdas_reference =
           peba_lambdas(out.lambdas, static_cast<int>(std::ceil(options.param)));
       out.p_value = (out.lambdas_reference.size() > 0)
-                        ? imhof_upper(out.lambdas_reference, chi2_source)
+                        ? weighted_chisq_upper(out.lambdas_reference, chi2_source)
                         : nan();
       break;
     case FmgMethod::Pols:
       out.lambdas_reference = pols_lambdas(out.lambdas, options.param);
       out.p_value = (out.lambdas_reference.size() > 0)
-                        ? imhof_upper(out.lambdas_reference, chi2_source)
+                        ? weighted_chisq_upper(out.lambdas_reference, chi2_source)
                         : nan();
       break;
   }

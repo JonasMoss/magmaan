@@ -143,7 +143,7 @@ lr_test_satorra_bentler2010_ml2s_from_data(
 //                   T_adjusted = T_diff · d̂₀ / (Σ λ).
 //                   p_adjusted = Pr( χ²(d̂₀) > T_adjusted ).
 //   • p_mixture   — exact tail of the asymptotic Σⱼ λⱼ χ²₁ⱼ distribution
-//                   via `imhof_upper`.
+//                   via `weighted_chisq_upper`.
 //   • p_unscaled is also reported for reference (the naïve χ²(m) p-value of
 //     T_diff with no λ correction).
 // ============================================================================
@@ -166,7 +166,7 @@ struct LRSatorra2000Result {
   ScaledShiftedResult scaled_shifted;
   double              p_scaled_shifted;
 
-  double           p_mixture;      // Imhof tail of T_diff
+  double           p_mixture;      // weighted-χ² tail of T_diff
 
   std::vector<std::string> warnings;
 };

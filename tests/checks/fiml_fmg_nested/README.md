@@ -20,7 +20,7 @@ stochastic smoke checks for the nested p-values:
 - mean-scaled/Satorra-Bentler;
 - mean+variance adjusted;
 - scaled+shifted;
-- exact mixture through Imhof.
+- exact positive weighted-chi-square mixture.
 
 `--dist=t --t-df=5` keeps the model restriction true while making the data
 heavy-tailed, so normal-theory and robust nested behavior can be compared. This

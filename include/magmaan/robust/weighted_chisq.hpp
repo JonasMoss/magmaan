@@ -20,7 +20,8 @@ weighted_chisq_moments(int df,
 //   trace_sq = tr((UΓ̂)²) = tr(M²)      = ‖M‖_F² (M symmetric)    — O(k²)
 // Use this when only mean / mean+variance adjustments are needed (SB, MV-adj,
 // scaled-shifted). Keep `weighted_chisq_moments(df, eigvals)` for callers
-// that need the spectrum itself (Satorra 2000 mixture p-values, Imhof tail).
+// that need the spectrum itself (Satorra 2000 mixture p-values, exact mixture
+// tails).
 WeightedChiSquareMoments
 weighted_chisq_moments_from_M(int df,
                               const Eigen::Ref<const Eigen::MatrixXd>& M) noexcept;
@@ -64,10 +65,11 @@ scaled_shifted(double                                    t_ml,
                int                                       df,
                const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
 
-// Tail probability of a weighted sum of independent central χ²₁ variates:
+// Tail probability and quantiles of a positive weighted sum of independent
+// central χ²₁ variates:
 //
 //     Q = Σⱼ λⱼ · Xⱼ ,    Xⱼ  ~ᵢᵢᵈ  χ²₁ ,
-//     imhof_upper(λ, x) = Pr(Q > x).
+//     weighted_chisq_upper(λ, x) = Pr(Q > x).
 //
 // Positive spectra are evaluated first by Ruben's non-negative central-χ²
 // series, which avoids oscillatory cancellation in the deep tail. If that
@@ -91,9 +93,24 @@ scaled_shifted(double                                    t_ml,
 // drift by a small ε for very tight tolerances and Q in the deep tails.
 // `max_subdivisions` caps the Simpson recursion depth per interval (so the
 // total function evaluation count is at most O(max_subdivisions · log U)).
+double weighted_chisq_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
+                            double x,
+                            double rel_tol       = 1e-7,
+                            int    max_doublings = 8);
+
+// Invert `weighted_chisq_upper`: returns q such that Pr(Q <= q) ≈ `prob`.
+// `prob <= 0` returns 0; `prob >= 1` returns +∞ for non-degenerate mixtures.
+double weighted_chisq_quantile(const Eigen::Ref<const Eigen::VectorXd>& lambda,
+                               double prob,
+                               double rel_tol       = 1e-7,
+                               int    max_doublings = 8);
+
+// Compatibility alias retained for existing FMG / score-test callers. New code
+// should prefer `weighted_chisq_upper`, since positive weighted χ² mixtures are
+// evaluated by Ruben's series before any Imhof fallback is considered.
 double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
                    double x,
-                   double rel_tol         = 1e-7,
-                   int    max_doublings   = 8);
+                   double rel_tol       = 1e-7,
+                   int    max_doublings = 8);
 
 }  // namespace magmaan::robust
