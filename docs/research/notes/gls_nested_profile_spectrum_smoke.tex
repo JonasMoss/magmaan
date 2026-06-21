@@ -18,11 +18,8 @@
 This note records what is needed to compute the full regular eigenspectrum for
 nested tests in the profile-Hessian paradigm, and a first finite-sample smoke
 test in a continuous GLS setting. The companion scripts are
-\[
-  \texttt{relative-and-nested-fit-check.py}
-  \qquad\text{and}\qquad
-  \texttt{gls\_nested\_profile\_mc.py}.
-\]
+\texttt{relative-and-nested-fit-check.py}, \texttt{gls\_nested\_profile\_mc.py},
+and \texttt{gls\_nested\_cfa\_cycle\_scan.py}.
 The finite-sample script uses the C++ helper
 \texttt{weighted\_chisq\_quantile\_cli.cpp}, which calls \texttt{magmaan}'s
 \texttt{robust::weighted\_chisq\_quantile} and
@@ -418,6 +415,66 @@ This is intentionally an extreme design. The practical next question is how
 large the gap remains under less ill-conditioned but still realistic covariance
 patterns, and then under ordinal DWLS where the first-stage weight inputs are
 more variable.
+
+\section{A More SEM-Like Pseudo-Null}
+
+The diagonal examples isolate the mechanism, but they make the population too
+simple. A more SEM-like construction is a one-factor population with omitted
+local dependence:
+\[
+  \Sigma_0(\delta)
+  = \lambda^2 \mathbf 1\mathbf 1'
+    + (1-\lambda^2)I_6
+    + \delta C_6,
+  \qquad \lambda=0.7,
+\]
+where \(C_6\) is the adjacency matrix of the six-cycle. Thus all population
+off-diagonal correlations are positive: non-adjacent pairs have correlation
+\(0.49\), while adjacent local-dependence pairs have correlation
+\(0.49+\delta\).
+
+The nested pair is now nonlinear:
+\[
+  A:\ \Sigma_A(\lambda_i,\theta_i)=\lambda\lambda' + \operatorname{diag}(\theta_i),
+  \qquad
+  B:\ \Sigma_B(\ell,\theta_i)=\ell^2\mathbf 1\mathbf 1'
+    + \operatorname{diag}(\theta_i).
+\]
+Model \(A\) is congeneric one-factor CFA and \(B\) is tau-equivalent CFA. The
+six-cycle symmetry is transitive over indicators, so the pseudo-true congeneric
+fit has equal loadings and equal residual variances. Hence the larger-model
+pseudo-true point lies in \(B\), even though both models are misspecified for
+\(\delta>0\). Numerically, \(\lvert f_B-f_A\rvert<1.4\times10^{-17}\) and
+\(\lVert s_B-s_A\rVert<4.2\times10^{-11}\) over the grid below.
+
+The ordinary nested reference is \(\chi^2_5\), whose 0.95 cutoff is \(11.0705\).
+The profile-Hessian reference has six positive weights in this family; under
+estimated weights and misspecification, the number of positive directions need
+not equal the parameter-count difference. The population scan gives:
+\[
+\begin{array}{c|c|ccc|cc}
+\delta & \text{corr. range} & \text{RMSEA}_A & \text{RMSEA}_B & \text{SRMR}
+& q^{\mathrm{profile}}_{0.95}
+& \Pr_{\mathrm{profile}}\{T>q_{0.95}(\chi^2_5)\}\\
+\hline
+0.02 & [0.49,0.51] & 0.025 & 0.020 & 0.008 & 11.053 & 0.050\\
+0.04 & [0.49,0.53] & 0.051 & 0.041 & 0.017 & 10.997 & 0.049\\
+0.06 & [0.49,0.55] & 0.077 & 0.062 & 0.027 & 10.896 & 0.047\\
+0.08 & [0.49,0.57] & 0.104 & 0.084 & 0.037 & 10.740 & 0.044\\
+0.10 & [0.49,0.59] & 0.133 & 0.107 & 0.050 & 10.514 & 0.040\\
+0.12 & [0.49,0.61] & 0.164 & 0.131 & 0.064 & 10.196 & 0.035
+\end{array}
+\]
+
+This is a useful contrast to the toy stress tests. With acceptable global fit
+the ordinary chi-square reference is not catastrophically wrong in this family;
+the asymptotic 0.05 tail is around \(0.047\)--\(0.049\) for RMSEA near
+\(0.05\)--\(0.08\) and SRMR below \(0.03\). The distortion becomes visible as
+local dependence grows: at SRMR \(0.037\), the ordinary test is about a 0.044
+test, and at SRMR \(0.050\), about a 0.040 test. This suggests a practical
+performance study rather than another extreme example: grid the local-dependence
+strength, loading level, number of indicators, and \(N\), and report empirical
+tail error alongside population RMSEA/SRMR and the profile spectrum.
 
 \section{Magmaan Machinery}
 
