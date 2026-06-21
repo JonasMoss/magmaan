@@ -351,6 +351,45 @@ for \(N=150,600,3000\), while the ordinary chi-square cutoff rejected at
 \includegraphics[width=\linewidth]{gls_nested_profile_survival_liberal_diag447.pdf}
 \end{center}
 
+\subsection*{Population fit-index scale}
+
+For orientation, the following table reports population RMSEA and SRMR for the
+misspecified models used above. Here \(F_0=2f_M(\Sigma_0)\) is the full
+population GLS discrepancy, so
+\[
+  \varepsilon_{0,M}=\sqrt{F_0/df_M}.
+\]
+The degrees of freedom \(df_A\) and \(df_B\) are the ordinary model degrees of
+freedom against the saturated covariance model, not the nested-test df. The
+reported SRMR is the covariance-only population value
+\[
+  \operatorname{SRMR}_0 =
+  \left\{
+  \frac{2}{p(p+1)}
+  \sum_{i\le j}
+  \left(
+  \frac{\Sigma_{0,ij}-\Sigma^*_{ij}}
+       {\sqrt{\Sigma_{0,ii}\Sigma_{0,jj}}}
+  \right)^2
+  \right\}^{1/2}.
+\]
+Because \(A\) and \(B\) share the same pseudo-true covariance in these
+pseudo-null examples, they also share the same \(F_0\) and SRMR. RMSEA differs
+only because it divides by the model's own overall df.
+
+\begin{center}
+\begin{tabular}{lrrrrrr}
+\toprule
+Design & \(F_0\) & \(df_A\) & RMSEA \(A\) & \(df_B\) & RMSEA \(B\) & SRMR \\
+\midrule
+Moderate \(p=4,\epsilon=0.15\) & 0.044 & 3 & 0.121 & 8 & 0.074 & 0.094 \\
+High-contrast \(p=4\) & 1.069 & 3 & 0.597 & 8 & 0.366 & 0.462 \\
+Round conservative \(p=3\) & 0.500 & 2 & 0.500 & 4 & 0.354 & 0.408 \\
+Round liberal \(p=3\) & 0.079 & 4 & 0.140 & 5 & 0.126 & 0.162 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
 \subsection*{Growth with the number of indicators}
 
 The conservative failure is not a finite-\(p\) artifact. A clean construction is
