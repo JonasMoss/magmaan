@@ -1,0 +1,146 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,booktabs}
+\usepackage{hyperref}
+
+\title{A First Categorical DWLS Profile-Hessian Check}
+\author{}
+\date{\today}
+
+\newcommand{\tr}{\operatorname{tr}}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note records a first diagnostic exploration of the regular profile-Hessian
+roadmap in a genuinely categorical DWLS setting. The goal is not a finite-sample
+simulation yet. The goal is to check whether the categorical DWLS weight channel
+can visibly change the nested-test reference law once we leave exact fit.
+
+The companion script is
+\[
+  \texttt{docs/research/notes/ordinal\_dwls\_profile\_check.R}.
+\]
+
+\section{Setup}
+
+The population is a four-variable binary ordinal latent-response model. The
+first-stage object is
+\[
+  x=(u,\gamma),
+\]
+where $u$ stacks the four thresholds and six tetrachoric correlations, and
+\[
+  \gamma=\operatorname{diag}(\Gamma_u)
+\]
+is the diagonal of the asymptotic covariance of $u$. DWLS uses
+$W=\operatorname{diag}(\gamma)^{-1}$. The script computes $u$, $\gamma$, and the
+joint covariance of $(u,\gamma)$ by finite-difference delta method from the
+$2^4$ binary cell probabilities.
+
+The nested pair is:
+\[
+  A:\ \text{congeneric one-factor latent-response correlations},
+  \qquad
+  B:\ \text{tau-equivalent one-factor latent-response correlations}.
+\]
+Thresholds are free in both models. Thus the nested contrast tests equality of
+the loading structure, not threshold equality.
+
+For the nested contrast $B$ versus $A$, the script compares three quadratic
+reference laws:
+\[
+\begin{array}{ll}
+U_{\mathrm{GN}}:     & \text{Gauss--Newton fixed-weight projector, using only }u,\\
+Q_{\mathrm{fixed}}: & \text{fixed-weight profile Hessian in }u,\\
+Q_{\mathrm{full}}:  & \text{full profile Hessian in }x=(u,\gamma).
+\end{array}
+\]
+The last object is the categorical DWLS version of the general $Q_B-Q_A$
+roadmap object.
+
+\section{Results}
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Scenario & $\sqrt{2f_A}$ & $\sqrt{2f_B}$ &
+$\tr(Q_{\mathrm{fixed}}\Gamma_u)$ &
+$\tr(Q_{\mathrm{full}}\Gamma_x)$ \\
+\midrule
+Exact nested null & 0.0000 & 0.0001 & 2.8949 & 2.8949 \\
+Near-null misspec., $\epsilon=0.04$ & 0.0499 & 0.0499 & 2.9108 & 2.9850 \\
+Near-null misspec., $\epsilon=0.08$ & 0.1003 & 0.1003 & 2.9709 & 3.1580 \\
+Restriction false, congeneric & 0.0001 & 0.1261 & 2.9113 & 3.0918 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The corresponding full/fixed trace ratios were
+\[
+  1.0000,\quad 1.0255,\quad 1.0630,\quad 1.0620 .
+\]
+The exact nested null behaves as expected: the residual is essentially zero, so
+the DWLS weight channel is dormant and the full profile law collapses onto the
+fixed-weight law. Under fixed misspecification, the full DWLS law separates from
+the fixed-weight law. In the two near-null misspecification directions, the
+trace increases by about $2.5\%$ and $6.3\%$.
+
+The eigenvalue movement is more informative than the trace alone. For
+$\epsilon=0.08$, the leading eigenvalues changed from
+\[
+  (1.2945,\ 0.9387,\ 0.7377)
+\]
+under the fixed-weight profile Hessian to
+\[
+  (1.5546,\ 0.9326,\ 0.6710)
+\]
+under the full DWLS profile Hessian. So the weight channel does not merely
+rescale the law; it reshapes it.
+
+\section{Interpretation}
+
+This is consistent with the general theory. The DWLS profile score has two
+blocks:
+\[
+  s_u=-Wr,
+  \qquad
+  (s_\gamma)_k=-\frac12\,\frac{r_k^2}{\gamma_k^2}.
+\]
+The $\gamma$ block is residual-driven. It vanishes at exact fit and becomes a
+leading component under fixed misspecification. This is exactly why categorical
+DWLS is a strong applied example for the paper: the most common ordinal SEM
+workflow uses an estimated diagonal weight, and that weight is asymptotically
+irrelevant only in the exact-fit regime.
+
+\section{Caveats}
+
+The near-null misspecification scenarios were constructed to keep the congeneric
+and tau-equivalent fits nearly tied, but they are not yet an exact proof-level
+nested pseudo-null design. The reported score-gradient differences are small but
+not identically zero. The next pass should solve for misspecification directions
+that satisfy the nested pseudo-null conditions more exactly, then simulate
+finite-sample rejection rates under those population values.
+
+The script is intentionally small and finite-difference based. It is useful for
+orientation, not for final numerical claims. A production version should reuse
+the analytic ordinal moment influence and DWLS weight machinery in
+\texttt{magmaan}.
+
+\section{Next Steps}
+
+\begin{enumerate}
+\item Construct exact pseudo-null ordinal DWLS populations by solving the value
+  and profile-gradient equality conditions for $B$ and $A$.
+\item Run finite-sample simulations comparing ordinary $\chi^2$, fixed-weight
+  $Q_{\mathrm{fixed}}$, and full DWLS $Q_{\mathrm{full}}$ references.
+\item Repeat for multigroup threshold/loading invariance, where categorical
+  DWLS is most common in practice.
+\item Port the profile-Hessian calculation to \texttt{magmaan} using the
+  existing ordinal moment and weight caches.
+\end{enumerate}
+
+\end{document}
