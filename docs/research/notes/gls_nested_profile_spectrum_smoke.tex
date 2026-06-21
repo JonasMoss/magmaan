@@ -1,0 +1,156 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,booktabs}
+\usepackage{hyperref}
+
+\title{Nested GLS Profile Spectrum: First Smoke Test}
+\author{}
+\date{\today}
+
+\newcommand{\tr}{\operatorname{tr}}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note records what is needed to compute the full regular eigenspectrum for
+nested tests in the profile-Hessian paradigm, and a first finite-sample smoke
+test in a continuous GLS setting. The companion scripts are
+\[
+  \texttt{relative-and-nested-fit-check.py}
+  \qquad\text{and}\qquad
+  \texttt{gls\_nested\_profile\_mc.py}.
+\]
+
+\section{Required Objects}
+
+Let $x$ be the first-stage vector and let
+\[
+  \sqrt n(\hat x-x_0)\Rightarrow Z,\qquad Z\sim N(0,\Gamma_x).
+\]
+For each model $M$, define the profiled value
+\[
+  v_M(x)=\min_\theta f_M(\theta,x).
+\]
+The nested contrast is
+\[
+  c(x)=v_B(x)-v_A(x),
+\]
+where $B$ is the restricted model and $A$ is the larger model. Under the regular
+nested pseudo-null,
+\[
+  c(x_0)=0,\qquad \nabla c(x_0)=0.
+\]
+The reference law is therefore
+\[
+  n\,c(\hat x)\Rightarrow \frac12 Z'(Q_B-Q_A)Z
+\]
+if $f$ is scaled as a half-discrepancy, or equivalently
+\[
+  2n\,c(\hat x)\Rightarrow Z'(Q_B-Q_A)Z.
+\]
+Thus the full spectrum is obtained from the self-adjoint version of
+\[
+  (Q_B-Q_A)\Gamma_x .
+\]
+In implementation terms, the steps are:
+\begin{enumerate}
+\item Build a common first-stage vector $x$ and covariance $\Gamma_x$.
+\item Compute the profiled score $s_M(x)=\nabla_x v_M(x)$ for each model.
+\item Differentiate it to get $Q_M=D_xs_M(x_0)$.
+\item Verify the pseudo-null conditions $v_B=v_A$ and $s_B=s_A$.
+\item Eigensolve $\Gamma_x^{1/2}(Q_B-Q_A)\Gamma_x^{1/2}$.
+\end{enumerate}
+The old $U_B-U_A$ spectrum is the special exact-fit/fixed-weight/Gauss--Newton
+case. It is not the general object.
+
+\section{GLS Smoke Design}
+
+The smoke uses the linear covariance example from
+\texttt{relative-and-nested-fit.tex}. There are four observed variables.
+\[
+  B:\ \text{compound symmetry: one variance and one covariance},
+\]
+\[
+  A:\ \text{one common variance and free covariances}.
+\]
+The test is equality of the covariances. The normal-theory GLS weight is
+estimated from the first-stage covariance:
+\[
+  W(u)=\Gamma_{\mathrm{NT}}(u)^{-1}.
+\]
+
+To make the nested pseudo-null exact while keeping both models misspecified, the
+population covariance is diagonal with unequal variances:
+\[
+  \Sigma_0=I+\epsilon\operatorname{diag}(d),
+  \qquad
+  d=(1,-1,1,-1).
+\]
+Both models share the same pseudo-true zero covariance structure, so
+\[
+  v_B(x_0)-v_A(x_0)=0,\qquad s_B(x_0)-s_A(x_0)=0,
+\]
+but the common-variance part is misspecified when $\epsilon\ne0$.
+
+\section{Population Spectrum}
+
+For $\epsilon=0.15$, the population script reports:
+\[
+  v_B-v_A=0,\qquad \lVert s_B-s_A\rVert=0,
+\]
+and the profile/value finite-difference Hessians agree to $1.17\times10^{-7}$.
+The classical fixed-weight spectrum is
+\[
+  (1,1,1,1,1),
+\]
+whereas the profile-Hessian spectrum is
+\[
+  (1.4082,\ 0.9139,\ 0.9139,\ 0.9139,\ 0.5057),
+  \qquad
+  \tr=4.6557 .
+\]
+So even in this linear model with no model-curvature term, estimating the GLS
+weight changes the reference law under fixed misspecification.
+
+\section{Finite-Sample Smoke}
+
+The Monte Carlo uses $N=1200$ and $6000$ replications, simulating normal data
+from the same $\Sigma_0$ and refitting both GLS profiles with $W(\hat u)$.
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Reference & q50 & q90 & q95 & q99 \\
+\midrule
+Empirical statistic & 3.9382 & 8.8421 & 10.7279 & 15.4107 \\
+Profile spectrum & 3.9829 & 8.7284 & 10.5929 & 14.7434 \\
+Classical $U$ / $\chi^2_5$ & 4.3539 & 9.2525 & 11.0753 & 14.9859 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The empirical tail probability at the profile-spectrum 95\% cutoff was $0.0532$.
+At the ordinary $\chi^2_5$ cutoff it was $0.0450$. This is only a smoke test, but
+it points in the expected direction: the profile-Hessian spectrum tracks the
+finite-sample statistic better than the exact-fit spectrum.
+
+\section{What This Suggests}
+
+For GLS, the full nested eigenspectrum is not hard in principle. The hard part
+is not the eigensolve; it is computing $Q_M$ reliably. Finite differences of the
+profile score are enough for research scripts. A production implementation
+should expose analytic or automatic profile derivatives for:
+\[
+  s_M(x),\qquad Q_M=D_xs_M(x).
+\]
+
+For categorical DWLS, the same steps apply, but $x$ must include the weight
+inputs such as $\gamma=\operatorname{diag}(\Gamma_u)$. That makes $Q_M$ a block
+Hessian over $(u,\gamma)$ rather than only over ordinal moments. The GLS smoke
+is therefore the right first implementation target: it validates the profile
+machinery before the ordinal first-stage stack is made larger.
+
+\end{document}

@@ -192,7 +192,7 @@ def plain_chi2_size(lams, df_diff, ndraw=300000, seed_offset=0):
     return float(np.mean(stat > chi2_q95(df_diff)))
 
 
-def run(p=4, a0=1.0, b0=0.3):
+def run(p=4, a0=1.0, b0=0.0):
     Dp = dup(p)
     Dplus = np.linalg.inv(Dp.T @ Dp) @ Dp.T
     Delta_A, Delta_B = jacobians(p)
@@ -227,11 +227,14 @@ def run(p=4, a0=1.0, b0=0.3):
         lam_profile, imag = spectrum(Q_profile, Gamma)
         lam_classic, _ = spectrum(Q_classic, Gamma)
         lam_resid, _ = spectrum(Q_resid, Gamma)
+        f0_diff = profile_value(Delta_B, u0, p, Dplus) - profile_value(Delta_A, u0, p, Dplus)
+        score_diff = profile_score(Delta_B, u0, p, Dplus) - profile_score(Delta_A, u0, p, Dplus)
 
         k = df_diff
         mA = float(np.sqrt(max(rA @ W @ rA, 0.0)))
         mB = float(np.sqrt(max(rB @ W @ rB, 0.0)))
         print(f"\n=== {label}   ||r*_A||_W={mA:.4f}  ||r*_B||_W={mB:.4f} ===")
+        print(f" f0 diff: {f0_diff:.3e}   ||score diff||: {np.linalg.norm(score_diff):.3e}")
         print(f" score/value Hessian max diff: {q_err:.2e}")
         print(f" classical fixed-W top-{k+1}: {lam_classic[:k+1]}")
         print(f" profile-Hessian top-{k+1}: {lam_profile[:k+1]}   (max imag {imag:.1e})")
