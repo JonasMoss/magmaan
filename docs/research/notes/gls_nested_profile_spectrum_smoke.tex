@@ -24,10 +24,10 @@ test in a continuous GLS setting. The companion scripts are
   \texttt{gls\_nested\_profile\_mc.py}.
 \]
 The finite-sample script uses the C++ helper
-\texttt{imhof\_quantile\_cli.cpp}, which calls \texttt{magmaan}'s
-\texttt{robust::imhof\_upper} and inverts it by bisection for deterministic
-mixture quantiles. The only Monte Carlo in the smoke is the finite-sample data
-generation.
+\texttt{weighted\_chisq\_quantile\_cli.cpp}, which calls \texttt{magmaan}'s
+\texttt{robust::weighted\_chisq\_quantile} and
+\texttt{robust::weighted\_chisq\_upper} for deterministic mixture quantiles. The
+only Monte Carlo in the smoke is the finite-sample data generation.
 
 \section{Required Objects}
 
@@ -122,32 +122,62 @@ weight changes the reference law under fixed misspecification.
 
 \section{Finite-Sample Smoke}
 
-The Monte Carlo uses $N=1200$ and $6000$ replications, simulating normal data
-from the same $\Sigma_0$ and refitting both GLS profiles with $W(\hat u)$.
+The Monte Carlo uses $6000$ replications for each sample size, simulating normal
+data from the same $\Sigma_0$ and refitting both GLS profiles with $W(\hat u)$.
+The reference quantiles are computed once from the population spectrum.
 
 \begin{center}
 \begin{tabular}{lrrrr}
 \toprule
 Reference & q50 & q90 & q95 & q99 \\
 \midrule
-Empirical statistic & 3.9382 & 8.8421 & 10.7279 & 15.4107 \\
 Profile spectrum & 3.9817 & 8.7316 & 10.5854 & 14.7734 \\
 Classical $U$ / $\chi^2_5$ & 4.3515 & 9.2364 & 11.0705 & 15.0863 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The empirical tail probability at the profile-spectrum 95\% cutoff was $0.0532$.
-At the ordinary $\chi^2_5$ cutoff it was $0.0450$. This is only a smoke test, but
-it points in the expected direction: the profile-Hessian spectrum tracks the
-finite-sample statistic better than the exact-fit spectrum.
+\begin{center}
+\begin{tabular}{rrrrrr}
+\toprule
+$N$ & empirical q50 & empirical q90 & empirical q95 & tail at profile q95
+  & tail at $\chi^2_5$ q95 \\
+\midrule
+150  & 3.8651 & 8.4670 & 10.1870 & 0.0437 & 0.0352 \\
+300  & 3.9323 & 8.4929 & 10.3074 & 0.0457 & 0.0385 \\
+600  & 3.9239 & 8.6244 & 10.4148 & 0.0475 & 0.0397 \\
+1200 & 3.9793 & 8.7283 & 10.5150 & 0.0487 & 0.0405 \\
+3000 & 3.8889 & 8.5904 & 10.5366 & 0.0487 & 0.0395 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The profile cutoff is close to nominal once $N$ is moderate. The ordinary
+$\chi^2_5$ cutoff remains conservative here because the profile spectrum has a
+smaller upper tail cutoff than the exact-fit spectrum.
+
+\section{Magmaan Machinery}
+
+The reusable library pieces are now:
+\[
+  \texttt{robust::compute\_profile\_contrast\_spectrum}(Q,\Gamma),
+\]
+which returns the positive eigenvalues of
+$\Gamma^{1/2}Q\Gamma^{1/2}$ and flags genuinely negative directions, and
+\[
+  \texttt{robust::weighted\_chisq\_upper},\qquad
+  \texttt{robust::weighted\_chisq\_quantile},
+\]
+which provide the central positive weighted-\(\chi^2\) reference law and its
+cutoffs. The old \texttt{robust::imhof\_upper} symbol remains as a compatibility
+alias, but the new call sites use the distribution-level name.
 
 \section{What This Suggests}
 
 For GLS, the full nested eigenspectrum is not hard in principle. The hard part
 is not the eigensolve; it is computing $Q_M$ reliably. Finite differences of the
-profile score are enough for research scripts. A production implementation
-should expose analytic or automatic profile derivatives for:
+profile score are enough for research scripts. The next production step is to
+expose analytic or automatic profile derivatives for:
 \[
   s_M(x),\qquad Q_M=D_xs_M(x).
 \]

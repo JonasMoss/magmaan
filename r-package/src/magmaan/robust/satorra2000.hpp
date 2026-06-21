@@ -120,6 +120,27 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     GammaSource                      gamma = GammaSource::Empirical,
                     GammaComputation                 computation = GammaComputation::Streaming);
 
+// Positive quadratic-form spectrum for a profile-Hessian contrast.
+//
+// If a regular nested pseudo-null has
+//
+//     2n {v_B(\hat x) - v_A(\hat x)} => Z' Q Z,
+//     Z ~ N(0, Gamma),
+//
+// then the central mixture weights are the non-zero eigenvalues of Q·Gamma,
+// computed through the self-adjoint reduction Gamma^{1/2} Q Gamma^{1/2}. This
+// helper returns the positive weights only (ascending). Negative eigenvalues
+// beyond `eig_tol` are reported in `warnings`, because a nested pseudo-null
+// contrast should be PSD in exact arithmetic.
+//
+// `C`/`S` are empty in the returned `SatorraDiffResult`; `trace_CinvS` and
+// `trace_CinvS_sq` are the first two positive-spectrum sums.
+post_expected<SatorraDiffResult>
+compute_profile_contrast_spectrum(
+    const Eigen::Ref<const Eigen::MatrixXd>& Q,
+    const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+    double                                   eig_tol = 1e-10);
+
 // ============================================================================
 // Satorra-Bentler (2001) "method 2001" difference spectrum — the alternative
 // estimator of the U_D·Γ spectrum that the FMG-nested paper and `semTests`

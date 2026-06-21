@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
@@ -12,8 +11,7 @@
 
 namespace {
 
-Eigen::VectorXd
-positive_lambdas(int argc, char** argv, int offset) {
+Eigen::VectorXd positive_lambdas(int argc, char** argv, int offset) {
   std::vector<double> xs;
   for (int i = offset; i < argc; ++i) {
     const double x = std::strtod(argv[i], nullptr);
@@ -26,35 +24,7 @@ positive_lambdas(int argc, char** argv, int offset) {
   return out;
 }
 
-double
-quantile(const Eigen::VectorXd& lambda, double prob) {
-  if (lambda.size() == 0) return 0.0;
-  prob = std::clamp(prob, 0.0, 1.0);
-  if (prob <= 0.0) return 0.0;
-  const double target_upper = 1.0 - prob;
-
-  double lo = 0.0;
-  double hi = std::max(1.0, lambda.sum() +
-                                12.0 * std::sqrt(2.0 * lambda.squaredNorm()));
-  while (magmaan::robust::imhof_upper(lambda, hi) > target_upper) {
-    hi *= 2.0;
-    if (hi > 1e12) break;
-  }
-
-  for (int iter = 0; iter < 80; ++iter) {
-    const double mid = 0.5 * (lo + hi);
-    const double upper = magmaan::robust::imhof_upper(lambda, mid);
-    if (upper > target_upper) {
-      lo = mid;
-    } else {
-      hi = mid;
-    }
-  }
-  return 0.5 * (lo + hi);
-}
-
-void
-usage(const char* exe) {
+void usage(const char* exe) {
   std::cerr << "usage:\n"
             << "  " << exe << " quantile <cdf_prob> <lambda...>\n"
             << "  " << exe << " upper <x> <lambda...>\n";
@@ -62,8 +32,7 @@ usage(const char* exe) {
 
 }  // namespace
 
-int
-main(int argc, char** argv) {
+int main(int argc, char** argv) {
   if (argc < 4) {
     usage(argv[0]);
     return 2;
@@ -75,12 +44,13 @@ main(int argc, char** argv) {
 
   std::cout << std::setprecision(17);
   if (mode == "quantile") {
-    const double q = quantile(lambda, x);
-    std::cout << q << ' ' << magmaan::robust::imhof_upper(lambda, q) << '\n';
+    const double q = magmaan::robust::weighted_chisq_quantile(lambda, x);
+    std::cout << q << ' '
+              << magmaan::robust::weighted_chisq_upper(lambda, q) << '\n';
     return 0;
   }
   if (mode == "upper") {
-    std::cout << magmaan::robust::imhof_upper(lambda, x) << '\n';
+    std::cout << magmaan::robust::weighted_chisq_upper(lambda, x) << '\n';
     return 0;
   }
 

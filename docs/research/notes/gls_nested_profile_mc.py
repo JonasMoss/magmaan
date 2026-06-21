@@ -48,10 +48,10 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def imhof_cli() -> Path:
+def mixture_cli() -> Path:
     root = repo_root()
-    src = Path(__file__).with_name("imhof_quantile_cli.cpp")
-    out = root / "build" / "fast" / "imhof_quantile_cli"
+    src = Path(__file__).with_name("weighted_chisq_quantile_cli.cpp")
+    out = root / "build" / "fast" / "weighted_chisq_quantile_cli"
     lib = root / "build" / "fast" / "libmagmaan.a"
     quadpack = root / "build" / "fast" / "libquadpack.a"
     eigen = root / "build" / "fast" / "_deps" / "eigen3-src"
@@ -89,18 +89,18 @@ def positive_lambdas(lam: np.ndarray) -> np.ndarray:
     return np.array([x for x in lam if x > 1e-8], dtype=float)
 
 
-def imhof_quantile(lam: np.ndarray, prob: float) -> float:
+def weighted_chisq_quantile(lam: np.ndarray, prob: float) -> float:
     pos = positive_lambdas(lam)
     if pos.size == 0:
         return 0.0
-    args = [str(imhof_cli()), "quantile", f"{prob:.17g}"]
+    args = [str(mixture_cli()), "quantile", f"{prob:.17g}"]
     args.extend(f"{x:.17g}" for x in pos)
     out = subprocess.check_output(args, text=True).strip().split()
     return float(out[0])
 
 
-def imhof_qtiles(lam: np.ndarray) -> tuple[float, float, float, float]:
-    return tuple(imhof_quantile(lam, p) for p in (0.50, 0.90, 0.95, 0.99))
+def weighted_chisq_qtiles(lam: np.ndarray) -> tuple[float, float, float, float]:
+    return tuple(weighted_chisq_quantile(lam, p) for p in (0.50, 0.90, 0.95, 0.99))
 
 
 def simulate_stats(base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed):
@@ -118,7 +118,7 @@ def simulate_stats(base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed):
     return out
 
 
-def run(p=4, eps=0.15, N=1200, M=6000):
+def run(p=4, eps=0.15, Ns=(150, 300, 600, 1200, 3000), M=6000):
     base = load_base()
     Dp = base.dup(p)
     Dplus = np.linalg.inv(Dp.T @ Dp) @ Dp.T
@@ -154,13 +154,12 @@ def run(p=4, eps=0.15, N=1200, M=6000):
     top_df_lam = np.sort(full_lam)[::-1][:df_diff]
     classic_lam = positive_lambdas(lam_classic)
     chi_lam = np.ones(df_diff)
-    emp = simulate_stats(base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed=20260621)
-    q_full = imhof_qtiles(full_lam)
-    q_top = imhof_qtiles(top_df_lam)
-    q_classic = imhof_qtiles(classic_lam)
-    q_chi = imhof_qtiles(chi_lam)
+    q_full = weighted_chisq_qtiles(full_lam)
+    q_top = weighted_chisq_qtiles(top_df_lam)
+    q_classic = weighted_chisq_qtiles(classic_lam)
+    q_chi = weighted_chisq_qtiles(chi_lam)
 
-    print(f"GLS nested finite-sample smoke: p={p}, eps={eps}, N={N}, M={M}")
+    print(f"GLS nested finite-sample smoke: p={p}, eps={eps}, Ns={list(Ns)}, M={M}")
     print(f"df_diff={df_diff}, f0_diff={f0_diff:.3e}, ||score diff||={np.linalg.norm(score_diff):.3e}")
     print(f"profile/value Q max diff={np.abs(Q_profile - Q_value).max():.2e}")
     print(f"classic eig top: {lam_classic[:8]}")
@@ -169,7 +168,6 @@ def run(p=4, eps=0.15, N=1200, M=6000):
     print()
     print("quantiles:          q50      q90      q95      q99")
     for label, vals in [
-        ("empirical stat", qtiles(emp)),
         ("profile full ", q_full),
         ("profile topdf", q_top),
         ("classic U    ", q_classic),
@@ -177,13 +175,19 @@ def run(p=4, eps=0.15, N=1200, M=6000):
     ]:
         print(f"{label:14s} {vals[0]:8.4f} {vals[1]:8.4f} {vals[2]:8.4f} {vals[3]:8.4f}")
     print()
-    for label, cutoff in [
-        ("profile full q95", q_full[2]),
-        ("profile topdf q95", q_top[2]),
-        ("classic U q95", q_classic[2]),
-        ("chi-square q95", q_chi[2]),
-    ]:
-        print(f"empirical tail at {label:17s}: {np.mean(emp > cutoff):.4f}  cutoff={cutoff:.4f}")
+    print("finite-sample calibration by N")
+    print("N        emp_q50  emp_q90  emp_q95  emp_q99  tail_prof95  tail_chi95")
+    for idx, N in enumerate(Ns):
+        emp = simulate_stats(
+            base, Sig0, Delta_A, Delta_B, p, Dplus, N, M, seed=20260621 + idx
+        )
+        eq = qtiles(emp)
+        tail_prof = np.mean(emp > q_full[2])
+        tail_chi = np.mean(emp > q_chi[2])
+        print(
+            f"{N:5d}   {eq[0]:8.4f} {eq[1]:8.4f} {eq[2]:8.4f} {eq[3]:8.4f}"
+            f"     {tail_prof:8.4f}    {tail_chi:8.4f}"
+        )
 
 
 if __name__ == "__main__":

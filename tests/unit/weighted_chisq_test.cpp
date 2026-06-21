@@ -45,32 +45,33 @@ TEST_CASE("weighted_chisq_moments_from_M matches eigvals form on symmetric M") {
 
 // ── Closed-form cross-checks ────────────────────────────────────────────────
 
-TEST_CASE("imhof_upper: single λ collapses to a scaled χ²(1)") {
+TEST_CASE("weighted_chisq_upper: single λ collapses to a scaled χ²(1)") {
   // For a single λ, Q = λ·χ²(1), so Pr(Q > x) = Pr(χ²(1) > x/λ).
   for (double lambda : {0.25, 1.0, 4.0, 17.5}) {
     for (double x : {0.05, 0.5, 1.0, 2.5, 7.0, 15.0}) {
-      const double p_imhof = magmaan::robust::imhof_upper(vec({lambda}), x);
+      const double p_mix =
+          magmaan::robust::weighted_chisq_upper(vec({lambda}), x);
       const double p_exact = magmaan::inference::chi2_pvalue(x / lambda, 1);
       INFO("λ=", lambda, "  x=", x);
-      CHECK(p_imhof == doctest::Approx(p_exact).epsilon(1e-5));
+      CHECK(p_mix == doctest::Approx(p_exact).epsilon(1e-5));
     }
   }
 }
 
-TEST_CASE("imhof_upper: k equal-weight λ=1 collapses to χ²(k)") {
+TEST_CASE("weighted_chisq_upper: k equal-weight λ=1 collapses to χ²(k)") {
   // Σⱼ 1·χ²₁ⱼ = χ²(k).
   for (int k : {2, 3, 5, 8}) {
     Eigen::VectorXd lam = Eigen::VectorXd::Ones(k);
     for (double x : {0.1, 1.0, 3.0, 8.0, 16.0, 30.0}) {
-      const double p_imhof = magmaan::robust::imhof_upper(lam, x);
+      const double p_mix = magmaan::robust::weighted_chisq_upper(lam, x);
       const double p_exact = magmaan::inference::chi2_pvalue(x, k);
       INFO("k=", k, "  x=", x);
-      CHECK(p_imhof == doctest::Approx(p_exact).epsilon(1e-5));
+      CHECK(p_mix == doctest::Approx(p_exact).epsilon(1e-5));
     }
   }
 }
 
-TEST_CASE("imhof_upper: equal-weight deep tails stay on the χ² reference") {
+TEST_CASE("weighted_chisq_upper: equal-weight deep tails stay on the χ² reference") {
   struct Case {
     int k;
     double x;
@@ -80,7 +81,7 @@ TEST_CASE("imhof_upper: equal-weight deep tails stay on the χ² reference") {
 
   for (const auto& c : cases) {
     const Eigen::VectorXd lam = Eigen::VectorXd::Ones(c.k);
-    const double got = magmaan::robust::imhof_upper(lam, c.x);
+    const double got = magmaan::robust::weighted_chisq_upper(lam, c.x);
     const double exact = magmaan::inference::chi2_pvalue(c.x, c.k);
     INFO("k=", c.k, "  x=", c.x, "  got=", got, "  exact=", exact);
     CHECK(got > 0.0);
@@ -88,45 +89,71 @@ TEST_CASE("imhof_upper: equal-weight deep tails stay on the χ² reference") {
   }
 }
 
-TEST_CASE("imhof_upper: distinct positive deep tail matches Davies oracle") {
+TEST_CASE("weighted_chisq_upper: distinct positive deep tail matches Davies oracle") {
   const Eigen::VectorXd lam = vec({2.0, 1.5, 1.0, 0.7, 0.3});
   const double x = 66.0;
   // Independent oracle: CompQuadForm::davies(q, lambda, acc=1e-10, lim=1e6),
   // ifault=0. This exercises Ruben's recurrence, not the equal-weight shortcut.
   const double expected = 3.8227433551973888e-08;
 
-  const double got = magmaan::robust::imhof_upper(lam, x);
+  const double got = magmaan::robust::weighted_chisq_upper(lam, x);
   CHECK(got > 0.0);
   CHECK(got == doctest::Approx(expected).epsilon(1e-6));
 }
 
-TEST_CASE("imhof_upper: k equal-weight λ=c collapses to a scaled χ²(k)") {
+TEST_CASE("weighted_chisq_upper: k equal-weight λ=c collapses to a scaled χ²(k)") {
   // Σⱼ c·χ²₁ⱼ = c·χ²(k), so Pr(Q > x) = Pr(χ²(k) > x/c).
   const int k = 4;
   for (double c : {0.5, 2.0, 7.3}) {
     Eigen::VectorXd lam = Eigen::VectorXd::Constant(k, c);
     for (double x : {0.5, 3.0, 10.0, 25.0}) {
-      const double p_imhof = magmaan::robust::imhof_upper(lam, x);
+      const double p_mix = magmaan::robust::weighted_chisq_upper(lam, x);
       const double p_exact = magmaan::inference::chi2_pvalue(x / c, k);
       INFO("c=", c, "  x=", x);
-      CHECK(p_imhof == doctest::Approx(p_exact).epsilon(1e-5));
+      CHECK(p_mix == doctest::Approx(p_exact).epsilon(1e-5));
     }
   }
 }
 
+TEST_CASE("weighted_chisq_quantile inverts the upper tail") {
+  const Eigen::VectorXd lam = vec({1.4082, 0.9139, 0.9139, 0.9139, 0.5057});
+  for (double prob : {0.50, 0.90, 0.95, 0.99}) {
+    const double q = magmaan::robust::weighted_chisq_quantile(lam, prob);
+    const double upper = magmaan::robust::weighted_chisq_upper(lam, q);
+    INFO("prob=", prob, "  q=", q, "  upper=", upper);
+    CHECK(std::isfinite(q));
+    CHECK(upper == doctest::Approx(1.0 - prob).epsilon(2e-6));
+  }
+
+  const Eigen::VectorXd chi5 = Eigen::VectorXd::Ones(5);
+  CHECK(magmaan::robust::weighted_chisq_quantile(chi5, 0.95) ==
+        doctest::Approx(11.070497693516351).epsilon(1e-8));
+}
+
+TEST_CASE("imhof_upper remains a compatibility alias") {
+  const Eigen::VectorXd lam = vec({2.0, 1.0, 0.5});
+  CHECK(magmaan::robust::imhof_upper(lam, 3.0) ==
+        doctest::Approx(magmaan::robust::weighted_chisq_upper(lam, 3.0)));
+}
+
 // ── Degenerate / edge cases ─────────────────────────────────────────────────
 
-TEST_CASE("imhof_upper: degenerate inputs") {
+TEST_CASE("weighted_chisq_upper: degenerate inputs") {
   // x ≤ 0  ⇒  full mass to the right.
-  CHECK(magmaan::robust::imhof_upper(vec({1.0, 2.0}), 0.0)  == doctest::Approx(1.0));
-  CHECK(magmaan::robust::imhof_upper(vec({1.0, 2.0}), -3.0) == doctest::Approx(1.0));
+  CHECK(magmaan::robust::weighted_chisq_upper(vec({1.0, 2.0}), 0.0) ==
+        doctest::Approx(1.0));
+  CHECK(magmaan::robust::weighted_chisq_upper(vec({1.0, 2.0}), -3.0) ==
+        doctest::Approx(1.0));
 
   // All λ = 0  ⇒  Q ≡ 0; upper tail above any x > 0 is exactly 0.
-  CHECK(magmaan::robust::imhof_upper(vec({0.0, 0.0, 0.0}), 1.0) == doctest::Approx(0.0));
+  CHECK(magmaan::robust::weighted_chisq_upper(vec({0.0, 0.0, 0.0}), 1.0) ==
+        doctest::Approx(0.0));
 
   // Zero weights and clipped negative eigensolve noise contribute no mass.
-  CHECK(magmaan::robust::imhof_upper(vec({3.0, 2.0, 1.0, 0.0, -1e-12}), 5.0) ==
-        doctest::Approx(magmaan::robust::imhof_upper(vec({3.0, 2.0, 1.0}), 5.0))
+  CHECK(magmaan::robust::weighted_chisq_upper(
+            vec({3.0, 2.0, 1.0, 0.0, -1e-12}), 5.0) ==
+        doctest::Approx(magmaan::robust::weighted_chisq_upper(
+                            vec({3.0, 2.0, 1.0}), 5.0))
             .epsilon(1e-12));
 }
 
@@ -155,11 +182,11 @@ double mc_upper(const Eigen::VectorXd& lambda, double x,
 
 }  // namespace
 
-TEST_CASE("imhof_upper: Monte-Carlo agreement on mixed-λ spectra") {
+TEST_CASE("weighted_chisq_upper: Monte-Carlo agreement on mixed-λ spectra") {
   std::mt19937 rng(0xc0ffeeU);
   // 500k draws × 5 cases keeps the test under ~5 s while the 4·σ envelope
   // below (σ ≈ √(p(1−p)/N) ≈ 7·10⁻⁴ at p = 0.5) stays comfortably above
-  // Imhof's quadrature error.
+  // the mixture-tail numerical error.
   constexpr long N = 500'000;
 
   struct Case {
@@ -174,13 +201,13 @@ TEST_CASE("imhof_upper: Monte-Carlo agreement on mixed-λ spectra") {
     {vec({3.0, 1.0, 0.3, 0.1}), 5.0},
   };
   for (const auto& c : cases) {
-    const double p_imhof = magmaan::robust::imhof_upper(c.lambda, c.x);
-    const double p_mc    = mc_upper(c.lambda, c.x, N, rng);
+    const double p_mix = magmaan::robust::weighted_chisq_upper(c.lambda, c.x);
+    const double p_mc  = mc_upper(c.lambda, c.x, N, rng);
     // Wilson-style envelope: 4·σ where σ = √(p(1−p)/N).
     const double sigma   = std::sqrt(std::max(p_mc * (1.0 - p_mc), 1e-12) / N);
     const double tol     = std::max(4.0 * sigma, 5e-4);
     INFO("λ=[", c.lambda.transpose(), "]  x=", c.x,
-         "  p_imhof=", p_imhof, "  p_mc=", p_mc, "  tol=", tol);
-    CHECK(std::abs(p_imhof - p_mc) < tol);
+         "  p_mix=", p_mix, "  p_mc=", p_mc, "  tol=", tol);
+    CHECK(std::abs(p_mix - p_mc) < tol);
   }
 }

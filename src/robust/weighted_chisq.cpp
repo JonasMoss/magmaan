@@ -23,9 +23,9 @@ struct TailResult {
 };
 
 // QUADPACK's dqagie takes a bare `double f(double*)` integrand (no user-data
-// pointer), so the Imhof parameters are threaded through thread-local state:
-// imhof_upper sets them, calls dqagie synchronously, then clears. thread_local
-// keeps it re-entrant across parallel callers.
+// pointer), so the Imhof fallback parameters are threaded through thread-local
+// state: weighted_chisq_upper sets them, calls dqagie synchronously, then
+// clears. thread_local keeps it re-entrant across parallel callers.
 thread_local const Eigen::VectorXd* tls_lambda = nullptr;
 thread_local double                 tls_x      = 0.0;
 
@@ -195,10 +195,10 @@ int dqagie_(double (*f)(double*), double* bound, int* inf, double* epsabs,
             double* elist, int* iord, int* last);
 }
 
-double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
-                   double x,
-                   double rel_tol,
-                   int    max_doublings) {
+double weighted_chisq_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
+                            double x,
+                            double rel_tol,
+                            int    max_doublings) {
   // Degenerate inputs.
   if (lambda.size() == 0) return (x < 0.0) ? 1.0 : 0.0;
   if (!std::isfinite(x)) return (x > 0.0) ? 0.0 : 1.0;
@@ -253,6 +253,56 @@ double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
                        ? 0.5 + result / pi
                        : imhof_simpson(lam, x, rel_tol, max_doublings);
   return std::clamp(p, 0.0, 1.0);
+}
+
+double weighted_chisq_quantile(const Eigen::Ref<const Eigen::VectorXd>& lambda,
+                               double prob,
+                               double rel_tol,
+                               int    max_doublings) {
+  if (lambda.size() == 0) return 0.0;
+
+  double sum = 0.0;
+  double sumsq = 0.0;
+  for (Eigen::Index j = 0; j < lambda.size(); ++j) {
+    if (lambda(j) > 0.0) {
+      sum += lambda(j);
+      sumsq += lambda(j) * lambda(j);
+    }
+  }
+  if (sum == 0.0) return 0.0;
+
+  prob = std::clamp(prob, 0.0, 1.0);
+  if (prob <= 0.0) return 0.0;
+  if (prob >= 1.0) return std::numeric_limits<double>::infinity();
+
+  const double target_upper = 1.0 - prob;
+  double lo = 0.0;
+  double hi = std::max(1.0, sum + 12.0 * std::sqrt(2.0 * sumsq));
+  for (int expand = 0;
+       expand < 80 && weighted_chisq_upper(lambda, hi, rel_tol, max_doublings) >
+                          target_upper;
+       ++expand) {
+    hi *= 2.0;
+  }
+
+  for (int iter = 0; iter < 80; ++iter) {
+    const double mid = 0.5 * (lo + hi);
+    const double upper =
+        weighted_chisq_upper(lambda, mid, rel_tol, max_doublings);
+    if (upper > target_upper) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return 0.5 * (lo + hi);
+}
+
+double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
+                   double x,
+                   double rel_tol,
+                   int    max_doublings) {
+  return weighted_chisq_upper(lambda, x, rel_tol, max_doublings);
 }
 
 }  // namespace magmaan::robust

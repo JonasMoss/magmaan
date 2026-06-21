@@ -238,7 +238,7 @@ golden `parTable()` fixtures.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
   and a casewise multi-block primitive.
 - The weighted-sum-of-chi-squares tail behind the FMG/pEBA/pOLS p-values
-  (`robust::weighted_chisq::imhof_upper`) uses Ruben's positive-weight
+  (`robust::weighted_chisq_upper`) uses Ruben's positive-weight
   central-χ² series first, avoiding oscillatory-cancellation failures in deep
   tails. If the series does not converge it falls back to Imhof's characteristic
   function inversion through vendored QUADPACK `qagi`
@@ -248,7 +248,10 @@ golden `parTable()` fixtures.
   extrapolation breaks. A self-contained C++ golden pins fixed-spectrum FMG
   p-values for each method against constants generated from R `stats` and
   `CompQuadForm::imhof`; unit tests also pin deep equal-weight tails to exact
-  χ² references.
+  χ² references. The same module exposes `robust::weighted_chisq_quantile`
+  for deterministic positive-mixture cutoffs, and
+  `robust::compute_profile_contrast_spectrum` computes the positive `QΓ`
+  spectrum for regular profile-Hessian nested-test research primitives.
 
 ### Continuous FIML
 
