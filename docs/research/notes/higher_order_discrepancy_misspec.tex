@@ -275,6 +275,50 @@ linear in $\theta$ (e.g.\ a free covariance matrix with linear equality
 constraints), where $\tilde U=U$ exactly even under misspecification.
 \end{remark}
 
+\section{Comparison with the first-order trace}
+
+The fixed-misspecification trace is the Satorra--Bentler trace plus an additive
+series, so it slots directly against earlier robust RMSEA.
+
+\begin{corollary}[Bread decomposition]\label{cor:decomp}
+Let $N=\dot\sigma'V\Gamma V\dot\sigma$ (the parameter-space meat). Both traces are
+the same total noise $\tr(V\Gamma)$ minus a model-absorbed part that differs only
+in its bread:
+\begin{equation}\label{eq:breadforms}
+  \tr(U\Gamma)=\tr(V\Gamma)-\tr(A^{-1}N),
+  \qquad
+  \tr(\tilde U\Gamma)=\tr(V\Gamma)-\tr(B^{-1}N).
+\end{equation}
+The first-order (Satorra--Bentler) trace uses the Gauss--Newton bread $A^{-1}$;
+the fixed-misspecification trace uses the Hessian bread $B^{-1}$. This is the same
+$A^{-1}\!\to\!B^{-1}$ swap (expected information to observed Hessian) that turns a
+naive standard error into a misspecification-robust one
+(\texttt{misspec\_observed\_bread.tex}), here inside the fit-index trace.
+Expanding $B^{-1}$ about $A^{-1}$ with $B=A-K$ and
+$B^{-1}-A^{-1}=\sum_{m\ge1}(A^{-1}K)^mA^{-1}$ gives the additive series
+\begin{equation}\label{eq:decompseries}
+  \tr(\tilde U\Gamma)=\underbrace{\tr(U\Gamma)}_{\text{robust RMSEA}}
+  \;-\;\tr(KM)\;-\;\tr(KA^{-1}KM)\;-\cdots,
+  \qquad M:=A^{-1}NA^{-1},
+\end{equation}
+geometric in $A^{-1}K$ (ratio its spectral radius). The leading correction
+$\mathrm{corr}_1=-\tr(KM)$ is $O(\|e\|)$: the residual-weighted model curvature
+$K=(Ve)'\ddot\sigma$ contracted against $M$, the Gauss--Newton sandwich
+covariance of $\hat\theta$ (the parameter covariance read at the tangent; it
+equals the fixed-misspecification $\mathrm{acov}\,\hat\theta=B^{-1}NB^{-1}$ only
+at $K=0$). Earlier robust RMSEA is the $K=0$ truncation.
+\end{corollary}
+
+\begin{remark}[Magnitudes, and ML]
+In the ULS check (Section~\ref{sec:check}) the baseline $\tr(U\Gamma)=3.38$ and
+the corrections $\mathrm{corr}_1=-0.55$, $\mathrm{corr}_2=-0.38$,
+$\mathrm{corr}_3=-0.12,\dots$ sum to $\tr(\tilde U\Gamma)=2.26$; $\mathrm{corr}_1$
+alone recovers half the gap, $\mathrm{corr}_{1:2}$ four-fifths. For ML there are
+two baselines to deform from, the metric ($W_\ast\!\to\!V_0$) and the bread
+($B\!\to\!A$), so the analogous expansion carries two families of corrections,
+both $O(\|e\|)$ and both vanishing under correct specification.
+\end{remark}
+
 \section{The honest interval}
 
 \begin{corollary}[CLT and Wald interval, no noncentral inversion]\label{cor:ci}
@@ -399,7 +443,7 @@ different $O(1/n)$ biases through $\beta_W$ and $B$. Under the drift, all of thi
 disappears and the classical equivalence is restored. The daylight between
 estimators lives entirely in the fixed-misspecification, higher-order regime.
 
-\section{Numerical check}
+\section{Numerical check}\label{sec:check}
 
 A one-factor model is fit to a two-factor population (six indicators, three per
 factor, factor correlation $0.55$), a misspecification the one-factor model
