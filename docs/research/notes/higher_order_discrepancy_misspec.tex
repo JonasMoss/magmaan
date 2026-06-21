@@ -322,7 +322,7 @@ $n\hat F\dto$ (noncentral) $\chi^2$ mixture\\
 noise/bias mean & $\tr(\tilde U\Gamma)$, curvature-corrected &
 $\tr(U\Gamma)=c\,df$, no curvature\\
 weight influence $\beta_W$ & $O(\|e\|)$, present & $\to0$\\
-ML vs GLS & differ (pseudo-true, $\beta_W$) & coincide to leading order\\
+ML vs GLS & differ (two-metric, pseudo-true) & coincide to leading order\\
 interval & Wald via $\omega^2$ \eqref{eq:rmseaclt} & noncentral-$\chi^2$ inversion\\
 \end{tabular}
 \end{center}
@@ -334,10 +334,27 @@ of a wrong model's fit.
 
 \section{ML, GLS, ULS}\label{sec:estimators}
 
-The three estimators share the quadratic-form weight at the data limit,
-$V=\tfrac12 D'(\Sigma_0^{-1}\otimes\Sigma_0^{-1})D$ for ML and GLS and $V=\tfrac12
-D'D$ for ULS, but they differ in where the weight is anchored, and this is what
-separates their RMSEAs once the drift is gone.
+The estimators differ in where the weight is anchored, and once the drift is gone
+this separates their RMSEAs. The unifying tool is that $\tilde U$ is, for
+\emph{any} smooth discrepancy, half the Hessian of the profiled criterion.
+
+\begin{lemma}[Profiled-Hessian form]\label{lem:profhess}
+For a smooth discrepancy $F(s,\theta)$ with population minimizer $\theta_\ast$,
+Corollary~\ref{cor:bias} holds with
+\begin{equation}\label{eq:profhess}
+  \tilde U \;=\; \tfrac12\,\nabla_s^2\Big[\min_\theta F(s,\theta)\Big]\Big|_{s=\sigma_0}
+  \;=\; V_{ss}-\tfrac14\,C\,B^{-1}C',
+\end{equation}
+where $V_{ss}=\tfrac12\partial^2_{ss}F$, $C=\partial^2_{s\theta}F$ and
+$B=\tfrac12\partial^2_{\theta\theta}F$ at $(\sigma_0,\theta_\ast)$. The
+fixed-weight quadratic \eqref{eq:Utilde} is the case $V_{ss}=V$,
+$C=-2V\dot\sigma$ (then $\tfrac14 CB^{-1}C'=V\dot\sigma B^{-1}\dot\sigma'V$). A
+non-quadratic $F$ enters only through these three second derivatives; there is no
+separate higher-derivative term at $O(1/n)$, and the data skewness enters the
+bias only at $O(n^{-3/2})$. For a data-dependent weight $V(s)$ the $s$-derivatives
+of the weight populate $V_{ss}$ and $C$, reproducing $\beta_W$ of
+Corollary~\ref{cor:bias} in trace form.
+\end{lemma}
 
 \paragraph{ULS.} Fixed weight, $\dot V=0$, so $\beta_W\equiv0$ and the bias is
 purely $\tr(\tilde U\Gamma)/n$. ULS is never efficient, so $\tr(U\Gamma)\ne df$
@@ -350,21 +367,30 @@ derivative of $V(\cdot)$ along the \emph{raw} fluctuation $z$. The full $\beta_W
 is present, leading-order in the residual through the cross term
 $2\E[w'(I-PV)z]$, and $\omega^2$ in \eqref{eq:clt2} acquires the $v_e$ term.
 
-\paragraph{ML.} The ML discrepancy is not a fixed quadratic; its estimating
-equation is the reweighted normal equation
-$\dot\sigma'V(\sigma(\theta))\,(\sigma_0-\sigma(\theta))=0$ with the weight
-anchored at the \emph{fitted model} $\Sigma(\theta)$. Two consequences. First,
-the pseudo-true value solves a model-metric projection, so under fixed
-misspecification $\theta_\ast^{\mathrm{ML}}\ne\theta_\ast^{\mathrm{GLS}}$ and
-$F_0^{\mathrm{ML}}\ne F_0^{\mathrm{GLS}}$: ML-RMSEA and GLS-RMSEA estimate
-\emph{different population numbers}, already at zeroth order, because they measure
-misfit in different metrics (Olsson, Foss, Troye and Howell
-\cite{olssonetal2000}). Second, the $\theta$-dependence of the weight adds a
-discrepancy-curvature term $K_F$ to $B$ (a third derivative of $F_{\mathrm{ML}}$),
-and routes the weight fluctuation through the projected increment
-$\dot\sigma(\hat\theta-\theta_\ast)$ rather than the raw $z$. All three effects
-collapse under correct specification ($\sigma(\theta_\ast)=\sigma_0$, $e=0$),
-where ML, GLS and ULS coincide to the order that matters.
+\paragraph{ML.} ML is not a fixed quadratic: its normal equation
+$\dot\sigma'W(\theta)\,(\sigma_0-\sigma(\theta))=0$ anchors the weight
+$W(\theta)=\tfrac12 D'(\Sigma(\theta)^{-1}\otimes\Sigma(\theta)^{-1})D$ at the
+\emph{fitted model}. Two consequences. First, the pseudo-true value solves a
+model-metric projection, so under fixed misspecification
+$\theta_\ast^{\mathrm{ML}}\ne\theta_\ast^{\mathrm{GLS}}$ and
+$F_0^{\mathrm{ML}}\ne F_0^{\mathrm{GLS}}$: the two estimate \emph{different
+population numbers}, already at zeroth order, measuring misfit in different
+metrics (Olsson, Foss, Troye and Howell \cite{olssonetal2000}). Second, by
+Lemma~\ref{lem:profhess} the noise weight is the moment-Hessian
+$V_{ss}=V_0=\tfrac12 D'(\Sigma_0^{-1}\otimes\Sigma_0^{-1})D$ at the \emph{data},
+while the cross-term $C=-2W_\ast\dot\sigma$ carries the \emph{model} weight
+$W_\ast=\tfrac12 D'(\Sigma_\ast^{-1}\otimes\Sigma_\ast^{-1})D$,
+$\Sigma_\ast=\Sigma(\theta_\ast)$, so
+\begin{equation}\label{eq:UtildeML}
+  \tilde U_{\mathrm{ML}} = V_0 - W_\ast\dot\sigma\,B_{\mathrm{ML}}^{-1}\dot\sigma'W_\ast .
+\end{equation}
+This is the two-metric object: sampling noise weighted in the data metric,
+residuals projected in the model metric. The non-quadraticity of the log-det is
+absorbed entirely into $(V_0,W_\ast,B_{\mathrm{ML}})$; there is no separate
+third-derivative term (correcting an earlier draft). It all collapses under
+correct specification ($\Sigma_\ast=\Sigma_0$, $W_\ast=V_0$, $e=0$), where ML, GLS
+and ULS coincide to the order that matters. The numerical check confirms
+\eqref{eq:UtildeML} to finite-difference precision.
 
 So the answer to ``does GLS-RMSEA do anything that normal-theory RMSEA does
 not'' is yes, and sharper than expected: under fixed misspecification the two
@@ -375,37 +401,52 @@ estimators lives entirely in the fixed-misspecification, higher-order regime.
 
 \section{Numerical check}
 
-For ULS the weight is fixed, so $\beta_W\equiv0$ and Corollary~\ref{cor:bias}
-predicts $N\,(\E[\hat F]-F_0)\to\tr(\tilde U\Gamma)$ exactly, isolating the new
-object $\tilde U$. A one-factor model is fit to data from a two-factor population
-(six indicators, three per factor, factor correlation $0.55$), a misspecification
-the one-factor model cannot absorb: $df=9$, $F_0=0.231$, $\|e\|=0.48$, curvature
-coupling $\|K\|=0.68$. The table reports $N$ times the Monte-Carlo bias of
-$\hat F$ against the naive $\tr(U\Gamma)$ (Gauss--Newton $A$) and the
-curvature-corrected $\tr(\tilde U\Gamma)$ (Hessian $B$). The sample covariance is
-the unbiased $\div(N{-}1)$ form; the $\div N$ form carries its own $O(1/N)$
-moment bias which contaminates exactly this order. Under normality
-$\Gamma=\Gamma_{\mathrm{NT}}$ is closed form; under $t_6$ data $\Gamma$ is a
-Monte-Carlo estimate.
+A one-factor model is fit to a two-factor population (six indicators, three per
+factor, factor correlation $0.55$), a misspecification the one-factor model
+cannot absorb ($df=9$; ULS $F_0=0.23$, ML $F_0=0.49$, the differing estimands of
+Section~\ref{sec:estimators}). Two checks.
 
+\emph{Deterministic.} By Lemma~\ref{lem:profhess} the bias coefficient is half
+the Hessian of the profiled criterion, which finite differencing pins exactly,
+with no Monte Carlo. Comparing $\tfrac12\nabla_s^2[\min_\theta F]$ at $\sigma_0$
+to the closed forms:
 \begin{center}
-\begin{tabular}{llccc}
-data & $N$ & $N\,(\E[\hat F]-F_0)$ (MC se) & naive $\tr(U\Gamma)$ & corrected $\tr(\tilde U\Gamma)$\\
+\begin{tabular}{lccc}
+ & $\|\tfrac12 H_{\mathrm{prof}}-\tilde U\|/\|\tilde U\|$ & $\tr(\tilde U\Gamma_{\mathrm{NT}})$ corrected & naive (Gauss--Newton $A$)\\
 \hline
-normal & $200$ & $2.20\ (0.05)$ & $3.38$ & $\mathbf{2.26}$\\
-normal & $800$ & $2.24\ (0.10)$ & $3.38$ & $\mathbf{2.26}$\\
-$t_6$  & $200$ & $4.26\ (0.08)$ & $7.00$ & $\mathbf{4.74}$\\
-$t_6$  & $800$ & $4.60\ (0.16)$ & $7.00$ & $\mathbf{4.74}$\\
+ULS & $2\times10^{-8}$ & $2.26$ & $3.38$\\
+ML  & $9\times10^{-6}$ & $1.24$ & $9.07$\\
 \end{tabular}
 \end{center}
+ULS is a single-metric quadratic (positive control); ML is the two-metric
+$\tilde U_{\mathrm{ML}}$ of \eqref{eq:UtildeML}, confirmed to finite-difference
+precision. Replacing the Hessian $B$ by Gauss--Newton $A$ is wrong by a factor of
+several, for ML by $7\times$ (and with the opposite conclusion about how much
+sampling noise a wrong model spends): discarding the curvature is not a small
+error.
 
-Every cell matches the curvature-corrected trace and rejects the naive one: at
-$N=800$ the empirical bias sits within one Monte-Carlo standard error of
-$\tr(\tilde U\Gamma)$ in both data conditions, while $\tr(U\Gamma)$ is wrong by
-the full gap (more than twenty standard errors at $N=200$, normal). The small
-$N=200$ shortfall in the $t_6$ cell is the expected $O(1/N)$ remainder, which
-closes by $N=800$. The curvature term is not a third-decimal refinement: it is a
-third to a half of the entire bias. Script:
+\emph{Monte Carlo (ULS, $\beta_W=0$).} Confirms the Hessian-to-bias step,
+$N(\E[\hat F]-F_0)\to\tr(\tilde U\Gamma)$, under normal and $t_6$ data; the sample
+covariance is the unbiased $\div(N{-}1)$ form (the $\div N$ form carries its own
+$O(1/N)$ moment bias contaminating this order), $\Gamma_{\mathrm{NT}}$ closed form
+under normality and Monte-Carlo under $t_6$:
+\begin{center}
+\begin{tabular}{llccc}
+data & $N$ & $N(\E[\hat F]-F_0)$ (MC se) & naive $\tr(U\Gamma)$ & corrected $\tr(\tilde U\Gamma)$\\
+\hline
+normal & $200$ & $2.23\ (0.05)$ & $3.38$ & $\mathbf{2.26}$\\
+normal & $800$ & $2.21\ (0.10)$ & $3.38$ & $\mathbf{2.26}$\\
+$t_6$  & $200$ & $4.22\ (0.08)$ & $7.00$ & $\mathbf{4.74}$\\
+$t_6$  & $800$ & $4.78\ (0.16)$ & $7.00$ & $\mathbf{4.74}$\\
+\end{tabular}
+\end{center}
+By $N=800$ the empirical bias is within one Monte-Carlo standard error of
+$\tr(\tilde U\Gamma)$ in both conditions; the naive trace is off by the full gap
+(over twenty standard errors at $N=200$, normal). ML is validated
+deterministically rather than by Monte Carlo: its bias has a large higher-order
+tail and small-$N$ improper-solution inflation that the exact Hessian check
+sidesteps. The curvature term is not a third-decimal refinement; it is a third to
+a half of the whole bias. Script:
 \texttt{higher\_order\_discrepancy\_check.py}.
 
 \section{Connections and caveats}
@@ -442,12 +483,12 @@ regularized TIC.
 \begin{remark}[Caveats]
 The truncation $\max(\cdot,0)$ in \eqref{eq:rmseacorr} re-introduces an
 $O(n^{-1/2})$ bias near $F_0=0$, where the fixed-misspecification expansion is
-least relevant and the near-null device should take over. The ML term $K_F$ and
-the projected weight fluctuation are stated, not derived; the full ML expansion
-needs the third derivative of $F_{\mathrm{ML}}$ and is left for the numerical
-companion. The expansion assumes finite fourth moments for $\Gamma$ and finite
-sixth moments for the $n^{-1}$ bias to have finite expectation; under heavier
-tails \eqref{eq:bias} is a stochastic-order statement, not a moment statement.
+least relevant and the near-null device should take over. Data skewness enters
+the bias only at $O(n^{-3/2})$ (Lemma~\ref{lem:profhess}); the $t_6$ shortfall at
+$N=200$ in the table is that tail. The expansion assumes finite fourth moments
+for $\Gamma$ and finite sixth moments for the $n^{-1}$ bias to have finite
+expectation; under heavier tails \eqref{eq:bias} is a stochastic-order statement,
+not a moment statement.
 \end{remark}
 
 \begin{thebibliography}{9}
