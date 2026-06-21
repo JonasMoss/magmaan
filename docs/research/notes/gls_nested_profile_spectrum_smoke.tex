@@ -270,6 +270,62 @@ case; it is effectively unusable for a nominal 0.05 test.
 \includegraphics[width=\linewidth]{gls_nested_profile_survival_linear085.pdf}
 \end{center}
 
+\subsection*{Three indicators already suffice}
+
+The phenomenon is not tied to four indicators. For \(p=3\), take the diagonal
+pseudo-null
+\[
+  \Sigma_0=\operatorname{diag}(1.35,\ 0.30,\ 1.35).
+\]
+The same model pair is used: model \(A\) has one common variance and three free
+covariances, while model \(B\) has one common variance and one common
+covariance. The population GLS projections again coincide,
+\[
+  \Sigma_A^{*}=\Sigma_B^{*}=0.3944\,I_3,
+  \qquad f_A(\Sigma_0)=f_B(\Sigma_0)=0.2752808989.
+\]
+The profile spectrum has only two positive weights,
+\[
+  (0.3681,\ 0.1924),
+\]
+so the profile 0.95 cutoff is \(1.7233\), while the ordinary \(\chi^2_2\)
+cutoff is \(5.9915\). In \(12000\) replications, the profile cutoff rejected at
+\[
+  0.0499,\quad 0.0498,\quad 0.0482
+\]
+for \(N=150,600,3000\), while the ordinary chi-square cutoff rejected at
+\[
+  0.0005,\quad 0.0000,\quad 0.0003.
+\]
+
+\begin{center}
+\includegraphics[width=\linewidth]{gls_nested_profile_survival_p3_alt070.pdf}
+\end{center}
+
+\subsection*{Growth with the number of indicators}
+
+The badness is not a finite-\(p\) artifact. A clean construction is block
+replication. Take \(K\) independent copies of the three-indicator pseudo-null
+block above, and test the same within-block covariance equality restriction in
+each block. This is a block-diagonal SEM sequence rather than the single global
+compound-symmetry family, but it is enough to show that the issue does not
+disappear with more indicators. The ordinary reference has \(2K\) degrees of
+freedom. The profile reference is
+\[
+  \sum_{k=1}^{K}\{0.3681\,\chi^2_{1k,1}+0.1924\,\chi^2_{1k,2}\}.
+\]
+Its mean is \(K(0.3681+0.1924)=0.5605K\), whereas the ordinary
+\(\chi^2_{2K}\) reference has mean \(2K\). Therefore the ordinary 0.95 cutoff,
+which is \(2K+O(\sqrt K)\), lies far to the right of the true profile mixture
+mean by an order-\(K\) amount. By concentration,
+\[
+  \Pr_{\mathrm{profile}}\{T>q_{0.95}(\chi^2_{2K})\}\to 0.
+\]
+So the nominal 0.05 chi-square test can be made arbitrarily conservative, in
+the sense that its true size tends to zero as the number of replicated
+indicator blocks grows. The absolute size error is then as large as possible
+for a conservative 0.05-level test.
+
 This is intentionally an extreme design. The practical next question is how
 large the gap remains under less ill-conditioned but still realistic covariance
 patterns, and then under ordinal DWLS where the first-stage weight inputs are
