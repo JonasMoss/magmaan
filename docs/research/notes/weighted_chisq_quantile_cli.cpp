@@ -27,7 +27,8 @@ Eigen::VectorXd positive_lambdas(int argc, char** argv, int offset) {
 void usage(const char* exe) {
   std::cerr << "usage:\n"
             << "  " << exe << " quantile <cdf_prob> <lambda...>\n"
-            << "  " << exe << " upper <x> <lambda...>\n";
+            << "  " << exe << " upper <x> <lambda...>\n"
+            << "  " << exe << " upper_grid <x0> <x1> <n> <lambda...>\n";
 }
 
 }  // namespace
@@ -51,6 +52,27 @@ int main(int argc, char** argv) {
   }
   if (mode == "upper") {
     std::cout << magmaan::robust::weighted_chisq_upper(lambda, x) << '\n';
+    return 0;
+  }
+  if (mode == "upper_grid") {
+    if (argc < 6) {
+      usage(argv[0]);
+      return 2;
+    }
+    const double x1 = std::strtod(argv[3], nullptr);
+    const long   n  = std::strtol(argv[4], nullptr, 10);
+    if (!(n > 1) || !std::isfinite(x) || !std::isfinite(x1)) {
+      usage(argv[0]);
+      return 2;
+    }
+    const Eigen::VectorXd grid_lambda = positive_lambdas(argc, argv, 5);
+    for (long i = 0; i < n; ++i) {
+      const double t =
+          x + (x1 - x) * static_cast<double>(i) / static_cast<double>(n - 1);
+      std::cout << t << ' '
+                << magmaan::robust::weighted_chisq_upper(grid_lambda, t)
+                << '\n';
+    }
     return 0;
   }
 

@@ -1,7 +1,7 @@
 \documentclass[11pt]{article}
 
 \usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb,booktabs}
+\usepackage{amsmath,amssymb,booktabs,graphicx}
 \usepackage{hyperref}
 
 \title{Nested GLS Profile Spectrum: First Smoke Test}
@@ -155,6 +155,63 @@ $N$ & empirical q50 & empirical q90 & empirical q95 & tail at profile q95
 The profile cutoff is close to nominal once $N$ is moderate. The ordinary
 $\chi^2_5$ cutoff remains conservative here because the profile spectrum has a
 smaller upper tail cutoff than the exact-fit spectrum.
+
+\begin{center}
+\includegraphics[width=\linewidth]{gls_nested_profile_survival.pdf}
+\end{center}
+
+The survival-curve smoke uses $12000$ replications for $N=150,600,3000$ and
+compares the whole tail curve against the two deterministic references. The
+maximum absolute survival gap over the plotted grid was
+\[
+\begin{array}{c|ccc}
+N & 150 & 600 & 3000\\
+\hline
+\text{profile mixture} & 0.0201 & 0.0085 & 0.0065\\
+\chi^2_5 & 0.0696 & 0.0593 & 0.0567
+\end{array}
+\]
+for this seed and grid. This is a better diagnostic than only checking the
+0.95 cutoff, because it shows the ordinary chi-square reference is not merely
+off at one threshold; it is visibly too far to the right across the upper tail.
+
+\section{A High-Contrast Stress Test}
+
+The population scan in \texttt{gls\_nested\_profile\_scan.py} searches diagonal
+pseudo-null misspecifications before running Monte Carlo. The useful heuristic is
+simple: the fixed-weight $U$ spectrum stays close to the exact-fit reference,
+whereas the profile spectrum changes through the derivative of the estimated GLS
+weight. Those derivative terms are driven by the pseudo-true residual, so large
+variance heterogeneity is the first place to look.
+
+One strong $p=4$ stress case uses a linear diagonal pattern with
+\(\epsilon=0.85\), so the marginal variances range from \(0.15\) to \(1.85\).
+The profile spectrum is
+\[
+  (0.5401,\ 0.3781,\ 0.3279,\ 0.2767,\ 0.1990),
+\]
+giving a profile 0.95 cutoff of \(3.9305\), versus the ordinary
+\(\chi^2_5\) cutoff \(11.0705\). The finite-sample smoke again used \(12000\)
+replications:
+\[
+\begin{array}{c|ccc}
+N & 150 & 600 & 3000\\
+\hline
+\Pr(T>q_{0.95}^{\mathrm{profile}}) & 0.0404 & 0.0475 & 0.0508\\
+\Pr(T>q_{0.95}^{\chi^2_5}) & 0.0000 & 0.0001 & 0.0000
+\end{array}
+\]
+So the ordinary chi-square reference is not mildly conservative in this stress
+case; it is effectively unusable for a nominal 0.05 test.
+
+\begin{center}
+\includegraphics[width=\linewidth]{gls_nested_profile_survival_linear085.pdf}
+\end{center}
+
+This is intentionally an extreme design. The practical next question is how
+large the gap remains under less ill-conditioned but still realistic covariance
+patterns, and then under ordinal DWLS where the first-stage weight inputs are
+more variable.
 
 \section{Magmaan Machinery}
 
