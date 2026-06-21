@@ -1,0 +1,392 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{A Regular Asymptotic Roadmap for SEM Outputs}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note sketches a paper and implementation roadmap for regular
+misspecification asymptotics in structural equation modeling. The aim is a
+math-forward statistical-methods paper, paired with implementation in
+\texttt{magmaan}, that treats many familiar SEM quantities as consequences of a
+small number of profile-map theorems.
+
+The scope is deliberately regular:
+\[
+  \text{interior pseudo-true points, fixed rank, smooth maps, nonsingular
+  profile Hessians.}
+\]
+Boundary parameters, rank loss, unidentified pseudo-true points, chi-bar-square
+limits, clipping, and other nonregular phenomena should be acknowledged, but
+not solved in the first paper. They are too large to include without blurring
+the central message.
+
+The main claim is not that every mathematical ingredient is new. The claim is
+that the ingredients are scattered, repeatedly rederived, and often
+implemented through exact-fit shortcuts. A unified regular theory can make clear
+which object is being estimated, which Hessian is required under
+misspecification, and how standard errors, fit measures, nested tests,
+relative-fit tests, and future indices such as CFI and TLI share the same
+calculus.
+
+\section{Paper Positioning}
+
+The paper should be pitched as a statistical-methods contribution with broad SEM
+impact. A JASA-style target is plausible because the procedures are applied at
+large scale, the asymptotic objects are nontrivial, and a software-backed
+unification would be useful beyond one psychometric subcommunity.
+
+The paper should not argue that the work is ``too mathematical'' for
+psychometrics journals. That is unnecessary and would read badly. A better
+framing is:
+\[
+\begin{minipage}{0.86\linewidth}
+Routine SEM output is built from profile estimators and profiled discrepancy
+functions. Under misspecification, the relevant derivatives are observed
+profile derivatives at pseudo-true points, not the exact-fit/Fisher
+simplifications often used in derivations and software. We provide a unified
+regular asymptotic theory and an implementation that applies the same objects to
+standard errors, model-comparison tests, robust RMSEA, and related fit indices.
+\end{minipage}
+\]
+This is candid about the contribution: not a new probability limit theorem for
+its own sake, but a unifying theorem, a correction of common shortcuts, and an
+implementation-ready framework for procedures that are used constantly.
+
+\section{Master Setup}
+
+Let $\hat x$ be the first-stage object used by the SEM estimator:
+sample means/covariances, FIML score aggregates, thresholds and polychorics,
+group proportions, NACOV components, estimated weights, or any stacked
+combination needed to make later maps smooth. Assume
+\begin{equation}\label{eq:first-stage}
+  \hat x
+  =
+  x_0+n^{-1/2}Z+n^{-1}b_n+o_p(n^{-1}),
+  \qquad
+  Z\dto N(0,\Gamma),
+  \qquad
+  \E b_n\to b .
+\end{equation}
+The $n^{-1}b$ term is optional for first-order inference but needed for
+second-order bias corrections such as fixed-misspecification RMSEA.
+
+For each model $M$, define a smooth criterion
+\[
+  f_M(\theta,x),
+  \qquad
+  \theta_M(x)=\argmin_\theta f_M(\theta,x),
+  \qquad
+  v_M(x)=f_M\{\theta_M(x),x\}.
+\]
+Here $v_M$ is the profiled discrepancy or value function. In a quadratic
+moment-discrepancy setting,
+\[
+  f_M(\theta,x)
+  =
+  \frac12 r_M(\theta,x)'W(x)r_M(\theta,x),
+\]
+but the theory should be written for a general smooth criterion so that ML,
+FIML, GLS, ULS, DWLS, ordinal limited-information estimators, and multigroup
+extensions fit the same template.
+
+All derivatives below are evaluated at $(\theta_M,x_0)$, where
+$\theta_M=\theta_M(x_0)$ is the pseudo-true parameter. Write
+\[
+  H_M=f_{\theta\theta},
+  \qquad
+  G_M=f_{\theta x}.
+\]
+The regularity assumption is that $H_M$ is nonsingular after applying any fixed
+linear equality constraints or reduced parameterization.
+
+\section{Main Theorem 1: Coefficient Maps}
+
+The first master map is the pseudo-true parameter map $x\mapsto\theta_M(x)$.
+The population first-order condition is
+\[
+  f_\theta\{\theta_M(x),x\}=0 .
+\]
+Differentiating gives
+\[
+  D\theta_M[x_0] = -H_M^{-1}G_M .
+\]
+Therefore
+\begin{equation}\label{eq:theta-if}
+  \sqrt n(\hat\theta_M-\theta_M)
+  =
+  -H_M^{-1}G_M Z+o_p(1),
+\end{equation}
+and
+\begin{equation}\label{eq:theta-vcov}
+  \Var\{\sqrt n(\hat\theta_M-\theta_M)\}
+  =
+  H_M^{-1}G_M\Gamma G_M'H_M^{-1}.
+\end{equation}
+
+This is the master theorem for misspecification-robust standard errors. In SEM
+notation, $H_M$ is the observed/profile Hessian at the pseudo-true point. Under
+correct specification it may reduce to expected information or a
+Gauss--Newton/Fisher expression, but that reduction is a special case, not the
+general theorem.
+
+\section{Main Theorem 2: Residual and Fitted-Value Maps}
+
+Many SEM outputs are not just parameters or scalar discrepancies. They use the
+fitted moments, residuals, standardized residuals, modification indices, EPCs,
+or score-like projections. These should be handled as smooth maps derived from
+$\theta_M(x)$.
+
+For a residual map
+\[
+  r_M(x)=r_M\{\theta_M(x),x\},
+\]
+the derivative is
+\begin{equation}\label{eq:resid-derivative}
+  Dr_M
+  =
+  r_x-r_\theta H_M^{-1}G_M ,
+\end{equation}
+with signs determined by the residual convention. Thus
+\[
+  \sqrt n\{\hat r_M-r_M\}
+  =
+  Dr_M\,Z+o_p(1).
+\]
+This is the natural home for residual diagnostics, SRMR ingredients,
+standardized residuals, score-test ingredients, and modification-index
+building blocks. It is not a new asymptotic primitive, but it deserves a named
+corollary because many SEM procedures are projection procedures rather than
+coefficient procedures.
+
+\section{Main Theorem 3: Profiled Discrepancy Maps}
+
+The second master primitive is the profiled value map
+\[
+  v_M(x)=\min_\theta f_M(\theta,x).
+\]
+The envelope theorem gives
+\[
+  s_M=v_{M,x}=f_x ,
+\]
+and the profile Hessian is
+\begin{equation}\label{eq:Q}
+  Q_M
+  =
+  v_{M,xx}
+  =
+  f_{xx}-f_{x\theta}H_M^{-1}f_{\theta x}.
+\end{equation}
+Then
+\begin{equation}\label{eq:value-expansion}
+  v_M(\hat x)
+  =
+  v_M(x_0)
+  +n^{-1/2}s_M'Z
+  +n^{-1}\left\{s_M'b_n+\frac12 Z'Q_MZ\right\}
+  +o_p(n^{-1}).
+\end{equation}
+Consequently
+\begin{equation}\label{eq:value-bias}
+  \E\{v_M(\hat x)\}
+  =
+  v_M(x_0)
+  +n^{-1}\left\{s_M'b+\frac12\tr(Q_M\Gamma)\right\}
+  +o(n^{-1}),
+\end{equation}
+again up to a factor of two depending on whether $f_M$ is defined as $F_M$ or
+$F_M/2$.
+
+The notation $Q_M$ is important. In the exact-fit, fixed-weight quadratic case,
+$Q_M$ reduces to the familiar residual projector $U_M$ (up to the same factor
+convention). Under fixed misspecification, estimated weights, or curved models,
+$Q_M$ is the correct profile Hessian and $U_M$ is only a shortcut.
+
+\section{Contrasts: Nested Tests, Vuong, and Absolute Fit}
+
+Most SEM tests compare profiled values. Let
+\[
+  c(x)=\sum_{j=1}^J a_j v_{M_j}(x),
+  \qquad
+  s_c=\sum_j a_j s_{M_j},
+  \qquad
+  Q_c=\sum_j a_j Q_{M_j}.
+\]
+Then
+\begin{equation}\label{eq:contrast-expansion}
+  c(\hat x)-c(x_0)
+  =
+  n^{-1/2}s_c'Z
+  +\frac{1}{2n}Z'Q_cZ
+  +n^{-1}s_c'b_n
+  +o_p(n^{-1}).
+\end{equation}
+
+\paragraph{Distinguishable regime.}
+If $s_c\ne0$, the contrast is root-$n$ normal:
+\[
+  \sqrt n\{c(\hat x)-c(x_0)\}
+  \dto
+  N(0,s_c'\Gamma s_c).
+\]
+This is the regular Vuong-style regime and also the fixed-misspecification
+regime for many fit-index differences.
+
+\paragraph{Degenerate regime.}
+If the null or comparison makes the values and first derivatives cancel, then
+the quadratic term is leading:
+\[
+  n\,c(\hat x)
+  \dto
+  \frac12 Z'Q_cZ,
+\]
+with a weighted chi-square or indefinite quadratic-form reference distribution.
+Nested difference tests are the main SEM example:
+\[
+  c(x)=v_B(x)-v_A(x),
+  \qquad
+  Q_c=Q_B-Q_A.
+\]
+Absolute goodness of fit is the special comparison with the saturated model:
+\[
+  v_{\mathrm{sat}}(x)\equiv0,
+  \qquad
+  Q_{\mathrm{sat}}=0,
+  \qquad
+  Q_c=Q_M.
+\]
+This explains why a single $U_M$ or $Q_M$ appears in RMSEA and exact-fit tests,
+while nested tests naturally involve a difference $Q_B-Q_A$.
+
+\paragraph{Local alternatives.}
+Local alternatives belong here too. They perturb $c(x_0)$ or $s_c$ at the
+$n^{-1}$ or $n^{-1/2}$ scale, turning central quadratic forms into noncentral
+ones. This should be treated as a regular local regime, distinct from
+nonregular boundary asymptotics.
+
+\section{Fit Indices as Functionals}
+
+Fit indices should be treated as smooth or nonsmooth functionals of the master
+maps. For the first paper, the clean theorem is the smooth one. Let
+\[
+  y(x)=\{\theta_{M_1}(x),\ldots,\theta_{M_J}(x),
+        r_{M_1}(x),\ldots,r_{M_J}(x),
+        v_{M_1}(x),\ldots,v_{M_J}(x)\}
+\]
+and let $h$ be differentiable at $y(x_0)$. Then
+\[
+  \sqrt n\{h(\hat y)-h(y_0)\}
+  \dto
+  N(0,\nabla h'\,\Sigma_y\,\nabla h),
+\]
+where $\Sigma_y$ is assembled from the joint derivatives of the component maps
+against the common $Z$.
+
+This covers fixed-positive-misfit versions of:
+\[
+  \text{RMSEA, CFI, TLI, SRMR, information criteria, residual summaries,}
+\]
+provided denominators are nonzero and the functional is evaluated away from
+kinks. Bias terms can be added by second-order delta method when useful.
+
+The nonsmooth cases should be acknowledged rather than solved in this paper:
+\[
+  \max(\cdot,0),\quad \sqrt{\cdot}\text{ at zero},\quad clipped CFI/TLI,\quad
+  near-zero baseline discrepancy,\quad boundary parameters.
+\]
+These are important, but they are not needed for a strong regular-asymptotics
+paper.
+
+\section{Implementation Roadmap in \texttt{magmaan}}
+
+The implementation should mirror the theorem structure.
+
+\begin{enumerate}
+\item Define a first-stage object: $\hat x$, $x_0$ or fitted plug-in,
+  $\Gamma$, optional $b$, and block metadata for moments, weights, groups, and
+  ordinal pieces.
+\item For each estimator/model, expose a profile object that can compute
+  $f_M$, $\hat\theta_M$, $H_M$, $G_M$, residual derivatives, $s_M$, and $Q_M$.
+\item Route standard errors through the coefficient theorem
+  \eqref{eq:theta-vcov}.
+\item Route residual diagnostics, score tests, modification indices, and SRMR
+  ingredients through the residual-map theorem \eqref{eq:resid-derivative}.
+\item Route exact-fit tests, nested tests, Vuong tests, RMSEA corrections, and
+  future CFI/TLI corrections through the value-map theorem
+  \eqref{eq:value-expansion}.
+\item Keep $U_M$ as an optimized special case for exact-fit/fixed-weight
+  quadratic models, but store and test the general object as $Q_M$.
+\end{enumerate}
+
+Validation should proceed from the simplest profile maps to the most coupled:
+\[
+\begin{array}{ll}
+1. & \text{fixed-weight ULS/GLS, complete data;}\\
+2. & \text{estimated-weight GLS/DWLS and ordinal limited information;}\\
+3. & \text{ML/FIML as criterion-specific profile maps;}\\
+4. & \text{multigroup and equality-constrained comparisons;}\\
+5. & \text{fit-index functionals such as RMSEA, CFI, TLI, and SRMR.}
+\end{array}
+\]
+
+\section{Proposed Paper Structure}
+
+\begin{enumerate}
+\item Introduction: widely used SEM outputs rely on exact-fit shortcuts; under
+  misspecification, one needs profile derivatives at pseudo-true points.
+\item Setup: first-stage CLT, smooth criteria, regular pseudo-true points.
+\item Main theory: coefficient maps, residual maps, value maps.
+\item Model comparisons: absolute fit, nested tests, Vuong and overlapping
+  comparisons, local alternatives.
+\item Fit indices: RMSEA now; CFI/TLI/SRMR as smooth functionals, with
+  nonsmooth cases flagged.
+\item SEM specializations: ML/FIML, GLS/ULS/WLS/DWLS, ordinal/multigroup.
+\item Implementation: \texttt{magmaan} architecture, analytic derivatives,
+  finite-difference validation, lavaan parity where relevant.
+\item Simulations and examples: cases where exact-fit shortcuts agree, cases
+  where $Q_M$ and observed-profile Hessians matter, and empirical size/coverage
+  for robust SEs and tests.
+\item Discussion: regular theory first; boundaries, rank loss, and clipped fit
+  indices are future work.
+\end{enumerate}
+
+\section{Immediate Next Steps}
+
+The next concrete work should be:
+\begin{enumerate}
+\item Write a short theorem note with consistent notation
+  $(x,\Gamma,b,\theta_M,v_M,s_M,Q_M,H_M,G_M)$.
+\item Refactor existing RMSEA and nested-test notes to cite that notation
+  rather than each defining a parallel vocabulary.
+\item Add a small fixed-weight validation script showing
+  $n\{\E v_M(\hat x)-v_M(x_0)\}$ matches $\tfrac12\tr(Q_M\Gamma)$ under fixed
+  misspecification.
+\item Add an estimated-weight validation that isolates the weight channel.
+\item Decide the first implemented public surface in \texttt{magmaan}: likely
+  profile Hessians $Q_M$, robust nested tests, and fixed-misspecification RMSEA
+  diagnostics before moving to CFI/TLI.
+\end{enumerate}
+
+\end{document}
