@@ -186,6 +186,68 @@ variance heterogeneity is the first place to look.
 
 One strong $p=4$ stress case uses a linear diagonal pattern with
 \(\epsilon=0.85\), so the marginal variances range from \(0.15\) to \(1.85\).
+The data-generating law is
+\[
+  Y\sim N_4(0,\Sigma_0),\qquad
+  \Sigma_0=
+  \begin{pmatrix}
+  0.1500 & 0 & 0 & 0\\
+  0 & 0.7167 & 0 & 0\\
+  0 & 0 & 1.2833 & 0\\
+  0 & 0 & 0 & 1.8500
+  \end{pmatrix}.
+\]
+The larger model \(A\) is common variance with free covariances,
+\[
+  \Sigma_A(a,c)=
+  \begin{pmatrix}
+  a & c_{12} & c_{13} & c_{14}\\
+  c_{12} & a & c_{23} & c_{24}\\
+  c_{13} & c_{23} & a & c_{34}\\
+  c_{14} & c_{24} & c_{34} & a
+  \end{pmatrix},
+\]
+and the restricted model \(B\) is compound symmetry,
+\[
+  \Sigma_B(a,b)=
+  \begin{pmatrix}
+  a & b & b & b\\
+  b & a & b & b\\
+  b & b & a & b\\
+  b & b & b & a
+  \end{pmatrix}.
+\]
+At the population point the normal-theory GLS weight is
+\(W_0=\Gamma_{\mathrm{NT}}(\Sigma_0)^{-1}\). Because \(\Sigma_0\) is diagonal,
+the off-diagonal moment weights are diagonal and all true covariances are zero,
+so both models choose zero covariance:
+\[
+  c_{ij}^{*}=0,\qquad b^{*}=0.
+\]
+The common variance is the GLS projection of the four true variances onto one
+number,
+\[
+  a^{*}=
+  \frac{\sum_i w_i\sigma_i^2}{\sum_i w_i},\qquad
+  w_i=\frac{1}{2\sigma_i^4},
+\]
+which gives
+\[
+  a_A^{*}=a_B^{*}=0.1983847695.
+\]
+Thus
+\[
+  \Sigma_A^{*}=\Sigma_B^{*}=0.1983847695\,I_4,
+\]
+while both models are badly misspecified as approximations to \(\Sigma_0\).
+The population half-discrepancies are equal,
+\[
+  f_A(\Sigma_0)=f_B(\Sigma_0)=0.5346995918,
+\]
+so this is a genuine nested pseudo-null: the less restricted and more
+restricted models share the same pseudo-true covariance even though neither
+model is true.
+
 The profile spectrum is
 \[
   (0.5401,\ 0.3781,\ 0.3279,\ 0.2767,\ 0.1990),
