@@ -71,35 +71,91 @@ Scenario & $\sqrt{2f_A}$ & $\sqrt{2f_B}$ &
 $\tr(Q_{\mathrm{fixed}}\Gamma_u)$ &
 $\tr(Q_{\mathrm{full}}\Gamma_x)$ \\
 \midrule
-Exact nested null & 0.0000 & 0.0001 & 2.8949 & 2.8949 \\
-Near-null misspec., $\epsilon=0.04$ & 0.0499 & 0.0499 & 2.9108 & 2.9850 \\
-Near-null misspec., $\epsilon=0.08$ & 0.1003 & 0.1003 & 2.9709 & 3.1580 \\
-Restriction false, congeneric & 0.0001 & 0.1261 & 2.9113 & 3.0918 \\
+Exact nested null & 0.0000 & 0.0000 & 2.8925 & 2.8924 \\
+Near-null misspec., $\epsilon=0.04$ & 0.0499 & 0.0499 & 2.9109 & 2.9391 \\
+Near-null misspec., $\epsilon=0.08$ & 0.1004 & 0.1004 & 2.9708 & 3.1582 \\
+Restriction false, congeneric & 0.0000 & 0.1260 & 2.9116 & 3.0915 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 The corresponding full/fixed trace ratios were
 \[
-  1.0000,\quad 1.0255,\quad 1.0630,\quad 1.0620 .
+  1.0000,\quad 1.0097,\quad 1.0631,\quad 1.0618 .
 \]
 The exact nested null behaves as expected: the residual is essentially zero, so
 the DWLS weight channel is dormant and the full profile law collapses onto the
 fixed-weight law. Under fixed misspecification, the full DWLS law separates from
 the fixed-weight law. In the two near-null misspecification directions, the
-trace increases by about $2.5\%$ and $6.3\%$.
+trace increases by about $1.0\%$ and $6.3\%$.
 
 The eigenvalue movement is more informative than the trace alone. For
 $\epsilon=0.08$, the leading eigenvalues changed from
 \[
-  (1.2945,\ 0.9387,\ 0.7377)
+  (1.2947,\ 0.9386,\ 0.7376)
 \]
 under the fixed-weight profile Hessian to
 \[
-  (1.5546,\ 0.9326,\ 0.6710)
+  (1.5551,\ 0.9324,\ 0.6709)
 \]
 under the full DWLS profile Hessian. So the weight channel does not merely
 rescale the law; it reshapes it.
+
+\section{An Exact Symmetry Pseudo-Null}
+
+The unequal-threshold rows above are useful diagnostics, but they are only
+near-null examples. A cleaner categorical pseudo-null can be obtained by
+symmetry. Set all binary thresholds to zero and start from the tau-equivalent
+latent-response correlation matrix with loading $\lambda=0.55$, so every
+off-diagonal correlation is $\lambda^2=0.3025$. Then add local dependence on the
+four edges of a cycle:
+\[
+  R_{12}=R_{14}=R_{23}=R_{34}=0.3025+\epsilon,
+  \qquad
+  R_{13}=R_{24}=0.3025.
+\]
+All off-diagonal correlations remain nonzero, but the population has two pair
+orbits: adjacent pairs and opposite pairs. The four-cycle is vertex-transitive.
+With equal thresholds, this symmetry forces the congeneric pseudo-true loadings
+and thresholds to be equal, so the larger model's pseudo-true point lies in the
+tau-equivalent submodel even though both models are misspecified when
+$\epsilon>0$.
+
+Numerically, across the grid below the value difference satisfies
+\(|f_B-f_A|<6\times10^{-14}\) and the profile-score difference is below
+\(2.1\times10^{-7}\). The ordinary nested reference has three degrees of
+freedom, with \(q_{0.95}(\chi^2_3)=7.8147\).
+
+\begin{center}
+\begin{tabular}{rrrrrr}
+\toprule
+$\epsilon$ & $\sqrt{2f_A}$ &
+$\tr(Q_{\mathrm{fixed}}\Gamma_u)$ &
+$\tr(Q_{\mathrm{full}}\Gamma_x)$ &
+$q^{\mathrm{full}}_{0.95}$ &
+$\Pr_{\mathrm{full}}\{T>q_{0.95}(\chi^2_3)\}$ \\
+\midrule
+0.02 & 0.0158 & 2.8544 & 2.8577 & 7.449 & 0.042\\
+0.04 & 0.0317 & 2.8475 & 2.8606 & 7.471 & 0.043\\
+0.06 & 0.0477 & 2.8408 & 2.8510 & 7.476 & 0.043\\
+0.08 & 0.0638 & 2.8331 & 2.8842 & 7.585 & 0.045\\
+0.10 & 0.0801 & 2.8234 & 2.8959 & 7.655 & 0.047\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The effect is smaller than in the unequal-threshold near-null direction, but it
+is cleaner: the pseudo-null is protected by symmetry, the residual is nonzero,
+and the $\gamma$ block still changes the full profile law. At
+$\epsilon=0.10$, the full DWLS eigenvalues are approximately
+\[
+  (1.1151,\ 1.1151,\ 0.6656),
+\]
+whereas the fixed-weight trace is still below three. The ordinary
+\(\chi^2_3\) cutoff is mildly conservative here rather than catastrophic. That
+is a good sign for this as a realistic simulation design: the point is not to
+manufacture a giant failure, but to quantify how much the estimated categorical
+weight matters at plausible levels of limited-information misfit.
 
 \section{Interpretation}
 
@@ -118,12 +174,11 @@ irrelevant only in the exact-fit regime.
 
 \section{Caveats}
 
-The near-null misspecification scenarios were constructed to keep the congeneric
-and tau-equivalent fits nearly tied, but they are not yet an exact proof-level
-nested pseudo-null design. The reported score-gradient differences are small but
-not identically zero. The next pass should solve for misspecification directions
-that satisfy the nested pseudo-null conditions more exactly, then simulate
-finite-sample rejection rates under those population values.
+The first near-null misspecification scenarios were constructed to keep the
+congeneric and tau-equivalent fits nearly tied, but they are not exact
+pseudo-null designs. The four-cycle construction fixes that problem for a
+single-group binary CFA example. It is still only a population calculation:
+finite-sample rejection rates have not yet been simulated.
 
 The script is intentionally small and finite-difference based. It is useful for
 orientation, not for final numerical claims. A production version should reuse
@@ -133,10 +188,12 @@ the analytic ordinal moment influence and DWLS weight machinery in
 \section{Next Steps}
 
 \begin{enumerate}
-\item Construct exact pseudo-null ordinal DWLS populations by solving the value
-  and profile-gradient equality conditions for $B$ and $A$.
-\item Run finite-sample simulations comparing ordinary $\chi^2$, fixed-weight
+\item Run finite-sample simulations for the four-cycle pseudo-null, comparing
+  ordinary $\chi^2$, fixed-weight
   $Q_{\mathrm{fixed}}$, and full DWLS $Q_{\mathrm{full}}$ references.
+\item Search for larger but still plausible symmetry-protected categorical
+  designs by varying the number of indicators, thresholds, categories, and local
+  dependence graph.
 \item Repeat for multigroup threshold/loading invariance, where categorical
   DWLS is most common in practice.
 \item Port the profile-Hessian calculation to \texttt{magmaan} using the

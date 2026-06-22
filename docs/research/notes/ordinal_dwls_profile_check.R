@@ -44,7 +44,7 @@ biv_p00 <- function(t1, t2, rho) {
   R <- matrix(c(1, rho, rho, 1), 2, 2)
   as.numeric(pmvnorm(
     lower = c(-Inf, -Inf), upper = c(t1, t2),
-    mean = c(0, 0), sigma = R
+    mean = c(0, 0), sigma = R, algorithm = Miwa()
   ))
 }
 
@@ -65,7 +65,8 @@ cell_probs <- function(tau, R) {
     lower <- ifelse(patterns[a, ] == 0, -Inf, tau)
     upper <- ifelse(patterns[a, ] == 0, tau, Inf)
     out[a] <- as.numeric(pmvnorm(
-      lower = lower, upper = upper, mean = rep(0, p), sigma = R
+      lower = lower, upper = upper, mean = rep(0, p), sigma = R,
+      algorithm = Miwa()
     ))
   }
   out / sum(out)
@@ -301,6 +302,64 @@ analyze <- function(label, tau, R) {
   cat("full/fixed trace ratio:", sprintf("%.4f", sum(lam_full) / sum(lam_fixed)), "\n")
 }
 
+scenario_stats <- function(tau, R) {
+  pi <- cell_probs(tau, R)
+  u <- moments_from_pi(pi)
+  gamma <- gamma_u_from_pi(pi)
+  x <- c(u, gamma)
+  Gamma_u <- {
+    J <- finite_jac_pi(moments_from_pi, pi)
+    pii <- pi[-n_cell]
+    S <- diag(pii) - tcrossprod(pii)
+    J %*% S %*% t(J)
+  }
+  Gamma_x <- gamma_x_from_pi(pi)
+
+  fitA <- fit_model("A", x)
+  fitB <- fit_model("B", x)
+  Q_full <- jacobian_x(function(xx) profile_score_x("B", xx), x) -
+    jacobian_x(function(xx) profile_score_x("A", xx), x)
+  Q_fixed <- jacobian_u(function(uu) profile_score_u_fixed("B", uu, gamma), u) -
+    jacobian_u(function(uu) profile_score_u_fixed("A", uu, gamma), u)
+  lam_full <- spec(Q_full, Gamma_x)
+  lam_fixed <- spec(Q_fixed, Gamma_u)
+
+  list(
+    fit_diff = fitB$value - fitA$value,
+    score_diff = norm_score_diff(x),
+    sqrt2f = sqrt(sum(fitA$r^2 / gamma)),
+    fixed = lam_fixed,
+    full = lam_full,
+    fixed_trace = sum(lam_fixed),
+    full_trace = sum(lam_full)
+  )
+}
+
+adjacent_cycle <- c(1, 0, 1, 1, 0, 1)
+R_symmetric_cycle <- function(eps) {
+  R <- R_eq
+  for (k in seq_along(pairs)) {
+    i <- pairs[[k]][1]
+    j <- pairs[[k]][2]
+    R[i, j] <- R[j, i] <- R[i, j] + eps * adjacent_cycle[k]
+  }
+  R
+}
+
+print_symmetric_cycle_scan <- function() {
+  cat("\nSymmetry-protected C4 pseudo-null, equal binary thresholds.\n")
+  cat("eps  sqrt2f  B-A        score      tr_fixed tr_full ratio  full eig top3\n")
+  for (eps in c(0.02, 0.04, 0.06, 0.08, 0.10)) {
+    out <- scenario_stats(rep(0, p), R_symmetric_cycle(eps))
+    cat(sprintf(
+      "%.2f  %.4f  %.2e  %.2e  %.4f  %.4f  %.4f   %s\n",
+      eps, out$sqrt2f, out$fit_diff, out$score_diff,
+      out$fixed_trace, out$full_trace, out$full_trace / out$fixed_trace,
+      paste(sprintf("%.4f", head(out$full, 3)), collapse = " ")
+    ))
+  }
+}
+
 tau0 <- c(-0.6, -0.15, 0.25, 0.7)
 lambda_eq <- rep(0.55, p)
 R_eq <- diag(1, p)
@@ -330,3 +389,4 @@ analyze("exact nested null: tau-equivalent latent response", tau0, R_eq)
 analyze("near-null misspec direction eps=0.04", tau0, R_cycle(0.04))
 analyze("near-null misspec direction eps=0.08", tau0, R_cycle(0.08))
 analyze("restriction false: congeneric latent response", tau0, R_uneq)
+print_symmetric_cycle_scan()
