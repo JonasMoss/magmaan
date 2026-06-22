@@ -312,8 +312,13 @@ golden `parTable()` fixtures.
   `Q̄=tr(QΓ_x)`) are a ratio delta-method, the TLI interval being the CFI interval
   scaled by `Q̄_b/Q̄_u`. To leading order `Var(CFI)≈Var(T_u)/δ_b²`, so CFI
   inference is a rescaling of the RMSEA-side variance. Derivation in
-  `docs/research/notes/cfi_tli_misspec_inference.tex`; gated by `ordinal_test.cpp`.
-  Single-group; R bindings and an MC coverage harness deferred.
+  `docs/research/notes/cfi_tli_misspec_inference.tex`; gated by `ordinal_test.cpp`
+  and the C4 MC harness `tests/checks/ordinal_cfi_inference`. Empirically CFI's CI
+  is calibrated and (unlike RMSEA) largely robust to weight estimation (γ-share
+  ≈±3–8%); the leading-order simplification holds only at weak misfit. TLI's point
+  is calibrated but its variance over-states at strong misfit (`c=Q̄_b/Q̄_u`
+  ill-conditioned), so CFI is the index to trust for an interval. Single-group;
+  R bindings and a stabilized-`c` TLI variance deferred.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

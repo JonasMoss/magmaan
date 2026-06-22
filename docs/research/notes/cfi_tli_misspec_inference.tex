@@ -213,8 +213,13 @@ statistic variance $V_{uu}=N g_u'\Gamma_x g_u$ already returned as
 noncentrality $\hat\delta_b^2$; the baseline acts as a nearly constant scale.
 The cross-term and baseline-variance contributions are $O(r)$ and $O(r^2)$
 corrections. The full bivariate form \eqref{eq:varcfi} is retained in code for
-honesty, but \eqref{eq:dominated} is the right intuition and an effective
-cross-check: \emph{CFI inference is a rescaling of RMSEA inference.}
+honesty, and it must be: the Monte-Carlo check
+(\texttt{tests/checks/ordinal\_cfi\_inference}) finds the ratio
+$(V_{uu}/\hat\delta_b^2)/\widehat\Var(\cfi)$ falling from $0.99$ at weak misfit to
+$0.35$ at strong misfit, i.e.\ \eqref{eq:dominated} is accurate only near correct
+specification, where ``CFI inference is a rescaling of RMSEA inference'' holds;
+as misfit grows the cross-term and baseline-variance corrections take over. The
+simplification is intuition, not the computation.
 
 \section{Estimated versus fixed weight}\label{sec:weight}
 
@@ -226,9 +231,13 @@ to the fixed-weight trace. The estimated-weight law differs from current
 practice exactly through this channel. It enters CFI twice: through $V_{uu}$
 (the RMSEA-metric piece, where the channel is large because RMSEA's metric
 \emph{is} the weight) and through the baseline objects $\hat\delta_b,V_{bb}$.
-By \eqref{eq:dominated} the dominant effect is the former, so the estimated-weight
-correction to CFI tracks the estimated-weight correction to the user RMSEA,
-attenuated by $1/\hat\delta_b^2$.
+One might expect the former to dominate and CFI to inherit RMSEA's large weight
+sensitivity, but empirically the \emph{net} effect on $\widehat\Var(\cfi)$ is
+small: the Monte-Carlo check puts the $\gamma$ share at only $\pm 3\text{--}8\%$
+(versus $-12\%$ to $-80\%$ for RMSEA). The ratio structure and the
+$\hat\delta_b^2$ scaling attenuate the channel, and the $\hat\delta_b$ shift
+under a fixed weight largely cancels it, so CFI sits at the CRMR end of the
+spectrum: its estimated- and fixed-weight intervals nearly coincide.
 
 \section{Boundary and regularity}\label{sec:boundary}
 
@@ -246,6 +255,15 @@ baseline is a genuine null.
 \item \textbf{Shared metric.} $g_u'\Gamma_x g_b$ uses the \emph{same} $\Gamma_x$
 for both gradients; the implementation must assert the two profile fits returned
 a common $\Gamma_x$ (they do, being data-only) before forming the cross-term.
+\item \textbf{TLI variance is ill-conditioned at strong misfit.} Corollary
+\ref{cor:tli} treats $c=\bar Q_b/\bar Q_u$ as fixed, but $\bar Q_u$ is a signed
+trace that can be small (and near its sign-change cancellation) when the user
+model misfits strongly, giving $c^2$ a heavy right tail. The Monte-Carlo check
+finds the TLI interval calibrated at weak/moderate misfit but
+\emph{over-covering} at strong misfit (analytic variance $\sim$8$\times$ the
+empirical), i.e.\ conservative, not anti-conservative. The TLI \emph{point}
+stays unbiased. CFI carries no such division and is the index to trust for an
+interval; a stabilized $c$ for TLI is future work.
 \item \textbf{Single group.} As with RMSEA/CRMR, the first pass is
 single-group; the multi-group extension stacks $\Gamma_x$ block-diagonally and
 sums the block traces, and is deferred.
