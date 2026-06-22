@@ -317,14 +317,18 @@ golden `parTable()` fixtures.
   is calibrated and (unlike RMSEA) largely robust to weight estimation (γ-share
   ≈±3–8%); the leading-order simplification holds only at weak misfit. TLI's point
   is calibrated but its variance over-states at strong misfit (`c=Q̄_b/Q̄_u`
-  ill-conditioned), so CFI is the index to trust for an interval. Single-group.
+  ill-conditioned), so CFI is the index to trust for an interval.
   The whole estimated-weight fit-index family (RMSEA + CRMR/SRMR + CFI/TLI with
   CIs) is R-exposed through one consolidated surface,
   `estimate::ordinal_fit_measures_misspec_inference`
   (`OrdinalMisspecFitMeasures`), bound as `infer_ordinal_fit_measures_misspec`
   and the `@export`ed `fit_measures_misspec(fit, ordinal_stats, ...)`; the
-  per-index C++ entry points stay unbound. A stabilized-`c` TLI variance and
-  multi-group remain deferred.
+  per-index C++ entry points stay unbound. All of RMSEA/CRMR/CFI/TLI are now
+  **multi-group**: the criteria pool as `Σ_b n_b·crit_b` with a block-diagonal
+  `Γ_x`, the gradients stack with `√(n_b/N)` weights, and the baseline is the
+  per-group independence model (validated by a duplicate-group reduction:
+  points invariant, statistic/df double, intervals tighten). A stabilized-`c`
+  TLI variance remains deferred.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

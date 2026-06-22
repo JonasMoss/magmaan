@@ -3829,6 +3829,108 @@ TEST_CASE("ordinal_fit_measures_misspec_inference bundles the per-index results"
   CHECK_FALSE(all->fixed_weight);
 }
 
+TEST_CASE("misspec fit-index inference is multi-group (duplicate-group reduction)") {
+  // Tau-equivalence on unequal loadings => misspecified, so the indices are
+  // non-trivial. Duplicating the data into a configural two-group fit must leave
+  // every index UNCHANGED (the pooled statistic and df both double, so the
+  // bias-corrected criteria and the CFI/TLI ratios are invariant). This pins the
+  // n_b-weighted pooling and the per-block γ channel against the single-group
+  // path that the earlier cases already validate.
+  const char* syntax =
+      "f =~ x1 + 1*x2 + 1*x3 + 1*x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260629, 700, {0.82, 0.66, 0.52, 0.40}, -0.4, 0.7);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  opts.ftol = 1e-13;
+  opts.gtol = 1e-9;
+  auto fit_for = [&](const std::vector<Eigen::MatrixXd>& blocks, int n_groups) {
+    auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
+    REQUIRE(stats.has_value());
+    auto fp = magmaan::parse::Parser::parse(syntax);
+    REQUIRE(fp.has_value());
+    magmaan::spec::BuildOptions bo;
+    bo.n_groups = n_groups;
+    auto pt = magmaan::spec::build(*fp, bo);
+    REQUIRE(pt.has_value());
+    auto mr = magmaan::model::build_matrix_rep(*pt);
+    REQUIRE(mr.has_value());
+    auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+    REQUIRE(x0.has_value());
+    auto fit = magmaan::estimate::fit_ordinal_bounded(
+        *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE_MESSAGE(fit.has_value(),
+        "fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+    return std::make_tuple(std::move(*stats), std::move(*pt), std::move(*mr),
+                           std::move(*fit));
+  };
+
+  auto [s1, pt1, mr1, f1] = fit_for({X}, 1);
+  auto [s2, pt2, mr2, f2] = fit_for({X, X}, 2);  // two identical groups
+
+  auto a1 = magmaan::estimate::ordinal_fit_measures_misspec_inference(
+      pt1, mr1, s1, f1);
+  auto a2 = magmaan::estimate::ordinal_fit_measures_misspec_inference(
+      pt2, mr2, s2, f2);
+  REQUIRE_MESSAGE(a1.has_value(),
+      "single-group bundle failed: " << (a1.has_value() ? "" : a1.error().detail));
+  REQUIRE_MESSAGE(a2.has_value(),
+      "two-group bundle failed: " << (a2.has_value() ? "" : a2.error().detail));
+
+  // The duplicated fit doubles the raw statistic and df, leaving every POINT
+  // index invariant (they are functions of population discrepancy ratios). The
+  // intervals are NOT invariant: twice the data tightens them, so they should
+  // be narrower, not equal.
+  CHECK(a2->stat_user == doctest::Approx(2.0 * a1->stat_user).epsilon(2e-3));
+  CHECK(a2->stat_baseline == doctest::Approx(2.0 * a1->stat_baseline).epsilon(2e-3));
+  CHECK(a2->df_user == 2 * a1->df_user);
+  CHECK(a2->df_baseline == 2 * a1->df_baseline);
+  CHECK(a2->rmsea == doctest::Approx(a1->rmsea).epsilon(2e-3));
+  CHECK(a2->cfi == doctest::Approx(a1->cfi).epsilon(2e-3));
+  CHECK(a2->tli == doctest::Approx(a1->tli).epsilon(5e-3));
+  CHECK(a2->crmr == doctest::Approx(a1->crmr).epsilon(2e-3));
+  CHECK(a2->srmr == doctest::Approx(a1->srmr).epsilon(2e-3));
+
+  // Intervals stay ordered and tighten with the doubled sample.
+  CHECK(a2->rmsea_ci_lower <= a2->rmsea_ci_upper);
+  CHECK(a2->cfi_ci_lower <= a2->cfi_ci_upper);
+  const double w1 = a1->rmsea_ci_upper - a1->rmsea_ci_lower;
+  const double w2 = a2->rmsea_ci_upper - a2->rmsea_ci_lower;
+  CHECK(w2 < w1);  // 2x data -> narrower RMSEA interval
+
+  // Two genuinely different groups: everything runs, intervals are ordered, and
+  // the estimated-weight γ channel is active (differs from the fixed-weight
+  // comparator).
+  const Eigen::MatrixXd Y =
+      ordinal_test_block(20260630, 500, {0.78, 0.70, 0.55, 0.45}, -0.3, 0.8);
+  auto [s3, pt3, mr3, f3] = fit_for({X, Y}, 2);
+  auto est = magmaan::estimate::ordinal_fit_measures_misspec_inference(
+      pt3, mr3, s3, f3);
+  auto fix = magmaan::estimate::ordinal_fit_measures_misspec_inference(
+      pt3, mr3, s3, f3, magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE_MESSAGE(est.has_value(),
+      "two-group different bundle failed: "
+          << (est.has_value() ? "" : est.error().detail));
+  REQUIRE(fix.has_value());
+  CHECK(est->df_baseline == 12);  // 2 groups * ncorr 6
+  CHECK(est->rmsea >= 0.0);
+  CHECK(est->rmsea_ci_lower <= est->rmsea_ci_upper);
+  CHECK(est->cfi >= 0.0);
+  CHECK(est->cfi <= 1.0);
+  CHECK(est->cfi_ci_lower <= est->cfi_ci_upper);
+  CHECK(est->crmr_ci_lower <= est->crmr_ci_upper);
+  CHECK(std::isfinite(est->tli));
+  // Raw statistics are weight-independent; the bias correction is not.
+  CHECK(fix->stat_user == doctest::Approx(est->stat_user).epsilon(1e-9));
+  CHECK(std::abs(fix->rmsea - est->rmsea) >= 0.0);  // both finite, may differ
+  CHECK(std::isfinite(fix->cfi));
+}
+
 TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) law") {
   std::mt19937 rng(20260630);
   std::normal_distribution<double> norm(0.0, 1.0);

@@ -264,10 +264,45 @@ finds the TLI interval calibrated at weak/moderate misfit but
 empirical), i.e.\ conservative, not anti-conservative. The TLI \emph{point}
 stays unbiased. CFI carries no such division and is the index to trust for an
 interval; a stabilized $c$ for TLI is future work.
-\item \textbf{Single group.} As with RMSEA/CRMR, the first pass is
-single-group; the multi-group extension stacks $\Gamma_x$ block-diagonally and
-sums the block traces, and is deferred.
+\item \textbf{Groups.} The pooling is in Section~\ref{sec:multigroup}.
 \end{itemize}
+
+\section{Multi-group}\label{sec:multigroup}
+
+For $G$ groups with sizes $n_b$, $N=\sum_b n_b$, the first-stage vectors
+$\hat x_b$ are independent across groups, $\sqrt{n_b}(\hat x_b-x_{0,b})\dto
+\mathcal N(0,\Gamma_{x,b})$. The fit minimizes the pooled discrepancy
+$F=\sum_b (n_b/N)F_b$, and every statistic in this note is a sample-size-weighted
+sum of per-group criteria,
+\begin{equation}\label{eq:mg-stat}
+  T=N\!\sum_b \tfrac{n_b}{N}\,\mathrm{crit}_b=\sum_b n_b\,\mathrm{crit}_b
+  \qquad(\mathrm{crit}_b=F_b\ \text{for RMSEA},\ G_b\ \text{for CRMR}).
+\end{equation}
+Each $\mathrm{crit}_b$ depends on $\hat x_b$ only, with per-group envelope
+gradient $g_b$. Because the groups are independent, the joint law collapses to a
+\emph{block-diagonal} sum:
+\begin{equation}\label{eq:mg-var}
+  \Var(T)=\sum_b n_b\,g_b'\,\Gamma_{x,b}\,g_b,\qquad
+  \Cov(T^{(1)},T^{(2)})=\sum_b n_b\,g_{b}^{(1)\prime}\,\Gamma_{x,b}\,g_{b}^{(2)},
+\end{equation}
+the second line being the CFI/TLI cross-term with the user and baseline gradients
+(cross-group terms vanish). The profile machinery already returns the block-%
+diagonal $\Gamma_x=\operatorname{blkdiag}_b\Gamma_{x,b}$ and the pooled signed
+trace $\bar Q=\tr(Q\Gamma_x)$ (the two-metric core scales each block's Jacobian by
+$\sqrt{n_b/N}$, giving the correct pooled trace), so $\hat\delta=T-\bar Q$ is
+unchanged. The baseline is the per-group independence model: $T_b=\sum_b n_b
+F_{b,\mathrm{base}}$, $df_b=\sum_b \mathrm{ncorr}_b$, built as $G$ analytic blocks
+through the same primitive with the \emph{shared} per-group $\Gamma_{x,b}$.
+
+In code \eqref{eq:mg-var} is one quadratic form: stack the per-group gradients
+into $g_\star$ with block $b$ equal to $\sqrt{n_b/N}\,g_b$, so
+$g_\star'\Gamma_x g_\star=\frac1N\Var(T)$ matches the single-group
+$g'\Gamma_x g$ exactly (with $n_1=N$ it is the same expression). The
+fixed-weight comparator zeros the $\gamma$ coordinates \emph{within each block}
+(global indices $[\,\mathrm{off}_b+m_b,\ \mathrm{off}_b+2m_b)$), not a single
+trailing $\gamma$ band. CFI, TLI, the ratio delta-method, and the boundary
+handling are otherwise identical with the pooled $\hat\delta$'s and
+\eqref{eq:mg-var}.
 
 \section{Implementation map}\label{sec:impl}
 

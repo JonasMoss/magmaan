@@ -85,6 +85,33 @@ err <- tryCatch(magmaan::fit_measures_misspec(fit),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("ordinal_stats", err, fixed = TRUE))
 
+## --- multi-group: the pooling is n_b-weighted across groups ------------------
+# Two groups, configural tau-equivalent fit. The baseline pools per group
+# (df = sum of off-diagonal counts), and every index/interval runs.
+set.seed(11L)
+g2_make <- function(n, seed) {
+  set.seed(seed); f <- rnorm(n)
+  zz <- sapply(seq_len(p), function(j) lambda[j] * f + sqrt(1 - lambda[j]^2) * rnorm(n))
+  d <- data.frame(lapply(seq_len(p), function(j)
+    ordered(cut(zz[, j], c(-Inf, -0.4, 0.7, Inf), labels = FALSE))))
+  names(d) <- paste0("x", seq_len(p)); d
+}
+ga <- g2_make(700L, 21L); gb <- g2_make(500L, 22L)
+ga$grp <- "a"; gb$grp <- "b"
+dfg <- rbind(ga, gb)
+mg <- magmaan::model_spec("f =~ x1 + 1*x2 + 1*x3 + 1*x4",
+                          ordered = paste0("x", seq_len(p)), group = "grp",
+                          group_labels = c("a", "b"), parameterization = "delta")
+dg <- core$data_ordinal_stats_from_df(dfg, mg)
+fitg <- core$fit_dwls_ordinal(
+  mg, dg, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+fmg <- magmaan::fit_measures_misspec(fitg, dg)
+stopifnot(fmg$baseline.df == 12L)                         # 2 groups * 6 off-diag
+stopifnot(fmg$cfi >= 0, fmg$cfi <= 1,
+          fmg$rmsea.ci.lower <= fmg$rmsea.ci.upper,
+          fmg$cfi.ci.lower <= fmg$cfi.ci.upper,
+          is.finite(fmg$tli))
+
 cat(sprintf(
   "fit_measures_misspec: rmsea=%.3f [%.3f, %.3f]  cfi=%.3f [%.3f, %.3f]  tli=%.3f [%.3f, %.3f]\n",
   fm$rmsea, fm$rmsea.ci.lower, fm$rmsea.ci.upper,
