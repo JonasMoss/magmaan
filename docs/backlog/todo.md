@@ -424,16 +424,27 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       rank note flags. Single- and multi-group. Gated in `ordinal_test.cpp`
       (single-fit `Γ_x` uu-block == NACOV + df/chisq vs `robust_ordinal` + live
       γ channel; nested LRT df_diff / spectrum / mixture-p).
+    - **Done 2026-06-22 (population cross-check).** Advisory check
+      `tests/checks/ordinal_dwls_profile/` reproduces the symmetry-protected C4
+      binary pseudo-null of `ordinal_dwls_profile_exploration.tex` in magmaan
+      (tally→expand population dataset, congeneric vs tau-equivalent DWLS). Two
+      verifications: (1) at `ε=0` the estimated-weight channel is dormant
+      (`gap=0`, `tr_full==tr_fixed`) and the law reduces to the fixed-weight DWLS
+      law (eigenvalues = the single SB scaling `c≈0.954`, *not* χ²₃ — DWLS≠WLS);
+      (2) for `ε∈[0.02,0.10]` magmaan matches the prototype's population
+      `tr_fixed` to ~1e-3 and the `ε=0.10` eigenvalues to ~1e-3, with the γ
+      channel positive and monotone. Surfaced a prototype defect: its
+      double-finite-differenced `tr_full` at `ε=0.06` is non-monotonic; magmaan's
+      analytic-influence law is the corrected reference (as the note anticipated).
     Remaining profile-Hessian fit/test work:
     mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
     mixed continuous/ordinal DWLS wiring (the `mixed_gamma_*` analogs exist),
     whose first-stage influence adds its own directions to `Γ` on top of the two
     channels above; an *a-priori* analytic sign count of `#{ν_j < 1}` from model
     structure (the note settles the inertia identity but still reads the signs
-    off an eigendecomposition); a numerical cross-check of the categorical
-    `Γ_x`/spectrum against the `ordinal_dwls_profile_*` finite-difference
-    prototype (population vs sample); R/API wrappers after a concrete experiment
-    needs them.
+    off an eigendecomposition); the finite-sample rejection-rate simulation
+    (experiment) for the C4 pseudo-null and stronger designs; R/API wrappers
+    after a concrete experiment needs them.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
