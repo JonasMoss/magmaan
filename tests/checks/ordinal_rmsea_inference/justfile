@@ -1,0 +1,42 @@
+set shell := ["bash", "-uc"]
+
+root := "../../.."
+build_dir := "build"
+bin := build_dir / "ordinal_rmsea_verify"
+cxx := env_var_or_default("CXX", "clang++")
+libdir := root / "build/opt"
+eigen := root / "build/fast/_deps/eigen3-src"
+
+default:
+    @just --list
+
+# Links the optimized (build/opt) static libs; run `cmake --build --preset opt`
+# first. Compile flags mirror the opt preset so inlined Eigen matches the ABI.
+build:
+    mkdir -p {{build_dir}}
+    {{cxx}} -std=c++23 -O3 -DNDEBUG -march=native -fPIC \
+      -fno-exceptions -fno-rtti \
+      -fvisibility=hidden -fvisibility-inlines-hidden \
+      -DEIGEN_DONT_PARALLELIZE=1 -DEIGEN_MAX_ALIGN_BYTES=64 \
+      -DEIGEN_NO_AUTOMATIC_RESIZING=1 -DEIGEN_NO_EXCEPTIONS=1 \
+      -DEIGEN_RUNTIME_NO_MALLOC=1 -DMAGMAAN_WITH_PORT \
+      -I{{root}}/include -I{{root}}/src -isystem {{eigen}} \
+      ordinal_rmsea_verify.cpp \
+      -Wl,--start-group \
+        {{libdir}}/libmagmaan.a {{libdir}}/libport.a \
+        {{libdir}}/libquadpack.a {{libdir}}/_deps/nlopt-build/libnlopt.a \
+      -Wl,--end-group \
+      -lm -o {{bin}}
+
+# Fast smoke (noisy coverage at low reps).
+quick: build
+    mkdir -p results
+    {{bin}} --reps=300 --n=800 | tee results/quick.txt
+
+# Full run (coverage + variance match vs Monte-Carlo).
+all: build
+    mkdir -p results
+    {{bin}} --reps=2000 --n=1000 | tee results/latest.txt
+
+clean:
+    rm -rf {{build_dir}} results

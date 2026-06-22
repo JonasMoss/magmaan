@@ -95,6 +95,31 @@ struct OrdinalCrmrInference {
   std::vector<std::string> warnings;
 };
 
+// Misspecification-aware inference for RMSEA, the absolute-fit companion whose
+// metric IS the estimated weight (so its γ channel is large, unlike CRMR). The
+// criterion is the DWLS discrepancy F = rᵀ W r itself; since θ̂ minimizes it, the
+// envelope theorem makes the gradient the bare profile score
+// g_F = (−2 W r, −r²/γ²) with no estimator-projection term. `point` is the
+// bias-corrected RMSEA (= ordinal_dwls_profile_rmsea's rmsea); the CI propagates
+// the estimated weight through `grad_var = g_Fᵀ Γ_x g_F` (Var(N·F)=N·grad_var).
+// `estimated_weight=false` zeros the γ channel (fixed-weight comparator).
+// Single-group only in this first pass.
+struct OrdinalRmseaInference {
+  double point = 0.0;            // sqrt(max(F − tr(QΓ)/N,0)·G/df)
+  double ci_lower = 0.0;         // misspec normal-theory interval on F₀, mapped
+  double ci_upper = 0.0;
+  double exact_fit_pvalue = 0.0; // Pr(Σλⱼχ²₁ > N·F)
+  double bias_trace = 0.0;       // tr(Q Γ_x) (signed)
+  double grad_var = 0.0;         // g_Fᵀ Γ_x g_F (per-unit; Var(N·F)=N·grad_var)
+  double fmin = 0.0;             // F = full DWLS discrepancy
+  double stat = 0.0;             // N · F
+  int df = 0;
+  int spectrum_size = 0;
+  bool fixed_weight = false;
+  Eigen::VectorXd eigvals;       // positive Q Γ_x spectrum
+  std::vector<std::string> warnings;
+};
+
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
@@ -563,6 +588,21 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                bool srmr_denominator = false,
                                double conf_level = 0.90,
                                double eig_tol = 1e-10);
+
+// Estimated-weight (γ-channel-aware) misspecification confidence interval for
+// RMSEA. Reuses `ordinal_dwls_profile_rmsea` for the Hessian/Γ_x/bias/spectrum
+// and adds the envelope-score gradient variance for the interval.
+// `estimated_weight=false` is the fixed-weight comparator. Single-group only.
+post_expected<OrdinalRmseaInference>
+ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const data::OrdinalStats& stats,
+                                const Estimates& est,
+                                OrdinalParameterization parameterization =
+                                    OrdinalParameterization::Delta,
+                                bool estimated_weight = true,
+                                double conf_level = 0.90,
+                                double eig_tol = 1e-10);
 
 // Fixed-misspecification estimated-weight (categorical DWLS) profile-RMSEA for
 // an all-ordinal fit. The first-stage object is the EXTENDED moment vector

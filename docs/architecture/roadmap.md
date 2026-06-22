@@ -291,6 +291,17 @@ golden `parTable()` fixtures.
   largely robust to weight estimation, unlike the metric-dominating RMSEA / nested
   test. Verified by `tests/checks/ordinal_crmr_inference` (bias/variance/coverage
   vs Monte-Carlo). R bindings and lavaan `crmr` parity are deferred.
+  The large-γ absolute-fit case is `estimate::ordinal_rmsea_misspec_inference`
+  (`OrdinalRmseaInference`): RMSEA's criterion is the discrepancy `F = rᵀWr`
+  itself, so the envelope theorem gives the gradient as the bare profile score
+  `g_F = (−2Wr, −r²/γ²)` (no projector); it returns the bias-corrected RMSEA, an
+  exact-fit mixture p-value, and a normal-theory CI on `F₀` with
+  `Var(N·F)=N·g_Fᵀ Γ_x g_F`, reusing the profile `Q`/`Γ_x`/bias/spectrum.
+  Empirically the γ channel is large and variance-reducing (`r` and `γ` co-vary
+  negatively): the estimated-weight CI is calibrated while the fixed-weight one
+  is conservative (over-covers, increasingly with misspecification) — accounting
+  for the estimated weight tightens RMSEA's interval. Verified by
+  `tests/checks/ordinal_rmsea_inference`. Single-group; R bindings deferred.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over
