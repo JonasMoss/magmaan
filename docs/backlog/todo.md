@@ -428,6 +428,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       rank note flags. Single- and multi-group. Gated in `ordinal_test.cpp`
       (single-fit `Γ_x` uu-block == NACOV + df/chisq vs `robust_ordinal` + live
       γ channel; nested LRT df_diff / spectrum / mixture-p).
+    - **Done 2026-06-22 (finite-sample calibration experiment).**
+      `experiments/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
+      On the exact C4 binary pseudo-null it shows the standard fixed-weight
+      DWLS nested test (Satorra-2000) is anti-conservative under fixed
+      misspecification of the larger model — rising to 10.5% rejection at a
+      nominal 5% (strong design, n=1500) as ε grows — while the estimated-weight
+      profile law stays flat at ~4.2%. The empirical mean of the difference
+      statistic tracks the full-profile trace, not the fixed-weight trace
+      (2.63 vs 2.13 at the strongest setting). This is the nested-LRT companion
+      to experiment 35 / `papers/estimated-weight-se`.
     - **Done 2026-06-22 (population cross-check).** Advisory check
       `tests/checks/ordinal_dwls_profile/` reproduces the symmetry-protected C4
       binary pseudo-null of `ordinal_dwls_profile_exploration.tex` in magmaan
@@ -446,9 +456,8 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     whose first-stage influence adds its own directions to `Γ` on top of the two
     channels above; an *a-priori* analytic sign count of `#{ν_j < 1}` from model
     structure (the note settles the inertia identity but still reads the signs
-    off an eigendecomposition); the finite-sample rejection-rate simulation
-    (experiment) for the C4 pseudo-null and stronger designs; R/API wrappers
-    after a concrete experiment needs them.
+    off an eigendecomposition); R/API wrappers for the ordinal profile path
+    (experiment 36 is C++-only because they do not exist yet).
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
