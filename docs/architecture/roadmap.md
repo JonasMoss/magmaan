@@ -223,8 +223,15 @@ golden `parTable()` fixtures.
   `estimate::continuous_ls_profile_rmsea` and
   `estimate::continuous_ls_profile_lrt` supply
   the observed bread plus Γ from either caller blocks or complete raw data.
-  These are basic dense research surfaces, not lavaan-parity fit-measure
-  dispatch.
+  `estimate::weighted_moment_profile_rmsea_two_metric` generalizes the same
+  dense engine to two-metric profile Hessians
+  `Q = V0 - W* D B^{-1} D' W*`. The first adapter is covariance-only
+  complete-data ML: `estimate::ml_profile_rmsea` /
+  `estimate::ml_profile_lrt` use the sample/saturated normal-theory metric for
+  `V0`, the fitted-implied metric for `W*`, and the observed ML Hessian scaled
+  to the per-unit profile bread. Mean-structure ML is intentionally not wired
+  into this first pass. These are basic dense research surfaces, not
+  lavaan-parity fit-measure dispatch.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over
