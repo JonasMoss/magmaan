@@ -372,8 +372,8 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `continuous_ls_profile_lrt` now compare nested dense profile Hessians in a
     common first-stage moment space and report both nominal `df_diff` and actual
     positive `spectrum_size`. `weighted_moment_profile_rmsea_two_metric` and
-    the covariance-only complete-data ML wrappers `ml_profile_rmsea` /
-    `ml_profile_lrt` now implement the basic dense two-metric profile Hessian
+    the complete-data ML wrappers `ml_profile_rmsea` / `ml_profile_lrt` now
+    implement the basic dense two-metric profile Hessian
     `Q = V0 - W* D B^{-1} D' W*` with raw-data or caller Γ. This is the basic
     research surface only.
     - **Done 2026-06-22.** Estimated-weight (diagonal DWLS) profile-Hessian
@@ -455,6 +455,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `ordinal_test.cpp` by the live mixed γ block, uu-block == NACOV,
       standard χ²/df parity with `robust_mixed_ordinal`, raw-data requirement,
       and a nested mixed DWLS profile-LRT smoke.
+    - **Done 2026-06-22 (mean-structure ML wiring).**
+      `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
+      mean-structure ML in addition to covariance-only ML. The two-metric
+      profile blocks use the stacked `[mean; vech(S)]` Jacobian, block-diagonal
+      normal-theory metrics (`S^{-1}` or `Σ(θ̂)^{-1}` for means plus
+      `Γ_NT^{-1}` for vech covariances), observed ML bread scaled per unit, and
+      either caller-supplied stacked Γ or raw-data Γ from
+      `data::empirical_gamma_with_means`. Gated in
+      `weighted_inference_test.cpp` by raw-vs-supplied Γ parity for single-fit
+      RMSEA and nested LRT.
     - **Done 2026-06-22 (finite-sample calibration experiment).**
       `experiments/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
       On the exact C4 binary pseudo-null it shows the standard fixed-weight
@@ -478,7 +488,7 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       double-finite-differenced `tr_full` at `ε=0.06` is non-monotonic; magmaan's
       analytic-influence law is the corrected reference (as the note anticipated).
     Remaining profile-Hessian fit/test work:
-    mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
+    FIML and ML2S-NT two-metric profile Hessians;
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
     dense `QΓ` when actual positive mixture weights are needed); an *a-priori*

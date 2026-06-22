@@ -1218,6 +1218,40 @@ TEST_CASE("ml_profile_rmsea covariance-only raw and supplied Gamma agree") {
   CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
 }
 
+TEST_CASE("ml_profile_rmsea meanstructure raw and supplied Gamma agree") {
+  auto fx = one_factor_fixture(true);
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est = magmaan::test::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, opt);
+  REQUIRE(est.has_value());
+
+  auto G = magmaan::data::empirical_gamma_with_means(fx.raw.X[0]);
+  REQUIRE(G.has_value());
+  auto by_gamma = magmaan::estimate::ml_profile_rmsea(
+      fx.pt, fx.rep, fx.samp, *est, {*G});
+  auto by_raw = magmaan::estimate::ml_profile_rmsea(
+      fx.pt, fx.rep, fx.samp, *est, fx.raw);
+  REQUIRE(by_gamma.has_value());
+  REQUIRE(by_raw.has_value());
+
+  const Eigen::Index p = fx.samp.S[0].rows();
+  const Eigen::Index m = p + vech_len(p);
+  CHECK(by_raw->profile_hessian.rows() == m);
+  CHECK(by_raw->gamma.rows() == m);
+  CHECK(by_raw->df == 2);
+  CHECK(by_raw->spectrum_size == by_gamma->spectrum_size);
+  CHECK(by_raw->profile_hessian.isApprox(by_gamma->profile_hessian, 1e-12));
+  CHECK(by_raw->gamma.isApprox(by_gamma->gamma, 1e-12));
+  CHECK(by_raw->gamma.topLeftCorner(p, p).isApprox(fx.samp.S[0], 1e-12));
+  CHECK(by_raw->eigvals.isApprox(by_gamma->eigvals, 1e-10));
+  CHECK(by_raw->bias_trace == doctest::Approx(by_gamma->bias_trace));
+  CHECK(by_raw->rmsea == doctest::Approx(by_gamma->rmsea));
+  CHECK(by_raw->chisq_standard ==
+        doctest::Approx(2.0 * total_n(fx.samp) * est->fmin));
+  CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
+}
+
 TEST_CASE("ml_profile_lrt covariance-only raw and supplied Gamma agree") {
   auto fx = one_factor_fixture();
   auto fp0 = magmaan::parse::Parser::parse(
@@ -1238,6 +1272,46 @@ TEST_CASE("ml_profile_lrt covariance-only raw and supplied Gamma agree") {
   REQUIRE(est0.has_value());
 
   auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
+  REQUIRE(G.has_value());
+  auto by_gamma = magmaan::estimate::ml_profile_lrt(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0, {*G});
+  auto by_raw = magmaan::estimate::ml_profile_lrt(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0, fx.raw);
+  REQUIRE(by_gamma.has_value());
+  REQUIRE(by_raw.has_value());
+
+  CHECK(by_raw->df_diff == 1);
+  CHECK(by_raw->spectrum_size == by_gamma->spectrum_size);
+  CHECK(by_raw->profile_hessian.isApprox(by_gamma->profile_hessian, 1e-12));
+  CHECK(by_raw->gamma.isApprox(by_gamma->gamma, 1e-12));
+  CHECK(by_raw->eigvals.isApprox(by_gamma->eigvals, 1e-10));
+  CHECK(by_raw->bias_trace == doctest::Approx(by_gamma->bias_trace));
+  CHECK(by_raw->T_diff == doctest::Approx(by_gamma->T_diff));
+  CHECK(by_raw->p_mixture == doctest::Approx(by_gamma->p_mixture));
+  CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
+}
+
+TEST_CASE("ml_profile_lrt meanstructure raw and supplied Gamma agree") {
+  auto fx = one_factor_fixture(true);
+  auto fp0 = magmaan::parse::Parser::parse(
+      "f =~ x1 + a*x2 + a*x3 + x4\n"
+      "x1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1");
+  REQUIRE(fp0.has_value());
+  auto pt0 = magmaan::spec::build(*fp0);
+  REQUIRE(pt0.has_value());
+  auto rep0 = magmaan::model::build_matrix_rep(*pt0);
+  REQUIRE(rep0.has_value());
+
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est1 = magmaan::test::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, opt);
+  auto est0 = magmaan::test::fit_bounded(
+      *pt0, *rep0, fx.samp, magmaan::estimate::Bounds{}, opt);
+  REQUIRE(est1.has_value());
+  REQUIRE(est0.has_value());
+
+  auto G = magmaan::data::empirical_gamma_with_means(fx.raw.X[0]);
   REQUIRE(G.has_value());
   auto by_gamma = magmaan::estimate::ml_profile_lrt(
       fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0, {*G});

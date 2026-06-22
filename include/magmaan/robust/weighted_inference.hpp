@@ -396,10 +396,9 @@ continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
                           const data::RawData& raw,
                           double eig_tol = 1e-10);
 
-// Basic complete-data normal-theory ML profile-RMSEA/LRT for covariance-only
-// models. This is the dense two-metric research primitive from the
-// fixed-misspecification note; mean-structure ML needs additional cross-metric
-// curvature and is intentionally rejected in this first pass.
+// Basic complete-data normal-theory ML profile-RMSEA/LRT. Covariance-only
+// models use the vech(S) first-stage moment; mean-structure models use the
+// stacked [mean; vech(S)] moment with the matching empirical Gamma.
 post_expected<WeightedProfileRMSEAResult>
 ml_profile_rmsea(spec::LatentStructure pt,
                  const model::MatrixRep& rep,
