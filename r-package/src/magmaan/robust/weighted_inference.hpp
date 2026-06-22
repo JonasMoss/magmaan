@@ -69,6 +69,35 @@ struct WeightedProfileRMSEAResult {
   std::vector<std::string> warnings;
 };
 
+// Fixed-misspecification nested profile-LRT summary for two models in the same
+// first-stage moment space. `df_diff` is the nominal model df difference, while
+// `spectrum_size` is the actual number of positive weights in the profile
+// contrast; the two are reported separately because they need not agree.
+struct WeightedProfileLRTResult {
+  Eigen::MatrixXd profile_hessian;  // Q_H0 - Q_H1
+  Eigen::MatrixXd gamma;
+  Eigen::VectorXd eigvals;
+  double fmin_diff = 0.0;
+  double T_diff = 0.0;
+  double bias_trace = 0.0;
+  double bias_trace_sq = 0.0;
+  double scale_c = 0.0;
+  double T_scaled = 0.0;
+  double p_unscaled = 0.0;  // χ²(df_diff), nominal comparator
+  double p_scaled = 0.0;    // χ²(spectrum_size), mean-scaled comparator
+  double T_adjusted = 0.0;
+  double adjust_df = 0.0;
+  double p_adjusted = 0.0;
+  ScaledShiftedResult scaled_shifted;
+  double p_scaled_shifted = 0.0;
+  double p_mixture = 0.0;   // Pr(Σλⱼχ²₁ > T_diff)
+  int df_diff = 0;
+  int spectrum_size = 0;
+  std::int64_t ntotal = 0;
+  std::size_t n_groups = 1;
+  std::vector<std::string> warnings;
+};
+
 struct WeightedMomentIJBlock {
   Eigen::MatrixXd jacobian;          // model moments wrt full free theta
   Eigen::MatrixXd weight;            // fixed estimator weight W_b
@@ -122,6 +151,14 @@ weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
                               const Eigen::MatrixXd& observed_bread,
                               std::size_t n_groups = 1,
                               double eig_tol = 1e-10);
+
+// Nested profile-LRT from two already-computed profile-Hessian fits. `h1` is
+// the less restricted model, `h0` the more restricted model. Both must share
+// the same first-stage moment space, Γ, total sample size, and group count.
+post_expected<WeightedProfileLRTResult>
+weighted_moment_profile_lrt(const WeightedProfileRMSEAResult& h1,
+                            const WeightedProfileRMSEAResult& h0,
+                            double eig_tol = 1e-10);
 
 // Infinitesimal-jackknife parameter covariance for a moment-quadratic fit with
 // observed-Hessian bread. Each block contributes casewise rows
@@ -256,6 +293,33 @@ continuous_ls_profile_rmsea(spec::LatentStructure pt,
                             const gmm::Weight& weight,
                             const data::RawData& raw,
                             double eig_tol = 1e-10);
+
+// Fixed-misspecification profile-LRT for nested continuous moment-quadratic
+// fits sharing one caller-fixed weight and Γ. `pt_H1`/`est_H1` are the less
+// restricted model; `pt_H0`/`est_H0` are the more restricted model.
+post_expected<WeightedProfileLRTResult>
+continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
+                          const model::MatrixRep& rep_H1,
+                          const data::SampleStats& samp,
+                          const Estimates& est_H1,
+                          spec::LatentStructure pt_H0,
+                          const model::MatrixRep& rep_H0,
+                          const Estimates& est_H0,
+                          const gmm::Weight& weight,
+                          const std::vector<Eigen::MatrixXd>& gamma,
+                          double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
+                          const model::MatrixRep& rep_H1,
+                          const data::SampleStats& samp,
+                          const Estimates& est_H1,
+                          spec::LatentStructure pt_H0,
+                          const model::MatrixRep& rep_H0,
+                          const Estimates& est_H0,
+                          const gmm::Weight& weight,
+                          const data::RawData& raw,
+                          double eig_tol = 1e-10);
 
 // Complete-data infinitesimal-jackknife covariance for continuous LS with a
 // fixed second-stage weight. Empty `weight` is ULS; non-empty weights are treated

@@ -209,19 +209,22 @@ golden `parTable()` fixtures.
   loading-invariance golden 0010 — the latter pins the `n_b/N` weighting that
   within-group reductions cannot (`A1 = lavInspect(fit,"information")` equals
   `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24).
-- Frontier fixed-misspecification profile-RMSEA primitive for the continuous
-  moment-quadratic tier (2026-06-22): `estimate::weighted_moment_profile_rmsea`
-  forms the full moment-space profile Hessian
+- Frontier fixed-misspecification profile-RMSEA / profile-LRT primitives for the
+  continuous moment-quadratic tier (2026-06-22): the weighted-moment RMSEA
+  helper forms the full moment-space profile Hessian
   `Q = W - W D B^{-1} D' W` from the same observed-Hessian bread used by the
   misspecification-robust SE path, computes the positive `QΓ` spectrum with
   `robust::compute_profile_contrast_spectrum`, and reports the trace-replaced
-  RMSEA correction `sqrt(max(F - tr(QΓ)/N, 0) * G / df)`. The continuous wrapper
-  `estimate::continuous_ls_profile_rmsea` supplies the observed bread plus Γ
-  from either caller blocks or complete raw data. The result deliberately carries
-  both nominal `df` and `spectrum_size`: observed-bread / estimated-weight
-  profile methods can have a positive-spectrum dimension different from the
-  classical model df. This is a basic dense research surface, not lavaan-parity
-  fit-measure dispatch and not yet the nested profile-LRT driver.
+  RMSEA correction `sqrt(max(F - tr(QΓ)/N, 0) * G / df)`.
+  `estimate::weighted_moment_profile_lrt` compares two such profile Hessians in
+  a common first-stage moment space, uses the positive spectrum of
+  `(Q_H0 - Q_H1)Γ` for mixture and adjusted tails, and reports nominal `df_diff`
+  separately from the actual `spectrum_size`. The continuous wrappers
+  `estimate::continuous_ls_profile_rmsea` and
+  `estimate::continuous_ls_profile_lrt` supply
+  the observed bread plus Γ from either caller blocks or complete raw data.
+  These are basic dense research surfaces, not lavaan-parity fit-measure
+  dispatch.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over
