@@ -719,6 +719,8 @@ compute_satorra2000_from_sandwich(
     deg.eigenvalues = Eigen::VectorXd::Zero(0);
     deg.trace_CinvS = 0.0;
     deg.trace_CinvS_sq = 0.0;
+    deg.trace_signed = 0.0;
+    deg.spectrum_rank = 0;
     return deg;
   }
   if (m > r1) {
@@ -785,6 +787,8 @@ compute_satorra2000_from_sandwich(
   out.eigenvalues = eig;
   out.trace_CinvS = eig.sum();
   out.trace_CinvS_sq = eig.squaredNorm();
+  out.trace_signed = out.trace_CinvS;
+  out.spectrum_rank = static_cast<int>(eig.size());
   out.warnings = std::move(warnings);
   return out;
 }

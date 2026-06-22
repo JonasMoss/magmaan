@@ -213,9 +213,12 @@ golden `parTable()` fixtures.
   continuous moment-quadratic tier (2026-06-22): the weighted-moment RMSEA
   helper forms the full moment-space profile Hessian
   `Q = W - W D B^{-1} D' W` from the same observed-Hessian bread used by the
-  misspecification-robust SE path, computes the positive `QΓ` spectrum with
-  `robust::compute_profile_contrast_spectrum`, and reports the trace-replaced
-  RMSEA correction `sqrt(max(F - tr(QΓ)/N, 0) * G / df)`.
+  misspecification-robust SE path, computes the `QΓ` spectrum with
+  `robust::compute_profile_contrast_spectrum`, and reports both the signed
+  trace `tr(QΓ)` used by the RMSEA correction
+  `sqrt(max(F - tr(QΓ)/N, 0) * G / df)` and the positive-spectrum summaries used
+  by mixture-tail approximations (`bias_trace`, `spectrum_size`, negative count,
+  and rank are carried separately).
   `estimate::weighted_moment_profile_lrt` compares two such profile Hessians in
   a common first-stage moment space, uses the positive spectrum of
   `(Q_H0 - Q_H1)Γ` for mixture and adjusted tails, and reports nominal `df_diff`

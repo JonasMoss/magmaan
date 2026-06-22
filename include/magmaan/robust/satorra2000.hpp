@@ -102,6 +102,10 @@ struct SatorraDiffResult {
   Eigen::VectorXd          eigenvalues;       // length m, ascending
   double                   trace_CinvS;       // = Σ λⱼ
   double                   trace_CinvS_sq;    // = Σ λⱼ²
+  double                   trace_signed = 0.0;
+  double                   negative_trace_abs = 0.0;
+  int                      negative_spectrum_size = 0;
+  int                      spectrum_rank = 0;
   std::vector<std::string> warnings;
 };
 
@@ -132,8 +136,10 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
 // beyond `eig_tol` are reported in `warnings`, because a nested pseudo-null
 // contrast should be PSD in exact arithmetic.
 //
-// `C`/`S` are empty in the returned `SatorraDiffResult`; `trace_CinvS` and
-// `trace_CinvS_sq` are the first two positive-spectrum sums.
+// `C`/`S` are empty in the returned `SatorraDiffResult`; `eigenvalues`,
+// `trace_CinvS`, and `trace_CinvS_sq` are positive-spectrum summaries. The
+// signed trace summarizes the full quadratic-form spectrum; the inertia fields
+// use `eig_tol` to separate positive, zero, and negative directions.
 post_expected<SatorraDiffResult>
 compute_profile_contrast_spectrum(
     const Eigen::Ref<const Eigen::MatrixXd>& Q,

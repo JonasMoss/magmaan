@@ -364,8 +364,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   - **Done 2026-06-22.** First fixed-misspecification profile-RMSEA / profile
     LRT slices: `weighted_moment_profile_rmsea` builds the dense profile Hessian
     `Q = W - W D B^{-1} D' W` from the observed-Hessian bread and reports the
-    positive `QΓ` spectrum, trace replacement, nominal df, and actual
-    `spectrum_size`; `continuous_ls_profile_rmsea` wires this for complete
+    signed `tr(QΓ)` RMSEA centering, positive `QΓ` mixture-tail spectrum,
+    negative count, rank, nominal df, and actual positive `spectrum_size`;
+    `continuous_ls_profile_rmsea` wires this for complete
     continuous ULS/GLS/WLS/DWLS-style moment-quadratic fits with Γ from raw data
     or caller blocks. `weighted_moment_profile_lrt` and
     `continuous_ls_profile_lrt` now compare nested dense profile Hessians in a
@@ -413,6 +414,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `O(‖e‖)` so the integer rank is brittle (read `spectrum_size` as an
       effective rank at a floor). Numerically verified to machine precision (ULS
       inertia `(13,7,1)`, ML `(17,1,3)` at `df=9`; e→0 collapse to df).
+    - **Done 2026-06-22 (signed trace fields).** Profile RMSEA/LRT result
+      structs expose `trace_signed = tr(QΓ)`, `negative_trace_abs`,
+      `negative_spectrum_size`, and `spectrum_rank` alongside the existing
+      positive-tail `eigvals` / `bias_trace` / `spectrum_size`. RMSEA centering
+      uses `trace_signed`; `rmsea_positive_trace` preserves the old positive-only
+      comparator. LRT p-value summaries remain positive-tail approximations and
+      warn when the contrast is indefinite.
     - **Done 2026-06-22 (categorical DWLS wiring).**
       `estimate::ordinal_dwls_profile_rmsea` / `ordinal_dwls_profile_lrt`
       (`estimate/ordinal.{hpp,cpp}`) extract `(D, γ, r, B)` from an all-ordinal
@@ -454,10 +462,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
     mixed continuous/ordinal DWLS wiring (the `mixed_gamma_*` analogs exist),
     whose first-stage influence adds its own directions to `Γ` on top of the two
-    channels above; an *a-priori* analytic sign count of `#{ν_j < 1}` from model
-    structure (the note settles the inertia identity but still reads the signs
-    off an eigendecomposition); R/API wrappers for the ordinal profile path
-    (experiment 36 is C++-only because they do not exist yet).
+    channels above; small-pencil diagnostics/gating from
+    `ν_j = eig(B^{-1} Ã)` so callers can get sign counts and skip curvature work
+    when `max|ν_j−1|` is negligible (still use dense `QΓ` when actual positive
+    mixture weights are needed); an *a-priori* analytic sign count of
+    `#{ν_j < 1}` from model structure (the note settles the inertia identity but
+    still reads the signs off an eigendecomposition); R/API wrappers for the
+    ordinal profile path (experiment 36 is C++-only because they do not exist
+    yet).
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a

@@ -627,12 +627,48 @@ TEST_CASE("weighted_moment_profile_rmsea reports positive spectrum size") {
   CHECK(out->eigvals(2) == doctest::Approx(5.0));
   CHECK(out->bias_trace == doctest::Approx(9.0));
   CHECK(out->bias_trace_sq == doctest::Approx(35.0));
+  CHECK(out->trace_signed == doctest::Approx(9.0));
+  CHECK(out->negative_trace_abs == doctest::Approx(0.0));
+  CHECK(out->negative_spectrum_size == 0);
+  CHECK(out->spectrum_rank == 3);
   CHECK(out->chisq_standard == doctest::Approx(50.0));
   CHECK(out->rmsea ==
         doctest::Approx(std::sqrt((0.5 - 9.0 / 100.0) / 2.0)));
+  CHECK(out->rmsea_positive_trace == doctest::Approx(out->rmsea));
   CHECK(out->rmsea_df ==
         doctest::Approx(std::sqrt((0.5 - 2.0 / 100.0) / 2.0)));
   CHECK(out->warnings.empty());
+}
+
+TEST_CASE("weighted_moment_profile_rmsea exposes signed trace for indefinite QGamma") {
+  magmaan::estimate::WeightedMomentBlock block;
+  block.jacobian.resize(2, 1);
+  block.jacobian << 1.0, 0.0;
+  block.weight = Eigen::MatrixXd::Identity(2, 2);
+  block.gamma = Eigen::MatrixXd::Identity(2, 2);
+  block.n_obs = 100;
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(1, 1);
+  Eigen::MatrixXd observed_bread(1, 1);
+  observed_bread << 0.5;
+
+  auto out = magmaan::estimate::weighted_moment_profile_rmsea(
+      {block}, K, 0.20, observed_bread);
+  REQUIRE(out.has_value());
+
+  CHECK(out->df == 1);
+  CHECK(out->spectrum_size == 1);
+  CHECK(out->negative_spectrum_size == 1);
+  CHECK(out->spectrum_rank == 2);
+  REQUIRE(out->eigvals.size() == 1);
+  CHECK(out->eigvals(0) == doctest::Approx(1.0));
+  CHECK(out->bias_trace == doctest::Approx(1.0));
+  CHECK(out->trace_signed == doctest::Approx(0.0));
+  CHECK(out->negative_trace_abs == doctest::Approx(1.0));
+  CHECK(out->rmsea == doctest::Approx(std::sqrt(0.20)));
+  CHECK(out->rmsea_positive_trace ==
+        doctest::Approx(std::sqrt(0.20 - 1.0 / 100.0)));
+  CHECK_FALSE(out->warnings.empty());
 }
 
 TEST_CASE("weighted_moment_profile_lrt separates nominal df from spectrum size") {
@@ -660,6 +696,10 @@ TEST_CASE("weighted_moment_profile_lrt separates nominal df from spectrum size")
   CHECK(out->eigvals(2) == doctest::Approx(5.0));
   CHECK(out->bias_trace == doctest::Approx(10.0));
   CHECK(out->bias_trace_sq == doctest::Approx(38.0));
+  CHECK(out->trace_signed == doctest::Approx(10.0));
+  CHECK(out->negative_trace_abs == doctest::Approx(0.0));
+  CHECK(out->negative_spectrum_size == 0);
+  CHECK(out->spectrum_rank == 3);
   CHECK(out->fmin_diff == doctest::Approx(0.40));
   CHECK(out->T_diff == doctest::Approx(40.0));
   CHECK(out->scale_c == doctest::Approx(10.0 / 3.0));
@@ -673,6 +713,40 @@ TEST_CASE("weighted_moment_profile_lrt separates nominal df from spectrum size")
                                                               40.0)));
   CHECK(out->scaled_shifted.df == 3);
   CHECK(out->warnings.empty());
+}
+
+TEST_CASE("weighted_moment_profile_lrt exposes signed trace for indefinite contrasts") {
+  magmaan::estimate::WeightedProfileRMSEAResult h1;
+  h1.profile_hessian = Eigen::MatrixXd::Zero(2, 2);
+  h1.gamma = Eigen::MatrixXd::Identity(2, 2);
+  h1.fmin = 0.10;
+  h1.df = 1;
+  h1.ntotal = 100;
+  h1.n_groups = 1;
+
+  magmaan::estimate::WeightedProfileRMSEAResult h0 = h1;
+  h0.profile_hessian.resize(2, 2);
+  h0.profile_hessian << 1.0, 0.0,
+                        0.0, -0.25;
+  h0.fmin = 0.50;
+  h0.df = 2;
+
+  auto out = magmaan::estimate::weighted_moment_profile_lrt(h1, h0);
+  REQUIRE(out.has_value());
+
+  CHECK(out->df_diff == 1);
+  CHECK(out->spectrum_size == 1);
+  CHECK(out->negative_spectrum_size == 1);
+  CHECK(out->spectrum_rank == 2);
+  REQUIRE(out->eigvals.size() == 1);
+  CHECK(out->eigvals(0) == doctest::Approx(1.0));
+  CHECK(out->bias_trace == doctest::Approx(1.0));
+  CHECK(out->trace_signed == doctest::Approx(0.75));
+  CHECK(out->negative_trace_abs == doctest::Approx(0.25));
+  CHECK(out->p_mixture ==
+        doctest::Approx(magmaan::robust::weighted_chisq_upper(out->eigvals,
+                                                              40.0)));
+  CHECK_FALSE(out->warnings.empty());
 }
 
 TEST_CASE("weighted_moment_profile_rmsea_two_metric uses data and projection metrics") {

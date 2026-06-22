@@ -1441,8 +1441,18 @@ weighted_moment_profile_rmsea_two_metric(
   out.eigvals = std::move(spectrum_or->eigenvalues);
   out.bias_trace = spectrum_or->trace_CinvS;
   out.bias_trace_sq = spectrum_or->trace_CinvS_sq;
+  out.trace_signed = spectrum_or->trace_signed;
+  out.negative_trace_abs = spectrum_or->negative_trace_abs;
   out.spectrum_size = static_cast<int>(out.eigvals.size());
+  out.negative_spectrum_size = spectrum_or->negative_spectrum_size;
+  out.spectrum_rank = spectrum_or->spectrum_rank;
   out.warnings = std::move(spectrum_or->warnings);
+  if (out.negative_spectrum_size > 0) {
+    out.warnings.emplace_back(
+        "weighted_moment_profile_rmsea: profile Hessian has negative "
+        "quadratic-form eigenvalues; rmsea uses signed tr(QGamma), while "
+        "bias_trace/eigvals remain positive-tail summaries");
+  }
 
   out.fmin = fmin;
   out.chisq_standard = N_total * fmin;
@@ -1453,6 +1463,9 @@ weighted_moment_profile_rmsea_two_metric(
     const double G = static_cast<double>(out.n_groups);
     const double denom = static_cast<double>(df);
     out.rmsea =
+        std::sqrt(std::max((fmin - out.trace_signed / N_total) * G / denom,
+                           0.0));
+    out.rmsea_positive_trace =
         std::sqrt(std::max((fmin - out.bias_trace / N_total) * G / denom,
                            0.0));
     out.rmsea_df =
@@ -1568,8 +1581,9 @@ weighted_moment_profile_rmsea_estimated_weight(
 
   // The two-metric core counts df off the DOUBLED extended dimension; the
   // genuine nominal df lives in the u-moment space alone. Restate it and the
-  // df-comparator RMSEA, leaving the spectrum-driven `bias_trace`/`rmsea`
-  // untouched.
+  // df-comparator RMSEA. The two trace-based RMSEA summaries must be recomputed
+  // because the denominator is the classical u-moment df, not the doubled
+  // extended dimension.
   const Eigen::Index n_alpha = K.cols();
   const int classical_df = static_cast<int>(u_rows - n_alpha);
   out->df = classical_df;
@@ -1577,11 +1591,14 @@ weighted_moment_profile_rmsea_estimated_weight(
     const double G = static_cast<double>(out->n_groups);
     const double denom = static_cast<double>(classical_df);
     out->rmsea = std::sqrt(
+        std::max((fmin - out->trace_signed / N_total) * G / denom, 0.0));
+    out->rmsea_positive_trace = std::sqrt(
         std::max((fmin - out->bias_trace / N_total) * G / denom, 0.0));
     out->rmsea_df =
         std::sqrt(std::max((fmin - denom / N_total) * G / denom, 0.0));
   } else {
     out->rmsea = 0.0;
+    out->rmsea_positive_trace = 0.0;
     out->rmsea_df = 0.0;
   }
   return out;
@@ -1661,10 +1678,20 @@ weighted_moment_profile_lrt(const WeightedProfileRMSEAResult& h1,
   out.eigvals = std::move(spectrum_or->eigenvalues);
   out.bias_trace = spectrum_or->trace_CinvS;
   out.bias_trace_sq = spectrum_or->trace_CinvS_sq;
+  out.trace_signed = spectrum_or->trace_signed;
+  out.negative_trace_abs = spectrum_or->negative_trace_abs;
   out.spectrum_size = static_cast<int>(out.eigvals.size());
+  out.negative_spectrum_size = spectrum_or->negative_spectrum_size;
+  out.spectrum_rank = spectrum_or->spectrum_rank;
   out.warnings.insert(out.warnings.end(),
                       spectrum_or->warnings.begin(),
                       spectrum_or->warnings.end());
+  if (out.negative_spectrum_size > 0) {
+    out.warnings.emplace_back(
+        "weighted_moment_profile_lrt: profile contrast is indefinite; "
+        "positive-tail p-values use only positive eigenvalues, while "
+        "trace_signed reports the signed mean correction");
+  }
 
   out.p_unscaled =
       out.df_diff > 0
