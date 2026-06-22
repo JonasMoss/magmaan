@@ -113,6 +113,61 @@ post_expected<Eigen::MatrixXd> symmetric_sqrt_psd(const Eigen::MatrixXd& A,
   return es.eigenvectors() * vals.asDiagonal() * es.eigenvectors().transpose();
 }
 
+void fill_profile_pencil_diagnostics(
+    WeightedProfileRMSEAResult& out,
+    const Eigen::MatrixXd& V0,
+    const Eigen::MatrixXd& Wstar,
+    const Eigen::MatrixXd& Dtilde,
+    const Eigen::MatrixXd& B,
+    int residual_dim,
+    double eig_tol) {
+  out.profile_pencil_residual_dim = residual_dim;
+
+  auto V0_inv_or = inverse_sym_pd(
+      V0, "weighted_moment_profile_rmsea_two_metric data metric");
+  if (!V0_inv_or.has_value()) {
+    return;  // Estimated-weight extended metrics are singular by construction.
+  }
+
+  Eigen::MatrixXd Atilde =
+      Dtilde.transpose() * Wstar * (*V0_inv_or) * Wstar * Dtilde;
+  Atilde = 0.5 * (Atilde + Atilde.transpose()).eval();
+
+  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
+      Atilde, B, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+  if (ges.info() != Eigen::Success) {
+    return;
+  }
+
+  out.profile_pencil_eigvals = ges.eigenvalues();
+  const double scale =
+      out.profile_pencil_eigvals.size() > 0
+          ? std::max(1.0, out.profile_pencil_eigvals.cwiseAbs().maxCoeff())
+          : 1.0;
+  const double tol = eig_tol * scale;
+  int n_lt = 0;
+  int n_gt = 0;
+  int n_eq = 0;
+  double max_gap = 0.0;
+  for (Eigen::Index k = 0; k < out.profile_pencil_eigvals.size(); ++k) {
+    const double gap = out.profile_pencil_eigvals(k) - 1.0;
+    max_gap = std::max(max_gap, std::abs(gap));
+    if (gap < -tol) {
+      ++n_lt;
+    } else if (gap > tol) {
+      ++n_gt;
+    } else {
+      ++n_eq;
+    }
+  }
+
+  out.profile_pencil_max_abs_gap = max_gap;
+  out.profile_pencil_positive_count = residual_dim + n_lt;
+  out.profile_pencil_negative_count = n_gt;
+  out.profile_pencil_rank =
+      residual_dim + static_cast<int>(out.profile_pencil_eigvals.size()) - n_eq;
+}
+
 bool same_matrix_within(const Eigen::MatrixXd& A,
                         const Eigen::MatrixXd& B,
                         double rel_tol) {
@@ -1435,6 +1490,8 @@ weighted_moment_profile_rmsea_two_metric(
   out.profile_hessian =
       0.5 * (out.profile_hessian + out.profile_hessian.transpose()).eval();
   out.gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+  fill_profile_pencil_diagnostics(
+      out, V0, Wstar, Dtilde, B, df, eig_tol);
 
   auto spectrum_or = robust::compute_profile_contrast_spectrum(
       out.profile_hessian, out.gamma, eig_tol);

@@ -218,7 +218,10 @@ golden `parTable()` fixtures.
   trace `tr(QΓ)` used by the RMSEA correction
   `sqrt(max(F - tr(QΓ)/N, 0) * G / df)` and the positive-spectrum summaries used
   by mixture-tail approximations (`bias_trace`, `spectrum_size`, negative count,
-  and rank are carried separately).
+  and rank are carried separately). When the first-stage data metric is positive
+  definite, the RMSEA result also carries the small profile pencil
+  `ν_j = eig(B^{-1} Ã)` plus its predicted positive/negative/rank counts; dense
+  `QΓ` eigensolve remains the source of actual mixture weights.
   `estimate::weighted_moment_profile_lrt` compares two such profile Hessians in
   a common first-stage moment space, uses the positive spectrum of
   `(Q_H0 - Q_H1)Γ` for mixture and adjusted tails, and reports nominal `df_diff`

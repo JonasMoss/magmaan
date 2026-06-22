@@ -631,6 +631,13 @@ TEST_CASE("weighted_moment_profile_rmsea reports positive spectrum size") {
   CHECK(out->negative_trace_abs == doctest::Approx(0.0));
   CHECK(out->negative_spectrum_size == 0);
   CHECK(out->spectrum_rank == 3);
+  REQUIRE(out->profile_pencil_eigvals.size() == 1);
+  CHECK(out->profile_pencil_eigvals(0) == doctest::Approx(0.5));
+  CHECK(out->profile_pencil_max_abs_gap == doctest::Approx(0.5));
+  CHECK(out->profile_pencil_residual_dim == 2);
+  CHECK(out->profile_pencil_positive_count == 3);
+  CHECK(out->profile_pencil_negative_count == 0);
+  CHECK(out->profile_pencil_rank == 3);
   CHECK(out->chisq_standard == doctest::Approx(50.0));
   CHECK(out->rmsea ==
         doctest::Approx(std::sqrt((0.5 - 9.0 / 100.0) / 2.0)));
@@ -665,6 +672,13 @@ TEST_CASE("weighted_moment_profile_rmsea exposes signed trace for indefinite QGa
   CHECK(out->bias_trace == doctest::Approx(1.0));
   CHECK(out->trace_signed == doctest::Approx(0.0));
   CHECK(out->negative_trace_abs == doctest::Approx(1.0));
+  REQUIRE(out->profile_pencil_eigvals.size() == 1);
+  CHECK(out->profile_pencil_eigvals(0) == doctest::Approx(2.0));
+  CHECK(out->profile_pencil_max_abs_gap == doctest::Approx(1.0));
+  CHECK(out->profile_pencil_residual_dim == 1);
+  CHECK(out->profile_pencil_positive_count == 1);
+  CHECK(out->profile_pencil_negative_count == 1);
+  CHECK(out->profile_pencil_rank == 2);
   CHECK(out->rmsea == doctest::Approx(std::sqrt(0.20)));
   CHECK(out->rmsea_positive_trace ==
         doctest::Approx(std::sqrt(0.20 - 1.0 / 100.0)));
@@ -775,6 +789,12 @@ TEST_CASE("weighted_moment_profile_rmsea_two_metric uses data and projection met
   CHECK(out->bias_trace == doctest::Approx(105.0));
   CHECK(out->bias_trace_sq == doctest::Approx(7.0 * 7.0 + 33.0 * 33.0 +
                                               65.0 * 65.0));
+  REQUIRE(out->profile_pencil_eigvals.size() == 1);
+  CHECK(out->profile_pencil_eigvals(0) == doctest::Approx(0.5));
+  CHECK(out->profile_pencil_residual_dim == 2);
+  CHECK(out->profile_pencil_positive_count == 3);
+  CHECK(out->profile_pencil_negative_count == 0);
+  CHECK(out->profile_pencil_rank == 3);
 }
 
 TEST_CASE("weighted_moment_profile_rmsea_estimated_weight matches finite-difference Q") {
@@ -846,6 +866,8 @@ TEST_CASE("weighted_moment_profile_rmsea_estimated_weight matches finite-differe
 
   // Classical df is over the u-moments only, not the doubled extended space.
   CHECK(out->df == static_cast<int>(m - q));
+  CHECK(out->profile_pencil_residual_dim == static_cast<int>(2 * m - q));
+  CHECK(out->profile_pencil_eigvals.size() == 0);
 }
 
 TEST_CASE("weighted_moment_profile_rmsea_estimated_weight collapses to fixed weight at r=0") {
