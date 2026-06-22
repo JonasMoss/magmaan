@@ -541,7 +541,27 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       metric-dominating channel in RMSEA/the nested test) — CRMR's fixed metric
       makes it largely robust to weight estimation. Deferred: R bindings, lavaan
       `crmr` oracle/goldens, threshold-inclusive SRMR variants, the residual-map
-      curvature term, multi-group.
+      curvature term. (Multi-group landed in `b82b1f7`; the open piece is the
+      pooling *convention*, below.)
+    - **TODO: survey the multigroup CRMR/SRMR pooling convention** (short lit
+      survey). Multi-group is implemented, but the CRMR point has two defensible
+      forms that diverge for G>1: lavaan / `ordinal_crmr` use the size-weighted
+      *mean of per-group roots* `Σ_b (n_b/N)·√(‖r_b‖²/k)` (oracle-pinned for the
+      core fit measure), while `ordinal_crmr_misspec_inference` reports the literal
+      RMS, the *root of the size-weighted mean* `√(Σ_b (n_b/N)‖r_b‖²/k)`, forced by
+      the `T = N·G` statistic its CI is built on; by Jensen the former ≤ the latter,
+      equal at G=1 (pinned in `ordinal_test.cpp`). Two questions: (1) mean-of-roots
+      vs root-of-mean (root-of-mean is the literal "root mean square residual" and
+      coheres with the CI; lavaan's is the nonstandard form); (2) the weighting
+      itself: CRMR is not a discrepancy (identity metric, no `W`), so `π_g = n_g/N`
+      is not derived; it enters legitimately only via the pseudo-true
+      `θ_0 = argmin Σ_g π_g F_g`, whereas the explicit `π_g`-weighting of the pooled
+      residuals is inherited convention plus the independence-additivity that keeps
+      `Var(T) = Σ_g n_g(·)` a clean block sum. Unweighted stacked-RMS
+      `√(Σ_b‖r_b‖²/Σ_b k_b)` is a third, equally-legit target. Survey what
+      lavaan / Mplus / EQS and the SRMR literature actually do, then decide which
+      the frontier index should report (current: weighted root-of-mean) and whether
+      to expose a `crmr_lavaan` companion. From the 2026-06-22 audit discussion.
     - **Done 2026-06-22 (RMSEA estimated-weight CI).** The absolute-fit
       large-γ case. `estimate::ordinal_rmsea_misspec_inference`
       (`OrdinalRmseaInference`) returns the bias-corrected RMSEA (=
