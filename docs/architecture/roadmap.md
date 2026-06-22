@@ -244,8 +244,14 @@ golden `parTable()` fixtures.
   complete-data sample statistics, while Stage-1 uncertainty is supplied by
   `two_stage_gamma_from_acov(sm, false)` over the stacked `[mean; vech(cov)]`
   moment blocks; overloads accept either precomputed `SaturatedMoments`, raw
-  data, or raw data plus a precomputed `FIMLPack`/`FIMLH1`. These are basic
-  dense research surfaces, not lavaan-parity fit-measure dispatch.
+  data, or raw data plus a precomputed `FIMLPack`/`FIMLH1`. Raw-data FIML is
+  wired through `estimate::fiml::fiml_profile_rmsea` /
+  `fiml_profile_lrt`: it uses the EM saturated metric `H/n_b` for `V0`, the
+  model-implied observed-pattern H1 metric for `W*`, the observed FIML
+  information scaled per observation as the bread, and the caller's FIML LRT
+  chi-square as `N*fmin`; the same overload pattern reuses precomputed
+  `FIMLPack`/`FIMLH1` and `SaturatedMoments`. These are basic dense research
+  surfaces, not lavaan-parity fit-measure dispatch.
   `estimate::weighted_moment_profile_rmsea_estimated_weight` adds the
   diagonal-weight (categorical DWLS) case where the weight `W=diag(1/γ)` is
   itself a first-stage quantity: it assembles the value-function Hessian over the

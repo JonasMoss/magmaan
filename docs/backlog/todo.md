@@ -475,6 +475,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       precomputed `SaturatedMoments`, raw data, and raw data plus precomputed
       `FIMLPack`/`FIMLH1`; `fiml_test.cpp` gates raw/precomputed parity for
       single-model RMSEA and nested LRT.
+    - **Done 2026-06-22 (FIML profile wiring).**
+      `estimate::fiml::fiml_profile_rmsea` / `fiml_profile_lrt` now adapt
+      raw-data FIML to the same two-metric profile-Hessian engine. The
+      first-stage space is the EM saturated `[mean; vech(cov)]` coordinate:
+      `V0 = H/n_b`, `W*` is the model-implied observed-pattern H1 information
+      per block, Γ is the n-scaled saturated ACOV from
+      `two_stage_gamma_from_acov(sm, false)`, and the observed FIML information
+      divided by N supplies the profile bread. The API takes the already-known
+      FIML LRT chi-square so `chisq_standard = chi2_lrt`; overloads cover raw,
+      precomputed `FIMLPack`/`FIMLH1`, and precomputed `SaturatedMoments`.
+      `fiml_test.cpp` gates raw/precomputed parity for single-model RMSEA and
+      nested LRT.
     - **Done 2026-06-22 (finite-sample calibration experiment).**
       `experiments/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
       On the exact C4 binary pseudo-null it shows the standard fixed-weight
@@ -498,7 +510,6 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       double-finite-differenced `tr_full` at `ε=0.06` is non-monotonic; magmaan's
       analytic-influence law is the corrected reference (as the note anticipated).
     Remaining profile-Hessian fit/test work:
-    FIML two-metric profile Hessians;
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
     dense `QΓ` when actual positive mixture weights are needed); an *a-priori*

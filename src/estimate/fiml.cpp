@@ -4427,7 +4427,244 @@ two_stage_gamma_blocks_from_acov(const SaturatedMoments& sm) {
   return blocks;
 }
 
+post_expected<double>
+total_n_from_saturated(const SaturatedMoments& sm, const char* caller) {
+  double out = 0.0;
+  for (std::int64_t n : sm.n_obs) out += static_cast<double>(n);
+  if (!(out > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": saturated moments have non-positive total N"));
+  }
+  return out;
+}
+
+post_expected<std::vector<WeightedProfileMomentBlock>>
+fiml_profile_blocks(const spec::LatentStructure& pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const SaturatedMoments& sm) {
+  const FIMLCache& cache = pack.cache;
+  const std::size_t B = raw.X.size();
+  if (B == 0 || cache.block_p.size() != B || sm.mean.size() != B ||
+      sm.cov.size() != B || sm.n_obs.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_profile_rmsea: empty or inconsistent block layout"));
+  }
+
+  auto Delta_or = fiml_eta_jacobian_impl(pt, rep, raw, est, pack);
+  if (!Delta_or.has_value()) return std::unexpected(Delta_or.error());
+  auto Wstar_or = fiml_structured_h1_information(pt, rep, raw, est, pack);
+  if (!Wstar_or.has_value()) return std::unexpected(Wstar_or.error());
+  auto gamma_full_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_full_or.has_value()) return std::unexpected(gamma_full_or.error());
+
+  const Eigen::MatrixXd& Delta = Delta_or->Delta_theta;
+  const Eigen::MatrixXd& Wstar_full = *Wstar_or;
+  const Eigen::MatrixXd& gamma_full = *gamma_full_or;
+
+  Eigen::Index Q = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    if (p <= 0 || raw.X[b].cols() != p || sm.cov[b].rows() != p ||
+        sm.cov[b].cols() != p || sm.mean[b].size() != p ||
+        sm.n_obs[b] != raw.X[b].rows() || sm.n_obs[b] <= 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_profile_rmsea: malformed saturated block " +
+              std::to_string(b)));
+    }
+    Q += p + vech_len(p);
+  }
+  if (Delta.rows() != Q || sm.H.rows() != Q || sm.H.cols() != Q ||
+      Wstar_full.rows() != Q || Wstar_full.cols() != Q ||
+      gamma_full.rows() != Q || gamma_full.cols() != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_profile_rmsea: saturated/profile matrix shape mismatch"));
+  }
+
+  std::vector<WeightedProfileMomentBlock> blocks;
+  blocks.reserve(B);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    const Eigen::Index q = p + vech_len(p);
+    const double nb = static_cast<double>(sm.n_obs[b]);
+    blocks.push_back(WeightedProfileMomentBlock{
+        .jacobian = Delta.block(off, 0, q, Delta.cols()),
+        .data_metric = sm.H.block(off, off, q, q) / nb,
+        .projection_metric = Wstar_full.block(off, off, q, q) / nb,
+        .gamma = gamma_full.block(off, off, q, q),
+        .n_obs = sm.n_obs[b]});
+    off += q;
+  }
+  return blocks;
+}
+
 }  // namespace
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1,
+                   const SaturatedMoments& sm,
+                   double eig_tol) {
+  if (!std::isfinite(chi2_lrt)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_profile_rmsea: non-finite chi-square"));
+  }
+  if (auto e = validate_h1_blocks(pack.cache, h1); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "FIML H1 moments"));
+  }
+  auto n_or = total_n_from_saturated(sm, "fiml_profile_rmsea");
+  if (!n_or.has_value()) return std::unexpected(n_or.error());
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  if (con_or->K().rows() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_profile_rmsea: constraint reparameterization has incompatible "
+        "shape"));
+  }
+
+  auto blocks = fiml_profile_blocks(pt, rep, raw, est, pack, sm);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  auto info = fiml_observed_information_impl(pt, rep, raw, est, pack);
+  if (!info.has_value()) return std::unexpected(info.error());
+  Eigen::MatrixXd bread =
+      con_or->K().transpose() * (*info) * con_or->K() / *n_or;
+  bread = 0.5 * (bread + bread.transpose()).eval();
+
+  return ::magmaan::estimate::weighted_moment_profile_rmsea_two_metric(
+      *blocks, con_or->K(), chi2_lrt / *n_or, bread, raw.X.size(), eig_tol);
+}
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1,
+                   double eig_tol) {
+  auto sm = saturated_em_moments(raw, pack, h1);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return fiml_profile_rmsea(
+      std::move(pt), rep, raw, est, chi2_lrt, pack, h1, *sm, eig_tol);
+}
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   FIML discrepancy,
+                   double h_step,
+                   double eig_tol) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_profile_rmsea: h_step must be > 0"));
+  }
+  (void)discrepancy;
+  auto pack = fiml_pack(raw);
+  if (!pack.has_value()) {
+    return std::unexpected(fit_to_post(pack.error(), "fiml_pack"));
+  }
+  auto h1 = fiml_h1_moments(raw, *pack);
+  if (!h1.has_value()) {
+    return std::unexpected(fit_to_post(h1.error(), "FIML H1 moments"));
+  }
+  auto sm = saturated_em_moments(raw, *pack, *h1);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return fiml_profile_rmsea(
+      std::move(pt), rep, raw, est, chi2_lrt, *pack, *h1, *sm, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 const FIMLPack& pack,
+                 const FIMLH1& h1,
+                 const SaturatedMoments& sm,
+                 double eig_tol) {
+  auto h1_profile = fiml_profile_rmsea(
+      std::move(pt_H1), rep_H1, raw, est_H1, chi2_lrt_H1, pack, h1, sm,
+      eig_tol);
+  if (!h1_profile.has_value()) return std::unexpected(h1_profile.error());
+  auto h0_profile = fiml_profile_rmsea(
+      std::move(pt_H0), rep_H0, raw, est_H0, chi2_lrt_H0, pack, h1, sm,
+      eig_tol);
+  if (!h0_profile.has_value()) return std::unexpected(h0_profile.error());
+  return ::magmaan::estimate::weighted_moment_profile_lrt(
+      *h1_profile, *h0_profile, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 const FIMLPack& pack,
+                 const FIMLH1& h1,
+                 double eig_tol) {
+  auto sm = saturated_em_moments(raw, pack, h1);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return fiml_profile_lrt(
+      std::move(pt_H1), rep_H1, raw, est_H1, chi2_lrt_H1,
+      std::move(pt_H0), rep_H0, est_H0, chi2_lrt_H0, pack, h1, *sm, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 FIML discrepancy,
+                 double h_step,
+                 double eig_tol) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_profile_lrt: h_step must be > 0"));
+  }
+  (void)discrepancy;
+  auto pack = fiml_pack(raw);
+  if (!pack.has_value()) {
+    return std::unexpected(fit_to_post(pack.error(), "fiml_pack"));
+  }
+  auto h1 = fiml_h1_moments(raw, *pack);
+  if (!h1.has_value()) {
+    return std::unexpected(fit_to_post(h1.error(), "FIML H1 moments"));
+  }
+  auto sm = saturated_em_moments(raw, *pack, *h1);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return fiml_profile_lrt(
+      std::move(pt_H1), rep_H1, raw, est_H1, chi2_lrt_H1,
+      std::move(pt_H0), rep_H0, est_H0, chi2_lrt_H0, *pack, *h1, *sm,
+      eig_tol);
+}
 
 post_expected<WeightedProfileRMSEAResult>
 two_stage_nt_profile_rmsea(spec::LatentStructure pt,
