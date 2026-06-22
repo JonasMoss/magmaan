@@ -237,7 +237,14 @@ golden `parTable()` fixtures.
   `W*`, and the observed ML Hessian scaled to the per-unit profile bread.
   Covariance-only models use the vech(S) moment; mean-structure models use the
   stacked `[mean; vech(S)]` moment and empirical Gamma from
-  `data::empirical_gamma_with_means` when raw data is supplied. These are basic
+  `data::empirical_gamma_with_means` when raw data is supplied. ML2S-NT reuses
+  the same two-metric ML adapter through
+  `estimate::fiml::two_stage_nt_profile_rmsea` /
+  `two_stage_nt_profile_lrt`: saturated EM moments are treated as the Stage-2
+  complete-data sample statistics, while Stage-1 uncertainty is supplied by
+  `two_stage_gamma_from_acov(sm, false)` over the stacked `[mean; vech(cov)]`
+  moment blocks; overloads accept either precomputed `SaturatedMoments`, raw
+  data, or raw data plus a precomputed `FIMLPack`/`FIMLH1`. These are basic
   dense research surfaces, not lavaan-parity fit-measure dispatch.
   `estimate::weighted_moment_profile_rmsea_estimated_weight` adds the
   diagonal-weight (categorical DWLS) case where the weight `W=diag(1/γ)` is

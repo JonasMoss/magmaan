@@ -465,6 +465,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `data::empirical_gamma_with_means`. Gated in
       `weighted_inference_test.cpp` by raw-vs-supplied Γ parity for single-fit
       RMSEA and nested LRT.
+    - **Done 2026-06-22 (ML2S-NT profile wiring).**
+      `estimate::fiml::two_stage_nt_profile_rmsea` /
+      `two_stage_nt_profile_lrt` now adapt the ML2S normal-theory Stage-2
+      likelihood to the same two-metric profile-Hessian engine: saturated EM
+      moments become the complete-data ML sample statistics, and Stage-1
+      uncertainty is the block-diagonal stacked `[mean; vech(cov)]` Gamma from
+      `two_stage_gamma_from_acov(sm, false)`. The public overloads cover
+      precomputed `SaturatedMoments`, raw data, and raw data plus precomputed
+      `FIMLPack`/`FIMLH1`; `fiml_test.cpp` gates raw/precomputed parity for
+      single-model RMSEA and nested LRT.
     - **Done 2026-06-22 (finite-sample calibration experiment).**
       `experiments/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
       On the exact C4 binary pseudo-null it shows the standard fixed-weight
@@ -488,7 +498,7 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       double-finite-differenced `tr_full` at `ε=0.06` is non-monotonic; magmaan's
       analytic-influence law is the corrected reference (as the note anticipated).
     Remaining profile-Hessian fit/test work:
-    FIML and ML2S-NT two-metric profile Hessians;
+    FIML two-metric profile Hessians;
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
     dense `QΓ` when actual positive mixture weights are needed); an *a-priori*

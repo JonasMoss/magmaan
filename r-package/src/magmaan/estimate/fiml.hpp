@@ -22,6 +22,11 @@
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
+namespace magmaan::estimate {
+struct WeightedProfileRMSEAResult;
+struct WeightedProfileLRTResult;
+}  // namespace magmaan::estimate
+
 namespace magmaan::estimate::fiml {
 
 using data::RawData;
@@ -482,6 +487,68 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           TwoStageWeight kind = TwoStageWeight::Nt,
                           TwoStageDlsOptions dls = {},
                           TwoStageBread bread = TwoStageBread::Expected);
+
+// Fixed-misspecification profile-RMSEA / profile-LRT for the ML2S-NT
+// Stage-2 likelihood, over the saturated EM moment vector [mean; vech(cov)].
+// These are dense research primitives: they use the complete-data ML
+// two-metric profile Hessian with Γ supplied by the Stage-1 saturated ACOV
+// (`two_stage_gamma_from_acov(sm, false)`).
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& est,
+                           const SaturatedMoments& sm,
+                           double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& est,
+                           double h_step = 1e-4,
+                           double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& est,
+                           const FIMLPack& pack,
+                           const FIMLH1& h1,
+                           double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         const SaturatedMoments& sm,
+                         double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const RawData& raw,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         double h_step = 1e-4,
+                         double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const RawData& raw,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         const FIMLPack& pack,
+                         const FIMLH1& h1,
+                         double eig_tol = 1e-10);
 
 post_expected<TwoStageFitMeasures>
 two_stage_fit_measures(spec::LatentStructure pt,

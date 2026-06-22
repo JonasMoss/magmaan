@@ -4402,6 +4402,138 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
 
 namespace {
 
+post_expected<std::vector<Eigen::MatrixXd>>
+two_stage_gamma_blocks_from_acov(const SaturatedMoments& sm) {
+  auto gamma_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_or.has_value()) return std::unexpected(gamma_or.error());
+
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.reserve(sm.cov.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    const Eigen::Index q = p + vech_len(p);
+    if (off + q > gamma_or->rows()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_nt_profile_rmsea: saturated Gamma block layout "
+          "overruns assembled Gamma"));
+    }
+    blocks.push_back(gamma_or->block(off, off, q, q));
+    off += q;
+  }
+  if (off != gamma_or->rows()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_nt_profile_rmsea: saturated Gamma has trailing rows"));
+  }
+  return blocks;
+}
+
+}  // namespace
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& est,
+                           const SaturatedMoments& sm,
+                           double eig_tol) {
+  SampleStats samp = sample_stats_from_saturated(sm);
+  auto gamma = two_stage_gamma_blocks_from_acov(sm);
+  if (!gamma.has_value()) return std::unexpected(gamma.error());
+  return ::magmaan::estimate::ml_profile_rmsea(
+      std::move(pt), rep, samp, est, *gamma, eig_tol);
+}
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& est,
+                           double h_step,
+                           double eig_tol) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_nt_profile_rmsea: h_step must be > 0"));
+  }
+  auto sm = saturated_em_moments(raw, h_step);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return two_stage_nt_profile_rmsea(
+      std::move(pt), rep, est, *sm, eig_tol);
+}
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& est,
+                           const FIMLPack& pack,
+                           const FIMLH1& h1,
+                           double eig_tol) {
+  auto sm = saturated_em_moments(raw, pack, h1);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return two_stage_nt_profile_rmsea(
+      std::move(pt), rep, est, *sm, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         const SaturatedMoments& sm,
+                         double eig_tol) {
+  auto h1 = two_stage_nt_profile_rmsea(
+      std::move(pt_H1), rep_H1, est_H1, sm, eig_tol);
+  if (!h1.has_value()) return std::unexpected(h1.error());
+  auto h0 = two_stage_nt_profile_rmsea(
+      std::move(pt_H0), rep_H0, est_H0, sm, eig_tol);
+  if (!h0.has_value()) return std::unexpected(h0.error());
+  return ::magmaan::estimate::weighted_moment_profile_lrt(
+      *h1, *h0, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const RawData& raw,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         double h_step,
+                         double eig_tol) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_nt_profile_lrt: h_step must be > 0"));
+  }
+  auto sm = saturated_em_moments(raw, h_step);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return two_stage_nt_profile_lrt(
+      std::move(pt_H1), rep_H1, est_H1, std::move(pt_H0), rep_H0, est_H0,
+      *sm, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const RawData& raw,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         const FIMLPack& pack,
+                         const FIMLH1& h1,
+                         double eig_tol) {
+  auto sm = saturated_em_moments(raw, pack, h1);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  return two_stage_nt_profile_lrt(
+      std::move(pt_H1), rep_H1, est_H1, std::move(pt_H0), rep_H0, est_H0,
+      *sm, eig_tol);
+}
+
+namespace {
+
 post_expected<TwoStageFitMeasures>
 two_stage_fit_measures_from_sm(spec::LatentStructure pt,
                                const model::MatrixRep& rep,
