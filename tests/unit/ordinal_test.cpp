@@ -3651,6 +3651,110 @@ TEST_CASE("ordinal_rmsea_misspec_inference matches profile point and runs the ga
   CHECK(std::abs(fixed->bias_trace - est->bias_trace) > 1e-8);  // gamma active
 }
 
+TEST_CASE("ordinal_cfi_tli_misspec_inference: joint two-model law for CFI/TLI") {
+  // Tau-equivalence on unequal loadings => misspecified user model => live
+  // gamma channel and a detectable incremental-fit gap.
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260627, 800, {0.82, 0.66, 0.52, 0.40}, -0.4, 0.7);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + 1*x2 + 1*x3 + 1*x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto prof = magmaan::estimate::ordinal_dwls_profile_rmsea(*pt, *mr, *stats,
+                                                            *fit);
+  REQUIRE(prof.has_value());
+  auto fm = magmaan::estimate::fit_measures_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fm.has_value());
+
+  auto est = magmaan::estimate::ordinal_cfi_tli_misspec_inference(*pt, *mr,
+                                                                  *stats, *fit);
+  REQUIRE_MESSAGE(est.has_value(),
+      "cfi/tli inference failed: " << (est.has_value() ? "" : est.error().detail));
+
+  // User statistic passes through the profile path; baseline matches the
+  // analytic independence chi-square and its nominal df = ncorr = 6.
+  CHECK(est->stat_user == doctest::Approx(prof->chisq_standard).epsilon(1e-9));
+  CHECK(est->df_user == prof->df);
+  CHECK(est->gendf_user == doctest::Approx(prof->trace_signed).epsilon(1e-9));
+  CHECK(est->stat_baseline == doctest::Approx(fm->baseline.chi2).epsilon(1e-6));
+  CHECK(est->df_baseline == fm->baseline.df);
+  CHECK(est->df_baseline == 6);
+
+  // Noncentralities are the bias-corrected statistics; baseline misfits grossly.
+  CHECK(est->delta_user ==
+        doctest::Approx(est->stat_user - est->gendf_user).epsilon(1e-12));
+  CHECK(est->delta_baseline ==
+        doctest::Approx(est->stat_baseline - est->gendf_baseline).epsilon(1e-12));
+  CHECK(est->delta_baseline > est->delta_user);
+
+  // CFI is a proper [0,1] index with an ordered, finite interval.
+  CHECK(est->cfi >= 0.0);
+  CHECK(est->cfi <= 1.0);
+  CHECK(est->cfi_ci_lower <= est->cfi_ci_upper);
+  CHECK(est->cfi_ci_lower >= 0.0);
+  CHECK(est->cfi_ci_upper <= 1.0);
+  CHECK(std::isfinite(est->var_cfi));
+  CHECK(est->var_cfi >= 0.0);
+  CHECK(std::isfinite(est->var_user));
+  CHECK(std::isfinite(est->var_baseline));
+  CHECK(std::isfinite(est->cov_user_baseline));
+  CHECK(est->var_user >= 0.0);
+  CHECK(est->var_baseline >= 0.0);
+
+  // TLI is the same ratio r rescaled by the generalized-df ratio c = Q̄_b/Q̄_u,
+  // and its variance is c² times the CFI variance (Corollaries 1-2 of the note).
+  const double r = est->delta_user / est->delta_baseline;
+  const double c = est->gendf_baseline / est->gendf_user;
+  CHECK(est->tli == doctest::Approx(1.0 - c * r).epsilon(1e-10));
+  CHECK(est->var_tli == doctest::Approx(c * c * est->var_cfi).epsilon(1e-10));
+  CHECK(est->tli_ci_lower <= est->tli_ci_upper);
+  CHECK(std::isfinite(est->tli));
+
+  // Baseline-dominated regime: to leading order Var(CFI) ≈ V_uu / δ_b², the
+  // user-statistic variance scaled by the squared baseline noncentrality. The
+  // full bivariate form must stay within the O(r) corrections of that leading
+  // term (here r is small because the baseline dwarfs the user misfit).
+  const double db = est->delta_baseline;
+  const double leading = est->var_user / (db * db);
+  CHECK(std::abs(est->var_cfi - leading) <= 0.5 * leading + 1e-12);
+
+  // Fixed-weight comparator: drops the gamma channel, so the generalized df (and
+  // hence the noncentralities and variances) differ under misspecification while
+  // the raw statistics are unchanged.
+  auto fixed = magmaan::estimate::ordinal_cfi_tli_misspec_inference(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE(fixed.has_value());
+  CHECK(fixed->stat_user == doctest::Approx(est->stat_user).epsilon(1e-12));
+  CHECK(fixed->stat_baseline ==
+        doctest::Approx(est->stat_baseline).epsilon(1e-12));
+  CHECK(std::abs(fixed->gendf_user - est->gendf_user) > 1e-8);  // gamma active
+  CHECK(std::isfinite(fixed->cfi));
+  CHECK(std::isfinite(fixed->var_cfi));
+}
+
 TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) law") {
   std::mt19937 rng(20260630);
   std::normal_distribution<double> norm(0.0, 1.0);

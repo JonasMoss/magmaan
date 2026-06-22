@@ -121,6 +121,41 @@ struct OrdinalRmseaInference {
   std::vector<std::string> warnings;
 };
 
+// Estimated-weight misspecification inference for the incremental fit indices
+// CFI and TLI, the program's first two-model (user-vs-baseline) statistics. The
+// noncentralities δ_u = T_u − tr(Q_u Γ_x) and δ_b = T_b − tr(Q_b Γ_x) share the
+// one data-only joint NACOV Γ_x, so their joint law is a single bilinear form:
+// Var(T_u)=N gᵤᵀΓ_x gᵤ, Var(T_b)=N g_bᵀΓ_x g_b, Cov=N gᵤᵀΓ_x g_b, with the
+// envelope-score gradients g = (−2Wd, −d²/γ²) of each model. CFI = 1 − δ_u/δ_b
+// and TLI = 1 − (Q̄_b/Q̄_u)·δ_u/δ_b are then a ratio delta-method; the TLI
+// interval is the CFI interval scaled by Q̄_b/Q̄_u (Q̄ = signed bias trace, the
+// generalized df). `estimated_weight=false` zeros the γ channel (fixed-weight
+// comparator). See docs/research/notes/cfi_tli_misspec_inference.tex.
+// Single-group only in this first pass.
+struct OrdinalIncrementalFitInference {
+  double cfi = 0.0;               // 1 − δ_u/δ_b, clipped to [0,1]
+  double cfi_ci_lower = 0.0;      // misspec normal-theory interval, clipped
+  double cfi_ci_upper = 0.0;
+  double tli = 0.0;               // 1 − (Q̄_b/Q̄_u)·δ_u/δ_b
+  double tli_ci_lower = 0.0;
+  double tli_ci_upper = 0.0;
+  double delta_user = 0.0;        // δ_u = T_u − Q̄_u
+  double delta_baseline = 0.0;    // δ_b = T_b − Q̄_b
+  double stat_user = 0.0;         // T_u = N·F_u
+  double stat_baseline = 0.0;     // T_b = N·F_b
+  double gendf_user = 0.0;        // Q̄_u = tr(Q_u Γ_x) (signed)
+  double gendf_baseline = 0.0;    // Q̄_b = tr(Q_b Γ_x) (signed)
+  double var_user = 0.0;          // V_uu = N gᵤᵀΓ_x gᵤ = Var(T_u)
+  double var_baseline = 0.0;      // V_bb = Var(T_b)
+  double cov_user_baseline = 0.0; // V_ub = Cov(T_u, T_b)
+  double var_cfi = 0.0;           // delta-method Var(ĈFI)
+  double var_tli = 0.0;           // = (Q̄_b/Q̄_u)² · var_cfi
+  int df_user = 0;                // nominal df (reference)
+  int df_baseline = 0;
+  bool fixed_weight = false;
+  std::vector<std::string> warnings;
+};
+
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
@@ -604,6 +639,24 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                 bool estimated_weight = true,
                                 double conf_level = 0.90,
                                 double eig_tol = 1e-10);
+
+// Estimated-weight (γ-channel-aware) misspecification inference for the
+// incremental fit indices CFI and TLI. Runs the user model through
+// `ordinal_dwls_profile_rmsea` and the analytic independence baseline (free
+// thresholds, zero correlations) through `weighted_moment_profile_rmsea_-
+// estimated_weight` with the SAME Γ_x, then forms the ratio delta-method of the
+// two noncentralities (see OrdinalIncrementalFitInference).
+// `estimated_weight=false` is the fixed-weight comparator. Single-group only.
+post_expected<OrdinalIncrementalFitInference>
+ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
+                                  const model::MatrixRep& rep,
+                                  const data::OrdinalStats& stats,
+                                  const Estimates& est,
+                                  OrdinalParameterization parameterization =
+                                      OrdinalParameterization::Delta,
+                                  bool estimated_weight = true,
+                                  double conf_level = 0.90,
+                                  double eig_tol = 1e-10);
 
 // Fixed-misspecification estimated-weight (categorical DWLS) profile-RMSEA for
 // an all-ordinal fit. The first-stage object is the EXTENDED moment vector

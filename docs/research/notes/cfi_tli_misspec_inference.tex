@@ -1,0 +1,276 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Misspecification-Robust Inference for the Incremental Fit Indices\\
+CFI and TLI under an Estimated Weight}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\cfi}{\widehat{\mathrm{CFI}}}
+\newcommand{\tli}{\widehat{\mathrm{TLI}}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The companion notes fix the estimated-weight inference of a \emph{single}
+quadratic-form criterion. \texttt{rmsea\_asymptotics.tex} and the RMSEA path of
+\texttt{higher\_order\_discrepancy\_misspec.tex} treat the discrepancy
+$F=r'Wr$ itself; the CRMR path treats the correlation residual sum $G=r'V_0r$.
+Both reduce to one object: a statistic $T=N\hat F$, a bias-corrected
+noncentrality $\hat\delta=T-\tr(Q\Gamma_x)$ where $Q$ is a profile Hessian and
+$\Gamma_x$ the joint NACOV of the extended first-stage vector
+$x=(u,\gamma)$, and a sampling variance $\Var(T)=N\,g'\Gamma_x g$ obtained by
+the delta method from an envelope-score gradient $g$.
+
+This note opens the program's \emph{first incremental} (two-model) index. CFI
+and TLI are not functions of one criterion; they compare the fitted user model
+to the independence baseline,
+\begin{equation}\label{eq:cfi-tli-classical}
+  \mathrm{CFI}=1-\frac{\max(0,T_u-df_u)}{\max(0,T_b-df_b)},\qquad
+  \mathrm{TLI}=\frac{T_b/df_b-T_u/df_u}{T_b/df_b-1}.
+\end{equation}
+Under an estimated weight neither $T_u$ nor $T_b$ is $\chi^2$: each is a
+mixture $\sum_j\lambda_j\chi^2_1$ whose mean is the generalized degrees of
+freedom $\bar Q=\tr(Q\Gamma_x)$, not the nominal $df$. The single new
+statistical object is the \emph{joint} law of $(T_u,T_b)$. The headline is that
+both statistics are smooth functionals of the \emph{same} $x$, so their joint
+covariance is one bilinear form in the \emph{one} shared $\Gamma_x$:
+\begin{equation}\label{eq:headline}
+  \Cov(T_u,T_b)\;=\;N\,g_u'\,\Gamma_x\,g_b,
+\end{equation}
+and CFI and TLI are then a ratio delta-method on the two correlated
+noncentralities. No new covariance machinery is needed beyond the second
+gradient $g_b$ and the second profile Hessian $Q_b$; the metric $\Gamma_x$ is
+shared. Three consequences follow: an honest Wald interval for CFI
+(Corollary~\ref{cor:cfi}), a TLI interval that is the CFI interval rescaled by a
+generalized-df ratio (Corollary~\ref{cor:tli}), and a baseline-dominated
+simplification (Remark) under which CFI's variance collapses to the
+RMSEA-side variance the program already computes, divided by the squared
+baseline noncentrality.
+
+\section{Setup}\label{sec:setup}
+
+Write $x=(u,\gamma)\in\mathbb R^{2m}$ for the extended first-stage vector: the
+$m$ polychoric sample moments $u$ (thresholds and correlations, stacked in the
+\texttt{OrdinalStats} order) and the DWLS weight diagonal $\gamma=\operatorname{diag}\hat\Gamma$,
+$W=\operatorname{diag}(1/\gamma)$. Let
+\[
+  \sqrt N(\hat x-x_0)\dto\mathcal N(0,\Gamma_x),
+\]
+with $\Gamma_x$ the joint per-unit NACOV built from the stacked casewise
+influence $[\,g_i\mid \mathrm{IF}_i(\gamma)\,]$ exactly as in
+\texttt{ordinal\_dwls\_profile\_rmsea}. $\Gamma_x$ is a property of the data, not
+of any fitted model: \emph{the user model and the baseline share it.}
+
+For a model $M\in\{u,b\}$ (user, baseline) the minimum-discrepancy fit profiles
+its parameters out of
+\[
+  F_M(x)=d_M(x)'\,W\,d_M(x),\qquad d_M=\sigma_M(\hat\theta_M)-u,
+\]
+giving statistic $T_M=N F_M$, profile Hessian $Q_M$ (the
+$2m\times2m$ extended object of \texttt{weighted\_moment\_profile\_rmsea\_estimated\_weight}),
+generalized df $\bar Q_M=\tr(Q_M\Gamma_x)$, and bias-corrected noncentrality
+\begin{equation}\label{eq:delta}
+  \hat\delta_M \;=\; T_M-\bar Q_M.
+\end{equation}
+The user model is the fitted CFA/SEM. The baseline is the independence model:
+free thresholds, all polychoric correlations fixed to zero (delta scaling fixes
+the variances). Its residual is $d_b=(\,0;\,-\operatorname{vech}_{<}\hat R\,)$
+(thresholds profile to zero residual under diagonal $W$; the correlation block
+is the negative sample correlations), and $T_b$ matches
+\texttt{ordinal\_baseline\_chi2}. Because $\sigma_b$ is \emph{linear} in the
+baseline thresholds, the baseline observed bread equals its Gauss--Newton bread
+and $Q_b$ is exact.
+
+\paragraph{Envelope gradient.} Since $\hat\theta_M$ minimizes $F_M$, the
+$\hat\theta_M$-movement term in $dF_M/dx$ vanishes (envelope theorem) and the
+gradient is the bare profile score, identical in form for both models:
+\begin{equation}\label{eq:grad}
+  g_M=\Big(\tfrac{\partial F_M}{\partial u},\ \tfrac{\partial F_M}{\partial\gamma}\Big)
+     =\big(-2\,W d_M,\ -d_M^{\,2}/\gamma^{2}\big)\in\mathbb R^{2m},
+\end{equation}
+the $\gamma$ block coming from $\partial W/\partial\gamma_k=-1/\gamma_k^2$ in
+$F_M=\sum_k d_{M,k}^2/\gamma_k$. Equation~\eqref{eq:grad} is exactly the RMSEA
+envelope score, evaluated once at the user residual $d_u$ and once at the
+baseline residual $d_b$.
+
+\section{Joint law of the two statistics}\label{sec:joint}
+
+\begin{theorem}\label{thm:joint}
+Under fixed misspecification of both models and the regularity of the
+single-criterion program, with $\hat x=\bar x$ the sample first-stage vector,
+\[
+  \sqrt N\begin{pmatrix}F_u-F_{0,u}\\[2pt]F_b-F_{0,b}\end{pmatrix}
+  \dto
+  \mathcal N\!\left(0,\;
+  \begin{pmatrix}
+    g_u'\Gamma_x g_u & g_u'\Gamma_x g_b\\[2pt]
+    g_b'\Gamma_x g_u & g_b'\Gamma_x g_b
+  \end{pmatrix}\right).
+\]
+Equivalently, with $V_{uu}=N g_u'\Gamma_x g_u$, $V_{bb}=N g_b'\Gamma_x g_b$,
+$V_{ub}=N g_u'\Gamma_x g_b$, the statistic pair satisfies
+$\Var(T_u)=V_{uu}$, $\Var(T_b)=V_{bb}$, $\Cov(T_u,T_b)=V_{ub}$, which is
+\eqref{eq:headline}.
+\end{theorem}
+
+\begin{proof}
+Each $F_M(\hat x)=F_{0,M}+g_M'(\hat x-x_0)+o_p(N^{-1/2})$ by a first-order
+expansion, with $g_M$ the envelope gradient \eqref{eq:grad} (the profiled
+parameters contribute no first-order term). Stacking the two expansions and
+applying the single CLT $\sqrt N(\hat x-x_0)\dto\mathcal N(0,\Gamma_x)$ to the
+common $\hat x$ gives the bivariate limit; the off-diagonal is
+$g_u'\Gamma_x g_b$ because both rows read the same increment $\hat x-x_0$.
+Scaling by $N$ ($T_M=NF_M$) gives the stated variances.
+\end{proof}
+
+The mean corrections $\bar Q_M$ are $O_p(1)$ and, as in the single-criterion
+program, are treated as fixed in the variance (their sampling fluctuation is
+higher order). Hence $\Var(\hat\delta_u)=V_{uu}$, $\Var(\hat\delta_b)=V_{bb}$,
+$\Cov(\hat\delta_u,\hat\delta_b)=V_{ub}$.
+
+\section{CFI}\label{sec:cfi}
+
+In the regime where both models misfit, $\hat\delta_u>0$ and $\hat\delta_b>0$,
+the truncations in \eqref{eq:cfi-tli-classical} are inactive and, writing the
+generalized-df noncentralities for $df$,
+\begin{equation}\label{eq:cfi}
+  \cfi \;=\; 1-r,\qquad r:=\frac{\hat\delta_u}{\hat\delta_b}.
+\end{equation}
+The population target is $\mathrm{CFI}_0=1-\delta_{0,u}/\delta_{0,b}
+=1-F_{0,u}/F_{0,b}$ (the $N$ cancels in the ratio).
+
+\begin{corollary}\label{cor:cfi}
+The ratio gradient is $\nabla r=\hat\delta_b^{-1}(1,-r)$, so by the delta method
+\begin{equation}\label{eq:varcfi}
+  \widehat\Var(\cfi)=\widehat\Var(r)
+  =\frac{1}{\hat\delta_b^{2}}\Big(V_{uu}-2\,r\,V_{ub}+r^{2}V_{bb}\Big),
+\end{equation}
+and a two-sided $1-\alpha$ interval is
+$\cfi\pm z_{1-\alpha/2}\,\widehat\Var(\cfi)^{1/2}$, clipped to $[0,1]$.
+\end{corollary}
+
+\section{TLI}\label{sec:tli}
+
+TLI is the same comparison taken per generalized degree of freedom. With
+$E[T_M]\approx\bar Q_M+\delta_M$, the misspecification-robust analogue of
+$T/df$ is $T_M/\bar Q_M\approx 1+\delta_M/\bar Q_M$, and substituting into the
+TLI form of \eqref{eq:cfi-tli-classical} gives
+\begin{equation}\label{eq:tli}
+  \tli=\frac{T_b/\bar Q_b-T_u/\bar Q_u}{T_b/\bar Q_b-1}
+       =1-c\,r,\qquad c:=\frac{\bar Q_b}{\bar Q_u}.
+\end{equation}
+Thus TLI is CFI's ratio $r$ rescaled by the generalized-df ratio $c$;
+$\tli=1-(1-\cfi)\,\bar Q_b/\bar Q_u$. Using $\bar Q$ rather than the nominal
+$df$ keeps TLI internally consistent with the mixture mean that defines
+$\hat\delta$; when the weight is correctly specified $\bar Q_M\to df_M$ and
+\eqref{eq:tli} recovers the lavaan point value.
+
+\begin{corollary}\label{cor:tli}
+Treating $c$ as fixed (the $\bar Q_M$ are deterministic mean corrections),
+\begin{equation}\label{eq:vartli}
+  \tli=1-c\,r\ \Longrightarrow\ \widehat\Var(\tli)=c^{2}\,\widehat\Var(\cfi).
+\end{equation}
+The TLI interval is the CFI interval scaled by $c=\bar Q_b/\bar Q_u$: same $r$,
+same $\widehat\Var(r)$, one extra factor. (TLI is not clipped to $[0,1]$; it can
+exceed $1$ for $\hat\delta_u<0$.)
+\end{corollary}
+
+\section{The baseline-dominated regime}\label{sec:dominated}
+
+Under any appreciable misspecification the independence model fits grossly, so
+$\hat\delta_b\gg\hat\delta_u$, $r\to0$, and \eqref{eq:varcfi} collapses to its
+leading term:
+\begin{equation}\label{eq:dominated}
+  \widehat\Var(\cfi)
+  =\frac{V_{uu}}{\hat\delta_b^{2}}\Big(1-2r\,\tfrac{V_{ub}}{V_{uu}}
+    +r^2\,\tfrac{V_{bb}}{V_{uu}}\Big)
+  \;\approx\;\frac{V_{uu}}{\hat\delta_b^{2}}
+  =\frac{\Var(T_u)}{\hat\delta_b^{2}}.
+\end{equation}
+That is, to leading order CFI's sampling variance is the \emph{user-model}
+statistic variance $V_{uu}=N g_u'\Gamma_x g_u$ already returned as
+\texttt{grad\_var} by the RMSEA path, divided by the squared baseline
+noncentrality $\hat\delta_b^2$; the baseline acts as a nearly constant scale.
+The cross-term and baseline-variance contributions are $O(r)$ and $O(r^2)$
+corrections. The full bivariate form \eqref{eq:varcfi} is retained in code for
+honesty, but \eqref{eq:dominated} is the right intuition and an effective
+cross-check: \emph{CFI inference is a rescaling of RMSEA inference.}
+
+\section{Estimated versus fixed weight}\label{sec:weight}
+
+Zeroing the $\gamma$ blocks of $\Gamma_x$ (drop the
+$\operatorname{IF}(\gamma)$ rows/columns) gives the fixed-weight comparator: the
+$g_M$ $\gamma$-channel in \eqref{eq:grad} is then inert, $V_{MM}$ and $V_{ub}$
+revert to their conventional (treat-$W$-as-known) values, and $\bar Q_M$ reverts
+to the fixed-weight trace. The estimated-weight law differs from current
+practice exactly through this channel. It enters CFI twice: through $V_{uu}$
+(the RMSEA-metric piece, where the channel is large because RMSEA's metric
+\emph{is} the weight) and through the baseline objects $\hat\delta_b,V_{bb}$.
+By \eqref{eq:dominated} the dominant effect is the former, so the estimated-weight
+correction to CFI tracks the estimated-weight correction to the user RMSEA,
+attenuated by $1/\hat\delta_b^2$.
+
+\section{Boundary and regularity}\label{sec:boundary}
+
+\begin{itemize}
+\item \textbf{User boundary.} As $\hat\delta_u\downarrow0$ (correct or
+near-correct user model) $\cfi\to1$ sits on the parameter-space boundary, the
+truncation $\max(0,\cdot)$ activates, and the normal approximation degrades.
+The interval is clipped at $1$ and flagged. This is the RMSEA close-fit boundary
+made sharper by CFI's hard ceiling.
+\item \textbf{Baseline boundary.} If $\hat\delta_b\le0$ (independence model
+fits; essentially uncorrelated data) the ratio is undefined: report
+$\cfi=1$, $\tli$ and both intervals \texttt{NaN}, with a warning. The delta
+method requires $\hat\delta_b$ bounded away from zero, which holds whenever the
+baseline is a genuine null.
+\item \textbf{Shared metric.} $g_u'\Gamma_x g_b$ uses the \emph{same} $\Gamma_x$
+for both gradients; the implementation must assert the two profile fits returned
+a common $\Gamma_x$ (they do, being data-only) before forming the cross-term.
+\item \textbf{Single group.} As with RMSEA/CRMR, the first pass is
+single-group; the multi-group extension stacks $\Gamma_x$ block-diagonally and
+sums the block traces, and is deferred.
+\end{itemize}
+
+\section{Implementation map}\label{sec:impl}
+
+\begin{enumerate}
+\item User profile via \texttt{ordinal\_dwls\_profile\_rmsea} $\Rightarrow$
+$Q_u,\Gamma_x,T_u,\bar Q_u$; form $g_u$ from \eqref{eq:grad} with the fitted
+residual $d_u$ (as the RMSEA path already does).
+\item Baseline profile from the analytic independence block: jacobian
+$D_b=[\,I_{nth};0\,]$, residual $d_b$, weight $\gamma$, shared $\Gamma_x$,
+Gauss--Newton bread $D_b'WD_b$, $K_b=I$. Route through
+\texttt{weighted\_moment\_profile\_rmsea\_estimated\_weight} $\Rightarrow$
+$Q_b,T_b,\bar Q_b$; cross-check $T_b$ against \texttt{ordinal\_baseline\_chi2}.
+Form $g_b$ from \eqref{eq:grad} with $d_b$.
+\item $\hat\delta_u=T_u-\bar Q_u$, $\hat\delta_b=T_b-\bar Q_b$;
+$V_{uu}=N g_u'\Gamma_x g_u$, $V_{bb}=N g_b'\Gamma_x g_b$,
+$V_{ub}=N g_u'\Gamma_x g_b$.
+\item CFI \eqref{eq:cfi}, \eqref{eq:varcfi}; TLI \eqref{eq:tli},
+\eqref{eq:vartli}; intervals per Corollaries~\ref{cor:cfi}--\ref{cor:tli} with
+the boundary handling of Section~\ref{sec:boundary}.
+\item \texttt{estimated\_weight=false} zeros the $\gamma$ blocks of $\Gamma_x$
+before steps 3--4 (fixed-weight comparator).
+\end{enumerate}
+
+\end{document}
