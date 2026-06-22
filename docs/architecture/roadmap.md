@@ -278,6 +278,19 @@ golden `parTable()` fixtures.
   `magmaan_core$ordinal_profile_rmsea` / `ordinal_profile_lrt` and
   `magmaan_core$mixed_ordinal_profile_rmsea` / `mixed_ordinal_profile_lrt`,
   taking the same explicit ordinal or mixed stats object used for fitting.
+  The absolute-fit companion is `estimate::ordinal_crmr_misspec_inference`
+  (`OrdinalCrmrInference`; `estimate::ordinal_crmr` point +
+  `OrdinalFitMeasures.crmr`): a criterion-at-estimator sandwich
+  `Q_G = Dφᵀ V0 Dφ` with `V0` the correlation-selector and `Dφ` the full extended
+  `(u,γ)` residual jacobian, reusing the catml projector and the profile `Γ_x`. It
+  returns a bias-corrected CRMR/SRMR point, an exact-fit mixture p-value, and a
+  CI that propagates the estimated weight (normal-theory `g_Gᵀ Γ_x g_G` under
+  misspecification, `weighted_chisq` mixture at the null); an `estimated_weight`
+  flag gives the fixed-weight comparator. Single-group only so far. Empirically
+  the γ channel is only ~2–3% of the CRMR variance — CRMR's fixed metric makes it
+  largely robust to weight estimation, unlike the metric-dominating RMSEA / nested
+  test. Verified by `tests/checks/ordinal_crmr_inference` (bias/variance/coverage
+  vs Monte-Carlo). R bindings and lavaan `crmr` parity are deferred.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

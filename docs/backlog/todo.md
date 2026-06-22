@@ -520,6 +520,28 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       channel positive and monotone. Surfaced a prototype defect: its
       double-finite-differenced `tr_full` at `ε=0.06` is non-monotonic; magmaan's
       analytic-influence law is the corrected reference (as the note anticipated).
+    - **Done 2026-06-22 (CRMR/SRMR estimated-weight inference).** The
+      absolute-fit (single-model) companion. `estimate::ordinal_crmr` (point) +
+      `OrdinalFitMeasures.crmr`; `estimate::ordinal_crmr_misspec_inference`
+      (`OrdinalCrmrInference`) returns a bias-corrected point, exact-fit mixture
+      p-value, and a confidence interval for CRMR/SRMR that propagates the
+      estimated-weight γ channel. It is a criterion-at-estimator sandwich
+      `Q_G = Dφᵀ V0 Dφ`, `V0` = correlation-selector, `Dφ` the full extended
+      `(u,γ)` residual jacobian (u-channel `−(I−P)`; γ-channel the estimator
+      weight-sensitivity), reusing the catml projector and the
+      `ordinal_dwls_profile_rmsea` `Γ_x`; CI uses the normal-theory `g_Gᵀ Γ_x g_G`
+      under misspec and the `weighted_chisq` mixture at the null. `estimated_weight`
+      flag toggles the fixed-weight comparator; `srmr_denominator` switches the
+      scaling. Single-group only this pass (multi-group coupling deferred). Gated
+      by `ordinal_test.cpp` (denominator relation, point==fm.crmr, γ channel
+      active, SRMR scaling) and the C4 MC harness
+      `tests/checks/ordinal_crmr_inference/` (bias/variance/coverage vs
+      Monte-Carlo + ε=0 dormancy). **Finding:** the CI is calibrated, but the γ
+      channel is only ~2–3% of the CRMR variance under misspecification (vs the
+      metric-dominating channel in RMSEA/the nested test) — CRMR's fixed metric
+      makes it largely robust to weight estimation. Deferred: R bindings, lavaan
+      `crmr` oracle/goldens, threshold-inclusive SRMR variants, the residual-map
+      curvature term, multi-group.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
