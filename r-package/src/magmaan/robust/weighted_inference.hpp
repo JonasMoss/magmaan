@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -44,6 +45,30 @@ struct WeightedRobustResult {
   robust::ScaledShiftedResult scaled_shifted;
 };
 
+// Fixed-misspecification profile-Hessian RMSEA ingredients for a
+// moment-quadratic fit. `profile_hessian` is Q in
+//   2N{v(\hat x) - v(x0)} => Z' Q Z,
+// over the stacked first-stage moment metric; `gamma` is the matching ACOV.
+// The positive spectrum is intentionally reported with its own size because
+// under observed-bread / estimated-weight profile methods it need not equal the
+// nominal model df.
+struct WeightedProfileRMSEAResult {
+  Eigen::MatrixXd profile_hessian;
+  Eigen::MatrixXd gamma;
+  Eigen::VectorXd eigvals;
+  double fmin = 0.0;              // full discrepancy F = 2 * Estimates::fmin
+  double chisq_standard = 0.0;    // N * F
+  double bias_trace = 0.0;        // Σ positive λ_j
+  double bias_trace_sq = 0.0;     // Σ positive λ_j²
+  double rmsea = 0.0;             // sqrt(max(F - trace/N, 0) * G / df)
+  double rmsea_df = 0.0;          // classical df-subtraction comparator
+  int df = 0;
+  int spectrum_size = 0;          // number of positive λ_j after toleranceing
+  std::int64_t ntotal = 0;
+  std::size_t n_groups = 1;
+  std::vector<std::string> warnings;
+};
+
 struct WeightedMomentIJBlock {
   Eigen::MatrixXd jacobian;          // model moments wrt full free theta
   Eigen::MatrixXd weight;            // fixed estimator weight W_b
@@ -81,6 +106,22 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         double fmin,
                         const std::optional<Eigen::MatrixXd>& bread_override =
                             std::nullopt);
+
+// Basic fixed-misspecification profile-RMSEA primitive for a moment-quadratic
+// fit. `observed_bread` is the K-reduced profile Hessian in parameter space
+// (the same observed bread used by the misspecification-robust SE path). The
+// function forms the full moment-space profile Hessian
+//   Q = W - W D B^{-1} D' W,
+// computes the positive QΓ spectrum, and replaces the classical df bias
+// subtraction by tr(QΓ). It is deliberately allocation-heavy: it is the basic
+// research/validation surface, not the final optimized adapter.
+post_expected<WeightedProfileRMSEAResult>
+weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
+                              const Eigen::MatrixXd& K,
+                              double fmin,
+                              const Eigen::MatrixXd& observed_bread,
+                              std::size_t n_groups = 1,
+                              double eig_tol = 1e-10);
 
 // Infinitesimal-jackknife parameter covariance for a moment-quadratic fit with
 // observed-Hessian bread. Each block contributes casewise rows
@@ -193,6 +234,28 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const gmm::Weight& weight,
                      const data::RawData& raw,
                      robust::Information bread = robust::Information::Expected);
+
+// Fixed-misspecification profile-RMSEA for a continuous moment-quadratic
+// (ULS/GLS/WLS/DWLS) fit. The supplied Γ/raw-data source follows
+// `robust_continuous_ls`; the bread is always the observed-Hessian
+// misspecification bread.
+post_expected<WeightedProfileRMSEAResult>
+continuous_ls_profile_rmsea(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const gmm::Weight& weight,
+                            const std::vector<Eigen::MatrixXd>& gamma,
+                            double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+continuous_ls_profile_rmsea(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const gmm::Weight& weight,
+                            const data::RawData& raw,
+                            double eig_tol = 1e-10);
 
 // Complete-data infinitesimal-jackknife covariance for continuous LS with a
 // fixed second-stage weight. Empty `weight` is ULS; non-empty weights are treated

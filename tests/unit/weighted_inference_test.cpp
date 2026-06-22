@@ -602,6 +602,38 @@ TEST_CASE("robust_weighted_moments respects per-block sample weighting and K") {
   CHECK(out->eigvals(0) >= 0.0);
 }
 
+TEST_CASE("weighted_moment_profile_rmsea reports positive spectrum size") {
+  magmaan::estimate::WeightedMomentBlock block;
+  block.jacobian.resize(3, 1);
+  block.jacobian << 1.0, 0.0, 0.0;
+  block.weight = Eigen::MatrixXd::Identity(3, 3);
+  block.gamma = Eigen::Vector3d(2.0, 3.0, 5.0).asDiagonal();
+  block.n_obs = 100;
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(1, 1);
+  Eigen::MatrixXd observed_bread(1, 1);
+  observed_bread << 2.0;
+
+  auto out = magmaan::estimate::weighted_moment_profile_rmsea(
+      {block}, K, 0.5, observed_bread);
+  REQUIRE(out.has_value());
+
+  CHECK(out->df == 2);
+  CHECK(out->spectrum_size == 3);
+  REQUIRE(out->eigvals.size() == 3);
+  CHECK(out->eigvals(0) == doctest::Approx(1.0));
+  CHECK(out->eigvals(1) == doctest::Approx(3.0));
+  CHECK(out->eigvals(2) == doctest::Approx(5.0));
+  CHECK(out->bias_trace == doctest::Approx(9.0));
+  CHECK(out->bias_trace_sq == doctest::Approx(35.0));
+  CHECK(out->chisq_standard == doctest::Approx(50.0));
+  CHECK(out->rmsea ==
+        doctest::Approx(std::sqrt((0.5 - 9.0 / 100.0) / 2.0)));
+  CHECK(out->rmsea_df ==
+        doctest::Approx(std::sqrt((0.5 - 2.0 / 100.0) / 2.0)));
+  CHECK(out->warnings.empty());
+}
+
 TEST_CASE("robust_weighted_moment_ij fixed-weight path matches weighted sandwich") {
   Eigen::MatrixXd G(4, 2);
   G << 1.0, 0.0,
@@ -755,6 +787,36 @@ TEST_CASE("robust_continuous_ls: raw and supplied Gamma agree for ULS") {
   CHECK((by_gamma->eigvals - by_raw->eigvals).cwiseAbs().maxCoeff() < 1e-10);
   CHECK(by_raw->chisq_standard ==
         doctest::Approx(2.0 * total_n(fx.samp) * est->fmin));
+}
+
+TEST_CASE("continuous_ls_profile_rmsea raw and supplied Gamma agree") {
+  auto fx = one_factor_fixture();
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est.has_value());
+
+  auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
+  REQUIRE(G.has_value());
+  auto by_gamma = magmaan::estimate::continuous_ls_profile_rmsea(
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, {*G});
+  auto by_raw = magmaan::estimate::continuous_ls_profile_rmsea(
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, fx.raw);
+  REQUIRE(by_gamma.has_value());
+  REQUIRE(by_raw.has_value());
+
+  CHECK(by_raw->df == by_gamma->df);
+  CHECK(by_raw->spectrum_size == by_gamma->spectrum_size);
+  CHECK(by_raw->profile_hessian.isApprox(by_gamma->profile_hessian, 1e-12));
+  CHECK(by_raw->gamma.isApprox(by_gamma->gamma, 1e-12));
+  CHECK(by_raw->eigvals.isApprox(by_gamma->eigvals, 1e-10));
+  CHECK(by_raw->bias_trace == doctest::Approx(by_gamma->bias_trace));
+  CHECK(by_raw->rmsea == doctest::Approx(by_gamma->rmsea));
+  CHECK(by_raw->chisq_standard ==
+        doctest::Approx(2.0 * total_n(fx.samp) * est->fmin));
+  CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
 }
 
 TEST_CASE("robust_continuous_ls_fixed_weight_ij reduces to observed-bread sandwich") {

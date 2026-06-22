@@ -492,6 +492,30 @@ which provide the central positive weighted-\(\chi^2\) reference law and its
 cutoffs. The old \texttt{robust::imhof\_upper} symbol remains as a compatibility
 alias, but the new call sites use the distribution-level name.
 
+\subsection*{Spectrum-size bookkeeping}
+
+The new profile-Hessian methods should report the size of the positive spectrum
+explicitly, not only the ordinary model or nested-test degrees of freedom. In
+the exact-fit, fixed-weight, Gauss--Newton setting the nonzero spectrum has the
+classical dimension: \(df_M\) for a single-model absolute-fit law and
+\(df_B-df_A\) for a regular nested contrast. Once the reference law is built from
+the full profile Hessian \(Q_M\), especially with estimated weights, that equality
+is no longer guaranteed by the parameter-count argument alone. The CFA
+pseudo-null example above already produced six positive weights for an ordinary
+five-df nested contrast.
+
+Implementation reports should therefore carry at least
+\[
+  \#\{\lambda_j>\tau\},\qquad \sum_j\lambda_j,\qquad \sum_j\lambda_j^2,
+\]
+alongside the nominal \(df\). The eigentolerance \(\tau\) must be recorded or
+made deterministic from the scale of \(Q\Gamma\). If possible, later analytic
+work should identify when the rank is forced to equal the classical \(df\), and
+when additional nonzero eigenvalues are structurally expected from residual
+curvature or estimated-weight channels. Until then, downstream LRT/RMSEA code
+must use the actual positive weights for mixture tails and trace corrections,
+using \(df\) only as the named model-complexity denominator.
+
 \section{What This Suggests}
 
 For GLS, the full nested eigenspectrum is not hard in principle. The hard part
