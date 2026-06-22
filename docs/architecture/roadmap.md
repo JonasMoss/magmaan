@@ -273,7 +273,11 @@ golden `parTable()` fixtures.
   block from `MixedOrdinalStats`, `mixed_moment_jacobian`,
   `mixed_observed_bread_analytic`, and the mixed `mixed_gamma_diag_*`
   influence/Jacobian channels (including observed/missing variants), so the
-  mixed path also shares the `robust_mixed_ordinal` standard χ² and df.
+  mixed path also shares the `robust_mixed_ordinal` standard χ² and df. The R
+  package exposes these research surfaces through
+  `magmaan_core$ordinal_profile_rmsea` / `ordinal_profile_lrt` and
+  `magmaan_core$mixed_ordinal_profile_rmsea` / `mixed_ordinal_profile_lrt`,
+  taking the same explicit ordinal or mixed stats object used for fitting.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

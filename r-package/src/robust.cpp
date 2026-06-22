@@ -10,6 +10,7 @@
 
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"
@@ -135,6 +136,96 @@ scaled_shifted_to_list(const magmaan::robust::ScaledShiftedResult& r) {
                             Rcpp::_["df"] = r.df,
                             Rcpp::_["scale_a"] = r.scale_a,
                             Rcpp::_["shift_b"] = r.shift_b);
+}
+
+Rcpp::CharacterVector warnings_to_r(const std::vector<std::string>& warnings) {
+  Rcpp::CharacterVector out(static_cast<R_xlen_t>(warnings.size()));
+  for (std::size_t k = 0; k < warnings.size(); ++k) {
+    out[static_cast<R_xlen_t>(k)] = warnings[k];
+  }
+  return out;
+}
+
+Rcpp::List profile_rmsea_to_list(
+    const magmaan::estimate::WeightedProfileRMSEAResult& r) {
+  return Rcpp::List::create(
+      Rcpp::_["profile_hessian"] = Rcpp::wrap(r.profile_hessian),
+      Rcpp::_["gamma"] = Rcpp::wrap(r.gamma),
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["profile_pencil_eigvals"] = Rcpp::wrap(r.profile_pencil_eigvals),
+      Rcpp::_["fmin"] = r.fmin,
+      Rcpp::_["chisq_standard"] = r.chisq_standard,
+      Rcpp::_["bias_trace"] = r.bias_trace,
+      Rcpp::_["bias_trace_sq"] = r.bias_trace_sq,
+      Rcpp::_["trace_signed"] = r.trace_signed,
+      Rcpp::_["negative_trace_abs"] = r.negative_trace_abs,
+      Rcpp::_["profile_pencil_max_abs_gap"] = r.profile_pencil_max_abs_gap,
+      Rcpp::_["rmsea"] = r.rmsea,
+      Rcpp::_["rmsea_positive_trace"] = r.rmsea_positive_trace,
+      Rcpp::_["rmsea_df"] = r.rmsea_df,
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["spectrum_size"] = r.spectrum_size,
+      Rcpp::_["negative_spectrum_size"] = r.negative_spectrum_size,
+      Rcpp::_["spectrum_rank"] = r.spectrum_rank,
+      Rcpp::_["profile_pencil_residual_dim"] = r.profile_pencil_residual_dim,
+      Rcpp::_["profile_pencil_positive_count"] =
+          r.profile_pencil_positive_count,
+      Rcpp::_["profile_pencil_negative_count"] =
+          r.profile_pencil_negative_count,
+      Rcpp::_["profile_pencil_rank"] = r.profile_pencil_rank,
+      Rcpp::_["ntotal"] = static_cast<double>(r.ntotal),
+      Rcpp::_["n_groups"] = static_cast<int>(r.n_groups),
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+}
+
+Rcpp::List profile_lrt_to_list(
+    const magmaan::estimate::WeightedProfileLRTResult& r) {
+  return Rcpp::List::create(
+      Rcpp::_["profile_hessian"] = Rcpp::wrap(r.profile_hessian),
+      Rcpp::_["gamma"] = Rcpp::wrap(r.gamma),
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["fmin_diff"] = r.fmin_diff,
+      Rcpp::_["T_diff"] = r.T_diff,
+      Rcpp::_["bias_trace"] = r.bias_trace,
+      Rcpp::_["bias_trace_sq"] = r.bias_trace_sq,
+      Rcpp::_["trace_signed"] = r.trace_signed,
+      Rcpp::_["negative_trace_abs"] = r.negative_trace_abs,
+      Rcpp::_["scale_c"] = r.scale_c,
+      Rcpp::_["T_scaled"] = r.T_scaled,
+      Rcpp::_["p_unscaled"] = r.p_unscaled,
+      Rcpp::_["p_scaled"] = r.p_scaled,
+      Rcpp::_["T_adjusted"] = r.T_adjusted,
+      Rcpp::_["adjust_df"] = r.adjust_df,
+      Rcpp::_["p_adjusted"] = r.p_adjusted,
+      Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted),
+      Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
+      Rcpp::_["p_mixture"] = r.p_mixture,
+      Rcpp::_["df_diff"] = r.df_diff,
+      Rcpp::_["spectrum_size"] = r.spectrum_size,
+      Rcpp::_["negative_spectrum_size"] = r.negative_spectrum_size,
+      Rcpp::_["spectrum_rank"] = r.spectrum_rank,
+      Rcpp::_["ntotal"] = static_cast<double>(r.ntotal),
+      Rcpp::_["n_groups"] = static_cast<int>(r.n_groups),
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+}
+
+std::string ordinal_fit_weight(Rcpp::List fit, const char* caller) {
+  if (fit.containsElementNamed("ordinal_computational_weight")) {
+    return Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
+  }
+  if (fit.containsElementNamed("estimator")) {
+    return Rcpp::as<std::string>(fit["estimator"]);
+  }
+  Rcpp::stop("magmaan: %s requires a DWLS ordinal fit carrying $estimator",
+             caller);
+}
+
+void require_dwls_fit(Rcpp::List fit, const char* caller) {
+  const std::string weight = ordinal_fit_weight(fit, caller);
+  if (!(weight == "DWLS" || weight == "dwls")) {
+    Rcpp::stop("magmaan: %s is defined for DWLS fits only (got '%s')",
+               caller, weight);
+  }
 }
 
 // ---- UFactor <-> R list ----------------------------------------------------
@@ -928,6 +1019,113 @@ Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
       Rcpp::_["satorra_bentler"] = satorra_bentler_to_list(r.satorra_bentler),
       Rcpp::_["mean_var_adjusted"] = mean_var_to_list(r.mean_var_adjusted),
       Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted));
+}
+
+// infer_ordinal_profile_rmsea() — fixed-misspecification estimated-weight
+// profile RMSEA for all-ordinal DWLS fits. Requires `ordinal_stats` with
+// `moment_influence` and `int_data`, which the high-level DWLS path stores.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_profile_rmsea(Rcpp::List fit,
+                                       Rcpp::List ordinal_stats,
+                                       double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_ordinal_profile_rmsea()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::ordinal_dwls_profile_rmsea(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name), eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_rmsea_to_list(*r_or);
+}
+
+// infer_ordinal_profile_lrt() — nested estimated-weight profile LRT for two
+// all-ordinal DWLS fits to the same `ordinal_stats`.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_profile_lrt(Rcpp::List fit_H1,
+                                     Rcpp::List fit_H0,
+                                     Rcpp::List ordinal_stats,
+                                     double eig_tol = 1e-10) {
+  require_dwls_fit(fit_H1, "infer_ordinal_profile_lrt()");
+  require_dwls_fit(fit_H0, "infer_ordinal_profile_lrt()");
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  const std::string par1 = fit_H1.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H1["parameterization"])
+      : "delta";
+  const std::string par0 = fit_H0.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H0["parameterization"])
+      : "delta";
+  if (par1 != par0) {
+    Rcpp::stop("magmaan: infer_ordinal_profile_lrt() requires H1/H0 to use "
+               "the same ordinal parameterization");
+  }
+  auto r_or = magmaan::estimate::ordinal_dwls_profile_lrt(
+      std::move(ctx1.pt), ctx1.rep, stats, est1,
+      std::move(ctx0.pt), ctx0.rep, est0,
+      ordinal_parameterization_from_string(par1), eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_lrt_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_profile_rmsea(Rcpp::List fit,
+                                             Rcpp::List mixed_stats,
+                                             double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_mixed_ordinal_profile_rmsea()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name), eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_rmsea_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_profile_lrt(Rcpp::List fit_H1,
+                                           Rcpp::List fit_H0,
+                                           Rcpp::List mixed_stats,
+                                           double eig_tol = 1e-10) {
+  require_dwls_fit(fit_H1, "infer_mixed_ordinal_profile_lrt()");
+  require_dwls_fit(fit_H0, "infer_mixed_ordinal_profile_lrt()");
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  const std::string par1 = fit_H1.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H1["parameterization"])
+      : "delta";
+  const std::string par0 = fit_H0.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H0["parameterization"])
+      : "delta";
+  if (par1 != par0) {
+    Rcpp::stop("magmaan: infer_mixed_ordinal_profile_lrt() requires H1/H0 to "
+               "use the same ordinal parameterization");
+  }
+  auto r_or = magmaan::estimate::mixed_ordinal_dwls_profile_lrt(
+      std::move(ctx1.pt), ctx1.rep, stats, est1,
+      std::move(ctx0.pt), ctx0.rep, est0,
+      ordinal_parameterization_from_string(par1), eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_lrt_to_list(*r_or);
 }
 
 // =============================================================================

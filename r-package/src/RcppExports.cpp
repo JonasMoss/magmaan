@@ -1751,6 +1751,60 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_ordinal_profile_rmsea
+Rcpp::List infer_ordinal_profile_rmsea(Rcpp::List fit, Rcpp::List ordinal_stats, double eig_tol);
+RcppExport SEXP _magmaan_infer_ordinal_profile_rmsea(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_profile_rmsea(fit, ordinal_stats, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_ordinal_profile_lrt
+Rcpp::List infer_ordinal_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List ordinal_stats, double eig_tol);
+RcppExport SEXP _magmaan_infer_ordinal_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP ordinal_statsSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_profile_lrt(fit_H1, fit_H0, ordinal_stats, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_mixed_ordinal_profile_rmsea
+Rcpp::List infer_mixed_ordinal_profile_rmsea(Rcpp::List fit, Rcpp::List mixed_stats, double eig_tol);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_profile_rmsea(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_profile_rmsea(fit, mixed_stats, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_mixed_ordinal_profile_lrt
+Rcpp::List infer_mixed_ordinal_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List mixed_stats, double eig_tol);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP mixed_statsSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_profile_lrt(fit_H1, fit_H0, mixed_stats, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_robust_se
 Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat, std::string bread, std::string moments, std::string cov);
 RcppExport SEXP _magmaan_infer_robust_se(SEXP fitSEXP, SEXP gamma_hatSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
@@ -2610,6 +2664,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 4},
     {"_magmaan_infer_ordinal_robust_ij", (DL_FUNC) &_magmaan_infer_ordinal_robust_ij, 3},
     {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 4},
+    {"_magmaan_infer_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_ordinal_profile_rmsea, 3},
+    {"_magmaan_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_ordinal_profile_lrt, 4},
+    {"_magmaan_infer_mixed_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_mixed_ordinal_profile_rmsea, 3},
+    {"_magmaan_infer_mixed_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_mixed_ordinal_profile_lrt, 4},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
     {"_magmaan_infer_robust_se_parts", (DL_FUNC) &_magmaan_infer_robust_se_parts, 7},
     {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},
