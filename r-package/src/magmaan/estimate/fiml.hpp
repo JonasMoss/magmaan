@@ -673,6 +673,86 @@ fiml_residual_projector(spec::LatentStructure pt,
                         const Eigen::Ref<const Eigen::MatrixXd>& V,
                         FIML discrepancy = {});
 
+// Fixed-misspecification profile-RMSEA / profile-LRT for raw-data FIML. The
+// saturated first-stage coordinate is η = [mean; vech(cov)] from EM H1; the
+// data Hessian is `SaturatedMoments::H / n_b`, the projection Hessian is the
+// model-implied observed-pattern H1 information per block, and Γ is the
+// n-scaled saturated ACOV (`two_stage_gamma_from_acov(sm, false)`). `chi2_lrt`
+// is the already-computed FIML model-vs-H1 likelihood-ratio statistic.
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   FIML discrepancy = {},
+                   double h_step = 1e-4,
+                   double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1,
+                   double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1,
+                   const SaturatedMoments& sm,
+                   double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 FIML discrepancy = {},
+                 double h_step = 1e-4,
+                 double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 const FIMLPack& pack,
+                 const FIMLH1& h1,
+                 double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 const FIMLPack& pack,
+                 const FIMLH1& h1,
+                 const SaturatedMoments& sm,
+                 double eig_tol = 1e-10);
+
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
 // diagonal normal model directly over observed-value patterns and compares it
