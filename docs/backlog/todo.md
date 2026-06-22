@@ -409,15 +409,31 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `O(‖e‖)` so the integer rank is brittle (read `spectrum_size` as an
       effective rank at a floor). Numerically verified to machine precision (ULS
       inertia `(13,7,1)`, ML `(17,1,3)` at `df=9`; e→0 collapse to df).
+    - **Done 2026-06-22 (categorical DWLS wiring).**
+      `estimate::ordinal_dwls_profile_rmsea` / `ordinal_dwls_profile_lrt`
+      (`estimate/ordinal.{hpp,cpp}`) extract `(D, γ, r, B)` from an all-ordinal
+      DWLS fit (`ordinal_moment_jacobian`, `NACOV.diagonal()`,
+      `ordinal_block_residual`, `ordinal_observed_bread_analytic`) and build the
+      joint NACOV `Γ_x` of `(u, γ)` as the cross-product of the stacked per-case
+      influence rows `[g_i | IF_i(γ)]`, with `IF_i(γ) = IFG + G·(dΓ̂/dκ)'`
+      reusing the same `ordinal_gamma_diag_data_influence` /
+      `ordinal_gamma_diag_jacobian_fd` channels (and `*observed*` variants for
+      pairwise-overlap MCAR) that `robust_ordinal_ij` uses. `fmin` is the
+      standard DWLS `F`, so `chisq_standard` and `df` match `robust_ordinal`
+      exactly; the γ channel is the first-stage estimated-weight direction the
+      rank note flags. Single- and multi-group. Gated in `ordinal_test.cpp`
+      (single-fit `Γ_x` uu-block == NACOV + df/chisq vs `robust_ordinal` + live
+      γ channel; nested LRT df_diff / spectrum / mixture-p).
     Remaining profile-Hessian fit/test work:
     mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
-    wiring the categorical DWLS estimator to *produce* the
-    `(D, γ, r, Γ_x)` ingredients (the joint NACOV `Γ_x` of `(u, γ)` from the
-    ordinal moment / `IF(Γ)` caches is the genuinely new piece), whose first-stage
-    influence adds its own directions to `Γ` on top of the two channels above; an
-    *a-priori* analytic sign count of `#{ν_j < 1}` from model structure (the note
-    settles the inertia identity but still reads the signs off an
-    eigendecomposition); R/API wrappers after a concrete experiment needs them.
+    mixed continuous/ordinal DWLS wiring (the `mixed_gamma_*` analogs exist),
+    whose first-stage influence adds its own directions to `Γ` on top of the two
+    channels above; an *a-priori* analytic sign count of `#{ν_j < 1}` from model
+    structure (the note settles the inertia identity but still reads the signs
+    off an eigendecomposition); a numerical cross-check of the categorical
+    `Γ_x`/spectrum against the `ordinal_dwls_profile_*` finite-difference
+    prototype (population vs sample); R/API wrappers after a concrete experiment
+    needs them.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a

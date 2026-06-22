@@ -3333,6 +3333,144 @@ TEST_CASE("robust_ordinal_ij ULS supports observed MCAR ordinal stats") {
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
 }
 
+TEST_CASE("ordinal_dwls_profile_rmsea assembles the extended (u, gamma) law") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260622, 600, {0.80, 0.74, 0.68, 0.62}, -0.5, 0.6);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->moment_influence.size() == 1);
+  REQUIRE(stats->int_data.size() == 1);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Expected);
+  REQUIRE(rob.has_value());
+
+  auto prof = magmaan::estimate::ordinal_dwls_profile_rmsea(*pt, *mr, *stats,
+                                                            *fit);
+  REQUIRE_MESSAGE(prof.has_value(),
+      "profile RMSEA failed: " << (prof.has_value() ? "" : prof.error().detail));
+
+  const Eigen::Index p = stats->R[0].rows();
+  const Eigen::Index m = stats->thresholds[0].size() + p * (p - 1) / 2;
+  REQUIRE(prof->profile_hessian.rows() == 2 * m);
+  REQUIRE(prof->gamma.rows() == 2 * m);
+
+  // Standard statistic and classical df agree with the standard DWLS path.
+  CHECK(prof->df == rob->df);
+  CHECK(prof->chisq_standard == doctest::Approx(rob->chisq_standard));
+  CHECK(prof->spectrum_size > 0);
+  CHECK(prof->bias_trace > 0.0);
+  CHECK(prof->rmsea >= 0.0);
+
+  // Gamma_x uu-block reproduces the polychoric NACOV (influence stack + scale).
+  CHECK(prof->gamma.topLeftCorner(m, m).isApprox(stats->NACOV[0], 1e-9));
+  // The estimated-weight channel populates the gamma-gamma and cross blocks.
+  CHECK(prof->gamma.bottomRightCorner(m, m).cwiseAbs().maxCoeff() > 0.0);
+  CHECK(prof->gamma.topRightCorner(m, m).cwiseAbs().maxCoeff() > 0.0);
+}
+
+TEST_CASE("ordinal_dwls_profile_lrt compares nested ordinal DWLS models") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260623, 700, {0.78, 0.72, 0.66, 0.60}, -0.4, 0.7);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+
+  const char* thresholds =
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  const std::string syntax_h1 =
+      std::string("f =~ x1 + x2 + x3 + x4\n") + thresholds;
+  // Tau-equivalence as a strict restriction of the marker-identified H1: the
+  // remaining loadings are fixed to the marker value of 1.
+  const std::string syntax_h0 =
+      std::string("f =~ x1 + 1*x2 + 1*x3 + 1*x4\n") + thresholds;
+
+  auto build_fit = [&](const std::string& syntax) {
+    auto fp = magmaan::parse::Parser::parse(syntax);
+    REQUIRE(fp.has_value());
+    auto pt = magmaan::spec::build(*fp);
+    REQUIRE(pt.has_value());
+    auto mr = magmaan::model::build_matrix_rep(*pt);
+    REQUIRE(mr.has_value());
+    auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+    REQUIRE(x0.has_value());
+    magmaan::optim::OptimOptions opts;
+    opts.max_iter = 1500;
+    opts.ftol = 1e-12;
+    opts.gtol = 1e-8;
+    auto fit = magmaan::estimate::fit_ordinal_bounded(
+        *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE_MESSAGE(fit.has_value(),
+        "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+    return std::make_tuple(std::move(*pt), std::move(*mr), std::move(*fit));
+  };
+
+  auto [pt1, mr1, fit1] = build_fit(syntax_h1);
+  auto [pt0, mr0, fit0] = build_fit(syntax_h0);
+
+  auto rob1 = magmaan::estimate::robust_ordinal(
+      pt1, mr1, *stats, fit1, magmaan::estimate::OrdinalWeightKind::DWLS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Expected);
+  auto rob0 = magmaan::estimate::robust_ordinal(
+      pt0, mr0, *stats, fit0, magmaan::estimate::OrdinalWeightKind::DWLS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Expected);
+  REQUIRE(rob1.has_value());
+  REQUIRE(rob0.has_value());
+
+  auto lrt = magmaan::estimate::ordinal_dwls_profile_lrt(
+      pt1, mr1, *stats, fit1, pt0, mr0, fit0);
+  REQUIRE_MESSAGE(lrt.has_value(),
+      "profile LRT failed: " << (lrt.has_value() ? "" : lrt.error().detail));
+
+  CHECK(lrt->df_diff == rob0->df - rob1->df);
+  CHECK(lrt->df_diff > 0);
+  CHECK(lrt->spectrum_size > 0);
+  CHECK(lrt->T_diff >= -1e-6);
+  CHECK(std::isfinite(lrt->p_mixture));
+  CHECK(lrt->p_mixture >= 0.0);
+  CHECK(lrt->p_mixture <= 1.0);
+}
+
 TEST_CASE("robust_ordinal_ij DWLS and WLS support observed MCAR ordinal stats") {
   Eigen::MatrixXd X =
       ordinal_test_block(20260622, 520, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55);
