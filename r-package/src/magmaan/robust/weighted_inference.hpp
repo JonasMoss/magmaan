@@ -68,10 +68,15 @@ struct WeightedProfileRMSEAResult {
   double chisq_standard = 0.0;    // N * F
   double bias_trace = 0.0;        // Σ positive λ_j
   double bias_trace_sq = 0.0;     // Σ positive λ_j²
-  double rmsea = 0.0;             // sqrt(max(F - trace/N, 0) * G / df)
+  double trace_signed = 0.0;      // Σ signed λ_j = tr(QΓ)
+  double negative_trace_abs = 0.0;
+  double rmsea = 0.0;             // sqrt(max(F - trace_signed/N, 0) * G / df)
+  double rmsea_positive_trace = 0.0;
   double rmsea_df = 0.0;          // classical df-subtraction comparator
   int df = 0;
   int spectrum_size = 0;          // number of positive λ_j after toleranceing
+  int negative_spectrum_size = 0;
+  int spectrum_rank = 0;
   std::int64_t ntotal = 0;
   std::size_t n_groups = 1;
   std::vector<std::string> warnings;
@@ -89,6 +94,8 @@ struct WeightedProfileLRTResult {
   double T_diff = 0.0;
   double bias_trace = 0.0;
   double bias_trace_sq = 0.0;
+  double trace_signed = 0.0;
+  double negative_trace_abs = 0.0;
   double scale_c = 0.0;
   double T_scaled = 0.0;
   double p_unscaled = 0.0;  // χ²(df_diff), nominal comparator
@@ -101,6 +108,8 @@ struct WeightedProfileLRTResult {
   double p_mixture = 0.0;   // Pr(Σλⱼχ²₁ > T_diff)
   int df_diff = 0;
   int spectrum_size = 0;
+  int negative_spectrum_size = 0;
+  int spectrum_rank = 0;
   std::int64_t ntotal = 0;
   std::size_t n_groups = 1;
   std::vector<std::string> warnings;
@@ -149,9 +158,10 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
 // (the same observed bread used by the misspecification-robust SE path). The
 // function forms the full moment-space profile Hessian
 //   Q = W - W D B^{-1} D' W,
-// computes the positive QΓ spectrum, and replaces the classical df bias
-// subtraction by tr(QΓ). It is deliberately allocation-heavy: it is the basic
-// research/validation surface, not the final optimized adapter.
+// computes the signed and positive QΓ spectrum summaries, and replaces the
+// classical df bias subtraction by signed tr(QΓ). It is deliberately
+// allocation-heavy: it is the basic research/validation surface, not the final
+// optimized adapter.
 post_expected<WeightedProfileRMSEAResult>
 weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
                               const Eigen::MatrixXd& K,
@@ -201,7 +211,7 @@ struct WeightedEstimatedWeightProfileBlock {
 // extended (u, γ) profile Hessian above for each group and delegates to
 // `weighted_moment_profile_rmsea_two_metric`. The reported `df` is the CLASSICAL
 // nominal df Σ m_b − n_alpha (over the u-moments only), not the doubled extended
-// dimension; `bias_trace`/`spectrum_size` carry the live γ channel. `fmin` and
+// dimension; the trace/spectrum fields carry the live γ channel. `fmin` and
 // `observed_bread` (K-reduced) follow the usual moment-quadratic conventions.
 post_expected<WeightedProfileRMSEAResult>
 weighted_moment_profile_rmsea_estimated_weight(

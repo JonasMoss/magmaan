@@ -686,6 +686,10 @@ TEST_CASE("compute_profile_contrast_spectrum: returns positive QGamma weights") 
   CHECK(sd.eigenvalues(1) == doctest::Approx(6.0));
   CHECK(sd.trace_CinvS == doctest::Approx(11.0));
   CHECK(sd.trace_CinvS_sq == doctest::Approx(61.0));
+  CHECK(sd.trace_signed == doctest::Approx(11.0));
+  CHECK(sd.negative_trace_abs == doctest::Approx(0.0));
+  CHECK(sd.negative_spectrum_size == 0);
+  CHECK(sd.spectrum_rank == 2);
   CHECK(sd.C.size() == 0);
   CHECK(sd.S.size() == 0);
   CHECK(sd.warnings.empty());
@@ -702,6 +706,11 @@ TEST_CASE("compute_profile_contrast_spectrum: flags indefinite contrasts") {
   const auto& sd = *sd_or;
   REQUIRE(sd.eigenvalues.size() == 1);
   CHECK(sd.eigenvalues(0) == doctest::Approx(1.0));
+  CHECK(sd.trace_CinvS == doctest::Approx(1.0));
+  CHECK(sd.trace_signed == doctest::Approx(0.75));
+  CHECK(sd.negative_trace_abs == doctest::Approx(0.25));
+  CHECK(sd.negative_spectrum_size == 1);
+  CHECK(sd.spectrum_rank == 2);
   CHECK_FALSE(sd.warnings.empty());
 }
 

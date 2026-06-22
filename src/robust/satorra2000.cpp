@@ -98,6 +98,8 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
     deg.eigenvalues    = Eigen::VectorXd::Zero(0);
     deg.trace_CinvS    = 0.0;
     deg.trace_CinvS_sq = 0.0;
+    deg.trace_signed   = 0.0;
+    deg.spectrum_rank  = 0;
     return deg;
   }
   if (m > r1) {
@@ -383,6 +385,8 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   out.eigenvalues    = eig;
   out.trace_CinvS    = eig.sum();
   out.trace_CinvS_sq = eig.squaredNorm();
+  out.trace_signed   = out.trace_CinvS;
+  out.spectrum_rank  = static_cast<int>(eig.size());
   out.warnings       = std::move(warnings);
   return out;
 }
@@ -446,10 +450,17 @@ compute_profile_contrast_spectrum(
   std::vector<double> pos;
   std::vector<std::string> warnings;
   pos.reserve(static_cast<std::size_t>(all.size()));
+  double negative_trace_abs = 0.0;
+  int negative_count = 0;
+  int rank = 0;
   for (Eigen::Index k = 0; k < all.size(); ++k) {
     if (all(k) > tol) {
       pos.push_back(all(k));
+      ++rank;
     } else if (all(k) < -tol) {
+      negative_trace_abs += -all(k);
+      ++negative_count;
+      ++rank;
       warnings.emplace_back(
           "compute_profile_contrast_spectrum: negative contrast eigenvalue " +
           std::to_string(all(k)) + " below tolerance " + std::to_string(tol));
@@ -467,6 +478,10 @@ compute_profile_contrast_spectrum(
   out.eigenvalues    = std::move(eig);
   out.trace_CinvS    = out.eigenvalues.sum();
   out.trace_CinvS_sq = out.eigenvalues.squaredNorm();
+  out.trace_signed   = all.sum();
+  out.negative_trace_abs = negative_trace_abs;
+  out.negative_spectrum_size = negative_count;
+  out.spectrum_rank = rank;
   out.warnings       = std::move(warnings);
   return out;
 }
@@ -490,6 +505,8 @@ compute_diff_spectrum_2001(const Eigen::Ref<const Eigen::MatrixXd>& U0,
     deg.eigenvalues    = Eigen::VectorXd::Zero(0);
     deg.trace_CinvS    = 0.0;
     deg.trace_CinvS_sq = 0.0;
+    deg.trace_signed   = 0.0;
+    deg.spectrum_rank  = 0;
     return deg;
   }
   if (static_cast<Eigen::Index>(df) > q) {
@@ -552,6 +569,17 @@ compute_diff_spectrum_2001(const Eigen::Ref<const Eigen::MatrixXd>& U0,
   out.eigenvalues    = std::move(eig);
   out.trace_CinvS    = out.eigenvalues.sum();
   out.trace_CinvS_sq = out.eigenvalues.squaredNorm();
+  out.trace_signed   = out.trace_CinvS;
+  const double tol = 1e-8 * scale;
+  for (Eigen::Index k = 0; k < out.eigenvalues.size(); ++k) {
+    if (out.eigenvalues(k) > tol || out.eigenvalues(k) < -tol) {
+      ++out.spectrum_rank;
+    }
+    if (out.eigenvalues(k) < -tol) {
+      ++out.negative_spectrum_size;
+      out.negative_trace_abs += -out.eigenvalues(k);
+    }
+  }
   out.warnings       = std::move(warnings);
   return out;
 }
