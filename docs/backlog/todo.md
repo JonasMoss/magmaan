@@ -581,8 +581,19 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       which the test confirms). Gated by `ordinal_test.cpp` (T_u/T_b pass-through,
       baseline==`fm.baseline`, CFI∈[0,1] ordered CI, TLI=1−c·r and
       `Var(TLI)=c²Var(CFI)`, leading-order check, γ channel active vs fixed-weight
-      comparator). Deferred: R bindings, MC coverage harness, close-fit boundary
-      calibration, multi-group.
+      comparator) and the C4 MC harness `tests/checks/ordinal_cfi_inference/`
+      (point unbiasedness, coverage, γ-share, leading-order ratio). **Findings**
+      (reps=2000, n=1000): CFI's CI is **calibrated** (coverage 0.90–0.91, var
+      matches MC); CFI is **largely robust to weight estimation** (γ-share only
+      ≈±3–8%, CRMR-like, *opposite* to RMSEA's −12…−80%); the baseline-dominated
+      `Var(CFI)≈V_uu/δ_b²` simplification is accurate only at weak misfit (ratio
+      0.99→0.84→0.35 as ε grows — the full bivariate form is load-bearing). TLI's
+      point is unbiased and its CI calibrated at weak/moderate misfit but its
+      analytic variance **over-states at strong misfit** (≈8× MC, over-covers)
+      because `c=Q̄_b/Q̄_u` is ill-conditioned when `Q̄_u` is small — conservative,
+      not anti-conservative; CFI is the index to trust for an interval. Deferred:
+      R bindings, a stabilized-`c` TLI variance, close-fit boundary calibration,
+      multi-group.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
