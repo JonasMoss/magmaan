@@ -21,6 +21,7 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 
 #include "detail_second_order.hpp"
 #include "detail_vech.hpp"
@@ -108,6 +109,15 @@ post_expected<Eigen::MatrixXd> symmetric_sqrt_psd(const Eigen::MatrixXd& A,
     vals(i) = std::sqrt(std::max(0.0, vals(i)));
   }
   return es.eigenvectors() * vals.asDiagonal() * es.eigenvectors().transpose();
+}
+
+bool same_matrix_within(const Eigen::MatrixXd& A,
+                        const Eigen::MatrixXd& B,
+                        double rel_tol) {
+  if (A.rows() != B.rows() || A.cols() != B.cols()) return false;
+  const double scale = std::max({1.0, A.cwiseAbs().maxCoeff(),
+                                B.cwiseAbs().maxCoeff()});
+  return (A - B).cwiseAbs().maxCoeff() <= rel_tol * scale;
 }
 
 post_expected<double> total_n(const data::SampleStats& samp) {
@@ -1432,6 +1442,142 @@ weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
   return out;
 }
 
+post_expected<WeightedProfileLRTResult>
+weighted_moment_profile_lrt(const WeightedProfileRMSEAResult& h1,
+                            const WeightedProfileRMSEAResult& h0,
+                            double eig_tol) {
+  const Eigen::Index q = h1.profile_hessian.rows();
+  if (q == 0 || h1.profile_hessian.cols() != q ||
+      h0.profile_hessian.rows() != q || h0.profile_hessian.cols() != q ||
+      h1.gamma.rows() != q || h1.gamma.cols() != q ||
+      h0.gamma.rows() != q || h0.gamma.cols() != q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: profile Hessians and Gamma matrices "
+        "must be square with the same non-zero dimension"));
+  }
+  if (!(eig_tol >= 0.0) || !std::isfinite(eig_tol)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: eig_tol must be finite and non-negative"));
+  }
+  if (h1.ntotal <= 0 || h0.ntotal <= 0 || h1.ntotal != h0.ntotal) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: profile fits must have the same positive "
+        "total sample size"));
+  }
+  if (h1.n_groups == 0 || h0.n_groups == 0 || h1.n_groups != h0.n_groups) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: profile fits must have the same positive "
+        "group count"));
+  }
+  const int df_diff = h0.df - h1.df;
+  if (df_diff < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: restricted model has smaller nominal df "
+        "than unrestricted model"));
+  }
+  if (!std::isfinite(h1.fmin) || !std::isfinite(h0.fmin)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: non-finite discrepancy"));
+  }
+  if (!same_matrix_within(h1.gamma, h0.gamma, 1e-8)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_lrt: profile fits use different Gamma "
+        "matrices; nested profile LRT requires a common first-stage covariance"));
+  }
+
+  WeightedProfileLRTResult out;
+  out.profile_hessian =
+      h0.profile_hessian - h1.profile_hessian;
+  out.profile_hessian =
+      0.5 * (out.profile_hessian + out.profile_hessian.transpose()).eval();
+  out.gamma = 0.5 * (h0.gamma + h0.gamma.transpose()).eval();
+  out.fmin_diff = h0.fmin - h1.fmin;
+  out.T_diff = static_cast<double>(h0.ntotal) * out.fmin_diff;
+  out.df_diff = df_diff;
+  out.ntotal = h0.ntotal;
+  out.n_groups = h0.n_groups;
+  out.warnings = h1.warnings;
+  out.warnings.insert(out.warnings.end(), h0.warnings.begin(),
+                      h0.warnings.end());
+
+  const double stat_tol =
+      1e-10 * std::max({1.0, std::abs(h0.fmin), std::abs(h1.fmin)}) *
+      static_cast<double>(h0.ntotal);
+  if (out.T_diff < -stat_tol) {
+    out.warnings.emplace_back(
+        "weighted_moment_profile_lrt: restricted discrepancy is smaller than "
+        "unrestricted discrepancy by " + std::to_string(-out.T_diff));
+  }
+  const double T_tail = std::max(0.0, out.T_diff);
+
+  auto spectrum_or = robust::compute_profile_contrast_spectrum(
+      out.profile_hessian, out.gamma, eig_tol);
+  if (!spectrum_or.has_value()) return std::unexpected(spectrum_or.error());
+  out.eigvals = std::move(spectrum_or->eigenvalues);
+  out.bias_trace = spectrum_or->trace_CinvS;
+  out.bias_trace_sq = spectrum_or->trace_CinvS_sq;
+  out.spectrum_size = static_cast<int>(out.eigvals.size());
+  out.warnings.insert(out.warnings.end(),
+                      spectrum_or->warnings.begin(),
+                      spectrum_or->warnings.end());
+
+  out.p_unscaled =
+      out.df_diff > 0
+          ? inference::chi2_pvalue(T_tail, out.df_diff)
+          : (T_tail <= stat_tol ? 1.0
+                                : std::numeric_limits<double>::quiet_NaN());
+  if (out.spectrum_size <= 0) {
+    out.scale_c = std::numeric_limits<double>::quiet_NaN();
+    out.T_scaled = std::numeric_limits<double>::quiet_NaN();
+    out.p_scaled = std::numeric_limits<double>::quiet_NaN();
+    out.T_adjusted = std::numeric_limits<double>::quiet_NaN();
+    out.adjust_df = std::numeric_limits<double>::quiet_NaN();
+    out.p_adjusted = std::numeric_limits<double>::quiet_NaN();
+    out.scaled_shifted = robust::ScaledShiftedResult{
+        std::numeric_limits<double>::quiet_NaN(),
+        0,
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN()};
+    out.p_scaled_shifted = std::numeric_limits<double>::quiet_NaN();
+    out.p_mixture = T_tail <= stat_tol
+                        ? 1.0
+                        : robust::weighted_chisq_upper(out.eigvals, T_tail);
+    if (out.df_diff > 0) {
+      out.warnings.emplace_back(
+          "weighted_moment_profile_lrt: no positive profile contrast "
+          "eigenvalues for a positive nominal df difference");
+    }
+    return out;
+  }
+
+  const auto moments = robust::WeightedChiSquareMoments{
+      out.spectrum_size, out.bias_trace, out.bias_trace_sq};
+  out.scale_c = out.bias_trace / static_cast<double>(out.spectrum_size);
+  out.T_scaled = (out.scale_c > 0.0)
+                     ? T_tail / out.scale_c
+                     : std::numeric_limits<double>::quiet_NaN();
+  out.p_scaled = inference::chi2_pvalue(out.T_scaled, out.spectrum_size);
+  if (out.bias_trace_sq > 0.0) {
+    out.adjust_df = (out.bias_trace * out.bias_trace) / out.bias_trace_sq;
+    out.T_adjusted = T_tail * out.adjust_df / out.bias_trace;
+    const double cdf =
+        inference::noncentral_chisq_cdf(out.T_adjusted, out.adjust_df, 0.0);
+    out.p_adjusted = std::isfinite(cdf)
+                         ? std::clamp(1.0 - cdf, 0.0, 1.0)
+                         : std::numeric_limits<double>::quiet_NaN();
+  } else {
+    out.adjust_df = std::numeric_limits<double>::quiet_NaN();
+    out.T_adjusted = std::numeric_limits<double>::quiet_NaN();
+    out.p_adjusted = std::numeric_limits<double>::quiet_NaN();
+  }
+  out.scaled_shifted = robust::scaled_shifted(T_tail, moments);
+  out.p_scaled_shifted =
+      inference::chi2_pvalue(out.scaled_shifted.chi2_adj,
+                             out.scaled_shifted.df);
+  out.p_mixture = robust::weighted_chisq_upper(out.eigvals, T_tail);
+  return out;
+}
+
 post_expected<WeightedRobustResult>
 robust_weighted_moment_ij(const std::vector<WeightedMomentIJBlock>& blocks,
                           const Eigen::MatrixXd& K,
@@ -1651,6 +1797,46 @@ continuous_ls_profile_rmsea(spec::LatentStructure pt,
   if (!gamma.has_value()) return std::unexpected(gamma.error());
   return continuous_ls_profile_rmsea(std::move(pt), rep, samp, est, weight,
                                      *gamma, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
+                          const model::MatrixRep& rep_H1,
+                          const data::SampleStats& samp,
+                          const Estimates& est_H1,
+                          spec::LatentStructure pt_H0,
+                          const model::MatrixRep& rep_H0,
+                          const Estimates& est_H0,
+                          const gmm::Weight& weight,
+                          const std::vector<Eigen::MatrixXd>& gamma,
+                          double eig_tol) {
+  auto h1 = continuous_ls_profile_rmsea(std::move(pt_H1), rep_H1, samp,
+                                        est_H1, weight, gamma, eig_tol);
+  if (!h1.has_value()) return std::unexpected(h1.error());
+  auto h0 = continuous_ls_profile_rmsea(std::move(pt_H0), rep_H0, samp,
+                                        est_H0, weight, gamma, eig_tol);
+  if (!h0.has_value()) return std::unexpected(h0.error());
+  return weighted_moment_profile_lrt(*h1, *h0, eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
+                          const model::MatrixRep& rep_H1,
+                          const data::SampleStats& samp,
+                          const Estimates& est_H1,
+                          spec::LatentStructure pt_H0,
+                          const model::MatrixRep& rep_H0,
+                          const Estimates& est_H0,
+                          const gmm::Weight& weight,
+                          const data::RawData& raw,
+                          double eig_tol) {
+  auto h1 = continuous_ls_profile_rmsea(pt_H1, rep_H1, samp, est_H1, weight,
+                                        raw, eig_tol);
+  if (!h1.has_value()) return std::unexpected(h1.error());
+  auto h0 = continuous_ls_profile_rmsea(std::move(pt_H0), rep_H0, samp,
+                                        est_H0, weight, raw, eig_tol);
+  if (!h0.has_value()) return std::unexpected(h0.error());
+  return weighted_moment_profile_lrt(*h1, *h0, eig_tol);
 }
 
 post_expected<WeightedRobustResult>

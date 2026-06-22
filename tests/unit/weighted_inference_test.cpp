@@ -14,6 +14,7 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -634,6 +635,46 @@ TEST_CASE("weighted_moment_profile_rmsea reports positive spectrum size") {
   CHECK(out->warnings.empty());
 }
 
+TEST_CASE("weighted_moment_profile_lrt separates nominal df from spectrum size") {
+  magmaan::estimate::WeightedProfileRMSEAResult h1;
+  h1.profile_hessian = Eigen::MatrixXd::Zero(3, 3);
+  h1.gamma = Eigen::Vector3d(2.0, 3.0, 5.0).asDiagonal();
+  h1.fmin = 0.10;
+  h1.df = 2;
+  h1.ntotal = 100;
+  h1.n_groups = 1;
+
+  magmaan::estimate::WeightedProfileRMSEAResult h0 = h1;
+  h0.profile_hessian = Eigen::MatrixXd::Identity(3, 3);
+  h0.fmin = 0.50;
+  h0.df = 3;
+
+  auto out = magmaan::estimate::weighted_moment_profile_lrt(h1, h0);
+  REQUIRE(out.has_value());
+
+  CHECK(out->df_diff == 1);
+  CHECK(out->spectrum_size == 3);
+  REQUIRE(out->eigvals.size() == 3);
+  CHECK(out->eigvals(0) == doctest::Approx(2.0));
+  CHECK(out->eigvals(1) == doctest::Approx(3.0));
+  CHECK(out->eigvals(2) == doctest::Approx(5.0));
+  CHECK(out->bias_trace == doctest::Approx(10.0));
+  CHECK(out->bias_trace_sq == doctest::Approx(38.0));
+  CHECK(out->fmin_diff == doctest::Approx(0.40));
+  CHECK(out->T_diff == doctest::Approx(40.0));
+  CHECK(out->scale_c == doctest::Approx(10.0 / 3.0));
+  CHECK(out->T_scaled == doctest::Approx(12.0));
+  CHECK(out->p_unscaled ==
+        doctest::Approx(magmaan::inference::chi2_pvalue(40.0, 1)));
+  CHECK(out->p_scaled ==
+        doctest::Approx(magmaan::inference::chi2_pvalue(12.0, 3)));
+  CHECK(out->p_mixture ==
+        doctest::Approx(magmaan::robust::weighted_chisq_upper(out->eigvals,
+                                                              40.0)));
+  CHECK(out->scaled_shifted.df == 3);
+  CHECK(out->warnings.empty());
+}
+
 TEST_CASE("robust_weighted_moment_ij fixed-weight path matches weighted sandwich") {
   Eigen::MatrixXd G(4, 2);
   G << 1.0, 0.0,
@@ -816,6 +857,49 @@ TEST_CASE("continuous_ls_profile_rmsea raw and supplied Gamma agree") {
   CHECK(by_raw->rmsea == doctest::Approx(by_gamma->rmsea));
   CHECK(by_raw->chisq_standard ==
         doctest::Approx(2.0 * total_n(fx.samp) * est->fmin));
+  CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
+}
+
+TEST_CASE("continuous_ls_profile_lrt raw and supplied Gamma agree") {
+  auto fx = one_factor_fixture();
+  auto fp0 = magmaan::parse::Parser::parse(
+      "f =~ x1 + a*x2 + a*x3 + x4");
+  REQUIRE(fp0.has_value());
+  auto pt0 = magmaan::spec::build(*fp0);
+  REQUIRE(pt0.has_value());
+  auto rep0 = magmaan::model::build_matrix_rep(*pt0);
+  REQUIRE(rep0.has_value());
+
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est1 = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  auto est0 = magmaan::test::fit_gmm(
+      *pt0, *rep0, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est1.has_value());
+  REQUIRE(est0.has_value());
+
+  auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
+  REQUIRE(G.has_value());
+  auto by_gamma = magmaan::estimate::continuous_ls_profile_lrt(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0,
+      magmaan::estimate::gmm::Weight{}, {*G});
+  auto by_raw = magmaan::estimate::continuous_ls_profile_lrt(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0,
+      magmaan::estimate::gmm::Weight{}, fx.raw);
+  REQUIRE(by_gamma.has_value());
+  REQUIRE(by_raw.has_value());
+
+  CHECK(by_raw->df_diff == 1);
+  CHECK(by_raw->spectrum_size == by_gamma->spectrum_size);
+  CHECK(by_raw->profile_hessian.isApprox(by_gamma->profile_hessian, 1e-12));
+  CHECK(by_raw->gamma.isApprox(by_gamma->gamma, 1e-12));
+  CHECK(by_raw->eigvals.isApprox(by_gamma->eigvals, 1e-10));
+  CHECK(by_raw->bias_trace == doctest::Approx(by_gamma->bias_trace));
+  CHECK(by_raw->T_diff == doctest::Approx(by_gamma->T_diff));
+  CHECK(by_raw->p_mixture == doctest::Approx(by_gamma->p_mixture));
   CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
 }
 
