@@ -569,6 +569,103 @@ TEST_CASE("frontier robust LS MI: DWLS raw path scales; sandwich matches primiti
   CHECK((sw->B1 - B1_ref).norm() < 1e-8 * (1.0 + B1_ref.norm()));
 }
 
+TEST_CASE("estimated-weight sandwich_ij: Fixed mode reduces to the fixed-weight "
+          "sandwich") {
+  // With no IF(Ŵ) correction (mode = Fixed) the IJ meat
+  //   B1 = Σ_b (1/N)·(VΔ_b)ᵀ(VΔ_b),  V = g·W
+  // must equal the fixed-weight Δ'WΓ̂WΔ from `continuous_ls_param_space_sandwich`
+  // built from the SAME raw-data Γ̂ = ZᵀZ/n. This anchors the meat formula.
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(99001122u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 1800, Sigma, 8.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto G = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(G.has_value());
+  Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
+  for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
+  magmaan::estimate::gmm::Weight weight{W_dwls};
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
+  REQUIRE(est.has_value());
+
+  auto sw_plain = magmaan::estimate::continuous_ls_param_space_sandwich(
+      h.pt, h.rep, *samp, *est, weight, raw);
+  REQUIRE(sw_plain.has_value());
+  auto sw_ij = magmaan::estimate::continuous_ls_param_space_sandwich_ij(
+      h.pt, h.rep, *samp, *est, weight, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::Fixed);
+  REQUIRE(sw_ij.has_value());
+
+  CHECK((sw_ij->A1 - sw_plain->A1).norm() < 1e-9 * (1.0 + sw_plain->A1.norm()));
+  CHECK((sw_ij->B1 - sw_plain->B1).norm() < 1e-9 * (1.0 + sw_plain->B1.norm()));
+}
+
+TEST_CASE("frontier robust LS MI: estimated-weight DWLS meat shifts the scaling") {
+  // The complete (estimated-weight) sandwich adds the data-dependent-weight
+  // IF(Ŵ) meat term, absent from lavaan's MI. On non-normal data with a DWLS
+  // weight (W ≠ Γ̂⁻¹) it must move the per-direction scaling c away from the
+  // fixed-weight value; with mode = Fixed it must coincide with it exactly.
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20260619u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 3000, Sigma, 6.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto G = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(G.has_value());
+  Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
+  for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
+  magmaan::estimate::gmm::Weight weight{W_dwls};
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
+  REQUIRE(est.has_value());
+
+  inf::frontier::RobustScoreOptions fixed_opts;
+  fixed_opts.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto rob_fixed = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, fixed_opts);
+  REQUIRE(rob_fixed.has_value());
+
+  inf::frontier::RobustScoreOptions ew_opts = fixed_opts;
+  ew_opts.estimated_weight = true;
+  ew_opts.ij_weight_mode =
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls;
+  auto rob_ew = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, ew_opts);
+  REQUIRE(rob_ew.has_value());
+  REQUIRE(rob_ew->rows.size() == rob_fixed->rows.size());
+  REQUIRE(rob_ew->rows.size() > 1);
+
+  bool any_shift = false;
+  for (std::size_t i = 0; i < rob_ew->rows.size(); ++i) {
+    const auto& r = rob_ew->rows[i];
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    CHECK(std::isfinite(r.mi_scaled));
+    CHECK(r.mi_scaled >= 0.0);
+    // unscaled mi is the same ordinary statistic; only the denominator changed
+    CHECK(std::abs(r.mi - rob_fixed->rows[i].mi) < 1e-8 * (1.0 + std::abs(r.mi)));
+    if (std::abs(r.scaling_factor - rob_fixed->rows[i].scaling_factor) > 0.02)
+      any_shift = true;
+  }
+  CHECK(any_shift);
+
+  // mode = Fixed ⇒ the estimated-weight path reproduces the fixed-weight one.
+  inf::frontier::RobustScoreOptions ew_fixed = fixed_opts;
+  ew_fixed.estimated_weight = true;
+  ew_fixed.ij_weight_mode = magmaan::estimate::ContinuousLsIJWeightMode::Fixed;
+  auto rob_ewf = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, ew_fixed);
+  REQUIRE(rob_ewf.has_value());
+  REQUIRE(rob_ewf->rows.size() == rob_fixed->rows.size());
+  for (std::size_t i = 0; i < rob_fixed->rows.size(); ++i) {
+    CHECK(std::abs(rob_ewf->rows[i].scaling_factor -
+                   rob_fixed->rows[i].scaling_factor) < 1e-8);
+  }
+}
+
 // ── Ordinal tier ─────────────────────────────────────────────────────────────
 // The exact-reduction anchor: the full-WLS weight is the NACOV inverse, so the
 // NACOV meat collapses onto the bread (c ≡ 1) and the robust statistic equals
@@ -782,6 +879,79 @@ TEST_CASE("frontier robust ordinal MI: DWLS scales against the NACOV meat") {
           h.pt, h.rep, stats_no_nacov, *est,
           magmaan::estimate::OrdinalWeightKind::DWLS, mi_opts);
   CHECK_FALSE(rob_missing.has_value());
+}
+
+TEST_CASE("frontier robust ordinal MI: estimated-weight DWLS shifts the scaling") {
+  // The complete (Hall-Inoue) sandwich adds the polychoric-weight IF(Ŵ) meat
+  // term to the per-direction scaling — beyond lavaan's global SB scalar. The
+  // weight-influence is leading-order only under MISSPECIFICATION, so the data
+  // carry an x1–x2 residual association the single-factor model omits; against
+  // that misfit the estimated-weight c must move off the fixed-weight value.
+  std::mt19937 rng(20260619u);
+  auto misspec_ordinal = [&](Eigen::Index n) {
+    std::normal_distribution<double> norm(0.0, 1.0);
+    Eigen::MatrixXd X(n, 4);
+    for (Eigen::Index i = 0; i < n; ++i) {
+      const double eta = norm(rng);
+      const double nuis = norm(rng);  // extra factor on x1,x2 only (omitted)
+      for (Eigen::Index j = 0; j < 4; ++j) {
+        const double extra = (j < 2) ? 0.40 * nuis : 0.0;
+        const double rsd = (j < 2) ? std::sqrt(0.35) : std::sqrt(0.51);
+        const double y = 0.70 * eta + extra + rsd * norm(rng);
+        X(i, j) = 1.0 + (y > -0.50) + (y > 0.45);
+      }
+    }
+    return X;
+  };
+  auto stats =
+      magmaan::data::ordinal_stats_from_integer_data({misspec_ordinal(1200)});
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_syntax);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto fixed = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::DWLS,
+      mi_opts, magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE(fixed.has_value());
+  auto ew = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::DWLS,
+      mi_opts, magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/true);
+  REQUIRE(ew.has_value());
+  REQUIRE(ew->rows.size() == fixed->rows.size());
+  REQUIRE(ew->rows.size() > 1);
+
+  bool any_shift = false;
+  for (std::size_t i = 0; i < ew->rows.size(); ++i) {
+    const auto& r = ew->rows[i];
+    // The ordinary mi is unchanged; only the robust denominator moved.
+    CHECK(std::abs(r.mi - fixed->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(fixed->rows[i].mi)));
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    CHECK(std::isfinite(r.mi_scaled));
+    CHECK(r.mi_scaled >= 0.0);
+    if (std::abs(r.scaling_factor - fixed->rows[i].scaling_factor) > 0.01)
+      any_shift = true;
+  }
+  CHECK(any_shift);
+
+  // Mixed-ordinal estimated-weight is not yet wired: it must error, not silently
+  // fall back. (Exercised via the all-ordinal guard message path here through a
+  // missing-influence stats object.)
+  auto stats_no_infl = *stats;
+  stats_no_infl.moment_influence.clear();
+  auto ew_bad = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, stats_no_infl, *est,
+      magmaan::estimate::OrdinalWeightKind::DWLS, mi_opts,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/true);
+  CHECK_FALSE(ew_bad.has_value());
 }
 
 TEST_CASE("frontier robust mixed ordinal: WLS reduces, DWLS finite, ULS rejected") {

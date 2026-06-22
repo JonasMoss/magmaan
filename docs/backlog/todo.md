@@ -710,6 +710,30 @@ oracle from `tests/tools/regen_robust_score.R`, and the advisory
   GLS/DWLS, so it would have to recompute the weight; the ML `api::frontier`
   robust overloads already exist). The R path sidesteps this by reconstructing the
   weight in glue, so no consumer needs the C++ api entry point yet.
+- **Done 2026-06-22 — estimated-weight ("complete-sandwich") robust MI.** The
+  per-direction robust scaling `c = gᵀB1g / gᵀA1g` can now use the complete
+  (Hall-Inoue infinitesimal-jackknife) meat — with the data-dependent-weight
+  `IF(Ŵ)` term — instead of the fixed-weight `Δ'WΓ̂WΔ`, via a new
+  `estimated_weight` flag. This is the per-parameter denominator lavaan never
+  builds (it scales MI only by the global SB scalar `c`). New core primitives
+  `estimate::weighted_param_space_sandwich_ij` and the IJ adapters
+  `continuous_ls_param_space_sandwich_ij` (continuous GLS/WLS/DWLS/DLS, via the
+  shared `build_continuous_ls_ij_blocks`) and `ordinal_param_space_sandwich_ij`
+  (all-ordinal DWLS/WLS, via the shared `build_ordinal_ij_blocks` factored out of
+  `robust_ordinal_ij` so the SE and MI paths build identical meat). Threaded
+  through `inference::frontier::RobustScoreOptions.{estimated_weight,
+  ij_weight_mode}` and the ordinal/mixed `estimate::frontier` entry points
+  (mixed-ordinal errors: not yet wired); ML/FIML reject the flag (no estimated
+  second-stage weight). R: `modification_indices_robust()` /
+  `score_tests_robust()` gain `estimated_weight = FALSE`
+  (`r-package/examples/estimated_weight_modindices.R`). The correction is
+  leading-order only under misspecification (Hall-Inoue order-promotion; ULS has
+  a fixed weight and is unaffected). Reduction anchors and a misspec-shift check
+  in `tests/unit/score_robust_test.cpp`. Open follow-ups: mixed-ordinal IJ meat;
+  an MC calibration cell in `tests/checks/robust_score/` showing the
+  estimated-weight `mi.scaled` is better-calibrated than fixed-weight under DWLS
+  misspecification; these new IJ sandwich primitives ride the pending
+  `<domain>::frontier` retier below.
 
 ## Local hardening and validation tooling
 
@@ -1363,8 +1387,10 @@ into `<domain>::frontier`. Canonical public headers now live under
   `observed_moment_bread_fd` in `robust/weighted_inference`; `fiml_profile_*` /
   `two_stage_nt_profile_*` in `estimate/fiml`; `compute_profile_contrast_spectrum`
   in `robust/satorra2000`), the pre-existing exp-35 misspec-SE machinery
-  (`robust_continuous_ls`, the Hall-Inoue `*_ij` family, `weighted_param_space_sandwich`,
-  also in `weighted_inference`), and the older `OrdinalCatmlDwlsRmsea` probe. All
+  (`robust_continuous_ls`, the Hall-Inoue `*_ij` family, `weighted_param_space_sandwich`
+  and its estimated-weight MI counterparts `weighted_param_space_sandwich_ij` /
+  `continuous_ls_param_space_sandwich_ij` / `ordinal_param_space_sandwich_ij`,
+  also in `weighted_inference`/`ordinal`), and the older `OrdinalCatmlDwlsRmsea` probe. All
   are non-lavaan research yet sit in `magmaan::{estimate,robust,estimate::fiml}`.
   This must be one deliberate pass, not piecemeal: `weighted_inference.{hpp,cpp}`
   interleaves the new profile primitives with the widely-used `robust_continuous_ls`
