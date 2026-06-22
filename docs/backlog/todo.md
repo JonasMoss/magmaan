@@ -542,6 +542,26 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       makes it largely robust to weight estimation. Deferred: R bindings, lavaan
       `crmr` oracle/goldens, threshold-inclusive SRMR variants, the residual-map
       curvature term, multi-group.
+    - **Done 2026-06-22 (RMSEA estimated-weight CI).** The absolute-fit
+      large-γ case. `estimate::ordinal_rmsea_misspec_inference`
+      (`OrdinalRmseaInference`) returns the bias-corrected RMSEA (=
+      `ordinal_dwls_profile_rmsea.rmsea`), an exact-fit mixture p-value, and a
+      CI. RMSEA's criterion is the discrepancy `F = rᵀWr` itself, so by the
+      envelope theorem the gradient is the bare profile score `g_F = (−2Wr,
+      −r²/γ²)` (no projector, unlike CRMR); the CI is the normal-theory interval
+      on `F₀` with `Var(N·F)=N·g_Fᵀ Γ_x g_F`, reusing the profile `Q`/`Γ_x`/bias/
+      spectrum. `estimated_weight=false` is the fixed-weight comparator.
+      Single-group only. Gated by `ordinal_test.cpp` (point==profile rmsea, CI
+      ordering, γ active) and `tests/checks/ordinal_rmsea_inference/`
+      (bias/variance/coverage vs Monte-Carlo). **Finding:** the γ channel is
+      large (−0.12 to −0.80 of the variance) and **variance-reducing** (`r` and
+      `γ` co-vary negatively), so the estimated-weight CI is calibrated (~nominal)
+      while the fixed-weight CI is increasingly **conservative / too wide**
+      (coverage 0.93→0.98 as ε grows) — accounting for the estimated weight
+      *tightens* RMSEA's interval. Same theme as the rest of the program, opposite
+      direction from the nested test (conservative, not anti-conservative).
+      Deferred: R bindings, close-fit p-value, classical-noncentral comparator,
+      multi-group.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use

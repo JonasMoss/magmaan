@@ -6061,7 +6061,7 @@ ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
 namespace {
 // Inverse standard-normal CDF (Acklam rational approximation), for the
 // two-sided normal-theory CI quantile. Mirrors `normal_quantile` used elsewhere.
-double crmr_inv_normal_cdf(double p) noexcept {
+double inv_normal_cdf(double p) noexcept {
   p = std::clamp(p, 1e-12, 1.0 - 1e-12);
   static constexpr double a[] = {
       -3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
@@ -6327,11 +6327,134 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
   out.warnings = std::move(spec_or->warnings);
 
   // Misspecification normal-theory CI on the bias-removed statistic N·G₀.
-  const double z = crmr_inv_normal_cdf(0.5 * (1.0 + conf_level));
+  const double z = inv_normal_cdf(0.5 * (1.0 + conf_level));
   const double sd = std::sqrt(std::max(N_total * out.grad_var, 0.0));
   const double center = out.stat - out.bias_trace;
   out.ci_lower = std::sqrt(std::max(center - z * sd, 0.0) / Nk);
   out.ci_upper = std::sqrt(std::max(center + z * sd, 0.0) / Nk);
+  return out;
+}
+
+post_expected<OrdinalRmseaInference>
+ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const data::OrdinalStats& stats,
+                                const Estimates& est,
+                                OrdinalParameterization parameterization,
+                                bool estimated_weight,
+                                double conf_level,
+                                double eig_tol) {
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rmsea_misspec_inference: multi-group RMSEA CI is not yet "
+        "supported (single group only)"));
+  }
+  if (!(conf_level > 0.0 && conf_level < 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rmsea_misspec_inference: conf_level must lie in (0,1)"));
+  }
+
+  // The profile path validates the fit and supplies Q (profile_hessian), the
+  // joint NACOV Γ_x (gamma), the signed bias trace, the QΓ spectrum, F (fmin),
+  // N·F (chisq_standard), df, and N. RMSEA's criterion is the discrepancy F
+  // itself, so the bias/Hessian objects are exactly the profile ones.
+  auto prof_or = ordinal_dwls_profile_rmsea(pt, rep, stats, est,
+                                            parameterization, eig_tol);
+  if (!prof_or.has_value()) return std::unexpected(prof_or.error());
+  const WeightedProfileRMSEAResult& prof = *prof_or;
+
+  const Eigen::Index p = stats.R[0].rows();
+  const Eigen::Index nth = stats.thresholds[0].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index m = nth + ncorr;
+  if (prof.profile_hessian.rows() != 2 * m || prof.gamma.rows() != 2 * m) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rmsea_misspec_inference: unexpected profile dimension (single "
+        "group expected)"));
+  }
+
+  // Recompute the fitted residual d = σ(θ̂) − u for the envelope-score gradient.
+  spec::LatentStructure pt2 = std::move(pt);
+  if (auto pr = prepare_ordinal_delta_partable(pt2, stats, nullptr);
+      !pr.has_value()) {
+    return std::unexpected(fit_to_post(pr.error()));
+  }
+  auto layout_or = make_threshold_layout(pt2, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  auto ev_or = model::ModelEvaluator::build(pt2, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rmsea_misspec_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rmsea_misspec_inference: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+  const Eigen::VectorXd d = ordinal_block_residual(
+      stats, *layout_or, eval->moments, est.theta, parameterization, 0);
+  if (d.size() != m) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rmsea_misspec_inference: residual length mismatch"));
+  }
+  const Eigen::VectorXd gamma_diag = stats.NACOV[0].diagonal();
+  const Eigen::MatrixXd& W = stats.W_dwls[0];
+
+  // Envelope-theorem gradient of the value function F = rᵀ W r w.r.t. x=(u,γ):
+  // since θ̂ minimizes F, the θ̂-movement term vanishes and dF/dx is the bare
+  // profile score (NO estimator projection, unlike the CRMR criterion):
+  //   g_F = ( ∂F/∂u , ∂F/∂γ ) = ( −2 W d , −d²/γ² ).
+  Eigen::VectorXd g_F(2 * m);
+  g_F.head(m) = -2.0 * (W * d);
+  g_F.tail(m) =
+      -(d.array().square() / gamma_diag.array().square()).matrix();
+
+  Eigen::MatrixXd Gamma_used = prof.gamma;
+  double bias = prof.trace_signed;
+  Eigen::VectorXd eigvals = prof.eigvals;
+  int spectrum_size = prof.spectrum_size;
+  if (!estimated_weight) {  // fixed-weight comparator: drop the γ channel
+    Gamma_used.rightCols(m).setZero();
+    Gamma_used.bottomRows(m).setZero();
+    auto spec = robust::compute_profile_contrast_spectrum(
+        prof.profile_hessian, Gamma_used, eig_tol);
+    if (!spec.has_value()) return std::unexpected(spec.error());
+    bias = spec->trace_signed;
+    eigvals = spec->eigenvalues;
+    spectrum_size = static_cast<int>(spec->eigenvalues.size());
+  }
+  const double grad_var = std::max(0.0, g_F.dot(Gamma_used * g_F));
+
+  const double N = static_cast<double>(prof.ntotal);
+  const double F = prof.fmin;
+  const double Gn = static_cast<double>(prof.n_groups);
+  const int df = prof.df;
+
+  OrdinalRmseaInference out;
+  out.fixed_weight = !estimated_weight;
+  out.eigvals = std::move(eigvals);
+  out.spectrum_size = spectrum_size;
+  out.bias_trace = bias;
+  out.grad_var = grad_var;
+  out.fmin = F;
+  out.stat = prof.chisq_standard;  // N · F
+  out.df = df;
+  out.warnings = prof.warnings;
+  if (df > 0 && N > 0.0) {
+    const double denom = static_cast<double>(df);
+    const double center = F - bias / N;            // estimate of F₀
+    const double sd = std::sqrt(std::max(grad_var / N, 0.0));
+    const double z = inv_normal_cdf(0.5 * (1.0 + conf_level));
+    out.point = std::sqrt(std::max(center, 0.0) * Gn / denom);
+    out.ci_lower = std::sqrt(std::max(center - z * sd, 0.0) * Gn / denom);
+    out.ci_upper = std::sqrt(std::max(center + z * sd, 0.0) * Gn / denom);
+  }
+  out.exact_fit_pvalue =
+      out.eigvals.size() > 0
+          ? robust::weighted_chisq_upper(out.eigvals, std::max(0.0, out.stat))
+          : std::numeric_limits<double>::quiet_NaN();
   return out;
 }
 
