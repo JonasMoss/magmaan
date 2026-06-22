@@ -10,6 +10,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/inference/score.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -515,6 +516,44 @@ catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
                          const Estimates& est,
                          OrdinalParameterization parameterization =
                              OrdinalParameterization::Delta);
+
+// Fixed-misspecification estimated-weight (categorical DWLS) profile-RMSEA for
+// an all-ordinal fit. The first-stage object is the EXTENDED moment vector
+// x = (u, γ) with u = thresholds+polychorics and γ = diag(Γ̂_u) the diagonal
+// NACOV that DWLS inverts. The joint NACOV Γ_x is the cross-product of the
+// stacked per-case influence rows [g_i | IF_i(γ)]; IF_i(γ) combines the
+// data-direct Γ̂ influence and the κ-movement channel exactly as
+// `robust_ordinal_ij` builds the estimated-weight correction. The result routes
+// through `weighted_moment_profile_rmsea_estimated_weight`, so the residual-
+// driven γ channel reshapes the reference law under fixed misspecification and
+// is dormant at exact fit. Requires `stats.moment_influence` and
+// `stats.int_data` (complete, or `-1`-coded for pairwise-overlap stats).
+post_expected<WeightedProfileRMSEAResult>
+ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Estimates& est,
+                           OrdinalParameterization parameterization =
+                               OrdinalParameterization::Delta,
+                           double eig_tol = 1e-10);
+
+// Nested estimated-weight (categorical DWLS) profile-LRT for two all-ordinal
+// models fit to the SAME data (one `stats`). `*_H1` is the less restricted
+// model, `*_H0` the more restricted. Both share the data-only joint NACOV Γ_x,
+// so the nested profile contrast Q_H0 − Q_H1 is compared over a common
+// first-stage space; the result reports nominal `df_diff` separately from the
+// positive profile `spectrum_size`.
+post_expected<WeightedProfileLRTResult>
+ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const data::OrdinalStats& stats,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         OrdinalParameterization parameterization =
+                             OrdinalParameterization::Delta,
+                         double eig_tol = 1e-10);
 
 post_expected<OrdinalFitMeasures>
 fit_measures_mixed_ordinal(spec::LatentStructure pt,

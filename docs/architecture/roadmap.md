@@ -241,8 +241,13 @@ golden `parTable()` fixtures.
   `V0=[[W,R],[R,S]]`, `W*=blkdiag(W,R)`, joint NACOV `Γ_x`) and restates `df` to
   the classical u-moment count. The residual-driven γ channel is dormant at
   exact fit (`Q` collapses to `W − W D B^{-1} D' W`) and reshapes the reference
-  law under fixed misspecification. The categorical estimator wiring that
-  *produces* `(D, γ, r, Γ_x)` from the ordinal caches is still pending.
+  law under fixed misspecification. The all-ordinal estimator wiring that
+  *produces* `(D, γ, r, Γ_x)` is `estimate::ordinal_dwls_profile_rmsea` /
+  `ordinal_dwls_profile_lrt`: it pulls `(D, γ, r, B)` from the ordinal DWLS fit
+  and builds the joint NACOV `Γ_x` of `(u, γ)` from stacked per-case influence
+  rows `[g_i | IF_i(γ)]`, reusing the same `ordinal_gamma_diag_*` influence
+  channels as `robust_ordinal_ij`; its `chisq_standard`/`df` match
+  `robust_ordinal`. Mixed continuous/ordinal DWLS wiring is still pending.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over
