@@ -421,6 +421,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       uses `trace_signed`; `rmsea_positive_trace` preserves the old positive-only
       comparator. LRT p-value summaries remain positive-tail approximations and
       warn when the contrast is indefinite.
+    - **Done 2026-06-22 (small-pencil diagnostics).** Single-model profile
+      RMSEA results now expose the parameter-space pencil
+      `ν_j = eig(B^{-1} Ã)` when the stacked data metric `V_o` is positive
+      definite, with `max|ν_j−1|` and predicted structural positive/negative/rank
+      counts. Estimated-weight extended metrics can be singular, so they leave
+      the pencil empty and continue through the dense `QΓ` path.
     - **Done 2026-06-22 (categorical DWLS wiring).**
       `estimate::ordinal_dwls_profile_rmsea` / `ordinal_dwls_profile_lrt`
       (`estimate/ordinal.{hpp,cpp}`) extract `(D, γ, r, B)` from an all-ordinal
@@ -462,14 +468,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
     mixed continuous/ordinal DWLS wiring (the `mixed_gamma_*` analogs exist),
     whose first-stage influence adds its own directions to `Γ` on top of the two
-    channels above; small-pencil diagnostics/gating from
-    `ν_j = eig(B^{-1} Ã)` so callers can get sign counts and skip curvature work
-    when `max|ν_j−1|` is negligible (still use dense `QΓ` when actual positive
-    mixture weights are needed); an *a-priori* analytic sign count of
-    `#{ν_j < 1}` from model structure (the note settles the inertia identity but
-    still reads the signs off an eigendecomposition); R/API wrappers for the
-    ordinal profile path (experiment 36 is C++-only because they do not exist
-    yet).
+    channels above; using the small-pencil `max|ν_j−1|` diagnostic as an actual
+    runtime gate to skip dense profile-curvature work when negligible (still use
+    dense `QΓ` when actual positive mixture weights are needed); an *a-priori*
+    analytic sign count of `#{ν_j < 1}` from model structure (the note settles
+    the inertia identity but still reads the signs off an eigendecomposition);
+    R/API wrappers for the ordinal profile path (experiment 36 is C++-only
+    because they do not exist yet).
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a

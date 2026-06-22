@@ -64,12 +64,14 @@ struct WeightedProfileRMSEAResult {
   Eigen::MatrixXd profile_hessian;
   Eigen::MatrixXd gamma;
   Eigen::VectorXd eigvals;
+  Eigen::VectorXd profile_pencil_eigvals;  // ν_j = eig(B^{-1} Ã), when available
   double fmin = 0.0;              // full discrepancy F = 2 * Estimates::fmin
   double chisq_standard = 0.0;    // N * F
   double bias_trace = 0.0;        // Σ positive λ_j
   double bias_trace_sq = 0.0;     // Σ positive λ_j²
   double trace_signed = 0.0;      // Σ signed λ_j = tr(QΓ)
   double negative_trace_abs = 0.0;
+  double profile_pencil_max_abs_gap = 0.0;  // max |ν_j - 1|
   double rmsea = 0.0;             // sqrt(max(F - trace_signed/N, 0) * G / df)
   double rmsea_positive_trace = 0.0;
   double rmsea_df = 0.0;          // classical df-subtraction comparator
@@ -77,6 +79,10 @@ struct WeightedProfileRMSEAResult {
   int spectrum_size = 0;          // number of positive λ_j after toleranceing
   int negative_spectrum_size = 0;
   int spectrum_rank = 0;
+  int profile_pencil_residual_dim = 0;     // m - p for the first-stage space
+  int profile_pencil_positive_count = 0;   // (m - p) + #{ν_j < 1}
+  int profile_pencil_negative_count = 0;   // #{ν_j > 1}
+  int profile_pencil_rank = 0;             // (m - p) + #{ν_j != 1}
   std::int64_t ntotal = 0;
   std::size_t n_groups = 1;
   std::vector<std::string> warnings;
