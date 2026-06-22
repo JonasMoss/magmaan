@@ -442,6 +442,19 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       rank note flags. Single- and multi-group. Gated in `ordinal_test.cpp`
       (single-fit `Γ_x` uu-block == NACOV + df/chisq vs `robust_ordinal` + live
       γ channel; nested LRT df_diff / spectrum / mixture-p).
+    - **Done 2026-06-22 (mixed categorical DWLS wiring).**
+      `estimate::mixed_ordinal_dwls_profile_rmsea` /
+      `mixed_ordinal_dwls_profile_lrt` now run the same estimated-weight profile
+      construction for mixed continuous/ordinal DWLS. The wrapper prepares the
+      mixed delta partable, builds `D` with `mixed_moment_jacobian`, takes
+      `(γ, r)` from `MixedOrdinalStats::NACOV.diagonal()` and
+      `mixed_model_moments() - stats.moments`, uses
+      `mixed_observed_bread_analytic` for `B`, and assembles the extended
+      `Γ_x` from `[g_i | IF_i(γ)]` using the complete or observed
+      `mixed_gamma_diag_*` influence/Jacobian channels. Gated in
+      `ordinal_test.cpp` by the live mixed γ block, uu-block == NACOV,
+      standard χ²/df parity with `robust_mixed_ordinal`, raw-data requirement,
+      and a nested mixed DWLS profile-LRT smoke.
     - **Done 2026-06-22 (finite-sample calibration experiment).**
       `experiments/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
       On the exact C4 binary pseudo-null it shows the standard fixed-weight
@@ -466,9 +479,7 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       analytic-influence law is the corrected reference (as the note anticipated).
     Remaining profile-Hessian fit/test work:
     mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
-    mixed continuous/ordinal DWLS wiring (the `mixed_gamma_*` analogs exist),
-    whose first-stage influence adds its own directions to `Γ` on top of the two
-    channels above; using the small-pencil `max|ν_j−1|` diagnostic as an actual
+    using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
     dense `QΓ` when actual positive mixture weights are needed); an *a-priori*
     analytic sign count of `#{ν_j < 1}` from model structure (the note settles
