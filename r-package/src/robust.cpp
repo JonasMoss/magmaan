@@ -209,6 +209,35 @@ Rcpp::List profile_lrt_to_list(
       Rcpp::_["warnings"] = warnings_to_r(r.warnings));
 }
 
+Rcpp::List misspec_fit_measures_to_list(
+    const magmaan::estimate::OrdinalMisspecFitMeasures& r) {
+  return Rcpp::List::create(
+      Rcpp::_["rmsea"] = r.rmsea,
+      Rcpp::_["rmsea.ci.lower"] = r.rmsea_ci_lower,
+      Rcpp::_["rmsea.ci.upper"] = r.rmsea_ci_upper,
+      Rcpp::_["rmsea.pvalue"] = r.rmsea_pvalue,
+      Rcpp::_["crmr"] = r.crmr,
+      Rcpp::_["crmr.ci.lower"] = r.crmr_ci_lower,
+      Rcpp::_["crmr.ci.upper"] = r.crmr_ci_upper,
+      Rcpp::_["crmr.pvalue"] = r.crmr_pvalue,
+      Rcpp::_["srmr"] = r.srmr,
+      Rcpp::_["srmr.ci.lower"] = r.srmr_ci_lower,
+      Rcpp::_["srmr.ci.upper"] = r.srmr_ci_upper,
+      Rcpp::_["cfi"] = r.cfi,
+      Rcpp::_["cfi.ci.lower"] = r.cfi_ci_lower,
+      Rcpp::_["cfi.ci.upper"] = r.cfi_ci_upper,
+      Rcpp::_["tli"] = r.tli,
+      Rcpp::_["tli.ci.lower"] = r.tli_ci_lower,
+      Rcpp::_["tli.ci.upper"] = r.tli_ci_upper,
+      Rcpp::_["chisq"] = r.stat_user,
+      Rcpp::_["df"] = r.df_user,
+      Rcpp::_["baseline.chisq"] = r.stat_baseline,
+      Rcpp::_["baseline.df"] = r.df_baseline,
+      Rcpp::_["conf.level"] = r.conf_level,
+      Rcpp::_["estimated.weight"] = !r.fixed_weight,
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+}
+
 std::string ordinal_fit_weight(Rcpp::List fit, const char* caller) {
   if (fit.containsElementNamed("ordinal_computational_weight")) {
     return Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
@@ -1075,6 +1104,34 @@ Rcpp::List infer_ordinal_profile_lrt(Rcpp::List fit_H1,
       ordinal_parameterization_from_string(par1), eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return profile_lrt_to_list(*r_or);
+}
+
+// infer_ordinal_fit_measures_misspec() — consolidated estimated-weight
+// misspecification fit table (RMSEA + CRMR/SRMR + CFI/TLI with CIs) for an
+// all-ordinal DWLS fit. Requires `ordinal_stats` with `moment_influence` and
+// `int_data`, which the high-level DWLS path stores. `estimated_weight = FALSE`
+// is the fixed-weight comparator.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
+                                              Rcpp::List ordinal_stats,
+                                              bool estimated_weight = true,
+                                              double conf_level = 0.90,
+                                              double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_ordinal_fit_measures_misspec()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::ordinal_fit_measures_misspec_inference(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name),
+      estimated_weight, conf_level, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return misspec_fit_measures_to_list(*r_or);
 }
 
 // [[Rcpp::export]]

@@ -592,8 +592,23 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       analytic variance **over-states at strong misfit** (≈8× MC, over-covers)
       because `c=Q̄_b/Q̄_u` is ill-conditioned when `Q̄_u` is small — conservative,
       not anti-conservative; CFI is the index to trust for an interval. Deferred:
-      R bindings, a stabilized-`c` TLI variance, close-fit boundary calibration,
-      multi-group.
+      a stabilized-`c` TLI variance, close-fit boundary calibration, multi-group.
+    - **Done 2026-06-22 (consolidated R binding).** The estimated-weight
+      fit-index family is now R-exposed through one surface.
+      `estimate::ordinal_fit_measures_misspec_inference` (`OrdinalMisspecFitMeasures`)
+      bundles RMSEA + CRMR/SRMR + CFI/TLI with their CIs (delegating to the
+      per-index entry points; SRMR is the CRMR statistic rescaled to the vech
+      denominator), gated by `ordinal_test.cpp`. The Rcpp entry
+      `infer_ordinal_fit_measures_misspec` (`r-package/src/robust.cpp`,
+      dotted-key list) and the `@export`ed wrapper `fit_measures_misspec(fit,
+      ordinal_stats, estimated_weight, conf_level)` (`r-package/R/fmg.R`) expose
+      it; `ordinal_stats` is passed explicitly (a fit does not retain `int_data`).
+      Validated by `r-package/examples/fit_measures_misspec.R` (RMSEA == the
+      standalone profile binding, SRMR==CRMR·√(ncorr/vech), ordered/in-range
+      intervals, CFI near weight-invariant). The individual `ordinal_{rmsea,crmr,
+      cfi_tli}_misspec_inference` stay C++-only. Deferred: per-index R bindings
+      (covered by the bundle), the `.scaled`/`.robust` integration into the main
+      `fit_measures()` table.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use

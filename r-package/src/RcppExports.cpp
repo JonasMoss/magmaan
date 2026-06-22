@@ -1778,6 +1778,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_ordinal_fit_measures_misspec
+Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit, Rcpp::List ordinal_stats, bool estimated_weight, double conf_level, double eig_tol);
+RcppExport SEXP _magmaan_infer_ordinal_fit_measures_misspec(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_fit_measures_misspec(fit, ordinal_stats, estimated_weight, conf_level, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_mixed_ordinal_profile_rmsea
 Rcpp::List infer_mixed_ordinal_profile_rmsea(Rcpp::List fit, Rcpp::List mixed_stats, double eig_tol);
 RcppExport SEXP _magmaan_infer_mixed_ordinal_profile_rmsea(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP eig_tolSEXP) {
@@ -2666,6 +2681,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 4},
     {"_magmaan_infer_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_ordinal_profile_rmsea, 3},
     {"_magmaan_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_ordinal_profile_lrt, 4},
+    {"_magmaan_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaan_infer_ordinal_fit_measures_misspec, 5},
     {"_magmaan_infer_mixed_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_mixed_ordinal_profile_rmsea, 3},
     {"_magmaan_infer_mixed_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_mixed_ordinal_profile_lrt, 4},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
