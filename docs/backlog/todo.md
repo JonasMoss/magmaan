@@ -370,13 +370,17 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     or caller blocks. `weighted_moment_profile_lrt` and
     `continuous_ls_profile_lrt` now compare nested dense profile Hessians in a
     common first-stage moment space and report both nominal `df_diff` and actual
-    positive `spectrum_size`. This is the basic research surface only.
-    Remaining profile-Hessian fit/test work: ML/FIML and ML2S-NT two-metric
-    profile Hessians; ordinal/mixed categorical DWLS with expanded
-    `(u, gamma)` first-stage vectors; analytic or structured rank accounting
-    for when the nonzero positive spectrum equals classical df and when
-    observed-bread / estimated-weight channels add directions; R/API wrappers
-    after a concrete experiment needs them.
+    positive `spectrum_size`. `weighted_moment_profile_rmsea_two_metric` and
+    the covariance-only complete-data ML wrappers `ml_profile_rmsea` /
+    `ml_profile_lrt` now implement the basic dense two-metric profile Hessian
+    `Q = V0 - W* D B^{-1} D' W*` with raw-data or caller Γ. This is the basic
+    research surface only. Remaining profile-Hessian fit/test work:
+    mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
+    ordinal/mixed categorical DWLS with expanded `(u, gamma)` first-stage
+    vectors; analytic or structured rank accounting for when the nonzero
+    positive spectrum equals classical df and when observed-bread /
+    estimated-weight channels add directions; R/API wrappers after a concrete
+    experiment needs them.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a

@@ -34,6 +34,14 @@ struct WeightedMomentBlock {
   std::int64_t n_obs = 0;
 };
 
+struct WeightedProfileMomentBlock {
+  Eigen::MatrixXd jacobian;           // model moments wrt full free theta
+  Eigen::MatrixXd data_metric;        // direct curvature in the moment argument
+  Eigen::MatrixXd projection_metric;  // metric in the model tangent projection
+  Eigen::MatrixXd gamma;              // NACOV/meat for this moment block
+  std::int64_t n_obs = 0;
+};
+
 struct WeightedRobustResult {
   Eigen::MatrixXd vcov;
   Eigen::VectorXd se;
@@ -151,6 +159,19 @@ weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
                               const Eigen::MatrixXd& observed_bread,
                               std::size_t n_groups = 1,
                               double eig_tol = 1e-10);
+
+// Two-metric variant used by complete-data ML and future ML2S-NT profile
+// methods. The first Hessian term uses `data_metric`; the tangent projection
+// uses `projection_metric`:
+//   Q = V0 - W* D B^{-1} D' W*.
+post_expected<WeightedProfileRMSEAResult>
+weighted_moment_profile_rmsea_two_metric(
+    const std::vector<WeightedProfileMomentBlock>& blocks,
+    const Eigen::MatrixXd& K,
+    double fmin,
+    const Eigen::MatrixXd& observed_bread,
+    std::size_t n_groups = 1,
+    double eig_tol = 1e-10);
 
 // Nested profile-LRT from two already-computed profile-Hessian fits. `h1` is
 // the less restricted model, `h0` the more restricted model. Both must share
@@ -320,6 +341,48 @@ continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
                           const gmm::Weight& weight,
                           const data::RawData& raw,
                           double eig_tol = 1e-10);
+
+// Basic complete-data normal-theory ML profile-RMSEA/LRT for covariance-only
+// models. This is the dense two-metric research primitive from the
+// fixed-misspecification note; mean-structure ML needs additional cross-metric
+// curvature and is intentionally rejected in this first pass.
+post_expected<WeightedProfileRMSEAResult>
+ml_profile_rmsea(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const data::SampleStats& samp,
+                 const Estimates& est,
+                 const std::vector<Eigen::MatrixXd>& gamma,
+                 double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+ml_profile_rmsea(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const data::SampleStats& samp,
+                 const Estimates& est,
+                 const data::RawData& raw,
+                 double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+ml_profile_lrt(spec::LatentStructure pt_H1,
+               const model::MatrixRep& rep_H1,
+               const data::SampleStats& samp,
+               const Estimates& est_H1,
+               spec::LatentStructure pt_H0,
+               const model::MatrixRep& rep_H0,
+               const Estimates& est_H0,
+               const std::vector<Eigen::MatrixXd>& gamma,
+               double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+ml_profile_lrt(spec::LatentStructure pt_H1,
+               const model::MatrixRep& rep_H1,
+               const data::SampleStats& samp,
+               const Estimates& est_H1,
+               spec::LatentStructure pt_H0,
+               const model::MatrixRep& rep_H0,
+               const Estimates& est_H0,
+               const data::RawData& raw,
+               double eig_tol = 1e-10);
 
 // Complete-data infinitesimal-jackknife covariance for continuous LS with a
 // fixed second-stage weight. Empty `weight` is ULS; non-empty weights are treated

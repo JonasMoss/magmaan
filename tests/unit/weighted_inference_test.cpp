@@ -675,6 +675,34 @@ TEST_CASE("weighted_moment_profile_lrt separates nominal df from spectrum size")
   CHECK(out->warnings.empty());
 }
 
+TEST_CASE("weighted_moment_profile_rmsea_two_metric uses data and projection metrics") {
+  magmaan::estimate::WeightedProfileMomentBlock block;
+  block.jacobian.resize(3, 1);
+  block.jacobian << 1.0, 0.0, 0.0;
+  block.data_metric = Eigen::Vector3d(2.0, 3.0, 5.0).asDiagonal();
+  block.projection_metric = Eigen::MatrixXd::Identity(3, 3);
+  block.gamma = Eigen::Vector3d(7.0, 11.0, 13.0).asDiagonal();
+  block.n_obs = 100;
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(1, 1);
+  Eigen::MatrixXd observed_bread(1, 1);
+  observed_bread << 1.0;
+
+  auto out = magmaan::estimate::weighted_moment_profile_rmsea_two_metric(
+      {block}, K, 0.5, observed_bread);
+  REQUIRE(out.has_value());
+
+  CHECK(out->df == 2);
+  CHECK(out->spectrum_size == 3);
+  REQUIRE(out->eigvals.size() == 3);
+  CHECK(out->eigvals(0) == doctest::Approx(7.0));
+  CHECK(out->eigvals(1) == doctest::Approx(33.0));
+  CHECK(out->eigvals(2) == doctest::Approx(65.0));
+  CHECK(out->bias_trace == doctest::Approx(105.0));
+  CHECK(out->bias_trace_sq == doctest::Approx(7.0 * 7.0 + 33.0 * 33.0 +
+                                              65.0 * 65.0));
+}
+
 TEST_CASE("robust_weighted_moment_ij fixed-weight path matches weighted sandwich") {
   Eigen::MatrixXd G(4, 2);
   G << 1.0, 0.0,
@@ -889,6 +917,74 @@ TEST_CASE("continuous_ls_profile_lrt raw and supplied Gamma agree") {
   auto by_raw = magmaan::estimate::continuous_ls_profile_lrt(
       fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0,
       magmaan::estimate::gmm::Weight{}, fx.raw);
+  REQUIRE(by_gamma.has_value());
+  REQUIRE(by_raw.has_value());
+
+  CHECK(by_raw->df_diff == 1);
+  CHECK(by_raw->spectrum_size == by_gamma->spectrum_size);
+  CHECK(by_raw->profile_hessian.isApprox(by_gamma->profile_hessian, 1e-12));
+  CHECK(by_raw->gamma.isApprox(by_gamma->gamma, 1e-12));
+  CHECK(by_raw->eigvals.isApprox(by_gamma->eigvals, 1e-10));
+  CHECK(by_raw->bias_trace == doctest::Approx(by_gamma->bias_trace));
+  CHECK(by_raw->T_diff == doctest::Approx(by_gamma->T_diff));
+  CHECK(by_raw->p_mixture == doctest::Approx(by_gamma->p_mixture));
+  CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
+}
+
+TEST_CASE("ml_profile_rmsea covariance-only raw and supplied Gamma agree") {
+  auto fx = one_factor_fixture();
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est = magmaan::test::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, opt);
+  REQUIRE(est.has_value());
+
+  auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
+  REQUIRE(G.has_value());
+  auto by_gamma = magmaan::estimate::ml_profile_rmsea(
+      fx.pt, fx.rep, fx.samp, *est, {*G});
+  auto by_raw = magmaan::estimate::ml_profile_rmsea(
+      fx.pt, fx.rep, fx.samp, *est, fx.raw);
+  REQUIRE(by_gamma.has_value());
+  REQUIRE(by_raw.has_value());
+
+  CHECK(by_raw->df == 2);
+  CHECK(by_raw->spectrum_size == by_gamma->spectrum_size);
+  CHECK(by_raw->profile_hessian.isApprox(by_gamma->profile_hessian, 1e-12));
+  CHECK(by_raw->gamma.isApprox(by_gamma->gamma, 1e-12));
+  CHECK(by_raw->eigvals.isApprox(by_gamma->eigvals, 1e-10));
+  CHECK(by_raw->bias_trace == doctest::Approx(by_gamma->bias_trace));
+  CHECK(by_raw->rmsea == doctest::Approx(by_gamma->rmsea));
+  CHECK(by_raw->chisq_standard ==
+        doctest::Approx(2.0 * total_n(fx.samp) * est->fmin));
+  CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
+}
+
+TEST_CASE("ml_profile_lrt covariance-only raw and supplied Gamma agree") {
+  auto fx = one_factor_fixture();
+  auto fp0 = magmaan::parse::Parser::parse(
+      "f =~ x1 + a*x2 + a*x3 + x4");
+  REQUIRE(fp0.has_value());
+  auto pt0 = magmaan::spec::build(*fp0);
+  REQUIRE(pt0.has_value());
+  auto rep0 = magmaan::model::build_matrix_rep(*pt0);
+  REQUIRE(rep0.has_value());
+
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est1 = magmaan::test::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, opt);
+  auto est0 = magmaan::test::fit_bounded(
+      *pt0, *rep0, fx.samp, magmaan::estimate::Bounds{}, opt);
+  REQUIRE(est1.has_value());
+  REQUIRE(est0.has_value());
+
+  auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
+  REQUIRE(G.has_value());
+  auto by_gamma = magmaan::estimate::ml_profile_lrt(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0, {*G});
+  auto by_raw = magmaan::estimate::ml_profile_lrt(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0, fx.raw);
   REQUIRE(by_gamma.has_value());
   REQUIRE(by_raw.has_value());
 
