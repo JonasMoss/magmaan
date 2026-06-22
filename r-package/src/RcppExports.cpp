@@ -1046,8 +1046,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // inference_modification_indices_robust
-Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances);
-RcppExport SEXP _magmaan_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP) {
+Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances, bool estimated_weight);
+RcppExport SEXP _magmaan_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP estimated_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1061,13 +1061,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type candidates(candidatesSEXP);
     Rcpp::traits::input_parameter< bool >::type include_loadings(include_loadingsSEXP);
     Rcpp::traits::input_parameter< bool >::type include_covariances(include_covariancesSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_modification_indices_robust(fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances));
+    Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_modification_indices_robust(fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight));
     return rcpp_result_gen;
 END_RCPP
 }
 // inference_score_tests_robust
-Rcpp::DataFrame inference_score_tests_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov);
-RcppExport SEXP _magmaan_inference_score_tests_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+Rcpp::DataFrame inference_score_tests_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, bool estimated_weight);
+RcppExport SEXP _magmaan_inference_score_tests_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP estimated_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1077,7 +1078,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_score_tests_robust(fit, raw, weight, bread, moments, cov));
+    Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_tests_robust(fit, raw, weight, bread, moments, cov, estimated_weight));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2627,8 +2629,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
-    {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 10},
-    {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 6},
+    {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 11},
+    {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},

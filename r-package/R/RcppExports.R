@@ -309,12 +309,12 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaan_inference_score_tests`, fit, weight, h_step)
 }
 
-inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE) {
-    .Call(`_magmaan_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances)
+inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = FALSE) {
+    .Call(`_magmaan_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
 }
 
-inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical") {
-    .Call(`_magmaan_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov)
+inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", estimated_weight = FALSE) {
+    .Call(`_magmaan_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
 }
 
 infer_z_test <- function(fit, se) {

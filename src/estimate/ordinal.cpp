@@ -3394,6 +3394,204 @@ OrdinalRobustResult ordinal_result_from_weighted(const WeightedRobustResult& r) 
   return out;
 }
 
+// Per-block missing-pattern flags for the estimated-weight ordinal IJ, plus the
+// int_data validation `robust_ordinal_ij` requires (0-based category codes;
+// missing entries only with pairwise-overlap Gamma). ULS carries no estimated
+// weight, so it returns all-false without touching int_data.
+post_expected<std::vector<bool>>
+ordinal_ij_block_missing(const data::OrdinalStats& stats,
+                         OrdinalWeightKind weights) {
+  std::vector<bool> block_has_missing(stats.R.size(), false);
+  if (weights == OrdinalWeightKind::ULS) return block_has_missing;
+  if (stats.int_data.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: integer data unavailable; recompute ordinal "
+        "stats with int_data to include the estimated-weight influence"));
+  }
+  const bool allow_pairwise_missing = stats.pairwise_gamma == "overlap";
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::MatrixXi& Xcat = stats.int_data[b];
+    if (stats.n_levels[b].size() != static_cast<std::size_t>(p)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij: n_levels length mismatch in block " +
+              std::to_string(b)));
+    }
+    if (Xcat.rows() != stats.n_obs[b] || Xcat.cols() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij: int_data shape mismatch in block " +
+              std::to_string(b)));
+    }
+    for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
+      for (Eigen::Index j = 0; j < Xcat.cols(); ++j) {
+        const int c = Xcat(r, j);
+        if (c < 0) {
+          if (!allow_pairwise_missing) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "robust_ordinal_ij: missing ordinal int_data requires "
+                "pairwise overlap Gamma in block " + std::to_string(b)));
+          }
+          block_has_missing[b] = true;
+          continue;
+        }
+        const int max_level = stats.n_levels[b][static_cast<std::size_t>(j)];
+        if (c >= max_level) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "robust_ordinal_ij: int_data must contain 0-based category "
+              "codes in block " + std::to_string(b)));
+        }
+      }
+    }
+  }
+  return block_has_missing;
+}
+
+// Per-case IJ blocks (Δ_b, W_b, moment_influence, IF(Ŵ) correction) for an
+// all-ordinal DWLS/WLS fit, evaluated at `theta`/`moments` (the fitted point for
+// the SE path, the freed-candidate null for the score-test sandwich). Shared by
+// `robust_ordinal_ij` and `ordinal_param_space_sandwich_ij` so the SE and MI
+// paths build identical meat. The DWLS/WLS weight-influence channels are
+// recomputed per call (theta-independent but inexpensive enough for the v1
+// frontier sweep).
+post_expected<std::vector<WeightedMomentIJBlock>>
+build_ordinal_ij_blocks(const data::OrdinalStats& stats,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const Eigen::VectorXd& theta,
+                        const std::vector<Eigen::MatrixXd>& Ws,
+                        const Eigen::MatrixXd& Delta_full,
+                        OrdinalWeightKind weights,
+                        OrdinalParameterization parameterization,
+                        const std::vector<bool>& block_has_missing) {
+  if (stats.moment_influence.size() != stats.R.size() ||
+      stats.NACOV.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal_ij: per-case influence functions unavailable; recompute "
+        "ordinal stats (moment_influence is required for the IJ)"));
+  }
+  std::vector<WeightedMomentIJBlock> ij_blocks;
+  ij_blocks.reserve(stats.R.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
+    const Eigen::MatrixXd& G = stats.moment_influence[b];   // n_b × mb
+    if (G.cols() != mb || G.rows() != stats.n_obs[b]) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal_ij: moment_influence shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::VectorXd d_b = ordinal_block_residual(
+        stats, layout, moments, theta, parameterization, b);
+    Eigen::MatrixXd correction;
+    if (weights == OrdinalWeightKind::DWLS) {
+      // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
+      // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
+      // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
+      // data; pairwise-overlap MCAR blocks use the observed-support helpers.
+      Eigen::MatrixXd IFG;  // n_b × mb: data-direct IF of Γ̂_kk (V̂ + Â variation)
+      Eigen::MatrixXd GD;   // n_b × mb: κ-movement IF of Γ̂_kk (FD of Γ̂ over κ)
+      auto inf_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_diag_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_diag_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
+      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+      IFG = std::move(*inf_or);
+      auto D_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_diag_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_diag_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
+      if (!D_or.has_value()) return std::unexpected(D_or.error());
+      GD.noalias() = G * D_or->transpose();
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index k = 0; k < mb; ++k) {
+        const double gkk = stats.NACOV[b](k, k);
+        if (!(gkk > 0.0)) continue;
+        const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
+        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
+      }
+    } else if (weights == OrdinalWeightKind::WLS) {
+      // Full-WLS analogue: IF(Ŵ_i) = -W IF_i(Γ̂) W, so the row correction added
+      // to g_i W is d' W IF_i(Γ̂) W. `IF_i(Γ̂)` combines the data-direct
+      // sandwich channel with the κ-movement channel DΓ/Dκ · IF_i(κ).
+      auto inf_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_data_influence(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
+      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+      auto D_or = block_has_missing[b]
+          ? data::ordinal_observed_gamma_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b])
+          : data::ordinal_gamma_jacobian_fd(
+                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+                stats.R[b]);
+      if (!D_or.has_value()) return std::unexpected(D_or.error());
+      if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
+          D_or->rows() != mb * mb || D_or->cols() != mb) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal_ij: full Gamma influence shape mismatch in block " +
+                std::to_string(b)));
+      }
+      const Eigen::RowVectorXd lhs = d_b.transpose() * Ws[b];
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index i = 0; i < G.rows(); ++i) {
+        Eigen::VectorXd if_vec = inf_or->row(i).transpose();
+        if_vec.noalias() += (*D_or) * G.row(i).transpose();
+        Eigen::Map<const Eigen::MatrixXd> IFGamma(if_vec.data(), mb, mb);
+        correction.row(i) = lhs * IFGamma * Ws[b];
+      }
+    }
+    ij_blocks.push_back(WeightedMomentIJBlock{
+        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
+        .weight = Ws[b],
+        .moment_influence = G,
+        .weight_correction = std::move(correction),
+        .n_obs = stats.n_obs[b]});
+    off += mb;
+  }
+  return ij_blocks;
+}
+
+// Estimated-weight ("complete-sandwich") parameter-space sandwich {A1, B1} for
+// an all-ordinal DWLS/WLS fit: the IJ counterpart of
+// `ordinal_param_space_sandwich`, carrying the IF(Ŵ) meat term. Used by the
+// estimated-weight robust modification-index / score-test path.
+post_expected<robust::ParamSpaceSandwich>
+ordinal_param_space_sandwich_ij(const data::OrdinalStats& stats,
+                                const ThresholdLayout& layout,
+                                const model::ImpliedMoments& moments,
+                                const Eigen::VectorXd& theta,
+                                const std::vector<Eigen::MatrixXd>& Ws,
+                                const Eigen::MatrixXd& Delta_full,
+                                OrdinalWeightKind weights,
+                                OrdinalParameterization parameterization,
+                                const std::vector<bool>& block_has_missing) {
+  auto blocks = build_ordinal_ij_blocks(stats, layout, moments, theta, Ws,
+                                        Delta_full, weights, parameterization,
+                                        block_has_missing);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  if (Delta_full.rows() != [&] {
+        Eigen::Index s = 0;
+        for (const auto& blk : *blocks) s += blk.jacobian.rows();
+        return s;
+      }()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal estimated-weight score tests: moment Jacobian row count does "
+        "not match the block layout"));
+  }
+  return weighted_param_space_sandwich_ij(*blocks);
+}
+
 }  // namespace
 
 fit_expected<void>
@@ -3932,51 +4130,9 @@ robust_ordinal_ij(spec::LatentStructure pt,
         "robust_ordinal_ij: per-case influence functions unavailable; recompute "
         "ordinal stats (moment_influence is required for the IJ)"));
   }
-  std::vector<bool> block_has_missing(stats.R.size(), false);
-  if (weights != OrdinalWeightKind::ULS) {
-    if (stats.int_data.size() != stats.R.size()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_ordinal_ij: integer data unavailable; recompute ordinal "
-          "stats with int_data to include the estimated-weight "
-          "influence"));
-    }
-    const bool allow_pairwise_missing = stats.pairwise_gamma == "overlap";
-    for (std::size_t b = 0; b < stats.R.size(); ++b) {
-      const Eigen::Index p = stats.R[b].rows();
-      const Eigen::MatrixXi& Xcat = stats.int_data[b];
-      if (stats.n_levels[b].size() != static_cast<std::size_t>(p)) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_ordinal_ij: n_levels length mismatch in block " +
-                std::to_string(b)));
-      }
-      if (Xcat.rows() != stats.n_obs[b] || Xcat.cols() != p) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_ordinal_ij: int_data shape mismatch in block " +
-                std::to_string(b)));
-      }
-      for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
-        for (Eigen::Index j = 0; j < Xcat.cols(); ++j) {
-          const int c = Xcat(r, j);
-          if (c < 0) {
-            if (!allow_pairwise_missing) {
-              return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-                  "robust_ordinal_ij: missing ordinal int_data requires "
-                  "pairwise overlap Gamma in block " + std::to_string(b)));
-            }
-            block_has_missing[b] = true;
-            continue;
-          }
-          const int max_level =
-              stats.n_levels[b][static_cast<std::size_t>(j)];
-          if (c >= max_level) {
-            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-                "robust_ordinal_ij: int_data must contain 0-based category "
-                "codes in block " + std::to_string(b)));
-          }
-        }
-      }
-    }
-  }
+  auto missing_or = ordinal_ij_block_missing(stats, weights);
+  if (!missing_or.has_value()) return std::unexpected(missing_or.error());
+  const std::vector<bool> block_has_missing = std::move(*missing_or);
   if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -4027,98 +4183,12 @@ robust_ordinal_ij(spec::LatentStructure pt,
   if (!ob.has_value()) return std::unexpected(ob.error());
   Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
 
-  std::vector<WeightedMomentIJBlock> ij_blocks;
-  ij_blocks.reserve(stats.R.size());
-  Eigen::Index off = 0;
-  for (std::size_t b = 0; b < stats.R.size(); ++b) {
-    const Eigen::Index p = stats.R[b].rows();
-    const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
-    const Eigen::MatrixXd& G = stats.moment_influence[b];   // n_b × mb
-    if (G.cols() != mb || G.rows() != stats.n_obs[b]) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_ordinal_ij: moment_influence shape mismatch in block " +
-              std::to_string(b)));
-    }
-    const Eigen::VectorXd d_b = ordinal_block_residual(
-        stats, *layout_or, eval->moments, est.theta, parameterization, b);
-    Eigen::MatrixXd correction;
-    if (weights == OrdinalWeightKind::DWLS) {
-      // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
-      // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
-      // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
-      // data; pairwise-overlap MCAR blocks use the observed-support helpers.
-      Eigen::MatrixXd IFG;  // n_b × mb: data-direct IF of Γ̂_kk (V̂ + Â variation)
-      Eigen::MatrixXd GD;   // n_b × mb: κ-movement IF of Γ̂_kk (FD of Γ̂ over κ)
-      auto inf_or = block_has_missing[b]
-          ? data::ordinal_observed_gamma_diag_data_influence(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b])
-          : data::ordinal_gamma_diag_data_influence(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b]);
-      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-      IFG = std::move(*inf_or);
-      auto D_or = block_has_missing[b]
-          ? data::ordinal_observed_gamma_diag_jacobian_fd(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b])
-          : data::ordinal_gamma_diag_jacobian_fd(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b]);
-      if (!D_or.has_value()) return std::unexpected(D_or.error());
-      GD.noalias() = G * D_or->transpose();
-      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
-      for (Eigen::Index k = 0; k < mb; ++k) {
-        const double gkk = stats.NACOV[b](k, k);
-        if (!(gkk > 0.0)) continue;
-        const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
-        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
-      }
-    } else if (weights == OrdinalWeightKind::WLS) {
-      // Full-WLS analogue: IF(Ŵ_i) = -W IF_i(Γ̂) W, so the row correction added
-      // to g_i W is d' W IF_i(Γ̂) W. `IF_i(Γ̂)` combines the data-direct
-      // sandwich channel with the κ-movement channel DΓ/Dκ · IF_i(κ).
-      auto inf_or = block_has_missing[b]
-          ? data::ordinal_observed_gamma_data_influence(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b])
-          : data::ordinal_gamma_data_influence(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b]);
-      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-      auto D_or = block_has_missing[b]
-          ? data::ordinal_observed_gamma_jacobian_fd(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b])
-          : data::ordinal_gamma_jacobian_fd(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b]);
-      if (!D_or.has_value()) return std::unexpected(D_or.error());
-      if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
-          D_or->rows() != mb * mb || D_or->cols() != mb) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "robust_ordinal_ij: full Gamma influence shape mismatch in block " +
-                std::to_string(b)));
-      }
-      const Eigen::RowVectorXd lhs = d_b.transpose() * Ws[b];
-      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
-      for (Eigen::Index i = 0; i < G.rows(); ++i) {
-        Eigen::VectorXd if_vec = inf_or->row(i).transpose();
-        if_vec.noalias() += (*D_or) * G.row(i).transpose();
-        Eigen::Map<const Eigen::MatrixXd> IFGamma(if_vec.data(), mb, mb);
-        correction.row(i) = lhs * IFGamma * Ws[b];
-      }
-    }
-    ij_blocks.push_back(WeightedMomentIJBlock{
-        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
-        .weight = Ws[b],
-        .moment_influence = G,
-        .weight_correction = std::move(correction),
-        .n_obs = stats.n_obs[b]});
-    off += mb;
-  }
+  auto ij_blocks = build_ordinal_ij_blocks(
+      stats, *layout_or, eval->moments, est.theta, Ws, Delta_full, weights,
+      parameterization, block_has_missing);
+  if (!ij_blocks.has_value()) return std::unexpected(ij_blocks.error());
 
-  auto out = robust_weighted_moment_ij(ij_blocks, K, 2.0 * est.fmin, A);
+  auto out = robust_weighted_moment_ij(*ij_blocks, K, 2.0 * est.fmin, A);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }
@@ -5030,6 +5100,8 @@ ordinal_modification_indices_robust_impl(
     const Estimates& est,
     OrdinalWeightKind weights,
     const inference::ModificationIndexOptions& options,
+    OrdinalParameterization parameterization,
+    bool estimated_weight,
     ResidualFn residual_fn,
     JacobianFn jacobian_fn,
     MomentJacobianFn moment_jacobian_fn,
@@ -5059,6 +5131,21 @@ ordinal_modification_indices_robust_impl(
   const double n_total = static_cast<double>(*N_or);
   auto Ws = ordinal_sandwich_weights(stats, weights);
   if (!Ws.has_value()) return std::unexpected(Ws.error());
+
+  // Estimated-weight (complete-sandwich) meat: precompute the per-block missing
+  // pattern once (all-ordinal only); mixed-ordinal is not yet wired.
+  std::vector<bool> block_has_missing;
+  if constexpr (std::is_same_v<Stats, data::OrdinalStats>) {
+    if (estimated_weight) {
+      auto missing_or = ordinal_ij_block_missing(stats, weights);
+      if (!missing_or.has_value()) return std::unexpected(missing_or.error());
+      block_has_missing = std::move(*missing_or);
+    }
+  } else if (estimated_weight) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed-ordinal estimated-weight modification indices are not yet "
+        "implemented; use estimated_weight = false"));
+  }
 
   inference::ScoreTestTable table;
   for (std::size_t row = 0; row < work->pt.size(); ++row) {
@@ -5098,7 +5185,15 @@ ordinal_modification_indices_robust_impl(
 
     const Eigen::MatrixXd Delta_full = moment_jacobian_fn(
         stats, *layout, eval->moments, eval->J_sigma, eval->J_mu, theta);
-    auto sw = ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+    auto sw = [&]() -> post_expected<robust::ParamSpaceSandwich> {
+      if constexpr (std::is_same_v<Stats, data::OrdinalStats>) {
+        if (estimated_weight)
+          return ordinal_param_space_sandwich_ij(
+              stats, *layout, eval->moments, theta, *Ws, Delta_full, weights,
+              parameterization, block_has_missing);
+      }
+      return ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+    }();
     if (!sw.has_value()) return std::unexpected(sw.error());
 
     const bool generated_absent = row >= work->original_rows;
@@ -5139,6 +5234,8 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
                                 const Stats& stats,
                                 const Estimates& est,
                                 OrdinalWeightKind weights,
+                                OrdinalParameterization parameterization,
+                                bool estimated_weight,
                                 ResidualFn residual_fn,
                                 JacobianFn jacobian_fn,
                                 MomentJacobianFn moment_jacobian_fn,
@@ -5194,7 +5291,23 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
 
   const Eigen::MatrixXd Delta_full = moment_jacobian_fn(
       stats, *layout, eval->moments, eval->J_sigma, eval->J_mu, est.theta);
-  auto sw = ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+  auto sw = [&]() -> post_expected<robust::ParamSpaceSandwich> {
+    if constexpr (std::is_same_v<Stats, data::OrdinalStats>) {
+      if (estimated_weight) {
+        auto missing_or = ordinal_ij_block_missing(stats, weights);
+        if (!missing_or.has_value())
+          return std::unexpected(missing_or.error());
+        return ordinal_param_space_sandwich_ij(
+            stats, *layout, eval->moments, est.theta, *Ws, Delta_full, weights,
+            parameterization, *missing_or);
+      }
+    } else if (estimated_weight) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed-ordinal estimated-weight score tests are not yet implemented; "
+          "use estimated_weight = false"));
+    }
+    return ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+  }();
   if (!sw.has_value()) return std::unexpected(sw.error());
 
   for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {
@@ -7349,11 +7462,12 @@ modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     OrdinalWeightKind weights,
                                     const inference::ModificationIndexOptions&
                                         options,
-                                    OrdinalParameterization parameterization) {
+                                    OrdinalParameterization parameterization,
+                                    bool estimated_weight) {
   auto h = ordinal_robust_handles(parameterization);
   return ordinal_modification_indices_robust_impl(
-      std::move(pt), rep, stats, est, weights, options, h.residual, h.jacobian,
-      h.moment_jacobian, h.prepare);
+      std::move(pt), rep, stats, est, weights, options, parameterization,
+      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -7362,11 +7476,12 @@ score_tests_ordinal_robust(spec::LatentStructure pt,
                            const data::OrdinalStats& stats,
                            const Estimates& est,
                            OrdinalWeightKind weights,
-                           OrdinalParameterization parameterization) {
+                           OrdinalParameterization parameterization,
+                           bool estimated_weight) {
   auto h = ordinal_robust_handles(parameterization);
-  return ordinal_score_tests_robust_impl(std::move(pt), rep, stats, est,
-                                         weights, h.residual, h.jacobian,
-                                         h.moment_jacobian, h.prepare);
+  return ordinal_score_tests_robust_impl(
+      std::move(pt), rep, stats, est, weights, parameterization,
+      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -7377,11 +7492,12 @@ modification_indices_mixed_ordinal_robust(
     const Estimates& est,
     OrdinalWeightKind weights,
     const inference::ModificationIndexOptions& options,
-    OrdinalParameterization parameterization) {
+    OrdinalParameterization parameterization,
+    bool estimated_weight) {
   auto h = mixed_ordinal_robust_handles(parameterization);
   return ordinal_modification_indices_robust_impl(
-      std::move(pt), rep, stats, est, weights, options, h.residual, h.jacobian,
-      h.moment_jacobian, h.prepare);
+      std::move(pt), rep, stats, est, weights, options, parameterization,
+      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -7390,11 +7506,12 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
                                  const data::MixedOrdinalStats& stats,
                                  const Estimates& est,
                                  OrdinalWeightKind weights,
-                                 OrdinalParameterization parameterization) {
+                                 OrdinalParameterization parameterization,
+                                 bool estimated_weight) {
   auto h = mixed_ordinal_robust_handles(parameterization);
-  return ordinal_score_tests_robust_impl(std::move(pt), rep, stats, est,
-                                         weights, h.residual, h.jacobian,
-                                         h.moment_jacobian, h.prepare);
+  return ordinal_score_tests_robust_impl(
+      std::move(pt), rep, stats, est, weights, parameterization,
+      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
 }
 
 }  // namespace frontier

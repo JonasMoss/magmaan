@@ -121,6 +121,11 @@ score_tests <- function(fit, data = NULL, ...) {
 # build the meat from `cov`: 'empirical'/'browne_unbiased' need the fitting
 # `data` (raw observations); 'model_implied' uses Gamma_NT(S) and reduces to the
 # ordinary statistic. WLS supplies its weight via `weight=` and always reduces.
+# `estimated_weight = TRUE` routes the per-direction scaling through the complete
+# (Hall-Inoue) sandwich, which carries the data-dependent-weight IF(W-hat) meat
+# term beyond lavaan's global SB scalar. It applies to estimated second-stage
+# weights (continuous GLS/WLS, ordinal/categorical DWLS/WLS), needs the fitting
+# `data` for the continuous tier, and is not available for ML or mixed-ordinal.
 modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         bread = "expected",
                                         moments = "structured",
@@ -128,22 +133,25 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         candidates = "all",
                                         include_loadings = TRUE,
                                         include_covariances = TRUE,
-                                        information = "expected") {
+                                        information = "expected",
+                                        estimated_weight = FALSE) {
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_modification_indices_robust(
     fit, raw = raw, weight = weight, bread = bread, moments = moments,
     cov = cov, information = information, candidates = candidates,
-    include_loadings = include_loadings, include_covariances = include_covariances)
+    include_loadings = include_loadings, include_covariances = include_covariances,
+    estimated_weight = estimated_weight)
 }
 
 score_tests_robust <- function(fit, data = NULL, weight = NULL,
                                bread = "expected", moments = "structured",
-                               cov = "empirical") {
+                               cov = "empirical", estimated_weight = FALSE) {
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_score_tests_robust(
-    fit, raw = raw, weight = weight, bread = bread, moments = moments, cov = cov)
+    fit, raw = raw, weight = weight, bread = bread, moments = moments, cov = cov,
+    estimated_weight = estimated_weight)
 }
 
 raw_data_arg <- function(fit, data) {

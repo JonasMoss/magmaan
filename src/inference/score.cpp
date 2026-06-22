@@ -887,6 +887,10 @@ struct RobustLsEvaluator {
   robust::InferenceSpec spec;
   const RawData* raw = nullptr;
   const std::vector<Eigen::MatrixXd>* gamma_blocks = nullptr;
+  bool estimated_weight = false;
+  estimate::ContinuousLsIJWeightMode ij_mode =
+      estimate::ContinuousLsIJWeightMode::Fixed;
+  estimate::frontier::DlsWeightOptions dls_opts{};
 
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
@@ -901,6 +905,15 @@ struct RobustLsEvaluator {
 
   post_expected<robust::ParamSpaceSandwich>
   sandwich_for(const spec::LatentStructure& pt, const Estimates& est) const {
+    if (estimated_weight) {
+      // The data-dependent-weight (Δ'W'd) meat needs the raw data.
+      if (raw == nullptr) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "robust score tests: estimated-weight meat requires raw data"));
+      }
+      return estimate::continuous_ls_param_space_sandwich_ij(
+          pt, rep, samp, est, weight, *raw, ij_mode, dls_opts);
+    }
     if (spec.cov == robust::ScoreCovariance::ModelImplied) {
       return estimate::continuous_ls_param_space_sandwich(pt, rep, samp, est,
                                                           weight, spec.moments);
@@ -1549,6 +1562,16 @@ ScoreInformation info_for_bread(robust::Information bread) {
                                                 : ScoreInformation::Expected;
 }
 
+post_expected<void> reject_estimated_weight_ml(const RobustScoreOptions& options) {
+  if (options.estimated_weight) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: the estimated-weight meat is a continuous-LS / "
+        "ordinal feature; the ML/FIML tier has no estimated second-stage "
+        "weight"));
+  }
+  return {};
+}
+
 post_expected<ScoreTestTable>
 modification_indices_robust_impl(spec::LatentStructure pt,
                                  const model::MatrixRep& rep,
@@ -1557,6 +1580,9 @@ modification_indices_robust_impl(spec::LatentStructure pt,
                                  const RobustScoreOptions& options,
                                  const RawData* raw,
                                  const Eigen::MatrixXd* gamma_hat) {
+  if (auto e = reject_estimated_weight_ml(options); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   auto work = prepare_modification_index_model(std::move(pt), rep, options.base);
@@ -1623,6 +1649,9 @@ score_tests_robust_impl(spec::LatentStructure pt,
                         const RobustScoreOptions& options,
                         const RawData* raw,
                         const Eigen::MatrixXd* gamma_hat) {
+  if (auto e = reject_estimated_weight_ml(options); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
@@ -1770,7 +1799,8 @@ modification_indices_robust_ls_impl(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(e.error()));
   }
   RobustLsEvaluator ev{work->rep, samp, weight, *n, options.spec,
-                       raw, gamma_blocks};
+                       raw, gamma_blocks, options.estimated_weight,
+                       options.ij_weight_mode, options.dls_opts};
   auto table = fixed_parameter_tests_robust(work->pt, work->rep, est, ev);
   if (!table.has_value()) return std::unexpected(table.error());
   if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
@@ -1797,7 +1827,9 @@ score_tests_robust_ls_impl(spec::LatentStructure pt,
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  RobustLsEvaluator ev{rep, samp, weight, *n, options.spec, raw, gamma_blocks};
+  RobustLsEvaluator ev{rep, samp, weight, *n, options.spec, raw, gamma_blocks,
+                       options.estimated_weight, options.ij_weight_mode,
+                       options.dls_opts};
   return equality_release_tests_robust(std::move(pt), rep, est, ev);
 }
 

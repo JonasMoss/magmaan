@@ -353,6 +353,18 @@ golden `parTable()` fixtures.
   Complete-data ML (raw or caller Γ̂); single- or multi-group. Oracle: df=2 joint
   fixture 0011 (mi = lavaan total, c̄ ≈ 2.03, p_mixture vs `CompQuadForm::imhof`)
   plus a df=1-reduces-to-per-row unit check.
+- Estimated-weight ("complete-sandwich") robust MI / score tests (2026-06-22):
+  an `estimated_weight` flag routes the per-direction scaling `c = gᵀB1g/gᵀA1g`
+  through the complete Hall-Inoue infinitesimal-jackknife meat (the
+  data-dependent-weight `IF(Ŵ)` term), not the fixed-weight `Δ'WΓ̂WΔ` — the
+  per-parameter robust denominator lavaan never builds (it scales MI only by the
+  global SB scalar). Core: `estimate::weighted_param_space_sandwich_ij` plus the
+  IJ adapters `continuous_ls_param_space_sandwich_ij` (GLS/WLS/DWLS/DLS) and
+  `ordinal_param_space_sandwich_ij` (all-ordinal DWLS/WLS), the latter built from
+  `build_ordinal_ij_blocks` shared with the `robust_ordinal_ij` SE path. ML/FIML
+  and mixed-ordinal reject the flag. Leading-order only under misspecification
+  (ULS, fixed weight, unaffected). R: `{modification_indices,score_tests}_robust(…,
+  estimated_weight=)`.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

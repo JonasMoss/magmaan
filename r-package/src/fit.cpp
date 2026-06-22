@@ -1488,6 +1488,13 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
       Wdl(x["W_dwls"]), Wfl(x["W_wls"]),
       nlevl(x["n_levels"]);
   Rcpp::IntegerVector nobs(x["nobs"]);
+  // The estimated-weight (Hall-Inoue) score-test path needs the per-case
+  // influence + integer data; read them through when present (the high-level
+  // DWLS path stores them).
+  const bool has_mi = x.containsElementNamed("moment_influence");
+  Rcpp::List mil = has_mi ? Rcpp::List(x["moment_influence"]) : Rcpp::List();
+  const bool has_id = x.containsElementNamed("int_data");
+  Rcpp::List idl = has_id ? Rcpp::List(x["int_data"]) : Rcpp::List();
   const R_xlen_t nb = Rl.size();
   magmaan::data::OrdinalStats out;
   out.R.reserve(static_cast<std::size_t>(nb));
@@ -1514,6 +1521,12 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
     out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
     out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
     out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
+    if (has_mi)
+      out.moment_influence.push_back(
+          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mil[b])));
+    if (has_id)
+      out.int_data.push_back(
+          Rcpp::as<Eigen::MatrixXi>(Rcpp::IntegerMatrix(idl[b])));
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
     out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
   }
@@ -3935,6 +3948,17 @@ magmaan::estimate::gmm::Weight continuous_ls_weight(
              estimator.c_str());
 }
 
+// Which second-stage weight's data influence the estimated-weight continuous-LS
+// IJ meat should carry, from the fit's estimator label (ULS has a fixed weight).
+magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
+    const std::string& estimator) {
+  if (estimator == "GLS")
+    return magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory;
+  if (estimator == "WLS")
+    return magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalWls;
+  return magmaan::estimate::ContinuousLsIJWeightMode::Fixed;  // ULS
+}
+
 }  // namespace
 
 // [[Rcpp::export]]
@@ -3943,7 +3967,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
     std::string bread = "expected", std::string moments = "structured",
     std::string cov = "empirical", std::string information = "expected",
     std::string candidates = "fixed", bool include_loadings = true,
-    bool include_covariances = true) {
+    bool include_covariances = true, bool estimated_weight = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -3971,7 +3995,8 @@ Rcpp::DataFrame inference_modification_indices_robust(
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
-                : ordinal_parameterization_attr(fit["partable"])));
+                : ordinal_parameterization_attr(fit["partable"])),
+        estimated_weight);
   } else if (is_mixed_ordinal_fit) {
     auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "mixed_ordinal_stats",
@@ -3985,38 +4010,62 @@ Rcpp::DataFrame inference_modification_indices_robust(
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
-                : ordinal_parameterization_attr(fit["partable"])));
+                : ordinal_parameterization_attr(fit["partable"])),
+        estimated_weight);
   } else {
     const bool is_ml = (estimator == "ML" || estimator.empty());
-    const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
     magmaan::inference::frontier::RobustScoreOptions opts;
     opts.base = base;
-    opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
-    if (model_implied) {
+    if (estimated_weight) {
+      // The complete (estimated-weight) sandwich needs the fitting data and an
+      // estimated second-stage weight; ML has none.
       if (is_ml) {
-        out = magmaan::inference::frontier::modification_indices_robust(
-            ctx.pt, ctx.rep, ctx.samp, est, opts);
-      } else {
-        auto w = continuous_ls_weight(ctx, est, estimator, weight,
-                                      "modification indices");
-        out = magmaan::inference::frontier::modification_indices_robust(
-            ctx.pt, ctx.rep, ctx.samp, est, w, opts);
+        Rcpp::stop("magmaan: estimated_weight robust modification indices need "
+                   "an estimated second-stage weight (GLS/WLS, or an ordinal "
+                   "fit), not ML");
       }
-    } else {
       if (Rf_isNull(raw)) {
-        Rcpp::stop("magmaan: robust modification indices with cov='%s' require "
-                   "the fitting data; pass data= (or use cov='model_implied')",
-                   cov.c_str());
+        Rcpp::stop("magmaan: estimated_weight robust modification indices "
+                   "require the fitting data; pass data=");
       }
+      opts.spec = spec_from(bread, moments,
+                            cov == "model_implied" ? "empirical" : cov);
+      opts.estimated_weight = true;
+      opts.ij_weight_mode = continuous_ij_mode(estimator);
       magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
-      if (is_ml) {
-        out = magmaan::inference::frontier::modification_indices_robust(
-            ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
+      auto w = continuous_ls_weight(ctx, est, estimator, weight,
+                                    "modification indices");
+      out = magmaan::inference::frontier::modification_indices_robust(
+          ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+    } else {
+      const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
+      opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
+      if (model_implied) {
+        if (is_ml) {
+          out = magmaan::inference::frontier::modification_indices_robust(
+              ctx.pt, ctx.rep, ctx.samp, est, opts);
+        } else {
+          auto w = continuous_ls_weight(ctx, est, estimator, weight,
+                                        "modification indices");
+          out = magmaan::inference::frontier::modification_indices_robust(
+              ctx.pt, ctx.rep, ctx.samp, est, w, opts);
+        }
       } else {
-        auto w = continuous_ls_weight(ctx, est, estimator, weight,
-                                      "modification indices");
-        out = magmaan::inference::frontier::modification_indices_robust(
-            ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+        if (Rf_isNull(raw)) {
+          Rcpp::stop("magmaan: robust modification indices with cov='%s' "
+                     "require the fitting data; pass data= (or use "
+                     "cov='model_implied')", cov.c_str());
+        }
+        magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
+        if (is_ml) {
+          out = magmaan::inference::frontier::modification_indices_robust(
+              ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
+        } else {
+          auto w = continuous_ls_weight(ctx, est, estimator, weight,
+                                        "modification indices");
+          out = magmaan::inference::frontier::modification_indices_robust(
+              ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+        }
       }
     }
   }
@@ -4028,7 +4077,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
 Rcpp::DataFrame inference_score_tests_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
     std::string bread = "expected", std::string moments = "structured",
-    std::string cov = "empirical") {
+    std::string cov = "empirical", bool estimated_weight = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -4052,7 +4101,8 @@ Rcpp::DataFrame inference_score_tests_robust(
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
-                : ordinal_parameterization_attr(fit["partable"])));
+                : ordinal_parameterization_attr(fit["partable"])),
+        estimated_weight);
   } else if (is_mixed_ordinal_fit) {
     auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "mixed_ordinal_stats",
@@ -4065,35 +4115,56 @@ Rcpp::DataFrame inference_score_tests_robust(
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
-                : ordinal_parameterization_attr(fit["partable"])));
+                : ordinal_parameterization_attr(fit["partable"])),
+        estimated_weight);
   } else {
     const bool is_ml = (estimator == "ML" || estimator.empty());
-    const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
     magmaan::inference::frontier::RobustScoreOptions opts;
-    opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
-    if (model_implied) {
+    if (estimated_weight) {
       if (is_ml) {
-        Rcpp::stop("magmaan: ML robust score tests require the fitting data "
-                   "(cov='empirical'); pass data=");
+        Rcpp::stop("magmaan: estimated_weight robust score tests need an "
+                   "estimated second-stage weight (GLS/WLS, or an ordinal "
+                   "fit), not ML");
       }
+      if (Rf_isNull(raw)) {
+        Rcpp::stop("magmaan: estimated_weight robust score tests require the "
+                   "fitting data; pass data=");
+      }
+      opts.spec = spec_from(bread, moments,
+                            cov == "model_implied" ? "empirical" : cov);
+      opts.estimated_weight = true;
+      opts.ij_weight_mode = continuous_ij_mode(estimator);
+      magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
       auto w = continuous_ls_weight(ctx, est, estimator, weight, "score tests");
       out = magmaan::inference::frontier::score_tests_robust(
-          ctx.pt, ctx.rep, ctx.samp, est, w, opts);
+          ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
     } else {
-      if (Rf_isNull(raw)) {
-        Rcpp::stop("magmaan: robust score tests with cov='%s' require the "
-                   "fitting data; pass data= (or use cov='model_implied')",
-                   cov.c_str());
-      }
-      magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
-      if (is_ml) {
+      const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
+      opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
+      if (model_implied) {
+        if (is_ml) {
+          Rcpp::stop("magmaan: ML robust score tests require the fitting data "
+                     "(cov='empirical'); pass data=");
+        }
+        auto w = continuous_ls_weight(ctx, est, estimator, weight, "score tests");
         out = magmaan::inference::frontier::score_tests_robust(
-            ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
+            ctx.pt, ctx.rep, ctx.samp, est, w, opts);
       } else {
-        auto w =
-            continuous_ls_weight(ctx, est, estimator, weight, "score tests");
-        out = magmaan::inference::frontier::score_tests_robust(
-            ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+        if (Rf_isNull(raw)) {
+          Rcpp::stop("magmaan: robust score tests with cov='%s' require the "
+                     "fitting data; pass data= (or use cov='model_implied')",
+                     cov.c_str());
+        }
+        magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
+        if (is_ml) {
+          out = magmaan::inference::frontier::score_tests_robust(
+              ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
+        } else {
+          auto w =
+              continuous_ls_weight(ctx, est, estimator, weight, "score tests");
+          out = magmaan::inference::frontier::score_tests_robust(
+              ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+        }
       }
     }
   }
