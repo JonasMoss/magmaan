@@ -172,6 +172,45 @@ weighted_moment_profile_rmsea_two_metric(
     std::size_t n_groups = 1,
     double eig_tol = 1e-10);
 
+// Per-group ingredients for a diagonal-weight ("estimated-weight") DWLS profile
+// Hessian, e.g. categorical DWLS where the weight is the inverse diagonal of the
+// estimated polychoric NACOV. The first-stage object is the EXTENDED moment
+// vector x = (u, γ): `u` are the fitted moments (thresholds + polychorics for
+// the categorical case) and `γ = diag(Γ_u)` is the diagonal NACOV that DWLS
+// inverts as its weight, W = diag(1/γ). The DWLS profile score has two blocks,
+//   s_u = -W r,   (s_γ)_k = -½ r_k²/γ_k²,   r = μ(θ̂) - u,
+// so the γ channel is residual-driven: dormant at exact fit and a leading
+// component under fixed misspecification. The full value-function Hessian
+//   Q = φ_xx - φ_xθ B^{-1} φ_θx
+//     = [[W, R],[R, S]] - [[WD],[RD]] B^{-1} [D'W, D'R],
+//   R = diag(r/γ²),  S = diag(r²/γ³),
+// is assembled and routed through the two-metric core with the extended block
+// jacobian [D;D], V0 = [[W,R],[R,S]], and W* = blkdiag(W,R). At r = 0 the off
+// diagonal and γγ blocks vanish and Q collapses to the fixed-weight uu-block
+// W - W D B^{-1} D' W. `gamma` is the joint NACOV of the extended (u, γ) pair.
+struct WeightedEstimatedWeightProfileBlock {
+  Eigen::MatrixXd jacobian;     // D = ∂μ/∂θ for the u-moments, m × q (full free θ)
+  Eigen::VectorXd weight_diag;  // γ_k > 0, the DWLS diagonal NACOV, length m
+  Eigen::VectorXd residual;     // r = μ(θ̂) - u at the pseudo-true fit, length m
+  Eigen::MatrixXd gamma;        // joint NACOV of the extended (u, γ), 2m × 2m
+  std::int64_t n_obs = 0;
+};
+
+// Diagonal-weight ("estimated-weight") profile-RMSEA primitive. Builds the
+// extended (u, γ) profile Hessian above for each group and delegates to
+// `weighted_moment_profile_rmsea_two_metric`. The reported `df` is the CLASSICAL
+// nominal df Σ m_b − n_alpha (over the u-moments only), not the doubled extended
+// dimension; `bias_trace`/`spectrum_size` carry the live γ channel. `fmin` and
+// `observed_bread` (K-reduced) follow the usual moment-quadratic conventions.
+post_expected<WeightedProfileRMSEAResult>
+weighted_moment_profile_rmsea_estimated_weight(
+    const std::vector<WeightedEstimatedWeightProfileBlock>& blocks,
+    const Eigen::MatrixXd& K,
+    double fmin,
+    const Eigen::MatrixXd& observed_bread,
+    std::size_t n_groups = 1,
+    double eig_tol = 1e-10);
+
 // Nested profile-LRT from two already-computed profile-Hessian fits. `h1` is
 // the less restricted model, `h0` the more restricted model. Both must share
 // the same first-stage moment space, Γ, total sample size, and group count.

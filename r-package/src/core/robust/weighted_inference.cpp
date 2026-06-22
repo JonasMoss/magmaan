@@ -1483,6 +1483,111 @@ weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
       profile_blocks, K, fmin, observed_bread, n_groups, eig_tol);
 }
 
+post_expected<WeightedProfileRMSEAResult>
+weighted_moment_profile_rmsea_estimated_weight(
+    const std::vector<WeightedEstimatedWeightProfileBlock>& blocks,
+    const Eigen::MatrixXd& K,
+    double fmin,
+    const Eigen::MatrixXd& observed_bread,
+    std::size_t n_groups,
+    double eig_tol) {
+  if (blocks.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea_estimated_weight: no moment blocks "
+        "supplied"));
+  }
+
+  std::vector<WeightedProfileMomentBlock> ext_blocks;
+  ext_blocks.reserve(blocks.size());
+  Eigen::Index u_rows = 0;       // classical u-moment count Σ m_b
+  double N_total = 0.0;
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& blk = blocks[b];
+    const Eigen::Index m = blk.jacobian.rows();
+    const Eigen::Index q = blk.jacobian.cols();
+    if (m == 0 || q == 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea_estimated_weight: empty jacobian in "
+          "block " + std::to_string(b)));
+    }
+    if (blk.weight_diag.size() != m || blk.residual.size() != m) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea_estimated_weight: weight_diag/residual "
+          "length does not match jacobian rows in block " + std::to_string(b)));
+    }
+    if (blk.gamma.rows() != 2 * m || blk.gamma.cols() != 2 * m) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea_estimated_weight: gamma must be the "
+          "2m × 2m joint NACOV of (u, γ) in block " + std::to_string(b)));
+    }
+    if (blk.n_obs <= 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea_estimated_weight: non-positive n_obs "
+          "in block " + std::to_string(b)));
+    }
+    if (!(blk.weight_diag.array() > 0.0).all() ||
+        !blk.weight_diag.allFinite() || !blk.residual.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea_estimated_weight: weight_diag must be "
+          "positive and finite, residual finite, in block " + std::to_string(b)));
+    }
+
+    // Diagonal channels of the value-function Hessian:
+    //   W = diag(1/γ), R = diag(r/γ²), S = diag(r²/γ³).
+    const Eigen::ArrayXd g = blk.weight_diag.array();
+    const Eigen::ArrayXd r = blk.residual.array();
+    const Eigen::VectorXd w_diag = (1.0 / g).matrix();
+    const Eigen::VectorXd r_diag = (r / (g * g)).matrix();
+    const Eigen::VectorXd s_diag = (r * r / (g * g * g)).matrix();
+
+    WeightedProfileMomentBlock ext;
+    ext.jacobian.resize(2 * m, q);
+    ext.jacobian.topRows(m) = blk.jacobian;
+    ext.jacobian.bottomRows(m) = blk.jacobian;
+
+    ext.data_metric = Eigen::MatrixXd::Zero(2 * m, 2 * m);
+    ext.data_metric.block(0, 0, m, m).diagonal() = w_diag;
+    ext.data_metric.block(0, m, m, m).diagonal() = r_diag;
+    ext.data_metric.block(m, 0, m, m).diagonal() = r_diag;
+    ext.data_metric.block(m, m, m, m).diagonal() = s_diag;
+
+    ext.projection_metric = Eigen::MatrixXd::Zero(2 * m, 2 * m);
+    ext.projection_metric.block(0, 0, m, m).diagonal() = w_diag;
+    ext.projection_metric.block(m, m, m, m).diagonal() = r_diag;
+
+    ext.gamma = blk.gamma;
+    ext.n_obs = blk.n_obs;
+    ext_blocks.push_back(std::move(ext));
+
+    u_rows += m;
+    N_total += static_cast<double>(blk.n_obs);
+  }
+
+  auto out = weighted_moment_profile_rmsea_two_metric(
+      ext_blocks, K, fmin, observed_bread, n_groups, eig_tol);
+  if (!out.has_value()) return out;
+
+  // The two-metric core counts df off the DOUBLED extended dimension; the
+  // genuine nominal df lives in the u-moment space alone. Restate it and the
+  // df-comparator RMSEA, leaving the spectrum-driven `bias_trace`/`rmsea`
+  // untouched.
+  const Eigen::Index n_alpha = K.cols();
+  const int classical_df = static_cast<int>(u_rows - n_alpha);
+  out->df = classical_df;
+  if (classical_df > 0 && N_total > 0.0) {
+    const double G = static_cast<double>(out->n_groups);
+    const double denom = static_cast<double>(classical_df);
+    out->rmsea = std::sqrt(
+        std::max((fmin - out->bias_trace / N_total) * G / denom, 0.0));
+    out->rmsea_df =
+        std::sqrt(std::max((fmin - denom / N_total) * G / denom, 0.0));
+  } else {
+    out->rmsea = 0.0;
+    out->rmsea_df = 0.0;
+  }
+  return out;
+}
+
 post_expected<WeightedProfileLRTResult>
 weighted_moment_profile_lrt(const WeightedProfileRMSEAResult& h1,
                             const WeightedProfileRMSEAResult& h0,
