@@ -494,27 +494,56 @@ alias, but the new call sites use the distribution-level name.
 
 \subsection*{Spectrum-size bookkeeping}
 
-The new profile-Hessian methods should report the size of the positive spectrum
-explicitly, not only the ordinary model or nested-test degrees of freedom. In
-the exact-fit, fixed-weight, Gauss--Newton setting the nonzero spectrum has the
-classical dimension: \(df_M\) for a single-model absolute-fit law and
-\(df_B-df_A\) for a regular nested contrast. Once the reference law is built from
-the full profile Hessian \(Q_M\), especially with estimated weights, that equality
-is no longer guaranteed by the parameter-count argument alone. The CFA
-pseudo-null example above already produced six positive weights for an ordinary
-five-df nested contrast.
+The new profile-Hessian methods should report the inertia of the reference law,
+not only the ordinary model or nested-test degrees of freedom. Let \(Q\) denote
+the symmetric profile Hessian in the first-stage moment coordinates and let
+\(\Gamma\) denote the first-stage covariance. The computable spectrum is that of
+\(\Gamma^{1/2}Q\Gamma^{1/2}\), equivalently the nonzero spectrum of
+\(Q\Gamma\). If \(\Gamma\) is positive definite and \(Q\) is held fixed,
+Sylvester's law gives the same positive, negative, and zero counts as \(Q\).
+Thus \(\Gamma\) changes the magnitudes but not the signs. If \(\Gamma\) is
+singular, this statement holds only after restricting to the range of
+\(\Gamma\). It is also a conditional statement: in WLS, DWLS, and
+estimated-weight constructions, \(Q\) itself may change with the population
+moments, the pseudo-true point, and the first-stage weight channel.
 
 Implementation reports should therefore carry at least
 \[
-  \#\{\lambda_j>\tau\},\qquad \sum_j\lambda_j,\qquad \sum_j\lambda_j^2,
+  \begin{gathered}
+    \#\{\lambda_j>\tau\},\qquad
+    \#\{\lambda_j<-\tau\},\qquad
+    \#\{|\lambda_j|>\tau\},\qquad
+    \operatorname{tr}(Q\Gamma),\\
+    \sum_{\lambda_j>\tau}\lambda_j,\qquad
+    \sum_{\lambda_j>\tau}\lambda_j^2,
+  \end{gathered}
 \]
 alongside the nominal \(df\). The eigentolerance \(\tau\) must be recorded or
-made deterministic from the scale of \(Q\Gamma\). If possible, later analytic
-work should identify when the rank is forced to equal the classical \(df\), and
-when additional nonzero eigenvalues are structurally expected from residual
-curvature or estimated-weight channels. Until then, downstream LRT/RMSEA code
-must use the actual positive weights for mixture tails and trace corrections,
-using \(df\) only as the named model-complexity denominator.
+made deterministic from the scale of \(Q\Gamma\). Positive eigenvalues are the
+weights for the usual positive weighted-\(\chi^2\) mixture tail. The trace
+replacement for bias and RMSEA centering is the signed trace
+\(\operatorname{tr}(Q\Gamma)\); it equals the positive-weight sum only in the
+PSD or local-null regimes. When negative directions appear, the positive-tail
+helper is a diagnostic approximation to an indefinite quadratic form rather
+than the full law.
+
+Some of the counting can be done without eigendecomposing the full moment-space
+matrix. In the fixed-weight one-metric case,
+\[
+  Q = V - VD B^{-1}D'V,\qquad A=D'VD,
+\]
+so the residual complement contributes automatic positive directions and the
+remaining sign decisions reduce to the parameter-space pencil
+\[
+  \nu_j=\operatorname{eig}(B^{-1}A).
+\]
+Directions with \(\nu_j<1\) add positive curvature, directions with
+\(\nu_j>1\) add negative curvature, and \(\nu_j=1\) is the Gauss--Newton
+boundary. In the two-metric ML construction the analogous reduced matrix uses
+\(A_* = D'W_*V_0^{-1}W_*D\) in place of \(A\). This \(p\)-dimensional spectrum is
+a useful gate for whether the profile-curvature correction matters, but it does
+not by itself justify falling back to classical RMSEA; non-normal
+\(\Gamma\)-based trace corrections may still be needed.
 
 \section{What This Suggests}
 

@@ -138,9 +138,12 @@ symmetric $\tilde A^{1/2}B^{-1}\tilde A^{1/2}$ ($\tilde A\succ0$).
 \end{proof}
 
 \begin{theorem}[Rank accounting]\label{thm:rank}
-$Q$, $Q\Gamma$, and $I-\tilde G B^{-1}\tilde G'$ share the same inertia (Sylvester's
-law, congruence by $V_{\!o}^{1/2}$ and then by $\Gamma^{1/2}$, both nonsingular).
-Hence the limiting mixture \eqref{eq:mixture} has
+Assume $V_{\!o}$ and $\Gamma$ are positive definite. Then $Q$,
+$\Gamma^{1/2}Q\Gamma^{1/2}$, and $I-\tilde G B^{-1}\tilde G'$ share the same
+inertia (Sylvester's law, congruence by $V_{\!o}^{1/2}$ and then by
+$\Gamma^{1/2}$, both nonsingular). Equivalently, the nonzero eigenvalues of
+$Q\Gamma$ have the same signs. Hence the limiting mixture \eqref{eq:mixture}
+has
 \begin{align}
   \#\{\text{nonzero }\lambda_j\}=\rank(Q\Gamma)
     &=(m-p)+\#\{\,j:\nu_j\neq1\,\},\label{eq:rk}\\
@@ -151,9 +154,31 @@ Hence the limiting mixture \eqref{eq:mixture} has
 \end{align}
 \end{theorem}
 
+If $\Gamma$ is singular, the same statement holds only on the range of
+$\Gamma$; directions killed by $\Gamma$ disappear from the limiting quadratic
+form and the rank can drop below the full-rank count.
+
 The classical chi-square picture is the special case in which all $p$ of the
 $\nu_j$ equal $1$, so the $p$ model directions are exactly annihilated and only
 the $m-p$ residual directions survive.
+
+\begin{remark}[What is invariant]\label{rem:invariant}
+For a fixed profile Hessian $Q$ and full-rank $\Gamma$, the inertia is
+$\Gamma$-free: changing the first-stage covariance changes eigenvalue
+magnitudes and the trace, but not the positive, negative, or zero counts. This
+is not an unconditional distribution-free claim. In WLS, DWLS, ML, and
+estimated-weight constructions, $Q$ may itself change with the population
+moments, the pseudo-true point, and the first-stage weight channel.
+\end{remark}
+
+\begin{remark}[Small-pencil gate]\label{rem:gate}
+The $p$ eigenvalues $\nu_j$ are an inexpensive diagnostic for whether the
+profile-curvature correction matters. If $\max_j|\nu_j-1|$ is numerically tiny,
+the profile Hessian has effectively collapsed to the Gauss--Newton rank count.
+That gate does not by itself justify using classical RMSEA: non-normal
+$\Gamma$-based trace corrections can still be needed even when the curvature
+channel is dormant.
+\end{remark}
 
 \begin{corollary}[When classical df survives]\label{cor:classical}
 $\np(Q\Gamma)=\rank(Q\Gamma)=m-p$ and $\nm(Q\Gamma)=0$ if and only if
@@ -212,14 +237,21 @@ recentered to cancel the dominant $O(\sqrt n)$ linear term $2(W_{\!p}e)'z$
 \section{Consequences for the magmaan summaries}\label{sec:magmaan}
 
 \begin{corollary}[Reading the fields]\label{cor:magmaan}
-$\texttt{spectrum\_size}=\np(Q\Gamma)=(m-p)+\#\{\nu_j<1\}\ge m-p$, with equality
-exactly in the classical case of Corollary~\ref{cor:classical}. The reported
+With full-rank $\Gamma$, the reported positive count satisfies
+\[
+  \texttt{spectrum\_size}=\np(Q\Gamma)=(m-p)+\#\{\nu_j<1\}\ge m-p,
+\]
+with equality exactly in the classical case of Corollary~\ref{cor:classical};
+singular $\Gamma$ can only remove directions. The reported
 \texttt{bias\_trace} sums only the positive $\lambda_j$, whereas the principled
 curvature-corrected df mean of the companion note is the \emph{signed} trace
-$\tr(Q\Gamma)=\sum_j\lambda_j$. When $\nm(Q\Gamma)>0$ the two differ by
-$\sum_{\lambda_j<0}|\lambda_j|$, so the positive-only \texttt{bias\_trace}
-\emph{overcounts} the noise relative to $\tr(Q\Gamma)$. In the ULS check below the
-gap is $3.72$ versus $2.26$.
+$\tr(Q\Gamma)=\sum_j\lambda_j$. When $\nm(Q\Gamma)>0$,
+\[
+  \sum_{\lambda_j>0}\lambda_j-\tr(Q\Gamma)
+  =\sum_{\lambda_j<0}|\lambda_j|,
+\]
+so the positive-only \texttt{bias\_trace} \emph{overcounts} the noise relative
+to $\tr(Q\Gamma)$. In the ULS check below the gap is $3.72$ versus $2.26$.
 \end{corollary}
 
 This is a convention choice surfaced by the rank accounting, not a bug:

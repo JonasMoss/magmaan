@@ -396,9 +396,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `Q = V_o^{1/2}(I − Ĝ B^{-1} Ĝ') V_o^{1/2}` with `Ĝ = V_o^{-1/2} W_p D` and
       the metric-gap form `Ã = D' W_p V_o^{-1} W_p D`, `col(Ĝ)` is invariant and
       `spec(I − Ĝ B^{-1} Ĝ') = {1}^{(m−p)} ∪ {1 − ν_j}`, `ν_j = eig(B^{-1} Ã)`.
-      By Sylvester `Q`, `QΓ`, and the inner matrix share inertia, so
+      With full-rank `Γ`, Sylvester gives the same inertia for `Q`, the
+      symmetric `Γ^{1/2}QΓ^{1/2}` form, and the inner matrix, so
       `spectrum_size = n_+(QΓ) = (m−p) + #{ν_j < 1}`, `n_−(QΓ) = #{ν_j > 1}`,
-      `rank(QΓ) = (m−p) + #{ν_j ≠ 1}`. Classical df survives iff `ν_j ≡ 1`, i.e.
+      `rank(QΓ) = (m−p) + #{ν_j ≠ 1}`; with singular `Γ`, the count is restricted
+      to `range(Γ)`. These counts are `Γ`-free only conditional on fixed `Q`;
+      `Q` can itself move with population moments / weights. Classical df
+      survives iff `ν_j ≡ 1`, i.e.
       `B = Ã`, which needs `K = 0` (observed-bread/curvature channel off) **and**
       `W_p = V_o` (estimated-weight/metric channel off); both hold under correct
       spec and at `e=0`. ULS exposes only the curvature channel, ML/GLS both, and

@@ -4,9 +4,9 @@ Companion to higher_order_discrepancy_check.py. That note characterizes the
 *mean* of the fixed-misspecification profile statistic 2N{v(x_hat)-v(x0)} ->
 Z'QΓZ via the trace tr(QΓ) (the curvature-corrected df). This note characterizes
 the *inertia* of the same QΓ: how many nonzero, positive, and negative
-eigenvalues the limiting quadratic form has, i.e. how many χ²₁ terms (and with
-what signs) sit in the mixture, and exactly when that count collapses to the
-classical df = m - p.
+eigenvalues the limiting quadratic form has. In the PSD/local regime this is the
+weighted-χ² term count; under fixed misspecification the same eigenvalues are
+mean-level contributions to tr(QΓ), not an ordinary χ² mixture.
 
 Q is magmaan's WeightedProfileRMSEAResult::profile_hessian, the curvature-
 corrected residual-weight matrix Utilde of higher_order_discrepancy_misspec.tex:
@@ -26,12 +26,17 @@ and the inner symmetric matrix splits as
     spec(I - Gtil B^{-1} Gtil') = { 1 (x (m-p)) }  U  { 1 - nu_j : j=1..p },
     nu_j = eig(B^{-1} Atil).
 
-By Sylvester (congruence by Vout^{1/2} and then by Γ^{1/2}) the inertia of Q and
-of QΓ equals the inertia of that inner matrix, so
+For the full-rank Γ used here, Sylvester congruence by Vout^{1/2} and then by
+Γ^{1/2} gives the same inertia for Q, Γ^{1/2}QΓ^{1/2}, and the inner matrix
+(equivalently, the nonzero eigenvalues of QΓ have the same signs), so
 
     rank(QΓ)        = (m - p) + #{ nu_j != 1 } = (m - p) + rank(K-or-metric gap)
     n_positive(QΓ)  = (m - p) + #{ nu_j <  1 }
     n_negative(QΓ)  =           #{ nu_j >  1 }.
+
+If Γ is singular these counts apply only on range(Γ). The count is Γ-free only
+conditional on a fixed Q; Q itself can change with the population moments,
+pseudo-true point, and weight-estimation channel.
 
 nu_j = 1 for all j  <=>  B = Atil  <=>  K = 0 AND Wproj = Vout (in their action
 on col(J))  <=>  the classical df = m - p is recovered with all weights 1.
@@ -262,7 +267,7 @@ def check_case(name, o, Gam):
     print(f"  (2) Q == Vout^1/2 (I - Gtil B^-1 Gtil') Vout^1/2 : "
           f"max|Δ| = {err_fac:.2e}   {'OK' if err_fac < 1e-6 else 'FAIL'}")
 
-    # (3) Sylvester: inertia(QΓ) == inertia(Q) == inertia(inner)
+    # (3) full-rank Γ: inertia(QΓ) == inertia(Q) == inertia(inner)
     iQG, iQ, iIn = inertia(Gam_cong(Q, Gam)), inertia(Q), inertia(inner)
     print(f"  (3) inertia  QΓ={iQG}  Q={iQ}  inner={iIn} : "
           f"{'OK' if iQG == iQ == iIn else 'FAIL'}   (n_pos, n_zero, n_neg)")
