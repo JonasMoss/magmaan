@@ -609,6 +609,22 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       cfi_tli}_misspec_inference` stay C++-only. Deferred: per-index R bindings
       (covered by the bundle), the `.scaled`/`.robust` integration into the main
       `fit_measures()` table.
+    - **Done 2026-06-22 (multi-group).** RMSEA, CRMR/SRMR, CFI and TLI
+      estimated-weight inference now handle multi-group all-ordinal DWLS fits
+      (the single-group guards are lifted). The criteria pool as `Σ_b n_b·crit_b`;
+      the underlying profile already returns the block-diagonal `Γ_x` and pooled
+      signed trace, so the new work is the stacked envelope gradient (`√(n_b/N)`
+      per-group weights), a per-block γ-zeroing helper (`zero_extended_gamma_-
+      channel`) for the fixed-weight comparator, the stacked CRMR sandwich
+      (block-diagonal `Q_G`, statistic `Σ_b n_b G_b`), and a multi-group baseline
+      (direct sum of per-group independence models; its bread is scaled `(n_b/N)·
+      W_tt` so it pools correctly). The R `fit_measures_misspec` is group-agnostic
+      and works unchanged. Note's "Multi-group" section derives the pooling.
+      Gated by a duplicate-group reduction in `ordinal_test.cpp` (points
+      invariant, statistic/df double, RMSEA interval tightens) plus a different-
+      two-group run and the R example's two-group block. CRMR/SRMR require a
+      common per-group `p` (shared denominator). A stabilized-`c` TLI variance and
+      a multi-group MC coverage harness remain deferred.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
