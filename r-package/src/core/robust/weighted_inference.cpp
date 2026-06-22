@@ -2072,8 +2072,9 @@ continuous_ls_profile_lrt(spec::LatentStructure pt_H1,
 namespace {
 
 post_expected<std::vector<Eigen::MatrixXd>>
-ml_covariance_gamma_blocks_from_raw(const data::RawData& raw,
-                                    const data::SampleStats& samp) {
+ml_moment_gamma_blocks_from_raw(const data::RawData& raw,
+                                const data::SampleStats& samp,
+                                bool include_means) {
   if (!raw.mask.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ml_profile_rmsea: RawData masks are not supported for complete-data ML"));
@@ -2091,11 +2092,29 @@ ml_covariance_gamma_blocks_from_raw(const data::RawData& raw,
           "ml_profile_rmsea: raw-data shape mismatch in block " +
               std::to_string(b)));
     }
-    auto G = data::empirical_gamma(raw.X[b]);
+    auto G = include_means ? data::empirical_gamma_with_means(raw.X[b])
+                           : data::empirical_gamma(raw.X[b]);
     if (!G.has_value()) return std::unexpected(G.error());
     out.push_back(std::move(*G));
   }
   return out;
+}
+
+post_expected<Eigen::MatrixXd>
+normal_theory_stacked_moment_metric(const Eigen::MatrixXd& Sigma,
+                                    bool include_means,
+                                    const char* what) {
+  auto Wcov = normal_theory_moment_metric(Sigma, what);
+  if (!Wcov.has_value()) return std::unexpected(Wcov.error());
+  if (!include_means) return *Wcov;
+
+  auto Wmu = inverse_sym_pd(Sigma, what);
+  if (!Wmu.has_value()) return std::unexpected(Wmu.error());
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(
+      Sigma.rows() + Wcov->rows(), Sigma.rows() + Wcov->cols());
+  W.topLeftCorner(Sigma.rows(), Sigma.rows()) = *Wmu;
+  W.bottomRightCorner(Wcov->rows(), Wcov->cols()) = *Wcov;
+  return W;
 }
 
 post_expected<std::vector<WeightedProfileMomentBlock>>
@@ -2112,11 +2131,6 @@ build_ml_profile_blocks(const spec::LatentStructure& pt,
   if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
   auto eval = ev_or->evaluate(est.theta, true, true);
   if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-  if (eval->J_mu.size() != 0) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "ml_profile_rmsea: mean-structure ML profile Hessian is not wired in "
-        "this covariance-only first pass"));
-  }
   if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -2125,41 +2139,68 @@ build_ml_profile_blocks(const spec::LatentStructure& pt,
         "ml_profile_rmsea: gamma block count does not match sample blocks"));
   }
 
+  const bool has_means = eval->J_mu.rows() > 0;
   std::vector<WeightedProfileMomentBlock> blocks;
   blocks.reserve(samp.S.size());
-  Eigen::Index off = 0;
+  Eigen::Index sig_off = 0;
+  Eigen::Index mu_off = 0;
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     const Eigen::Index p = samp.S[b].rows();
     const Eigen::Index pstar = vech_len(p);
-    if (eval->J_sigma.rows() < off + pstar) {
+    const Eigen::Index mb = has_means ? p + pstar : pstar;
+    if (eval->J_sigma.rows() < sig_off + pstar) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "ml_profile_rmsea: covariance Jacobian row count is too small"));
     }
-    if (gamma[b].rows() != pstar || gamma[b].cols() != pstar) {
+    if (has_means) {
+      if (samp.mean.size() <= b || samp.mean[b].size() != p) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ml_profile_rmsea: mean-structure sample stats need per-block means"));
+      }
+      if (eval->moments.mu.size() <= b || eval->moments.mu[b].size() != p ||
+          eval->J_mu.rows() < mu_off + p) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ml_profile_rmsea: mean Jacobian row count is too small"));
+      }
+    }
+    if (gamma[b].rows() != mb || gamma[b].cols() != mb) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "ml_profile_rmsea: gamma dimension mismatch in block " +
               std::to_string(b)));
     }
-    auto V0 = normal_theory_moment_metric(
-        samp.S[b], ("ml_profile_rmsea sample metric block " +
-                    std::to_string(b)).c_str());
+    auto V0 = normal_theory_stacked_moment_metric(
+        samp.S[b], has_means,
+        ("ml_profile_rmsea sample metric block " + std::to_string(b)).c_str());
     if (!V0.has_value()) return std::unexpected(V0.error());
-    auto Wstar = normal_theory_moment_metric(
-        eval->moments.sigma[b], ("ml_profile_rmsea fitted metric block " +
-                                 std::to_string(b)).c_str());
+    auto Wstar = normal_theory_stacked_moment_metric(
+        eval->moments.sigma[b], has_means,
+        ("ml_profile_rmsea fitted metric block " + std::to_string(b)).c_str());
     if (!Wstar.has_value()) return std::unexpected(Wstar.error());
+    Eigen::MatrixXd Jb(mb, eval->J_sigma.cols());
+    if (has_means) {
+      Jb.topRows(p) = eval->J_mu.middleRows(mu_off, p);
+      Jb.bottomRows(pstar) = eval->J_sigma.middleRows(sig_off, pstar);
+      mu_off += p;
+    } else {
+      Jb = eval->J_sigma.middleRows(sig_off, pstar);
+    }
     blocks.push_back(WeightedProfileMomentBlock{
-        .jacobian = eval->J_sigma.middleRows(off, pstar),
+        .jacobian = std::move(Jb),
         .data_metric = std::move(*V0),
         .projection_metric = std::move(*Wstar),
         .gamma = gamma[b],
         .n_obs = samp.n_obs[b]});
-    off += pstar;
+    sig_off += pstar;
   }
-  if (off != eval->J_sigma.rows()) {
+  if (sig_off != eval->J_sigma.rows()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ml_profile_rmsea: covariance Jacobian row count does not match "
         "sample covariance blocks"));
+  }
+  if (has_means && mu_off != eval->J_mu.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ml_profile_rmsea: mean Jacobian row count does not match sample "
+        "mean blocks"));
   }
   return blocks;
 }
@@ -2203,7 +2244,13 @@ ml_profile_rmsea(spec::LatentStructure pt,
                  const Estimates& est,
                  const data::RawData& raw,
                  double eig_tol) {
-  auto gamma = ml_covariance_gamma_blocks_from_raw(raw, samp);
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  const bool include_means = eval->J_mu.rows() > 0;
+
+  auto gamma = ml_moment_gamma_blocks_from_raw(raw, samp, include_means);
   if (!gamma.has_value()) return std::unexpected(gamma.error());
   return ml_profile_rmsea(std::move(pt), rep, samp, est, *gamma, eig_tol);
 }
@@ -2237,10 +2284,13 @@ ml_profile_lrt(spec::LatentStructure pt_H1,
                const Estimates& est_H0,
                const data::RawData& raw,
                double eig_tol) {
-  auto gamma = ml_covariance_gamma_blocks_from_raw(raw, samp);
-  if (!gamma.has_value()) return std::unexpected(gamma.error());
-  return ml_profile_lrt(std::move(pt_H1), rep_H1, samp, est_H1,
-                        std::move(pt_H0), rep_H0, est_H0, *gamma, eig_tol);
+  auto h1 = ml_profile_rmsea(std::move(pt_H1), rep_H1, samp, est_H1,
+                             raw, eig_tol);
+  if (!h1.has_value()) return std::unexpected(h1.error());
+  auto h0 = ml_profile_rmsea(std::move(pt_H0), rep_H0, samp, est_H0,
+                             raw, eig_tol);
+  if (!h0.has_value()) return std::unexpected(h0.error());
+  return weighted_moment_profile_lrt(*h1, *h0, eig_tol);
 }
 
 post_expected<WeightedRobustResult>

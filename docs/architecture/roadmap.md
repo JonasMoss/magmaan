@@ -231,13 +231,14 @@ golden `parTable()` fixtures.
   the observed bread plus Γ from either caller blocks or complete raw data.
   `estimate::weighted_moment_profile_rmsea_two_metric` generalizes the same
   dense engine to two-metric profile Hessians
-  `Q = V0 - W* D B^{-1} D' W*`. The first adapter is covariance-only
-  complete-data ML: `estimate::ml_profile_rmsea` /
-  `estimate::ml_profile_lrt` use the sample/saturated normal-theory metric for
-  `V0`, the fitted-implied metric for `W*`, and the observed ML Hessian scaled
-  to the per-unit profile bread. Mean-structure ML is intentionally not wired
-  into this first pass. These are basic dense research surfaces, not
-  lavaan-parity fit-measure dispatch.
+  `Q = V0 - W* D B^{-1} D' W*`. The complete-data ML adapter
+  `estimate::ml_profile_rmsea` / `estimate::ml_profile_lrt` uses the
+  sample/saturated normal-theory metric for `V0`, the fitted-implied metric for
+  `W*`, and the observed ML Hessian scaled to the per-unit profile bread.
+  Covariance-only models use the vech(S) moment; mean-structure models use the
+  stacked `[mean; vech(S)]` moment and empirical Gamma from
+  `data::empirical_gamma_with_means` when raw data is supplied. These are basic
+  dense research surfaces, not lavaan-parity fit-measure dispatch.
   `estimate::weighted_moment_profile_rmsea_estimated_weight` adds the
   diagonal-weight (categorical DWLS) case where the weight `W=diag(1/γ)` is
   itself a first-stage quantity: it assembles the value-function Hessian over the
