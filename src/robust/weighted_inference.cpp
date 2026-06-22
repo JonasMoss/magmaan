@@ -1313,6 +1313,125 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
   return out;
 }
 
+post_expected<WeightedProfileRMSEAResult>
+weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
+                              const Eigen::MatrixXd& K,
+                              double fmin,
+                              const Eigen::MatrixXd& observed_bread,
+                              std::size_t n_groups,
+                              double eig_tol) {
+  if (blocks.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea: no moment blocks supplied"));
+  }
+  if (K.rows() == 0 || K.cols() == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea: empty constraint reparameterization"));
+  }
+  if (!std::isfinite(fmin)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea: non-finite discrepancy"));
+  }
+  if (!(eig_tol >= 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea: negative eigentolerance"));
+  }
+
+  double N_total = 0.0;
+  std::int64_t N_total_i = 0;
+  Eigen::Index total_rows = 0;
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& blk = blocks[b];
+    if (blk.n_obs <= 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea: non-positive n_obs in block " +
+              std::to_string(b)));
+    }
+    if (blk.jacobian.cols() != K.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea: jacobian/K column mismatch in block " +
+              std::to_string(b)));
+    }
+    if (blk.weight.rows() != blk.jacobian.rows() ||
+        blk.weight.cols() != blk.jacobian.rows() ||
+        blk.gamma.rows() != blk.jacobian.rows() ||
+        blk.gamma.cols() != blk.jacobian.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_moment_profile_rmsea: moment matrix shape mismatch in block " +
+              std::to_string(b)));
+    }
+    N_total += static_cast<double>(blk.n_obs);
+    N_total_i += blk.n_obs;
+    total_rows += blk.jacobian.rows();
+  }
+  if (!(N_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea: non-positive total sample size"));
+  }
+
+  const Eigen::Index n_alpha = K.cols();
+  if (observed_bread.rows() != n_alpha || observed_bread.cols() != n_alpha) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_moment_profile_rmsea: observed_bread shape does not match "
+        "the reduced parameter count"));
+  }
+  const int df = static_cast<int>(total_rows - n_alpha);
+  if (df < 0) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "weighted_moment_profile_rmsea: model has more reduced parameters "
+        "than moments"));
+  }
+
+  Eigen::MatrixXd Dtilde(total_rows, n_alpha);
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(total_rows, total_rows);
+  Eigen::MatrixXd Gamma = Eigen::MatrixXd::Zero(total_rows, total_rows);
+  Eigen::Index off = 0;
+  for (const auto& blk : blocks) {
+    const Eigen::Index mb = blk.jacobian.rows();
+    const double sw = std::sqrt(static_cast<double>(blk.n_obs) / N_total);
+    Dtilde.block(off, 0, mb, n_alpha) = sw * blk.jacobian * K;
+    W.block(off, off, mb, mb) = blk.weight;
+    Gamma.block(off, off, mb, mb) = blk.gamma;
+    off += mb;
+  }
+
+  Eigen::MatrixXd B = 0.5 * (observed_bread + observed_bread.transpose()).eval();
+  auto B_inv_or = inverse_sym_pd(B, "weighted_moment_profile_rmsea observed bread");
+  if (!B_inv_or.has_value()) return std::unexpected(B_inv_or.error());
+
+  WeightedProfileRMSEAResult out;
+  out.profile_hessian =
+      W - W * Dtilde * (*B_inv_or) * Dtilde.transpose() * W;
+  out.profile_hessian =
+      0.5 * (out.profile_hessian + out.profile_hessian.transpose()).eval();
+  out.gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+
+  auto spectrum_or = robust::compute_profile_contrast_spectrum(
+      out.profile_hessian, out.gamma, eig_tol);
+  if (!spectrum_or.has_value()) return std::unexpected(spectrum_or.error());
+  out.eigvals = std::move(spectrum_or->eigenvalues);
+  out.bias_trace = spectrum_or->trace_CinvS;
+  out.bias_trace_sq = spectrum_or->trace_CinvS_sq;
+  out.spectrum_size = static_cast<int>(out.eigvals.size());
+  out.warnings = std::move(spectrum_or->warnings);
+
+  out.fmin = fmin;
+  out.chisq_standard = N_total * fmin;
+  out.df = df;
+  out.ntotal = N_total_i;
+  out.n_groups = std::max<std::size_t>(1, n_groups);
+  if (df > 0) {
+    const double G = static_cast<double>(out.n_groups);
+    const double denom = static_cast<double>(df);
+    out.rmsea =
+        std::sqrt(std::max((fmin - out.bias_trace / N_total) * G / denom,
+                           0.0));
+    out.rmsea_df =
+        std::sqrt(std::max((fmin - denom / N_total) * G / denom, 0.0));
+  }
+  return out;
+}
+
 post_expected<WeightedRobustResult>
 robust_weighted_moment_ij(const std::vector<WeightedMomentIJBlock>& blocks,
                           const Eigen::MatrixXd& K,
@@ -1472,6 +1591,66 @@ robust_continuous_ls(spec::LatentStructure pt,
                      robust::Information bread) {
   return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
                                        weight, raw, bread);
+}
+
+post_expected<WeightedProfileRMSEAResult>
+continuous_ls_profile_rmsea(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const gmm::Weight& weight,
+                            const std::vector<Eigen::MatrixXd>& gamma,
+                            double eig_tol) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  if (con_or->K().rows() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_profile_rmsea: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  auto blocks = build_continuous_ls_blocks(pt, rep, samp, est, weight, gamma);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+
+  auto ob = continuous_ls_observed_bread(pt, rep, samp, est, weight,
+                                         con_or->K());
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  auto chisq = robust_ls_standard_chisq(samp, est);
+  if (!chisq.has_value()) return std::unexpected(chisq.error());
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return weighted_moment_profile_rmsea(
+      *blocks, con_or->K(), *chisq / *n, *ob, samp.S.size(), eig_tol);
+}
+
+post_expected<WeightedProfileRMSEAResult>
+continuous_ls_profile_rmsea(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Estimates& est,
+                            const gmm::Weight& weight,
+                            const data::RawData& raw,
+                            double eig_tol) {
+  spec::LatentStructure pt_for_layout = pt;
+  if (auto e = resolve_fixed_x_from_sample(pt_for_layout, rep, samp);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt_for_layout, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  const auto layout = make_layout(samp, eval->moments);
+  auto gamma = gamma_blocks_from_raw(raw, samp, layout);
+  if (!gamma.has_value()) return std::unexpected(gamma.error());
+  return continuous_ls_profile_rmsea(std::move(pt), rep, samp, est, weight,
+                                     *gamma, eig_tol);
 }
 
 post_expected<WeightedRobustResult>
