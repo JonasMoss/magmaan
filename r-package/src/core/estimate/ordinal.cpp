@@ -31,6 +31,8 @@
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/robust/restriction.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
+#include "magmaan/robust/satorra2000.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
@@ -5305,6 +5307,36 @@ ordinal_srmr(const data::OrdinalStats& stats,
   return out;
 }
 
+// Correlation root-mean-square residual (lavaan `crmr`): identical to
+// `ordinal_srmr` but averaging the squared polychoric-correlation residuals over
+// the off-diagonal count p(p-1)/2 rather than the full vech length p(p+1)/2 (the
+// diagonal residuals are identically zero, so only the denominator differs).
+post_expected<double>
+ordinal_crmr(const data::OrdinalStats& stats,
+             const model::ImpliedMoments& moments,
+             OrdinalParameterization parameterization) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(fit_to_post(N.error()));
+
+  double out = 0.0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    if (ncorr <= 0) continue;
+    const Eigen::VectorXd implied =
+        parameterization == OrdinalParameterization::Theta
+            ? std_corr_lower(moments.sigma[b])
+            : corr_lower(moments.sigma[b]);
+    const Eigen::VectorXd residual = implied - corr_lower(stats.R[b]);
+    const double block =
+        std::sqrt(residual.squaredNorm() / static_cast<double>(ncorr));
+    out += (static_cast<double>(stats.n_obs[b]) /
+            static_cast<double>(*N)) *
+           block;
+  }
+  return out;
+}
+
 post_expected<double>
 mixed_ordinal_srmr(const data::MixedOrdinalStats& stats,
                    const ThresholdLayout& layout,
@@ -5641,6 +5673,8 @@ fit_measures_ordinal(spec::LatentStructure pt,
   if (!baseline.has_value()) return std::unexpected(baseline.error());
   auto sr = ordinal_srmr(stats, eval->moments, parameterization);
   if (!sr.has_value()) return std::unexpected(sr.error());
+  auto cr = ordinal_crmr(stats, eval->moments, parameterization);
+  if (!cr.has_value()) return std::unexpected(cr.error());
 
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
@@ -5651,7 +5685,7 @@ fit_measures_ordinal(spec::LatentStructure pt,
   const measures::FitMeasures indices =
       measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());
 
-  return OrdinalFitMeasures{*baseline, indices, *sr};
+  return OrdinalFitMeasures{*baseline, indices, *sr, *cr};
 }
 
 post_expected<OrdinalCatmlDwlsRmsea>
@@ -6023,6 +6057,283 @@ ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
                                        parameterization, eig_tol);
   if (!h0.has_value()) return std::unexpected(h0.error());
   return weighted_moment_profile_lrt(*h1, *h0, eig_tol);
+}
+
+namespace {
+// Inverse standard-normal CDF (Acklam rational approximation), for the
+// two-sided normal-theory CI quantile. Mirrors `normal_quantile` used elsewhere.
+double crmr_inv_normal_cdf(double p) noexcept {
+  p = std::clamp(p, 1e-12, 1.0 - 1e-12);
+  static constexpr double a[] = {
+      -3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+      1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00};
+  static constexpr double b[] = {
+      -5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+      6.680131188771972e+01, -1.328068155288572e+01};
+  static constexpr double c[] = {
+      -7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+      -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00};
+  static constexpr double d[] = {
+      7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+      3.754408661907416e+00};
+  constexpr double plow = 0.02425;
+  constexpr double phigh = 1.0 - plow;
+  if (p < plow) {
+    const double q = std::sqrt(-2.0 * std::log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q +
+            c[5]) /
+           ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0);
+  }
+  if (p > phigh) {
+    const double q = std::sqrt(-2.0 * std::log(1.0 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q +
+             c[5]) /
+           ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0);
+  }
+  const double q = p - 0.5;
+  const double r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) *
+         q /
+         (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0);
+}
+}  // namespace
+
+post_expected<OrdinalCrmrInference>
+ordinal_crmr_misspec_inference(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const data::OrdinalStats& stats,
+                               const Estimates& est,
+                               OrdinalParameterization parameterization,
+                               bool estimated_weight,
+                               bool srmr_denominator,
+                               double conf_level,
+                               double eig_tol) {
+  if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
+      !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: multi-group CRMR/SRMR inference is not "
+        "yet supported (single group only)"));
+  }
+  if (stats.NACOV.size() != 1 || stats.moment_influence.size() != 1 ||
+      stats.int_data.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: per-case influence functions and "
+        "integer data are required (recompute ordinal stats with "
+        "moment_influence and int_data)"));
+  }
+  if (!(conf_level > 0.0 && conf_level < 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: conf_level must lie in (0,1)"));
+  }
+
+  const std::size_t b = 0;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index m = nth + ncorr;
+  if (ncorr <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: no association moments"));
+  }
+
+  // Integer-code validation + missing-pattern detection (mirror profile path).
+  bool block_has_missing = false;
+  const bool allow_pairwise_missing = stats.pairwise_gamma == "overlap";
+  {
+    const Eigen::MatrixXi& Xcat = stats.int_data[b];
+    if (stats.n_levels[b].size() != static_cast<std::size_t>(p)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal_crmr_misspec_inference: n_levels length mismatch"));
+    }
+    if (Xcat.rows() != stats.n_obs[b] || Xcat.cols() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal_crmr_misspec_inference: int_data shape mismatch"));
+    }
+    for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
+      for (Eigen::Index j = 0; j < Xcat.cols(); ++j) {
+        const int c = Xcat(r, j);
+        if (c < 0) {
+          if (!allow_pairwise_missing) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "ordinal_crmr_misspec_inference: missing int_data requires "
+                "pairwise overlap Gamma"));
+          }
+          block_has_missing = true;
+          continue;
+        }
+        if (c >= stats.n_levels[b][static_cast<std::size_t>(j)]) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "ordinal_crmr_misspec_inference: int_data must be 0-based codes"));
+        }
+      }
+    }
+  }
+
+  if (auto pr = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !pr.has_value()) {
+    return std::unexpected(fit_to_post(pr.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: fitted theta length does not match "
+        "ordinal delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  if (parameterization == OrdinalParameterization::Delta) {
+    for (const auto& blk : layout_or->scale_free) {
+      if (std::any_of(blk.begin(), blk.end(),
+                      [](char c) { return c != 0; })) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "ordinal_crmr_misspec_inference: delta fits with released response "
+            "scales are not yet supported"));
+      }
+    }
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd D = ordinal_moment_jacobian(
+      stats, *layout_or, eval->moments, eval->J_sigma, est.theta,
+      parameterization);  // m × q (single block)
+  if (D.rows() != m) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: moment Jacobian row count mismatch"));
+  }
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != D.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double N_total = static_cast<double>(*N_or);
+
+  auto ob = ordinal_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, stats.W_dwls, K, parameterization);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  const Eigen::MatrixXd Balpha = 0.5 * (*ob + ob->transpose()).eval();
+  auto Binv_or = sym_inverse_pd_post(
+      Balpha, "ordinal_crmr_misspec_inference observed bread");
+  if (!Binv_or.has_value()) return std::unexpected(Binv_or.error());
+  const Eigen::MatrixXd e_inv = K * (*Binv_or) * K.transpose();  // q × q
+
+  const Eigen::MatrixXd& W = stats.W_dwls[b];  // m × m
+  const Eigen::VectorXd d = ordinal_block_residual(
+      stats, *layout_or, eval->moments, est.theta, parameterization, b);  // m
+  const Eigen::VectorXd gamma_diag = stats.NACOV[b].diagonal();           // m
+
+  // Extended residual Jacobian Dφ = [ −(I − P) | D e_inv Dᵀ diag(d/γ²) ],
+  // P = D e_inv Dᵀ W. The u-block matches the catml projector −wi_u; the γ-block
+  // is the estimator's weight-sensitivity (sign FD-gated by the verification).
+  const Eigen::MatrixXd DeinvDt = D * e_inv * D.transpose();  // m × m
+  Eigen::MatrixXd Dphi(m, 2 * m);
+  Dphi.leftCols(m) = DeinvDt * W - Eigen::MatrixXd::Identity(m, m);
+  const Eigen::VectorXd dg2 =
+      (d.array() / gamma_diag.array().square()).matrix();
+  Dphi.rightCols(m) = DeinvDt * dg2.asDiagonal();
+
+  // V0 = correlation-selector identity (1 on the ncorr association rows).
+  Eigen::VectorXd v0diag = Eigen::VectorXd::Zero(m);
+  v0diag.tail(ncorr).setOnes();
+  const Eigen::MatrixXd V0Dphi = v0diag.asDiagonal() * Dphi;  // m × 2m
+  Eigen::MatrixXd Q_G = Dphi.transpose() * V0Dphi;            // 2m × 2m
+  Q_G = 0.5 * (Q_G + Q_G.transpose()).eval();
+  const Eigen::VectorXd g_G =
+      2.0 * (Dphi.transpose() * (v0diag.asDiagonal() * d));  // 2m
+  const double G = d.tail(ncorr).squaredNorm();               // = dᵀ V0 d
+
+  // Joint NACOV Γ_x of the extended (u, γ): same stacked-influence build as
+  // ordinal_dwls_profile_rmsea (full moment space).
+  const Eigen::MatrixXd& Gmat = stats.moment_influence[b];  // n × m
+  if (Gmat.cols() != m || Gmat.rows() != stats.n_obs[b]) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: moment_influence shape mismatch"));
+  }
+  auto ifg_or = block_has_missing
+      ? data::ordinal_observed_gamma_diag_data_influence(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+            stats.R[b])
+      : data::ordinal_gamma_diag_data_influence(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+            stats.R[b]);
+  if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
+  auto jac_or = block_has_missing
+      ? data::ordinal_observed_gamma_diag_jacobian_fd(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+            stats.R[b])
+      : data::ordinal_gamma_diag_jacobian_fd(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
+            stats.R[b]);
+  if (!jac_or.has_value()) return std::unexpected(jac_or.error());
+  if (ifg_or->rows() != Gmat.rows() || ifg_or->cols() != m ||
+      jac_or->rows() != m || jac_or->cols() != m) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_crmr_misspec_inference: gamma influence shape mismatch"));
+  }
+  Eigen::MatrixXd if_gamma = *ifg_or;
+  if_gamma.noalias() += Gmat * jac_or->transpose();
+  Eigen::MatrixXd H(Gmat.rows(), 2 * m);
+  H.leftCols(m) = Gmat;
+  H.rightCols(m) = if_gamma;
+  Eigen::MatrixXd Gamma_x =
+      (H.transpose() * H) / static_cast<double>(stats.n_obs[b]);
+  Gamma_x = 0.5 * (Gamma_x + Gamma_x.transpose()).eval();
+  if (!estimated_weight) {  // fixed-weight comparator: drop the γ channel
+    Gamma_x.rightCols(m).setZero();
+    Gamma_x.bottomRows(m).setZero();
+  }
+
+  auto spec_or =
+      robust::compute_profile_contrast_spectrum(Q_G, Gamma_x, eig_tol);
+  if (!spec_or.has_value()) return std::unexpected(spec_or.error());
+
+  OrdinalCrmrInference out;
+  out.fixed_weight = !estimated_weight;
+  out.srmr_denominator = srmr_denominator;
+  out.eigvals = spec_or->eigenvalues;
+  out.spectrum_size = static_cast<int>(spec_or->eigenvalues.size());
+  out.bias_trace = spec_or->trace_signed;
+  out.grad_var = std::max(0.0, g_G.dot(Gamma_x * g_G));
+  out.k = static_cast<int>(srmr_denominator ? vech_len(p) : ncorr);
+  out.stat = N_total * G;
+  const double Nk = N_total * static_cast<double>(out.k);
+  out.point = std::sqrt(std::max(G, 0.0) / static_cast<double>(out.k));
+  out.point_bias_corrected =
+      std::sqrt(std::max(out.stat - out.bias_trace, 0.0) / Nk);
+  out.exact_fit_pvalue =
+      out.eigvals.size() > 0
+          ? robust::weighted_chisq_upper(out.eigvals, std::max(0.0, out.stat))
+          : std::numeric_limits<double>::quiet_NaN();
+  out.warnings = std::move(spec_or->warnings);
+
+  // Misspecification normal-theory CI on the bias-removed statistic N·G₀.
+  const double z = crmr_inv_normal_cdf(0.5 * (1.0 + conf_level));
+  const double sd = std::sqrt(std::max(N_total * out.grad_var, 0.0));
+  const double center = out.stat - out.bias_trace;
+  out.ci_lower = std::sqrt(std::max(center - z * sd, 0.0) / Nk);
+  out.ci_upper = std::sqrt(std::max(center + z * sd, 0.0) / Nk);
+  return out;
 }
 
 post_expected<WeightedProfileRMSEAResult>

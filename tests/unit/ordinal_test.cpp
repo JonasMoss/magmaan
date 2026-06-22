@@ -3471,6 +3471,118 @@ TEST_CASE("ordinal_dwls_profile_lrt compares nested ordinal DWLS models") {
   CHECK(lrt->p_mixture <= 1.0);
 }
 
+TEST_CASE("ordinal CRMR point estimate and SRMR denominator relation") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260624, 600, {0.80, 0.74, 0.68, 0.62}, -0.5, 0.6);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto fm = magmaan::estimate::fit_measures_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fm.has_value());
+  // p=4: ncorr=6, vech_len=10. SRMR and CRMR share the numerator.
+  CHECK(fm->crmr > 0.0);
+  CHECK(fm->srmr ==
+        doctest::Approx(fm->crmr * std::sqrt(6.0 / 10.0)).epsilon(1e-9));
+}
+
+TEST_CASE("ordinal_crmr_misspec_inference runs and the gamma channel is active") {
+  // Tau-equivalence imposed on unequal-loading data => misspecified => nonzero
+  // residual => the estimated-weight (gamma) channel is live.
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260625, 800, {0.82, 0.66, 0.52, 0.40}, -0.4, 0.7);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + 1*x2 + 1*x3 + 1*x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto fm = magmaan::estimate::fit_measures_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fm.has_value());
+
+  auto est = magmaan::estimate::ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit);
+  REQUIRE_MESSAGE(est.has_value(),
+      "crmr inference failed: " << (est.has_value() ? "" : est.error().detail));
+
+  CHECK(est->point == doctest::Approx(fm->crmr).epsilon(1e-9));
+  CHECK(est->k == 6);
+  CHECK(est->bias_trace > 0.0);
+  CHECK(std::isfinite(est->bias_trace));
+  CHECK(est->grad_var >= 0.0);
+  CHECK(std::isfinite(est->grad_var));
+  CHECK(est->spectrum_size > 0);
+  CHECK(est->ci_lower <= est->ci_upper);
+  CHECK(est->ci_lower >= 0.0);
+  CHECK(std::isfinite(est->exact_fit_pvalue));
+  CHECK(est->exact_fit_pvalue >= 0.0);
+  CHECK(est->exact_fit_pvalue <= 1.0);
+
+  // Fixed-weight comparator: drops the gamma channel, so the law differs under
+  // misspecification (its bias trace is not identical to the estimated-weight
+  // one). Both must be finite.
+  auto fixed = magmaan::estimate::ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE(fixed.has_value());
+  CHECK(fixed->point == doctest::Approx(est->point).epsilon(1e-12));  // same G
+  CHECK(std::isfinite(fixed->grad_var));
+  CHECK(fixed->bias_trace > 0.0);
+  CHECK(std::abs(fixed->bias_trace - est->bias_trace) > 1e-8);  // gamma active
+
+  // SRMR variant: same statistic, different denominator/scale.
+  auto srmr = magmaan::estimate::ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/true, /*srmr_denominator=*/true);
+  REQUIRE(srmr.has_value());
+  CHECK(srmr->k == 10);
+  CHECK(srmr->stat == doctest::Approx(est->stat).epsilon(1e-12));
+  CHECK(srmr->point ==
+        doctest::Approx(est->point * std::sqrt(6.0 / 10.0)).epsilon(1e-9));
+}
+
 TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) law") {
   std::mt19937 rng(20260630);
   std::normal_distribution<double> norm(0.0, 1.0);
