@@ -36,14 +36,26 @@ The companion note \texttt{higher\_order\_discrepancy\_misspec.tex} fixes the
 misspecification: $2N\{v(\hat x)-v(x_0)\}\dto Z'Q\Gamma Z$ with
 $\E[\hat F]=F_0+n^{-1}[\tr(Q\Gamma)+\beta_W]+o(n^{-1})$, the curvature-corrected
 generalized df $\tr(Q\Gamma)$. This note does the complementary object: the
-\emph{inertia} of the same $Q\Gamma$. The limiting law is a weighted mixture
+\emph{inertia} of the same $Q\Gamma$. One spectrum carries two asymptotic roles.
+In the correctly-specified or local-drift regime the statistic is a genuine
+weighted $\chi^2$ mixture,
 \begin{equation}\label{eq:mixture}
-  2N\{v(\hat x)-v(x_0)\}\;\dto\;\sum_{j=1}^{m}\lambda_j\,\chi^2_{1,j},
+  2N\{v(\hat x)-v(x_0)\}\;\dto\;\sum_{j}\lambda_j\,\chi^2_{1,j},
   \qquad \lambda_j=\operatorname{eig}_j(Q\Gamma),
 \end{equation}
-and the questions are: how many $\lambda_j$ are nonzero (how many $\chi^2_1$ terms
-are actually present), how many are positive, and exactly when the count
-collapses to the classical $df=m-p$. This is the analytic backing for the
+with $\lambda_j\ge0$, and the question is how many terms are present and when the
+count is the classical $df=m-p$. Under \emph{fixed} misspecification the statistic
+is not a $\chi^2$ mixture at all but Gaussian ($\sqrt n(\hat F-F_0)\dto
+N(0,\omega^2)$, \texttt{higher\_order\_discrepancy\_misspec.tex}); the same
+spectrum then governs the $O(1)$ \emph{mean},
+$\E[2N\{v(\hat x)-v(x_0)\}]\to\tr(Q\Gamma)=\sum_j\lambda_j$, the
+curvature-corrected generalized df. The inertia identity below answers both: the
+positive count is the mixture's term count in the first regime and the number of
+positive mean-contributions in the second, while the negative weights, which
+exist only under fixed misspecification, are mean-level (they lower the
+generalized df) and never sampling-law weights
+(Corollary~\ref{cor:sign}, Section~\ref{sec:check}). This is the analytic backing
+for the
 \texttt{spectrum\_size} field of magmaan's \texttt{WeightedProfileRMSEAResult}
 / \texttt{WeightedProfileLRTResult}, which deliberately reports the size of the
 positive spectrum separately from the nominal model df because, as shown below,
@@ -182,12 +194,19 @@ in the regular regime $B\succ0$ ($\kappa_j<1$),
 \[
   1-\nu_j>0\iff\kappa_j<0,\qquad 1-\nu_j<0\iff\kappa_j>0 .
 \]
-So a \emph{negative} residual-curvature direction adds a \emph{positive}
-$\chi^2_1$ weight, while a \emph{positive} one adds a \emph{negative} weight. Off
-$H_0$ with positive residual-curvature directions present, $Q\Gamma$ is therefore
-indefinite: the limiting law \eqref{eq:mixture} is a difference of weighted
-$\chi^2_1$ variables, not the noncentral $\chi^2$ of the local-drift regime, and
-not even a nonnegative mixture.
+So a \emph{negative} residual-curvature direction contributes a \emph{positive}
+$\lambda_j$, while a \emph{positive} one contributes a \emph{negative} $\lambda_j$;
+off $H_0$ with a positive-curvature direction present, $Q\Gamma$ is indefinite.
+This indefiniteness is a property of the generalized-df \emph{mean}, not of a
+sampling law. Off $H_0$ the statistic is Gaussian, not $\chi^2$
+(Section~\ref{sec:check}), so a negative $\lambda_j$ is a negative \emph{bias}
+contribution that pulls $\tr(Q\Gamma)$ below the first-order trace $\tr(U\Gamma)$;
+it is not a negative weight of a realized mixture. Nor can it surface in the
+genuine mixture \eqref{eq:mixture}: that regime requires $e\to0$, which sends
+$\kappa_j\to0$ and $Q$ back to PSD, so the negative direction vanishes exactly
+where a $\chi^2$ law exists. A negative weight is realized only by a statistic
+recentered to cancel the dominant $O(\sqrt n)$ linear term $2(W_{\!p}e)'z$
+(Vuong-type); the raw discrepancy is dominated by that term.
 \end{corollary}
 
 \section{Consequences for the magmaan summaries}\label{sec:magmaan}
@@ -249,6 +268,31 @@ the negative count to $0$ as $\lVert e\rVert\to0$, with the largest extra weight
 shrinking like $O(\lVert e\rVert)$, confirming Corollaries~\ref{cor:classical}
 and \ref{cor:channels} and the brittleness remark. The naive-sandwich check of
 Remark~\ref{rem:envelope} reproduces $\lVert\text{sandwich}-Q\rVert=0.95\neq0$.
+
+\paragraph{A negative weight, and where it lives.} The ULS spectrum has exactly
+one negative eigenvalue, $\lambda_{\min}=-1.461$, from its single
+positive-curvature direction ($\kappa=+0.37\Rightarrow\nu=1.588>1$); the four
+negative-curvature directions ($\kappa\approx-0.08,-0.11$) supply the four extra
+\emph{positive} weights past $df=9$. This is the cleanest test of
+Corollary~\ref{cor:sign}: were the statistic the mixture $\sum_j\lambda_j\chi^2_1$,
+it would have mean $\sum_j\lambda_j=2.26$ and a \emph{constant}
+SD $\sqrt{2\sum_j\lambda_j^2}=2.91$. A Monte Carlo of the actual $T=N(\hat F-F_0)$
+under the fixed-misspecification population instead has SD growing like $\sqrt N$:
+\begin{center}
+\begin{tabular}{rrrr}
+$N$ & mean$(T)$ & SD$(T)$ & SD$/\sqrt N$\\\hline
+$250$   & $1.9$  & $16.8$  & $1.06$\\
+$1000$  & $2.2$  & $33.1$  & $1.05$\\
+$4000$  & $4.7$  & $66.7$  & $1.06$\\
+$16000$ & $-1.2$ & $130.9$ & $1.04$\\
+\end{tabular}
+\end{center}
+$\mathrm{SD}/\sqrt N$ is constant (the Gaussian signature), and the mixture's
+constant $2.91$ is already swamped at $N=250$. The mean stays $O(1)$ near
+$\sum_j\lambda_j$ (the large-$N$ wobble is the $\sqrt N$ spread over $\sim10^3$
+draws, SE of the mean $\approx3$ at $N=16000$). So $-1.461$ is visible only in the
+$O(1)$ mean, where it pulls the generalized df from the first-order
+$\tr(U\Gamma)=3.38$ down to $\tr(Q\Gamma)=2.26$; it is never a mixture weight.
 
 \section*{What remains}
 

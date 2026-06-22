@@ -343,6 +343,38 @@ def residual_shrink_scan(fit, Fval, Wproj_fn, Vout_fn, label, analytic_K=False, 
               f"{np.sum(lam[lam > 0]):7.3f}  {np.sum(lam):8.3f}")
 
 
+def negative_weight_law_demo(o, Gam, label, seed=20260622):
+    """Exhibit a negative mixture weight and show WHERE it lives.
+
+    Under fixed misspecification the statistic T = N(F_hat - F0) is NOT a chi^2
+    mixture: it is Gaussian (companion note, sqrt(N)(F_hat-F0) -> N(0,omega^2)),
+    so its SD grows like sqrt(N). The signed spectrum (negative weight included)
+    is the O(1) MEAN, E[T] -> tr(Q Gamma) = sum lambda_j, swamped by the sqrt(N)
+    spread. A negative lambda_j is therefore a negative BIAS contribution (it
+    lowers the generalized df), never a realized mixture weight."""
+    print(f"\n================ negative weight: where it lives ({label}) ================")
+    lam = np.sort(gen_eigvals(o["Q"], Gam))
+    S1, S2 = float(lam.sum()), float((lam ** 2).sum())
+    print(f"  QΓ spectrum min weight = {lam.min():.3f} (the negative one); "
+          f"Σλ = {S1:.3f}, Σλ² = {S2:.3f}")
+    print(f"  IF T ~ Σλⱼχ²₁ (mixture): mean = {S1:.2f}, SD = {np.sqrt(2*S2):.2f} "
+          f"(CONSTANT in N)")
+    rng2 = np.random.default_rng(seed)
+    th0 = uls_fit(s0, theta0)
+    F0 = uls_F(s0, th0)
+    L = np.linalg.cholesky(Sigma0)
+    print("  Monte Carlo of the actual T = N(F_hat - F0) under fixed misspecification:")
+    print("     N        mean(T)   SD(T)    SD/√N   (SD/√N const ⇒ Gaussian, not mixture)")
+    for N, M in [(250, 1500), (1000, 1500), (4000, 1500), (16000, 1200)]:
+        Ts = np.empty(M)
+        for r in range(M):
+            X = (L @ rng2.standard_normal((p, N))).T
+            s = vech(np.cov(X, rowvar=False, bias=False))
+            Ts[r] = N * (uls_F(s, uls_fit(s, th0)) - F0)
+        sd = Ts.std(ddof=1)
+        print(f"   {N:6d}    {Ts.mean():7.2f}  {sd:7.2f}  {sd/np.sqrt(N):7.3f}")
+
+
 if __name__ == "__main__":
     print(f"=== profile-Hessian rank accounting | p(vars)={p}  m={ps}  "
           f"classical df = m - 2p = {df} ===")
@@ -373,3 +405,6 @@ if __name__ == "__main__":
     residual_shrink_scan(ml_fit, ml_F,
                          lambda th: Wmat(unvech(sigma(th))),
                          lambda Sig: Wmat(Sig), "ML")
+
+    # the negative weight is a mean-level (bias) object, not a sampling-law weight.
+    negative_weight_law_demo(o_uls, Gamma_NT, "ULS")
