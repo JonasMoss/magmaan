@@ -3931,6 +3931,85 @@ TEST_CASE("misspec fit-index inference is multi-group (duplicate-group reduction
   CHECK(std::isfinite(fix->cfi));
 }
 
+TEST_CASE("ordinal CRMR multi-group pooling: quadratic-form vs lavaan per-group-root") {
+  // ordinal_crmr_misspec_inference reports CRMR on the pooled quadratic-form
+  // scale, point = sqrt(Σ_b (n_b/N)‖r_b‖²/k), consistent with its statistic N·G
+  // and its CI. fit_measures_ordinal / ordinal_crmr use lavaan's pooling, a
+  // sample-size-weighted mean of per-group roots, Σ_b (n_b/N)·sqrt(‖r_b‖²/k).
+  // The two agree at one group; for G>1, by Jensen (sqrt concave),
+  //   lavaan crmr ≤ misspec point,  strict once per-group misfit differs.
+  // This pins the single-group identity and documents the deliberate multi-group
+  // divergence: the misspec point is NOT lavaan's multi-group CRMR.
+  const char* syntax =
+      "f =~ x1 + 1*x2 + 1*x3 + 1*x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  opts.ftol = 1e-13;
+  opts.gtol = 1e-9;
+  auto fit_for = [&](const std::vector<Eigen::MatrixXd>& blocks, int n_groups) {
+    auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
+    REQUIRE(stats.has_value());
+    auto fp = magmaan::parse::Parser::parse(syntax);
+    REQUIRE(fp.has_value());
+    magmaan::spec::BuildOptions bo;
+    bo.n_groups = n_groups;
+    auto pt = magmaan::spec::build(*fp, bo);
+    REQUIRE(pt.has_value());
+    auto mr = magmaan::model::build_matrix_rep(*pt);
+    REQUIRE(mr.has_value());
+    auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+    REQUIRE(x0.has_value());
+    auto fit = magmaan::estimate::fit_ordinal_bounded(
+        *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE_MESSAGE(fit.has_value(),
+        "fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+    return std::make_tuple(std::move(*stats), std::move(*pt), std::move(*mr),
+                           std::move(*fit));
+  };
+  auto crmr_point = [&](const auto& pt, const auto& mr, const auto& s,
+                        const auto& f) {
+    auto inf = magmaan::estimate::ordinal_crmr_misspec_inference(pt, mr, s, f);
+    REQUIRE_MESSAGE(inf.has_value(),
+        "crmr inference failed: " << (inf.has_value() ? "" : inf.error().detail));
+    return inf->point;
+  };
+  auto fm_crmr = [&](const auto& pt, const auto& mr, const auto& s,
+                     const auto& f) {
+    auto fm = magmaan::estimate::fit_measures_ordinal(
+        pt, mr, s, f, magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::OrdinalParameterization::Delta);
+    REQUIRE(fm.has_value());
+    return fm->crmr;
+  };
+
+  // Two groups with deliberately different misfit so the poolings diverge.
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260629, 700, {0.82, 0.66, 0.52, 0.40}, -0.4, 0.7);
+  const Eigen::MatrixXd Y =
+      ordinal_test_block(20260630, 500, {0.78, 0.70, 0.55, 0.45}, -0.3, 0.8);
+
+  // Single group: the misspec point equals the lavaan CRMR exactly.
+  {
+    auto [s, pt, mr, f] = fit_for({X}, 1);
+    CHECK(crmr_point(pt, mr, s, f) ==
+          doctest::Approx(fm_crmr(pt, mr, s, f)).epsilon(1e-9));
+  }
+
+  // Two genuinely different groups: the poolings diverge, with the misspec
+  // (root-of-pooled-mean) point the larger of the two.
+  {
+    auto [s, pt, mr, f] = fit_for({X, Y}, 2);
+    const double point = crmr_point(pt, mr, s, f);
+    const double crmr = fm_crmr(pt, mr, s, f);
+    CHECK(point >= crmr - 1e-12);       // Jensen: mean-of-roots ≤ root-of-mean
+    CHECK(point > crmr + 1e-6);         // and the gap is material, not rounding
+  }
+}
+
 TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) law") {
   std::mt19937 rng(20260630);
   std::normal_distribution<double> norm(0.0, 1.0);

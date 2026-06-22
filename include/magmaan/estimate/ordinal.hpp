@@ -76,8 +76,17 @@ struct OrdinalCatmlDwlsRmsea {
 // propagates the sampling variability of the estimated weight (the γ channel)
 // through the joint NACOV of the extended (u, γ) first-stage vector. `stat = N·G`.
 // `point = sqrt(G/k)`; `point_bias_corrected` subtracts the signed bias trace.
+// The trace uses the Gauss-Newton Q_G = Dφᵀ V₀ Dφ; the residual·curvature term
+// (∂²r/∂x², O(‖r‖)) is omitted, so the correction is exact at the null and a
+// leading-order approximation off it (the CI width and exact-fit p-value, driven
+// by the full chain-rule gradient g_G, are unaffected).
 // With `estimated_weight = false` the γ channel is dropped (fixed-weight
-// comparator = current practice). Single-group only in this first pass.
+// comparator = current practice). Multi-group: criteria pool as sample-size-
+// weighted sums over the block-diagonal per-group Γ_x. For G>1 `point` is the
+// root of the pooled mean-square, sqrt(Σ_b (n_b/N)‖r_b‖²/k); by Jensen this is
+// ≥ fit_measures' CRMR (lavaan's per-group Σ_b (n_b/N)·sqrt(‖r_b‖²/k)), the two
+// agreeing only at one group. The bias-corrected point and CI live on this same
+// pooled quadratic-form (N·G) scale.
 struct OrdinalCrmrInference {
   double point = 0.0;                 // sqrt(G / k)
   double point_bias_corrected = 0.0;  // sqrt(max(N·G − tr(QΓ),0)/(N·k))
@@ -103,7 +112,7 @@ struct OrdinalCrmrInference {
 // bias-corrected RMSEA (= ordinal_dwls_profile_rmsea's rmsea); the CI propagates
 // the estimated weight through `grad_var = g_Fᵀ Γ_x g_F` (Var(N·F)=N·grad_var).
 // `estimated_weight=false` zeros the γ channel (fixed-weight comparator).
-// Single-group only in this first pass.
+// Multi-group: criteria pool as sample-size-weighted sums over the block-diagonal per-group Γ_x.
 struct OrdinalRmseaInference {
   double point = 0.0;            // sqrt(max(F − tr(QΓ)/N,0)·G/df)
   double ci_lower = 0.0;         // misspec normal-theory interval on F₀, mapped
@@ -130,7 +139,7 @@ struct OrdinalRmseaInference {
 // interval is the CFI interval scaled by Q̄_b/Q̄_u (Q̄ = signed bias trace, the
 // generalized df). `estimated_weight=false` zeros the γ channel (fixed-weight
 // comparator). See docs/research/notes/cfi_tli_misspec_inference.tex.
-// Single-group only in this first pass.
+// Multi-group: criteria pool as sample-size-weighted sums over the block-diagonal per-group Γ_x.
 struct OrdinalIncrementalFitInference {
   double cfi = 0.0;               // 1 − δ_u/δ_b, clipped to [0,1]
   double cfi_ci_lower = 0.0;      // misspec normal-theory interval, clipped
@@ -161,7 +170,7 @@ struct OrdinalIncrementalFitInference {
 // is the CRMR statistic rescaled to the vech denominator. The per-index
 // diagnostics (bias traces, gradient variances, spectra) stay on the individual
 // `OrdinalRmseaInference`/`OrdinalCrmrInference`/`OrdinalIncrementalFitInference`
-// results. `conf_level`/`fixed_weight` record the options. Single-group only.
+// results. `conf_level`/`fixed_weight` record the options. Multi-group via the block-diagonal per-group Γ_x.
 struct OrdinalMisspecFitMeasures {
   double conf_level = 0.90;
   bool fixed_weight = false;
@@ -644,8 +653,8 @@ catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
 // `estimated_weight=true` propagates the polychoric-weight sampling variability
 // through the joint NACOV of (u, γ); `false` is the fixed-weight comparator.
 // `srmr_denominator=true` reports the SRMR (vech) scaling instead of CRMR.
-// Single-group only (errors on multi-group). Requires `stats.moment_influence`
-// and `stats.int_data`.
+// Multi-group (criteria pool over groups; CRMR/SRMR requires a common variable
+// count across groups). Requires `stats.moment_influence` and `stats.int_data`.
 post_expected<OrdinalCrmrInference>
 ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                const model::MatrixRep& rep,
@@ -661,7 +670,7 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
 // Estimated-weight (γ-channel-aware) misspecification confidence interval for
 // RMSEA. Reuses `ordinal_dwls_profile_rmsea` for the Hessian/Γ_x/bias/spectrum
 // and adds the envelope-score gradient variance for the interval.
-// `estimated_weight=false` is the fixed-weight comparator. Single-group only.
+// `estimated_weight=false` is the fixed-weight comparator. Multi-group via the block-diagonal per-group Γ_x.
 post_expected<OrdinalRmseaInference>
 ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                 const model::MatrixRep& rep,
@@ -679,7 +688,7 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
 // thresholds, zero correlations) through `weighted_moment_profile_rmsea_-
 // estimated_weight` with the SAME Γ_x, then forms the ratio delta-method of the
 // two noncentralities (see OrdinalIncrementalFitInference).
-// `estimated_weight=false` is the fixed-weight comparator. Single-group only.
+// `estimated_weight=false` is the fixed-weight comparator. Multi-group via the block-diagonal per-group Γ_x.
 post_expected<OrdinalIncrementalFitInference>
 ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                   const model::MatrixRep& rep,
@@ -696,7 +705,7 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
 // inference entry points (each computing the shared profile/Γ_x internally), so
 // the bundled values match them exactly; SRMR is the CRMR result rescaled to the
 // vech denominator. `estimated_weight=false` is the fixed-weight comparator.
-// Single-group only.
+// Multi-group via the block-diagonal per-group Γ_x.
 post_expected<OrdinalMisspecFitMeasures>
 ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
                                        const model::MatrixRep& rep,
