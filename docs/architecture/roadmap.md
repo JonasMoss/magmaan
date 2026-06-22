@@ -232,6 +232,17 @@ golden `parTable()` fixtures.
   to the per-unit profile bread. Mean-structure ML is intentionally not wired
   into this first pass. These are basic dense research surfaces, not
   lavaan-parity fit-measure dispatch.
+  `estimate::weighted_moment_profile_rmsea_estimated_weight` adds the
+  diagonal-weight (categorical DWLS) case where the weight `W=diag(1/γ)` is
+  itself a first-stage quantity: it assembles the value-function Hessian over the
+  *extended* moment vector `x=(u,γ)`,
+  `Q = [[W,R],[R,S]] - [[WD],[RD]] B^{-1} [D'W,D'R]` with `R=diag(r/γ²)`,
+  `S=diag(r²/γ³)`, via the two-metric engine (extended `jacobian=[D;D]`,
+  `V0=[[W,R],[R,S]]`, `W*=blkdiag(W,R)`, joint NACOV `Γ_x`) and restates `df` to
+  the classical u-moment count. The residual-driven γ channel is dormant at
+  exact fit (`Q` collapses to `W − W D B^{-1} D' W`) and reshapes the reference
+  law under fixed misspecification. The categorical estimator wiring that
+  *produces* `(D, γ, r, Γ_x)` from the ordinal caches is still pending.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

@@ -703,6 +703,168 @@ TEST_CASE("weighted_moment_profile_rmsea_two_metric uses data and projection met
                                               65.0 * 65.0));
 }
 
+TEST_CASE("weighted_moment_profile_rmsea_estimated_weight matches finite-difference Q") {
+  using namespace magmaan::estimate;
+  const Eigen::Index m = 5;
+  const Eigen::Index q = 2;
+  Eigen::MatrixXd A(m, q);
+  A << 1.0, 0.0,
+       0.8, 0.2,
+       0.6, 0.4,
+       0.3, 0.7,
+       0.1, 0.9;
+  Eigen::VectorXd gamma0(m);
+  gamma0 << 0.5, 0.8, 1.2, 0.9, 0.6;
+  Eigen::VectorXd u0(m);
+  u0 << 0.9, 0.7, 0.55, 0.45, 0.2;  // not in col(A): residual is nonzero
+
+  // Profile score s(x) of the DWLS value function over x = (u, gamma), with the
+  // linear-model closed-form inner solve theta_hat = (A'WA)^{-1} A'W u.
+  auto profile_score = [&](const Eigen::VectorXd& x) -> Eigen::VectorXd {
+    Eigen::VectorXd u = x.head(m);
+    Eigen::VectorXd g = x.tail(m);
+    Eigen::MatrixXd W = g.cwiseInverse().asDiagonal();
+    Eigen::MatrixXd AtW = A.transpose() * W;
+    Eigen::VectorXd theta = (AtW * A).ldlt().solve(AtW * u);
+    Eigen::VectorXd r = A * theta - u;
+    Eigen::VectorXd s(2 * m);
+    s.head(m) = -(W * r);
+    s.tail(m) = -0.5 * (r.array().square() / g.array().square()).matrix();
+    return s;
+  };
+
+  Eigen::VectorXd x0(2 * m);
+  x0.head(m) = u0;
+  x0.tail(m) = gamma0;
+
+  // Central-difference Jacobian of the profile score == value-function Hessian.
+  const double h = 1e-6;
+  Eigen::MatrixXd Q_fd(2 * m, 2 * m);
+  for (Eigen::Index k = 0; k < 2 * m; ++k) {
+    Eigen::VectorXd xp = x0;
+    Eigen::VectorXd xm = x0;
+    xp(k) += h;
+    xm(k) -= h;
+    Q_fd.col(k) = (profile_score(xp) - profile_score(xm)) / (2.0 * h);
+  }
+  Q_fd = 0.5 * (Q_fd + Q_fd.transpose()).eval();
+
+  // Analytic assembly at the fitted point.
+  Eigen::MatrixXd W0 = gamma0.cwiseInverse().asDiagonal();
+  Eigen::MatrixXd AtW0 = A.transpose() * W0;
+  Eigen::VectorXd theta0 = (AtW0 * A).ldlt().solve(AtW0 * u0);
+  Eigen::VectorXd r0 = A * theta0 - u0;
+
+  WeightedEstimatedWeightProfileBlock blk;
+  blk.jacobian = A;
+  blk.weight_diag = gamma0;
+  blk.residual = r0;
+  blk.gamma = Eigen::MatrixXd::Identity(2 * m, 2 * m);
+  blk.n_obs = 200;
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(q, q);
+  Eigen::MatrixXd B = AtW0 * A;  // linear model: observed bread is exact
+
+  auto out = weighted_moment_profile_rmsea_estimated_weight({blk}, K, 0.3, B);
+  REQUIRE(out.has_value());
+  REQUIRE(out->profile_hessian.rows() == 2 * m);
+  CHECK((out->profile_hessian - Q_fd).cwiseAbs().maxCoeff() < 1e-6);
+
+  // Classical df is over the u-moments only, not the doubled extended space.
+  CHECK(out->df == static_cast<int>(m - q));
+}
+
+TEST_CASE("weighted_moment_profile_rmsea_estimated_weight collapses to fixed weight at r=0") {
+  using namespace magmaan::estimate;
+  const Eigen::Index m = 5;
+  const Eigen::Index q = 2;
+  Eigen::MatrixXd A(m, q);
+  A << 1.0, 0.0,
+       0.8, 0.2,
+       0.6, 0.4,
+       0.3, 0.7,
+       0.1, 0.9;
+  Eigen::VectorXd gamma0(m);
+  gamma0 << 0.5, 0.8, 1.2, 0.9, 0.6;
+  Eigen::Vector2d theta_star(0.5, 0.3);
+  Eigen::VectorXd u0 = A * theta_star;  // in col(A): residual vanishes at fit
+
+  Eigen::MatrixXd W0 = gamma0.cwiseInverse().asDiagonal();
+  Eigen::MatrixXd B = A.transpose() * W0 * A;
+  Eigen::VectorXd r0 = Eigen::VectorXd::Zero(m);  // exact fit
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(q, q);
+
+  WeightedEstimatedWeightProfileBlock blk;
+  blk.jacobian = A;
+  blk.weight_diag = gamma0;
+  blk.residual = r0;
+  blk.gamma = Eigen::MatrixXd::Identity(2 * m, 2 * m);
+  blk.n_obs = 200;
+  auto ew = weighted_moment_profile_rmsea_estimated_weight({blk}, K, 0.0, B);
+  REQUIRE(ew.has_value());
+
+  // Off-diagonal and gamma-gamma blocks are exactly zero when r = 0.
+  CHECK(ew->profile_hessian.block(0, m, m, m).cwiseAbs().maxCoeff() == 0.0);
+  CHECK(ew->profile_hessian.block(m, m, m, m).cwiseAbs().maxCoeff() == 0.0);
+
+  // The uu block equals the plain fixed-weight profile Hessian.
+  WeightedMomentBlock fixed_blk;
+  fixed_blk.jacobian = A;
+  fixed_blk.weight = W0;
+  fixed_blk.gamma = Eigen::MatrixXd::Identity(m, m);
+  fixed_blk.n_obs = 200;
+  auto fixed = weighted_moment_profile_rmsea({fixed_blk}, K, 0.0, B);
+  REQUIRE(fixed.has_value());
+  CHECK((ew->profile_hessian.topLeftCorner(m, m) - fixed->profile_hessian)
+            .cwiseAbs()
+            .maxCoeff() < 1e-12);
+}
+
+TEST_CASE("weighted_moment_profile_lrt accepts nested estimated-weight fits") {
+  using namespace magmaan::estimate;
+  const Eigen::Index m = 5;
+  Eigen::MatrixXd A(m, 2);
+  A << 1.0, 0.0,
+       0.8, 0.2,
+       0.6, 0.4,
+       0.3, 0.7,
+       0.1, 0.9;
+  Eigen::VectorXd gamma0(m);
+  gamma0 << 0.5, 0.8, 1.2, 0.9, 0.6;
+  Eigen::VectorXd u0(m);
+  u0 << 0.9, 0.7, 0.55, 0.45, 0.2;
+  Eigen::MatrixXd W0 = gamma0.cwiseInverse().asDiagonal();
+  Eigen::MatrixXd Gamma_x = Eigen::MatrixXd::Identity(2 * m, 2 * m);
+
+  auto build = [&](const Eigen::MatrixXd& D, double fmin) {
+    Eigen::MatrixXd AtW = D.transpose() * W0;
+    Eigen::VectorXd theta = (AtW * D).ldlt().solve(AtW * u0);
+    Eigen::VectorXd r = D * theta - u0;
+    WeightedEstimatedWeightProfileBlock blk;
+    blk.jacobian = D;
+    blk.weight_diag = gamma0;
+    blk.residual = r;
+    blk.gamma = Gamma_x;
+    blk.n_obs = 200;
+    Eigen::MatrixXd K = Eigen::MatrixXd::Identity(D.cols(), D.cols());
+    return weighted_moment_profile_rmsea_estimated_weight({blk}, K, fmin,
+                                                          AtW * D);
+  };
+
+  auto h1 = build(A, 0.20);                 // full model, q = 2, df = 3
+  auto h0 = build(A.leftCols(1), 0.35);     // submodel, q = 1, df = 4
+  REQUIRE(h1.has_value());
+  REQUIRE(h0.has_value());
+  CHECK(h1->df == 3);
+  CHECK(h0->df == 4);
+
+  auto lrt = weighted_moment_profile_lrt(*h1, *h0);
+  REQUIRE(lrt.has_value());
+  CHECK(lrt->df_diff == 1);
+  CHECK(lrt->spectrum_size > 0);
+  CHECK(lrt->T_diff == doctest::Approx(200.0 * (0.35 - 0.20)));
+}
+
 TEST_CASE("robust_weighted_moment_ij fixed-weight path matches weighted sandwich") {
   Eigen::MatrixXd G(4, 2);
   G << 1.0, 0.0,

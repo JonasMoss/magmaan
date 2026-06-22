@@ -374,13 +374,50 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     the covariance-only complete-data ML wrappers `ml_profile_rmsea` /
     `ml_profile_lrt` now implement the basic dense two-metric profile Hessian
     `Q = V0 - W* D B^{-1} D' W*` with raw-data or caller Γ. This is the basic
-    research surface only. Remaining profile-Hessian fit/test work:
+    research surface only.
+    - **Done 2026-06-22.** Estimated-weight (diagonal DWLS) profile-Hessian
+      core primitive `weighted_moment_profile_rmsea_estimated_weight` (+ the
+      `WeightedEstimatedWeightProfileBlock` ingredient struct). It assembles the
+      value-function Hessian over the *extended* first-stage vector `x = (u, γ)`,
+      `Q = φ_xx - φ_xθ B^{-1} φ_θx = [[W,R],[R,S]] - [[WD],[RD]] B^{-1} [D'W,D'R]`
+      with `W=diag(1/γ)`, `R=diag(r/γ²)`, `S=diag(r²/γ³)`, routing the extended
+      block (`jacobian=[D;D]`, `V0=[[W,R],[R,S]]`, `W*=blkdiag(W,R)`,
+      `gamma=Γ_x`) through the existing two-metric core and restating `df` to the
+      classical u-moment count `Σ m_b − n_alpha`. At `r=0` the γ channel is
+      dormant and `Q` collapses to the fixed-weight `W − W D B^{-1} D' W`; under
+      fixed misspecification the γ block reshapes the law (matches the
+      `docs/research/notes/ordinal_dwls_profile_*` prototype). `weighted_moment_profile_lrt`
+      already consumes the nested pair unchanged. Gated by FD-vs-analytic,
+      `r=0` reduction, and nested-LRT cases in `weighted_inference_test.cpp`.
+    - **Done 2026-06-22 (rank accounting).** The structured inertia bookkeeping
+      for the profile spectrum is characterized in
+      `docs/research/notes/profile_hessian_rank_accounting.tex` (+ the numpy
+      check `profile_hessian_rank_check.py`). Writing the profile Hessian as
+      `Q = V_o^{1/2}(I − Ĝ B^{-1} Ĝ') V_o^{1/2}` with `Ĝ = V_o^{-1/2} W_p D` and
+      the metric-gap form `Ã = D' W_p V_o^{-1} W_p D`, `col(Ĝ)` is invariant and
+      `spec(I − Ĝ B^{-1} Ĝ') = {1}^{(m−p)} ∪ {1 − ν_j}`, `ν_j = eig(B^{-1} Ã)`.
+      By Sylvester `Q`, `QΓ`, and the inner matrix share inertia, so
+      `spectrum_size = n_+(QΓ) = (m−p) + #{ν_j < 1}`, `n_−(QΓ) = #{ν_j > 1}`,
+      `rank(QΓ) = (m−p) + #{ν_j ≠ 1}`. Classical df survives iff `ν_j ≡ 1`, i.e.
+      `B = Ã`, which needs `K = 0` (observed-bread/curvature channel off) **and**
+      `W_p = V_o` (estimated-weight/metric channel off); both hold under correct
+      spec and at `e=0`. ULS exposes only the curvature channel, ML/GLS both, and
+      positive residual-curvature directions make `QΓ` indefinite (negative
+      mixture weights). The note also flags that the positive-only `bias_trace`
+      overcounts the signed `tr(QΓ)` of `higher_order_discrepancy_misspec.tex`
+      when `n_−>0` (a convention, not a bug), and that the extra weights are
+      `O(‖e‖)` so the integer rank is brittle (read `spectrum_size` as an
+      effective rank at a floor). Numerically verified to machine precision (ULS
+      inertia `(13,7,1)`, ML `(17,1,3)` at `df=9`; e→0 collapse to df).
+    Remaining profile-Hessian fit/test work:
     mean-structure ML; FIML and ML2S-NT two-metric profile Hessians;
-    ordinal/mixed categorical DWLS with expanded `(u, gamma)` first-stage
-    vectors; analytic or structured rank accounting for when the nonzero
-    positive spectrum equals classical df and when observed-bread /
-    estimated-weight channels add directions; R/API wrappers after a concrete
-    experiment needs them.
+    wiring the categorical DWLS estimator to *produce* the
+    `(D, γ, r, Γ_x)` ingredients (the joint NACOV `Γ_x` of `(u, γ)` from the
+    ordinal moment / `IF(Γ)` caches is the genuinely new piece), whose first-stage
+    influence adds its own directions to `Γ` on top of the two channels above; an
+    *a-priori* analytic sign count of `#{ν_j < 1}` from model structure (the note
+    settles the inertia identity but still reads the signs off an
+    eigendecomposition); R/API wrappers after a concrete experiment needs them.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
