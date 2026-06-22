@@ -155,6 +155,40 @@ struct OrdinalIncrementalFitInference {
   std::vector<std::string> warnings;
 };
 
+// Consolidated estimated-weight misspecification fit table for an all-ordinal
+// DWLS fit: the reportable RMSEA, CRMR, SRMR, CFI and TLI with their confidence
+// intervals, bundled into one post-fit result (the single C++/R surface). SRMR
+// is the CRMR statistic rescaled to the vech denominator. The per-index
+// diagnostics (bias traces, gradient variances, spectra) stay on the individual
+// `OrdinalRmseaInference`/`OrdinalCrmrInference`/`OrdinalIncrementalFitInference`
+// results. `conf_level`/`fixed_weight` record the options. Single-group only.
+struct OrdinalMisspecFitMeasures {
+  double conf_level = 0.90;
+  bool fixed_weight = false;
+  double rmsea = 0.0;            // bias-corrected profile RMSEA
+  double rmsea_ci_lower = 0.0;
+  double rmsea_ci_upper = 0.0;
+  double rmsea_pvalue = 0.0;     // exact-fit mixture tail Pr(Σλⱼχ²₁ > N·F)
+  double crmr = 0.0;             // sqrt(G/ncorr)
+  double crmr_ci_lower = 0.0;
+  double crmr_ci_upper = 0.0;
+  double srmr = 0.0;             // crmr · sqrt(ncorr/vech)
+  double srmr_ci_lower = 0.0;
+  double srmr_ci_upper = 0.0;
+  double crmr_pvalue = 0.0;      // shared CRMR/SRMR exact-fit mixture tail
+  double cfi = 0.0;
+  double cfi_ci_lower = 0.0;
+  double cfi_ci_upper = 0.0;
+  double tli = 0.0;
+  double tli_ci_lower = 0.0;
+  double tli_ci_upper = 0.0;
+  double stat_user = 0.0;        // T_u = N·F
+  double stat_baseline = 0.0;    // T_b
+  int df_user = 0;
+  int df_baseline = 0;
+  std::vector<std::string> warnings;
+};
+
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
@@ -656,6 +690,23 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                   bool estimated_weight = true,
                                   double conf_level = 0.90,
                                   double eig_tol = 1e-10);
+
+// Consolidated estimated-weight misspecification fit table (RMSEA + CRMR/SRMR +
+// CFI/TLI with CIs) for an all-ordinal DWLS fit. Delegates to the per-index
+// inference entry points (each computing the shared profile/Γ_x internally), so
+// the bundled values match them exactly; SRMR is the CRMR result rescaled to the
+// vech denominator. `estimated_weight=false` is the fixed-weight comparator.
+// Single-group only.
+post_expected<OrdinalMisspecFitMeasures>
+ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
+                                       const model::MatrixRep& rep,
+                                       const data::OrdinalStats& stats,
+                                       const Estimates& est,
+                                       OrdinalParameterization parameterization =
+                                           OrdinalParameterization::Delta,
+                                       bool estimated_weight = true,
+                                       double conf_level = 0.90,
+                                       double eig_tol = 1e-10);
 
 // Fixed-misspecification estimated-weight (categorical DWLS) profile-RMSEA for
 // an all-ordinal fit. The first-stage object is the EXTENDED moment vector

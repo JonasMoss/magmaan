@@ -938,3 +938,45 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
   }
   out
 }
+
+#' Misspecification-robust ordinal fit measures (estimated-weight intervals)
+#'
+#' Estimated-weight (categorical DWLS) misspecification inference for the
+#' absolute and incremental fit indices RMSEA, CRMR, SRMR, CFI and TLI, each with
+#' a confidence interval that propagates the sampling variability of the
+#' estimated polychoric weight (the gamma channel). The single consolidated
+#' surface over the per-index entry points. Single-group all-ordinal DWLS fits
+#' only.
+#'
+#' CFI carries a trustworthy interval and is largely robust to weight estimation;
+#' TLI's point is calibrated but its interval is conservative and unreliable at
+#' strong misfit (the generalized-df ratio is ill-conditioned). See
+#' `docs/research/notes/cfi_tli_misspec_inference.tex`.
+#'
+#' @param fit A fitted all-ordinal DWLS magmaan object.
+#' @param ordinal_stats The categorical sample statistics used for the fit, with
+#'   `moment_influence` and `int_data` (e.g. from `data_ordinal_stats_from_df()`).
+#'   Required and passed explicitly, like `robust_ordinal()` and the profile
+#'   bindings: a fitted object does not retain the integer data the
+#'   estimated-weight inference needs.
+#' @param estimated_weight `TRUE` (default) propagates the polychoric-weight
+#'   sampling variability; `FALSE` is the fixed-weight comparator.
+#' @param conf_level Two-sided confidence level for the intervals.
+#' @param eig_tol Eigenvalue tolerance for the profile-contrast spectrum.
+#' @return A named list: `rmsea`/`crmr`/`srmr`/`cfi`/`tli` with `.ci.lower` and
+#'   `.ci.upper`, the exact-fit `rmsea.pvalue` and `crmr.pvalue`, the user and
+#'   baseline `chisq`/`df`, `conf.level`, `estimated.weight`, and `warnings`.
+#' @export
+fit_measures_misspec <- function(fit, ordinal_stats = NULL,
+                                 estimated_weight = TRUE, conf_level = 0.90,
+                                 eig_tol = 1e-10) {
+  if (is.null(ordinal_stats)) {
+    stop("fit_measures_misspec(): `ordinal_stats` is required (the categorical ",
+         "sample statistics used for the fit, with moment_influence and ",
+         "int_data, e.g. from data_ordinal_stats_from_df()). A fitted object ",
+         "does not retain the integer data the estimated-weight inference needs.",
+         call. = FALSE)
+  }
+  infer_ordinal_fit_measures_misspec(fit, ordinal_stats, estimated_weight,
+                                     conf_level, eig_tol)
+}

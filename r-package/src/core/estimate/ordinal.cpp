@@ -6659,6 +6659,72 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<OrdinalMisspecFitMeasures>
+ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
+                                       const model::MatrixRep& rep,
+                                       const data::OrdinalStats& stats,
+                                       const Estimates& est,
+                                       OrdinalParameterization parameterization,
+                                       bool estimated_weight,
+                                       double conf_level,
+                                       double eig_tol) {
+  OrdinalMisspecFitMeasures out;
+  out.conf_level = conf_level;
+  out.fixed_weight = !estimated_weight;
+
+  auto rm = ordinal_rmsea_misspec_inference(pt, rep, stats, est, parameterization,
+                                            estimated_weight, conf_level, eig_tol);
+  if (!rm.has_value()) return std::unexpected(rm.error());
+  out.rmsea = rm->point;
+  out.rmsea_ci_lower = rm->ci_lower;
+  out.rmsea_ci_upper = rm->ci_upper;
+  out.rmsea_pvalue = rm->exact_fit_pvalue;
+
+  auto cr = ordinal_crmr_misspec_inference(pt, rep, stats, est, parameterization,
+                                           estimated_weight,
+                                           /*srmr_denominator=*/false, conf_level,
+                                           eig_tol);
+  if (!cr.has_value()) return std::unexpected(cr.error());
+  out.crmr = cr->point;
+  out.crmr_ci_lower = cr->ci_lower;
+  out.crmr_ci_upper = cr->ci_upper;
+  out.crmr_pvalue = cr->exact_fit_pvalue;
+  // SRMR shares the statistic; only the denominator differs (vech vs off-diag),
+  // so every reported quantity rescales by sqrt(ncorr/vech) = sqrt(k/(k+p)).
+  const double pdim = static_cast<double>(stats.R[0].rows());
+  const double kc = static_cast<double>(cr->k);
+  const double srmr_scale = (kc + pdim) > 0.0 ? std::sqrt(kc / (kc + pdim)) : 0.0;
+  out.srmr = cr->point * srmr_scale;
+  out.srmr_ci_lower = cr->ci_lower * srmr_scale;
+  out.srmr_ci_upper = cr->ci_upper * srmr_scale;
+
+  auto ct = ordinal_cfi_tli_misspec_inference(pt, rep, stats, est, parameterization,
+                                              estimated_weight, conf_level, eig_tol);
+  if (!ct.has_value()) return std::unexpected(ct.error());
+  out.cfi = ct->cfi;
+  out.cfi_ci_lower = ct->cfi_ci_lower;
+  out.cfi_ci_upper = ct->cfi_ci_upper;
+  out.tli = ct->tli;
+  out.tli_ci_lower = ct->tli_ci_lower;
+  out.tli_ci_upper = ct->tli_ci_upper;
+  out.stat_user = ct->stat_user;
+  out.stat_baseline = ct->stat_baseline;
+  out.df_user = ct->df_user;
+  out.df_baseline = ct->df_baseline;
+
+  // Bundle the per-index warnings, de-duplicated.
+  auto add_warnings = [&out](const std::vector<std::string>& ws) {
+    for (const auto& w : ws)
+      if (std::find(out.warnings.begin(), out.warnings.end(), w) ==
+          out.warnings.end())
+        out.warnings.push_back(w);
+  };
+  add_warnings(rm->warnings);
+  add_warnings(cr->warnings);
+  add_warnings(ct->warnings);
+  return out;
+}
+
 post_expected<WeightedProfileRMSEAResult>
 mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
                                  const model::MatrixRep& rep,

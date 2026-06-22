@@ -3755,6 +3755,80 @@ TEST_CASE("ordinal_cfi_tli_misspec_inference: joint two-model law for CFI/TLI") 
   CHECK(std::isfinite(fixed->var_cfi));
 }
 
+TEST_CASE("ordinal_fit_measures_misspec_inference bundles the per-index results") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260628, 800, {0.82, 0.66, 0.52, 0.40}, -0.4, 0.7);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + 1*x2 + 1*x3 + 1*x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  using magmaan::estimate::OrdinalParameterization;
+  auto rm = magmaan::estimate::ordinal_rmsea_misspec_inference(*pt, *mr, *stats,
+                                                               *fit);
+  auto cr = magmaan::estimate::ordinal_crmr_misspec_inference(*pt, *mr, *stats,
+                                                              *fit);
+  auto sr = magmaan::estimate::ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit, OrdinalParameterization::Delta,
+      /*estimated_weight=*/true, /*srmr_denominator=*/true);
+  auto ct = magmaan::estimate::ordinal_cfi_tli_misspec_inference(*pt, *mr,
+                                                                 *stats, *fit);
+  REQUIRE(rm.has_value());
+  REQUIRE(cr.has_value());
+  REQUIRE(sr.has_value());
+  REQUIRE(ct.has_value());
+
+  auto all = magmaan::estimate::ordinal_fit_measures_misspec_inference(
+      *pt, *mr, *stats, *fit);
+  REQUIRE_MESSAGE(all.has_value(),
+      "fit measures inference failed: "
+          << (all.has_value() ? "" : all.error().detail));
+
+  // The bundle equals the per-index entry points exactly (it delegates).
+  CHECK(all->rmsea == doctest::Approx(rm->point).epsilon(1e-12));
+  CHECK(all->rmsea_ci_lower == doctest::Approx(rm->ci_lower).epsilon(1e-12));
+  CHECK(all->rmsea_ci_upper == doctest::Approx(rm->ci_upper).epsilon(1e-12));
+  CHECK(all->rmsea_pvalue == doctest::Approx(rm->exact_fit_pvalue).epsilon(1e-12));
+  CHECK(all->crmr == doctest::Approx(cr->point).epsilon(1e-12));
+  CHECK(all->crmr_ci_lower == doctest::Approx(cr->ci_lower).epsilon(1e-12));
+  CHECK(all->crmr_pvalue == doctest::Approx(cr->exact_fit_pvalue).epsilon(1e-12));
+  CHECK(all->cfi == doctest::Approx(ct->cfi).epsilon(1e-12));
+  CHECK(all->cfi_ci_lower == doctest::Approx(ct->cfi_ci_lower).epsilon(1e-12));
+  CHECK(all->tli == doctest::Approx(ct->tli).epsilon(1e-12));
+  CHECK(all->tli_ci_upper == doctest::Approx(ct->tli_ci_upper).epsilon(1e-12));
+  CHECK(all->stat_user == doctest::Approx(ct->stat_user).epsilon(1e-12));
+  CHECK(all->df_baseline == ct->df_baseline);
+
+  // SRMR is the CRMR result rescaled to the vech denominator (p=4: 6 -> 10).
+  const double scale = std::sqrt(6.0 / 10.0);
+  CHECK(all->srmr == doctest::Approx(cr->point * scale).epsilon(1e-12));
+  CHECK(all->srmr == doctest::Approx(sr->point).epsilon(1e-9));
+  CHECK(all->srmr_ci_lower == doctest::Approx(sr->ci_lower).epsilon(1e-9));
+  CHECK(all->srmr_ci_upper == doctest::Approx(sr->ci_upper).epsilon(1e-9));
+  CHECK(all->conf_level == doctest::Approx(0.90));
+  CHECK_FALSE(all->fixed_weight);
+}
+
 TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) law") {
   std::mt19937 rng(20260630);
   std::normal_distribution<double> norm(0.0, 1.0);
