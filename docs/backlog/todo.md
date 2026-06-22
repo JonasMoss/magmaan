@@ -455,6 +455,17 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `ordinal_test.cpp` by the live mixed γ block, uu-block == NACOV,
       standard χ²/df parity with `robust_mixed_ordinal`, raw-data requirement,
       and a nested mixed DWLS profile-LRT smoke.
+    - **Done 2026-06-22 (R ordinal profile surface).**
+      The R package now exposes the all-ordinal and mixed DWLS profile methods
+      through `magmaan_core$ordinal_profile_rmsea` /
+      `ordinal_profile_lrt` and
+      `magmaan_core$mixed_ordinal_profile_rmsea` /
+      `mixed_ordinal_profile_lrt`, backed by `infer_*` Rcpp wrappers. These
+      take the same explicit `magmaan_ordinal_data` /
+      `magmaan_mixed_ordinal_data` object used for fitting, enforce DWLS, and
+      return the profile Hessian, Gamma, dense spectrum, signed/positive trace
+      summaries, RMSEA or nested-LRT statistics, and any warnings. Verified by
+      `just r-dev` and an R smoke over all-ordinal and mixed nested DWLS fits.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric
@@ -514,9 +525,7 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     runtime gate to skip dense profile-curvature work when negligible (still use
     dense `QΓ` when actual positive mixture weights are needed); an *a-priori*
     analytic sign count of `#{ν_j < 1}` from model structure (the note settles
-    the inertia identity but still reads the signs off an eigendecomposition);
-    R/API wrappers for the ordinal profile path (experiment 36 is C++-only
-    because they do not exist yet).
+    the inertia identity but still reads the signs off an eigendecomposition).
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
