@@ -142,11 +142,13 @@ struct Fitted {
   bool ok = false;
 };
 
-Fitted fit_dwls(const magmaan::data::OrdinalStats& stats) {
+Fitted fit_dwls(const magmaan::data::OrdinalStats& stats, int n_groups = 1) {
   Fitted out;
   auto fp = magmaan::parse::Parser::parse(syntax_congeneric());
   if (!fp.has_value()) return out;
-  auto pt = magmaan::spec::build(*fp);
+  magmaan::spec::BuildOptions bo;
+  bo.n_groups = n_groups;
+  auto pt = magmaan::spec::build(*fp, bo);
   if (!pt.has_value()) return out;
   auto mr = magmaan::model::build_matrix_rep(*pt);
   if (!mr.has_value()) return out;
@@ -176,6 +178,100 @@ std::int64_t parse_i64(std::string_view v, std::int64_t fb) {
   std::int64_t out = fb;
   std::from_chars(v.data(), v.data() + v.size(), out);
   return out;
+}
+
+// Two-group study: heterogeneous misfit (ε₁ ≠ ε₂) and sizes (n₁ ≠ n₂),
+// configural fit, exercising the n_b-weighted pooling and the block-diagonal
+// Γ_x. The population CFI₀/TLI₀ are read from a large-N two-group fit at the same
+// size ratio; coverage uses the UNCLAMPED normal interval.
+int run_multigroup(const Config& cfg) {
+  const double eps1 = 0.12, eps2 = 0.24;
+  const Eigen::Index n1 = cfg.n;
+  const Eigen::Index n2 = (cfg.n * 3) / 5;  // 1000 : 600
+  const Eigen::MatrixXd R1 = c4_correlation(cfg.lambda, eps1);
+  const Eigen::MatrixXd R2 = c4_correlation(cfg.lambda, eps2);
+  if (!is_pd(R1) || !is_pd(R2)) {
+    std::cout << "multigroup: a population correlation is not PD\n";
+    return 1;
+  }
+  const Eigen::MatrixXd L1 = Eigen::LLT<Eigen::MatrixXd>(R1).matrixL();
+  const Eigen::MatrixXd L2 = Eigen::LLT<Eigen::MatrixXd>(R2).matrixL();
+
+  double cfi_pop = std::numeric_limits<double>::quiet_NaN();
+  double tli_pop = std::numeric_limits<double>::quiet_NaN();
+  {
+    const Eigen::MatrixXd Xp1 =
+        c4_population_dataset(L1, cfg.n_pop, cfg.seed);
+    const Eigen::MatrixXd Xp2 =
+        c4_population_dataset(L2, (cfg.n_pop * 3) / 5, cfg.seed + 1);
+    auto sp = magmaan::data::ordinal_stats_from_integer_data({Xp1, Xp2}, true);
+    if (sp.has_value()) {
+      Fitted fp = fit_dwls(*sp, 2);
+      if (fp.ok) {
+        auto ep = magmaan::estimate::ordinal_cfi_tli_misspec_inference(
+            fp.pt, fp.rep, *sp, fp.est);
+        if (ep.has_value()) { cfi_pop = cfi_raw(*ep); tli_pop = ep->tli; }
+      }
+    }
+  }
+  if (!std::isfinite(cfi_pop) || !std::isfinite(tli_pop)) {
+    std::cout << "multigroup: population reference failed\n";
+    return 1;
+  }
+
+  std::mt19937_64 rng(cfg.seed + 4242ULL);
+  double s_cfi = 0, s_cfi2 = 0, s_tli = 0;
+  std::int64_t used = 0, cov_cfi_e = 0, cov_cfi_f = 0, cov_tli_e = 0;
+  for (std::int64_t r = 0; r < cfg.reps; ++r) {
+    const Eigen::MatrixXd X1 = c4_sample(L1, n1, rng);
+    const Eigen::MatrixXd X2 = c4_sample(L2, n2, rng);
+    auto stats = magmaan::data::ordinal_stats_from_integer_data({X1, X2}, true);
+    if (!stats.has_value()) continue;
+    Fitted f = fit_dwls(*stats, 2);
+    if (!f.ok) continue;
+    auto e = magmaan::estimate::ordinal_cfi_tli_misspec_inference(
+        f.pt, f.rep, *stats, f.est,
+        magmaan::estimate::OrdinalParameterization::Delta, true);
+    auto fx = magmaan::estimate::ordinal_cfi_tli_misspec_inference(
+        f.pt, f.rep, *stats, f.est,
+        magmaan::estimate::OrdinalParameterization::Delta, false);
+    if (!e.has_value() || !fx.has_value()) continue;
+    if (!std::isfinite(e->var_cfi) || !std::isfinite(e->tli) ||
+        !(e->delta_baseline > 0.0))
+      continue;
+    const double cf_e = cfi_raw(*e), cf_f = cfi_raw(*fx);
+    s_cfi += cf_e;
+    s_cfi2 += cf_e * cf_e;
+    s_tli += e->tli;
+    const double sd_e = std::sqrt(e->var_cfi), sd_f = std::sqrt(fx->var_cfi);
+    cov_cfi_e += (cf_e - kZ * sd_e <= cfi_pop &&
+                  cfi_pop <= cf_e + kZ * sd_e) ? 1 : 0;
+    cov_cfi_f += (cf_f - kZ * sd_f <= cfi_pop &&
+                  cfi_pop <= cf_f + kZ * sd_f) ? 1 : 0;
+    const double sdt = std::sqrt(e->var_tli);
+    cov_tli_e += (e->tli - kZ * sdt <= tli_pop &&
+                  tli_pop <= e->tli + kZ * sdt) ? 1 : 0;
+    ++used;
+  }
+  if (used < 10) { std::cout << "multigroup: too few reps\n"; return 1; }
+  const double d = static_cast<double>(used);
+  const double mc_mean = s_cfi / d;
+  const double cov_ce = static_cast<double>(cov_cfi_e) / d;
+  const double cov_cf = static_cast<double>(cov_cfi_f) / d;
+  const double cov_te = static_cast<double>(cov_tli_e) / d;
+  std::cout << "two-group (eps " << eps1 << "/" << eps2 << ", n " << n1 << "/"
+            << n2 << ")  CFI_pop=" << cfi_pop << "  TLI_pop=" << tli_pop
+            << "  (used " << used << ")\n"
+            << "  CFI: mc_mean=" << mc_mean << "  coverage est=" << cov_ce
+            << " fixed=" << cov_cf << "\n"
+            << "  TLI: coverage est=" << cov_te << "\n";
+
+  int fails = 0;
+  if (std::abs(mc_mean - cfi_pop) > 0.02) ++fails;
+  if (cov_ce < 0.84 || cov_ce > 0.97) ++fails;
+  if (cov_te < 0.84) ++fails;
+  std::cout << "\n";
+  return fails;
 }
 
 }  // namespace
@@ -337,6 +433,8 @@ int main(int argc, char** argv) {
     }
     std::cout << "\n";
   }
+
+  failures += run_multigroup(cfg);
 
   std::cout << (failures == 0 ? "PASS" : "FAIL") << ": " << failures
             << " failed criteria\n";
