@@ -562,6 +562,27 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       direction from the nested test (conservative, not anti-conservative).
       Deferred: R bindings, close-fit p-value, classical-noncentral comparator,
       multi-group.
+    - **Done 2026-06-22 (CFI/TLI estimated-weight inference).** The program's
+      first *incremental* (two-model) index. `estimate::ordinal_cfi_tli_misspec_-
+      inference` (`OrdinalIncrementalFitInference`) returns misspecification-robust
+      CFI and TLI with confidence intervals. The user model runs through
+      `ordinal_dwls_profile_rmsea`; the independence baseline (free thresholds,
+      zero correlations) is an analytic block (`D_b=[I;0]`, Gauss-Newton bread
+      `W_tt` since σ_b is linear) routed through the *same*
+      `weighted_moment_profile_rmsea_estimated_weight` with the *shared* `Γ_x`, so
+      the joint law of `(T_u,T_b)` is one bilinear form: `Cov(T_u,T_b)=N gᵤᵀΓ_x g_b`
+      with the envelope-score gradients `g=(−2Wd,−d²/γ²)`. CFI `=1−δ_u/δ_b` and
+      TLI `=1−(Q̄_b/Q̄_u)·δ_u/δ_b` (noncentralities `δ=T−Q̄`, generalized df
+      `Q̄=tr(QΓ_x)`) are a ratio delta-method; the TLI interval is the CFI
+      interval scaled by `Q̄_b/Q̄_u`. `estimated_weight=false` zeros the γ channel.
+      Single-group only. Derivation in
+      `docs/research/notes/cfi_tli_misspec_inference.tex` (joint CLT + ratio
+      delta-method + the baseline-dominated `Var(CFI)≈V_uu/δ_b²` simplification,
+      which the test confirms). Gated by `ordinal_test.cpp` (T_u/T_b pass-through,
+      baseline==`fm.baseline`, CFI∈[0,1] ordered CI, TLI=1−c·r and
+      `Var(TLI)=c²Var(CFI)`, leading-order check, γ channel active vs fixed-weight
+      comparator). Deferred: R bindings, MC coverage harness, close-fit boundary
+      calibration, multi-group.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use

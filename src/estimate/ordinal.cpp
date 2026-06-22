@@ -6458,6 +6458,206 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<OrdinalIncrementalFitInference>
+ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
+                                  const model::MatrixRep& rep,
+                                  const data::OrdinalStats& stats,
+                                  const Estimates& est,
+                                  OrdinalParameterization parameterization,
+                                  bool estimated_weight,
+                                  double conf_level,
+                                  double eig_tol) {
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: multi-group incremental-fit "
+        "inference is not yet supported (single group only)"));
+  }
+  if (!(conf_level > 0.0 && conf_level < 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: conf_level must lie in (0,1)"));
+  }
+
+  // User model: profile Hessian Q_u, the shared joint NACOV Γ_x, T_u = N·F_u,
+  // signed bias trace Q̄_u, df, N. The profile path also validates the fit and
+  // the moment_influence/int_data requirements.
+  spec::LatentStructure pt_user = pt;  // profile consumes its argument
+  auto prof_or = ordinal_dwls_profile_rmsea(std::move(pt_user), rep, stats, est,
+                                            parameterization, eig_tol);
+  if (!prof_or.has_value()) return std::unexpected(prof_or.error());
+  const WeightedProfileRMSEAResult& prof = *prof_or;
+
+  const Eigen::Index p = stats.R[0].rows();
+  const Eigen::Index nth = stats.thresholds[0].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index m = nth + ncorr;
+  if (ncorr <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: no association moments"));
+  }
+  if (prof.profile_hessian.rows() != 2 * m || prof.gamma.rows() != 2 * m) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: unexpected profile dimension "
+        "(single group expected)"));
+  }
+
+  const Eigen::VectorXd gamma_diag = stats.NACOV[0].diagonal();  // γ, length m
+  const Eigen::MatrixXd& W = stats.W_dwls[0];                    // diag(1/γ)
+
+  // User residual d_u = σ(θ̂) − u (recompute, as the RMSEA path does).
+  if (auto pr = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !pr.has_value()) {
+    return std::unexpected(fit_to_post(pr.error()));
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+  const Eigen::VectorXd d_u = ordinal_block_residual(
+      stats, *layout_or, eval->moments, est.theta, parameterization, 0);
+  if (d_u.size() != m) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_cfi_tli_misspec_inference: user residual length mismatch"));
+  }
+
+  // Baseline (independence model): free thresholds, all correlations fixed to 0.
+  // Residual d_b = σ_b − u has zero threshold block (diagonal W profiles the
+  // thresholds to the sample values) and correlation block −vech_<(R̂). σ_b is
+  // LINEAR in the thresholds, so the observed bread equals the Gauss-Newton
+  // bread D_bᵀ W D_b = W_tt and Q_b is exact. Routed through the same
+  // estimated-weight primitive with the SAME Γ_x, so the cross-covariance below
+  // is a single bilinear form in one metric.
+  Eigen::VectorXd d_b = Eigen::VectorXd::Zero(m);
+  d_b.tail(ncorr) = -corr_lower(stats.R[0]);
+  Eigen::MatrixXd D_b = Eigen::MatrixXd::Zero(m, nth);
+  D_b.topRows(nth).setIdentity();  // ∂(implied moments)/∂(thresholds) = [I; 0]
+  const Eigen::MatrixXd K_b = Eigen::MatrixXd::Identity(nth, nth);
+  Eigen::MatrixXd B_b = Eigen::MatrixXd::Zero(nth, nth);
+  B_b.diagonal() = gamma_diag.head(nth).array().inverse().matrix();
+  const double fmin_b = (d_b.array().square() / gamma_diag.array()).sum();
+
+  std::vector<WeightedEstimatedWeightProfileBlock> bblocks;
+  bblocks.push_back(WeightedEstimatedWeightProfileBlock{
+      .jacobian = D_b,
+      .weight_diag = gamma_diag,
+      .residual = d_b,
+      .gamma = prof.gamma,
+      .n_obs = stats.n_obs[0]});
+  auto prof_b_or = weighted_moment_profile_rmsea_estimated_weight(
+      bblocks, K_b, fmin_b, B_b, 1, eig_tol);
+  if (!prof_b_or.has_value()) return std::unexpected(prof_b_or.error());
+  const WeightedProfileRMSEAResult& prof_b = *prof_b_or;
+
+  // Envelope-score gradients g = (−2Wd, −d²/γ²) in the extended (u, γ). The
+  // baseline threshold channel is identically zero (d_b head = 0).
+  auto envelope_grad = [&](const Eigen::VectorXd& d) {
+    Eigen::VectorXd g(2 * m);
+    g.head(m) = -2.0 * (W * d);
+    g.tail(m) = -(d.array().square() / gamma_diag.array().square()).matrix();
+    return g;
+  };
+  const Eigen::VectorXd g_u = envelope_grad(d_u);
+  const Eigen::VectorXd g_b = envelope_grad(d_b);
+
+  // Estimated-weight metric, or its u-block only (fixed-weight comparator). The
+  // bias traces revert to fixed-weight values when the γ channel is dropped.
+  Eigen::MatrixXd Gamma_x = prof.gamma;
+  double biasU = prof.trace_signed;
+  double biasB = prof_b.trace_signed;
+  if (!estimated_weight) {
+    Gamma_x.rightCols(m).setZero();
+    Gamma_x.bottomRows(m).setZero();
+    auto su = robust::compute_profile_contrast_spectrum(prof.profile_hessian,
+                                                        Gamma_x, eig_tol);
+    if (!su.has_value()) return std::unexpected(su.error());
+    auto sb = robust::compute_profile_contrast_spectrum(prof_b.profile_hessian,
+                                                        Gamma_x, eig_tol);
+    if (!sb.has_value()) return std::unexpected(sb.error());
+    biasU = su->trace_signed;
+    biasB = sb->trace_signed;
+  }
+
+  const double N = static_cast<double>(prof.ntotal);
+  OrdinalIncrementalFitInference out;
+  out.fixed_weight = !estimated_weight;
+  out.stat_user = prof.chisq_standard;
+  out.stat_baseline = prof_b.chisq_standard;
+  out.gendf_user = biasU;
+  out.gendf_baseline = biasB;
+  out.delta_user = out.stat_user - biasU;
+  out.delta_baseline = out.stat_baseline - biasB;
+  out.df_user = prof.df;
+  out.df_baseline = prof_b.df;
+  out.warnings = prof.warnings;
+  for (const auto& w : prof_b.warnings) out.warnings.push_back(w);
+
+  // Joint covariance of (T_u, T_b): one bilinear form in the shared Γ_x.
+  const Eigen::VectorXd Gx_gu = Gamma_x * g_u;
+  const Eigen::VectorXd Gx_gb = Gamma_x * g_b;
+  out.var_user = std::max(0.0, N * g_u.dot(Gx_gu));
+  out.var_baseline = std::max(0.0, N * g_b.dot(Gx_gb));
+  out.cov_user_baseline = N * g_u.dot(Gx_gb);
+
+  const double z = inv_normal_cdf(0.5 * (1.0 + conf_level));
+  const double db = out.delta_baseline;
+  if (!(db > 0.0)) {
+    out.cfi = 1.0;
+    out.tli = std::numeric_limits<double>::quiet_NaN();
+    out.cfi_ci_lower = out.cfi_ci_upper =
+        std::numeric_limits<double>::quiet_NaN();
+    out.tli_ci_lower = out.tli_ci_upper =
+        std::numeric_limits<double>::quiet_NaN();
+    out.warnings.emplace_back(
+        "ordinal_cfi_tli_misspec_inference: baseline noncentrality is "
+        "non-positive (independence model fits); CFI set to 1, TLI/intervals "
+        "undefined");
+    return out;
+  }
+
+  const double r = out.delta_user / db;  // 1 − CFI
+  out.var_cfi = std::max(0.0,
+      (out.var_user - 2.0 * r * out.cov_user_baseline +
+       r * r * out.var_baseline) / (db * db));
+  out.cfi = std::clamp(1.0 - r, 0.0, 1.0);
+  const double sd_cfi = std::sqrt(out.var_cfi);
+  out.cfi_ci_lower = std::clamp(1.0 - r - z * sd_cfi, 0.0, 1.0);
+  out.cfi_ci_upper = std::clamp(1.0 - r + z * sd_cfi, 0.0, 1.0);
+  if (out.delta_user <= 0.0) {
+    out.warnings.emplace_back(
+        "ordinal_cfi_tli_misspec_inference: user noncentrality is non-positive "
+        "(near-exact fit); CFI on the boundary, normal interval approximate");
+  }
+
+  // TLI is CFI's ratio rescaled by the generalized-df ratio c = Q̄_b/Q̄_u, and
+  // its interval is the CFI interval scaled by c (Var(TLI) = c²·Var(CFI)).
+  if (biasU > 0.0) {
+    const double c = biasB / biasU;
+    out.tli = 1.0 - c * r;
+    out.var_tli = c * c * out.var_cfi;
+    const double sd_tli = std::sqrt(out.var_tli);
+    out.tli_ci_lower = out.tli - z * sd_tli;
+    out.tli_ci_upper = out.tli + z * sd_tli;
+  } else {
+    out.tli = std::numeric_limits<double>::quiet_NaN();
+    out.var_tli = std::numeric_limits<double>::quiet_NaN();
+    out.tli_ci_lower = out.tli_ci_upper =
+        std::numeric_limits<double>::quiet_NaN();
+    out.warnings.emplace_back(
+        "ordinal_cfi_tli_misspec_inference: user generalized df is "
+        "non-positive; TLI undefined");
+  }
+  return out;
+}
+
 post_expected<WeightedProfileRMSEAResult>
 mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
                                  const model::MatrixRep& rep,

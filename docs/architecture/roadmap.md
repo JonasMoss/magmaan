@@ -302,6 +302,18 @@ golden `parTable()` fixtures.
   is conservative (over-covers, increasingly with misspecification) — accounting
   for the estimated weight tightens RMSEA's interval. Verified by
   `tests/checks/ordinal_rmsea_inference`. Single-group; R bindings deferred.
+  The first *incremental* (two-model) case is
+  `estimate::ordinal_cfi_tli_misspec_inference` (`OrdinalIncrementalFitInference`):
+  misspecification-robust CFI and TLI with CIs. The user model and the analytic
+  independence baseline (linear in its thresholds, so `Q_b` is exact) run through
+  the *same* profile primitive with the *shared* `Γ_x`, so the joint law of
+  `(T_u,T_b)` is one bilinear form `Cov(T_u,T_b)=N gᵤᵀΓ_x g_b`; CFI `=1−δ_u/δ_b`
+  and TLI `=1−(Q̄_b/Q̄_u)δ_u/δ_b` (noncentralities `δ=T−Q̄`, generalized df
+  `Q̄=tr(QΓ_x)`) are a ratio delta-method, the TLI interval being the CFI interval
+  scaled by `Q̄_b/Q̄_u`. To leading order `Var(CFI)≈Var(T_u)/δ_b²`, so CFI
+  inference is a rescaling of the RMSEA-side variance. Derivation in
+  `docs/research/notes/cfi_tli_misspec_inference.tex`; gated by `ordinal_test.cpp`.
+  Single-group; R bindings and an MC coverage harness deferred.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over
