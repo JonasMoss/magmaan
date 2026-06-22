@@ -2135,6 +2135,109 @@ TEST_CASE("two_stage_em_ml_inference: missing data returns finite corrected outp
   CHECK(std::isfinite(ml2s->chisq_scaled));
 }
 
+TEST_CASE("two_stage_nt_profile: missing data raw and saturated moments agree") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + 1*x2 + x3 + x4");
+
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.55);
+  auto raw = model_missing_raw(h1, theta1, {180});
+
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1mom = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1mom.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1mom);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " << (sm.has_value() ? "" : sm.error().detail));
+
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 700;
+  Eigen::VectorXd start1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  start1.setConstant(0.55);
+  Eigen::VectorXd start0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  start0.setConstant(0.55);
+  auto est1 = magmaan::estimate::fit_ml(
+      *h1.pt, *h1.rep, samp, start1, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto est0 = magmaan::estimate::fit_ml(
+      *h0.pt, *h0.rep, samp, start0, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est1.has_value(),
+      "H1 two-stage ML fit failed: " << (est1.has_value() ? "" : est1.error().detail));
+  REQUIRE_MESSAGE(est0.has_value(),
+      "H0 two-stage ML fit failed: " << (est0.has_value() ? "" : est0.error().detail));
+
+  auto prof_sm = magmaan::estimate::fiml::two_stage_nt_profile_rmsea(
+      *h1.pt, *h1.rep, *est1, *sm);
+  auto prof_raw = magmaan::estimate::fiml::two_stage_nt_profile_rmsea(
+      *h1.pt, *h1.rep, raw, *est1);
+  auto prof_pack = magmaan::estimate::fiml::two_stage_nt_profile_rmsea(
+      *h1.pt, *h1.rep, raw, *est1, *pack, *h1mom);
+  REQUIRE_MESSAGE(prof_sm.has_value(),
+      "two_stage_nt_profile_rmsea(sm) failed: " <<
+      (prof_sm.has_value() ? "" : prof_sm.error().detail));
+  REQUIRE_MESSAGE(prof_raw.has_value(),
+      "two_stage_nt_profile_rmsea(raw) failed: " <<
+      (prof_raw.has_value() ? "" : prof_raw.error().detail));
+  REQUIRE_MESSAGE(prof_pack.has_value(),
+      "two_stage_nt_profile_rmsea(pack) failed: " <<
+      (prof_pack.has_value() ? "" : prof_pack.error().detail));
+
+  auto df1 = magmaan::inference::df_stat(*h1.pt, samp, est1->theta);
+  REQUIRE(df1.has_value());
+  CHECK(prof_sm->df == *df1);
+  CHECK(prof_sm->ntotal == 180);
+  CHECK(prof_sm->profile_hessian.rows() == prof_sm->gamma.rows());
+  CHECK(prof_sm->spectrum_rank >= prof_sm->spectrum_size);
+  CHECK(prof_sm->chisq_standard ==
+        doctest::Approx(magmaan::inference::chi2_stat(samp, *est1)));
+  CHECK(prof_raw->profile_hessian.isApprox(prof_sm->profile_hessian, 1e-12));
+  CHECK(prof_pack->profile_hessian.isApprox(prof_sm->profile_hessian, 1e-12));
+  CHECK(prof_raw->gamma.isApprox(prof_sm->gamma, 1e-12));
+  CHECK(prof_pack->gamma.isApprox(prof_sm->gamma, 1e-12));
+  CHECK(prof_raw->eigvals.isApprox(prof_sm->eigvals, 1e-10));
+  CHECK(prof_pack->eigvals.isApprox(prof_sm->eigvals, 1e-10));
+  CHECK(prof_raw->trace_signed == doctest::Approx(prof_sm->trace_signed));
+  CHECK(prof_pack->trace_signed == doctest::Approx(prof_sm->trace_signed));
+
+  auto lrt_sm = magmaan::estimate::fiml::two_stage_nt_profile_lrt(
+      *h1.pt, *h1.rep, *est1, *h0.pt, *h0.rep, *est0, *sm);
+  auto lrt_raw = magmaan::estimate::fiml::two_stage_nt_profile_lrt(
+      *h1.pt, *h1.rep, raw, *est1, *h0.pt, *h0.rep, *est0);
+  auto lrt_pack = magmaan::estimate::fiml::two_stage_nt_profile_lrt(
+      *h1.pt, *h1.rep, raw, *est1, *h0.pt, *h0.rep, *est0, *pack, *h1mom);
+  REQUIRE_MESSAGE(lrt_sm.has_value(),
+      "two_stage_nt_profile_lrt(sm) failed: " <<
+      (lrt_sm.has_value() ? "" : lrt_sm.error().detail));
+  REQUIRE_MESSAGE(lrt_raw.has_value(),
+      "two_stage_nt_profile_lrt(raw) failed: " <<
+      (lrt_raw.has_value() ? "" : lrt_raw.error().detail));
+  REQUIRE_MESSAGE(lrt_pack.has_value(),
+      "two_stage_nt_profile_lrt(pack) failed: " <<
+      (lrt_pack.has_value() ? "" : lrt_pack.error().detail));
+
+  auto df0 = magmaan::inference::df_stat(*h0.pt, samp, est0->theta);
+  REQUIRE(df0.has_value());
+  CHECK(lrt_sm->df_diff == *df0 - *df1);
+  CHECK(lrt_sm->df_diff > 0);
+  CHECK(lrt_sm->T_diff == doctest::Approx(
+      magmaan::inference::chi2_stat(samp, *est0) -
+      magmaan::inference::chi2_stat(samp, *est1)));
+  CHECK(lrt_raw->profile_hessian.isApprox(lrt_sm->profile_hessian, 1e-12));
+  CHECK(lrt_pack->profile_hessian.isApprox(lrt_sm->profile_hessian, 1e-12));
+  CHECK(lrt_raw->gamma.isApprox(lrt_sm->gamma, 1e-12));
+  CHECK(lrt_pack->gamma.isApprox(lrt_sm->gamma, 1e-12));
+  CHECK(lrt_raw->eigvals.isApprox(lrt_sm->eigvals, 1e-10));
+  CHECK(lrt_pack->eigvals.isApprox(lrt_sm->eigvals, 1e-10));
+  CHECK(std::isfinite(lrt_sm->p_mixture));
+}
+
 TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT "
           "spectrum; ADF collapses to c=1; DLS endpoints match Nt/Adf") {
   namespace mf = magmaan::estimate::fiml;

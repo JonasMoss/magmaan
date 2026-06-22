@@ -176,8 +176,8 @@ weighted_moment_profile_rmsea(const std::vector<WeightedMomentBlock>& blocks,
                               std::size_t n_groups = 1,
                               double eig_tol = 1e-10);
 
-// Two-metric variant used by complete-data ML and future ML2S-NT profile
-// methods. The first Hessian term uses `data_metric`; the tangent projection
+// Two-metric variant used by complete-data ML and ML2S-NT profile methods. The
+// first Hessian term uses `data_metric`; the tangent projection
 // uses `projection_metric`:
 //   Q = V0 - W* D B^{-1} D' W*.
 post_expected<WeightedProfileRMSEAResult>
