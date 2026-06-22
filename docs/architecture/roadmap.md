@@ -253,7 +253,13 @@ golden `parTable()` fixtures.
   and builds the joint NACOV `Γ_x` of `(u, γ)` from stacked per-case influence
   rows `[g_i | IF_i(γ)]`, reusing the same `ordinal_gamma_diag_*` influence
   channels as `robust_ordinal_ij`; its `chisq_standard`/`df` match
-  `robust_ordinal`. Mixed continuous/ordinal DWLS wiring is still pending.
+  `robust_ordinal`. Mixed continuous/ordinal DWLS is wired through
+  `estimate::mixed_ordinal_dwls_profile_rmsea` /
+  `mixed_ordinal_dwls_profile_lrt`, which assemble the same `(D, γ, r, Γ_x)`
+  block from `MixedOrdinalStats`, `mixed_moment_jacobian`,
+  `mixed_observed_bread_analytic`, and the mixed `mixed_gamma_diag_*`
+  influence/Jacobian channels (including observed/missing variants), so the
+  mixed path also shares the `robust_mixed_ordinal` standard χ² and df.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

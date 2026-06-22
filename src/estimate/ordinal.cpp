@@ -6024,6 +6024,163 @@ ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
   return weighted_moment_profile_lrt(*h1, *h0, eig_tol);
 }
 
+post_expected<WeightedProfileRMSEAResult>
+mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const data::MixedOrdinalStats& stats,
+                                 const Estimates& est,
+                                 OrdinalParameterization parameterization,
+                                 double eig_tol) {
+  if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
+      !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size() ||
+      stats.raw_data.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_dwls_profile_rmsea: per-case influence functions and "
+        "raw mixed data are required (ordinary ML/polyserial mixed stats)"));
+  }
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_dwls_profile_rmsea: fitted theta length does not match "
+        "mixed delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) {
+    return std::unexpected(fit_to_post(layout_or.error()));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_dwls_profile_rmsea: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_dwls_profile_rmsea: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      mixed_moment_jacobian(stats, *layout_or, eval->moments,
+                            eval->J_sigma, eval->J_mu, est.theta,
+                            parameterization);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_dwls_profile_rmsea: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double N_total = static_cast<double>(*N_or);
+
+  auto ob = mixed_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, stats.W_dwls, K, parameterization);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  const Eigen::MatrixXd B = 0.5 * (*ob + ob->transpose()).eval();
+
+  std::vector<WeightedEstimatedWeightProfileBlock> blocks;
+  blocks.reserve(stats.R.size());
+  double weighted_F = 0.0;  // sum_b n_b * d_b' W_b d_b
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = stats.moments[b].size();
+    const Eigen::MatrixXd& G = stats.moment_influence[b];
+    if (G.rows() != stats.n_obs[b] || G.cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_dwls_profile_rmsea: moment_influence shape mismatch "
+          "in block " + std::to_string(b)));
+    }
+
+    const Eigen::MatrixXd D_b = Delta_full.block(off, 0, mb, Delta_full.cols());
+    const Eigen::VectorXd gamma_diag = stats.NACOV[b].diagonal();
+    const Eigen::VectorXd d_b =
+        mixed_model_moments(stats, *layout_or, eval->moments, est.theta, b,
+                            parameterization) -
+        stats.moments[b];
+    weighted_F += static_cast<double>(stats.n_obs[b]) *
+                  (d_b.transpose() * stats.W_dwls[b] * d_b).value();
+
+    const bool observed_raw = !stats.raw_data[b].allFinite();
+    auto ifg_or = observed_raw
+        ? data::mixed_observed_gamma_diag_data_influence(
+              stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+              stats.thresholds[b], stats.mean[b], stats.R[b])
+        : data::mixed_gamma_diag_data_influence(
+              stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+              stats.thresholds[b], stats.mean[b], stats.R[b]);
+    if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
+    auto jac_or = observed_raw
+        ? data::mixed_observed_gamma_diag_jacobian_fd(
+              stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+              stats.thresholds[b], stats.mean[b], stats.R[b])
+        : data::mixed_gamma_diag_jacobian_fd(
+              stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+              stats.thresholds[b], stats.mean[b], stats.R[b]);
+    if (!jac_or.has_value()) return std::unexpected(jac_or.error());
+    if (ifg_or->rows() != G.rows() || ifg_or->cols() != mb ||
+        jac_or->rows() != mb || jac_or->cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_dwls_profile_rmsea: mixed Gamma diagonal influence "
+          "shape mismatch in block " + std::to_string(b)));
+    }
+    Eigen::MatrixXd if_gamma = *ifg_or;
+    if_gamma.noalias() += G * jac_or->transpose();
+
+    Eigen::MatrixXd H(G.rows(), 2 * mb);
+    H.leftCols(mb) = G;
+    H.rightCols(mb) = if_gamma;
+    Eigen::MatrixXd gamma_x =
+        (H.transpose() * H) / static_cast<double>(stats.n_obs[b]);
+    gamma_x = 0.5 * (gamma_x + gamma_x.transpose()).eval();
+
+    blocks.push_back(WeightedEstimatedWeightProfileBlock{
+        .jacobian = D_b,
+        .weight_diag = gamma_diag,
+        .residual = d_b,
+        .gamma = std::move(gamma_x),
+        .n_obs = stats.n_obs[b]});
+    off += mb;
+  }
+
+  const double fmin = weighted_F / N_total;
+  return weighted_moment_profile_rmsea_estimated_weight(
+      blocks, K, fmin, B, stats.R.size(), eig_tol);
+}
+
+post_expected<WeightedProfileLRTResult>
+mixed_ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
+                               const model::MatrixRep& rep_H1,
+                               const data::MixedOrdinalStats& stats,
+                               const Estimates& est_H1,
+                               spec::LatentStructure pt_H0,
+                               const model::MatrixRep& rep_H0,
+                               const Estimates& est_H0,
+                               OrdinalParameterization parameterization,
+                               double eig_tol) {
+  auto h1 = mixed_ordinal_dwls_profile_rmsea(
+      std::move(pt_H1), rep_H1, stats, est_H1, parameterization, eig_tol);
+  if (!h1.has_value()) return std::unexpected(h1.error());
+  auto h0 = mixed_ordinal_dwls_profile_rmsea(
+      std::move(pt_H0), rep_H0, stats, est_H0, parameterization, eig_tol);
+  if (!h0.has_value()) return std::unexpected(h0.error());
+  return weighted_moment_profile_lrt(*h1, *h0, eig_tol);
+}
+
 post_expected<OrdinalFitMeasures>
 fit_measures_mixed_ordinal(spec::LatentStructure pt,
                            const model::MatrixRep& rep,

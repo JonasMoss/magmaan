@@ -556,6 +556,34 @@ ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
                              OrdinalParameterization::Delta,
                          double eig_tol = 1e-10);
 
+// Fixed-misspecification estimated-weight profile-RMSEA for a mixed
+// continuous/ordinal DWLS fit. The first-stage object is the extended mixed
+// moment vector x = (u, gamma), where gamma = diag(Gamma_hat_u). The joint
+// NACOV Gamma_x is the cross-product of [g_i | IF_i(gamma)], using the same
+// mixed Gamma diagonal influence channels as `robust_mixed_ordinal_ij`.
+post_expected<WeightedProfileRMSEAResult>
+mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const data::MixedOrdinalStats& stats,
+                                 const Estimates& est,
+                                 OrdinalParameterization parameterization =
+                                     OrdinalParameterization::Delta,
+                                 double eig_tol = 1e-10);
+
+// Nested estimated-weight profile-LRT for two mixed continuous/ordinal DWLS
+// models fit to the SAME mixed stats.
+post_expected<WeightedProfileLRTResult>
+mixed_ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
+                               const model::MatrixRep& rep_H1,
+                               const data::MixedOrdinalStats& stats,
+                               const Estimates& est_H1,
+                               spec::LatentStructure pt_H0,
+                               const model::MatrixRep& rep_H0,
+                               const Estimates& est_H0,
+                               OrdinalParameterization parameterization =
+                                   OrdinalParameterization::Delta,
+                               double eig_tol = 1e-10);
+
 post_expected<OrdinalFitMeasures>
 fit_measures_mixed_ordinal(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
