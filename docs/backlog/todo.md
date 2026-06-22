@@ -1335,3 +1335,22 @@ into `<domain>::frontier`. Canonical public headers now live under
 - **M.** Gather the five start-value producers (`start_values.hpp`) into an
   `estimate::starts` sub-namespace; `start_values.hpp` has 16 includers and
   `spec::Starts` is part of the lavaanified-model triple, so this needs care.
+- **M/L.** Retier the moment-quadratic misspecification research surface into
+  `<domain>::frontier`. Currently in plain core namespaces: the estimated-weight
+  fit-index inference (`ordinal_{crmr,rmsea,cfi_tli,fit_measures}_misspec_inference`
+  in `estimate/ordinal`), the profile-Hessian primitives
+  (`weighted_moment_profile_*`, `continuous_ls_profile_*`, `ml_profile_*`,
+  `observed_moment_bread_fd` in `robust/weighted_inference`; `fiml_profile_*` /
+  `two_stage_nt_profile_*` in `estimate/fiml`; `compute_profile_contrast_spectrum`
+  in `robust/satorra2000`), the pre-existing exp-35 misspec-SE machinery
+  (`robust_continuous_ls`, the Hall-Inoue `*_ij` family, `weighted_param_space_sandwich`,
+  also in `weighted_inference`), and the older `OrdinalCatmlDwlsRmsea` probe. All
+  are non-lavaan research yet sit in `magmaan::{estimate,robust,estimate::fiml}`.
+  This must be one deliberate pass, not piecemeal: `weighted_inference.{hpp,cpp}`
+  interleaves the new profile primitives with the widely-used `robust_continuous_ls`
+  (callers across `api/`, tests, R glue), so wrapping only the audited stream would
+  leave a half-migrated header. Do it with the `<domain>/frontier/` directory move
+  + forwarding shims used by the first separation pass, updating R glue
+  (`r-package/src/{robust,fit}.cpp`), `experiments/36`, the unit tests, and the
+  vendored mirrors (`just vendor`). Flagged by the 2026-06-22 audit of the
+  estimated-weight fit-index stream.
