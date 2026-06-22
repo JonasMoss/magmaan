@@ -76,6 +76,27 @@ weights, **CFI carries a trustworthy interval**; TLI's point is fine but its
 interval should be read as conservative and is unreliable at strong misfit. A
 stabilized TLI variance (robust treatment of `c`) is future work.
 
+## Multi-group
+
+A final two-group cell (heterogeneous misfit `ε₁ = 0.12`, `ε₂ = 0.24`, and sizes
+`n₁ = 1000`, `n₂ = 600`, configural fit) exercises the `n_b`-weighted pooling and
+the block-diagonal `Γ_x`. The population `CFI₀/TLI₀` are read from a large-`N`
+two-group fit at the same size ratio.
+
+```
+ group cell                         CFI_pop  TLI_pop   CFI cov(est/fix)  TLI cov(est)
+ eps 0.12/0.24, n 1000/600           0.986    0.395     0.926 / 0.921     0.999
+```
+
+CFI is calibrated (coverage ≈ 0.92, point unbiased: mc-mean 0.985 vs 0.986),
+confirming the pooled gradient `g = stack_b √(n_b/N)·(−2W_b d_b, −d_b²/γ_b²)` and
+the per-group independence baseline. TLI over-covers, as in the single-group
+strong-misfit cell (here the pooled `TLI₀ = 0.40` is dragged down by group 2),
+the same `c = Q̄_b/Q̄_u` ill-conditioning. The complementary exact-arithmetic
+check is the duplicate-group reduction unit test (`ordinal_test.cpp`): a
+configural fit of two identical copies leaves every point index invariant while
+the statistic and df double and the intervals tighten.
+
 ## Run
 
 Requires `cmake --build --preset opt` first (links `build/opt/*.a`).

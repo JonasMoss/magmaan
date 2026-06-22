@@ -623,8 +623,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       Gated by a duplicate-group reduction in `ordinal_test.cpp` (points
       invariant, statistic/df double, RMSEA interval tightens) plus a different-
       two-group run and the R example's two-group block. CRMR/SRMR require a
-      common per-group `p` (shared denominator). A stabilized-`c` TLI variance and
-      a multi-group MC coverage harness remain deferred.
+      common per-group `p` (shared denominator). The MC harness
+      `tests/checks/ordinal_cfi_inference` gained a two-group cell (heterogeneous
+      ε/size, configural): CFI coverage ≈0.92 (calibrated, point unbiased), TLI
+      conservative — the pooling holds under genuine multi-group sampling, not
+      just the exact-arithmetic reduction. A stabilized-`c` TLI variance remains
+      the one outstanding quality gap.
     Remaining profile-Hessian fit/test work:
     using the small-pencil `max|ν_j−1|` diagnostic as an actual
     runtime gate to skip dense profile-curvature work when negligible (still use
