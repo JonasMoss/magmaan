@@ -1,0 +1,267 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Rank Accounting for the Fixed-Misspecification\\Profile Hessian}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\In}{\operatorname{In}}
+\newcommand{\np}{n_{+}}
+\newcommand{\nz}{n_{0}}
+\newcommand{\nm}{n_{-}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The companion note \texttt{higher\_order\_discrepancy\_misspec.tex} fixes the
+\emph{mean} of the fitted discrepancy under fixed model and distributional
+misspecification: $2N\{v(\hat x)-v(x_0)\}\dto Z'Q\Gamma Z$ with
+$\E[\hat F]=F_0+n^{-1}[\tr(Q\Gamma)+\beta_W]+o(n^{-1})$, the curvature-corrected
+generalized df $\tr(Q\Gamma)$. This note does the complementary object: the
+\emph{inertia} of the same $Q\Gamma$. The limiting law is a weighted mixture
+\begin{equation}\label{eq:mixture}
+  2N\{v(\hat x)-v(x_0)\}\;\dto\;\sum_{j=1}^{m}\lambda_j\,\chi^2_{1,j},
+  \qquad \lambda_j=\operatorname{eig}_j(Q\Gamma),
+\end{equation}
+and the questions are: how many $\lambda_j$ are nonzero (how many $\chi^2_1$ terms
+are actually present), how many are positive, and exactly when the count
+collapses to the classical $df=m-p$. This is the analytic backing for the
+\texttt{spectrum\_size} field of magmaan's \texttt{WeightedProfileRMSEAResult}
+/ \texttt{WeightedProfileLRTResult}, which deliberately reports the size of the
+positive spectrum separately from the nominal model df because, as shown below,
+the two need not agree once an observed-bread or estimated-weight profile method
+is used. The single result is an inertia identity
+(Theorem~\ref{thm:rank}); three corollaries read off when classical df survives
+(\ref{cor:classical}), which channel breaks it (\ref{cor:channels}), and what
+the broken case does to the magmaan summaries (\ref{cor:magmaan}).
+
+\section{The profile Hessian}\label{sec:setup}
+
+Fix the notation of the companion note. The moment vector is $s\in\mathbb R^m$
+(the saturated statistics, $m=p^\ast(p^\ast+1)/2$ for $p^\ast$ observed
+variables), the model is $\sigma(\theta)$, $\theta\in\mathbb R^p$ free after
+identification, with Jacobian $\dot\sigma=\partial\sigma/\partial\theta$
+($m\times p$, full column rank $p$) and curvature tensor $\ddot\sigma$. The fit
+minimizes a moment-quadratic discrepancy with an outer (data) metric $V_{\!o}$
+and a projection (model) metric $W_{\!p}$; for a fixed-weight estimator the two
+coincide, $V_{\!o}=W_{\!p}=V$, while for a data-weighted estimator they differ.
+At the pseudo-true $\theta_0$ write the population residual $e=\sigma(\theta_0)-s_\infty$,
+the Gauss--Newton part $A=\dot\sigma'W_{\!p}\dot\sigma$, the
+residual--curvature coupling $K=(W_{\!p}e)'\ddot\sigma$, and the discrepancy
+Hessian $B=A-K$. The profile Hessian is the curvature-corrected residual-weight
+matrix
+\begin{equation}\label{eq:Q}
+  Q \;=\; V_{\!o}\;-\;W_{\!p}\,\dot\sigma\,B^{-1}\dot\sigma'\,W_{\!p}
+  \qquad(\text{$=\tilde U$ of the companion note}),
+\end{equation}
+in single-metric ($V_{\!o}=W_{\!p}=V$, ULS / fixed-weight GLS) or two-metric form
+($V_{\!o}=V_0$ the data metric, $W_{\!p}=W_\ast$ the model metric, ML / GLS).
+
+\begin{remark}[Why $Q$, not the naive sandwich]\label{rem:envelope}
+$Q$ is exactly $\tfrac12$ the Hessian of the profiled discrepancy
+$s\mapsto\min_\theta F(s,\theta)$ in the moment argument, by the envelope theorem
+($\partial_s\,[\text{profiled }F]=2W_{\!p}r(\hat\theta)$, then differentiate again
+using $\partial_s\hat\theta=B^{-1}\dot\sigma'W_{\!p}$). It is \emph{not} the naive
+plug-in sandwich $(I-\dot\sigma B^{-1}\dot\sigma'W_{\!p})'V_{\!o}
+(I-\dot\sigma B^{-1}\dot\sigma'W_{\!p})$ obtained by linearizing
+$r(\hat\theta)$ and squaring: that drops the $O_p(n^{-1})$ cross term between the
+leading and second-order parts of $r(\hat\theta)$ and so disagrees with $Q$ off
+$H_0$ (numerically $\lVert\text{sandwich}-Q\rVert=0.95$ in the check below). The
+magmaan primitive stores $Q$, the envelope object, which is the correct one.
+\end{remark}
+
+\section{The inertia identity}\label{sec:rank}
+
+Let $\In(\cdot)=(\np,\nz,\nm)$ denote the inertia (numbers of positive, zero,
+and negative eigenvalues) of a symmetric matrix. Define the \emph{metric-gap
+form}
+\begin{equation}\label{eq:Atil}
+  \tilde A \;=\; \dot\sigma'\,W_{\!p}\,V_{\!o}^{-1}W_{\!p}\,\dot\sigma
+  \qquad(p\times p),
+\end{equation}
+which collapses to $A$ in the single-metric case $V_{\!o}=W_{\!p}$.
+
+\begin{lemma}[Spectral split]\label{lem:split}
+With $\tilde G=V_{\!o}^{-1/2}W_{\!p}\dot\sigma$ ($m\times p$, rank $p$),
+\[
+  Q=V_{\!o}^{1/2}\,(I-\tilde G B^{-1}\tilde G')\,V_{\!o}^{1/2},
+\]
+the column space $\operatorname{col}(\tilde G)$ is invariant under
+$I-\tilde G B^{-1}\tilde G'$, and
+\begin{equation}\label{eq:spectrum}
+  \operatorname{spec}(I-\tilde G B^{-1}\tilde G')
+  =\underbrace{\{\,1\,\}}_{\times(m-p)}\;\cup\;\{\,1-\nu_j:\,j=1,\dots,p\,\},
+  \qquad \nu_j=\operatorname{eig}_j(B^{-1}\tilde A).
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+On $\operatorname{col}(\tilde G)^{\perp}$ we have $\tilde G'u=0$, so
+$(I-\tilde G B^{-1}\tilde G')u=u$: an eigenvalue $1$ with multiplicity $m-p$. For
+$v=\tilde G w$, $(I-\tilde G B^{-1}\tilde G')\tilde G w
+=\tilde G(I-B^{-1}\tilde G'\tilde G)w=\tilde G(I-B^{-1}\tilde A)w$, since
+$\tilde G'\tilde G=\dot\sigma'W_{\!p}V_{\!o}^{-1}W_{\!p}\dot\sigma=\tilde A$. Thus
+$\operatorname{col}(\tilde G)$ is invariant and the operator acts there as
+$I-B^{-1}\tilde A$, with eigenvalues $1-\nu_j$. The two invariant subspaces span
+$\mathbb R^m$. $\nu_j$ are real because $B^{-1}\tilde A$ is similar to the
+symmetric $\tilde A^{1/2}B^{-1}\tilde A^{1/2}$ ($\tilde A\succ0$).
+\end{proof}
+
+\begin{theorem}[Rank accounting]\label{thm:rank}
+$Q$, $Q\Gamma$, and $I-\tilde G B^{-1}\tilde G'$ share the same inertia (Sylvester's
+law, congruence by $V_{\!o}^{1/2}$ and then by $\Gamma^{1/2}$, both nonsingular).
+Hence the limiting mixture \eqref{eq:mixture} has
+\begin{align}
+  \#\{\text{nonzero }\lambda_j\}=\rank(Q\Gamma)
+    &=(m-p)+\#\{\,j:\nu_j\neq1\,\},\label{eq:rk}\\
+  \#\{\text{positive }\lambda_j\}=\np(Q\Gamma)
+    &=(m-p)+\#\{\,j:\nu_j<1\,\},\label{eq:pos}\\
+  \#\{\text{negative }\lambda_j\}=\nm(Q\Gamma)
+    &=\phantom{(m-p)+{}}\#\{\,j:\nu_j>1\,\}.\label{eq:neg}
+\end{align}
+\end{theorem}
+
+The classical chi-square picture is the special case in which all $p$ of the
+$\nu_j$ equal $1$, so the $p$ model directions are exactly annihilated and only
+the $m-p$ residual directions survive.
+
+\begin{corollary}[When classical df survives]\label{cor:classical}
+$\np(Q\Gamma)=\rank(Q\Gamma)=m-p$ and $\nm(Q\Gamma)=0$ if and only if
+$\nu_j=1$ for all $j$, i.e.\ $B=\tilde A$. Sufficient is $B=A$ and
+$\tilde A=A$, that is $K=0$ \emph{and} $W_{\!p}=V_{\!o}$ on
+$\operatorname{col}(\dot\sigma)$. Both hold under correct specification ($e=0$),
+and both hold for a model linear in $\theta$ with a fixed weight ($\ddot\sigma=0
+\Rightarrow K=0$, $V_{\!o}=W_{\!p}\Rightarrow\tilde A=A$). When in addition
+$V_{\!o}=\Gamma^{-1}$ the surviving $m-p$ weights are all $1$ and
+\eqref{eq:mixture} is $\chi^2_{m-p}$.
+\end{corollary}
+
+\begin{corollary}[Two channels add directions]\label{cor:channels}
+$\nu_j$ departs from $1$ through two independent, additive routes:
+\begin{itemize}
+\item the \textbf{observed-bread (curvature) channel} $B\neq A$, i.e.\ $K\neq0$:
+present whenever the residual meets a curved model, $\ddot\sigma\neq0$. Factor and
+path models are nonlinear in $\theta$, so $\ddot\sigma\neq0$ generically and this
+channel is on for every wrong model. Absent for models linear in $\theta$.
+\item the \textbf{estimated-weight (metric) channel} $\tilde A\neq A$, i.e.\
+$W_{\!p}\neq V_{\!o}$: present whenever the projection metric differs from the
+data metric, which is exactly when the weight is tied to the model
+(ML: $W_\ast$ at the fitted covariance versus $V_0$ at the population), or to the
+data and re-estimated. Absent for a fixed weight (ULS), where $V_{\!o}=W_{\!p}$
+and only the curvature channel can act.
+\end{itemize}
+Each is $O(\lVert e\rVert)$ ($K\propto e$; $W_\ast-V_0\propto e$) and vanishes at
+$H_0$. ULS exposes one channel, ML/GLS both. This is the inertia-level sibling of
+the mean-level split in the companion note, where the curvature channel deforms
+$\tr(U\Gamma)\to\tr(\tilde U\Gamma)$ ($A\!\to\!B$) and the weight channel is
+$\beta_W$.
+\end{corollary}
+
+\begin{corollary}[Sign of the extra weights; indefiniteness]\label{cor:sign}
+In the single-metric case write $\kappa_j=\operatorname{eig}_j(A^{-1/2}KA^{-1/2})$,
+the curvature eigenvalues in the $A$-metric; then $\nu_j=(1-\kappa_j)^{-1}$, and
+in the regular regime $B\succ0$ ($\kappa_j<1$),
+\[
+  1-\nu_j>0\iff\kappa_j<0,\qquad 1-\nu_j<0\iff\kappa_j>0 .
+\]
+So a \emph{negative} residual-curvature direction adds a \emph{positive}
+$\chi^2_1$ weight, while a \emph{positive} one adds a \emph{negative} weight. Off
+$H_0$ with positive residual-curvature directions present, $Q\Gamma$ is therefore
+indefinite: the limiting law \eqref{eq:mixture} is a difference of weighted
+$\chi^2_1$ variables, not the noncentral $\chi^2$ of the local-drift regime, and
+not even a nonnegative mixture.
+\end{corollary}
+
+\section{Consequences for the magmaan summaries}\label{sec:magmaan}
+
+\begin{corollary}[Reading the fields]\label{cor:magmaan}
+$\texttt{spectrum\_size}=\np(Q\Gamma)=(m-p)+\#\{\nu_j<1\}\ge m-p$, with equality
+exactly in the classical case of Corollary~\ref{cor:classical}. The reported
+\texttt{bias\_trace} sums only the positive $\lambda_j$, whereas the principled
+curvature-corrected df mean of the companion note is the \emph{signed} trace
+$\tr(Q\Gamma)=\sum_j\lambda_j$. When $\nm(Q\Gamma)>0$ the two differ by
+$\sum_{\lambda_j<0}|\lambda_j|$, so the positive-only \texttt{bias\_trace}
+\emph{overcounts} the noise relative to $\tr(Q\Gamma)$. In the ULS check below the
+gap is $3.72$ versus $2.26$.
+\end{corollary}
+
+This is a convention choice surfaced by the rank accounting, not a bug:
+truncating to the positive spectrum yields a conservative (larger) trace
+subtraction and a smaller RMSEA. The honest mean is the signed trace; the honest
+\emph{count} of mixture terms is the positive spectrum. The two summaries answer
+different questions and the note recommends carrying both, which the struct
+already does.
+
+\begin{remark}[Rank is brittle; effective rank tracks $\lVert e\rVert$]
+Equations \eqref{eq:rk}--\eqref{eq:neg} are exact-arithmetic statements. For any
+$e\neq0$ the generic rank is $(m-p)+\rank(\text{gap})$, but the extra
+eigenvalues emerge \emph{continuously} as $O(\lVert e\rVert)$ from zero and the
+integer rank jumps only at $e=0$. Near a correct model the extra weights are
+numerically negligible and the classical $m-p$ description is effectively right;
+far from it they are real and \eqref{eq:mixture} is genuinely higher-rank and
+possibly indefinite. The reported \texttt{spectrum\_size} should be read with a
+floor, as an effective rank that tracks the misfit, not as a discontinuous
+integer.
+\end{remark}
+
+\section{Numerical check}\label{sec:check}
+
+\texttt{profile\_hessian\_rank\_check.py} (numpy only) fits a one-factor model to
+a two-factor population ($p^\ast=6$, $m=21$, classical $df=m-2p=9$;
+$\lVert e\rVert\approx0.48$), reusing the construction of
+\texttt{higher\_order\_discrepancy\_check.py}. It confirms, to machine precision:
+the spectral split \eqref{eq:spectrum} ($\max|\Delta|\sim10^{-14}$); the
+factorization of Lemma~\ref{lem:split}; the Sylvester inertia equality
+$\In(Q\Gamma)=\In(Q)=\In(I-\tilde G B^{-1}\tilde G')$; and the counts
+\eqref{eq:rk}--\eqref{eq:neg} against a direct eigendecomposition of $Q\Gamma$.
+
+\begin{center}
+\begin{tabular}{lcccccc}
+estimator & channels & $df$ & $\In(Q\Gamma)=(\np,\nz,\nm)$ & $\np$ & $\tr(Q\Gamma)$ & $\sum_{\lambda>0}\lambda$\\\hline
+ULS (analytic $K$) & curvature      & $9$ & $(13,7,1)$ & $13$ & $2.26$ & $3.72$\\
+ML  (two metric)   & curvature+weight & $9$ & $(17,1,3)$ & $17$ & $1.24$ & $10.61$\\
+\end{tabular}
+\end{center}
+
+Both sit strictly above classical df, ULS by the one curvature channel (four
+extra positive, one negative weight) and ML by both channels (eight extra
+positive, three negative). A residual-shrink scan pulling the population onto the
+fitted model ($\alpha:1\to0$) drives the effective rank of both down to $9$ and
+the negative count to $0$ as $\lVert e\rVert\to0$, with the largest extra weight
+shrinking like $O(\lVert e\rVert)$, confirming Corollaries~\ref{cor:classical}
+and \ref{cor:channels} and the brittleness remark. The naive-sandwich check of
+Remark~\ref{rem:envelope} reproduces $\lVert\text{sandwich}-Q\rVert=0.95\neq0$.
+
+\section*{What remains}
+
+The identity is structural and estimator-generic (single- and two-metric), so it
+already covers ULS/GLS/WLS/DWLS and covariance ML at the level of $Q$. What it
+does not yet do, and what a downstream consumer would need, is (i) an
+\emph{analytic} count of $\#\{\nu_j<1\}$ from model structure rather than an
+eigendecomposition, which would require signing $K$ and the metric gap a priori;
+(ii) the mean-structure and FIML/ML2S two-metric $Q$, where $\tilde A$ and $B$
+acquire the missing-data and mean blocks; and (iii) the categorical
+$(u,\gamma)$ first-stage expansion, where the first-stage influence adds its own
+directions to $\Gamma$ on top of the two channels here. Those are the open
+profile-Hessian items in \texttt{docs/backlog/todo.md}; this note settles the
+inertia bookkeeping they all build on.
+
+\end{document}
