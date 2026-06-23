@@ -1883,6 +1883,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_casewise_scores_fit
+Rcpp::NumericMatrix infer_casewise_scores_fit(Rcpp::List fit, SEXP X);
+RcppExport SEXP _magmaan_infer_casewise_scores_fit(SEXP fitSEXP, SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_casewise_scores_fit(fit, X));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_robust_se_raw_parts
 Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats, Rcpp::NumericVector theta, SEXP X, std::string bread, std::string moments, std::string cov);
 RcppExport SEXP _magmaan_infer_robust_se_raw_parts(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP thetaSEXP, SEXP XSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
@@ -2704,6 +2716,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
     {"_magmaan_infer_robust_se_parts", (DL_FUNC) &_magmaan_infer_robust_se_parts, 7},
     {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},
+    {"_magmaan_infer_casewise_scores_fit", (DL_FUNC) &_magmaan_infer_casewise_scores_fit, 2},
     {"_magmaan_infer_robust_se_raw_parts", (DL_FUNC) &_magmaan_infer_robust_se_raw_parts, 7},
     {"_magmaan_infer_robust_se_zc", (DL_FUNC) &_magmaan_infer_robust_se_zc, 6},
     {"_magmaan_infer_robust_se_both_breads", (DL_FUNC) &_magmaan_infer_robust_se_both_breads, 4},

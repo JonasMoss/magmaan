@@ -1713,9 +1713,15 @@ stop rather than any usable non-error return.
   fixtures (`tests/fixtures/case_influence/`, regen
   `tests/tools/regen_semfindr_fixtures.R`, pin `semfindr_version.txt`).
   Parity is to ~1e-5 for the estimate/gcd changes and machine precision for
-  fit-measure changes and Mahalanobis distance. The approximate (one-step,
-  no-refit) engine and misspecification-robust case influence are tracked in
-  the backlog.
+  fit-measure changes and Mahalanobis distance. The **approximate one-step
+  (no-refit) engine** also landed: `est_change_raw_approx()` /
+  `est_change_approx()` via `θ̂ − θ̂₍ᵢ₎ ≈ (N/(N−1))·V·s_i`, built on a new core
+  accessor `inference::casewise_scores` (the N×n_free per-case ML score matrix
+  `Z_c·WΔ` that `information_cross_products` is now the Gram of; bound as
+  `infer_casewise_scores_fit`, verified equal to `lavaan::lavScores`). These
+  match semfindr to machine precision. Still in the backlog:
+  `fit_measures_change_approx` (needs per-case loglik), multi-group and
+  robust-regime variants, and misspecification-robust case influence.
 - **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
   C++ core plus `third_party/{port,quadpack}` is vendored into
   `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`

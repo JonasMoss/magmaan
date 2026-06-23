@@ -11,6 +11,7 @@
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"
@@ -1245,6 +1246,21 @@ Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X,
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
                             Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
+}
+
+// infer_casewise_scores_fit() — the (N_total x n_free) per-case ML score matrix
+// (row i = d loglik_i / d theta at theta-hat), from inference::casewise_scores.
+// Continuous ML/ULS/GLS; needs the fitting raw data. Feeds the one-step
+// (no-refit) case-influence approximation est_change_*_approx in R.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_casewise_scores_fit(Rcpp::List fit, SEXP X) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
+  auto s_or = magmaan::inference::casewise_scores(ctx.pt, ctx.rep, ctx.samp, raw, est);
+  if (!s_or.has_value()) stop_post(s_or.error());
+  return Rcpp::wrap(*s_or);
 }
 
 // infer_robust_se_raw_parts() — primitive form of infer_robust_se_raw():

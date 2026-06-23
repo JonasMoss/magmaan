@@ -350,3 +350,89 @@ mahalanobis_rerun <- function(fit) {
   md <- stats::mahalanobis(X, colMeans(X), stats::cov(X))
   matrix(md, ncol = 1L, dimnames = list(case_id, "md"))
 }
+
+# ---------------------------------------------------------------------------
+# Approximate one-step engine (no refit).
+#
+# The empirical-influence / one-step approximation of the leave-one-out change:
+#   θ̂ − θ̂₍ᵢ₎ ≈ (N/(N−1))·V·s_i           (s_i = casewise score, V = full vcov)
+# Mirror of semfindr::est_change_raw_approx / est_change_approx. Takes a fitted
+# object (not a rerun); single-group continuous ML/ULS/GLS.
+# ---------------------------------------------------------------------------
+
+.case_raw_matrix <- function(fit) {
+  raw <- fit$raw_data
+  if (is.null(raw) || is.null(raw$X)) {
+    stop("case influence: `fit` does not carry raw data (need fit$raw_data$X)",
+         call. = FALSE)
+  }
+  if (length(raw$X) != 1L) {
+    stop("case influence: multiple-group approximation not supported yet",
+         call. = FALSE)
+  }
+  raw$X[[1L]]
+}
+
+# Shared one-step ingredients: per-case scores (N×npar), the full-sample vcov,
+# and the approximate raw change x0 = scores · V (one row per case).
+.case_approx_parts <- function(fit) {
+  X <- .case_raw_matrix(fit)
+  scores <- magmaan_core$infer_casewise_scores_fit(fit, X)
+  V <- .case_model_vcov(fit)
+  case_id <- rownames(X)
+  if (is.null(case_id)) case_id <- as.character(seq_len(nrow(X)))
+  list(n = nrow(X), scores = scores, V = V, x0 = scores %*% V, case_id = case_id)
+}
+
+#' Approximate case influence on raw parameter estimates (one-step, no refit)
+#'
+#' `(N/(N-1))·V·s_i` per case, the one-step approximation of [est_change_raw()]
+#' without refitting. Mirror of `semfindr::est_change_raw_approx()`.
+#'
+#' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
+#' @param parameters Optional parameter selector; default all free parameters.
+#' @return A matrix, one row per case, one column per selected parameter.
+#' @export
+est_change_raw_approx <- function(fit, parameters = NULL) {
+  fp <- .case_free_table(fit)
+  sel <- .case_pars_select(fp, parameters)
+  free_k <- fp$k[sel]
+  P <- .case_approx_parts(fit)
+  out <- (P$x0[, free_k, drop = FALSE]) * (P$n / (P$n - 1))
+  dimnames(out) <- list(P$case_id, fp$name[sel])
+  out
+}
+
+#' Approximate standardized case influence (DFTHETAS) and gCD (one-step)
+#'
+#' The one-step approximation of [est_change()] without refitting: the
+#' approximate raw change standardized by the full-sample SE, plus an
+#' approximate generalized Cook's distance `gcd_approx`. Mirror of
+#' `semfindr::est_change_approx()`.
+#'
+#' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
+#' @param parameters Optional parameter selector; default all free parameters.
+#' @return A matrix with one column per selected parameter plus `gcd_approx`,
+#'   one row per case.
+#' @export
+est_change_approx <- function(fit, parameters = NULL) {
+  fp <- .case_free_table(fit)
+  sel <- .case_pars_select(fp, parameters)
+  free_k <- fp$k[sel]
+  P <- .case_approx_parts(fit)
+  n <- P$n
+  se <- sqrt(diag(P$V))
+  # xr = est_change_raw_approx = (scores · V)·N/(N-1), restricted to selected
+  # parameters. semfindr standardizes this (already-factored) change by the SE
+  # and re-applies N/(N-1), and forms gcd from the same xr.
+  xr <- (P$x0[, free_k, drop = FALSE]) * (n / (n - 1))
+  dft <- sweep(xr, 2L, se[free_k], "/") * (n / (n - 1))
+  # gcd_approx = (N-1) · xr' I_unit xr, with the unit (per-case) information
+  # I_unit = I_full / N (magmaan's information_expected is N-scaled; lavaan's
+  # lavInspect "information" equals it divided by N).
+  info_unit <- magmaan_core$inference_information_expected(fit)[free_k, free_k, drop = FALSE] / n
+  gcd_approx <- (n - 1) * rowSums((xr %*% info_unit) * xr)
+  out <- cbind(dft, gcd_approx = gcd_approx)
+  dimnames(out) <- list(P$case_id, c(fp$name[sel], "gcd_approx"))
+  out
+}

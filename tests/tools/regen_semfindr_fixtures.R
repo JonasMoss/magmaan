@@ -105,7 +105,10 @@ build_one <- function(id, case) {
     est_change = mat_json(semfindr::est_change(rr)),
     fit_measures_change = mat_json(
       semfindr::fit_measures_change(rr, fit_measures = case$fit_measures)),
-    mahalanobis = mat_json(as.matrix(semfindr::mahalanobis_rerun(lfit)))
+    mahalanobis = mat_json(as.matrix(semfindr::mahalanobis_rerun(lfit))),
+    # approximate one-step engine (computed from the full fit, all cases)
+    est_change_raw_approx = mat_json(semfindr::est_change_raw_approx(lfit)),
+    est_change_approx = mat_json(semfindr::est_change_approx(lfit))
   )
   out_path <- file.path(out_dir, paste0(id, ".json"))
   write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
