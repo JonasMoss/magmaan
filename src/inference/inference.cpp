@@ -738,11 +738,12 @@ information_observed_analytic(spec::LatentStructure       pt,
 }
 
 // ============================================================================
-// information_cross_products — Σ_i s_i s_iᵀ at θ̂, parameter-level OPG.
+// casewise_scores — the (N × n_free) per-case ML score matrix, row i = s_iᵀ.
 //
 // Built from the casewise score factorisation
 //   s_i = (W_b · Δ_b)ᵀ · z_i,b ,  z_i,b = [x_i − m̄_b ; vech((x_i − m̄_b)(...)ᵀ) − vech(S_b)]
-// stacked block-diagonal across groups. The OPG is then
+// stacked block-diagonal across groups, returning the stacked Z_c · WΔ. Its
+// Gram matrix is the parameter-level OPG `information_cross_products`
 //   I_XP = Σ_i s_i s_iᵀ = (Z_c · WΔ)ᵀ · (Z_c · WΔ)
 // with per-block (n_b/N) weighting absorbed into the block-diagonal stacking
 // (each row of Z_c hits only its block's WΔ slice, so Σ_b n_b · ... falls
@@ -751,11 +752,11 @@ information_observed_analytic(spec::LatentStructure       pt,
 // ============================================================================
 
 post_expected<Eigen::MatrixXd>
-information_cross_products(spec::LatentStructure       pt,
-                           const model::MatrixRep&     rep,
-                           const SampleStats&          samp,
-                           const RawData&              raw,
-                           const Estimates&            est) {
+casewise_scores(spec::LatentStructure       pt,
+                const model::MatrixRep&     rep,
+                const SampleStats&          samp,
+                const RawData&              raw,
+                const Estimates&            est) {
   auto ev_or = prepare_evaluator(pt, rep, samp, est);
   if (!ev_or.has_value()) return std::unexpected(ev_or.error());
   const auto& ev = *ev_or;
@@ -906,9 +907,23 @@ information_cross_products(spec::LatentStructure       pt,
             " columns, expected " + std::to_string(total_rows)));
   }
 
-  // I_XP = (Z_c · WΔ)ᵀ · (Z_c · WΔ). Total (N-scaled) OPG, no /N.
-  const Eigen::MatrixXd ZcWDelta = Zc * WDelta;                  // N × n_free
-  Eigen::MatrixXd info = ZcWDelta.transpose() * ZcWDelta;        // n_free × n_free
+  // Per-case scores: row i = s_iᵀ = (Z_c · WΔ)_i. N-scaled (no /N), matching
+  // `information_expected` so the same `vcov(info, pt)` path works downstream.
+  return Eigen::MatrixXd(Zc * WDelta);                           // N × n_free
+}
+
+// information_cross_products — parameter-level OPG I_XP = Σ_i s_i s_iᵀ, the
+// Gram matrix of the per-case scores. Mplus calls the SE built from it "MLF".
+post_expected<Eigen::MatrixXd>
+information_cross_products(spec::LatentStructure       pt,
+                           const model::MatrixRep&     rep,
+                           const SampleStats&          samp,
+                           const RawData&              raw,
+                           const Estimates&            est) {
+  auto s_or = casewise_scores(std::move(pt), rep, samp, raw, est);
+  if (!s_or.has_value()) return std::unexpected(s_or.error());
+  const Eigen::MatrixXd& S = *s_or;
+  Eigen::MatrixXd info = S.transpose() * S;                      // n_free × n_free
   info = 0.5 * (info + info.transpose()).eval();
   return info;
 }

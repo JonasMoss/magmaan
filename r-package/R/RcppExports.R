@@ -553,6 +553,10 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
     .Call(`_magmaan_infer_robust_se_raw`, fit, X, bread, moments, cov)
 }
 
+infer_casewise_scores_fit <- function(fit, X) {
+    .Call(`_magmaan_infer_casewise_scores_fit`, fit, X)
+}
+
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }

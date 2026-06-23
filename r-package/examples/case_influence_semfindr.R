@@ -53,6 +53,12 @@ check_model <- function(label, mod, dat, estimator = "ML",
   m_md <- magmaan::mahalanobis_rerun(mfit)
   colnames(s_md) <- colnames(m_md)            # semfindr labels it differently
   agree("mahalanobis_rerun", m_md, s_md, tol = 1e-6)
+
+  # Approximate one-step engine (no refit; all cases).
+  agree("est_change_raw_approx", magmaan::est_change_raw_approx(mfit),
+        semfindr::est_change_raw_approx(lfit), tol = 1e-6)
+  agree("est_change_approx", magmaan::est_change_approx(mfit),
+        semfindr::est_change_approx(lfit), tol = 1e-5)
 }
 
 ## CFA: no exogenous predictors, so CFI/TLI baselines match lavaan exactly.

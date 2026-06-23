@@ -109,6 +109,20 @@ information_cross_products(spec::LatentStructure       pt,
                            const RawData&                  raw,
                            const Estimates&                est);
 
+// casewise_scores — the (N × n_free) matrix of per-case ML scores whose row i
+// is s_iᵀ = (∂ℓ_i/∂θ |_{θ̂})ᵀ = (Z_c · WΔ)_i. This is the factor underlying
+// `information_cross_products` (which is just `scoresᵀ scores`); exposed
+// separately for casewise diagnostics (the one-step / empirical-influence
+// approximation θ̂ − θ̂₍ᵢ₎ ≈ (N/(N−1))·V·s_i used by case-influence). Same
+// block-stacked moment layout and PD requirements as
+// `information_cross_products`.
+post_expected<Eigen::MatrixXd>
+casewise_scores(spec::LatentStructure       pt,
+                const model::MatrixRep&     rep,
+                const SampleStats&          samp,
+                const RawData&              raw,
+                const Estimates&            est);
+
 // Parameter covariance matrix:
 //   * no constraints: vcov = info⁻¹
 //   * linear equality (shared labels / cross-group invariance / general

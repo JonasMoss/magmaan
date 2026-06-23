@@ -577,6 +577,7 @@ magmaan_core <- local({
       "infer_build_u_factor_fit",
       "infer_robust_se_fit",
       "infer_robust_se_raw_fit",
+      "infer_casewise_scores_fit",
       "infer_robust_se_zc",
       "infer_robust_se_both_breads",
       "infer_robust_se_both_breads_raw",
