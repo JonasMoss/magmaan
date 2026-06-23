@@ -24,6 +24,7 @@
 namespace magmaan::estimate {
 struct WeightedProfileRMSEAResult;
 struct WeightedProfileLRTResult;
+struct CasewiseInfluenceIJ;
 }  // namespace magmaan::estimate
 
 namespace magmaan::estimate::fiml {
@@ -486,6 +487,29 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           TwoStageWeight kind = TwoStageWeight::Nt,
                           TwoStageDlsOptions dls = {},
                           TwoStageBread bread = TwoStageBread::Expected);
+
+// Per-case one-step misspecification-robust ("complete-sandwich") parameter
+// influences for a two-stage (ML2S) fit: the casewise dual of the estimated-
+// weight SE, and the missing-data member of the family. Each observation
+// influences theta-hat through two channels: how it moves the Stage-1 saturated
+// moments (the EM casewise influence `saturated_em_moment_influence`) and how it
+// moves the Stage-2 weight (the data-dependent-weight `IF(Ŵ)` term). The IJ
+// blocks are the SAME ones the observed-bread SE sandwich builds, so
+// `Σ_i c_i c_iᵀ` reproduces that vcov; `influence_naive` drops the weight term.
+// For the non-NT Stage-2 weights (DWLS/ADF/DLS) on complete data this routes
+// through `continuous_ls_casewise_influence_ij` (the SE's complete-data route);
+// otherwise (non-NT missing data, or NT — where lavaan robust.two.stage treats
+// the weight as fixed, so the correction is zero) it uses the shared IJ-block
+// assembly with the observed bread. Always observed-bread. Frontier.
+post_expected<CasewiseInfluenceIJ>
+two_stage_casewise_influence_ij(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const RawData& raw,
+                                const Estimates& est,
+                                const FIMLPack& pack,
+                                const FIMLH1& h1,
+                                TwoStageWeight kind = TwoStageWeight::Nt,
+                                TwoStageDlsOptions dls = {});
 
 // Fixed-misspecification profile-RMSEA / profile-LRT for the ML2S-NT
 // Stage-2 likelihood, over the saturated EM moment vector [mean; vech(cov)].

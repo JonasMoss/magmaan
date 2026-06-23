@@ -155,4 +155,34 @@ V_ord <- crossprod(
 stopifnot(all(eigen(V_ord, symmetric = TRUE, only.values = TRUE)$values > -1e-10))
 cat("ordinal DWLS (categorical): complete sandwich live, gcd ok\n")
 
+# 10. Two-stage (ML2S): the missing-data member. The Stage-2 weight is estimated
+#     from the Stage-1 saturated EM fit, so a case influences theta-hat through
+#     two channels: how it moves the filled-in saturated moments and how it moves
+#     the Stage-2 weight. The NT weight (lavaan robust.two.stage) treats the
+#     weight as fixed, so its data-dependent-weight correction is exactly zero;
+#     a non-NT Stage-2 weight (DWLS) carries the live term.
+df_miss <- hs
+set.seed(1)
+for (v in c("x1", "x2", "x3", "x4", "x5", "x6")) {
+  df_miss[[v]][sample(nrow(hs), 25)] <- NA_real_
+}
+model_ml2s <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"  # misspecified 1-factor
+
+fit_nt <- magmaan::magmaan(model_ml2s, data = df_miss, estimator = "ML2S")
+stopifnot(identical(fit_nt$estimator, "ML2S"))
+ew_nt <- magmaan::est_change_raw_approx(fit_nt, type = "estimated.weight")
+stopifnot(nrow(ew_nt) == nrow(hs), all(is.finite(ew_nt)),
+          max(abs(attr(ew_nt, "weight_diagnostic"))) < 1e-9)  # NT: weight fixed
+
+fit_dwls <- magmaan::magmaan(model_ml2s, data = df_miss, estimator = "ML2S",
+                             stage2_weight = "dwls")
+stopifnot(identical(fit_dwls$estimator, "ML2S_DWLS"))
+ew_dwls <- magmaan::est_change_raw_approx(fit_dwls, type = "estimated.weight")
+stopifnot(nrow(ew_dwls) == nrow(hs), all(is.finite(ew_dwls)),
+          max(abs(attr(ew_dwls, "weight_diagnostic"))) > 1e-3)  # weight term live
+V_ml2s <- crossprod(magmaan_core$infer_ml2s_casewise_influence_ij_fit(
+  fit_dwls, fit_dwls$raw_data, stage2_weight = "dwls")$influence)
+stopifnot(all(eigen(V_ml2s, symmetric = TRUE, only.values = TRUE)$values > -1e-9))
+cat("ML2S (two-stage, missing data): NT correction zero; DWLS weight term live\n")
+
 cat("\nmisspecification-robust case influence: ok\n")

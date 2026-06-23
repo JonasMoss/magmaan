@@ -4165,27 +4165,30 @@ two_stage_complete_data_weighted_ij_from_sm(spec::LatentStructure pt,
   return out;
 }
 
-post_expected<TwoStageEMMLInference>
-two_stage_missing_data_weighted_ij_from_sm(spec::LatentStructure pt,
-                                           const model::MatrixRep& rep,
-                                           const RawData& raw,
-                                           const Estimates& est,
-                                           const FIMLPack& pack,
-                                           const FIMLH1& h1,
-                                           const SaturatedMoments& sm,
-                                           TwoStageWeight kind,
-                                           TwoStageDlsOptions dls,
-                                           TwoStageBread bread) {
-  if (bread != TwoStageBread::Observed || raw_has_no_missing_mask(raw) ||
-      kind == TwoStageWeight::Nt) {
-    return two_stage_em_weighted_inference_from_sm(
-        std::move(pt), rep, est, sm, kind, dls, bread);
-  }
+struct Ml2sIjAssembly {
+  std::vector<WeightedMomentIJBlock> blocks;
+  Eigen::MatrixXd K;
+  Eigen::MatrixXd observed_bread;
+};
 
-  auto base_or = two_stage_em_weighted_inference_from_sm(
-      pt, rep, est, sm, kind, dls, bread);
-  if (!base_or.has_value()) return std::unexpected(base_or.error());
-
+// Per-case ML2S infinitesimal-jackknife blocks plus K and the observed bread,
+// shared by the missing-data SE sandwich and the casewise-influence accessor so
+// both decompose the SAME complete-sandwich meat. Each block's moment_influence
+// is the Stage-1 saturated-moment per-case influence (`saturated_em_moment_influence`,
+// which reduces to centered mean/covariance rows under complete data); the
+// weight_correction is the data-dependent-weight `IF(Ŵ)` term
+// (`ml2s_weight_correction_block`, zero for the NT weight, which lavaan
+// robust.two.stage treats as fixed). Always the observed bread.
+post_expected<Ml2sIjAssembly>
+build_ml2s_ij_blocks(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1,
+                     const SaturatedMoments& sm,
+                     TwoStageWeight kind,
+                     TwoStageDlsOptions dls) {
   SampleStats samp = sample_stats_from_saturated(sm);
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error(),
@@ -4193,7 +4196,7 @@ two_stage_missing_data_weighted_ij_from_sm(spec::LatentStructure pt,
   }
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
-  const Eigen::MatrixXd& K = con_or->K();
+  Eigen::MatrixXd K = con_or->K();
   if (K.rows() != pt.n_free()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "two_stage_em_ml_inference: constraint reparameterization has "
@@ -4274,8 +4277,35 @@ two_stage_missing_data_weighted_ij_from_sm(spec::LatentStructure pt,
 
   auto ob_or = ml2s_observed_bread(pt, rep, samp, est, *weight_or, K);
   if (!ob_or.has_value()) return std::unexpected(ob_or.error());
+  return Ml2sIjAssembly{std::move(ij_blocks), std::move(K), std::move(*ob_or)};
+}
+
+post_expected<TwoStageEMMLInference>
+two_stage_missing_data_weighted_ij_from_sm(spec::LatentStructure pt,
+                                           const model::MatrixRep& rep,
+                                           const RawData& raw,
+                                           const Estimates& est,
+                                           const FIMLPack& pack,
+                                           const FIMLH1& h1,
+                                           const SaturatedMoments& sm,
+                                           TwoStageWeight kind,
+                                           TwoStageDlsOptions dls,
+                                           TwoStageBread bread) {
+  if (bread != TwoStageBread::Observed || raw_has_no_missing_mask(raw) ||
+      kind == TwoStageWeight::Nt) {
+    return two_stage_em_weighted_inference_from_sm(
+        std::move(pt), rep, est, sm, kind, dls, bread);
+  }
+
+  auto base_or = two_stage_em_weighted_inference_from_sm(
+      pt, rep, est, sm, kind, dls, bread);
+  if (!base_or.has_value()) return std::unexpected(base_or.error());
+
+  auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, raw, est, pack, h1, sm,
+                                     kind, dls);
+  if (!asm_or.has_value()) return std::unexpected(asm_or.error());
   auto ij_or = robust_weighted_moment_ij(
-      ij_blocks, K, 2.0 * est.fmin, *ob_or);
+      asm_or->blocks, asm_or->K, 2.0 * est.fmin, asm_or->observed_bread);
   if (!ij_or.has_value()) return std::unexpected(ij_or.error());
 
   TwoStageEMMLInference out = std::move(*base_or);
@@ -4397,6 +4427,43 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           TwoStageBread bread) {
   return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, sm,
                                            kind, dls, bread);
+}
+
+post_expected<CasewiseInfluenceIJ>
+two_stage_casewise_influence_ij(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const RawData& raw,
+                                const Estimates& est,
+                                const FIMLPack& pack,
+                                const FIMLH1& h1,
+                                TwoStageWeight kind,
+                                TwoStageDlsOptions dls) {
+  auto sm_or = saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+
+  // Mirror the SE dispatch: a non-NT Stage-2 weight on complete data routes
+  // through the continuous-LS casewise accessor (the same route the SE takes to
+  // `continuous_ls_*_ij`, so the per-case rows reproduce that vcov). Everything
+  // else — non-NT missing data, and the NT weight (correction zero) — goes
+  // through the shared IJ-block assembly with the observed bread.
+  if (kind != TwoStageWeight::Nt && raw_has_no_missing_mask(raw)) {
+    SampleStats samp = sample_stats_from_saturated(*sm_or);
+    ContinuousLsIJWeightMode mode = ContinuousLsIJWeightMode::SampleEmpiricalWls;
+    if (kind == TwoStageWeight::Dwls)
+      mode = ContinuousLsIJWeightMode::SampleEmpiricalDwls;
+    else if (kind == TwoStageWeight::Dls)
+      mode = ContinuousLsIJWeightMode::SampleDls;
+    frontier::DlsWeightOptions opts;
+    opts.a = dls.a;
+    return continuous_ls_casewise_influence_ij(
+        std::move(pt), rep, samp, est, gmm::Weight{}, raw, mode, opts);
+  }
+
+  auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, raw, est, pack, h1,
+                                     *sm_or, kind, dls);
+  if (!asm_or.has_value()) return std::unexpected(asm_or.error());
+  return casewise_influence_from_ij_blocks(asm_or->blocks, asm_or->K,
+                                           asm_or->observed_bread);
 }
 
 namespace {

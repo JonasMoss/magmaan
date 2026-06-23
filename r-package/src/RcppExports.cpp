@@ -902,6 +902,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_ml2s_casewise_influence_ij_fit
+Rcpp::List infer_ml2s_casewise_influence_ij_fit(Rcpp::List fit, SEXP raw_data, std::string stage2_weight, double dls_a);
+RcppExport SEXP _magmaan_infer_ml2s_casewise_influence_ij_fit(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< std::string >::type stage2_weight(stage2_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ml2s_casewise_influence_ij_fit(fit, raw_data, stage2_weight, dls_a));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_two_stage_em_ml_inference
 Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data, double h_step, std::string stage2_weight, double dls_a);
 RcppExport SEXP _magmaan_estimate_two_stage_em_ml_inference(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP h_stepSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
@@ -2681,6 +2695,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
     {"_magmaan_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaan_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
+    {"_magmaan_infer_ml2s_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ml2s_casewise_influence_ij_fit, 4},
     {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 5},
     {"_magmaan_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_two_stage_stage2_weight_blocks_impl, 3},
     {"_magmaan_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaan_infer_fiml_fmg_spectrum, 3},

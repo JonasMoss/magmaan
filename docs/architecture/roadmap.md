@@ -386,9 +386,13 @@ golden `parTable()` fixtures.
   DWLS/WLSMV — the headline cell, on the existing `build_ordinal_ij_blocks`).
   Both case-influence regimes (`standard`, `estimated.weight`) are multiple-group
   (block-stacked `g{b}_{row}` ids); `est_change_*_approx(type = "estimated.weight")`
-  covers continuous GLS/WLS/ULS and ordinal DWLS/WLSMV, routing ordinal fits to
-  `infer_ordinal_casewise_influence_ij_fit` automatically. Every estimator/group
-  cell self-checks `Σ_i c_i c_iᵀ ≡ robust_{continuous_ls,ordinal}_*_ij` vcov.
+  covers continuous GLS/WLS/ULS, ordinal DWLS/WLSMV, and two-stage **ML2S**
+  (`estimate::fiml::two_stage_casewise_influence_ij` — the missing-data member,
+  fusing the Stage-1 saturated-moment influence with the Stage-2 weight term;
+  NT/robust.two.stage carries a zero correction, non-NT DWLS/ADF/DLS the live
+  one), routing ordinal/ML2S fits to their bindings automatically. Every
+  estimator/group cell self-checks `Σ_i c_i c_iᵀ ≡` the matching observed-bread
+  `robust_*_ij` vcov.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

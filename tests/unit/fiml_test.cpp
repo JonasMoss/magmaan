@@ -2003,6 +2003,68 @@ TEST_CASE("two_stage_em_ml_inference: missing-data non-NT observed bread uses "
   check_kind(magmaan::estimate::fiml::TwoStageWeight::Dls, {0.35});
 }
 
+TEST_CASE("two_stage_casewise_influence_ij Gram reproduces the ML2S IJ vcov") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(built, theta0, {24});
+
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(sm.has_value());
+
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+  double n_total = 0.0;
+  for (auto n : sm->n_obs) n_total += static_cast<double>(n);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+
+  // Missing-data DWLS Stage-2: the complete-sandwich IJ carries a live
+  // data-dependent-weight correction.
+  const auto kind = magmaan::estimate::fiml::TwoStageWeight::Dwls;
+  auto w = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(*sm, kind, {});
+  REQUIRE(w.has_value());
+  auto est = magmaan::test::fit_gmm(
+      *built.pt, *built.rep, samp, *w, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(est.has_value());
+
+  // Reference: the observed-bread ML2S IJ covariance (the SE path).
+  auto ij = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est, *pack, *h1, kind, {},
+      magmaan::estimate::fiml::TwoStageBread::Observed);
+  REQUIRE(ij.has_value());
+
+  auto infl = magmaan::estimate::fiml::two_stage_casewise_influence_ij(
+      *built.pt, *built.rep, raw, *est, *pack, *h1, kind, {});
+  REQUIRE_MESSAGE(infl.has_value(),
+      "ML2S casewise influence failed: "
+          << (infl.has_value() ? "" : infl.error().detail));
+
+  CHECK(infl->n_total == static_cast<std::int64_t>(n_total));
+  CHECK(infl->influence.rows() == static_cast<Eigen::Index>(n_total));
+  CHECK(infl->influence.cols() == ij->vcov.rows());
+
+  // Σ_i c_i c_iᵀ == the ML2S complete-sandwich vcov, to machine precision.
+  const Eigen::MatrixXd gram = infl->influence.transpose() * infl->influence;
+  CHECK(gram.isApprox(ij->vcov, 1e-8));
+
+  // The estimated Stage-2 weight correction channel is wired (nonzero, well
+  // above roundoff). Its magnitude is O_p(N^{-1}) under correct specification —
+  // this just-identified fixture has no misfit — and leading-order under
+  // misspecification; the R example shows the large-misfit case.
+  const double diag =
+      (infl->influence - infl->influence_naive).cwiseAbs().maxCoeff();
+  CHECK(diag > 1e-12);
+}
+
 TEST_CASE("nested ML2S restriction map: empirical spectrum and NT collapse") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");

@@ -484,6 +484,27 @@ mahalanobis_rerun <- function(fit, data = NULL) {
 # DWLS/WLSMV) only.
 .case_approx_parts <- function(fit, type = c("standard", "estimated.weight")) {
   type <- match.arg(type)
+  # Two-stage (ML2S) estimated-weight path: the missing-data member. The
+  # influence rides the Stage-1 saturated-moment per-case influence plus the
+  # Stage-2 data-dependent-weight term. The Stage-2 weight is encoded in the
+  # estimator label ("ML2S" = NT, "ML2S_DWLS"/"_ADF"/"_DLS"/"_WLS" = non-NT);
+  # NT treats the weight as fixed (correction zero). Case ids are sequential
+  # (block-stacked per-case rows, no original-row map).
+  if (type == "estimated.weight" &&
+      grepl("^ML2S", toupper(fit$estimator %||% ""))) {
+    raw <- fit$raw_data
+    if (is.null(raw)) {
+      stop("case influence: ML2S fit does not carry $raw_data", call. = FALSE)
+    }
+    sw <- sub("^ML2S_?", "", toupper(fit$estimator))
+    stage2 <- if (nzchar(sw)) tolower(sw) else "nt"
+    ij <- magmaan_core$infer_ml2s_casewise_influence_ij_fit(
+      fit, raw, stage2_weight = stage2)
+    case_id <- as.character(seq_len(nrow(ij$influence)))
+    return(list(n = nrow(ij$influence), V = crossprod(ij$influence),
+                x0 = ij$influence, x0_naive = ij$influence_naive,
+                case_id = case_id, type = type))
+  }
   # Ordinal (categorical DWLS/WLS/ULSMV) estimated-weight path: the influence
   # rides the ordinal IJ blocks (per-case polychoric/threshold scores + IF(Ŵ)),
   # not the continuous moment scores, so it routes through the ordinal accessor
