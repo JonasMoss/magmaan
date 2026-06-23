@@ -1550,11 +1550,16 @@ stop rather than any usable non-error return.
   and let `robust_mixed_ordinal_ij` handle ULS/fixed-weight observed-bread
   covariance under MCAR. The same entry point now routes observed mixed DWLS
   and dense WLS through support-aware observed mixed Gamma data-influence and
-  finite-difference `d Gamma / d kappa` helpers, using NaN-coded raw blocks
-  retained on `MixedOrdinalStats`. The observed helpers reduce to the
-  complete-data mixed helpers and are covered by deterministic MCAR fit-level
-  IJ tests. Robust/experimental mixed stage-1 variants need separate
-  Gamma-influence derivations.
+  finite-difference `d Gamma / d kappa` helpers, and now materializes the
+  resulting `gamma_diag_influence` / `gamma_full_influence` rows directly on
+  `MixedOrdinalStats`. `robust_mixed_ordinal_ij` consumes those rows first and
+  keeps the NaN-coded raw blocks only as a complete-data/backward-compatible
+  fallback. The same precomputed diagonal channel feeds
+  `mixed_ordinal_dwls_profile_rmsea`, so observed-missing mixed profile RMSEA
+  has the same explicit-data-object contract as the all-ordinal overlap path.
+  The observed helpers reduce to the complete-data mixed helpers and are
+  covered by deterministic MCAR fit-level IJ/profile tests. Robust/experimental
+  mixed stage-1 variants need separate Gamma-influence derivations.
   ML2S now exposes the observed-bread Stage-2 regime through
   `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
   is available as `saturated_em_moment_influence`. Raw complete-data ML2S
@@ -1659,9 +1664,19 @@ stop rather than any usable non-error return.
   exactly). Mixed theta SNLLS runs through the same full-threshold stack:
   under theta only thresholds stay Golub-Pereyra linear (the standardized
   covariance moments make the rest nonlinear), gated against the bounded
-  theta fit on a well-identified three-category design — binary-indicator
-  theta models carry a near-flat lambda/psi ridge where optimizer endpoints
-  are arbitrary, so theta parity is only meaningful on identified designs.
+  theta fit on a well-identified three-category design. Binary-indicator theta
+  models carry a near-flat lambda/psi ridge where optimizer endpoints are
+  arbitrary, so theta parity is only meaningful on identified designs.
+  Observed-data mixed stats now cover both pure observed-pairwise and a basic
+  hybrid first stage:
+  `estimate::fiml::mixed_ordinal_stats_hybrid_fiml_from_observed_data` keeps
+  the ordinal/polyserial pieces pairwise, but replaces continuous
+  means/covariances and their influence rows with saturated continuous FIML
+  estimates. The hybrid stats recompute NACOV and estimated-weight Gamma
+  influence rows empirically from the combined influence matrix, then feed the
+  existing mixed DWLS fit, IJ, and profile-RMSEA machinery. This is a
+  correctness-first implementation; validation remains focused on MCAR/MAR
+  efficiency and full-WLS stability.
   Mixed WLS and fit-plus-inference workspaces are lazy about weights: the
   builder carries moments plus full Gamma into the cache and defers the
   O(m³) WLS inverse (and DWLS weight extraction) to the
@@ -1727,6 +1742,14 @@ stop rather than any usable non-error return.
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- The `magmaan_core` data/robust surface includes explicit observed-missing
+  mixed continuous/ordinal builders:
+  `data_mixed_ordinal_stats_observed_from_{raw,df}` for fully pairwise
+  observed stats and `data_mixed_ordinal_stats_hybrid_fiml_from_{raw,df}` for
+  the continuous-FIML hybrid. `robust_mixed_ordinal_ij` exposes the
+  misspecification-robust IJ covariance for mixed ULS/DWLS/WLS fits using the
+  same explicit `magmaan_mixed_ordinal_data` object as fitting and profile
+  RMSEA/LRT.
 - **Case-level influence diagnostics** (exact leave-one-out engine; semfindr
   parity) landed 2026-06-23 as pure-R `r-package/R/case_influence.R`:
   `case_rerun()` (drop one case, down-date the sample statistics, warm-started

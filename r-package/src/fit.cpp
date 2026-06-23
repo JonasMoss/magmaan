@@ -1124,7 +1124,8 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
   const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
   Rcpp::List R(nb), mean(nb), ordered_mask(nb), thresholds(nb), threshold_ov(nb),
       threshold_level(nb), moments(nb), NACOV(nb), W_dwls(nb), W_wls(nb),
-      moment_influence(nb), raw_data(nb), n_levels(nb);
+      moment_influence(nb), gamma_diag_influence(nb),
+      gamma_full_influence(nb), raw_data(nb), n_levels(nb);
   Rcpp::IntegerVector nobs(nb);
   for (R_xlen_t b = 0; b < nb; ++b) {
     const std::size_t bi = static_cast<std::size_t>(b);
@@ -1147,6 +1148,12 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
     moment_influence[b] = bi < s.moment_influence.size()
         ? Rcpp::wrap(s.moment_influence[bi])
         : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    gamma_diag_influence[b] = bi < s.gamma_diag_influence.size()
+        ? Rcpp::wrap(s.gamma_diag_influence[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    gamma_full_influence[b] = bi < s.gamma_full_influence.size()
+        ? Rcpp::wrap(s.gamma_full_influence[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
     raw_data[b] = bi < s.raw_data.size()
         ? Rcpp::wrap(s.raw_data[bi])
         : Rcpp::wrap(Eigen::MatrixXd(0, 0));
@@ -1165,6 +1172,8 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
       Rcpp::_["W_dwls"] = W_dwls,
       Rcpp::_["W_wls"] = W_wls,
       Rcpp::_["moment_influence"] = moment_influence,
+      Rcpp::_["gamma_diag_influence"] = gamma_diag_influence,
+      Rcpp::_["gamma_full_influence"] = gamma_full_influence,
       Rcpp::_["raw_data"] = raw_data,
       Rcpp::_["nobs"] = nobs,
       Rcpp::_["n_levels"] = n_levels);
@@ -2529,22 +2538,34 @@ Rcpp::List data_ordinal_stats_huber_residual_from_raw_impl(
   return out;
 }
 
+std::vector<std::vector<std::int32_t>>
+mixed_ordered_mask_from_arg(SEXP ordered_mask, std::size_t n_blocks);
+
 // [[Rcpp::export]]
 Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask,
                                                   bool full_wls_weight = true) {
   auto blocks = matrix_blocks_from_arg(X);
+  auto ordered = mixed_ordered_mask_from_arg(ordered_mask, blocks.size());
+  auto out_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered,
+                                                            full_wls_weight);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  return mixed_ordinal_stats_to_r(*out_or);
+}
+
+std::vector<std::vector<std::int32_t>>
+mixed_ordered_mask_from_arg(SEXP ordered_mask, std::size_t n_blocks) {
   std::vector<std::vector<std::int32_t>> ordered;
-  ordered.reserve(blocks.size());
+  ordered.reserve(n_blocks);
   if (Rf_isMatrix(ordered_mask)) {
     Rcpp::IntegerMatrix M(ordered_mask);
-    if (blocks.size() != 1)
+    if (n_blocks != 1)
       Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
     std::vector<std::int32_t> row(static_cast<std::size_t>(M.ncol()));
     for (R_xlen_t j = 0; j < M.ncol(); ++j) row[static_cast<std::size_t>(j)] = M(0, j);
     ordered.push_back(std::move(row));
   } else if (TYPEOF(ordered_mask) == VECSXP) {
     Rcpp::List L(ordered_mask);
-    if (static_cast<std::size_t>(L.size()) != blocks.size())
+    if (static_cast<std::size_t>(L.size()) != n_blocks)
       Rcpp::stop("magmaan: ordered_mask block count does not match X");
     for (R_xlen_t b = 0; b < L.size(); ++b) {
       Rcpp::IntegerVector v(L[b]);
@@ -2552,12 +2573,33 @@ Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask,
     }
   } else {
     Rcpp::IntegerVector v(ordered_mask);
-    if (blocks.size() != 1)
+    if (n_blocks != 1)
       Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
     ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
   }
-  auto out_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered,
-                                                            full_wls_weight);
+  return ordered;
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_mixed_ordinal_stats_observed_from_raw_impl(
+    SEXP X, SEXP ordered_mask, bool full_wls_weight = true) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto ordered = mixed_ordered_mask_from_arg(ordered_mask, blocks.size());
+  auto out_or = magmaan::data::mixed_ordinal_stats_from_observed_data(
+      blocks, ordered, full_wls_weight);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  return mixed_ordinal_stats_to_r(*out_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl(
+    SEXP X, SEXP ordered_mask, bool full_wls_weight = true,
+    double h_step = 1e-4) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto ordered = mixed_ordered_mask_from_arg(ordered_mask, blocks.size());
+  auto out_or =
+      magmaan::estimate::fiml::mixed_ordinal_stats_hybrid_fiml_from_observed_data(
+          blocks, ordered, full_wls_weight, h_step);
   if (!out_or.has_value()) stop_post(out_or.error());
   return mixed_ordinal_stats_to_r(*out_or);
 }

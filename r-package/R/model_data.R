@@ -414,6 +414,119 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   out
 }
 
+.mixed_ordinal_blocks_from_df <- function(x, model, ordered = NULL, group = NULL,
+                                          caller, keep_missing = FALSE) {
+  if (!is.data.frame(x)) stop(caller, "(): `x` must be a data.frame")
+  model <- as_magmaan_model_spec(model)
+  ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
+  if (!length(ordered)) stop(caller, "(): `ordered` must name ordered variables")
+
+  group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
+  if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
+  labels <- character()
+  if (nzchar(group_var)) {
+    if (!group_var %in% names(x)) {
+      stop(caller, "(): grouping column not found: ", group_var)
+    }
+    g <- x[[group_var]]
+    if (anyNA(g)) stop(caller, "(): grouping column contains missing values")
+    labels <- model$group_labels
+    if (is.null(labels) || !length(labels)) labels <- unique(as.character(g))
+    labels <- as.character(labels)
+  }
+
+  rep <- model_matrix_rep(model$partable)
+  ov_by_group <- rep$ov_names
+  if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+  if (length(labels) && length(ov_by_group) != length(labels)) {
+    stop(caller, "(): model/data group count mismatch")
+  }
+
+  make_block <- function(rows, ov, label = NULL) {
+    if (!all(ordered %in% ov)) {
+      stop(caller, "(): ordered variables must be observed model variables")
+    }
+    if (setequal(ordered, ov)) {
+      stop(caller, "(): use data_ordinal_stats_from_df() for all-ordinal data")
+    }
+    miss_cols <- setdiff(ov, names(x))
+    if (length(miss_cols)) {
+      stop(caller, "(): data is missing observed variables: ",
+           paste(miss_cols, collapse = ", "))
+    }
+    block <- x[rows, ov, drop = FALSE]
+    if (!keep_missing) {
+      block <- block[stats::complete.cases(block), , drop = FALSE]
+    }
+    if (nrow(block) < 2L) stop(caller, "(): fewer than 2 rows")
+
+    mat <- matrix(NA_real_, nrow(block), length(ov), dimnames = list(NULL, ov))
+    mask <- integer(length(ov))
+    for (j in seq_along(ov)) {
+      v <- block[[ov[[j]]]]
+      if (ov[[j]] %in% ordered) {
+        mask[[j]] <- 1L
+        if (is.factor(v)) {
+          counts <- tabulate(as.integer(v), nbins = nlevels(v))
+          if (any(counts == 0L)) {
+            suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+            stop(caller, "(): empty ordinal category for ", ov[[j]], suffix)
+          }
+          mat[, j] <- as.integer(v)
+        } else {
+          vals <- sort(unique(v[!is.na(v)]))
+          if (!length(vals)) {
+            suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+            stop(caller, "(): no observed ordinal categories for ", ov[[j]], suffix)
+          }
+          mat[, j] <- match(v, vals)
+        }
+      } else {
+        if (!is.numeric(v)) {
+          stop(caller, "(): continuous variable is not numeric: ", ov[[j]])
+        }
+        mat[, j] <- as.numeric(v)
+      }
+    }
+    list(X = mat, ordered_mask = mask)
+  }
+
+  if (nzchar(group_var)) {
+    g_chr <- as.character(x[[group_var]])
+    if (!all(g_chr %in% labels)) {
+      stop(caller, "(): data contains groups outside `group_labels`: ",
+           paste(setdiff(unique(g_chr), labels), collapse = ", "))
+    }
+    blocks <- Map(function(label, ov) make_block(g_chr == label, ov, label),
+                  labels, ov_by_group)
+    X <- lapply(blocks, `[[`, "X")
+    ordered_mask <- lapply(blocks, `[[`, "ordered_mask")
+    names(X) <- labels
+  } else {
+    blk <- make_block(rep(TRUE, nrow(x)), ov_by_group[[1L]])
+    X <- list(blk$X)
+    ordered_mask <- list(blk$ordered_mask)
+  }
+
+  list(X = X, ordered_mask = ordered_mask, ov_names = ov_by_group,
+       ordered = ordered, group_var = group_var, group_labels = labels)
+}
+
+.stamp_mixed_ordinal_stats <- function(out, ctx) {
+  out$X <- ctx$X
+  out$ov_names <- ctx$ov_names
+  out$ordered <- ctx$ordered
+  out$group_var <- ctx$group_var
+  out$group_labels <- ctx$group_labels
+  for (b in seq_along(out$R)) {
+    nm <- ctx$ov_names[[b]]
+    dimnames(out$R[[b]]) <- list(nm, nm)
+    names(out$mean[[b]]) <- nm
+  }
+  class(out) <- c("magmaan_mixed_ordinal_data", "list")
+  out
+}
+
 data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                              missing = c("listwise", "error"),
                                              polyserial = c("ml", "dpd", "huber_residual"),
@@ -527,6 +640,34 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
   }
   class(out) <- c("magmaan_mixed_ordinal_data", "list")
   out
+}
+
+data_mixed_ordinal_stats_observed_from_df <- function(x, model, ordered = NULL,
+                                                      group = NULL,
+                                                      full_wls_weight = TRUE) {
+  ctx <- .mixed_ordinal_blocks_from_df(
+    x, model, ordered = ordered, group = group,
+    caller = "data_mixed_ordinal_stats_observed_from_df",
+    keep_missing = TRUE
+  )
+  out <- data_mixed_ordinal_stats_observed_from_raw(
+    ctx$X, ctx$ordered_mask, full_wls_weight = full_wls_weight)
+  .stamp_mixed_ordinal_stats(out, ctx)
+}
+
+data_mixed_ordinal_stats_hybrid_fiml_from_df <- function(x, model, ordered = NULL,
+                                                         group = NULL,
+                                                         full_wls_weight = TRUE,
+                                                         h_step = 1e-4) {
+  ctx <- .mixed_ordinal_blocks_from_df(
+    x, model, ordered = ordered, group = group,
+    caller = "data_mixed_ordinal_stats_hybrid_fiml_from_df",
+    keep_missing = TRUE
+  )
+  out <- data_mixed_ordinal_stats_hybrid_fiml_from_raw(
+    ctx$X, ctx$ordered_mask, full_wls_weight = full_wls_weight,
+    h_step = h_step)
+  .stamp_mixed_ordinal_stats(out, ctx)
 }
 
 augment_ordinal_partable <- function(model, ordinal_stats) {

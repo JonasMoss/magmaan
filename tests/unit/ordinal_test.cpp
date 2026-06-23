@@ -21,6 +21,7 @@
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -4077,7 +4078,8 @@ TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) la
   auto missing = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(
       *pt, *mr, no_raw, *fit);
   REQUIRE_FALSE(missing.has_value());
-  CHECK(missing.error().detail.find("raw mixed data") != std::string::npos);
+  CHECK(missing.error().detail.find("estimated-weight influence unavailable") !=
+        std::string::npos);
 }
 
 TEST_CASE("mixed_ordinal_dwls_profile_lrt compares nested mixed DWLS models") {
@@ -6486,6 +6488,34 @@ TEST_CASE("robust_mixed_ordinal_ij DWLS and WLS support observed MCAR") {
   CHECK(dwls->vcov.allFinite());
   CHECK(dwls->se.allFinite());
 
+  auto fallback_stats = *stats;
+  fallback_stats.gamma_diag_influence.clear();
+  fallback_stats.gamma_full_influence.clear();
+  auto dwls_fallback = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, fallback_stats, *dwls_fit,
+      magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(dwls_fallback.has_value(),
+      "observed mixed DWLS IJ raw fallback failed: "
+          << (dwls_fallback.has_value() ? "" : dwls_fallback.error().detail));
+  CHECK(dwls_fallback->vcov.isApprox(dwls->vcov, 1e-10));
+  CHECK(dwls_fallback->se.isApprox(dwls->se, 1e-10));
+
+  auto prof = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(
+      *pt, *mr, *stats, *dwls_fit,
+      magmaan::estimate::OrdinalParameterization::Delta);
+  auto prof_fallback = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(
+      *pt, *mr, fallback_stats, *dwls_fit,
+      magmaan::estimate::OrdinalParameterization::Delta);
+  REQUIRE_MESSAGE(prof.has_value(),
+      "observed mixed DWLS profile failed: "
+          << (prof.has_value() ? "" : prof.error().detail));
+  REQUIRE_MESSAGE(prof_fallback.has_value(),
+      "observed mixed DWLS profile raw fallback failed: "
+          << (prof_fallback.has_value() ? "" : prof_fallback.error().detail));
+  CHECK(prof_fallback->gamma.isApprox(prof->gamma, 1e-10));
+  CHECK(prof_fallback->eigvals.isApprox(prof->eigvals, 1e-9));
+  CHECK(prof_fallback->rmsea == doctest::Approx(prof->rmsea));
+
   auto wls_fit = magmaan::test::fit_mixed_ordinal_bounded(
       *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
   REQUIRE_MESSAGE(wls_fit.has_value(),
@@ -6497,9 +6527,101 @@ TEST_CASE("robust_mixed_ordinal_ij DWLS and WLS support observed MCAR") {
   REQUIRE_MESSAGE(wls.has_value(),
       "observed mixed WLS IJ failed: "
           << (wls.has_value() ? "" : wls.error().detail));
+  auto wls_fallback = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, fallback_stats, *wls_fit,
+      magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_MESSAGE(wls_fallback.has_value(),
+      "observed mixed WLS IJ raw fallback failed: "
+          << (wls_fallback.has_value() ? "" : wls_fallback.error().detail));
   CHECK(wls->df == dwls->df);
   CHECK(wls->vcov.allFinite());
   CHECK(wls->se.allFinite());
+  CHECK(wls_fallback->vcov.isApprox(wls->vcov, 1e-10));
+  CHECK(wls_fallback->se.isApprox(wls->se, 1e-10));
+}
+
+TEST_CASE("hybrid FIML mixed ordinal stats support MCAR continuous information") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::mt19937 rng(20260629);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(820, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    const double eps1 = norm(rng);
+    const double eps2 = norm(rng);
+    X(i, 0) = 1.0 + (eta + 0.34 * eps1 > -0.55) +
+              (eta + 0.34 * eps1 > 0.48);
+    X(i, 1) = 0.70 * eta + 0.72 * norm(rng) + 0.12;
+    X(i, 2) = 1.0 + (0.72 * eta + 0.69 * eps2 > 0.08);
+    X(i, 3) = 0.58 * eta + 0.82 * norm(rng) - 0.08;
+  }
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    if (i % 7 == 0) X(i, 0) = nan;
+    if (i % 11 == 0) X(i, 1) = nan;
+    if (i % 13 == 0) X(i, 2) = nan;
+    if (i % 17 == 0) X(i, 3) = nan;
+  }
+
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 1, 0}};
+  auto stats = magmaan::estimate::fiml::
+      mixed_ordinal_stats_hybrid_fiml_from_observed_data({X}, ordered, true);
+  REQUIRE_MESSAGE(stats.has_value(),
+      "hybrid mixed stats failed: "
+          << (stats.has_value() ? "" : stats.error().detail));
+  REQUIRE(stats->moment_influence.size() == 1);
+  REQUIRE(stats->gamma_diag_influence.size() == 1);
+  REQUIRE(stats->gamma_full_influence.size() == 1);
+  const Eigen::Index m = stats->moments[0].size();
+  CHECK(stats->moment_influence[0].rows() == X.rows());
+  CHECK(stats->moment_influence[0].cols() == m);
+  CHECK(stats->gamma_diag_influence[0].rows() == X.rows());
+  CHECK(stats->gamma_diag_influence[0].cols() == m);
+  CHECK(stats->gamma_full_influence[0].rows() == X.rows());
+  CHECK(stats->gamma_full_influence[0].cols() == m * m);
+  CHECK(((stats->moment_influence[0].transpose() *
+          stats->moment_influence[0]) /
+         static_cast<double>(X.rows()))
+            .isApprox(stats->NACOV[0], 1e-10));
+  CHECK(stats->moment_influence[0].allFinite());
+  CHECK(stats->gamma_diag_influence[0].allFinite());
+  CHECK(stats->gamma_full_influence[0].allFinite());
+  CHECK(stats->gamma_diag_influence[0].colwise().mean().norm() < 1e-9);
+  CHECK(stats->gamma_full_influence[0].colwise().mean().norm() < 1e-9);
+
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x3 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x3 ~*~ 1*x3\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "hybrid mixed DWLS fit failed: "
+          << (fit.has_value() ? "" : fit.error().detail));
+  auto ij = magmaan::estimate::robust_mixed_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(ij.has_value(),
+      "hybrid mixed DWLS IJ failed: "
+          << (ij.has_value() ? "" : ij.error().detail));
+  auto prof = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(
+      *pt, *mr, *stats, *fit,
+      magmaan::estimate::OrdinalParameterization::Delta);
+  REQUIRE_MESSAGE(prof.has_value(),
+      "hybrid mixed DWLS profile failed: "
+          << (prof.has_value() ? "" : prof.error().detail));
+  CHECK(ij->vcov.allFinite());
+  CHECK(ij->se.allFinite());
+  CHECK(prof->gamma.allFinite());
+  CHECK(std::isfinite(prof->rmsea));
 }
 
 TEST_CASE("mixed Gamma influence has mixed moment order and zero mean") {
@@ -6659,7 +6781,7 @@ TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS DWLS and WLS") {
       *pt, *mr, no_raw, *dwls_fit,
       magmaan::estimate::OrdinalWeightKind::DWLS);
   REQUIRE_FALSE(missing.has_value());
-  CHECK(missing.error().detail.find("raw mixed data unavailable") !=
+  CHECK(missing.error().detail.find("estimated-weight influence unavailable") !=
         std::string::npos);
 
   auto wls_fit = magmaan::test::fit_mixed_ordinal_bounded(
@@ -6680,7 +6802,7 @@ TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS DWLS and WLS") {
       *pt, *mr, no_raw, *wls_fit,
       magmaan::estimate::OrdinalWeightKind::WLS);
   REQUIRE_FALSE(missing_wls.has_value());
-  CHECK(missing_wls.error().detail.find("raw mixed data unavailable") !=
+  CHECK(missing_wls.error().detail.find("estimated-weight influence unavailable") !=
         std::string::npos);
 }
 

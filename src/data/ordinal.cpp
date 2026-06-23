@@ -4781,6 +4781,8 @@ mixed_ordinal_stats_from_observed_data(
   stats.n_obs.reserve(Xs.size());
   stats.n_levels.reserve(Xs.size());
   stats.moment_influence.reserve(Xs.size());
+  stats.gamma_diag_influence.reserve(Xs.size());
+  stats.gamma_full_influence.reserve(Xs.size());
   stats.raw_data.reserve(Xs.size());
 
   for (std::size_t b = 0; b < Xs.size(); ++b) {
@@ -5227,6 +5229,36 @@ mixed_ordinal_stats_from_observed_data(
       }
     }
 
+    auto IFG_diag_or = mixed_observed_gamma_diag_data_influence(
+        X, ordered[b], levels, th, mean, R);
+    if (!IFG_diag_or.has_value()) return std::unexpected(IFG_diag_or.error());
+    auto D_diag_or = mixed_observed_gamma_diag_jacobian_fd(
+        X, ordered[b], levels, th, mean, R);
+    if (!D_diag_or.has_value()) return std::unexpected(D_diag_or.error());
+    if (IFG_diag_or->rows() != n || IFG_diag_or->cols() != mdim ||
+        D_diag_or->rows() != mdim || D_diag_or->cols() != mdim) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_from_observed_data: Gamma diagonal influence "
+          "shape mismatch"));
+    }
+    Eigen::MatrixXd gamma_diag_if =
+        (*IFG_diag_or + IF * D_diag_or->transpose()).eval();
+
+    auto IFG_full_or = mixed_observed_gamma_data_influence(
+        X, ordered[b], levels, th, mean, R);
+    if (!IFG_full_or.has_value()) return std::unexpected(IFG_full_or.error());
+    auto D_full_or = mixed_observed_gamma_jacobian_fd(
+        X, ordered[b], levels, th, mean, R);
+    if (!D_full_or.has_value()) return std::unexpected(D_full_or.error());
+    if (IFG_full_or->rows() != n || IFG_full_or->cols() != mdim * mdim ||
+        D_full_or->rows() != mdim * mdim || D_full_or->cols() != mdim) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_from_observed_data: Gamma full influence "
+          "shape mismatch"));
+    }
+    Eigen::MatrixXd gamma_full_if =
+        (*IFG_full_or + IF * D_full_or->transpose()).eval();
+
     stats.R.push_back(std::move(R));
     stats.mean.push_back(std::move(mean));
     stats.ordered.push_back(ordered[b]);
@@ -5236,6 +5268,8 @@ mixed_ordinal_stats_from_observed_data(
     stats.moments.push_back(std::move(moment));
     stats.NACOV.push_back(std::move(NACOV));
     stats.moment_influence.push_back(std::move(IF));
+    stats.gamma_diag_influence.push_back(std::move(gamma_diag_if));
+    stats.gamma_full_influence.push_back(std::move(gamma_full_if));
     stats.W_dwls.push_back(std::move(W_dwls));
     stats.W_wls.push_back(std::move(W_wls));
     stats.n_obs.push_back(static_cast<std::int64_t>(n));

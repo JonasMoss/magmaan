@@ -348,6 +348,22 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     Tests gate complete-data reduction of the observed helpers, diagonal/full
     consistency, `IF(Gamma)` centering at fixed kappa, and deterministic-MCAR
     DWLS/WLS fit-level IJ execution.
+    Follow-up landed 2026-06-23: observed mixed stats now also materialize
+    support-aligned `gamma_diag_influence` / `gamma_full_influence` rows, and
+    `robust_mixed_ordinal_ij` plus `mixed_ordinal_dwls_profile_rmsea` consume
+    those rows directly, falling back to raw-data reconstruction only for older
+    complete-data stats. This makes missing-data mixed IJ/profile inference
+    explicit-data-object driven like the all-ordinal overlap path.
+    Basic hybrid mixed observed-data stats **landed 2026-06-23** as
+    `estimate::fiml::mixed_ordinal_stats_hybrid_fiml_from_observed_data`:
+    ordinal thresholds/polychorics and polyserials remain observed-pairwise,
+    while continuous means/covariances and their influence rows come from
+    saturated continuous FIML. R exposes this through
+    `magmaan_core$data_mixed_ordinal_stats_hybrid_fiml_from_raw/_from_df`,
+    with observed-pairwise companions and `robust_mixed_ordinal_ij`. Gated by
+    C++ MCAR smoke tests and an R smoke; remaining validation is MCAR/MAR
+    efficiency, finite-sample calibration, and stress tests for singular full
+    WLS Gamma.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; replace the ML2S missing-data
@@ -455,6 +471,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `ordinal_test.cpp` by the live mixed γ block, uu-block == NACOV,
       standard χ²/df parity with `robust_mixed_ordinal`, raw-data requirement,
       and a nested mixed DWLS profile-LRT smoke.
+      Follow-up 2026-06-23: the mixed profile accepts precomputed
+      `MixedOrdinalStats::gamma_diag_influence` and only falls back to raw
+      mixed data when those rows are absent; the observed-missing mixed builder
+      now provides the precomputed rows.
     - **Done 2026-06-22 (R ordinal profile surface).**
       The R package now exposes the all-ordinal and mixed DWLS profile methods
       through `magmaan_core$ordinal_profile_rmsea` /

@@ -12,6 +12,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/optim/problem.hpp"
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -389,6 +390,18 @@ saturated_em_moment_influence(const RawData& raw,
                               const FIMLPack& pack,
                               const FIMLH1& h1,
                               const SaturatedMoments& sm);
+
+// Hybrid mixed continuous/ordinal observed-data first stage. Ordinal
+// thresholds/polychorics and ordinal-continuous polyserial correlations use
+// observed-pair support; the continuous mean/covariance block uses saturated
+// continuous FIML. The returned MixedOrdinalStats carries coherent casewise
+// moment influence and empirical estimated-weight Gamma influence rows.
+post_expected<data::MixedOrdinalStats>
+mixed_ordinal_stats_hybrid_fiml_from_observed_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    bool full_wls_weight = true,
+    double h_step = 1e-4);
 
 // Convert the saturated EM ACOV to the two-stage moment meat used by
 // robust.two.stage. `se_weighted = true` gives the parameter-vcov convention;

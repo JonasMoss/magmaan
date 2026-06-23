@@ -3565,6 +3565,235 @@ saturated_em_moment_influence(const RawData& raw,
       raw, pack.cache, h1, sm, "saturated_em_moment_influence");
 }
 
+post_expected<data::MixedOrdinalStats>
+mixed_ordinal_stats_hybrid_fiml_from_observed_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    bool full_wls_weight,
+    double h_step) {
+  auto stats_or =
+      data::mixed_ordinal_stats_from_observed_data(X, ordered, full_wls_weight);
+  if (!stats_or.has_value()) return std::unexpected(stats_or.error());
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_stats_hybrid_fiml_from_observed_data: h_step must be > 0"));
+  }
+
+  data::MixedOrdinalStats stats = std::move(*stats_or);
+  stats.gamma_diag_influence.clear();
+  stats.gamma_full_influence.clear();
+  stats.gamma_diag_influence.reserve(X.size());
+  stats.gamma_full_influence.reserve(X.size());
+
+  for (std::size_t b = 0; b < X.size(); ++b) {
+    const Eigen::MatrixXd& Xb = X[b];
+    const Eigen::Index n = Xb.rows();
+    const Eigen::Index p = Xb.cols();
+    std::vector<Eigen::Index> cont;
+    cont.reserve(static_cast<std::size_t>(p));
+    std::vector<Eigen::Index> cont_pos(static_cast<std::size_t>(p), -1);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[b][static_cast<std::size_t>(j)] == 0) {
+        cont_pos[static_cast<std::size_t>(j)] =
+            static_cast<Eigen::Index>(cont.size());
+        cont.push_back(j);
+      }
+    }
+    const Eigen::Index q = static_cast<Eigen::Index>(cont.size());
+    if (q == 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: block " +
+              std::to_string(b) + " has no continuous variables"));
+    }
+
+    std::vector<Eigen::Index> keep_rows;
+    keep_rows.reserve(static_cast<std::size_t>(n));
+    for (Eigen::Index r = 0; r < n; ++r) {
+      bool any = false;
+      for (Eigen::Index k = 0; k < q; ++k) {
+        any = any || std::isfinite(Xb(r, cont[static_cast<std::size_t>(k)]));
+      }
+      if (any) keep_rows.push_back(r);
+    }
+    if (keep_rows.size() < 2) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: block " +
+              std::to_string(b) +
+              " has fewer than 2 rows with continuous observations"));
+    }
+
+    RawData raw_cont;
+    const Eigen::Index nf = static_cast<Eigen::Index>(keep_rows.size());
+    Eigen::MatrixXd Xc(nf, q);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask(nf, q);
+    for (Eigen::Index rr = 0; rr < nf; ++rr) {
+      const Eigen::Index src = keep_rows[static_cast<std::size_t>(rr)];
+      for (Eigen::Index k = 0; k < q; ++k) {
+        const double v = Xb(src, cont[static_cast<std::size_t>(k)]);
+        const bool obs = std::isfinite(v);
+        Xc(rr, k) = obs ? v : std::numeric_limits<double>::quiet_NaN();
+        mask(rr, k) = obs ? 1 : 0;
+      }
+    }
+    raw_cont.X.push_back(std::move(Xc));
+    raw_cont.mask.push_back(std::move(mask));
+
+    auto pack_or = fiml_pack(raw_cont);
+    if (!pack_or.has_value()) {
+      return std::unexpected(fit_to_post(pack_or.error(),
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: fiml_pack"));
+    }
+    auto h1_or = fiml_h1_moments(raw_cont, *pack_or);
+    if (!h1_or.has_value()) {
+      return std::unexpected(fit_to_post(h1_or.error(),
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: H1 EM"));
+    }
+    auto sm_or = saturated_em_moments_impl(
+        raw_cont, *pack_or, *h1_or, h_step, SaturatedHessianKind::Analytic,
+        "mixed_ordinal_stats_hybrid_fiml_from_observed_data");
+    if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+    auto infl_or = saturated_em_moment_influence(
+        raw_cont, *pack_or, *h1_or, *sm_or);
+    if (!infl_or.has_value()) return std::unexpected(infl_or.error());
+    if (sm_or->mean.size() != 1 || sm_or->cov.size() != 1 ||
+        sm_or->mean[0].size() != q || sm_or->cov[0].rows() != q ||
+        sm_or->cov[0].cols() != q) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: malformed "
+          "continuous saturated moments"));
+    }
+
+    const Eigen::Index qmom = q + detail::vech_len(q);
+    if (infl_or->rows() != nf || infl_or->cols() != qmom) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: continuous "
+          "influence shape mismatch"));
+    }
+    Eigen::MatrixXd cont_if = Eigen::MatrixXd::Zero(n, qmom);
+    for (Eigen::Index rr = 0; rr < nf; ++rr) {
+      const Eigen::Index src = keep_rows[static_cast<std::size_t>(rr)];
+      cont_if.row(src) = static_cast<double>(n) * infl_or->row(rr);
+    }
+
+    Eigen::MatrixXd R_old = stats.R[b];
+    Eigen::MatrixXd IF_old = stats.moment_influence[b];
+    Eigen::MatrixXd& R = stats.R[b];
+    Eigen::VectorXd& mean = stats.mean[b];
+    Eigen::VectorXd& moments = stats.moments[b];
+    Eigen::MatrixXd& G = stats.moment_influence[b];
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index mb = moments.size();
+    if (G.rows() != n || G.cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_stats_hybrid_fiml_from_observed_data: mixed "
+          "influence shape mismatch"));
+    }
+
+    std::vector<Eigen::Index> mean_col(static_cast<std::size_t>(p), -1);
+    std::vector<Eigen::Index> var_col(static_cast<std::size_t>(p), -1);
+    Eigen::Index pos = nth;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (cont_pos[static_cast<std::size_t>(j)] >= 0) mean_col[static_cast<std::size_t>(j)] = pos++;
+    }
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (cont_pos[static_cast<std::size_t>(j)] >= 0) var_col[static_cast<std::size_t>(j)] = pos++;
+    }
+    const Eigen::Index assoc_start = pos;
+
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const Eigen::Index cp = cont_pos[static_cast<std::size_t>(j)];
+      if (cp < 0) continue;
+      const Eigen::Index mc = mean_col[static_cast<std::size_t>(j)];
+      const Eigen::Index vc = var_col[static_cast<std::size_t>(j)];
+      mean(j) = sm_or->mean[0](cp);
+      R(j, j) = sm_or->cov[0](cp, cp);
+      moments(mc) = -mean(j);
+      moments(vc) = R(j, j);
+      G.col(mc) = -cont_if.col(cp);
+      G.col(vc) = cont_if.col(q + detail::vech_index(q, cp, cp));
+    }
+
+    Eigen::Index assoc = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        const Eigen::Index col = assoc_start + assoc;
+        const Eigen::Index ci = cont_pos[static_cast<std::size_t>(i)];
+        const Eigen::Index cj = cont_pos[static_cast<std::size_t>(j)];
+        if (ci >= 0 && cj >= 0) {
+          R(i, j) = R(j, i) = sm_or->cov[0](ci, cj);
+          moments(col) = R(i, j);
+          G.col(col) = cont_if.col(q + detail::vech_index(q, ci, cj));
+        } else if (ci >= 0 || cj >= 0) {
+          const Eigen::Index c = ci >= 0 ? i : j;
+          const Eigen::Index cp = ci >= 0 ? ci : cj;
+          const double old_var = R_old(c, c);
+          const double new_var = R(c, c);
+          if (!(old_var > 0.0) || !(new_var > 0.0)) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "mixed_ordinal_stats_hybrid_fiml_from_observed_data: "
+                "non-positive continuous variance"));
+          }
+          const double old_sd = std::sqrt(old_var);
+          const double new_sd = std::sqrt(new_var);
+          const double rho = R_old(i, j) / old_sd;
+          const Eigen::Index vc = var_col[static_cast<std::size_t>(c)];
+          const Eigen::VectorXd rho_if =
+              (IF_old.col(col) - (rho / (2.0 * old_sd)) * IF_old.col(vc)) /
+              old_sd;
+          R(i, j) = R(j, i) = rho * new_sd;
+          moments(col) = R(i, j);
+          G.col(col) = new_sd * rho_if +
+              (rho / (2.0 * new_sd)) *
+                  cont_if.col(q + detail::vech_index(q, cp, cp));
+        }
+        ++assoc;
+      }
+    }
+
+    Eigen::MatrixXd NACOV = (G.transpose() * G) / static_cast<double>(n);
+    NACOV = 0.5 * (NACOV + NACOV.transpose()).eval();
+    Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(mb, mb);
+    for (Eigen::Index k = 0; k < mb; ++k) {
+      const double v = NACOV(k, k);
+      if (!(v > 0.0) || !std::isfinite(v)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "mixed_ordinal_stats_hybrid_fiml_from_observed_data: non-positive "
+            "hybrid NACOV diagonal"));
+      }
+      W_dwls(k, k) = 1.0 / v;
+    }
+    Eigen::MatrixXd W_wls;
+    if (full_wls_weight) {
+      Eigen::LLT<Eigen::MatrixXd> llt(NACOV);
+      if (llt.info() == Eigen::Success) {
+        W_wls = llt.solve(Eigen::MatrixXd::Identity(mb, mb));
+        W_wls = 0.5 * (W_wls + W_wls.transpose()).eval();
+      }
+    }
+
+    Eigen::MatrixXd gamma_diag_if(n, mb);
+    Eigen::MatrixXd gamma_full_if(n, mb * mb);
+    const Eigen::VectorXd diag = NACOV.diagonal();
+    for (Eigen::Index r = 0; r < n; ++r) {
+      const Eigen::VectorXd gr = G.row(r).transpose();
+      gamma_diag_if.row(r) = (gr.array().square() - diag.array()).matrix();
+      const Eigen::MatrixXd outer = gr * gr.transpose() - NACOV;
+      for (Eigen::Index cc = 0; cc < mb; ++cc) {
+        for (Eigen::Index rr = 0; rr < mb; ++rr) {
+          gamma_full_if(r, rr + cc * mb) = outer(rr, cc);
+        }
+      }
+    }
+
+    stats.NACOV[b] = std::move(NACOV);
+    stats.W_dwls[b] = std::move(W_dwls);
+    stats.W_wls[b] = std::move(W_wls);
+    stats.gamma_diag_influence.push_back(std::move(gamma_diag_if));
+    stats.gamma_full_influence.push_back(std::move(gamma_full_if));
+  }
+  return stats;
+}
+
 namespace {
 
 SampleStats
