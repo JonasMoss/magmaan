@@ -335,8 +335,11 @@ golden `parTable()` fixtures.
   envelope-score CI and exact-fit mixture p-value for RMSEA, while
   `estimate::mixed_ordinal_crmr_misspec_inference` adds CRMR/SRMR inference over
   the existing standardized mixed association residual convention (including
-  observed continuous-variance scale derivatives). Mixed CFI/TLI and the
-  consolidated mixed table remain convention work.
+  observed continuous-variance scale derivatives), and
+  `estimate::mixed_ordinal_cfi_tli_misspec_inference` adds CFI/TLI inference
+  with the mixed DWLS independence-baseline convention. These are exposed through
+  explicit `magmaan_core$mixed_ordinal_*_misspec` bindings; the consolidated
+  mixed table remains reportable-surface work.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

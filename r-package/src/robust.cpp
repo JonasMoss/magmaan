@@ -260,6 +260,32 @@ Rcpp::List crmr_inference_to_list(
   return out;
 }
 
+Rcpp::List incremental_inference_to_list(
+    const magmaan::estimate::OrdinalIncrementalFitInference& r) {
+  return Rcpp::List::create(
+      Rcpp::_["cfi"] = r.cfi,
+      Rcpp::_["cfi.ci.lower"] = r.cfi_ci_lower,
+      Rcpp::_["cfi.ci.upper"] = r.cfi_ci_upper,
+      Rcpp::_["tli"] = r.tli,
+      Rcpp::_["tli.ci.lower"] = r.tli_ci_lower,
+      Rcpp::_["tli.ci.upper"] = r.tli_ci_upper,
+      Rcpp::_["delta_user"] = r.delta_user,
+      Rcpp::_["delta_baseline"] = r.delta_baseline,
+      Rcpp::_["stat_user"] = r.stat_user,
+      Rcpp::_["stat_baseline"] = r.stat_baseline,
+      Rcpp::_["gendf_user"] = r.gendf_user,
+      Rcpp::_["gendf_baseline"] = r.gendf_baseline,
+      Rcpp::_["var_user"] = r.var_user,
+      Rcpp::_["var_baseline"] = r.var_baseline,
+      Rcpp::_["cov_user_baseline"] = r.cov_user_baseline,
+      Rcpp::_["var_cfi"] = r.var_cfi,
+      Rcpp::_["var_tli"] = r.var_tli,
+      Rcpp::_["df_user"] = r.df_user,
+      Rcpp::_["df_baseline"] = r.df_baseline,
+      Rcpp::_["fixed_weight"] = r.fixed_weight,
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+}
+
 Rcpp::List misspec_fit_measures_to_list(
     const magmaan::estimate::OrdinalMisspecFitMeasures& r) {
   return Rcpp::List::create(
@@ -1311,6 +1337,33 @@ Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit,
       estimated_weight, srmr_denominator, conf_level, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return crmr_inference_to_list(*r_or);
+}
+
+// infer_mixed_ordinal_cfi_tli_misspec() -- mixed continuous/ordinal DWLS CFI/TLI
+// misspecification CI using the mixed independence baseline with free marginal
+// rows and zero association rows.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit,
+                                               Rcpp::List mixed_stats,
+                                               bool estimated_weight = true,
+                                               double conf_level = 0.90,
+                                               double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_mixed_ordinal_cfi_tli_misspec()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::mixed_ordinal_cfi_tli_misspec_inference(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name),
+      estimated_weight, conf_level, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return incremental_inference_to_list(*r_or);
 }
 
 // [[Rcpp::export]]
