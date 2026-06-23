@@ -332,7 +332,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
     g <- x[[group_var]]
     if (anyNA(g)) stop("data_ordinal_stats_from_df(): grouping column contains missing values")
     labels <- model$group_labels
-    if (is.null(labels) || !length(labels)) labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    if (is.null(labels) || !length(labels)) labels <- unique(as.character(g))
     labels <- as.character(labels)
   }
 
@@ -441,7 +441,7 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
     g <- x[[group_var]]
     if (anyNA(g)) stop("data_mixed_ordinal_stats_from_df(): grouping column contains missing values")
     labels <- model$group_labels
-    if (is.null(labels) || !length(labels)) labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    if (is.null(labels) || !length(labels)) labels <- unique(as.character(g))
     labels <- as.character(labels)
   }
 
@@ -803,7 +803,7 @@ df_to_data <- function(x, model, group = NULL, missing = c("listwise", "error"),
     if (anyNA(g)) stop("df_to_data(): grouping column contains missing values")
     labels <- model$group_labels
     if (is.null(labels) || !length(labels)) {
-      labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+      labels <- unique(as.character(g))
     }
     labels <- as.character(labels)
     if (!all(as.character(g) %in% labels)) {
@@ -906,7 +906,7 @@ df_to_fiml_data <- function(x, model, group = NULL) {
     if (anyNA(g)) stop("df_to_fiml_data(): grouping column contains missing values")
     labels <- model$group_labels
     if (is.null(labels) || !length(labels)) {
-      labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+      labels <- unique(as.character(g))
     }
     labels <- as.character(labels)
     if (!all(as.character(g) %in% labels)) {
@@ -1411,7 +1411,10 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     }
     g <- data[[group_var]]
     if (anyNA(g)) stop("magmaan(): grouping column contains missing values")
-    group_labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    # Group order follows lavaan: data-appearance order (unique()), ignoring
+    # factor levels, so magmaan and lavaan index groups identically. Explicit
+    # ordering is still available via the model spec's `group_labels`.
+    group_labels <- unique(as.character(g))
     group_labels <- as.character(group_labels)
   }
 

@@ -1737,6 +1737,13 @@ stop rather than any usable non-error return.
   `fit_measures()` used the partable-unaware `infer_baseline(ss)`, so CFI/TLI
   diverged from lavaan for models with observed exogenous predictors; they now
   match to machine precision. A no-op for fits without exogenous variables.
+- **Multiple-group order follows lavaan** (2026-06-23). The R group helpers
+  (`magmaan()`, `df_to_data`, `df_to_fiml_data`, the ordinal/mixed data builders)
+  derive group labels by data-appearance order (`unique(as.character(g))`),
+  matching lavaan, instead of factor `levels()`. Previously a factor group
+  column whose level order differed from its appearance order made magmaan and
+  lavaan index groups differently. Explicit ordering remains available via the
+  model spec's `group_labels`.
 - **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
   C++ core plus `third_party/{port,quadpack}` is vendored into
   `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`

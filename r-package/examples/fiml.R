@@ -105,7 +105,8 @@ stopifnot(grepl("mixed FIML/complete-data", err_mixed, fixed = TRUE))
 
 mg <- df_to_fiml_data(df, model_spec(model, meanstructure = TRUE), group = "school")
 stopifnot(length(mg$X) == 2L)
-stopifnot(identical(mg$group_labels, levels(df$school)))
+# Group order follows lavaan: data-appearance order, not factor levels.
+stopifnot(identical(mg$group_labels, unique(as.character(df$school))))
 stopifnot(identical(names(mg$X), mg$group_labels))
 stopifnot(any(!mg$mask[[1L]]) || any(!mg$mask[[2L]]))
 
