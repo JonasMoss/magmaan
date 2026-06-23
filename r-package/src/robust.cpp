@@ -1282,10 +1282,8 @@ Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
   return misspec_fit_measures_to_list(*r_or);
 }
 
-// infer_mixed_ordinal_rmsea_misspec() — mixed continuous/ordinal DWLS RMSEA
-// misspecification CI. This is the first mixed fit-index slice over the existing
-// estimated-weight profile-RMSEA path; CRMR/SRMR and CFI/TLI remain separate
-// convention work.
+// infer_mixed_ordinal_rmsea_misspec() -- mixed continuous/ordinal DWLS RMSEA
+// misspecification CI over the estimated-weight profile-RMSEA path.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
@@ -1364,6 +1362,33 @@ Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit,
       estimated_weight, conf_level, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return incremental_inference_to_list(*r_or);
+}
+
+// infer_mixed_ordinal_fit_measures_misspec() -- consolidated mixed DWLS
+// misspecification fit table (RMSEA + CRMR/SRMR + CFI/TLI with CIs).
+//
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_fit_measures_misspec(
+    Rcpp::List fit,
+    Rcpp::List mixed_stats,
+    bool estimated_weight = true,
+    double conf_level = 0.90,
+    double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_mixed_ordinal_fit_measures_misspec()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::mixed_ordinal_fit_measures_misspec_inference(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name),
+      estimated_weight, conf_level, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return misspec_fit_measures_to_list(*r_or);
 }
 
 // [[Rcpp::export]]

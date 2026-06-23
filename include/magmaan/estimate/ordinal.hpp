@@ -796,6 +796,21 @@ ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
                                        double conf_level = 0.90,
                                        double eig_tol = 1e-10);
 
+// Mixed continuous/ordinal counterpart of
+// `ordinal_fit_measures_misspec_inference`. Bundles the mixed DWLS RMSEA,
+// CRMR/SRMR, and CFI/TLI misspecification intervals into the same reportable
+// result type. `estimated_weight=false` is the fixed-weight comparator.
+post_expected<OrdinalMisspecFitMeasures>
+mixed_ordinal_fit_measures_misspec_inference(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    bool estimated_weight = true,
+    double conf_level = 0.90,
+    double eig_tol = 1e-10);
+
 // Fixed-misspecification estimated-weight (categorical DWLS) profile-RMSEA for
 // an all-ordinal fit. The first-stage object is the EXTENDED moment vector
 // x = (u, γ) with u = thresholds+polychorics and γ = diag(Γ̂_u) the diagonal

@@ -337,9 +337,10 @@ golden `parTable()` fixtures.
   the existing standardized mixed association residual convention (including
   observed continuous-variance scale derivatives), and
   `estimate::mixed_ordinal_cfi_tli_misspec_inference` adds CFI/TLI inference
-  with the mixed DWLS independence-baseline convention. These are exposed through
-  explicit `magmaan_core$mixed_ordinal_*_misspec` bindings; the consolidated
-  mixed table remains reportable-surface work.
+  with the mixed DWLS independence-baseline convention. The mixed consolidated
+  surface is `estimate::mixed_ordinal_fit_measures_misspec_inference`, exposed as
+  `magmaan_core$mixed_ordinal_fit_measures_misspec` and the exported R companion
+  `fit_measures_misspec_mixed_ordinal()`.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over
