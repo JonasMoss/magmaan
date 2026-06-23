@@ -1801,9 +1801,13 @@ stop rather than any usable non-error return.
   lavaanified model.
 - Friendly R post-fit wrappers expose routine inspection without hiding
   statistical choices: `standardized(fit, vcov, type)` requires an explicit
-  covariance matrix, `stats::residuals(fit, standardized)` wraps raw or
-  standardized residuals including the lavaan-style continuous residual
-  z-statistics, `factor_scores(fit, data, method)` requires complete raw data
+  covariance matrix, `stats::residuals(fit, standardized)` / `lav_residuals(fit)`
+  wrap raw or standardized residuals including the lavaan-style continuous
+  residual z-statistics and the per-block `$summary` table (the
+  `lavResiduals(fit)$summary` analogue: cor.bentler SRMR/USRMR with SE,
+  exact-fit and close-fit z-tests, and a close-fit CI for cov/mean/total,
+  the raw-metric residual ACOV congruence-scaled into the correlation metric),
+  `factor_scores(fit, data, method)` requires complete raw data
   and dispatches continuous regression/Bartlett vs ordinal/mixed EBM/ML/EAP
   according to the fitted data type, and `modification_indices(fit, data,
   candidates)` / `score_tests(fit, data)`

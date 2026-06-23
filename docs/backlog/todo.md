@@ -735,6 +735,28 @@ oracle from `tests/tools/regen_robust_score.R`, and the advisory
   misspecification; these new IJ sandwich primitives ride the pending
   `<domain>::frontier` retier below.
 
+## Residual summary (lavResiduals parity)
+
+- **Done 2026-06-23 — `lavResiduals(fit)$summary` table.** `measures::
+  standardized_residuals` now fills a per-block `ResidualSummary` (`cov`, and
+  `mean`/`total` under a mean structure), the analogue of
+  `lavResiduals(fit)$summary` with the default `type = "cor.bentler"`: the SRMR
+  family (SRMR, its asymptotic SE, the exact-fit z-test against 0) and the
+  bias-corrected USRMR with a close-fit CI and a close-fit z-test against 0.05.
+  The cor.bentler residual ACOV is the existing raw-metric `acov_res`
+  (`Q·acov_obs·Qᵀ` in `fill_residual_z`) congruence-scaled by the sample SDs
+  (Ogasawara 2001 eq. 13; verified `GG·acov_raw·GG == lavaan cor.bentler acov` to
+  machine zero), so no new projection — just the RMS summary port of lavaan's
+  `lav_residuals_summary_rms`. R: `lav_residuals(fit)` (exported) and
+  `residuals(fit, standardized = TRUE)$summary` carry it; one C++ call.
+  Gated full-precision vs lavaan 0.7.1.2691 in `tests/unit/residuals_test.cpp`
+  (no-mean cov column; meanstructure cov/mean/total) and end-to-end vs live
+  lavaan in `r-package/examples/lav_residuals_summary.R` (single- and
+  multi-group, ~1e-6/1e-5). Note: only the default cor.bentler/SRMR type is
+  built; the raw (RMR) and cor.bollen (CRMR, needs the `lav_deriv_cov2cor_b`
+  Jacobian) summary types are not — add if a consumer appears. Ordinal residual
+  summaries are a separate object (`OrdinalMisspecFitMeasures`), left untouched.
+
 ## Local hardening and validation tooling
 
 Local-first safety tooling for an AI-assisted repo. Design note:

@@ -440,6 +440,12 @@ ordinal_stats_with_stage2_weight(const data::OrdinalStats& stats,
                                  OrdinalStage2Weight kind,
                                  OrdinalStage2DlsOptions dls = {});
 
+// `estimated_weight = true` routes the per-direction robust scaling through the
+// complete (Hall-Inoue infinitesimal-jackknife) sandwich, which carries the
+// data-dependent-weight IF(Ŵ) meat term — beyond lavaan, which scales MI only by
+// the global SB scalar. DWLS/WLS only (ULS has a fixed weight); requires the
+// per-case `moment_influence` and `int_data` carried by the fit's OrdinalStats.
+// Not yet implemented for mixed-ordinal (errors if requested there).
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     const model::MatrixRep& rep,
@@ -449,7 +455,8 @@ modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     const inference::ModificationIndexOptions&
                                         options = {},
                                     OrdinalParameterization parameterization =
-                                        OrdinalParameterization::Delta);
+                                        OrdinalParameterization::Delta,
+                                    bool estimated_weight = false);
 
 post_expected<inference::ScoreTestTable>
 score_tests_ordinal_robust(spec::LatentStructure pt,
@@ -458,7 +465,8 @@ score_tests_ordinal_robust(spec::LatentStructure pt,
                            const Estimates& est,
                            OrdinalWeightKind weights,
                            OrdinalParameterization parameterization =
-                               OrdinalParameterization::Delta);
+                               OrdinalParameterization::Delta,
+                           bool estimated_weight = false);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal_robust(
@@ -468,7 +476,8 @@ modification_indices_mixed_ordinal_robust(
     const Estimates& est,
     OrdinalWeightKind weights,
     const inference::ModificationIndexOptions& options = {},
-    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    bool estimated_weight = false);
 
 post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
@@ -477,7 +486,8 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
                                  const Estimates& est,
                                  OrdinalWeightKind weights,
                                  OrdinalParameterization parameterization =
-                                     OrdinalParameterization::Delta);
+                                     OrdinalParameterization::Delta,
+                                 bool estimated_weight = false);
 
 }  // namespace frontier
 

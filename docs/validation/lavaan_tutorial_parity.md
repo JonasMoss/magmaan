@@ -250,9 +250,13 @@ delta-method SEs, optional bootstrap SEs.
     - `residuals()` — `measures::residuals` / `api::residuals` expose the raw
       moment residuals `S − Σ̂(θ̂)` (and the mean residuals under a mean
       structure).
-    - `lavResiduals()` — `measures::standardized_residuals` / `api::…` expose
-      the raw and correlation-metric (Bentler) residual matrices, residual
-      SE/z-statistics (`$cov.z` for the default continuous path), and the SRMR.
+    - `lavResiduals()` — `measures::standardized_residuals` / `api::…` /
+      `lav_residuals()` expose the raw and correlation-metric (Bentler) residual
+      matrices, residual SE/z-statistics (`$cov.z` for the default continuous
+      path), the SRMR, and the per-block `$summary` table (cor.bentler SRMR
+      family: SRMR/USRMR with SE, exact-fit and close-fit z-tests, and a
+      close-fit CI), matching `lavResiduals(fit)$summary` to ~1e-6 on the HS CFA
+      (cov / mean / total, single- and multi-group).
     - `lavPredict()` — `measures::factor_scores` / `api::factor_scores`
       compute regression (Thurstone) and Bartlett factor scores.
 - **Gaps:**

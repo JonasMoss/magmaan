@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <memory>
 
 #include "magmaan/estimate/bounds.hpp"
@@ -229,6 +230,42 @@ Rcpp::List vector_blocks_to_r(const std::vector<Eigen::VectorXd>& blocks,
       v.attr("names") = Rcpp::wrap(names[b]);
     }
     out[static_cast<R_xlen_t>(b)] = v;
+  }
+  return out;
+}
+
+// One RMS residual section -> the 11-row column of lavaan's $summary table.
+// Non-finite inferential fields map to R's NA (lavaan reports NA there).
+Rcpp::NumericVector residual_rms_to_r(const magmaan::measures::ResidualRms& r) {
+  auto na = [](double x) { return std::isfinite(x) ? x : NA_REAL; };
+  return Rcpp::NumericVector::create(
+      na(r.srmr), na(r.srmr_se), na(r.srmr_exactfit_z),
+      na(r.srmr_exactfit_pvalue), na(r.usrmr), na(r.usrmr_se),
+      na(r.usrmr_ci_lower), na(r.usrmr_ci_upper), na(r.usrmr_closefit_h0),
+      na(r.usrmr_closefit_z), na(r.usrmr_closefit_pvalue));
+}
+
+// Per-block residual summary -> list of data frames shaped like
+// lavResiduals(fit)$summary: rows are the SRMR-family statistics, columns are
+// cov (and mean/total when the block carries a mean structure).
+Rcpp::List residual_summary_to_r(
+    const std::vector<magmaan::measures::ResidualSummary>& summ) {
+  const Rcpp::CharacterVector row_names = Rcpp::CharacterVector::create(
+      "srmr", "srmr.se", "srmr.exactfit.z", "srmr.exactfit.pvalue", "usrmr",
+      "usrmr.se", "usrmr.ci.lower", "usrmr.ci.upper", "usrmr.closefit.h0.value",
+      "usrmr.closefit.z", "usrmr.closefit.pvalue");
+  Rcpp::List out(static_cast<R_xlen_t>(summ.size()));
+  for (std::size_t b = 0; b < summ.size(); ++b) {
+    const auto& s = summ[b];
+    Rcpp::List df =
+        s.has_mean
+            ? Rcpp::List::create(Rcpp::_["cov"] = residual_rms_to_r(s.cov),
+                                 Rcpp::_["mean"] = residual_rms_to_r(s.mean),
+                                 Rcpp::_["total"] = residual_rms_to_r(s.total))
+            : Rcpp::List::create(Rcpp::_["cov"] = residual_rms_to_r(s.cov));
+    df.attr("class") = "data.frame";
+    df.attr("row.names") = row_names;
+    out[static_cast<R_xlen_t>(b)] = df;
   }
   return out;
 }
@@ -3600,7 +3637,9 @@ Rcpp::List measures_residuals(Rcpp::List fit) {
 
 // measures_standardized_residuals() — mirrors
 // measures::standardized_residuals(); deterministic lavResiduals-style raw and
-// correlation-metric residuals, residual SE/z-statistics, and SRMR.
+// correlation-metric residuals, residual SE/z-statistics, the SRMR, and the
+// per-block $summary table (cor.bentler SRMR family: SRMR/USRMR with SE,
+// exact-fit and close-fit z-tests and a close-fit CI).
 //
 // [[Rcpp::export]]
 Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
@@ -3626,7 +3665,8 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
                                               ctx.rep.ov_names),
       Rcpp::_["mean_z"] = vector_blocks_to_r(r_or->mean_z,
                                              ctx.rep.ov_names),
-      Rcpp::_["srmr"] = r_or->srmr);
+      Rcpp::_["srmr"] = r_or->srmr,
+      Rcpp::_["summary"] = residual_summary_to_r(r_or->summary));
 }
 
 // measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`
