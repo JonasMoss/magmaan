@@ -2003,6 +2003,69 @@ TEST_CASE("two_stage_em_ml_inference: missing-data non-NT observed bread uses "
   check_kind(magmaan::estimate::fiml::TwoStageWeight::Dls, {0.35});
 }
 
+TEST_CASE("two_stage_saturated_gamma_influence: analytic matches the "
+          "finite-difference Stage-1 Gamma influence") {
+  namespace fiml = magmaan::estimate::fiml;
+  // Well-conditioned deterministic data with nonzero means; a complete block
+  // and a missing-data block that exercise both branches of the analytic law.
+  const Eigen::Index n = 36;
+  const Eigen::Index p = 3;
+  Eigen::MatrixXd base = deterministic_z(n, p);
+  base.col(0).array() += 0.8;   // shift means away from zero (mean channel)
+  base.col(1).array() -= 0.5;
+  base.col(2).array() += 0.3;
+
+  magmaan::data::RawData complete;
+  complete.X.push_back(base);
+
+  magmaan::data::RawData missing;
+  Eigen::MatrixXd Xm = base;
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
+  M.setOnes();
+  const double na = std::numeric_limits<double>::quiet_NaN();
+  // Scatter a few missing entries across columns, keeping every row partially
+  // observed and every column mostly observed.
+  const std::array<std::pair<Eigen::Index, Eigen::Index>, 6> holes = {{
+      {3, 1}, {7, 2}, {11, 0}, {18, 1}, {24, 2}, {29, 0}}};
+  for (const auto& [r, c] : holes) {
+    Xm(r, c) = na;
+    M(r, c) = 0;
+  }
+  missing.X.push_back(Xm);
+  missing.mask.push_back(M);
+
+  const auto check_block = [&](const magmaan::data::RawData& raw,
+                               const char* label) {
+    for (Eigen::Index row : {Eigen::Index{0}, Eigen::Index{1}, Eigen::Index{7},
+                             Eigen::Index{18}, Eigen::Index{29}}) {
+      auto an = fiml::two_stage_saturated_gamma_influence(
+          raw, 0, row, fiml::GammaInfluenceRegime::Analytic);
+      auto fd = fiml::two_stage_saturated_gamma_influence(
+          raw, 0, row, fiml::GammaInfluenceRegime::FiniteDifference);
+      REQUIRE_MESSAGE(an.has_value(),
+          label << " analytic failed: " <<
+          (an.has_value() ? "" : an.error().detail));
+      REQUIRE_MESSAGE(fd.has_value(),
+          label << " FD failed: " <<
+          (fd.has_value() ? "" : fd.error().detail));
+      REQUIRE(an->rows() == fd->rows());
+      REQUIRE(an->cols() == fd->cols());
+      const double scale = 1.0 + fd->cwiseAbs().maxCoeff();
+      const double rel = (*an - *fd).cwiseAbs().maxCoeff() / scale;
+      // The analytic law is exact; the residual is the central-difference
+      // truncation / EM-tolerance floor (~1e-5, uniform over rows). A sign or
+      // scaling error would be O(1) relative.
+      CHECK_MESSAGE(rel < 5e-5,
+          std::string(label) << " row " << row << " rel=" << rel);
+      // Symmetric, like the sandwich it differentiates.
+      CHECK((*an - an->transpose()).cwiseAbs().maxCoeff() < 1e-9);
+    }
+  };
+
+  check_block(complete, "complete");
+  check_block(missing, "missing");
+}
+
 TEST_CASE("two_stage_casewise_influence_ij Gram reproduces the ML2S IJ vcov") {
   auto built = build_mean_model("f =~ x1 + x2 + x3");
   Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));

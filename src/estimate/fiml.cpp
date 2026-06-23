@@ -1363,6 +1363,360 @@ weighted_two_stage_gamma_influence_fd_block(const RawData& raw,
   return out;
 }
 
+// === Analytic ML2S missing-data Γ-influence ================================
+//
+// The Stage-1 saturated-FIML sandwich Γ_b = n·H⁻¹JH⁻¹ feeds the non-NT Stage-2
+// weight (DWLS/ADF/DLS); the estimated-weight IJ correction needs the per-case
+// influence dΓ_b/dw_i. Writing θ = (μ, vech Σ), with s_j the deviance score
+// (row j of `fiml_saturated_scores_block`) and g_j = −½ s_j the log-likelihood
+// gradient, the weighted saturated fit has
+//   H = (n/2)·H̄_dev = Σ_j w_j I_j   (total observed info; I_j = ½ per-case
+//                                     deviance Hessian)
+//   J = ¼ Σ_j w_j s_j s_jᵀ = Σ_j w_j g_j g_jᵀ      Γ = n·H⁻¹JH⁻¹
+// and the saturated-moment influence is Δθ_i = H⁻¹ g_i (= `saturated_em_moment_
+// influence` row i). The total weight-derivative is direct (explicit weight on
+// case i) plus the θ-movement of the fit:
+//   dH/dw_i = I_i + (∂H/∂θ)·Δθ_i ,   dJ/dw_i = g_i g_iᵀ + (∂J/∂θ)·Δθ_i
+//   dΓ/dw_i = H⁻¹JH⁻¹·(dn/dw_i = 1)
+//           + n·[ −H⁻¹(dH)H⁻¹JH⁻¹ + H⁻¹(dJ)H⁻¹ − H⁻¹JH⁻¹(dH)H⁻¹ ].
+// The J-movement collapses without any per-case info matrix:
+//   (∂J/∂θ)·v = ¼ (dSᵀ S + Sᵀ dS) ,  dS = directional deviance score along v.
+// The H-movement is the per-pattern directional third derivative of the
+// analytic saturated Hessian. `weighted_two_stage_gamma_influence_fd_block`
+// multiplies its central difference by n, so this returns n·dΓ/dw_i to match it.
+
+// ∂s/∂θ·v for the deviance scores: directional twin of
+// `fiml_saturated_scores_block` along v = (dmu, dSigma).
+post_expected<Eigen::MatrixXd>
+fiml_saturated_scores_directional_block(const RawData& raw, std::size_t block,
+                                        const Eigen::VectorXd& mu,
+                                        const Eigen::MatrixXd& Sigma,
+                                        const Eigen::VectorXd& dmu,
+                                        const Eigen::MatrixXd& dSigma) {
+  const Eigen::MatrixXd& X = raw.X[block];
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::MatrixXd dscores = Eigen::MatrixXd::Zero(n, p + pstar);
+  std::vector<Eigen::Index> obs;
+  for (Eigen::Index r = 0; r < n; ++r) {
+    obs.clear();
+    obs.reserve(static_cast<std::size_t>(p));
+    if (raw.mask.empty()) {
+      for (Eigen::Index c = 0; c < p; ++c) obs.push_back(c);
+    } else {
+      for (Eigen::Index c = 0; c < p; ++c)
+        if (raw.mask[block](r, c) != 0) obs.push_back(c);
+    }
+    if (obs.empty() || !finite_observed_row(X, obs, r)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ML2S Gamma influence: invalid observed row"));
+    }
+    const Eigen::Index q = static_cast<Eigen::Index>(obs.size());
+    const Eigen::MatrixXd Sigma_o = select_square(Sigma, obs);
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ML2S Gamma influence: Sigma_oo is not positive definite"));
+    }
+    const Eigen::MatrixXd A = llt.solve(Eigen::MatrixXd::Identity(q, q));
+    const Eigen::MatrixXd dS_o = select_square(dSigma, obs);
+    const Eigen::VectorXd dmu_o = select_vector(dmu, obs);
+    const Eigen::VectorXd Mu_o = select_vector(mu, obs);
+    Eigen::VectorXd d(q);
+    for (Eigen::Index j = 0; j < q; ++j) {
+      d(j) = X(r, obs[static_cast<std::size_t>(j)]) - Mu_o(j);
+    }
+    const Eigen::VectorXd z = A * d;
+    const Eigen::MatrixXd dA = -(A * dS_o * A);
+    const Eigen::VectorXd dz = dA * d - A * dmu_o;  // dd/dθ·v = −dmu_o
+    for (Eigen::Index i = 0; i < q; ++i) {
+      dscores(r, obs[static_cast<std::size_t>(i)]) = -2.0 * dz(i);
+    }
+    // G = A − z zᵀ ⇒ dG = dA − (dz zᵀ + z dzᵀ); same vech packing as the base.
+    const Eigen::MatrixXd dG =
+        dA - (dz * z.transpose() + z * dz.transpose());
+    for (Eigen::Index cj = 0; cj < q; ++cj) {
+      const Eigen::Index c = obs[static_cast<std::size_t>(cj)];
+      for (Eigen::Index ri = cj; ri < q; ++ri) {
+        const Eigen::Index rr0 = obs[static_cast<std::size_t>(ri)];
+        const Eigen::Index rr = std::max(rr0, c);
+        const Eigen::Index cc = std::min(rr0, c);
+        const Eigen::Index idx = p + vech_index(p, rr, cc);
+        dscores(r, idx) += (ri == cj) ? dG(ri, cj) : 2.0 * dG(ri, cj);
+      }
+    }
+  }
+  return dscores;
+}
+
+// Per-case observed information I_i = ½·(case deviance Hessian), in the full
+// q×q [μ; vech Σ] layout — the single-case slice of the analytic Hessian
+// assembly (nr = 1, Zsum = z_i, M = z_i z_iᵀ).
+post_expected<Eigen::MatrixXd>
+fiml_saturated_case_info_block(const RawData& raw, std::size_t block,
+                               Eigen::Index row, const Eigen::VectorXd& mu,
+                               const Eigen::MatrixXd& Sigma) {
+  const Eigen::MatrixXd& X = raw.X[block];
+  const Eigen::Index p = X.cols();
+  const Eigen::Index q = p + vech_len(p);
+  std::vector<Eigen::Index> obs;
+  obs.reserve(static_cast<std::size_t>(p));
+  if (raw.mask.empty()) {
+    for (Eigen::Index c = 0; c < p; ++c) obs.push_back(c);
+  } else {
+    for (Eigen::Index c = 0; c < p; ++c)
+      if (raw.mask[block](row, c) != 0) obs.push_back(c);
+  }
+  if (obs.empty() || !finite_observed_row(X, obs, row)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ML2S Gamma influence: invalid observed row"));
+  }
+  const Eigen::Index m = static_cast<Eigen::Index>(obs.size());
+  const Eigen::MatrixXd Sigma_o = select_square(Sigma, obs);
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ML2S Gamma influence: Sigma_oo is not positive definite"));
+  }
+  Eigen::MatrixXd A = llt.solve(Eigen::MatrixXd::Identity(m, m));
+  A = 0.5 * (A + A.transpose()).eval();
+  const Eigen::VectorXd Mu_o = select_vector(mu, obs);
+  Eigen::VectorXd d(m);
+  for (Eigen::Index j = 0; j < m; ++j) {
+    d(j) = X(row, obs[static_cast<std::size_t>(j)]) - Mu_o(j);
+  }
+  const Eigen::VectorXd Zsum = A * d;             // z_i (nr = 1)
+  const Eigen::MatrixXd M = Zsum * Zsum.transpose();
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  for (Eigen::Index j = 0; j < m; ++j) {
+    const Eigen::Index fj = obs[static_cast<std::size_t>(j)];
+    for (Eigen::Index i = 0; i < m; ++i) {
+      H(fj, obs[static_cast<std::size_t>(i)]) += 2.0 * A(i, j);
+    }
+  }
+  std::vector<SigmaBasis> basis;
+  basis.reserve(static_cast<std::size_t>(m * (m + 1) / 2));
+  for (Eigen::Index cj = 0; cj < m; ++cj) {
+    for (Eigen::Index ri = cj; ri < m; ++ri) {
+      const Eigen::Index full_r0 = obs[static_cast<std::size_t>(ri)];
+      const Eigen::Index full_c = obs[static_cast<std::size_t>(cj)];
+      SigmaBasis e;
+      e.full_index =
+          p + vech_index(p, std::max(full_r0, full_c), std::min(full_r0, full_c));
+      e.a = ri;
+      e.b = cj;
+      Eigen::VectorXd ADz =
+          (ri == cj) ? Eigen::VectorXd(A.col(ri) * Zsum(ri))
+                     : Eigen::VectorXd(A.col(ri) * Zsum(cj) +
+                                       A.col(cj) * Zsum(ri));
+      for (Eigen::Index i = 0; i < m; ++i) {
+        const Eigen::Index full_i = obs[static_cast<std::size_t>(i)];
+        const double h = 2.0 * ADz(i);
+        H(full_i, e.full_index) += h;
+        H(e.full_index, full_i) += h;
+      }
+      basis.push_back(e);
+    }
+  }
+  for (std::size_t kk = 0; kk < basis.size(); ++kk) {
+    const SigmaBasis& k = basis[kk];
+    for (std::size_t ll = 0; ll <= kk; ++ll) {
+      const SigmaBasis& l = basis[ll];
+      const double h = -basis_trace_xy(A, A, l, k) +
+                       basis_trace_xy(A, M, l, k) + basis_trace_xy(A, M, k, l);
+      H(k.full_index, l.full_index) += h;
+      if (kk != ll) H(l.full_index, k.full_index) += h;
+    }
+  }
+  H = 0.5 * (H + H.transpose()).eval();  // deviance Hessian (nr = 1)
+  return Eigen::MatrixXd(0.5 * H);       // I_i = ½ · deviance Hessian
+}
+
+// ∂(H̄_dev)/∂θ·v: per-pattern directional twin of
+// `fiml_saturated_hessian_analytic_block` (pattern data moments held fixed).
+// Caller scales by n/2 for the total-information derivative ∂H/∂θ·v.
+post_expected<Eigen::MatrixXd>
+fiml_saturated_hessian_directional_block(const FIMLCache& cache,
+                                         std::size_t block,
+                                         const Eigen::VectorXd& mu,
+                                         const Eigen::MatrixXd& Sigma,
+                                         const Eigen::VectorXd& dmu,
+                                         const Eigen::MatrixXd& dSigma) {
+  const Eigen::Index p = cache.block_p[block];
+  const Eigen::Index q = p + vech_len(p);
+  Eigen::MatrixXd dH = Eigen::MatrixXd::Zero(q, q);
+  std::int64_t n_block = 0;
+
+  for (const FIMLPattern& pat : cache.patterns) {
+    if (pat.block != block) continue;
+    n_block += pat.n_obs;
+    const auto& obs = pat.observed;
+    const Eigen::Index m = static_cast<Eigen::Index>(obs.size());
+    const double nr = static_cast<double>(pat.n_obs);
+
+    const Eigen::MatrixXd Sigma_o = select_square(Sigma, obs);
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ML2S Gamma influence: Sigma_oo is not positive definite"));
+    }
+    Eigen::MatrixXd A = llt.solve(Eigen::MatrixXd::Identity(m, m));
+    A = 0.5 * (A + A.transpose()).eval();
+    const Eigen::MatrixXd dS_o = select_square(dSigma, obs);
+    const Eigen::MatrixXd dA = -(A * dS_o * A);
+    const Eigen::VectorXd dmu_o = select_vector(dmu, obs);
+    const Eigen::VectorXd Mu_o = select_vector(mu, obs);
+    const Eigen::VectorXd dbar = pat.mean - Mu_o;
+    const Eigen::VectorXd ddbar = -dmu_o;
+
+    const Eigen::VectorXd Zsum = nr * (A * dbar);
+    const Eigen::VectorXd dZsum = nr * (dA * dbar + A * ddbar);
+    const Eigen::MatrixXd sum_ddT = nr * (pat.cov + dbar * dbar.transpose());
+    const Eigen::MatrixXd dsum_ddT =
+        nr * (ddbar * dbar.transpose() + dbar * ddbar.transpose());
+    const Eigen::MatrixXd M = A * sum_ddT * A;
+    const Eigen::MatrixXd dM =
+        dA * sum_ddT * A + A * dsum_ddT * A + A * sum_ddT * dA;
+
+    for (Eigen::Index j = 0; j < m; ++j) {
+      const Eigen::Index fj = obs[static_cast<std::size_t>(j)];
+      for (Eigen::Index i = 0; i < m; ++i) {
+        dH(obs[static_cast<std::size_t>(i)], fj) += 2.0 * nr * dA(i, j);
+      }
+    }
+
+    std::vector<SigmaBasis> basis;
+    basis.reserve(static_cast<std::size_t>(m * (m + 1) / 2));
+    for (Eigen::Index cj = 0; cj < m; ++cj) {
+      for (Eigen::Index ri = cj; ri < m; ++ri) {
+        const Eigen::Index full_r0 = obs[static_cast<std::size_t>(ri)];
+        const Eigen::Index full_c = obs[static_cast<std::size_t>(cj)];
+        SigmaBasis e;
+        e.full_index = p + vech_index(p, std::max(full_r0, full_c),
+                                      std::min(full_r0, full_c));
+        e.a = ri;
+        e.b = cj;
+        Eigen::VectorXd dADz;
+        if (ri == cj) {
+          dADz = dA.col(ri) * Zsum(ri) + A.col(ri) * dZsum(ri);
+        } else {
+          dADz = dA.col(ri) * Zsum(cj) + A.col(ri) * dZsum(cj) +
+                 dA.col(cj) * Zsum(ri) + A.col(cj) * dZsum(ri);
+        }
+        for (Eigen::Index i = 0; i < m; ++i) {
+          const Eigen::Index full_i = obs[static_cast<std::size_t>(i)];
+          const double h = 2.0 * dADz(i);
+          dH(full_i, e.full_index) += h;
+          dH(e.full_index, full_i) += h;
+        }
+        basis.push_back(e);
+      }
+    }
+
+    for (std::size_t kk = 0; kk < basis.size(); ++kk) {
+      const SigmaBasis& k = basis[kk];
+      for (std::size_t ll = 0; ll <= kk; ++ll) {
+        const SigmaBasis& l = basis[ll];
+        const double h =
+            -nr * (basis_trace_xy(dA, A, l, k) + basis_trace_xy(A, dA, l, k)) +
+            (basis_trace_xy(dA, M, l, k) + basis_trace_xy(A, dM, l, k)) +
+            (basis_trace_xy(dA, M, k, l) + basis_trace_xy(A, dM, k, l));
+        dH(k.full_index, l.full_index) += h;
+        if (kk != ll) dH(l.full_index, k.full_index) += h;
+      }
+    }
+  }
+
+  if (n_block <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ML2S Gamma influence: block has no observations"));
+  }
+  dH /= static_cast<double>(n_block);
+  return Eigen::MatrixXd(0.5 * (dH + dH.transpose()));
+}
+
+// Per-block precompute for the analytic Γ-influence: base scores S, total info
+// inverse H⁻¹, and the sandwich H⁻¹JH⁻¹ at the (unperturbed) saturated fit.
+struct Ml2sGammaInfluencePrep {
+  Eigen::Index n = 0;
+  Eigen::Index q = 0;
+  Eigen::VectorXd mu;
+  Eigen::MatrixXd Sigma;
+  Eigen::MatrixXd scores;  // n×q deviance scores
+  Eigen::MatrixXd Hinv;    // q×q
+  Eigen::MatrixXd HiJHi;   // q×q (= H⁻¹ J H⁻¹)
+};
+
+post_expected<Ml2sGammaInfluencePrep>
+prep_ml2s_gamma_influence(const RawData& raw, const FIMLCache& cache,
+                          std::size_t block, const Eigen::VectorXd& mu,
+                          const Eigen::MatrixXd& Sigma) {
+  auto scores_or = fiml_saturated_scores_block(raw, block, mu, Sigma);
+  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+  auto Hbar_or = fiml_saturated_hessian_analytic_block(cache, block, mu, Sigma);
+  if (!Hbar_or.has_value()) return std::unexpected(Hbar_or.error());
+
+  const double n = static_cast<double>(raw.X[block].rows());
+  const Eigen::MatrixXd H = (n / 2.0) * (*Hbar_or);
+  const Eigen::MatrixXd J = 0.25 * (scores_or->transpose() * (*scores_or));
+  auto Hinv_or = invert_symmetric(
+      H, "ML2S Gamma influence: weighted saturated information");
+  if (!Hinv_or.has_value()) return std::unexpected(Hinv_or.error());
+
+  Ml2sGammaInfluencePrep prep;
+  prep.n = raw.X[block].rows();
+  prep.q = scores_or->cols();
+  prep.mu = mu;
+  prep.Sigma = Sigma;
+  prep.scores = std::move(*scores_or);
+  prep.Hinv = std::move(*Hinv_or);
+  prep.HiJHi = prep.Hinv * J * prep.Hinv;
+  prep.HiJHi = 0.5 * (prep.HiJHi + prep.HiJHi.transpose()).eval();
+  return prep;
+}
+
+// n·dΓ_b/dw_i for case `i` — the analytic drop-in for
+// `weighted_two_stage_gamma_influence_fd_block`.
+post_expected<Eigen::MatrixXd>
+weighted_two_stage_gamma_influence_analytic_block(
+    const RawData& raw, const FIMLCache& cache, std::size_t block,
+    const Ml2sGammaInfluencePrep& prep, Eigen::Index i) {
+  const Eigen::Index p = prep.Sigma.rows();
+  const double n = static_cast<double>(prep.n);
+  const Eigen::VectorXd s_i = prep.scores.row(i).transpose();
+  const Eigen::VectorXd g_i = -0.5 * s_i;
+  const Eigen::VectorXd dtheta = prep.Hinv * g_i;  // Δθ_i = H⁻¹ g_i
+  Eigen::VectorXd dmu = dtheta.head(p);
+  Eigen::MatrixXd dSigma(p, p);
+  vech_unpack(dtheta.segment(p, vech_len(p)), p, dSigma);
+
+  auto Ii_or = fiml_saturated_case_info_block(raw, block, i, prep.mu, prep.Sigma);
+  if (!Ii_or.has_value()) return std::unexpected(Ii_or.error());
+  auto dS_or = fiml_saturated_scores_directional_block(
+      raw, block, prep.mu, prep.Sigma, dmu, dSigma);
+  if (!dS_or.has_value()) return std::unexpected(dS_or.error());
+  auto dHbar_or = fiml_saturated_hessian_directional_block(
+      cache, block, prep.mu, prep.Sigma, dmu, dSigma);
+  if (!dHbar_or.has_value()) return std::unexpected(dHbar_or.error());
+
+  // J̇_i = g_i g_iᵀ + ¼(dSᵀS + SᵀdS);  Ḣ_i = I_i + (n/2)·∂H̄/∂θ·Δθ_i.
+  const Eigen::MatrixXd Jdot =
+      g_i * g_i.transpose() +
+      0.25 * (dS_or->transpose() * prep.scores +
+              prep.scores.transpose() * (*dS_or));
+  const Eigen::MatrixXd Hdot = *Ii_or + (n / 2.0) * (*dHbar_or);
+
+  const Eigen::MatrixXd& Hinv = prep.Hinv;
+  const Eigen::MatrixXd& HiJHi = prep.HiJHi;
+  Eigen::MatrixXd dGamma =
+      HiJHi + n * (-(Hinv * Hdot * HiJHi) + (Hinv * Jdot * Hinv) -
+                   (HiJHi * Hdot * Hinv));
+  dGamma = 0.5 * (dGamma + dGamma.transpose()).eval();
+  return Eigen::MatrixXd(n * dGamma);
+}
+
 post_expected<Eigen::MatrixXd>
 fiml_saturated_hessian_fd_block(const RawData& raw,
                                 std::size_t block,
@@ -4079,6 +4433,7 @@ ml2s_nt_gamma_influence(const SampleStats& samp,
 
 post_expected<Eigen::MatrixXd>
 ml2s_weight_correction_block(const RawData& raw,
+                             const FIMLCache& cache,
                              const SampleStats& samp,
                              const Eigen::VectorXd& residual,
                              const Eigen::MatrixXd& moment_influence,
@@ -4100,13 +4455,32 @@ ml2s_weight_correction_block(const RawData& raw,
         "two_stage_em_ml_inference: DLS mixing scalar a must lie in [0, 1]"));
   }
 
+  // The non-NT weights (DWLS/ADF/DLS with a>0) carry the estimated-weight
+  // channel through the analytic Stage-1 sandwich-Γ influence; build its
+  // per-block precompute once.
+  const bool needs_gamma = kind == TwoStageWeight::Dwls ||
+                           kind == TwoStageWeight::Adf ||
+                           (kind == TwoStageWeight::Dls && dls.a > 0.0);
+  Ml2sGammaInfluencePrep prep;
+  if (needs_gamma) {
+    if (b >= samp.mean.size() || samp.mean[b].size() != raw.X[b].cols()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_em_ml_inference: estimated-weight ML2S Gamma influence "
+          "requires saturated means"));
+    }
+    auto prep_or =
+        prep_ml2s_gamma_influence(raw, cache, b, samp.mean[b], samp.S[b]);
+    if (!prep_or.has_value()) return std::unexpected(prep_or.error());
+    prep = std::move(*prep_or);
+  }
+
   const Eigen::RowVectorXd lhs = residual.transpose() * weight;
   Eigen::MatrixXd correction(moment_influence.rows(), mb);
   for (Eigen::Index i = 0; i < moment_influence.rows(); ++i) {
     Eigen::MatrixXd dG = Eigen::MatrixXd::Zero(mb, mb);
-    if (kind == TwoStageWeight::Dwls || kind == TwoStageWeight::Adf ||
-        (kind == TwoStageWeight::Dls && dls.a > 0.0)) {
-      auto gf_or = weighted_two_stage_gamma_influence_fd_block(raw, b, i);
+    if (needs_gamma) {
+      auto gf_or = weighted_two_stage_gamma_influence_analytic_block(
+          raw, cache, b, prep, i);
       if (!gf_or.has_value()) return std::unexpected(gf_or.error());
       if (kind == TwoStageWeight::Dwls) {
         dG.diagonal() = gf_or->diagonal();
@@ -4171,6 +4545,38 @@ two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted) {
     off += q;
   }
   return Eigen::MatrixXd(0.5 * (gamma + gamma.transpose()).eval());
+}
+
+post_expected<Eigen::MatrixXd>
+two_stage_saturated_gamma_influence(const RawData& raw, std::size_t block,
+                                    Eigen::Index row,
+                                    GammaInfluenceRegime regime) {
+  if (block >= raw.X.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_saturated_gamma_influence: block index out of range"));
+  }
+  if (row < 0 || row >= raw.X[block].rows()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_saturated_gamma_influence: row index out of range"));
+  }
+  if (regime == GammaInfluenceRegime::FiniteDifference) {
+    return weighted_two_stage_gamma_influence_fd_block(raw, block, row);
+  }
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) {
+    return std::unexpected(fit_to_post(pack_or.error(),
+        "two_stage_saturated_gamma_influence: fiml_pack"));
+  }
+  auto h1_or = fiml_h1_moments(raw, *pack_or);
+  if (!h1_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_or.error(),
+        "two_stage_saturated_gamma_influence: H1 EM"));
+  }
+  auto prep_or = prep_ml2s_gamma_influence(raw, pack_or->cache, block,
+                                           h1_or->mu[block], h1_or->sigma[block]);
+  if (!prep_or.has_value()) return std::unexpected(prep_or.error());
+  return weighted_two_stage_gamma_influence_analytic_block(
+      raw, pack_or->cache, block, *prep_or, row);
 }
 
 namespace {
@@ -4491,7 +4897,8 @@ build_ml2s_ij_blocks(spec::LatentStructure pt,
         static_cast<double>(n) *
         influence_or->block(row_off, col_off, n, qb);
     auto correction_or = ml2s_weight_correction_block(
-        raw, samp, residual, moment_rows, *Wb, layout, b, kind, dls);
+        raw, pack.cache, samp, residual, moment_rows, *Wb, layout, b, kind,
+        dls);
     if (!correction_or.has_value()) return std::unexpected(correction_or.error());
 
     ij_blocks.push_back(WeightedMomentIJBlock{
