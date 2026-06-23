@@ -1699,6 +1699,23 @@ stop rather than any usable non-error return.
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- **Case-level influence diagnostics** (exact leave-one-out engine; semfindr
+  parity) landed 2026-06-23 as pure-R `r-package/R/case_influence.R`:
+  `case_rerun()` (drop one case, down-date the sample statistics, warm-started
+  refit; single-group continuous ML/ULS/GLS), then `est_change_raw()` (raw or
+  std.all DFBETA), `est_change()` (DFTHETAS standardized by the leave-one-out SE
+  plus the generalized Cook's distance `gcd`), `fit_measures_change()`, and
+  `mahalanobis_rerun()`. It reuses existing primitives only (`fit_ml`/`fit_uls`/
+  `fit_gls`, `df_to_data`, `inference_information_expected`/`inference_vcov`,
+  `fit_measures`), so no core C++ was touched. Output format mirrors
+  `semfindr` (Cheung & Lai, 2026; Pek & MacCallum, 2011), validated live by
+  `r-package/examples/case_influence_semfindr.R` and frozen against semfindr
+  fixtures (`tests/fixtures/case_influence/`, regen
+  `tests/tools/regen_semfindr_fixtures.R`, pin `semfindr_version.txt`).
+  Parity is to ~1e-5 for the estimate/gcd changes and machine precision for
+  fit-measure changes and Mahalanobis distance. The approximate (one-step,
+  no-refit) engine and misspecification-robust case influence are tracked in
+  the backlog.
 - **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
   C++ core plus `third_party/{port,quadpack}` is vendored into
   `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`

@@ -782,6 +782,44 @@ oracle from `tests/tools/regen_robust_score.R`, and the advisory
   mixed-ordinal / categorical estimated-weight residuals are not wired; these
   primitives ride the pending `<domain>::frontier` retier below.
 
+## Case-level influence diagnostics (semfindr parity)
+
+The **exact leave-one-out engine landed 2026-06-23** (`r-package/R/case_influence.R`:
+`case_rerun` / `est_change_raw` / `est_change` (+`gcd`) / `fit_measures_change` /
+`mahalanobis_rerun`), single-group continuous ML/ULS/GLS, semfindr-format,
+validated by `r-package/examples/case_influence_semfindr.R` and frozen fixtures
+under `tests/fixtures/case_influence/`. Remaining:
+
+- **Approximate one-step engine (M/L, needs core).** semfindr's no-refit path:
+  `est_change_raw_approx` / `est_change_approx` / `fit_measures_change_approx`
+  via `Δθ ≈ (N/(N−1))·V·∇ℓ_i` and `gCD ≈ (N−1)·Δθ'ℐΔθ`. Needs per-case ML scores
+  exposed in core (today only assembled and summed: per-case ML score rows are
+  `robust::casewise_contributions × WΔ`, with `WΔ` built inline in
+  `information_cross_products`, `src/inference/inference.cpp`; FIML per-case
+  scores already exist as `fiml_score_meat_bread().scores`) plus a per-case
+  loglik for the fit-measure change. Add the score/loglik accessor + Rcpp glue
+  + re-vendor, then the three `*_approx` R wrappers (which take a plain fit, not
+  a rerun). Cross-check approx-vs-exact on the same fixtures.
+- **`fixed.x` baseline df gap (blocks CFI/TLI case influence on path models).**
+  For a model with exogenous predictors, magmaan's independence/baseline model
+  gives `baseline.df` one too high vs lavaan (e.g. path / `pa_dat`: magmaan 6,
+  lavaan 5) because lavaan frees the exogenous covariance (`iv1~~iv2`) in the
+  baseline under `fixed.x` and magmaan does not. `chisq`/`rmsea` match exactly;
+  `cfi`/`tli` (and their case-influence changes) do not. This is a pre-existing
+  fit-index issue in `measures::baseline`, not a case-influence bug; the example
+  gates CFI/TLI parity to `fixed.x`-free CFA models until it is fixed. Fix in
+  core `measures` baseline construction (free exogenous (co)variances), then
+  re-enable CFI/TLI in the path fixture.
+- **Multi-group and robust-regime extensions.** `case_rerun` is single-group
+  only (per-group raw blocks lose the original interleaved row order needed for
+  global case ids). `est_change` standardizes by the leave-one-out naive-ML
+  (lavaan `se="standard"`) covariance; matching semfindr on a robust-SE fit
+  means per-refit robust vcov (`vcov(refit, regime=…, data=refit$raw_data)`).
+- **Misspecification-robust case influence (frontier, deferred).** The casewise
+  dual of the estimated-weight (complete-sandwich) SE: the per-case
+  data-dependent-weight meat term `Δ'W'_d`. Ties to `papers/estimated-weight-se`
+  and the model-free DOCR reference (`external/refs/case-influence/`).
+
 ## Local hardening and validation tooling
 
 Local-first safety tooling for an AI-assisted repo. Design note:
