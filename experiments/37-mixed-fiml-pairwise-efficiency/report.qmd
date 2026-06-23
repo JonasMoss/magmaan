@@ -1,0 +1,172 @@
+---
+title: "Mixed first-stage statistics: does continuous FIML buy efficiency over pairwise deletion?"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path), dirname(getwd())))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"), candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "efficiency.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+need <- file.path(results_dir, c("efficiency.csv", "per_param.csv", "convergence.csv"))
+if (!all(file.exists(need))) {
+  stop("Missing results. Run: Rscript run_experiment.R")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) stop("The report requires ggplot2.")
+library(ggplot2)
+
+eff  <- utils::read.csv(file.path(results_dir, "efficiency.csv"), check.names = FALSE)
+pp   <- utils::read.csv(file.path(results_dir, "per_param.csv"), check.names = FALSE)
+conv <- utils::read.csv(file.path(results_dir, "convergence.csv"), check.names = FALSE)
+meta_path <- file.path(results_dir, "metadata.csv")
+meta <- if (file.exists(meta_path)) utils::read.csv(meta_path, check.names = FALSE) else NULL
+meta_lookup <- function(key, default = "?") {
+  if (is.null(meta)) return(default)
+  row <- meta[meta$key == key, , drop = FALSE]
+  if (!nrow(row)) default else as.character(row$value[[1L]])
+}
+n_reps <- meta_lookup("reps")
+
+block_label <- c(continuous = "Continuous block", ordinal = "Ordinal block",
+                 cross = "Cross (factor cor.)")
+mech_label  <- c(mcar = "MCAR", mar = "MAR")
+eff$Block      <- factor(block_label[eff$block], levels = block_label)
+eff$Mechanism  <- mech_label[eff$mechanism]
+
+# Headline numbers used in prose.
+pct <- function(x) sprintf("%.0f%%", 100 * (1 - x))
+mcar_cont <- eff[eff$mechanism == "mcar" & eff$block == "continuous", ]
+miss_lo <- min(eff$missing_rate); miss_hi <- max(eff$missing_rate)
+n_hi <- max(eff$n)
+val <- function(d, mech, block, n, mr) {
+  r <- d[d$mechanism == mech & d$block == block & d$n == n & d$missing_rate == mr, ]
+  if (!nrow(r)) NA_real_ else r$median_rel_rmse[[1L]]
+}
+valv <- function(d, mech, block, n, mr) {
+  r <- d[d$mechanism == mech & d$block == block & d$n == n & d$missing_rate == mr, ]
+  if (!nrow(r)) NA_real_ else r$median_rel_var[[1L]]
+}
+cvar_lo <- valv(eff, "mcar", "continuous", n_hi, miss_lo)
+cvar_hi <- valv(eff, "mcar", "continuous", n_hi, miss_hi)
+ord_rrmse <- eff$median_rel_rmse[eff$block == "ordinal"]
+
+# MAR bias on the continuous block at the highest missing rate.
+mar_bias <- eff[eff$mechanism == "mar" & eff$block == "continuous" &
+                eff$n == n_hi & eff$missing_rate == miss_hi, ]
+```
+
+## Question
+
+When a mixed continuous/ordinal SEM is fit from summary statistics with
+item-level missing data, the continuous means and covariances can be formed two
+ways: by **pairwise deletion** (each moment from the cases that observe its
+pair) or by **continuous FIML** (the saturated normal likelihood over all
+observed continuous values). The ordinal thresholds, polychorics, and
+ordinal/continuous polyserials are pairwise either way. Does swapping pairwise
+continuous moments for FIML continuous moments improve the resulting
+estimates, and which parameters feel it?
+
+## Short answer
+
+Yes, modestly, and exactly where the theory says it should. The hybrid changes
+only the continuous moment block, so the ordinal parameters are **bit-for-bit
+identical** (relative RMSE = `r sprintf("%.2f", stats::median(ord_rrmse))`),
+which is the clean control. On the continuous block under MCAR the FIML hybrid
+is more efficient, and the gain grows with the missing rate: at n = `r n_hi` the
+sampling variance of the continuous parameters drops by about `r pct(cvar_lo)`
+at `r sprintf("%.0f%%", 100*miss_lo)` missing and about `r pct(cvar_hi)` at
+`r sprintf("%.0f%%", 100*miss_hi)` missing, both estimators being unbiased here.
+Under MAR the decisive effect is **bias**: pairwise continuous moments are
+selected on the observed anchors and become inconsistent, while continuous FIML
+stays consistent. At `r sprintf("%.0f%%", 100*miss_hi)` missing the worst
+continuous-parameter bias is `r sprintf("%.3f", mar_bias$max_abs_bias_pp)`
+(pairwise) versus `r sprintf("%.3f", mar_bias$max_abs_bias_pf)` (hybrid), a
+roughly `r sprintf("%.0f-fold", mar_bias$max_abs_bias_pp / mar_bias$max_abs_bias_pf)`
+reduction. The cross-block factor correlation, governed by the unchanged
+polyserial moments, barely moves.
+
+## Evidence
+
+### Efficiency: relative RMSE by block
+
+Each point is the median over the free parameters in a block of
+RMSE(hybrid) / RMSE(pairwise); below 1 means the FIML hybrid wins. The ordinal
+line sits on 1 by construction (the hybrid never touches it); the continuous
+line drops further below 1 as missingness rises.
+
+```{r efficiency-plot, fig.width = 8, fig.height = 4.5}
+d <- eff[eff$block %in% c("continuous", "ordinal"), ]
+ggplot(d, aes(missing_rate, median_rel_rmse, colour = Block,
+              group = interaction(Block, n), linetype = factor(n))) +
+  geom_hline(yintercept = 1, colour = "grey60") +
+  geom_line() + geom_point(size = 2) +
+  facet_wrap(~ Mechanism) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_colour_manual(values = c("Continuous block" = "#1f78b4",
+                                 "Ordinal block" = "#b2182b",
+                                 "Cross (factor cor.)" = "#7f7f7f")) +
+  labs(x = "Missing rate", y = "Relative RMSE (hybrid / pairwise)",
+       colour = NULL, linetype = "n",
+       caption = "Below 1: FIML-continuous hybrid more efficient.") +
+  theme_minimal(base_size = 12)
+```
+
+### Bias under MAR (continuous block)
+
+Pairwise deletion under MAR selects the continuous covariances on the observed
+anchors; FIML does not. The table reports the largest absolute bias among the
+continuous-block parameters (loadings, residual variances, factor variance,
+intercepts) at each design cell.
+
+```{r mar-bias-table}
+b <- eff[eff$mechanism == "mar" & eff$block == "continuous",
+         c("n", "missing_rate", "max_abs_bias_pp", "max_abs_bias_pf")]
+b <- b[order(b$n, b$missing_rate), ]
+b$missing_rate <- sprintf("%.0f%%", 100 * b$missing_rate)
+names(b) <- c("n", "Missing", "Max |bias| pairwise", "Max |bias| hybrid")
+knitr::kable(b, digits = 3, row.names = FALSE)
+```
+
+### SE calibration and convergence
+
+Both first stages feed the same misspecification-robust IJ standard errors. The
+table reports, per estimator, the convergence rate and the median fit time
+(statistics + DWLS fit + IJ standard errors).
+
+```{r conv-table}
+cs <- aggregate(cbind(conv_rate, median_ms) ~ estimator, data = conv, FUN = mean)
+cs$estimator <- c(pp = "Pairwise x pairwise", pf = "Pairwise x FIML")[cs$estimator]
+names(cs) <- c("Estimator", "Mean convergence rate", "Median time (ms)")
+knitr::kable(cs, digits = c(0, 3, 0), row.names = FALSE)
+```
+
+## Caveats
+
+- This is an efficiency probe, not a parity gate. The population is a single
+  two-factor mixed CFA (four continuous indicators on one factor, four
+  three-category ordinal indicators on the other); the gains will differ for
+  other ratios of continuous to ordinal information and other correlation
+  strengths.
+- Reference ("true") values are a large-sample fit, not closed-form, so biases
+  carry a small reference-noise floor.
+- Only DWLS stage-two weights are exercised. WLS and ULS are deferred.
+- `r n_reps` replications per cell; small relative-RMSE gaps near 1 are within
+  Monte Carlo noise.
+
+## Reproduce
+
+```sh
+cd experiments/37-mixed-fiml-pairwise-efficiency
+Rscript run_experiment.R            # full grid
+Rscript run_experiment.R --smoke    # fast sanity path
+quarto render report.qmd
+```

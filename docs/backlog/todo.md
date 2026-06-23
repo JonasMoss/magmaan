@@ -361,9 +361,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     saturated continuous FIML. R exposes this through
     `magmaan_core$data_mixed_ordinal_stats_hybrid_fiml_from_raw/_from_df`,
     with observed-pairwise companions and `robust_mixed_ordinal_ij`. Gated by
-    C++ MCAR smoke tests and an R smoke; remaining validation is MCAR/MAR
-    efficiency, finite-sample calibration, and stress tests for singular full
-    WLS Gamma.
+    C++ MCAR smoke tests and an R smoke. MCAR/MAR efficiency validated
+    2026-06-23 by `experiments/37-mixed-fiml-pairwise-efficiency`: the hybrid
+    leaves the ordinal block bit-for-bit identical, modestly reduces continuous
+    sampling variance under MCAR (grows with the missing rate), and removes the
+    pairwise continuous-moment bias under MAR (worst continuous-parameter |bias|
+    ~0.10 pairwise vs ~0.01 hybrid at 35% missing). Remaining validation is
+    finite-sample calibration and stress tests for singular full WLS Gamma.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
     polyserial DPD and Huber residual; replace the ML2S missing-data
