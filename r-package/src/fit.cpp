@@ -4051,6 +4051,45 @@ Rcpp::List measures_standardized_residuals_estimated_weight(
   return standardized_residuals_to_r(*r_or, ctx.rep.ov_names);
 }
 
+// infer_casewise_influence_ij_fit() — per-case one-step misspecification-robust
+// ("complete-sandwich") parameter influences for a continuous-LS fit: the
+// casewise dual of semfindr's est_change_raw_approx. Returns the N_total x
+// n_free `influence` matrix (the moment-quadratic analogue of scores·V, whose
+// column-Gram is the estimated-weight IJ vcov) and its fixed-weight `naive`
+// counterpart; the R layer forms DFTHETAS / gCD and the data-dependent-weight
+// diagnostic (influence − naive) from these. Continuous GLS/WLS/ULS only; needs
+// the fitting raw data. Beyond lavaan/semfindr.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_casewise_influence_ij_fit(
+    Rcpp::List fit, SEXP raw_data, SEXP weight = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if ((fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) ||
+      (fit.containsElementNamed("mixed_ordinal") &&
+       Rcpp::as<bool>(fit["mixed_ordinal"]))) {
+    Rcpp::stop("magmaan: estimated_weight case influence is continuous-LS only "
+               "(GLS/WLS/ULS); not available for ordinal fits");
+  }
+  if (estimator == "ML" || estimator.empty() || estimator == "FIML") {
+    Rcpp::stop("magmaan: estimated_weight case influence needs an estimated "
+               "second-stage weight (GLS/WLS); estimator '%s' carries none",
+               estimator.c_str());
+  }
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  auto wls = continuous_ls_weight(ctx, est, estimator, weight,
+                                  "estimated_weight case influence");
+  auto r_or = magmaan::estimate::continuous_ls_casewise_influence_ij(
+      ctx.pt, ctx.rep, ctx.samp, est, wls, raw, continuous_ij_mode(estimator));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::Named("influence") = Rcpp::wrap(r_or->influence),
+      Rcpp::Named("influence_naive") = Rcpp::wrap(r_or->influence_naive),
+      Rcpp::Named("n_total") = static_cast<double>(r_or->n_total));
+}
+
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_modification_indices_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,

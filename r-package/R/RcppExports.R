@@ -317,6 +317,10 @@ measures_standardized_residuals_estimated_weight <- function(fit, raw_data, weig
     .Call(`_magmaan_measures_standardized_residuals_estimated_weight`, fit, raw_data, weight, conf_level)
 }
 
+infer_casewise_influence_ij_fit <- function(fit, raw_data, weight = NULL) {
+    .Call(`_magmaan_infer_casewise_influence_ij_fit`, fit, raw_data, weight)
+}
+
 inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = FALSE) {
     .Call(`_magmaan_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
 }
