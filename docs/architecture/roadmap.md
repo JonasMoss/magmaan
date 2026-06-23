@@ -492,7 +492,12 @@ golden `parTable()` fixtures.
     two_stage_weighting.tex`.
 - Robust FIML MLR post-fit reporting computes observed-pattern casewise
   sandwich SEs and Yuan-Bentler Mplus scaled-test traces for fixture-backed
-  non-saturated single- and multi-group cases. The observed FIML information
+  non-saturated single- and multi-group cases. The R surface also exposes
+  `fiml_observed_vcov()` / `inference_fiml_observed_vcov()` and routes
+  `vcov(fit, regime = "model" | "robust")` for FIML to the inverse observed
+  information or the MLR sandwich respectively; saturated (`df = 0`) FIML fits
+  still return robust `vcov`/`se`, with scaled-test scalars set to `NaN`. The
+  observed FIML information
   (`fiml_observed_information`, the MLR sandwich bread, and the `api` FIML
   information path) is analytic: the per-pattern moment-space Hessian chained
   through the model Jacobian plus the pattern-aggregated moment gradient

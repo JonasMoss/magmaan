@@ -19,10 +19,13 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
 # Parameter covariance under an explicit SE regime. `regime = "model"` uses the
 # expected / Gauss-Newton bread (efficient when the model is correct; the
 # robust.sem / WLSMV-style default); `regime = "robust"` uses the observed-Hessian
-# bread. For ordinal DWLS this is the fixed-weight observed-bread sandwich; the
-# estimated-weight infinitesimal jackknife is exposed explicitly as
-# `magmaan_core$robust_ordinal_ij()` for all-ordinal fits. Feed the covariance
-# into standardized(fit, vcov) to carry the regime choice into SE(beta).
+# bread. FIML is already an observed-information estimator, so `regime = "model"`
+# returns the inverse observed FIML information and `regime = "robust"` returns
+# the observed-bread MLR sandwich. For ordinal DWLS this is the fixed-weight
+# observed-bread sandwich; the estimated-weight infinitesimal jackknife is
+# exposed explicitly as `magmaan_core$robust_ordinal_ij()` for all-ordinal fits.
+# Feed the covariance into standardized(fit, vcov) to carry the regime choice
+# into SE(beta).
 vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
                              data = NULL, ...) {
   regime <- match.arg(regime)
@@ -41,6 +44,13 @@ vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
       stop("vcov(): mixed fit does not carry $mixed_ordinal_stats")
     }
     return(magmaan_core$robust_mixed_ordinal(fit, stats, "", bread)$vcov)
+  }
+  estimator <- if (is.null(fit$estimator)) "" else toupper(as.character(fit$estimator))
+  if (isTRUE(fit$fiml) || identical(estimator, "FIML")) {
+    if (identical(regime, "robust")) {
+      return(magmaan_core$estimate_fiml_robust_mlr(fit)$vcov)
+    }
+    return(magmaan_core$fiml_observed_vcov(fit)$vcov)
   }
   if (is.null(data)) {
     stop("vcov(): continuous fits need `data` (raw observations) for the ",

@@ -38,10 +38,45 @@ stopifnot(typeof(fit$fiml_h1) == "externalptr")
 stopifnot(inherits(fit$fiml_pack, "magmaan_fiml_pack"))
 stopifnot(inherits(fit$fiml_h1, "magmaan_fiml_h1"))
 
+fit_s3 <- magmaan(
+  model, data = df, estimator = "FIML",
+  control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
+)
+fiml_model <- magmaan_core$fiml_observed_vcov(fit_s3)
+fiml_robust <- magmaan_core$estimate_fiml_robust_mlr(fit_s3)
+V_model <- vcov(fit_s3, regime = "model")
+V_robust <- vcov(fit_s3, regime = "robust")
+stopifnot(is.matrix(V_model), is.matrix(V_robust))
+stopifnot(nrow(V_model) == fit_s3$npar, ncol(V_model) == fit_s3$npar)
+stopifnot(nrow(V_robust) == fit_s3$npar, ncol(V_robust) == fit_s3$npar)
+stopifnot(max(abs(V_model - fiml_model$vcov)) < 1e-10)
+stopifnot(max(abs(V_robust - fiml_robust$vcov)) < 1e-10)
+stopifnot(all(is.finite(fiml_model$se)))
+stopifnot(all(is.finite(fiml_robust$se)))
+stopifnot(is.nan(fiml_robust$scaling_factor))
+
 model_ml2s <- "
 visual =~ x1 + x2 + x3
 textual =~ x4 + x5 + x6
 "
+fit_fiml_ns <- magmaan(
+  model_ml2s, data = df, estimator = "FIML",
+  control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
+)
+fiml_model_ns <- magmaan_core$fiml_observed_vcov(fit_fiml_ns)
+fiml_robust_ns <- magmaan_core$estimate_fiml_robust_mlr(fit_fiml_ns)
+V_model_ns <- vcov(fit_fiml_ns, regime = "model")
+V_robust_ns <- vcov(fit_fiml_ns, regime = "robust")
+stopifnot(is.matrix(V_model_ns), is.matrix(V_robust_ns))
+stopifnot(nrow(V_model_ns) == fit_fiml_ns$npar,
+          ncol(V_model_ns) == fit_fiml_ns$npar)
+stopifnot(nrow(V_robust_ns) == fit_fiml_ns$npar,
+          ncol(V_robust_ns) == fit_fiml_ns$npar)
+stopifnot(max(abs(V_model_ns - fiml_model_ns$vcov)) < 1e-10)
+stopifnot(max(abs(V_robust_ns - fiml_robust_ns$vcov)) < 1e-10)
+stopifnot(all(is.finite(fiml_model_ns$se)))
+stopifnot(all(is.finite(fiml_robust_ns$se)))
+
 fit_ml2s <- magmaan(
   model_ml2s, data = df, estimator = "ML2S",
   control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)

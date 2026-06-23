@@ -216,15 +216,19 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   df, and chi-square are unchanged. Selector `bread = "expected" | "observed"` (reusing
   `robust::Information`) threaded through `robust_ordinal` / `robust_mixed_ordinal`
   / `robust_continuous_ls`, surfaced in R as `vcov(fit, regime = "model" |
-  "robust")`, which feeds `standardized(fit, vcov)`. Continuous ML/FIML already
-  had the observed bread (unchanged). Default stays `expected` (lavaan parity).
+  "robust")`, which feeds `standardized(fit, vcov)`. Continuous ML already had
+  the observed bread; FIML's observed-information model vcov and MLR sandwich
+  now use the same `vcov(fit, regime=)` keyword. Default stays `expected`
+  (lavaan parity) where an expected-bread estimator exists.
   Validation: experiment 35 (`35-misspec-robust-se`) -- under the correct model
   the two breads coincide and both match the empirical sampling SD. Focal is a
-  free loading on a cross-loading-distorted factor (raw + std.all), continuous ML
-  and ordinal DWLS. Under the omitted cross-loading the expected-bread SE
+  free loading on a cross-loading-distorted factor (raw + std.all), continuous
+  ML, MCAR FIML, and ordinal DWLS. Under the omitted cross-loading the
+  expected-bread/model SE
   underestimates by about a third (std loading 0.69-0.78 of truth) and the
   observed bread recovers it -- essentially completely for continuous ML
-  (std 1.01) and substantially for ordinal DWLS (std 0.85, the new bread). Note:
+  (std 1.01) and substantially for ordinal DWLS (std 0.85, the new bread), with
+  FIML now included as the missing-data continuous cell. Note:
   `docs/research/notes/misspec_observed_bread.tex`. This is `frontier`, not core
   parity: the correct-model cell is the validation oracle (no mainstream
   *software* -- lavaan/Mplus -- exposes this for the ordinal/WLS family).
@@ -701,10 +705,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     all-ordinal table, exposed through
     `magmaan_core$mixed_ordinal_fit_measures_misspec` and the explicit exported R
     companion `fit_measures_misspec_mixed_ordinal(fit, mixed_stats, ...)`.
-  - **FIML**: verify it really is misspecification-robust (its bread is the
-    observed Hessian by construction); add an expected-vs-observed comparison and
-    a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
-    misspecified-model FIML cell in exp 35.
+  - **FIML slice landed 2026-06-23.** R now exposes
+    `magmaan_core$fiml_observed_vcov()` / `inference_fiml_observed_vcov()` and
+    `vcov(fit, regime = "model" | "robust")` dispatches FIML fits to inverse
+    observed information or the existing MLR sandwich respectively, without a
+    separate raw-data argument. `r-package/examples/fiml.R` checks the
+    model-vs-robust route on a non-saturated FIML fit, and
+    experiment 35 includes an MCAR FIML cell under both correct and omitted
+    cross-loading conditions.
   - **(Research / "insanely cool") explicit second-order corrections**: Edgeworth /
     Cornish-Fisher / saddlepoint / Nagar variance expansion for the two-stage
     ordinal estimator. All need the same hard ingredient -- the third cumulants of

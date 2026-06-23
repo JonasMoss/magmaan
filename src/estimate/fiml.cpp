@@ -2438,11 +2438,6 @@ fiml_robust_mlr_impl(spec::LatentStructure pt,
                      double chisq,
                      const FIMLPack& pack,
                      const FIMLH1& h1) {
-  if (df <= 0) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_robust_mlr: robust scaled test requires df > 0"));
-  }
-
   const FIMLCache& cache = pack.cache;
   const SampleStats& start_samp = pack.start_stats;
   if (auto e = validate_h1_blocks(cache, h1); !e.has_value()) {
@@ -2507,10 +2502,15 @@ fiml_robust_mlr_impl(spec::LatentStructure pt,
   if (!h1_trace_or.has_value()) return std::unexpected(h1_trace_or.error());
   out.trace_ugamma_h1 = *h1_trace_or;
   out.trace_ugamma = out.trace_ugamma_h1 - out.trace_ugamma_h0;
-  out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
-  out.chisq_scaled = (out.scaling_factor > 0.0)
-      ? chisq / out.scaling_factor
-      : std::numeric_limits<double>::quiet_NaN();
+  if (df > 0) {
+    out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
+    out.chisq_scaled = (out.scaling_factor > 0.0)
+        ? chisq / out.scaling_factor
+        : std::numeric_limits<double>::quiet_NaN();
+  } else {
+    out.scaling_factor = std::numeric_limits<double>::quiet_NaN();
+    out.chisq_scaled = std::numeric_limits<double>::quiet_NaN();
+  }
   (void)q;
   return out;
 }
