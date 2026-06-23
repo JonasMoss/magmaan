@@ -1723,9 +1723,11 @@ stop rather than any usable non-error return.
   `est_change_approx` uses the *correct* finite-sample scaling and so diverges
   from semfindr 0.2.0 by two documented constant factors (semfindr applies
   `N/(N-1)` twice to DFTHETAS and once too few inside gCD — a recorded oracle
-  defect, gated transitively up to those factors). Still in the backlog:
-  `fit_measures_change_approx` (needs per-case loglik), multi-group and
-  robust-regime variants, and misspecification-robust case influence.
+  defect, gated transitively up to those factors). `fit_measures_change_approx`
+  is intentionally not provided (the exact `fit_measures_change` covers that leg
+  cheaply since refits are reused from `case_rerun`; the no-refit version would
+  be lossier). Still in the backlog: multi-group and robust-regime variants, and
+  misspecification-robust case influence.
 - **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
   C++ core plus `third_party/{port,quadpack}` is vendored into
   `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`
