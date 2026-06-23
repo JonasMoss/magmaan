@@ -6330,6 +6330,49 @@ void zero_extended_gamma_channel(Eigen::MatrixXd& Gamma,
     off += 2 * mb;
   }
 }
+
+post_expected<Eigen::MatrixXd>
+mixed_diag_gamma_influence_block(const data::MixedOrdinalStats& stats,
+                                 std::size_t b,
+                                 bool has_diag_gamma_if,
+                                 const Eigen::MatrixXd& G,
+                                 Eigen::Index mb,
+                                 const std::string& context) {
+  if (has_diag_gamma_if) {
+    Eigen::MatrixXd if_gamma = stats.gamma_diag_influence[b];
+    if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          context + ": precomputed Gamma diagonal influence shape mismatch "
+          "in block " + std::to_string(b)));
+    }
+    return if_gamma;
+  }
+
+  const bool observed_raw = !stats.raw_data[b].allFinite();
+  auto ifg_or = observed_raw
+      ? data::mixed_observed_gamma_diag_data_influence(
+            stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+            stats.thresholds[b], stats.mean[b], stats.R[b])
+      : data::mixed_gamma_diag_data_influence(
+            stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+            stats.thresholds[b], stats.mean[b], stats.R[b]);
+  if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
+  auto jac_or = observed_raw
+      ? data::mixed_observed_gamma_diag_jacobian_fd(
+            stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+            stats.thresholds[b], stats.mean[b], stats.R[b])
+      : data::mixed_gamma_diag_jacobian_fd(
+            stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+            stats.thresholds[b], stats.mean[b], stats.R[b]);
+  if (!jac_or.has_value()) return std::unexpected(jac_or.error());
+  if (ifg_or->rows() != G.rows() || ifg_or->cols() != mb ||
+      jac_or->rows() != mb || jac_or->cols() != mb) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        context + ": mixed Gamma diagonal influence shape mismatch in block " +
+            std::to_string(b)));
+  }
+  return (*ifg_or + G * jac_or->transpose()).eval();
+}
 }  // namespace
 
 post_expected<OrdinalCrmrInference>
@@ -6592,6 +6635,267 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
   const double center = out.stat - out.bias_trace;
   out.ci_lower = std::sqrt(std::max(center - z * sd, 0.0) / Nk);
   out.ci_upper = std::sqrt(std::max(center + z * sd, 0.0) / Nk);
+  return out;
+}
+
+post_expected<OrdinalCrmrInference>
+mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
+                                     const model::MatrixRep& rep,
+                                     const data::MixedOrdinalStats& stats,
+                                     const Estimates& est,
+                                     OrdinalParameterization parameterization,
+                                     bool estimated_weight,
+                                     bool srmr_denominator,
+                                     double conf_level,
+                                     double eig_tol) {
+  if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
+      !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: per-case influence functions "
+        "are required"));
+  }
+  const bool has_diag_gamma_if =
+      stats.gamma_diag_influence.size() == stats.R.size();
+  if (!has_diag_gamma_if && stats.raw_data.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: estimated-weight influence "
+        "unavailable; recompute mixed ordinal stats with gamma_diag_influence "
+        "or raw_data"));
+  }
+  if (!(conf_level > 0.0 && conf_level < 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: conf_level must lie in (0,1)"));
+  }
+
+  const Eigen::Index p = stats.R[0].rows();
+  const Eigen::Index nassoc = p * (p - 1) / 2;
+  if (nassoc <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: no association moments"));
+  }
+  std::vector<Eigen::Index> m_blocks(stats.R.size());
+  Eigen::Index M = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    if (stats.R[b].rows() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_crmr_misspec_inference: all groups must have the same "
+          "number of variables (common CRMR/SRMR denominator)"));
+    }
+    m_blocks[b] = stats.moments[b].size();
+    M += m_blocks[b];
+  }
+
+  if (auto pr = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !pr.has_value()) {
+    return std::unexpected(fit_to_post(pr.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: fitted theta length does not "
+        "match mixed delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd D =
+      mixed_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                            eval->J_mu, est.theta, parameterization);
+  if (D.rows() != M) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: moment Jacobian row count "
+        "mismatch"));
+  }
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != D.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_crmr_misspec_inference: constraint reparameterization "
+        "has incompatible shape"));
+  }
+
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double N_total = static_cast<double>(*N_or);
+
+  auto ob = mixed_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, stats.W_dwls, K, parameterization);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  const Eigen::MatrixXd Balpha = 0.5 * (*ob + ob->transpose()).eval();
+  auto Binv_or = sym_inverse_pd_post(
+      Balpha, "mixed_ordinal_crmr_misspec_inference observed bread");
+  if (!Binv_or.has_value()) return std::unexpected(Binv_or.error());
+  const Eigen::MatrixXd e_inv = K * (*Binv_or) * K.transpose();
+
+  Eigen::MatrixXd Q_G = Eigen::MatrixXd::Zero(2 * M, 2 * M);
+  Eigen::MatrixXd Gamma_x = Eigen::MatrixXd::Zero(2 * M, 2 * M);
+  Eigen::VectorXd g_G = Eigen::VectorXd::Zero(2 * M);
+  double weighted_G = 0.0;
+  Eigen::Index moff = 0, xoff = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = m_blocks[b];
+    const Eigen::Index pb = stats.R[b].rows();
+    const Eigen::Index n_assoc_b = pb * (pb - 1) / 2;
+    const Eigen::Index nth = stats.thresholds[b].size();
+
+    std::vector<Eigen::Index> cont_pos(static_cast<std::size_t>(pb), -1);
+    Eigen::Index n_cont = 0;
+    for (Eigen::Index j = 0; j < pb; ++j) {
+      if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) {
+        cont_pos[static_cast<std::size_t>(j)] = n_cont++;
+      }
+    }
+    const Eigen::Index assoc_off = nth + 2 * n_cont;
+    if (assoc_off + n_assoc_b != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_crmr_misspec_inference: mixed moment layout "
+          "mismatch"));
+    }
+    std::vector<Eigen::Index> var_row(static_cast<std::size_t>(pb), -1);
+    for (Eigen::Index j = 0; j < pb; ++j) {
+      const Eigen::Index cp = cont_pos[static_cast<std::size_t>(j)];
+      if (cp >= 0) var_row[static_cast<std::size_t>(j)] = nth + n_cont + cp;
+    }
+
+    const Eigen::MatrixXd D_b = D.block(moff, 0, mb, D.cols());
+    const Eigen::VectorXd d_b =
+        mixed_model_moments(stats, *layout_or, eval->moments, est.theta, b,
+                            parameterization) -
+        stats.moments[b];
+    const Eigen::VectorXd gamma_b = stats.NACOV[b].diagonal();
+    const Eigen::MatrixXd& W_b = stats.W_dwls[b];
+    const Eigen::MatrixXd DeinvDt = D_b * e_inv * D_b.transpose();
+    Eigen::MatrixXd Dphi(mb, 2 * mb);
+    Dphi.leftCols(mb) = DeinvDt * W_b - Eigen::MatrixXd::Identity(mb, mb);
+    const Eigen::VectorXd dg2 =
+        (d_b.array() / gamma_b.array().square()).matrix();
+    Dphi.rightCols(mb) = DeinvDt * dg2.asDiagonal();
+
+    Eigen::MatrixXd Dstd(n_assoc_b, 2 * mb);
+    Eigen::VectorXd z = Eigen::VectorXd::Zero(n_assoc_b);
+    Eigen::Index k = 0;
+    for (Eigen::Index j = 0; j < pb; ++j) {
+      for (Eigen::Index i = j + 1; i < pb; ++i) {
+        const Eigen::Index assoc_row = assoc_off + k;
+        const bool oi = stats.ordered[b][static_cast<std::size_t>(i)] != 0;
+        const bool oj = stats.ordered[b][static_cast<std::size_t>(j)] != 0;
+        double inv_scale = 1.0;
+        std::vector<Eigen::Index> scale_vars;
+        if (!oi && !oj) {
+          scale_vars = {i, j};
+          const double vi = stats.R[b](i, i);
+          const double vj = stats.R[b](j, j);
+          if (!(vi > 0.0) || !(vj > 0.0)) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "mixed_ordinal_crmr_misspec_inference: non-positive "
+                "continuous variance in standardization"));
+          }
+          inv_scale = 1.0 / std::sqrt(vi * vj);
+        } else if (oi != oj) {
+          const Eigen::Index c = oi ? j : i;
+          scale_vars = {c};
+          const double vc = stats.R[b](c, c);
+          if (!(vc > 0.0)) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "mixed_ordinal_crmr_misspec_inference: non-positive "
+                "continuous variance in standardization"));
+          }
+          inv_scale = 1.0 / std::sqrt(vc);
+        }
+
+        z(k) = inv_scale * d_b(assoc_row);
+        Dstd.row(k) = inv_scale * Dphi.row(assoc_row);
+        for (const Eigen::Index c : scale_vars) {
+          const Eigen::Index vr = var_row[static_cast<std::size_t>(c)];
+          if (vr < 0) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "mixed_ordinal_crmr_misspec_inference: missing continuous "
+                "variance row in standardization"));
+          }
+          Dstd(k, vr) += d_b(assoc_row) *
+                         (-0.5 * inv_scale / stats.R[b](c, c));
+        }
+        ++k;
+      }
+    }
+
+    Eigen::MatrixXd Q_Gb = Dstd.transpose() * Dstd;
+    Q_Gb = 0.5 * (Q_Gb + Q_Gb.transpose()).eval();
+    Q_G.block(xoff, xoff, 2 * mb, 2 * mb) = Q_Gb;
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) / N_total);
+    g_G.segment(xoff, 2 * mb) = sw * (2.0 * (Dstd.transpose() * z));
+    weighted_G += static_cast<double>(stats.n_obs[b]) * z.squaredNorm();
+
+    const Eigen::MatrixXd& Gmat = stats.moment_influence[b];
+    if (Gmat.cols() != mb || Gmat.rows() != stats.n_obs[b]) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_crmr_misspec_inference: moment_influence shape "
+          "mismatch in block " + std::to_string(b)));
+    }
+    auto ifg_or = mixed_diag_gamma_influence_block(
+        stats, b, has_diag_gamma_if, Gmat, mb,
+        "mixed_ordinal_crmr_misspec_inference");
+    if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
+    Eigen::MatrixXd H(Gmat.rows(), 2 * mb);
+    H.leftCols(mb) = Gmat;
+    H.rightCols(mb) = *ifg_or;
+    Eigen::MatrixXd gx =
+        (H.transpose() * H) / static_cast<double>(stats.n_obs[b]);
+    Gamma_x.block(xoff, xoff, 2 * mb, 2 * mb) =
+        0.5 * (gx + gx.transpose()).eval();
+
+    moff += mb;
+    xoff += 2 * mb;
+  }
+  if (!estimated_weight) zero_extended_gamma_channel(Gamma_x, m_blocks);
+
+  auto spec_or =
+      robust::compute_profile_contrast_spectrum(Q_G, Gamma_x, eig_tol);
+  if (!spec_or.has_value()) return std::unexpected(spec_or.error());
+
+  OrdinalCrmrInference out;
+  out.fixed_weight = !estimated_weight;
+  out.srmr_denominator = srmr_denominator;
+  out.eigvals = spec_or->eigenvalues;
+  out.spectrum_size = static_cast<int>(spec_or->eigenvalues.size());
+  out.bias_trace = spec_or->trace_signed;
+  out.grad_var = std::max(0.0, g_G.dot(Gamma_x * g_G));
+  out.k = static_cast<int>(srmr_denominator ? vech_len(p) : nassoc);
+  out.stat = weighted_G;
+  const double Nk = N_total * static_cast<double>(out.k);
+  out.point = std::sqrt(std::max(weighted_G / N_total, 0.0) /
+                        static_cast<double>(out.k));
+  out.point_bias_corrected =
+      std::sqrt(std::max(out.stat - out.bias_trace, 0.0) / Nk);
+  out.exact_fit_pvalue =
+      out.eigvals.size() > 0
+          ? robust::weighted_chisq_upper(out.eigvals, std::max(0.0, out.stat))
+          : std::numeric_limits<double>::quiet_NaN();
+  out.warnings = std::move(spec_or->warnings);
+
+  const double zcrit = inv_normal_cdf(0.5 * (1.0 + conf_level));
+  const double sd = std::sqrt(std::max(N_total * out.grad_var, 0.0));
+  const double center = out.stat - out.bias_trace;
+  out.ci_lower = std::sqrt(std::max(center - zcrit * sd, 0.0) / Nk);
+  out.ci_upper = std::sqrt(std::max(center + zcrit * sd, 0.0) / Nk);
   return out;
 }
 
@@ -7218,44 +7522,14 @@ mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
     weighted_F += static_cast<double>(stats.n_obs[b]) *
                   (d_b.transpose() * stats.W_dwls[b] * d_b).value();
 
-    Eigen::MatrixXd if_gamma;
-    if (has_diag_gamma_if) {
-      if_gamma = stats.gamma_diag_influence[b];
-      if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "mixed_ordinal_dwls_profile_rmsea: precomputed Gamma diagonal "
-            "influence shape mismatch in block " + std::to_string(b)));
-      }
-    } else {
-      const bool observed_raw = !stats.raw_data[b].allFinite();
-      auto ifg_or = observed_raw
-          ? data::mixed_observed_gamma_diag_data_influence(
-                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                stats.thresholds[b], stats.mean[b], stats.R[b])
-          : data::mixed_gamma_diag_data_influence(
-                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                stats.thresholds[b], stats.mean[b], stats.R[b]);
-      if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
-      auto jac_or = observed_raw
-          ? data::mixed_observed_gamma_diag_jacobian_fd(
-                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                stats.thresholds[b], stats.mean[b], stats.R[b])
-          : data::mixed_gamma_diag_jacobian_fd(
-                stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                stats.thresholds[b], stats.mean[b], stats.R[b]);
-      if (!jac_or.has_value()) return std::unexpected(jac_or.error());
-      if (ifg_or->rows() != G.rows() || ifg_or->cols() != mb ||
-          jac_or->rows() != mb || jac_or->cols() != mb) {
-        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-            "mixed_ordinal_dwls_profile_rmsea: mixed Gamma diagonal influence "
-            "shape mismatch in block " + std::to_string(b)));
-      }
-      if_gamma = (*ifg_or + G * jac_or->transpose()).eval();
-    }
+    auto ifg_or = mixed_diag_gamma_influence_block(
+        stats, b, has_diag_gamma_if, G, mb,
+        "mixed_ordinal_dwls_profile_rmsea");
+    if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
 
     Eigen::MatrixXd H(G.rows(), 2 * mb);
     H.leftCols(mb) = G;
-    H.rightCols(mb) = if_gamma;
+    H.rightCols(mb) = *ifg_or;
     Eigen::MatrixXd gamma_x =
         (H.transpose() * H) / static_cast<double>(stats.n_obs[b]);
     gamma_x = 0.5 * (gamma_x + gamma_x.transpose()).eval();

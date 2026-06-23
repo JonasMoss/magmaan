@@ -228,6 +228,38 @@ Rcpp::List rmsea_inference_to_list(
       Rcpp::_["warnings"] = warnings_to_r(r.warnings));
 }
 
+Rcpp::List crmr_inference_to_list(
+    const magmaan::estimate::OrdinalCrmrInference& r) {
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["index"] = r.srmr_denominator ? "srmr" : "crmr",
+      Rcpp::_["estimate"] = r.point,
+      Rcpp::_["estimate.bias.corrected"] = r.point_bias_corrected,
+      Rcpp::_["ci.lower"] = r.ci_lower,
+      Rcpp::_["ci.upper"] = r.ci_upper,
+      Rcpp::_["pvalue"] = r.exact_fit_pvalue,
+      Rcpp::_["bias_trace"] = r.bias_trace,
+      Rcpp::_["grad_var"] = r.grad_var,
+      Rcpp::_["stat"] = r.stat,
+      Rcpp::_["k"] = r.k,
+      Rcpp::_["spectrum_size"] = r.spectrum_size,
+      Rcpp::_["fixed_weight"] = r.fixed_weight,
+      Rcpp::_["srmr_denominator"] = r.srmr_denominator,
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+  if (r.srmr_denominator) {
+    out["srmr"] = r.point;
+    out["srmr.ci.lower"] = r.ci_lower;
+    out["srmr.ci.upper"] = r.ci_upper;
+    out["srmr.pvalue"] = r.exact_fit_pvalue;
+  } else {
+    out["crmr"] = r.point;
+    out["crmr.ci.lower"] = r.ci_lower;
+    out["crmr.ci.upper"] = r.ci_upper;
+    out["crmr.pvalue"] = r.exact_fit_pvalue;
+  }
+  return out;
+}
+
 Rcpp::List misspec_fit_measures_to_list(
     const magmaan::estimate::OrdinalMisspecFitMeasures& r) {
   return Rcpp::List::create(
@@ -1250,6 +1282,35 @@ Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
       estimated_weight, conf_level, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return rmsea_inference_to_list(*r_or);
+}
+
+// infer_mixed_ordinal_crmr_misspec() — mixed continuous/ordinal DWLS
+// CRMR/SRMR misspecification CI over standardized association residuals.
+// `srmr_denominator = TRUE` switches from the off-diagonal CRMR denominator to
+// the full-vech SRMR denominator.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit,
+                                            Rcpp::List mixed_stats,
+                                            bool estimated_weight = true,
+                                            bool srmr_denominator = false,
+                                            double conf_level = 0.90,
+                                            double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_mixed_ordinal_crmr_misspec()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::mixed_ordinal_crmr_misspec_inference(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name),
+      estimated_weight, srmr_denominator, conf_level, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return crmr_inference_to_list(*r_or);
 }
 
 // [[Rcpp::export]]
