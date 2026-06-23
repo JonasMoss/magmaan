@@ -80,6 +80,22 @@ mod_cfa <- "f1 =~ x1 + x2 + x3
 check_model("CFA / HolzingerSwineford1939", mod_cfa,
             lavaan::HolzingerSwineford1939[, paste0("x", 1:6)])
 
+## Robust-SE regimes: est_change(se = ) standardizes (and forms gCD) from the
+## leave-one-out *robust* (sandwich) covariance, matching semfindr on a fit with
+## the corresponding se. The point estimates (and est_change_raw) are unchanged;
+## only the covariance differs.
+cat("\n## Robust-SE est_change (CFA / HolzingerSwineford1939)\n")
+r_dat <- lavaan::HolzingerSwineford1939[, paste0("x", 1:6)]
+r_cr <- magmaan::case_rerun(magmaan::magmaan(mod_cfa, r_dat, estimator = "ML"),
+                            to_rerun = 1:25)
+for (se in c("robust.sem", "robust.huber.white")) {
+  lr <- lavaan::cfa(mod_cfa, r_dat, se = se)
+  agree(paste0("est_change se=", se),
+        magmaan::est_change(r_cr, se = se),
+        semfindr::est_change(semfindr::lavaan_rerun(lr, to_rerun = 1:25)),
+        tol = 1e-4)
+}
+
 ## Path model with exogenous predictors (fixed.x). All four fit measures now
 ## match: fit_measures() uses the partable-aware baseline, which frees the
 ## exogenous (co)variances in the independence model the way lavaan does under

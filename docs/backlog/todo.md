@@ -833,10 +833,13 @@ is now its Gram. Remaining:
   fit_measures_change 2e-9, Mahalanobis exact. The one-step `*_approx` engine is
   still single-group (errors clearly on multigroup; the block-stacked scores
   would need original-row reordering — extend if needed).
-- **Robust-regime `est_change`.** `est_change` standardizes by the leave-one-out
-  naive-ML (lavaan `se="standard"`) covariance; matching semfindr on a robust-SE
-  fit means computing the per-refit robust vcov
-  (`robust_se_raw_fit(refit, refit$raw_data, bread)`). Add an `se=` selector.
+- **Done 2026-06-23 — robust-regime `est_change`.** `est_change(rerun, se = )`
+  takes `"standard"` (default, naive ML), `"robust.sem"` (Satorra-Bentler /
+  expected-bread sandwich), or `"robust.huber.white"` (MLR / observed-bread
+  sandwich); the robust regimes standardize and form gCD from the per-refit
+  robust vcov (`robust_se_raw_fit(refit, refit$raw_data$X, bread)`, reusing the
+  raw data every fit carries). Gated vs semfindr on robust-SE fits in
+  `case_influence_semfindr.R` (~1e-5).
 - **Misspecification-robust case influence (frontier, deferred).** The casewise
   dual of the estimated-weight (complete-sandwich) SE: the per-case
   data-dependent-weight meat term `Δ'W'_d`. Ties to `papers/estimated-weight-se`
