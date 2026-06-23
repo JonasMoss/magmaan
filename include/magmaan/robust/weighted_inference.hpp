@@ -323,6 +323,19 @@ struct CasewiseInfluenceIJ {
   std::int64_t n_total = 0;
 };
 
+// Per-case parameter influences from precomputed IJ blocks: the per-case dual of
+// `robust_weighted_moment_ij` (same inputs, but the rows are kept instead of
+// summed into the meat). Row i of `influence` is
+//   c_i = (1/N)·K·A⁻¹·(Δ_b K)ᵀ·v_i,   v_i = g_i·W_b + correction_i,
+// stacked group-block order; `influence_naive` drops `correction_i`. With the
+// observed-Hessian bread `A` (the K-reduced n_alpha × n_alpha matrix the
+// complete-sandwich SE uses), `Σ_i c_i c_iᵀ` reproduces that SE's vcov exactly.
+// Shared by the continuous-LS and ordinal casewise-influence accessors.
+post_expected<CasewiseInfluenceIJ>
+casewise_influence_from_ij_blocks(const std::vector<WeightedMomentIJBlock>& blocks,
+                                  const Eigen::MatrixXd& K,
+                                  const Eigen::MatrixXd& observed_bread);
+
 post_expected<CasewiseInfluenceIJ>
 continuous_ls_casewise_influence_ij(spec::LatentStructure pt,
                                     const model::MatrixRep& rep,

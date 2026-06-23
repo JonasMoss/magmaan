@@ -1019,6 +1019,46 @@ Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats,
       Rcpp::_["chisq_standard"] = r.chisq_standard);
 }
 
+// infer_ordinal_casewise_influence_ij_fit() — per-case one-step
+// misspecification-robust ("complete-sandwich") parameter influences for an
+// all-ordinal DWLS/WLS/ULS(MV) fit: the categorical dual of semfindr's
+// est_change_raw_approx, the ordinal counterpart of
+// infer_casewise_influence_ij_fit. Returns the N_total x n_free `influence`
+// matrix (column-Gram = the ordinal estimated-weight IJ vcov) and its
+// fixed-weight `naive` counterpart. Same `ordinal_stats$moment_influence` /
+// `int_data` requirements as infer_ordinal_robust_ij(). Beyond lavaan/semfindr.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_casewise_influence_ij_fit(
+    Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight = "") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  if (weight.empty()) {
+    if (fit.containsElementNamed("ordinal_computational_weight")) {
+      weight = Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
+    } else {
+      if (!fit.containsElementNamed("estimator")) {
+        Rcpp::stop("magmaan: infer_ordinal_casewise_influence_ij_fit() needs "
+                   "`weight` when fit$estimator is absent");
+      }
+      weight = Rcpp::as<std::string>(fit["estimator"]);
+    }
+  }
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::ordinal_casewise_influence_ij(
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
+      ordinal_parameterization_from_string(parameterization_name));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::Named("influence") = Rcpp::wrap(r_or->influence),
+      Rcpp::Named("influence_naive") = Rcpp::wrap(r_or->influence_naive),
+      Rcpp::Named("n_total") = static_cast<double>(r_or->n_total));
+}
+
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
                                       std::string weight = "",

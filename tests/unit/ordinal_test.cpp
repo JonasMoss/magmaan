@@ -4278,6 +4278,66 @@ TEST_CASE("robust_ordinal_ij WLS carries dense estimated-weight channel") {
   CHECK(ij->se.allFinite());
 }
 
+TEST_CASE("ordinal_casewise_influence_ij Gram reproduces the DWLS IJ vcov") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260623, 500, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  // Reference: the estimated-weight ("complete-sandwich") ordinal IJ vcov.
+  auto ij = magmaan::estimate::robust_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(ij.has_value());
+
+  auto infl = magmaan::estimate::ordinal_casewise_influence_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(infl.has_value(),
+      "ordinal casewise influence failed: "
+          << (infl.has_value() ? "" : infl.error().detail));
+
+  CHECK(infl->n_total == static_cast<std::int64_t>(X.rows()));
+  CHECK(infl->influence.rows() == X.rows());
+  CHECK(infl->influence.cols() == ij->vcov.rows());
+
+  // Σ_i c_i c_iᵀ == the ordinal estimated-weight vcov, to machine precision.
+  const Eigen::MatrixXd gram = infl->influence.transpose() * infl->influence;
+  CHECK(gram.isApprox(ij->vcov, 1e-8));
+
+  // The estimated diagonal polychoric weight ⇒ complete differs from naive.
+  const double diag =
+      (infl->influence - infl->influence_naive).cwiseAbs().maxCoeff();
+  CHECK(diag > 1e-8);
+}
+
 TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma variant") {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   Eigen::MatrixXd X(10, 3);

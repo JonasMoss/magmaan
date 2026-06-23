@@ -1777,6 +1777,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_ordinal_casewise_influence_ij_fit
+Rcpp::List infer_ordinal_casewise_influence_ij_fit(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight);
+RcppExport SEXP _magmaan_infer_ordinal_casewise_influence_ij_fit(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP weightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_casewise_influence_ij_fit(fit, ordinal_stats, weight));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_mixed_ordinal_robust
 Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats, std::string weight, std::string bread);
 RcppExport SEXP _magmaan_infer_mixed_ordinal_robust(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP weightSEXP, SEXP breadSEXP) {
@@ -2733,6 +2746,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_empirical_gamma_with_means", (DL_FUNC) &_magmaan_infer_empirical_gamma_with_means, 1},
     {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 4},
     {"_magmaan_infer_ordinal_robust_ij", (DL_FUNC) &_magmaan_infer_ordinal_robust_ij, 3},
+    {"_magmaan_infer_ordinal_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ordinal_casewise_influence_ij_fit, 3},
     {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 4},
     {"_magmaan_infer_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_ordinal_profile_rmsea, 3},
     {"_magmaan_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_ordinal_profile_lrt, 4},
