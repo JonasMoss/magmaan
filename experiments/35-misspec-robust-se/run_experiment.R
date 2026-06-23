@@ -3,9 +3,10 @@
 # of a focal loading when the structural model is wrong, while the expected /
 # Gauss-Newton bread ("model" regime) underestimates it -- and do the two
 # coincide when the model is correct? We look at the raw loading AND its
-# standardized counterpart, for continuous ML and ordinal DWLS on the same
-# latent design. Both regimes use the SAME (empirical) meat, so they differ ONLY
-# in the bread.
+# standardized counterpart, for complete-data ML, MCAR FIML, and ordinal DWLS on
+# the same latent design. Except for FIML's model regime (plain inverse observed
+# information), both regimes use the SAME empirical meat, so they differ ONLY in
+# the bread.
 #
 # Usage:
 #   Rscript run_experiment.R [--reps 250] [--n-total 600]
@@ -90,6 +91,13 @@ gen_z <- function(n, cross) {
   z
 }
 as_continuous <- function(z) as.data.frame(z)
+as_missing_continuous <- function(z) {
+  d <- as.data.frame(z)
+  n <- nrow(d)
+  d$y2[runif(n) < 0.20] <- NA_real_
+  d$y5[runif(n) < 0.25] <- NA_real_
+  d
+}
 as_ordinal <- function(z) {
   d <- as.data.frame(lapply(seq_len(6), function(j)
     ordered(cut(z[, j], c(-Inf, thresholds, Inf), labels = FALSE))))
@@ -109,6 +117,10 @@ one_rep <- function(estimator, n, cross, seed) {
   if (estimator == "ML") {
     d <- as_continuous(z)
     fit <- tryCatch(magmaan::magmaan(model, d, estimator = "ML"),
+                    error = function(e) NULL)
+  } else if (estimator == "FIML") {
+    d <- as_missing_continuous(z)
+    fit <- tryCatch(magmaan::magmaan(model, d, estimator = "FIML"),
                     error = function(e) NULL)
   } else {
     d <- as_ordinal(z)
@@ -148,12 +160,12 @@ run_cell <- function(estimator, cell, cross, seed_off) {
         mk("std", D$std_est, D$std_model, D$std_robust))
 }
 
-grid <- expand.grid(estimator = c("ML", "DWLS"),
+grid <- expand.grid(estimator = c("ML", "FIML", "DWLS"),
                     cell = c("null", "misspec"), stringsAsFactors = FALSE)
 summary <- do.call(rbind, Map(function(est, cell) {
   cross <- if (cell == "null") 0.0 else cfg$cross
   off <- (if (cell == "null") 0L else 1000000L) +
-    (if (est == "DWLS") 500000L else 0L)
+    switch(est, ML = 0L, FIML = 250000L, DWLS = 500000L)
   run_cell(est, cell, cross, off)
 }, grid$estimator, grid$cell))
 write_csv(summary, file.path(res_dir, "se_regime.csv"))
@@ -163,10 +175,10 @@ write_metadata(
   values = list(
     reps = cfg$reps, n_total = cfg$n_total, cross = cfg$cross,
     seed_base = cfg$seed_base,
-    estimators = "ML (continuous), DWLS (ordinal delta)",
+    estimators = "ML (continuous), FIML (continuous MCAR), DWLS (ordinal delta)",
     model = "two_factor_six_indicator; y4 cross-loads on f1 in the DGP, omitted in the fit",
     focal = "f2=~y5 loading (free; on the misspecification-distorted factor) and its std.all counterpart",
-    regimes = "model=expected/Gauss-Newton bread; robust=observed-Hessian bread (same empirical meat)",
+    regimes = "ML/DWLS: model=expected/Gauss-Newton bread, robust=observed-Hessian bread with same empirical meat; FIML: model=inverse observed information, robust=observed-Hessian MLR sandwich",
     smoke = cfg$smoke),
   packages = "magmaan")
 

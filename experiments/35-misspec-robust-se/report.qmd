@@ -19,10 +19,12 @@ M <- read.csv(mp)
 meta <- function(k) M$value[match(k, M$key)]
 f2 <- function(x) sprintf("%.2f", x)
 r <- function(est, cell, kind, col) {
-  S[[col]][S$estimator == est & S$cell == cell & S$param_kind == kind]
+  x <- S[[col]][S$estimator == est & S$cell == cell & S$param_kind == kind]
+  if (length(x)) x[[1L]] else NA_real_
 }
-lab_est <- c(ML = "Continuous ML", DWLS = "Ordinal DWLS")
-rows <- expand.grid(estimator = c("ML", "DWLS"), param_kind = c("raw", "std"),
+lab_est <- c(ML = "Continuous ML", FIML = "FIML (MCAR)",
+             DWLS = "Ordinal DWLS")
+rows <- expand.grid(estimator = names(lab_est), param_kind = c("raw", "std"),
                     stringsAsFactors = FALSE)
 tab <- data.frame(
   Estimator = lab_est[rows$estimator],
@@ -52,7 +54,10 @@ sampling SD of the focal loading by roughly a third -- the same for the raw and
 the standardized loading -- and the robust SE recovers it. For continuous ML the
 recovery is essentially complete (standardized loading: model
 `r f2(r("ML","misspec","std","ratio_model"))` of truth, robust
-`r f2(r("ML","misspec","std","ratio_robust"))`). For ordinal DWLS, where the
+`r f2(r("ML","misspec","std","ratio_robust"))`). FIML uses the same
+observed-Hessian bread vocabulary with missing data (model
+`r f2(r("FIML","misspec","std","ratio_model"))`, robust
+`r f2(r("FIML","misspec","std","ratio_robust"))`). For ordinal DWLS, where the
 robust bread is new, it moves the same direction and closes most of the gap
 (`r f2(r("DWLS","misspec","std","ratio_model"))` to
 `r f2(r("DWLS","misspec","std","ratio_robust"))`).

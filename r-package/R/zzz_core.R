@@ -102,6 +102,8 @@ frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composit
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
 inference_information_observed_analytic <- infer_information_observed_analytic
+inference_fiml_observed_vcov <- infer_fiml_observed_vcov
+fiml_observed_vcov <- infer_fiml_observed_vcov
 inference_information_cross_products <- infer_information_cross_products
 inference_vcov <- infer_vcov
 inference_vcov_partable <- infer_vcov_partable
@@ -284,6 +286,7 @@ magmaan_core <- local({
       "estimate_start_values",
       "estimate_structured_gamma",
       "estimate_structured_gamma_weight",
+      "fiml_observed_vcov",
       "estimate_fiml_robust_mlr",
       "estimate_two_stage_em_ml_inference"
     ),
@@ -291,6 +294,7 @@ magmaan_core <- local({
       "inference_information_expected",
       "inference_information_observed_fd",
       "inference_information_observed_analytic",
+      "inference_fiml_observed_vcov",
       "inference_information_cross_products",
       "inference_vcov",
       "inference_vcov_partable",

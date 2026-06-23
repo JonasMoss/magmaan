@@ -3434,6 +3434,30 @@ Rcpp::List ordinal_catml_dwls_rmsea_impl(Rcpp::List fit,
       Rcpp::_["rmsea.robust"] = out.rmsea_robust);
 }
 
+// infer_fiml_observed_vcov() inverts the analytic observed FIML information
+// for a fit carrying its retained raw-data/pack state.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_observed_vcov(Rcpp::List fit) {
+  if (!fit.containsElementNamed("raw_data")) {
+    Rcpp::stop("magmaan: infer_fiml_observed_vcov() requires a FIML fit with $raw_data");
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  auto info_or = magmaan::estimate::fiml::fiml_observed_information(
+      ctx.pt, ctx.rep, raw, est, pack);
+  if (!info_or.has_value()) stop_post(info_or.error());
+  auto vcov_or = magmaan::inference::vcov(*info_or, ctx.pt, est.theta);
+  if (!vcov_or.has_value()) stop_post(vcov_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["information"] = Rcpp::wrap(*info_or),
+      Rcpp::_["vcov"] = Rcpp::wrap(*vcov_or),
+      Rcpp::_["se"] = Rcpp::wrap(magmaan::inference::se(*vcov_or)));
+}
+
 // estimate_fiml_robust_mlr() — mirrors estimate::fiml::fiml_robust_mlr().
 // Computes observed-pattern sandwich SEs plus Yuan-Bentler/Mplus scaled-test
 // traces for a FIML fit carrying $raw_data.
