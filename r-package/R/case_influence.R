@@ -247,8 +247,10 @@ est_change_raw <- function(rerun_out, parameters = NULL, standardized = FALSE) {
 #' For each case, the raw change `(with all) - (without this case)` divided by
 #' the standard error of the estimate *from the leave-one-out refit* (DFTHETAS;
 #' Pek & MacCallum, 2011, Eq. 7), plus a final `gcd` column: the generalized
-#' Cook's distance `Delta' V_(-i)^{-1} Delta` over the selected parameters, with
-#' `V_(-i)` the leave-one-out parameter covariance. Mirror of
+#' Cook's distance `Delta' V_(-i)^{-1} Delta` (Pek & MacCallum, 2011, Eq. 6)
+#' over the selected parameters, with `V_(-i)` the leave-one-out parameter
+#' covariance. Both the SE (Eq. 7) and the gCD covariance (Eq. 6) are the
+#' reduced-sample versions, exactly as the paper specifies. Mirror of
 #' `semfindr::est_change()` (which standardizes by, and forms gCD from, the
 #' deleted-case refit's covariance).
 #'

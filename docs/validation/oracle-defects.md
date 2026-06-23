@@ -86,7 +86,11 @@ Scope: semfindr 0.2.0. Both errors are exactly O(1/N) constant factors, so they
         are immaterial relative to the one-step approximation's own error, but
         they have no first-principles basis. Affects only the *_approx engine,
         not the exact leave-one-out est_change().
-Proof: influence-function derivation — removing case i gives
+Proof: the exact definitions are Pek & MacCallum (2011, external/refs/
+        case-influence/pek2011.pdf) Eq. 7 (DFTHETAS = (θ̂ⱼ − θ̂ⱼ₍ᵢ₎) / SE(θ̂ⱼ₍ᵢ₎),
+        the leave-one-out SE) and Eq. 6 (gCD = Δ'[V̂AR(θ̂₍ᵢ₎)]⁻¹Δ, the reduced-
+        sample covariance). A one-step approximation must approximate these.
+        Influence-function derivation — removing case i gives
         θ̂ − θ̂₍ᵢ₎ ≈ (N/(N-1))·V·s_i (one N/(N-1), the factor semfindr's
         est_change_raw_approx already carries). Hence DFTHETAS = Δ/SE carries
         exactly one such factor and gCD = Δ'V⁻¹Δ carries it squared. semfindr's
