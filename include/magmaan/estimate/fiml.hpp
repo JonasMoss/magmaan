@@ -409,6 +409,19 @@ mixed_ordinal_stats_hybrid_fiml_from_observed_data(
 post_expected<Eigen::MatrixXd>
 two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted);
 
+// Per-case influence n·dΓ_b/dw_i of the Stage-1 saturated-FIML sandwich
+// Γ_b = n·H⁻¹JH⁻¹ for raw block `block`, the estimated-weight channel that the
+// non-NT ML2S correction contracts for missing data. `Analytic` is the
+// production closed form (direct + θ-movement of the saturated fit);
+// `FiniteDifference` is the case-reweight central difference kept as the
+// validation oracle. The two agree to the finite-difference tolerance on both
+// complete and missing data. Frontier / validation surface.
+enum class GammaInfluenceRegime { Analytic, FiniteDifference };
+post_expected<Eigen::MatrixXd>
+two_stage_saturated_gamma_influence(const RawData& raw, std::size_t block,
+                                    Eigen::Index row,
+                                    GammaInfluenceRegime regime);
+
 // Stage-2 weight family for two-stage (ML2S) estimation. The Stage-2 fit to the
 // saturated EM moments may weight its moment residuals by any of these; the
 // robust correction restores test validity for all of them, so the choice is an
@@ -465,9 +478,9 @@ two_stage_stage2_weight(const SaturatedMoments& sm,
 // fit. `bread` defaults to the lavaan-parity expected-information convention.
 // With raw data and `bread = Observed`, the non-NT weights include the
 // estimated-weight IJ covariance channel: complete data reuses the
-// continuous-LS IJ adapters, while missing data finite-differences the FIML
-// Stage-1 sandwich-Gamma influence. Scaled-test fields remain on the
-// fixed-weight robust sandwich.
+// continuous-LS IJ adapters, while missing data uses the analytic FIML
+// Stage-1 sandwich-Gamma influence (`two_stage_saturated_gamma_influence`).
+// Scaled-test fields remain on the fixed-weight robust sandwich.
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,

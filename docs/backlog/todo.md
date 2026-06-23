@@ -319,6 +319,23 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `(H,J,ACOV)` stack; the adapter covers `TwoStageWeight::{Dwls,Adf,Dls}`
     and tests that the IJ path changes `vcov`/`se` while preserving the
     fixed-weight scaled-test fields.
+    Analytic replacement **landed 2026-06-23**: the per-case Stage-1
+    sandwich-Γ influence `n·dΓ_b/dw_i` (Γ_b = n·H⁻¹JH⁻¹) is now closed-form,
+    `dΓ/dw_i = H⁻¹JH⁻¹ + n(−H⁻¹dH H⁻¹JH⁻¹ + H⁻¹dJ H⁻¹ − sym)` with the
+    direct (explicit case-weight) and θ-movement parts of `dH = I_i +
+    (∂H/∂θ)Δθ_i`, `dJ = g_ig_iᵀ + (∂J/∂θ)Δθ_i`, where `Δθ_i = H⁻¹g_i` is the
+    `saturated_em_moment_influence` row. The J-movement collapses to
+    `¼(dSᵀS + SᵀdS)` (directional deviance score `dS`, no per-case info
+    matrix); the H-movement is the per-pattern directional third derivative of
+    the analytic saturated Hessian (`fiml_saturated_hessian_directional_block`,
+    differentiating `A, Zsum, M` and reusing `basis_trace_xy`). This is the
+    "score-product / observed-information / eta-movement" decomposition the
+    remaining-slice flagged; it removes the per-case EM re-fits (was O(n) EM
+    solves per block) and the ε step. `two_stage_saturated_gamma_influence(...,
+    GammaInfluenceRegime::{Analytic,FiniteDifference})` exposes both; the FD is
+    retained as the validation oracle. Gated in `fiml_test.cpp` (analytic == FD
+    to ~1e-5 on complete and missing data, symmetric) plus the existing
+    missing-data DWLS/ADF/DLS IJ vcov tests now run through the analytic path.
     Continuous-LS analytic observed bread **landed 2026-06-20** by replacing
     the production finite-difference Hessian with the closed-form
     `J' W J + residual-curvature` contraction from
@@ -374,10 +391,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     finite-sample calibration and stress tests for singular full WLS Gamma.
     Remaining
     slices: robust/experimental mixed stage-1 variants such as
-    polyserial DPD and Huber residual; replace the ML2S missing-data
-    finite-difference FIML sandwich-Gamma influence with analytic
-    score-product / observed-information / eta-movement derivatives if the
-    frontier path becomes performance-critical;
+    polyserial DPD and Huber residual
+    (the ML2S missing-data FIML sandwich-Gamma influence is now analytic, see
+    above);
     the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
     covered by complete continuous LS.
@@ -713,13 +729,6 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     model-vs-robust route on a non-saturated FIML fit, and
     experiment 35 includes an MCAR FIML cell under both correct and omitted
     cross-loading conditions.
-  - **(Research / "insanely cool") explicit second-order corrections**: Edgeworth /
-    Cornish-Fisher / saddlepoint / Nagar variance expansion for the two-stage
-    ordinal estimator. All need the same hard ingredient -- the third cumulants of
-    the Stage-1 polychorics/thresholds (Olsson's `Gamma` is only second-order) plus
-    `d^3 eta/d theta^3`. Big project; scope a 1-parameter or continuous-ML proof of
-    concept first. The iterated/double bootstrap reaches the same second-order
-    coverage *without* deriving cumulants (B^2 cost, but magmaan is fast enough).
   - A continuous-LS R `bread` binding for `vcov(fit, regime=)`; the
     single-source-of-truth refactor of `ordinal_block_residual`.
 
