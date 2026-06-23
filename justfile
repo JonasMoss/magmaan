@@ -226,6 +226,10 @@ regen-oracle:
 regen-robcat:
     Rscript tests/tools/regen_robcat_fixtures.R
 
+# Regenerate the semfindr case-influence fixtures (needs R + the pinned semfindr).
+regen-semfindr:
+    Rscript tests/tools/regen_semfindr_fixtures.R
+
 # Enforce the dependency-layering rule (leaves are sinks). Fast: no build, no R.
 check-layering:
     bash tests/tools/check_layering.sh
