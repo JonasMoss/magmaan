@@ -57,8 +57,20 @@ check_model <- function(label, mod, dat, estimator = "ML",
   # Approximate one-step engine (no refit; all cases).
   agree("est_change_raw_approx", magmaan::est_change_raw_approx(mfit),
         semfindr::est_change_raw_approx(lfit), tol = 1e-6)
-  agree("est_change_approx", magmaan::est_change_approx(mfit),
-        semfindr::est_change_approx(lfit), tol = 1e-5)
+
+  # est_change_approx: magmaan uses the CORRECT finite-sample scaling, which
+  # differs from semfindr (v0.2.0) by two known constant factors — semfindr
+  # applies N/(N-1) twice to DFTHETAS and once (too few) inside gCD. We verify
+  # parity up to those documented factors (machine precision), which both
+  # confirms the implementation and pins the upstream discrepancy.
+  n <- nrow(dat)
+  m_ap <- magmaan::est_change_approx(mfit)
+  s_ap <- semfindr::est_change_approx(lfit)
+  dft_cols <- setdiff(colnames(m_ap), "gcd_approx")
+  s_corr <- s_ap
+  s_corr[, dft_cols] <- s_ap[, dft_cols] * ((n - 1) / n)   # remove extra N/(N-1)
+  s_corr[, "gcd_approx"] <- s_ap[, "gcd_approx"] * (n / (n - 1))  # add missing factor
+  agree("est_change_approx (corrected)", m_ap, s_corr, tol = 1e-5)
 }
 
 ## CFA: no exogenous predictors, so CFI/TLI baselines match lavaan exactly.

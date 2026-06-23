@@ -1718,8 +1718,12 @@ stop rather than any usable non-error return.
   `est_change_approx()` via `θ̂ − θ̂₍ᵢ₎ ≈ (N/(N−1))·V·s_i`, built on a new core
   accessor `inference::casewise_scores` (the N×n_free per-case ML score matrix
   `Z_c·WΔ` that `information_cross_products` is now the Gram of; bound as
-  `infer_casewise_scores_fit`, verified equal to `lavaan::lavScores`). These
-  match semfindr to machine precision. Still in the backlog:
+  `infer_casewise_scores_fit`, verified equal to `lavaan::lavScores`).
+  `est_change_raw_approx` matches semfindr to machine precision;
+  `est_change_approx` uses the *correct* finite-sample scaling and so diverges
+  from semfindr 0.2.0 by two documented constant factors (semfindr applies
+  `N/(N-1)` twice to DFTHETAS and once too few inside gCD — a recorded oracle
+  defect, gated transitively up to those factors). Still in the backlog:
   `fit_measures_change_approx` (needs per-case loglik), multi-group and
   robust-regime variants, and misspecification-robust case influence.
 - **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
