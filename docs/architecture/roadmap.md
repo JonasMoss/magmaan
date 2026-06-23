@@ -1728,6 +1728,13 @@ stop rather than any usable non-error return.
   cheaply since refits are reused from `case_rerun`; the no-refit version would
   be lossier). Still in the backlog: multi-group and robust-regime variants, and
   misspecification-robust case influence.
+- **`fit_measures()` baseline is now `fixed.x`-aware** (2026-06-23). It calls
+  `infer_baseline_fit(fit)` → `measures::baseline_chi2(pt, samp)`, which frees
+  the exogenous (co)variances in the independence/baseline model exactly as
+  lavaan does under `fixed.x` (baseline `df` drops by `px(px-1)/2`). Previously
+  `fit_measures()` used the partable-unaware `infer_baseline(ss)`, so CFI/TLI
+  diverged from lavaan for models with observed exogenous predictors; they now
+  match to machine precision. A no-op for fits without exogenous variables.
 - **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
   C++ core plus `third_party/{port,quadpack}` is vendored into
   `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`

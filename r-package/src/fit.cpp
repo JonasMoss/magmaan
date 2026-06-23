@@ -3312,6 +3312,20 @@ Rcpp::List infer_baseline(Rcpp::List sample_stats) {
   return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
 }
 
+// infer_baseline_fit() — partable-aware baseline_chi2(pt, samp). Applies the
+// fixed.x exogenous correction: lavaan's independence/baseline model frees the
+// exogenous (co)variances, so baseline.df drops by px(px-1)/2 and baseline.chisq
+// loses the exo-block fit. A no-op when there are < 2 exogenous variables, so it
+// is safe for every fit; only fixed.x models change (matching lavaan).
+//
+// [[Rcpp::export]]
+Rcpp::List infer_baseline_fit(Rcpp::List fit) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::measures::BaselineFit bl =
+      magmaan::measures::baseline_chi2(ctx.pt, ctx.samp);
+  return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
+}
+
 // measures_fit() — mirrors fit_measures(chi2, df, baseline, samp) plus
 // fit_extras(pt, rep, samp, est) (the logl-based information criteria + SRMR).
 // `chi2` and `df` are scalars from infer_chi2_stat() / infer_df_stat() (or any

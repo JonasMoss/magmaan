@@ -80,16 +80,14 @@ mod_cfa <- "f1 =~ x1 + x2 + x3
 check_model("CFA / HolzingerSwineford1939", mod_cfa,
             lavaan::HolzingerSwineford1939[, paste0("x", 1:6)])
 
-## Path model with exogenous predictors (fixed.x). chisq and rmsea match
-## exactly; cfi/tli are gated OUT here because magmaan's baseline (independence)
-## model does not yet free the exogenous covariance the way lavaan does under
-## fixed.x, so baseline.df differs (a pre-existing fit-index gap, not a
-## case-influence issue). See dev notes.
+## Path model with exogenous predictors (fixed.x). All four fit measures now
+## match: fit_measures() uses the partable-aware baseline, which frees the
+## exogenous (co)variances in the independence model the way lavaan does under
+## fixed.x (so baseline.df and CFI/TLI agree).
 mod_pa <- "m1 ~ a1 * iv1 + a2 * iv2
            dv ~ b * m1
            a1b := a1 * b
            a2b := a2 * b"
-check_model("Path / pa_dat", mod_pa, semfindr::pa_dat,
-            fm_measures = c("chisq", "rmsea"))
+check_model("Path / pa_dat", mod_pa, semfindr::pa_dat)
 
 cat("\ncase_influence_semfindr.R: all parity checks passed.\n")

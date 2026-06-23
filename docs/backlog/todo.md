@@ -811,16 +811,16 @@ is now its Gram. Remaining:
   pure R (casewise MVN log-density at model/saturated/baseline moments — no core
   accessor needed); build only if a concrete large-N, approximate-only consumer
   ever appears.
-- **`fixed.x` baseline df gap (blocks CFI/TLI case influence on path models).**
-  For a model with exogenous predictors, magmaan's independence/baseline model
-  gives `baseline.df` one too high vs lavaan (e.g. path / `pa_dat`: magmaan 6,
-  lavaan 5) because lavaan frees the exogenous covariance (`iv1~~iv2`) in the
-  baseline under `fixed.x` and magmaan does not. `chisq`/`rmsea` match exactly;
-  `cfi`/`tli` (and their case-influence changes) do not. This is a pre-existing
-  fit-index issue in `measures::baseline`, not a case-influence bug; the example
-  gates CFI/TLI parity to `fixed.x`-free CFA models until it is fixed. Fix in
-  core `measures` baseline construction (free exogenous (co)variances), then
-  re-enable CFI/TLI in the path fixture.
+- **Done 2026-06-23 — `fixed.x` baseline df gap.** `fit_measures()` reported
+  `baseline.df` one too high per exogenous covariance vs lavaan (path / `pa_dat`:
+  magmaan 6, lavaan 5), so CFI/TLI diverged on `fixed.x` models (chisq/rmsea were
+  fine). The core correction already existed (`measures::baseline_chi2(pt, samp)`
+  frees the exo (co)variances); the R `fit_measures()` was just calling the
+  partable-unaware `infer_baseline(ss)`. Fixed by adding `infer_baseline_fit(fit)`
+  (calls the partable-aware overload; a no-op without exo, so safe for all fits)
+  and pointing `fit_measures()` at it. Path-model CFI/TLI now match lavaan to
+  machine precision; the case-influence example and fixture use all four
+  measures; full `just r-examples` clean.
 - **Multi-group and robust-regime extensions.** `case_rerun` is single-group
   only (per-group raw blocks lose the original interleaved row order needed for
   global case ids). `est_change` standardizes by the leave-one-out naive-ML
