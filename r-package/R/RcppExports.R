@@ -561,6 +561,10 @@ infer_ordinal_fit_measures_misspec <- function(fit, ordinal_stats, estimated_wei
     .Call(`_magmaan_infer_ordinal_fit_measures_misspec`, fit, ordinal_stats, estimated_weight, conf_level, eig_tol)
 }
 
+infer_mixed_ordinal_fit_measures_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
+    .Call(`_magmaan_infer_mixed_ordinal_fit_measures_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
+}
+
 infer_mixed_ordinal_rmsea_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
     .Call(`_magmaan_infer_mixed_ordinal_rmsea_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
 }

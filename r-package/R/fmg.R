@@ -983,3 +983,32 @@ fit_measures_misspec <- function(fit, ordinal_stats = NULL,
   infer_ordinal_fit_measures_misspec(fit, ordinal_stats, estimated_weight,
                                      conf_level, eig_tol)
 }
+
+#' Misspecification-robust mixed continuous/ordinal DWLS fit measures
+#'
+#' @param fit A mixed continuous/ordinal DWLS fit returned by the core mixed
+#'   ordinal fitting helpers.
+#' @param mixed_stats The mixed continuous/ordinal sample statistics used for the
+#'   fit, with `moment_influence` and either `gamma_diag_influence` or raw data
+#'   available (e.g. from `data_mixed_ordinal_stats_from_df()`).
+#' @param estimated_weight `TRUE` (default) propagates the mixed DWLS weight
+#'   sampling variability; `FALSE` is the fixed-weight comparator.
+#' @param conf_level Two-sided confidence level for the intervals.
+#' @param eig_tol Eigenvalue tolerance for the profile-contrast spectrum.
+#' @return A named list with the same fields as [fit_measures_misspec()].
+#' @export
+fit_measures_misspec_mixed_ordinal <- function(fit, mixed_stats = NULL,
+                                               estimated_weight = TRUE,
+                                               conf_level = 0.90,
+                                               eig_tol = 1e-10) {
+  if (is.null(mixed_stats)) {
+    stop("fit_measures_misspec_mixed_ordinal(): `mixed_stats` is required ",
+         "(the mixed continuous/ordinal sample statistics used for the fit, ",
+         "with moment_influence and gamma influence/raw data, e.g. from ",
+         "data_mixed_ordinal_stats_from_df()). A fitted object does not retain ",
+         "the raw mixed data the estimated-weight inference needs.",
+         call. = FALSE)
+  }
+  infer_mixed_ordinal_fit_measures_misspec(fit, mixed_stats, estimated_weight,
+                                           conf_level, eig_tol)
+}

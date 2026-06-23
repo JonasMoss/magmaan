@@ -695,12 +695,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     slice **landed 2026-06-23**:
     `mixed_ordinal_cfi_tli_misspec_inference` adds incremental CFI/TLI inference
     using the mixed DWLS independence-baseline convention, exposed through
-    `magmaan_core$mixed_ordinal_cfi_tli_misspec`. What remains is the consolidated
-    reportable surface analogous to all-ordinal
-    `ordinal_fit_measures_misspec_inference`: an R entry point that either accepts
-    `magmaan_mixed_ordinal_data` in `fit_measures_misspec()` or grows a clearly
-    named mixed companion; do not silently route mixed fits through the
-    all-ordinal ordinal-stats API.
+    `magmaan_core$mixed_ordinal_cfi_tli_misspec`. Consolidated surface **landed
+    2026-06-23**: `mixed_ordinal_fit_measures_misspec_inference` bundles
+    RMSEA + CRMR/SRMR + CFI/TLI into the same reportable schema as the
+    all-ordinal table, exposed through
+    `magmaan_core$mixed_ordinal_fit_measures_misspec` and the explicit exported R
+    companion `fit_measures_misspec_mixed_ordinal(fit, mixed_stats, ...)`.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a

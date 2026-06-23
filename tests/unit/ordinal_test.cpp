@@ -4183,6 +4183,50 @@ TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) la
         doctest::Approx(cfi->stat_baseline).epsilon(1e-12));
   CHECK(cfi_fixed->fixed_weight);
 
+  auto all = magmaan::estimate::mixed_ordinal_fit_measures_misspec_inference(
+      *pt, *mr, *stats, *fit);
+  auto all_fixed =
+      magmaan::estimate::mixed_ordinal_fit_measures_misspec_inference(
+          *pt, *mr, *stats, *fit,
+          magmaan::estimate::OrdinalParameterization::Delta,
+          /*estimated_weight=*/false);
+  REQUIRE_MESSAGE(all.has_value(),
+      "mixed fit-measures inference failed: "
+          << (all.has_value() ? "" : all.error().detail));
+  REQUIRE_MESSAGE(all_fixed.has_value(),
+      "mixed fixed-weight fit-measures inference failed: "
+          << (all_fixed.has_value() ? "" : all_fixed.error().detail));
+  CHECK(all->rmsea == doctest::Approx(rmsea->point).epsilon(1e-12));
+  CHECK(all->rmsea_ci_lower == doctest::Approx(rmsea->ci_lower).epsilon(1e-12));
+  CHECK(all->rmsea_ci_upper == doctest::Approx(rmsea->ci_upper).epsilon(1e-12));
+  CHECK(all->rmsea_pvalue ==
+        doctest::Approx(rmsea->exact_fit_pvalue).epsilon(1e-12));
+  CHECK(all->crmr == doctest::Approx(crmr->point).epsilon(1e-12));
+  CHECK(all->crmr_ci_lower == doctest::Approx(crmr->ci_lower).epsilon(1e-12));
+  CHECK(all->crmr_ci_upper == doctest::Approx(crmr->ci_upper).epsilon(1e-12));
+  CHECK(all->crmr_pvalue ==
+        doctest::Approx(crmr->exact_fit_pvalue).epsilon(1e-12));
+  CHECK(all->srmr == doctest::Approx(srmr->point).epsilon(1e-12));
+  CHECK(all->srmr_ci_lower == doctest::Approx(srmr->ci_lower).epsilon(1e-12));
+  CHECK(all->srmr_ci_upper == doctest::Approx(srmr->ci_upper).epsilon(1e-12));
+  CHECK(all->cfi == doctest::Approx(cfi->cfi).epsilon(1e-12));
+  CHECK(all->cfi_ci_lower == doctest::Approx(cfi->cfi_ci_lower).epsilon(1e-12));
+  CHECK(all->cfi_ci_upper == doctest::Approx(cfi->cfi_ci_upper).epsilon(1e-12));
+  CHECK(all->tli == doctest::Approx(cfi->tli).epsilon(1e-12));
+  CHECK(all->tli_ci_lower == doctest::Approx(cfi->tli_ci_lower).epsilon(1e-12));
+  CHECK(all->tli_ci_upper == doctest::Approx(cfi->tli_ci_upper).epsilon(1e-12));
+  CHECK(all->stat_user == doctest::Approx(cfi->stat_user).epsilon(1e-12));
+  CHECK(all->stat_baseline ==
+        doctest::Approx(cfi->stat_baseline).epsilon(1e-12));
+  CHECK(all->df_user == cfi->df_user);
+  CHECK(all->df_baseline == cfi->df_baseline);
+  CHECK(all->conf_level == doctest::Approx(0.90));
+  CHECK_FALSE(all->fixed_weight);
+  CHECK(all_fixed->fixed_weight);
+  CHECK(all_fixed->stat_user == doctest::Approx(all->stat_user).epsilon(1e-12));
+  CHECK(all_fixed->stat_baseline ==
+        doctest::Approx(all->stat_baseline).epsilon(1e-12));
+
   auto no_raw = *stats;
   no_raw.raw_data.clear();
   auto missing = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(
