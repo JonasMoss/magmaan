@@ -260,6 +260,45 @@ robust_weighted_moment_ij(const std::vector<WeightedMomentIJBlock>& blocks,
 post_expected<robust::ParamSpaceSandwich>
 weighted_param_space_sandwich(const std::vector<WeightedMomentBlock>& blocks);
 
+// Estimated-weight ("complete-sandwich") counterpart of
+// `weighted_param_space_sandwich`, built from the per-case infinitesimal-
+// jackknife blocks. The bread is the same fixed-weight A1 = Σ_b (n_b/N)·Δ_bᵀW_bΔ_b,
+// but the meat carries the data-dependent-weight influence:
+//   B1 = Σ_b (1/N)·Δ_bᵀ (VᵀV) Δ_b,   V = moment_influence·W_b + weight_correction.
+// Dropping `weight_correction` reproduces `weighted_param_space_sandwich` exactly
+// (since Γ̂_b = (1/n_b)·gᵀg over the same moment-influence rows). This is the
+// score-test denominator that lavaan never builds: a per-direction estimated-
+// weight scaling c = gᵀB1g / gᵀA1g, not the global SB scalar. Frontier.
+post_expected<robust::ParamSpaceSandwich>
+weighted_param_space_sandwich_ij(const std::vector<WeightedMomentIJBlock>& blocks);
+
+// Which second-stage weight's data influence the continuous-LS IJ blocks carry.
+// `Fixed` ⇒ caller-fixed weight (no correction; ULS and pre-supplied weights);
+// the rest re-estimate the weight from `raw` and add its IF(Ŵ) correction rows.
+enum class ContinuousLsIJWeightMode {
+  Fixed,
+  SampleNormalTheory,   // GLS: W from the sample S
+  SampleEmpiricalWls,   // WLS/ADF: dense Browne empirical Γ̂⁻¹
+  SampleEmpiricalDwls,  // DWLS: diagonal Browne empirical Γ̂⁻¹
+  SampleDls,            // DLS: mixed (1-a)Γ_NT + a Γ_ADF
+};
+
+// Estimated-weight moment-metric sandwich {A1, B1} for a continuous moment-
+// quadratic fit, the IJ counterpart of `continuous_ls_param_space_sandwich`.
+// `weight` is the caller-fixed estimation weight (used for `Fixed`); for the
+// re-estimating modes it is ignored and the weight is rebuilt from `raw`. The
+// meat carries the weight-derivative influence so the robust score-test scaling
+// `c` reflects the estimated second-stage weight. Always full θ-space.
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
+                                      const model::MatrixRep& rep,
+                                      const data::SampleStats& samp,
+                                      const Estimates& est,
+                                      const gmm::Weight& weight,
+                                      const data::RawData& raw,
+                                      ContinuousLsIJWeightMode mode,
+                                      frontier::DlsWeightOptions dls_opts = {});
+
 // Moment-metric sandwich for a continuous moment-quadratic (ULS/GLS/WLS/DWLS)
 // fit, evaluated at `est.theta` (which may belong to an augmented partable —
 // the robust modification-index path calls this at the freed-candidate null

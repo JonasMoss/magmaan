@@ -15,6 +15,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::inference {
@@ -212,6 +213,17 @@ struct RobustScoreOptions {
                              robust::WeightMoments::Structured,
                              robust::ScoreCovariance::Empirical};
   ModificationIndexOptions base{};  // candidate set, loadings/covariances, info
+  // Estimated-weight ("complete-sandwich") meat for the continuous-LS tier:
+  // when true, the per-direction scaling uses the infinitesimal-jackknife meat
+  // (with the data-dependent-weight IF(Ŵ) term) instead of the fixed-weight
+  // Δ'WΓ̂WΔ. Requires raw data (the weight influence needs the data) and the
+  // estimator that produced the weight (`ij_weight_mode`). Ignored by the
+  // ML/FIML tiers (no estimated second-stage weight there). Frontier; beyond
+  // lavaan, which scales MI only by the global SB scalar.
+  bool estimated_weight = false;
+  estimate::ContinuousLsIJWeightMode ij_weight_mode =
+      estimate::ContinuousLsIJWeightMode::Fixed;
+  estimate::frontier::DlsWeightOptions dls_opts{};
 };
 
 // Robust ML modification indices. Γ̂ from raw data; or model-implied Γ_NT when

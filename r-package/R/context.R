@@ -64,6 +64,15 @@ residuals.magmaan_fit <- function(object, standardized = FALSE, ...) {
   magmaan_core$measures_residuals(object)
 }
 
+# lavResiduals() analogue: the standardized (cor.bentler) residual matrices, the
+# residual SE/z-statistics, the SRMR, and the per-block `$summary` table
+# (SRMR/USRMR with SE, exact-fit and close-fit z-tests, and a close-fit CI).
+# Equivalent to residuals(fit, standardized = TRUE); named for familiarity with
+# lavaan::lavResiduals(). `$summary` is a list of data frames, one per block.
+lav_residuals <- function(fit) {
+  magmaan_core$measures_standardized_residuals(fit)
+}
+
 factor_scores <- function(fit, data, method = NULL) {
   if (is.null(method)) {
     method <- if (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) {

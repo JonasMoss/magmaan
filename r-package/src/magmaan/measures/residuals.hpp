@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <vector>
 
 #include <Eigen/Core>
@@ -60,6 +61,42 @@ residuals(spec::LatentStructure pt, const model::MatrixRep& rep,
 // through the fitted-model tangent space, then rescale by the observed sample
 // variances. Near-zero residuals use lavaan's z-stat safeguard and divide by
 // 1, so exact fitted diagonal residuals remain numerically zero.
+// One root-mean-square residual summary — magmaan's analogue of a single column
+// of lavaan's `lavResiduals(fit)$summary` table. With the default
+// `type = "cor.bentler"` this is the SRMR family in the correlation metric.
+// `srmr` is the RMS of the residuals over `pstar` moments; the remaining fields
+// follow Ogasawara (2001) / Maydeu-Olivares (2017): an asymptotic SE, the
+// exact-fit z-test against an RMS of 0, and the bias-corrected `usrmr` with a
+// close-fit confidence interval and a z-test against `usrmr_closefit_h0`
+// (lavaan's 0.05 default). Degenerate (all-zero) sections leave the inferential
+// fields non-finite (NaN), exactly where lavaan returns `NA`.
+struct ResidualRms {
+  double srmr = 0.0;
+  double srmr_se = std::numeric_limits<double>::quiet_NaN();
+  double srmr_exactfit_z = std::numeric_limits<double>::quiet_NaN();
+  double srmr_exactfit_pvalue = std::numeric_limits<double>::quiet_NaN();
+  double usrmr = std::numeric_limits<double>::quiet_NaN();
+  double usrmr_se = std::numeric_limits<double>::quiet_NaN();
+  double usrmr_ci_lower = std::numeric_limits<double>::quiet_NaN();
+  double usrmr_ci_upper = std::numeric_limits<double>::quiet_NaN();
+  double usrmr_closefit_h0 = 0.05;
+  double usrmr_closefit_z = std::numeric_limits<double>::quiet_NaN();
+  double usrmr_closefit_pvalue = std::numeric_limits<double>::quiet_NaN();
+};
+
+// Per-block residual summary — lavaan's `lavResiduals(fit)$summary` data frame.
+// `cov` summarises the covariance residuals (vech, diagonal included), so its
+// SRMR uses pstar = p(p+1)/2. With a mean structure, `mean` (pstar = p) and
+// `total` (mean ++ vech cov) are populated too; `has_mean` flags this. The ACOV
+// each RMS consumes is the cor.bentler residual ACOV, i.e. the raw-metric
+// residual ACOV congruence-scaled by the sample standard deviations.
+struct ResidualSummary {
+  ResidualRms cov;
+  ResidualRms mean;
+  ResidualRms total;
+  bool        has_mean = false;
+};
+
 struct StandardizedResiduals {
   std::vector<Eigen::MatrixXd> cov_raw;
   std::vector<Eigen::MatrixXd> cov_cor;
@@ -69,11 +106,16 @@ struct StandardizedResiduals {
   std::vector<Eigen::VectorXd> mean_cor;
   std::vector<Eigen::VectorXd> mean_se;
   std::vector<Eigen::VectorXd> mean_z;
+  std::vector<ResidualSummary> summary;  // one per block (== lavResiduals $summary)
   double                       srmr = 0.0;
+  double                       conf_level = 0.90;  // close-fit CI level in summary
 };
 
+// `conf_level` sets the close-fit interval level for the `summary` table
+// (lavaan's `unbiased.ci.level`, default 0.90).
 post_expected<StandardizedResiduals>
 standardized_residuals(spec::LatentStructure pt, const model::MatrixRep& rep,
-                       const SampleStats& samp, const Estimates& est);
+                       const SampleStats& samp, const Estimates& est,
+                       double conf_level = 0.90);
 
 }  // namespace magmaan::measures
