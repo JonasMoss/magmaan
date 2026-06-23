@@ -1497,6 +1497,42 @@ TEST_CASE("continuous_ls_casewise_influence_ij is correction-free for ULS") {
   CHECK(gram.isApprox(vcov_ij->vcov, 1e-9));
 }
 
+TEST_CASE("continuous_ls_casewise_influence_ij Gram reproduces the WLS IJ vcov") {
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+  auto fx = one_factor_fixture();
+
+  auto ev_or = magmaan::model::ModelEvaluator::build(fx.pt, fx.rep);
+  REQUIRE(ev_or.has_value());
+  auto x0 = magmaan::estimate::simple_start_values(fx.pt, fx.rep, fx.samp, {});
+  REQUIRE(x0.has_value());
+  auto eval0 = ev_or->evaluate(*x0, true, true);
+  REQUIRE(eval0.has_value());
+  const TestLsLayout layout0 = make_test_layout(fx.samp, eval0->moments);
+  const auto rows0 = test_moment_influence_rows(fx.raw, fx.samp, layout0);
+  const magmaan::estimate::gmm::Weight W = adf_weight_from_rows(rows0);
+
+  auto est = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, W, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est.has_value());
+
+  auto vcov_ij = magmaan::estimate::robust_continuous_ls_wls_ij(
+      fx.pt, fx.rep, fx.samp, *est, fx.raw);
+  REQUIRE(vcov_ij.has_value());
+
+  auto infl = magmaan::estimate::continuous_ls_casewise_influence_ij(
+      fx.pt, fx.rep, fx.samp, *est, W, fx.raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalWls);
+  REQUIRE(infl.has_value());
+
+  const Eigen::MatrixXd gram = infl->influence.transpose() * infl->influence;
+  CHECK(gram.isApprox(vcov_ij->vcov, 1e-9));
+  const double diag =
+      (infl->influence - infl->influence_naive).cwiseAbs().maxCoeff();
+  CHECK(diag > 1e-8);
+}
+
 TEST_CASE("robust_continuous_ls_wls_ij matches finite-difference empirical "
           "weight influence") {
   const magmaan::optim::OptimOptions opt{

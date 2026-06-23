@@ -262,6 +262,26 @@ robust_ordinal_ij(spec::LatentStructure pt,
                   OrdinalParameterization parameterization =
                       OrdinalParameterization::Delta);
 
+// Per-case one-step misspecification-robust ("complete-sandwich") parameter
+// influences for an all-ordinal DWLS/WLS/ULS(MV) fit: the categorical analogue
+// of `continuous_ls_casewise_influence_ij` and the casewise dual of
+// `robust_ordinal_ij`. Builds the same per-case IJ blocks (with the
+// estimated-weight `IF(Ŵ)` correction for DWLS/WLS) and observed bread, then
+// returns the per-case rows via `casewise_influence_from_ij_blocks` rather than
+// summing them into the SE meat. `Σ_i c_i c_iᵀ` reproduces `robust_ordinal_ij`'s
+// vcov exactly; `influence_naive` drops the weight correction (the fixed-weight
+// influence semfindr/Pek-MacCallum use). ULS has a fixed weight ⇒ no correction.
+// Same `stats.moment_influence` / `stats.int_data` requirements as
+// `robust_ordinal_ij`. Frontier.
+post_expected<CasewiseInfluenceIJ>
+ordinal_casewise_influence_ij(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const data::OrdinalStats& stats,
+                              const Estimates& est,
+                              OrdinalWeightKind weights,
+                              OrdinalParameterization parameterization =
+                                  OrdinalParameterization::Delta);
+
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,

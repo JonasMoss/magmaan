@@ -525,6 +525,10 @@ infer_ordinal_robust_ij <- function(fit, ordinal_stats, weight = "") {
     .Call(`_magmaan_infer_ordinal_robust_ij`, fit, ordinal_stats, weight)
 }
 
+infer_ordinal_casewise_influence_ij_fit <- function(fit, ordinal_stats, weight = "") {
+    .Call(`_magmaan_infer_ordinal_casewise_influence_ij_fit`, fit, ordinal_stats, weight)
+}
+
 infer_mixed_ordinal_robust <- function(fit, mixed_stats, weight = "", bread = "expected") {
     .Call(`_magmaan_infer_mixed_ordinal_robust`, fit, mixed_stats, weight, bread)
 }

@@ -861,11 +861,28 @@ is now its Gram. Remaining:
   while the naive error grows with misfit (2.8e-3 at cfi 0.94 → 1.3e-2 at cfi
   0.85) and the complete error stays flat — the Hall-Inoue order promotion
   (`O_p(N⁻¹)` at the null → `O_p(N^{-1/2})` off it). Writeup in
-  `papers/estimated-weight-se` (the casewise-dual section). Remaining (deferred):
-  DWLS/categorical (needs a WLS/DWLS exact-LOO refit path for the oracle, and the
-  `SampleEmpiricalDwls` mode); multigroup (rides the `*_approx` single-group
-  limit above); ties to the model-free DOCR reference
-  (`external/refs/case-influence/`).
+  `papers/estimated-weight-se` (the casewise-dual section).
+- **Done 2026-06-23 — full estimator/group coverage for the case-influence
+  one-step engine.** Both regimes (`standard` and `estimated.weight`) are now
+  **multiple-group**: the bindings already block-stack the per-group cases, so
+  the R surface passes the full per-group raw list and labels rows `g{b}_{row}`
+  with group-suffixed columns (the standard multigroup one-step tracks the exact
+  ML refit at RMSE 3.6e-3, cor 0.93). The per-case row extraction was factored
+  into the shared `estimate::casewise_influence_from_ij_blocks(blocks, K, bread)`
+  (the per-case dual of `robust_weighted_moment_ij`), reused by both the
+  continuous accessor and the new **ordinal** `estimate::ordinal_casewise_influence_ij`
+  — the categorical (DWLS/WLSMV/ULSMV) headline cell, riding the existing
+  `build_ordinal_ij_blocks` + `ordinal_observed_bread_analytic`, bound as
+  `infer_ordinal_casewise_influence_ij_fit` and routed automatically when
+  `fit$ordinal`. Continuous WLS/ADF (`SampleEmpiricalWls`) is also covered. Every
+  cell self-checks `Σ_i c_i c_iᵀ ≡ robust_{continuous_ls,ordinal}_*_ij` vcov to
+  1e-8/1e-9 (`weighted_inference_test.cpp`, `ordinal_test.cpp`), and the R
+  example exercises multigroup + ordinal. Remaining: the per-drop exact
+  leave-one-out *simulation figure* for the categorical / DWLS cell (a paper
+  deliverable, not library code — `case_rerun` is ML/ULS/GLS, and re-estimating
+  polychorics per drop is expensive; the GLS exact-LOO already validates the
+  one-step semantics, and the self-checks pin the math). Ties to the model-free
+  DOCR reference (`external/refs/case-influence/`).
 
 ## Local hardening and validation tooling
 

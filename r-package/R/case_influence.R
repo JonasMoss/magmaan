@@ -440,22 +440,36 @@ mahalanobis_rerun <- function(fit, data = NULL) {
 # object (not a rerun); single-group continuous ML/ULS/GLS.
 # ---------------------------------------------------------------------------
 
-.case_raw_matrix <- function(fit) {
+# Per-group raw blocks plus the block-stacked case ids the one-step bindings
+# return. The casewise score / influence accessors loop over groups and stack
+# their rows group-by-group (group b = `fit$raw_data$X[[b]]`), so the case ids
+# follow that order. Single group: the bare rownames. Multiple groups: the
+# `g{b}_{rowname}` convention used by `mahalanobis_rerun()` (the per-group raw
+# blocks have lost the original global row order, so a within-block label is what
+# keeps the rows identifiable without the original data frame). `arg` is what we
+# hand the binding: the lone matrix for one group, the per-group list otherwise
+# (both accepted by the C++ raw-data marshalling).
+.case_raw_blocks <- function(fit) {
   raw <- fit$raw_data
   if (is.null(raw) || is.null(raw$X)) {
     stop("case influence: `fit` does not carry raw data (need fit$raw_data$X)",
          call. = FALSE)
   }
-  if (length(raw$X) != 1L) {
-    stop("case influence: multiple-group approximation not supported yet",
-         call. = FALSE)
-  }
-  raw$X[[1L]]
+  X <- raw$X
+  multigroup <- length(X) > 1L
+  ids <- lapply(seq_along(X), function(b) {
+    rn <- rownames(X[[b]])
+    if (is.null(rn)) rn <- as.character(seq_len(nrow(X[[b]])))
+    if (multigroup) paste0("g", b, "_", rn) else rn
+  })
+  list(arg = if (multigroup) X else X[[1L]],
+       case_id = unlist(ids, use.names = FALSE))
 }
 
 # Shared one-step ingredients: the per-case raw influence `x0` (one row per
 # case; the one-step raw change is (N/(N-1))·x0), the vcov `V` used to
-# standardize it, and the case ids.
+# standardize it, and the case ids. Single- and multiple-group (the bindings
+# block-stack the rows group by group; `V` is the full-θ block-diagonal vcov).
 #
 # `type = "standard"` (default, semfindr-style): x0 = scores · V with the ML
 # casewise scores and the expected-information model vcov, so x0 row i = V·s_i.
@@ -466,21 +480,38 @@ mahalanobis_rerun <- function(fit, data = NULL) {
 # `crossprod(x0)` IS the estimated-weight ("complete-sandwich") IJ vcov, used as
 # `V` here. `x0_naive` is the fixed-weight counterpart (weight treated as
 # constant, as semfindr/Pek-MacCallum implicitly do), so `x0 - x0_naive` is the
-# per-case data-dependent-weight diagnostic. Continuous GLS/WLS/ULS only.
+# per-case data-dependent-weight diagnostic. Continuous GLS/WLS/ULS (and ordinal
+# DWLS/WLSMV) only.
 .case_approx_parts <- function(fit, type = c("standard", "estimated.weight")) {
   type <- match.arg(type)
-  X <- .case_raw_matrix(fit)
-  case_id <- rownames(X)
-  if (is.null(case_id)) case_id <- as.character(seq_len(nrow(X)))
-  if (type == "estimated.weight") {
-    ij <- magmaan_core$infer_casewise_influence_ij_fit(fit, X)
-    return(list(n = nrow(X), V = crossprod(ij$influence), x0 = ij$influence,
-                x0_naive = ij$influence_naive, case_id = case_id, type = type))
+  # Ordinal (categorical DWLS/WLS/ULSMV) estimated-weight path: the influence
+  # rides the ordinal IJ blocks (per-case polychoric/threshold scores + IF(Ŵ)),
+  # not the continuous moment scores, so it routes through the ordinal accessor
+  # using the stats the fit carries. Case ids are sequential (the ordinal stats
+  # hold per-case influence rows, block-stacked, with no original-row map).
+  if (type == "estimated.weight" && isTRUE(fit$ordinal)) {
+    stats <- fit$ordinal_stats
+    if (is.null(stats)) {
+      stop("case influence: ordinal fit does not carry $ordinal_stats",
+           call. = FALSE)
+    }
+    ij <- magmaan_core$infer_ordinal_casewise_influence_ij_fit(fit, stats)
+    case_id <- as.character(seq_len(nrow(ij$influence)))
+    return(list(n = nrow(ij$influence), V = crossprod(ij$influence),
+                x0 = ij$influence, x0_naive = ij$influence_naive,
+                case_id = case_id, type = type))
   }
-  scores <- magmaan_core$infer_casewise_scores_fit(fit, X)
+  rb <- .case_raw_blocks(fit)
+  if (type == "estimated.weight") {
+    ij <- magmaan_core$infer_casewise_influence_ij_fit(fit, rb$arg)
+    return(list(n = nrow(ij$influence), V = crossprod(ij$influence),
+                x0 = ij$influence, x0_naive = ij$influence_naive,
+                case_id = rb$case_id, type = type))
+  }
+  scores <- magmaan_core$infer_casewise_scores_fit(fit, rb$arg)
   V <- .case_model_vcov(fit)
-  list(n = nrow(X), scores = scores, V = V, x0 = scores %*% V,
-       case_id = case_id, type = type)
+  list(n = nrow(scores), V = V, x0 = scores %*% V,
+       case_id = rb$case_id, type = type)
 }
 
 #' Approximate case influence on raw parameter estimates (one-step, no refit)
@@ -489,22 +520,28 @@ mahalanobis_rerun <- function(fit, data = NULL) {
 #' without refitting. Mirror of `semfindr::est_change_raw_approx()`.
 #'
 #' With `type = "estimated.weight"` this is the misspecification-robust
-#' ("complete-sandwich") one-step change for a continuous moment-quadratic fit
-#' (GLS/WLS/ULS): the per-case influence carries the data-dependent-weight term
-#' that semfindr / Pek & MacCallum drop by treating the estimator weight as
-#' fixed. That term is `O_p(N^{-1})` under a correct model but
-#' `O_p(N^{-1/2})` under misspecification (Hall-Inoue order promotion), so the
-#' two regimes agree at the null and diverge under misfit; it is the casewise
-#' dual of the estimated-weight standard error. The result then carries two
-#' attributes: `"naive"` (the fixed-weight one-step change) and
+#' ("complete-sandwich") one-step change for a moment-quadratic fit whose weight
+#' is estimated from the data (continuous GLS/WLS, ordinal DWLS/WLSMV; ULS is
+#' fixed-weight and so unchanged): the per-case influence carries the
+#' data-dependent-weight term that semfindr / Pek & MacCallum drop by treating
+#' the estimator weight as fixed. That term is `O_p(N^{-1})` under a correct
+#' model but `O_p(N^{-1/2})` under misspecification (Hall-Inoue order promotion),
+#' so the two regimes agree at the null and diverge under misfit; it is the
+#' casewise dual of the estimated-weight standard error. The result then carries
+#' two attributes: `"naive"` (the fixed-weight one-step change) and
 #' `"weight_diagnostic"` (their difference, the per-case `Δ'W'_d` term). There is
 #' no semfindr counterpart; this is a frontier extension.
 #'
-#' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
+#' Both regimes support single- and multiple-group fits; multiple-group rows are
+#' block-stacked (`g{b}_{row}` ids, group-suffixed columns).
+#'
+#' @param fit A fitted `magmaan_fit` carrying raw data (`"standard"`: continuous
+#'   ML/ULS/GLS; `"estimated.weight"`: continuous GLS/WLS/ULS or ordinal
+#'   DWLS/WLSMV/ULSMV).
 #' @param parameters Optional parameter selector; default all free parameters.
 #' @param type `"standard"` (default; semfindr-style fixed-weight) or
-#'   `"estimated.weight"` (misspecification-robust complete sandwich;
-#'   continuous GLS/WLS/ULS only).
+#'   `"estimated.weight"` (misspecification-robust complete sandwich; estimators
+#'   with a data-estimated weight, single- or multiple-group).
 #' @return A matrix, one row per case, one column per selected parameter (plus
 #'   the `"naive"` / `"weight_diagnostic"` attributes when
 #'   `type = "estimated.weight"`).
@@ -548,10 +585,12 @@ est_change_raw_approx <- function(fit, parameters = NULL,
 #' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
 #' @param parameters Optional parameter selector; default all free parameters.
 #' @param type `"standard"` (default; semfindr-style fixed-weight) or
-#'   `"estimated.weight"` (misspecification-robust complete sandwich; continuous
-#'   GLS/WLS/ULS only). Under `"estimated.weight"` both the one-step change and
-#'   the SE / `gcd` metric use the complete-sandwich IJ covariance, the casewise
-#'   dual of the estimated-weight standard error; see [est_change_raw_approx()].
+#'   `"estimated.weight"` (misspecification-robust complete sandwich; estimators
+#'   with a data-estimated weight: continuous GLS/WLS, ordinal DWLS/WLSMV,
+#'   single- or multiple-group). Under `"estimated.weight"` both the one-step
+#'   change and the SE / `gcd` metric use the complete-sandwich IJ covariance,
+#'   the casewise dual of the estimated-weight standard error; see
+#'   [est_change_raw_approx()].
 #' @return A matrix with one column per selected parameter plus `gcd_approx`,
 #'   one row per case.
 #' @export

@@ -379,7 +379,16 @@ golden `parTable()` fixtures.
   GLS/WLS/ULS). Self-validated against the exact GLS leave-one-out engine (which
   re-estimates the weight per drop): the complete one-step tracks it at RMSE ~3e-4
   regardless of misfit, while the naive degrades with it (the Hall-Inoue order
-  promotion). Writeup in `papers/estimated-weight-se`.
+  promotion). Writeup in `papers/estimated-weight-se`. The per-case row extraction
+  is the shared `estimate::casewise_influence_from_ij_blocks(blocks, K, bread)`
+  (the per-case dual of `robust_weighted_moment_ij`), reused by the continuous
+  accessor and the ordinal `estimate::ordinal_casewise_influence_ij` (categorical
+  DWLS/WLSMV — the headline cell, on the existing `build_ordinal_ij_blocks`).
+  Both case-influence regimes (`standard`, `estimated.weight`) are multiple-group
+  (block-stacked `g{b}_{row}` ids); `est_change_*_approx(type = "estimated.weight")`
+  covers continuous GLS/WLS/ULS and ordinal DWLS/WLSMV, routing ordinal fits to
+  `infer_ordinal_casewise_influence_ij_fit` automatically. Every estimator/group
+  cell self-checks `Σ_i c_i c_iᵀ ≡ robust_{continuous_ls,ordinal}_*_ij` vcov.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

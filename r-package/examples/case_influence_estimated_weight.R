@@ -109,11 +109,50 @@ ew_uls <- magmaan::est_change_raw_approx(fit_uls, type = "estimated.weight")
 stopifnot(max(abs(attr(ew_uls, "weight_diagnostic"))) < 1e-9)
 cat("ULS: complete == naive (correction-free)\n")
 
-# 7. The estimated-weight regime is continuous-LS only.
+# 7. ML has no estimated second-stage weight, so the regime is rejected.
 fit_ml <- magmaan::magmaan(
   "visual =~ x1 + x2 + x3", data = hs, estimator = "ML")
 err <- tryCatch(magmaan::est_change_raw_approx(fit_ml, type = "estimated.weight"),
                 error = function(e) conditionMessage(e))
 stopifnot(is.character(err), grepl("estimated", err))
+
+# 8. Multiple groups: the one-step engine block-stacks the per-group cases
+#    (g{b}_{row} ids, group-suffixed columns) and the IJ covariance is the
+#    full-theta block-diagonal complete sandwich.
+fit_mg <- magmaan::magmaan(
+  "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+  data = hs, estimator = "GLS", groups = "school")
+ew_mg <- magmaan::est_change_raw_approx(fit_mg, type = "estimated.weight")
+stopifnot(nrow(ew_mg) == nrow(hs), ncol(ew_mg) == fit_mg$npar,
+          all(is.finite(ew_mg)),
+          all(grepl("^g\\d+_", rownames(ew_mg))),
+          any(grepl("\\.(Pasteur|Grant-White)$", colnames(ew_mg))))
+V_mg <- crossprod(
+  magmaan_core$infer_casewise_influence_ij_fit(fit_mg, fit_mg$raw_data$X)$influence)
+stopifnot(all(eigen(V_mg, symmetric = TRUE, only.values = TRUE)$values > 0))
+cat("multigroup (2 groups): block-stacked one-step, SPD IJ vcov\n")
+
+# 9. Categorical (ordinal DWLS / WLSMV): the headline cell of the estimated-
+#    weight stream, where the diagonal polychoric weight moves hardest. Rides
+#    the ordinal IJ blocks; crossprod(influence) == the ordinal complete-sandwich
+#    vcov (pinned to 1e-8 in the C++ self-check vs robust_ordinal_ij).
+ord <- hs
+for (v in c("x1", "x2", "x3", "x4")) {
+  ord[[v]] <- as.integer(cut(hs[[v]], 3))
+}
+fit_ord <- magmaan::magmaan("f =~ x1 + x2 + x3 + x4", data = ord,
+                            estimator = "DWLS",
+                            ordered = c("x1", "x2", "x3", "x4"))
+stopifnot(isTRUE(fit_ord$ordinal))
+ew_ord <- magmaan::est_change_raw_approx(fit_ord, type = "estimated.weight")
+stopifnot(nrow(ew_ord) == nrow(ord), ncol(ew_ord) == fit_ord$npar,
+          all(is.finite(ew_ord)),
+          max(abs(attr(ew_ord, "weight_diagnostic"))) > 1e-8)  # weight term live
+ec_ord <- magmaan::est_change_approx(fit_ord, type = "estimated.weight")
+stopifnot("gcd_approx" %in% colnames(ec_ord), all(ec_ord[, "gcd_approx"] >= 0))
+V_ord <- crossprod(
+  magmaan_core$infer_ordinal_casewise_influence_ij_fit(fit_ord, fit_ord$ordinal_stats)$influence)
+stopifnot(all(eigen(V_ord, symmetric = TRUE, only.values = TRUE)$values > -1e-10))
+cat("ordinal DWLS (categorical): complete sandwich live, gcd ok\n")
 
 cat("\nmisspecification-robust case influence: ok\n")

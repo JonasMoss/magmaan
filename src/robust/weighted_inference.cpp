@@ -2484,6 +2484,85 @@ continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
 }
 
 post_expected<CasewiseInfluenceIJ>
+casewise_influence_from_ij_blocks(const std::vector<WeightedMomentIJBlock>& blocks,
+                                  const Eigen::MatrixXd& K,
+                                  const Eigen::MatrixXd& observed_bread) {
+  constexpr const char* who = "casewise_influence_from_ij_blocks";
+  if (blocks.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": no moment blocks supplied"));
+  }
+  if (K.rows() == 0 || K.cols() == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": empty constraint reparameterization"));
+  }
+  const Eigen::Index q = K.rows();
+  const Eigen::Index n_alpha = K.cols();
+  if (observed_bread.rows() != n_alpha || observed_bread.cols() != n_alpha) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": observed bread shape does not match the reduced "
+        "parameter count"));
+  }
+
+  double N_total = 0.0;
+  Eigen::Index total_rows = 0;
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& blk = blocks[b];
+    if (blk.n_obs <= 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": non-positive n_obs in block " +
+              std::to_string(b)));
+    }
+    const Eigen::Index mb = blk.jacobian.rows();
+    if (blk.jacobian.cols() != q || blk.weight.rows() != mb ||
+        blk.weight.cols() != mb || blk.moment_influence.rows() != blk.n_obs ||
+        blk.moment_influence.cols() != mb) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": moment matrix shape mismatch in block " +
+              std::to_string(b)));
+    }
+    if (blk.weight_correction.size() != 0 &&
+        (blk.weight_correction.rows() != blk.n_obs ||
+         blk.weight_correction.cols() != mb)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": correction shape mismatch in block " +
+              std::to_string(b)));
+    }
+    N_total += static_cast<double>(blk.n_obs);
+    total_rows += static_cast<Eigen::Index>(blk.n_obs);
+  }
+  if (!(N_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": non-positive total sample size"));
+  }
+
+  Eigen::MatrixXd A = 0.5 * (observed_bread + observed_bread.transpose()).eval();
+  auto A_inv_or = inverse_sym_pd(A, "casewise_influence_from_ij_blocks bread");
+  if (!A_inv_or.has_value()) return std::unexpected(A_inv_or.error());
+
+  // c_i = (1/N)·K·A⁻¹·ψ_i^α, ψ_i^α = (Δ_b K)ᵀ v_i. Row-wise: the n_b × q block
+  // is (1/N)·(V·Δ_b·K)·(A⁻¹·Kᵀ), with V = g·W (naive) or g·W + IF(Ŵ) (complete).
+  const Eigen::MatrixXd G = (*A_inv_or) * K.transpose();  // n_alpha × q
+  Eigen::MatrixXd influence(total_rows, q);
+  Eigen::MatrixXd influence_naive(total_rows, q);
+  Eigen::Index row0 = 0;
+  for (const auto& blk : blocks) {
+    const auto nb = static_cast<Eigen::Index>(blk.n_obs);
+    const Eigen::MatrixXd DbK = blk.jacobian * K;            // m × n_alpha
+    Eigen::MatrixXd V = blk.moment_influence * blk.weight;   // n_b × m
+    influence_naive.middleRows(row0, nb).noalias() =
+        (1.0 / N_total) * (V * DbK) * G;
+    if (blk.weight_correction.size() != 0) V += blk.weight_correction;
+    influence.middleRows(row0, nb).noalias() =
+        (1.0 / N_total) * (V * DbK) * G;
+    row0 += nb;
+  }
+
+  return CasewiseInfluenceIJ{std::move(influence), std::move(influence_naive),
+                             static_cast<std::int64_t>(N_total)};
+}
+
+post_expected<CasewiseInfluenceIJ>
 continuous_ls_casewise_influence_ij(spec::LatentStructure pt,
                                     const model::MatrixRep& rep,
                                     const data::SampleStats& samp,
@@ -2504,7 +2583,6 @@ continuous_ls_casewise_influence_ij(spec::LatentStructure pt,
         std::string(who) +
             ": constraint reparameterization has incompatible shape"));
   }
-  const Eigen::Index q = K.rows();
 
   auto asmbl = build_continuous_ls_ij_blocks(pt, rep, samp, est, weight, raw,
                                              mode, dls_opts, who);
@@ -2515,46 +2593,7 @@ continuous_ls_casewise_influence_ij(spec::LatentStructure pt,
   auto ob = continuous_ls_observed_bread(pt, rep, samp, est,
                                          asmbl->active_weight, K);
   if (!ob.has_value()) return std::unexpected(ob.error());
-  Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
-  auto A_inv_or =
-      inverse_sym_pd(A, "continuous_ls_casewise_influence_ij observed bread");
-  if (!A_inv_or.has_value()) return std::unexpected(A_inv_or.error());
-
-  double N_total = 0.0;
-  Eigen::Index total_rows = 0;
-  for (const auto& blk : asmbl->blocks) {
-    if (blk.n_obs <= 0) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          std::string(who) + ": non-positive n_obs in a block"));
-    }
-    N_total += static_cast<double>(blk.n_obs);
-    total_rows += static_cast<Eigen::Index>(blk.n_obs);
-  }
-  if (!(N_total > 0.0)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        std::string(who) + ": non-positive total sample size"));
-  }
-
-  // c_i = (1/N)·K·A⁻¹·ψ_i^α, ψ_i^α = (Δ_b K)ᵀ v_i. Row-wise: the n_b × q block
-  // is (1/N)·(V·Δ_b·K)·(A⁻¹·Kᵀ), with V = g·W (naive) or g·W + IF(Ŵ) (complete).
-  const Eigen::MatrixXd G = (*A_inv_or) * K.transpose();  // n_alpha × q
-  Eigen::MatrixXd influence(total_rows, q);
-  Eigen::MatrixXd influence_naive(total_rows, q);
-  Eigen::Index row0 = 0;
-  for (const auto& blk : asmbl->blocks) {
-    const auto nb = static_cast<Eigen::Index>(blk.n_obs);
-    const Eigen::MatrixXd DbK = blk.jacobian * K;            // m × n_alpha
-    Eigen::MatrixXd V = blk.moment_influence * blk.weight;   // n_b × m
-    influence_naive.middleRows(row0, nb).noalias() =
-        (1.0 / N_total) * (V * DbK) * G;
-    if (blk.weight_correction.size() != 0) V += blk.weight_correction;
-    influence.middleRows(row0, nb).noalias() =
-        (1.0 / N_total) * (V * DbK) * G;
-    row0 += nb;
-  }
-
-  return CasewiseInfluenceIJ{std::move(influence), std::move(influence_naive),
-                             static_cast<std::int64_t>(N_total)};
+  return casewise_influence_from_ij_blocks(asmbl->blocks, K, *ob);
 }
 
 post_expected<std::vector<Eigen::MatrixXd>>

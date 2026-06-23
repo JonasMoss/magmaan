@@ -4194,6 +4194,86 @@ robust_ordinal_ij(spec::LatentStructure pt,
   return ordinal_result_from_weighted(*out);
 }
 
+post_expected<CasewiseInfluenceIJ>
+ordinal_casewise_influence_ij(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const data::OrdinalStats& stats,
+                              const Estimates& est,
+                              OrdinalWeightKind weights,
+                              OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_casewise_influence_ij: per-case influence functions "
+        "unavailable; recompute ordinal stats (moment_influence is required for "
+        "the IJ)"));
+  }
+  auto missing_or = ordinal_ij_block_missing(stats, weights);
+  if (!missing_or.has_value()) return std::unexpected(missing_or.error());
+  const std::vector<bool> block_has_missing = std::move(*missing_or);
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_casewise_influence_ij: fitted theta length does not match "
+        "ordinal delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_casewise_influence_ij: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                              est.theta, parameterization);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_casewise_influence_ij: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                 : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls);
+
+  auto ob = ordinal_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, Ws, K, parameterization);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
+
+  auto ij_blocks = build_ordinal_ij_blocks(
+      stats, *layout_or, eval->moments, est.theta, Ws, Delta_full, weights,
+      parameterization, block_has_missing);
+  if (!ij_blocks.has_value()) return std::unexpected(ij_blocks.error());
+
+  return casewise_influence_from_ij_blocks(*ij_blocks, K, A);
+}
+
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
