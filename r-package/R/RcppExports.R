@@ -249,6 +249,10 @@ infer_baseline <- function(sample_stats) {
     .Call(`_magmaan_infer_baseline`, sample_stats)
 }
 
+infer_baseline_fit <- function(fit) {
+    .Call(`_magmaan_infer_baseline_fit`, fit)
+}
+
 measures_fit <- function(fit, chi2, df, baseline) {
     .Call(`_magmaan_measures_fit`, fit, chi2, df, baseline)
 }

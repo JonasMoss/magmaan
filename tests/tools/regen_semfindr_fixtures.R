@@ -67,8 +67,7 @@ cases <- list(
     estimator = "ML",
     data = semfindr::pa_dat,
     to_rerun = 1:25,
-    # cfi/tli omitted: magmaan's fixed.x baseline df differs from lavaan's.
-    fit_measures = c("chisq", "rmsea"))
+    fit_measures = c("chisq", "cfi", "rmsea", "tli"))
 )
 
 # === serialization helpers =================================================

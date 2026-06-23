@@ -853,6 +853,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_baseline_fit
+Rcpp::List infer_baseline_fit(Rcpp::List fit);
+RcppExport SEXP _magmaan_infer_baseline_fit(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_baseline_fit(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
 // measures_fit
 Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df, Rcpp::List baseline);
 RcppExport SEXP _magmaan_measures_fit(SEXP fitSEXP, SEXP chi2SEXP, SEXP dfSEXP, SEXP baselineSEXP) {
@@ -2640,6 +2651,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_chi2_stat", (DL_FUNC) &_magmaan_infer_chi2_stat, 2},
     {"_magmaan_infer_df_stat", (DL_FUNC) &_magmaan_infer_df_stat, 2},
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
+    {"_magmaan_infer_baseline_fit", (DL_FUNC) &_magmaan_infer_baseline_fit, 1},
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
     {"_magmaan_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaan_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
