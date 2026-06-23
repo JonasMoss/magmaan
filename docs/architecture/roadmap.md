@@ -1704,10 +1704,10 @@ stop rather than any usable non-error return.
   `case_rerun()` (drop one case, down-date the sample statistics, warm-started
   refit; continuous ML/ULS/GLS, single- or multiple-group — the latter by
   passing the original `data` frame, with group-label-suffixed columns), then
-  `est_change_raw()` (raw or
-  std.all DFBETA), `est_change()` (DFTHETAS standardized by the leave-one-out SE
-  plus the generalized Cook's distance `gcd`), `fit_measures_change()`, and
-  `mahalanobis_rerun()`. It reuses existing primitives only (`fit_ml`/`fit_uls`/
+  `est_change_raw()` (raw or std.all DFBETA), `est_change(se = )` (DFTHETAS +
+  generalized Cook's distance `gcd`, standardized by the leave-one-out
+  covariance under a `standard` / `robust.sem` / `robust.huber.white` regime),
+  `fit_measures_change()`, and `mahalanobis_rerun()`. It reuses existing primitives only (`fit_ml`/`fit_uls`/
   `fit_gls`, `df_to_data`, `inference_information_expected`/`inference_vcov`,
   `fit_measures`), so no core C++ was touched. Output format mirrors
   `semfindr` (Cheung & Lai, 2026; Pek & MacCallum, 2011), validated live by

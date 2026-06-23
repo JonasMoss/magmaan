@@ -288,14 +288,35 @@ est_change_raw <- function(rerun_out, parameters = NULL, standardized = FALSE) {
 #' `semfindr::est_change()` (which standardizes by, and forms gCD from, the
 #' deleted-case refit's covariance).
 #'
+# Leave-one-out parameter covariance for a refit, under the chosen SE regime.
+# "standard" = naive ML (lavaan se="standard"); "robust.sem" = expected-bread
+# empirical-meat sandwich (Satorra-Bentler/MLM); "robust.huber.white" =
+# observed-bread sandwich (Yuan-Bentler/MLR). The robust regimes need the
+# refit's raw data (carried on every fit_* result).
+.case_refit_vcov <- function(refit, se) {
+  if (se == "standard") return(.case_model_vcov(refit))
+  if (is.null(refit$raw_data) || is.null(refit$raw_data$X)) {
+    stop("est_change(se = \"", se, "\"): the refit carries no raw data",
+         call. = FALSE)
+  }
+  bread <- if (se == "robust.huber.white") "observed" else "expected"
+  magmaan_core$robust_se_raw_fit(refit, refit$raw_data$X, bread = bread)$vcov
+}
+
 #' @param rerun_out Output of [case_rerun()].
 #' @param parameters Optional parameter selector; default all free parameters.
+#' @param se Standard-error regime for the leave-one-out covariance: `"standard"`
+#'   (naive ML, the default), `"robust.sem"` (Satorra-Bentler sandwich), or
+#'   `"robust.huber.white"` (Huber-White/MLR sandwich). Match the `se` of the
+#'   reference fit when comparing to semfindr.
 #' @return A matrix with one column per selected parameter plus a final `gcd`
 #'   column, one row per case, rownames = case ids. Columns are named by user
 #'   label when present, else `lhs op rhs`.
 #' @export
-est_change <- function(rerun_out, parameters = NULL) {
+est_change <- function(rerun_out, parameters = NULL,
+                       se = c("standard", "robust.sem", "robust.huber.white")) {
   .case_check_rerun(rerun_out, "est_change()")
+  se <- match.arg(se)
   fit <- rerun_out$fit
   fp <- .case_free_table(fit)
   sel <- .case_pars_select(fp, parameters)
@@ -311,7 +332,7 @@ est_change <- function(rerun_out, parameters = NULL) {
     refit <- rerun_out$rerun[[j]]
     if (is.null(refit)) next
     d <- theta_full[free_k] - refit$theta[free_k]
-    Vi <- .case_model_vcov(refit)
+    Vi <- .case_refit_vcov(refit, se)
     sei <- sqrt(diag(Vi))[free_k]
     dft[j, ] <- d / sei
     Vi_sel_inv <- solve(Vi[free_k, free_k, drop = FALSE])
