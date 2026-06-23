@@ -406,9 +406,20 @@ est_change_raw_approx <- function(fit, parameters = NULL) {
 #' Approximate standardized case influence (DFTHETAS) and gCD (one-step)
 #'
 #' The one-step approximation of [est_change()] without refitting: the
-#' approximate raw change standardized by the full-sample SE, plus an
-#' approximate generalized Cook's distance `gcd_approx`. Mirror of
-#' `semfindr::est_change_approx()`.
+#' approximate raw change `Δ ≈ (N/(N-1))·V·s_i` standardized by the full-sample
+#' SE, plus an approximate generalized Cook's distance
+#' `gcd_approx = Δ' V_sel^{-1} Δ`.
+#'
+#' This deliberately uses the *correct* finite-sample scaling, which differs
+#' from `semfindr::est_change_approx()` (v0.2.0) by two known constant factors:
+#' semfindr applies `N/(N-1)` twice to DFTHETAS (one too many — the factor is
+#' already in the raw one-step change) and applies it only once inside gCD (one
+#' too few). With matched columns, `est_change_approx(magmaan)` relates to
+#' semfindr by `dftheta_magmaan = dftheta_semfindr · (N-1)/N` and
+#' `gcd_magmaan = gcd_semfindr · N/(N-1)`. Both factors are O(1/N) and immaterial
+#' relative to the one-step error, but they have no first-principles basis (see
+#' the influence-function derivation; tracked as an upstream-PR item). The raw
+#' [est_change_raw_approx()] is unaffected (semfindr is correct there).
 #'
 #' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
 #' @param parameters Optional parameter selector; default all free parameters.
@@ -422,16 +433,13 @@ est_change_approx <- function(fit, parameters = NULL) {
   P <- .case_approx_parts(fit)
   n <- P$n
   se <- sqrt(diag(P$V))
-  # xr = est_change_raw_approx = (scores · V)·N/(N-1), restricted to selected
-  # parameters. semfindr standardizes this (already-factored) change by the SE
-  # and re-applies N/(N-1), and forms gcd from the same xr.
+  # xr = one-step raw change ≈ θ̂ − θ̂₍ᵢ₎ = (N/(N-1))·V·s_i, selected columns.
   xr <- (P$x0[, free_k, drop = FALSE]) * (n / (n - 1))
-  dft <- sweep(xr, 2L, se[free_k], "/") * (n / (n - 1))
-  # gcd_approx = (N-1) · xr' I_unit xr, with the unit (per-case) information
-  # I_unit = I_full / N (magmaan's information_expected is N-scaled; lavaan's
-  # lavInspect "information" equals it divided by N).
-  info_unit <- magmaan_core$inference_information_expected(fit)[free_k, free_k, drop = FALSE] / n
-  gcd_approx <- (n - 1) * rowSums((xr %*% info_unit) * xr)
+  dft <- sweep(xr, 2L, se[free_k], "/")                 # DFTHETAS = Δ / SE
+  # gcd_approx = Δ' V_sel^{-1} Δ — the one-step form of est_change()'s gcd, with
+  # the full-sample vcov submatrix inverted (matching the exact engine).
+  Vsel_inv <- solve(P$V[free_k, free_k, drop = FALSE])
+  gcd_approx <- rowSums((xr %*% Vsel_inv) * xr)
   out <- cbind(dft, gcd_approx = gcd_approx)
   dimnames(out) <- list(P$case_id, c(fp$name[sel], "gcd_approx"))
   out

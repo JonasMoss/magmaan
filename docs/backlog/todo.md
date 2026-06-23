@@ -795,6 +795,13 @@ one-step), single-group continuous ML/ULS/GLS, semfindr-format, validated by
 `infer_casewise_scores_fit`, == `lavaan::lavScores`); `information_cross_products`
 is now its Gram. Remaining:
 
+- **Upstream PR to semfindr (est_change_approx scaling).** semfindr 0.2.0
+  `est_change_approx()` applies `N/(N-1)` twice to DFTHETAS and once (too few)
+  inside `gcd_approx`; both are spurious O(1/N) factors with no first-principles
+  basis (`est_change_raw_approx` is correct). magmaan uses the correct scaling
+  and gates transitively up to the documented factors; see the
+  `docs/validation/oracle-defects.md` entry. File a PR / issue against
+  `sfcheung/semfindr` with the influence-function derivation. **S**
 - **`fit_measures_change_approx` (needs per-case loglik).** semfindr's no-refit
   fit-measure change uses `lavInspect(fit, "loglik.casewise")` for the model,
   the saturated h1, and the baseline: `chisq_change ≈ 2·(ll1_i − ll0_i)`, then

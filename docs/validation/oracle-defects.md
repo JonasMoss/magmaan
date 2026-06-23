@@ -76,6 +76,37 @@ magmaan: factor_scores_ordinal / _mixed_ordinal compute the true posterior mode.
 Upstream: not filed. Found 2026-06-14.
 ```
 
+```text
+Defect: semfindr::est_change_approx() (the one-step, no-refit case-influence
+        approximation) applies the finite-sample factor N/(N-1) twice to the
+        standardized change (DFTHETAS) and only once inside the approximate
+        generalized Cook's distance (gcd_approx) — one too many and one too
+        few, respectively. est_change_raw_approx() is correct (one factor).
+Scope: semfindr 0.2.0. Both errors are exactly O(1/N) constant factors, so they
+        are immaterial relative to the one-step approximation's own error, but
+        they have no first-principles basis. Affects only the *_approx engine,
+        not the exact leave-one-out est_change().
+Proof: influence-function derivation — removing case i gives
+        θ̂ − θ̂₍ᵢ₎ ≈ (N/(N-1))·V·s_i (one N/(N-1), the factor semfindr's
+        est_change_raw_approx already carries). Hence DFTHETAS = Δ/SE carries
+        exactly one such factor and gCD = Δ'V⁻¹Δ carries it squared. semfindr's
+        est_change_approx multiplies the already-factored raw change by N/(N-1)
+        AGAIN for DFTHETAS, and forms gcd_approx = (N-1)·xᵀ(V⁻¹/N)x =
+        (N/(N-1))·sᵀVs instead of (N/(N-1))²·sᵀVs. Independent reference: the
+        exact leave-one-out engine (est_change(), itself gated against
+        semfindr::est_change() to ~1e-5) — magmaan's corrected one-step tracks
+        the exact gcd marginally better than semfindr's (0.2643 vs 0.2654 on a
+        2-factor HS CFA, the rest being one-step error).
+magmaan: est_change_approx() uses the correct scaling (DFTHETAS = Δ/SE,
+        gcd_approx = Δ'V_sel⁻¹Δ with Δ = (N/(N-1))Vs). Gated transitively in
+        r-package/examples/case_influence_semfindr.R: matched up to the two
+        documented constant factors (dftheta_magmaan = dftheta_semfindr·(N-1)/N,
+        gcd_magmaan = gcd_semfindr·N/(N-1)) to machine precision, not against the
+        raw semfindr output.
+Upstream: not filed (PR to semfindr planned — see docs/backlog/todo.md). Found
+        2026-06-23.
+```
+
 ## Investigated — not a defect
 
 - **Satorra-2000 scaled-difference parity** (2026-05-17): a divergence first
