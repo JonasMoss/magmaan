@@ -679,6 +679,20 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     dense `QΓ` when actual positive mixture weights are needed); an *a-priori*
     analytic sign count of `#{ν_j < 1}` from model structure (the note settles
     the inertia identity but still reads the signs off an eigendecomposition).
+  - **M — mixed continuous/ordinal misspec fit-measure bundle.** Mixed DWLS
+    already has estimated-weight profile RMSEA/LRT over the extended
+    `(u, gamma)` moment stack and observed/pairwise-missing stats now materialize
+    the needed gamma-influence rows. First reportable slice **landed
+    2026-06-23**: `mixed_ordinal_rmsea_misspec_inference` adds the same
+    estimated-weight envelope-score CI and exact-fit mixture p-value as the
+    all-ordinal RMSEA path, exposed through
+    `magmaan_core$mixed_ordinal_rmsea_misspec`. What remains is the consolidated
+    reportable surface analogous to all-ordinal
+    `ordinal_fit_measures_misspec_inference`: mixed CRMR/SRMR and CFI/TLI once
+    the mixed residual denominator and independence-baseline conventions stay
+    coherent. R should either accept `magmaan_mixed_ordinal_data` in
+    `fit_measures_misspec()` or grow a clearly named mixed companion; do not
+    silently route mixed fits through the all-ordinal ordinal-stats API.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
