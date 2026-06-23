@@ -1807,6 +1807,12 @@ stop rather than any usable non-error return.
   `lavResiduals(fit)$summary` analogue: cor.bentler SRMR/USRMR with SE,
   exact-fit and close-fit z-tests, and a close-fit CI for cov/mean/total,
   the raw-metric residual ACOV congruence-scaled into the correlation metric),
+  with an `estimated_weight = TRUE` frontier route
+  (`measures::frontier::standardized_residuals_estimated_weight`) that swaps the
+  NT residual ACOV for the Hall-Inoue infinitesimal-jackknife sandwich so the
+  residual SE/z and `$summary` reflect an estimated continuous-LS second-stage
+  weight (beyond lavaan; bootstrap-calibrated under non-normality where the NT
+  residual SE is anti-conservative),
   `factor_scores(fit, data, method)` requires complete raw data
   and dispatches continuous regression/Bartlett vs ordinal/mixed EBM/ML/EAP
   according to the fitted data type, and `modification_indices(fit, data,

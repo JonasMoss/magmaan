@@ -270,6 +270,24 @@ Rcpp::List residual_summary_to_r(
   return out;
 }
 
+// A measures::StandardizedResiduals -> the R list shared by the NT and the
+// estimated-weight residual bindings (raw/cor/se/z matrices, SRMR, $summary).
+Rcpp::List standardized_residuals_to_r(
+    const magmaan::measures::StandardizedResiduals& r,
+    const std::vector<std::vector<std::string>>& ov_names) {
+  return Rcpp::List::create(
+      Rcpp::_["cov_raw"] = matrix_blocks_to_r(r.cov_raw, ov_names, true),
+      Rcpp::_["cov_cor"] = matrix_blocks_to_r(r.cov_cor, ov_names, true),
+      Rcpp::_["cov_se"] = matrix_blocks_to_r(r.cov_se, ov_names, true),
+      Rcpp::_["cov_z"] = matrix_blocks_to_r(r.cov_z, ov_names, true),
+      Rcpp::_["mean_raw"] = vector_blocks_to_r(r.mean_raw, ov_names),
+      Rcpp::_["mean_cor"] = vector_blocks_to_r(r.mean_cor, ov_names),
+      Rcpp::_["mean_se"] = vector_blocks_to_r(r.mean_se, ov_names),
+      Rcpp::_["mean_z"] = vector_blocks_to_r(r.mean_z, ov_names),
+      Rcpp::_["srmr"] = r.srmr,
+      Rcpp::_["summary"] = residual_summary_to_r(r.summary));
+}
+
 const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
   using magmaan::optim::OptimStatus;
   return status == OptimStatus::Converged           ? "converged"
@@ -3648,25 +3666,7 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
   auto r_or = magmaan::measures::standardized_residuals(
       ctx.pt, ctx.rep, ctx.samp, est);
   if (!r_or.has_value()) stop_post(r_or.error());
-  return Rcpp::List::create(
-      Rcpp::_["cov_raw"] = matrix_blocks_to_r(r_or->cov_raw, ctx.rep.ov_names,
-                                              /*square_names=*/true),
-      Rcpp::_["cov_cor"] = matrix_blocks_to_r(r_or->cov_cor, ctx.rep.ov_names,
-                                              /*square_names=*/true),
-      Rcpp::_["cov_se"] = matrix_blocks_to_r(r_or->cov_se, ctx.rep.ov_names,
-                                             /*square_names=*/true),
-      Rcpp::_["cov_z"] = matrix_blocks_to_r(r_or->cov_z, ctx.rep.ov_names,
-                                            /*square_names=*/true),
-      Rcpp::_["mean_raw"] = vector_blocks_to_r(r_or->mean_raw,
-                                               ctx.rep.ov_names),
-      Rcpp::_["mean_cor"] = vector_blocks_to_r(r_or->mean_cor,
-                                               ctx.rep.ov_names),
-      Rcpp::_["mean_se"] = vector_blocks_to_r(r_or->mean_se,
-                                              ctx.rep.ov_names),
-      Rcpp::_["mean_z"] = vector_blocks_to_r(r_or->mean_z,
-                                             ctx.rep.ov_names),
-      Rcpp::_["srmr"] = r_or->srmr,
-      Rcpp::_["summary"] = residual_summary_to_r(r_or->summary));
+  return standardized_residuals_to_r(*r_or, ctx.rep.ov_names);
 }
 
 // measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`
@@ -4000,6 +4000,42 @@ magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
 }
 
 }  // namespace
+
+// measures_standardized_residuals_estimated_weight() — the estimated-weight
+// ("complete-sandwich") residual SE/z and $summary for a continuous LS fit. The
+// residual ACOV uses the Hall-Inoue infinitesimal-jackknife rows (with the
+// data-dependent-weight influence) instead of the NT projection. Continuous
+// GLS/WLS/ULS only; needs the fitting `data` (raw observations). Beyond lavaan.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_standardized_residuals_estimated_weight(
+    Rcpp::List fit, SEXP raw_data, SEXP weight = R_NilValue,
+    double conf_level = 0.90) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if ((fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) ||
+      (fit.containsElementNamed("mixed_ordinal") &&
+       Rcpp::as<bool>(fit["mixed_ordinal"]))) {
+    Rcpp::stop("magmaan: estimated_weight residuals are continuous-LS only "
+               "(GLS/WLS/ULS); not available for ordinal fits");
+  }
+  if (estimator == "ML" || estimator.empty() || estimator == "FIML") {
+    Rcpp::stop("magmaan: estimated_weight residuals need an estimated second-"
+               "stage weight (GLS/WLS); estimator '%s' carries none",
+               estimator.c_str());
+  }
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  auto wls = continuous_ls_weight(ctx, est, estimator, weight,
+                                  "estimated_weight residuals");
+  auto r_or =
+      magmaan::measures::frontier::standardized_residuals_estimated_weight(
+          ctx.pt, ctx.rep, ctx.samp, est, wls, raw,
+          continuous_ij_mode(estimator), {}, conf_level);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return standardized_residuals_to_r(*r_or, ctx.rep.ov_names);
+}
 
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_modification_indices_robust(

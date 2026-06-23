@@ -298,6 +298,25 @@ continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
                                       ContinuousLsIJWeightMode mode,
                                       frontier::DlsWeightOptions dls_opts = {});
 
+// Estimated-weight ("complete-sandwich") residual moment ACOV for a continuous
+// moment-quadratic fit, one block per group in the [μ ; vech σ] layout. The
+// residual r = s − σ(θ̂) has per-case influence function IF_r = M·Qᵀ − C·P with
+// the residual-maker Q = I − P·W (P = n_b·Δ_b·A⁻¹·Δ_bᵀ, A the pooled LS bread)
+// and the data-dependent-weight rows C = weight_correction; the ACOV is the
+// empirical covariance of those rows. With a fixed weight (C = 0) it collapses
+// to Q·(Γ̂_b/n_b)·Qᵀ, the empirical-Γ̂ analogue of the lavaan/`fill_residual_z`
+// NT residual ACOV. Feeds `measures::frontier::standardized_residuals_estimated_
+// weight`. Frontier: beyond lavaan, which uses the NT projector and Γ_NT.
+post_expected<std::vector<Eigen::MatrixXd>>
+continuous_ls_residual_acov_ij(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const data::SampleStats& samp,
+                               const Estimates& est,
+                               const gmm::Weight& weight,
+                               const data::RawData& raw,
+                               ContinuousLsIJWeightMode mode,
+                               frontier::DlsWeightOptions dls_opts = {});
+
 // Moment-metric sandwich for a continuous moment-quadratic (ULS/GLS/WLS/DWLS)
 // fit, evaluated at `est.theta` (which may belong to an augmented partable —
 // the robust modification-index path calls this at the freed-candidate null

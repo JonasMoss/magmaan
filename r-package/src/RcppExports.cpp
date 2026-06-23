@@ -1045,6 +1045,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// measures_standardized_residuals_estimated_weight
+Rcpp::List measures_standardized_residuals_estimated_weight(Rcpp::List fit, SEXP raw_data, SEXP weight, double conf_level);
+RcppExport SEXP _magmaan_measures_standardized_residuals_estimated_weight(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_standardized_residuals_estimated_weight(fit, raw_data, weight, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inference_modification_indices_robust
 Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances, bool estimated_weight);
 RcppExport SEXP _magmaan_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP estimated_weightSEXP) {
@@ -2629,6 +2643,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
+    {"_magmaan_measures_standardized_residuals_estimated_weight", (DL_FUNC) &_magmaan_measures_standardized_residuals_estimated_weight, 4},
     {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 11},
     {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},

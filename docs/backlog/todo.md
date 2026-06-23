@@ -757,6 +757,31 @@ oracle from `tests/tools/regen_robust_score.R`, and the advisory
   Jacobian) summary types are not — add if a consumer appears. Ordinal residual
   summaries are a separate object (`OrdinalMisspecFitMeasures`), left untouched.
 
+- **Done 2026-06-23 — estimated-weight ("complete-sandwich") standardized
+  residuals (frontier).** `measures::frontier::standardized_residuals_estimated_
+  weight` (new `measures::frontier` namespace) gives the residual SE/z and the
+  `$summary` inference an estimated-weight residual ACOV for continuous LS fits
+  (GLS/WLS/DWLS/DLS), instead of the NT projection + Γ_NT that lavaan and the NT
+  path use. The residual influence function is `IF_r = M·Qᵀ − C·P` (residual-
+  maker `Q = I − P·W`, `P = n_b·Δ_b·A⁻¹·Δ_bᵀ`, `A` the pooled LS bread, `C =
+  weight_correction` the Hall-Inoue IF(Ŵ) rows); the ACOV is the empirical
+  covariance of those rows. New core primitive `estimate::continuous_ls_residual_
+  acov_ij` reuses the Stage-A `build_continuous_ls_ij_blocks`; `fill_residual_z`'s
+  standardization was factored into a shared `apply_residual_standardization` the
+  override path also calls. With a fixed weight (`C = 0`) it collapses to
+  `Q·(Γ̂/n)·Qᵀ`, gated EXACTLY in `tests/unit/residuals_test.cpp` against a hand-
+  built projector (1e-8); a DWLS weight-correction shift test isolates the `C`
+  term. R: `residuals(fit, standardized = TRUE, estimated_weight = TRUE, data =)`
+  / `lav_residuals(fit, estimated_weight = TRUE, data =)`
+  (`r-package/examples/estimated_weight_residuals.R`); ML/FIML/ordinal reject the
+  flag. Advisory bootstrap MC `tests/checks/residual_estimated_weight/` confirms
+  the calibration: under t₆ heavy tails the estimated-weight SE / bootstrap-SD
+  ratio ≈ 1.02 while the NT ratio ≈ 0.68 (NT under-states the residual
+  variability by ~⅓). Open follow-ups: multi-group couples blocks only through
+  the shared bread (per-block meat, the lavaan residual-ACOV convention);
+  mixed-ordinal / categorical estimated-weight residuals are not wired; these
+  primitives ride the pending `<domain>::frontier` retier below.
+
 ## Local hardening and validation tooling
 
 Local-first safety tooling for an AI-assisted repo. Design note:

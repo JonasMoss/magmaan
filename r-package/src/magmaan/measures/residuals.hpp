@@ -8,9 +8,11 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::measures {
@@ -117,5 +119,26 @@ post_expected<StandardizedResiduals>
 standardized_residuals(spec::LatentStructure pt, const model::MatrixRep& rep,
                        const SampleStats& samp, const Estimates& est,
                        double conf_level = 0.90);
+
+namespace frontier {
+
+// Estimated-weight ("complete-sandwich") standardized residuals for a continuous
+// moment-quadratic (GLS/WLS/DWLS/DLS) fit. The residual SE/z and `$summary`
+// inference use the Hall-Inoue infinitesimal-jackknife residual ACOV, which
+// carries the data-dependent-weight influence IF(Ŵ), instead of the NT
+// projection + Γ_NT that `standardized_residuals` uses. `weight` is the fixed
+// estimation weight (used by `mode == Fixed`); the re-estimating modes rebuild
+// the second-stage weight from `raw` and add its influence. Beyond lavaan;
+// reduces to the empirical-Γ̂ NT residual ACOV when the weight is fixed.
+post_expected<StandardizedResiduals>
+standardized_residuals_estimated_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Estimates& est,
+    const estimate::gmm::Weight& weight, const data::RawData& raw,
+    estimate::ContinuousLsIJWeightMode mode,
+    estimate::frontier::DlsWeightOptions dls_opts = {},
+    double conf_level = 0.90);
+
+}  // namespace frontier
 
 }  // namespace magmaan::measures

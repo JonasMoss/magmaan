@@ -2484,6 +2484,73 @@ continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
   return weighted_param_space_sandwich_ij(asmbl->blocks);
 }
 
+post_expected<std::vector<Eigen::MatrixXd>>
+continuous_ls_residual_acov_ij(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const data::SampleStats& samp,
+                               const Estimates& est,
+                               const gmm::Weight& weight,
+                               const data::RawData& raw,
+                               ContinuousLsIJWeightMode mode,
+                               frontier::DlsWeightOptions dls_opts) {
+  constexpr const char* who = "continuous_ls_residual_acov_ij";
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto asmbl = build_continuous_ls_ij_blocks(pt, rep, samp, est, weight, raw,
+                                             mode, dls_opts, who);
+  if (!asmbl.has_value()) return std::unexpected(asmbl.error());
+  const auto& blocks = asmbl->blocks;
+  if (blocks.empty()) return std::vector<Eigen::MatrixXd>{};
+
+  // Pooled least-squares bread A = Σ_b n_b·Δ_bᵀ W_b Δ_b (full free-θ). This is
+  // the Gauss-Newton information whose inverse is the moment→θ̂ projection
+  // coefficient — the SAME bread for a fixed or an estimated weight (the weight
+  // estimation enters only through the per-case `weight_correction` rows, not
+  // the projector). It reduces to the NT residual projector when W = Γ_NT(Σ)⁻¹.
+  const Eigen::Index q = blocks.front().jacobian.cols();
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(q, q);
+  for (const auto& blk : blocks) {
+    const double n_b = static_cast<double>(blk.n_obs);
+    A.noalias() +=
+        n_b * (blk.jacobian.transpose() * blk.weight * blk.jacobian);
+  }
+  auto V_or = inverse_sym_pd(A, "continuous-LS residual bread A");
+  if (!V_or.has_value()) return std::unexpected(V_or.error());
+  const Eigen::MatrixXd& V = *V_or;
+
+  // Per-block residual ACOV from the per-case residual influence functions
+  //   IF_r,i = M_i − V_i·P,   V_i = M_i·W + C_i,   P = n_b·Δ_b V Δ_bᵀ,
+  // i.e. R = M·Qᵀ − C·P with the residual-maker Q = I − P·W. The residual ACOV
+  // is the empirical covariance of those rows, Σ_i IF_r,i IF_r,iᵀ / n_b², which
+  // collapses to Q·(Γ̂_b/n_b)·Qᵀ when the weight is fixed (C = 0). Each block is
+  // standardized per-group, matching lavaan's per-group residual ACOV
+  // convention (cross-block parameter coupling enters only through the shared V).
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(blocks.size());
+  for (const auto& blk : blocks) {
+    const Eigen::MatrixXd& M = blk.moment_influence;  // n_b × m_b (centered)
+    const Eigen::MatrixXd& W = blk.weight;            // m_b × m_b
+    const Eigen::MatrixXd& D = blk.jacobian;          // m_b × q
+    const double n_b = static_cast<double>(blk.n_obs);
+    if (n_b <= 0.0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": non-positive block n_obs"));
+    }
+    const Eigen::Index m = D.rows();
+    const Eigen::MatrixXd P = n_b * (D * V * D.transpose());  // m × m
+    const Eigen::MatrixXd Qt =
+        Eigen::MatrixXd::Identity(m, m) - W * P;  // Qᵀ = I − W·P
+    Eigen::MatrixXd R = M * Qt;                   // n_b × m, = M·Qᵀ
+    if (blk.weight_correction.size() != 0) {
+      R.noalias() -= blk.weight_correction * P;   // − C·P
+    }
+    Eigen::MatrixXd acov = (R.transpose() * R) / (n_b * n_b);
+    out.push_back(0.5 * (acov + acov.transpose()));
+  }
+  return out;
+}
+
 post_expected<robust::ParamSpaceSandwich>
 continuous_ls_param_space_sandwich(spec::LatentStructure pt,
                                    const model::MatrixRep& rep,
