@@ -821,11 +821,22 @@ is now its Gram. Remaining:
   and pointing `fit_measures()` at it. Path-model CFI/TLI now match lavaan to
   machine precision; the case-influence example and fixture use all four
   measures; full `just r-examples` clean.
-- **Multi-group and robust-regime extensions.** `case_rerun` is single-group
-  only (per-group raw blocks lose the original interleaved row order needed for
-  global case ids). `est_change` standardizes by the leave-one-out naive-ML
-  (lavaan `se="standard"`) covariance; matching semfindr on a robust-SE fit
-  means per-refit robust vcov (`vcov(refit, regime=…, data=refit$raw_data)`).
+- **Done 2026-06-23 — multiple-group `case_rerun` / `est_change`.** Pass the
+  original `data` frame to `case_rerun(fit, data = …)`; it refits on `data[-i, ]`
+  through the canonical `df_to_data` pipeline for any number of groups (case ids
+  = data rows, as in semfindr). Columns are suffixed with the group *label*
+  (magmaan and lavaan order groups differently — magmaan by factor level, lavaan
+  by data appearance — so a label keeps comparisons tool-independent).
+  `mahalanobis_rerun(fit, data)` computes per-group distances placed at the
+  original rows. Gated vs semfindr in `case_influence_semfindr.R` (2-group HS
+  CFA, `meanstructure = FALSE` to match): est_change_raw 7e-6, est_change 5e-5,
+  fit_measures_change 2e-9, Mahalanobis exact. The one-step `*_approx` engine is
+  still single-group (errors clearly on multigroup; the block-stacked scores
+  would need original-row reordering — extend if needed).
+- **Robust-regime `est_change`.** `est_change` standardizes by the leave-one-out
+  naive-ML (lavaan `se="standard"`) covariance; matching semfindr on a robust-SE
+  fit means computing the per-refit robust vcov
+  (`robust_se_raw_fit(refit, refit$raw_data, bread)`). Add an `se=` selector.
 - **Misspecification-robust case influence (frontier, deferred).** The casewise
   dual of the estimated-weight (complete-sandwich) SE: the per-case
   data-dependent-weight meat term `Δ'W'_d`. Ties to `papers/estimated-weight-se`

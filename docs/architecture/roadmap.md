@@ -1702,7 +1702,9 @@ stop rather than any usable non-error return.
 - **Case-level influence diagnostics** (exact leave-one-out engine; semfindr
   parity) landed 2026-06-23 as pure-R `r-package/R/case_influence.R`:
   `case_rerun()` (drop one case, down-date the sample statistics, warm-started
-  refit; single-group continuous ML/ULS/GLS), then `est_change_raw()` (raw or
+  refit; continuous ML/ULS/GLS, single- or multiple-group — the latter by
+  passing the original `data` frame, with group-label-suffixed columns), then
+  `est_change_raw()` (raw or
   std.all DFBETA), `est_change()` (DFTHETAS standardized by the leave-one-out SE
   plus the generalized Cook's distance `gcd`), `fit_measures_change()`, and
   `mahalanobis_rerun()`. It reuses existing primitives only (`fit_ml`/`fit_uls`/
