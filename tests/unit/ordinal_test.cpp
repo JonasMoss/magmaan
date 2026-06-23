@@ -4136,6 +4136,53 @@ TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) la
   CHECK(crmr_fixed->stat == doctest::Approx(crmr->stat).epsilon(1e-12));
   CHECK(crmr_fixed->k == crmr->k);
 
+  auto cfi = magmaan::estimate::mixed_ordinal_cfi_tli_misspec_inference(
+      *pt, *mr, *stats, *fit);
+  auto cfi_fixed = magmaan::estimate::mixed_ordinal_cfi_tli_misspec_inference(
+      *pt, *mr, *stats, *fit,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE_MESSAGE(cfi.has_value(),
+      "mixed CFI/TLI inference failed: "
+          << (cfi.has_value() ? "" : cfi.error().detail));
+  REQUIRE_MESSAGE(cfi_fixed.has_value(),
+      "mixed fixed-weight CFI/TLI inference failed: "
+          << (cfi_fixed.has_value() ? "" : cfi_fixed.error().detail));
+  CHECK(cfi->stat_user == doctest::Approx(prof->chisq_standard).epsilon(1e-9));
+  CHECK(cfi->df_user == prof->df);
+  CHECK(cfi->stat_baseline ==
+        doctest::Approx(fm->baseline.chi2).epsilon(1e-9));
+  CHECK(cfi->df_baseline == fm->baseline.df);
+  CHECK(cfi->df_baseline == 6);
+  CHECK(cfi->delta_user ==
+        doctest::Approx(cfi->stat_user - cfi->gendf_user).epsilon(1e-12));
+  CHECK(cfi->delta_baseline ==
+        doctest::Approx(cfi->stat_baseline - cfi->gendf_baseline).epsilon(1e-12));
+  CHECK(cfi->delta_baseline > 0.0);
+  CHECK(cfi->cfi >= 0.0);
+  CHECK(cfi->cfi <= 1.0);
+  CHECK(cfi->cfi_ci_lower <= cfi->cfi_ci_upper);
+  CHECK(cfi->cfi_ci_lower >= 0.0);
+  CHECK(cfi->cfi_ci_upper <= 1.0);
+  CHECK(std::isfinite(cfi->var_cfi));
+  CHECK(std::isfinite(cfi->var_user));
+  CHECK(std::isfinite(cfi->var_baseline));
+  CHECK(std::isfinite(cfi->cov_user_baseline));
+  CHECK(cfi->var_cfi >= 0.0);
+  CHECK(cfi->var_user >= 0.0);
+  CHECK(cfi->var_baseline >= 0.0);
+  if (cfi->gendf_user > 0.0) {
+    const double r = cfi->delta_user / cfi->delta_baseline;
+    const double cc = cfi->gendf_baseline / cfi->gendf_user;
+    CHECK(cfi->tli == doctest::Approx(1.0 - cc * r).epsilon(1e-10));
+    CHECK(cfi->var_tli == doctest::Approx(cc * cc * cfi->var_cfi).epsilon(1e-10));
+    CHECK(std::isfinite(cfi->tli));
+  }
+  CHECK(cfi_fixed->stat_user == doctest::Approx(cfi->stat_user).epsilon(1e-12));
+  CHECK(cfi_fixed->stat_baseline ==
+        doctest::Approx(cfi->stat_baseline).epsilon(1e-12));
+  CHECK(cfi_fixed->fixed_weight);
+
   auto no_raw = *stats;
   no_raw.raw_data.clear();
   auto missing = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(

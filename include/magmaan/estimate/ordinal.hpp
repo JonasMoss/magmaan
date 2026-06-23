@@ -733,9 +733,7 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
 // Mixed continuous/ordinal counterpart of `ordinal_rmsea_misspec_inference`.
 // Reuses `mixed_ordinal_dwls_profile_rmsea` for the profile Hessian, signed
 // trace, spectrum, and joint NACOV of `(u, gamma)`, then adds the same envelope-
-// score normal-theory CI for the DWLS discrepancy. This is the first mixed slice
-// of the misspec fit-measure bundle: no mixed CRMR/SRMR or CFI/TLI convention is
-// implied here.
+// score normal-theory CI for the DWLS discrepancy.
 post_expected<OrdinalRmseaInference>
 mixed_ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,
@@ -764,6 +762,22 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                   bool estimated_weight = true,
                                   double conf_level = 0.90,
                                   double eig_tol = 1e-10);
+
+// Mixed continuous/ordinal counterpart of `ordinal_cfi_tli_misspec_inference`.
+// The baseline is the same mixed independence model used by
+// `fit_measures_mixed_ordinal`: free mixed marginal rows (thresholds,
+// continuous means, continuous variances) and zero association rows. The user
+// and baseline statistics share the same extended `(u, gamma)` NACOV.
+post_expected<OrdinalIncrementalFitInference>
+mixed_ordinal_cfi_tli_misspec_inference(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    bool estimated_weight = true,
+    double conf_level = 0.90,
+    double eig_tol = 1e-10);
 
 // Consolidated estimated-weight misspecification fit table (RMSEA + CRMR/SRMR +
 // CFI/TLI with CIs) for an all-ordinal DWLS fit. Delegates to the per-index

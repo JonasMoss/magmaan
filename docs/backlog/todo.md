@@ -691,13 +691,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     inference over the existing standardized mixed association residual
     convention (continuous-continuous and polyserial residuals divided by
     observed standard-deviation scales, with scale derivatives carried in the
-    sandwich), exposed through `magmaan_core$mixed_ordinal_crmr_misspec`. What
-    remains is the consolidated reportable surface analogous to all-ordinal
-    `ordinal_fit_measures_misspec_inference`: mixed CFI/TLI once the
-    independence-baseline convention stays coherent, then an R entry point that
-    either accepts `magmaan_mixed_ordinal_data` in `fit_measures_misspec()` or
-    grows a clearly named mixed companion; do not silently route mixed fits
-    through the all-ordinal ordinal-stats API.
+    sandwich), exposed through `magmaan_core$mixed_ordinal_crmr_misspec`. Third
+    slice **landed 2026-06-23**:
+    `mixed_ordinal_cfi_tli_misspec_inference` adds incremental CFI/TLI inference
+    using the mixed DWLS independence-baseline convention, exposed through
+    `magmaan_core$mixed_ordinal_cfi_tli_misspec`. What remains is the consolidated
+    reportable surface analogous to all-ordinal
+    `ordinal_fit_measures_misspec_inference`: an R entry point that either accepts
+    `magmaan_mixed_ordinal_data` in `fit_measures_misspec()` or grows a clearly
+    named mixed companion; do not silently route mixed fits through the
+    all-ordinal ordinal-stats API.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a

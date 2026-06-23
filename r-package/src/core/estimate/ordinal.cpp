@@ -7359,6 +7359,217 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<OrdinalIncrementalFitInference>
+mixed_ordinal_cfi_tli_misspec_inference(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    OrdinalParameterization parameterization,
+    bool estimated_weight,
+    double conf_level,
+    double eig_tol) {
+  if (!(conf_level > 0.0 && conf_level < 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_cfi_tli_misspec_inference: conf_level must lie in (0,1)"));
+  }
+
+  spec::LatentStructure pt_user = pt;
+  auto prof_or = mixed_ordinal_dwls_profile_rmsea(
+      std::move(pt_user), rep, stats, est, parameterization, eig_tol);
+  if (!prof_or.has_value()) return std::unexpected(prof_or.error());
+  const WeightedProfileRMSEAResult& prof = *prof_or;
+
+  std::vector<Eigen::Index> m_blocks(stats.R.size());
+  std::vector<Eigen::Index> nmarg_blocks(stats.R.size());
+  std::vector<Eigen::Index> nassoc_blocks(stats.R.size());
+  Eigen::Index M = 0, nmarg_total = 0, nassoc_total = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index pb = stats.R[b].rows();
+    Eigen::Index n_cont = 0;
+    for (const std::int32_t flag : stats.ordered[b])
+      if (flag == 0) ++n_cont;
+    nmarg_blocks[b] = stats.thresholds[b].size() + 2 * n_cont;
+    nassoc_blocks[b] = pb * (pb - 1) / 2;
+    m_blocks[b] = stats.moments[b].size();
+    if (nmarg_blocks[b] + nassoc_blocks[b] != m_blocks[b]) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_cfi_tli_misspec_inference: mixed moment layout "
+          "mismatch"));
+    }
+    M += m_blocks[b];
+    nmarg_total += nmarg_blocks[b];
+    nassoc_total += nassoc_blocks[b];
+  }
+  if (nassoc_total <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_cfi_tli_misspec_inference: no association moments"));
+  }
+  if (prof.profile_hessian.rows() != 2 * M || prof.gamma.rows() != 2 * M) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_cfi_tli_misspec_inference: unexpected profile dimension"));
+  }
+
+  if (auto pr = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !pr.has_value()) {
+    return std::unexpected(fit_to_post(pr.error()));
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_cfi_tli_misspec_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_cfi_tli_misspec_inference: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const double N = static_cast<double>(prof.ntotal);
+  Eigen::VectorXd g_u = Eigen::VectorXd::Zero(2 * M);
+  Eigen::VectorXd g_b = Eigen::VectorXd::Zero(2 * M);
+  std::vector<WeightedEstimatedWeightProfileBlock> bblocks;
+  bblocks.reserve(stats.R.size());
+  const Eigen::MatrixXd K_b =
+      Eigen::MatrixXd::Identity(nmarg_total, nmarg_total);
+  Eigen::MatrixXd B_b = Eigen::MatrixXd::Zero(nmarg_total, nmarg_total);
+  double weighted_F_b = 0.0;
+  Eigen::Index xoff = 0, margoff = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = m_blocks[b];
+    const Eigen::Index nmarg = nmarg_blocks[b];
+    const Eigen::Index nassoc = nassoc_blocks[b];
+    const Eigen::VectorXd gamma_b = stats.NACOV[b].diagonal();
+    const Eigen::MatrixXd& W_b = stats.W_dwls[b];
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) / N);
+
+    const Eigen::VectorXd d_ub =
+        mixed_model_moments(stats, *layout_or, eval->moments, est.theta, b,
+                            parameterization) -
+        stats.moments[b];
+    if (d_ub.size() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_cfi_tli_misspec_inference: user residual length "
+          "mismatch"));
+    }
+    g_u.segment(xoff, mb) = sw * (-2.0 * (W_b * d_ub));
+    g_u.segment(xoff + mb, mb) =
+        sw * (-(d_ub.array().square() / gamma_b.array().square()).matrix());
+
+    Eigen::VectorXd d_bb = Eigen::VectorXd::Zero(mb);
+    d_bb.tail(nassoc) = -stats.moments[b].tail(nassoc);
+    g_b.segment(xoff, mb) = sw * (-2.0 * (W_b * d_bb));
+    g_b.segment(xoff + mb, mb) =
+        sw * (-(d_bb.array().square() / gamma_b.array().square()).matrix());
+
+    Eigen::MatrixXd D_bb = Eigen::MatrixXd::Zero(mb, nmarg_total);
+    D_bb.block(0, margoff, nmarg, nmarg).setIdentity();
+    B_b.block(margoff, margoff, nmarg, nmarg).diagonal() =
+        (sw * sw * gamma_b.head(nmarg).array().inverse()).matrix();
+    weighted_F_b += static_cast<double>(stats.n_obs[b]) *
+                    (d_bb.transpose() * W_b * d_bb).value();
+    bblocks.push_back(WeightedEstimatedWeightProfileBlock{
+        .jacobian = D_bb,
+        .weight_diag = gamma_b,
+        .residual = d_bb,
+        .gamma = prof.gamma.block(xoff, xoff, 2 * mb, 2 * mb),
+        .n_obs = stats.n_obs[b]});
+    xoff += 2 * mb;
+    margoff += nmarg;
+  }
+  auto prof_b_or = weighted_moment_profile_rmsea_estimated_weight(
+      bblocks, K_b, weighted_F_b / N, B_b, stats.R.size(), eig_tol);
+  if (!prof_b_or.has_value()) return std::unexpected(prof_b_or.error());
+  const WeightedProfileRMSEAResult& prof_b = *prof_b_or;
+
+  Eigen::MatrixXd Gamma_x = prof.gamma;
+  double biasU = prof.trace_signed;
+  double biasB = prof_b.trace_signed;
+  if (!estimated_weight) {
+    zero_extended_gamma_channel(Gamma_x, m_blocks);
+    auto su = robust::compute_profile_contrast_spectrum(prof.profile_hessian,
+                                                        Gamma_x, eig_tol);
+    if (!su.has_value()) return std::unexpected(su.error());
+    auto sb = robust::compute_profile_contrast_spectrum(prof_b.profile_hessian,
+                                                        Gamma_x, eig_tol);
+    if (!sb.has_value()) return std::unexpected(sb.error());
+    biasU = su->trace_signed;
+    biasB = sb->trace_signed;
+  }
+
+  OrdinalIncrementalFitInference out;
+  out.fixed_weight = !estimated_weight;
+  out.stat_user = prof.chisq_standard;
+  out.stat_baseline = prof_b.chisq_standard;
+  out.gendf_user = biasU;
+  out.gendf_baseline = biasB;
+  out.delta_user = out.stat_user - biasU;
+  out.delta_baseline = out.stat_baseline - biasB;
+  out.df_user = prof.df;
+  out.df_baseline = prof_b.df;
+  out.warnings = prof.warnings;
+  for (const auto& w : prof_b.warnings) out.warnings.push_back(w);
+
+  const Eigen::VectorXd Gx_gu = Gamma_x * g_u;
+  const Eigen::VectorXd Gx_gb = Gamma_x * g_b;
+  out.var_user = std::max(0.0, N * g_u.dot(Gx_gu));
+  out.var_baseline = std::max(0.0, N * g_b.dot(Gx_gb));
+  out.cov_user_baseline = N * g_u.dot(Gx_gb);
+
+  const double z = inv_normal_cdf(0.5 * (1.0 + conf_level));
+  const double db = out.delta_baseline;
+  if (!(db > 0.0)) {
+    out.cfi = 1.0;
+    out.tli = std::numeric_limits<double>::quiet_NaN();
+    out.cfi_ci_lower = out.cfi_ci_upper =
+        std::numeric_limits<double>::quiet_NaN();
+    out.tli_ci_lower = out.tli_ci_upper =
+        std::numeric_limits<double>::quiet_NaN();
+    out.warnings.emplace_back(
+        "mixed_ordinal_cfi_tli_misspec_inference: baseline noncentrality is "
+        "non-positive (independence model fits); CFI set to 1, TLI/intervals "
+        "undefined");
+    return out;
+  }
+
+  const double r = out.delta_user / db;
+  out.var_cfi = std::max(0.0,
+      (out.var_user - 2.0 * r * out.cov_user_baseline +
+       r * r * out.var_baseline) / (db * db));
+  out.cfi = std::clamp(1.0 - r, 0.0, 1.0);
+  const double sd_cfi = std::sqrt(out.var_cfi);
+  out.cfi_ci_lower = std::clamp(1.0 - r - z * sd_cfi, 0.0, 1.0);
+  out.cfi_ci_upper = std::clamp(1.0 - r + z * sd_cfi, 0.0, 1.0);
+  if (out.delta_user <= 0.0) {
+    out.warnings.emplace_back(
+        "mixed_ordinal_cfi_tli_misspec_inference: user noncentrality is "
+        "non-positive (near-exact fit); CFI on the boundary, normal interval "
+        "approximate");
+  }
+
+  if (biasU > 0.0) {
+    const double c = biasB / biasU;
+    out.tli = 1.0 - c * r;
+    out.var_tli = c * c * out.var_cfi;
+    const double sd_tli = std::sqrt(out.var_tli);
+    out.tli_ci_lower = out.tli - z * sd_tli;
+    out.tli_ci_upper = out.tli + z * sd_tli;
+  } else {
+    out.tli = std::numeric_limits<double>::quiet_NaN();
+    out.var_tli = std::numeric_limits<double>::quiet_NaN();
+    out.tli_ci_lower = out.tli_ci_upper =
+        std::numeric_limits<double>::quiet_NaN();
+    out.warnings.emplace_back(
+        "mixed_ordinal_cfi_tli_misspec_inference: user generalized df is "
+        "non-positive; TLI undefined");
+  }
+  return out;
+}
+
 post_expected<OrdinalMisspecFitMeasures>
 ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
                                        const model::MatrixRep& rep,
