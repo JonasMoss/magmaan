@@ -4,21 +4,27 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <random>
 #include <sstream>
 #include <string>
 
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
 
 #include <nlohmann/json.hpp>
 
 #include <cmath>
 
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/measures/residuals.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/build.hpp"
 
 namespace {
@@ -43,6 +49,50 @@ magmaan::data::SampleStats load_hs_samp() {
   samp.S = {S};
   samp.n_obs = {j["n_obs"].get<std::int64_t>()};
   return samp;
+}
+
+// A fixed 4-indicator population covariance with one extra residual covariance,
+// for the estimated-weight frontier residual tests.
+Eigen::Matrix4d four_indicator_cov() {
+  Eigen::Vector4d lambda;  lambda << 1.0, 0.8, 0.7, 0.9;
+  Eigen::Vector4d theta;   theta  << 0.6, 0.7, 0.8, 0.5;
+  Eigen::Matrix4d S =
+      lambda * lambda.transpose() * 1.4 + theta.asDiagonal().toDenseMatrix();
+  S(1, 0) += 0.18;
+  S(0, 1) = S(1, 0);
+  return S;
+}
+
+// Heavy-tailed multivariate-t with covariance ≈ Sigma ⇒ Γ̂ ≠ Γ_NT.
+Eigen::MatrixXd mvt_sample(std::mt19937& rng, Eigen::Index n,
+                           const Eigen::MatrixXd& Sigma, double df) {
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const Eigen::Index p = Sigma.rows();
+  std::normal_distribution<double> z(0.0, 1.0);
+  std::chi_squared_distribution<double> chi(df);
+  const double scale = std::sqrt((df - 2.0) / df);
+  Eigen::MatrixXd X(n, p);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    Eigen::VectorXd zi(p);
+    for (Eigen::Index j = 0; j < p; ++j) zi(j) = z(rng);
+    const double w = chi(rng) / df;
+    X.row(i) = (scale * (L * zi) / std::sqrt(w)).transpose();
+  }
+  return X;
+}
+
+struct CfaHandles {
+  magmaan::spec::LatentStructure pt;
+  magmaan::model::MatrixRep rep;
+};
+
+CfaHandles build_4indicator_cfa() {
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);              REQUIRE(pt.has_value());
+  auto rep = magmaan::model::build_matrix_rep(*pt); REQUIRE(rep.has_value());
+  return CfaHandles{std::move(*pt), std::move(*rep)};
 }
 
 }  // namespace
@@ -238,6 +288,126 @@ TEST_CASE("standardized_residuals: $summary mean/total match lavaan with means")
   CHECK(sm.mean.srmr == doctest::Approx(0.0).epsilon(1e-8));
   CHECK(!std::isfinite(sm.mean.srmr_se));
   CHECK(sm.mean.usrmr_closefit_h0 == doctest::Approx(0.05));
+}
+
+TEST_CASE("frontier estimated-weight residuals: Fixed mode == hand-built "
+          "Q·(Γ̂/n)·Qᵀ projection") {
+  // With a fixed weight (no IF(Ŵ)) the estimated-weight residual ACOV must equal
+  // the residual-maker Q = I − Δ(Δ'WΔ)⁻¹Δ'W applied to the empirical moment
+  // ACOV Γ̂/n: acov_res = Q·(Γ̂/n)·Qᵀ. Re-derive that here from primitives and
+  // check the standardized residual SE matches. This anchors the projector and
+  // the IJ residual assembly exactly (no mean structure, single group).
+  auto h = build_4indicator_cfa();
+  std::mt19937 rng(20260623u);
+  const Eigen::Matrix4d Sigma = four_indicator_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvt_sample(rng, 2000, Sigma, 8.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  auto G = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(G.has_value());
+  Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
+  for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
+  magmaan::estimate::gmm::Weight weight{W_dwls};
+
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
+  REQUIRE(est.has_value());
+
+  auto ew = magmaan::measures::frontier::standardized_residuals_estimated_weight(
+      h.pt, h.rep, *samp, *est, weight, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::Fixed);
+  REQUIRE(ew.has_value());
+  REQUIRE(ew->cov_se.size() == 1);
+
+  // Independent Q·(Γ̂/n)·Qᵀ in the vech(cov) moment metric.
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto Delta = ev->dsigma_dtheta(est->theta);
+  REQUIRE(Delta.has_value());
+  const Eigen::MatrixXd& D = *Delta;            // pstar × q
+  const Eigen::MatrixXd A = D.transpose() * W_dwls * D;
+  const Eigen::MatrixXd Ainv = A.ldlt().solve(
+      Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+  const Eigen::Index m = D.rows();
+  const Eigen::MatrixXd Q =
+      Eigen::MatrixXd::Identity(m, m) - D * Ainv * D.transpose() * W_dwls;
+  const double n = static_cast<double>(samp->n_obs[0]);
+  const Eigen::MatrixXd acov_res = Q * (*G / n) * Q.transpose();
+
+  const Eigen::Index p = ew->cov_se[0].rows();
+  auto vech_idx = [](Eigen::Index pp, Eigen::Index r, Eigen::Index c) {
+    return c * pp - (c * (c - 1)) / 2 + (r - c);
+  };
+  const Eigen::MatrixXd& S = samp->S[0];
+  for (Eigen::Index c = 0; c < p; ++c)
+    for (Eigen::Index r = c; r < p; ++r) {
+      const Eigen::Index row = vech_idx(p, r, c);
+      const double se_ref =
+          std::sqrt(acov_res(row, row) / (S(r, r) * S(c, c)));
+      CHECK(ew->cov_se[0](r, c) ==
+            doctest::Approx(se_ref).epsilon(1e-8));
+    }
+
+  // The $summary cov SRMR matches the deterministic SRMR; inference is finite.
+  REQUIRE(ew->summary.size() == 1);
+  CHECK(ew->summary[0].cov.srmr == doctest::Approx(ew->srmr).epsilon(1e-10));
+  CHECK(std::isfinite(ew->summary[0].cov.srmr_se));
+  CHECK(std::isfinite(ew->summary[0].cov.usrmr));
+}
+
+TEST_CASE("frontier estimated-weight residuals: DWLS weight correction shifts "
+          "the residual SE under non-normality") {
+  // Same DWLS weight, same projection, same empirical Γ̂ meat: the ONLY
+  // difference between Fixed and SampleEmpiricalDwls is the data-dependent-weight
+  // term C = IF(Ŵ). On heavy-tailed data it must move the residual SE (and so
+  // the $summary), the residual-space analogue of the Stage-A MI shift.
+  auto h = build_4indicator_cfa();
+  std::mt19937 rng(20260623u);
+  const Eigen::Matrix4d Sigma = four_indicator_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvt_sample(rng, 4000, Sigma, 6.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  auto G = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(G.has_value());
+  Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
+  for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
+  magmaan::estimate::gmm::Weight weight{W_dwls};
+
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
+  REQUIRE(est.has_value());
+
+  auto fixed =
+      magmaan::measures::frontier::standardized_residuals_estimated_weight(
+          h.pt, h.rep, *samp, *est, weight, raw,
+          magmaan::estimate::ContinuousLsIJWeightMode::Fixed);
+  REQUIRE(fixed.has_value());
+  auto ew = magmaan::measures::frontier::standardized_residuals_estimated_weight(
+      h.pt, h.rep, *samp, *est, weight, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls);
+  REQUIRE(ew.has_value());
+
+  const Eigen::Index p = ew->cov_se[0].rows();
+  // The deterministic residual matrices are identical (same θ̂); only the ACOV
+  // (SE/z/summary) carries the weight correction.
+  for (Eigen::Index r = 0; r < p; ++r)
+    for (Eigen::Index c = 0; c < p; ++c)
+      CHECK(ew->cov_cor[0](r, c) ==
+            doctest::Approx(fixed->cov_cor[0](r, c)).epsilon(1e-10));
+
+  double max_abs_dse = 0.0;
+  for (Eigen::Index c = 0; c < p; ++c)
+    for (Eigen::Index r = c; r < p; ++r) {
+      CHECK(std::isfinite(ew->cov_se[0](r, c)));
+      max_abs_dse = std::max(max_abs_dse,
+                             std::abs(ew->cov_se[0](r, c) - fixed->cov_se[0](r, c)));
+    }
+  CHECK(max_abs_dse > 1e-4);
+  // The summary close-fit inference moves too.
+  CHECK(std::abs(ew->summary[0].cov.usrmr_se -
+                 fixed->summary[0].cov.usrmr_se) > 1e-6);
 }
 
 TEST_CASE("residuals: rejects a θ of the wrong size") {

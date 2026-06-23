@@ -1,0 +1,38 @@
+set shell := ["bash", "-uc"]
+
+root := "../../.."
+build_dir := "build"
+bin := build_dir / "residual_ew_verify"
+cxx := env_var_or_default("CXX", "clang++")
+
+# Build the optimized (non-sanitized) library the harness links against.
+lib:
+    cmake --build --preset opt --target magmaan
+
+eigen := env_var_or_default("EIGEN_INCLUDE", root / "build/fast/_deps/eigen3-src")
+opt := root / "build/opt"
+libs := opt / "libmagmaan.a " + opt / "libport.a " + opt / "libquadpack.a " + opt / "_deps/nlopt-build/libnlopt.a"
+
+# Eigen ABI defines MUST match cmake/MagmaanNoExceptNoRtti.cmake (Release set,
+# so no EIGEN_INITIALIZE_MATRICES_BY_NAN); EIGEN_MAX_ALIGN_BYTES is ABI-critical.
+eigen_defs := "-DNDEBUG -DEIGEN_NO_EXCEPTIONS=1 -DEIGEN_NO_AUTOMATIC_RESIZING=1 -DEIGEN_RUNTIME_NO_MALLOC=1 -DEIGEN_DONT_PARALLELIZE=1 -DEIGEN_MAX_ALIGN_BYTES=64"
+
+build: lib
+    mkdir -p {{build_dir}}
+    {{cxx}} -std=gnu++23 -O3 -march=native -g -fPIC -fno-exceptions -fno-rtti \
+      -fvisibility=hidden -fvisibility-inlines-hidden {{eigen_defs}} \
+      -I{{root}}/include -I{{root}}/src -isystem {{eigen}} \
+      residual_ew_verify.cpp -Wl,--start-group {{libs}} -Wl,--end-group -o {{bin}}
+
+# Fast smoke run.
+quick: build
+    mkdir -p results
+    {{bin}} --n=1500 --reps=300 --df=6 | tee results/quick.txt
+
+# Full run: heavier tails, many bootstrap reps.
+all: build
+    mkdir -p results
+    {{bin}} --n=3000 --reps=1500 --df=6 | tee results/latest.txt
+
+clean:
+    rm -rf {{build_dir}} results

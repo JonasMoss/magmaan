@@ -57,8 +57,21 @@ composite_weights <- function(fit, vcov) {
   magmaan_core$measures_composite_weights(fit, vcov)
 }
 
-residuals.magmaan_fit <- function(object, standardized = FALSE, ...) {
+# `estimated_weight = TRUE` (continuous GLS/WLS/ULS only) routes the residual
+# SE/z and `$summary` inference through the Hall-Inoue complete sandwich, which
+# carries the data-dependent-weight influence IF(W-hat) beyond lavaan's NT
+# projection; it needs the fitting `data` (raw observations).
+residuals.magmaan_fit <- function(object, standardized = FALSE,
+                                  estimated_weight = FALSE, data = NULL, ...) {
   if (isTRUE(standardized)) {
+    if (isTRUE(estimated_weight)) {
+      if (is.null(data)) {
+        stop("residuals(estimated_weight = TRUE): `data` (raw observations) ",
+             "is required")
+      }
+      return(magmaan_core$measures_standardized_residuals_estimated_weight(
+        object, raw_data_arg(object, data)))
+    }
     return(magmaan_core$measures_standardized_residuals(object))
   }
   magmaan_core$measures_residuals(object)
@@ -69,7 +82,17 @@ residuals.magmaan_fit <- function(object, standardized = FALSE, ...) {
 # (SRMR/USRMR with SE, exact-fit and close-fit z-tests, and a close-fit CI).
 # Equivalent to residuals(fit, standardized = TRUE); named for familiarity with
 # lavaan::lavResiduals(). `$summary` is a list of data frames, one per block.
-lav_residuals <- function(fit) {
+# `estimated_weight = TRUE` (continuous GLS/WLS/ULS) uses the complete
+# (Hall-Inoue) residual ACOV instead of the NT projection and needs `data`.
+lav_residuals <- function(fit, estimated_weight = FALSE, data = NULL) {
+  if (isTRUE(estimated_weight)) {
+    if (is.null(data)) {
+      stop("lav_residuals(estimated_weight = TRUE): `data` (raw observations) ",
+           "is required")
+    }
+    return(magmaan_core$measures_standardized_residuals_estimated_weight(
+      fit, raw_data_arg(fit, data)))
+  }
   magmaan_core$measures_standardized_residuals(fit)
 }
 

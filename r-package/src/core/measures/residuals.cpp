@@ -147,6 +147,103 @@ ResidualRms residual_rms(const Eigen::VectorXd& stats,
   return r;
 }
 
+// Standardize one block's residual moment ACOV (`acov_res`, [μ ; vech σ] layout,
+// already symmetrized, dims moment_rows = (has_mean?p:0)+p(p+1)/2) into the
+// correlation-metric residual SE/z matrices and the cor.bentler RMS `$summary`,
+// appending them to `out`. Shared by the NT residual path (`fill_residual_z`)
+// and the estimated-weight frontier path; assumes `out.cov_cor[b]` /
+// `out.mean_cor[b]` are already filled.
+void apply_residual_standardization(StandardizedResiduals& out, std::size_t b,
+                                    const Eigen::MatrixXd& S, bool has_mean,
+                                    const Eigen::MatrixXd& acov_res,
+                                    double conf_level) {
+  const Eigen::Index p = S.rows();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index cov_off = has_mean ? p : 0;
+  const Eigen::Index moment_rows = (has_mean ? p : 0) + pstar;
+
+  Eigen::MatrixXd cov_se = Eigen::MatrixXd::Zero(p, p);
+  Eigen::MatrixXd cov_z = Eigen::MatrixXd::Zero(p, p);
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      const Eigen::Index row = cov_off + vech_index(p, r, c);
+      const double denom = std::sqrt(S(r, r) * S(c, c));
+      const double scale = (denom != 0.0) ? 1.0 / denom : 0.0;
+      const double var = scale * scale * acov_res(row, row);
+      const double se = (var >= 0.0)
+          ? std::sqrt(var)
+          : std::numeric_limits<double>::quiet_NaN();
+      const double z = residual_z(out.cov_cor[b](r, c), se);
+      cov_se(r, c) = se;
+      cov_z(r, c) = z;
+      if (r != c) {
+        cov_se(c, r) = se;
+        cov_z(c, r) = z;
+      }
+    }
+  }
+  out.cov_se.push_back(std::move(cov_se));
+  out.cov_z.push_back(std::move(cov_z));
+
+  if (has_mean) {
+    Eigen::VectorXd mean_se(p);
+    Eigen::VectorXd mean_z(p);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      const double scale = (S(i, i) != 0.0) ? 1.0 / std::sqrt(S(i, i)) : 0.0;
+      const double var = scale * scale * acov_res(i, i);
+      const double se = (var >= 0.0)
+          ? std::sqrt(var)
+          : std::numeric_limits<double>::quiet_NaN();
+      mean_se(i) = se;
+      mean_z(i) = residual_z(out.mean_cor[b](i), se);
+    }
+    out.mean_se.push_back(std::move(mean_se));
+    out.mean_z.push_back(std::move(mean_z));
+  } else {
+    out.mean_se.emplace_back();
+    out.mean_z.emplace_back();
+  }
+
+  // lavResiduals(fit)$summary — the cor.bentler RMS family. Scale the raw-metric
+  // residual ACOV into the correlation metric by a diagonal congruence
+  // (Ogasawara 2001 eq. 13): a vech(cov) row (r,c) by 1/√(s_rr·s_cc), a mean row
+  // i by 1/√(s_ii). The standardized residuals are the STATS the RMS averages.
+  Eigen::VectorXd gg(moment_rows);
+  if (has_mean) {
+    for (Eigen::Index i = 0; i < p; ++i)
+      gg(i) = (S(i, i) > 0.0) ? 1.0 / std::sqrt(S(i, i)) : 0.0;
+  }
+  for (Eigen::Index c = 0; c < p; ++c)
+    for (Eigen::Index r = c; r < p; ++r) {
+      const double denom = std::sqrt(S(r, r) * S(c, c));
+      gg(cov_off + vech_index(p, r, c)) = (denom > 0.0) ? 1.0 / denom : 0.0;
+    }
+  Eigen::MatrixXd acov_cor = acov_res;
+  for (Eigen::Index i = 0; i < moment_rows; ++i)
+    for (Eigen::Index j = 0; j < moment_rows; ++j)
+      acov_cor(i, j) *= gg(i) * gg(j);
+
+  Eigen::VectorXd stats_total(moment_rows);
+  if (has_mean)
+    for (Eigen::Index i = 0; i < p; ++i) stats_total(i) = out.mean_cor[b](i);
+  for (Eigen::Index c = 0; c < p; ++c)
+    for (Eigen::Index r = c; r < p; ++r)
+      stats_total(cov_off + vech_index(p, r, c)) = out.cov_cor[b](r, c);
+
+  ResidualSummary summ;
+  summ.has_mean = has_mean;
+  summ.cov = residual_rms(stats_total.segment(cov_off, pstar),
+                          acov_cor.block(cov_off, cov_off, pstar, pstar),
+                          static_cast<double>(pstar), conf_level, 0.05);
+  if (has_mean) {
+    summ.mean = residual_rms(stats_total.head(p), acov_cor.topLeftCorner(p, p),
+                             static_cast<double>(p), conf_level, 0.05);
+    summ.total = residual_rms(stats_total, acov_cor,
+                              static_cast<double>(moment_rows), conf_level, 0.05);
+  }
+  out.summary.push_back(std::move(summ));
+}
+
 post_expected<void>
 fill_residual_z(spec::LatentStructure pt, const model::MatrixRep& rep,
                 const SampleStats& samp, const Estimates& est,
@@ -273,91 +370,62 @@ fill_residual_z(spec::LatentStructure pt, const model::MatrixRep& rep,
     Eigen::MatrixXd acov_res = Q * acov_obs * Q.transpose();
     acov_res = 0.5 * (acov_res + acov_res.transpose()).eval();
 
-    Eigen::MatrixXd cov_se = Eigen::MatrixXd::Zero(p, p);
-    Eigen::MatrixXd cov_z = Eigen::MatrixXd::Zero(p, p);
-    for (Eigen::Index c = 0; c < p; ++c) {
-      for (Eigen::Index r = c; r < p; ++r) {
-        const Eigen::Index row = cov_off + vech_index(p, r, c);
-        const double denom = std::sqrt(S(r, r) * S(c, c));
-        const double scale = (denom != 0.0) ? 1.0 / denom : 0.0;
-        const double var = scale * scale * acov_res(row, row);
-        const double se = (var >= 0.0)
-            ? std::sqrt(var)
-            : std::numeric_limits<double>::quiet_NaN();
-        const double z = residual_z(out.cov_cor[b](r, c), se);
-        cov_se(r, c) = se;
-        cov_z(r, c) = z;
-        if (r != c) {
-          cov_se(c, r) = se;
-          cov_z(c, r) = z;
-        }
-      }
-    }
-    out.cov_se.push_back(std::move(cov_se));
-    out.cov_z.push_back(std::move(cov_z));
-
-    if (has_mean) {
-      Eigen::VectorXd mean_se(p);
-      Eigen::VectorXd mean_z(p);
-      for (Eigen::Index i = 0; i < p; ++i) {
-        const double scale = (S(i, i) != 0.0) ? 1.0 / std::sqrt(S(i, i)) : 0.0;
-        const double var = scale * scale * acov_res(i, i);
-        const double se = (var >= 0.0)
-            ? std::sqrt(var)
-            : std::numeric_limits<double>::quiet_NaN();
-        mean_se(i) = se;
-        mean_z(i) = residual_z(out.mean_cor[b](i), se);
-      }
-      out.mean_se.push_back(std::move(mean_se));
-      out.mean_z.push_back(std::move(mean_z));
-    } else {
-      out.mean_se.emplace_back();
-      out.mean_z.emplace_back();
-    }
-
-    // lavResiduals(fit)$summary — the cor.bentler RMS family. Scale the raw-
-    // metric residual ACOV into the correlation metric by a diagonal congruence
-    // (Ogasawara 2001 eq. 13): a vech(cov) row (r,c) by 1/√(s_rr·s_cc), a mean
-    // row i by 1/√(s_ii). The standardized residuals are the STATS the RMS
-    // averages over.
-    Eigen::VectorXd gg(moment_rows);
-    if (has_mean) {
-      for (Eigen::Index i = 0; i < p; ++i)
-        gg(i) = (S(i, i) > 0.0) ? 1.0 / std::sqrt(S(i, i)) : 0.0;
-    }
-    for (Eigen::Index c = 0; c < p; ++c)
-      for (Eigen::Index r = c; r < p; ++r) {
-        const double denom = std::sqrt(S(r, r) * S(c, c));
-        gg(cov_off + vech_index(p, r, c)) = (denom > 0.0) ? 1.0 / denom : 0.0;
-      }
-    Eigen::MatrixXd acov_cor = acov_res;
-    for (Eigen::Index i = 0; i < moment_rows; ++i)
-      for (Eigen::Index j = 0; j < moment_rows; ++j)
-        acov_cor(i, j) *= gg(i) * gg(j);
-
-    Eigen::VectorXd stats_total(moment_rows);
-    if (has_mean)
-      for (Eigen::Index i = 0; i < p; ++i) stats_total(i) = out.mean_cor[b](i);
-    for (Eigen::Index c = 0; c < p; ++c)
-      for (Eigen::Index r = c; r < p; ++r)
-        stats_total(cov_off + vech_index(p, r, c)) = out.cov_cor[b](r, c);
-
-    ResidualSummary summ;
-    summ.has_mean = has_mean;
-    summ.cov = residual_rms(stats_total.segment(cov_off, pstar),
-                            acov_cor.block(cov_off, cov_off, pstar, pstar),
-                            static_cast<double>(pstar), conf_level, 0.05);
-    if (has_mean) {
-      summ.mean = residual_rms(stats_total.head(p), acov_cor.topLeftCorner(p, p),
-                               static_cast<double>(p), conf_level, 0.05);
-      summ.total =
-          residual_rms(stats_total, acov_cor,
-                       static_cast<double>(moment_rows), conf_level, 0.05);
-    }
-    out.summary.push_back(std::move(summ));
+    apply_residual_standardization(out, b, S, has_mean, acov_res, conf_level);
   }
 
   return {};
+}
+
+// Raw + correlation-metric residual matrices and the SRMR (everything in a
+// `StandardizedResiduals` except the SE/z/summary blocks, which a downstream
+// `acov_res` source fills). Shared by the NT and estimated-weight paths.
+post_expected<StandardizedResiduals>
+build_base_standardized(spec::LatentStructure pt, const model::MatrixRep& rep,
+                        const SampleStats& samp, const Estimates& est,
+                        double conf_level) {
+  auto raw = residuals(pt, rep, samp, est);
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  auto extras = fit_extras(pt, rep, samp, est);
+  if (!extras.has_value()) return std::unexpected(extras.error());
+
+  StandardizedResiduals out;
+  out.srmr       = extras->srmr;
+  out.conf_level = conf_level;
+  out.cov_raw  = std::move(raw->cov);
+  out.mean_raw = std::move(raw->mean);
+  out.cov_cor.reserve(out.cov_raw.size());
+  out.mean_cor.reserve(out.cov_raw.size());
+
+  for (std::size_t b = 0; b < out.cov_raw.size(); ++b) {
+    const Eigen::MatrixXd& S = samp.S[b];
+    const Eigen::MatrixXd& r = out.cov_raw[b];
+    const Eigen::Index p = r.rows();
+
+    // Correlation-metric residual (Bentler standardization by the *sample* SDs)
+    // — the same metric the SRMR sums over.
+    Eigen::MatrixXd cor = Eigen::MatrixXd::Zero(p, p);
+    for (Eigen::Index c = 0; c < p; ++c) {
+      cor(c, c) = (S(c, c) != 0.0) ? r(c, c) / S(c, c) : 0.0;
+      for (Eigen::Index rr = c + 1; rr < p; ++rr) {
+        const double denom = std::sqrt(S(rr, rr) * S(c, c));
+        const double v = (denom != 0.0) ? r(rr, c) / denom : 0.0;
+        cor(rr, c) = v;
+        cor(c, rr) = v;
+      }
+    }
+    out.cov_cor.push_back(std::move(cor));
+
+    // Mean residual in SD units — only when the block carries a mean.
+    if (out.mean_raw[b].size() == p && p > 0) {
+      Eigen::VectorXd mc(p);
+      for (Eigen::Index i = 0; i < p; ++i)
+        mc(i) = (S(i, i) != 0.0) ? out.mean_raw[b](i) / std::sqrt(S(i, i)) : 0.0;
+      out.mean_cor.push_back(std::move(mc));
+    } else {
+      out.mean_cor.emplace_back();
+    }
+  }
+  return out;
 }
 
 }  // namespace
@@ -427,56 +495,63 @@ post_expected<StandardizedResiduals>
 standardized_residuals(spec::LatentStructure pt, const model::MatrixRep& rep,
                        const SampleStats& samp, const Estimates& est,
                        double conf_level) {
-  // Raw moment residuals + the SRMR — reuse the single definitions of each
-  // rather than re-deriving Σ̂(θ̂) here.
-  auto raw = residuals(pt, rep, samp, est);
-  if (!raw.has_value()) return std::unexpected(raw.error());
-  auto extras = fit_extras(pt, rep, samp, est);
-  if (!extras.has_value()) return std::unexpected(extras.error());
-
-  StandardizedResiduals out;
-  out.srmr       = extras->srmr;
-  out.conf_level = conf_level;
-  out.cov_raw  = std::move(raw->cov);
-  out.mean_raw = std::move(raw->mean);
-  out.cov_cor.reserve(out.cov_raw.size());
-  out.mean_cor.reserve(out.cov_raw.size());
-
-  for (std::size_t b = 0; b < out.cov_raw.size(); ++b) {
-    const Eigen::MatrixXd& S = samp.S[b];
-    const Eigen::MatrixXd& r = out.cov_raw[b];
-    const Eigen::Index p = r.rows();
-
-    // Correlation-metric residual (Bentler standardization by the *sample*
-    // SDs) — the same metric the SRMR sums over.
-    Eigen::MatrixXd cor = Eigen::MatrixXd::Zero(p, p);
-    for (Eigen::Index c = 0; c < p; ++c) {
-      cor(c, c) = (S(c, c) != 0.0) ? r(c, c) / S(c, c) : 0.0;
-      for (Eigen::Index rr = c + 1; rr < p; ++rr) {
-        const double denom = std::sqrt(S(rr, rr) * S(c, c));
-        const double v = (denom != 0.0) ? r(rr, c) / denom : 0.0;
-        cor(rr, c) = v;
-        cor(c, rr) = v;
-      }
-    }
-    out.cov_cor.push_back(std::move(cor));
-
-    // Mean residual in SD units — only when the block carries a mean.
-    if (out.mean_raw[b].size() == p && p > 0) {
-      Eigen::VectorXd mc(p);
-      for (Eigen::Index i = 0; i < p; ++i)
-        mc(i) = (S(i, i) != 0.0) ? out.mean_raw[b](i) / std::sqrt(S(i, i))
-                                 : 0.0;
-      out.mean_cor.push_back(std::move(mc));
-    } else {
-      out.mean_cor.emplace_back();
-    }
-  }
-  if (auto z = fill_residual_z(pt, rep, samp, est, conf_level, out);
+  auto out = build_base_standardized(pt, rep, samp, est, conf_level);
+  if (!out.has_value()) return out;
+  if (auto z = fill_residual_z(pt, rep, samp, est, conf_level, *out);
       !z.has_value()) {
     return std::unexpected(z.error());
   }
   return out;
 }
+
+namespace frontier {
+
+post_expected<StandardizedResiduals>
+standardized_residuals_estimated_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Estimates& est,
+    const estimate::gmm::Weight& weight, const data::RawData& raw,
+    estimate::ContinuousLsIJWeightMode mode,
+    estimate::frontier::DlsWeightOptions dls_opts, double conf_level) {
+  auto out = build_base_standardized(pt, rep, samp, est, conf_level);
+  if (!out.has_value()) return out;
+
+  // Estimated-weight residual moment ACOV (per block, [μ ; vech σ] layout) from
+  // the Hall-Inoue infinitesimal-jackknife rows — the data-dependent-weight
+  // analogue of the NT projection used by `fill_residual_z`.
+  auto acov = estimate::continuous_ls_residual_acov_ij(
+      std::move(pt), rep, samp, est, weight, raw, mode, dls_opts);
+  if (!acov.has_value()) return std::unexpected(acov.error());
+  if (acov->size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_residuals_estimated_weight: residual ACOV block count "
+        "mismatch"));
+  }
+
+  out->cov_se.reserve(out->cov_cor.size());
+  out->cov_z.reserve(out->cov_cor.size());
+  out->mean_se.reserve(out->mean_cor.size());
+  out->mean_z.reserve(out->mean_cor.size());
+  out->summary.reserve(out->cov_cor.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::MatrixXd S = 0.5 * (samp.S[b] + samp.S[b].transpose());
+    const Eigen::Index p = S.rows();
+    const Eigen::Index moment_rows = (*acov)[b].rows();
+    const bool has_mean =
+        out->mean_cor.size() > b && out->mean_cor[b].size() == p &&
+        moment_rows == p + vech_len(p);
+    if (moment_rows != (has_mean ? p : 0) + vech_len(p)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "standardized_residuals_estimated_weight: residual ACOV has an "
+          "unexpected moment dimension"));
+    }
+    const Eigen::MatrixXd acov_b =
+        0.5 * ((*acov)[b] + (*acov)[b].transpose());
+    apply_residual_standardization(*out, b, S, has_mean, acov_b, conf_level);
+  }
+  return out;
+}
+
+}  // namespace frontier
 
 }  // namespace magmaan::measures

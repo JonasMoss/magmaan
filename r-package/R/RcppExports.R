@@ -309,6 +309,10 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaan_inference_score_tests`, fit, weight, h_step)
 }
 
+measures_standardized_residuals_estimated_weight <- function(fit, raw_data, weight = NULL, conf_level = 0.90) {
+    .Call(`_magmaan_measures_standardized_residuals_estimated_weight`, fit, raw_data, weight, conf_level)
+}
+
 inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = FALSE) {
     .Call(`_magmaan_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
 }

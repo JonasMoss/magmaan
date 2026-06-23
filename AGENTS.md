@@ -236,10 +236,10 @@ Friendly frontier entry points live under `api::frontier`. A `frontier` symbol
 carries no deprecation-cycle promise. Put new non-lavaan methods in their
 domain's `frontier` sub-namespace.
 
-So far `api::frontier`, `estimate::frontier`, and `robust::frontier` exist;
-their headers still sit in the domain directory rather than a
-`<domain>/frontier/` subdirectory, and the `data/` research headers are not yet
-retiered. See `docs/backlog/todo.md`.
+So far `api::frontier`, `estimate::frontier`, `robust::frontier`, and
+`measures::frontier` exist; their headers still sit in the domain directory
+rather than a `<domain>/frontier/` subdirectory, and the `data/` research
+headers are not yet retiered. See `docs/backlog/todo.md`.
 
 ## Conventions
 

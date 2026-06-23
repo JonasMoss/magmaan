@@ -401,6 +401,7 @@ magmaan_core <- local({
       "measures_composite_weights",
       "measures_residuals",
       "measures_standardized_residuals",
+      "measures_standardized_residuals_estimated_weight",
       "measures_factor_scores",
       "measures_factor_score_precision",
       "measures_compute_defined"
