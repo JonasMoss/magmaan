@@ -1070,6 +1070,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_casewise_influence_ij_fit
+Rcpp::List infer_casewise_influence_ij_fit(Rcpp::List fit, SEXP raw_data, SEXP weight);
+RcppExport SEXP _magmaan_infer_casewise_influence_ij_fit(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_casewise_influence_ij_fit(fit, raw_data, weight));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inference_modification_indices_robust
 Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances, bool estimated_weight);
 RcppExport SEXP _magmaan_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP estimated_weightSEXP) {
@@ -2668,6 +2681,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
     {"_magmaan_measures_standardized_residuals_estimated_weight", (DL_FUNC) &_magmaan_measures_standardized_residuals_estimated_weight, 4},
+    {"_magmaan_infer_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_casewise_influence_ij_fit, 3},
     {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 11},
     {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},

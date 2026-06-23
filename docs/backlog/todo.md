@@ -840,10 +840,32 @@ is now its Gram. Remaining:
   robust vcov (`robust_se_raw_fit(refit, refit$raw_data$X, bread)`, reusing the
   raw data every fit carries). Gated vs semfindr on robust-SE fits in
   `case_influence_semfindr.R` (~1e-5).
-- **Misspecification-robust case influence (frontier, deferred).** The casewise
-  dual of the estimated-weight (complete-sandwich) SE: the per-case
-  data-dependent-weight meat term `Δ'W'_d`. Ties to `papers/estimated-weight-se`
-  and the model-free DOCR reference (`external/refs/case-influence/`).
+- **Done 2026-06-23 — misspecification-robust ("complete-sandwich") case
+  influence (frontier).** The casewise dual of the estimated-weight SE: the
+  one-step leave-one-out change carries the per-case data-dependent-weight term
+  the naive (semfindr / Pek-MacCallum) influence drops by treating the estimator
+  weight as fixed. New core accessor
+  `estimate::continuous_ls_casewise_influence_ij` returns the `N×q` per-case
+  influences `c_i = (1/N)·K·A⁻¹·(Δ_b K)ᵀ·v_i` (observed bread; `v_i = g_i·W + IF(Ŵ)`)
+  plus the fixed-weight `influence_naive`; by construction `Σ_i c_i c_iᵀ`
+  reproduces the `robust_continuous_ls_*_ij` vcov exactly (pinned at 1e-9 in
+  `weighted_inference_test.cpp`). Reuses the shared `build_continuous_ls_ij_blocks`
+  from the estimated-weight stream (no new IJ math). Bound as
+  `infer_casewise_influence_ij_fit`; R surface
+  `est_change_raw_approx(fit, type = "estimated.weight")` /
+  `est_change_approx(..., type = "estimated.weight")` (continuous GLS/WLS/ULS),
+  the raw output carrying `"naive"` / `"weight_diagnostic"` (`Δ'W'_d`) attributes.
+  Self-validated against the EXACT GLS leave-one-out engine (which re-estimates
+  the weight per drop) in `r-package/examples/case_influence_estimated_weight.R`:
+  the complete one-step tracks the exact refit at RMSE ~3e-4 in both regimes,
+  while the naive error grows with misfit (2.8e-3 at cfi 0.94 → 1.3e-2 at cfi
+  0.85) and the complete error stays flat — the Hall-Inoue order promotion
+  (`O_p(N⁻¹)` at the null → `O_p(N^{-1/2})` off it). Writeup in
+  `papers/estimated-weight-se` (the casewise-dual section). Remaining (deferred):
+  DWLS/categorical (needs a WLS/DWLS exact-LOO refit path for the oracle, and the
+  `SampleEmpiricalDwls` mode); multigroup (rides the `*_approx` single-group
+  limit above); ties to the model-free DOCR reference
+  (`external/refs/case-influence/`).
 
 ## Local hardening and validation tooling
 

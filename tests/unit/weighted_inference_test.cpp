@@ -1433,6 +1433,70 @@ TEST_CASE("robust_continuous_ls_gls_ij matches finite-difference weight influenc
   CHECK(got->eigvals.size() == 0);
 }
 
+TEST_CASE("continuous_ls_casewise_influence_ij Gram reproduces the GLS IJ vcov") {
+  auto fx = one_factor_fixture();
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+
+  auto est = magmaan::test::fit_gls(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est.has_value());
+  const auto W = gls_weight(fx.pt, fx.rep, fx.samp, est->theta);
+
+  // The reference: the estimated-weight (complete-sandwich) IJ covariance.
+  auto vcov_ij = magmaan::estimate::robust_continuous_ls_gls_ij(
+      fx.pt, fx.rep, fx.samp, *est, fx.raw);
+  REQUIRE(vcov_ij.has_value());
+
+  auto infl = magmaan::estimate::continuous_ls_casewise_influence_ij(
+      fx.pt, fx.rep, fx.samp, *est, W, fx.raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory);
+  REQUIRE(infl.has_value());
+
+  const double N_total = total_n(fx.samp);
+  CHECK(infl->n_total == static_cast<std::int64_t>(N_total));
+  CHECK(infl->influence.rows() == static_cast<Eigen::Index>(N_total));
+  CHECK(infl->influence.cols() == static_cast<Eigen::Index>(fx.pt.n_free()));
+
+  // Σ_i c_i c_iᵀ == the complete-sandwich vcov, to machine precision.
+  const Eigen::MatrixXd gram =
+      infl->influence.transpose() * infl->influence;
+  CHECK(gram.isApprox(vcov_ij->vcov, 1e-9));
+
+  // The estimated GLS weight makes the complete influence differ from the naive
+  // (fixed-weight) one: the per-case data-dependent-weight diagnostic Δ'W'_d.
+  const double diag =
+      (infl->influence - infl->influence_naive).cwiseAbs().maxCoeff();
+  CHECK(diag > 1e-8);
+}
+
+TEST_CASE("continuous_ls_casewise_influence_ij is correction-free for ULS") {
+  auto fx = one_factor_fixture();
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+
+  auto est = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est.has_value());
+
+  auto vcov_ij = magmaan::estimate::robust_continuous_ls_fixed_weight_ij(
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, fx.raw);
+  REQUIRE(vcov_ij.has_value());
+
+  auto infl = magmaan::estimate::continuous_ls_casewise_influence_ij(
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, fx.raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::Fixed);
+  REQUIRE(infl.has_value());
+
+  // Fixed weight ⇒ no IF(Ŵ) correction, so complete and naive coincide exactly.
+  CHECK(infl->influence.isApprox(infl->influence_naive, 1e-12));
+  const Eigen::MatrixXd gram =
+      infl->influence.transpose() * infl->influence;
+  CHECK(gram.isApprox(vcov_ij->vcov, 1e-9));
+}
+
 TEST_CASE("robust_continuous_ls_wls_ij matches finite-difference empirical "
           "weight influence") {
   const magmaan::optim::OptimOptions opt{

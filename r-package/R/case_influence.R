@@ -453,15 +453,34 @@ mahalanobis_rerun <- function(fit, data = NULL) {
   raw$X[[1L]]
 }
 
-# Shared one-step ingredients: per-case scores (N×npar), the full-sample vcov,
-# and the approximate raw change x0 = scores · V (one row per case).
-.case_approx_parts <- function(fit) {
+# Shared one-step ingredients: the per-case raw influence `x0` (one row per
+# case; the one-step raw change is (N/(N-1))·x0), the vcov `V` used to
+# standardize it, and the case ids.
+#
+# `type = "standard"` (default, semfindr-style): x0 = scores · V with the ML
+# casewise scores and the expected-information model vcov, so x0 row i = V·s_i.
+#
+# `type = "estimated.weight"` (frontier; the misspecification-robust dual): x0
+# is the complete-sandwich per-case influence c_i for a continuous moment-
+# quadratic fit, which carries the data-dependent-weight term; its column-Gram
+# `crossprod(x0)` IS the estimated-weight ("complete-sandwich") IJ vcov, used as
+# `V` here. `x0_naive` is the fixed-weight counterpart (weight treated as
+# constant, as semfindr/Pek-MacCallum implicitly do), so `x0 - x0_naive` is the
+# per-case data-dependent-weight diagnostic. Continuous GLS/WLS/ULS only.
+.case_approx_parts <- function(fit, type = c("standard", "estimated.weight")) {
+  type <- match.arg(type)
   X <- .case_raw_matrix(fit)
-  scores <- magmaan_core$infer_casewise_scores_fit(fit, X)
-  V <- .case_model_vcov(fit)
   case_id <- rownames(X)
   if (is.null(case_id)) case_id <- as.character(seq_len(nrow(X)))
-  list(n = nrow(X), scores = scores, V = V, x0 = scores %*% V, case_id = case_id)
+  if (type == "estimated.weight") {
+    ij <- magmaan_core$infer_casewise_influence_ij_fit(fit, X)
+    return(list(n = nrow(X), V = crossprod(ij$influence), x0 = ij$influence,
+                x0_naive = ij$influence_naive, case_id = case_id, type = type))
+  }
+  scores <- magmaan_core$infer_casewise_scores_fit(fit, X)
+  V <- .case_model_vcov(fit)
+  list(n = nrow(X), scores = scores, V = V, x0 = scores %*% V,
+       case_id = case_id, type = type)
 }
 
 #' Approximate case influence on raw parameter estimates (one-step, no refit)
@@ -469,17 +488,42 @@ mahalanobis_rerun <- function(fit, data = NULL) {
 #' `(N/(N-1))·V·s_i` per case, the one-step approximation of [est_change_raw()]
 #' without refitting. Mirror of `semfindr::est_change_raw_approx()`.
 #'
+#' With `type = "estimated.weight"` this is the misspecification-robust
+#' ("complete-sandwich") one-step change for a continuous moment-quadratic fit
+#' (GLS/WLS/ULS): the per-case influence carries the data-dependent-weight term
+#' that semfindr / Pek & MacCallum drop by treating the estimator weight as
+#' fixed. That term is `O_p(N^{-1})` under a correct model but
+#' `O_p(N^{-1/2})` under misspecification (Hall-Inoue order promotion), so the
+#' two regimes agree at the null and diverge under misfit; it is the casewise
+#' dual of the estimated-weight standard error. The result then carries two
+#' attributes: `"naive"` (the fixed-weight one-step change) and
+#' `"weight_diagnostic"` (their difference, the per-case `Δ'W'_d` term). There is
+#' no semfindr counterpart; this is a frontier extension.
+#'
 #' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
 #' @param parameters Optional parameter selector; default all free parameters.
-#' @return A matrix, one row per case, one column per selected parameter.
+#' @param type `"standard"` (default; semfindr-style fixed-weight) or
+#'   `"estimated.weight"` (misspecification-robust complete sandwich;
+#'   continuous GLS/WLS/ULS only).
+#' @return A matrix, one row per case, one column per selected parameter (plus
+#'   the `"naive"` / `"weight_diagnostic"` attributes when
+#'   `type = "estimated.weight"`).
 #' @export
-est_change_raw_approx <- function(fit, parameters = NULL) {
+est_change_raw_approx <- function(fit, parameters = NULL,
+                                  type = c("standard", "estimated.weight")) {
+  type <- match.arg(type)
   fp <- .case_free_table(fit)
   sel <- .case_pars_select(fp, parameters)
   free_k <- fp$k[sel]
-  P <- .case_approx_parts(fit)
+  P <- .case_approx_parts(fit, type)
   out <- (P$x0[, free_k, drop = FALSE]) * (P$n / (P$n - 1))
   dimnames(out) <- list(P$case_id, fp$name[sel])
+  if (type == "estimated.weight") {
+    naive <- (P$x0_naive[, free_k, drop = FALSE]) * (P$n / (P$n - 1))
+    dimnames(naive) <- list(P$case_id, fp$name[sel])
+    attr(out, "naive") <- naive
+    attr(out, "weight_diagnostic") <- out - naive
+  }
   out
 }
 
@@ -503,14 +547,21 @@ est_change_raw_approx <- function(fit, parameters = NULL) {
 #'
 #' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
 #' @param parameters Optional parameter selector; default all free parameters.
+#' @param type `"standard"` (default; semfindr-style fixed-weight) or
+#'   `"estimated.weight"` (misspecification-robust complete sandwich; continuous
+#'   GLS/WLS/ULS only). Under `"estimated.weight"` both the one-step change and
+#'   the SE / `gcd` metric use the complete-sandwich IJ covariance, the casewise
+#'   dual of the estimated-weight standard error; see [est_change_raw_approx()].
 #' @return A matrix with one column per selected parameter plus `gcd_approx`,
 #'   one row per case.
 #' @export
-est_change_approx <- function(fit, parameters = NULL) {
+est_change_approx <- function(fit, parameters = NULL,
+                              type = c("standard", "estimated.weight")) {
+  type <- match.arg(type)
   fp <- .case_free_table(fit)
   sel <- .case_pars_select(fp, parameters)
   free_k <- fp$k[sel]
-  P <- .case_approx_parts(fit)
+  P <- .case_approx_parts(fit, type)
   n <- P$n
   se <- sqrt(diag(P$V))
   # xr = one-step raw change ≈ θ̂ − θ̂₍ᵢ₎ = (N/(N-1))·V·s_i, selected columns.

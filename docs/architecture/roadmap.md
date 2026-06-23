@@ -365,6 +365,21 @@ golden `parTable()` fixtures.
   and mixed-ordinal reject the flag. Leading-order only under misspecification
   (ULS, fixed weight, unaffected). R: `{modification_indices,score_tests}_robust(…,
   estimated_weight=)`.
+- Misspecification-robust ("complete-sandwich") case influence (2026-06-23): the
+  casewise dual of the estimated-weight SE.
+  `estimate::continuous_ls_casewise_influence_ij` decomposes the complete-sandwich
+  covariance into its per-case contributions `c_i = (1/N)·K·A⁻¹·(Δ_b K)ᵀ·v_i`
+  (observed bread `A`; `v_i = g_i·W + IF(Ŵ)`), the one-step leave-one-out change
+  carrying the data-dependent-weight term that the naive (semfindr / Pek-MacCallum)
+  influence drops. It reuses the same `build_continuous_ls_ij_blocks` as the MI /
+  SE paths, so `Σ_i c_i c_iᵀ` reproduces the `robust_continuous_ls_*_ij` vcov to
+  1e-9 (a free self-check); a `naive` field drops `IF(Ŵ)`, so the difference is
+  the per-case `Δ'W'_d` diagnostic. R: `infer_casewise_influence_ij_fit`,
+  `est_change_{raw_,}approx(fit, type = "estimated.weight")` (continuous
+  GLS/WLS/ULS). Self-validated against the exact GLS leave-one-out engine (which
+  re-estimates the weight per drop): the complete one-step tracks it at RMSE ~3e-4
+  regardless of misfit, while the naive degrades with it (the Hall-Inoue order
+  promotion). Writeup in `papers/estimated-weight-se`.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
@@ -1728,8 +1743,13 @@ stop rather than any usable non-error return.
   defect, gated transitively up to those factors). `fit_measures_change_approx`
   is intentionally not provided (the exact `fit_measures_change` covers that leg
   cheaply since refits are reused from `case_rerun`; the no-refit version would
-  be lossier). Still in the backlog: multi-group and robust-regime variants, and
-  misspecification-robust case influence.
+  be lossier). The multi-group and robust-regime exact variants also landed
+  2026-06-23 (see above), as did the **misspecification-robust ("complete-sandwich")
+  one-step** — `est_change_{raw_,}approx(fit, type = "estimated.weight")`, the
+  casewise dual of the estimated-weight SE, via the new core accessor
+  `estimate::continuous_ls_casewise_influence_ij` (see the estimated-weight stream
+  above and `papers/estimated-weight-se`). Still in the backlog: DWLS/categorical
+  and multigroup for that one-step path.
 - **`fit_measures()` baseline is now `fixed.x`-aware** (2026-06-23). It calls
   `infer_baseline_fit(fit)` → `measures::baseline_chi2(pt, samp)`, which frees
   the exogenous (co)variances in the independence/baseline model exactly as

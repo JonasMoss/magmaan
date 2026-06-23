@@ -299,6 +299,41 @@ continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
                                       ContinuousLsIJWeightMode mode,
                                       frontier::DlsWeightOptions dls_opts = {});
 
+// Per-case one-step (infinitesimal-jackknife) parameter influences for a
+// continuous moment-quadratic fit: the casewise decomposition of the estimated-
+// weight ("complete-sandwich") covariance, and the misspecification-robust dual
+// of the naive (fixed-weight) influence semfindr/Pek-MacCallum use. Row i is
+//   c_i = (1/N)·K·A⁻¹·(Δ_b K)ᵀ·v_i,   v_i = g_i·W_b + correction_i,
+// with A the observed-Hessian bread (the same one the complete-sandwich SE uses)
+// and (g_i, correction_i) the per-case moment-influence / IF(Ŵ) rows from the
+// shared IJ blocks. By construction `Σ_i c_i c_iᵀ` reproduces the IJ vcov from
+// `robust_continuous_ls_*_ij` exactly, so the rows are the per-case
+// contributions whose sum-of-squares is the estimated-weight SE. `influence_naive`
+// drops `correction_i` (fixed-weight IJ, same observed bread), so
+//   influence − influence_naive
+// is the per-case data-dependent-weight diagnostic (the Δ'W'_d term): O_p(N⁻¹)
+// under correct specification, promoted to O_p(N^{-1/2}) under misspecification
+// (Hall-Inoue). With a fixed weight (ULS, `Fixed`) `correction_i = 0` and the two
+// coincide. The one-step leave-one-out change is θ̂ − θ̂₍ᵢ₎ ≈ (N/(N−1))·c_i. Rows
+// are group-block-stacked (single group ⇒ original data order). `mode` selects
+// which estimated weight's influence the correction carries, exactly as in
+// `continuous_ls_param_space_sandwich_ij`. Frontier; beyond lavaan/semfindr.
+struct CasewiseInfluenceIJ {
+  Eigen::MatrixXd influence;        // N × q (full free-θ space): complete sandwich
+  Eigen::MatrixXd influence_naive;  // N × q: weight_correction dropped
+  std::int64_t n_total = 0;
+};
+
+post_expected<CasewiseInfluenceIJ>
+continuous_ls_casewise_influence_ij(spec::LatentStructure pt,
+                                    const model::MatrixRep& rep,
+                                    const data::SampleStats& samp,
+                                    const Estimates& est,
+                                    const gmm::Weight& weight,
+                                    const data::RawData& raw,
+                                    ContinuousLsIJWeightMode mode,
+                                    frontier::DlsWeightOptions dls_opts = {});
+
 // Estimated-weight ("complete-sandwich") residual moment ACOV for a continuous
 // moment-quadratic fit, one block per group in the [μ ; vech σ] layout. The
 // residual r = s − σ(θ̂) has per-case influence function IF_r = M·Qᵀ − C·P with
