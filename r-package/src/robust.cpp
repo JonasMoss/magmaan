@@ -210,6 +210,24 @@ Rcpp::List profile_lrt_to_list(
       Rcpp::_["warnings"] = warnings_to_r(r.warnings));
 }
 
+Rcpp::List rmsea_inference_to_list(
+    const magmaan::estimate::OrdinalRmseaInference& r) {
+  return Rcpp::List::create(
+      Rcpp::_["rmsea"] = r.point,
+      Rcpp::_["rmsea.ci.lower"] = r.ci_lower,
+      Rcpp::_["rmsea.ci.upper"] = r.ci_upper,
+      Rcpp::_["rmsea.pvalue"] = r.exact_fit_pvalue,
+      Rcpp::_["bias_trace"] = r.bias_trace,
+      Rcpp::_["grad_var"] = r.grad_var,
+      Rcpp::_["fmin"] = r.fmin,
+      Rcpp::_["chisq_standard"] = r.stat,
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["spectrum_size"] = r.spectrum_size,
+      Rcpp::_["fixed_weight"] = r.fixed_weight,
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+}
+
 Rcpp::List misspec_fit_measures_to_list(
     const magmaan::estimate::OrdinalMisspecFitMeasures& r) {
   return Rcpp::List::create(
@@ -1204,6 +1222,34 @@ Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
       estimated_weight, conf_level, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return misspec_fit_measures_to_list(*r_or);
+}
+
+// infer_mixed_ordinal_rmsea_misspec() — mixed continuous/ordinal DWLS RMSEA
+// misspecification CI. This is the first mixed fit-index slice over the existing
+// estimated-weight profile-RMSEA path; CRMR/SRMR and CFI/TLI remain separate
+// convention work.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
+                                             Rcpp::List mixed_stats,
+                                             bool estimated_weight = true,
+                                             double conf_level = 0.90,
+                                             double eig_tol = 1e-10) {
+  require_dwls_fit(fit, "infer_mixed_ordinal_rmsea_misspec()");
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::mixed_ordinal_rmsea_misspec_inference(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name),
+      estimated_weight, conf_level, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return rmsea_inference_to_list(*r_or);
 }
 
 // [[Rcpp::export]]

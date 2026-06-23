@@ -4073,6 +4073,31 @@ TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) la
   CHECK(prof->gamma.bottomRightCorner(m, m).cwiseAbs().maxCoeff() > 0.0);
   CHECK(prof->gamma.topRightCorner(m, m).cwiseAbs().maxCoeff() > 0.0);
 
+  auto rmsea = magmaan::estimate::mixed_ordinal_rmsea_misspec_inference(
+      *pt, *mr, *stats, *fit);
+  auto fixed = magmaan::estimate::mixed_ordinal_rmsea_misspec_inference(
+      *pt, *mr, *stats, *fit,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE_MESSAGE(rmsea.has_value(),
+      "mixed RMSEA inference failed: "
+          << (rmsea.has_value() ? "" : rmsea.error().detail));
+  REQUIRE_MESSAGE(fixed.has_value(),
+      "mixed fixed-weight RMSEA inference failed: "
+          << (fixed.has_value() ? "" : fixed.error().detail));
+  CHECK_FALSE(rmsea->fixed_weight);
+  CHECK(fixed->fixed_weight);
+  CHECK(rmsea->point == doctest::Approx(prof->rmsea).epsilon(1e-12));
+  CHECK(rmsea->stat == doctest::Approx(prof->chisq_standard).epsilon(1e-12));
+  CHECK(rmsea->df == prof->df);
+  CHECK(rmsea->ci_lower <= rmsea->ci_upper);
+  CHECK(std::isfinite(rmsea->exact_fit_pvalue));
+  CHECK(rmsea->exact_fit_pvalue >= 0.0);
+  CHECK(rmsea->exact_fit_pvalue <= 1.0);
+  CHECK(fixed->stat == doctest::Approx(rmsea->stat).epsilon(1e-12));
+  CHECK(fixed->df == rmsea->df);
+  CHECK(std::abs(fixed->bias_trace - rmsea->bias_trace) > 1e-10);
+
   auto no_raw = *stats;
   no_raw.raw_data.clear();
   auto missing = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(

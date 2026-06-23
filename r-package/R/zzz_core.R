@@ -165,6 +165,7 @@ robust_mixed_ordinal <- infer_mixed_ordinal_robust
 robust_mixed_ordinal_ij <- infer_mixed_ordinal_robust_ij
 ordinal_profile_rmsea <- infer_ordinal_profile_rmsea
 ordinal_profile_lrt <- infer_ordinal_profile_lrt
+mixed_ordinal_rmsea_misspec <- infer_mixed_ordinal_rmsea_misspec
 mixed_ordinal_profile_rmsea <- infer_mixed_ordinal_profile_rmsea
 mixed_ordinal_profile_lrt <- infer_mixed_ordinal_profile_lrt
 robust_se <- infer_robust_se
@@ -352,6 +353,7 @@ magmaan_core <- local({
       "robust_mixed_ordinal_ij",
       "ordinal_profile_rmsea",
       "ordinal_profile_lrt",
+      "mixed_ordinal_rmsea_misspec",
       "mixed_ordinal_profile_rmsea",
       "mixed_ordinal_profile_lrt",
       "robust_se",
@@ -575,6 +577,7 @@ magmaan_core <- local({
       "infer_mixed_ordinal_robust_ij",
       "infer_ordinal_profile_rmsea",
       "infer_ordinal_profile_lrt",
+      "infer_mixed_ordinal_rmsea_misspec",
       "infer_mixed_ordinal_profile_rmsea",
       "infer_mixed_ordinal_profile_lrt",
       "infer_robust_se",

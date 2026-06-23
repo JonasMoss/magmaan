@@ -838,10 +838,10 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
   const bool has_mi = x.containsElementNamed("moment_influence");
   const bool has_raw = x.containsElementNamed("raw_data");
   Rcpp::List mil = has_mi ? Rcpp::List(x["moment_influence"]) : Rcpp::List();
-  const bool has_gdi = x.containsElementNamed("gamma_diag_influence");
-  const bool has_gfi = x.containsElementNamed("gamma_full_influence");
-  Rcpp::List gdil = has_gdi ? Rcpp::List(x["gamma_diag_influence"]) : Rcpp::List();
-  Rcpp::List gfil = has_gfi ? Rcpp::List(x["gamma_full_influence"]) : Rcpp::List();
+  bool use_gdi = x.containsElementNamed("gamma_diag_influence");
+  bool use_gfi = x.containsElementNamed("gamma_full_influence");
+  Rcpp::List gdil = use_gdi ? Rcpp::List(x["gamma_diag_influence"]) : Rcpp::List();
+  Rcpp::List gfil = use_gfi ? Rcpp::List(x["gamma_full_influence"]) : Rcpp::List();
   Rcpp::List rawl = has_raw ? Rcpp::List(x["raw_data"]) : Rcpp::List();
   Rcpp::IntegerVector nobs(x["nobs"]);
   const R_xlen_t nb = Rl.size();
@@ -853,14 +853,33 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
     Rcpp::stop("magmaan: %s$raw_data has length %d but R has length %d",
                what, static_cast<int>(rawl.size()), static_cast<int>(nb));
   }
-  if (has_gdi && gdil.size() != nb) {
+  if (use_gdi && gdil.size() != nb) {
     Rcpp::stop("magmaan: %s$gamma_diag_influence has length %d but R has length %d",
                what, static_cast<int>(gdil.size()), static_cast<int>(nb));
   }
-  if (has_gfi && gfil.size() != nb) {
+  if (use_gfi && gfil.size() != nb) {
     Rcpp::stop("magmaan: %s$gamma_full_influence has length %d but R has length %d",
                what, static_cast<int>(gfil.size()), static_cast<int>(nb));
   }
+  auto use_precomputed_influence = [what, nb](Rcpp::List xs, const char* nm) {
+    bool all_empty = true;
+    bool all_nonempty = true;
+    for (R_xlen_t b = 0; b < nb; ++b) {
+      Rcpp::NumericMatrix xb(xs[b]);
+      const bool empty = xb.nrow() == 0 && xb.ncol() == 0;
+      const bool nonempty = xb.nrow() > 0 && xb.ncol() > 0;
+      all_empty = all_empty && empty;
+      all_nonempty = all_nonempty && nonempty;
+    }
+    if (all_empty) return false;
+    if (!all_nonempty) {
+      Rcpp::stop("magmaan: %s$%s must be non-empty for every block or 0x0 for every block",
+                 what, nm);
+    }
+    return true;
+  };
+  if (use_gdi) use_gdi = use_precomputed_influence(gdil, "gamma_diag_influence");
+  if (use_gfi) use_gfi = use_precomputed_influence(gfil, "gamma_full_influence");
   magmaan::data::MixedOrdinalStats out;
   out.R.reserve(static_cast<std::size_t>(nb));
   out.mean.reserve(static_cast<std::size_t>(nb));
@@ -875,8 +894,8 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
   out.n_obs.reserve(static_cast<std::size_t>(nb));
   out.n_levels.reserve(static_cast<std::size_t>(nb));
   if (has_mi) out.moment_influence.reserve(static_cast<std::size_t>(nb));
-  if (has_gdi) out.gamma_diag_influence.reserve(static_cast<std::size_t>(nb));
-  if (has_gfi) out.gamma_full_influence.reserve(static_cast<std::size_t>(nb));
+  if (use_gdi) out.gamma_diag_influence.reserve(static_cast<std::size_t>(nb));
+  if (use_gfi) out.gamma_full_influence.reserve(static_cast<std::size_t>(nb));
   if (has_raw) out.raw_data.reserve(static_cast<std::size_t>(nb));
   for (R_xlen_t b = 0; b < nb; ++b) {
     out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
@@ -903,11 +922,11 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
       out.moment_influence.push_back(
           Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mil[b])));
     }
-    if (has_gdi) {
+    if (use_gdi) {
       out.gamma_diag_influence.push_back(
           Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(gdil[b])));
     }
-    if (has_gfi) {
+    if (use_gfi) {
       out.gamma_full_influence.push_back(
           Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(gfil[b])));
     }

@@ -6721,6 +6721,122 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<OrdinalRmseaInference>
+mixed_ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
+                                      const model::MatrixRep& rep,
+                                      const data::MixedOrdinalStats& stats,
+                                      const Estimates& est,
+                                      OrdinalParameterization parameterization,
+                                      bool estimated_weight,
+                                      double conf_level,
+                                      double eig_tol) {
+  if (!(conf_level > 0.0 && conf_level < 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rmsea_misspec_inference: conf_level must lie in (0,1)"));
+  }
+
+  auto prof_or = mixed_ordinal_dwls_profile_rmsea(pt, rep, stats, est,
+                                                  parameterization, eig_tol);
+  if (!prof_or.has_value()) return std::unexpected(prof_or.error());
+  const WeightedProfileRMSEAResult& prof = *prof_or;
+
+  std::vector<Eigen::Index> m_blocks(stats.R.size());
+  Eigen::Index M = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    m_blocks[b] = stats.moments[b].size();
+    M += m_blocks[b];
+  }
+  if (prof.profile_hessian.rows() != 2 * M || prof.gamma.rows() != 2 * M) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rmsea_misspec_inference: unexpected profile dimension"));
+  }
+
+  if (auto pr = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !pr.has_value()) {
+    return std::unexpected(fit_to_post(pr.error()));
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rmsea_misspec_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rmsea_misspec_inference: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const double N = static_cast<double>(prof.ntotal);
+  Eigen::VectorXd g_F = Eigen::VectorXd::Zero(2 * M);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = m_blocks[b];
+    const Eigen::VectorXd d_b =
+        mixed_model_moments(stats, *layout_or, eval->moments, est.theta, b,
+                            parameterization) -
+        stats.moments[b];
+    if (d_b.size() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_rmsea_misspec_inference: residual length mismatch"));
+    }
+    const Eigen::VectorXd gamma_b = stats.NACOV[b].diagonal();
+    const Eigen::MatrixXd& W_b = stats.W_dwls[b];
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) / N);
+    g_F.segment(off, mb) = sw * (-2.0 * (W_b * d_b));
+    g_F.segment(off + mb, mb) =
+        sw * (-(d_b.array().square() / gamma_b.array().square()).matrix());
+    off += 2 * mb;
+  }
+
+  Eigen::MatrixXd Gamma_used = prof.gamma;
+  double bias = prof.trace_signed;
+  Eigen::VectorXd eigvals = prof.eigvals;
+  int spectrum_size = prof.spectrum_size;
+  if (!estimated_weight) {
+    zero_extended_gamma_channel(Gamma_used, m_blocks);
+    auto spec = robust::compute_profile_contrast_spectrum(
+        prof.profile_hessian, Gamma_used, eig_tol);
+    if (!spec.has_value()) return std::unexpected(spec.error());
+    bias = spec->trace_signed;
+    eigvals = spec->eigenvalues;
+    spectrum_size = static_cast<int>(spec->eigenvalues.size());
+  }
+  const double grad_var = std::max(0.0, g_F.dot(Gamma_used * g_F));
+
+  const double F = prof.fmin;
+  const double Gn = static_cast<double>(prof.n_groups);
+  const int df = prof.df;
+
+  OrdinalRmseaInference out;
+  out.fixed_weight = !estimated_weight;
+  out.eigvals = std::move(eigvals);
+  out.spectrum_size = spectrum_size;
+  out.bias_trace = bias;
+  out.grad_var = grad_var;
+  out.fmin = F;
+  out.stat = prof.chisq_standard;
+  out.df = df;
+  out.warnings = prof.warnings;
+  if (df > 0 && N > 0.0) {
+    const double denom = static_cast<double>(df);
+    const double center = F - bias / N;
+    const double sd = std::sqrt(std::max(grad_var / N, 0.0));
+    const double z = inv_normal_cdf(0.5 * (1.0 + conf_level));
+    out.point = std::sqrt(std::max(center, 0.0) * Gn / denom);
+    out.ci_lower = std::sqrt(std::max(center - z * sd, 0.0) * Gn / denom);
+    out.ci_upper = std::sqrt(std::max(center + z * sd, 0.0) * Gn / denom);
+  }
+  out.exact_fit_pvalue =
+      out.eigvals.size() > 0
+          ? robust::weighted_chisq_upper(out.eigvals, std::max(0.0, out.stat))
+          : std::numeric_limits<double>::quiet_NaN();
+  return out;
+}
+
 post_expected<OrdinalIncrementalFitInference>
 ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                   const model::MatrixRep& rep,
