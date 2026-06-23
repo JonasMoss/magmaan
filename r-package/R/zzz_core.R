@@ -582,6 +582,7 @@ magmaan_core <- local({
       "infer_casewise_scores_fit",
       "infer_casewise_influence_ij_fit",
       "infer_ordinal_casewise_influence_ij_fit",
+      "infer_ml2s_casewise_influence_ij_fit",
       "infer_robust_se_zc",
       "infer_robust_se_both_breads",
       "infer_robust_se_both_breads_raw",

@@ -3433,6 +3433,40 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
       Rcpp::_["chisq"] = extras_or->chi2);
 }
 
+// infer_ml2s_casewise_influence_ij_fit() — per-case one-step misspecification-
+// robust ("complete-sandwich") parameter influences for a two-stage (ML2S) fit:
+// the missing-data member of the estimated-weight case-influence family, the
+// casewise dual of estimate_two_stage_em_ml_inference()'s observed-bread vcov.
+// Returns the N_total x n_free `influence` matrix (column-Gram = the ML2S IJ
+// vcov) and its fixed-weight `naive` counterpart. Reuses the Stage-1 EM
+// pack/H1 the fit carries. The NT Stage-2 weight (lavaan robust.two.stage)
+// treats the weight as fixed, so its correction is zero (complete == naive);
+// the non-NT weights (DWLS/ADF/DLS) carry the live data-dependent-weight term.
+// Beyond lavaan/semfindr.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ml2s_casewise_influence_ij_fit(
+    Rcpp::List fit, SEXP raw_data, std::string stage2_weight = "nt",
+    double dls_a = 0.5) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
+  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  magmaan::estimate::fiml::TwoStageDlsOptions dls;
+  dls.a = dls_a;
+  auto r_or = magmaan::estimate::fiml::two_stage_casewise_influence_ij(
+      ctx.pt, ctx.rep, raw, est, pack, h1, kind, dls);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::Named("influence") = Rcpp::wrap(r_or->influence),
+      Rcpp::Named("influence_naive") = Rcpp::wrap(r_or->influence_naive),
+      Rcpp::Named("n_total") = static_cast<double>(r_or->n_total));
+}
+
 // estimate_two_stage_em_ml_inference() — mirrors
 // estimate::fiml::two_stage_em_ml_inference(). Takes the Stage-2 ML fit on EM
 // moments plus the original raw data used for Stage 1.

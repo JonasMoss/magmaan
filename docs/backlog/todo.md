@@ -877,12 +877,30 @@ is now its Gram. Remaining:
   `fit$ordinal`. Continuous WLS/ADF (`SampleEmpiricalWls`) is also covered. Every
   cell self-checks `Σ_i c_i c_iᵀ ≡ robust_{continuous_ls,ordinal}_*_ij` vcov to
   1e-8/1e-9 (`weighted_inference_test.cpp`, `ordinal_test.cpp`), and the R
-  example exercises multigroup + ordinal. Remaining: the per-drop exact
-  leave-one-out *simulation figure* for the categorical / DWLS cell (a paper
-  deliverable, not library code — `case_rerun` is ML/ULS/GLS, and re-estimating
-  polychorics per drop is expensive; the GLS exact-LOO already validates the
-  one-step semantics, and the self-checks pin the math). Ties to the model-free
-  DOCR reference (`external/refs/case-influence/`).
+  example exercises multigroup + ordinal.
+- **Done 2026-06-23 — two-stage (ML2S) case influence**, the missing-data member
+  of the estimated-weight family. `estimate::fiml::two_stage_casewise_influence_ij`
+  decomposes the ML2S complete sandwich: each case influences θ̂ through the
+  Stage-1 saturated-moment influence (`saturated_em_moment_influence`) AND the
+  Stage-2 data-dependent-weight term (`ml2s_weight_correction_block`). It factors
+  the same IJ-block assembly the missing-data SE sandwich uses (`build_ml2s_ij_blocks`)
+  and ends in the shared `casewise_influence_from_ij_blocks`; non-NT complete data
+  routes through `continuous_ls_casewise_influence_ij` (the SE's complete-data
+  route). The NT weight (lavaan robust.two.stage) treats the weight as fixed, so
+  its correction is exactly zero (complete == naive); the non-NT Stage-2 weights
+  (DWLS/ADF/DLS) carry the live term (HS missing+misspecified DWLS: naive-diff
+  0.036). Bound `infer_ml2s_casewise_influence_ij_fit`, routed by the `^ML2S`
+  estimator label (Stage-2 weight parsed from `ML2S_{DWLS,ADF,DLS,WLS}`).
+  Self-check `Σ_i c_i c_iᵀ ≡` the observed-bread ML2S IJ vcov to 1e-8
+  (`fiml_test.cpp`); R example exercises NT (zero) vs DWLS (live).
+- **Remaining (case-influence one-step):** the per-drop exact leave-one-out
+  *simulation figures* for the categorical/DWLS and ML2S cells (paper
+  deliverables, not library code — `case_rerun` is ML/ULS/GLS; re-estimating
+  polychorics / re-running the Stage-1 EM per drop is expensive; the GLS
+  exact-LOO already validates the one-step semantics and the self-checks pin the
+  math). Mixed ordinal-continuous case influence stays blocked on its
+  estimated-weight SE (not yet wired). Ties to the model-free DOCR reference
+  (`external/refs/case-influence/`).
 
 ## Local hardening and validation tooling
 
