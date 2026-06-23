@@ -90,4 +90,31 @@ mod_pa <- "m1 ~ a1 * iv1 + a2 * iv2
            a2b := a2 * b"
 check_model("Path / pa_dat", mod_pa, semfindr::pa_dat)
 
+## Multiple-group CFA. case_rerun() takes the original data frame; columns are
+## suffixed with the group LABEL (magmaan and lavaan index groups in different
+## orders, so a label keeps the comparison tool-independent). semfindr's columns
+## are relabelled to the same (param).<label> key for the comparison.
+cat("\n## Multigroup CFA / HolzingerSwineford1939 by school\n")
+mg_dat <- lavaan::HolzingerSwineford1939[, c("school", paste0("x", 1:6))]
+m_mg <- magmaan::magmaan(mod_cfa, mg_dat, estimator = "ML", groups = "school")
+l_mg <- lavaan::cfa(mod_cfa, mg_dat, group = "school", meanstructure = FALSE)
+cases <- 1:20
+cr <- magmaan::case_rerun(m_mg, data = mg_dat, to_rerun = cases)
+rr <- semfindr::lavaan_rerun(l_mg, to_rerun = cases)
+stopifnot(sum(cr$converged) == length(cases))
+## relabel semfindr columns by (param).<group label>, in coef() order
+glab <- lavaan::lavInspect(l_mg, "group.label")
+pt <- lavaan::parameterTable(l_mg); pt <- pt[pt$free > 0, ]; pt <- pt[order(pt$free), ]
+skey <- paste0(pt$lhs, pt$op, pt$rhs, ".", glab[pt$group])
+relabel <- function(s, extra = character()) { colnames(s) <- c(skey, extra); s }
+agree("est_change_raw", magmaan::est_change_raw(cr),
+      relabel(semfindr::est_change_raw(rr)), tol = 1e-4)
+agree("est_change (DFTHETAS+gcd)", magmaan::est_change(cr),
+      relabel(semfindr::est_change(rr), "gcd"), tol = 1e-3)
+agree("fit_measures_change", magmaan::fit_measures_change(cr),
+      semfindr::fit_measures_change(rr), tol = 1e-3)
+mg_md_m <- magmaan::mahalanobis_rerun(m_mg, data = mg_dat)
+mg_md_s <- as.matrix(semfindr::mahalanobis_rerun(l_mg)); colnames(mg_md_s) <- colnames(mg_md_m)
+agree("mahalanobis_rerun (per group)", mg_md_m, mg_md_s, tol = 1e-6)
+
 cat("\ncase_influence_semfindr.R: all parity checks passed.\n")

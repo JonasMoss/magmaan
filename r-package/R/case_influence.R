@@ -65,9 +65,25 @@
   lab <- if ("label" %in% names(ptab)) as.character(ptab$label[fr]) else rep("", length(fr))
   lab[is.na(lab)] <- ""
   label_name <- ifelse(nzchar(lab), lab, name)
-  data.frame(k = k, row = fr,
+  group <- if ("group" %in% names(ptab)) as.integer(ptab$group[fr]) else rep(1L, length(fr))
+  # Multigroup column names collide (e.g. f1=~x2 in every group), so suffix them
+  # with the group *label* (not index): magmaan and lavaan order groups
+  # differently, so a label keeps the columns tool-independent. Single-group
+  # output is unchanged.
+  multigroup <- length(unique(group)) > 1L
+  glabels <- fit$group_labels
+  suffix <- if (!multigroup) {
+    ""
+  } else if (!is.null(glabels) && length(glabels) >= max(group)) {
+    paste0(".", glabels[group])
+  } else {
+    paste0(".g", group)
+  }
+  data.frame(k = k, row = fr, group = group,
              lhs = ptab$lhs[fr], op = ptab$op[fr], rhs = ptab$rhs[fr],
-             name = name, label_name = label_name, stringsAsFactors = FALSE)
+             name = paste0(name, suffix),
+             label_name = paste0(label_name, suffix),
+             stringsAsFactors = FALSE)
 }
 
 # Resolve a `parameters` selector (lavaan-syntax names and/or bare operators)
@@ -106,49 +122,67 @@
 #'
 #' The exact leave-one-out engine: for each selected case, drop its row, rebuild
 #' the sample statistics, and refit (warm-started from the full-sample solution).
-#' Mirror of `semfindr::lavaan_rerun()`. Single-group continuous ML/ULS/GLS only.
+#' Mirror of `semfindr::lavaan_rerun()`. Continuous ML/ULS/GLS.
 #'
-#' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS) carrying raw data.
+#' Single-group fits work directly from the raw data the fit carries. For
+#' multiple-group fits, pass the original `data` frame (the per-group raw blocks
+#' on the fit have lost the original row order needed to map a global case index
+#' to its group); case ids are then the data-frame rows, as in semfindr.
+#'
+#' @param fit A fitted `magmaan_fit` (continuous ML/ULS/GLS).
+#' @param data Optional original data frame. Required for multiple-group fits;
+#'   for single-group fits, defaults to the raw data on `fit`.
 #' @param to_rerun Integer case indices to refit; default all cases.
 #' @param warm_start Seed each refit from the full-sample estimates (faster, and
 #'   keeps refits on the same optimum). Default `TRUE`.
 #' @return A `magmaan_case_rerun` list: `rerun` (per-case refit fits, `NULL` when
 #'   a refit fails or is inadmissible), `fit`, `selected`, `case_id`, `converged`.
 #' @export
-case_rerun <- function(fit, to_rerun = NULL, warm_start = TRUE) {
+case_rerun <- function(fit, data = NULL, to_rerun = NULL, warm_start = TRUE) {
   if (!inherits(fit, "magmaan_fit")) {
     stop("case_rerun(): `fit` must be a magmaan_fit", call. = FALSE)
   }
   estimator <- .case_estimator(fit)
   fit_fun <- .case_fit_fun(estimator)
-  raw <- fit$raw_data
-  if (is.null(raw) || is.null(raw$X)) {
-    stop("case_rerun(): `fit` does not carry raw data (need fit$raw_data$X)",
-         call. = FALSE)
+  spec_warm <- .case_warm_spec(fit, warm_start)
+  group_var <- fit$group_var %||% ""
+
+  if (is.data.frame(data)) {
+    # Data-frame path: works for any number of groups. Drop the global row and
+    # rebuild per-group sample stats through the canonical df_to_data pipeline.
+    n <- nrow(data)
+    case_id <- rownames(data)
+    grp <- if (nzchar(group_var)) group_var else NULL
+    make_loo <- function(i) df_to_data(data[-i, , drop = FALSE], spec_warm,
+                                       group = grp, missing = "error")
+  } else {
+    raw <- fit$raw_data
+    if (is.null(raw) || is.null(raw$X)) {
+      stop("case_rerun(): `fit` does not carry raw data; pass the original ",
+           "`data` frame", call. = FALSE)
+    }
+    if (length(raw$X) != 1L) {
+      stop("case_rerun(): multiple-group fits need the original `data` frame ",
+           "(pass `data = <your data.frame>`)", call. = FALSE)
+    }
+    X <- raw$X[[1L]]
+    n <- nrow(X)
+    case_id <- rownames(X)
+    scaling <- raw$scaling %||% "n"
+    make_loo <- function(i) .case_loo_data(X[-i, , drop = FALSE], spec_warm, scaling)
   }
-  if (length(raw$X) != 1L) {
-    stop("case_rerun(): multiple-group leave-one-out is not supported yet; ",
-         "single-group fits only", call. = FALSE)
-  }
-  X <- raw$X[[1L]]
-  n <- nrow(X)
+  if (is.null(case_id)) case_id <- as.character(seq_len(n))
+
   selected <- if (is.null(to_rerun)) seq_len(n) else as.integer(to_rerun)
   if (any(selected < 1L | selected > n)) {
     stop("case_rerun(): `to_rerun` out of range 1:", n, call. = FALSE)
   }
-  case_id <- rownames(X)
-  if (is.null(case_id)) case_id <- as.character(seq_len(n))
-  scaling <- fit$raw_data$scaling %||% "n"
-  spec_warm <- .case_warm_spec(fit, warm_start)
 
   reruns <- vector("list", length(selected))
   converged <- logical(length(selected))
   for (j in seq_along(selected)) {
-    i <- selected[j]
-    refit <- tryCatch({
-      data_i <- .case_loo_data(X[-i, , drop = FALSE], spec_warm, scaling)
-      fit_fun(spec_warm, data_i)
-    }, error = function(e) NULL)
+    refit <- tryCatch(fit_fun(spec_warm, make_loo(selected[j])),
+                      error = function(e) NULL)
     ok <- !is.null(refit) && isTRUE(refit$converged)
     converged[j] <- ok
     reruns[[j]] <- if (ok) refit else NULL
@@ -156,7 +190,7 @@ case_rerun <- function(fit, to_rerun = NULL, warm_start = TRUE) {
 
   out <- list(rerun = reruns, fit = fit, selected = selected,
               case_id = case_id[selected], converged = converged,
-              estimator = estimator)
+              estimator = estimator, group_var = group_var)
   class(out) <- c("magmaan_case_rerun", "list")
   out
 }
@@ -328,29 +362,52 @@ fit_measures_change <- function(rerun_out,
 #'
 #' Model-free leverage measure: `stats::mahalanobis(X, colMeans(X),
 #' stats::cov(X))` (N-1 covariance), needing no refit. Mirror of
-#' `semfindr::mahalanobis_rerun()`. Single-group continuous fits.
+#' `semfindr::mahalanobis_rerun()`. For multiple-group fits the distance is
+#' computed within each group (its own mean/cov); pass the original `data` frame
+#' to place the per-group distances back at the original rows (semfindr order).
 #'
 #' @param fit A `magmaan_fit` or a `magmaan_case_rerun`.
+#' @param data Optional original data frame (multiple-group fits, to recover the
+#'   original row order). If omitted, multiple-group distances are returned in
+#'   group-block order.
 #' @return A one-column matrix of Mahalanobis distances, rownames = case ids.
 #' @export
-mahalanobis_rerun <- function(fit) {
+mahalanobis_rerun <- function(fit, data = NULL) {
   if (inherits(fit, "magmaan_case_rerun")) fit <- fit$fit
   if (!inherits(fit, "magmaan_fit")) {
     stop("mahalanobis_rerun(): `fit` must be a magmaan_fit or magmaan_case_rerun",
          call. = FALSE)
   }
+  md_block <- function(Xg) stats::mahalanobis(Xg, colMeans(Xg), stats::cov(Xg))
+
+  group_var <- fit$group_var %||% ""
+  if (is.data.frame(data) && nzchar(group_var)) {
+    ov <- colnames(fit$raw_data$X[[1L]])
+    g <- as.character(data[[group_var]])
+    n <- nrow(data)
+    md <- rep(NA_real_, n)
+    for (lab in unique(g)) {
+      idx <- which(g == lab)
+      md[idx] <- md_block(as.matrix(data[idx, ov, drop = FALSE]))
+    }
+    case_id <- rownames(data)
+    if (is.null(case_id)) case_id <- as.character(seq_len(n))
+    return(matrix(md, ncol = 1L, dimnames = list(case_id, "md")))
+  }
+
   raw <- fit$raw_data
   if (is.null(raw) || is.null(raw$X)) {
     stop("mahalanobis_rerun(): `fit` does not carry raw data", call. = FALSE)
   }
-  if (length(raw$X) != 1L) {
-    stop("mahalanobis_rerun(): multiple-group fits not supported yet", call. = FALSE)
-  }
-  X <- raw$X[[1L]]
-  case_id <- rownames(X)
-  if (is.null(case_id)) case_id <- as.character(seq_len(nrow(X)))
-  md <- stats::mahalanobis(X, colMeans(X), stats::cov(X))
-  matrix(md, ncol = 1L, dimnames = list(case_id, "md"))
+  # One block (single group) or several (multi-group, group-block order).
+  mds <- lapply(raw$X, md_block)
+  ids <- lapply(seq_along(raw$X), function(b) {
+    rn <- rownames(raw$X[[b]])
+    if (is.null(rn)) rn <- as.character(seq_len(nrow(raw$X[[b]])))
+    if (length(raw$X) > 1L) paste0("g", b, "_", rn) else rn
+  })
+  matrix(unlist(mds), ncol = 1L,
+         dimnames = list(unlist(ids), "md"))
 }
 
 # ---------------------------------------------------------------------------
