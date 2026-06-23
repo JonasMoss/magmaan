@@ -1915,6 +1915,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_mixed_ordinal_crmr_misspec
+Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, bool srmr_denominator, double conf_level, double eig_tol);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_crmr_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP srmr_denominatorSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
+    Rcpp::traits::input_parameter< bool >::type srmr_denominator(srmr_denominatorSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_crmr_misspec(fit, mixed_stats, estimated_weight, srmr_denominator, conf_level, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_mixed_ordinal_profile_rmsea
 Rcpp::List infer_mixed_ordinal_profile_rmsea(Rcpp::List fit, Rcpp::List mixed_stats, double eig_tol);
 RcppExport SEXP _magmaan_infer_mixed_ordinal_profile_rmsea(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP eig_tolSEXP) {
@@ -2825,6 +2841,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_ordinal_profile_lrt, 4},
     {"_magmaan_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaan_infer_ordinal_fit_measures_misspec, 5},
     {"_magmaan_infer_mixed_ordinal_rmsea_misspec", (DL_FUNC) &_magmaan_infer_mixed_ordinal_rmsea_misspec, 5},
+    {"_magmaan_infer_mixed_ordinal_crmr_misspec", (DL_FUNC) &_magmaan_infer_mixed_ordinal_crmr_misspec, 6},
     {"_magmaan_infer_mixed_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_mixed_ordinal_profile_rmsea, 3},
     {"_magmaan_infer_mixed_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_mixed_ordinal_profile_lrt, 4},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},

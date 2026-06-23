@@ -4098,6 +4098,44 @@ TEST_CASE("mixed_ordinal_dwls_profile_rmsea assembles the extended (u, gamma) la
   CHECK(fixed->df == rmsea->df);
   CHECK(std::abs(fixed->bias_trace - rmsea->bias_trace) > 1e-10);
 
+  auto crmr = magmaan::estimate::mixed_ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit);
+  auto srmr = magmaan::estimate::mixed_ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/true, /*srmr_denominator=*/true);
+  auto crmr_fixed = magmaan::estimate::mixed_ordinal_crmr_misspec_inference(
+      *pt, *mr, *stats, *fit,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      /*estimated_weight=*/false);
+  REQUIRE_MESSAGE(crmr.has_value(),
+      "mixed CRMR inference failed: "
+          << (crmr.has_value() ? "" : crmr.error().detail));
+  REQUIRE_MESSAGE(srmr.has_value(),
+      "mixed SRMR inference failed: "
+          << (srmr.has_value() ? "" : srmr.error().detail));
+  REQUIRE_MESSAGE(crmr_fixed.has_value(),
+      "mixed fixed-weight CRMR inference failed: "
+          << (crmr_fixed.has_value() ? "" : crmr_fixed.error().detail));
+  auto fm = magmaan::estimate::fit_measures_mixed_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS,
+      magmaan::estimate::OrdinalParameterization::Delta);
+  REQUIRE(fm.has_value());
+  CHECK(crmr->k == 6);
+  CHECK(srmr->k == 10);
+  CHECK(srmr->srmr_denominator);
+  CHECK(crmr_fixed->fixed_weight);
+  CHECK(crmr->point ==
+        doctest::Approx(srmr->point * std::sqrt(10.0 / 6.0)).epsilon(1e-9));
+  CHECK(srmr->point == doctest::Approx(fm->srmr).epsilon(1e-9));
+  CHECK(crmr->ci_lower <= crmr->ci_upper);
+  CHECK(srmr->ci_lower <= srmr->ci_upper);
+  CHECK(std::isfinite(crmr->exact_fit_pvalue));
+  CHECK(crmr->exact_fit_pvalue >= 0.0);
+  CHECK(crmr->exact_fit_pvalue <= 1.0);
+  CHECK(crmr_fixed->stat == doctest::Approx(crmr->stat).epsilon(1e-12));
+  CHECK(crmr_fixed->k == crmr->k);
+
   auto no_raw = *stats;
   no_raw.raw_data.clear();
   auto missing = magmaan::estimate::mixed_ordinal_dwls_profile_rmsea(

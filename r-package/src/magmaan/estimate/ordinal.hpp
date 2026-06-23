@@ -698,6 +698,24 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                double conf_level = 0.90,
                                double eig_tol = 1e-10);
 
+// Mixed continuous/ordinal counterpart of `ordinal_crmr_misspec_inference`.
+// The association residuals use the same standardization convention as
+// `mixed_ordinal_srmr`: continuous-continuous and polyserial rows are divided by
+// their observed standard-deviation scale, while ordinal-ordinal rows are
+// already correlations. `srmr_denominator=false` reports the off-diagonal CRMR
+// denominator; `true` reports the full-vech SRMR denominator.
+post_expected<OrdinalCrmrInference>
+mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
+                                     const model::MatrixRep& rep,
+                                     const data::MixedOrdinalStats& stats,
+                                     const Estimates& est,
+                                     OrdinalParameterization parameterization =
+                                         OrdinalParameterization::Delta,
+                                     bool estimated_weight = true,
+                                     bool srmr_denominator = false,
+                                     double conf_level = 0.90,
+                                     double eig_tol = 1e-10);
+
 // Estimated-weight (γ-channel-aware) misspecification confidence interval for
 // RMSEA. Reuses `ordinal_dwls_profile_rmsea` for the Hessian/Γ_x/bias/spectrum
 // and adds the envelope-score gradient variance for the interval.

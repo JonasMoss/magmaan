@@ -329,11 +329,14 @@ golden `parTable()` fixtures.
   per-group independence model (validated by a duplicate-group reduction:
   points invariant, statistic/df double, intervals tighten). A stabilized-`c`
   TLI variance remains deferred.
-  Mixed continuous/ordinal DWLS has the first reportable fit-index slice:
+  Mixed continuous/ordinal DWLS has the first reportable fit-index slices:
   `estimate::mixed_ordinal_rmsea_misspec_inference` reuses
   `mixed_ordinal_dwls_profile_rmsea` and adds the same estimated-weight
-  envelope-score CI and exact-fit mixture p-value for RMSEA. Mixed CRMR/SRMR and
-  CFI/TLI remain convention work.
+  envelope-score CI and exact-fit mixture p-value for RMSEA, while
+  `estimate::mixed_ordinal_crmr_misspec_inference` adds CRMR/SRMR inference over
+  the existing standardized mixed association residual convention (including
+  observed continuous-variance scale derivatives). Mixed CFI/TLI and the
+  consolidated mixed table remain convention work.
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

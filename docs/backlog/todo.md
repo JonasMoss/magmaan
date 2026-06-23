@@ -686,13 +686,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     2026-06-23**: `mixed_ordinal_rmsea_misspec_inference` adds the same
     estimated-weight envelope-score CI and exact-fit mixture p-value as the
     all-ordinal RMSEA path, exposed through
-    `magmaan_core$mixed_ordinal_rmsea_misspec`. What remains is the consolidated
-    reportable surface analogous to all-ordinal
-    `ordinal_fit_measures_misspec_inference`: mixed CRMR/SRMR and CFI/TLI once
-    the mixed residual denominator and independence-baseline conventions stay
-    coherent. R should either accept `magmaan_mixed_ordinal_data` in
-    `fit_measures_misspec()` or grow a clearly named mixed companion; do not
-    silently route mixed fits through the all-ordinal ordinal-stats API.
+    `magmaan_core$mixed_ordinal_rmsea_misspec`. Second slice **landed
+    2026-06-23**: `mixed_ordinal_crmr_misspec_inference` adds CRMR/SRMR
+    inference over the existing standardized mixed association residual
+    convention (continuous-continuous and polyserial residuals divided by
+    observed standard-deviation scales, with scale derivatives carried in the
+    sandwich), exposed through `magmaan_core$mixed_ordinal_crmr_misspec`. What
+    remains is the consolidated reportable surface analogous to all-ordinal
+    `ordinal_fit_measures_misspec_inference`: mixed CFI/TLI once the
+    independence-baseline convention stays coherent, then an R entry point that
+    either accepts `magmaan_mixed_ordinal_data` in `fit_measures_misspec()` or
+    grows a clearly named mixed companion; do not silently route mixed fits
+    through the all-ordinal ordinal-stats API.
   - **FIML**: verify it really is misspecification-robust (its bread is the
     observed Hessian by construction); add an expected-vs-observed comparison and
     a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
