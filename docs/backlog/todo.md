@@ -802,15 +802,15 @@ is now its Gram. Remaining:
   and gates transitively up to the documented factors; see the
   `docs/validation/oracle-defects.md` entry. File a PR / issue against
   `sfcheung/semfindr` with the influence-function derivation. **S**
-- **`fit_measures_change_approx` (needs per-case loglik).** semfindr's no-refit
-  fit-measure change uses `lavInspect(fit, "loglik.casewise")` for the model,
-  the saturated h1, and the baseline: `chisq_change ≈ 2·(ll1_i − ll0_i)`, then
-  CFI/TLI/RMSEA from the approximate chisqs. magmaan exposes no per-case loglik
-  (the FIML objective is summed per missingness pattern; complete-data ML has no
-  casewise objective at all, only casewise moment contributions). Add a per-case
-  ML/saturated/baseline loglik accessor, then the wrapper. The exact
-  `fit_measures_change` already covers the fit-measure influence leg; this is a
-  speed optimization.
+- **`fit_measures_change_approx` — NOT supported (by design).** semfindr's
+  no-refit fit-measure change exists to dodge expensive refits; magmaan's refits
+  are cheap summary-stat fits and are already reused from `case_rerun`, so the
+  exact `fit_measures_change` covers this leg at machine precision for no extra
+  cost. The approximation would be lossier (first-order `2·(ll1_i − ll0_i)`) and
+  its CFI/TLI would inherit the `fixed.x` baseline gap. It is implementable in
+  pure R (casewise MVN log-density at model/saturated/baseline moments — no core
+  accessor needed); build only if a concrete large-N, approximate-only consumer
+  ever appears.
 - **`fixed.x` baseline df gap (blocks CFI/TLI case influence on path models).**
   For a model with exogenous predictors, magmaan's independence/baseline model
   gives `baseline.df` one too high vs lavaan (e.g. path / `pa_dat`: magmaan 6,
