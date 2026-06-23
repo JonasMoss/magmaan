@@ -85,6 +85,14 @@ struct MixedOrdinalStats {
   // (1/n_b)·Σ_i g_i g_iᵀ = NACOV[b]. Empty when not computed.
   std::vector<Eigen::MatrixXd> moment_influence;
 
+  // Optional per-case influence rows for the estimated first-stage Gamma used
+  // by DWLS/WLS weights. `gamma_diag_influence[b]` is n_b × m_b for
+  // diag(Gamma_hat); `gamma_full_influence[b]` is n_b × (m_b*m_b) in
+  // column-major vec order for the full Gamma matrix. Consumers fall back to
+  // `raw_data`-based ordinary mixed helpers when these are empty.
+  std::vector<Eigen::MatrixXd> gamma_diag_influence;
+  std::vector<Eigen::MatrixXd> gamma_full_influence;
+
   // Raw data blocks used to reconstruct the estimated-weight influence for
   // mixed DWLS/WLS IJ. Ordinal columns are 1-based categories and continuous
   // columns are the original values; non-finite entries mark observed-data

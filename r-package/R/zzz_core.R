@@ -54,6 +54,8 @@ data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
   )
 }
 data_shrink_mixed_ordinal_stats <- data_shrink_mixed_ordinal_stats_impl
+data_mixed_ordinal_stats_observed_from_raw <- data_mixed_ordinal_stats_observed_from_raw_impl
+data_mixed_ordinal_stats_hybrid_fiml_from_raw <- data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl
 data_mixed_ordinal_stats_polyserial_dpd_from_raw <- data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl
 data_mixed_ordinal_stats_huber_residual_from_raw <- data_mixed_ordinal_stats_huber_residual_from_raw_impl
 
@@ -160,6 +162,7 @@ robust_gamma_nt <- infer_gamma_nt
 robust_ordinal <- infer_ordinal_robust
 robust_ordinal_ij <- infer_ordinal_robust_ij
 robust_mixed_ordinal <- infer_mixed_ordinal_robust
+robust_mixed_ordinal_ij <- infer_mixed_ordinal_robust_ij
 ordinal_profile_rmsea <- infer_ordinal_profile_rmsea
 ordinal_profile_lrt <- infer_ordinal_profile_lrt
 mixed_ordinal_profile_rmsea <- infer_mixed_ordinal_profile_rmsea
@@ -242,6 +245,8 @@ magmaan_core <- local({
       "data_ordinal_stats_from_raw",
       "data_ordinal_stats_observed_from_raw",
       "data_mixed_ordinal_stats_from_raw",
+      "data_mixed_ordinal_stats_observed_from_raw",
+      "data_mixed_ordinal_stats_hybrid_fiml_from_raw",
       "data_shrink_mixed_ordinal_stats"
     ),
     estimate = c(
@@ -344,6 +349,7 @@ magmaan_core <- local({
       "robust_ordinal",
       "robust_ordinal_ij",
       "robust_mixed_ordinal",
+      "robust_mixed_ordinal_ij",
       "ordinal_profile_rmsea",
       "ordinal_profile_lrt",
       "mixed_ordinal_profile_rmsea",
@@ -426,6 +432,8 @@ magmaan_core <- local({
       "df_to_fcsem_data",
       "data_ordinal_stats_from_df",
       "data_mixed_ordinal_stats_from_df",
+      "data_mixed_ordinal_stats_observed_from_df",
+      "data_mixed_ordinal_stats_hybrid_fiml_from_df",
       "shrink_mixed_ordinal_stats",
       "fit_ml",
       "fit_ml_fisher",
@@ -466,6 +474,8 @@ magmaan_core <- local({
       "data_ordinal_stats_dpd_from_raw",
       "data_ordinal_stats_huber_residual_from_raw",
       "data_ordinal_stats_observed_from_raw",
+      "data_mixed_ordinal_stats_observed_from_raw",
+      "data_mixed_ordinal_stats_hybrid_fiml_from_raw",
       "data_mixed_ordinal_stats_polyserial_dpd_from_raw",
       "data_mixed_ordinal_stats_huber_residual_from_raw",
       "data_ordinal_stats_from_raw_impl",
@@ -474,6 +484,8 @@ magmaan_core <- local({
       "data_ordinal_stats_dpd_from_raw_impl",
       "data_ordinal_stats_huber_residual_from_raw_impl",
       "data_mixed_ordinal_stats_from_raw_impl",
+      "data_mixed_ordinal_stats_observed_from_raw_impl",
+      "data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl",
       "data_shrink_mixed_ordinal_stats_impl",
       "data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl",
       "data_mixed_ordinal_stats_huber_residual_from_raw_impl",
@@ -560,6 +572,7 @@ magmaan_core <- local({
       "infer_gamma_nt",
       "infer_ordinal_robust",
       "infer_mixed_ordinal_robust",
+      "infer_mixed_ordinal_robust_ij",
       "infer_ordinal_profile_rmsea",
       "infer_ordinal_profile_lrt",
       "infer_mixed_ordinal_profile_rmsea",

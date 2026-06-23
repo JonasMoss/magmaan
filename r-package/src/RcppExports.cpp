@@ -480,6 +480,33 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_mixed_ordinal_stats_observed_from_raw_impl
+Rcpp::List data_mixed_ordinal_stats_observed_from_raw_impl(SEXP X, SEXP ordered_mask, bool full_wls_weight);
+RcppExport SEXP _magmaan_data_mixed_ordinal_stats_observed_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP, SEXP full_wls_weightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
+    Rcpp::traits::input_parameter< bool >::type full_wls_weight(full_wls_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_observed_from_raw_impl(X, ordered_mask, full_wls_weight));
+    return rcpp_result_gen;
+END_RCPP
+}
+// data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl
+Rcpp::List data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl(SEXP X, SEXP ordered_mask, bool full_wls_weight, double h_step);
+RcppExport SEXP _magmaan_data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP, SEXP full_wls_weightSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
+    Rcpp::traits::input_parameter< bool >::type full_wls_weight(full_wls_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl(X, ordered_mask, full_wls_weight, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 // data_shrink_mixed_ordinal_stats_impl
 Rcpp::List data_shrink_mixed_ordinal_stats_impl(Rcpp::List mixed_stats, std::string kind, double intensity, bool estimate_intensity);
 RcppExport SEXP _magmaan_data_shrink_mixed_ordinal_stats_impl(SEXP mixed_statsSEXP, SEXP kindSEXP, SEXP intensitySEXP, SEXP estimate_intensitySEXP) {
@@ -1818,6 +1845,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_mixed_ordinal_robust_ij
+Rcpp::List infer_mixed_ordinal_robust_ij(Rcpp::List fit, Rcpp::List mixed_stats, std::string weight);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_robust_ij(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP weightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_robust_ij(fit, mixed_stats, weight));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_ordinal_profile_rmsea
 Rcpp::List infer_ordinal_profile_rmsea(Rcpp::List fit, Rcpp::List ordinal_stats, double eig_tol);
 RcppExport SEXP _magmaan_infer_ordinal_profile_rmsea(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP eig_tolSEXP) {
@@ -2663,6 +2703,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
     {"_magmaan_data_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_huber_residual_from_raw_impl, 3},
     {"_magmaan_data_mixed_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_from_raw_impl, 3},
+    {"_magmaan_data_mixed_ordinal_stats_observed_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_observed_from_raw_impl, 3},
+    {"_magmaan_data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl, 4},
     {"_magmaan_data_shrink_mixed_ordinal_stats_impl", (DL_FUNC) &_magmaan_data_shrink_mixed_ordinal_stats_impl, 4},
     {"_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl, 3},
     {"_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl, 4},
@@ -2763,6 +2805,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_ordinal_robust_ij", (DL_FUNC) &_magmaan_infer_ordinal_robust_ij, 3},
     {"_magmaan_infer_ordinal_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ordinal_casewise_influence_ij_fit, 3},
     {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 4},
+    {"_magmaan_infer_mixed_ordinal_robust_ij", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust_ij, 3},
     {"_magmaan_infer_ordinal_profile_rmsea", (DL_FUNC) &_magmaan_infer_ordinal_profile_rmsea, 3},
     {"_magmaan_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaan_infer_ordinal_profile_lrt, 4},
     {"_magmaan_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaan_infer_ordinal_fit_measures_misspec, 5},

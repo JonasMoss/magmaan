@@ -1091,6 +1091,37 @@ Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
       Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted));
 }
 
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_robust_ij(Rcpp::List fit,
+                                         Rcpp::List mixed_stats,
+                                         std::string weight = "") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats =
+      mixed_ordinal_stats_from_arg(mixed_stats);
+  if (weight.empty()) {
+    if (!fit.containsElementNamed("estimator")) {
+      Rcpp::stop("magmaan: infer_mixed_ordinal_robust_ij() needs `weight` "
+                 "when fit$estimator is absent");
+    }
+    weight = Rcpp::as<std::string>(fit["estimator"]);
+  }
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto r_or = magmaan::estimate::robust_mixed_ordinal_ij(
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
+      ordinal_parameterization_from_string(parameterization_name));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  const magmaan::estimate::OrdinalRobustResult& r = *r_or;
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r.vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r.se),
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["chisq_standard"] = r.chisq_standard);
+}
+
 // infer_ordinal_profile_rmsea() — fixed-misspecification estimated-weight
 // profile RMSEA for all-ordinal DWLS fits. Requires `ordinal_stats` with
 // `moment_influence` and `int_data`, which the high-level DWLS path stores.

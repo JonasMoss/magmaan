@@ -137,6 +137,14 @@ data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask, full_wls_wei
     .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask, full_wls_weight)
 }
 
+data_mixed_ordinal_stats_observed_from_raw_impl <- function(X, ordered_mask, full_wls_weight = TRUE) {
+    .Call(`_magmaan_data_mixed_ordinal_stats_observed_from_raw_impl`, X, ordered_mask, full_wls_weight)
+}
+
+data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl <- function(X, ordered_mask, full_wls_weight = TRUE, h_step = 1e-4) {
+    .Call(`_magmaan_data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl`, X, ordered_mask, full_wls_weight, h_step)
+}
+
 data_shrink_mixed_ordinal_stats_impl <- function(mixed_stats, kind = "diagonal", intensity = 0.0, estimate_intensity = FALSE) {
     .Call(`_magmaan_data_shrink_mixed_ordinal_stats_impl`, mixed_stats, kind, intensity, estimate_intensity)
 }
@@ -535,6 +543,10 @@ infer_ordinal_casewise_influence_ij_fit <- function(fit, ordinal_stats, weight =
 
 infer_mixed_ordinal_robust <- function(fit, mixed_stats, weight = "", bread = "expected") {
     .Call(`_magmaan_infer_mixed_ordinal_robust`, fit, mixed_stats, weight, bread)
+}
+
+infer_mixed_ordinal_robust_ij <- function(fit, mixed_stats, weight = "") {
+    .Call(`_magmaan_infer_mixed_ordinal_robust_ij`, fit, mixed_stats, weight)
 }
 
 infer_ordinal_profile_rmsea <- function(fit, ordinal_stats, eig_tol = 1e-10) {
