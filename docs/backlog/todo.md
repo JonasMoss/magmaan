@@ -417,6 +417,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     pilot-sim winner); DPD/Huber are secondary comparators. This is the
     missing-data sibling of the complete-data robust ordinal moments that the
     robust-ordinal-paper track already ships; see Ordinal/SNLLS research.
+    **DEFERRED 2026-06-24 — blocked on a recipe-choice decision, not effort.**
+    Recon found "WMA polyserial" is a category error: WMA is a *polychoric*
+    cell-overcount cap and does not reach polyserials; the polyserial robust
+    members are DPD and Huber/Tukey-residual. So a mixed robust estimator either
+    goes uniform-DPD (one divergence over all pair types, but DPD was the weaker
+    pilot), mixes recipes (WMA cells + clipped-conditional polyserial — user:
+    "mixing estimators is probably not very beautiful"), or the WMA robust paper
+    stays all-ordinal (no mixing question). The missing-data layer is orthogonal
+    and ready (the `Gamma^pw` overlap reweighting already serves the ML observed
+    builders); the recipe choice is the only blocker. Full synthesis + resume
+    checklist in
+    [docs/research/notes/robust_mixed_recipe_taxonomy.md](../research/notes/robust_mixed_recipe_taxonomy.md).
   - **Done 2026-06-20.** Analytic moment-Hessian remainder: complete continuous
     LS, all-ordinal, and mixed ordinal/polyserial observed breads now have the
     closed-form `J' W J + residual-curvature` contraction; FD remains the

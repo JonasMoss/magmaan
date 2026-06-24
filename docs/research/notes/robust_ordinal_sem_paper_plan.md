@@ -52,6 +52,14 @@ Optional only if plots demand it:
 - Pair-local joint WMA: report only as a validation check against robcat/Welz,
   not as the SEM method.
 
+Scope note: WMA is a *polychoric* (cell-overcount) recipe and does not extend to
+polyserial (continuous-ordinal) pairs; the mixed/polyserial robust extension
+forces a recipe-choice question (uniform DPD vs mixing WMA-cells with
+clipped-conditional polyserials vs keeping this paper all-ordinal). That design
+discussion and its resume checklist are in
+[robust_mixed_recipe_taxonomy.md](robust_mixed_recipe_taxonomy.md). For now the
+robust SEM paper is cleanest scoped all-ordinal, where no mixing question arises.
+
 ## Simulation protocol
 
 All designs should emit one tidy results table with columns:
