@@ -303,11 +303,8 @@
 
 # FIML result rows: the spectrum comes from the first-principles missing-data
 # UGamma path (`infer_fiml_fmg_spectrum`); the base statistic is the FIML LRT.
-.fmg_result_rows_fiml <- function(fit, specs, h_step = 1e-4,
-                                  h1_information = c("saturated",
-                                                     "structured")) {
-  h1_information <- match.arg(h1_information)
-  sp <- infer_fiml_fmg_spectrum(fit, h_step, h1_information)
+.fmg_result_rows_fiml <- function(fit, specs, h_step = 1e-4) {
+  sp <- infer_fiml_fmg_spectrum(fit, h_step)
   df <- sp$df
   eigvals <- sp$biased
   rows <- lapply(specs, function(s) {
@@ -332,7 +329,6 @@
   })
   out <- .fmg_rows_to_df(rows)
   attr(out, "trace_xcheck") <- sp$trace_xcheck
-  attr(out, "h1_information") <- sp$h1_information
   out
 }
 
@@ -680,8 +676,7 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #' are supported the same way: the df-dimensional UGamma spectrum and the
 #' Stage-2 ML base chi-square are taken from the two-stage inference already
 #' attached to the fit (`fit$ml2s`), and the eigenvalue-tail transforms are
-#' applied to that triple. As under FIML, `_ug` and `_rls` are rejected and
-#' `h1_information` is fixed at its `"saturated"` default.
+#' applied to that triple. As under FIML, `_ug` and `_rls` are rejected.
 #'
 #' @param fit A fitted magmaan ML (complete-data), FIML, or ML2S model.
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
@@ -690,17 +685,11 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #'   optionally suffixed `_ug` and `_ml` / `_rls` (complete-data only).
 #' @param data Optional complete raw data (complete-data fits only). Usually
 #'   unnecessary for new fits that retain `$raw_data`.
-#' @param h1_information For FIML fits, `"saturated"` (default) uses the
-#'   saturated normal-theory H1 information as the U projector metric; `"structured"`
-#'   evaluates the same H1 curvature at the model-implied moments. Ignored only
-#'   at its default for complete-data ML fits.
 #'
 #' @return A data frame with scalar diagnostics plus list-columns for the raw
 #'   UGamma spectrum and the method-specific lambda vectors.
 #' @export
-fmg_tests <- function(fit, tests = NULL, data = NULL,
-                      h1_information = c("saturated", "structured")) {
-  h1_information <- match.arg(h1_information)
+fmg_tests <- function(fit, tests = NULL, data = NULL) {
   tests <- .fmg_resolve_default_tests(fit, tests)
   specs <- lapply(tests, .fmg_parse_test)
   # ML2S must be checked before FIML: a two-stage fit also carries a
@@ -709,11 +698,6 @@ fmg_tests <- function(fit, tests = NULL, data = NULL,
     if (!is.null(data)) {
       stop("fmg_tests(): ML2S FMG uses the fit's own two-stage spectrum; the ",
            "`data` argument is not supported for ML2S fits.", call. = FALSE)
-    }
-    if (!identical(h1_information, "saturated")) {
-      stop("fmg_tests(): h1_information is fixed for ML2S fits (the two-stage ",
-           "convention uses the complete-data weight as the U-metric); only the ",
-           "default 'saturated' is accepted.", call. = FALSE)
     }
     specs <- .fmg_adjust_specs_ml2s(specs)
     return(.fmg_result_rows_ml2s(fit, specs))
@@ -724,12 +708,7 @@ fmg_tests <- function(fit, tests = NULL, data = NULL,
            "the `data` argument is not supported for FIML fits.", call. = FALSE)
     }
     specs <- .fmg_adjust_specs_fiml(specs)
-    return(.fmg_result_rows_fiml(fit, specs,
-                                 h1_information = h1_information))
-  }
-  if (!identical(h1_information, "saturated")) {
-    stop("fmg_tests(): h1_information = 'structured' is only supported for ",
-         "FIML fits.", call. = FALSE)
+    return(.fmg_result_rows_fiml(fit, specs))
   }
   estimator <- .fmg_fit_estimator(fit)
   if (!identical(estimator, "ML")) {
@@ -754,15 +733,12 @@ fmg_tests <- function(fit, tests = NULL, data = NULL,
 #'   `std`, `sb`, `ss`, `mv`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` (unbiased Gamma-hat) and `_ml` / `_rls` (base
 #'   statistic; default `rls`).
-#' @param h1_information Passed to [fmg_tests()] for FIML fits.
 #'
 #' @return A named numeric vector of p-values; names are the canonical test
 #'   labels (e.g. `peba4_rls`, `sb_ug_rls`), matching `semTests::pvalues()`.
 #' @export
-fmg_pvalues <- function(fit, data = NULL, tests = NULL,
-                        h1_information = c("saturated", "structured")) {
-  tab <- fmg_tests(fit, tests = tests, data = data,
-                   h1_information = h1_information)
+fmg_pvalues <- function(fit, data = NULL, tests = NULL) {
+  tab <- fmg_tests(fit, tests = tests, data = data)
   out <- tab$p_value
   names(out) <- tab$label
   out

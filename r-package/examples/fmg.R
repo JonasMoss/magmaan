@@ -96,11 +96,6 @@ tab_f <- fmg_tests(fit_fiml)
 stopifnot(inherits(tab_f, "magmaan_fmg_tests"))
 stopifnot(all(tab_f$base == "ml"), all(!tab_f$ug))
 stopifnot(all(is.finite(tab_f$p_value)), all(tab_f$p_value >= 0), all(tab_f$p_value <= 1))
-stopifnot(identical(attr(tab_f, "h1_information"), "saturated"))
-tab_f_struct <- fmg_tests(fit_fiml, h1_information = "structured")
-stopifnot(inherits(tab_f_struct, "magmaan_fmg_tests"))
-stopifnot(identical(attr(tab_f_struct, "h1_information"), "structured"))
-stopifnot(all(is.finite(tab_f_struct$p_value)))
 # RLS and unbiased gamma are refused under FIML.
 stopifnot(grepl("RLS",
   tryCatch(fmg_tests(fit_fiml, tests = "peba4_rls"), error = conditionMessage)))
@@ -162,7 +157,7 @@ cat("FIML FMG (single + multi-group) workflow: ok\n")
 # The two-stage spectrum and Stage-2 ML base chi-square are attached to the fit
 # as $ml2s; fmg_tests() applies the same eigenvalue-tail transforms to that
 # triple. Under ML2S, as under FIML, only the biased Gamma-hat and the ML base
-# are defined (_ug / _rls rejected) and h1_information is fixed at "saturated".
+# are defined (_ug / _rls rejected).
 fit_2s <- magmaan(model, df_na, estimator = "ML2S")
 stopifnot(identical(fit_2s$estimator, "ML2S"), !is.null(fit_2s$ml2s),
           length(fit_2s$ml2s$eigvals) == fit_2s$ml2s$df)

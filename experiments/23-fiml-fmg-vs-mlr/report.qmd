@@ -35,11 +35,8 @@ mcar_hi <- {
 sev <- mcar_hi[mcar_hi$dist == "vm2", ]
 mlr_sev <- sev$reject[sev$method == "MLR"]
 yb_exact_sev <- sev$reject[sev$method == "YB_exact"]
-yb_exact_struct_sev <- sev$reject[sev$method == "YB_exact_structured"]
 all_sev <- sev$reject[sev$method == "all"]
-all_struct_sev <- sev$reject[sev$method == "all_structured"]
 ss_sev  <- sev$reject[sev$method == "SS"]
-ss_struct_sev  <- sev$reject[sev$method == "SS_structured"]
 ```
 
 ## Question
@@ -57,19 +54,16 @@ goodness-of-fit Type-I rate where MLR does not?
 
 ```{r short, results="asis"}
 if (length(mlr_sev) && length(yb_exact_sev) &&
-    length(yb_exact_struct_sev) && length(all_sev) &&
-    length(all_struct_sev) && length(ss_sev) && length(ss_struct_sev)) {
+    length(all_sev) && length(ss_sev)) {
   cat(sprintf(
     paste0("Under **MCAR** (where normal-theory FIML stays consistent), yes. At ",
            "severe Vale-Maurelli non-normality the MLR default rejects a true ",
            "model **%s** of the time at the .05 level. Exact UΓ mean scaling ",
-           "(`YB_exact`, the same p-values as the FMG `SB` row) rejects **%s** ",
-           "(**%s** with structured H1 information). The full FMG mixture rejects ",
-           "**%s** (**%s** structured), and scaled-shifted rejects **%s** ",
-           "(**%s** structured). ",
+           "(`YB_exact`, the same p-values as the FMG `SB` row) rejects **%s**. ",
+           "The full FMG mixture rejects **%s**, and scaled-shifted rejects ",
+           "**%s**. ",
            "The pattern holds across all non-normal families (%s reps).\n\n"),
-    fmt(mlr_sev), fmt(yb_exact_sev), fmt(yb_exact_struct_sev),
-    fmt(all_sev), fmt(all_struct_sev), fmt(ss_sev), fmt(ss_struct_sev), reps))
+    fmt(mlr_sev), fmt(yb_exact_sev), fmt(all_sev), fmt(ss_sev), reps))
   cat(paste0("Under this study's **MAR** the same conclusion holds. The ",
              "Savalei-Bentler mechanism here deletes indicators by coarse *sign* ",
              "rules on two always-observed indicators, which is mild enough that ",
@@ -160,19 +154,13 @@ applied to the difference of the two models' residual operators (Satorra 2000);
 the spectrum reduction above carries over verbatim, and its results are in the
 `nested` rows of `results/summary_rejection.csv`.
 
-**Structured ($V_S$) vs unstructured ($V_{US}$).** $V$ is the curvature
-$U(V)$ is built from, and the two test variants differ only in where it is
-evaluated:
-$$
-  V_{US} = H(\hat\eta) \quad\text{(saturated fit)},
-  \qquad
-  V_{S} = H(\eta(\hat\theta)) \quad\text{(model-implied moments)}.
-$$
-The default columns use $V_{US}$; the `_structured` columns use $V_S$. They
-share a probability limit under the correct MCAR null -- so here they agree up to
-finite-sample terms -- and separate only under misspecification or strong
-non-normal MAR. Full derivations:
-`docs/research/notes/non_normal_fiml_mlr_information`.
+**H1 information.** $V$ is the curvature $U(V)$ is built from, evaluated at the
+saturated fit $\hat\eta$ (the unstructured convention $V = H(\hat\eta)$). Earlier
+runs also carried a *structured* variant evaluating $V$ at the model-implied
+moments $\eta(\hat\theta)$; it shared the same probability limit under the null,
+never improved on the unstructured convention here, and risked an indefinite $V$
+off $H_0$, so it was removed from magmaan (2026-06-24) and is no longer reported.
+Full derivations: `docs/research/notes/non_normal_fiml_mlr_information`.
 
 ```{=latex}
 \newpage
@@ -183,13 +171,13 @@ non-normal MAR. Full derivations:
 In the table below, columns are the data families: normal (the control), then
 Vale-Maurelli (VM), inverse-Gaussian (IG), and power-law (PL) generators at
 moderate (`1`; skew 2, kurtosis 7) and severe (`2`; skew 3, kurtosis 21)
-non-normality. Rows are the tests; `(str)` marks the structured-$H_1$ variant.
+non-normality. Rows are the tests.
 
 ```{r tab-mcar}
 if (nrow(mcar_hi)) {
-  ord <- c("naive","MLR","YB_exact","YB_exact_structured","SS",
-           "SS_structured","SF","EBA4","pEBA4","pEBA4_structured","pall",
-           "pOLS","all","all_structured")
+  ord <- c("naive","MLR","YB_exact","SS",
+           "SF","EBA4","pEBA4","pall",
+           "pOLS","all")
   dist_ord <- c("norm","vm1","vm2","ig1","ig2","pl1","pl2")
   w <- reshape(mcar_hi[, c("dist","method","reject")], idvar = "method",
                timevar = "dist", direction = "wide")
@@ -206,7 +194,7 @@ if (nrow(mcar_hi)) {
   num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], pct)
   knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
     paste("GOF Type-I error (%%), MCAR %s%% (nominal 5%%). Last column: mean",
-          "over the six non-normal families. SB = YB; (str) = structured H1."),
+          "over the six non-normal families. SB = YB."),
     formatC(100 * max(mcar_hi$rate), format = "d")))
 }
 ```
@@ -224,9 +212,9 @@ mar_hi <- {
   gof[gof$truth == "h0" & gof$mech == "MAR" & gof$rate == r, ]
 }
 if (nrow(mar_hi)) {
-  ord <- c("naive","MLR","YB_exact","YB_exact_structured","SS",
-           "SS_structured","SF","EBA4","pEBA4","pEBA4_structured","pall",
-           "pOLS","all","all_structured")
+  ord <- c("naive","MLR","YB_exact","SS",
+           "SF","EBA4","pEBA4","pall",
+           "pOLS","all")
   dist_ord <- c("norm","vm1","vm2","ig1","ig2","pl1","pl2")
   w <- reshape(mar_hi[, c("dist","method","reject")], idvar = "method",
                timevar = "dist", direction = "wide")
@@ -243,7 +231,7 @@ if (nrow(mar_hi)) {
   num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], pct)
   knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
     paste("GOF Type-I error (%%), MAR %s%% (nominal 5%%). Last column: mean",
-          "over the six non-normal families. SB = YB; (str) = structured H1."),
+          "over the six non-normal families. SB = YB."),
     formatC(100 * max(mar_hi$rate), format = "d")))
 }
 ```

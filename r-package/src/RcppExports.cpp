@@ -983,15 +983,14 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_fiml_fmg_spectrum
-Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step, std::string h1_information);
-RcppExport SEXP _magmaan_infer_fiml_fmg_spectrum(SEXP fitSEXP, SEXP h_stepSEXP, SEXP h1_informationSEXP) {
+Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step);
+RcppExport SEXP _magmaan_infer_fiml_fmg_spectrum(SEXP fitSEXP, SEXP h_stepSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
-    Rcpp::traits::input_parameter< std::string >::type h1_information(h1_informationSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_fiml_fmg_spectrum(fit, h_step, h1_information));
+    rcpp_result_gen = Rcpp::wrap(infer_fiml_fmg_spectrum(fit, h_step));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2813,7 +2812,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_ml2s_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ml2s_casewise_influence_ij_fit, 4},
     {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 5},
     {"_magmaan_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_two_stage_stage2_weight_blocks_impl, 3},
-    {"_magmaan_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaan_infer_fiml_fmg_spectrum, 3},
+    {"_magmaan_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaan_infer_fiml_fmg_spectrum, 2},
     {"_magmaan_measures_standardize_lv", (DL_FUNC) &_magmaan_measures_standardize_lv, 2},
     {"_magmaan_measures_standardize_all", (DL_FUNC) &_magmaan_measures_standardize_all, 2},
     {"_magmaan_measures_composite_weights", (DL_FUNC) &_magmaan_measures_composite_weights, 2},

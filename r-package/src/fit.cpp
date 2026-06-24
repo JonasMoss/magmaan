@@ -79,33 +79,6 @@ std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
   return default_name;
 }
 
-magmaan::estimate::fiml::FIMLH1Information
-fiml_h1_information_from_arg(std::string name, const char* caller) {
-  for (char& ch : name) {
-    if (ch == '-') ch = '_';
-    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-  }
-  if (name == "saturated" || name == "unstructured") {
-    return magmaan::estimate::fiml::FIMLH1Information::Saturated;
-  }
-  if (name == "structured") {
-    return magmaan::estimate::fiml::FIMLH1Information::Structured;
-  }
-  Rcpp::stop("magmaan: %s(): h1_information must be 'saturated' or 'structured'",
-             caller);
-  return magmaan::estimate::fiml::FIMLH1Information::Saturated;
-}
-
-const char*
-fiml_h1_information_to_string(magmaan::estimate::fiml::FIMLH1Information x) {
-  using magmaan::estimate::fiml::FIMLH1Information;
-  switch (x) {
-    case FIMLH1Information::Saturated: return "saturated";
-    case FIMLH1Information::Structured: return "structured";
-  }
-  return "saturated";
-}
-
 // The estimate::fit* core takes an explicit start vector. These helpers
 // compute the starting values from a parsed model and abort to R on failure.
 // The R-facing layer owns the choice of starting algorithm; ordinary fits
@@ -3653,23 +3626,18 @@ Rcpp::List two_stage_stage2_weight_blocks_impl(Rcpp::List stage1,
 
 // infer_fiml_fmg_spectrum() — mirrors estimate::fiml::fiml_ugamma_spectrum().
 // First-principles missing-data UΓ spectrum for FMG goodness-of-fit tests: the
-// df nonzero eigenvalues of U·Γ_mis built from saturated or model-implied H1
-// information and the saturated-moment ACOV. Biased gamma only (the Du-Bentler
-// unbiased gamma is undefined under FIML — no $unbiased key), ML/LRT base
-// statistic.
+// df nonzero eigenvalues of U·Γ_mis built from the saturated H1 information and
+// the saturated-moment ACOV. Biased gamma only (the Du-Bentler unbiased gamma
+// is undefined under FIML — no $unbiased key), ML/LRT base statistic.
 //
 // [[Rcpp::export]]
-Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step = 1e-4,
-                                   std::string h1_information = "saturated") {
+Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step = 1e-4) {
   if (!fit.containsElementNamed("raw_data")) {
     Rcpp::stop("magmaan: infer_fiml_fmg_spectrum() requires a FIML fit with $raw_data");
   }
   if (!(h_step > 0.0)) {
     Rcpp::stop("magmaan: infer_fiml_fmg_spectrum() requires h_step > 0");
   }
-  const auto h1_info =
-      fiml_h1_information_from_arg(std::move(h1_information),
-                                   "infer_fiml_fmg_spectrum");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
@@ -3685,15 +3653,13 @@ Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step = 1e-4,
       ctx.pt, ctx.rep, raw, est, pack, h1);
   if (!extras_or.has_value()) stop_post(extras_or.error());
   auto sp_or = magmaan::estimate::fiml::fiml_ugamma_spectrum(
-      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2, pack, h1, sm, h1_info);
+      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2, pack, h1, sm);
   if (!sp_or.has_value()) stop_post(sp_or.error());
   return Rcpp::List::create(
       Rcpp::_["biased"] = Rcpp::wrap(sp_or->eigvals),
       Rcpp::_["chi2_lrt"] = sp_or->chi2_lrt,
       Rcpp::_["df"] = sp_or->df,
-      Rcpp::_["trace_xcheck"] = sp_or->trace_xcheck,
-      Rcpp::_["h1_information"] =
-          fiml_h1_information_to_string(sp_or->h1_information));
+      Rcpp::_["trace_xcheck"] = sp_or->trace_xcheck);
 }
 
 // measures_standardize_lv() — mirrors measures::standardize::standardize_lv().

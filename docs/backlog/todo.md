@@ -1211,31 +1211,28 @@ decisions in the simulation backlog.
   Note: pEBA-on-the-difference IS already exposed (`fmg_nested()`, FIML + ML2S),
   so the spectrum nested battery is harvested now; only the two items above
   remain.
-- **M, evaluation — structured-h1 FIML FMG: keep or ditch.** The FIML FMG U·Γ
-  spectrum exposes `estimate::FIMLH1Information::Structured`, which evaluates the
-  U-side information `V` (the saturated observed Hessian `J`) at the model-implied
-  moments `ξ(θ̂)` instead of the saturated `ξ̃` (`fiml_structured_h1_information`,
-  `src/estimate/fiml.cpp:2155`; consumed in `fiml_ugamma_spectrum_impl`, `:2245`).
-  Concern: at `ξ(θ̂)` the observed Hessian is not guaranteed positive definite
-  off-H₀ (the `ȳ_j − μ_j(θ̂)` terms, `:842-846`), and nothing guards it. The only
-  definiteness check is on the model-implied `Σ_oo` (always PD); `invert_symmetric`
-  silently LDLT-falls-back on an indefinite `Δ'VΔ` (`:500-517`); and the rank
-  sanity check (`:2374`) is necessary-not-sufficient (one boundary eigenvalue, no
-  sign check on the retained spectrum, which then feeds the FMG/pEBA mixture that
-  assumes `λᵢ ≥ 0`). The default `Saturated` evaluates `V` at the saturated
-  optimum `ξ̃`, PD by second-order optimality, so it is unaffected. Structured-h1
-  is *not* asymptotically advantageous (both consistent under H₀); the
-  Satorra-Bentler convention keeps the meat/`Ω` saturated and varies only `U⁰`,
-  and the complete-data evidence (Xia et al. 2016, via Savalei & Rosseel 2022)
-  mildly prefers the saturated/unstructured information. Evaluation: under the
-  exp-23 misspecified conditions, measure (a) how often structured `V` / `Δ'VΔ`
-  goes indefinite, and (b) whether structured-h1 ever beats saturated on Type-I /
-  power. If it never helps and risks indefiniteness, remove the `Structured`
-  option and keep `Saturated` as the sole FIML-FMG path (the FMG-spectrum
-  convention anyway). Caveat to weigh before removal: structured-h1 + observed-info
-  is the combination that gives lavaan-MLR bread parity, so dropping it ends exact
-  MLR reproduction from magmaan (the exp-23 MLR baseline runs via lavaan, so the
-  comparison itself is unaffected).
+- **Done 2026-06-24 — structured-h1 FIML FMG ditched.**
+  `estimate::FIMLH1Information::Structured` (the FIML FMG U·Γ-spectrum knob that
+  evaluated the U-side information `V` at the model-implied moments `ξ(θ̂)`
+  instead of the saturated `ξ̃`) is removed: the `FIMLH1Information` enum, the
+  `h1_information` parameter on the `fiml_ugamma_spectrum` overloads, the
+  `FIMLUGammaSpectrum::h1_information` field, the `infer_fiml_fmg_spectrum` Rcpp
+  arg, and the R `fmg_tests(h1_information=)` / `fmg_pvalues()` argument. `V` is
+  now always the saturated observed H1 information — the FMG-spectrum convention,
+  PD by second-order optimality. Rationale: structured-h1 was *not*
+  asymptotically advantageous (both consistent under H₀; Satorra-Bentler varies
+  only `U⁰`, and Xia et al. 2016 via Savalei & Rosseel 2022 mildly prefer the
+  saturated/unstructured information), and the model-implied curvature is not
+  guaranteed PD off H₀ with nothing guarding the sign of the retained spectrum
+  fed to the FMG/pEBA mixture (which assumes `λᵢ ≥ 0`). No new sim was needed:
+  experiment 23 already carried both variants across its grid, so the
+  keep-or-ditch evaluation was in hand. Two things survive the removal: the
+  `fiml_structured_h1_information` helper stays (the ML2S Stage-2 `W*` uses it),
+  and magmaan's MLR/Yuan-Bentler reproduction is the independent
+  `fiml_robust_mlr` (`estimate_fiml_robust_mlr`), which never used this knob.
+  Experiment 23's structured columns were dropped from the harness and the
+  variant is marked legacy in its report; `examples/fmg.R` and the
+  `fiml_ugamma_spectrum` C++ test no longer exercise it.
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
   2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
