@@ -397,6 +397,26 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
     covered by complete continuous LS.
+  - **Robust polyserial/mixed under missing data (the named target).** Extend
+    the *robust* (h-weighted / WMA, DPD, Huber) mixed stage-1 to MISSING data,
+    paralleling the already-landed *ML* missing-data mixed stack
+    (`mixed_ordinal_stats_from_observed_data` MCAR/pairwise-overlap +
+    `mixed_ordinal_stats_hybrid_fiml_from_observed_data`), with
+    estimated-weight IJ misspecification-robust inference (`robust_mixed_-
+    ordinal_ij` + the profile/fit-measure family). Three flavors to wire,
+    mirroring the ML ones:
+    (1) **pairwise/observed-overlap** robust polyserial (the MCAR pairwise
+        path) — robust thresholds/polychorics/polyserials on observed-pair
+        support, with support-aware moment-influence + `IF(Gamma)` rows;
+    (2) **hybrid FIML-normal** robust polyserial — continuous block via
+        saturated continuous FIML, robust polyserial/polychoric on
+        observed-pairs (the `*_hybrid_fiml_*` analogue);
+    (3) the matching robust casewise influence / `NACOV` so DWLS/WLS weights
+        and the estimated-weight γ channel carry through under missingness.
+    Lead variant is **WMA hard cap** (closed-form φ — no quadrature — and the
+    pilot-sim winner); DPD/Huber are secondary comparators. This is the
+    missing-data sibling of the complete-data robust ordinal moments that the
+    robust-ordinal-paper track already ships; see Ordinal/SNLLS research.
   - **Done 2026-06-20.** Analytic moment-Hessian remainder: complete continuous
     LS, all-ordinal, and mixed ordinal/polyserial observed breads now have the
     closed-form `J' W J + residual-curvature` contraction; FD remains the
@@ -1548,6 +1568,22 @@ work lives in [`speculative.md`](speculative.md). Open work:
   smooth h, and Huberized Pearson-residual moments. First milestone: reproduce the
   known Welz qualitative pattern for Designs 1-2 before adding SEM fits or broad
   copula grids.
+  - **Robust-variant cleanup / evaluation harness (decide which to keep).** The
+    full variant family is wired end-to-end (C++ core + R `data_ordinal_stats_-
+    from_raw(robust=, h_kind=, clip=, ...)`), and `ros_method_specs()` now
+    sweeps all 8: `ml`, `wma_hard_cap`, `smooth_cap`, `exp_cap`, `dpd`,
+    `hard_huber`, `pseudo_huber`, `tukey_biweight`. Open question is which earn
+    a main-text line vs. supplement vs. removal: we don't necessarily want all
+    of them, but the call should come from a proper comparison, not a hunch.
+    Build the evaluation setup before pruning: contamination sweep (bias/RMSE/SE
+    calibration/convergence/Γ-conditioning/runtime) AND the copula
+    distributional stress (Welz et al. evaluated on copulas too — Clayton main
+    text, Gumbel/t supplement) so we separate "robust to tail contamination"
+    from "robust to nonnormal copula." Prior signal: a limited pilot
+    (`robust_ordinal_pilot_n1000_r5.csv`) had WMA hard cap doing best, and hard
+    cap's φ is closed-form (the others — smooth/exp — carry Gauss-Legendre
+    quadrature in `phi_from_h`). Hard cap alone is a sufficient paper; the
+    cleanup decides whether the rest add enough to report.
 - **M/L.** Ordinal SNLLS follow-up research. The all-ordinal delta ULS/DWLS/WLS
   path covers free, fixed, merged (including cross-group invariant), and
   general linearly constrained thresholds through both the threshold-profiled
