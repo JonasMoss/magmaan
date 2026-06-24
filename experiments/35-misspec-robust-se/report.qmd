@@ -69,7 +69,11 @@ meat, so the whole difference is the bread.
 The practical reading is the wider lesson about settings made concrete: under a
 believed-correct model the conventional SE is right and efficient; once you are
 standing on a model you know is imperfect -- which is most of applied SEM -- you
-want the robust regime, and the choice should be one explicit keyword.
+want the robust regime, and the choice should be one explicit keyword. For
+ordinal DWLS the robust regime is not the end of the story: the conventional
+observed-Hessian SE (Lai & Simoes 2023) still under-covers, because it fixes the
+estimated weight, and only the complete jackknife reaches nominal CI coverage as
+`N` grows -- the sharper version of this finding (see Coverage across N).
 
 ## Evidence
 
@@ -81,6 +85,52 @@ structural. Focal parameter: a free loading on the distorted factor, and its
 
 ```{r}
 knitr::kable(tab, row.names = FALSE)
+```
+
+## Coverage across N: the fixed-weight "robust" SE does not converge, the complete jackknife does
+
+This is the step beyond Lai & Simoes (2023). Their corrected SE is the
+observed-Hessian bread (the "robust" regime above); like the lavaan default, it
+still treats the Stage-2 weight as fixed. magmaan's complete infinitesimal
+jackknife adds the influence of that estimated weight. Scoring CI coverage of the
+pseudo-true loading (nominal 0.95) across sample size tells the three apart.
+
+```{r}
+#| include: false
+csp <- file.path("results", "coverage_sweep.csv")
+CS <- if (file.exists(csp)) read.csv(csp) else NULL
+csv <- function(cell, n, col) {
+  if (is.null(CS)) return(NA_real_)
+  x <- CS[[col]][CS$cell == cell & CS$n_total == n]
+  if (length(x)) x[[1L]] else NA_real_
+}
+```
+
+The headline: under misspecification only the complete jackknife holds nominal
+coverage as `N` grows. The lavaan-default (expected) interval sits near
+`r f2(csv("misspec", 6000, "cov_exp"))` and never reaches 0.95 -- the structural
+misfit does not vanish with `N`. The observed bread (Lai & Simoes' corrected SE)
+recovers part of the gap but settles around
+`r f2(csv("misspec", 6000, "cov_obs"))`, short of nominal and not closing with
+`N`, because the weight is held fixed. The complete jackknife covers at
+`r f2(csv("misspec", 600, "cov_ij"))`--`r f2(csv("misspec", 6000, "cov_ij"))`
+across `N = 600`--`6000`. Under the correct model all three coincide near nominal
+at every `N` (no misfit, so the breads agree).
+
+```{r}
+if (!is.null(CS)) {
+  mis <- CS[CS$cell == "misspec", ]
+  ct <- data.frame(
+    N = mis$n_total,
+    `Expected (lavaan default)` = sprintf("%.2f", mis$cov_exp),
+    `Observed (Lai & Simoes 2023)` = sprintf("%.2f", mis$cov_obs),
+    `Complete jackknife (this work)` = sprintf("%.2f", mis$cov_ij),
+    check.names = FALSE)
+  knitr::kable(ct, row.names = FALSE, caption = paste(
+    "Misspecified cell: CI coverage of the pseudo-true loading (nominal 0.95) by",
+    "sample size; ordinal DWLS. The null cell is omitted -- all three coincide",
+    "near nominal there."))
+} else cat("Run `Rscript scripts/coverage_sweep.R` for the coverage-vs-N table.\n")
 ```
 
 ## Bootstrap: is it worth it here?
@@ -105,23 +155,33 @@ if (file.exists(bp)) {
 } else cat("Run `Rscript scripts/bootstrap.R` for the bootstrap coverage table.\n")
 ```
 
-Under misspecification the expected-bread (conventional / lavaan-default) interval
-under-covers (~0.87), the **observed-bread interval recovers nominal coverage
-(~0.95)**, and the three bootstrap intervals slightly over-cover (~0.97). So the
-analytic observed bread -- the new SE -- is enough for calibrated intervals here;
-the bootstrap is a conservative safety net, not a necessity. Note the
-observed-bread *mean SE* still slightly underestimates the empirical SD, yet its
-*coverage* is on target: the SD is inflated by a few heavy-tailed replications,
-while central 95% coverage is not, so the residual SE gap is tail mass rather than
-a coverage failure.
+At this single sample size the expected-bread (lavaan-default) interval
+under-covers (~0.87), the observed bread is near nominal, and the three bootstrap
+intervals slightly over-cover (~0.97). The bootstrap re-estimates the weight on
+every resample, so -- unlike the fixed-weight analytic breads -- it carries the
+weight's own sampling variability, the same term the complete jackknife adds
+analytically (coverage-vs-N section above). That the resampling intervals land at
+or above nominal while the fixed-weight breads fall short is the cross-check that
+the weight term is the missing piece. The practical reading: the analytic
+jackknife reaches calibrated coverage without 499 refits per fit, so the
+bootstrap is a confirmation here, not a necessity. (The bare observed-bread *mean
+SE* underestimates the empirical SD by exactly that weight term; the jackknife SE
+matches it -- see the `se` columns of the sweep.)
 
 ## Caveats
 
-- One focal parameter, one design point, `N = r meta("n_total")`. The robust SE
-  is an asymptotic sandwich: continuous ML closes the SE gap fully here, while
-  ordinal DWLS closes most of the SE *ratio* at this `N` (the residual is tail
-  mass -- its CI *coverage* is already nominal; see Bootstrap). The SE ratio
-  tightens with `N` (DWLS std loading: 0.85 at N=600, 0.93 at N=2400).
+- One focal parameter, one design point. The observed-Hessian ("robust") SE is
+  an asymptotic sandwich: continuous ML closes the SE gap fully, but for ordinal
+  DWLS the observed bread leaves a residual that does **not** vanish with `N` --
+  the influence of the estimated Stage-2 weight, which under-covers by ~2--3
+  points (Coverage across N). The complete jackknife adds that term and recovers
+  nominal coverage at every `N`. The SE-ratio table above reports the observed
+  bread for all three estimators, so its DWLS column carries this residual; read
+  it alongside the jackknife coverage, not as the final word for DWLS.
+- The coverage-vs-N sweep is ordinal DWLS, one focal loading, 400 replications
+  per cell. The ordering (expected < observed < jackknife, only the jackknife at
+  nominal) is stable across `N = 600`--`6000`; absolute rates carry Monte Carlo
+  noise (~1.1 points at `p = 0.95`).
 - The null-cell raw ratios carry Monte Carlo noise in the empirical SD at this
   replication count; the model-equals-robust coincidence (not the absolute
   level) is the point there.
@@ -135,5 +195,7 @@ a coverage failure.
 ```sh
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R --reps 250 --n-total 600 --cross 0.4
+Rscript scripts/coverage_sweep.R --reps 400 --ns 600,1500,3000,6000
+Rscript scripts/bootstrap.R --reps 150 --boot 499 --n-total 600 --cross 0.4
 quarto render report.qmd
 ```
