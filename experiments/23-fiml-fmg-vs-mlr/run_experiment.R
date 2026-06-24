@@ -9,7 +9,8 @@
 # `YB_mplus` from FMG's `YB_exact`: both are df-preserving mean scalings, but
 # `YB_mplus` uses the finite-sample Mplus trace approximation, whereas
 # `YB_exact`/`SB` uses the exact UGamma trace from the same FIML fit.
-# Structured-H1 FMG variants are stored with a `_structured` suffix.
+# (A structured-H1 FMG variant was compared in earlier runs but removed from
+# magmaan on 2026-06-24; saturated H1 is the only convention now.)
 #
 # Two regimes (see the report): under MCAR, normal-theory FIML is consistent for
 # any distribution, so this is a clean test of the reference-law correction.
@@ -192,7 +193,6 @@ for (ci in seq_len(nrow(grid))) {
     nk <- nk + 1L; nested_rows[[nk]] <- cbind(tag, res$nested)
     key <- paste(cell$truth, cell$dist, cell$mech, cell$rate, rep, sep = "|")
     spectra[[key]] <- list(gof = res$gof_spectrum,
-                           gof_structured = res$gof_structured_spectrum,
                            nested = res$nested_spectrum)
   }
   cat(sprintf("  %-12s %-4s %-8s rate=%.2f  %d/%d ok\n",
@@ -316,8 +316,7 @@ write_metadata(
                 estimation = "FIML",
                 competitors = paste(
                   "naive,MLR/YB_mplus,YB_exact,SB,SS,SF,EBA2/4/6,",
-                  "pEBA2/4/6,pall,pOLS,all plus structured-H1 FMG variants",
-                  "with _structured suffix"),
+                  "pEBA2/4/6,pall,pOLS,all"),
                 elapsed_sec = round(elapsed, 1)),
   packages = c("magmaan", "lavaan"))
 

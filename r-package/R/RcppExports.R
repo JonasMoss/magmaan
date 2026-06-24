@@ -289,8 +289,8 @@ two_stage_stage2_weight_blocks_impl <- function(stage1, stage2_weight = "nt", dl
     .Call(`_magmaan_two_stage_stage2_weight_blocks_impl`, stage1, stage2_weight, dls_a)
 }
 
-infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4, h1_information = "saturated") {
-    .Call(`_magmaan_infer_fiml_fmg_spectrum`, fit, h_step, h1_information)
+infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
+    .Call(`_magmaan_infer_fiml_fmg_spectrum`, fit, h_step)
 }
 
 measures_standardize_lv <- function(fit, vcov) {

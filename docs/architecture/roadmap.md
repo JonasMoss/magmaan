@@ -534,18 +534,17 @@ golden `parTable()` fixtures.
   `estimate::fiml::fiml_ugamma_spectrum` from the saturated-moment ACOV
   `Gamma_mis = H^-1 J H^-1` (`saturated_em_moments`, with analytic observed-row
   Hessians for saturated H1 information and a C++-only finite-difference
-  diagnostic comparator) plus an explicit H1 information choice for the
-  projector metric. The default `h1_information = "saturated"` uses the
-  saturated-model EM information `V = H`; `h1_information = "structured"`
-  evaluates the same observed-row H1 curvature at the model-implied moments
-  while leaving `Gamma_mis` unchanged. Both routes use
+  diagnostic comparator) plus the saturated observed H1 information `V = H` as
+  the projector metric (PD by second-order optimality — the FMG-spectrum
+  convention; a selectable structured-at-θ̂ variant was removed 2026-06-24, see
+  the backlog). The route uses
   `U = V - V Delta (Delta' V Delta)^-1 Delta' V` and the df eigenvalues of
   `U Gamma_mis`, with the FIML LRT as the base statistic. Equality constraints
   are honored by projecting `Delta` into the local free-coordinate space:
   affine linear constraints use their `K` reparameterization, while nonlinear
   equality constraints use the tangent-space null basis of `[A_eq ; dh/dtheta]`
   at `theta_hat`.
-  The saturated default is the `h1.information = "unstructured"` convention
+  The saturated H1 is the `h1.information = "unstructured"` convention
   natural to FIML's EM saturated model: on complete data it reproduces lavaan's
   unstructured UGamma spectrum element-for-element (~1e-7), validated in
   `examples/fmg.R`. semTests'
@@ -559,8 +558,8 @@ golden `parTable()` fixtures.
   `df`) by `two_stage_em_ml_inference`. The two-stage spectrum uses the
   saturated-moment EM sandwich ACOV as its meat and an expected normal-theory
   Satorra-Bentler weight built from the *unstructured* (sample/saturated h1)
-  moments as the U-metric; as under FIML, `_ug`/`_rls` are rejected and
-  `h1_information` is fixed at `"saturated"`. ML2S must be dispatched before FIML
+  moments as the U-metric; as under FIML, `_ug`/`_rls` are rejected. ML2S must
+  be dispatched before FIML
   because a two-stage fit also carries a `magmaan_fiml_data` raw object. The
   two-stage scaling and SEs match lavaan's `missing = "robust.two.stage"`
   convention (Huber-White sandwich Stage-1 ACOV) to machine precision - base,

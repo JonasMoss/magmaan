@@ -170,18 +170,17 @@ struct TwoStageFitMeasures {
 // reference law T → Σ λ_j χ²_1 that every FMG eigenvalue-tail transform consumes.
 // Built first-principles from H1 information (V), the saturated-moment ACOV
 // (Γ_mis = H⁻¹JH⁻¹), and the model Jacobian Δ = ∂η_model/∂θ:
-// U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV. No lavaan-UGamma-rescaling hack.
-enum class FIMLH1Information {
-  Saturated,   // V is the saturated normal-theory observed H1 information.
-  Structured   // V is the same H1 curvature evaluated at η_model(θ̂).
-};
-
+// U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV. No lavaan-UGamma-rescaling hack. The H1 information V
+// is always the saturated normal-theory observed information — the FMG-spectrum
+// convention, and PD by second-order optimality at the saturated optimum. (A
+// selectable structured-at-θ̂ variant was removed 2026-06-24: not asymptotically
+// advantageous and the model-implied curvature is not guaranteed PD off H₀; see
+// docs/architecture/roadmap.md.)
 struct FIMLUGammaSpectrum {
   Eigen::VectorXd eigvals;          // df nonzero eigenvalues of U·Γ_mis, ascending
   double          chi2_lrt = 0.0;   // FIML LRT (the FMG base statistic under FIML)
   int             df       = 0;
   double          trace_xcheck = 0.0;  // Σ eigvals
-  FIMLH1Information h1_information = FIMLH1Information::Saturated;
 };
 
 struct FIMLEtaJacobian {
@@ -676,9 +675,7 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      int df,
                      double chi2_lrt,
                      FIML discrepancy = {},
-                     double h_step = 1e-4,
-                     FIMLH1Information h1_information =
-                         FIMLH1Information::Saturated);
+                     double h_step = 1e-4);
 
 post_expected<FIMLUGammaSpectrum>
 fiml_ugamma_spectrum(spec::LatentStructure pt,
@@ -688,13 +685,11 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      int df,
                      double chi2_lrt,
                      const FIMLPack& pack,
-                     const FIMLH1& h1,
-                     FIMLH1Information h1_information =
-                         FIMLH1Information::Saturated);
+                     const FIMLH1& h1);
 
 // As above, but reuses a precomputed Stage-1 `SaturatedMoments` (the EM moments
 // + H/J/acov = Γ_mis) instead of rebuilding it. `pack`/`h1` are still consumed
-// for the residual projector Δ and the optional structured-H1 information.
+// for the residual projector Δ.
 post_expected<FIMLUGammaSpectrum>
 fiml_ugamma_spectrum(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
@@ -704,9 +699,7 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      double chi2_lrt,
                      const FIMLPack& pack,
                      const FIMLH1& h1,
-                     const SaturatedMoments& sm,
-                     FIMLH1Information h1_information =
-                         FIMLH1Information::Saturated);
+                     const SaturatedMoments& sm);
 
 // Single-model FIML residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV in the saturated
 // η-metric, with Δ the constraint-collapsed model Jacobian ∂[μ; vech Σ]/∂θ. The

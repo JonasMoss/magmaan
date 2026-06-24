@@ -3150,7 +3150,6 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
                           double chi2_lrt,
                           const FIMLPack& pack,
                           const FIMLH1& h1,
-                          FIMLH1Information h1_information,
                           const SaturatedMoments* sm_precomputed) {
   if (df <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -3158,8 +3157,8 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
   }
 
   // (1) Saturated-moment ingredients (block-diagonal η-space, multi-group safe):
-  //     Γ_mis = acov = H⁻¹ J H⁻¹. V defaults to saturated observed H1
-  //     information and may be swapped for model-implied H1 curvature. A caller
+  //     Γ_mis = acov = H⁻¹ J H⁻¹. V is the saturated observed H1 information
+  //     (the FMG-spectrum convention, PD at the saturated optimum). A caller
   //     holding the Stage-1 saturated moments passes them in to skip the rebuild.
   SaturatedMoments sm_owned;
   if (!sm_precomputed) {
@@ -3168,15 +3167,7 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
     sm_owned = std::move(*sm_or);
   }
   const SaturatedMoments& sm = sm_precomputed ? *sm_precomputed : sm_owned;
-  Eigen::MatrixXd V_storage;
-  const Eigen::MatrixXd* V_ptr = &sm.H;
-  if (h1_information == FIMLH1Information::Structured) {
-    auto V_or = fiml_structured_h1_information(pt, rep, raw, est, pack);
-    if (!V_or.has_value()) return std::unexpected(V_or.error());
-    V_storage = std::move(*V_or);
-    V_ptr = &V_storage;
-  }
-  const Eigen::MatrixXd& V = *V_ptr;
+  const Eigen::MatrixXd& V = sm.H;
   const Eigen::MatrixXd& G = sm.acov;
   const Eigen::Index Q = V.rows();
 
@@ -3220,7 +3211,6 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
   out.chi2_lrt = chi2_lrt;
   out.eigvals = all.tail(df);  // top-df nonzero eigenvalues, ascending
   out.trace_xcheck = out.eigvals.sum();
-  out.h1_information = h1_information;
 
   // Sanity: the largest projected-out eigenvalue must be ~0 — a non-trivial
   // value means `df` is inconsistent with the U-rank (layout / df bug).
@@ -3247,8 +3237,7 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      int df,
                      double chi2_lrt,
                      FIML discrepancy,
-                     double h_step,
-                     FIMLH1Information h1_information) {
+                     double h_step) {
   if (!(h_step > 0.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_ugamma_spectrum: h_step must be > 0"));
@@ -3263,7 +3252,20 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
   }
   return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
-                                   *pack_or, *h1_or, h1_information, nullptr);
+                                   *pack_or, *h1_or, nullptr);
+}
+
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1) {
+  return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
+                                   pack, h1, nullptr);
 }
 
 post_expected<FIMLUGammaSpectrum>
@@ -3275,24 +3277,9 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      double chi2_lrt,
                      const FIMLPack& pack,
                      const FIMLH1& h1,
-                     FIMLH1Information h1_information) {
+                     const SaturatedMoments& sm) {
   return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
-                                   pack, h1, h1_information, nullptr);
-}
-
-post_expected<FIMLUGammaSpectrum>
-fiml_ugamma_spectrum(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const RawData& raw,
-                     const Estimates& est,
-                     int df,
-                     double chi2_lrt,
-                     const FIMLPack& pack,
-                     const FIMLH1& h1,
-                     const SaturatedMoments& sm,
-                     FIMLH1Information h1_information) {
-  return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
-                                   pack, h1, h1_information, &sm);
+                                   pack, h1, &sm);
 }
 
 namespace {
@@ -3498,8 +3485,7 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
   if (!xx3_or.has_value()) return std::unexpected(xx3_or.error());
 
   auto spec_or = fiml_ugamma_spectrum_impl(
-      pt, rep, raw, est, df, *xx3_or, pack, h1,
-      FIMLH1Information::Saturated, &sm);
+      pt, rep, raw, est, df, *xx3_or, pack, h1, &sm);
   if (!spec_or.has_value()) return std::unexpected(spec_or.error());
 
   const std::vector<Eigen::Index> exo_idx = observed_exogenous_indices(pt);

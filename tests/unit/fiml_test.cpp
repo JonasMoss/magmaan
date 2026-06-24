@@ -799,30 +799,11 @@ TEST_CASE("fiml_ugamma_spectrum: missing-data trace matches fiml_robust_mlr") {
   CHECK(sp->eigvals.size() == *df_or);
   CHECK(sp->eigvals.allFinite());
   CHECK(sp->eigvals.minCoeff() > 0.0);
-  CHECK(sp->h1_information ==
-        magmaan::estimate::fiml::FIMLH1Information::Saturated);
   INFO("trace_xcheck = ", sp->trace_xcheck,
        " robust trace = ", rob->trace_ugamma);
   const double trace_scale =
       std::max(1.0, std::abs(rob->trace_ugamma));
   CHECK(std::abs(sp->trace_xcheck - rob->trace_ugamma) / trace_scale < 1e-2);
-
-  auto sp_struct = magmaan::estimate::fiml::fiml_ugamma_spectrum(
-      *built.pt, *built.rep, raw, *est, *df_or, fx->chi2,
-      magmaan::estimate::fiml::FIML{}, h_step,
-      magmaan::estimate::fiml::FIMLH1Information::Structured);
-  REQUIRE_MESSAGE(sp_struct.has_value(),
-      "structured fiml_ugamma_spectrum failed: " <<
-      (sp_struct.has_value() ? "" : sp_struct.error().detail));
-  CHECK(sp_struct->h1_information ==
-        magmaan::estimate::fiml::FIMLH1Information::Structured);
-  CHECK(sp_struct->df == *df_or);
-  CHECK(sp_struct->chi2_lrt == doctest::Approx(fx->chi2));
-  CHECK(sp_struct->eigvals.size() == *df_or);
-  CHECK(sp_struct->eigvals.allFinite());
-  CHECK(sp_struct->eigvals.minCoeff() > -1e-8);
-  CHECK(sp_struct->trace_xcheck ==
-        doctest::Approx(sp_struct->eigvals.sum()).epsilon(1e-12));
 }
 
 TEST_CASE("fiml_ugamma_spectrum: saturated-space trace identity is algebraic") {
