@@ -110,9 +110,20 @@ ros_method_specs <- function() {
     list(method = "smooth_cap", tuning = "h_a=1.6;h_b=2.2",
          args = list(robust = "h_weighted", h_kind = "smooth_cap",
                      h_a = 1.6, h_b = 2.2, h_lambda = 0.2)),
+    list(method = "exp_cap", tuning = "h_k=1.6;lambda=0.2",
+         args = list(robust = "h_weighted", h_kind = "exp_cap",
+                     h_k = 1.6, h_lambda = 0.2)),
+    list(method = "dpd", tuning = "alpha=0.3",
+         args = list(robust = "dpd", alpha = 0.3)),
     list(method = "huber_residual", tuning = "hard_huber;k=1.345",
          args = list(robust = "huber_residual", clip = "hard_huber",
-                     k = 1.345))
+                     k = 1.345)),
+    list(method = "pseudo_huber", tuning = "pseudo_huber;k=1.345",
+         args = list(robust = "huber_residual", clip = "pseudo_huber",
+                     k = 1.345)),
+    list(method = "tukey_biweight", tuning = "tukey_biweight;k=4.685",
+         args = list(robust = "huber_residual", clip = "tukey_biweight",
+                     k = 4.685))
   )
 }
 
