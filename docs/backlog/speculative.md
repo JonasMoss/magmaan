@@ -109,6 +109,36 @@ semantics are the target.
   add a focused diagnostic/warning that explains why the released `~*~` rows are
   unidentified and points users to theta or the Mplus-style helper.
 
+### Robust mixed/polyserial moments under missing data
+
+A *robust* (h-weighted / WMA, DPD, Huber) mixed stage-1 for MISSING data, the
+missing-data sibling of the landed complete-data robust ordinal moments: the
+three ML-mirroring flavors (pairwise/observed-overlap, hybrid FIML-normal, and
+the matching robust casewise influence / `NACOV` so DWLS/WLS weights and the
+estimated-weight γ channel carry through under missingness).
+
+**Alternative already available.** Complete-data robust ordinal moments are
+landed (the robust-ordinal paper track ships them, all-ordinal), and the *ML*
+missing-data mixed stack — `mixed_ordinal_stats_from_observed_data`
+(MCAR/pairwise-overlap) and `mixed_ordinal_stats_hybrid_fiml_from_observed_data`
+— already exists, so the missing-data layer (`Gamma^pw` overlap reweighting) is
+ready to mirror once a recipe is chosen. The blocker is not effort but a recipe
+choice: "WMA polyserial" is a category error (WMA is a polychoric cell-overcount
+cap; the polyserial robust members are DPD and Huber/Tukey-residual), so a mixed
+robust estimator must go uniform-DPD, intrinsic-mix (which the user finds
+inelegant), or keep the robust paper all-ordinal where the question doesn't
+arise. The copula stress results favour uniform-DPD and kill the intrinsic-mix
+Huber/Tukey port. Full synthesis + resume checklist:
+[docs/research/notes/robust_mixed_recipe_taxonomy.md](../research/notes/robust_mixed_recipe_taxonomy.md);
+copula evidence in
+[docs/research/notes/robust_ordinal_copula_results.md](../research/notes/robust_ordinal_copula_results.md).
+
+**Build if.** A concrete mixed-robust-missing-data consumer (paper row, user
+request) appears AND the recipe fork is resolved. If it fires, build the chosen
+recipe as a unified `mixed_*_shared_robust_*` taking the recipe as an option,
+then flavor 1 (observed/overlap missing-data treatment) then flavor 2 (hybrid
+FIML-normal continuous block).
+
 ## Optimizers
 
 ### Exact Hessians for IPOPT

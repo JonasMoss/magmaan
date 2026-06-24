@@ -390,45 +390,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     ~0.10 pairwise vs ~0.01 hybrid at 35% missing). Remaining validation is
     finite-sample calibration and stress tests for singular full WLS Gamma.
     Remaining
-    slices: robust/experimental mixed stage-1 variants such as
-    polyserial DPD and Huber residual
-    (the ML2S missing-data FIML sandwich-Gamma influence is now analytic, see
-    above);
-    the default `TwoStageWeight::Nt` path remains ordinary normal-theory
+    slices: the default `TwoStageWeight::Nt` path remains ordinary normal-theory
     ML robust-score inference, while the moment-quadratic GLS IJ correction is
-    covered by complete continuous LS.
-  - **Robust polyserial/mixed under missing data (the named target).** Extend
-    the *robust* (h-weighted / WMA, DPD, Huber) mixed stage-1 to MISSING data,
-    paralleling the already-landed *ML* missing-data mixed stack
-    (`mixed_ordinal_stats_from_observed_data` MCAR/pairwise-overlap +
-    `mixed_ordinal_stats_hybrid_fiml_from_observed_data`), with
-    estimated-weight IJ misspecification-robust inference (`robust_mixed_-
-    ordinal_ij` + the profile/fit-measure family). Three flavors to wire,
-    mirroring the ML ones:
-    (1) **pairwise/observed-overlap** robust polyserial (the MCAR pairwise
-        path) — robust thresholds/polychorics/polyserials on observed-pair
-        support, with support-aware moment-influence + `IF(Gamma)` rows;
-    (2) **hybrid FIML-normal** robust polyserial — continuous block via
-        saturated continuous FIML, robust polyserial/polychoric on
-        observed-pairs (the `*_hybrid_fiml_*` analogue);
-    (3) the matching robust casewise influence / `NACOV` so DWLS/WLS weights
-        and the estimated-weight γ channel carry through under missingness.
-    Lead variant is **WMA hard cap** (closed-form φ — no quadrature — and the
-    pilot-sim winner); DPD/Huber are secondary comparators. This is the
-    missing-data sibling of the complete-data robust ordinal moments that the
-    robust-ordinal-paper track already ships; see Ordinal/SNLLS research.
-    **DEFERRED 2026-06-24 — blocked on a recipe-choice decision, not effort.**
-    Recon found "WMA polyserial" is a category error: WMA is a *polychoric*
-    cell-overcount cap and does not reach polyserials; the polyserial robust
-    members are DPD and Huber/Tukey-residual. So a mixed robust estimator either
-    goes uniform-DPD (one divergence over all pair types, but DPD was the weaker
-    pilot), mixes recipes (WMA cells + clipped-conditional polyserial — user:
-    "mixing estimators is probably not very beautiful"), or the WMA robust paper
-    stays all-ordinal (no mixing question). The missing-data layer is orthogonal
-    and ready (the `Gamma^pw` overlap reweighting already serves the ML observed
-    builders); the recipe choice is the only blocker. Full synthesis + resume
-    checklist in
-    [docs/research/notes/robust_mixed_recipe_taxonomy.md](../research/notes/robust_mixed_recipe_taxonomy.md).
+    covered by complete continuous LS. (Robust/experimental mixed stage-1
+    variants under missing data — WMA/DPD/Huber polyserial — are cut to
+    [speculative.md](speculative.md): blocked on a recipe choice, no consumer.)
   - **Done 2026-06-20.** Analytic moment-Hessian remainder: complete continuous
     LS, all-ordinal, and mixed ordinal/polyserial observed breads now have the
     closed-form `J' W J + residual-curvature` contraction; FD remains the
