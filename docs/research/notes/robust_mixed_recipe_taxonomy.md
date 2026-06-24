@@ -101,9 +101,23 @@ which carry support-aware moment-influence and (for mixed) the
 wiring is the same mirror we did for the ML path; the recipe choice is the only
 blocker.
 
+## Evidence update (2026-06-24)
+
+The copula distributional-misspecification stress test now has results:
+[robust_ordinal_copula_results.md](robust_ordinal_copula_results.md) (full
+8-estimator family, faithful Welz §8.2 replica, 5000 reps). They bear directly
+on this fork: the **Huber/Tukey residual-clip recipe** (called "the genuine
+spiritual port of WMA" above, option 2) is the **worst performer** on the
+copula stress and Tukey's SEs are unusable; **DPD** (option 1, uniform) is the
+only cross-copula-stable robust recipe with calibrated SEs. This pushes a
+*mixed* extension toward DPD and away from intrinsic-mix Huber/Tukey. Caveat:
+that test is distributional, not partial-contamination (WMA's headline case);
+cross-check against the contamination designs before treating it as final.
+
 ## Resume checklist
 
 - Decide the fork: uniform-DPD vs intrinsic-mix vs all-ordinal-only-paper.
+  Copula evidence (above) now favours uniform-DPD for the mixed case.
 - If a mixed robust builder is built, the natural shape is a unified
   `mixed_*_shared_robust_*` taking the recipe as an option (no such builder
   exists today; DPD and Huber are separate functions with separate result

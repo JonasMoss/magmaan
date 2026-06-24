@@ -121,6 +121,17 @@ This should be the main SEM-facing result.
 
 ### Design 4: Copula distributional misspecification stress test
 
+Status: **DONE 2026-06-24** (moment-level, full 8-estimator family).
+`docs/research/sims/r/robust_ordinal_copula.R`; findings in
+[robust_ordinal_copula_results.md](robust_ordinal_copula_results.md). WMA hard
+cap reproduces robcat / ML reproduces the MLE to paper Table-5 precision. Key
+result: WMA's robustness is directional (wins on Clayton, over-corrects on
+Gumbel rho=0.9 to worse-than-ML), the Huber/Tukey residual-clip family is
+dominated everywhere, and DPD is the only cross-copula-stable robust recipe;
+this argues for building any mixed/polyserial extension on DPD, not on the
+residual clip. t-copula supplement still pending (needs a calibrated bivariate
+t R wrapper).
+
 Purpose: show boundaries. This is not the core claim.
 
 - Use VITA/covsim-style latent data with standard normal margins and nonnormal

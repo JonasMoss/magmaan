@@ -1596,6 +1596,17 @@ work lives in [`speculative.md`](speculative.md). Open work:
     cap's φ is closed-form (the others — smooth/exp — carry Gauss-Legendre
     quadrature in `phi_from_h`). Hard cap alone is a sufficient paper; the
     cleanup decides whether the rest add enough to report.
+    - **DONE 2026-06-24: copula distributional stress (Design 4).**
+      `docs/research/sims/r/robust_ordinal_copula.R` runs the full 8-estimator
+      family on a faithful Welz §8.2 replica (Clayton/Gumbel/Frank × rho_G
+      {0.3,0.9}, N=1000, 5000 reps); our WMA hard cap reproduces robcat and ML
+      reproduces the MLE to Table-5 precision. Findings in
+      [robust_ordinal_copula_results.md](../research/notes/robust_ordinal_copula_results.md):
+      WMA's robustness is *directional* (wins on Clayton, over-corrects on
+      Gumbel rho=0.9 to worse-than-ML); the Huber/Tukey residual-clip family is
+      dominated everywhere (Tukey SEs unusable); DPD is the only cross-copula-
+      stable robust recipe. Still to run: the contamination sweep (Designs 1-2
+      at scale) and the SEM-downstream design (Design 3).
 - **M/L.** Ordinal SNLLS follow-up research. The all-ordinal delta ULS/DWLS/WLS
   path covers free, fixed, merged (including cross-group invariant), and
   general linearly constrained thresholds through both the threshold-profiled
