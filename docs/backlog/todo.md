@@ -207,20 +207,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 
 ## Misspecification-robust SE for the moment-quadratic family (frontier)
 
-- **Reduced-bias estimation (RBM) frontier follow-ups.** V1 landed 2026-06 for
-  raw-data continuous ML and FIML: explicit one-step correction, implicit
-  penalized objective, C++ `estimate::frontier::rbm_*`, R
-  `magmaan_core$frontier_rbm()`, and a complete-data FIML == ML scaling
-  regression. Remaining work:
-  - **M/L — fixed-weight continuous LS.** Derive and implement the RBM meat and
-    bread for ULS/GLS/WLS/DWLS when the weight matrix is treated as fixed. Use
-    the moment-quadratic estimating equations and existing observed-bread
-    machinery; validate with finite-difference adjusted estimating equations.
-  - **L/XL — estimated-weight and staged estimators.** Extend only after the
-    stacked first-stage influence is explicit: ordinal/mixed DWLS/WLS, DLS/ADF,
-    and ML2S must include weight/saturated-moment estimation effects, not a
-    stage-2-only trace term. Reuse the complete-sandwich IJ blocks where
-    possible.
+- **Reduced-bias estimation (RBM) frontier.** V1 landed 2026-06 for raw-data
+  continuous ML and FIML. The 2026-06-25 extension adds the moment-quadratic
+  family: continuous ULS/GLS/WLS through `continuous_ls_rbm_parts()`, ordinal
+  and mixed ordinal through `ordinal_rbm_parts()` /
+  `mixed_ordinal_rbm_parts()`, and ML2S NT/DWLS/ADF/DLS through
+  `two_stage_rbm_parts()`. All use the same reduced-space trace algebra as ML
+  (`K' J K`, `K' E K`) and the R frontier dispatcher now routes existing fit
+  objects through `magmaan_core$frontier_rbm()`. Remaining work:
+  - **M/L — validation breadth.** Add independent finite-difference checks for
+    the adjusted estimating equations across continuous LS, ordinal/mixed, and
+    ML2S weights; the current smoke tests cover reduced-space diagnostics and
+    complete-data FIML == ML scaling.
   - **M — magmaan-owned paper rerun.** Experiment
     `38-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
     paper's main two-factor and growth-curve examples from the authors' OSF

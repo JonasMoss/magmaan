@@ -16,6 +16,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
@@ -23,6 +24,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/reparameterize.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 
 #include "detail_vech.hpp"
 
@@ -49,6 +51,20 @@ double total_n(const data::SampleStats& samp) {
 
 double total_n(const fiml::FIMLPack& pack) {
   return static_cast<double>(pack.cache.n_total);
+}
+
+double total_n(const std::vector<std::int64_t>& n_obs) {
+  double n = 0.0;
+  for (const auto nb : n_obs) n += static_cast<double>(nb);
+  return n;
+}
+
+data::SampleStats sample_stats_from_saturated(const fiml::SaturatedMoments& sm) {
+  data::SampleStats samp;
+  samp.mean = sm.mean;
+  samp.S = sm.cov;
+  samp.n_obs = sm.n_obs;
+  return samp;
 }
 
 fit_expected<optim::OptimResult>
@@ -93,9 +109,16 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
 struct RBMParts {
   Eigen::MatrixXd information;
   Eigen::MatrixXd meat;
+  Eigen::MatrixXd information_reduced;
+  Eigen::MatrixXd meat_reduced;
   double trace_term = 0.0;
   double penalty = 0.0;
   double penalty_per_observation = 0.0;
+};
+
+struct OwnedGmmProblem {
+  std::shared_ptr<model::ModelEvaluator> ev;
+  optim::GmmProblem problem;
 };
 
 fit_expected<double>
@@ -126,20 +149,60 @@ trace_information_meat(const Eigen::MatrixXd& information,
 fit_expected<RBMParts>
 parts_from_info_scores(Eigen::MatrixXd information,
                        const Eigen::MatrixXd& scores,
+                       const Eigen::MatrixXd& K,
                        double n_total) {
   if (!(n_total > 0.0)) {
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
         "rbm: non-positive sample size"));
   }
+  if (K.rows() != information.rows()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "rbm: constraint reparameterization row count does not match "
+        "information"));
+  }
+  if (scores.cols() != information.cols()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "rbm: score column count does not match information"));
+  }
   Eigen::MatrixXd meat = scores.transpose() * scores;
-  auto trace_or = trace_information_meat(information, meat);
+  Eigen::MatrixXd information_reduced = K.transpose() * information * K;
+  information_reduced =
+      0.5 * (information_reduced + information_reduced.transpose()).eval();
+  Eigen::MatrixXd scores_reduced = scores * K;
+  Eigen::MatrixXd meat_reduced = scores_reduced.transpose() * scores_reduced;
+  meat_reduced = 0.5 * (meat_reduced + meat_reduced.transpose()).eval();
+  auto trace_or = trace_information_meat(information_reduced, meat_reduced);
   if (!trace_or.has_value()) return std::unexpected(trace_or.error());
   RBMParts out;
   out.information = std::move(information);
   out.meat = std::move(meat);
+  out.information_reduced = std::move(information_reduced);
+  out.meat_reduced = std::move(meat_reduced);
   out.trace_term = *trace_or;
   out.penalty = -0.5 * out.trace_term;
   out.penalty_per_observation = -out.penalty / n_total;
+  return out;
+}
+
+fit_expected<RBMParts>
+parts_from_weighted(WeightedMomentRBMParts parts) {
+  if (parts.n_obs <= 0) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "rbm: weighted moment parts have non-positive sample size"));
+  }
+  auto trace_or = trace_information_meat(parts.information, parts.meat);
+  if (!trace_or.has_value()) return std::unexpected(trace_or.error());
+  RBMParts out;
+  out.information_reduced = std::move(parts.information);
+  out.meat_reduced = std::move(parts.meat);
+  out.information = parts.K * out.information_reduced * parts.K.transpose();
+  out.information = 0.5 * (out.information + out.information.transpose()).eval();
+  out.meat = parts.K * out.meat_reduced * parts.K.transpose();
+  out.meat = 0.5 * (out.meat + out.meat.transpose()).eval();
+  out.trace_term = *trace_or;
+  out.penalty = -0.5 * out.trace_term;
+  out.penalty_per_observation =
+      -out.penalty / static_cast<double>(parts.n_obs);
   return out;
 }
 
@@ -249,6 +312,82 @@ fiml_context(spec::LatentStructure pt, const model::MatrixRep& rep,
   return ctx;
 }
 
+fit_expected<RBMContext>
+scalar_context(spec::LatentStructure pt, const model::MatrixRep& rep,
+               const Eigen::VectorXd& theta0,
+               optim::ScalarProblem base_objective, double n_total,
+               const char* who) {
+  if (theta0.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(make_fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": theta size (" + std::to_string(theta0.size()) +
+            ") != n_free (" + std::to_string(pt.n_free()) + ")"));
+  }
+  if (!(n_total > 0.0)) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": non-positive sample size"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/false);
+  if (!con_or.has_value()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": unsupported equality constraint: " +
+            con_or.error().detail));
+  }
+
+  RBMContext ctx;
+  ctx.pt = std::move(pt);
+  ctx.rep = &rep;
+  ctx.ev = std::make_shared<model::ModelEvaluator>(std::move(*ev_or));
+  ctx.con = std::move(*con_or);
+  ctx.nl = build_nl_constraints(ctx.pt);
+  ctx.base_objective = std::move(base_objective);
+  ctx.n_total = n_total;
+  return ctx;
+}
+
+fit_expected<RBMContext>
+ls_context(spec::LatentStructure pt, const model::MatrixRep& rep,
+           const data::SampleStats& samp, const Eigen::VectorXd& theta0,
+           const gmm::Weight& weight, const char* who) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto ev = std::make_shared<model::ModelEvaluator>(std::move(*ev_or));
+  auto prob_or = gmm::residuals(*ev, samp, theta0, weight);
+  if (!prob_or.has_value()) return std::unexpected(prob_or.error());
+  auto state = std::make_shared<OwnedGmmProblem>();
+  state->ev = std::move(ev);
+  state->problem = std::move(*prob_or);
+  optim::GmmProblem prob;
+  prob.n_resid = state->problem.n_resid;
+  prob.n_param = state->problem.n_param;
+  prob.expand = [state](const Eigen::VectorXd& x) {
+    return state->problem.expand(x);
+  };
+  prob.r = [state](const Eigen::VectorXd& x) {
+    return state->problem.r(x);
+  };
+  prob.J = [state](const Eigen::VectorXd& x) {
+    return state->problem.J(x);
+  };
+  prob.eval = [state](const Eigen::VectorXd& x) {
+    return state->problem.eval(x);
+  };
+  return scalar_context(std::move(pt), rep, theta0, optim::scalarize(prob),
+                        total_n(samp), who);
+}
+
 fit_expected<RBMParts>
 ml_parts(const RBMContext& ctx, const data::SampleStats& samp,
          const data::RawData& raw, const Eigen::VectorXd& theta) {
@@ -327,7 +466,8 @@ ml_parts(const RBMContext& ctx, const data::SampleStats& samp,
     return scores;
   }();
   if (!scores_or.has_value()) return std::unexpected(scores_or.error());
-  return parts_from_info_scores(std::move(*info_or), *scores_or, ctx.n_total);
+  return parts_from_info_scores(std::move(*info_or), *scores_or, ctx.con.K(),
+                                ctx.n_total);
 }
 
 fit_expected<RBMParts>
@@ -343,7 +483,90 @@ fiml_parts(const RBMContext& ctx, const data::RawData& raw,
   const double N = ctx.n_total;
   Eigen::MatrixXd information = 0.5 * N * smb_or->hessian;
   Eigen::MatrixXd loglik_scores = -0.5 * smb_or->scores;
-  return parts_from_info_scores(std::move(information), loglik_scores, N);
+  return parts_from_info_scores(std::move(information), loglik_scores,
+                                ctx.con.K(), N);
+}
+
+fit_expected<double>
+base_fmin_at(const optim::ScalarProblem& prob, const Eigen::VectorXd& theta,
+             const char* who);
+
+fit_expected<Estimates>
+estimates_at(const Estimates& base, const optim::ScalarProblem& objective,
+             const Eigen::VectorXd& theta, const char* who) {
+  auto fmin = base_fmin_at(objective, theta, who);
+  if (!fmin.has_value()) return std::unexpected(fmin.error());
+  Estimates est = base;
+  est.theta = theta;
+  est.fmin = *fmin;
+  return est;
+}
+
+fit_expected<RBMParts>
+continuous_ls_parts(const RBMContext& ctx, const data::SampleStats& samp,
+                    const Estimates& base, const gmm::Weight& weight,
+                    const data::RawData& raw, ContinuousLsIJWeightMode mode,
+                    DlsWeightOptions dls_opts,
+                    const Eigen::VectorXd& theta) {
+  auto est = estimates_at(base, ctx.base_objective, theta,
+                          "rbm_continuous_ls");
+  if (!est.has_value()) return std::unexpected(est.error());
+  auto parts = continuous_ls_rbm_parts(ctx.pt, *ctx.rep, samp, *est, weight,
+                                       raw, mode, dls_opts);
+  if (!parts.has_value()) {
+    return std::unexpected(post_to_fit(parts.error(), "rbm_continuous_ls"));
+  }
+  return parts_from_weighted(std::move(*parts));
+}
+
+fit_expected<RBMParts>
+ordinal_parts(const RBMContext& ctx, const spec::LatentStructure& pt,
+              const data::OrdinalStats& stats, const Estimates& base,
+              OrdinalWeightKind weights,
+              OrdinalParameterization parameterization,
+              const Eigen::VectorXd& theta) {
+  auto est = estimates_at(base, ctx.base_objective, theta, "rbm_ordinal");
+  if (!est.has_value()) return std::unexpected(est.error());
+  auto parts = ordinal_rbm_parts(pt, *ctx.rep, stats, *est, weights,
+                                 parameterization);
+  if (!parts.has_value()) {
+    return std::unexpected(post_to_fit(parts.error(), "rbm_ordinal"));
+  }
+  return parts_from_weighted(std::move(*parts));
+}
+
+fit_expected<RBMParts>
+mixed_ordinal_parts(const RBMContext& ctx,
+                    const spec::LatentStructure& pt,
+                    const data::MixedOrdinalStats& stats,
+                    const Estimates& base, OrdinalWeightKind weights,
+                    OrdinalParameterization parameterization,
+                    const Eigen::VectorXd& theta) {
+  auto est = estimates_at(base, ctx.base_objective, theta,
+                          "rbm_mixed_ordinal");
+  if (!est.has_value()) return std::unexpected(est.error());
+  auto parts = mixed_ordinal_rbm_parts(pt, *ctx.rep, stats, *est, weights,
+                                       parameterization);
+  if (!parts.has_value()) {
+    return std::unexpected(post_to_fit(parts.error(), "rbm_mixed_ordinal"));
+  }
+  return parts_from_weighted(std::move(*parts));
+}
+
+fit_expected<RBMParts>
+two_stage_parts(const RBMContext& ctx, const data::RawData& raw,
+                const fiml::FIMLPack& pack, const fiml::FIMLH1& h1,
+                const fiml::SaturatedMoments& sm, const Estimates& base,
+                fiml::TwoStageWeight weight, fiml::TwoStageDlsOptions dls,
+                const Eigen::VectorXd& theta) {
+  auto est = estimates_at(base, ctx.base_objective, theta, "rbm_two_stage");
+  if (!est.has_value()) return std::unexpected(est.error());
+  auto parts = fiml::two_stage_rbm_parts(ctx.pt, *ctx.rep, raw, *est, pack, h1,
+                                         sm, weight, dls);
+  if (!parts.has_value()) {
+    return std::unexpected(post_to_fit(parts.error(), "rbm_two_stage"));
+  }
+  return parts_from_weighted(std::move(*parts));
 }
 
 fit_expected<double>
@@ -460,6 +683,8 @@ void fill_common_result(RBMResult& result, const RBMContext& ctx,
   result.correction = theta - start_theta;
   result.information = parts.information;
   result.meat = parts.meat;
+  result.information_reduced = parts.information_reduced;
+  result.meat_reduced = parts.meat_reduced;
   result.trace_term = parts.trace_term;
   result.penalty = parts.penalty;
   result.penalty_per_observation = parts.penalty_per_observation;
@@ -498,7 +723,7 @@ explicit_impl(const RBMContext& ctx, const Estimates& base,
   auto grad_alpha_or = penalty_gradient_fd(alpha0, penalty_alpha, opts, who);
   if (!grad_alpha_or.has_value()) return std::unexpected(grad_alpha_or.error());
 
-  const Eigen::MatrixXd j_alpha = K.transpose() * parts.information * K;
+  const Eigen::MatrixXd& j_alpha = parts.information_reduced;
   auto delta_alpha_or = solve_linear(j_alpha, *grad_alpha_or,
                                      "rbm explicit correction");
   if (!delta_alpha_or.has_value()) {
@@ -758,6 +983,222 @@ rbm_implicit_fiml(spec::LatentStructure pt,
   if (!pack.has_value()) return std::unexpected(pack.error());
   return rbm_implicit_fiml(std::move(pt), rep, raw, *pack, start,
                            std::move(bounds), opts);
+}
+
+fit_expected<RBMResult>
+rbm_explicit_continuous_ls(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::SampleStats& samp,
+                           const Estimates& base,
+                           const gmm::Weight& weight,
+                           const data::RawData& raw,
+                           ContinuousLsIJWeightMode mode,
+                           DlsWeightOptions dls_opts,
+                           Bounds bounds,
+                           RBMOptions opts) {
+  auto valid = validate_raw_matches_sample(samp, raw);
+  if (!valid.has_value()) return std::unexpected(valid.error());
+  auto ctx = ls_context(std::move(pt), rep, samp, base.theta, weight,
+                        "rbm_explicit_continuous_ls");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, &samp, &base, &weight, &raw, mode, dls_opts](
+                         const Eigen::VectorXd& theta) {
+    return continuous_ls_parts(*ctx, samp, base, weight, raw, mode, dls_opts,
+                               theta);
+  };
+  return explicit_impl(*ctx, base, bounds, opts, parts_at,
+                       "rbm_explicit_continuous_ls");
+}
+
+fit_expected<RBMResult>
+rbm_implicit_continuous_ls(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::SampleStats& samp,
+                           const Estimates& start,
+                           const gmm::Weight& weight,
+                           const data::RawData& raw,
+                           ContinuousLsIJWeightMode mode,
+                           DlsWeightOptions dls_opts,
+                           Bounds bounds,
+                           RBMOptions opts) {
+  auto valid = validate_raw_matches_sample(samp, raw);
+  if (!valid.has_value()) return std::unexpected(valid.error());
+  auto ctx = ls_context(std::move(pt), rep, samp, start.theta, weight,
+                        "rbm_implicit_continuous_ls");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, &samp, &start, &weight, &raw, mode, dls_opts](
+                         const Eigen::VectorXd& theta) {
+    return continuous_ls_parts(*ctx, samp, start, weight, raw, mode, dls_opts,
+                               theta);
+  };
+  return implicit_impl(*ctx, start, bounds, opts, parts_at,
+                       "rbm_implicit_continuous_ls");
+}
+
+fit_expected<RBMResult>
+rbm_explicit_ordinal(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Estimates& base,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization,
+                     Bounds bounds,
+                     RBMOptions opts) {
+  spec::LatentStructure pt_for_parts = pt;
+  auto obj = ordinal_ls_objective(std::move(pt), rep, stats, base, weights,
+                                  parameterization);
+  if (!obj.has_value()) return std::unexpected(obj.error());
+  auto ctx = scalar_context(std::move(obj->pt), rep, base.theta,
+                            optim::scalarize(obj->problem),
+                            total_n(stats.n_obs), "rbm_explicit_ordinal");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
+                      &base, weights, parameterization](
+                         const Eigen::VectorXd& theta) mutable {
+    return ordinal_parts(*ctx, pt_for_parts, stats, base, weights,
+                         parameterization, theta);
+  };
+  return explicit_impl(*ctx, base, bounds, opts, parts_at,
+                       "rbm_explicit_ordinal");
+}
+
+fit_expected<RBMResult>
+rbm_implicit_ordinal(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Estimates& start,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization,
+                     Bounds bounds,
+                     RBMOptions opts) {
+  spec::LatentStructure pt_for_parts = pt;
+  auto obj = ordinal_ls_objective(std::move(pt), rep, stats, start, weights,
+                                  parameterization);
+  if (!obj.has_value()) return std::unexpected(obj.error());
+  auto ctx = scalar_context(std::move(obj->pt), rep, start.theta,
+                            optim::scalarize(obj->problem),
+                            total_n(stats.n_obs), "rbm_implicit_ordinal");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
+                      &start, weights, parameterization](
+                         const Eigen::VectorXd& theta) mutable {
+    return ordinal_parts(*ctx, pt_for_parts, stats, start, weights,
+                         parameterization, theta);
+  };
+  return implicit_impl(*ctx, start, bounds, opts, parts_at,
+                       "rbm_implicit_ordinal");
+}
+
+fit_expected<RBMResult>
+rbm_explicit_mixed_ordinal(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           const Estimates& base,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization,
+                           Bounds bounds,
+                           RBMOptions opts) {
+  spec::LatentStructure pt_for_parts = pt;
+  auto obj = mixed_ordinal_ls_objective(std::move(pt), rep, stats, base,
+                                        weights, parameterization);
+  if (!obj.has_value()) return std::unexpected(obj.error());
+  auto ctx = scalar_context(std::move(obj->pt), rep, base.theta,
+                            optim::scalarize(obj->problem),
+                            total_n(stats.n_obs), "rbm_explicit_mixed_ordinal");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
+                      &base, weights, parameterization](
+                         const Eigen::VectorXd& theta) mutable {
+    return mixed_ordinal_parts(*ctx, pt_for_parts, stats, base, weights,
+                               parameterization, theta);
+  };
+  return explicit_impl(*ctx, base, bounds, opts, parts_at,
+                       "rbm_explicit_mixed_ordinal");
+}
+
+fit_expected<RBMResult>
+rbm_implicit_mixed_ordinal(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           const Estimates& start,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization,
+                           Bounds bounds,
+                           RBMOptions opts) {
+  spec::LatentStructure pt_for_parts = pt;
+  auto obj = mixed_ordinal_ls_objective(std::move(pt), rep, stats, start,
+                                        weights, parameterization);
+  if (!obj.has_value()) return std::unexpected(obj.error());
+  auto ctx = scalar_context(std::move(obj->pt), rep, start.theta,
+                            optim::scalarize(obj->problem),
+                            total_n(stats.n_obs), "rbm_implicit_mixed_ordinal");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
+                      &start, weights, parameterization](
+                         const Eigen::VectorXd& theta) mutable {
+    return mixed_ordinal_parts(*ctx, pt_for_parts, stats, start, weights,
+                               parameterization, theta);
+  };
+  return implicit_impl(*ctx, start, bounds, opts, parts_at,
+                       "rbm_implicit_mixed_ordinal");
+}
+
+fit_expected<RBMResult>
+rbm_explicit_two_stage(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const data::RawData& raw,
+                       const fiml::FIMLPack& pack,
+                       const fiml::FIMLH1& h1,
+                       const Estimates& base,
+                       fiml::TwoStageWeight weight,
+                       fiml::TwoStageDlsOptions dls,
+                       Bounds bounds,
+                       RBMOptions opts) {
+  auto sm = fiml::saturated_em_moments(raw, pack, h1);
+  if (!sm.has_value()) return std::unexpected(post_to_fit(sm.error(),
+      "rbm_explicit_two_stage: saturated moments"));
+  data::SampleStats samp = sample_stats_from_saturated(*sm);
+  auto w = fiml::two_stage_stage2_weight_blocks(*sm, weight, dls);
+  if (!w.has_value()) return std::unexpected(post_to_fit(w.error(),
+      "rbm_explicit_two_stage: stage-2 weight"));
+  auto ctx = ls_context(pt, rep, samp, base.theta, *w,
+                        "rbm_explicit_two_stage");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, &raw, &pack, &h1, sm = std::move(*sm), &base,
+                      weight, dls](const Eigen::VectorXd& theta) {
+    return two_stage_parts(*ctx, raw, pack, h1, sm, base, weight, dls, theta);
+  };
+  return explicit_impl(*ctx, base, bounds, opts, parts_at,
+                       "rbm_explicit_two_stage");
+}
+
+fit_expected<RBMResult>
+rbm_implicit_two_stage(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const data::RawData& raw,
+                       const fiml::FIMLPack& pack,
+                       const fiml::FIMLH1& h1,
+                       const Estimates& start,
+                       fiml::TwoStageWeight weight,
+                       fiml::TwoStageDlsOptions dls,
+                       Bounds bounds,
+                       RBMOptions opts) {
+  auto sm = fiml::saturated_em_moments(raw, pack, h1);
+  if (!sm.has_value()) return std::unexpected(post_to_fit(sm.error(),
+      "rbm_implicit_two_stage: saturated moments"));
+  data::SampleStats samp = sample_stats_from_saturated(*sm);
+  auto w = fiml::two_stage_stage2_weight_blocks(*sm, weight, dls);
+  if (!w.has_value()) return std::unexpected(post_to_fit(w.error(),
+      "rbm_implicit_two_stage: stage-2 weight"));
+  auto ctx = ls_context(pt, rep, samp, start.theta, *w,
+                        "rbm_implicit_two_stage");
+  if (!ctx.has_value()) return std::unexpected(ctx.error());
+  PartsFn parts_at = [&ctx, &raw, &pack, &h1, sm = std::move(*sm), &start,
+                      weight, dls](const Eigen::VectorXd& theta) {
+    return two_stage_parts(*ctx, raw, pack, h1, sm, start, weight, dls, theta);
+  };
+  return implicit_impl(*ctx, start, bounds, opts, parts_at,
+                       "rbm_implicit_two_stage");
 }
 
 }  // namespace magmaan::estimate::frontier

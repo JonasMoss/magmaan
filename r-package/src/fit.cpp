@@ -54,6 +54,11 @@ namespace {
 // can call them.
 Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a);
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d);
+magmaan::estimate::gmm::Weight continuous_ls_weight(
+    const Ctx& ctx, const magmaan::estimate::Estimates& est,
+    const std::string& estimator, SEXP weight, const char* call);
+magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
+    const std::string& estimator);
 
 std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
                                 const char* caller,
@@ -1015,6 +1020,8 @@ Rcpp::List rbm_metadata_to_r(
       Rcpp::_["adjustment"] = Rcpp::wrap(r.adjustment),
       Rcpp::_["information"] = Rcpp::wrap(r.information),
       Rcpp::_["meat"] = Rcpp::wrap(r.meat),
+      Rcpp::_["information_reduced"] = Rcpp::wrap(r.information_reduced),
+      Rcpp::_["meat_reduced"] = Rcpp::wrap(r.meat_reduced),
       Rcpp::_["trace"] = r.trace_term,
       Rcpp::_["penalty"] = r.penalty,
       Rcpp::_["penalty_per_observation"] = r.penalty_per_observation,
@@ -2046,16 +2053,110 @@ Rcpp::List frontier_fit_ml_ridge_continuation_impl(
 Rcpp::List frontier_rbm_impl(
     Rcpp::List fit,
     SEXP raw_data = R_NilValue,
+    SEXP weight = R_NilValue,
+    std::string stage2_weight = "nt",
+    double dls_a = 0.5,
     std::string method = "explicit",
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
   const std::string method_key = rbm_method_key(std::move(method));
   const magmaan::estimate::frontier::RBMOptions opts =
       rbm_options_from(optimizer, control);
   const magmaan::estimate::Bounds b = bounds_from_nullable(bounds);
+
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
+  if (is_ordinal_fit) {
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "ordinal_stats", "frontier_rbm"));
+    const std::string parameterization_name =
+        fit.containsElementNamed("parameterization")
+            ? Rcpp::as<std::string>(fit["parameterization"])
+            : ordinal_parameterization_attr(fit["partable"]);
+    const auto parameterization =
+        ordinal_parameterization_from_string(parameterization_name);
+    const auto ow = ordinal_weight_from_estimator(
+        ordinal_weight_for_postfit(fit, estimator), "frontier_rbm");
+    magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
+        method_key == "explicit"
+            ? magmaan::estimate::frontier::rbm_explicit_ordinal(
+                  ctx.pt, ctx.rep, stats, est, ow, parameterization, b, opts)
+            : magmaan::estimate::frontier::rbm_implicit_ordinal(
+                  ctx.pt, ctx.rep, stats, est, ow, parameterization, b, opts);
+    if (!rbm.has_value()) stop_fit(rbm.error());
+    Rcpp::List out = ordinal_fit_result(
+        ctx, stats, rbm->estimates, nullptr, "RBM-ORDINAL",
+        parameterization_name.c_str());
+    out["rbm"] = rbm_metadata_to_r(*rbm, method_key, estimator.c_str());
+    return out;
+  }
+
+  if (is_mixed_ordinal_fit) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "mixed_ordinal_stats", "frontier_rbm"));
+    const std::string parameterization_name =
+        fit.containsElementNamed("parameterization")
+            ? Rcpp::as<std::string>(fit["parameterization"])
+            : ordinal_parameterization_attr(fit["partable"]);
+    const auto parameterization =
+        ordinal_parameterization_from_string(parameterization_name);
+    const auto ow = ordinal_weight_from_estimator(
+        ordinal_weight_for_postfit(fit, estimator), "frontier_rbm");
+    magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
+        method_key == "explicit"
+            ? magmaan::estimate::frontier::rbm_explicit_mixed_ordinal(
+                  ctx.pt, ctx.rep, stats, est, ow, parameterization, b, opts)
+            : magmaan::estimate::frontier::rbm_implicit_mixed_ordinal(
+                  ctx.pt, ctx.rep, stats, est, ow, parameterization, b, opts);
+    if (!rbm.has_value()) stop_fit(rbm.error());
+    Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr,
+                                "RBM-MIXED-ORDINAL");
+    out["mixed_ordinal"] = true;
+    out["parameterization"] = parameterization_name;
+    out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
+    out["rbm"] = rbm_metadata_to_r(*rbm, method_key, estimator.c_str());
+    return out;
+  }
+
+  if (fit.containsElementNamed("stage1")) {
+    SEXP rd = raw_data;
+    if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) {
+      rd = fit["raw_data"];
+    }
+    if (Rf_isNull(rd)) {
+      Rcpp::stop("magmaan: frontier_rbm() needs raw_data for ML2S fits");
+    }
+    magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, rd);
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+    std::unique_ptr<FimlH1> owned_h1;
+    const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
+    const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+    magmaan::estimate::fiml::TwoStageDlsOptions dls;
+    dls.a = dls_a;
+    magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
+        method_key == "explicit"
+            ? magmaan::estimate::frontier::rbm_explicit_two_stage(
+                  ctx.pt, ctx.rep, raw, pack, h1, est, kind, dls, b, opts)
+            : magmaan::estimate::frontier::rbm_implicit_two_stage(
+                  ctx.pt, ctx.rep, raw, pack, h1, est, kind, dls, b, opts);
+    if (!rbm.has_value()) stop_fit(rbm.error());
+    Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr, "RBM-ML2S");
+    out["stage1"] = fit["stage1"];
+    out["stage2_weight"] = stage2_weight;
+    out["stage2_dls_a"] = dls_a;
+    out["rbm"] = rbm_metadata_to_r(*rbm, method_key, "ML2S");
+    return out;
+  }
 
   const bool is_fiml = fit.containsElementNamed("fiml") &&
                        Rcpp::as<bool>(fit["fiml"]);
@@ -2084,6 +2185,26 @@ Rcpp::List frontier_rbm_impl(
     out["raw_data"] =
         fiml_raw_to_r(raw, ctx.rep.ov_names, ctx.names.group_labels);
     out["rbm"] = rbm_metadata_to_r(*rbm, method_key, "FIML");
+    return out;
+  }
+
+  if (estimator == "ULS" || estimator == "GLS" || estimator == "WLS") {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("magmaan: frontier_rbm() needs raw_data for continuous LS fits");
+    }
+    magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+    auto w = continuous_ls_weight(ctx, est, estimator, weight, "RBM");
+    const auto mode = continuous_ij_mode(estimator);
+    magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
+        method_key == "explicit"
+            ? magmaan::estimate::frontier::rbm_explicit_continuous_ls(
+                  ctx.pt, ctx.rep, ctx.samp, est, w, raw, mode, {}, b, opts)
+            : magmaan::estimate::frontier::rbm_implicit_continuous_ls(
+                  ctx.pt, ctx.rep, ctx.samp, est, w, raw, mode, {}, b, opts);
+    if (!rbm.has_value()) stop_fit(rbm.error());
+    Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr,
+                                ("RBM-" + estimator).c_str());
+    out["rbm"] = rbm_metadata_to_r(*rbm, method_key, estimator.c_str());
     return out;
   }
 

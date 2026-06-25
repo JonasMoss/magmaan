@@ -98,11 +98,13 @@ frontier_is_std_lv_admissible <- is_std_lv_admissible_impl
 frontier_backconvert_std_lv_to_marker <- backconvert_std_lv_to_marker_impl
 frontier_fit_ml_auto_identification <- fit_ml_auto_identification_impl
 frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composite_nested_impl
-frontier_rbm <- function(fit, raw_data = NULL,
+frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
+                         stage2_weight = "nt", dls_a = 0.5,
                          method = c("explicit", "implicit"),
                          optimizer = NULL, control = NULL, bounds = NULL) {
   method <- match.arg(method)
-  frontier_rbm_impl(fit, raw_data, method, optimizer, control, bounds)
+  frontier_rbm_impl(fit, raw_data, weight, stage2_weight, dls_a,
+                    method, optimizer, control, bounds)
 }
 
 inference_information_expected <- infer_information_expected

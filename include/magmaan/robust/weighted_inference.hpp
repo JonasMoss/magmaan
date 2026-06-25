@@ -128,6 +128,13 @@ struct WeightedMomentIJBlock {
   std::int64_t n_obs = 0;
 };
 
+struct WeightedMomentRBMParts {
+  Eigen::MatrixXd information;  // total-N K-reduced observed bread
+  Eigen::MatrixXd meat;         // K-reduced IJ estimating-function meat
+  Eigen::MatrixXd K;            // full theta -> reduced tangent basis
+  std::int64_t n_obs = 0;
+};
+
 // Misspecification-robust ("observed-Hessian") bread for a moment-quadratic
 // fit, in the K-reduced parameter space. Central-differences the per-unit
 // moment-LS gradient
@@ -246,6 +253,11 @@ post_expected<WeightedRobustResult>
 robust_weighted_moment_ij(const std::vector<WeightedMomentIJBlock>& blocks,
                           const Eigen::MatrixXd& K,
                           double fmin,
+                          const Eigen::MatrixXd& observed_bread);
+
+post_expected<WeightedMomentRBMParts>
+weighted_moment_rbm_parts(const std::vector<WeightedMomentIJBlock>& blocks,
+                          const Eigen::MatrixXd& K,
                           const Eigen::MatrixXd& observed_bread);
 
 // Parameter-space sandwich {A1, B1} in the moment metric, the LS counterpart
@@ -603,5 +615,16 @@ robust_continuous_ls_dls_ij(
     const Estimates& est,
     const data::RawData& raw,
     frontier::DlsWeightOptions opts = {});
+
+post_expected<WeightedMomentRBMParts>
+continuous_ls_rbm_parts(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::SampleStats& samp,
+                        const Estimates& est,
+                        const gmm::Weight& weight,
+                        const data::RawData& raw,
+                        ContinuousLsIJWeightMode mode =
+                            ContinuousLsIJWeightMode::Fixed,
+                        frontier::DlsWeightOptions dls_opts = {});
 
 }  // namespace magmaan::estimate
