@@ -172,16 +172,22 @@ per-candidate cost grows from $2.0$\,ms at $n=500$ to $4.7$\,ms at $n=8000$. The
 conclusion for the design question is unambiguous: at the model sizes
 measurement-invariance studies use, the refit cost is not a barrier.
 
-\paragraph{Implementation.} The sweep ships as the R function
-\texttt{modification\_indices\_lrt(fit, data)}, a thin composition of the
-one-call estimator \texttt{magmaan} and the nested test
-\texttt{robust\_nested\_lrt}: it enumerates the tied families from the anchor
-partable, refits each released model, and returns the difference statistic, the
-reference-law family, and the exact released per-group estimates. An existing
+\paragraph{Implementation.} The sweep ships as two R functions, mirroring the
+one-step pair (\texttt{modification\_indices} for absent parameters,
+\texttt{score\_tests} for equality releases), each a thin composition of the
+one-call estimator \texttt{magmaan} and the existing nested tests.
+\texttt{modification\_indices\_lrt(fit, data)} is the refit of the lavaan
+\texttt{modindices} table: for every parameter absent from the model (cross
+loadings, residual covariances) it refits the augmented model and reports the
+nested $\Delta\chi^2$ and the exact refitted change next to the one-step
+\texttt{mi}/\texttt{epc}. \texttt{score\_tests\_lrt(fit, data)} is the
+equality-release sweep: for each cross-group tied family it refits the released
+model and runs the Satorra-2000 difference test, returning the reference-law
+family and the exact released per-group estimates; an existing
 \texttt{group\_partial} baseline on the anchor is carried into every refit, so
 the conditional localization is automatic. For both complete-data ML and FIML the
-per-row statistic reproduces a hand-built two-fit \texttt{robust\_nested\_lrt} to
-machine precision.
+equality-release statistic reproduces a hand-built two-fit
+\texttt{robust\_nested\_lrt} to machine precision.
 
 \paragraph{What remains as an optimization.} This baseline cold-starts every
 released fit. Starting each released fit from the constrained MLE (the C++ core
