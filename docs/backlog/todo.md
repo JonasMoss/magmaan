@@ -215,10 +215,27 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   `two_stage_rbm_parts()`. All use the same reduced-space trace algebra as ML
   (`K' J K`, `K' E K`) and the R frontier dispatcher now routes existing fit
   objects through `magmaan_core$frontier_rbm()`. Remaining work:
-  - **M/L — validation breadth.** Add independent finite-difference checks for
-    the adjusted estimating equations across continuous LS, ordinal/mixed, and
-    ML2S weights; the current smoke tests cover reduced-space diagnostics and
-    complete-data FIML == ML scaling.
+  - **Done 2026-06-25 — validation breadth (FD checks for the adjusted
+    estimating equations).** `tests/unit/rbm_fd_test.cpp` independently
+    finite-difference-validates the RBM *driver's* penalty/correction assembly
+    (the ingredients `j`/`e` are already FD-gated transitively via
+    `robust_weighted_moment_ij` and the `*_ij` / Γ-influence gates). Three
+    checks: **A** explicit one-step reconstruction (independently central-FD the
+    penalty `P(θ)=−½tr(j⁻¹e)`, solve `j_α·δ=∇P`, assert `correction≈δ` and
+    `adjustment≈∇P` — guards sign, the −½, the K-reduction, the solve), run on
+    **every** family (continuous ULS/GLS/WLS, ML, FIML complete+missing, ordinal
+    DWLS/WLS/ULS, mixed DWLS, ML2S Nt/Dwls/Adf); **B** explicit↔implicit
+    agreement to `O(‖corr‖²)` (confirmed second-order: the gap shrinks faster
+    than `‖corr‖²` as N grows); **C** implicit stationarity of
+    `M(θ)=base.f(θ)+trace(θ)/(2N)` (the adjusted estimating equation verbatim).
+    B and C run on the cheap-implicit families (continuous/ML/FIML): the implicit
+    RBM solve is an FD-gradient-over-parts optimization that rebuilds the
+    IF(Ŵ)-carrying parts ~2q times per iterate, so the estimated-weight families
+    (ordinal/mixed/ML2S, especially missing-data ML2S with its per-case Stage-1
+    Γ-influence) run Check A only. `trace(θ)` is read directly from the public
+    `*_rbm_parts` (weighted families) or via the explicit base-swap (ML/FIML);
+    `base.f(θ)` is rebuilt from each family's public objective constructor.
+    13 cases, all green.
   - **M — magmaan-owned paper rerun.** Experiment
     `38-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
     paper's main two-factor and growth-curve examples from the authors' OSF
