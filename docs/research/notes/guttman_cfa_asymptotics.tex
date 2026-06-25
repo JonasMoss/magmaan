@@ -398,7 +398,13 @@ large-\(n\) MSE.
 For a small subset, simulate many datasets, compute all estimators, and check
 that \(n\,\widehat{\Cov}(\hat\tau_e)\) matches \(\Omega_e\). For Guttman this
 is the main new validation. For NT and LS it should agree with existing
-misspecification-robust sandwich code.
+misspecification-robust sandwich code. This is implemented as the
+\texttt{--validate} path in experiment 40: at the well-specified cell with
+\(2000\) replications and \(N=1000\), the Guttman all-parameter asymptotic
+SD matches simulation to within \(1\%\) (\(-0.8\%\)), bracketed by the
+known-correct NT (\(-0.7\%\)) and oracle-WLS (\(-1.0\%\)) sandwiches, so the
+finite-difference Jacobian of the Guttman map is as accurate as those
+comparators.
 
 \section{Takeaways}
 
