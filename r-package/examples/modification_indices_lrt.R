@@ -167,3 +167,34 @@ cat("\ncontinuous GLS/ULS: x1~~x2 lrt_p_obs = ",
     format(gmi$lrt_p_obs[gdoub], digits = 3), " (GLS) / ",
     format(umi$lrt_p_obs[udoub], digits = 3), " (ULS), dispatched\n", sep = "")
 cat("continuous LS modern MI: ok\n")
+
+## --- FIML: incomplete data, the missing-data difference baseline -------------
+## FIML is supported now. The model-vs-saturated FIML chi-square is not 2N*fmin,
+## so lrt/lrt_p come from the nested-test difference (the saturated term cancels);
+## lrt_p_obs routes to the FIML observed-Hessian profile-LRT.
+set.seed(3)
+fdat <- dat
+fdat[matrix(runif(prod(dim(fdat))) < 0.08, nrow(fdat))] <- NA  # ~8% MCAR
+ffit <- magmaan(syntax, fdat, estimator = "FIML")
+fmi  <- modification_indices_lrt(ffit, fdat)
+fdoub <- which(fmi$op == "~~" &
+                 mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
+                        fmi$lhs, fmi$rhs))
+stopifnot(inherits(fmi, "magmaan_mi_lrt"), length(fdoub) == 1L,
+          is.finite(fmi$lrt[fdoub]), is.finite(fmi$lrt_p_obs[fdoub]))
+## Both the plain lrt (T_diff, the FIML model-vs-saturated chi-square difference)
+## and lrt_p_obs (p_mixture) come from one fiml_profile_lrt() call on the released
+## fit -- the table surfaces exactly those binding outputs.
+ftop <- fmi[fdoub, ]
+frel <- magmaan(paste0(syntax, "\n", ftop$lhs, " ", ftop$op, " ", ftop$rhs),
+                fdat, estimator = "FIML")
+fpr  <- magmaan_core$fiml_profile_lrt(frel, ffit)
+stopifnot(fpr$T_diff > 0,
+          abs(fmi$lrt[fdoub] - fpr$T_diff) < 1e-9,
+          abs(fmi$lrt_p_obs[fdoub] - fpr$p_mixture) < 1e-9)
+fscr <- mi_screen(fmi)
+stopifnot("verdict" %in% names(fscr))
+cat("\nFIML: x1~~x2 lrt = ", format(fmi$lrt[fdoub], digits = 4),
+    ", lrt_p_obs = ", format(fmi$lrt_p_obs[fdoub], digits = 3),
+    " (dispatched)\n", sep = "")
+cat("FIML modern MI: ok\n")

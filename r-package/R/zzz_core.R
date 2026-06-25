@@ -177,6 +177,7 @@ ordinal_profile_rmsea <- infer_ordinal_profile_rmsea
 ordinal_profile_lrt <- infer_ordinal_profile_lrt
 ml_profile_lrt <- infer_ml_profile_lrt
 continuous_ls_profile_lrt <- infer_continuous_ls_profile_lrt
+fiml_profile_lrt <- infer_fiml_profile_lrt
 mixed_ordinal_fit_measures_misspec <- infer_mixed_ordinal_fit_measures_misspec
 mixed_ordinal_rmsea_misspec <- infer_mixed_ordinal_rmsea_misspec
 mixed_ordinal_crmr_misspec <- infer_mixed_ordinal_crmr_misspec
@@ -372,6 +373,7 @@ magmaan_core <- local({
       "ordinal_profile_lrt",
       "ml_profile_lrt",
       "continuous_ls_profile_lrt",
+      "fiml_profile_lrt",
       "mixed_ordinal_fit_measures_misspec",
       "mixed_ordinal_rmsea_misspec",
       "mixed_ordinal_crmr_misspec",
@@ -603,6 +605,7 @@ magmaan_core <- local({
       "infer_ordinal_profile_lrt",
       "infer_ml_profile_lrt",
       "infer_continuous_ls_profile_lrt",
+      "infer_fiml_profile_lrt",
       "infer_mixed_ordinal_fit_measures_misspec",
       "infer_mixed_ordinal_rmsea_misspec",
       "infer_mixed_ordinal_crmr_misspec",

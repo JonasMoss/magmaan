@@ -30,11 +30,11 @@ modification_indices_lrt <- function(fit, data,
     stop("modification_indices_lrt(): `fit` is missing its model spec; fit with ",
          "magmaan() so the augmented models can be reconstructed.", call. = FALSE)
   }
-  if (toupper(fit$estimator %||% "ML") == "FIML") {
-    stop("modification_indices_lrt(): FIML is not yet supported here (the ",
-         "incomplete-data chi-square baseline differs); for missing data use ",
-         "the one-step modification_indices().", call. = FALSE)
-  }
+  # FIML uses an incomplete-data baseline: the model-vs-saturated chi-square is
+  # not 2N*fmin, so the plain lrt/lrt_p come from the profile-LRT's own T_diff /
+  # p_unscaled (the saturated term cancels in the difference), not T0 - T1.
+  est <- toupper(fit$estimator %||% "ML")
+  use_profile_diff <- isTRUE(fit$fiml) || est == "FIML"
 
   ngroups <- fit$ngroups %||% 1L
   ops <- switch(candidates,
@@ -51,14 +51,15 @@ modification_indices_lrt <- function(fit, data,
          "'", candidates, "' parameters to add.", call. = FALSE)
   }
 
-  T0 <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
+  # Complete-data chi-square baseline (2N*fmin); skipped for FIML/ML2S.
+  T0 <- if (use_profile_diff) NA_real_ else
+    infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
   # Per-group raw data (ov order) for the ML/continuous-LS observed-Hessian
   # profile difference test (the empirical Gamma is built from it). The
-  # categorical branches of .lrt_profile_p() share the anchor's polychoric stage
+  # categorical branches of .lrt_profile_obj() share the anchor's polychoric stage
   # via fit$*_stats instead, and FIML/ML2S read fit$raw_data, so only the
   # complete-data ML/ULS/GLS branches consume this list.
-  need_raw_data <- isTRUE(robust) &&
-    toupper(fit$estimator %||% "ML") %in% c("ML", "ULS", "GLS")
+  need_raw_data <- isTRUE(robust) && est %in% c("ML", "ULS", "GLS")
   data_list <- if (need_raw_data) .lrt_group_data(fit, data) else NULL
 
   rows <- lapply(seq_len(nrow(cand)), function(i) {
@@ -70,18 +71,30 @@ modification_indices_lrt <- function(fit, data,
       lrt <- NA_real_; lrt_p <- NA_real_; lrt_p_obs <- NA_real_
       epc_lrt <- NA_real_; sepc_lrt <- NA_real_
     } else {
-      T1 <- infer_chi2_stat(fit_sample_stats(rel), rel$fmin)
-      lrt <- T0 - T1
-      lrt_p <- stats::pchisq(lrt, df = 1L, lower.tail = FALSE)
       added <- .lrt_added_est(rel$partable, row)
       epc_lrt <- added$est
       sepc_lrt <- .lrt_std_epc(rel, added$free)
-      # Observed-bread (model-misspecification-robust) reference law, dispatched
-      # on the anchor's estimator/data type (see .lrt_profile_p).
-      lrt_p_obs <- if (isTRUE(robust)) {
-        tryCatch(.lrt_profile_p(rel, fit, data_list),
-                 error = function(e) NA_real_)
-      } else NA_real_
+      if (use_profile_diff) {
+        # FIML/ML2S: one profile-LRT call yields the plain difference (T_diff /
+        # p_unscaled; the incomplete-data saturated term cancels) and the robust
+        # mixture tail (p_mixture).
+        pr <- tryCatch(.lrt_profile_obj(rel, fit, data_list),
+                       error = function(e) NULL)
+        lrt   <- if (is.null(pr)) NA_real_ else pr$T_diff
+        lrt_p <- if (is.null(pr)) NA_real_ else pr$p_unscaled
+        lrt_p_obs <- if (isTRUE(robust) && !is.null(pr)) pr$p_mixture else NA_real_
+      } else {
+        T1 <- infer_chi2_stat(fit_sample_stats(rel), rel$fmin)
+        lrt <- T0 - T1
+        lrt_p <- stats::pchisq(lrt, df = 1L, lower.tail = FALSE)
+        # Observed-bread (model-misspecification-robust) reference law (p_mixture),
+        # dispatched on the anchor's estimator/data type (see .lrt_profile_obj).
+        lrt_p_obs <- if (isTRUE(robust)) {
+          pr <- tryCatch(.lrt_profile_obj(rel, fit, data_list),
+                         error = function(e) NULL)
+          if (is.null(pr)) NA_real_ else pr$p_mixture
+        } else NA_real_
+      }
     }
     data.frame(
       lhs = row$lhs, op = row$op, rhs = row$rhs, group = row$group, df = 1L,
@@ -99,31 +112,35 @@ modification_indices_lrt <- function(fit, data,
   out
 }
 
-# Observed-bread (model-misspecification-robust) reference law for lrt_p_obs: the
-# exact eigenvalue-mixture tail (p_mixture) of the profile-Hessian difference
-# spectrum, dispatched on the anchor's estimator/data type. `rel` is the released
-# (H1) fit, `fit` the anchor (H0); the categorical branches share the anchor's
-# polychoric stage via fit$ordinal_stats / fit$mixed_ordinal_stats, just as the ML
-# branch shares the per-group raw data. p_mixture (not the mean-scaled p_scaled)
-# because the profile contrast spreads over the moment space (spectrum_size !=
-# df_diff for a 1-df add). The ordinal/mixed bindings are DWLS-only and continuous
-# WLS would need an explicit weight not retained on the fit, so those plus any
-# estimator without a wired profile-LRT path return NA here; the plain lrt/lrt_p
-# columns still report for any complete-data estimator.
-.lrt_profile_p <- function(rel, fit, data_list, eig_tol = 1e-10) {
+# Observed-bread (model-misspecification-robust) profile-LRT object for one freed
+# parameter, dispatched on the anchor's estimator/data type. Returns the full
+# WeightedProfileLRTResult list (or NULL if the estimator has no wired path), so
+# callers can read p_mixture (the robust reference law for lrt_p_obs) and, for the
+# missing-data estimators, T_diff / p_unscaled (the plain difference, whose
+# incomplete-data saturated term cancels). `rel` is the released (H1) fit, `fit`
+# the anchor (H0); the categorical branches share the anchor's polychoric stage
+# via fit$ordinal_stats / fit$mixed_ordinal_stats, the ML/continuous branches the
+# per-group raw data, and FIML/ML2S read fit$raw_data. p_mixture (not the
+# mean-scaled p_scaled) because the profile contrast spreads over the moment space
+# (spectrum_size != df_diff for a 1-df add). The ordinal/mixed bindings are
+# DWLS-only and continuous WLS would need an explicit weight not retained on the
+# fit, so those return NULL here; the plain lrt/lrt_p columns still report for any
+# complete-data estimator.
+.lrt_profile_obj <- function(rel, fit, data_list, eig_tol = 1e-10) {
   est <- toupper(fit$estimator %||% "ML")
-  pr <- if (isTRUE(fit$ordinal) && est == "DWLS") {
+  if (isTRUE(fit$ordinal) && est == "DWLS") {
     infer_ordinal_profile_lrt(rel, fit, fit$ordinal_stats, eig_tol)
   } else if (isTRUE(fit$mixed_ordinal) && est == "DWLS") {
     infer_mixed_ordinal_profile_lrt(rel, fit, fit$mixed_ordinal_stats, eig_tol)
   } else if (est %in% c("ULS", "GLS")) {
     infer_continuous_ls_profile_lrt(rel, fit, data_list, eig_tol = eig_tol)
+  } else if (isTRUE(fit$fiml) || est == "FIML") {
+    infer_fiml_profile_lrt(rel, fit, eig_tol)
   } else if (est == "ML") {
     infer_ml_profile_lrt(rel, fit, data_list)
   } else {
-    return(NA_real_)
+    NULL
   }
-  pr$p_mixture
 }
 
 # Augmented-model syntax line that frees one absent parameter. Single group: a
