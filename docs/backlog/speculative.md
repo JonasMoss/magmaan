@@ -208,6 +208,49 @@ rotational-indeterminacy caveat the authors flag for EFA solutions, which would
 need its own convention. Research-tier benchmark cutoffs (Nye et al. 2019) carry
 their own validation burden; do not ship interpretive thresholds as core.
 
+### Structural-model fit indices, tests, and CIs (two-step / SAM)
+
+A `measures::frontier` post-fit surface that evaluates the fit of *just the
+structural model* of a full SEM, isolated from measurement misfit, via the
+Hancock-Mueller two-step (a special case of joint-measurement local SAM): Step 1
+fits the measurement model with a saturated latent covariance to get Φ̂, Step 2
+fits the hypothesized structural model treating the latents as observed. The
+deliverables are a structural chi-square test, structural RMSEA/CFI/SRMR, and
+CIs for all three. Zhang & Wu (2024, *SEM* 31:5, 863-881; PDF in
+`external/refs/`, eval in
+[paper-evals](../research/paper-evals/2024-zhang-structural-model-fit.md)) show
+the naive structural chi-square has Type-I error above 80% in small
+low-reliability samples because Φ̂ is not Wishart (the statistic is a mixture of
+1-df chi-squares, not χ²_df), and supply a Satorra-Bentler-type mean correction
+T_HS,C = T_HS/ĉ_HS (eq. 24), corrected indices (eqs. 25-27), and the first
+structural fit-index CIs (Welch/delta, Table 2). Their recommended versions V2
+and V5 use the expected information of the saturated structural model in Step 2.
+
+**Downstream of the SAM entry.** Requires the SAM two-step scaffolding above
+(Step-1 saturated-latent fit producing Φ̂ and its asymptotic covariance Γ̂_SS,
+then a structural Step-2 fit). Builds on machinery magmaan already has:
+`inference` observed/expected/first-order information, the `robust`
+Satorra-Bentler scaling family, and `measures` full-SEM RMSEA/CFI/SRMR +
+baseline.
+
+**Alternative already available.** lavaan's original two-step HS indices
+(RMSEA_HS, CFI_HS, naive-BC SRMR_HS) and their CIs cover the *uncorrected* case;
+the authors' OSF code (osf.io/dcj2z) covers the *corrected* versions on a lavaan
+refit. magmaan's full-SEM GOF surface evaluates the whole model, not the
+structural part in isolation.
+
+**Build if.** The SAM two-step lands *and* a methods workflow or paper needs
+isolated structural GOF with CIs (the small-N inference or
+SAM-under-misspecification studies are the natural home). Notes: the structural
+scaling ĉ_HS needs Γ̂_SS = the W_SS⁻¹ block, which the authors flag as
+unspecified future work (not pure transcription); gate the corrected versions
+transitively or first-principles since only the original HS versions have a
+lavaan oracle; structural CFI needs an uncorrelated-latent structural baseline,
+where magmaan's [[fixedx-baseline-df-gap]] would bite. Over-the-top extension:
+the structural chi-square is a chi-square mixture and ĉ_HS matches only its first
+moment, so the FMG / pEBA spectrum machinery in `papers/fiml-fmg/` gives a
+sharper "structural-FMG" GOF test if a paper wants more than the mean correction.
+
 ## Optimizers
 
 ### Exact Hessians for IPOPT
