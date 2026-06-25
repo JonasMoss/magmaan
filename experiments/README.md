@@ -55,6 +55,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 37 | [mixed-fiml-pairwise-efficiency](37-mixed-fiml-pairwise-efficiency/report.qmd) | benchmark | active | Under item missingness in mixed continuous/ordinal SEM, does a continuous-FIML first stage (pairwise x FIML) buy efficiency and reduce MAR bias over fully pairwise statistics, and on which parameter block? |
 | 38 | [jamil-rosseel-2026-rbm-sem](38-jamil-rosseel-2026-rbm-sem/report.qmd) | replication | active | Can we reproduce the SEM reduced-bias paper's two-factor and growth-curve RBM examples from the authors' OSF outputs before magmaan-owned reruns? |
 | 39 | [rbm-bias-small](39-rbm-bias-small/report.qmd) | probe | active | In a small magmaan-owned CFA run, do standard, explicit post-hoc RBM, and implicit integrated RBM differ in finite-sample bias for GLS, FIML, and ordinal DWLS? |
+| 40 | [guttman-cfa-asymptotics](40-guttman-cfa-asymptotics/report.qmd) | benchmark | active | How do Guttman's closed-form CFA estimates compare with NT/ULS/GLS/WLS in asymptotic variance and fixed-misspecification risk? |
 
 ## Archived
 
