@@ -198,3 +198,26 @@ cat("\nFIML: x1~~x2 lrt = ", format(fmi$lrt[fdoub], digits = 4),
     ", lrt_p_obs = ", format(fmi$lrt_p_obs[fdoub], digits = 3),
     " (dispatched)\n", sep = "")
 cat("FIML modern MI: ok\n")
+
+## --- ML2S: two-stage ML on the same incomplete data --------------------------
+## ML2S now enumerates candidates (one-step ML score MI on the Stage-1 EM moments)
+## and dispatches lrt_p_obs to the two-stage NT profile-LRT; lrt/lrt_p are its
+## T_diff/p_unscaled.
+sfit <- magmaan(syntax, fdat, estimator = "ML2S")
+smi  <- modification_indices_lrt(sfit, fdat)
+sdoub <- which(smi$op == "~~" &
+                 mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
+                        smi$lhs, smi$rhs))
+stopifnot(inherits(smi, "magmaan_mi_lrt"), length(sdoub) == 1L,
+          is.finite(smi$lrt[sdoub]), is.finite(smi$lrt_p_obs[sdoub]))
+srow <- smi[sdoub, ]
+srel <- magmaan(paste0(syntax, "\n", srow$lhs, " ", srow$op, " ", srow$rhs),
+                fdat, estimator = "ML2S")
+spr  <- magmaan_core$two_stage_nt_profile_lrt(srel, sfit)
+stopifnot(spr$T_diff > 0,
+          abs(smi$lrt[sdoub] - spr$T_diff) < 1e-9,
+          abs(smi$lrt_p_obs[sdoub] - spr$p_mixture) < 1e-9)
+cat("\nML2S: x1~~x2 lrt = ", format(smi$lrt[sdoub], digits = 4),
+    ", lrt_p_obs = ", format(smi$lrt_p_obs[sdoub], digits = 3),
+    " (dispatched)\n", sep = "")
+cat("ML2S modern MI: ok\n")
