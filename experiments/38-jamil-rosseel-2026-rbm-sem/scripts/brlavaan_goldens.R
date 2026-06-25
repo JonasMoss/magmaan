@@ -92,7 +92,7 @@ if (!requireNamespace("magmaan", quietly = TRUE)) {
 br <- function(name) get(name, envir = asNamespace("brlavaan"), inherits = FALSE)
 
 param_name <- function(partable) {
-  paste(partable$lhs, partable$op, partable$rhs)
+  paste0(partable$lhs, partable$op, partable$rhs)
 }
 
 free_estimates <- function(fit) {
@@ -199,7 +199,7 @@ metadata <- data.frame(
   rel = opts$rel,
   seed = opts$seed,
   bounds = opts$bounds,
-  max_abs_diff = max(out$abs_diff, na.rm = TRUE),
+  max_abs_diff = if (nrow(out)) max(out$abs_diff, na.rm = TRUE) else NA_real_,
   stringsAsFactors = FALSE
 )
 metadata_path <- file.path(opts$results_dir, "brlavaan_magmaan_goldens_metadata.csv")

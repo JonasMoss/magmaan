@@ -69,7 +69,7 @@ The default run reproduces the paper's main examples from published OSF outputs,
 
 The full paper grid is expensive because the original design has 2,000 replications per cell, bootstrap and jackknife comparators, and split two-factor result files. Use the full mode only when the OSF result cache is available or when network/download time is acceptable.
 
-An optional brlavaan-vs-magmaan smoke oracle lives in `scripts/brlavaan_goldens.R`. It is deliberately outside the default run because `brlavaan` is a GitHub package, not a pinned CI dependency. In this local environment, `haziqj/brlavaan` commit `d31002e` does not install against lavaan `0.7.1.2691` because that lavaan build no longer provides the unexported `lav_model_gradient` symbol that brlavaan binds at load time.
+An optional brlavaan-vs-magmaan smoke oracle lives in `scripts/brlavaan_goldens.R`. It is deliberately outside the default run because `brlavaan` is a GitHub package, not a pinned CI dependency. In this local environment, `haziqj/brlavaan` commit `d31002e` does not install against lavaan `0.7.1.2691` because that lavaan build no longer provides the unexported `lav_model_gradient` symbol that brlavaan binds at load time. Installing the repo's lavaan `0.6-22.2560` mirror into an isolated temp library works after removing the stray source-mirror file `R/tre linjer kode.R`; with that library, the optional n=100 two-factor check matches brlavaan on ML/eRBM/iRBM with max absolute parameter difference `9.56e-06`.
 
 ## Reproduce
 
@@ -79,4 +79,7 @@ Rscript run_experiment.R --download
 Rscript run_experiment.R --download --smoke
 Rscript run_experiment.R --download --full
 Rscript scripts/brlavaan_goldens.R
+
+# Example after building an isolated compatible library:
+R_LIBS_USER=/tmp/magmaan-brlavaan-lib Rscript scripts/brlavaan_goldens.R
 ```
