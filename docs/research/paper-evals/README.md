@@ -63,3 +63,4 @@ complete eval.
 | 2026-06-25 | [Bogaert, Loh, Schuberth & Rosseel 2025](2025-bogaert-measurement-error-small-sample.md) | Measurement error + small-N hypothesis testing; SEM-ML/LSAM vs UFSR/PLS | → speculative |
 | 2026-06-25 | [Zhang & Wu 2024](2024-zhang-structural-model-fit.md) | Structural-model fit: corrected χ²/RMSEA/CFI/SRMR + CIs via two-step | → speculative |
 | 2026-06-25 | [Dhaene & Rosseel 2023](2023-dhaene-noniterative-sam.md) | Non-iterative step-1 estimators in SAM; estimator choice barely matters | → speculative (folds into SAM) |
+| 2026-06-25 | [De Jonckere & Rosseel 2023](2023-dejonckere-model-based-shrinkage-target.md) | Model-based covariance-shrinkage target for small-N nonconvergence | → speculative (penalized-ML alternative) |
