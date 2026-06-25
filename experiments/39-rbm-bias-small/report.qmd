@@ -29,7 +29,7 @@ method_summary$Method <- factor(method_summary$method,
 primary <- method_summary[order(method_summary$estimator,
                                 method_summary$Method), ]
 best <- do.call(rbind, lapply(split(primary, primary$estimator), function(d) {
-  d[which.min(d$mean_abs_bias_primary), , drop = FALSE]
+  d[which.min(d$mise_primary), , drop = FALSE]
 }))
 fmt <- function(x, digits = 4) format(round(x, digits), nsmall = digits)
 ```
@@ -39,15 +39,15 @@ fmt <- function(x, digits = 4) format(round(x, digits), nsmall = digits)
 Do the new reduced-bias estimators move finite-sample point estimates in the
 right direction in a small magmaan-owned run, rather than only in the published
 result-object replication? The check compares the ordinary estimator with the
-explicit post-hoc correction and the implicit integrated estimator for one GLS,
-one FIML, and one ordinal DWLS setup.
+explicit post-hoc correction and the implicit integrated estimator for
+complete-data ML, GLS, FIML, and ordinal DWLS.
 
 ## Short Answer
 
 In this run (`r meta[["reps"]]` replications, `N = r meta[["n"]]`), the smallest
-mean absolute bias over the primary loading / latent-variance parameters was:
+MISE over the primary loading / latent-variance vector was:
 `r paste(sprintf("%s: %s (%s)", toupper(best$estimator), best$method,
-                 fmt(best$mean_abs_bias_primary)), collapse = "; ")`.
+                 fmt(best$mise_primary)), collapse = "; ")`.
 
 Treat this as a smoke-scale direction check, not a calibration result. The
 large-sample target is a simulated reference fit with `N = r meta[["ref_n"]]`,
@@ -58,38 +58,45 @@ the RBM machinery.
 
 ```{r}
 tab <- primary[c("estimator", "method", "mean_abs_bias_primary",
-                 "mean_rmse_primary", "mean_abs_bias_all", "acceptance_rate",
-                 "median_elapsed_ms")]
+                 "mean_rmse_primary", "mise_primary",
+                 "relative_mise_primary", "mean_abs_pu_error_primary",
+                 "acceptance_rate", "median_elapsed_ms")]
 names(tab) <- c("Estimator", "Method", "Mean Abs Bias", "Mean RMSE",
-                "Mean Abs Bias, All Free", "Acceptance", "Median Time (ms)")
+                "MISE", "MISE / Standard", "Mean |PU - .5|",
+                "Acceptance", "Median Time (ms)")
 tab$Estimator <- toupper(tab$Estimator)
 tab$Method <- c(standard = "Standard", posthoc = "Post-hoc",
                 integrated = "Integrated")[tab$Method]
 tab$`Mean Abs Bias` <- fmt(tab$`Mean Abs Bias`)
 tab$`Mean RMSE` <- fmt(tab$`Mean RMSE`)
-tab$`Mean Abs Bias, All Free` <- fmt(tab$`Mean Abs Bias, All Free`)
+tab$MISE <- fmt(tab$MISE)
+tab$`MISE / Standard` <- fmt(tab$`MISE / Standard`, 3)
+tab$`Mean |PU - .5|` <- fmt(tab$`Mean |PU - .5|`, 3)
 tab$Acceptance <- sprintf("%.0f%%", 100 * tab$Acceptance)
 tab$`Median Time (ms)` <- round(tab$`Median Time (ms)`)
 knitr::kable(tab, row.names = FALSE)
 ```
 
 The primary summary uses only the free factor loadings and latent variance, so
-the GLS, FIML, and DWLS rows are comparable. The full parameter summaries,
-including residual variances, thresholds, and FIML intercepts where present, are
-in `results/parameter_summary.csv`.
+the ML, GLS, FIML, and DWLS rows are comparable. MISE is the average, over
+replications, of the mean squared error across that primary parameter vector.
+The full parameter summaries, including residual variances, thresholds, and
+FIML intercepts where present, are in `results/parameter_summary.csv`.
 
 ## Caveats
 
-This is a deliberately small probe: one correctly specified CFA population, one
-sample size, normal latent responses, MCAR missingness for FIML, and two
-thresholds for DWLS. It can catch gross direction and stability problems in the
-standard/post-hoc/integrated comparison, but it cannot establish uniform bias
-reduction, coverage, or optimizer reliability.
+This is still not a replication of the paper's full design: it uses one
+correctly specified CFA population, one sample size, normal latent responses,
+MCAR missingness for FIML, and two thresholds for DWLS. The ML branch is the
+paper-relevant likelihood path, but the paper's two-factor and growth-curve
+grids remain larger and harder. This probe can catch gross direction and
+stability problems in the standard/post-hoc/integrated comparison, but it cannot
+establish uniform bias reduction, coverage, or optimizer reliability.
 
 ## Reproduce
 
 ```sh
 Rscript experiments/39-rbm-bias-small/run_experiment.R --smoke
-Rscript experiments/39-rbm-bias-small/run_experiment.R --reps 20 --n 160 --ref-n 20000
+Rscript experiments/39-rbm-bias-small/run_experiment.R --reps 250 --n 160 --ref-n 50000 --cores auto --chunk-size 120
 quarto render experiments/39-rbm-bias-small/report.qmd
 ```

@@ -121,6 +121,21 @@ Runners should:
 - support a cheap smoke path such as `--smoke`, `--reps 1`, `--cases`, or
   `--cells`;
 - set or accept a deterministic seed (`--seed-base` for simulations);
+- for runs expected to take more than a few minutes, support either a small
+  timing trial (`--smoke`, `--reps`, or `--dry-run-plan`) that can estimate wall
+  time for the requested grid, or print that estimate after a pilot subset;
+- print progress while expensive loops run. For serial loops this can be every
+  fixed number of replications or cells. For parallel loops, report progress
+  from the parent process at chunk boundaries, or write a small
+  `results/progress.csv` / `results/progress.log` heartbeat that records total
+  tasks, completed tasks, elapsed time, and rough ETA. Do not leave a
+  30-minute runner silent inside one large estimator block;
+- when using `parallel::mclapply`, choose the scheduling deliberately:
+  `mc.preschedule = TRUE` is usually best for many roughly equal-cost
+  replications because it chunks work per core and avoids thousands of forks;
+  `mc.preschedule = FALSE` is for uneven task costs, but then the runner still
+  needs parent-visible chunk/progress reporting. For large grids, prefer
+  explicit chunks of deterministic replicate IDs over one fork per replicate;
 - create `results/` as needed;
 - write `results/metadata.csv` with command arguments, seed base when relevant,
   session/package versions, and the design dimensions needed to interpret the
