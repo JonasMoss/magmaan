@@ -28,6 +28,40 @@ a degenerate Γ̂ instead of an explicit refusal. Research-tier: a pseudo-invers
 estimator's sampling behavior is its own validation problem, not a free
 parity patch.
 
+### Structural-after-measurement (SAM / LSAM) two-step estimator
+
+A `estimate::frontier` two-step estimator: fit the measurement model (Λ, Θ),
+form a Croon/Wall-Amemiya bias-corrected factor covariance Var(η), then solve
+the structural model (B, Ψ) against it. The *local* flavor (LSAM, Rosseel & Loh
+2024) fits the measurement model block-by-block so structural misspecification
+does not leak back into the measurement step; the *global* flavor fits all
+measurement parameters jointly. Bogaert, Loh, Schuberth & Rosseel (2025, *SEM*
+32:2, 215-236; PDF in `external/refs/`, eval in
+[paper-evals](../research/paper-evals/2025-bogaert-measurement-error-small-sample.md))
+show LSAM is the principled small-sample alternative to joint SEM-ML: it keeps
+two-step robustness where SEM-ML test statistics go bimodal (N≤30), while
+correcting the attenuation that inflates Type I error for uncorrected
+factor-score regression (UFSR) and PLS once two correlated latent predictors
+are measured with error. The structural fit is a clean match to magmaan's
+existing measurement/structural matrix split (`model::MatrixRep`: Λ, Θ vs B, Ψ).
+
+**Alternative already available.** SEM-ML (joint, complete-data normal-theory)
+is magmaan's core estimator and the paper's gold standard; for the two-step
+alternative, lavaan's `sam()` covers the practical case on a refit and is the
+parity oracle for LSAM point estimates.
+
+**Build if.** A paper row or methods workflow needs the unbiased two-step
+alternative on a magmaan fit, most naturally a small-N inference study or a
+SAM-under-misspecification / non-normality / missingness study (the paper's own
+limitations section flags non-normal and missing data as unexamined for SAM,
+which is exactly the FIML-FMG / ML2S / misspec-robust-SE territory). Sequencing:
+LSAM point estimates to lavaan `sam()` parity first (a credible reference), then
+the structural-step SEs. The small-sample SSC variant (Fuller α-modification,
+Bogaert et al. 2023) and its SE convention (a weighted average of UFSR/LSAM SEs;
+no closed form) are research-tier with their own bias-variance validation, not a
+free parity addition (see [[feedback-shortcut-variants]]); defer them past plain
+LSAM.
+
 ### `statistic = "N" | "N-1"` selector for the GLS/WLS test multiplier
 
 A user-facing selector (or report-both mode) for the GLS/WLS chi-square
