@@ -58,16 +58,17 @@ modification_indices_lrt <- function(fit, data,
     rel <- tryCatch(.lrt_refit(fit, data, extra_syntax = line),
                     error = function(e) e)
     if (inherits(rel, "error") || !isTRUE(rel$converged)) {
-      lrt <- NA_real_; pval <- NA_real_; epc_lrt <- NA_real_
+      lrt <- NA_real_; lrt_p <- NA_real_; epc_lrt <- NA_real_
     } else {
       T1 <- infer_chi2_stat(fit_sample_stats(rel), rel$fmin)
       lrt <- T0 - T1
-      pval <- stats::pchisq(lrt, df = 1L, lower.tail = FALSE)
+      lrt_p <- stats::pchisq(lrt, df = 1L, lower.tail = FALSE)
       epc_lrt <- .lrt_added_est(rel$partable, row)
     }
     data.frame(
-      lhs = row$lhs, op = row$op, rhs = row$rhs, group = row$group,
-      mi = row$mi, lrt = lrt, df = 1L, pvalue = pval,
+      lhs = row$lhs, op = row$op, rhs = row$rhs, group = row$group, df = 1L,
+      mi = row$mi, mi_p = stats::pchisq(row$mi, df = 1L, lower.tail = FALSE),
+      lrt = lrt, lrt_p = lrt_p,
       epc = row$epc, epc_lrt = epc_lrt,
       stringsAsFactors = FALSE)
   })
