@@ -139,6 +139,41 @@ recipe as a unified `mixed_*_shared_robust_*` taking the recipe as an option,
 then flavor 1 (observed/overlap missing-data treatment) then flavor 2 (hybrid
 FIML-normal continuous block).
 
+## Measures / reporting
+
+### MI effect sizes (dMACS / EDM family) for fitted multi-group models
+
+A `measures::frontier` post-fit surface that quantifies *how much* measurement
+invariance is violated, rather than only testing whether it holds: the dMACS /
+dMACS_Signed pair (Nye & Drasgow 2011), Glass-Δ analogue UDI/SDI and the
+weighted WUDI/WSDI (Gunn et al. 2020), and the Cohen-f analogue fMACS (Lai et
+al. 2025). Schuhbeck, Sterner & Goretzko (2025, *SEM* 33:1, 81-88; PDF in
+`external/refs/`) unify all of these as the class of *Expected Difference
+Measures* (EDMs), built from three normal-expectation terms (signed / absolute /
+squared model-implied item-score difference), and give **closed formulas with
+O(q) complexity** for general common-factor models (cross-loadings, correlated
+factors), replacing the exponential-in-q numerical integration that limited the
+predecessors to simple structure. Inputs are exactly what a fitted magmaan
+multi-group model already produces: group-specific intercepts τ_g, loadings
+Λ_g, and the latent mean/covariance (κ_g, Σ_g). Reference R package:
+`github.com/TiziSchuh/ExpectedDifferenceMeasures` (lavaan-compatible).
+
+**Alternative already available.** magmaan's multi-group invariance machinery
+covers the *testing* question (configural/metric/scalar fits, nested
+difference tests, the FIML/ML2S MI difference-test papers in exps 21/25, ordinal
+`group.equal`). Effect-size reporting can be done by hand from the exposed τ/Λ
+estimates, or in the authors' R package directly on a lavaan refit.
+
+**Build if.** A paper row or methods workflow needs MI effect sizes reported on
+a magmaan multi-group fit (most naturally alongside the invariance-test papers),
+*or* an EFA-based MI method (EFA trees / mixture MGFA) that calls dMACS many
+times needs the O(q) closed form rather than a per-call numerical integral. The
+closed formulas are fully specified in the paper (eqs. 4-6), so this is a
+transcription-plus-validation task, not a research problem — except the
+rotational-indeterminacy caveat the authors flag for EFA solutions, which would
+need its own convention. Research-tier benchmark cutoffs (Nye et al. 2019) carry
+their own validation burden; do not ship interpretive thresholds as core.
+
 ## Optimizers
 
 ### Exact Hessians for IPOPT
