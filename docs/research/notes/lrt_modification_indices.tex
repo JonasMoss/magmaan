@@ -191,13 +191,20 @@ the first-stage moment space, so adding a parameter (which changes the parameter
 count) needs no restriction-map pinning, and its spectrum size exceeds the
 nominal $1$ df; the mixture tail, not the mean-scaled statistic, is the
 well-behaved summary. The observed-bread column dispatches on the anchor's
-estimator: complete-data normal-theory ML uses \texttt{ml\_profile\_lrt}, while
+estimator: complete-data normal-theory ML uses \texttt{ml\_profile\_lrt};
 all-ordinal and mixed-ordinal DWLS fits use the categorical estimated-weight
 profile-LRT (\texttt{ordinal\_profile\_lrt}, \texttt{mixed\_ordinal\_profile\_lrt})
-over the polychoric NACOV; continuous LS and FIML/ML2S anchors leave
-\texttt{lrt\_p\_obs} empty pending their bindings, while the plain $\Delta\chi^2$
-columns still report for any complete-data estimator.
-\texttt{score\_tests\_lrt(fit, data)} is the
+over the polychoric NACOV; continuous ULS/GLS use
+\texttt{continuous\_ls\_profile\_lrt} (one shared weight, empirical $\Gamma$ from
+the raw data); and FIML and two-stage ML (ML2S) use \texttt{fiml\_profile\_lrt} /
+\texttt{two\_stage\_nt\_profile\_lrt}. For the missing-data estimators the plain
+$\Delta\chi^2$ cannot use $2N\!\cdot\!f_{\min}$ (the model-vs-saturated FIML
+chi-square is not $2N\!\cdot\!f_{\min}$, and ML2S works on the Stage-1 EM
+moments), so the same profile-LRT call supplies the plain difference
+(\texttt{T\_diff}/\texttt{p\_unscaled}, where the saturated term cancels) along
+with the robust mixture. Continuous WLS stays empty: its weight is not retained
+on the fit. The plain $\Delta\chi^2$ columns still report for any complete-data
+estimator. \texttt{score\_tests\_lrt(fit, data)} is the
 equality-release sweep: for each cross-group tied family it refits the released
 model and runs the Satorra-2000 difference test, returning the reference-law
 family and the exact released per-group estimates; an existing

@@ -537,14 +537,30 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       — making `modification_indices_lrt` the first R consumer of those bindings.
       `.lrt_refit` now propagates `ordered=` so an ordinal augmented model refits
       under DWLS (it previously errored "requires ordered variables"). Estimators
-      without a wired profile-LRT path (ordinal ULS/WLS, continuous LS, FIML/ML2S)
-      report `lrt_p_obs = NA`; the plain `lrt`/`lrt_p` Δχ² columns still report for
-      any complete-data estimator. Validated by ML/ordinal/mixed arms in
-      `r-package/examples/modification_indices_lrt.R` (each `lrt_p_obs` matches a
-      direct `*_profile_lrt` call to ~1e-9). **Remaining LRT-MI tiers:** continuous
-      ULS/GLS need a new `infer_continuous_ls_profile_lrt` binding (the C++
-      `continuous_ls_profile_lrt` exists); FIML/ML2S additionally need an
-      incomplete-data Δχ² baseline (the reason for the current FIML guard).
+      without a wired profile-LRT path report `lrt_p_obs = NA`; the plain
+      `lrt`/`lrt_p` Δχ² columns still report for any complete-data estimator.
+      `.lrt_refit` now propagates `ordered=` so an ordinal augmented model refits
+      under DWLS (it previously errored "requires ordered variables").
+    - **Done 2026-06-25 (continuous ULS/GLS + FIML + ML2S LRT MI).** Extended the
+      `lrt_p_obs` dispatch to the remaining estimator families via three new Rcpp
+      bindings (in `fit.cpp`, co-located with the fit-local weight/pack helpers;
+      the shared `profile_lrt_to_list` serializer was hoisted to `internal.hpp`):
+      `infer_continuous_ls_profile_lrt` (continuous **ULS/GLS** — one shared weight
+      built at the anchor θ, empirical Γ from the raw data),
+      `infer_fiml_profile_lrt` (**FIML** — one shared missingness/saturated stage,
+      per-model χ² from `fiml_extras`), and `infer_two_stage_nt_profile_lrt`
+      (**ML2S** — Stage-1 EM moments reconstructed from `fit$stage1`). The FIML
+      `stop()` is gone. For FIML/ML2S the plain `lrt`/`lrt_p` come from the
+      profile-LRT's own `T_diff`/`p_unscaled` (the incomplete-data saturated term
+      cancels in the difference), not `2N·fmin`; `robust_nested_lrt` is unusable
+      here because its Satorra-2000 restriction map requires equal npar, not the
+      parameter additions a modindex sweep makes. ML2S also needed an ML2S arm in
+      `inference_modification_indices` for candidate enumeration (one-step ML score
+      MI on the EM moments). Validated by GLS/ULS/FIML/ML2S arms in
+      `r-package/examples/modification_indices_lrt.R` (each table value matches a
+      direct `*_profile_lrt` call to ~1e-9). **Remaining:** continuous **WLS** only
+      (its weight is not retained on the fit; the binding accepts `weight=` for
+      forward-compat but the R dispatch leaves WLS `NA`).
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric
