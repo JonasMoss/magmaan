@@ -333,6 +333,10 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaan_inference_score_tests`, fit, weight, h_step)
 }
 
+infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight = NULL, eig_tol = 1e-10) {
+    .Call(`_magmaan_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol)
+}
+
 measures_standardized_residuals_estimated_weight <- function(fit, raw_data, weight = NULL, conf_level = 0.90) {
     .Call(`_magmaan_measures_standardized_residuals_estimated_weight`, fit, raw_data, weight, conf_level)
 }
@@ -760,3 +764,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+

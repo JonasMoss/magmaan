@@ -1126,6 +1126,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_continuous_ls_profile_lrt
+Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, SEXP weight, double eig_tol);
+RcppExport SEXP _magmaan_infer_continuous_ls_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP weightSEXP, SEXP eig_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_profile_lrt(fit_H1, fit_H0, X_per_group, weight, eig_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // measures_standardized_residuals_estimated_weight
 Rcpp::List measures_standardized_residuals_estimated_weight(Rcpp::List fit, SEXP raw_data, SEXP weight, double conf_level);
 RcppExport SEXP _magmaan_measures_standardized_residuals_estimated_weight(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP conf_levelSEXP) {
@@ -2856,6 +2871,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
+    {"_magmaan_infer_continuous_ls_profile_lrt", (DL_FUNC) &_magmaan_infer_continuous_ls_profile_lrt, 5},
     {"_magmaan_measures_standardized_residuals_estimated_weight", (DL_FUNC) &_magmaan_measures_standardized_residuals_estimated_weight, 4},
     {"_magmaan_infer_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_casewise_influence_ij_fit, 3},
     {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 11},

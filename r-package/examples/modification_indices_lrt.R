@@ -137,3 +137,33 @@ stopifnot(abs(mmi$lrt_p_obs[mrow] - mpr$p_mixture) < 1e-9)
 cat("\nmixed-ordinal DWLS: x1~~x2 lrt_p_obs = ",
     format(mmi$lrt_p_obs[mrow], digits = 3), " (dispatched)\n", sep = "")
 cat("mixed modern MI: ok\n")
+
+## --- Continuous GLS / ULS: the same table via the continuous-LS profile-LRT --
+## For ULS/GLS lrt_p_obs routes to the continuous moment-quadratic profile-LRT
+## (one shared weight built at the anchor, empirical Gamma from the raw data).
+gfit <- magmaan(syntax, dat, estimator = "GLS")
+gmi  <- modification_indices_lrt(gfit, dat)
+gdoub <- which(gmi$op == "~~" &
+                 mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
+                        gmi$lhs, gmi$rhs))
+stopifnot(inherits(gmi, "magmaan_mi_lrt"), length(gdoub) == 1L,
+          is.finite(gmi$lrt_p_obs[gdoub]))
+## lrt_p_obs matches a direct continuous_ls_profile_lrt() call on the released fit.
+gtop <- gmi[gdoub, ]
+grel <- magmaan(paste0(syntax, "\n", gtop$lhs, " ", gtop$op, " ", gtop$rhs),
+                dat, estimator = "GLS")
+gov  <- if (is.list(gfit$ov_names)) gfit$ov_names[[1]] else gfit$ov_names
+gpr  <- magmaan_core$continuous_ls_profile_lrt(grel, gfit,
+                                               list(as.matrix(dat[, gov])))
+stopifnot(abs(gmi$lrt_p_obs[gdoub] - gpr$p_mixture) < 1e-9)
+## ULS (empty-weight branch) also dispatches a finite robust p for the doublet.
+ufit <- magmaan(syntax, dat, estimator = "ULS")
+umi  <- modification_indices_lrt(ufit, dat)
+udoub <- which(umi$op == "~~" &
+                 mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
+                        umi$lhs, umi$rhs))
+stopifnot(length(udoub) == 1L, is.finite(umi$lrt_p_obs[udoub]))
+cat("\ncontinuous GLS/ULS: x1~~x2 lrt_p_obs = ",
+    format(gmi$lrt_p_obs[gdoub], digits = 3), " (GLS) / ",
+    format(umi$lrt_p_obs[udoub], digits = 3), " (ULS), dispatched\n", sep = "")
+cat("continuous LS modern MI: ok\n")

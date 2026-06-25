@@ -31,6 +31,7 @@
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
 #include "magmaan/robust/robust.hpp"              // InferenceSpec (bread/moments/cov)
+#include "magmaan/robust/weighted_inference.hpp"   // WeightedProfileLRTResult, ScaledShiftedResult
 #include "magmaan/optim/problem.hpp"  // OptimOptions
 
 namespace lv  = magmaan;
@@ -999,6 +1000,59 @@ two_stage_weight_from_arg(const std::string& s) {
     return magmaan::estimate::fiml::TwoStageWeight::Dls;
   Rcpp::stop("magmaan: unknown stage2_weight '" + s +
              "' (expected nt, dwls, adf, dls)");
+}
+
+// ---- profile-LRT result serializers (shared by robust.cpp + fit.cpp) -------
+// The misspecification-robust profile-LRT bindings live in two glue files
+// (robust.cpp: ML/ordinal/mixed; fit.cpp: continuous-LS/FIML/ML2S, co-located
+// with their fit-local weight/pack helpers), so the WeightedProfileLRTResult
+// serializer must be shared rather than file-local.
+[[maybe_unused]] inline Rcpp::List
+scaled_shifted_to_list(const magmaan::robust::ScaledShiftedResult& r) {
+  return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
+                            Rcpp::_["df"] = r.df,
+                            Rcpp::_["scale_a"] = r.scale_a,
+                            Rcpp::_["shift_b"] = r.shift_b);
+}
+
+inline Rcpp::CharacterVector
+warnings_to_r(const std::vector<std::string>& warnings) {
+  Rcpp::CharacterVector out(static_cast<R_xlen_t>(warnings.size()));
+  for (std::size_t k = 0; k < warnings.size(); ++k) {
+    out[static_cast<R_xlen_t>(k)] = warnings[k];
+  }
+  return out;
+}
+
+inline Rcpp::List
+profile_lrt_to_list(const magmaan::estimate::WeightedProfileLRTResult& r) {
+  return Rcpp::List::create(
+      Rcpp::_["profile_hessian"] = Rcpp::wrap(r.profile_hessian),
+      Rcpp::_["gamma"] = Rcpp::wrap(r.gamma),
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["fmin_diff"] = r.fmin_diff,
+      Rcpp::_["T_diff"] = r.T_diff,
+      Rcpp::_["bias_trace"] = r.bias_trace,
+      Rcpp::_["bias_trace_sq"] = r.bias_trace_sq,
+      Rcpp::_["trace_signed"] = r.trace_signed,
+      Rcpp::_["negative_trace_abs"] = r.negative_trace_abs,
+      Rcpp::_["scale_c"] = r.scale_c,
+      Rcpp::_["T_scaled"] = r.T_scaled,
+      Rcpp::_["p_unscaled"] = r.p_unscaled,
+      Rcpp::_["p_scaled"] = r.p_scaled,
+      Rcpp::_["T_adjusted"] = r.T_adjusted,
+      Rcpp::_["adjust_df"] = r.adjust_df,
+      Rcpp::_["p_adjusted"] = r.p_adjusted,
+      Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted),
+      Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
+      Rcpp::_["p_mixture"] = r.p_mixture,
+      Rcpp::_["df_diff"] = r.df_diff,
+      Rcpp::_["spectrum_size"] = r.spectrum_size,
+      Rcpp::_["negative_spectrum_size"] = r.negative_spectrum_size,
+      Rcpp::_["spectrum_rank"] = r.spectrum_rank,
+      Rcpp::_["ntotal"] = static_cast<double>(r.ntotal),
+      Rcpp::_["n_groups"] = static_cast<int>(r.n_groups),
+      Rcpp::_["warnings"] = warnings_to_r(r.warnings));
 }
 
 }  // namespace magmaanr

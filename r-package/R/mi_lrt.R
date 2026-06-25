@@ -52,11 +52,14 @@ modification_indices_lrt <- function(fit, data,
   }
 
   T0 <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
-  # Per-group raw data (ov order) for the ML observed-Hessian profile difference
-  # test; only the ML branch of .lrt_profile_p() consumes it (the categorical
-  # branches share the anchor's polychoric stage via fit$*_stats instead).
-  need_ml_data <- isTRUE(robust) && toupper(fit$estimator %||% "ML") == "ML"
-  data_list <- if (need_ml_data) .lrt_group_data(fit, data) else NULL
+  # Per-group raw data (ov order) for the ML/continuous-LS observed-Hessian
+  # profile difference test (the empirical Gamma is built from it). The
+  # categorical branches of .lrt_profile_p() share the anchor's polychoric stage
+  # via fit$*_stats instead, and FIML/ML2S read fit$raw_data, so only the
+  # complete-data ML/ULS/GLS branches consume this list.
+  need_raw_data <- isTRUE(robust) &&
+    toupper(fit$estimator %||% "ML") %in% c("ML", "ULS", "GLS")
+  data_list <- if (need_raw_data) .lrt_group_data(fit, data) else NULL
 
   rows <- lapply(seq_len(nrow(cand)), function(i) {
     row <- cand[i, ]
@@ -103,15 +106,18 @@ modification_indices_lrt <- function(fit, data,
 # polychoric stage via fit$ordinal_stats / fit$mixed_ordinal_stats, just as the ML
 # branch shares the per-group raw data. p_mixture (not the mean-scaled p_scaled)
 # because the profile contrast spreads over the moment space (spectrum_size !=
-# df_diff for a 1-df add). The ordinal/mixed bindings are DWLS-only, so estimators
-# without a wired profile-LRT path (ordinal ULS/WLS, continuous LS, FIML) return NA
-# here; the plain lrt/lrt_p columns still report for any complete-data estimator.
+# df_diff for a 1-df add). The ordinal/mixed bindings are DWLS-only and continuous
+# WLS would need an explicit weight not retained on the fit, so those plus any
+# estimator without a wired profile-LRT path return NA here; the plain lrt/lrt_p
+# columns still report for any complete-data estimator.
 .lrt_profile_p <- function(rel, fit, data_list, eig_tol = 1e-10) {
   est <- toupper(fit$estimator %||% "ML")
   pr <- if (isTRUE(fit$ordinal) && est == "DWLS") {
     infer_ordinal_profile_lrt(rel, fit, fit$ordinal_stats, eig_tol)
   } else if (isTRUE(fit$mixed_ordinal) && est == "DWLS") {
     infer_mixed_ordinal_profile_lrt(rel, fit, fit$mixed_ordinal_stats, eig_tol)
+  } else if (est %in% c("ULS", "GLS")) {
+    infer_continuous_ls_profile_lrt(rel, fit, data_list, eig_tol = eig_tol)
   } else if (est == "ML") {
     infer_ml_profile_lrt(rel, fit, data_list)
   } else {
