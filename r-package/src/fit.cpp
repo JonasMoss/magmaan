@@ -4180,7 +4180,11 @@ Rcpp::DataFrame inference_modification_indices(
     auto w = wls_from_arg(weight, ctx.samp.S.size());
     out = magmaan::inference::modification_indices(
         ctx.pt, ctx.rep, ctx.samp, est, w, opts);
-  } else if (estimator == "ML" || estimator.empty()) {
+  } else if (estimator == "ML" || estimator.empty() || estimator == "ML2S") {
+    // ML2S: fit$S/sample_mean are the Stage-1 EM-completed moments (the fit is
+    // a Stage-2 ML on them), so ctx.samp already carries them and the one-step
+    // sweep is the normal-theory ML score test on the EM moments (the naive
+    // comparator; Stage-1 uncertainty enters only the robust lrt_p_obs column).
     out = magmaan::inference::modification_indices(
         ctx.pt, ctx.rep, ctx.samp, est, opts);
   } else {
@@ -4414,6 +4418,33 @@ Rcpp::List infer_fiml_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0,
       std::move(ctx1.pt), ctx1.rep, raw, est1, x1->chi2,
       std::move(ctx0.pt), ctx0.rep, est0, x0->chi2,
       pack, h1, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_lrt_to_list(*r_or);
+}
+
+// infer_two_stage_nt_profile_lrt() — misspecification-robust profile-LRT for two
+// nested two-stage ML (ML2S, NT Stage-2) fits. The Stage-1 EM moments are the
+// complete-data ML sample statistics and Stage-1 uncertainty is the block stacked
+// [mean; vech(cov)] Gamma; reconstructed from the anchor's $stage1 (no recompute).
+// T_diff / p_unscaled are the plain difference, p_mixture the robust tail.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_two_stage_nt_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                          double eig_tol = 1e-10) {
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
+
+  // Shared Stage-1 EM moments (reconstructed from the anchor's $stage1).
+  magmaan::estimate::fiml::SaturatedMoments sm;
+  if (!saturated_from_stage1(fit_H1, sm)) {
+    Rcpp::stop("infer_two_stage_nt_profile_lrt: H1 fit is missing $stage1 "
+               "(not an ML2S fit?)");
+  }
+  auto r_or = magmaan::estimate::fiml::two_stage_nt_profile_lrt(
+      std::move(ctx1.pt), ctx1.rep, est1,
+      std::move(ctx0.pt), ctx0.rep, est0, sm, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return profile_lrt_to_list(*r_or);
 }

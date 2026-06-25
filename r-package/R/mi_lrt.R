@@ -30,11 +30,11 @@ modification_indices_lrt <- function(fit, data,
     stop("modification_indices_lrt(): `fit` is missing its model spec; fit with ",
          "magmaan() so the augmented models can be reconstructed.", call. = FALSE)
   }
-  # FIML uses an incomplete-data baseline: the model-vs-saturated chi-square is
-  # not 2N*fmin, so the plain lrt/lrt_p come from the profile-LRT's own T_diff /
+  # FIML / ML2S use an incomplete-data baseline: the model-vs-saturated chi-square
+  # is not 2N*fmin, so the plain lrt/lrt_p come from the profile-LRT's own T_diff /
   # p_unscaled (the saturated term cancels in the difference), not T0 - T1.
   est <- toupper(fit$estimator %||% "ML")
-  use_profile_diff <- isTRUE(fit$fiml) || est == "FIML"
+  use_profile_diff <- isTRUE(fit$fiml) || est %in% c("FIML", "ML2S")
 
   ngroups <- fit$ngroups %||% 1L
   ops <- switch(candidates,
@@ -136,6 +136,8 @@ modification_indices_lrt <- function(fit, data,
     infer_continuous_ls_profile_lrt(rel, fit, data_list, eig_tol = eig_tol)
   } else if (isTRUE(fit$fiml) || est == "FIML") {
     infer_fiml_profile_lrt(rel, fit, eig_tol)
+  } else if (est == "ML2S") {
+    infer_two_stage_nt_profile_lrt(rel, fit, eig_tol)
   } else if (est == "ML") {
     infer_ml_profile_lrt(rel, fit, data_list)
   } else {
