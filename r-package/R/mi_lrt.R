@@ -63,12 +63,14 @@ modification_indices_lrt <- function(fit, data,
                     error = function(e) e)
     if (inherits(rel, "error") || !isTRUE(rel$converged)) {
       lrt <- NA_real_; lrt_p <- NA_real_; lrt_p_obs <- NA_real_
-      epc_lrt <- NA_real_
+      epc_lrt <- NA_real_; sepc_lrt <- NA_real_
     } else {
       T1 <- infer_chi2_stat(fit_sample_stats(rel), rel$fmin)
       lrt <- T0 - T1
       lrt_p <- stats::pchisq(lrt, df = 1L, lower.tail = FALSE)
-      epc_lrt <- .lrt_added_est(rel$partable, row)
+      added <- .lrt_added_est(rel$partable, row)
+      epc_lrt <- added$est
+      sepc_lrt <- .lrt_std_epc(rel, added$free)
       # Observed-bread (model-misspecification-robust) reference law: the exact
       # eigenvalue-mixture tail of the profile-Hessian difference spectrum. We
       # use p_mixture, not the mean-scaled p_scaled, because the profile contrast
@@ -83,7 +85,7 @@ modification_indices_lrt <- function(fit, data,
       lhs = row$lhs, op = row$op, rhs = row$rhs, group = row$group, df = 1L,
       mi = row$mi, mi_p = stats::pchisq(row$mi, df = 1L, lower.tail = FALSE),
       lrt = lrt, lrt_p = lrt_p, lrt_p_obs = lrt_p_obs,
-      epc = row$epc, epc_lrt = epc_lrt,
+      epc = row$epc, epc_lrt = epc_lrt, sepc_lrt = sepc_lrt,
       stringsAsFactors = FALSE)
   })
 
@@ -106,18 +108,95 @@ modification_indices_lrt <- function(fit, data,
   paste0(row$lhs, " ", row$op, " c(", paste(vec, collapse = ","), ")*", row$rhs)
 }
 
-# Exact EPC: the refitted estimate of the added parameter, in its group.
+# Exact EPC: the refitted estimate of the added parameter (and its free index),
+# in its group.
 .lrt_added_est <- function(pt_rel, row) {
   sel <- pt_rel$op == row$op & pt_rel$lhs == row$lhs & pt_rel$rhs == row$rhs &
     pt_rel$group == row$group & (pt_rel$free %||% 0L) > 0L
-  est <- pt_rel$est[sel]
-  if (length(est)) est[1] else NA_real_
+  i <- which(sel)
+  if (!length(i)) return(list(est = NA_real_, free = NA_integer_))
+  list(est = pt_rel$est[i[1]], free = pt_rel$free[i[1]])
+}
+
+# Standardized exact EPC: the std.all value of the freed parameter in the
+# released fit (the exact analog of lavaan's sepc.all). The std *point* values do
+# not use the vcov (only the SEs do), so a correctly-shaped zero matrix satisfies
+# standardized()'s shape check at no inference cost.
+.lrt_std_epc <- function(rel, free_index) {
+  if (is.na(free_index)) return(NA_real_)
+  np <- max(rel$partable$free)
+  std <- tryCatch(standardized(rel, matrix(0, np, np), type = "all"),
+                  error = function(e) NULL)
+  if (is.null(std) || is.null(std$theta) || free_index > length(std$theta)) {
+    return(NA_real_)
+  }
+  std$theta[free_index]
 }
 
 print.magmaan_mi_lrt <- function(x, ...) {
   cat("LRT modification indices (nested chi-square difference vs one-step mi)\n")
+  sc <- attr(x, "mi_screen")
+  if (!is.null(sc) && "verdict" %in% names(x)) {
+    cat(sprintf("  verdict = %s-adjusted %s (alpha=%.3g) x |%s| >= %.2f\n",
+                sc$adjust, sc$p, sc$alpha, sc$effect, sc$effect_min))
+  }
   print(as.data.frame(x), ...)
   invisible(x)
+}
+
+# ---- decision layer: multiplicity + significant x substantial verdict -------
+
+# Add a multiplicity-adjusted p-value and a verdict to an MI table
+# (modification_indices_lrt or score_tests_lrt). Keys off named columns, so the
+# same helper screens either table. The verdict is the Saris-Satorra-Sorbom 2x2
+# on (adjusted p <= alpha) x (|effect| >= effect_min):
+#   free          significant and substantively large -> a real release
+#   trivial       significant but a negligible effect  -> large-N artifact
+#   underpowered  large effect but not significant      -> flag, do not free
+#   ok            neither                               -> leave fixed
+# Rows with a missing p or effect get verdict NA. With p/effect = NULL the robust
+# columns are auto-resolved: lrt_p_obs/sepc_lrt for modification_indices_lrt,
+# p_mixture/epc_range for score_tests_lrt; BH is the default (Thissen-style FDR).
+mi_screen <- function(x, p = NULL, effect = NULL,
+                      alpha = 0.05, effect_min = 0.10, adjust = "BH") {
+  if (!is.data.frame(x)) {
+    stop("mi_screen(): `x` must be a modification-index table (data.frame).",
+         call. = FALSE)
+  }
+  # Resolve the robust p and effect columns: lrt_p_obs/sepc_lrt for
+  # modification_indices_lrt, p_mixture/epc_range for score_tests_lrt.
+  if (is.null(p)) {
+    p <- intersect(c("lrt_p_obs", "p_mixture"), names(x))[1]
+    if (is.na(p)) {
+      stop("mi_screen(): no robust p-value column found; pass `p=`.",
+           call. = FALSE)
+    }
+  } else if (!p %in% names(x)) {
+    stop("mi_screen(): p-value column '", p, "' not found in `x`.", call. = FALSE)
+  }
+  if (is.null(effect)) {
+    effect <- intersect(c("sepc_lrt", "epc_range"), names(x))[1]
+    if (is.na(effect)) {
+      stop("mi_screen(): no effect column found; pass `effect=`.", call. = FALSE)
+    }
+  } else if (!effect %in% names(x)) {
+    stop("mi_screen(): effect column '", effect, "' not found in `x`.",
+         call. = FALSE)
+  }
+  padj <- stats::p.adjust(x[[p]], method = adjust)
+  eff  <- x[[effect]]
+  ok   <- !is.na(padj) & !is.na(eff)
+  sig  <- padj <= alpha
+  big  <- abs(eff) >= effect_min
+  verdict <- rep(NA_character_, nrow(x))
+  verdict[ok] <- ifelse(sig[ok] & big[ok], "free",
+                 ifelse(sig[ok] & !big[ok], "trivial",
+                 ifelse(!sig[ok] & big[ok], "underpowered", "ok")))
+  x[[paste0(p, "_", tolower(adjust))]] <- padj
+  x$verdict <- verdict
+  attr(x, "mi_screen") <- list(p = p, effect = effect, alpha = alpha,
+                               effect_min = effect_min, adjust = adjust)
+  x
 }
 
 # ---- equality releases: the score_tests() sweep, by LRT ---------------------

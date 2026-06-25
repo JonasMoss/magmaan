@@ -3,53 +3,70 @@
 ## modification_indices_lrt(fit, data) is the refit counterpart of
 ## modification_indices(): for each parameter ABSENT from the model (cross
 ## loadings, residual covariances) it refits the augmented model and reports the
-## nested chi-square difference (lrt) and the EXACT refitted parameter change
-## (epc_lrt), alongside the one-step mi/epc for comparison. See
-## docs/research/notes/lrt_modification_indices.tex.
+## nested chi-square difference (lrt), the model-misspecification-robust
+## observed-bread reference law (lrt_p_obs), and the EXACT refitted change
+## (epc_lrt, plus its std.all standardization sepc_lrt). mi_screen() then adds the
+## "modern MI" decision layer: BH multiplicity + a significant x substantial
+## verdict. See docs/research/notes/lrt_modification_indices.tex.
 
 suppressMessages(library(magmaan))
 
-## Single-group two-factor CFA where x3 truly cross-loads on f2 (0.4); the fitted
-## model omits that cross-loading, so the modification index has a real target.
-set.seed(3)
-n <- 600
-f1 <- rnorm(n); f2 <- 0.4 * f1 + sqrt(1 - 0.16) * rnorm(n)
-mk <- function(a, b = 0)
-  a * f1 + b * f2 + rnorm(n, 0, sqrt(pmax(1 - a^2 - b^2, 1e-6)))
-dat <- data.frame(x1 = mk(.7), x2 = mk(.7), x3 = mk(.7, .4),
+## Single-factor CFA with an omitted x1-x2 residual doublet (shared nuisance u):
+## the 1-factor model leaves a strong, unambiguous x1~~x2 modification index.
+set.seed(1)
+n <- 1000
+f <- rnorm(n); u <- rnorm(n)
+mk <- function(load, extra = 0)
+  load * f + extra * u + rnorm(n, 0, sqrt(pmax(1 - load^2 - extra^2, 1e-6)))
+dat <- data.frame(x1 = mk(.7, .5), x2 = mk(.7, .5), x3 = mk(.7),
                   x4 = mk(.7), x5 = mk(.7), x6 = mk(.7))
-syntax <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6"
+syntax <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
 fit <- magmaan(syntax, dat, estimator = "ML")
 
 mi <- modification_indices_lrt(fit, dat)
 stopifnot(inherits(mi, "magmaan_mi_lrt"),
-          all(c("mi", "mi_p", "lrt", "lrt_p", "lrt_p_obs", "epc", "epc_lrt")
-              %in% names(mi)),
+          all(c("mi", "mi_p", "lrt", "lrt_p", "lrt_p_obs", "epc", "epc_lrt",
+                "sepc_lrt") %in% names(mi)),
           nrow(mi) > 1L)
+## The dominant candidate is the omitted doublet x1~~x2.
+stopifnot(mi$op[1] == "~~", setequal(c(mi$lhs[1], mi$rhs[1]), c("x1", "x2")))
 
-## lrt_p_obs is the model-misspecification-robust reference law: the observed-
-## Hessian profile-LRT (ml_profile_lrt) exact eigenvalue-mixture tail. It matches
-## a direct ml_profile_lrt() call on the top candidate.
-top1 <- mi[1, ]
-relp <- magmaan(paste0(syntax, "\n", top1$lhs, " ", top1$op, " ", top1$rhs),
-                dat, estimator = "ML")
-ov <- if (is.list(fit$ov_names)) fit$ov_names[[1]] else fit$ov_names
-pr <- magmaan_core$ml_profile_lrt(relp, fit, list(as.matrix(dat[, ov])))
-stopifnot(is.finite(mi$lrt_p_obs[1]), abs(mi$lrt_p_obs[1] - pr$p_mixture) < 1e-9)
-
-## The refit chi-square difference of the top candidate reproduces a manual
-## augmented refit exactly.
+## lrt_p_obs is the model-misspecification-robust reference law (observed-Hessian
+## profile-LRT exact mixture); it matches a direct ml_profile_lrt() call.
 top <- mi[1, ]
 rel <- magmaan(paste0(syntax, "\n", top$lhs, " ", top$op, " ", top$rhs),
                dat, estimator = "ML")
-chi2 <- function(f) magmaan::magmaan_core$inference_chi2_stat(
-  list(S = f$S, nobs = f$nobs, mean = f$sample_mean), f$fmin)
-stopifnot(abs(top$lrt - (chi2(fit) - chi2(rel))) < 1e-6)
+ov <- if (is.list(fit$ov_names)) fit$ov_names[[1]] else fit$ov_names
+pr <- magmaan_core$ml_profile_lrt(rel, fit, list(as.matrix(dat[, ov])))
+stopifnot(is.finite(mi$lrt_p_obs[1]), abs(mi$lrt_p_obs[1] - pr$p_mixture) < 1e-9)
 
-## The one-step EPC can blow up where the refit (exact) EPC is well behaved: the
-## linearization is what the refit avoids.
+## The nested chi-square difference reproduces a manual augmented refit, and
+## sepc_lrt matches a direct standardized() call on the released fit.
+chi2 <- function(g) magmaan_core$inference_chi2_stat(
+  list(S = g$S, nobs = g$nobs, mean = g$sample_mean), g$fmin)
+stopifnot(abs(top$lrt - (chi2(fit) - chi2(rel))) < 1e-6)
+sel <- rel$partable$op == top$op & rel$partable$lhs == top$lhs &
+  rel$partable$rhs == top$rhs & rel$partable$free > 0
+fk  <- rel$partable$free[sel][1]; np <- max(rel$partable$free)
+stopifnot(abs(top$sepc_lrt -
+              standardized(rel, matrix(0, np, np), "all")$theta[fk]) < 1e-9)
+
 cat("LRT vs one-step modification indices (top 5):\n")
-print(head(mi[, c("lhs", "op", "rhs", "mi", "lrt", "lrt_p", "lrt_p_obs",
-                  "epc_lrt")], 5),
+print(head(mi[, c("lhs", "op", "rhs", "mi", "lrt", "lrt_p_obs", "epc_lrt",
+                  "sepc_lrt")], 5),
       row.names = FALSE)
-cat("top refit chi-square difference matches a manual augmented refit: ok\n")
+
+## The "modern MI" decision layer: mi_screen() adds BH-FDR multiplicity control on
+## the observed-bread robust p, plus a Saris-Satorra-Sorbom verdict combining
+## corrected significance with substantive effect size (|sepc_lrt|).
+scr <- mi_screen(mi)  # auto-resolves p = lrt_p_obs, effect = sepc_lrt
+stopifnot(inherits(scr, "magmaan_mi_lrt"),
+          all(c("lrt_p_obs_bh", "verdict") %in% names(scr)),
+          all(scr$verdict %in% c("free", "trivial", "underpowered", "ok", NA)),
+          all(scr$lrt_p_obs_bh >= scr$lrt_p_obs - 1e-12, na.rm = TRUE))
+## The omitted doublet survives BH + the effect-size gate as a real release.
+stopifnot(scr$verdict[1] == "free")
+
+cat("\nverdict counts (BH alpha=0.05, |sepc|>=0.10):\n")
+print(table(scr$verdict, useNA = "ifany"))
+cat("modern MI: ok\n")
