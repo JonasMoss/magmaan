@@ -23,8 +23,19 @@ fit <- magmaan(syntax, dat, estimator = "ML")
 
 mi <- modification_indices_lrt(fit, dat)
 stopifnot(inherits(mi, "magmaan_mi_lrt"),
-          all(c("mi", "mi_p", "lrt", "lrt_p", "epc", "epc_lrt") %in% names(mi)),
+          all(c("mi", "mi_p", "lrt", "lrt_p", "lrt_p_obs", "epc", "epc_lrt")
+              %in% names(mi)),
           nrow(mi) > 1L)
+
+## lrt_p_obs is the model-misspecification-robust reference law: the observed-
+## Hessian profile-LRT (ml_profile_lrt) exact eigenvalue-mixture tail. It matches
+## a direct ml_profile_lrt() call on the top candidate.
+top1 <- mi[1, ]
+relp <- magmaan(paste0(syntax, "\n", top1$lhs, " ", top1$op, " ", top1$rhs),
+                dat, estimator = "ML")
+ov <- if (is.list(fit$ov_names)) fit$ov_names[[1]] else fit$ov_names
+pr <- magmaan_core$ml_profile_lrt(relp, fit, list(as.matrix(dat[, ov])))
+stopifnot(is.finite(mi$lrt_p_obs[1]), abs(mi$lrt_p_obs[1] - pr$p_mixture) < 1e-9)
 
 ## The refit chi-square difference of the top candidate reproduces a manual
 ## augmented refit exactly.
@@ -38,7 +49,7 @@ stopifnot(abs(top$lrt - (chi2(fit) - chi2(rel))) < 1e-6)
 ## The one-step EPC can blow up where the refit (exact) EPC is well behaved: the
 ## linearization is what the refit avoids.
 cat("LRT vs one-step modification indices (top 5):\n")
-print(head(mi[, c("lhs", "op", "rhs", "mi", "mi_p", "lrt", "lrt_p",
-                  "epc", "epc_lrt")], 5),
+print(head(mi[, c("lhs", "op", "rhs", "mi", "lrt", "lrt_p", "lrt_p_obs",
+                  "epc_lrt")], 5),
       row.names = FALSE)
 cat("top refit chi-square difference matches a manual augmented refit: ok\n")

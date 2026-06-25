@@ -180,7 +180,17 @@ one-call estimator \texttt{magmaan} and the existing nested tests.
 \texttt{modindices} table: for every parameter absent from the model (cross
 loadings, residual covariances) it refits the augmented model and reports the
 nested $\Delta\chi^2$ and the exact refitted change next to the one-step
-\texttt{mi}/\texttt{epc}. \texttt{score\_tests\_lrt(fit, data)} is the
+\texttt{mi}/\texttt{epc}. Each row also carries an observed-bread robust p-value
+\texttt{lrt\_p\_obs}: the exact eigenvalue-mixture tail of the observed-Hessian
+profile-LRT (\texttt{ml\_profile\_lrt}), which is the
+\emph{model-misspecification}-robust reference law for the difference statistic
+(the bread is the profile Hessian $Q$, not the expected information). It is the
+``observed'' axis, distinct from the empirical-$\Gamma$ Satorra--Bentler
+reference, which is the \emph{non-normality} axis. The profile contrast lives in
+the first-stage moment space, so adding a parameter (which changes the parameter
+count) needs no restriction-map pinning, and its spectrum size exceeds the
+nominal $1$ df; the mixture tail, not the mean-scaled statistic, is the
+well-behaved summary. \texttt{score\_tests\_lrt(fit, data)} is the
 equality-release sweep: for each cross-group tied family it refits the released
 model and runs the Satorra-2000 difference test, returning the reference-law
 family and the exact released per-group estimates; an existing

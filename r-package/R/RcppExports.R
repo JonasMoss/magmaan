@@ -561,12 +561,12 @@ infer_ordinal_profile_lrt <- function(fit_H1, fit_H0, ordinal_stats, eig_tol = 1
     .Call(`_magmaan_infer_ordinal_profile_lrt`, fit_H1, fit_H0, ordinal_stats, eig_tol)
 }
 
-infer_ordinal_fit_measures_misspec <- function(fit, ordinal_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaan_infer_ordinal_fit_measures_misspec`, fit, ordinal_stats, estimated_weight, conf_level, eig_tol)
+infer_ml_profile_lrt <- function(fit_H1, fit_H0, X_per_group, eig_tol = 1e-10) {
+    .Call(`_magmaan_infer_ml_profile_lrt`, fit_H1, fit_H0, X_per_group, eig_tol)
 }
 
-infer_mixed_ordinal_fit_measures_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaan_infer_mixed_ordinal_fit_measures_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
+infer_ordinal_fit_measures_misspec <- function(fit, ordinal_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
+    .Call(`_magmaan_infer_ordinal_fit_measures_misspec`, fit, ordinal_stats, estimated_weight, conf_level, eig_tol)
 }
 
 infer_mixed_ordinal_rmsea_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
@@ -579,6 +579,10 @@ infer_mixed_ordinal_crmr_misspec <- function(fit, mixed_stats, estimated_weight 
 
 infer_mixed_ordinal_cfi_tli_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
     .Call(`_magmaan_infer_mixed_ordinal_cfi_tli_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
+}
+
+infer_mixed_ordinal_fit_measures_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
+    .Call(`_magmaan_infer_mixed_ordinal_fit_measures_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
 }
 
 infer_mixed_ordinal_profile_rmsea <- function(fit, mixed_stats, eig_tol = 1e-10) {
@@ -752,3 +756,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+

@@ -1254,6 +1254,44 @@ Rcpp::List infer_ordinal_profile_lrt(Rcpp::List fit_H1,
   return profile_lrt_to_list(*r_or);
 }
 
+// infer_ml_profile_lrt() — complete-data normal-theory ML nested profile LRT:
+// the misspecification-robust ("observed-Hessian profile bread") difference test
+// for two ML fits sharing the same observed data. Unlike the expected-info
+// Satorra-2000 restriction map, the profile contrast lives in the first-stage
+// moment space, so H1/H0 need not share npar. `X_per_group` is the per-group raw
+// data in the model's ov order (the empirical Gamma is built from it).
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ml_profile_lrt(Rcpp::List fit_H1,
+                                Rcpp::List fit_H0,
+                                Rcpp::List X_per_group,
+                                double eig_tol = 1e-10) {
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
+
+  const std::size_t G = ctx1.samp.S.size();
+  if (static_cast<std::size_t>(X_per_group.size()) != G) {
+    Rcpp::stop("infer_ml_profile_lrt: X_per_group has length %d but the model "
+               "has %d group(s)",
+               static_cast<int>(X_per_group.size()), static_cast<int>(G));
+  }
+  magmaan::data::RawData raw;
+  raw.X.reserve(G);
+  for (std::size_t g = 0; g < G; ++g) {
+    raw.X.emplace_back(
+        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X_per_group[g])));
+  }
+
+  auto r_or = magmaan::estimate::ml_profile_lrt(
+      std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
+      std::move(ctx0.pt), ctx0.rep, est0,
+      raw, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_lrt_to_list(*r_or);
+}
+
 // infer_ordinal_fit_measures_misspec() — consolidated estimated-weight
 // misspecification fit table (RMSEA + CRMR/SRMR + CFI/TLI with CIs) for an
 // all-ordinal DWLS fit. Requires `ordinal_stats` with `moment_influence` and
