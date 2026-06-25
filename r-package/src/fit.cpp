@@ -4375,6 +4375,49 @@ Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1,
   return profile_lrt_to_list(*r_or);
 }
 
+// infer_fiml_profile_lrt() — misspecification-robust ("observed-Hessian profile
+// bread") nested difference test for two raw-data FIML fits sharing the same
+// incomplete data. The LRT counterpart of infer_ml_profile_lrt for FIML: H1/H0
+// share one missingness/saturated stage (pack + h1), and the model-vs-saturated
+// chi-squares come from fiml_extras() per model. No `data` arg — reads
+// fit$raw_data (the magmaan_fiml_data object) directly.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                  double eig_tol = 1e-10) {
+  if (!fit_H1.containsElementNamed("raw_data") ||
+      !fit_H0.containsElementNamed("raw_data")) {
+    Rcpp::stop("infer_fiml_profile_lrt: both H1 and H0 require a FIML fit "
+               "with $raw_data");
+  }
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
+
+  // One missingness/saturated stage shared by H1 and H0 (same observed data).
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx1.rep, fit_H1["raw_data"]);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit_H1, raw, owned_pack);
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlH1& h1 = fiml_h1_for_fit(fit_H1, raw, pack, owned_h1);
+
+  // Model-vs-saturated FIML chi-square for each model (fiml_extras copies pt).
+  auto x1 = magmaan::estimate::fiml::fiml_extras(ctx1.pt, ctx1.rep, raw, est1,
+                                                 pack, h1);
+  if (!x1.has_value()) stop_post(x1.error());
+  auto x0 = magmaan::estimate::fiml::fiml_extras(ctx0.pt, ctx0.rep, raw, est0,
+                                                 pack, h1);
+  if (!x0.has_value()) stop_post(x0.error());
+
+  auto r_or = magmaan::estimate::fiml::fiml_profile_lrt(
+      std::move(ctx1.pt), ctx1.rep, raw, est1, x1->chi2,
+      std::move(ctx0.pt), ctx0.rep, est0, x0->chi2,
+      pack, h1, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_lrt_to_list(*r_or);
+}
+
 // measures_standardized_residuals_estimated_weight() — the estimated-weight
 // ("complete-sandwich") residual SE/z and $summary for a continuous LS fit. The
 // residual ACOV uses the Hall-Inoue infinitesimal-jackknife rows (with the

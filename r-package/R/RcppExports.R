@@ -337,6 +337,10 @@ infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight 
     .Call(`_magmaan_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol)
 }
 
+infer_fiml_profile_lrt <- function(fit_H1, fit_H0, eig_tol = 1e-10) {
+    .Call(`_magmaan_infer_fiml_profile_lrt`, fit_H1, fit_H0, eig_tol)
+}
+
 measures_standardized_residuals_estimated_weight <- function(fit, raw_data, weight = NULL, conf_level = 0.90) {
     .Call(`_magmaan_measures_standardized_residuals_estimated_weight`, fit, raw_data, weight, conf_level)
 }
