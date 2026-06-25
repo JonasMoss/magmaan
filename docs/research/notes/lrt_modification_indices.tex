@@ -1,0 +1,193 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\title{LRT-Based Modification Indices and Exact Expected Parameter Change}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+\newcommand{\Th}{\hat\theta}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+A modification index (MI) asks, for a single constrained parameter, how much fit
+would improve if the constraint were freed. In measurement-invariance work the
+constraint of interest is a cross-group equality (a loading or intercept tied
+across groups), and the MI localizes \emph{which} item is non-invariant. magmaan
+ships the classical one-step form: a Lagrange-multiplier (score) statistic
+evaluated once at the constrained fit, with robust (sandwich-scaled) variants.
+
+This note records the refit-based likelihood-ratio (LRT) counterpart, why it is
+the correct tool when the model is structurally misspecified elsewhere, and what
+it costs. The headline cost result is that the refit sweep is cheap: a full
+invariance sweep over a 20-item two-group model runs in about one tenth of a
+second, cold-started, in pure R.
+
+\section{The three localizations and their anchor points}
+
+Let $H_0$ (constrained) be nested in $H_1$ (the one extra constraint released),
+with $m$ released degrees of freedom ($m=1$ for a single equality). The same
+null can be probed from three places:
+\begin{itemize}
+\item \textbf{Score / LM (the MI).} Fit only $H_0$; test whether the score for
+  the frozen direction is far from zero. One fit, anchored at the
+  \emph{constrained} model.
+\item \textbf{Wald.} Fit only $H_1$; test whether $R\Th_1 = q$. One fit, anchored
+  at the \emph{free} model.
+\item \textbf{LRT.} Fit \emph{both}; compare $T_d = T_0 - T_1 = 2N(F_0 - F_1)$.
+\end{itemize}
+All three converge to $\chi^2_m$ under the null and are asymptotically
+equivalent. They differ in finite samples and, decisively, in their robustness
+to misspecification \emph{elsewhere in the model}.
+
+\section{Two senses of misspecification}
+
+Write the candidate as direction $j$ and suppose the model is also wrong in some
+other direction $k$.
+
+\paragraph{Distributional misspecification} (non-normality, an inefficient
+weight $W \neq \Gamma^{-1}$, the failure of the information equality
+$\mathcal{I} = -\E[H]$). This inflates or deflates the \emph{reference
+distribution} of the statistic. The robust score test repairs it by building the
+meat from $\hat\Gamma$ rather than assuming $\mathcal{I}$; the per-direction
+scaling $c = g^\top B_1 g / g^\top A_1 g$ restores a valid $\chi^2$ under the
+local null. This is a \emph{denominator} correction.
+
+\paragraph{Structural misspecification} (the model is wrong in direction $k \neq
+j$). The score $s_j(\Th_0)$ is evaluated at the constrained solution, which the
+estimator has biased by spreading the $k$-misfit across every frozen parameter.
+This is a \emph{numerator} contamination, and no sandwich touches it.
+
+\begin{proposition}[Why robustifying the MI cannot fix structural leakage]
+Under a fixed structural error in direction $k$, the contaminating part of
+$s_j(\Th_0)$ is $O(\sqrt{N})$ (its noncentrality grows with $N$; that is how the
+test gains power against $k$), whereas any meat/bread reweighting is an $O(1)$
+rescaling of the statistic. An $O(1)$ factor cannot recenter an $O(\sqrt{N})$
+bias.
+\end{proposition}
+
+The robust MI is therefore correctly sized under the local null
+(``$j$ constrained, rest correct, distribution possibly wrong'') and silent
+about structural bias. The score test's anchor model is the constrained one,
+which under genuine non-invariance \emph{is} the misspecified model, so its
+per-item MIs inherit the leakage. The Wald's anchor (the free model) is, for a
+loadings-only alternative, correctly specified; this is the structural reason a
+Wald localization resists the contamination a score MI suffers.
+
+\section{The LRT modification index}
+
+To decontaminate the numerator one must stop conditioning on the suspect
+parameters at wrong fixed values. The LRT does this by \emph{refitting}: for each
+candidate constraint, fit the released model $H_1$ and report
+\[
+  T_d = T_0 - T_1, \qquad \mathrm{df} = m,
+\]
+together with the robust reference-law family from the Satorra (2000) difference
+spectrum. Let $\lambda_1,\dots,\lambda_m$ be the eigenvalues of the difference
+operator; then
+\[
+  T_d \dto \sum_{j=1}^m \lambda_j \chi^2_{1,j},
+\]
+and magmaan reports the naive $\chi^2_m$ tail, the Satorra--Bentler mean scaling
+$\bar c = \tfrac1m\sum_j\lambda_j$, the mean--variance adjustment, the
+scaled-shifted statistic, the exact mixture tail (Imhof/Farebrother), and the
+penalized FMG/pEBA transform. None of these cost extra: they are functions of the
+same spectrum the nested difference test already computes.
+
+\paragraph{Exact EPC.} The one-step expected parameter change is a single Newton
+step, $\mathrm{epc} = s_{\mathrm{eff}}/\mathcal{I}_{\mathrm{eff}}$. The LRT
+counterpart is the \emph{refitted} value of the freed parameter minus its
+constrained value: no linearization, the actual change. The existing
+standardization (\texttt{epc.lv}, \texttt{epc.all}) applies unchanged.
+
+\section{Conditional localization: exact, not local}
+
+Because the LRT names both endpoints, it can \emph{condition}. To test item $j$
+while protecting against a suspected non-invariant set $B$, free $B$ in
+\emph{both} $H_0$ and $H_1$ (in magmaan, \texttt{group\_partial}). Then $B$'s
+misfit is identical on the two sides and cancels in $T_d$, so $j$ is isolated.
+
+This is the refit analogue of the Bera--Yoon (1993) adjusted score test, which
+orthogonalizes $s_j$ against the $k$-direction. The crucial difference: Bera--Yoon
+removes the \emph{linear} dependence and is valid only under local
+($O(N^{-1/2})$) misspecification; the conditional LRT removes $B$'s misfit to all
+orders by genuinely refitting, so it is exact under fixed non-invariance. The two
+extremes of the conditioning dial are the ordinary MI (condition on everything,
+maximal contamination) and the configural Wald (condition on nothing, zero
+contamination, all df spent).
+
+\begin{remark}
+The residual cost is the specification-search/anchor-item problem: a third
+non-invariant item left in the tied background contaminates both the $j$-test and
+the choice of $B$. And the difference spectrum is evaluated at $H_1$'s pseudo-true
+point; the exact mixture fixes the reference-law \emph{shape}, while conditioning
+fixes the \emph{point} at which it is evaluated. These are orthogonal jobs.
+\end{remark}
+
+\section{Cost}
+
+The refit sweep is $\#\text{candidates}$ nested fits plus one difference spectrum
+each, against the one fit of the score sweep. Table~\ref{tab:cost} times both for
+a two-group one-factor CFA (loadings $0.6$, one planted non-invariant loading,
+$n_A:n_B = 1{:}3$), cold-started (magmaan computes its own start values).
+
+\begin{table}[h]
+\centering
+\caption{Cold-start LRT-MI vs.\ one-step score sweep, $n=1000$, median of 3 runs.}
+\label{tab:cost}
+\begin{tabular}{rrrrrrr}
+\toprule
+items & npar & cand & one-step (ms) & LRT (ms) & per cand (ms) & LRT/one-step \\
+\midrule
+ 6 & 24 &  5 & 1.0 &  6.0 & 1.2 & 6.0 \\
+ 9 & 36 &  8 & 1.0 & 15.0 & 1.9 & 15.0 \\
+12 & 48 & 11 & 1.0 & 23.0 & 2.1 & 23.0 \\
+15 & 60 & 14 & 2.0 & 43.0 & 3.1 & 21.5 \\
+20 & 80 & 19 & 6.0 & 97.0 & 5.1 & 16.2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ratio LRT/one-step is $6$--$23\times$, but only because the one-step sweep is
+near-free; in absolute terms the entire LRT sweep is sub-100\,ms even at 20 items.
+Sample size enters mildly through the empirical $\hat\Gamma$: at 12 items the
+per-candidate cost grows from $2.0$\,ms at $n=500$ to $4.7$\,ms at $n=8000$. The
+conclusion for the design question is unambiguous: at the model sizes
+measurement-invariance studies use, the refit cost is not a barrier.
+
+\paragraph{Implementation.} The sweep ships as the R function
+\texttt{modification\_indices\_lrt(fit, data)}, a thin composition of the
+one-call estimator \texttt{magmaan} and the nested test
+\texttt{robust\_nested\_lrt}: it enumerates the tied families from the anchor
+partable, refits each released model, and returns the difference statistic, the
+reference-law family, and the exact released per-group estimates. An existing
+\texttt{group\_partial} baseline on the anchor is carried into every refit, so
+the conditional localization is automatic. For both complete-data ML and FIML the
+per-row statistic reproduces a hand-built two-fit \texttt{robust\_nested\_lrt} to
+machine precision.
+
+\paragraph{What remains as an optimization.} This baseline cold-starts every
+released fit. Starting each released fit from the constrained MLE (the C++ core
+takes an explicit \texttt{x0} and contracts it into the released parameter space)
+should cut the per-candidate refit to a few Newton steps. The benchmark
+(\texttt{benchmarks/r/bench\_mi\_lrt.R}) is structured to quantify that warm-start
+speed-up against this cold-start reference once the warm path lands.
+
+\end{document}
