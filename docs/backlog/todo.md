@@ -528,6 +528,23 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       return the profile Hessian, Gamma, dense spectrum, signed/positive trace
       summaries, RMSEA or nested-LRT statistics, and any warnings. Verified by
       `just r-dev` and an R smoke over all-ordinal and mixed nested DWLS fits.
+    - **Done 2026-06-25 (estimator-aware LRT modification indices).**
+      The R `modification_indices_lrt()` observed-bread column `lrt_p_obs` now
+      dispatches the profile-LRT on the anchor's estimator instead of hardcoding
+      `ml_profile_lrt`: complete-data ML keeps `ml_profile_lrt`, all-ordinal DWLS
+      uses `ordinal_profile_lrt` (sharing the anchor's `fit$ordinal_stats`), and
+      mixed-ordinal DWLS uses `mixed_ordinal_profile_lrt` (`fit$mixed_ordinal_stats`)
+      — making `modification_indices_lrt` the first R consumer of those bindings.
+      `.lrt_refit` now propagates `ordered=` so an ordinal augmented model refits
+      under DWLS (it previously errored "requires ordered variables"). Estimators
+      without a wired profile-LRT path (ordinal ULS/WLS, continuous LS, FIML/ML2S)
+      report `lrt_p_obs = NA`; the plain `lrt`/`lrt_p` Δχ² columns still report for
+      any complete-data estimator. Validated by ML/ordinal/mixed arms in
+      `r-package/examples/modification_indices_lrt.R` (each `lrt_p_obs` matches a
+      direct `*_profile_lrt` call to ~1e-9). **Remaining LRT-MI tiers:** continuous
+      ULS/GLS need a new `infer_continuous_ls_profile_lrt` binding (the C++
+      `continuous_ls_profile_lrt` exists); FIML/ML2S additionally need an
+      incomplete-data Δχ² baseline (the reason for the current FIML guard).
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

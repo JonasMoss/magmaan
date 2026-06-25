@@ -52,9 +52,11 @@ modification_indices_lrt <- function(fit, data,
   }
 
   T0 <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
-  # Per-group raw data (ov order) for the observed-Hessian profile difference
-  # test, the misspecification-robust reference law (ml_profile_lrt).
-  data_list <- if (isTRUE(robust)) .lrt_group_data(fit, data) else NULL
+  # Per-group raw data (ov order) for the ML observed-Hessian profile difference
+  # test; only the ML branch of .lrt_profile_p() consumes it (the categorical
+  # branches share the anchor's polychoric stage via fit$*_stats instead).
+  need_ml_data <- isTRUE(robust) && toupper(fit$estimator %||% "ML") == "ML"
+  data_list <- if (need_ml_data) .lrt_group_data(fit, data) else NULL
 
   rows <- lapply(seq_len(nrow(cand)), function(i) {
     row <- cand[i, ]
@@ -71,14 +73,11 @@ modification_indices_lrt <- function(fit, data,
       added <- .lrt_added_est(rel$partable, row)
       epc_lrt <- added$est
       sepc_lrt <- .lrt_std_epc(rel, added$free)
-      # Observed-bread (model-misspecification-robust) reference law: the exact
-      # eigenvalue-mixture tail of the profile-Hessian difference spectrum. We
-      # use p_mixture, not the mean-scaled p_scaled, because the profile contrast
-      # spreads over the moment space (spectrum_size != df_diff for a 1-df add).
+      # Observed-bread (model-misspecification-robust) reference law, dispatched
+      # on the anchor's estimator/data type (see .lrt_profile_p).
       lrt_p_obs <- if (isTRUE(robust)) {
-        pr <- tryCatch(infer_ml_profile_lrt(rel, fit, data_list),
-                       error = function(e) NULL)
-        if (is.null(pr)) NA_real_ else pr$p_mixture
+        tryCatch(.lrt_profile_p(rel, fit, data_list),
+                 error = function(e) NA_real_)
       } else NA_real_
     }
     data.frame(
@@ -95,6 +94,30 @@ modification_indices_lrt <- function(fit, data,
   attr(out, "robust") <- isTRUE(robust)
   class(out) <- c("magmaan_mi_lrt", "data.frame")
   out
+}
+
+# Observed-bread (model-misspecification-robust) reference law for lrt_p_obs: the
+# exact eigenvalue-mixture tail (p_mixture) of the profile-Hessian difference
+# spectrum, dispatched on the anchor's estimator/data type. `rel` is the released
+# (H1) fit, `fit` the anchor (H0); the categorical branches share the anchor's
+# polychoric stage via fit$ordinal_stats / fit$mixed_ordinal_stats, just as the ML
+# branch shares the per-group raw data. p_mixture (not the mean-scaled p_scaled)
+# because the profile contrast spreads over the moment space (spectrum_size !=
+# df_diff for a 1-df add). The ordinal/mixed bindings are DWLS-only, so estimators
+# without a wired profile-LRT path (ordinal ULS/WLS, continuous LS, FIML) return NA
+# here; the plain lrt/lrt_p columns still report for any complete-data estimator.
+.lrt_profile_p <- function(rel, fit, data_list, eig_tol = 1e-10) {
+  est <- toupper(fit$estimator %||% "ML")
+  pr <- if (isTRUE(fit$ordinal) && est == "DWLS") {
+    infer_ordinal_profile_lrt(rel, fit, fit$ordinal_stats, eig_tol)
+  } else if (isTRUE(fit$mixed_ordinal) && est == "DWLS") {
+    infer_mixed_ordinal_profile_lrt(rel, fit, fit$mixed_ordinal_stats, eig_tol)
+  } else if (est == "ML") {
+    infer_ml_profile_lrt(rel, fit, data_list)
+  } else {
+    return(NA_real_)
+  }
+  pr$p_mixture
 }
 
 # Augmented-model syntax line that frees one absent parameter. Single group: a
@@ -325,9 +348,14 @@ print.magmaan_score_lrt <- function(x, ...) {
   model <- fit$model
   syntax <- model$syntax
   if (nzchar(extra_syntax)) syntax <- paste0(syntax, "\n", extra_syntax)
+  # "ordered" is essential: without it an ordinal anchor refits as continuous and
+  # the DWLS/WLS/ULS path errors ("requires ordered variables"); "parameterization"
+  # keeps the released fit on the anchor's theta/delta convention (the profile-LRT
+  # binding requires H1/H0 to match).
   valid <- c("auto_var", "auto_cov_lv_x", "auto_cov_y", "orthogonal",
              "auto_fix_first", "auto_fix_single", "std_lv", "effect_coding",
-             "fixed_x", "meanstructure", "model_type", "parameterization")
+             "fixed_x", "meanstructure", "model_type", "ordered",
+             "parameterization")
   mo <- fit$options$model_options %||% list()
   mo <- mo[intersect(names(mo), valid)]
   partial <- unique(c(model$group_partial, extra_partial))
