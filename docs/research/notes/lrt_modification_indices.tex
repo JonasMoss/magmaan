@@ -190,7 +190,14 @@ reference, which is the \emph{non-normality} axis. The profile contrast lives in
 the first-stage moment space, so adding a parameter (which changes the parameter
 count) needs no restriction-map pinning, and its spectrum size exceeds the
 nominal $1$ df; the mixture tail, not the mean-scaled statistic, is the
-well-behaved summary. \texttt{score\_tests\_lrt(fit, data)} is the
+well-behaved summary. The observed-bread column dispatches on the anchor's
+estimator: complete-data normal-theory ML uses \texttt{ml\_profile\_lrt}, while
+all-ordinal and mixed-ordinal DWLS fits use the categorical estimated-weight
+profile-LRT (\texttt{ordinal\_profile\_lrt}, \texttt{mixed\_ordinal\_profile\_lrt})
+over the polychoric NACOV; continuous LS and FIML/ML2S anchors leave
+\texttt{lrt\_p\_obs} empty pending their bindings, while the plain $\Delta\chi^2$
+columns still report for any complete-data estimator.
+\texttt{score\_tests\_lrt(fit, data)} is the
 equality-release sweep: for each cross-group tied family it refits the released
 model and runs the Satorra-2000 difference test, returning the reference-law
 family and the exact released per-group estimates; an existing
