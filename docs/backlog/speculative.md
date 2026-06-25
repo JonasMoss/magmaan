@@ -56,7 +56,15 @@ SAM-under-misspecification / non-normality / missingness study (the paper's own
 limitations section flags non-normal and missing data as unexamined for SAM,
 which is exactly the FIML-FMG / ML2S / misspec-robust-SE territory). Sequencing:
 LSAM point estimates to lavaan `sam()` parity first (a credible reference), then
-the structural-step SEs. The small-sample SSC variant (Fuller α-modification,
+the structural-step SEs. The step-1 measurement-estimator choice is
+near-irrelevant to accuracy (Dhaene & Rosseel 2023, eval in
+[paper-evals](../research/paper-evals/2023-dhaene-noniterative-sam.md)): reuse
+magmaan's existing ML measurement fit rather than porting the closed-form
+factor-analytic zoo (FABIN2 / Guttman / James-Stein / Bentler), since SAM's
+small-N win comes from decoupling + bounds + compartmentalization, not the
+estimator; the FSR-with-Croon = local-SAM-with-ML-mapping identity (their eq. 10
+= Bartlett's factor-score matrix) ties into the existing `measures` factor-score
+path. The small-sample SSC variant (Fuller α-modification,
 Bogaert et al. 2023) and its SE convention (a weighted average of UFSR/LSAM SEs;
 no closed form) are research-tier with their own bias-variance validation, not a
 free parity addition (see [[feedback-shortcut-variants]]); defer them past plain
