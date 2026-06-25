@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -4193,6 +4194,86 @@ robust_ordinal_ij(spec::LatentStructure pt,
   return ordinal_result_from_weighted(*out);
 }
 
+post_expected<WeightedMomentRBMParts>
+ordinal_rbm_parts(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::OrdinalStats& stats,
+                  const Estimates& est,
+                  OrdinalWeightKind weights,
+                  OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rbm_parts: per-case influence functions unavailable; "
+        "recompute ordinal stats (moment_influence is required for RBM)"));
+  }
+  auto missing_or = ordinal_ij_block_missing(stats, weights);
+  if (!missing_or.has_value()) return std::unexpected(missing_or.error());
+  const std::vector<bool> block_has_missing = std::move(*missing_or);
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rbm_parts: fitted theta length does not match ordinal delta "
+        "partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rbm_parts: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rbm_parts: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                              est.theta, parameterization);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_rbm_parts: constraint reparameterization has incompatible "
+        "shape"));
+  }
+
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                 : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls);
+
+  auto ob = ordinal_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, Ws, K, parameterization);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
+
+  auto ij_blocks = build_ordinal_ij_blocks(
+      stats, *layout_or, eval->moments, est.theta, Ws, Delta_full, weights,
+      parameterization, block_has_missing);
+  if (!ij_blocks.has_value()) return std::unexpected(ij_blocks.error());
+
+  return weighted_moment_rbm_parts(*ij_blocks, K, A);
+}
+
 post_expected<CasewiseInfluenceIJ>
 ordinal_casewise_influence_ij(spec::LatentStructure pt,
                               const model::MatrixRep& rep,
@@ -4631,6 +4712,204 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
   auto out = robust_weighted_moment_ij(ij_blocks, K, 2.0 * est.fmin, A);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
+}
+
+post_expected<WeightedMomentRBMParts>
+mixed_ordinal_rbm_parts(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::MixedOrdinalStats& stats,
+                        const Estimates& est,
+                        OrdinalWeightKind weights,
+                        OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: per-case influence functions unavailable; "
+        "recompute mixed ordinal stats (moment_influence is required for RBM)"));
+  }
+  const bool has_diag_gamma_if =
+      stats.gamma_diag_influence.size() == stats.R.size();
+  const bool has_full_gamma_if =
+      stats.gamma_full_influence.size() == stats.R.size();
+  if (weights == OrdinalWeightKind::DWLS && !has_diag_gamma_if &&
+      stats.raw_data.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: DWLS estimated-weight influence unavailable; "
+        "recompute mixed ordinal stats with gamma_diag_influence or raw_data"));
+  }
+  if (weights == OrdinalWeightKind::WLS && !has_full_gamma_if &&
+      stats.raw_data.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: WLS estimated-weight influence unavailable; "
+        "recompute mixed ordinal stats with gamma_full_influence or raw_data"));
+  }
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: fitted theta length does not match mixed "
+        "delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      mixed_moment_jacobian(stats, *layout_or, eval->moments,
+                            eval->J_sigma, eval->J_mu, est.theta,
+                            parameterization);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_rbm_parts: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                 : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls);
+
+  auto ob = mixed_observed_bread_analytic(
+      pt, rep, stats, est, *layout_or, Ws, K, parameterization);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
+
+  std::vector<WeightedMomentIJBlock> ij_blocks;
+  ij_blocks.reserve(stats.R.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = stats.moments[b].size();
+    const Eigen::MatrixXd& G = stats.moment_influence[b];
+    if (G.rows() != stats.n_obs[b] || G.cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed_ordinal_rbm_parts: moment_influence shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::VectorXd model_m = mixed_model_moments(
+        stats, *layout_or, eval->moments, est.theta, b, parameterization);
+    const Eigen::VectorXd d_b = model_m - stats.moments[b];
+    Eigen::MatrixXd correction;
+    if (weights == OrdinalWeightKind::DWLS) {
+      Eigen::MatrixXd if_gamma;
+      if (has_diag_gamma_if) {
+        if_gamma = stats.gamma_diag_influence[b];
+        if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "mixed_ordinal_rbm_parts: precomputed Gamma diagonal influence "
+              "shape mismatch in block " + std::to_string(b)));
+        }
+      } else {
+        const bool observed_raw = !stats.raw_data[b].allFinite();
+        auto inf_or = observed_raw
+            ? data::mixed_observed_gamma_diag_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_diag_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+        auto D_or = observed_raw
+            ? data::mixed_observed_gamma_diag_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_diag_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!D_or.has_value()) return std::unexpected(D_or.error());
+        if (inf_or->rows() != G.rows() || inf_or->cols() != mb ||
+            D_or->rows() != mb || D_or->cols() != mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "mixed_ordinal_rbm_parts: mixed Gamma diagonal influence shape "
+              "mismatch in block " + std::to_string(b)));
+        }
+        if_gamma = (*inf_or + G * D_or->transpose()).eval();
+      }
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index k = 0; k < mb; ++k) {
+        const double gkk = stats.NACOV[b](k, k);
+        if (!(gkk > 0.0)) continue;
+        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_gamma.col(k);
+      }
+    } else if (weights == OrdinalWeightKind::WLS) {
+      Eigen::MatrixXd if_gamma;
+      if (has_full_gamma_if) {
+        if_gamma = stats.gamma_full_influence[b];
+        if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb * mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "mixed_ordinal_rbm_parts: precomputed Gamma full influence "
+              "shape mismatch in block " + std::to_string(b)));
+        }
+      } else {
+        const bool observed_raw = !stats.raw_data[b].allFinite();
+        auto inf_or = observed_raw
+            ? data::mixed_observed_gamma_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+        auto D_or = observed_raw
+            ? data::mixed_observed_gamma_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!D_or.has_value()) return std::unexpected(D_or.error());
+        if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
+            D_or->rows() != mb * mb || D_or->cols() != mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "mixed_ordinal_rbm_parts: mixed full Gamma influence shape "
+              "mismatch in block " + std::to_string(b)));
+        }
+        if_gamma = (*inf_or + G * D_or->transpose()).eval();
+      }
+      const Eigen::RowVectorXd lhs = d_b.transpose() * Ws[b];
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index i = 0; i < G.rows(); ++i) {
+        const Eigen::VectorXd if_vec = if_gamma.row(i).transpose();
+        Eigen::Map<const Eigen::MatrixXd> IFGamma(if_vec.data(), mb, mb);
+        correction.row(i) = lhs * IFGamma * Ws[b];
+      }
+    }
+    ij_blocks.push_back(WeightedMomentIJBlock{
+        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
+        .weight = Ws[b],
+        .moment_influence = G,
+        .weight_correction = std::move(correction),
+        .n_obs = stats.n_obs[b]});
+    off += mb;
+  }
+
+  return weighted_moment_rbm_parts(ij_blocks, K, A);
 }
 
 post_expected<OrdinalRobustResult>
@@ -8057,6 +8336,205 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
 }
 
 namespace frontier {
+
+namespace {
+
+struct OrdinalObjectiveState {
+  data::OrdinalStats stats;
+  ThresholdLayout layout;
+  model::ModelEvaluator ev;
+  std::vector<Eigen::MatrixXd> factors;
+  OrdinalParameterization parameterization = OrdinalParameterization::Delta;
+};
+
+struct MixedOrdinalObjectiveState {
+  data::MixedOrdinalStats stats;
+  ThresholdLayout layout;
+  model::ModelEvaluator ev;
+  std::vector<Eigen::MatrixXd> factors;
+  OrdinalParameterization parameterization = OrdinalParameterization::Delta;
+};
+
+}  // namespace
+
+fit_expected<OrdinalLsObjective>
+ordinal_ls_objective(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Estimates& at,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  if (at.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "ordinal_ls_objective: theta length does not match ordinal delta "
+        "partable"));
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  auto factors_or = weight_factors(stats, weights);
+  if (!factors_or.has_value()) return std::unexpected(factors_or.error());
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "ordinal_ls_objective: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval0 = ev_or->evaluate(at.theta, false, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "ordinal_ls_objective: start evaluation failed: " +
+            eval0.error().detail));
+  }
+  auto r0 = ordinal_residuals(stats, *layout_or, eval0->moments, *factors_or,
+                              at.theta, parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  auto state = std::make_shared<OrdinalObjectiveState>(OrdinalObjectiveState{
+      stats, std::move(*layout_or), std::move(*ev_or), std::move(*factors_or),
+      parameterization});
+
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = at.theta.size();
+  prob.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.r = [state](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+    auto eval = state->ev.evaluate(x, false, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "ordinal_ls_objective: evaluate failed: " + eval.error().detail));
+    }
+    return ordinal_residuals(state->stats, state->layout, eval->moments,
+                             state->factors, x, state->parameterization);
+  };
+  prob.J = [state](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+    auto eval = state->ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "ordinal_ls_objective: evaluate failed: " + eval.error().detail));
+    }
+    return ordinal_jacobian(state->stats, state->layout, eval->moments,
+                            eval->J_sigma, state->factors, x,
+                            state->parameterization, eval->J_mu);
+  };
+  prob.eval =
+      [state](const Eigen::VectorXd& x) -> fit_expected<optim::LsEvaluation> {
+    auto eval = state->ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "ordinal_ls_objective: evaluate failed: " + eval.error().detail));
+    }
+    auto r = ordinal_residuals(state->stats, state->layout, eval->moments,
+                               state->factors, x, state->parameterization);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J = ordinal_jacobian(state->stats, state->layout, eval->moments,
+                              eval->J_sigma, state->factors, x,
+                              state->parameterization, eval->J_mu);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+
+  return OrdinalLsObjective{std::move(pt), std::move(prob)};
+}
+
+fit_expected<OrdinalLsObjective>
+mixed_ordinal_ls_objective(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           const Estimates& at,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  if (at.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "mixed_ordinal_ls_objective: theta length does not match mixed delta "
+        "partable"));
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  auto factors_or = weight_factors(stats, weights);
+  if (!factors_or.has_value()) return std::unexpected(factors_or.error());
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "mixed_ordinal_ls_objective: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval0 = ev_or->evaluate(at.theta, false, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "mixed_ordinal_ls_objective: start evaluation failed: " +
+            eval0.error().detail));
+  }
+  auto r0 = mixed_ordinal_residuals(stats, *layout_or, eval0->moments,
+                                    *factors_or, at.theta, parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  auto state =
+      std::make_shared<MixedOrdinalObjectiveState>(MixedOrdinalObjectiveState{
+          stats, std::move(*layout_or), std::move(*ev_or),
+          std::move(*factors_or), parameterization});
+
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = at.theta.size();
+  prob.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.r = [state](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+    auto eval = state->ev.evaluate(x, false, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "mixed_ordinal_ls_objective: evaluate failed: " +
+              eval.error().detail));
+    }
+    return mixed_ordinal_residuals(state->stats, state->layout, eval->moments,
+                                   state->factors, x,
+                                   state->parameterization);
+  };
+  prob.J = [state](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+    auto eval = state->ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "mixed_ordinal_ls_objective: evaluate failed: " +
+              eval.error().detail));
+    }
+    return mixed_ordinal_jacobian(state->stats, state->layout, eval->moments,
+                                  eval->J_sigma, eval->J_mu, state->factors,
+                                  x, state->parameterization);
+  };
+  prob.eval =
+      [state](const Eigen::VectorXd& x) -> fit_expected<optim::LsEvaluation> {
+    auto eval = state->ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "mixed_ordinal_ls_objective: evaluate failed: " +
+              eval.error().detail));
+    }
+    auto r = mixed_ordinal_residuals(state->stats, state->layout,
+                                     eval->moments, state->factors, x,
+                                     state->parameterization);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J = mixed_ordinal_jacobian(state->stats, state->layout, eval->moments,
+                                    eval->J_sigma, eval->J_mu,
+                                    state->factors, x,
+                                    state->parameterization);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+
+  return OrdinalLsObjective{std::move(pt), std::move(prob)};
+}
 
 post_expected<std::vector<Eigen::MatrixXd>>
 ordinal_stage2_weight_blocks(const data::OrdinalStats& stats,

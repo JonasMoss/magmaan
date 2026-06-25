@@ -26,6 +26,7 @@ namespace magmaan::estimate {
 struct WeightedProfileRMSEAResult;
 struct WeightedProfileLRTResult;
 struct CasewiseInfluenceIJ;
+struct WeightedMomentRBMParts;
 }  // namespace magmaan::estimate
 
 namespace magmaan::estimate::fiml {
@@ -535,6 +536,27 @@ two_stage_casewise_influence_ij(spec::LatentStructure pt,
                                 const FIMLH1& h1,
                                 TwoStageWeight kind = TwoStageWeight::Nt,
                                 TwoStageDlsOptions dls = {});
+
+post_expected<WeightedMomentRBMParts>
+two_stage_rbm_parts(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const FIMLH1& h1,
+                    TwoStageWeight kind = TwoStageWeight::Nt,
+                    TwoStageDlsOptions dls = {});
+
+post_expected<WeightedMomentRBMParts>
+two_stage_rbm_parts(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const FIMLH1& h1,
+                    const SaturatedMoments& sm,
+                    TwoStageWeight kind = TwoStageWeight::Nt,
+                    TwoStageDlsOptions dls = {});
 
 // Fixed-misspecification profile-RMSEA / profile-LRT for the ML2S-NT
 // Stage-2 likelihood, over the saturated EM moment vector [mean; vech(cov)].

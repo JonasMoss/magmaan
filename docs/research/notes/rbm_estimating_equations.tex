@@ -1,0 +1,158 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\title{Reduced-Bias Estimation for ML, FIML, and Moment-Quadratic SEM}
+\author{}
+\date{\today}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\hatth}{\widehat\theta}
+\newcommand{\hatalpha}{\widehat\alpha}
+\newcommand{\vech}{\operatorname{vech}}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note records the common estimating-equation convention used by the
+\texttt{estimate::frontier::rbm\_*} implementation. The first implementation
+covered complete-data ML and FIML. The extension adds continuous ULS/GLS/WLS,
+all-ordinal LS, mixed ordinal LS, and ML2S. All paths use the same
+linear-constraint-reduced trace algebra; they differ only in how they supply
+the observed bread and the empirical estimating-function meat.
+
+\section*{Objective scale}
+
+Let the estimator minimize a per-observation objective
+\[
+  f_N(\theta) = \frac{1}{N}\sum_{i=1}^N f_i(\theta),
+  \qquad
+  U_N(\theta) = \frac{\partial f_N(\theta)}{\partial \theta}.
+\]
+For likelihood estimators \(f_i\) is the normal deviance contribution up to the
+usual SEM scale. For moment-quadratic estimators
+\[
+  f_N(\theta)
+    =
+  \frac12 \sum_b \frac{n_b}{N}
+    d_b(\theta)\T W_b d_b(\theta),
+  \qquad
+  d_b(\theta) = m_b(\theta) - s_b .
+\]
+The implementation stores the observed bread on the total-\(N\) scale,
+\[
+  J_N(\theta) =
+    N\,\frac{\partial U_N(\theta)}{\partial\theta\T},
+\]
+and the meat as the empirical sum
+\[
+  E_N(\theta) = \sum_{i=1}^N \psi_i(\theta)\psi_i(\theta)\T,
+  \qquad
+  \sum_i \psi_i(\hatth) \approx 0 .
+\]
+With this convention the trace term is dimensionless:
+\[
+  T(\theta) = \tr\{J_N(\theta)^{-1}E_N(\theta)\}.
+\]
+
+\section*{Linear constraints}
+
+The lavaanified model may contain linear equality constraints. Write the
+free-parameter vector as
+\[
+  \theta = \theta_0 + K\alpha,
+\]
+where the columns of \(K\) span the feasible tangent space. RBM is carried out
+in \(\alpha\)-space:
+\[
+  J_\alpha = K\T J_N K,
+  \qquad
+  E_\alpha = K\T E_N K,
+  \qquad
+  T_\alpha = \tr(J_\alpha^{-1}E_\alpha).
+\]
+The explicit one-step correction computes the gradient of
+\[
+  P(\alpha) = -\frac12 T_\alpha(\alpha)
+\]
+at the unadjusted solution and applies
+\[
+  \Delta_\alpha = J_\alpha^{-1}
+    \frac{\partial P(\alpha)}{\partial\alpha},
+  \qquad
+  \hat\theta_{\mathrm{eRBM}} =
+    \hat\theta + K\Delta_\alpha .
+\]
+The implicit estimator minimizes the adjusted objective
+\[
+  f_N(\theta) - \frac{1}{N}P(\theta)
+    =
+  f_N(\theta) + \frac{1}{2N}T_\alpha(\theta).
+\]
+This sign convention matches the metadata stored by the implementation:
+\texttt{penalty = -0.5 * trace\_term} and
+\texttt{penalized\_fmin = fmin + penalty\_per\_observation}.
+
+\section*{ML and FIML}
+
+For complete-data ML, \(\psi_i\) is the row-wise gradient of the normal
+log-likelihood contribution in the full free-parameter basis. For FIML,
+\(\psi_i\) is the observed-pattern score contribution for the row's observed
+subvector. The FIML complete-data special case is therefore pinned to the ML
+path by a regression test: after scale normalization, bread, meat, trace, and
+the explicit correction agree.
+
+\section*{Moment-quadratic estimators}
+
+For a moment block, let
+\[
+  D_b(\theta) = \frac{\partial m_b(\theta)}{\partial\theta\T}.
+\]
+The stage-two estimating equation has the form
+\[
+  U_N(\theta) =
+    \sum_b \frac{n_b}{N} D_b(\theta)\T W_b d_b(\theta).
+\]
+The observed bread is the derivative of this estimating equation, not only the
+Gauss-Newton term. In the continuous LS path this is the same observed-Hessian
+bread used by the misspecification-robust SE implementation. Ordinal, mixed,
+and ML2S paths reuse the corresponding weighted-inference observed bread.
+
+The meat is built from complete infinitesimal-jackknife rows for the fitted
+moment estimator. In block notation the implementation computes rows whose
+crossproduct is equivalent to
+\[
+  E_\alpha =
+    \sum_b (D_b K)\T V_b\T V_b (D_b K),
+\]
+where \(V_b\) is the casewise transformed moment influence, including any
+estimated-weight or first-stage contribution. This is why ordinal DWLS/WLS,
+mixed polyserial/polychoric LS, DLS/ADF, and ML2S do not use a stage-two-only
+meat: their first-stage saturated-moment and weight estimation effects are
+already in \(V_b\).
+
+\section*{Estimator routing}
+
+The common RBM result reports both full-\(\theta\) and reduced-\(\alpha\)
+bread/meat diagnostics. Current routed estimators are:
+\[
+\begin{array}{ll}
+\text{ML} & \text{complete-data normal scores},\\
+\text{FIML} & \text{observed-pattern normal scores},\\
+\text{ULS/GLS/WLS} & \text{continuous moment IJ rows},\\
+\text{ordinal ULS/DWLS/WLS} & \text{polychoric/threshold IJ rows},\\
+\text{mixed ordinal ULS/DWLS/WLS} & \text{mixed moment IJ rows},\\
+\text{ML2S} & \text{FIML saturated-moment IJ rows with NT/DWLS/ADF/DLS weights}.
+\end{array}
+\]
+Nonlinear equality constraints remain outside the implementation because the
+current correction requires a fixed linear tangent matrix \(K\) over the local
+finite-difference stencil.
+
+\end{document}

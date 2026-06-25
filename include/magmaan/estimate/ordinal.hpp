@@ -262,6 +262,15 @@ robust_ordinal_ij(spec::LatentStructure pt,
                   OrdinalParameterization parameterization =
                       OrdinalParameterization::Delta);
 
+post_expected<WeightedMomentRBMParts>
+ordinal_rbm_parts(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::OrdinalStats& stats,
+                  const Estimates& est,
+                  OrdinalWeightKind weights,
+                  OrdinalParameterization parameterization =
+                      OrdinalParameterization::Delta);
+
 // Per-case one-step misspecification-robust ("complete-sandwich") parameter
 // influences for an all-ordinal DWLS/WLS/ULS(MV) fit: the categorical analogue
 // of `continuous_ls_casewise_influence_ij` and the casewise dual of
@@ -308,6 +317,15 @@ robust_mixed_ordinal(spec::LatentStructure pt,
 // requires `stats.moment_influence` and `stats.raw_data`.
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal_ij(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::MixedOrdinalStats& stats,
+                        const Estimates& est,
+                        OrdinalWeightKind weights,
+                        OrdinalParameterization parameterization =
+                            OrdinalParameterization::Delta);
+
+post_expected<WeightedMomentRBMParts>
+mixed_ordinal_rbm_parts(spec::LatentStructure pt,
                         const model::MatrixRep& rep,
                         const data::MixedOrdinalStats& stats,
                         const Estimates& est,
@@ -427,6 +445,29 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
 // moment-scale factor). Mixed stats support DWLS/WLS only, like the
 // non-robust mixed sweep. Single group only (v1).
 namespace frontier {
+
+struct OrdinalLsObjective {
+  spec::LatentStructure pt;
+  optim::GmmProblem problem;
+};
+
+fit_expected<OrdinalLsObjective>
+ordinal_ls_objective(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Estimates& at,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization =
+                         OrdinalParameterization::Delta);
+
+fit_expected<OrdinalLsObjective>
+mixed_ordinal_ls_objective(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           const Estimates& at,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization =
+                               OrdinalParameterization::Delta);
 
 // Experimental all-ordinal second-stage weights over an already-built
 // threshold + polychoric `OrdinalStats` object. This is intended for research

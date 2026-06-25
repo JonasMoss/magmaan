@@ -61,8 +61,8 @@ frontier_fit_ml_ridge_continuation_impl <- function(partable, sample_stats, opti
     .Call(`_magmaan_frontier_fit_ml_ridge_continuation_impl`, partable, sample_stats, optimizer, control, bounds, alphas, target, include_endpoint, diagonal_floor)
 }
 
-frontier_rbm_impl <- function(fit, raw_data = NULL, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaan_frontier_rbm_impl`, fit, raw_data, method, optimizer, control, bounds)
+frontier_rbm_impl <- function(fit, raw_data = NULL, weight = NULL, stage2_weight = "nt", dls_a = 0.5, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_frontier_rbm_impl`, fit, raw_data, weight, stage2_weight, dls_a, method, optimizer, control, bounds)
 }
 
 fcsem_model_spec_impl <- function(syntax) {
@@ -760,4 +760,3 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
-

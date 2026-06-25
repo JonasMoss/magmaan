@@ -5088,6 +5088,41 @@ two_stage_casewise_influence_ij(spec::LatentStructure pt,
                                            asm_or->observed_bread);
 }
 
+post_expected<WeightedMomentRBMParts>
+two_stage_rbm_parts(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const FIMLH1& h1,
+                    TwoStageWeight kind,
+                    TwoStageDlsOptions dls) {
+  auto sm_or = saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, raw, est, pack, h1,
+                                     *sm_or, kind, dls);
+  if (!asm_or.has_value()) return std::unexpected(asm_or.error());
+  return weighted_moment_rbm_parts(asm_or->blocks, asm_or->K,
+                                   asm_or->observed_bread);
+}
+
+post_expected<WeightedMomentRBMParts>
+two_stage_rbm_parts(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const FIMLH1& h1,
+                    const SaturatedMoments& sm,
+                    TwoStageWeight kind,
+                    TwoStageDlsOptions dls) {
+  auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, raw, est, pack, h1,
+                                     sm, kind, dls);
+  if (!asm_or.has_value()) return std::unexpected(asm_or.error());
+  return weighted_moment_rbm_parts(asm_or->blocks, asm_or->K,
+                                   asm_or->observed_bread);
+}
+
 namespace {
 
 post_expected<std::vector<Eigen::MatrixXd>>

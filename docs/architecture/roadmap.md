@@ -84,18 +84,19 @@ golden `parTable()` fixtures.
   ending at `alpha = 0` by default. The C++ primitive is
   `estimate::frontier::fit_ml_ridge_continuation()` and the R research surface
   is `magmaan_core$frontier_fit_ml_ridge_continuation()`.
-- Frontier empirical reduced-bias ML/FIML estimation (2026-06) implements the
-  Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM. The C++
-  surface is `estimate::frontier::rbm_{explicit,implicit}_{ml,fiml}` and the R
-  research surface is `magmaan_core$frontier_rbm(fit, raw_data, method =
-  "explicit" | "implicit")`. The explicit path applies the one-step
-  `j^{-1} grad{-0.5 tr(j^{-1}e)}` correction in the linear-constraint-reduced
-  α-space; the implicit path optimizes `fmin + tr(j^{-1}e)/(2N)`. Complete-data
-  ML builds literal per-row normal log-likelihood score rows for the meat, while
-  FIML rescales observed-pattern deviance gradients by `-1/2`; a unit test pins
-  complete-data FIML RBM to ML. V1 is raw-data only, rejects nonlinear equality
-  constraints, keeps LS/GMM/ordinal/estimated-weight extensions in backlog, and
-  reports the trace, penalty, bread, meat, correction, and admissibility metadata.
+- Frontier empirical reduced-bias estimation (2026-06) implements the
+  Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
+  moment-quadratic family. The C++ surface covers
+  `rbm_{explicit,implicit}_{ml,fiml,continuous_ls,ordinal,mixed_ordinal,two_stage}`;
+  the R research surface is `magmaan_core$frontier_rbm(fit, raw_data, weight,
+  stage2_weight, dls_a, method = "explicit" | "implicit")`. Complete-data ML
+  uses literal per-row normal score rows, FIML uses observed-pattern score rows,
+  continuous ULS/GLS/WLS uses the complete-data moment IJ rows, ordinal and
+  mixed ordinal use the estimated polychoric/polyserial IJ rows, and ML2S uses
+  the same saturated-moment IJ stack as weighted inference. The trace,
+  correction, and implicit penalty are computed in the linear-constraint-reduced
+  alpha space (`K' J K`, `K' E K`); full and reduced bread/meat matrices are
+  reported for diagnostics. Nonlinear equality constraints are still rejected.
 - Experimental complete-data ML IRLS paths fit the same ML objective through
   outer Fisher reweighting and inner GLS solves:
   `estimate::fit_ml_irls()` uses the full parameter block, while

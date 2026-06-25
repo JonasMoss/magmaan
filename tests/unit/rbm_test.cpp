@@ -125,6 +125,12 @@ TEST_CASE("RBM explicit ML returns finite correction and diagnostics") {
   CHECK(rbm->information.cols() == q);
   CHECK(rbm->meat.rows() == q);
   CHECK(rbm->meat.cols() == q);
+  CHECK(rbm->information_reduced.rows() == q);
+  CHECK(rbm->information_reduced.cols() == q);
+  CHECK(rbm->meat_reduced.rows() == q);
+  CHECK(rbm->meat_reduced.cols() == q);
+  CHECK(max_abs(rbm->information_reduced - rbm->information) < 1e-8);
+  CHECK(max_abs(rbm->meat_reduced - rbm->meat) < 1e-8);
   CHECK(rbm->correction.allFinite());
   CHECK(rbm->adjustment.allFinite());
   CHECK(std::isfinite(rbm->trace_term));
@@ -160,5 +166,49 @@ TEST_CASE("RBM explicit FIML complete-data path matches ML scaling") {
   CHECK(max_abs(fiml->adjustment - ml->adjustment) < 1e-5);
   CHECK(max_abs(fiml->information - ml->information) < 1e-6);
   CHECK(max_abs(fiml->meat - ml->meat) < 1e-6);
+  CHECK(max_abs(fiml->information_reduced - ml->information_reduced) < 1e-6);
+  CHECK(max_abs(fiml->meat_reduced - ml->meat_reduced) < 1e-6);
   CHECK(fiml->trace_term == doctest::Approx(ml->trace_term).epsilon(1e-7));
+}
+
+TEST_CASE("RBM explicit continuous ULS returns finite moment diagnostics") {
+  magmaan::data::RawData raw;
+  magmaan::data::SampleStats samp;
+  magmaan::estimate::Estimates ml_est;
+  auto built = rbm_fixture(raw, samp, ml_est);
+
+  magmaan::optim::OptimOptions fit_opts;
+  fit_opts.max_iter = 250;
+  auto uls = magmaan::test::fit_gmm(
+      *built.pt, *built.rep, samp, {}, {}, magmaan::estimate::Backend::NloptLbfgs,
+      fit_opts);
+  if (!uls.has_value()) {
+    FAIL(uls.error().detail);
+    return;
+  }
+
+  magmaan::estimate::frontier::RBMOptions opts;
+  auto rbm = magmaan::estimate::frontier::rbm_explicit_continuous_ls(
+      *built.pt, *built.rep, samp, *uls, {}, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::Fixed, {}, {}, opts);
+  if (!rbm.has_value()) {
+    FAIL(rbm.error().detail);
+    return;
+  }
+
+  const Eigen::Index q = uls->theta.size();
+  CHECK(rbm->estimates.theta.size() == q);
+  CHECK(rbm->correction.size() == q);
+  CHECK(rbm->information.rows() == q);
+  CHECK(rbm->information.cols() == q);
+  CHECK(rbm->information_reduced.rows() == q);
+  CHECK(rbm->information_reduced.cols() == q);
+  CHECK(rbm->meat_reduced.rows() == q);
+  CHECK(rbm->meat_reduced.cols() == q);
+  CHECK(rbm->correction.allFinite());
+  CHECK(rbm->adjustment.allFinite());
+  CHECK(rbm->information_reduced.allFinite());
+  CHECK(rbm->meat_reduced.allFinite());
+  CHECK(std::isfinite(rbm->trace_term));
+  CHECK(rbm->penalty == doctest::Approx(-0.5 * rbm->trace_term));
 }
