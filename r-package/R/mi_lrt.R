@@ -20,7 +20,7 @@
 modification_indices_lrt <- function(fit, data,
                                      candidates = c("all", "loadings",
                                                     "covariances"),
-                                     robust = TRUE) {
+                                     robust = TRUE, weight = NULL) {
   candidates <- match.arg(candidates)
   if (!inherits(fit, "magmaan_fit")) {
     stop("modification_indices_lrt(): `fit` must be a fitted magmaan model.",
@@ -35,6 +35,13 @@ modification_indices_lrt <- function(fit, data,
   # p_unscaled (the saturated term cancels in the difference), not T0 - T1.
   est <- toupper(fit$estimator %||% "ML")
   use_profile_diff <- isTRUE(fit$fiml) || est %in% c("FIML", "ML2S")
+  # Continuous WLS keeps no weight on the fit, so the same fitting `weight=` (W)
+  # must be supplied to refit the augmented models and build the profile-LRT.
+  if (est == "WLS" && is.null(weight)) {
+    stop("modification_indices_lrt(): continuous WLS requires the fitting ",
+         "`weight=` (the W matrix); it is not retained on the fit.",
+         call. = FALSE)
+  }
 
   ngroups <- fit$ngroups %||% 1L
   ops <- switch(candidates,
@@ -43,8 +50,9 @@ modification_indices_lrt <- function(fit, data,
     covariances = "~~")
 
   # Reuse the one-step sweep for both the candidate enumeration and the
-  # comparison column (lavaan-style mi / epc).
-  one_step <- modification_indices(fit)
+  # comparison column (lavaan-style mi / epc). WLS needs the weight here too.
+  one_step <- if (is.null(weight)) modification_indices(fit) else
+    modification_indices(fit, weight = weight)
   cand <- one_step[one_step$op %in% ops, , drop = FALSE]
   if (!nrow(cand)) {
     stop("modification_indices_lrt(): modification_indices() found no absent ",
@@ -58,14 +66,14 @@ modification_indices_lrt <- function(fit, data,
   # profile difference test (the empirical Gamma is built from it). The
   # categorical branches of .lrt_profile_obj() share the anchor's polychoric stage
   # via fit$*_stats instead, and FIML/ML2S read fit$raw_data, so only the
-  # complete-data ML/ULS/GLS branches consume this list.
-  need_raw_data <- isTRUE(robust) && est %in% c("ML", "ULS", "GLS")
+  # complete-data ML/ULS/GLS/WLS branches consume this list.
+  need_raw_data <- isTRUE(robust) && est %in% c("ML", "ULS", "GLS", "WLS")
   data_list <- if (need_raw_data) .lrt_group_data(fit, data) else NULL
 
   rows <- lapply(seq_len(nrow(cand)), function(i) {
     row <- cand[i, ]
     line <- .lrt_aug_line(row, ngroups)
-    rel <- tryCatch(.lrt_refit(fit, data, extra_syntax = line),
+    rel <- tryCatch(.lrt_refit(fit, data, extra_syntax = line, weight = weight),
                     error = function(e) e)
     if (inherits(rel, "error") || !isTRUE(rel$converged)) {
       lrt <- NA_real_; lrt_p <- NA_real_; lrt_p_obs <- NA_real_
@@ -90,7 +98,7 @@ modification_indices_lrt <- function(fit, data,
         # Observed-bread (model-misspecification-robust) reference law (p_mixture),
         # dispatched on the anchor's estimator/data type (see .lrt_profile_obj).
         lrt_p_obs <- if (isTRUE(robust)) {
-          pr <- tryCatch(.lrt_profile_obj(rel, fit, data_list),
+          pr <- tryCatch(.lrt_profile_obj(rel, fit, data_list, weight = weight),
                          error = function(e) NULL)
           if (is.null(pr)) NA_real_ else pr$p_mixture
         } else NA_real_
@@ -123,17 +131,19 @@ modification_indices_lrt <- function(fit, data,
 # per-group raw data, and FIML/ML2S read fit$raw_data. p_mixture (not the
 # mean-scaled p_scaled) because the profile contrast spreads over the moment space
 # (spectrum_size != df_diff for a 1-df add). The ordinal/mixed bindings are
-# DWLS-only and continuous WLS would need an explicit weight not retained on the
-# fit, so those return NULL here; the plain lrt/lrt_p columns still report for any
-# complete-data estimator.
-.lrt_profile_obj <- function(rel, fit, data_list, eig_tol = 1e-10) {
+# DWLS-only, so a non-DWLS ordinal anchor returns NULL here; the plain lrt/lrt_p
+# columns still report for any complete-data estimator. Continuous WLS needs the
+# caller's `weight` (the W matrix) since it is not retained on the fit.
+.lrt_profile_obj <- function(rel, fit, data_list, weight = NULL,
+                             eig_tol = 1e-10) {
   est <- toupper(fit$estimator %||% "ML")
   if (isTRUE(fit$ordinal) && est == "DWLS") {
     infer_ordinal_profile_lrt(rel, fit, fit$ordinal_stats, eig_tol)
   } else if (isTRUE(fit$mixed_ordinal) && est == "DWLS") {
     infer_mixed_ordinal_profile_lrt(rel, fit, fit$mixed_ordinal_stats, eig_tol)
-  } else if (est %in% c("ULS", "GLS")) {
-    infer_continuous_ls_profile_lrt(rel, fit, data_list, eig_tol = eig_tol)
+  } else if (est %in% c("ULS", "GLS", "WLS")) {
+    infer_continuous_ls_profile_lrt(rel, fit, data_list, weight = weight,
+                                    eig_tol = eig_tol)
   } else if (isTRUE(fit$fiml) || est == "FIML") {
     infer_fiml_profile_lrt(rel, fit, eig_tol)
   } else if (est == "ML2S") {
@@ -369,7 +379,8 @@ print.magmaan_score_lrt <- function(x, ...) {
 # Refit a model derived from `fit`'s anchor: append `extra_syntax` rows and/or
 # add `extra_partial` group_partial tokens, preserving the anchor's estimator,
 # grouping, group_equal, existing group_partial, and model options.
-.lrt_refit <- function(fit, data, extra_syntax = "", extra_partial = NULL) {
+.lrt_refit <- function(fit, data, extra_syntax = "", extra_partial = NULL,
+                       weight = NULL) {
   model <- fit$model
   syntax <- model$syntax
   if (nzchar(extra_syntax)) syntax <- paste0(syntax, "\n", extra_syntax)
@@ -390,6 +401,7 @@ print.magmaan_score_lrt <- function(x, ...) {
          groups = fit$group_var,
          group_equal = model$group_equal,
          group_partial = if (length(partial)) partial else NULL),
+    if (!is.null(weight)) list(W = weight),  # continuous WLS augmented refit
     mo))
 }
 

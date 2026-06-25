@@ -558,9 +558,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
       `inference_modification_indices` for candidate enumeration (one-step ML score
       MI on the EM moments). Validated by GLS/ULS/FIML/ML2S arms in
       `r-package/examples/modification_indices_lrt.R` (each table value matches a
-      direct `*_profile_lrt` call to ~1e-9). **Remaining:** continuous **WLS** only
-      (its weight is not retained on the fit; the binding accepts `weight=` for
-      forward-compat but the R dispatch leaves WLS `NA`).
+      direct `*_profile_lrt` call to ~1e-9).
+    - **Done 2026-06-25 (continuous WLS LRT MI — family complete).** Continuous WLS
+      is now wired too: `modification_indices_lrt()` gains a `weight=` argument (the
+      fitting W, which is not retained on the fit), threaded through the candidate
+      sweep, the augmented refit (`magmaan(..., W=)`), and the profile-LRT binding.
+      A WLS fit without `weight=` errors clearly. Pure-R change (the
+      `infer_continuous_ls_profile_lrt` binding already accepted `weight=`). The
+      `lrt_p_obs` dispatch now covers **every** estimator magmaan fits: ML, ordinal
+      DWLS, mixed-ordinal DWLS, continuous ULS/GLS/WLS, FIML, and ML2S. Validated by
+      a WLS arm (ADF weight from `robust_empirical_gamma`) in the example.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

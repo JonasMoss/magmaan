@@ -221,3 +221,31 @@ cat("\nML2S: x1~~x2 lrt = ", format(smi$lrt[sdoub], digits = 4),
     ", lrt_p_obs = ", format(smi$lrt_p_obs[sdoub], digits = 3),
     " (dispatched)\n", sep = "")
 cat("ML2S modern MI: ok\n")
+
+## --- Continuous WLS (ADF): pass the same weight used to fit ------------------
+## WLS keeps no weight on the fit, so modification_indices_lrt() takes weight=
+## (the W matrix) and threads it through the refit and the profile-LRT.
+ov6  <- paste0("x", 1:6)
+Wadf <- solve(magmaan_core$robust_empirical_gamma(as.matrix(dat[, ov6])))
+wfit <- magmaan(syntax, dat, estimator = "WLS", W = Wadf)
+wmi  <- modification_indices_lrt(wfit, dat, weight = Wadf)
+wdoub <- which(wmi$op == "~~" &
+                 mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
+                        wmi$lhs, wmi$rhs))
+stopifnot(inherits(wmi, "magmaan_mi_lrt"), length(wdoub) == 1L,
+          is.finite(wmi$lrt_p_obs[wdoub]))
+## lrt_p_obs matches a direct continuous_ls_profile_lrt() call with the same W.
+wtop <- wmi[wdoub, ]
+wrel <- magmaan(paste0(syntax, "\n", wtop$lhs, " ", wtop$op, " ", wtop$rhs),
+                dat, estimator = "WLS", W = Wadf)
+wpr  <- magmaan_core$continuous_ls_profile_lrt(wrel, wfit,
+                                               list(as.matrix(dat[, ov6])),
+                                               weight = Wadf)
+stopifnot(abs(wmi$lrt_p_obs[wdoub] - wpr$p_mixture) < 1e-9)
+## A WLS fit without weight= errors clearly (the W is not retained on the fit).
+stopifnot(inherits(try(modification_indices_lrt(wfit, dat), silent = TRUE),
+                   "try-error"))
+cat("\ncontinuous WLS: x1~~x2 lrt_p_obs = ",
+    format(wmi$lrt_p_obs[wdoub], digits = 3), " (dispatched, ADF weight)\n",
+    sep = "")
+cat("continuous WLS modern MI: ok\n")
