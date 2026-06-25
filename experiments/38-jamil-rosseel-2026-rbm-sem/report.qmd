@@ -1,0 +1,79 @@
+---
+title: "Jamil-Rosseel RBM SEM Replication"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+metrics_path <- "results/paper_main_metrics.csv"
+summary_path <- "results/paper_main_method_summary.csv"
+accept_path <- "results/paper_acceptance_rates.csv"
+if (!file.exists(metrics_path) || !file.exists(summary_path) || !file.exists(accept_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --download")
+}
+metrics <- read.csv(metrics_path)
+method_summary <- read.csv(summary_path)
+acceptance <- read.csv(accept_path)
+```
+
+## Question
+
+Can we reproduce the published examples from Jamil, Rosseel, Kemp, and Kosmidis' reduced-bias SEM paper before treating the method as a magmaan target?
+
+## Short Answer
+
+Yes, for the paper's two central examples when we consume the authors' OSF result objects: the two-factor SEM under normal data and reliability 0.8, and the growth curve model under normal data and reliability 0.5. The reproduced summaries show the same qualitative pattern as the manuscript: eRBM and iRBM reduce trimmed finite-sample bias relative to ML while keeping RMSE broadly comparable, and the implicit estimator is less fragile than the explicit post-hoc correction in the small-sample cells.
+
+This is not yet an independent magmaan rerun. It is a replication harness over the authors' brlavaan/lavaan simulation outputs, which is the right baseline before we spend compute on magmaan-owned reruns.
+
+## Evidence
+
+The table aggregates the paper's Figure 4 and Figure 6 metrics over the focal parameters in each model. Lower values are better for absolute bias, RMSE, PU error, and coverage error; the final column is the smallest accepted parameter-level count contributing to that row.
+
+```{r}
+show <- subset(method_summary, n %in% c(15, 20, 100, 1000))
+show$model <- ifelse(show$model == "twofac", "Two-factor", "Growth")
+show$reliability <- sprintf("%.1f", show$reliability)
+show$mean_abs_bias <- round(show$mean_abs_bias, 4)
+show$mean_rmse <- round(show$mean_rmse, 4)
+show$mean_abs_pu_error <- round(show$mean_abs_pu_error, 4)
+show$mean_abs_coverage_error <- round(show$mean_abs_coverage_error, 4)
+names(show) <- c(
+  "Model", "Distribution", "Reliability", "N", "Method",
+  "Mean |Bias|", "Mean RMSE", "Mean |PU - .5|",
+  "Mean |Coverage - .95|", "Min Reps"
+)
+knitr::kable(show)
+```
+
+The acceptance-rate output is also written because the paper's Table 2 is a warning about eRBM in difficult cells. The display below follows the paper by showing eRBM and iRBM. The default run only covers the two main normal-data examples; `--full` extends the same machinery to all normal and non-normal cells once the remaining split two-factor result files are present.
+
+```{r}
+acc <- subset(acceptance, method != "ML" & n %in% c(15, 20, 100, 1000))
+acc$model <- ifelse(acc$model == "twofac", "Two-factor", "Growth")
+acc$reliability <- sprintf("%.1f", acc$reliability)
+acc$acceptance_rate <- round(100 * acc$acceptance_rate, 1)
+names(acc) <- c("Model", "Distribution", "Reliability", "N", "Method", "Replications", "Acceptable", "Acceptance (%)")
+knitr::kable(acc)
+```
+
+## Caveats
+
+The default run reproduces the paper's main examples from published OSF outputs, not by refitting every simulated dataset with magmaan. The authors used bounded lavaan/brlavaan fits, observed information, and separate robust-SE runs for coverage; matching those choices matters.
+
+The full paper grid is expensive because the original design has 2,000 replications per cell, bootstrap and jackknife comparators, and split two-factor result files. Use the full mode only when the OSF result cache is available or when network/download time is acceptable.
+
+## Reproduce
+
+```sh
+cd experiments/38-jamil-rosseel-2026-rbm-sem
+Rscript run_experiment.R --download
+Rscript run_experiment.R --download --smoke
+Rscript run_experiment.R --download --full
+```
