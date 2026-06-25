@@ -19,7 +19,8 @@
 
 modification_indices_lrt <- function(fit, data,
                                      candidates = c("all", "loadings",
-                                                    "covariances")) {
+                                                    "covariances"),
+                                     robust = TRUE) {
   candidates <- match.arg(candidates)
   if (!inherits(fit, "magmaan_fit")) {
     stop("modification_indices_lrt(): `fit` must be a fitted magmaan model.",
@@ -51,6 +52,9 @@ modification_indices_lrt <- function(fit, data,
   }
 
   T0 <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
+  # Per-group raw data (ov order) for the observed-Hessian profile difference
+  # test, the misspecification-robust reference law (ml_profile_lrt).
+  data_list <- if (isTRUE(robust)) .lrt_group_data(fit, data) else NULL
 
   rows <- lapply(seq_len(nrow(cand)), function(i) {
     row <- cand[i, ]
@@ -58,17 +62,27 @@ modification_indices_lrt <- function(fit, data,
     rel <- tryCatch(.lrt_refit(fit, data, extra_syntax = line),
                     error = function(e) e)
     if (inherits(rel, "error") || !isTRUE(rel$converged)) {
-      lrt <- NA_real_; lrt_p <- NA_real_; epc_lrt <- NA_real_
+      lrt <- NA_real_; lrt_p <- NA_real_; lrt_p_obs <- NA_real_
+      epc_lrt <- NA_real_
     } else {
       T1 <- infer_chi2_stat(fit_sample_stats(rel), rel$fmin)
       lrt <- T0 - T1
       lrt_p <- stats::pchisq(lrt, df = 1L, lower.tail = FALSE)
       epc_lrt <- .lrt_added_est(rel$partable, row)
+      # Observed-bread (model-misspecification-robust) reference law: the exact
+      # eigenvalue-mixture tail of the profile-Hessian difference spectrum. We
+      # use p_mixture, not the mean-scaled p_scaled, because the profile contrast
+      # spreads over the moment space (spectrum_size != df_diff for a 1-df add).
+      lrt_p_obs <- if (isTRUE(robust)) {
+        pr <- tryCatch(infer_ml_profile_lrt(rel, fit, data_list),
+                       error = function(e) NULL)
+        if (is.null(pr)) NA_real_ else pr$p_mixture
+      } else NA_real_
     }
     data.frame(
       lhs = row$lhs, op = row$op, rhs = row$rhs, group = row$group, df = 1L,
       mi = row$mi, mi_p = stats::pchisq(row$mi, df = 1L, lower.tail = FALSE),
-      lrt = lrt, lrt_p = lrt_p,
+      lrt = lrt, lrt_p = lrt_p, lrt_p_obs = lrt_p_obs,
       epc = row$epc, epc_lrt = epc_lrt,
       stringsAsFactors = FALSE)
   })
@@ -76,6 +90,7 @@ modification_indices_lrt <- function(fit, data,
   out <- do.call(rbind, rows)
   out <- out[order(-out$lrt), , drop = FALSE]
   rownames(out) <- NULL
+  attr(out, "robust") <- isTRUE(robust)
   class(out) <- c("magmaan_mi_lrt", "data.frame")
   out
 }
@@ -252,9 +267,12 @@ print.magmaan_score_lrt <- function(x, ...) {
     return(lapply(data, function(d) as.matrix(d[, ov, drop = FALSE])))
   }
   gv <- fit$group_var
-  if (is.null(gv) || !gv %in% names(data)) {
-    stop("score_tests_lrt(): `data` must contain the grouping column '", gv,
-         "', or be a list of per-group matrices.", call. = FALSE)
+  if (is.null(gv) || !nzchar(gv) || (fit$ngroups %||% 1L) < 2L) {
+    return(list(as.matrix(data[, ov, drop = FALSE])))
+  }
+  if (!gv %in% names(data)) {
+    stop("modification_indices_lrt(): `data` must contain the grouping column '",
+         gv, "', or be a list of per-group matrices.", call. = FALSE)
   }
   lapply(fit$group_labels, function(g)
     as.matrix(data[as.character(data[[gv]]) == g, ov, drop = FALSE]))
