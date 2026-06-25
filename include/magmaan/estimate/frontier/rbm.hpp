@@ -1,0 +1,106 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/fiml.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
+
+namespace magmaan::estimate::frontier {
+
+// Empirical reduced-bias M-estimation after Kosmidis and Lunardon, exposed as
+// frontier SEM machinery. V1 supports raw-data ML/FIML only, because the
+// empirical meat e(theta) is built from casewise estimating-function rows.
+struct RBMOptions {
+  double fd_rel_step = 1e-4;
+  double fd_abs_step = 1e-6;
+#ifdef MAGMAAN_WITH_PORT
+  Backend backend = Backend::Port;
+#else
+  Backend backend = Backend::NloptLbfgs;
+#endif
+  optim::OptimOptions optim = {};
+  bool check_admissibility = true;
+  double admissibility_tol = 1e-6;
+};
+
+struct RBMResult {
+  Estimates estimates;
+
+  Eigen::VectorXd correction;   // theta_rbm - theta_start, full theta space
+  Eigen::VectorXd adjustment;   // tangent-space grad P(theta), full theta size
+  Eigen::MatrixXd information;  // j(theta): base theta for explicit, final for implicit
+  Eigen::MatrixXd meat;         // e(theta): base theta for explicit, final for implicit
+
+  double trace_term = 0.0;      // trace(j^-1 e)
+  double penalty = 0.0;         // P(theta) = -0.5 * trace_term
+  double penalty_per_observation = 0.0;
+  double penalized_fmin = 0.0;  // original fmin + trace_term / (2N)
+
+  bool admissible = true;
+  bool bounds_satisfied = true;
+  bool sigma_pd = true;
+  std::vector<std::string> warnings;
+};
+
+fit_expected<RBMResult>
+rbm_explicit_ml(spec::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const data::SampleStats& samp,
+                const data::RawData& raw,
+                const Estimates& base,
+                Bounds bounds = {},
+                RBMOptions opts = {});
+
+fit_expected<RBMResult>
+rbm_implicit_ml(spec::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const data::SampleStats& samp,
+                const data::RawData& raw,
+                const Estimates& start,
+                Bounds bounds = {},
+                RBMOptions opts = {});
+
+fit_expected<RBMResult>
+rbm_explicit_fiml(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::RawData& raw,
+                  const fiml::FIMLPack& pack,
+                  const Estimates& base,
+                  Bounds bounds = {},
+                  RBMOptions opts = {});
+
+fit_expected<RBMResult>
+rbm_explicit_fiml(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::RawData& raw,
+                  const Estimates& base,
+                  Bounds bounds = {},
+                  RBMOptions opts = {});
+
+fit_expected<RBMResult>
+rbm_implicit_fiml(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::RawData& raw,
+                  const fiml::FIMLPack& pack,
+                  const Estimates& start,
+                  Bounds bounds = {},
+                  RBMOptions opts = {});
+
+fit_expected<RBMResult>
+rbm_implicit_fiml(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::RawData& raw,
+                  const Estimates& start,
+                  Bounds bounds = {},
+                  RBMOptions opts = {});
+
+}  // namespace magmaan::estimate::frontier

@@ -61,6 +61,10 @@ frontier_fit_ml_ridge_continuation_impl <- function(partable, sample_stats, opti
     .Call(`_magmaan_frontier_fit_ml_ridge_continuation_impl`, partable, sample_stats, optimizer, control, bounds, alphas, target, include_endpoint, diagonal_floor)
 }
 
+frontier_rbm_impl <- function(fit, raw_data = NULL, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_frontier_rbm_impl`, fit, raw_data, method, optimizer, control, bounds)
+}
+
 fcsem_model_spec_impl <- function(syntax) {
     .Call(`_magmaan_fcsem_model_spec_impl`, syntax)
 }

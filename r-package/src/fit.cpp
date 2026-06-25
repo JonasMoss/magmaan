@@ -34,6 +34,7 @@
 #include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/frontier/rbm.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -965,6 +966,63 @@ Rcpp::List bounds_to_r(const magmaan::estimate::Bounds& bounds) {
   return Rcpp::List::create(
       Rcpp::_["lower"] = Rcpp::wrap(bounds.lower),
       Rcpp::_["upper"] = Rcpp::wrap(bounds.upper));
+}
+
+magmaan::estimate::frontier::RBMOptions
+rbm_options_from(Rcpp::Nullable<Rcpp::String> optimizer,
+                 Rcpp::Nullable<Rcpp::List> control) {
+  magmaan::estimate::frontier::RBMOptions opts;
+  if (optimizer.isNotNull()) {
+    opts.backend = backend_from_optimizer_arg(optimizer);
+  }
+  opts.optim = optim_opts_from(control);
+  if (control.isNotNull()) {
+    Rcpp::List l(control.get());
+    if (l.containsElementNamed("fd_rel_step"))
+      opts.fd_rel_step = Rcpp::as<double>(l["fd_rel_step"]);
+    if (l.containsElementNamed("fd_abs_step"))
+      opts.fd_abs_step = Rcpp::as<double>(l["fd_abs_step"]);
+    if (l.containsElementNamed("check_admissibility"))
+      opts.check_admissibility = Rcpp::as<bool>(l["check_admissibility"]);
+    if (l.containsElementNamed("admissibility_tol"))
+      opts.admissibility_tol = Rcpp::as<double>(l["admissibility_tol"]);
+  }
+  return opts;
+}
+
+std::string rbm_method_key(std::string method) {
+  for (char& ch : method) {
+    if (ch == '-') ch = '_';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  if (method == "explicit" || method == "erb" || method == "erbm") {
+    return "explicit";
+  }
+  if (method == "implicit" || method == "irb" || method == "irbm") {
+    return "implicit";
+  }
+  Rcpp::stop("magmaan: RBM method must be 'explicit' or 'implicit'");
+}
+
+Rcpp::List rbm_metadata_to_r(
+    const magmaan::estimate::frontier::RBMResult& r,
+    const std::string& method,
+    const char* base_estimator) {
+  return Rcpp::List::create(
+      Rcpp::_["method"] = method,
+      Rcpp::_["base_estimator"] = base_estimator,
+      Rcpp::_["correction"] = Rcpp::wrap(r.correction),
+      Rcpp::_["adjustment"] = Rcpp::wrap(r.adjustment),
+      Rcpp::_["information"] = Rcpp::wrap(r.information),
+      Rcpp::_["meat"] = Rcpp::wrap(r.meat),
+      Rcpp::_["trace"] = r.trace_term,
+      Rcpp::_["penalty"] = r.penalty,
+      Rcpp::_["penalty_per_observation"] = r.penalty_per_observation,
+      Rcpp::_["penalized_fmin"] = r.penalized_fmin,
+      Rcpp::_["admissible"] = r.admissible,
+      Rcpp::_["bounds_satisfied"] = r.bounds_satisfied,
+      Rcpp::_["sigma_pd"] = r.sigma_pd,
+      Rcpp::_["warnings"] = Rcpp::wrap(r.warnings));
 }
 
 magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
@@ -1981,6 +2039,68 @@ Rcpp::List frontier_fit_ml_ridge_continuation_impl(
   Rcpp::List out = fit_result(final_ctx, fit.final, &starts, "ML");
   out["frontier_method"] = "ml_ridge_continuation";
   out["continuation"] = continuation_to_r(fit, cont.target);
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_rbm_impl(
+    Rcpp::List fit,
+    SEXP raw_data = R_NilValue,
+    std::string method = "explicit",
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string method_key = rbm_method_key(std::move(method));
+  const magmaan::estimate::frontier::RBMOptions opts =
+      rbm_options_from(optimizer, control);
+  const magmaan::estimate::Bounds b = bounds_from_nullable(bounds);
+
+  const bool is_fiml = fit.containsElementNamed("fiml") &&
+                       Rcpp::as<bool>(fit["fiml"]);
+  if (is_fiml) {
+    SEXP rd = raw_data;
+    if (Rf_isNull(rd)) {
+      if (!fit.containsElementNamed("raw_data")) {
+        Rcpp::stop("magmaan: frontier_rbm() needs raw_data or a FIML fit with $raw_data");
+      }
+      rd = fit["raw_data"];
+    }
+    magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, rd);
+    auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+    if (!pack.has_value()) stop_fit(pack.error());
+
+    magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
+        method_key == "explicit"
+            ? magmaan::estimate::frontier::rbm_explicit_fiml(
+                  ctx.pt, ctx.rep, raw, *pack, est, b, opts)
+            : magmaan::estimate::frontier::rbm_implicit_fiml(
+                  ctx.pt, ctx.rep, raw, *pack, est, b, opts);
+    if (!rbm.has_value()) stop_fit(rbm.error());
+
+    Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr, "RBM-FIML");
+    out["fiml"] = true;
+    out["raw_data"] =
+        fiml_raw_to_r(raw, ctx.rep.ov_names, ctx.names.group_labels);
+    out["rbm"] = rbm_metadata_to_r(*rbm, method_key, "FIML");
+    return out;
+  }
+
+  if (Rf_isNull(raw_data)) {
+    Rcpp::stop("magmaan: frontier_rbm() needs raw_data for complete-data ML fits");
+  }
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
+      method_key == "explicit"
+          ? magmaan::estimate::frontier::rbm_explicit_ml(
+                ctx.pt, ctx.rep, ctx.samp, raw, est, b, opts)
+          : magmaan::estimate::frontier::rbm_implicit_ml(
+                ctx.pt, ctx.rep, ctx.samp, raw, est, b, opts);
+  if (!rbm.has_value()) stop_fit(rbm.error());
+
+  Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr, "RBM-ML");
+  out["rbm"] = rbm_metadata_to_r(*rbm, method_key, "ML");
   return out;
 }
 

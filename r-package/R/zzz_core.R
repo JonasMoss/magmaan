@@ -98,6 +98,12 @@ frontier_is_std_lv_admissible <- is_std_lv_admissible_impl
 frontier_backconvert_std_lv_to_marker <- backconvert_std_lv_to_marker_impl
 frontier_fit_ml_auto_identification <- fit_ml_auto_identification_impl
 frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composite_nested_impl
+frontier_rbm <- function(fit, raw_data = NULL,
+                         method = c("explicit", "implicit"),
+                         optimizer = NULL, control = NULL, bounds = NULL) {
+  method <- match.arg(method)
+  frontier_rbm_impl(fit, raw_data, method, optimizer, control, bounds)
+}
 
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
@@ -438,6 +444,7 @@ magmaan_core <- local({
       "frontier_backconvert_std_lv_to_marker",
       "frontier_fit_ml_auto_identification",
       "frontier_fit_ml_ridge_continuation",
+      "frontier_rbm",
       "frontier_pairwise_ordinal_composite_nested"
     ),
     helpers = c(
@@ -531,6 +538,7 @@ magmaan_core <- local({
       "fcsem_model_spec_impl",
       "fit_ml_fcsem_impl",
       "frontier_fit_ml_ridge_continuation_impl",
+      "frontier_rbm_impl",
       "frontier_pairwise_ordinal_composite_nested_impl",
       "fcsem_standard_errors_impl",
       "fcsem_fit_measures_impl",
