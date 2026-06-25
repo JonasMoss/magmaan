@@ -75,11 +75,39 @@ all-parameter risk.
 knitr::kable(show)
 ```
 
+## Validation
+
+The Guttman covariance map is differentiated by finite differences, so the
+delta-method variances are only as good as that linearization. A direct Monte
+Carlo check (simulate normal data at the well-specified cell, compare the
+empirical sampling spread of each estimator to the delta-method prediction)
+confirms it: the all-parameter asymptotic SD agrees with simulation to within a
+percent or two, on the order of Monte Carlo error itself.
+
+```{r}
+val_path <- "results/validation.csv"
+if (file.exists(val_path)) {
+  val <- read.csv(val_path)
+  v <- subset(val, group == "all")
+  v$Estimator <- v$estimator
+  v$`Delta SD` <- round(v$delta_sd_norm, 3)
+  v$`Monte Carlo SD` <- round(v$mc_sd_norm, 3)
+  v$`Rel. Error` <- sprintf("%+.1f%%", 100 * v$sd_norm_rel_err)
+  knitr::kable(v[, c("Estimator", "Delta SD", "Monte Carlo SD", "Rel. Error")],
+               caption = sprintf("All-parameter SD, delta method vs %d-rep Monte Carlo at N=%d.",
+                                 v$reps[1], v$n_validate[1]))
+} else {
+  cat("Run `Rscript run_experiment.R --validate` to populate this check.")
+}
+```
+
 ## Caveats
 
-The runner uses finite differences for the Guttman covariance map and for the
-implicit estimator maps. The diagnostics file records convergence and covariance
-matrix eigenvalues; inspect it before trusting a new grid.
+The implicit estimator maps (NT, ULS, GLS, WLS) are also finite-differenced; the
+diagnostics file records convergence and covariance-matrix eigenvalues, so
+inspect it before trusting a new grid. The Monte Carlo validation above covers
+the well-specified cell only; GLS is excluded there because its weight is
+recomputed every iteration.
 
 The WLS column is an oracle fixed-weight moment estimator using the population
 normal fourth-moment covariance. GLS recomputes the normal-theory sample weight

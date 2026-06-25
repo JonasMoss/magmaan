@@ -23,6 +23,12 @@ usage <- function() {
     "  --fd-step X          Relative finite-difference step. Default: 1e-5.\n",
     "  --n-risk LIST        Comma-separated sample sizes for risk summaries.\n",
     "                       Default: 50,100,500,1000.\n",
+    "  --validate           Also Monte-Carlo validate the delta-method Omega:\n",
+    "                       simulate normal data at one well-specified cell and\n",
+    "                       check N*Cov(tau_hat) against the FD-Jacobian Omega.\n",
+    "                       Off by default; adds a few minutes.\n",
+    "  --validate-reps N    Monte-Carlo replications for --validate. Default: 1000.\n",
+    "  --validate-n N       Sample size per replication for --validate. Default: 1000.\n",
     "  --results-dir PATH   Output directory. Default: results.\n",
     "  --help               Show this help.\n",
     sep = ""
@@ -35,6 +41,9 @@ parse_args <- function(args) {
     full = FALSE,
     fd_step = 1e-5,
     n_risk = c(50L, 100L, 500L, 1000L),
+    validate = FALSE,
+    validate_reps = 1000L,
+    validate_n = 1000L,
     results_dir = file.path(script_dir, "results")
   )
   i <- 1L
@@ -57,6 +66,16 @@ parse_args <- function(args) {
       i <- i + 1L
       if (i > length(args)) stop("--n-risk needs a value", call. = FALSE)
       opts$n_risk <- as.integer(strsplit(args[[i]], ",", fixed = TRUE)[[1]])
+    } else if (arg == "--validate") {
+      opts$validate <- TRUE
+    } else if (arg == "--validate-reps") {
+      i <- i + 1L
+      if (i > length(args)) stop("--validate-reps needs a value", call. = FALSE)
+      opts$validate_reps <- as.integer(args[[i]])
+    } else if (arg == "--validate-n") {
+      i <- i + 1L
+      if (i > length(args)) stop("--validate-n needs a value", call. = FALSE)
+      opts$validate_n <- as.integer(args[[i]])
     } else if (arg == "--results-dir") {
       i <- i + 1L
       if (i > length(args)) stop("--results-dir needs a value", call. = FALSE)
@@ -71,6 +90,12 @@ parse_args <- function(args) {
   }
   if (!length(opts$n_risk) || any(!is.finite(opts$n_risk)) || any(opts$n_risk <= 0)) {
     stop("--n-risk must contain positive integers", call. = FALSE)
+  }
+  if (!is.finite(opts$validate_reps) || opts$validate_reps < 2) {
+    stop("--validate-reps must be an integer >= 2", call. = FALSE)
+  }
+  if (!is.finite(opts$validate_n) || opts$validate_n <= 9) {
+    stop("--validate-n must exceed the number of indicators", call. = FALSE)
   }
   opts
 }
@@ -396,6 +421,80 @@ groups <- list(
   all = seq_len(21)
 )
 
+# Monte-Carlo validation of the delta-method Omega. The note (section 7) flags
+# this as the main outstanding check for the Guttman map, whose Jacobian is taken
+# by finite differences. We simulate normal data at one well-specified cell and
+# compare the empirical sampling SD of tau_hat to sqrt(diag(Omega) / N_validate).
+# GLS is omitted: its weight is recomputed at every objective evaluation, which is
+# too costly per replication; the fixed-weight estimators below suffice for the check.
+rmvnorm0 <- function(n, Sigma) {
+  matrix(rnorm(n * ncol(Sigma)), n, ncol(Sigma)) %*% chol(Sigma)
+}
+
+run_validation <- function(opts) {
+  pop <- make_population(0.5, 0.1, "none")
+  Gamma <- gamma_normal(pop$Sigma)
+  W_oracle <- solve_sym(Gamma)
+  ests <- c("Guttman", "NT", "ULS", "WLS")
+
+  # delta-method Omega per estimator, reusing the main-loop machinery
+  Omega <- list()
+  alpha_start <- alpha_from_tau(pop$target_tau)
+  for (est in ests) {
+    fit <- fit_estimator(pop$sigma, est, alpha_start, W_oracle)
+    J <- estimator_jacobian(est, fit, pop$sigma, W_oracle, opts$fd_step)
+    Om <- J %*% Gamma %*% t(J)
+    Omega[[est]] <- 0.5 * (Om + t(Om))
+    if (est != "Guttman" && is.finite(fit$value)) alpha_start <- fit$alpha
+  }
+
+  B <- opts$validate_reps
+  Nv <- opts$validate_n
+  warm <- alpha_from_tau(pop$target_tau)
+  set.seed(20260625L)
+  acc <- lapply(ests, function(e) matrix(NA_real_, B, length(tau_names)))
+  names(acc) <- ests
+  message(sprintf("Validation: %d reps at N=%d on cell reliability=0.5 factor_cor=0.1 misspec=none",
+                  B, Nv))
+  for (b in seq_len(B)) {
+    Sb <- cov(rmvnorm0(Nv, pop$Sigma))
+    sb <- vech(Sb)
+    for (e in ests) {
+      ft <- tryCatch(fit_estimator(sb, e, warm, W_oracle), error = function(err) NULL)
+      if (!is.null(ft) && all(is.finite(ft$tau))) acc[[e]][b, ] <- ft$tau
+    }
+    if (b %% 250L == 0L) message(sprintf("  validation rep %d/%d", b, B))
+  }
+
+  rows <- list()
+  ri <- 0L
+  for (e in ests) {
+    mc_var <- apply(acc[[e]], 2, var, na.rm = TRUE)
+    nfin <- sum(stats::complete.cases(acc[[e]]))
+    dvar <- diag(Omega[[e]])
+    for (grp in names(groups)) {
+      idx <- groups[[grp]]
+      delta_sd <- sqrt(dvar[idx] / Nv)        # per-parameter delta-method SD at Nv
+      mc_sd <- sqrt(mc_var[idx])
+      ri <- ri + 1L
+      dnorm <- sqrt(sum(delta_sd^2))
+      mnorm <- sqrt(sum(mc_sd^2))
+      rows[[ri]] <- data.frame(
+        estimator = e,
+        group = grp,
+        reps = nfin,
+        n_validate = Nv,
+        delta_sd_norm = dnorm,
+        mc_sd_norm = mnorm,
+        sd_norm_rel_err = dnorm / mnorm - 1,        # stable aggregate check
+        max_param_rel_err = max(abs(delta_sd / mc_sd - 1)),  # noisy worst-case param
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  do.call(rbind, rows)
+}
+
 summary_rows <- list()
 point_rows <- list()
 diag_rows <- list()
@@ -530,3 +629,13 @@ cat("  ", summary_path, "\n", sep = "")
 cat("  ", points_path, "\n", sep = "")
 cat("  ", diag_path, "\n", sep = "")
 cat("  ", meta_path, "\n", sep = "")
+
+if (isTRUE(opts$validate)) {
+  validation <- run_validation(opts)
+  validation_path <- file.path(opts$results_dir, "validation.csv")
+  write.csv(validation, validation_path, row.names = FALSE)
+  cat("  ", validation_path, "\n", sep = "")
+  gut <- validation[validation$estimator == "Guttman" & validation$group == "all", ]
+  cat(sprintf("Guttman delta-vs-MC SD-norm: all-parameter rel. err = %+.1f%% (reps=%d, N=%d)\n",
+              100 * gut$sd_norm_rel_err, gut$reps, gut$n_validate))
+}
