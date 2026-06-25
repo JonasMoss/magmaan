@@ -1,0 +1,100 @@
+---
+title: "Guttman CFA Asymptotic Efficiency"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- "results/asymptotic_summary.csv"
+points_path <- "results/point_estimates.csv"
+diag_path <- "results/diagnostics.csv"
+if (!file.exists(summary_path) || !file.exists(points_path) || !file.exists(diag_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+}
+summary <- read.csv(summary_path)
+points <- read.csv(points_path)
+diagnostics <- read.csv(diag_path)
+
+focus <- subset(summary, group == "all" & n_ref == 100)
+best <- do.call(rbind, lapply(split(focus, paste(focus$reliability, focus$factor_cor, focus$misspec)), function(x) {
+  x[which.min(x$risk), , drop = FALSE]
+}))
+best_counts <- sort(table(best$estimator), decreasing = TRUE)
+best_sentence <- paste(paste(names(best_counts), as.integer(best_counts), sep = "="), collapse = ", ")
+guttman_rows <- subset(focus, estimator == "Guttman")
+guttman_nt_median <- median(guttman_rows$risk_ratio_to_nt, na.rm = TRUE)
+guttman_nt_min <- min(guttman_rows$risk_ratio_to_nt, na.rm = TRUE)
+guttman_nt_max <- max(guttman_rows$risk_ratio_to_nt, na.rm = TRUE)
+
+show <- subset(focus, reliability == min(focus$reliability) & factor_cor == min(focus$factor_cor))
+show$Misspecification <- c(
+  none = "None",
+  cross_loading = "Omitted loading",
+  residual_covariance = "Omitted residual covariance"
+)[show$misspec]
+show$Estimator <- show$estimator
+show$`Bias Norm` <- round(show$bias_norm, 3)
+show$`Asymptotic SD Norm` <- round(show$asymp_sd_norm, 3)
+show$`Risk / NT` <- round(show$risk_ratio_to_nt, 2)
+show$`Risk / Guttman` <- round(show$risk_ratio_to_guttman, 2)
+show <- show[order(show$misspec, show$estimator),
+             c("Misspecification", "Estimator", "Bias Norm",
+               "Asymptotic SD Norm", "Risk / NT", "Risk / Guttman")]
+```
+
+## Question
+
+Does Guttman's closed-form CFA estimator have competitive first-order variance
+and fixed-misspecification risk relative to NT, ULS, GLS, and oracle WLS in the
+small three-factor CFA design used by Dhaene and Rosseel?
+
+## Short Answer
+
+In this population-level run, the lowest all-parameter risk at \(N=100\) is split
+as follows across design cells: `r best_sentence`. Guttman's median risk ratio
+to NT is `r round(guttman_nt_median, 2)` across the same cells, ranging from
+`r round(guttman_nt_min, 2)` to `r round(guttman_nt_max, 2)`.
+
+Interpret this as an asymptotic target check, not a finite-sample convergence
+study. It compares pseudo-target bias plus first-order sampling variance; it
+does not simulate Heywood cases or optimizer failures.
+
+## Evidence
+
+The table shows the hardest displayed slice: reliability 0.5, factor correlation
+0.1, and \(N=100\). Ratios below 1 beat the denominator on the displayed
+all-parameter risk.
+
+```{r}
+knitr::kable(show)
+```
+
+## Caveats
+
+The runner uses finite differences for the Guttman covariance map and for the
+implicit estimator maps. The diagnostics file records convergence and covariance
+matrix eigenvalues; inspect it before trusting a new grid.
+
+The WLS column is an oracle fixed-weight moment estimator using the population
+normal fourth-moment covariance. GLS recomputes the normal-theory sample weight
+as the covariance summary changes. Under non-normal data these two should be
+extended with non-normal fourth moments, which is the next useful slice.
+
+The experiment is covariance-only and uses one small simple-structure CFA
+family. Larger indicator blocks are where Guttman's computational appeal should
+be strongest.
+
+## Reproduce
+
+```sh
+cd experiments/40-guttman-cfa-asymptotics
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --full
+quarto render report.qmd
+```
