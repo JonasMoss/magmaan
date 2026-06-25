@@ -53,6 +53,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 35 | [misspec-robust-se](35-misspec-robust-se/report.qmd) | probe | active | Does the observed-Hessian ("robust" regime) bread recover the true sampling SD of ordinal DWLS estimates under structural misspecification, while coinciding with the conventional SE under the null? |
 | 36 | [ordinal-dwls-profile-lrt](36-ordinal-dwls-profile-lrt/report.md) | paper-sim | active | Does the standard scaled difference test for nested all-ordinal DWLS models stay calibrated when the larger model is misspecified, and does the estimated-weight profile law restore calibration? |
 | 37 | [mixed-fiml-pairwise-efficiency](37-mixed-fiml-pairwise-efficiency/report.qmd) | benchmark | active | Under item missingness in mixed continuous/ordinal SEM, does a continuous-FIML first stage (pairwise x FIML) buy efficiency and reduce MAR bias over fully pairwise statistics, and on which parameter block? |
+| 38 | [jamil-rosseel-2026-rbm-sem](38-jamil-rosseel-2026-rbm-sem/report.qmd) | replication | active | Can we reproduce the SEM reduced-bias paper's two-factor and growth-curve RBM examples from the authors' OSF outputs before magmaan-owned reruns? |
 
 ## Archived
 

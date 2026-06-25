@@ -221,12 +221,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     and ML2S must include weight/saturated-moment estimation effects, not a
     stage-2-only trace term. Reuse the complete-sandwich IJ blocks where
     possible.
-  - **M — paper reproduction.** Add an experiment that reconstructs the
-    two-factor SEM and growth-curve simulations from the SEM bias-reduction
-    paper, producing analogues of the acceptable-estimate table and the
-    ML/eRBM/iRBM bias/RMSE/underestimation/coverage figures. First try the
-    paper's supplementary/OSF materials; if unavailable, label the run as an
-    independent reconstruction.
+  - **M — magmaan-owned paper rerun.** Experiment
+    `38-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
+    paper's main two-factor and growth-curve examples from the authors' OSF
+    result objects. Remaining work is the independent magmaan rerun: implement
+    the bounded-estimation choices needed for the paper design, rerun the
+    normal/non-normal cells from generated data, and compare magmaan ML/eRBM/iRBM
+    to the OSF summaries.
 
 - **Done 2026-06-19.** Observed-Hessian ("robust" regime) bread for the
   moment-quadratic estimators (ordinal DWLS/WLSMV/ULSMV, mixed/polyserial,
