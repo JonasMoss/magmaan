@@ -2,14 +2,16 @@
 # Small magmaan-owned bias check for the frontier reduced-bias estimators.
 #
 # The design is deliberately small: one correctly specified one-factor CFA,
-# one sample size, and three estimator families (continuous GLS, raw-data FIML
-# with light MCAR missingness, and all-ordinal DWLS). Each replicate fits the
+# one sample size, and four estimator families (complete-data ML, continuous
+# GLS, raw-data FIML with light MCAR missingness, and all-ordinal DWLS). Each
+# replicate fits the
 # ordinary estimator, then the explicit post-hoc RBM correction and the implicit
 # integrated RBM estimator from the ordinary fit.
 #
 # Usage:
 #   Rscript run_experiment.R [--reps N] [--n N] [--ref-n N]
-#                            [--estimators gls,fiml,dwls]
+#                            [--estimators ml,gls,fiml,dwls]
+#                            [--cores N|auto] [--chunk-size N]
 #                            [--seed-base S] [--smoke]
 
 .support_helpers <- function() {
@@ -56,22 +58,31 @@ elapsed <- function(expr) {
 
 parse_args <- function(args) {
   out <- list(
-    reps = 20L,
+    reps = 250L,
     n = 160L,
-    ref_n = 20000L,
-    estimators = c("gls", "fiml", "dwls"),
+    ref_n = 50000L,
+    estimators = c("ml", "gls", "fiml", "dwls"),
+    cores = 1L,
+    chunk_size = NA_integer_,
     seed_base = 20260625L,
     smoke = FALSE
   )
+  parse_cores <- function(x) {
+    if (tolower(x) == "auto") {
+      return(max(1L, parallel::detectCores(logical = FALSE) - 1L))
+    }
+    as.integer(x)
+  }
   i <- 1L
   while (i <= length(args)) {
     a <- args[[i]]
     take <- function() { i <<- i + 1L; args[[i]] }
     if (a %in% c("-h", "--help")) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--n N] [--ref-n N]\n",
-          "       [--estimators gls,fiml,dwls] [--seed-base S] [--smoke]\n\n",
+          "       [--estimators ml,gls,fiml,dwls] [--cores N|auto]\n",
+          "       [--chunk-size N] [--seed-base S] [--smoke]\n\n",
           "Fits standard, explicit post-hoc RBM, and implicit integrated RBM\n",
-          "variants for a small one-factor CFA under GLS, FIML, and DWLS.\n",
+          "variants for a small one-factor CFA under ML, GLS, FIML, and DWLS.\n",
           sep = "")
       quit(save = "no", status = 0L)
     } else if (a == "--reps") { out$reps <- as.integer(take())
@@ -82,6 +93,10 @@ parse_args <- function(args) {
     } else if (startsWith(a, "--ref-n=")) { out$ref_n <- as.integer(sub("^--ref-n=", "", a))
     } else if (a == "--estimators") { out$estimators <- parse_csv_arg(take())
     } else if (startsWith(a, "--estimators=")) { out$estimators <- parse_csv_arg(sub("^--estimators=", "", a))
+    } else if (a == "--cores") { out$cores <- parse_cores(take())
+    } else if (startsWith(a, "--cores=")) { out$cores <- parse_cores(sub("^--cores=", "", a))
+    } else if (a == "--chunk-size") { out$chunk_size <- as.integer(take())
+    } else if (startsWith(a, "--chunk-size=")) { out$chunk_size <- as.integer(sub("^--chunk-size=", "", a))
     } else if (a == "--seed-base") { out$seed_base <- as.integer(take())
     } else if (startsWith(a, "--seed-base=")) { out$seed_base <- as.integer(sub("^--seed-base=", "", a))
     } else if (a == "--smoke") { out$smoke <- TRUE
@@ -89,16 +104,25 @@ parse_args <- function(args) {
     i <- i + 1L
   }
   out$estimators <- tolower(out$estimators)
-  bad <- setdiff(out$estimators, c("gls", "fiml", "dwls"))
+  bad <- setdiff(out$estimators, c("ml", "gls", "fiml", "dwls"))
   if (length(bad)) stop("unknown estimator token(s): ", paste(bad, collapse = ", "))
   if (out$smoke) {
     out$reps <- 2L
     out$n <- 120L
     out$ref_n <- 2000L
+    out$cores <- min(out$cores, 2L)
+    if (is.na(out$chunk_size)) out$chunk_size <- 2L
   }
   if (!is.finite(out$reps) || out$reps < 1L) stop("--reps must be positive")
   if (!is.finite(out$n) || out$n < 80L) stop("--n must be >= 80")
   if (!is.finite(out$ref_n) || out$ref_n < 1000L) stop("--ref-n must be >= 1000")
+  if (!is.finite(out$cores) || out$cores < 1L) stop("--cores must be positive or 'auto'")
+  out$cores <- as.integer(out$cores)
+  if (is.na(out$chunk_size)) out$chunk_size <- max(10L, out$cores * 10L)
+  if (!is.finite(out$chunk_size) || out$chunk_size < 1L) {
+    stop("--chunk-size must be positive")
+  }
+  out$chunk_size <- as.integer(out$chunk_size)
   out
 }
 
@@ -108,6 +132,50 @@ require_pkg("magmaan")
 suppressPackageStartupMessages(library(magmaan))
 core <- magmaan::magmaan_core
 res_dir <- ensure_results_dir()
+progress_path <- file.path(res_dir, "progress.csv")
+write_csv(data.frame(
+  estimator = character(),
+  chunk = integer(),
+  chunks = integer(),
+  completed = integer(),
+  total = integer(),
+  elapsed_s = numeric(),
+  eta_s = numeric(),
+  stringsAsFactors = FALSE
+), progress_path)
+
+format_duration <- function(seconds) {
+  if (!is.finite(seconds)) return("unknown")
+  seconds <- max(0, as.integer(round(seconds)))
+  h <- seconds %/% 3600L
+  m <- (seconds %% 3600L) %/% 60L
+  s <- seconds %% 60L
+  if (h > 0L) sprintf("%dh%02dm%02ds", h, m, s)
+  else sprintf("%dm%02ds", m, s)
+}
+
+append_progress <- function(estimator, chunk, chunks, completed, total,
+                            elapsed_s, eta_s) {
+  row <- data.frame(
+    estimator = estimator,
+    chunk = chunk,
+    chunks = chunks,
+    completed = completed,
+    total = total,
+    elapsed_s = elapsed_s,
+    eta_s = eta_s,
+    stringsAsFactors = FALSE
+  )
+  utils::write.table(row, progress_path, sep = ",", row.names = FALSE,
+                     col.names = FALSE, append = TRUE)
+  cat(sprintf(
+    "[%s] chunk %d/%d: %d/%d reps (%.1f%%), elapsed %s, ETA %s\n",
+    toupper(estimator), chunk, chunks, completed, total,
+    100 * completed / total, format_duration(elapsed_s),
+    format_duration(eta_s)
+  ))
+  flush.console()
+}
 
 ov <- paste0("y", 1:4)
 lambda <- c(.75, .70, .65, .60)
@@ -150,12 +218,17 @@ as_ordinal_data_frame <- function(z) {
 data_for_estimator <- function(estimator, n, seed) {
   z <- draw_latent_response(n, seed)
   switch(estimator,
+         ml = z,
          gls = z,
          fiml = as_fiml_data_frame(z, seed + 100000L),
          dwls = as_ordinal_data_frame(z))
 }
 
 fit_standard <- function(estimator, data) {
+  if (estimator == "ml") {
+    return(magmaan::magmaan(model, data, estimator = "ML",
+                            control = control_fit))
+  }
   if (estimator == "gls") {
     return(magmaan::magmaan(model, data, estimator = "GLS",
                             control = control_fit))
@@ -169,7 +242,7 @@ fit_standard <- function(estimator, data) {
 }
 
 fit_rbm <- function(fit, estimator, method) {
-  raw_data <- if (estimator == "gls") fit$raw_data else NULL
+  raw_data <- if (estimator %in% c("ml", "gls")) fit$raw_data else NULL
   core$frontier_rbm(fit, raw_data = raw_data, method = method,
                     control = control_rbm)
 }
@@ -244,7 +317,7 @@ skipped_status_row <- function(estimator, method, rep, step, error) {
 
 reference_truth <- function(estimator) {
   d <- data_for_estimator(estimator, cfg$ref_n, cfg$seed_base + 900000L +
-                            match(estimator, c("gls", "fiml", "dwls")) * 10000L)
+                            match(estimator, c("ml", "gls", "fiml", "dwls")) * 10000L)
   r <- elapsed(fit_standard(estimator, d))
   if (!isTRUE(r$ok) || !isTRUE(r$value$converged)) {
     msg <- if (isTRUE(r$ok)) "reference fit did not converge" else r$error
@@ -263,41 +336,90 @@ status_rows <- list()
 ek <- 0L
 sk <- 0L
 
-for (estimator in cfg$estimators) {
-  cat("Running ", toupper(estimator), " reps\n", sep = "")
-  truth_est <- truths[[estimator]]
-  for (rep in seq_len(cfg$reps)) {
-    seed <- cfg$seed_base +
-      match(estimator, c("gls", "fiml", "dwls")) * 100000L + rep
-    d <- data_for_estimator(estimator, cfg$n, seed)
+run_one_rep <- function(estimator, truth_est, rep) {
+  seed <- cfg$seed_base +
+    match(estimator, c("ml", "gls", "fiml", "dwls")) * 100000L + rep
+  d <- data_for_estimator(estimator, cfg$n, seed)
 
-    base <- elapsed(fit_standard(estimator, d))
-    sk <- sk + 1L
-    status_rows[[sk]] <- status_row(estimator, "standard", rep, "fit", base)
-    if (!isTRUE(base$ok) || !isTRUE(base$value$converged)) {
-      skip_msg <- if (isTRUE(base$ok)) "base fit did not converge" else base$error
-      for (method_name in c("posthoc", "integrated")) {
-        sk <- sk + 1L
-        status_rows[[sk]] <- skipped_status_row(estimator, method_name, rep,
-                                                "skipped", skip_msg)
-      }
-      next
+  erows <- list()
+  srows <- list()
+  epos <- 0L
+  spos <- 0L
+
+  base <- elapsed(fit_standard(estimator, d))
+  spos <- spos + 1L
+  srows[[spos]] <- status_row(estimator, "standard", rep, "fit", base)
+  if (!isTRUE(base$ok) || !isTRUE(base$value$converged)) {
+    skip_msg <- if (isTRUE(base$ok)) "base fit did not converge" else base$error
+    for (method_name in c("posthoc", "integrated")) {
+      spos <- spos + 1L
+      srows[[spos]] <- skipped_status_row(estimator, method_name, rep,
+                                          "skipped", skip_msg)
     }
+    return(list(estimates = rbind_fill(erows), statuses = rbind_fill(srows)))
+  }
 
-    ek <- ek + 1L
-    estimate_rows[[ek]] <- estimate_table(base$value, estimator, "standard",
-                                          rep, truth_est)
+  epos <- epos + 1L
+  erows[[epos]] <- estimate_table(base$value, estimator, "standard",
+                                  rep, truth_est)
 
-    rbm_methods <- c(posthoc = "explicit", integrated = "implicit")
-    for (method_name in names(rbm_methods)) {
-      rb <- elapsed(fit_rbm(base$value, estimator, rbm_methods[[method_name]]))
-      sk <- sk + 1L
-      status_rows[[sk]] <- status_row(estimator, method_name, rep,
-                                      rbm_methods[[method_name]], rb)
-      if (!isTRUE(rb$ok) || !isTRUE(rb$value$converged)) next
+  rbm_methods <- c(posthoc = "explicit", integrated = "implicit")
+  for (method_name in names(rbm_methods)) {
+    rb <- elapsed(fit_rbm(base$value, estimator, rbm_methods[[method_name]]))
+    spos <- spos + 1L
+    srows[[spos]] <- status_row(estimator, method_name, rep,
+                                rbm_methods[[method_name]], rb)
+    if (!isTRUE(rb$ok) || !isTRUE(rb$value$converged)) next
+    epos <- epos + 1L
+    erows[[epos]] <- estimate_table(rb$value, estimator, method_name,
+                                    rep, truth_est)
+  }
+
+  list(estimates = rbind_fill(erows), statuses = rbind_fill(srows))
+}
+
+run_estimator_reps <- function(estimator, truth_est) {
+  reps <- seq_len(cfg$reps)
+  chunks <- split(reps, ceiling(seq_along(reps) / cfg$chunk_size))
+  out <- vector("list", 0L)
+  started <- proc.time()[["elapsed"]]
+  completed <- 0L
+  for (i in seq_along(chunks)) {
+    reps_i <- chunks[[i]]
+    chunk <- if (cfg$cores > 1L && .Platform$OS.type != "windows") {
+      parallel::mclapply(
+        reps_i,
+        function(rep) run_one_rep(estimator, truth_est, rep),
+        mc.cores = min(cfg$cores, length(reps_i)),
+        mc.preschedule = TRUE
+      )
+    } else {
+      lapply(reps_i, function(rep) run_one_rep(estimator, truth_est, rep))
+    }
+    out <- c(out, chunk)
+    completed <- completed + length(reps_i)
+    elapsed_s <- proc.time()[["elapsed"]] - started
+    eta_s <- if (completed > 0L) elapsed_s * (cfg$reps - completed) / completed else NA_real_
+    append_progress(estimator, i, length(chunks), completed, cfg$reps,
+                    elapsed_s, eta_s)
+  }
+  out
+}
+
+for (estimator in cfg$estimators) {
+  cat("Running ", toupper(estimator), " reps",
+      if (cfg$cores > 1L) paste0(" on ", cfg$cores, " cores") else "",
+      "\n", sep = "")
+  truth_est <- truths[[estimator]]
+  rep_results <- run_estimator_reps(estimator, truth_est)
+  for (rr in rep_results) {
+    if (nrow(rr$estimates)) {
       ek <- ek + 1L
-      estimate_rows[[ek]] <- estimate_table(rb$value, estimator, method_name,
-                                            rep, truth_est)
+      estimate_rows[[ek]] <- rr$estimates
+    }
+    if (nrow(rr$statuses)) {
+      sk <- sk + 1L
+      status_rows[[sk]] <- rr$statuses
     }
   }
 }
@@ -323,7 +445,9 @@ summarise_estimates <- function(estimates, statuses) {
       replications = nrow(d),
       bias = mean(d$bias, na.rm = TRUE),
       abs_bias = mean(abs(d$bias), na.rm = TRUE),
+      mse = mean(d$bias^2, na.rm = TRUE),
       rmse = sqrt(mean(d$bias^2, na.rm = TRUE)),
+      pu = mean(d$bias < 0, na.rm = TRUE),
       median_bias = stats::median(d$bias, na.rm = TRUE),
       q05_bias = stats::quantile(d$bias, .05, na.rm = TRUE),
       q95_bias = stats::quantile(d$bias, .95, na.rm = TRUE),
@@ -335,20 +459,40 @@ summarise_estimates <- function(estimates, statuses) {
   method_keys <- unique(estimates[c("estimator", "method")])
   mrows <- vector("list", nrow(method_keys))
   status_keys <- unique(statuses[c("estimator", "method")])
+  mise <- function(estimator, method, param_ids) {
+    e <- estimates[estimates$estimator == estimator &
+                     estimates$method == method &
+                     estimates$param_id %in% param_ids &
+                     is.finite(estimates$bias), , drop = FALSE]
+    if (!nrow(e)) return(NA_real_)
+    per_rep <- tapply(e$bias^2, e$rep, mean, na.rm = TRUE)
+    mean(per_rep, na.rm = TRUE)
+  }
   for (i in seq_len(nrow(method_keys))) {
     k <- method_keys[i, , drop = FALSE]
     d <- param[param$estimator == k$estimator & param$method == k$method, ,
                drop = FALSE]
     primary <- d$param_class %in% c("loading", "latent_variance")
+    primary_ids <- d$param_id[primary]
+    all_ids <- d$param_id
+    mise_primary <- mise(k$estimator, k$method, primary_ids)
+    mise_all <- mise(k$estimator, k$method, all_ids)
     st <- statuses[statuses$estimator == k$estimator &
                      statuses$method == k$method, , drop = FALSE]
     mrows[[i]] <- data.frame(
       k,
       primary_parameters = sum(primary),
       mean_abs_bias_primary = mean(d$abs_bias[primary], na.rm = TRUE),
+      mean_mse_primary = mean(d$mse[primary], na.rm = TRUE),
       mean_rmse_primary = mean(d$rmse[primary], na.rm = TRUE),
+      mise_primary = mise_primary,
+      rmise_primary = sqrt(mise_primary),
+      mean_abs_pu_error_primary = mean(abs(d$pu[primary] - 0.5), na.rm = TRUE),
       mean_abs_bias_all = mean(d$abs_bias, na.rm = TRUE),
+      mean_mse_all = mean(d$mse, na.rm = TRUE),
       mean_rmse_all = mean(d$rmse, na.rm = TRUE),
+      mise_all = mise_all,
+      rmise_all = sqrt(mise_all),
       accepted = sum(st$ok & st$converged, na.rm = TRUE),
       attempted = nrow(st),
       acceptance_rate = mean(st$ok & st$converged, na.rm = TRUE),
@@ -356,7 +500,16 @@ summarise_estimates <- function(estimates, statuses) {
       stringsAsFactors = FALSE
     )
   }
-  list(param = param, method = do.call(rbind, mrows),
+  method <- do.call(rbind, mrows)
+  method$relative_mise_primary <- NA_real_
+  for (estimator in unique(method$estimator)) {
+    ix <- method$estimator == estimator
+    base <- method$mise_primary[ix & method$method == "standard"]
+    if (length(base) == 1L && is.finite(base) && base > 0) {
+      method$relative_mise_primary[ix] <- method$mise_primary[ix] / base
+    }
+  }
+  list(param = param, method = method,
        status_keys = status_keys)
 }
 
@@ -372,6 +525,8 @@ write_metadata(
     n = cfg$n,
     ref_n = cfg$ref_n,
     estimators = cfg$estimators,
+    cores = cfg$cores,
+    chunk_size = cfg$chunk_size,
     seed_base = cfg$seed_base,
     smoke = cfg$smoke,
     model = model,
@@ -388,4 +543,5 @@ cat("  ", file.path(res_dir, "estimates.csv"), "\n", sep = "")
 cat("  ", file.path(res_dir, "fit_status.csv"), "\n", sep = "")
 cat("  ", file.path(res_dir, "parameter_summary.csv"), "\n", sep = "")
 cat("  ", file.path(res_dir, "method_summary.csv"), "\n", sep = "")
+cat("  ", file.path(res_dir, "progress.csv"), "\n", sep = "")
 cat("  ", file.path(res_dir, "metadata.csv"), "\n", sep = "")
