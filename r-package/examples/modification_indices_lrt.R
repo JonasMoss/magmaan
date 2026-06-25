@@ -23,7 +23,7 @@ fit <- magmaan(syntax, dat, estimator = "ML")
 
 mi <- modification_indices_lrt(fit, dat)
 stopifnot(inherits(mi, "magmaan_mi_lrt"),
-          all(c("mi", "lrt", "epc", "epc_lrt") %in% names(mi)),
+          all(c("mi", "mi_p", "lrt", "lrt_p", "epc", "epc_lrt") %in% names(mi)),
           nrow(mi) > 1L)
 
 ## The refit chi-square difference of the top candidate reproduces a manual
@@ -38,6 +38,7 @@ stopifnot(abs(top$lrt - (chi2(fit) - chi2(rel))) < 1e-6)
 ## The one-step EPC can blow up where the refit (exact) EPC is well behaved: the
 ## linearization is what the refit avoids.
 cat("LRT vs one-step modification indices (top 5):\n")
-print(head(mi[, c("lhs", "op", "rhs", "mi", "lrt", "epc", "epc_lrt")], 5),
+print(head(mi[, c("lhs", "op", "rhs", "mi", "mi_p", "lrt", "lrt_p",
+                  "epc", "epc_lrt")], 5),
       row.names = FALSE)
 cat("top refit chi-square difference matches a manual augmented refit: ok\n")
