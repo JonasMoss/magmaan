@@ -207,6 +207,27 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 
 ## Misspecification-robust SE for the moment-quadratic family (frontier)
 
+- **Reduced-bias estimation (RBM) frontier follow-ups.** V1 landed 2026-06 for
+  raw-data continuous ML and FIML: explicit one-step correction, implicit
+  penalized objective, C++ `estimate::frontier::rbm_*`, R
+  `magmaan_core$frontier_rbm()`, and a complete-data FIML == ML scaling
+  regression. Remaining work:
+  - **M/L — fixed-weight continuous LS.** Derive and implement the RBM meat and
+    bread for ULS/GLS/WLS/DWLS when the weight matrix is treated as fixed. Use
+    the moment-quadratic estimating equations and existing observed-bread
+    machinery; validate with finite-difference adjusted estimating equations.
+  - **L/XL — estimated-weight and staged estimators.** Extend only after the
+    stacked first-stage influence is explicit: ordinal/mixed DWLS/WLS, DLS/ADF,
+    and ML2S must include weight/saturated-moment estimation effects, not a
+    stage-2-only trace term. Reuse the complete-sandwich IJ blocks where
+    possible.
+  - **M — paper reproduction.** Add an experiment that reconstructs the
+    two-factor SEM and growth-curve simulations from the SEM bias-reduction
+    paper, producing analogues of the acceptable-estimate table and the
+    ML/eRBM/iRBM bias/RMSE/underestimation/coverage figures. First try the
+    paper's supplementary/OSF materials; if unavailable, label the run as an
+    independent reconstruction.
+
 - **Done 2026-06-19.** Observed-Hessian ("robust" regime) bread for the
   moment-quadratic estimators (ordinal DWLS/WLSMV/ULSMV, mixed/polyserial,
   continuous ULS/GLS/WLS), which previously had only the Gauss-Newton/expected
