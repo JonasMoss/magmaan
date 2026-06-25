@@ -202,9 +202,12 @@ $\Delta\chi^2$ cannot use $2N\!\cdot\!f_{\min}$ (the model-vs-saturated FIML
 chi-square is not $2N\!\cdot\!f_{\min}$, and ML2S works on the Stage-1 EM
 moments), so the same profile-LRT call supplies the plain difference
 (\texttt{T\_diff}/\texttt{p\_unscaled}, where the saturated term cancels) along
-with the robust mixture. Continuous WLS stays empty: its weight is not retained
-on the fit. The plain $\Delta\chi^2$ columns still report for any complete-data
-estimator. \texttt{score\_tests\_lrt(fit, data)} is the
+with the robust mixture. Continuous WLS is supported too, but since its weight is
+not retained on the fit the same $W$ must be passed via
+\texttt{modification\_indices\_lrt(..., weight=W)} (it is threaded through both the
+augmented refit and the profile-LRT). The plain $\Delta\chi^2$ columns still
+report for any complete-data estimator.
+\texttt{score\_tests\_lrt(fit, data)} is the
 equality-release sweep: for each cross-group tied family it refits the released
 model and runs the Satorra-2000 difference test, returning the reference-law
 family and the exact released per-group estimates; an existing
