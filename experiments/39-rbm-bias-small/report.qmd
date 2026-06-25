@@ -8,10 +8,12 @@ execute:
   echo: false
   warning: false
   message: false
+params:
+  results_dir: "results"
 ---
 
 ```{r}
-res_dir <- "results"
+res_dir <- params$results_dir
 needed <- file.path(res_dir, c("method_summary.csv", "parameter_summary.csv",
                                "fit_status.csv", "metadata.csv"))
 if (!all(file.exists(needed))) {
@@ -23,6 +25,46 @@ parameter_summary <- read.csv(file.path(res_dir, "parameter_summary.csv"))
 fit_status <- read.csv(file.path(res_dir, "fit_status.csv"))
 metadata <- read.csv(file.path(res_dir, "metadata.csv"))
 meta <- setNames(metadata$value, metadata$key)
+meta_value <- function(key, default = NA_character_) {
+  if (key %in% names(meta)) meta[[key]] else default
+}
+fmt <- function(x, digits = 4) format(round(x, digits), nsmall = digits)
+avg_rel <- as.numeric(meta_value("average_item_reliability"))
+if (!length(avg_rel)) avg_rel <- NA_real_
+avg_rel_text <- if (is.na(avg_rel)) "not recorded" else fmt(avg_rel)
+estimators_text <- paste(toupper(sort(unique(method_summary$estimator))),
+                         collapse = ", ")
+
+if (!"mean_abs_error_primary" %in% names(method_summary) &&
+    "mean_abs_bias_primary" %in% names(method_summary)) {
+  method_summary$mean_abs_error_primary <- method_summary$mean_abs_bias_primary
+}
+if (!all(c("mean_bias_primary", "mean_abs_mean_bias_primary") %in%
+         names(method_summary))) {
+  derived <- lapply(seq_len(nrow(method_summary)), function(i) {
+    key <- method_summary[i, ]
+    d <- parameter_summary[parameter_summary$estimator == key$estimator &
+                             parameter_summary$method == key$method &
+                             parameter_summary$param_class %in%
+                               c("loading", "latent_variance"), ]
+    data.frame(
+      mean_bias_primary = mean(d$bias, na.rm = TRUE),
+      mean_abs_mean_bias_primary = mean(abs(d$bias), na.rm = TRUE)
+    )
+  })
+  derived <- do.call(rbind, derived)
+  if (!"mean_bias_primary" %in% names(method_summary)) {
+    method_summary$mean_bias_primary <- derived$mean_bias_primary
+  }
+  if (!"mean_abs_mean_bias_primary" %in% names(method_summary)) {
+    method_summary$mean_abs_mean_bias_primary <-
+      derived$mean_abs_mean_bias_primary
+  }
+}
+for (nm in c("primary_p99_abs_error", "primary_extreme_rate_abs10",
+             "primary_extreme_rate_abs100")) {
+  if (!nm %in% names(method_summary)) method_summary[[nm]] <- NA_real_
+}
 
 method_summary$Method <- factor(method_summary$method,
                                 levels = c("standard", "posthoc", "integrated"))
@@ -31,7 +73,6 @@ primary <- method_summary[order(method_summary$estimator,
 best <- do.call(rbind, lapply(split(primary, primary$estimator), function(d) {
   d[which.min(d$mise_primary), , drop = FALSE]
 }))
-fmt <- function(x, digits = 4) format(round(x, digits), nsmall = digits)
 ```
 
 ## Question
@@ -40,7 +81,7 @@ Do the new reduced-bias estimators move finite-sample point estimates in the
 right direction in a small magmaan-owned run, rather than only in the published
 result-object replication? The check compares the ordinary estimator with the
 explicit post-hoc correction and the implicit integrated estimator for
-complete-data ML, GLS, FIML, and ordinal DWLS.
+the requested estimator set (`r estimators_text`).
 
 ## Short Answer
 
@@ -51,25 +92,32 @@ MISE over the primary loading / latent-variance vector was:
 
 Treat this as a smoke-scale direction check, not a calibration result. The
 large-sample target is a simulated reference fit with `N = r meta[["ref_n"]]`,
-and the default grid is intentionally small enough to rerun while developing
-the RBM machinery.
+the average item reliability is `r avg_rel_text`,
+and the default grid is intentionally small enough to rerun while developing the
+RBM machinery.
 
 ## Evidence
 
 ```{r}
-tab <- primary[c("estimator", "method", "mean_abs_bias_primary",
+tab <- primary[c("estimator", "method", "mean_bias_primary",
+                 "mean_abs_mean_bias_primary", "mean_abs_error_primary",
                  "mean_rmse_primary", "mise_primary",
+                 "primary_extreme_rate_abs100",
                  "relative_mise_primary", "mean_abs_pu_error_primary",
                  "acceptance_rate", "median_elapsed_ms")]
-names(tab) <- c("Estimator", "Method", "Mean Abs Bias", "Mean RMSE",
-                "MISE", "MISE / Standard", "Mean |PU - .5|",
-                "Acceptance", "Median Time (ms)")
+names(tab) <- c("Estimator", "Method", "Mean Bias", "Mean |Bias|", "MAE",
+                "Mean RMSE", "MISE", "|Err| > 100", "MISE / Standard",
+                "Mean |PU - .5|", "Acceptance", "Median Time (ms)")
 tab$Estimator <- toupper(tab$Estimator)
 tab$Method <- c(standard = "Standard", posthoc = "Post-hoc",
                 integrated = "Integrated")[tab$Method]
-tab$`Mean Abs Bias` <- fmt(tab$`Mean Abs Bias`)
+tab$`Mean Bias` <- fmt(tab$`Mean Bias`)
+tab$`Mean |Bias|` <- fmt(tab$`Mean |Bias|`)
+tab$MAE <- fmt(tab$MAE)
 tab$`Mean RMSE` <- fmt(tab$`Mean RMSE`)
 tab$MISE <- fmt(tab$MISE)
+tab$`|Err| > 100` <- ifelse(is.na(tab$`|Err| > 100`), "",
+                            sprintf("%.2f%%", 100 * tab$`|Err| > 100`))
 tab$`MISE / Standard` <- fmt(tab$`MISE / Standard`, 3)
 tab$`Mean |PU - .5|` <- fmt(tab$`Mean |PU - .5|`, 3)
 tab$Acceptance <- sprintf("%.0f%%", 100 * tab$Acceptance)
@@ -78,10 +126,11 @@ knitr::kable(tab, row.names = FALSE)
 ```
 
 The primary summary uses only the free factor loadings and latent variance, so
-the ML, GLS, FIML, and DWLS rows are comparable. MISE is the average, over
+the requested estimator rows are comparable. MISE is the average, over
 replications, of the mean squared error across that primary parameter vector.
-The full parameter summaries, including residual variances, thresholds, and
-FIML intercepts where present, are in `results/parameter_summary.csv`.
+`MAE` is mean absolute estimation error, not absolute mean bias. The full
+parameter summaries, including residual variances, thresholds, and FIML
+intercepts where present, are in `r file.path(res_dir, "parameter_summary.csv")`.
 
 ## Caveats
 
@@ -98,5 +147,7 @@ establish uniform bias reduction, coverage, or optimizer reliability.
 ```sh
 Rscript experiments/39-rbm-bias-small/run_experiment.R --smoke
 Rscript experiments/39-rbm-bias-small/run_experiment.R --reps 250 --n 160 --ref-n 50000 --cores auto --chunk-size 120
+Rscript experiments/39-rbm-bias-small/run_experiment.R --reps 5000 --n 30 --ref-n 100000 --estimators ml,gls --cores 1 --chunk-size 100 --results-dir results/tough-n30-ml-gls
 quarto render experiments/39-rbm-bias-small/report.qmd
+quarto render experiments/39-rbm-bias-small/report.qmd -P results_dir:results/tough-n30-ml-gls
 ```
