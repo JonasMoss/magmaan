@@ -70,6 +70,46 @@ no closed form) are research-tier with their own bias-variance validation, not a
 free parity addition (see [[feedback-shortcut-variants]]); defer them past plain
 LSAM.
 
+### Penalized ML for small-sample convergence and structure (parameter-space)
+
+A `estimate::frontier` penalized-ML surface that conditions in *parameter* space
+rather than moment space, the principled counterpart to the existing covariance
+shrinkage. Two penalties: (a) a residual-variance log-barrier
+`P_ρ(θ) = -ρ Σ_i log ψ_i` (equivalently `ρ Σ_i ψ_i⁻¹`; an inverse-gamma prior in
+MAP terms, the smooth sibling of De Jonckere & Rosseel 2022 bounded estimation)
+to cure small-N nonconvergence by repelling residual variances from zero, the
+on-target fix since the disease is Heywood cases (ψ_i → 0⁻); and (b) a structured
+Gaussian penalty `P_ρ(θ) = ρ(θ-θ⁰)'A(θ-θ⁰)` toward an idealized standardized model
+(all loadings 0.7, reliability 0.8), the non-circular parameter-space analog of
+the model-based *covariance* target of De Jonckere & Rosseel (2023, PDF in
+`external/refs/`, eval in
+[paper-evals](../research/paper-evals/2023-dejonckere-model-based-shrinkage-target.md)).
+Unlike that covariance target, penalizing θ leaves S, hence the reference law of
+the χ² fit test, uncontaminated, so the GOF stays valid. Closes with a
+penalized-sandwich SE `Cov(θ̂) = (H + P_ρ'')⁻¹ V (H + P_ρ'')⁻¹` and an effective-df
+correction for the fit test.
+
+**Alternative already available.** Covariance-space conditioning already covers
+the convergence case: `data::frontier` covariance shrinkage (`S_a = (1-λ)S + λT`),
+`estimate::frontier::fit_ml_ridge_continuation()` (warm-started continuation to
+α=0), and the `experiments/04-near-singular-ml-continuation` target/λ grid. Hard
+parameter bounds are De Jonckere & Rosseel (2022) bounded estimation (the hard
+sibling of the log-barrier); Bayesian priors on θ are the MAP version. lavaan
+bounded estimation and `regsem` cover the practical case on a refit.
+
+**Build if.** A small-N paper row or methods workflow needs *parameter-space*
+regularization specifically, i.e. a case where covariance conditioning is
+insufficient, or where an honest (non-circular) structural-shrinkage estimator
+with a valid GOF test is required, most naturally a moment-space-vs-parameter-space
+convergence/bias/MSE study extending experiment 04. Sequencing: the variance
+log-barrier first (smallest delta over bounded estimation, reuses its bound
+computation), then the structured Gaussian penalty, then the penalized-sandwich
+SE + effective-df. The ρ selector and the non-standard inference are research-tier
+([[feedback-shortcut-variants]]). Do not ship the De Jonckere & Rosseel (2023)
+model-based *covariance* target as core: it biases the GOF toward the fitted
+model (shrinking S toward a model-shaped target); if added at all it belongs in
+experiment 04's target menu with that caveat documented.
+
 ### `statistic = "N" | "N-1"` selector for the GLS/WLS test multiplier
 
 A user-facing selector (or report-both mode) for the GLS/WLS chi-square
