@@ -4322,6 +4322,59 @@ magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
 
 }  // namespace
 
+// infer_continuous_ls_profile_lrt() — misspecification-robust ("observed-Hessian
+// profile bread") nested difference test for two continuous moment-quadratic
+// (ULS/GLS/WLS) fits sharing the same observed data and one caller-fixed weight.
+// The LRT counterpart of infer_ml_profile_lrt for continuous LS. `X_per_group`
+// is the per-group raw data in the model's ov order (the empirical Gamma is built
+// from it). The shared weight is built at the H0 (anchor) theta, mirroring
+// inference_modification_indices: ULS=identity, GLS=normal-theory, WLS=explicit
+// `weight` (not retained on the fit, so it must be passed for WLS).
+//
+// [[Rcpp::export]]
+Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1,
+                                           Rcpp::List fit_H0,
+                                           Rcpp::List X_per_group,
+                                           SEXP weight = R_NilValue,
+                                           double eig_tol = 1e-10) {
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
+
+  const std::string est_H0 = fit_H0.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H0["estimator"]) : "";
+  const std::string est_H1 = fit_H1.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H1["estimator"]) : "";
+  if (est_H0 != est_H1) {
+    Rcpp::stop("infer_continuous_ls_profile_lrt: H1/H0 estimators differ "
+               "('%s' vs '%s')", est_H1.c_str(), est_H0.c_str());
+  }
+  // One weight shared by H1 and H0, built at the anchor (H0) theta.
+  const magmaan::estimate::gmm::Weight w =
+      continuous_ls_weight(ctx0, est0, est_H0, weight, "profile LRT");
+
+  const std::size_t G = ctx1.samp.S.size();
+  if (static_cast<std::size_t>(X_per_group.size()) != G) {
+    Rcpp::stop("infer_continuous_ls_profile_lrt: X_per_group has length %d but "
+               "the model has %d group(s)",
+               static_cast<int>(X_per_group.size()), static_cast<int>(G));
+  }
+  magmaan::data::RawData raw;
+  raw.X.reserve(G);
+  for (std::size_t g = 0; g < G; ++g) {
+    raw.X.emplace_back(
+        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X_per_group[g])));
+  }
+
+  auto r_or = magmaan::estimate::continuous_ls_profile_lrt(
+      std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
+      std::move(ctx0.pt), ctx0.rep, est0,
+      w, raw, eig_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return profile_lrt_to_list(*r_or);
+}
+
 // measures_standardized_residuals_estimated_weight() — the estimated-weight
 // ("complete-sandwich") residual SE/z and $summary for a continuous LS fit. The
 // residual ACOV uses the Hall-Inoue infinitesimal-jackknife rows (with the
