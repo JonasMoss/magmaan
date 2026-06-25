@@ -61,3 +61,4 @@ complete eval.
 |------|-------|-------|---------|
 | 2026-06-25 | [Schuhbeck, Sterner & Goretzko 2025](2025-schuhbeck-mi-effect-sizes.md) | MI effect sizes (dMACS/EDM), O(q) closed forms | → speculative |
 | 2026-06-25 | [Bogaert, Loh, Schuberth & Rosseel 2025](2025-bogaert-measurement-error-small-sample.md) | Measurement error + small-N hypothesis testing; SEM-ML/LSAM vs UFSR/PLS | → speculative |
+| 2026-06-25 | [Zhang & Wu 2024](2024-zhang-structural-model-fit.md) | Structural-model fit: corrected χ²/RMSEA/CFI/SRMR + CIs via two-step | → speculative |
