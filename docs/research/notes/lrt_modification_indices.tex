@@ -199,6 +199,46 @@ the conditional localization is automatic. For both complete-data ML and FIML th
 equality-release statistic reproduces a hand-built two-fit
 \texttt{robust\_nested\_lrt} to machine precision.
 
+\section{The decision layer: corrected significance and substantive effect}
+
+The per-candidate columns are raw. Turning them into a usable modification index
+needs two \emph{orthogonal} corrections plus an effect-size gate.
+
+\paragraph{Two orthogonal corrections.} The observed-bread reference law
+\texttt{lrt\_p\_obs} fixes the \emph{per-test} size under model misspecification
+(Section~2); it is not a multiplicity fix. Testing $K$ candidates inflates the
+\emph{family-wise} error on top of that, which a Benjamini--Hochberg adjustment
+of the robust p controls (\texttt{lrt\_p\_obs\_bh}); FDR is preferred to
+Bonferroni for the large candidate sets a modindex sweep produces (Thissen,
+Steinberg \& Kuang, 2002). The two act on different failures and compose: apply
+BH to the robust p, never to the naive one.
+
+\paragraph{Effect size.} Significance is necessary but not sufficient: in large
+$N$ a negligible misspecification is highly significant, and under collinearity a
+real one can be non-significant. The companion axis is the \emph{exact} refit EPC
+standardized to \texttt{std.all} (\texttt{sepc\_lrt}), so one correlation-scale
+threshold $|\,\cdot\,| \ge \tau$ applies uniformly across loadings and covariances.
+
+\paragraph{The verdict.} Combining corrected significance with substantive size
+is the Saris--Satorra--S\"orbom $2\times2$, here upgraded on every axis (refit LRT
+not score MI; observed-bread not naive $\chi^2$; FDR not nothing; exact not
+one-step EPC):
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & $|\text{sepc}| \ge \tau$ & $|\text{sepc}| < \tau$ \\
+\midrule
+$p_{\text{bh}} \le \alpha$ & \textbf{free} (real release) & \textbf{trivial} (large-$N$ artifact) \\
+$p_{\text{bh}} > \alpha$ & \textbf{underpowered} (flag, hold) & \textbf{ok} (leave fixed) \\
+\bottomrule
+\end{tabular}
+\end{center}
+This ships as \texttt{mi\_screen(table, alpha, effect\_min, adjust)}, a composable
+layer that screens either the \texttt{modification\_indices\_lrt} or the
+\texttt{score\_tests\_lrt} table (it auto-resolves the robust p and effect
+columns). None of it makes the search confirmatory: a data-driven freed parameter
+is a hypothesis, and the residual safeguard is replication on held-out data.
+
 \paragraph{What remains as an optimization.} This baseline cold-starts every
 released fit. Starting each released fit from the constrained MLE (the C++ core
 takes an explicit \texttt{x0} and contracts it into the released parameter space)
