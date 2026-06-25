@@ -63,6 +63,10 @@ historical archaeology, not current guidance.
 - `tests/checks/` - advisory local simulation checks, outside the default test suite.
 - `benchmarks/` - advisory benchmark harness; ignored data/results caches stay local.
 - `docs/research/` - tracked research notes and simulation scripts, not vendored PDFs.
+- `docs/research/paper-evals/` - short relevance-scored reads of recent SEM
+  papers (the PDFs live in ignored `external/refs/`). Each eval ends in a
+  verdict; actionable ones graduate to `backlog/speculative.md`, `todo.md`, or a
+  paper/experiment. See its `README.md` for the template and the `/eval-paper` skill.
 - `docs/reference/` - policy for ignored external resources and source mirrors.
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
 - `docs/architecture/roadmap.md` - current implementation state and design contracts.
