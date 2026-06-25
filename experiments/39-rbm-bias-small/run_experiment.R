@@ -12,7 +12,7 @@
 #   Rscript run_experiment.R [--reps N] [--n N] [--ref-n N]
 #                            [--estimators ml,gls,fiml,dwls]
 #                            [--cores N|auto] [--chunk-size N]
-#                            [--seed-base S] [--smoke]
+#                            [--results-dir PATH] [--seed-base S] [--smoke]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -64,6 +64,7 @@ parse_args <- function(args) {
     estimators = c("ml", "gls", "fiml", "dwls"),
     cores = 1L,
     chunk_size = NA_integer_,
+    results_dir = "results",
     seed_base = 20260625L,
     smoke = FALSE
   )
@@ -80,7 +81,8 @@ parse_args <- function(args) {
     if (a %in% c("-h", "--help")) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--n N] [--ref-n N]\n",
           "       [--estimators ml,gls,fiml,dwls] [--cores N|auto]\n",
-          "       [--chunk-size N] [--seed-base S] [--smoke]\n\n",
+          "       [--chunk-size N] [--results-dir PATH]\n",
+          "       [--seed-base S] [--smoke]\n\n",
           "Fits standard, explicit post-hoc RBM, and implicit integrated RBM\n",
           "variants for a small one-factor CFA under ML, GLS, FIML, and DWLS.\n",
           sep = "")
@@ -97,6 +99,8 @@ parse_args <- function(args) {
     } else if (startsWith(a, "--cores=")) { out$cores <- parse_cores(sub("^--cores=", "", a))
     } else if (a == "--chunk-size") { out$chunk_size <- as.integer(take())
     } else if (startsWith(a, "--chunk-size=")) { out$chunk_size <- as.integer(sub("^--chunk-size=", "", a))
+    } else if (a == "--results-dir") { out$results_dir <- take()
+    } else if (startsWith(a, "--results-dir=")) { out$results_dir <- sub("^--results-dir=", "", a)
     } else if (a == "--seed-base") { out$seed_base <- as.integer(take())
     } else if (startsWith(a, "--seed-base=")) { out$seed_base <- as.integer(sub("^--seed-base=", "", a))
     } else if (a == "--smoke") { out$smoke <- TRUE
@@ -114,7 +118,7 @@ parse_args <- function(args) {
     if (is.na(out$chunk_size)) out$chunk_size <- 2L
   }
   if (!is.finite(out$reps) || out$reps < 1L) stop("--reps must be positive")
-  if (!is.finite(out$n) || out$n < 80L) stop("--n must be >= 80")
+  if (!is.finite(out$n) || out$n < 15L) stop("--n must be >= 15")
   if (!is.finite(out$ref_n) || out$ref_n < 1000L) stop("--ref-n must be >= 1000")
   if (!is.finite(out$cores) || out$cores < 1L) stop("--cores must be positive or 'auto'")
   out$cores <- as.integer(out$cores)
@@ -123,6 +127,7 @@ parse_args <- function(args) {
     stop("--chunk-size must be positive")
   }
   out$chunk_size <- as.integer(out$chunk_size)
+  if (!nzchar(out$results_dir)) stop("--results-dir must be non-empty")
   out
 }
 
@@ -131,7 +136,12 @@ set_single_threaded_math()
 require_pkg("magmaan")
 suppressPackageStartupMessages(library(magmaan))
 core <- magmaan::magmaan_core
-res_dir <- ensure_results_dir()
+res_dir <- if (grepl("^/", cfg$results_dir)) {
+  cfg$results_dir
+} else {
+  experiment_path(cfg$results_dir)
+}
+dir.create(res_dir, recursive = TRUE, showWarnings = FALSE)
 progress_path <- file.path(res_dir, "progress.csv")
 write_csv(data.frame(
   estimator = character(),
@@ -444,7 +454,9 @@ summarise_estimates <- function(estimates, statuses) {
       k,
       replications = nrow(d),
       bias = mean(d$bias, na.rm = TRUE),
+      abs_mean_bias = abs(mean(d$bias, na.rm = TRUE)),
       abs_bias = mean(abs(d$bias), na.rm = TRUE),
+      sampling_variance = stats::var(d$bias, na.rm = TRUE),
       mse = mean(d$bias^2, na.rm = TRUE),
       rmse = sqrt(mean(d$bias^2, na.rm = TRUE)),
       pu = mean(d$bias < 0, na.rm = TRUE),
@@ -459,6 +471,14 @@ summarise_estimates <- function(estimates, statuses) {
   method_keys <- unique(estimates[c("estimator", "method")])
   mrows <- vector("list", nrow(method_keys))
   status_keys <- unique(statuses[c("estimator", "method")])
+  method_biases <- function(estimator, method, param_ids) {
+    e <- estimates[estimates$estimator == estimator &
+                     estimates$method == method &
+                     estimates$param_id %in% param_ids &
+                     is.finite(estimates$bias), , drop = FALSE]
+    if (!nrow(e)) return(numeric())
+    e$bias
+  }
   mise <- function(estimator, method, param_ids) {
     e <- estimates[estimates$estimator == estimator &
                      estimates$method == method &
@@ -475,6 +495,7 @@ summarise_estimates <- function(estimates, statuses) {
     primary <- d$param_class %in% c("loading", "latent_variance")
     primary_ids <- d$param_id[primary]
     all_ids <- d$param_id
+    primary_biases <- method_biases(k$estimator, k$method, primary_ids)
     mise_primary <- mise(k$estimator, k$method, primary_ids)
     mise_all <- mise(k$estimator, k$method, all_ids)
     st <- statuses[statuses$estimator == k$estimator &
@@ -482,13 +503,29 @@ summarise_estimates <- function(estimates, statuses) {
     mrows[[i]] <- data.frame(
       k,
       primary_parameters = sum(primary),
+      mean_bias_primary = mean(d$bias[primary], na.rm = TRUE),
+      mean_abs_mean_bias_primary = mean(d$abs_mean_bias[primary],
+                                        na.rm = TRUE),
+      mean_abs_error_primary = mean(d$abs_bias[primary], na.rm = TRUE),
       mean_abs_bias_primary = mean(d$abs_bias[primary], na.rm = TRUE),
+      mean_sampling_variance_primary = mean(d$sampling_variance[primary],
+                                            na.rm = TRUE),
+      primary_p99_abs_error = stats::quantile(abs(primary_biases), .99,
+                                              na.rm = TRUE),
+      primary_extreme_rate_abs10 = mean(abs(primary_biases) > 10,
+                                        na.rm = TRUE),
+      primary_extreme_rate_abs100 = mean(abs(primary_biases) > 100,
+                                         na.rm = TRUE),
       mean_mse_primary = mean(d$mse[primary], na.rm = TRUE),
       mean_rmse_primary = mean(d$rmse[primary], na.rm = TRUE),
       mise_primary = mise_primary,
       rmise_primary = sqrt(mise_primary),
       mean_abs_pu_error_primary = mean(abs(d$pu[primary] - 0.5), na.rm = TRUE),
+      mean_bias_all = mean(d$bias, na.rm = TRUE),
+      mean_abs_mean_bias_all = mean(d$abs_mean_bias, na.rm = TRUE),
+      mean_abs_error_all = mean(d$abs_bias, na.rm = TRUE),
       mean_abs_bias_all = mean(d$abs_bias, na.rm = TRUE),
+      mean_sampling_variance_all = mean(d$sampling_variance, na.rm = TRUE),
       mean_mse_all = mean(d$mse, na.rm = TRUE),
       mean_rmse_all = mean(d$rmse, na.rm = TRUE),
       mise_all = mise_all,
@@ -527,10 +564,13 @@ write_metadata(
     estimators = cfg$estimators,
     cores = cfg$cores,
     chunk_size = cfg$chunk_size,
+    results_dir = cfg$results_dir,
     seed_base = cfg$seed_base,
     smoke = cfg$smoke,
     model = model,
     loadings = lambda,
+    item_reliability = lambda^2,
+    average_item_reliability = mean(lambda^2),
     thresholds = thresholds,
     missing_rates = paste(names(missing_rate), missing_rate, sep = "=")
   ),
