@@ -1,0 +1,454 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Asymptotics for Guttman's Multiple-Group CFA Estimator}
+\author{}
+\date{\today}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\vecop}{\operatorname{vec}}
+\newcommand{\IF}{\operatorname{IF}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Dhaene and Rosseel \cite{dhaene2024} report that Guttman's multiple-group
+method \cite{guttman1952} is a surprisingly strong non-iterative CFA estimator
+in their simulations. This note records the asymptotic objects needed to
+evaluate that claim analytically against normal-theory ML and the
+moment-quadratic estimators already implemented in \texttt{magmaan}.
+
+The phrase ``multiple-group method'' below is Guttman's historical name for
+forming factor score groups from indicators. It is not multi-group SEM. Actual
+multi-group SEM enters only by stacking independent covariance blocks.
+
+\section{Sample Moment Setup}
+
+Let \(y_i\in\mathbb{R}^p\) have mean \(\mu_0\), covariance \(\Sigma_0\), and
+finite fourth moments. Write
+\[
+  \hat\sigma=\vech(\hat\Sigma),\qquad
+  \sigma_0=\vech(\Sigma_0),
+\]
+with the usual covariance influence rows
+\[
+  z_i=\vech\{(y_i-\mu_0)(y_i-\mu_0)\T-\Sigma_0\}.
+\]
+Then
+\[
+  \sqrt n(\hat\sigma-\sigma_0)
+    = n^{-1/2}\sum_{i=1}^n z_i+o_p(1),
+  \qquad
+  \Gamma=\Var(z_i).
+\]
+Under multivariate normality, \(\Gamma\) reduces to the normal-theory
+covariance of \(\vech(\hat\Sigma)\). Under misspecification or non-normality,
+\(\Gamma\) is the actual fourth-moment covariance.
+
+For independent sample groups \(b=1,\ldots,B\), stack
+\(\hat\sigma=(\hat\sigma_1\T,\ldots,\hat\sigma_B\T)\T\). With
+\(n_b/N\to\pi_b\),
+\[
+  \sqrt N(\hat\sigma-\sigma_0)
+    \Rightarrow
+  N\{0,\operatorname{blockdiag}(\Gamma_b/\pi_b)\}.
+\]
+All formulas below apply to this stacked vector after replacing \(\Gamma\) by
+the block diagonal covariance.
+
+\section{The Guttman Map}
+
+Fix a simple CFA loading pattern. Let \(X\in\{0,1\}^{p\times k}\) be the
+indicator-by-factor membership matrix, with one nonzero entry per row in the
+clean simple-structure case. Let \(S(\sigma)\) be the symmetric matrix whose
+lower triangle is \(\sigma\).
+
+Guttman's method first replaces the diagonal of \(S\) by communalities. Write
+\[
+  h(\sigma)\in\mathbb{R}^p,\qquad
+  C(\sigma)=S(\sigma)-\diag\{\diag S(\sigma)\}+\diag\{h(\sigma)\}.
+\]
+For the Spearman-Harman rule used by lavaan and magmaan starts, the unclamped
+correlation-scale communality for indicator \(i\) in its factor block is
+\[
+  h_i^{\mathrm{cor}}(R)
+    =
+  {|P_i|}^{-1}\sum_{(j,\ell)\in P_i}
+    \frac{R_{ij}R_{i\ell}}{R_{j\ell}},
+  \qquad
+  h_i(\Sigma)=\Sigma_{ii}h_i^{\mathrm{cor}}\{R(\Sigma)\},
+\]
+where \(P_i=\{(j,\ell):j<\ell,\ j\ne i,\ \ell\ne i\}\). The production start
+routine clamps this value and falls back in singular cases; the smooth theory
+below assumes an interior point where no clamp or fallback is active. A
+different communality rule only changes \(Dh(\sigma_0)\).
+
+Define
+\[
+  A=CX,\qquad
+  B=X\T C X,\qquad
+  D=\diag\{B\},\qquad
+  Q=D^{-1/2}.
+\]
+Then
+\[
+  L=AQ,\qquad
+  P=QBQ,\qquad
+  K^\star=LP^{-1}.
+\]
+If \(m_f\) is the marker indicator for factor \(f\), set
+\[
+  M=\diag(K^\star_{m_1 1},\ldots,K^\star_{m_k k}).
+\]
+The marker-scaled Guttman estimates are
+\[
+  \Lambda_G=K^\star M^{-1},
+  \qquad
+  \Phi_G=MPM,
+  \qquad
+  \psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}.
+\]
+The reported parameter map is a fixed selection
+\[
+  \tau_G(\sigma)
+    =
+  \bigl[
+    \operatorname{sel}_{\Lambda}(\Lambda_G)\T,\ 
+    \vech(\Phi_G)\T,\ 
+    \psi_G\T
+  \bigr]\T .
+\]
+This is the version closest to the current \texttt{guttman\_start\_values()}
+code: the full \(K^\star\) is computed, but only the model's allowed loading
+cells are read out. Dhaene and Rosseel mention a constrained quadratic program
+for enforcing simple structure. If that projection is used instead, the same
+delta method applies after differentiating the fixed-active-set KKT system.
+
+\section{Guttman Influence Function}
+
+Let \(dS\) be a symmetric covariance perturbation and write all quantities at
+\(\sigma_0\). Let
+\[
+  dC=dS-\diag\{\diag(dS)\}+\diag\{Dh[\sigma_0]\,d\sigma\}.
+\]
+The differential chain is
+\[
+\begin{aligned}
+  dA &= dC\,X,\\
+  dB &= X\T dC\,X,\\
+  dD &= \diag\{dB\},\\
+  dQ &= -\frac12 D^{-3/2}dD,\\
+  dL &= dA\,Q+A\,dQ,\\
+  dP &= dQ\,B\,Q+Q\,dB\,Q+Q\,B\,dQ,\\
+  dK^\star &= dL\,P^{-1}-L\,P^{-1}dP\,P^{-1}.
+\end{aligned}
+\]
+Next
+\[
+  dM=\diag(dK^\star_{m_1 1},\ldots,dK^\star_{m_k k}),
+\]
+and
+\[
+\begin{aligned}
+  d\Lambda_G
+    &= dK^\star M^{-1}-K^\star M^{-1}dM M^{-1},\\
+  d\Phi_G
+    &= dM\,P\,M+M\,dP\,M+M\,P\,dM,\\
+  d\psi_G
+    &=
+  \diag\{dS
+    -d\Lambda_G\Phi_G\Lambda_G\T
+    -\Lambda_G d\Phi_G\Lambda_G\T
+    -\Lambda_G\Phi_G d\Lambda_G\T\}.
+\end{aligned}
+\]
+
+\begin{proposition}[Guttman delta method]\label{prop:guttman}
+Assume \(\Gamma\) is finite, \(h\) is differentiable at \(\sigma_0\), the
+diagonal of \(B\) is positive, \(P\) is nonsingular, and all marker entries in
+\(M\) are nonzero. Then
+\[
+  \sqrt n\{\tau_G(\hat\sigma)-\tau_G(\sigma_0)\}
+    \Rightarrow
+  N(0,\Omega_G),
+  \qquad
+  \Omega_G=J_G\Gamma J_G\T,
+\]
+where \(J_G=D\tau_G[\sigma_0]\) is the linear map defined by the differential
+chain above. The observation-level influence function is
+\[
+  \IF_G(y_i)=J_G\,\vech\{(y_i-\mu_0)(y_i-\mu_0)\T-\Sigma_0\}.
+\]
+\end{proposition}
+
+\begin{remark}
+The current magmaan implementation already has most of the numerical map in
+\texttt{src/estimate/start\_guttman.cpp}. Turning it into an estimator is not
+hard. The open design choice is whether the estimator should be the clean
+smooth map above, the lavaan-style clamped start map, or the constrained
+projection variant used by Dhaene and Rosseel. For asymptotic comparisons, the
+clean map is the right first target.
+\end{remark}
+
+\section{Moment-Quadratic Estimators}
+
+Let \(m(\theta)\) be the model-implied covariance moment vector and
+\[
+  r(\theta,\sigma)=m(\theta)-\sigma.
+\]
+A fixed-weight ULS/GLS/WLS estimator minimizes
+\[
+  q_W(\theta,\sigma)=\frac12 r(\theta,\sigma)\T W r(\theta,\sigma),
+\]
+with pseudo-true value \(\theta_W\). Let
+\[
+  \Delta=\frac{\partial m(\theta_W)}{\partial\theta\T},
+  \qquad
+  H_W
+    =
+  \Delta\T W\Delta
+    +\sum_{\ell}\{Wr(\theta_W,\sigma_0)\}_{\ell}
+       \frac{\partial^2 m_\ell(\theta_W)}
+            {\partial\theta\,\partial\theta\T}.
+\]
+The second term is the misspecification curvature term. It vanishes at exact
+fit and is easy to miss if one silently substitutes Fisher or Gauss-Newton
+information.
+
+For fixed \(W\),
+\[
+  \IF_W(y_i)=
+  H_W^{-1}\Delta\T W z_i,
+  \qquad
+  \Omega_W
+    =
+  H_W^{-1}\Delta\T W\Gamma W\Delta H_W^{-1}.
+\]
+If \(W=W(\hat\sigma)\), the weight influence is first-order under
+misspecification:
+\[
+  \IF_{W(\hat\sigma)}(y_i)
+    =
+  H_W^{-1}\Delta\T W z_i
+  -
+  H_W^{-1}\Delta\T \{DW[\sigma_0]z_i\}\,r(\theta_W,\sigma_0).
+\]
+This second term drops out at exact fit. It is therefore most important in the
+setting the user asked about: fixed model misspecification with GLS/WLS style
+weights. This is also the term already handled by magmaan's continuous LS
+influence machinery when the caller asks for data-dependent weight influence.
+
+The efficient covariance-moment estimator for a fixed covariance target uses
+\(W=\Gamma^{-1}\), giving the familiar
+\[
+  \Omega_{\mathrm{eff}}
+    =
+  (\Delta\T\Gamma^{-1}\Delta)^{-1}
+\]
+only at exact fit or when the curvature and weight-influence terms are absent.
+Under misspecification the observed bread, not the Fisher simplification, is the
+general object.
+
+\section{Normal-Theory ML}
+
+For covariance-only NT estimation,
+\[
+  F_{\mathrm{NT}}(\theta,\sigma)
+    =
+  \log|\Sigma_\theta|
+  +\tr\{S(\sigma)\Sigma_\theta^{-1}\}
+  -\log|S(\sigma)|-p.
+\]
+The term \(-\log|S|\) is irrelevant for the first-order condition. At the
+pseudo-true point \(\theta_{\mathrm{NT}}\), define
+\[
+  U_a(\theta,\sigma)
+    =
+  \tr\left[
+    \{\Sigma_\theta^{-1}
+      -\Sigma_\theta^{-1}S(\sigma)\Sigma_\theta^{-1}\}
+    \frac{\partial\Sigma_\theta}{\partial\theta_a}
+  \right].
+\]
+Let \(H_{\mathrm{NT}}=\partial U/\partial\theta\T\) be the observed
+pseudo-true bread. For a covariance perturbation \(dS\),
+\[
+  \{G_{\mathrm{NT}}d\sigma\}_a
+    =
+  -\tr\left[
+    \Sigma_\theta^{-1}dS\Sigma_\theta^{-1}
+    \frac{\partial\Sigma_\theta}{\partial\theta_a}
+  \right].
+\]
+Thus
+\[
+  \IF_{\mathrm{NT}}(y_i)
+    =
+  -H_{\mathrm{NT}}^{-1}G_{\mathrm{NT}}z_i.
+\]
+When the normal model is correct this is the usual efficient likelihood
+influence function. Under non-normality or fixed structural misspecification,
+the sandwich \(H^{-1}G\Gamma G\T H^{-1}\) is the robust covariance around the
+NT pseudo-true parameter.
+
+\section{What Efficiency Means Under Misspecification}
+
+Under fixed misspecification, Guttman, NT, ULS, GLS, and WLS generally estimate
+different functionals of the same population covariance. A variance ratio is
+therefore not automatically an MSE ratio.
+
+For a scalar contrast \(a_e\{\tau_e(P)\}\), the variance-only ratio is
+\[
+  \rho_{G/e}
+    =
+  \frac{\nabla a_G\T \Omega_G \nabla a_G}
+       {\nabla a_e\T \Omega_e \nabla a_e}.
+\]
+This is meaningful when the contrast names the same scientific quantity and
+the pseudo-targets are close enough that first-order variance is the object of
+interest.
+
+For fixed misspecification, a finite-\(n\) target-risk comparison is more
+honest:
+\[
+  R_e(n;A,\tau_0)
+    =
+  \{\tau_e(P)-\tau_0\}\T A\{\tau_e(P)-\tau_0\}
+  +\frac1n\tr(A\Omega_e).
+\]
+Dhaene and Rosseel's MSE comparisons are of this type, with \(A\) selecting
+groups of parameters and \(\tau_0\) the data-generating parameter vector. An
+analytic experiment should report both \(R_e\) and the variance-only ratios.
+
+A third option is local misspecification:
+\[
+  \sigma_n=\sigma\{\theta_0\}+n^{-1/2}\delta.
+\]
+Then bias and variance both contribute at first order, and the influence maps
+above give closed-form local asymptotic risk. This is probably the cleanest
+paper-level efficiency comparison.
+
+\section{Proposed magmaan Experiment}
+
+The experiment should be deterministic and population based first, with Monte
+Carlo used only to validate the formulas.
+
+\paragraph{1. Estimator maps.}
+Implement a frontier Guttman CFA estimator that returns
+\((\Lambda_G,\Phi_G,\psi_G)\) per covariance block using the clean map in this
+note. Reuse \texttt{cfa\_block\_layouts()} and
+\texttt{guttman\_start\_values()} as implementation scaffolding, but keep
+finite-sample clamps out of the analytic target.
+
+\paragraph{2. Jacobians.}
+Start with central finite differences of \(\tau_G(\sigma)\) to verify the
+chain above. Then add the analytic differential for speed and numerical
+diagnostics. The Spearman-Harman communality derivative is a quotient-rule
+calculation through the covariance-to-correlation map.
+
+\paragraph{3. Comparator estimators.}
+For each population covariance, fit the analysis model at the population
+moments with NT, ULS, GLS, DWLS/WLS, and possibly empirical-ADF WLS. Use the
+current observed-bread sandwich machinery for NT and continuous LS. For
+data-dependent GLS/WLS weights, run both fixed-weight and weight-influence
+versions to show how much the misspecification term matters.
+
+\paragraph{4. Designs.}
+Replicate the Dhaene-Rosseel three-factor, three-indicator design with
+reliability \(0.5/0.8\), factor correlations \(0.1/0.4\), omitted
+cross-loadings, and omitted residual covariances. Add one larger block design
+with six to twelve indicators per factor, because Guttman's computational
+appeal grows with \(p\).
+
+\paragraph{5. Distributional covariance.}
+Evaluate \(\Gamma\) under three choices: normal theory, an analytic elliptical
+or independent-component heavy-tailed fourth-moment model, and empirical
+fourth moments from a very large simulated DGP draw. This separates structural
+misspecification from non-normal covariance noise.
+
+\paragraph{6. Outputs.}
+For each parameter group and selected scalar contrasts, report:
+\[
+  \diag(\Omega_G)/\diag(\Omega_e),\qquad
+  \tr(A\Omega_G)/\tr(A\Omega_e),\qquad
+  R_G(n;A,\tau_0)/R_e(n;A,\tau_0).
+\]
+Also report the pseudo-target displacement
+\(\tau_e(P)-\tau_0\), because under fixed misspecification this often dominates
+large-\(n\) MSE.
+
+\paragraph{7. Validation.}
+For a small subset, simulate many datasets, compute all estimators, and check
+that \(n\,\widehat{\Cov}(\hat\tau_e)\) matches \(\Omega_e\). For Guttman this
+is the main new validation. For NT and LS it should agree with existing
+misspecification-robust sandwich code.
+
+\section{Takeaways}
+
+Guttman's estimator has straightforward regular asymptotics because it is a
+smooth covariance-summary map away from clamps, singular factor-score
+correlations, and zero marker loadings. Its influence function is simply the
+Jacobian of that map times the covariance influence row.
+
+The comparison to NT, ULS, GLS, and WLS should not be framed as one universal
+efficiency ranking. Under correct normal specification NT/GLS have the usual
+optimality story. Under fixed misspecification, the relevant objects are
+pseudo-targets, observed breads, empirical meats, and weight influence. That is
+exactly the regime where an analytic magmaan experiment can be more informative
+than another Monte Carlo table.
+
+\begin{thebibliography}{9}
+
+\bibitem{bollen1989}
+Bollen, K. A. (1989).
+\newblock \emph{Structural equations with latent variables}.
+\newblock Wiley.
+
+\bibitem{browne1974}
+Browne, M. W. (1974).
+\newblock Generalized least squares estimators in the analysis of covariance
+structures.
+\newblock \emph{South African Statistical Journal}, 8, 1--24.
+
+\bibitem{dhaene2024}
+Dhaene, S., \& Rosseel, Y. (2024).
+\newblock An evaluation of non-iterative estimators in confirmatory factor
+analysis.
+\newblock \emph{Structural Equation Modeling: A Multidisciplinary Journal},
+31(1), 1--13.
+\newblock \href{https://doi.org/10.1080/10705511.2023.2187285}
+{doi:10.1080/10705511.2023.2187285}.
+
+\bibitem{guttman1952}
+Guttman, L. (1952).
+\newblock Multiple group methods for common-factor analysis: Their basis,
+computation, and interpretation.
+\newblock \emph{Psychometrika}, 17, 209--222.
+\newblock \href{https://doi.org/10.1007/BF02288783}
+{doi:10.1007/BF02288783}.
+
+\bibitem{harman1976}
+Harman, H. H. (1976).
+\newblock \emph{Modern factor analysis} (3rd ed.).
+\newblock University of Chicago Press.
+
+\end{thebibliography}
+
+\end{document}
