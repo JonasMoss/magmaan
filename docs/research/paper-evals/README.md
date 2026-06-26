@@ -67,3 +67,4 @@ complete eval.
 | 2026-06-25 | [Dhaene & Rosseel 2023](2023-dhaene-noniterative-sam.md) | Non-iterative step-1 estimators in SAM; estimator choice barely matters | → speculative (folds into SAM) |
 | 2026-06-25 | [De Jonckere & Rosseel 2023](2023-dejonckere-model-based-shrinkage-target.md) | Model-based covariance-shrinkage target for small-N nonconvergence | → speculative (penalized-ML alternative) |
 | 2026-06-26 | [Bell, Chalmers & Flora 2024](2024-bell-omega-misspecification.md) | Bias of model-based omega (omega_u / omega_H) under structural misspecification | → speculative (model-based omega) |
+| 2026-06-26 | [Lee & Gates 2026](2026-lee-cgsem-vs-classic.md) | cgSEM (tensorsem/Adam) vs classic SEM (lavaan/quasi-Newton); admissibility-conditioned bias | background |
