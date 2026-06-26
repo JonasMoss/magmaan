@@ -71,7 +71,7 @@ pops <- pops_all[cfg$pkeys]
 specs <- lapply(pops, function(pop)
   magmaan::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE))
 dists <- c("normal", "chisq")
-methods <- c("uncorrected", "second_order")
+methods <- c("uncorrected", "second_order", "second_order_logit")
 
 clamp01 <- function(x, eps = 1e-4) pmin(1 - eps, pmax(eps, x))
 ci_logit_pt <- function(point, se) {
@@ -94,9 +94,14 @@ one_rep <- function(spec, dat, pop) {
   lapply(c(gen = "gen", grp = "grp"), function(w) {
     rho  <- rho_of_theta(pt$est, rebuild, pop, w)
     cb   <- curvature_bias(pt$est, pt, rebuild, pop, w, Vr)
+    # logit-scale correction: subtract the curvature of logit(g) on the logit
+    # scale, then back-transform; the inverse logit keeps it inside (0, 1).
+    cb_l <- curvature_bias(pt$est, pt, rebuild, pop, w, Vr, link = "logit")
+    rho_l <- stats::plogis(stats::qlogis(clamp01(rho)) - cb_l)
     grad <- grad_rho(pt$est, pt, rebuild, pop, w)
     se   <- sqrt(max(0, as.numeric(crossprod(grad, Vr %*% grad))))
-    c(uncorrected = rho, second_order = rho - cb, curv = cb, se = se)
+    c(uncorrected = rho, second_order = rho - cb,
+      second_order_logit = rho_l, curv = cb, se = se)
   })
 }
 
@@ -148,7 +153,7 @@ write_metadata(
   file.path(res_dir, "correction_metadata.csv"),
   values = list(reps = cfg$reps, ns = paste(cfg$ns, collapse = ","),
                 pkeys = paste(cfg$pkeys, collapse = ","), seed_base = cfg$seed_base,
-                correction = "analytic second-order: rho-hat - 0.5 tr(g'' V_robust)",
+                correction = "analytic second-order, raw scale (rho-hat - 0.5 tr(g'' V)) and logit scale (back-transformed)",
                 interval = "logit scale, robust SE, recentred on the corrected point",
                 smoke = cfg$smoke),
   packages = "magmaan")

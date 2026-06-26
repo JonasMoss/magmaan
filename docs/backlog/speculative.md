@@ -348,10 +348,17 @@ non-normality) and a logit-scale interval for the `[0,1]` boundary and the wild
 width at low `rho*`. Together they are the best *simple* interval (near-nominal by
 N~200 at p=9, N~500 at p=18), but the binding residual error is the positive bias
 of `rho*` itself (up to ~0.20 for the group OLSC at p=18, N=50; Aguirre-Urreta 2019
-carried into the bifactor coefficients), which no symmetric interval removes. So if
-this surface is built it must ship a *bias-aware* interval (bias-corrected estimate
-or a BCa-type bootstrap), not a bare delta-method SE. The point coefficients still
-gate against lavInspect for free; the inference is the genuine work.
+carried into the bifactor coefficients), which no symmetric interval removes. The
+concrete fix the experiment lands on is an after-the-fact second-order bias
+correction of the *functional* (not the parameters): `rho-tilde = rho-hat - 1/2
+tr(g'' V)`, taken on the logit scale and mapped back so the inverse logit bounds it.
+That version is stable down to N=50 (the raw-scale correction over-shoots, to ~-1.2
+for the group OLSC at p9/N=50) and essentially unbiased by N=100, and it lifts the
+group-factor small-N coverage. The one residual gap is the general factor at N<=100,
+whose sampling distribution piles against the upper bound at 1 (boundary, not bias),
+needing a skew-aware / BCa interval. So a built surface should ship the
+logit-scale-corrected estimate plus a robust delta SE, not a bare delta-method SE;
+the point coefficients still gate against lavInspect for free.
 
 ### Structural-model fit indices, tests, and CIs (two-step / SAM)
 
