@@ -1,0 +1,426 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Profile Likelihood-Ratio Intervals, the Bartlett Correction,\\
+and the Eigenvalue-Spectrum Reference Law}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\Gnt}{\Gamma_{\mathrm{NT}}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Records the theory behind the experiment-43 maximal-reliability interval: the
+profile likelihood-ratio (LR) statistic and its inversion into a confidence set,
+the Bartlett correction that rescues its small-$N$ calibration under normality,
+and what changes under non-normality, where the reference law is a weighted sum
+of $\chi^2_1$ variables (the full eigenvalue spectrum, of which Satorra--Bentler
+scaling is only the first-moment summary). Three claims, stated here and argued
+below.
+
+\begin{enumerate}
+\item Test inversion buys transformation-invariance, range-respecting limits,
+and asymmetry for free, by anchoring on the likelihood rather than on
+$\hat\psi$ (Section~\ref{sec:profile}).
+\item The Bartlett correction is a finite-sample ($O(N^{-1})$) fix that is valid
+\emph{only when the limit is genuinely $\chi^2$}. It removes the small-$N$
+inflation of the LR and, uniquely among the trinity, does so to one extra order
+(Section~\ref{sec:bartlett}).
+\item Under non-normality the leading-order ($O(1)$) error must be fixed first by
+a spectral correction (Section~\ref{sec:spectrum}). A single scalar Bartlett
+factor on the mixture is then only a first-moment patch, not a Bartlett
+correction in the Barndorff-Nielsen sense; the principled finite-sample-robust
+route is to correct (or resample) the eigenvalues, not to rescale a mean
+(Section~\ref{sec:bartlett-spectrum}). For a \emph{one}-parameter interval the
+spectrum collapses to a single eigenvalue, so there the robust correction is just
+a scalar and the distinction is moot; it bites only for $\mathrm{df}>1$ (overall
+fit, multi-parameter regions, nested tests).
+\end{enumerate}
+
+\section{The profile LR and test-inversion intervals}
+\label{sec:profile}
+
+Partition $\theta = (\psi, \lambda)$ with $\psi \in \mathbb{R}$ the interest
+parameter (here the maximal reliability $\rho^*$) and $\lambda$ the nuisance
+block. In covariance-structure ML the discrepancy $F$ satisfies
+$-2\,\ell(\theta)/N = F(\theta) + \text{const}$, and we write
+$\hat\theta = \argmin_\theta F$ for the unconstrained fit and
+$\tilde\theta(\psi_0) = \argmin_{\theta:\,\psi=\psi_0} F$ for the fit constrained
+to $\psi = \psi_0$. The profile discrepancy is
+$F_p(\psi) = \min_\lambda F(\psi,\lambda)$, and the profile LR statistic is
+%
+\begin{equation}
+\label{eq:lr}
+W(\psi_0) \;=\; N\big[F_p(\psi_0) - F_p(\hat\psi)\big]
+          \;=\; N\big[F(\tilde\theta(\psi_0)) - F(\hat\theta)\big],
+\end{equation}
+%
+which is exactly the experiment-43 statistic $\mathrm{LR} = N(F_{\mathrm{con}} -
+F_{\mathrm{unc}})$.
+
+\begin{theorem}[Wilks]
+\label{thm:wilks}
+Under the usual regularity conditions, correct specification, normal-theory ML,
+and $\theta$ interior with true interest value $\psi_0$,
+$W(\psi_0) \xrightarrow{d} \chi^2_q$ with $q = \dim\psi$ ($=1$ here)
+\cite{wilks1938}.
+\end{theorem}
+
+The $(1-\alpha)$ confidence set is the acceptance region of the level-$\alpha$ LR
+test, swept over the hypothesized value:
+%
+\begin{equation}
+\label{eq:ci}
+C_{1-\alpha} \;=\; \big\{\psi_0 : W(\psi_0) \le \chi^2_{q,\,1-\alpha}\big\}.
+\end{equation}
+%
+Coverage of the true value needs only $W$ \emph{at} that value, which is why
+experiment-43 measures coverage with one constrained fit per replicate and defers
+interval width (the latter needs the root-finding $W(\psi_0) = \chi^2_{q,1-\alpha}$).
+
+Four properties make \eqref{eq:ci} succeed where intervals built around
+$\hat\psi$ fail.
+\begin{enumerate}
+\item[(i)] \emph{Transformation-invariance.} $W$ is invariant under any monotone
+reparameterization of $\psi$; a reparameterization maps $C$ to the image set. No
+logit-versus-Fisher choice arises.
+\item[(ii)] \emph{Range-respecting.} The constrained fit stays in the parameter
+space, so $C \subseteq [0,1]$ for a reliability by construction; the interval
+cannot leave the natural range.
+\item[(iii)] \emph{Asymmetry.} $C$ follows the curvature of $F_p$ and is
+asymmetric whenever the profile likelihood is.
+\item[(iv)] \emph{No standard error.} Only fits enter, never an estimate of
+$\Var(\hat\psi)$, so $C$ is immune to the bias, skew, and boundary pileup of
+$\hat\psi$ that defeat Wald, delta, and Cornish--Fisher intervals.
+\end{enumerate}
+
+\begin{remark}
+$W$, the Wald statistic $W_W = (\hat\psi - \psi_0)^2/\widehat{\Var}(\hat\psi)$,
+and the score statistic are asymptotically equivalent to $o_p(1)$ and share the
+limit of Theorem~\ref{thm:wilks}. $W_W$ is the quadratic Taylor approximation of
+$W$ at $\hat\psi$; it is \emph{not} transformation-invariant and inherits every
+finite-sample defect of $\hat\psi$. The signed root
+$R(\psi_0) = \operatorname{sign}(\hat\psi - \psi_0)\sqrt{W(\psi_0)} \to N(0,1)$ is
+the one-sided handle and the entry point for higher-order ($r^*$) refinements.
+In SEM, profile-LR intervals are due to \cite{nealemiller1997} (genetics, the
+OpenMx \texttt{mxCI} machinery) and \cite{pekwu2015} (general SEM, with
+confidence regions); the R package \texttt{semlbci} implements them.
+\end{remark}
+
+\section{The Bartlett correction}
+\label{sec:bartlett}
+
+Theorem~\ref{thm:wilks} is leading-order only. The next term is a pure scale
+effect:
+%
+\begin{equation}
+\label{eq:bartlett-mean}
+\E[W(\psi_0)] \;=\; q\Big(1 + \tfrac{b}{N} + O(N^{-2})\Big),
+\end{equation}
+%
+with $b$ a model-dependent constant. At small $N$ the mean exceeds $q$, $W$ is
+stochastically too large, the test over-rejects, and $C$ under-covers. In
+experiment-43 this is stark: $\E[W] \approx 3.8$ against $q = 1$ at $N = 50$ for
+the general-factor coefficient, decaying to $\approx 1$ by $N = 200$.
+
+\begin{theorem}[Bartlett-correctability]
+\label{thm:bartlett}
+Let $c = 1 + b/N = \E[W]/q$ and $W' = W/c$. Then $W' \xrightarrow{d} \chi^2_q$
+with relative error $O(N^{-2})$, one order better than for $W$
+\cite{bartlett1937,lawley1956}. The single mean-matching rescaling that sets
+$\E[W'] = q$ simultaneously corrects the higher cumulants to the order needed; the
+level error after adjustment is $O(N^{-2})$ \cite{barndorffnielsencox1984,
+barndorffnielsenhall1988}. This is special to the LR: the Wald and score
+statistics are not Bartlett-correctable by a scalar.
+\end{theorem}
+
+The correction is the rescaling $W \mapsto W/c$ in \eqref{eq:ci}, equivalently a
+rescaled threshold $c\,\chi^2_{q,1-\alpha}$. The factor $c = \E[W]/q$ can be
+obtained three ways:
+\begin{itemize}
+\item analytically, from Lawley's general expansion of \eqref{eq:bartlett-mean}
+(model-specific and algebraically heavy);
+\item by parametric bootstrap, simulating $W$ under the fitted null and taking the
+sample mean;
+\item empirically/oracle, the Monte-Carlo mean of $W$ at the true value, as in
+experiment-43 (an oracle, not an operational estimator).
+\end{itemize}
+
+\begin{remark}[SEM lineage]
+The covariance-structure analogue is old. \cite{bartlett1950} gave the
+factor-analysis $\chi^2$ multiplier; \cite{swain1975} the Swain correction (a
+Bartlett-type scalar for the ML $\chi^2$, evaluated by \cite{nevitthancock2004,
+herzogboomsmareinecke2007}); \cite{yuantianyanagihara2015} an empirical
+correction tuned for many variables. All target the same $O(N^{-1})$
+over-rejection of the normal-theory $\chi^2$. The standing assumption everywhere
+is that the limit \emph{is} $\chi^2$: a Bartlett correction fixes the
+finite-sample approach to that limit and presupposes it exists.
+\end{remark}
+
+\section{The reference law under non-normality: the full spectrum}
+\label{sec:spectrum}
+
+Under non-normality (or misspecification) the normal-theory statistic no longer
+converges to $\chi^2$. Let $\Gamma = \Cov\!\big(\sqrt{N}\,\vech(S - \Sigma)\big)$
+be the asymptotic covariance of the sample moments, $\Delta = \partial\,
+\vech\Sigma(\theta)/\partial\theta'$ the model Jacobian, $V$ the fit weight
+(normal-theory $V = \Gnt^{-1}$ for ML), and
+%
+\begin{equation}
+\label{eq:U}
+U \;=\; V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V
+\end{equation}
+%
+the residual-weight (projection) matrix.
+
+\begin{theorem}[Spectral limit]
+\label{thm:spectrum}
+Under correct structural specification and finite fourth moments,
+%
+\begin{equation}
+\label{eq:mixture}
+T \;=\; N\hat F \;\xrightarrow{d}\; \sum_{j=1}^{r} \lambda_j\, z_j^2,
+\qquad z_j \stackrel{\text{iid}}{\sim} N(0,1),
+\end{equation}
+%
+where $\lambda_1,\dots,\lambda_r$ are the $r = \mathrm{df}$ nonzero eigenvalues of
+$U\Gamma$ \cite{shapiro1983,satorra1989,satorrabentler1994}. Under multivariate
+normality $\Gamma = \Gnt$ and $U\Gnt$ is idempotent of rank $r$, so every
+$\lambda_j = 1$ and $T \to \chi^2_r$. Non-normality moves the eigenvalues off $1$.
+\end{theorem}
+
+So the statistic is a weighted sum of independent $\chi^2_1$, not a $\chi^2$. The
+established corrections form a hierarchy by how much of the spectrum
+$\{\lambda_j\}$ they use:
+\begin{itemize}
+\item \emph{Mean} (Satorra--Bentler $T_M$): scale by
+$c_1 = \tr(U\Gamma)/r = \bar\lambda$ and refer to $\chi^2_r$. First moment only;
+the variance is wrong unless the $\lambda_j$ are equal.
+\item \emph{Mean-and-variance} (Satorra--Bentler adjusted / Satterthwaite
+$T_{MV}$): match two moments by scaling and setting fractional
+$d = (\sum_j\lambda_j)^2/\sum_j\lambda_j^2$; refer to $\chi^2_d$.
+\item \emph{Scaled-shifted} ($T_{MV2}$): match two moments by an affine $aT+b$ at
+fixed df \cite{asparouhovmuthen2010}.
+\item \emph{Higher moments}: third-moment-adjusted variants extend the same idea.
+\item \emph{Full spectrum}: use all $\lambda_j$ and the exact distribution of
+$\sum_j\lambda_j z_j^2$ by numerical inversion of its characteristic function
+\cite{imhof1961,davies1980}, with no moment truncation.
+\end{itemize}
+
+\begin{remark}[Why the full spectrum is hard: the FMG program]
+The exact tail of \eqref{eq:mixture} needs the population $\lambda_j$, but the
+sample eigenvalues of $\hat U\hat\Gamma$ are badly biased and unstable, worst for
+the small eigenvalues and exactly where $N/\mathrm{df}$ is small; plugging them
+into Imhof is then worse than moment-matching. Eigenvalue block averaging (EBA)
+bins the ordered sample eigenvalues and replaces each by its block mean, trading
+variance for bias \cite{foldnesgronneberg2018}; penalized EBA (pEBA / pOLS)
+shrinks the spectrum toward a model-based trend and holds the nominal rate where
+$T_M$ and $T_{MV}$ drift under non-normality \cite{foldnesmossgronneberg2025},
+with the nested-model extension in \cite{foldnesmossgronneberg2026}. magmaan
+implements this family (experiments 17--18) to $\sim$$3\times10^{-6}$ parity with
+\texttt{semTests}. Satorra--Bentler is, in this language, the rank-collapsed
+first-moment summary of the same spectrum the full method resolves.
+\end{remark}
+
+\section{A Bartlett correction for the spectral statistic?}
+\label{sec:bartlett-spectrum}
+
+The two corrections attack different orders and are orthogonal. The spectral
+correction fixes the leading-order ($O(1)$) reference law: it makes the
+\emph{asymptotic} distribution right under non-normality. The Bartlett correction
+fixes the next-order ($O(N^{-1})$) approach to a $\chi^2$ limit. Under non-normal,
+small-$N$ data \emph{both} are wrong, and one needs both. Three things
+``Bartlett the spectrum'' can mean.
+
+\paragraph{(a) A first-moment finite-sample patch (exists; recommended).}
+Apply a Bartlett-type scalar to an \emph{already-robust} base statistic:
+$T_{MB} = $ Bartlett-corrected Satorra--Bentler. \cite{jobstauerswaldmoshagen2022}
+compare the family and recommend exactly this ordering, mean-correct (SB) first,
+then a Bartlett scalar on the scaled statistic, reporting that $T_{MB}$ is
+satisfactory across sources of non-normality where bare SB and the moment-matched
+variants drift at small $N$. This is the operational answer and the direct sibling
+of experiment-43, with the SB mean replacing the normal-theory mean in the factor.
+
+\paragraph{(b) A true Bartlett correction of the mixture (does not exist as a
+scalar).} The Barndorff-Nielsen property of Theorem~\ref{thm:bartlett}, that one
+scalar fixes the whole distribution to $O(N^{-2})$, is a property of the LR with a
+$\chi^2$ limit. For a general weighted-$\chi^2$ limit there is no single scalar
+whose mean-match also corrects the higher cumulants: the finite-sample error lives
+in the whole eigenvalue vector (each $\lambda_j$ carries its own $O(N^{-1})$ bias),
+not in one mean. Properly ``Bartlett-correcting the spectrum'' therefore means
+finite-sample-correcting the eigenvalues (or $\Gamma$ and $U$) before Imhof, which
+is precisely the bias problem EBA/pEBA already attack by shrinkage; pEBA is, in
+effect, the spectral analogue of a finite-sample correction, done by penalization
+rather than by an $O(N^{-1})$ expansion.
+
+\paragraph{(c) Resample the reference law (the clean robust-plus-finite-sample
+route).} A model-based or nonparametric bootstrap \cite{bollenstine1992} estimates
+the finite-sample null distribution of $T$ directly, absorbing non-normality
+(leading order) and the $O(N^{-1})$ term at once; the bootstrap mean of $T$ is a
+Bartlett factor that is robust by construction. This is why the empirical $c$ of
+experiment-43 is more than a normal-theory Bartlett factor: re-estimated on
+non-normal data it would absorb the leading-order mis-scaling too. A double
+bootstrap refines the calibration further.
+
+\begin{remark}[The df${=}1$ collapse]
+For a one-parameter interval ($q = 1$), the constrained-LR limit under
+non-normality is a \emph{single} scaled variable $\lambda\, z^2$: the spectrum of
+the relevant $q\times q$ matrix has one element. There the robust correction is
+just the scalar scaling $\lambda$ (a Satorra-2000 scaled difference test), the
+``full spectrum'' has nothing extra to offer, and $T_{MB}$ of path~(a) is the
+complete recipe. The spectral richness of Section~\ref{sec:spectrum} matters only
+for $\mathrm{df}>1$: overall goodness-of-fit, multi-parameter confidence regions,
+and nested tests with more than one restriction.
+\end{remark}
+
+\paragraph{Recommendation for a built surface (experiment 43 /
+\texttt{measures::frontier}).}
+\begin{itemize}
+\item Normal data: profile-LR interval \eqref{eq:ci} with a Bartlett factor
+(analytic or parametric-bootstrap $c$). A genuine Bartlett correction, $O(N^{-2})$.
+\item Non-normal data: do \emph{not} Bartlett the normal-theory LR. Either
+(i)~scale by the robust $\lambda$ (Satorra-2000) then Bartlett ($T_{MB}$,
+path~(a)), or (ii)~bootstrap the profile-LR null (path~(c)). Both fix leading
+order first.
+\item The eigenvalue machinery already in magmaan (Imhof tail, EBA/pEBA) is the
+spectral reference; the open piece is wiring a spectral (not $\chi^2_1$) threshold
+into the profile-LR inversion, the non-normal sibling that the experiment-43
+caveat defers.
+\end{itemize}
+
+\begin{thebibliography}{99}
+
+\bibitem{wilks1938} Wilks, S.~S. (1938). The large-sample distribution of the
+likelihood ratio for testing composite hypotheses. \emph{Annals of Mathematical
+Statistics}, 9(1), 60--62.
+\href{https://doi.org/10.1214/aoms/1177732360}{doi:10.1214/aoms/1177732360}.
+
+\bibitem{nealemiller1997} Neale, M.~C., \& Miller, M.~B. (1997). The use of
+likelihood-based confidence intervals in genetic models. \emph{Behavior
+Genetics}, 27(2), 113--120.
+\href{https://doi.org/10.1023/A:1025681223921}{doi:10.1023/A:1025681223921}.
+
+\bibitem{pekwu2015} Pek, J., \& Wu, H. (2015). Profile likelihood-based
+confidence intervals and regions for structural equation models.
+\emph{Psychometrika}, 80(4), 1123--1145.
+\href{https://doi.org/10.1007/s11336-015-9461-1}{doi:10.1007/s11336-015-9461-1}.
+
+\bibitem{bartlett1937} Bartlett, M.~S. (1937). Properties of sufficiency and
+statistical tests. \emph{Proceedings of the Royal Society of London A}, 160(901),
+268--282.
+\href{https://doi.org/10.1098/rspa.1937.0109}{doi:10.1098/rspa.1937.0109}.
+
+\bibitem{lawley1956} Lawley, D.~N. (1956). A general method for approximating to
+the distribution of likelihood ratio criteria. \emph{Biometrika}, 43(3/4),
+295--303.
+\href{https://doi.org/10.1093/biomet/43.3-4.295}{doi:10.1093/biomet/43.3-4.295}.
+
+\bibitem{barndorffnielsencox1984} Barndorff-Nielsen, O.~E., \& Cox, D.~R. (1984).
+Bartlett adjustments to the likelihood ratio statistic and the distribution of the
+maximum likelihood estimator. \emph{Journal of the Royal Statistical Society B},
+46(3), 483--495.
+
+\bibitem{barndorffnielsenhall1988} Barndorff-Nielsen, O.~E., \& Hall, P. (1988).
+On the level-error after Bartlett adjustment of the likelihood ratio statistic.
+\emph{Biometrika}, 75(2), 374--378.
+\href{https://doi.org/10.1093/biomet/75.2.374}{doi:10.1093/biomet/75.2.374}.
+
+\bibitem{bartlett1950} Bartlett, M.~S. (1950). Tests of significance in factor
+analysis. \emph{British Journal of Psychology, Statistical Section}, 3(2),
+77--85.
+\href{https://doi.org/10.1111/j.2044-8317.1950.tb00285.x}{doi:10.1111/j.2044-8317.1950.tb00285.x}.
+
+\bibitem{swain1975} Swain, A.~J. (1975). \emph{Analysis of parametric structures
+for variance matrices}. PhD thesis, University of Adelaide.
+
+\bibitem{nevitthancock2004} Nevitt, J., \& Hancock, G.~R. (2004). Evaluating
+small sample approaches for model test statistics in structural equation modeling.
+\emph{Multivariate Behavioral Research}, 39(3), 439--478.
+\href{https://doi.org/10.1207/S15327906MBR3903_3}{doi:10.1207/S15327906MBR3903\_3}.
+
+\bibitem{herzogboomsmareinecke2007} Herzog, W., Boomsma, A., \& Reinecke, S.
+(2007). The model-size effect on traditional and modified tests of covariance
+structures. \emph{Structural Equation Modeling}, 14(3), 361--390.
+\href{https://doi.org/10.1080/10705510701301602}{doi:10.1080/10705510701301602}.
+
+\bibitem{yuantianyanagihara2015} Yuan, K.-H., Tian, Y., \& Yanagihara, H. (2015).
+Empirical correction to the likelihood ratio statistic for structural equation
+modeling with many variables. \emph{Psychometrika}, 80(2), 379--405.
+\href{https://doi.org/10.1007/s11336-013-9386-5}{doi:10.1007/s11336-013-9386-5}.
+
+\bibitem{shapiro1983} Shapiro, A. (1983). Asymptotic distribution theory in the
+analysis of covariance structures (a unified approach). \emph{South African
+Statistical Journal}, 17(1), 33--81.
+
+\bibitem{satorra1989} Satorra, A. (1989). Alternative test criteria in covariance
+structure analysis: a unified approach. \emph{Psychometrika}, 54(1), 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{satorrabentler1994} Satorra, A., \& Bentler, P.~M. (1994). Corrections
+to test statistics and standard errors in covariance structure analysis. In A.
+von Eye \& C.~C. Clogg (Eds.), \emph{Latent Variables Analysis} (pp.\ 399--419).
+Sage.
+
+\bibitem{asparouhovmuthen2010} Asparouhov, T., \& Muth\'en, B. (2010).
+\emph{Simple second order chi-square correction}. Mplus Technical Appendix.
+\href{https://www.statmodel.com/download/WLSMV_new_chi21.pdf}{statmodel.com}.
+
+\bibitem{imhof1961} Imhof, J.~P. (1961). Computing the distribution of quadratic
+forms in normal variables. \emph{Biometrika}, 48(3/4), 419--426.
+\href{https://doi.org/10.2307/2332763}{doi:10.2307/2332763}.
+
+\bibitem{davies1980} Davies, R.~B. (1980). Algorithm AS 155: the distribution of a
+linear combination of $\chi^2$ random variables. \emph{Applied Statistics},
+29(3), 323--333.
+\href{https://doi.org/10.2307/2346911}{doi:10.2307/2346911}.
+
+\bibitem{foldnesgronneberg2018} Foldnes, N., \& Gr\o nneberg, S. (2018).
+Approximating test statistics using eigenvalue block averaging. \emph{Structural
+Equation Modeling}, 25(1), 101--114.
+\href{https://doi.org/10.1080/10705511.2017.1373021}{doi:10.1080/10705511.2017.1373021}.
+
+\bibitem{foldnesmossgronneberg2025} Foldnes, N., Moss, J., \& Gr\o nneberg, S.
+(2025). Improved goodness of fit procedures for structural equation models.
+\emph{Structural Equation Modeling}, 32(1).
+\href{https://doi.org/10.1080/10705511.2024.2372028}{doi:10.1080/10705511.2024.2372028}.
+
+\bibitem{foldnesmossgronneberg2026} Foldnes, N., Moss, J., \& Gr\o nneberg, S.
+(2026). Penalized eigenvalue block averaging: extension to nested model comparison
+and Monte Carlo evaluations. \emph{Behavior Research Methods}.
+\href{https://doi.org/10.3758/s13428-026-02968-4}{doi:10.3758/s13428-026-02968-4}.
+
+\bibitem{jobstauerswaldmoshagen2022} Jobst, L.~J., Auerswald, M., \& Moshagen, M.
+(2022). The effect of latent and error non-normality on corrections to the test
+statistic in structural equation modeling. \emph{Behavior Research Methods},
+54(5), 2351--2363.
+\href{https://doi.org/10.3758/s13428-021-01729-9}{doi:10.3758/s13428-021-01729-9}.
+
+\bibitem{bollenstine1992} Bollen, K.~A., \& Stine, R.~A. (1992). Bootstrapping
+goodness-of-fit measures in structural equation models. \emph{Sociological Methods
+\& Research}, 21(2), 205--229.
+\href{https://doi.org/10.1177/0049124192021002004}{doi:10.1177/0049124192021002004}.
+
+\end{thebibliography}
+
+\end{document}
