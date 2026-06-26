@@ -11,12 +11,16 @@
 #   bartlett    q * c, c = E[LR] estimated by the cell mean of LR(rho*_true)
 #               (the empirical/oracle Bartlett factor; df=1 so the factor is E[LR])
 # and report the coverage of each plus the inflation c and the empirical 95th
-# percentile of LR (which would be 3.841 if chi^2_1 held exactly). Normal data only:
-# under non-normality the normal-theory LR is mis-scaled (Satorra-Bentler), a
-# separate correction; see report.
+# percentile of LR (which would be 3.841 if chi^2_1 held exactly). For IG
+# non-normal observed indicators, the df=1 robust scale is estimated as
+# lambda = Var_robust(rho*) / Var_model(rho*) and the robust statistic is
+# LR / lambda; the "robust Bartlett" factor is the cell mean of that scaled
+# statistic.
 #
 # Usage:
 #   Rscript scripts/lr_interval.R [--reps 400] [--ns 50,100,200]
+#                                 [--dists normal,ig] [--ig-skew 1]
+#                                 [--ig-exk 4] [--ig-family fleishman]
 #                                 [--seed-base S] [--smoke]
 
 .support_helpers <- function() {
@@ -37,7 +41,9 @@ source(file.path(exp_dir, "R", "maxrel.R"))
 source(file.path(exp_dir, "R", "lr_ml.R"))
 
 parse_args <- function(a) {
-  o <- list(reps = 400L, ns = c(50L, 100L, 200L), seed_base = 20260701L, smoke = FALSE)
+  o <- list(reps = 400L, ns = c(50L, 100L, 200L), dists = "normal",
+            ig_skew = 1.0, ig_exk = 4.0, ig_family = "fleishman",
+            seed_base = 20260701L, smoke = FALSE)
   i <- 1L
   while (i <= length(a)) {
     x <- a[[i]]
@@ -46,10 +52,24 @@ parse_args <- function(a) {
     else if (startsWith(x, "--reps=")) o$reps <- as.integer(sub("^--reps=", "", x))
     else if (x == "--ns") { i <- i + 1L; o$ns <- as.integer(strsplit(a[[i]], ",")[[1L]]) }
     else if (startsWith(x, "--ns=")) o$ns <- as.integer(strsplit(sub("^--ns=", "", x), ",")[[1L]])
+    else if (x == "--dists") { i <- i + 1L; o$dists <- a[[i]] }
+    else if (startsWith(x, "--dists=")) o$dists <- sub("^--dists=", "", x)
+    else if (x == "--ig-skew") { i <- i + 1L; o$ig_skew <- as.numeric(a[[i]]) }
+    else if (startsWith(x, "--ig-skew=")) o$ig_skew <- as.numeric(sub("^--ig-skew=", "", x))
+    else if (x == "--ig-exk") { i <- i + 1L; o$ig_exk <- as.numeric(a[[i]]) }
+    else if (startsWith(x, "--ig-exk=")) o$ig_exk <- as.numeric(sub("^--ig-exk=", "", x))
+    else if (x == "--ig-family") { i <- i + 1L; o$ig_family <- a[[i]] }
+    else if (startsWith(x, "--ig-family=")) o$ig_family <- sub("^--ig-family=", "", x)
     else if (x == "--seed-base") { i <- i + 1L; o$seed_base <- as.integer(a[[i]]) }
     else if (x == "--smoke") o$smoke <- TRUE
     else stop("unknown argument: ", x, call. = FALSE)
     i <- i + 1L
+  }
+  o$dists <- parse_csv_arg(o$dists)
+  bad <- setdiff(o$dists, c("normal", "chisq", "ig"))
+  if (length(bad)) stop("unknown dist(s): ", paste(bad, collapse = ", "), call. = FALSE)
+  if (!o$ig_family %in% c("tukey_gh", "johnson", "fleishman")) {
+    stop("unknown IG generator family: ", o$ig_family, call. = FALSE)
   }
   if (o$smoke) { o$reps <- 80L; o$ns <- c(50L) }
   o
@@ -68,57 +88,129 @@ ml <- make_lr_ml(pop)
 q1 <- stats::qchisq(0.95, 1)
 tgt <- c(gen = pop$rho_gen, grp = pop$rho_grp1)
 
-# LR(rho*_true) for both coefficients on one dataset, or NULL.
+# Data blocks for one cell. IG uses magmaan's independent-generator simulator
+# directly on the observed indicators, preserving pop$Sigma while imposing common
+# marginal skewness/excess-kurtosis targets.
+cell_draws <- function(pop, n, dist, seed0, reps) {
+  if (dist == "ig") {
+    batch <- magmaan::magmaan_core$sim_ig_batch(
+      pop$Sigma, rep(cfg$ig_skew, pop$p), rep(cfg$ig_exk, pop$p),
+      n = n, reps = reps, seed_base = seed0,
+      root = "cholesky", generator_family = cfg$ig_family)
+    return(lapply(batch$draws, function(X) {
+      X <- as.data.frame(X)
+      names(X) <- pop$ov
+      X
+    }))
+  }
+  lapply(seq_len(reps), function(r) {
+    set.seed(seed0 + r)
+    gen_data(pop, n, dist)
+  })
+}
+
+# LR(rho*_true) and the df=1 robust scale for both coefficients on one dataset,
+# or NULL. The scale is the sandwich/model delta-variance ratio for rho*.
 lr_rep <- function(dat, n) {
   S <- stats::cov(dat) * (n - 1) / n
   logdetS <- as.numeric(determinant(S, logarithm = TRUE)$modulus)
   fit <- tryCatch(magmaan::magmaan(spec, dat, estimator = "ML"), error = function(e) NULL)
   if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
-  m <- make_rebuilder(fit$partable, pop)(fit$partable$est)
+  pt <- fit$partable
+  rebuild <- make_rebuilder(pt, pop)
+  Vm <- tryCatch(stats::vcov(fit, regime = "model", data = dat),
+                 error = function(e) NULL)
+  Vr <- tryCatch(stats::vcov(fit, regime = "robust", data = dat),
+                 error = function(e) NULL)
+  lambda <- c(gen = NA_real_, grp = NA_real_)
+  if (is.matrix(Vm) && is.matrix(Vr)) {
+    for (w in c("gen", "grp")) {
+      g <- grad_rho(pt$est, pt, rebuild, pop, w)
+      vm <- as.numeric(crossprod(g, Vm %*% g))
+      vr <- as.numeric(crossprod(g, Vr %*% g))
+      if (is.finite(vm) && vm > 0 && is.finite(vr) && vr > 0) lambda[[w]] <- vr / vm
+    }
+  }
+  m <- rebuild(pt$est)
   if (any(m$P <= 0)) return(NULL)                          # same admissible subset
   z0 <- ml$zeta_from(m$L, m$P)
   unc <- ml$fit_unc(S, logdetS, z0)
-  out <- c(gen = NA_real_, grp = NA_real_)
+  out <- list()
   for (w in c("gen", "grp")) {
     con <- ml$fit_con(S, logdetS, unc$z, w, tgt[[w]])
-    if (!is.null(con)) out[w] <- max(0, n * (con$F - unc$F))
+    if (!is.null(con)) {
+      out[[length(out) + 1L]] <- data.frame(
+        coef = w,
+        LR = max(0, n * (con$F - unc$F)),
+        lambda = lambda[[w]],
+        stringsAsFactors = FALSE)
+    }
   }
-  out
+  if (!length(out)) return(NULL)
+  do.call(rbind, out)
 }
 
-one_cell <- function(n, seed0) {
-  LR <- list(gen = numeric(0), grp = numeric(0))
-  for (r in seq_len(cfg$reps)) {
-    set.seed(seed0 + r)
-    v <- lr_rep(gen_data(pop, n, "normal"), n)
+q95 <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return(NA_real_)
+  stats::quantile(x, 0.95, names = FALSE)
+}
+
+one_cell <- function(n, dist, seed0) {
+  LR <- list(gen = data.frame(LR = numeric(0), lambda = numeric(0)),
+             grp = data.frame(LR = numeric(0), lambda = numeric(0)))
+  draws <- cell_draws(pop, n, dist, seed0, cfg$reps)
+  for (r in seq_along(draws)) {
+    v <- lr_rep(draws[[r]], n)
     if (is.null(v)) next
-    for (w in c("gen", "grp")) if (is.finite(v[[w]])) LR[[w]] <- c(LR[[w]], v[[w]])
+    for (w in c("gen", "grp")) {
+      ww <- v[v$coef == w & is.finite(v$LR), c("LR", "lambda"), drop = FALSE]
+      if (nrow(ww)) LR[[w]] <- rbind(LR[[w]], ww)
+    }
   }
   do.call(rbind, lapply(c("gen", "grp"), function(w) {
-    x <- LR[[w]]; c_bart <- mean(x)
-    data.frame(p = pop$p, coef = w, dist = "normal", n = n, reps_ok = length(x),
-      rho_pop = tgt[[w]], mean_LR = c_bart, q95_LR = stats::quantile(x, 0.95, names = FALSE),
-      cov_chi2 = mean(x <= q1), cov_bartlett = mean(x <= q1 * c_bart),
+    x <- LR[[w]]
+    sc_ok <- is.finite(x$LR) & is.finite(x$lambda) & x$lambda > 0
+    scaled <- x$LR[sc_ok] / x$lambda[sc_ok]
+    c_bart <- mean(x$LR)
+    c_robust_bart <- mean(scaled)
+    data.frame(p = pop$p, coef = w, dist = dist, n = n, reps_ok = nrow(x),
+      reps_scaled = sum(sc_ok),
+      rho_pop = tgt[[w]], mean_LR = c_bart, q95_LR = q95(x$LR),
+      mean_lambda = mean(x$lambda[is.finite(x$lambda)]),
+      mean_LR_scaled = c_robust_bart,
+      q95_LR_scaled = q95(scaled),
+      cov_chi2 = mean(x$LR <= q1), cov_bartlett = mean(x$LR <= q1 * c_bart),
+      cov_robust = mean(scaled <= q1),
+      cov_robust_bartlett = mean(scaled <= q1 * c_robust_bart),
       stringsAsFactors = FALSE)
   }))
 }
 
-all_rows <- do.call(rbind, lapply(seq_along(cfg$ns), function(i) {
-  n <- cfg$ns[i]; message(sprintf("cell %d/%d: n=%d (reps=%d)", i, length(cfg$ns), n, cfg$reps))
-  one_cell(n, cfg$seed_base + i * 100000L)
+all_cells <- expand.grid(dist = cfg$dists, n = cfg$ns, stringsAsFactors = FALSE)
+all_rows <- do.call(rbind, lapply(seq_len(nrow(all_cells)), function(i) {
+  dist <- all_cells$dist[i]
+  n <- all_cells$n[i]
+  message(sprintf("cell %d/%d: dist=%s n=%d (reps=%d)",
+                  i, nrow(all_cells), dist, n, cfg$reps))
+  one_cell(n, dist, cfg$seed_base + i * 100000L)
 }))
 
 write_csv(all_rows, file.path(res_dir, "lr_coverage.csv"))
 write_metadata(
   file.path(res_dir, "lr_metadata.csv"),
-  values = list(reps = cfg$reps, ns = paste(cfg$ns, collapse = ","), seed_base = cfg$seed_base,
-    model = "orthogonal std.lv bifactor, 6 indicators/subscale (p18), normal data",
+  values = list(reps = cfg$reps, ns = paste(cfg$ns, collapse = ","),
+    dists = paste(cfg$dists, collapse = ","), ig_skew = cfg$ig_skew,
+    ig_exk = cfg$ig_exk, ig_family = cfg$ig_family, seed_base = cfg$seed_base,
+    model = "orthogonal std.lv bifactor, 6 indicators/subscale (p18)",
     statistic = "profile LR = N (F_con(rho*_true) - F_unc), chi^2_1 reference",
     bartlett = "threshold q*c, c = cell-mean LR (empirical Bartlett factor, df=1)",
+    robust = "lambda = Var_robust(rho*) / Var_model(rho*); robust statistic LR/lambda",
     smoke = cfg$smoke),
   packages = "magmaan, nloptr")
 cat("\nProfile-LR coverage (nominal 0.95):\n")
 print(all_rows[order(all_rows$coef, all_rows$n),
-               c("coef","n","reps_ok","mean_LR","q95_LR","cov_chi2","cov_bartlett")],
+               c("coef","dist","n","reps_ok","mean_LR","mean_lambda","mean_LR_scaled",
+                 "cov_chi2","cov_bartlett","cov_robust","cov_robust_bartlett")],
       row.names = FALSE, digits = 3)
 cat("\nWrote ", file.path(res_dir, "lr_coverage.csv"), "\n", sep = "")
