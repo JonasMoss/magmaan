@@ -271,14 +271,20 @@ For the unit-weight total score \(w=\mathbf{1}\), this collapses further:
 Here \(h_i\) is the communality placed on item \(i\)'s diagonal in \(C\). For
 the Spearman-Harman/Guttman rule above, in the one-factor case,
 \[
+  \begin{aligned}
   h_i
-    =
+    &=
   S_{ii}{|P_i|}^{-1}\sum_{(j,\ell)\in P_i}
-    \frac{R_{ij}R_{i\ell}}{R_{j\ell}},
+    \frac{R_{ij}R_{i\ell}}{R_{j\ell}} \\
+    &=
+  {|P_i|}^{-1}\sum_{(j,\ell)\in P_i}
+    \frac{S_{ij}S_{i\ell}}{S_{j\ell}},
+  \end{aligned}
   \qquad
   P_i=\{(j,\ell):j<\ell,\ j\ne i,\ \ell\ne i\},
 \]
-with \(R_{ab}=S_{ab}/(S_{aa}S_{bb})^{1/2}\). Here
+with \(R_{ab}=S_{ab}/(S_{aa}S_{bb})^{1/2}\). The second equality is just the
+cancellation of the item variances in the correlation expression. Here
 \(|P_i|=\binom{p-1}{2}\), so the denominator is constant across \(i\). In a
 multi-factor simple-structure block, replace \(p\) by the block size \(p_f\);
 then \(|P_i|\) is constant within a block, but not necessarily across blocks.
