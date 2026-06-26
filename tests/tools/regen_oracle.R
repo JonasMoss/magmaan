@@ -2788,3 +2788,8 @@ for (m in composite_models) {
 
 cat("regenerated", length(regenerated_composite),
     "composite fixtures under", composite_dir, "\n")
+
+# === two-level (multilevel) ML layer =======================================
+# Self-contained section: its own model catalogue + Demo.twolevel data, not the
+# single-level corpus. `fixtures` is already defined above, so it reuses it.
+source(file.path(repo_root, "tests", "tools", "regen_oracle_twolevel.R"))
