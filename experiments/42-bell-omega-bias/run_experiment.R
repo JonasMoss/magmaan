@@ -400,8 +400,17 @@ sg_congeneric_diagnostics <- function(pop) {
   h_dev <- unlist(Map(function(x, m) x - m, by_item, h_mean),
                   use.names = FALSE)
   h_center <- rep(h_mean, lengths(by_item))
+  h_ss_dev <- sum(h_dev^2)
+  h_ss_center <- sum(h_center^2)
   h_rms <- sqrt(mean(h_dev^2))
-  h_relative_rms <- sqrt(sum(h_dev^2) / sum(h_center^2))
+  h_relative_rms <- if (h_ss_center > 0.0) sqrt(h_ss_dev / h_ss_center) else {
+    if (h_ss_dev == 0.0) 0.0 else Inf
+  }
+  h_unit <- if (h_ss_dev + h_ss_center > 0.0) {
+    sqrt(h_ss_dev / (h_ss_dev + h_ss_center))
+  } else {
+    0.0
+  }
   h_range_mean <- mean(vapply(by_item, function(x) max(x) - min(x),
                               numeric(1L)))
   h_invalid_share <- mean(!h_valid | h$h < 0.0 | h$h > 1.0)
@@ -409,13 +418,26 @@ sg_congeneric_diagnostics <- function(pop) {
   tetrads <- tetrad_values(R)
   tetrad_rms <- sqrt(mean(tetrads^2))
   tetrad_max_abs <- max(abs(tetrads))
+  tetrad_unit <- tetrad_rms / sqrt(8.0 / 3.0)
+  tetrad_max_abs_unit <- tetrad_max_abs / 2.0
 
   row_cov <- rowSums(R) - 1.0
   sg_load <- sign(row_cov) * sqrt(pmax(h_mean, 0.0))
   C_sg <- tcrossprod(sg_load)
   off <- upper.tri(R)
   off_resid <- R[off] - C_sg[off]
-  sg_offdiag_abs_share <- sum(abs(off_resid)) / sum(abs(R[off]))
+  off_resid_l1 <- sum(abs(off_resid))
+  off_observed_l1 <- sum(abs(R[off]))
+  sg_offdiag_abs_share <- if (off_observed_l1 > 0.0) {
+    off_resid_l1 / off_observed_l1
+  } else {
+    if (off_resid_l1 == 0.0) 0.0 else Inf
+  }
+  sg_offdiag_unit <- if (off_resid_l1 + off_observed_l1 > 0.0) {
+    off_resid_l1 / (off_resid_l1 + off_observed_l1)
+  } else {
+    0.0
+  }
   sg_offdiag_signed_share <- 2.0 * sum(off_resid) / sum(R)
 
   rel <- magmaan_core$measures_reliability_cov(pop$Sigma)$table
@@ -424,11 +446,15 @@ sg_congeneric_diagnostics <- function(pop) {
   data.frame(
     h_rms = h_rms,
     h_relative_rms = h_relative_rms,
+    h_unit = h_unit,
     h_range_mean = h_range_mean,
     h_invalid_share = h_invalid_share,
     tetrad_rms = tetrad_rms,
+    tetrad_unit = tetrad_unit,
     tetrad_max_abs = tetrad_max_abs,
+    tetrad_max_abs_unit = tetrad_max_abs_unit,
     sg_offdiag_abs_share = sg_offdiag_abs_share,
+    sg_offdiag_unit = sg_offdiag_unit,
     sg_offdiag_signed_share = sg_offdiag_signed_share,
     alpha = rval[["alpha"]],
     lambda6 = rval[["lambda6"]],
@@ -648,9 +674,10 @@ congeneric_rows <- do.call(rbind, lapply(populations, function(pop) {
 }))
 congeneric_rows <- congeneric_rows[, c(
   "population", "population_label", "reliability_level", "p",
-  "true_reliability", "h_rms", "h_relative_rms", "h_range_mean",
-  "h_invalid_share", "tetrad_rms", "tetrad_max_abs",
-  "sg_offdiag_abs_share", "sg_offdiag_signed_share", "alpha", "lambda6",
+  "true_reliability", "h_rms", "h_relative_rms", "h_unit",
+  "h_range_mean", "h_invalid_share", "tetrad_rms", "tetrad_unit",
+  "tetrad_max_abs", "tetrad_max_abs_unit", "sg_offdiag_abs_share",
+  "sg_offdiag_unit", "sg_offdiag_signed_share", "alpha", "lambda6",
   "spearman_guttman_omega", "sg_minus_alpha", "sg_minus_lambda6")]
 congeneric_rows <- congeneric_rows[order(congeneric_rows$population,
                                          congeneric_rows$reliability_level), ]
@@ -667,7 +694,7 @@ write_metadata(
     denominators = "model-implied total variance and observed/population total variance",
     fit_indices = "for fitted models only: population_discrepancy = 2*fmin; rmsea_like = sqrt(population_discrepancy / df), not comparable across ML/ULS/GLS scales",
     cfa_sensitivity = "ML CFA model set; omega_main_observed = one' C_main(theta_hat) one / one' S one; cfa_sensitivity_summary reports omega range over candidate models",
-    congeneric_diagnostics = "correlation-scale tetrad RMS, Spearman-Guttman anchor h dispersion, and SG rank-one off-diagonal reconstruction error",
+    congeneric_diagnostics = "correlation-scale tetrad RMS, Spearman-Guttman anchor h dispersion, SG rank-one off-diagonal reconstruction error, and unitized 0-to-1 versions",
     smoke = cfg$smoke,
     results_dir = res_dir
   ),
