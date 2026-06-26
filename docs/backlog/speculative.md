@@ -292,7 +292,52 @@ Flora 2020) and omega_ho finite-sample behavior unexamined; magmaan's ordinal/DW
 stack makes that an author-flagged gap. Note this is *structural-form* misspecification
 biasing a point estimate, orthogonal to the distributional/weight misspecification of
 the [[misspec-robust-se-weight-influence]] / `papers/estimated-weight-se` SE track;
-do not fold the two together. Research-tier interpretive cutoffs are not core.
+do not fold the two together. Research-tier interpretive cutoffs are not core. The
+*maximal* (optimally-weighted) counterpart of omega_H is the separate
+maximal-reliability entry below, which omega_H lower-bounds (ρ_gen ≥ omega_H).
+
+### Maximal reliability / corrected coefficient H for bifactor models
+
+A `measures::frontier` post-fit surface for the *model-based maximal reliability* of
+a fitted bifactor (or one-factor) model: the optimally-weighted counterpart of the
+unit-weighted model-based omega above. Three coefficients, each a closed form on
+quantities magmaan already produces (model-implied `Sigma-hat` and the loading
+matrix): the optimal-linear-composite reliability for the general factor `rho*_gen =
+1/(1 + 1/(lambda_G' (Sigma - lambda_G lambda_G')^-1 lambda_G))` and for group factor
+j (all items, eqs. 14-17 of the paper), the optimal-linear-*sub*-composite
+reliability `rho*_gj` (only that factor's items, eqs. 19-20 - the *correct*
+generalization of coefficient H), the corresponding OLC/OLSC weight vectors, and
+factor determinacy `FD = sqrt(rho*)`. Ordering: `rho*_grp,j >= rho*_gj >= omega_HS,j`
+and `rho_gen >= omega_H`, so this entry sits directly above the model-based omega
+entry. Li & Savalei (2026, *MBR* 61:3, 469-490; PDF in `external/refs/`, eval in
+[paper-evals](../research/paper-evals/2026-li-bifactor-maximal-reliability.md)) is
+the reference: they show coefficient H as applied to bifactor models (Rodriguez et
+al. 2016, standardized bifactor loadings into the one-factor H formula) is the
+reliability of *no* composite and must be replaced by these, and they prove the
+unification that Thurstone regression factor scores *are* OLCs (so `rho*` = the
+regression-score reliability) and `FD = sqrt(rho*)`.
+
+**Alternative already available.** magmaan already produces every input, and
+`measures::factor_scores` already computes the regression-score weights
+`(A Psi A') Lambda' Sigma-hat^-1` whose rows are the OLC weights, so `rho*` and `FD`
+are a few lines over machinery in hand. The clean parity oracle is lavaan itself:
+`lavInspect(fit, "fs.reliability")` = per-factor maximal reliability and
+`"fs.determinacy"` = FD (the paper cross-checks against exactly these). Distinct from
+the *S-based* `measures::frontier::reliability` module (alpha / Guttman lambda6 /
+Spearman-Guttman omega off the sample covariance): this is a model-based (theta-hat)
+object, same class as model-based omega.
+
+**Build if.** A bifactor/hierarchical reliability experiment or paper needs maximal
+reliability as a first-class output, OR the continuous factor-score path graduates to
+expose `fs.reliability` / `fs.determinacy` (at which point `rho*` and `FD` are nearly
+free and gate against lavInspect), OR the ordinal extension of the omega/reliability
+cluster is built (the paper, like Bell, is continuous-normal only; categorical
+maximal reliability is the unexamined cell). Heed the paper's own discouragement:
+group-factor composites are unreliable at realistic sizes (~200 indicators for an
+OLC, ~1000 for an OLSC, to reach 0.8) and carry pervasive negative weights, so the
+practical deliverable is a *model diagnostic*, not a scoring tool; ship the
+coefficient, not interpretive cutoffs. No new estimator/inference (SEs/CIs are
+author-flagged future work).
 
 ### Structural-model fit indices, tests, and CIs (two-step / SAM)
 
