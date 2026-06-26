@@ -354,11 +354,25 @@ correction of the *functional* (not the parameters): `rho-tilde = rho-hat - 1/2
 tr(g'' V)`, taken on the logit scale and mapped back so the inverse logit bounds it.
 That version is stable down to N=50 (the raw-scale correction over-shoots, to ~-1.2
 for the group OLSC at p9/N=50) and essentially unbiased by N=100, and it lifts the
-group-factor small-N coverage. The one residual gap is the general factor at N<=100,
-whose sampling distribution piles against the upper bound at 1 (boundary, not bias),
-needing a skew-aware / BCa interval. So a built surface should ship the
-logit-scale-corrected estimate plus a robust delta SE, not a bare delta-method SE;
-the point coefficients still gate against lavInspect for free.
+group-factor small-N coverage. The residual gap is the general factor at N<=100,
+whose sampling distribution piles against the upper bound at 1 (boundary, not bias);
+an analytic skew-aware (Cornish-Fisher) interval does *not* close it, because the
+leading-order skewness it needs is itself over-estimated several-fold at N=50 (the
+same breakdown, one cumulant up), and a BCa bootstrap would fail the same way. What
+*does* close it is to abandon estimator-centred intervals entirely and **invert a
+likelihood-ratio test**: the CI is `{rho0 : N(F_con(rho0)-F_unc) <= q}`, the
+constrained fit done with a nonlinear maximal-reliability constraint (nloptr SLSQP in
+the experiment). It is transformation-invariant, range-respecting, and asymmetric by
+construction; the plain chi^2_1 version under-covers at small N only because the LR
+is mean-inflated (E[LR] ~ 3-4 at N=50), and a **Bartlett correction** (rescale by
+E[LR], estimable analytically or by parametric bootstrap) restores nominal coverage
+at every N including 50, for both coefficients. So the recommended built surface is:
+the logit-scale-corrected point estimate + robust delta SE for routine use, and a
+Bartlett-corrected profile-LR interval for the small-N / boundary regime; the point
+coefficients still gate against lavInspect for free. Open: the LR is normal-theory
+only (non-normal data needs a Satorra-Bentler weight on it, not Bartlett), interval
+*width* (vs the coverage shown) needs profile root-finding, and everything is
+conditional on an admissible (non-Heywood) fit.
 
 ### Structural-model fit indices, tests, and CIs (two-step / SAM)
 

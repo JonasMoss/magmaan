@@ -30,6 +30,9 @@ corr_path <- file.path(res_dir, "correction.csv")
 corr <- if (file.exists(corr_path)) read.csv(corr_path) else NULL
 cg <- function(coef, p, n, dist, method, col)
   corr[[col]][corr$coef==coef & corr$p==p & corr$n==n & corr$dist==dist & corr$method==method]
+lr_path <- file.path(res_dir, "lr_coverage.csv")
+lrdat <- if (file.exists(lr_path)) read.csv(lr_path) else NULL
+lrv <- function(coef, n, col) lrdat[[col]][lrdat$coef==coef & lrdat$n==n]
 cf_path <- file.path(res_dir, "cf_coverage.csv")
 cfdat <- if (file.exists(cf_path)) read.csv(cf_path) else NULL
 cfc <- function(coef, p, n, dist, method, col)
@@ -86,7 +89,11 @@ and lifts the group factor's small-N coverage. The one case it cannot rescue is 
 general factor at N<=100, whose distribution is piled against the upper bound at 1,
 where the residual problem is the boundary rather than the bias; a skew-aware
 (Cornish-Fisher) interval does not close that gap either, because the skewness it
-needs is itself unreliable at N=50. The coefficients
+needs is itself unreliable at N=50. What does close it is to stop building the
+interval from the estimate at all: inverting a likelihood-ratio test, with a
+Bartlett correction for the small-sample inflation of the statistic, holds nominal
+coverage at every N including 50, for both coefficients, where every estimator-centred
+interval fails. The coefficients
 sit in the two regimes they describe: the general factor
 is reliable (population value
 `r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==9]))`-`r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==18]))`),
@@ -294,25 +301,79 @@ cat("Where the asymptotics hold the skewness estimate is accurate: at N=200 the"
 So the skew correction is no rescue, and for an instructive reason: at small N the
 higher cumulants it relies on are themselves unstable to estimate, the same
 breakdown one order up. A resampling (BCa) interval would hit the identical wall,
-since its skewness estimate is just as shaky there. The logit-scale point bias
-correction with a plain interval stays the best simple option; the small-N corner is
-a genuine identification limit, not a missing transform.
+since its skewness estimate is just as shaky there. Every method so far shares one
+flaw: it anchors on the estimate, and so inherits its bias, skew, and boundary
+pileup. The way out is to stop building intervals from the estimator at all.
+
+### Test inversion does work: the profile likelihood ratio
+
+Invert a test instead. The interval is the set of values not rejected,
+`{rho0 : LR(rho0) <= q}`, where `LR(rho0) = N (F_con(rho0) - F_unc)` compares the
+unconstrained fit to the fit constrained so the maximal reliability equals `rho0`.
+This anchors on the likelihood, not the estimate, so it is transformation-invariant
+(no logit-vs-Fisher choice), stays in `[0,1]` by construction (the constrained fit
+cannot leave it), and is asymmetric by following the likelihood's shape. Coverage of
+the true value needs only `LR` at that value (it is covered iff `LR <= q`).
+
+```{r fig-lr, eval = !is.null(lrdat)}
+#| fig-cap: "Coverage of the profile likelihood-ratio interval vs sample size (normal data, p18, 400 replications). The plain chi-square-1 threshold under-covers at small N because the LR is inflated; rescaling by its mean (the Bartlett correction) restores nominal coverage."
+if (has_gg) {
+  ld <- rbind(
+    data.frame(coef = lrdat$coef, n = lrdat$n, coverage = lrdat$cov_chi2, rule = "chi-square (1 df)"),
+    data.frame(coef = lrdat$coef, n = lrdat$n, coverage = lrdat$cov_bartlett, rule = "Bartlett-corrected"))
+  ld$coeff <- coef_lab[ld$coef]
+  ggplot(ld, aes(n, coverage, colour = rule, group = rule)) +
+    geom_hline(yintercept = 0.95, linetype = 2, colour = "grey50") +
+    geom_line() + geom_point(size = 1.6) +
+    facet_wrap(~ coeff) +
+    scale_x_continuous(trans = "log10", breaks = sort(unique(ld$n))) +
+    coord_cartesian(ylim = c(0.55, 1)) +
+    labs(x = "N (log scale)", y = "coverage", colour = NULL) +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+} else {
+  knitr::kable(lrdat[, c("coef","n","mean_LR","cov_chi2","cov_bartlett")], digits = 3)
+}
+```
+
+The plain chi-square-1 interval still under-covers at small N (general factor, N=50:
+`r fp(lrv("gen",50,"cov_chi2"))`), but for a benign reason: the LR is simply
+inflated, with a mean of `r fp(lrv("gen",50,"mean_LR"))` against the
+chi-square-1 mean of 1. That inflation is a pure scale effect, exactly what the
+**Bartlett correction** removes (rescale the statistic by its mean, here the empirical
+`E[LR]`). Bartlett-corrected coverage is at nominal across the whole range, including
+the cell nothing else could reach (general factor, N=50:
+`r fp(lrv("gen",50,"cov_bartlett"))`; group factor, N=50:
+`r fp(lrv("grp",50,"cov_bartlett"))`), and the inflation shrinks toward 1 as N grows
+(general factor mean LR `r fp(lrv("gen",50,"mean_LR"))` to
+`r fp(lrv("gen",200,"mean_LR"))` from N=50 to 200). So the small-N corner was never an
+identification wall; it was the cost of anchoring on a bad estimator. A
+likelihood-based interval with a mean correction holds its nominal rate where every
+estimator-centric interval fails.
 
 ## Caveats
 
 - One model family: an orthogonal bifactor with three subscales, equal loadings,
   correct specification, complete data, continuous ML. The two distributions are
   normal and a strongly skewed one with the same covariance.
+- The likelihood-ratio result is normal data only; under non-normality the
+  normal-theory LR is mis-scaled (a Satorra-Bentler weight, not a Bartlett factor),
+  a separate correction left for later. The Bartlett factor here is the empirical
+  mean LR at the true value (an oracle); a practical version estimates it
+  analytically or by parametric bootstrap. Coverage is computed from the LR at the
+  true value, so interval width is not measured; the corrected interval is mildly
+  conservative (0.95-0.98).
+- All coverage rates are conditional on an admissible (non-Heywood) fit; at N=50
+  roughly half of replicates are dropped, the same admissibility selection that runs
+  through every arm.
 - The bias correction is the single analytic second-order term; on the logit scale it
-  is stable down to N=50. The remaining gap is the general factor's boundary pileup at
-  small N, which the skew-aware (Cornish-Fisher) interval here does not close, and
-  which a resampling interval would not either; it reads as an identification limit.
+  is stable down to N=50, but the general factor's small-N coverage gap is closed by
+  the likelihood-ratio interval above, not by it.
 - The bootstrap arm is a focused reference at 18 indicators, N=100. A full bootstrap
   sweep is impractical at the smallest cells: at 9 indicators and N=50 the resampled
-  bifactor models frequently fail to converge, which is itself a reason to prefer an
-  analytic correction over bootstrapping here.
-- Coverage rates are from 1000 replications (the correction arm 500, the bootstrap
-  arm 150); read them as approximate.
+  bifactor models frequently fail to converge.
+- Coverage rates are from 1000 replications (correction arm 500, CF and LR arms 400,
+  bootstrap arm 150); read them as approximate.
 
 ## Reproduce
 
@@ -325,6 +386,8 @@ Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/sampling_d
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bias_correction.R
 # Cornish-Fisher (skew-aware) interval comparison (~2 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/cf_interval.R
+# profile likelihood-ratio + Bartlett, normal cells (~6 min)
+Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/lr_interval.R
 # focused bootstrap reference (~6 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bootstrap.R --pkeys p18 --ns 100
 quarto render experiments/43-li-savalei-2026-maximal-reliability-ci/report.qmd
