@@ -12,10 +12,11 @@
 #               (the empirical/oracle Bartlett factor; df=1 so the factor is E[LR])
 # and report the coverage of each plus the inflation c and the empirical 95th
 # percentile of LR (which would be 3.841 if chi^2_1 held exactly). For IG
-# non-normal observed indicators, the df=1 robust scale is estimated as
-# lambda = Var_robust(rho*) / Var_model(rho*) and the robust statistic is
-# LR / lambda; the "robust Bartlett" factor is the cell mean of that scaled
-# statistic.
+# non-normal observed indicators, the df=1 fixed-misspecification scale is
+# estimated as lambda = Var_observed-bread-sandwich(rho*) /
+# Var_observed-bread-quadratic(rho*), and the robust statistic is LR / lambda;
+# the "robust Bartlett" factor is the cell mean of that scaled statistic. The
+# older expected-bread ratio is retained only as a diagnostic.
 #
 # Usage:
 #   Rscript scripts/lr_interval.R [--reps 400] [--ns 50,100,200]
@@ -109,8 +110,20 @@ cell_draws <- function(pop, n, dist, seed0, reps) {
   })
 }
 
-# LR(rho*_true) and the df=1 robust scale for both coefficients on one dataset,
-# or NULL. The scale is the sandwich/model delta-variance ratio for rho*.
+observed_bread_vcov <- function(fit) {
+  info <- tryCatch(magmaan::magmaan_core$inference_information_observed_analytic(fit),
+                   error = function(e) NULL)
+  if (!is.matrix(info)) {
+    info <- tryCatch(magmaan::magmaan_core$inference_information_observed_fd(fit),
+                     error = function(e) NULL)
+  }
+  if (!is.matrix(info)) return(NULL)
+  solve((info + t(info)) / 2)
+}
+
+# LR(rho*_true) and the df=1 robust scales for both coefficients on one dataset,
+# or NULL. `lambda_misspec` uses the observed-bread profile quadratic in the
+# denominator, matching the fixed-misspecification profile-LRT reference law.
 lr_rep <- function(dat, n) {
   S <- stats::cov(dat) * (n - 1) / n
   logdetS <- as.numeric(determinant(S, logarithm = TRUE)$modulus)
@@ -122,13 +135,25 @@ lr_rep <- function(dat, n) {
                  error = function(e) NULL)
   Vr <- tryCatch(stats::vcov(fit, regime = "robust", data = dat),
                  error = function(e) NULL)
-  lambda <- c(gen = NA_real_, grp = NA_real_)
-  if (is.matrix(Vm) && is.matrix(Vr)) {
+  Vo <- tryCatch(observed_bread_vcov(fit), error = function(e) NULL)
+  lambda_expected <- c(gen = NA_real_, grp = NA_real_)
+  lambda_misspec <- c(gen = NA_real_, grp = NA_real_)
+  if (is.matrix(Vr)) {
     for (w in c("gen", "grp")) {
       g <- grad_rho(pt$est, pt, rebuild, pop, w)
-      vm <- as.numeric(crossprod(g, Vm %*% g))
       vr <- as.numeric(crossprod(g, Vr %*% g))
-      if (is.finite(vm) && vm > 0 && is.finite(vr) && vr > 0) lambda[[w]] <- vr / vm
+      if (is.matrix(Vm)) {
+        vm <- as.numeric(crossprod(g, Vm %*% g))
+        if (is.finite(vm) && vm > 0 && is.finite(vr) && vr > 0) {
+          lambda_expected[[w]] <- vr / vm
+        }
+      }
+      if (is.matrix(Vo)) {
+        vo <- as.numeric(crossprod(g, Vo %*% g))
+        if (is.finite(vo) && vo > 0 && is.finite(vr) && vr > 0) {
+          lambda_misspec[[w]] <- vr / vo
+        }
+      }
     }
   }
   m <- rebuild(pt$est)
@@ -142,7 +167,8 @@ lr_rep <- function(dat, n) {
       out[[length(out) + 1L]] <- data.frame(
         coef = w,
         LR = max(0, n * (con$F - unc$F)),
-        lambda = lambda[[w]],
+        lambda_expected = lambda_expected[[w]],
+        lambda_misspec = lambda_misspec[[w]],
         stringsAsFactors = FALSE)
     }
   }
@@ -157,27 +183,35 @@ q95 <- function(x) {
 }
 
 one_cell <- function(n, dist, seed0) {
-  LR <- list(gen = data.frame(LR = numeric(0), lambda = numeric(0)),
-             grp = data.frame(LR = numeric(0), lambda = numeric(0)))
+  LR <- list(gen = data.frame(LR = numeric(0), lambda_expected = numeric(0),
+                              lambda_misspec = numeric(0)),
+             grp = data.frame(LR = numeric(0), lambda_expected = numeric(0),
+                              lambda_misspec = numeric(0)))
   draws <- cell_draws(pop, n, dist, seed0, cfg$reps)
   for (r in seq_along(draws)) {
     v <- lr_rep(draws[[r]], n)
     if (is.null(v)) next
     for (w in c("gen", "grp")) {
-      ww <- v[v$coef == w & is.finite(v$LR), c("LR", "lambda"), drop = FALSE]
+      ww <- v[v$coef == w & is.finite(v$LR),
+              c("LR", "lambda_expected", "lambda_misspec"), drop = FALSE]
       if (nrow(ww)) LR[[w]] <- rbind(LR[[w]], ww)
     }
   }
   do.call(rbind, lapply(c("gen", "grp"), function(w) {
     x <- LR[[w]]
-    sc_ok <- is.finite(x$LR) & is.finite(x$lambda) & x$lambda > 0
-    scaled <- x$LR[sc_ok] / x$lambda[sc_ok]
+    exp_ok <- is.finite(x$LR) & is.finite(x$lambda_expected) & x$lambda_expected > 0
+    exp_scaled <- x$LR[exp_ok] / x$lambda_expected[exp_ok]
+    sc_ok <- is.finite(x$LR) & is.finite(x$lambda_misspec) & x$lambda_misspec > 0
+    scaled <- x$LR[sc_ok] / x$lambda_misspec[sc_ok]
     c_bart <- mean(x$LR)
     c_robust_bart <- mean(scaled)
     data.frame(p = pop$p, coef = w, dist = dist, n = n, reps_ok = nrow(x),
-      reps_scaled = sum(sc_ok),
+      reps_expected_scaled = sum(exp_ok), reps_scaled = sum(sc_ok),
       rho_pop = tgt[[w]], mean_LR = c_bart, q95_LR = q95(x$LR),
-      mean_lambda = mean(x$lambda[is.finite(x$lambda)]),
+      mean_lambda_expected = mean(x$lambda_expected[is.finite(x$lambda_expected)]),
+      mean_LR_scaled_expected = mean(exp_scaled),
+      cov_robust_expected = mean(exp_scaled <= q1),
+      mean_lambda = mean(x$lambda_misspec[is.finite(x$lambda_misspec)]),
       mean_LR_scaled = c_robust_bart,
       q95_LR_scaled = q95(scaled),
       cov_chi2 = mean(x$LR <= q1), cov_bartlett = mean(x$LR <= q1 * c_bart),
@@ -205,12 +239,13 @@ write_metadata(
     model = "orthogonal std.lv bifactor, 6 indicators/subscale (p18)",
     statistic = "profile LR = N (F_con(rho*_true) - F_unc), chi^2_1 reference",
     bartlett = "threshold q*c, c = cell-mean LR (empirical Bartlett factor, df=1)",
-    robust = "lambda = Var_robust(rho*) / Var_model(rho*); robust statistic LR/lambda",
+    robust = "lambda = Var_observed_bread_sandwich(rho*) / Var_observed_bread_quadratic(rho*); robust statistic LR/lambda",
     smoke = cfg$smoke),
   packages = "magmaan, nloptr")
 cat("\nProfile-LR coverage (nominal 0.95):\n")
 print(all_rows[order(all_rows$coef, all_rows$n),
-               c("coef","dist","n","reps_ok","mean_LR","mean_lambda","mean_LR_scaled",
-                 "cov_chi2","cov_bartlett","cov_robust","cov_robust_bartlett")],
+               c("coef","dist","n","reps_ok","mean_LR","mean_lambda_expected",
+                 "mean_lambda","mean_LR_scaled","cov_chi2","cov_bartlett",
+                 "cov_robust_expected","cov_robust","cov_robust_bartlett")],
       row.names = FALSE, digits = 3)
 cat("\nWrote ", file.path(res_dir, "lr_coverage.csv"), "\n", sep = "")
