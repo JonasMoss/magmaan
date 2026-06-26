@@ -268,6 +268,18 @@ For the unit-weight total score \(w=\mathbf{1}\), this collapses further:
     =
   1-\frac{\sum_i(S_{ii}-h_i)}{T}.
 \end{equation}
+Here \(h_i\) is the communality placed on item \(i\)'s diagonal in \(C\). For
+the Spearman-Harman/Guttman rule above, in the one-factor case,
+\[
+  h_i
+    =
+  S_{ii}{|P_i|}^{-1}\sum_{(j,\ell)\in P_i}
+    \frac{R_{ij}R_{i\ell}}{R_{j\ell}},
+  \qquad
+  P_i=\{(j,\ell):j<\ell,\ j\ne i,\ \ell\ne i\},
+\]
+with \(R_{ab}=S_{ab}/(S_{aa}S_{bb})^{1/2}\). Under an exact congeneric
+one-factor population, this population rule recovers \(h_i=\lambda_i^2\phi\).
 So the one-factor Guttman-derived omega is especially simple: replace each
 item variance by its Guttman communality, sum all entries, and divide by the
 observed total-score variance.
