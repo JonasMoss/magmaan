@@ -336,8 +336,22 @@ maximal reliability is the unexamined cell). Heed the paper's own discouragement
 group-factor composites are unreliable at realistic sizes (~200 indicators for an
 OLC, ~1000 for an OLSC, to reach 0.8) and carry pervasive negative weights, so the
 practical deliverable is a *model diagnostic*, not a scoring tool; ship the
-coefficient, not interpretive cutoffs. No new estimator/inference (SEs/CIs are
-author-flagged future work).
+coefficient, not interpretive cutoffs.
+
+**Inference is the open part, and `experiments/43-li-savalei-2026-maximal-reliability-ci`
+now scopes it.** The SEs/CIs the paper flags as future work are not free: over a
+1000-rep sweep of the correct orthogonal bifactor by ML, the textbook delta-method
+Wald CI is badly miscalibrated at realistic N (general-factor coverage falls to
+~0.40 at p=18, N=50), and two independent fixes are each needed: the sandwich `V`
+(`vcov(fit, regime="robust")`) for variance under-estimation (esp. under
+non-normality) and a logit-scale interval for the `[0,1]` boundary and the wild
+width at low `rho*`. Together they are the best *simple* interval (near-nominal by
+N~200 at p=9, N~500 at p=18), but the binding residual error is the positive bias
+of `rho*` itself (up to ~0.20 for the group OLSC at p=18, N=50; Aguirre-Urreta 2019
+carried into the bifactor coefficients), which no symmetric interval removes. So if
+this surface is built it must ship a *bias-aware* interval (bias-corrected estimate
+or a BCa-type bootstrap), not a bare delta-method SE. The point coefficients still
+gate against lavInspect for free; the inference is the genuine work.
 
 ### Structural-model fit indices, tests, and CIs (two-step / SAM)
 

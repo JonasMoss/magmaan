@@ -58,6 +58,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 40 | [guttman-cfa-asymptotics](40-guttman-cfa-asymptotics/report.qmd) | benchmark | active | How do Guttman's closed-form CFA estimates compare with NT/ULS/GLS/WLS in asymptotic variance and fixed-misspecification risk? |
 | 41 | [reliability-lambda6](41-reliability-lambda6/report.qmd) | benchmark | active | How do alpha, Guttman's lambda6, covariance omega, and fitted NT omega compare for total-score reliability under correct and misspecified one-factor summaries? |
 | 42 | [bell-omega-bias](42-bell-omega-bias/report.qmd) | benchmark | active | At Bell-style population moments, how biased is ordinary one-factor omega under misspecification for ML, ULS, GLS, and the Spearman-Guttman covariance form? |
+| 43 | [li-savalei-2026-maximal-reliability-ci](43-li-savalei-2026-maximal-reliability-ci/report.qmd) | replication | active | Can you put a trustworthy confidence interval around bifactor maximal reliability, the inference Li & Savalei (2026) leave open? |
 
 ## Archived
 

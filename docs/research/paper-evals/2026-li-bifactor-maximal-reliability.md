@@ -88,3 +88,11 @@ point ρ* and FD are nearly free and gate against lavInspect), OR an ordinal
 extension of the omega/reliability cluster. Cite as the correct-coefficient-H
 reference and for the OLC = regression-score = sqrt(FD) unification regardless of
 whether the layer is built.
+
+**Follow-up landed:** `experiments/43-li-savalei-2026-maximal-reliability-ci`
+addresses the SEs/CIs the paper leaves as future work. A 1000-rep ML coverage sweep
+shows the naive delta-method Wald CI under-covers (general-factor coverage ~0.40 at
+p=18, N=50), that a sandwich-`V` + logit-scale interval is the best simple fix, and
+that the binding residual error is the positive bias of `rho*` (up to ~0.20 for the
+group OLSC at small N; Aguirre-Urreta 2019 in the bifactor case), so any shipped
+interval must be bias-aware. Recorded in the speculative entry's inference note.
