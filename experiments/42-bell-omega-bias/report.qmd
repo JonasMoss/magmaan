@@ -57,6 +57,8 @@ tab <- data.frame(
   Target = fmt(display$true_reliability),
   Bias = fmt(display$bias),
   `Relative Bias` = pct(display$relative_bias),
+  `F` = fmt(display$population_discrepancy),
+  `RMSEA-like` = fmt(display$rmsea_like),
   check.names = FALSE
 )
 
@@ -64,8 +66,11 @@ ml_simple <- bias[bias$estimator == "ML" &
                     bias$denominator == "model_implied" &
                     bias$omega_variant == "omega_u_model_implied", ]
 sg <- bias[bias$estimator == "closed_form", ]
+fit_only <- focus[is.finite(focus$rmsea_like) &
+                    focus$denominator == "model_implied", ]
 worst_ml <- ml_simple[which.max(abs(ml_simple$bias)), ]
 worst_sg <- sg[which.max(abs(sg$bias)), ]
+worst_fit <- fit_only[which.max(fit_only$rmsea_like), ]
 one_factor_ml <- ml_simple[ml_simple$population == "one_factor", ]
 max_well_spec <- max(abs(one_factor_ml$bias), na.rm = TRUE)
 ```
@@ -93,10 +98,19 @@ logic: exact on the one-factor manifold, but its largest absolute bias here is
 `r fmt(worst_sg$bias)` in the `r worst_sg$population_label` /
 `r worst_sg$reliability_level` cell.
 
+The fit diagnostics tell the same broad story but should not be read as a clean
+ML-versus-ULS-versus-GLS ranking: the largest model-implied RMSEA-like value is
+`r fmt(worst_fit$rmsea_like)` for `r worst_fit$Estimator` in the
+`r worst_fit$population_label` / `r worst_fit$reliability_level` cell, using that
+estimator's own discrepancy scale.
+
 ## Evidence
 
 The table shows the low-reliability cells, where Bell et al. also report the
-largest misspecification effects. Bias is estimate minus Bell's target.
+largest misspecification effects. Bias is estimate minus Bell's target. `F` is
+the fitted discrepancy at population moments (`2 * fmin`), and `RMSEA-like` is
+`sqrt(F / df)`. Those two fit columns are within-discrepancy diagnostics, not
+cross-discrepancy evidence.
 
 ```{r}
 knitr::kable(tab, row.names = FALSE)
