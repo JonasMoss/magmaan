@@ -1,7 +1,8 @@
 #!/usr/bin/env Rscript
 # Bell et al. (2024)-style omega bias without finite-sample noise:
-# evaluate ordinary one-factor omega functionals directly at population
-# covariance matrices and subtract Bell's population reliability target.
+# evaluate omega functionals directly at population covariance matrices,
+# subtract Bell's population reliability target, and inspect a small
+# CFA model-set sensitivity coefficient for main-factor reliability.
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -22,9 +23,10 @@ usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [--results-dir DIR] [--smoke] [--help]\n",
     "\n",
-    "Population-moment Bell-style bias for ordinary one-factor omega. The\n",
-    "estimator functionals are evaluated at Bell-inspired population covariance\n",
-    "matrices; no finite-N simulation, SE, or coverage is computed.\n",
+    "Population-moment Bell-style bias for ordinary one-factor omega plus a\n",
+    "small CFA model-set sensitivity check for main-factor reliability. The\n",
+    "functionals are evaluated at Bell-inspired population covariance matrices;\n",
+    "no finite-N simulation, SE, or coverage is computed.\n",
     "\n",
     "Options:\n",
     "  --results-dir DIR  Output directory. Default: results.\n",
@@ -76,6 +78,74 @@ omega_model <- function(ov) {
   resid <- paste0(ov, " ~~ e", seq_len(p), "*", ov)
   paste(c(paste0("f =~ ", paste(loads, collapse = " + ")), resid),
         collapse = "\n")
+}
+
+blocks_for_p <- function(p) {
+  if (p == 8L) return(list(1:4, 5:8))
+  if (p == 12L) return(split(seq_len(p), rep(1:4, each = 3)))
+  stop("unsupported item count for CFA sensitivity blocks: ", p, call. = FALSE)
+}
+
+within_block_residual_lines <- function(ov, groups) {
+  out <- character()
+  for (b in seq_along(groups)) {
+    idx <- groups[[b]]
+    if (length(idx) < 2L) next
+    pairs <- utils::combn(idx, 2)
+    out <- c(out, apply(pairs, 2, function(z) {
+      paste0(ov[z[1L]], " ~~ c", b, "_", z[1L], "_", z[2L], "*", ov[z[2L]])
+    }))
+  }
+  out
+}
+
+omega_residual_block_model <- function(ov, groups = blocks_for_p(length(ov))) {
+  p <- length(ov)
+  loads <- paste0("l", seq_len(p), "*", ov)
+  resid <- paste0(ov, " ~~ e", seq_len(p), "*", ov)
+  paste(c(paste0("f =~ ", paste(loads, collapse = " + ")),
+          resid,
+          within_block_residual_lines(ov, groups)),
+        collapse = "\n")
+}
+
+bifactor_model <- function(ov, groups = blocks_for_p(length(ov))) {
+  p <- length(ov)
+  lines <- paste0("g =~ ", paste(paste0("l", seq_len(p), "*", ov),
+                                 collapse = " + "))
+  specific_names <- paste0("s", seq_along(groups))
+  for (b in seq_along(groups)) {
+    idx <- groups[[b]]
+    lines <- c(lines, paste0(
+      specific_names[b], " =~ ",
+      paste(paste0("a", b, "_", idx, "*", ov[idx]), collapse = " + ")))
+  }
+  lines <- c(lines, paste0("g ~~ 0*", specific_names))
+  if (length(specific_names) > 1L) {
+    lines <- c(lines, utils::combn(specific_names, 2, FUN = function(x)
+      paste0(x[1L], " ~~ 0*", x[2L])))
+  }
+  lines <- c(lines, paste0(ov, " ~~ e", seq_len(p), "*", ov))
+  paste(lines, collapse = "\n")
+}
+
+higher_order_model <- function(ov, groups = blocks_for_p(length(ov))) {
+  if (length(groups) < 3L) return(NULL)
+  lines <- character()
+  lower_names <- paste0("f", seq_along(groups))
+  for (b in seq_along(groups)) {
+    idx <- groups[[b]]
+    lines <- c(lines, paste0(
+      lower_names[b], " =~ ",
+      paste(paste0("a", idx, "*", ov[idx]), collapse = " + ")))
+  }
+  lines <- c(lines, paste0("h =~ ",
+                           paste(paste0("g", seq_along(groups), "*",
+                                        lower_names), collapse = " + ")))
+  lines <- c(lines, utils::combn(lower_names, 2, FUN = function(x)
+    paste0(x[1L], " ~~ 0*", x[2L])))
+  lines <- c(lines, paste0(ov, " ~~ e", seq_along(ov), "*", ov))
+  paste(lines, collapse = "\n")
 }
 
 sample_stats_from_cov <- function(Sigma, n = 1000000L) {
@@ -267,6 +337,106 @@ fit_omega_rows <- function(pop) {
   do.call(rbind, out)
 }
 
+cfa_candidates <- function(pop) {
+  ov <- colnames(pop$Sigma)
+  groups <- blocks_for_p(length(ov))
+  out <- list(
+    list(name = "one_factor", label = "One factor", kind = "one_factor",
+         syntax = omega_model(ov)),
+    list(name = "one_factor_residual_blocks",
+         label = "One factor + residual blocks", kind = "one_factor",
+         syntax = omega_residual_block_model(ov, groups)),
+    list(name = "bifactor_blocks", label = "Bifactor blocks",
+         kind = "bifactor", syntax = bifactor_model(ov, groups))
+  )
+  ho <- higher_order_model(ov, groups)
+  if (!is.null(ho)) {
+    out[[length(out) + 1L]] <- list(
+      name = "higher_order_blocks", label = "Higher-order blocks",
+      kind = "higher_order", syntax = ho)
+  }
+  out
+}
+
+loading_vector <- function(fit, lhs, ov) {
+  out <- setNames(rep(NA_real_, length(ov)), ov)
+  pt <- fit$partable
+  rows <- which(pt$lhs == lhs & pt$op == "=~" & pt$rhs %in% ov)
+  out[pt$rhs[rows]] <- pt$est[rows]
+  out
+}
+
+main_factor_coefficients <- function(fit, candidate, ov, groups) {
+  if (candidate$kind == "one_factor") {
+    return(loading_vector(fit, "f", ov))
+  }
+  if (candidate$kind == "bifactor") {
+    return(loading_vector(fit, "g", ov))
+  }
+  if (candidate$kind == "higher_order") {
+    out <- setNames(rep(NA_real_, length(ov)), ov)
+    pt <- fit$partable
+    lower_names <- paste0("f", seq_along(groups))
+    higher_rows <- which(pt$lhs == "h" & pt$op == "=~" &
+                           pt$rhs %in% lower_names)
+    higher <- setNames(pt$est[higher_rows], pt$rhs[higher_rows])
+    for (b in seq_along(groups)) {
+      lower <- lower_names[b]
+      idx <- groups[[b]]
+      out[ov[idx]] <- loading_vector(fit, lower, ov[idx]) * higher[[lower]]
+    }
+    return(out)
+  }
+  stop("unknown CFA sensitivity candidate kind: ", candidate$kind, call. = FALSE)
+}
+
+cfa_sensitivity_rows <- function(pop) {
+  ov <- colnames(pop$Sigma)
+  groups <- blocks_for_p(length(ov))
+  sample_stats <- sample_stats_from_cov(pop$Sigma)
+  out <- lapply(cfa_candidates(pop), function(candidate) {
+    fit <- tryCatch(
+      magmaan::magmaan(candidate$syntax, sample_stats, estimator = "ML",
+                       std_lv = TRUE),
+      error = function(e) e
+    )
+    if (inherits(fit, "error") || !isTRUE(fit$converged)) {
+      return(data.frame(
+        cfa_model = candidate$name,
+        cfa_model_label = candidate$label,
+        omega_main_observed = NA_real_,
+        bias = NA_real_,
+        abs_bias = NA_real_,
+        relative_bias = NA_real_,
+        df = NA_integer_,
+        population_discrepancy = NA_real_,
+        rmsea_like = NA_real_,
+        converged = FALSE,
+        stringsAsFactors = FALSE
+      ))
+    }
+    coeff <- main_factor_coefficients(fit, candidate, ov, groups)
+    numerator <- sum(coeff)^2
+    omega <- numerator / sum(pop$Sigma)
+    df <- magmaan_core$inference_df_stat(fit$partable, sample_stats)
+    discrepancy <- 2.0 * fit$fmin
+    data.frame(
+      cfa_model = candidate$name,
+      cfa_model_label = candidate$label,
+      omega_main_observed = omega,
+      bias = omega - pop$true_reliability,
+      abs_bias = abs(omega - pop$true_reliability),
+      relative_bias = (omega - pop$true_reliability) / pop$true_reliability,
+      df = df,
+      population_discrepancy = discrepancy,
+      rmsea_like = sqrt(max(0.0, discrepancy / df)),
+      converged = TRUE,
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, out)
+}
+
 populations <- make_populations()
 target_rows <- do.call(rbind, lapply(populations, function(pop) {
   data.frame(
@@ -320,6 +490,51 @@ summary <- do.call(rbind, lapply(split(rows, rows$population), function(d) {
 }))
 write_csv(summary, file.path(res_dir, "population_summary.csv"))
 
+cfa_rows <- do.call(rbind, lapply(populations, function(pop) {
+  x <- cfa_sensitivity_rows(pop)
+  x$population <- pop$name
+  x$population_label <- pop$label
+  x$reliability_level <- pop$reliability_level
+  x$p <- pop$p
+  x$true_reliability <- pop$true_reliability
+  x
+}))
+cfa_rows <- cfa_rows[, c("population", "population_label",
+                         "reliability_level", "p", "cfa_model",
+                         "cfa_model_label", "omega_main_observed",
+                         "true_reliability", "bias", "abs_bias",
+                         "relative_bias", "df", "population_discrepancy",
+                         "rmsea_like", "converged")]
+cfa_rows <- cfa_rows[order(cfa_rows$population, cfa_rows$reliability_level,
+                           cfa_rows$cfa_model), ]
+write_csv(cfa_rows, file.path(res_dir, "cfa_reliability.csv"))
+
+cfa_summary <- do.call(rbind, lapply(
+  split(cfa_rows, paste(cfa_rows$population, cfa_rows$reliability_level)),
+  function(d) {
+    ok <- d$converged & is.finite(d$omega_main_observed)
+    x <- d[ok, , drop = FALSE]
+    omega_range <- max(x$omega_main_observed) - min(x$omega_main_observed)
+    data.frame(
+      population = d$population[1L],
+      population_label = d$population_label[1L],
+      reliability_level = d$reliability_level[1L],
+      p = d$p[1L],
+      true_reliability = d$true_reliability[1L],
+      omega_min = min(x$omega_main_observed),
+      omega_max = max(x$omega_main_observed),
+      omega_range = omega_range,
+      min_abs_bias = min(x$abs_bias),
+      best_cfa_model = x$cfa_model_label[which.min(x$abs_bias)],
+      one_factor_bias = x$bias[x$cfa_model == "one_factor"][1L],
+      one_factor_rmsea_like = x$rmsea_like[x$cfa_model == "one_factor"][1L],
+      stringsAsFactors = FALSE
+    )
+  }))
+cfa_summary <- cfa_summary[order(cfa_summary$population,
+                                 cfa_summary$reliability_level), ]
+write_csv(cfa_summary, file.path(res_dir, "cfa_sensitivity_summary.csv"))
+
 write_metadata(
   file.path(res_dir, "metadata.csv"),
   values = list(
@@ -330,6 +545,7 @@ write_metadata(
     estimators = "ML, ULS, GLS, plus closed-form Spearman-Guttman covariance omega",
     denominators = "model-implied total variance and observed/population total variance",
     fit_indices = "for fitted models only: population_discrepancy = 2*fmin; rmsea_like = sqrt(population_discrepancy / df), not comparable across ML/ULS/GLS scales",
+    cfa_sensitivity = "ML CFA model set; omega_main_observed = one' C_main(theta_hat) one / one' S one; cfa_sensitivity_summary reports omega range over candidate models",
     smoke = cfg$smoke,
     results_dir = res_dir
   ),

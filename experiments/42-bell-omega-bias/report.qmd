@@ -15,6 +15,8 @@ params:
 ```{r}
 res_dir <- params$results_dir
 needed <- file.path(res_dir, c("omega_bias.csv", "population_targets.csv",
+                               "cfa_reliability.csv",
+                               "cfa_sensitivity_summary.csv",
                                "metadata.csv"))
 if (!all(file.exists(needed))) {
   stop("Missing result files. Run: Rscript experiments/42-bell-omega-bias/run_experiment.R",
@@ -22,6 +24,8 @@ if (!all(file.exists(needed))) {
 }
 bias <- read.csv(file.path(res_dir, "omega_bias.csv"))
 targets <- read.csv(file.path(res_dir, "population_targets.csv"))
+cfa <- read.csv(file.path(res_dir, "cfa_reliability.csv"))
+cfa_summary <- read.csv(file.path(res_dir, "cfa_sensitivity_summary.csv"))
 metadata <- read.csv(file.path(res_dir, "metadata.csv"))
 meta <- setNames(metadata$value, metadata$key)
 fmt <- function(x, digits = 3) {
@@ -73,6 +77,27 @@ worst_sg <- sg[which.max(abs(sg$bias)), ]
 worst_fit <- fit_only[which.max(fit_only$rmsea_like), ]
 one_factor_ml <- ml_simple[ml_simple$population == "one_factor", ]
 max_well_spec <- max(abs(one_factor_ml$bias), na.rm = TRUE)
+cfa_summary$Reliability <- tools::toTitleCase(cfa_summary$reliability_level)
+cfa_summary$Population <- cfa_summary$population_label
+cfa_low <- cfa_summary[cfa_summary$reliability_level == "low", ]
+cfa_low <- cfa_low[order(cfa_low$population), ]
+cfa_tab <- data.frame(
+  Population = cfa_low$Population,
+  p = cfa_low$p,
+  Target = fmt(cfa_low$true_reliability),
+  `One-factor bias` = fmt(cfa_low$one_factor_bias),
+  `One-factor RMSEA-like` = fmt(cfa_low$one_factor_rmsea_like),
+  `Omega range` = fmt(cfa_low$omega_range),
+  `Best CFA model` = cfa_low$best_cfa_model,
+  `Best abs. bias` = fmt(cfa_low$min_abs_bias),
+  check.names = FALSE
+)
+cfa_correct <- cfa_summary[cfa_summary$population == "one_factor", ]
+cfa_misspec <- cfa_summary[cfa_summary$population != "one_factor", ]
+max_cfa_range_correct <- max(cfa_correct$omega_range, na.rm = TRUE)
+min_cfa_range_misspec <- min(cfa_misspec$omega_range, na.rm = TRUE)
+max_cfa_range_misspec <- max(cfa_misspec$omega_range, na.rm = TRUE)
+best_cfa <- cfa_summary[which.min(cfa_summary$min_abs_bias), ]
 ```
 
 ## Question
@@ -104,6 +129,63 @@ ML-versus-ULS-versus-GLS ranking: the largest model-implied RMSEA-like value is
 `r worst_fit$population_label` / `r worst_fit$reliability_level` cell, using that
 estimator's own discrepancy scale.
 
+The CFA model-set check is more directly about reliability than ordinary
+fit. The omega range across candidate CFA specifications is at most
+`r fmt(max_cfa_range_correct, 4)` in the correctly specified one-factor cells,
+but ranges from `r fmt(min_cfa_range_misspec)` to
+`r fmt(max_cfa_range_misspec)` in the misspecified cells. When the candidate set
+contains a model that isolates the generating main factor, the best CFA bias is
+numerically zero; the low-reliability correlated-errors cell is the exception in
+this first implementation, with best absolute bias
+`r fmt(cfa_summary$min_abs_bias[cfa_summary$population == "correlated_errors" &
+                                cfa_summary$reliability_level == "low"])`.
+
+## CFA Reliability Functional
+
+Let \(S\) be the population covariance matrix used as sample covariance in this
+experiment and let \(w = \mathbf 1_p\) form the unit-weighted total score. For a
+candidate CFA model \(M\), fit the model at \(S\) and let
+\(\hat\theta_M = \arg\min_{\theta \in M} F_{\text{ML}}(S, \Sigma(\theta))\).
+Write \(C_g(\hat\theta_M)\) for the covariance contribution of the declared
+main factor \(g\). The CFA-specific reliability coefficient used here is
+
+\[
+\omega_g^{\text{obs}}(M)
+  =
+  \frac{w^\top C_g(\hat\theta_M) w}{w^\top S w}.
+\]
+
+For the one-factor and bifactor candidates,
+\(C_g(\hat\theta_M)=\lambda_g\lambda_g^\top\), because the main factor is
+standardized. For the higher-order candidate, the item coefficients on the
+higher-order factor are indirect: if \(\Lambda\) contains item loadings on the
+first-order factors and \(\gamma\) contains first-order loadings on the
+higher-order factor, then
+\(C_g(\hat\theta_M)=(\Lambda\gamma)(\Lambda\gamma)^\top\).
+
+Against Bell et al.'s target reliability
+\(\omega_{\text{Bell}} = w^\top C_{\text{gen}} w / w^\top S w\), the
+population bias for candidate \(M\) is
+
+\[
+b_g(M) = \omega_g^{\text{obs}}(M) - \omega_{\text{Bell}}.
+\]
+
+The model-set sensitivity diagnostic is just the range of that coefficient over
+a small CFA set \(\mathcal M\):
+
+\[
+R_\omega(\mathcal M)
+  =
+  \max_{M \in \mathcal M}\omega_g^{\text{obs}}(M)
+  -
+  \min_{M \in \mathcal M}\omega_g^{\text{obs}}(M).
+\]
+
+This is not a new fit index. It asks whether plausible CFA ways of protecting a
+declared main factor produce materially different main-factor reliability
+claims.
+
 ## Evidence
 
 The table shows the low-reliability cells, where Bell et al. also report the
@@ -116,8 +198,18 @@ cross-discrepancy evidence.
 knitr::kable(tab, row.names = FALSE)
 ```
 
-The full population-moment table, including high-reliability cells, is in
-`r file.path(res_dir, "omega_bias.csv")`.
+The next table uses the CFA functional above. `Omega range` is
+\(R_\omega(\mathcal M)\) over the candidate set: one factor, one factor with
+within-block residual covariances, bifactor blocks, and for p=12 also
+higher-order blocks.
+
+```{r}
+knitr::kable(cfa_tab, row.names = FALSE)
+```
+
+The full population-moment tables, including high-reliability cells, are in
+`r file.path(res_dir, "omega_bias.csv")` and
+`r file.path(res_dir, "cfa_reliability.csv")`.
 
 ## Caveats
 
@@ -126,9 +218,15 @@ replacement loop, no standard errors, and no coverage. The experiment asks only
 what Bell's bias definition becomes after sample noise is removed.
 
 The population values are Bell-inspired p=8 cells plus the p=12 higher-order
-cell from their loading table. The fitted model is deliberately the ordinary
-one-factor model with independent residuals; bifactor omega-hierarchical and
-one-factor models with freed residual covariances are outside this first slice.
+cell from their loading table.
+
+The CFA sensitivity section is not an identified bias estimator. It depends on
+the candidate model set and on which factor is declared to be the main factor.
+The residual-block model is deliberately flexible: in these toy populations it
+can reproduce some bifactor or higher-order nuisance covariance while preserving
+the total-score contribution attributed to the main factor. That is useful as a
+diagnostic, but it is not proof that the fitted model has recovered the
+substantive factor.
 
 ## Reproduce
 
