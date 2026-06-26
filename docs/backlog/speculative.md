@@ -256,6 +256,44 @@ rotational-indeterminacy caveat the authors flag for EFA solutions, which would
 need its own convention. Research-tier benchmark cutoffs (Nye et al. 2019) carry
 their own validation burden; do not ship interpretive thresholds as core.
 
+### Model-based omega (omega_u / omega_H / omega_ho) reliability
+
+A `measures::frontier` post-fit surface for the CFA-parameter forms of coefficient
+omega: omega-unidimensional `omega_u = (1' Lambda)^2 / sigma_X^2` off a one-factor
+fit, omega-hierarchical `omega_H` off a bifactor fit (general-factor loadings in
+the numerator), and omega-higher-order `omega_ho` off a higher-order fit
+(`lambda_jk * gamma_k` products), with sigma_X^2 either model-implied (`1' Sigma-hat 1`)
+or observed (`1' S 1`), plus delta-method SEs reusing the gradient-times-Gamma
+path. Bell, Chalmers & Flora (2024, *EPM* 84:1, 5-39; PDF in `external/refs/`,
+eval in
+[paper-evals](../research/paper-evals/2024-bell-omega-misspecification.md)) is the
+recent oracle for the bias-under-misspecification story: omega_u is strongly
+positively biased when error correlations are ignored or the population is
+multidimensional, omega_H stays nearly unbiased even when the bifactor model is
+itself wrong, the model-implied-vs-observed denominator choice barely matters, and
+fit indices only weakly track omega bias. This is the CFA-parameter object, distinct
+from the S-based coefficients (alpha, Guttman lambda6, Spearman-Guttman omega) in the
+in-flight `measures::frontier::reliability` module, and the same object as the exp-20
+omega-alpha thread in [todo.md](todo.md) (omega from a one-factor ML fit, alpha = omega
+of a ULS tau-equivalent fit) and the roadmap `infer_gamma_nt` omega.
+
+**Alternative already available.** magmaan already produces every input from a fitted
+CFA (`Lambda`, model-implied `Sigma-hat`), so omega_u / omega_H are a one-liner over a
+`ModelEvaluator`; semTools::reliability is the parity oracle on a lavaan refit. The
+S-based glb-family coefficients (in flight) and the exp-20 omega-alpha difference test
+cover the adjacent reliability questions.
+
+**Build if.** A paper row or methods workflow needs model-based omega reported on a
+magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a
+misspecification-bias study replicating Bell. The genuinely novel cell is the ordinal
+one: Bell uses continuous normal data only and explicitly leaves polychoric-CFA omega
+under misspecification (scaled into the observed total-score metric, Green-Yang 2009b /
+Flora 2020) and omega_ho finite-sample behavior unexamined; magmaan's ordinal/DWLS/sim
+stack makes that an author-flagged gap. Note this is *structural-form* misspecification
+biasing a point estimate, orthogonal to the distributional/weight misspecification of
+the [[misspec-robust-se-weight-influence]] / `papers/estimated-weight-se` SE track;
+do not fold the two together. Research-tier interpretive cutoffs are not core.
+
 ### Structural-model fit indices, tests, and CIs (two-step / SAM)
 
 A `measures::frontier` post-fit surface that evaluates the fit of *just the

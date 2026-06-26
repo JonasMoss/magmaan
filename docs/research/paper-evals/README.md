@@ -66,3 +66,4 @@ complete eval.
 | 2026-06-25 | [Zhang & Wu 2024](2024-zhang-structural-model-fit.md) | Structural-model fit: corrected χ²/RMSEA/CFI/SRMR + CIs via two-step | → speculative |
 | 2026-06-25 | [Dhaene & Rosseel 2023](2023-dhaene-noniterative-sam.md) | Non-iterative step-1 estimators in SAM; estimator choice barely matters | → speculative (folds into SAM) |
 | 2026-06-25 | [De Jonckere & Rosseel 2023](2023-dejonckere-model-based-shrinkage-target.md) | Model-based covariance-shrinkage target for small-N nonconvergence | → speculative (penalized-ML alternative) |
+| 2026-06-26 | [Bell, Chalmers & Flora 2024](2024-bell-omega-misspecification.md) | Bias of model-based omega (omega_u / omega_H) under structural misspecification | → speculative (model-based omega) |
