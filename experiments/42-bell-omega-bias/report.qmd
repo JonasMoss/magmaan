@@ -17,6 +17,7 @@ res_dir <- params$results_dir
 needed <- file.path(res_dir, c("omega_bias.csv", "population_targets.csv",
                                "cfa_reliability.csv",
                                "cfa_sensitivity_summary.csv",
+                               "congeneric_diagnostics.csv",
                                "metadata.csv"))
 if (!all(file.exists(needed))) {
   stop("Missing result files. Run: Rscript experiments/42-bell-omega-bias/run_experiment.R",
@@ -26,6 +27,7 @@ bias <- read.csv(file.path(res_dir, "omega_bias.csv"))
 targets <- read.csv(file.path(res_dir, "population_targets.csv"))
 cfa <- read.csv(file.path(res_dir, "cfa_reliability.csv"))
 cfa_summary <- read.csv(file.path(res_dir, "cfa_sensitivity_summary.csv"))
+congeneric <- read.csv(file.path(res_dir, "congeneric_diagnostics.csv"))
 metadata <- read.csv(file.path(res_dir, "metadata.csv"))
 meta <- setNames(metadata$value, metadata$key)
 fmt <- function(x, digits = 3) {
@@ -98,6 +100,40 @@ max_cfa_range_correct <- max(cfa_correct$omega_range, na.rm = TRUE)
 min_cfa_range_misspec <- min(cfa_misspec$omega_range, na.rm = TRUE)
 max_cfa_range_misspec <- max(cfa_misspec$omega_range, na.rm = TRUE)
 best_cfa <- cfa_summary[which.min(cfa_summary$min_abs_bias), ]
+cong_low <- congeneric[congeneric$reliability_level == "low", ]
+cong_low <- cong_low[order(cong_low$population), ]
+cong_low <- merge(
+  cong_low,
+  cfa_summary[, c("population", "reliability_level",
+                  "one_factor_rmsea_like", "one_factor_bias")],
+  by = c("population", "reliability_level"),
+  all.x = TRUE,
+  sort = FALSE
+)
+cong_low <- cong_low[order(cong_low$population), ]
+cong_tab <- data.frame(
+  Population = cong_low$population_label,
+  p = cong_low$p,
+  Target = fmt(cong_low$true_reliability),
+  `One-factor bias` = fmt(cong_low$one_factor_bias),
+  `One-factor RMSEA-like` = fmt(cong_low$one_factor_rmsea_like),
+  `Tetrad RMS` = fmt(cong_low$tetrad_rms),
+  `h rel. RMS` = fmt(cong_low$h_relative_rms),
+  `SG offdiag err.` = fmt(cong_low$sg_offdiag_abs_share),
+  `SG - alpha` = fmt(cong_low$sg_minus_alpha),
+  check.names = FALSE
+)
+cong_correct <- congeneric[congeneric$population == "one_factor", ]
+cong_misspec <- congeneric[congeneric$population != "one_factor", ]
+max_h_correct <- max(cong_correct$h_relative_rms, na.rm = TRUE)
+min_h_misspec <- min(cong_misspec$h_relative_rms, na.rm = TRUE)
+max_h_misspec <- max(cong_misspec$h_relative_rms, na.rm = TRUE)
+max_tetrad_correct <- max(cong_correct$tetrad_rms, na.rm = TRUE)
+min_tetrad_misspec <- min(cong_misspec$tetrad_rms, na.rm = TRUE)
+max_tetrad_misspec <- max(cong_misspec$tetrad_rms, na.rm = TRUE)
+min_sg_off_misspec <- min(cong_misspec$sg_offdiag_abs_share, na.rm = TRUE)
+max_sg_off_misspec <- max(cong_misspec$sg_offdiag_abs_share, na.rm = TRUE)
+max_sg_alpha_correct <- max(abs(cong_correct$sg_minus_alpha), na.rm = TRUE)
 ```
 
 ## Question
@@ -139,6 +175,81 @@ numerically zero; the low-reliability correlated-errors cell is the exception in
 this first implementation, with best absolute bias
 `r fmt(cfa_summary$min_abs_bias[cfa_summary$population == "correlated_errors" &
                                 cfa_summary$reliability_level == "low"])`.
+
+The cleaner diagnostic is to test the congeneric identities themselves. On the
+correlation scale, the correctly specified one-factor cells have
+Spearman/Guttman $h$-dispersion at most `r fmt(max_h_correct, 4)` and tetrad
+RMS at most `r fmt(max_tetrad_correct, 4)`. The misspecified cells have
+$h$-dispersion from `r fmt(min_h_misspec)` to `r fmt(max_h_misspec)`, tetrad
+RMS from `r fmt(min_tetrad_misspec)` to `r fmt(max_tetrad_misspec)`, and
+Spearman/Guttman rank-one off-diagonal error from
+`r fmt(min_sg_off_misspec)` to `r fmt(max_sg_off_misspec)`. The gap between
+Spearman/Guttman omega and alpha is not a congeneric diagnostic: it is already
+as large as `r fmt(max_sg_alpha_correct)` in the correctly specified congeneric
+cells because alpha is sensitive to unequal loadings.
+
+## Congeneric Diagnostics
+
+A one-factor congeneric correlation model with independent errors has
+
+$$
+R = aa^\top + \Psi,\qquad \Psi\ \text{diagonal},
+$$
+
+so every off-diagonal correlation satisfies $r_{ij}=a_i a_j$. This gives
+diagnostics that do not require Bell's generating reliability target.
+
+First, every tetrad must vanish. For each quadruple $i,j,\ell,m$, the three
+off-diagonal products $r_{ij}r_{\ell m}$, $r_{i\ell}r_{jm}$, and
+$r_{im}r_{j\ell}$ must be equal. The report uses their root-mean-square
+difference, $D_\tau$, on the correlation scale.
+
+Second, the Spearman/Guttman communality for item $i$ should not depend on
+which two other items are used as anchors. Define
+$\mathcal P_i=\{\{j,\ell\}: j<\ell,\ j\ne i,\ \ell\ne i\}$, where
+$|\mathcal P_i|={p-1\choose 2}$, and
+
+$$
+h_{i;j\ell} = \frac{r_{ij}r_{i\ell}}{r_{j\ell}}.
+$$
+
+Under the congeneric model, $h_{i;j\ell}=a_i^2$ for every
+$\{j,\ell\}\in\mathcal P_i$. Let
+
+$$
+\bar h_i =
+\frac{1}{|\mathcal P_i|}
+\sum_{\{j,\ell\}\in\mathcal P_i} h_{i;j\ell}.
+$$
+
+The $h$-dispersion diagnostic is
+
+$$
+D_h =
+\left[
+\frac{\sum_i\sum_{\{j,\ell\}\in\mathcal P_i}
+(h_{i;j\ell}-\bar h_i)^2}
+{\sum_i |\mathcal P_i|\,\bar h_i^2}
+\right]^{1/2}.
+$$
+
+This is the Guttman-derived check that seems most useful here: the old
+Spearman/Guttman omega averages the $h_{i;j\ell}$'s, while $D_h$ asks
+whether those anchor-specific values agree enough for a congeneric
+interpretation.
+
+Finally, define $\tilde a_i=\operatorname{sign}(\sum_{j\ne i} r_{ij})
+\sqrt{\max(\bar h_i,0)}$. The normalized Spearman/Guttman rank-one
+off-diagonal error is
+
+$$
+D_{\text{SG-off}} =
+\frac{\sum_{i<j}|r_{ij}-\tilde a_i\tilde a_j|}
+{\sum_{i<j}|r_{ij}|}.
+$$
+
+This is less fundamental than tetrads or $h$-dispersion, but it puts the
+violation on an inter-item-correlation scale.
 
 ## CFA Reliability Functional
 
@@ -207,9 +318,17 @@ higher-order blocks.
 knitr::kable(cfa_tab, row.names = FALSE)
 ```
 
+The next table uses the congeneric diagnostics. `h rel. RMS` is $D_h$, and
+`SG offdiag err.` is $D_{\text{SG-off}}$.
+
+```{r}
+knitr::kable(cong_tab, row.names = FALSE)
+```
+
 The full population-moment tables, including high-reliability cells, are in
-`r file.path(res_dir, "omega_bias.csv")` and
-`r file.path(res_dir, "cfa_reliability.csv")`.
+`r file.path(res_dir, "omega_bias.csv")`,
+`r file.path(res_dir, "cfa_reliability.csv")`, and
+`r file.path(res_dir, "congeneric_diagnostics.csv")`.
 
 ## Caveats
 
@@ -227,6 +346,12 @@ can reproduce some bifactor or higher-order nuisance covariance while preserving
 the total-score contribution attributed to the main factor. That is useful as a
 diagnostic, but it is not proof that the fitted model has recovered the
 substantive factor.
+
+The congeneric diagnostics are also descriptive, not sampling-calibrated tests.
+They use the sample or population correlation matrix directly. They say how
+strongly the covariance structure violates one-factor congeneric identities, not
+how large the resulting reliability bias must be for a particular substantive
+target.
 
 ## Reproduce
 
