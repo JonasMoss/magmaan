@@ -69,10 +69,15 @@ build_matrix_rep(const spec::LatentStructure& pt,
   out.cell_for_row.resize(pt.size());
   out.form = decide_form(pt);
 
-  const std::size_t nb = static_cast<std::size_t>(pt.n_groups());
+  // One block per (group, level): n_blocks() == n_groups()*n_levels(), which
+  // collapses to n_groups() for single-level models (every `block_info` then
+  // tagged `Single`, byte-identical to the pre-multilevel layout).
+  const std::int32_t n_levels = pt.n_levels();
+  const std::size_t nb = static_cast<std::size_t>(pt.n_blocks());
   out.dims.resize(nb);
   out.ov_names.resize(nb);
   out.lv_names.resize(nb);
+  out.block_info.resize(nb);
 
   // The canonical orderings + classification are precomputed by lavaanify and
   // ride on the partable's variable inventory — matrix_rep no longer re-derives
@@ -92,6 +97,21 @@ build_matrix_rep(const spec::LatentStructure& pt,
     out.lv_names[b] = lv_names_b;
     out.dims[b] = BlockDims{static_cast<std::int16_t>(pt.ov_order.size()),
                             static_cast<std::int16_t>(pt.lv_ext_order.size())};
+    // Map the 0-based block index back to its (group, level) coordinates. lavaan
+    // orders blocks `(group-1)*n_levels + level` (1-based), so the 0-based block
+    // `b` has group = b / n_levels and level = b % n_levels (both 0-based).
+    // Single-level (n_levels == 1): every block is `Single` with level 0, the
+    // pre-multilevel behavior. Two-level: level 0 = within, level 1 = between.
+    // The estimation core pairs a group's within/between blocks via
+    // `level_block_pairs`.
+    const std::int16_t grp =
+        static_cast<std::int16_t>(static_cast<std::int32_t>(b) / n_levels);
+    const std::int16_t lvl =
+        static_cast<std::int16_t>(static_cast<std::int32_t>(b) % n_levels);
+    const BlockLevel role = (n_levels <= 1)        ? BlockLevel::Single
+                            : (lvl == 0)           ? BlockLevel::Within
+                                                   : BlockLevel::Between;
+    out.block_info[b] = BlockInfo{grp, lvl, role};
   }
 
   // Phantom-Λ structural identity cells per block: every variable promoted
@@ -134,7 +154,9 @@ build_matrix_rep(const spec::LatentStructure& pt,
 
     const std::int32_t L = pt.lhs_var[i];
     const std::int32_t R = pt.rhs_var[i];
-    Cell c; c.block = static_cast<std::int8_t>(pt.group[i] - 1);  // 1-based → 0-based
+    // 1-based lavaan block (group,level) → 0-based cell block. Collapses to
+    // (group - 1) for single-level models, so single-level cells are unchanged.
+    Cell c; c.block = static_cast<std::int8_t>(pt.block_of(i) - 1);
 
     auto unknown_var = [&](std::int32_t v) {
       return std::unexpected(make_err(ModelError::Kind::UnknownVariable,
@@ -236,6 +258,22 @@ build_matrix_rep(const spec::LatentStructure& pt,
   }
 
   return out;
+}
+
+std::vector<LevelBlockPair> level_block_pairs(const MatrixRep& rep) {
+  std::vector<LevelBlockPair> pairs;
+  for (std::size_t b = 0; b < rep.block_info.size(); ++b) {
+    const BlockInfo& bi = rep.block_info[b];
+    const std::size_t g = static_cast<std::size_t>(bi.group);
+    if (g >= pairs.size()) pairs.resize(g + 1);
+    if (bi.role == BlockLevel::Between) {
+      pairs[g].between = static_cast<std::int32_t>(b);
+    } else {
+      // `Single` and `Within` both occupy the within slot.
+      pairs[g].within = static_cast<std::int32_t>(b);
+    }
+  }
+  return pairs;
 }
 
 }  // namespace magmaan::model

@@ -13,6 +13,7 @@
 
 #include <Eigen/Core>
 
+#include "magmaan/data/cluster_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
@@ -110,23 +111,27 @@ enum class DataKind : std::uint8_t {
   RawContinuous,
   Ordinal,
   MixedOrdinal,
+  ClusterStats,  // two-level (multilevel) sufficient statistics
 };
 
 class Data {
 public:
-  using Storage = std::variant<data::SampleStats, data::RawData,
-                               data::OrdinalStats, data::MixedOrdinalStats>;
+  using Storage =
+      std::variant<data::SampleStats, data::RawData, data::OrdinalStats,
+                   data::MixedOrdinalStats, data::ClusterSampleStats>;
 
   static Data from_sample_stats(data::SampleStats stats);
   static Data from_raw(data::RawData raw);
   static Data from_ordinal(data::OrdinalStats stats);
   static Data from_mixed_ordinal(data::MixedOrdinalStats stats);
+  static Data from_cluster_stats(data::ClusterSampleStats stats);
 
   DataKind kind() const noexcept;
   const data::SampleStats *sample_stats() const noexcept;
   const data::RawData *raw() const noexcept;
   const data::OrdinalStats *ordinal() const noexcept;
   const data::MixedOrdinalStats *mixed_ordinal() const noexcept;
+  const data::ClusterSampleStats *cluster_stats() const noexcept;
 
 private:
   explicit Data(Storage storage);
@@ -139,6 +144,15 @@ Result<Data> data_from_raw(const Model &, data::RawData raw);
 Result<Data> data_from_ordinal(const Model &, data::OrdinalStats stats);
 Result<Data> data_from_mixed_ordinal(const Model &,
                                      data::MixedOrdinalStats stats);
+// Two-level (multilevel) clustered data. `data_from_cluster_stats` wraps
+// already-built sufficient statistics; `data_from_cluster` builds them from
+// clustered raw data via data::cluster_sample_stats (v1: a single group, a
+// shared observed variable set, and `raw` columns already in MatrixRep ov
+// order — `cluster_id[r]` is the 0-based cluster of raw row r).
+Result<Data> data_from_cluster_stats(const Model &,
+                                     data::ClusterSampleStats stats);
+Result<Data> data_from_cluster(const Model &model, data::RawData raw,
+                               std::vector<std::int32_t> cluster_id);
 // Frontier (research / non-lavaan) data builders. No deprecation-cycle
 // promise; see docs/design/ideas.md for the core/frontier tier model.
 namespace frontier {
@@ -227,6 +241,7 @@ enum class EstimatorKind : std::uint8_t {
   GLS,
   WLS,
   DWLS,
+  TwoLevelML,   // two-level (multilevel) normal-theory ML; see estimate::twolevel
 };
 
 struct EstimatorSpec {
@@ -257,6 +272,7 @@ EstimatorSpec wls(estimate::gmm::Weight weight);
 EstimatorSpec ordinal_dwls();
 EstimatorSpec ordinal_wls();
 EstimatorSpec dwls();
+EstimatorSpec twolevel_ml();
 
 enum class InformationKind : std::uint8_t {
   Expected,
