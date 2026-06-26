@@ -218,6 +218,9 @@ fit_omega_rows <- function(pop) {
           omega_variant = paste0("omega_u_", denom),
           denominator = denom,
           estimate = NA_real_,
+          df = NA_integer_,
+          population_discrepancy = NA_real_,
+          rmsea_like = NA_real_,
           converged = FALSE,
           stringsAsFactors = FALSE
         )
@@ -228,6 +231,9 @@ fit_omega_rows <- function(pop) {
     loadings <- fit$partable$est[fit$partable$op == "=~"]
     numerator <- sum(loadings)^2
     implied <- magmaan_core$model_implied(fit)$sigma[[1L]]
+    df <- magmaan_core$inference_df_stat(fit$partable, sample_stats)
+    discrepancy <- 2.0 * fit$fmin
+    rmsea_like <- sqrt(max(0.0, discrepancy / df))
     denominators <- c(model_implied = sum(implied),
                       observed_total = sum(pop$Sigma))
     for (denom in names(denominators)) {
@@ -236,6 +242,9 @@ fit_omega_rows <- function(pop) {
         omega_variant = paste0("omega_u_", denom),
         denominator = denom,
         estimate = numerator / denominators[[denom]],
+        df = df,
+        population_discrepancy = discrepancy,
+        rmsea_like = rmsea_like,
         converged = TRUE,
         stringsAsFactors = FALSE
       )
@@ -249,6 +258,9 @@ fit_omega_rows <- function(pop) {
     omega_variant = "spearman_guttman_covariance_omega",
     denominator = "observed_total",
     estimate = as.numeric(sg$value),
+    df = NA_integer_,
+    population_discrepancy = NA_real_,
+    rmsea_like = NA_real_,
     converged = TRUE,
     stringsAsFactors = FALSE
   )
@@ -286,7 +298,7 @@ rows <- do.call(rbind, lapply(populations, function(pop) {
 rows <- rows[, c("population", "population_label", "reliability_level", "p",
                  "estimator", "omega_variant", "denominator", "estimate",
                  "true_reliability", "bias", "abs_bias", "relative_bias",
-                 "converged")]
+                 "df", "population_discrepancy", "rmsea_like", "converged")]
 rows <- rows[order(rows$population, rows$reliability_level, rows$estimator,
                    rows$omega_variant), ]
 write_csv(rows, file.path(res_dir, "omega_bias.csv"))
@@ -317,6 +329,7 @@ write_metadata(
     fitted_models = "ordinary one-factor model with independent residuals",
     estimators = "ML, ULS, GLS, plus closed-form Spearman-Guttman covariance omega",
     denominators = "model-implied total variance and observed/population total variance",
+    fit_indices = "for fitted models only: population_discrepancy = 2*fmin; rmsea_like = sqrt(population_discrepancy / df), not comparable across ML/ULS/GLS scales",
     smoke = cfg$smoke,
     results_dir = res_dir
   ),
