@@ -2,7 +2,7 @@
 
 **Cite.** Hancock, G. R., & An, J. (2020). Measurement: Interdisciplinary Research and Perspectives, 18(1):1-14. DOI: 10.1080/15366367.2019.1656049.
 **PDF.** `external/refs/A Closed-Form Alternative for Estimating   Reliability under Unidimensionality.pdf`
-**Read.** 2026-06-26  ·  **Verdict.** background
+**Read.** 2026-06-26  ·  **Verdict.** → paper (`papers/closed-form-omega`)
 
 ## TL;DR
 The peer-reviewed prior art for closed-form McDonald's omega under unidimensionality: loadings from triple-covariance ratios, no CFA fit. It is the oracle and citation for magmaan's already-landed `measures::frontier::reliability` Spearman-Guttman covariance omega, not new build work.
@@ -18,4 +18,4 @@ Directly the prior art for the covariance-only **Spearman-Guttman omega** that l
 Open lane Hancock-An do not cover (and what the note generalizes to): the grouping-matrix / weighted form `ω_G(σ;w) = w'CX(X'CX)⁻¹X'C w / w'Sw` gives closed-form omega-total for multi-factor, multi-group, and weighted composites, and a second-stage centroid on the Guttman factor correlation `Φ_G` (a Schmid-Leiman general factor, k>=3) gives a closed-form omega-hierarchical; a non-proportional bifactor solution is outside the simple-structure `X`. These extensions sit alongside the existing model-based-omega and maximal-reliability speculative entries; this paper itself warrants no new build.
 
 ## Verdict
-background — prior-art oracle and citation for the landed `measures::frontier::reliability` Spearman-Guttman omega; single-factor closed-form omega is solved. Pointer added to the [reliability todo entry](../../backlog/todo.md). The multi-factor / omega-hierarchical X-generalization is the open lane, captured in the note and memory `closed-form-omega-priorart`, not warranted as new build by this paper.
+→ paper (`papers/closed-form-omega`). For the *single-factor* case this is settled prior art (oracle and citation for the landed `measures::frontier::reliability` Spearman-Guttman omega; pointer in the [reliability todo entry](../../backlog/todo.md)). The eval's open lane — the multi-factor / weighted omega-total and the closed-form **omega-hierarchical** via a two-stage Schmid-Leiman centroid, which Hancock & An do not cover — graduated to a new (highly speculative) paper `papers/closed-form-omega`, with the verified derivations seeded in its `dev/notes/derivations.tex`. Hancock & An is that paper's prior art and ideal referee.

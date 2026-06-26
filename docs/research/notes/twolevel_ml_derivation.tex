@@ -1,0 +1,300 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Two-level normal-theory ML: full-information deviance, gradient,
+and the per-block contraction that magmaan already owns}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+
+\newcommand{\Sw}{\Sigma_W}
+\newcommand{\Sb}{\Sigma_B}
+\newcommand{\Md}{M_d}
+\newcommand{\Rd}{R_d}
+\newcommand{\SSW}{\mathrm{SSW}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Pin the math behind the magmaan Stream-C two-level ML core: the
+Mu\-th\'en--Asparouhov full-information cluster deviance $F$, its analytic
+gradient $\nabla_\theta F$, the balanced-data (MUML) reduction used as the
+implementation unit test, and the unstructured saturated ($H_1$) score
+equations. The load-bearing result (Corollary~\ref{cor:contract}) is that
+$\nabla_\theta F$ is the \emph{ordinary per-block discrepancy-gradient
+contraction} magmaan already performs in \texttt{ml\_value\_gradient}: assemble
+two symmetric ``weighted-residual'' matrices $G_W,G_B$ and a between-mean
+gradient, then contract them with the existing $d\vech(\Sigma)/d\theta$ and
+$d\mu/d\theta$ Jacobians. The two-level coupling lives entirely inside how
+$G_W,G_B$ are built from the per-cluster-size sufficient statistics; no new
+model machinery is needed.
+
+Maps to the Phase-0 contracts: $F$ is \texttt{twolevel\_value}, $\nabla_\theta
+F$ is \texttt{twolevel\_value\_gradient}, the $H_1$ solver is
+\texttt{twolevel\_h1\_moments}, all over \texttt{data::ClusterSampleStats}.
+
+\section{Model and notation}
+
+One group (groups are independent and add additively; restore a group index by
+summing $F$ and stacking gradients with the per-group $n_b/N$ weights, exactly
+as multi-group already does). Clusters $j=1,\dots,J$; cluster $j$ holds $n_j$
+level-1 units; $N=\sum_j n_j$. Observed $p$-vector $y_{ij}$ for unit $i$ in
+cluster $j$. The two-level model decomposes $y_{ij}=\mu+y_{B,j}+y_{W,ij}$ with
+independent $y_{B,j}\sim N(0,\Sb)$ (cluster-level) and $y_{W,ij}\sim N(0,\Sw)$
+(unit-level), so within cluster $j$
+\[
+\Cov(y_{ij},y_{i'j})=\Sb+\mathbf 1\{i=i'\}\,\Sw,\qquad
+\E[y_{ij}]=\mu .
+\]
+Here $\Sw=\Sw(\theta)$, $\Sb=\Sb(\theta)$, $\mu=\mu(\theta)$ are the implied
+within covariance, between covariance, and (between-level) mean; in magmaan they
+are $\Sw=\texttt{sigma}[\,b_W\,]$, $\Sb=\texttt{sigma}[\,b_B\,]$,
+$\mu=\texttt{mu}[\,b_B\,]$ for the within/between blocks paired by
+\texttt{level\_block\_pairs}. v1 scope: a \emph{shared} observed set, so
+$\Sw,\Sb$ are both $p\times p$ over the same $p$ variables.
+
+Stack cluster $j$ as $Y_j=(y_{1j}^\top,\dots,y_{n_j j}^\top)^\top$. With
+$\mathbf 1=\mathbf 1_{n_j}$ and $J_{n_j}=\mathbf 1\mathbf 1^\top$,
+\begin{equation}
+\label{eq:Vj}
+\Var(Y_j)=V_j=I_{n_j}\otimes\Sw+J_{n_j}\otimes\Sb,\qquad
+\E[Y_j]=\mathbf 1\otimes\mu .
+\end{equation}
+Write the cluster mean $\bar y_j=\tfrac1{n_j}\sum_i y_{ij}$ and the within-cluster
+scatter $S_j^W=\sum_i (y_{ij}-\bar y_j)(y_{ij}-\bar y_j)^\top$.
+
+\section{The cluster deviance}
+
+\begin{lemma}[Determinant/quadratic split]
+\label{lem:split}
+For $V_j$ in \eqref{eq:Vj}, with $M_{n_j}:=(\Sw+n_j\Sb)^{-1}$,
+\[
+\log|V_j|=(n_j-1)\log|\Sw|+\log|\Sw+n_j\Sb|,
+\]
+\[
+(Y_j-\mathbf 1\otimes\mu)^\top V_j^{-1}(Y_j-\mathbf 1\otimes\mu)
+=\tr(\Sw^{-1}S_j^W)+n_j\,(\bar y_j-\mu)^\top M_{n_j}(\bar y_j-\mu).
+\]
+\end{lemma}
+
+\begin{proof}
+The orthogonal split of $\mathbb R^{n_j}$ into the mean direction
+$u=n_j^{-1/2}\mathbf 1$ and its complement diagonalizes $V_j$: $J_{n_j}$ has
+eigenvalue $n_j$ on $u$ and $0$ on $u^\perp$, while $I_{n_j}$ is the identity on
+both. Hence $V_j$ acts as $\Sw+n_j\Sb$ on $u\otimes\mathbb R^p$ (one copy) and as
+$\Sw$ on $u^\perp\otimes\mathbb R^p$ ($n_j-1$ copies), giving the determinant.
+For the quadratic form, $(u^\top\otimes I)Y_j=\sqrt{n_j}\,\bar y_j$ carries the
+mean-direction part with covariance $\Sw+n_j\Sb$, contributing
+$n_j(\bar y_j-\mu)^\top M_{n_j}(\bar y_j-\mu)$; the complement carries the
+centered deviations with covariance $\Sw$, contributing $\tr(\Sw^{-1}S_j^W)$
+since $\sum_i\|\cdot\|^2_{\Sw^{-1}}=\tr(\Sw^{-1}S_j^W)$.
+\end{proof}
+
+Sum $-2\log L=\sum_j[\log|V_j|+(\cdot)^\top V_j^{-1}(\cdot)]$ over clusters and
+\emph{group by distinct cluster size}. Let $\mathcal D$ be the set of distinct
+sizes, $J_d=\#\{j:n_j=d\}$, and define the sufficient statistics
+\begin{equation}
+\label{eq:suffstats}
+\SSW=\sum_j S_j^W,\qquad
+T^{(1)}_d=\!\!\sum_{j:n_j=d}\!\!\bar y_j,\qquad
+T^{(2)}_d=\!\!\sum_{j:n_j=d}\!\!\bar y_j\bar y_j^\top .
+\end{equation}
+These are exactly \texttt{ClusterGroupStats::within\_scatter},
+\texttt{ClusterSizePattern::sum\_cluster\_mean}, and
+\texttt{::sum\_cluster\_mean\_cp} (Stream B). Note $\sum_j(n_j-1)=N-J$.
+
+\begin{theorem}[Full-information two-level deviance]
+\label{thm:F}
+Dropping the additive constant $Np\log(2\pi)$, and with
+$\Md:=(\Sw+d\Sb)^{-1}$ and the per-size centered cross-product
+\[
+A_d(\mu):=\!\!\sum_{j:n_j=d}\!\!(\bar y_j-\mu)(\bar y_j-\mu)^\top
+=T^{(2)}_d-\mu T^{(1)\top}_d-T^{(1)}_d\mu^\top+J_d\,\mu\mu^\top,
+\]
+the model deviance is
+\begin{equation}
+\label{eq:F}
+F(\theta)=(N-J)\log|\Sw|+\tr(\Sw^{-1}\SSW)
++\sum_{d\in\mathcal D}\Big[\,J_d\log|\Sw+d\Sb|+d\,\tr\!\big(\Md A_d(\mu)\big)\Big].
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Insert Lemma~\ref{lem:split} into $-2\log L$; the within terms collect to
+$(N-J)\log|\Sw|+\tr(\Sw^{-1}\SSW)$ using \eqref{eq:suffstats}; the
+mean-direction terms with $n_j=d$ collect to
+$J_d\log|\Sw+d\Sb|+d\sum_{j:n_j=d}(\bar y_j-\mu)^\top \Md(\bar y_j-\mu)$, and the
+sum equals $\tr(\Md A_d(\mu))$.
+\end{proof}
+
+\begin{remark}[Objective scale]
+magmaan minimizes $f=\tfrac12 F$ and reports the LRT statistic
+$T=F(\hat\theta)-F_{H_1}$ with $F_{H_1}$ the converged saturated deviance
+(Section~\ref{sec:h1}); $\mathrm{df}=p(p{+}1)+p-q$ with $q$ the number of free
+$\theta$ (saturated count $=2\cdot p(p{+}1)/2$ covariance parameters plus $p$
+between means). This mirrors the FIML convention: the optimizer carries the raw
+deviance, the saturated subtraction makes it a discrepancy.
+\end{remark}
+
+\section{Gradient}
+
+Let $W_0:=\Sw^{-1}$ and define the per-size \emph{between residual operator}
+\begin{equation}
+\label{eq:Rd}
+\Rd:=J_d\,\Md-d\,\Md A_d(\mu)\Md\qquad(\text{symmetric, }p\times p).
+\end{equation}
+
+\begin{theorem}[Matrix gradients]
+\label{thm:grad}
+With $F$ as in \eqref{eq:F},
+\begin{align}
+G_W:=\frac{\partial F}{\partial \Sw}
+ &=(N-J)\,W_0-W_0\,\SSW\,W_0+\sum_{d\in\mathcal D}\Rd,
+ \label{eq:GW}\\
+G_B:=\frac{\partial F}{\partial \Sb}
+ &=\sum_{d\in\mathcal D} d\,\Rd,
+ \label{eq:GB}\\
+g_\mu:=\frac{\partial F}{\partial \mu}
+ &=-2\sum_{d\in\mathcal D} d\,\Md\big(T^{(1)}_d-J_d\,\mu\big).
+ \label{eq:gmu}
+\end{align}
+\end{theorem}
+
+\begin{proof}
+Use $d\log|X|=\tr(X^{-1}dX)$ and $d\tr(X^{-1}A)=-\tr(X^{-1}(dX)X^{-1}A)$.
+For $\Sw$: the within terms give $(N-J)W_0$ and $-W_0\SSW W_0$; since
+$\partial(\Sw+d\Sb)/\partial\Sw=I$, the $d$-sum gives
+$\sum_d[J_d\Md-d\,\Md A_d\Md]=\sum_d\Rd$. For $\Sb$: only the $d$-sum depends on
+$\Sb$ and $\partial(\Sw+d\Sb)/\partial\Sb=d\,I$, scaling each bracket by $d$,
+giving $\sum_d d\,\Rd$. For $\mu$: only $A_d(\mu)$ depends on $\mu$, and
+$\partial\tr(\Md A_d)/\partial\mu=-2\Md(T^{(1)}_d-J_d\mu)$, scaled by $d$ and
+summed.
+\end{proof}
+
+Equations \eqref{eq:GW}--\eqref{eq:GB} expose the structure: $\Rd$ is the shared
+per-size between residual, weighted by $1$ in $G_W$ and by $d$ in $G_B$. At a
+perfect between fit $A_d(\mu)=J_d(\Sw+d\Sb)$, so $\Rd=0$ for every $d$ and the
+between channel is dormant in both gradients.
+
+\begin{corollary}[The contraction magmaan already owns]
+\label{cor:contract}
+Let $\partial_\theta\vech\Sw$, $\partial_\theta\vech\Sb$ be the within/between
+blocks of the evaluator Jacobian \texttt{J\_sigma}, and $\partial_\theta\mu$ the
+between block of \texttt{J\_mu}. With the symmetric-vech reduction
+$v(G):=\vech(2G-\operatorname{diag}G)$ (off-diagonals doubled, the same map
+\texttt{ml\_value\_gradient} applies),
+\[
+\nabla_\theta F=(\partial_\theta\vech\Sw)^\top v(G_W)
+              +(\partial_\theta\vech\Sb)^\top v(G_B)
+              +(\partial_\theta\mu)^\top g_\mu .
+\]
+\end{corollary}
+
+\begin{proof}
+$\partial F/\partial\theta_k=\tr(G_W\,\partial_{\theta_k}\Sw)
++\tr(G_B\,\partial_{\theta_k}\Sb)+g_\mu^\top\partial_{\theta_k}\mu$ by the chain
+rule on Theorem~\ref{thm:grad}; for symmetric $G,\partial\Sigma$ the trace equals
+$v(G)^\top\partial_{\theta_k}\vech\Sigma$.
+\end{proof}
+
+Implementation: \texttt{twolevel\_value\_gradient} forms $M_d,A_d,\SSW,W_0$ once,
+builds $G_W,G_B,g_\mu$ by \eqref{eq:GW}--\eqref{eq:gmu}, then reuses the existing
+per-block contraction. The only inputs beyond the single-level path are the
+cluster-size buckets; the Jacobian rows for the within block contract with
+$v(G_W)$, the between block with $v(G_B)$, and the between mean with $g_\mu$.
+
+\section{Balanced reduction (the unit test)}
+\label{sec:muml}
+
+\begin{theorem}[MUML]
+\label{thm:muml}
+If all $n_j=d$ (single distinct size), then with $S_{PW}:=\SSW/(N-J)$,
+$\hat\mu_{H_1}=T^{(1)}_d/J$, and $C_B:=(d/J)\,A_d(\mu)$ ($d$ times the
+cluster-mean sample cross-product, so $\E[C_B]=\Sw+d\Sb$),
+\[
+F=\underbrace{(N-J)\big[\log|\Sw|+\tr(\Sw^{-1}S_{PW})\big]}_{\text{within block}}
++\underbrace{J\big[\log|\Sw+d\Sb|+\tr\big((\Sw+d\Sb)^{-1}C_B\big)\big]}_{\text{between block}} .
+\]
+Each bracket is a normal-theory ML fit term (constants dropped). Hence on
+balanced data $F$ equals the two-block ML deviance of the
+\texttt{SampleStats} $\{(S_{PW},N{-}J),(C_B,J)\}$ whose block-2 implied
+covariance is $\Sw+d\Sb$.
+\end{theorem}
+
+This is the gradient/value check for Stream C: build a balanced
+\texttt{ClusterSampleStats}, and assert \texttt{twolevel\_value} and
+\texttt{twolevel\_value\_gradient} match \texttt{ml\_value}/\allowbreak
+\texttt{ml\_value\_gradient} run on the two-block \texttt{SampleStats} above
+(with $\Sigma_2=\Sw+d\Sb$), to machine precision; cross-check
+\texttt{twolevel\_value\_gradient} against a central finite difference of
+\texttt{twolevel\_value} on unbalanced data.
+
+\section{Saturated ($H_1$) model}
+\label{sec:h1}
+
+The saturated fit maximizes $L$ over unstructured $(\Sw,\Sb,\mu)$; its score
+equations are $G_W=0$, $G_B=0$, $g_\mu=0$ from Theorem~\ref{thm:grad}. From
+$g_\mu=0$,
+\begin{equation}
+\label{eq:muhat}
+\hat\mu=\Big(\sum_d d\,J_d\,\Md\Big)^{-1}\Big(\sum_d d\,\Md\,T^{(1)}_d\Big),
+\end{equation}
+which for a single size reduces to $\hat\mu=T^{(1)}_d/J_d$ (the grand mean of
+cluster means). The covariance equations $G_W=G_B=0$ are coupled and have no
+closed form for unbalanced $\mathcal D$; iterate (Fisher scoring on the three
+unstructured blocks, or two-level EM treating the cluster effects as missing)
+to convergence, the analogue of \texttt{fiml\_h1\_moments}. Balanced closed
+form (single $d$): $\hat\Sw=S_{PW}$ and $\hat\Sb=(C_B-S_{PW})/d$ when
+$C_B-S_{PW}\succeq0$ (else the boundary $\hat\Sb=0$), with $\hat\mu$ as above;
+this seeds the iteration and gives a $H_1$ smoke test.
+
+\begin{remark}[Start values]
+\texttt{twolevel\_start\_values}: take $\Sw$ from $S_{PW}$ and $\Sb$ from the
+pooled $\bar d^{-1}(C_B-S_{PW})_+$ (averaging the per-size $C_B$), then read off
+the structural starts the single-level producers already compute from a
+covariance target (\texttt{fabin}/\texttt{simple}) applied per level.
+\end{remark}
+
+\begin{thebibliography}{9}
+
+\bibitem{muthen-asparouhov-2011} Muth\'en, B.\ \& Asparouhov, T.\ (2011).
+Beyond multilevel regression modeling: multilevel analysis in a general latent
+variable framework. In \emph{Handbook of Advanced Multilevel Analysis}, 15--40.
+
+\bibitem{rosseel-2012} Rosseel, Y.\ (2012). lavaan: An R package for structural
+equation modeling. \emph{Journal of Statistical Software}, 48(2), 1--36.
+\href{https://doi.org/10.18637/jss.v048.i02}{doi:10.18637/jss.v048.i02}.
+
+\bibitem{yuan-bentler-2007} Yuan, K.-H.\ \& Bentler, P.\ M.\ (2007). Multilevel
+covariance structure analysis by fitting multiple single-level models.
+\emph{Sociological Methodology}, 37(1), 53--82.
+\href{https://doi.org/10.1111/j.1467-9531.2007.00182.x}{doi:10.1111/j.1467-9531.2007.00182.x}.
+
+\bibitem{liang-bentler-2004} Liang, J.\ \& Bentler, P.\ M.\ (2004). An EM
+algorithm for fitting two-level structural equation models.
+\emph{Psychometrika}, 69(1), 101--122.
+\href{https://doi.org/10.1007/BF02295842}{doi:10.1007/BF02295842}.
+
+\end{thebibliography}
+
+\end{document}
