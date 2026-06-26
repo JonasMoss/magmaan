@@ -118,6 +118,44 @@ grad_rho <- function(theta, pt, rebuild, pop, which) {
   g
 }
 
+# --- second-order (curvature) bias of the plug-in reliability ------------------
+#
+# rho* = g(theta) is a nonlinear functional, so even an unbiased theta-hat leaves
+# E[g(theta-hat)] - g(theta) ~ (1/2) tr(g''(theta) V), the Jensen / curvature term
+# (V = Cov(theta-hat)). We estimate it without forming the full Hessian: with the
+# eigendecomposition V = sum_k lambda_k v_k v_k', tr(g'' V) = sum_k lambda_k
+# v_k' g'' v_k, and each v_k' g'' v_k is a central second directional derivative.
+# Cost is O(n_free) evaluations of g, not O(n_free^2). The propagated-parameter
+# bias term g'(theta)' b_theta is handled separately, by evaluating g at a
+# reduced-bias (RBM / Kosmidis) theta-tilde.
+
+# Map free-parameter position (vcov ordering) -> partable row, so a direction in
+# free space can perturb the full theta vector.
+free_pos_to_row <- function(pt) {
+  fr <- which(pt$free > 0)
+  m <- integer(max(pt$free)); m[pt$free[fr]] <- fr
+  m
+}
+
+curvature_bias <- function(theta, pt, rebuild, pop, which, V) {
+  pos2row <- free_pos_to_row(pt)
+  p <- length(pos2row)
+  eg <- eigen((V + t(V)) / 2, symmetric = TRUE)
+  g0 <- rho_of_theta(theta, rebuild, pop, which)
+  bump <- function(v, s) { th <- theta; th[pos2row] <- th[pos2row] + s * v; th }
+  acc <- 0
+  for (k in seq_len(p)) {
+    lam <- eg$values[k]
+    if (abs(lam) < 1e-10) next
+    v <- eg$vectors[, k]
+    h <- 1e-4
+    d2 <- (rho_of_theta(bump(v, h), rebuild, pop, which) - 2 * g0 +
+           rho_of_theta(bump(v, -h), rebuild, pop, which)) / h^2
+    acc <- acc + lam * d2
+  }
+  0.5 * acc
+}
+
 # --- one replicate: fit, both coefficients, model & robust delta SEs -----------
 
 # Returns a one-row-per-coefficient data.frame with the point estimate and the
