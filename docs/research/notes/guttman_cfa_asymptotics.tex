@@ -271,21 +271,32 @@ For the unit-weight total score \(w=\mathbf{1}\), this collapses further:
 Here \(h_i\) is the communality placed on item \(i\)'s diagonal in \(C\). For
 the Spearman-Harman/Guttman rule above, in the one-factor case,
 \[
+  \begin{aligned}
   h_i
-    =
+    &=
   {\binom{p-1}{2}}^{-1}
   \left\{
     \sum_{1\le j<\ell\le p}
       \frac{S_{ij}S_{i\ell}}{S_{j\ell}}
     -(p-1)S_{ii}
+  \right\} \\
+    &=
+  \{2\binom{p-1}{2}\}^{-1}
+  \left\{
+    \sum_{j=1}^{p}\sum_{\substack{\ell=1\\ \ell\ne j}}^{p}
+      \frac{S_{ij}S_{i\ell}}{S_{j\ell}}
+    -2(p-1)S_{ii}
   \right\}.
+  \end{aligned}
 \]
 This is the covariance-scale form of the correlation expression
 \(S_{ii}R_{ij}R_{i\ell}/R_{j\ell}\): the item variance factors cancel, and the
 unrestricted pair sum contains \(p-1\) pairs involving item \(i\), each reducing
-to \(S_{ii}\). In a multi-factor simple-structure block, replace \(p\) by the
-block size \(p_f\) and sum only within the block. Under an exact congeneric
-one-factor population, this population rule recovers \(h_i=\lambda_i^2\phi\).
+to \(S_{ii}\). The ordered double sum counts each unordered pair twice, so it
+subtracts \(2(p-1)S_{ii}\) and divides by \(2\binom{p-1}{2}\). In a
+multi-factor simple-structure block, replace \(p\) by the block size \(p_f\)
+and sum only within the block. Under an exact congeneric one-factor population,
+this population rule recovers \(h_i=\lambda_i^2\phi\).
 So the one-factor Guttman-derived omega is especially simple: replace each
 item variance by its Guttman communality, sum all entries, and divide by the
 observed total-score variance.
