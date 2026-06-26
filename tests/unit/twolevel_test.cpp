@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Cholesky>
@@ -118,6 +119,29 @@ Eigen::VectorXd vec2(double a, double b) {
   return v;
 }
 
+// Identity selection Jacobians for the parametrization
+// theta = [vech(Sw); vech(Sb); mu], so a gradient w.r.t. theta is exactly the
+// stacked (vech-doubled G_W, G_B, g_mu). Lets a test read the matrix score off
+// twolevel_value_gradient.
+std::pair<Eigen::MatrixXd, Eigen::MatrixXd> identity_jacobians(Eigen::Index p) {
+  const Eigen::Index pv = magmaan::detail::vech_len(p);
+  const Eigen::Index nfree = 2 * pv + p;
+  Eigen::MatrixXd Js = Eigen::MatrixXd::Zero(2 * pv, nfree);
+  Js.block(0, 0, pv, pv).setIdentity();
+  Js.block(pv, pv, pv, pv).setIdentity();
+  Eigen::MatrixXd Jm = Eigen::MatrixXd::Zero(2 * p, nfree);
+  Jm.block(p, 2 * pv, p, p).setIdentity();
+  return {Js, Jm};
+}
+
+ImpliedMoments moments_of(const Eigen::MatrixXd& Sw, const Eigen::MatrixXd& Sb,
+                          const Eigen::VectorXd& mu) {
+  ImpliedMoments m;
+  m.sigma = {Sw, Sb};
+  m.mu = {Eigen::VectorXd(), mu};  // within has no mean structure
+  return m;
+}
+
 }  // namespace
 
 TEST_CASE("twolevel_value matches the brute-force stacked-cluster -2logL") {
@@ -222,4 +246,90 @@ TEST_CASE("twolevel_value_gradient matches central finite differences") {
     CHECK(vg->gradient(k) ==
           doctest::Approx(fd).epsilon(1e-5).scale(1.0 + std::abs(fd)));
   }
+}
+
+TEST_CASE("twolevel_h1_moments recovers the balanced closed form") {
+  // 5 clusters, each size 4, p = 2; strong between separation -> Sigma_B PD.
+  // Within deviations sum to zero per cluster, so ybar_j == base_j exactly.
+  const std::vector<Eigen::VectorXd> bases = {vec2(0, 0), vec2(3, 1),
+                                              vec2(-2, 2), vec2(1, -3),
+                                              vec2(4, 0)};
+  const std::vector<Eigen::VectorXd> devs = {vec2(0.2, 0.1), vec2(-0.1, 0.2),
+                                             vec2(0.1, -0.2), vec2(-0.2, -0.1)};
+  Clusters clusters;
+  for (const auto& b : bases) {
+    Cluster cl;
+    for (const auto& dv : devs) cl.push_back(Eigen::VectorXd(b + dv));
+    clusters.push_back(cl);
+  }
+  ClusterSampleStats cs;
+  cs.groups = {stats_from_clusters(clusters)};
+  const MatrixRep rep = two_block_rep();
+
+  auto h1 = tl::twolevel_h1_moments(cs);
+  REQUIRE(h1.has_value());
+  REQUIRE(h1->sigma_w.size() == 1);
+
+  // Closed form from the same data: Sw = S_PW, mu = mean(base_j),
+  // Sb = cov(base_j) - S_PW/d.
+  const double d = 4.0, J = 5.0, Ntot = 20.0;
+  const Eigen::MatrixXd S_PW = cs.groups[0].within_scatter / (Ntot - J);
+  Eigen::VectorXd muhat = Eigen::VectorXd::Zero(2);
+  for (const auto& b : bases) muhat += b;
+  muhat /= J;
+  Eigen::MatrixXd Adm = Eigen::MatrixXd::Zero(2, 2);
+  for (const auto& b : bases) Adm += (b - muhat) * (b - muhat).transpose();
+  const Eigen::MatrixXd Sb_ref = Adm / J - S_PW / d;
+
+  CHECK((h1->mu_b[0] - muhat).norm() < 1e-6);
+  CHECK((h1->sigma_w[0] - S_PW).norm() < 1e-6);
+  CHECK((h1->sigma_b[0] - Sb_ref).norm() < 1e-6);
+
+  // Score at the H1 solution is ~ 0.
+  auto cache = tl::twolevel_prepare(cs);
+  REQUIRE(cache.has_value());
+  auto [Js, Jm] = identity_jacobians(2);
+  auto vg = tl::twolevel_value_gradient(
+      cs, *cache, moments_of(h1->sigma_w[0], h1->sigma_b[0], h1->mu_b[0]), Js,
+      Jm, rep);
+  REQUIRE(vg.has_value());
+  CHECK(vg->gradient.norm() < 1e-5);
+}
+
+TEST_CASE("twolevel_h1_moments drives the score to zero (unbalanced)") {
+  // Varying cluster sizes {2,3,2,4,3} with strong, clearly-PD between
+  // separation so the saturated MLE is interior (Sigma_B off the PSD boundary).
+  const std::vector<Eigen::VectorXd> bases = {vec2(0, 0), vec2(3, 1),
+                                              vec2(-2, 2), vec2(1, -3),
+                                              vec2(4, 0)};
+  const std::vector<int> sizes = {2, 3, 2, 4, 3};
+  Clusters clusters;
+  for (std::size_t j = 0; j < bases.size(); ++j) {
+    Cluster cl;
+    for (int i = 0; i < sizes[j]; ++i) {
+      const double s = 0.15 * ((i % 2 == 0) ? 1.0 : -1.0);
+      cl.push_back(vec2(bases[j](0) + s, bases[j](1) - 0.5 * s + 0.1 * i));
+    }
+    clusters.push_back(cl);
+  }
+  ClusterSampleStats cs;
+  cs.groups = {stats_from_clusters(clusters)};
+  const MatrixRep rep = two_block_rep();
+
+  auto h1 = tl::twolevel_h1_moments(cs, {500, 1e-12});
+  REQUIRE(h1.has_value());
+
+  auto cache = tl::twolevel_prepare(cs);
+  REQUIRE(cache.has_value());
+  const ImpliedMoments mm =
+      moments_of(h1->sigma_w[0], h1->sigma_b[0], h1->mu_b[0]);
+  auto [Js, Jm] = identity_jacobians(2);
+  auto vg = tl::twolevel_value_gradient(cs, *cache, mm, Js, Jm, rep);
+  REQUIRE(vg.has_value());
+  CHECK(vg->gradient.norm() < 1e-5);
+
+  // The reported H1 deviance equals F at the returned moments.
+  auto F = tl::twolevel_value(cs, *cache, mm, rep);
+  REQUIRE(F.has_value());
+  CHECK(*F == doctest::Approx(h1->value).epsilon(1e-10));
 }
