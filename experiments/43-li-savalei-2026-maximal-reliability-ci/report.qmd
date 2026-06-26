@@ -32,7 +32,10 @@ cg <- function(coef, p, n, dist, method, col)
   corr[[col]][corr$coef==coef & corr$p==p & corr$n==n & corr$dist==dist & corr$method==method]
 lr_path <- file.path(res_dir, "lr_coverage.csv")
 lrdat <- if (file.exists(lr_path)) read.csv(lr_path) else NULL
-lrv <- function(coef, n, col) lrdat[[col]][lrdat$coef==coef & lrdat$n==n]
+lrv <- function(coef, n, col, dist = "normal") {
+  x <- lrdat[[col]][lrdat$coef==coef & lrdat$n==n & lrdat$dist==dist]
+  if (length(x)) x[[1L]] else NA_real_
+}
 cf_path <- file.path(res_dir, "cf_coverage.csv")
 cfdat <- if (file.exists(cf_path)) read.csv(cf_path) else NULL
 cfc <- function(coef, p, n, dist, method, col)
@@ -317,10 +320,11 @@ the true value needs only `LR` at that value (it is covered iff `LR <= q`).
 
 ```{r fig-lr, eval = !is.null(lrdat)}
 #| fig-cap: "Coverage of the profile likelihood-ratio interval vs sample size (normal data, p18, 400 replications). The plain chi-square-1 threshold under-covers at small N because the LR is inflated; rescaling by its mean (the Bartlett correction) restores nominal coverage."
-if (has_gg) {
+if (has_gg && any(lrdat$dist == "normal")) {
+  normal_lr <- lrdat[lrdat$dist == "normal", , drop = FALSE]
   ld <- rbind(
-    data.frame(coef = lrdat$coef, n = lrdat$n, coverage = lrdat$cov_chi2, rule = "chi-square (1 df)"),
-    data.frame(coef = lrdat$coef, n = lrdat$n, coverage = lrdat$cov_bartlett, rule = "Bartlett-corrected"))
+    data.frame(coef = normal_lr$coef, n = normal_lr$n, coverage = normal_lr$cov_chi2, rule = "chi-square (1 df)"),
+    data.frame(coef = normal_lr$coef, n = normal_lr$n, coverage = normal_lr$cov_bartlett, rule = "Bartlett-corrected"))
   ld$coeff <- coef_lab[ld$coef]
   ggplot(ld, aes(n, coverage, colour = rule, group = rule)) +
     geom_hline(yintercept = 0.95, linetype = 2, colour = "grey50") +
