@@ -6,6 +6,7 @@
 
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/estimate/twolevel.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 namespace magmaan::api {
@@ -364,6 +365,10 @@ Data Data::from_mixed_ordinal(data::MixedOrdinalStats stats) {
   return Data(std::move(stats));
 }
 
+Data Data::from_cluster_stats(data::ClusterSampleStats stats) {
+  return Data(std::move(stats));
+}
+
 DataKind Data::kind() const noexcept {
   switch (storage_.index()) {
   case 0:
@@ -372,8 +377,10 @@ DataKind Data::kind() const noexcept {
     return DataKind::RawContinuous;
   case 2:
     return DataKind::Ordinal;
-  default:
+  case 3:
     return DataKind::MixedOrdinal;
+  default:
+    return DataKind::ClusterStats;
   }
 }
 
@@ -393,6 +400,10 @@ const data::MixedOrdinalStats *Data::mixed_ordinal() const noexcept {
   return std::get_if<data::MixedOrdinalStats>(&storage_);
 }
 
+const data::ClusterSampleStats *Data::cluster_stats() const noexcept {
+  return std::get_if<data::ClusterSampleStats>(&storage_);
+}
+
 Data::Data(Storage storage) : storage_(std::move(storage)) {}
 
 Result<Data> data_from_sample_stats(const Model &, data::SampleStats stats) {
@@ -410,6 +421,41 @@ Result<Data> data_from_ordinal(const Model &, data::OrdinalStats stats) {
 Result<Data> data_from_mixed_ordinal(const Model &,
                                      data::MixedOrdinalStats stats) {
   return Data::from_mixed_ordinal(std::move(stats));
+}
+
+Result<Data> data_from_cluster_stats(const Model &,
+                                     data::ClusterSampleStats stats) {
+  return Data::from_cluster_stats(std::move(stats));
+}
+
+Result<Data> data_from_cluster(const Model &model, data::RawData raw,
+                               std::vector<std::int32_t> cluster_id) {
+  // v1: a single group with a shared observed variable set. `raw` columns are
+  // assumed already aligned to MatrixRep ov order, so the within / between
+  // column selectors are the identity over all p observed variables.
+  if (raw.X.size() != 1) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "data_from_cluster: v1 two-level supports a single group only"));
+  }
+  const Eigen::MatrixXd &X = raw.X.front();
+  if (X.rows() != static_cast<Eigen::Index>(cluster_id.size())) {
+    return std::unexpected(make_error(
+        ErrorStage::Data,
+        "data_from_cluster: cluster_id length must equal the number of rows"));
+  }
+  std::vector<std::int32_t> cols(static_cast<std::size_t>(X.cols()));
+  std::iota(cols.begin(), cols.end(), 0);
+  auto cs = data::cluster_sample_stats(X, cluster_id, cols, cols);
+  if (!cs) {
+    return std::unexpected(make_error(ErrorStage::Data, cs.error()));
+  }
+  // The ov index alignment is the caller's responsibility (cluster_stats.hpp);
+  // fill the identity here so the wrapped Data is fully specified.
+  if (cs->within_ov_index.empty()) cs->within_ov_index = cols;
+  if (cs->between_ov_index.empty()) cs->between_ov_index = std::move(cols);
+  (void)model;
+  return Data::from_cluster_stats(std::move(*cs));
 }
 
 namespace frontier {
@@ -610,11 +656,49 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   const auto &rep = model->matrix_rep();
 
   if (estimator.kind == EstimatorKind::TwoLevelML) {
-    // Phase-0 contract stub. Stream D wires the cluster-data dispatch into
-    // estimate::twolevel::fit_ml_twolevel. See the multilevel-SEM plan.
-    return std::unexpected(make_error(
-        ErrorStage::UnsupportedCombination,
-        "two-level (multilevel) ML is not yet implemented"));
+    // Dispatch the two-level ML core early, like FIML, before the
+    // sample-stats requirement: two-level fits consume clustered sufficient
+    // statistics (data::ClusterSampleStats), not complete-data moments.
+    const auto *cs = data->cluster_stats();
+    if (!cs) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "two-level ML requires clustered data (api::data_from_cluster)"));
+    }
+    if (estimator.bounds_mode != BoundsMode::None) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "two-level ML fitting does not accept bounds"));
+    }
+    if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
+        estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
+        estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "two-level ML currently supports only the NLopt L-BFGS, NLopt "
+          "SLSQP, or IPOPT optimizer"));
+    }
+
+    Eigen::VectorXd x0;
+    if (estimator.start_spec.kind == StartKind::Explicit) {
+      x0 = estimator.start_spec.theta;
+    } else {
+      auto starts = estimate::twolevel::twolevel_start_values(
+          pt, rep, *cs, model->starts());
+      if (!starts) {
+        return std::unexpected(make_error(ErrorStage::Fit, starts.error()));
+      }
+      x0 = std::move(*starts);
+    }
+
+    auto est = estimate::twolevel::fit_ml_twolevel(
+        pt, rep, *cs, x0, {}, backend_from(estimator.optimizer_spec),
+        estimator.optimizer_spec.options);
+    if (!est) {
+      return std::unexpected(make_error(ErrorStage::Fit, est.error()));
+    }
+    return Fit(std::move(model), std::move(data), std::move(*est),
+               std::move(estimator));
   }
 
   if (estimator.kind == EstimatorKind::FIML) {
@@ -932,11 +1016,28 @@ Result<StandardErrors> standard_errors(const Fit &fit, InformationSpec spec) {
                                     fit.model().matrix_rep(),
                                     *fit.data().sample_stats(),
                                     fit.estimates(), *weight);
+  } else if (fit.estimator() == EstimatorKind::TwoLevelML &&
+             fit.data().cluster_stats()) {
+    // Two-level information of the cluster deviance, inverted as usual.
+    // `spec.kind == Expected` selects the expected (Fisher) information;
+    // anything else falls to the observed information.
+    auto ev = model::ModelEvaluator::build(fit.model().structure(),
+                                           fit.model().matrix_rep());
+    if (!ev) {
+      return std::unexpected(make_error(ErrorStage::PostFit, ev.error()));
+    }
+    auto ti = estimate::twolevel::twolevel_information(
+        *ev, *fit.data().cluster_stats(), fit.estimates().theta,
+        spec.kind == InformationKind::Expected);
+    if (!ti) {
+      return std::unexpected(make_error(ErrorStage::Fit, ti.error()));
+    }
+    info = std::move(*ti);
   } else {
     return std::unexpected(make_error(
         ErrorStage::UnsupportedCombination,
-        "standard_errors() supports complete-data ML, FIML, and continuous "
-        "least-squares fits"));
+        "standard_errors() supports complete-data ML, FIML, continuous "
+        "least-squares, and two-level ML fits"));
   }
   if (!info) {
     return std::unexpected(make_error(ErrorStage::PostFit, info.error()));
@@ -1138,6 +1239,33 @@ Result<TestResult> test(const Fit &fit, TestSpec spec) {
     return TestResult{"ordinal-standard", robust->chisq_standard, robust->df,
                       inference::chi2_pvalue(robust->chisq_standard,
                                              robust->df)};
+  }
+
+  if (const auto *cs = fit.data().cluster_stats()) {
+    if (fit.estimator() != EstimatorKind::TwoLevelML) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "standard chi-square for clustered data requires a two-level ML fit"));
+    }
+    if (cs->groups.empty()) {
+      return std::unexpected(make_error(
+          ErrorStage::PostFit, "two-level test: empty cluster statistics"));
+    }
+    auto h1 = estimate::twolevel::twolevel_h1_moments(*cs);
+    if (!h1) {
+      return std::unexpected(make_error(ErrorStage::PostFit, h1.error()));
+    }
+    // f = ½F, so F(θ̂) = 2·fmin; the LRT is the saturated subtraction
+    // T = F(θ̂) − F_{H1} (twolevel_ml_derivation, "Objective scale").
+    const double chi2 = 2.0 * fit.estimates().fmin - h1->value;
+    // Saturated two-level moments over a shared p-variable set = within cov
+    // (p(p+1)/2) + between cov (p(p+1)/2) + between means (p) = p(p+1) + p.
+    const Eigen::Index p = cs->groups.front().p_within;
+    const int n_moments = static_cast<int>(p * (p + 1) + p);
+    const int q = static_cast<int>(fit.estimates().theta.size());
+    const int df = n_moments - q;
+    return TestResult{"twolevel-standard", chi2, df,
+                      inference::chi2_pvalue(chi2, df)};
   }
 
   return std::unexpected(
