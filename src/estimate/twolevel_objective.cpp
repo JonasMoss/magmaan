@@ -1,6 +1,7 @@
 #include "magmaan/estimate/twolevel.hpp"
 
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include <Eigen/Cholesky>
@@ -27,13 +28,6 @@ using detail::vech_index;
 using detail::vech_len;
 
 namespace {
-
-template <class T>
-fit_expected<T> not_impl(const char* what) {
-  return std::unexpected(FitError{
-      FitError::Kind::NumericIssue,
-      std::string("estimate::twolevel: ") + what + " not yet implemented"});
-}
 
 FitError err(std::string detail) {
   return FitError{FitError::Kind::NumericIssue, std::move(detail)};
@@ -248,16 +242,68 @@ twolevel_value_gradient(const ClusterSampleStats& cs,
 }
 
 fit_expected<optim::ScalarProblem>
-twolevel_ml_objective(const model::ModelEvaluator& /*ev*/,
-                      const ClusterSampleStats& /*cs*/) {
-  return not_impl<optim::ScalarProblem>("twolevel_ml_objective");
+twolevel_ml_objective(const model::ModelEvaluator& ev,
+                      const ClusterSampleStats& cs) {
+  auto cache_or = twolevel_prepare(cs);
+  if (!cache_or) return std::unexpected(cache_or.error());
+  optim::ScalarProblem prob;
+  prob.n_param = static_cast<Eigen::Index>(ev.n_free());
+  prob.expand = [](const Eigen::VectorXd& x) { return x; };
+  // `ev` and `cs` must outlive the returned problem (see header). f returns the
+  // optimiser's objective ½F and writes ½∇F (magmaan's fmin = ½·deviance).
+  prob.f = [&ev, &cs, cache = *cache_or](const Eigen::VectorXd& theta,
+                                         Eigen::VectorXd& grad) -> double {
+    auto e = ev.evaluate(theta, /*with_sigma_jac=*/true, /*with_mu_jac=*/true);
+    if (!e) return std::numeric_limits<double>::infinity();
+    auto vg = twolevel_value_gradient(cs, cache, e->moments, e->J_sigma,
+                                      e->J_mu, ev.matrix_rep());
+    if (!vg) return std::numeric_limits<double>::infinity();
+    grad = 0.5 * vg->gradient;
+    return 0.5 * vg->value;
+  };
+  return prob;
 }
 
 fit_expected<Eigen::MatrixXd>
-twolevel_information(const model::ModelEvaluator& /*ev*/,
-                     const ClusterSampleStats& /*cs*/,
-                     const Eigen::VectorXd& /*theta*/, bool /*expected*/) {
-  return not_impl<Eigen::MatrixXd>("twolevel_information");
+twolevel_information(const model::ModelEvaluator& ev,
+                     const ClusterSampleStats& cs, const Eigen::VectorXd& theta,
+                     bool /*expected*/) {
+  // v1: observed information by central finite differences of the analytic
+  // full-deviance gradient. info = ½·∂²F/∂θ² is the Fisher information on the
+  // F = -2logL scale; the caller inverts it for vcov. (`expected` is accepted
+  // for the contract but the expected-information path is deferred.)
+  auto cache_or = twolevel_prepare(cs);
+  if (!cache_or) return std::unexpected(cache_or.error());
+  const TwoLevelCache cache = *cache_or;
+  const model::MatrixRep& rep = ev.matrix_rep();
+  const Eigen::Index n = theta.size();
+
+  auto grad_at = [&](const Eigen::VectorXd& th) -> fit_expected<Eigen::VectorXd> {
+    auto e = ev.evaluate(th, true, true);
+    if (!e) {
+      return std::unexpected(err("twolevel information: evaluator failed at a "
+                                 "finite-difference point"));
+    }
+    auto vg = twolevel_value_gradient(cs, cache, e->moments, e->J_sigma,
+                                      e->J_mu, rep);
+    if (!vg) return std::unexpected(vg.error());
+    return vg->gradient;  // full-deviance gradient ∂F/∂θ
+  };
+
+  const double h = 1e-5;
+  Eigen::MatrixXd Hess(n, n);
+  for (Eigen::Index j = 0; j < n; ++j) {
+    Eigen::VectorXd tp = theta, tm = theta;
+    tp(j) += h;
+    tm(j) -= h;
+    auto gp = grad_at(tp);
+    if (!gp) return std::unexpected(gp.error());
+    auto gm = grad_at(tm);
+    if (!gm) return std::unexpected(gm.error());
+    Hess.col(j) = (*gp - *gm) / (2.0 * h);
+  }
+  Hess = (0.5 * (Hess + Hess.transpose())).eval();  // symmetrize
+  return Eigen::MatrixXd(0.5 * Hess);               // ½·∂²F/∂θ²
 }
 
 }  // namespace magmaan::estimate::twolevel

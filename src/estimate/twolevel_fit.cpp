@@ -1,28 +1,120 @@
 #include "magmaan/estimate/twolevel.hpp"
 
+#include <string>
+#include <utility>
+
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/start_values.hpp"
+#include "magmaan/optim/optimizers.hpp"
+
+// Two-level ML start values and the fit composer. The composer mirrors
+// estimate::fit_ml: build the evaluator, package the two-level deviance as an
+// optim::ScalarProblem (twolevel_ml_objective), and drive the optimiser.
+
 namespace magmaan::estimate::twolevel {
 
+namespace {
+
+FitError fit_err(FitError::Kind k, std::string detail) {
+  return FitError{k, std::move(detail)};
+}
+
+// Scalar-objective optimiser dispatch (the subset two-level ML accepts).
+fit_expected<optim::OptimResult>
+drive(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
+      const Bounds& bounds, Backend backend, OptimOptions opts) {
+  switch (backend) {
+    case Backend::NloptLbfgs:
+      return optim::nlopt_lbfgs(prob, x0, bounds, opts);
+    case Backend::NloptSlsqp:
+      return optim::nlopt_slsqp(prob, x0, bounds, opts);
+    case Backend::Ipopt:
+#ifdef MAGMAAN_WITH_IPOPT
+      return optim::ipopt(prob, x0, bounds, opts);
+#else
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "two-level ML: IPOPT requested but MAGMAAN_WITH_IPOPT is off"));
+#endif
+    default:
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "two-level ML supports the NloptLbfgs / NloptSlsqp / Ipopt scalar "
+          "backends"));
+  }
+}
+
+}  // namespace
+
 fit_expected<Eigen::VectorXd>
-twolevel_start_values(const spec::LatentStructure& /*pt*/,
-                      const model::MatrixRep& /*rep*/,
-                      const ClusterSampleStats& /*cs*/,
-                      const spec::Starts& /*starts*/) {
-  // Phase-0 contract stub. Stream C implements the two-level start heuristic.
-  // See the multilevel-SEM plan (Contract 6).
-  return std::unexpected(FitError{
-      FitError::Kind::NumericIssue,
-      "estimate::twolevel: twolevel_start_values not yet implemented"});
+twolevel_start_values(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                      const ClusterSampleStats& cs, const spec::Starts& starts) {
+  // Seed each level's structural starts from the unstructured saturated moments:
+  // feed the H1 within/between covariances (and the between mean) into the
+  // existing per-block start producer as that block's "sample" statistics.
+  auto h1 = twolevel_h1_moments(cs);
+  if (!h1) return std::unexpected(h1.error());
+
+  const auto pairs = model::level_block_pairs(rep);
+  const std::size_t nb = rep.dims.size();
+  data::SampleStats samp;
+  samp.S.assign(nb, Eigen::MatrixXd());
+  samp.mean.assign(nb, Eigen::VectorXd());
+  samp.n_obs.assign(nb, 0);
+  for (std::size_t g = 0; g < cs.groups.size(); ++g) {
+    if (g >= pairs.size() || pairs[g].within < 0 || pairs[g].between < 0) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "twolevel_start_values: group lacks a within/between block pair"));
+    }
+    const auto w = static_cast<std::size_t>(pairs[g].within);
+    const auto b = static_cast<std::size_t>(pairs[g].between);
+    samp.S[w] = h1->sigma_w[g];
+    samp.S[b] = h1->sigma_b[g];
+    samp.mean[b] = h1->mu_b[g];  // within level carries no mean structure
+    samp.n_obs[w] = cs.groups[g].n_within;
+    samp.n_obs[b] = cs.groups[g].n_clusters;
+  }
+  return simple_start_values(pt, rep, samp, starts);
 }
 
 fit_expected<Estimates>
-fit_ml_twolevel(spec::LatentStructure /*pt*/, const model::MatrixRep& /*rep*/,
-                const ClusterSampleStats& /*cs*/, const Eigen::VectorXd& /*x0*/,
-                Bounds /*bounds*/, Backend /*backend*/, OptimOptions /*opts*/) {
-  // Phase-0 contract stub. Stream C implements the two-level ML fit composer
-  // (mirrors estimate::fit_ml). See the multilevel-SEM plan (Contract 6).
-  return std::unexpected(FitError{
-      FitError::Kind::NumericIssue,
-      "estimate::twolevel: fit_ml_twolevel not yet implemented"});
+fit_ml_twolevel(spec::LatentStructure pt, const model::MatrixRep& rep,
+                const ClusterSampleStats& cs, const Eigen::VectorXd& x0,
+                Bounds bounds, Backend backend, OptimOptions opts) {
+  if (x0.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+        "fit_ml_twolevel: x0 size (" + std::to_string(x0.size()) +
+            ") != n_free (" + std::to_string(pt.n_free()) + ")"));
+  }
+  // v1 limitation: no equality/inequality constraints (declared honestly rather
+  // than silently ignored).
+  auto con = build_eq_constraints(pt, /*allow_nonlinear=*/true);
+  if (!con) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_twolevel: constraint build: " + con.error().detail));
+  }
+  if (con->active() || !pt.nonlinear_eq_rows.empty() ||
+      pt.has_inequality_constraints) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_twolevel: two-level v1 does not support equality/inequality "
+        "constraints"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or) {
+    return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+        "fit_ml_twolevel: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  const model::ModelEvaluator ev = std::move(*ev_or);
+
+  auto prob = twolevel_ml_objective(ev, cs);
+  if (!prob) return std::unexpected(prob.error());
+
+  auto out = drive(*prob, x0, bounds, backend, opts);
+  if (!out) return std::unexpected(out.error());
+
+  return Estimates{prob->expand(out->x), out->fmin,        out->iterations,
+                   out->f_evals,         out->g_evals,     out->status,
+                   out->grad_inf_norm,   std::move(out->audit)};
 }
 
 }  // namespace magmaan::estimate::twolevel
