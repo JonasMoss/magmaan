@@ -69,3 +69,4 @@ complete eval.
 | 2026-06-26 | [Bell, Chalmers & Flora 2024](2024-bell-omega-misspecification.md) | Bias of model-based omega (omega_u / omega_H) under structural misspecification | → speculative (model-based omega) |
 | 2026-06-26 | [Lee & Gates 2026](2026-lee-cgsem-vs-classic.md) | cgSEM (tensorsem/Adam) vs classic SEM (lavaan/quasi-Newton); admissibility-conditioned bias | background |
 | 2026-06-26 | [Li & Savalei 2026](2026-li-bifactor-maximal-reliability.md) | Correct maximal reliability (coefficient-H redone) + OLC/OLSC/FD for bifactor models | → speculative |
+| 2026-06-26 | [Schamberger, Schuberth & Henseler 2026](2026-schamberger-composite-moderated-mediation.md) | CMS = LMS + Henseler-Ogasawara composites for moderated mediation | background |
