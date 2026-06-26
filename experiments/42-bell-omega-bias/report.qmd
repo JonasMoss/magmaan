@@ -142,45 +142,45 @@ this first implementation, with best absolute bias
 
 ## CFA Reliability Functional
 
-Let \(S\) be the population covariance matrix used as sample covariance in this
-experiment and let \(w = \mathbf 1_p\) form the unit-weighted total score. For a
-candidate CFA model \(M\), fit the model at \(S\) and let
-\(\hat\theta_M = \arg\min_{\theta \in M} F_{\text{ML}}(S, \Sigma(\theta))\).
-Write \(C_g(\hat\theta_M)\) for the covariance contribution of the declared
-main factor \(g\). The CFA-specific reliability coefficient used here is
+Let $S$ be the population covariance matrix used as sample covariance in this
+experiment and let $w = \mathbf 1_p$ form the unit-weighted total score. For a
+candidate CFA model $M$, fit the model at $S$ and let
+$\hat\theta_M = \arg\min_{\theta \in M} F_{\text{ML}}(S, \Sigma(\theta))$.
+Write $C_g(\hat\theta_M)$ for the covariance contribution of the declared
+main factor $g$. The CFA-specific reliability coefficient used here is
 
-\[
+$$
 \omega_g^{\text{obs}}(M)
   =
   \frac{w^\top C_g(\hat\theta_M) w}{w^\top S w}.
-\]
+$$
 
 For the one-factor and bifactor candidates,
-\(C_g(\hat\theta_M)=\lambda_g\lambda_g^\top\), because the main factor is
+$C_g(\hat\theta_M)=\lambda_g\lambda_g^\top$, because the main factor is
 standardized. For the higher-order candidate, the item coefficients on the
-higher-order factor are indirect: if \(\Lambda\) contains item loadings on the
-first-order factors and \(\gamma\) contains first-order loadings on the
+higher-order factor are indirect: if $\Lambda$ contains item loadings on the
+first-order factors and $\gamma$ contains first-order loadings on the
 higher-order factor, then
-\(C_g(\hat\theta_M)=(\Lambda\gamma)(\Lambda\gamma)^\top\).
+$C_g(\hat\theta_M)=(\Lambda\gamma)(\Lambda\gamma)^\top$.
 
 Against Bell et al.'s target reliability
-\(\omega_{\text{Bell}} = w^\top C_{\text{gen}} w / w^\top S w\), the
-population bias for candidate \(M\) is
+$\omega_{\text{Bell}} = w^\top C_{\text{gen}} w / w^\top S w$, the
+population bias for candidate $M$ is
 
-\[
+$$
 b_g(M) = \omega_g^{\text{obs}}(M) - \omega_{\text{Bell}}.
-\]
+$$
 
 The model-set sensitivity diagnostic is just the range of that coefficient over
-a small CFA set \(\mathcal M\):
+a small CFA set $\mathcal M$:
 
-\[
+$$
 R_\omega(\mathcal M)
   =
   \max_{M \in \mathcal M}\omega_g^{\text{obs}}(M)
   -
   \min_{M \in \mathcal M}\omega_g^{\text{obs}}(M).
-\]
+$$
 
 This is not a new fit index. It asks whether plausible CFA ways of protecting a
 declared main factor produce materially different main-factor reliability
@@ -199,7 +199,7 @@ knitr::kable(tab, row.names = FALSE)
 ```
 
 The next table uses the CFA functional above. `Omega range` is
-\(R_\omega(\mathcal M)\) over the candidate set: one factor, one factor with
+$R_\omega(\mathcal M)$ over the candidate set: one factor, one factor with
 within-block residual covariances, bifactor blocks, and for p=12 also
 higher-order blocks.
 
@@ -213,7 +213,7 @@ The full population-moment tables, including high-reliability cells, are in
 
 ## Caveats
 
-This is not a finite-sample replication. There is no \(N\), no convergence
+This is not a finite-sample replication. There is no $N$, no convergence
 replacement loop, no standard errors, and no coverage. The experiment asks only
 what Bell's bias definition becomes after sample noise is removed.
 
