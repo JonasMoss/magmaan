@@ -30,6 +30,12 @@ corr_path <- file.path(res_dir, "correction.csv")
 corr <- if (file.exists(corr_path)) read.csv(corr_path) else NULL
 cg <- function(coef, p, n, dist, method, col)
   corr[[col]][corr$coef==coef & corr$p==p & corr$n==n & corr$dist==dist & corr$method==method]
+draws_path <- file.path(res_dir, "sampling_draws.csv")
+draws <- if (file.exists(draws_path)) read.csv(draws_path) else NULL
+skew_path <- file.path(res_dir, "sampling_skew.csv")
+skew <- if (file.exists(skew_path)) read.csv(skew_path) else NULL
+sk <- function(coef, p, n, dist, scale)
+  skew[[paste0("skew_", scale)]][skew$coef==coef & skew$p==p & skew$n==n & skew$dist==dist]
 
 has_gg <- requireNamespace("ggplot2", quietly = TRUE)
 method_lab <- c(wald_model = "normal SE", wald_robust = "robust SE",
@@ -111,6 +117,42 @@ width at low reliability (the group-factor interval at 9 indicators, N=50 shrink
 from a mean width of `r fp(g("grp",9,50,"normal","wald_model","mean_width"))` to
 `r fp(g("grp",9,50,"normal","logit_model","mean_width"))` at the same coverage).
 Together they are the best simple interval, near nominal once N is moderate.
+
+### Why it is hard: the small-sample distribution
+
+```{r fig-sampdist, eval = !is.null(draws)}
+#| fig-cap: "Sampling distribution of the estimate at N=50, 18 indicators (2000 replications). Red dashed line is the population value. Both estimates sit well above it, with the general factor piled against the ceiling at 1."
+if (has_gg) {
+  dd <- draws[draws$n == 50 & draws$p == 18, ]
+  dd$coeff <- coef_lab[dd$coef]
+  pv <- data.frame(coef = c("gen","grp"),
+                   rho_pop = c(unique(cov$rho_pop[cov$coef=="gen"&cov$p==18]),
+                               unique(cov$rho_pop[cov$coef=="grp"&cov$p==18])))
+  pv$coeff <- coef_lab[pv$coef]
+  ggplot(dd, aes(rho)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 50,
+                   fill = "grey82", colour = "white") +
+    geom_vline(data = pv, aes(xintercept = rho_pop), colour = "firebrick", linetype = 2) +
+    facet_grid(dist ~ coeff, scales = "free") +
+    labs(x = "estimate (N=50)", y = "density") +
+    theme_minimal(base_size = 11) +
+    theme(panel.grid.minor = element_blank())
+} else {
+  knitr::kable(skew[skew$n==50, c("coef","p","dist","mean","rho_pop","skew_raw","skew_logit","skew_fisher")], digits = 2)
+}
+```
+
+At N=50 the distribution is centred well above the truth and bounded, so the
+problem is mostly *location* (bias), not just shape. That also settles the scale
+for the interval. Maximal reliability is a squared correlation, so the textbook
+move would be Fisher's z on its square root; here that over-corrects. For the group
+factor at N=50 the skewness runs `r fp(sk("grp",18,50,"normal","raw"))` (raw) to
+`r fp(sk("grp",18,50,"normal","logit"))` (logit) to
+`r fp(sk("grp",18,50,"normal","fisher"))` (Fisher); by N=200 the logit scale is
+nearly symmetric (`r fp(sk("grp",18,200,"normal","logit"))`) while Fisher still
+overshoots (`r fp(sk("grp",18,200,"normal","fisher"))`). So the intervals here use
+the logit scale, but no static transform rescues N=50, because the displacement is
+the bias, which the next section corrects directly.
 
 ### What it cannot fix is the bias
 
@@ -224,6 +266,8 @@ correction is a real fix in the moderate-to-large-N regime, and the smallest cel
 ```sh
 # main coverage sweep (~3 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/run_experiment.R
+# small-N sampling distributions and transform-scale skewness (~2 min)
+Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/sampling_dist.R
 # second-order bias correction (~2 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bias_correction.R
 # focused bootstrap reference (~6 min)
