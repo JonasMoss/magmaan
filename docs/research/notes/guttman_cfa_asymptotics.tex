@@ -361,6 +361,42 @@ large-sample variance follows immediately by the delta method:
 \]
 and alpha has the same form with \(\nabla\alpha(\sigma_0)\).
 
+\paragraph{Relation to Hancock and An (2020).}
+Hancock and An \cite{hancockan2020} independently proposed a closed-form
+single-factor omega and evaluated it in a large simulation against the CFA-based
+estimate. Their loading uses Spearman's \cite{spearman1927} ratio-of-sums rule,
+\[
+  \hat\lambda_i
+    =
+  \left\{
+    \frac{\sum_{j<k}S_{ij}S_{ik}}{\sum_{j<k}S_{jk}}
+  \right\}^{1/2},
+  \qquad
+  \hat\omega=\frac{(\sum_i\hat\lambda_i)^2}{T},
+  \qquad j,k\ne i.
+\]
+Under an exact one-factor population this coincides with
+\eqref{eq:guttman-omega-one-factor}: both recover \(\hat\lambda_i^2=\lambda_i^2\phi\)
+and hence the same omega. Off the one-factor model the two differ. The communality
+\(h_i\) above is an \emph{average} of the per-triple ratios
+\(S_{ij}S_{i\ell}/S_{j\ell}\), whereas Hancock and An pool numerators and
+denominators before dividing; pooling is the more numerically stable choice when
+some \(S_{j\ell}\) are near zero, so for the single-factor unit-weight case their
+ratio-of-sums aggregation is preferred. The single-factor closed-form omega is
+therefore not new with this note (numerically confirmed: the two agree to machine
+precision on a one-factor population and diverge, e.g.\ \(0.712\) vs \(0.749\), on a
+two-factor covariance analyzed as one factor).
+
+What \eqref{eq:guttman-omega-general} adds beyond Hancock and An, who restrict
+to a single factor, is the grouping matrix \(X\) and the weights \(w\): a
+closed-form omega \emph{total} for multi-factor, multi-group, and
+weighted-composite reliability. The natural next target is omega
+\emph{hierarchical}: a second-stage centroid on the Guttman factor correlation
+\(\Phi_G\) (a Schmid-Leiman general factor) yields closed-form general-factor
+loadings whenever \(k\ge 3\), and hence a closed-form \(\omega_h\); a
+non-proportional bifactor solution lies outside the simple-structure \(X\) and is
+not available by this route.
+
 \section{Moment-Quadratic Estimators}
 
 Let \(m(\theta)\) be the model-implied covariance moment vector and
@@ -611,10 +647,24 @@ computation, and interpretation.
 \newblock \href{https://doi.org/10.1007/BF02288783}
 {doi:10.1007/BF02288783}.
 
+\bibitem{hancockan2020}
+Hancock, G. R., \& An, J. (2020).
+\newblock A closed-form alternative for estimating \(\omega\) reliability under
+unidimensionality.
+\newblock \emph{Measurement: Interdisciplinary Research and Perspectives}, 18(1),
+1--14.
+\newblock \href{https://doi.org/10.1080/15366367.2019.1656049}
+{doi:10.1080/15366367.2019.1656049}.
+
 \bibitem{harman1976}
 Harman, H. H. (1976).
 \newblock \emph{Modern factor analysis} (3rd ed.).
 \newblock University of Chicago Press.
+
+\bibitem{spearman1927}
+Spearman, C. (1927).
+\newblock \emph{The abilities of man: Their nature and measurement}.
+\newblock Macmillan.
 
 \bibitem{mcdonald1999}
 McDonald, R. P. (1999).
