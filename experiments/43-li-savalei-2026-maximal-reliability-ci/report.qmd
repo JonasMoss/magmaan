@@ -30,6 +30,10 @@ corr_path <- file.path(res_dir, "correction.csv")
 corr <- if (file.exists(corr_path)) read.csv(corr_path) else NULL
 cg <- function(coef, p, n, dist, method, col)
   corr[[col]][corr$coef==coef & corr$p==p & corr$n==n & corr$dist==dist & corr$method==method]
+cf_path <- file.path(res_dir, "cf_coverage.csv")
+cfdat <- if (file.exists(cf_path)) read.csv(cf_path) else NULL
+cfc <- function(coef, p, n, dist, method, col)
+  cfdat[[col]][cfdat$coef==coef & cfdat$p==p & cfdat$n==n & cfdat$dist==dist & cfdat$method==method]
 draws_path <- file.path(res_dir, "sampling_draws.csv")
 draws <- if (file.exists(draws_path)) read.csv(draws_path) else NULL
 skew_path <- file.path(res_dir, "sampling_skew.csv")
@@ -80,7 +84,9 @@ in the smallest samples (driving the weak group factor's estimate negative); don
 the logit scale and mapped back, it stays bounded, is essentially unbiased by N=100,
 and lifts the group factor's small-N coverage. The one case it cannot rescue is the
 general factor at N<=100, whose distribution is piled against the upper bound at 1,
-where the residual problem is the boundary rather than the bias. The coefficients
+where the residual problem is the boundary rather than the bias; a skew-aware
+(Cornish-Fisher) interval does not close that gap either, because the skewness it
+needs is itself unreliable at N=50. The coefficients
 sit in the two regimes they describe: the general factor
 is reliable (population value
 `r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==9]))`-`r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==18]))`),
@@ -257,16 +263,50 @@ removes its bias but does not restore coverage (18 indicators, N=50:
 `r fp(cg("gen",18,50,"normal","second_order_logit","coverage"))` corrected), because
 its sampling distribution is piled against the ceiling at 1 (see above): the
 residual problem there is the boundary, not the bias, and a Wald interval cannot fix
-it on any scale. That is the cell for a resampling or skew-aware interval.
+it on any scale. That is the cell for a skew-aware interval.
+
+### A skew-aware (Cornish-Fisher) interval does not rescue it
+
+The natural next step is to correct the interval's quantiles for the skewness rather
+than assume normality. A Cornish-Fisher interval replaces the normal quantile `z`
+with `z + (g1/6)(z^2-1)`, taken on the logit scale, with the skewness `g1` obtained
+analytically (one Hessian-vector product, no bootstrap). It does not help.
+
+```{r cf-eval, eval = !is.null(cfdat), results = "asis"}
+cat("Where the asymptotics hold the skewness estimate is accurate: at N=200 the",
+    "analytic `g1` for the group factor at 18 indicators is",
+    sprintf("%.2f", cfc("grp",18,200,"normal","cf","mean_gamma1")),
+    "against an observed logit-scale skewness near 0.02, and Cornish-Fisher covers",
+    sprintf("%.2f.", cfc("grp",18,200,"normal","cf","coverage")),
+    "But at the small N where help is needed the leading-order skewness is",
+    "over-estimated several-fold (general factor, 18 indicators, N=50: analytic",
+    sprintf("%.1f", cfc("gen",18,50,"normal","cf","mean_gamma1")),
+    "against an observed value near 0.9), past the range where the expansion is even",
+    "monotone for",
+    sprintf("%.0f%%", 100*cfc("gen",18,50,"normal","cf","frac_nonmono")),
+    "of replicates, and the over-correction drives coverage *down* to",
+    sprintf("%.2f", cfc("gen",18,50,"normal","cf","coverage")),
+    "(general factor) and",
+    sprintf("%.2f", cfc("grp",18,50,"normal","cf","coverage")),
+    "(group factor), below the bias-corrected Wald.\n")
+```
+
+So the skew correction is no rescue, and for an instructive reason: at small N the
+higher cumulants it relies on are themselves unstable to estimate, the same
+breakdown one order up. A resampling (BCa) interval would hit the identical wall,
+since its skewness estimate is just as shaky there. The logit-scale point bias
+correction with a plain interval stays the best simple option; the small-N corner is
+a genuine identification limit, not a missing transform.
 
 ## Caveats
 
 - One model family: an orthogonal bifactor with three subscales, equal loadings,
   correct specification, complete data, continuous ML. The two distributions are
   normal and a strongly skewed one with the same covariance.
-- The bias correction is the single analytic second-order term. On the logit scale
-  it is stable down to N=50; the remaining gap is the general factor's boundary
-  pileup at small N, where a skew-aware or resampling (BCa) interval is the next step.
+- The bias correction is the single analytic second-order term; on the logit scale it
+  is stable down to N=50. The remaining gap is the general factor's boundary pileup at
+  small N, which the skew-aware (Cornish-Fisher) interval here does not close, and
+  which a resampling interval would not either; it reads as an identification limit.
 - The bootstrap arm is a focused reference at 18 indicators, N=100. A full bootstrap
   sweep is impractical at the smallest cells: at 9 indicators and N=50 the resampled
   bifactor models frequently fail to converge, which is itself a reason to prefer an
@@ -283,6 +323,8 @@ Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/run_experiment.R
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/sampling_dist.R
 # second-order bias correction (~2 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bias_correction.R
+# Cornish-Fisher (skew-aware) interval comparison (~2 min)
+Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/cf_interval.R
 # focused bootstrap reference (~6 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bootstrap.R --pkeys p18 --ns 100
 quarto render experiments/43-li-savalei-2026-maximal-reliability-ci/report.qmd

@@ -165,6 +165,43 @@ curvature_bias <- function(theta, pt, rebuild, pop, which, V,
   0.5 * acc
 }
 
+# --- Cornish-Fisher interval on the logit scale --------------------------------
+#
+# CF corrects the normal (Wald) quantiles for skewness: q(z) = z + (g1/6)(z^2 - 1).
+# We apply it to the studentized logit-scale estimator (h-hat - h)/se_h, whose mean
+# is the standardized bias b* and whose skewness g1 we get analytically (no
+# bootstrap). For h = logit(g), to leading order kappa2 = grad_h' V grad_h = se_h^2
+# and kappa3 = 3 grad_h' V (Hess_h) V grad_h = 3 u' Hess_h u with u = V grad_h, a
+# single Hessian-vector product (the tr((BV)^3) term is higher order). On the logit
+# scale the [0,1] boundary is at +/-Inf, so the residual skew is the smooth kind the
+# Edgeworth/CF expansion is valid for. Returns the back-transformed (lo, hi) plus
+# g1, b*, and a flag for |g1| past the CF monotonicity range (expansion on thin ice).
+cf_logit_interval <- function(theta, pt, rebuild, pop, which, V, alpha = 0.05) {
+  g0 <- rho_of_theta(theta, rebuild, pop, which)
+  gc <- min(1 - 1e-9, max(1e-9, g0))
+  h0 <- stats::qlogis(gc)
+  gr <- grad_rho(theta, pt, rebuild, pop, which)          # grad g, free ordering
+  se_rho <- sqrt(max(0, as.numeric(crossprod(gr, V %*% gr))))
+  se_h <- se_rho / (gc * (1 - gc))
+  if (!(se_h > 0) || !is.finite(se_h)) return(NULL)
+  gh <- gr / (gc * (1 - gc))                              # grad h = grad g / g(1-g)
+  u <- as.numeric(V %*% gh)
+  nu <- sqrt(sum(u^2)); eps <- 1e-4 / max(nu, 1e-12)
+  pos2row <- free_pos_to_row(pt)
+  lf <- function(x) stats::qlogis(min(1 - 1e-9, max(1e-9, x)))
+  bump <- function(s) { th <- theta; th[pos2row] <- th[pos2row] + s * eps * u; th }
+  uBu <- (lf(rho_of_theta(bump(1), rebuild, pop, which)) - 2 * h0 +
+          lf(rho_of_theta(bump(-1), rebuild, pop, which))) / eps^2
+  gamma1 <- 3 * uBu / se_h^3
+  bstar  <- curvature_bias(theta, pt, rebuild, pop, which, V, link = "logit") / se_h
+  qf <- function(z) bstar + z + (gamma1 / 6) * (z^2 - 1)
+  zlo <- stats::qnorm(alpha / 2); zhi <- stats::qnorm(1 - alpha / 2)
+  list(lo = stats::plogis(h0 - se_h * qf(zhi)),
+       hi = stats::plogis(h0 - se_h * qf(zlo)),
+       gamma1 = gamma1, bstar = bstar,
+       nonmono = abs(gamma1) > 3 / zhi)                   # ~1.53: CF unreliable beyond
+}
+
 # --- one replicate: fit, both coefficients, model & robust delta SEs -----------
 
 # Returns a one-row-per-coefficient data.frame with the point estimate and the
