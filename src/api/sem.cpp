@@ -568,6 +568,12 @@ EstimatorSpec ordinal_wls() {
   return out;
 }
 
+EstimatorSpec twolevel_ml() {
+  EstimatorSpec out;
+  out.kind = EstimatorKind::TwoLevelML;
+  return out;
+}
+
 EstimatorSpec dwls() { return ordinal_dwls(); }
 
 InformationSpec expected_information() {
@@ -602,6 +608,14 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
 
   spec::LatentStructure pt = model->structure();
   const auto &rep = model->matrix_rep();
+
+  if (estimator.kind == EstimatorKind::TwoLevelML) {
+    // Phase-0 contract stub. Stream D wires the cluster-data dispatch into
+    // estimate::twolevel::fit_ml_twolevel. See the multilevel-SEM plan.
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "two-level (multilevel) ML is not yet implemented"));
+  }
 
   if (estimator.kind == EstimatorKind::FIML) {
     const auto *raw = data->raw();
@@ -776,6 +790,9 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     break;
   case EstimatorKind::FIML:
   case EstimatorKind::DWLS:
+  case EstimatorKind::TwoLevelML:
+    // Handled by early returns above (FIML at the FIML branch; DWLS and
+    // TwoLevelML before the sample-stats requirement). Unreachable here.
     break;
   }
 

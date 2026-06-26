@@ -72,6 +72,7 @@ build_matrix_rep(const spec::LatentStructure& pt,
   out.dims.resize(nb);
   out.ov_names.resize(nb);
   out.lv_names.resize(nb);
+  out.block_info.resize(nb);
 
   // The canonical orderings + classification are precomputed by lavaanify and
   // ride on the partable's variable inventory — matrix_rep no longer re-derives
@@ -91,6 +92,11 @@ build_matrix_rep(const spec::LatentStructure& pt,
     out.lv_names[b] = lv_names_b;
     out.dims[b] = BlockDims{static_cast<std::int16_t>(pt.ov_order.size()),
                             static_cast<std::int16_t>(pt.lv_ext_order.size())};
+    // Single-level / multi-group: each block is simply a group. The two-level
+    // front-end (Stream A) overrides nb and these roles with the (group,level)
+    // axis; see partable.hpp::block_of and BlockLevel.
+    out.block_info[b] = BlockInfo{static_cast<std::int16_t>(b), 0,
+                                  BlockLevel::Single};
   }
 
   // Phantom-Λ structural identity cells per block: every variable promoted
@@ -235,6 +241,22 @@ build_matrix_rep(const spec::LatentStructure& pt,
   }
 
   return out;
+}
+
+std::vector<LevelBlockPair> level_block_pairs(const MatrixRep& rep) {
+  std::vector<LevelBlockPair> pairs;
+  for (std::size_t b = 0; b < rep.block_info.size(); ++b) {
+    const BlockInfo& bi = rep.block_info[b];
+    const std::size_t g = static_cast<std::size_t>(bi.group);
+    if (g >= pairs.size()) pairs.resize(g + 1);
+    if (bi.role == BlockLevel::Between) {
+      pairs[g].between = static_cast<std::int32_t>(b);
+    } else {
+      // `Single` and `Within` both occupy the within slot.
+      pairs[g].within = static_cast<std::int32_t>(b);
+    }
+  }
+  return pairs;
 }
 
 }  // namespace magmaan::model

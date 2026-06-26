@@ -94,6 +94,7 @@ add_library(magmaan STATIC
   src/model/auto_identification.cpp
   src/data/raw_data.cpp
   src/data/pairwise_cov.cpp
+  src/data/cluster_stats.cpp
   src/data/frontier/shrinkage.cpp
   src/data/h_score.cpp
   src/data/pairwise_mixed.cpp
@@ -101,6 +102,9 @@ add_library(magmaan STATIC
   src/data/ordinal.cpp
   src/estimate/fit.cpp
   src/estimate/evaluate.cpp
+  src/estimate/twolevel_objective.cpp
+  src/estimate/twolevel_h1.cpp
+  src/estimate/twolevel_fit.cpp
   src/estimate/backend_strings.cpp
   src/estimate/nt.cpp
   src/estimate/ml_continuation.cpp
