@@ -207,6 +207,128 @@ projection variant used by Dhaene and Rosseel. For asymptotic comparisons, the
 clean map is the right first target.
 \end{remark}
 
+\section{Guttman Omega and Alpha}
+
+Let \(w\in\mathbb{R}^p\) be fixed score weights. For a diagonal-residual CFA
+model, coefficient omega for the composite \(w\T y\) is
+\[
+  \omega(\Lambda,\Phi,\psi;w)
+    =
+  \frac{w\T\Lambda\Phi\Lambda\T w}{w\T S w},
+\]
+where \(S\) is the covariance matrix whose reliability is being summarized
+\cite{mcdonald1999}. Applying this formula to the Guttman map gives
+\[
+  \omega_G(\sigma;w)
+    =
+  \frac{w\T\Lambda_G\Phi_G\Lambda_G\T w}{w\T S(\sigma) w}.
+\]
+This looks parameter-based, but the parameters cancel. Since
+\[
+  \Lambda_G\Phi_G\Lambda_G\T
+    =
+  K^\star P (K^\star)\T
+    =
+  L P^{-1}L\T
+    =
+  C X(X\T C X)^{-1}X\T C,
+\]
+we have the covariance-only form
+\begin{equation}\label{eq:guttman-omega-general}
+  \omega_G(\sigma;w)
+    =
+  \frac{
+    w\T C X(X\T C X)^{-1}X\T C w
+  }{
+    w\T S(\sigma)w
+  }.
+\end{equation}
+Thus, once the grouping matrix \(X\) and communality rule \(h(\sigma)\) are
+fixed, Guttman omega is a population covariance functional. It does not require
+iterative loadings, fitted residual variances, or marker choices. It is not
+assumption-free: \(X\), \(h\), and the nonsingularity of \(X\T C X\) are part of
+the definition.
+
+For one factor, \(X=\mathbf{1}\). Put
+\[
+  a=C\mathbf{1},\qquad b=\mathbf{1}\T C\mathbf{1},\qquad
+  T=\mathbf{1}\T S\mathbf{1}.
+\]
+Then
+\[
+  \omega_G(w)=\frac{(w\T a)^2}{b\,w\T S w}.
+\]
+For the unit-weight total score \(w=\mathbf{1}\), this collapses further:
+\begin{equation}\label{eq:guttman-omega-one-factor}
+  \omega_G
+    =
+  \frac{\mathbf{1}\T C\mathbf{1}}{\mathbf{1}\T S\mathbf{1}}
+    =
+  \frac{\sum_{i\ne j}S_{ij}+\sum_i h_i}{T}
+    =
+  1-\frac{\sum_i(S_{ii}-h_i)}{T}.
+\end{equation}
+So the one-factor Guttman-derived omega is especially simple: replace each
+item variance by its Guttman communality, sum all entries, and divide by the
+observed total-score variance.
+
+Cronbach's alpha for the same unit-weight score is
+\cite{cronbach1951}
+\begin{equation}\label{eq:alpha}
+  \alpha
+    =
+  \frac{p}{p-1}
+  \left(
+    1-\frac{\tr(S)}{\mathbf{1}\T S\mathbf{1}}
+  \right)
+    =
+  \frac{p}{p-1}\,
+  \frac{\sum_{i\ne j}S_{ij}}{T}.
+\end{equation}
+Equations~\eqref{eq:guttman-omega-one-factor} and \eqref{eq:alpha} show the
+contrast. Alpha extrapolates reliability from the off-diagonal covariance
+average. Guttman omega uses the same off-diagonal covariance sum, but adds an
+explicit diagonal common-variance estimate \(\sum_i h_i\).
+
+Under an exact one-factor congeneric population,
+\[
+  \Sigma=\lambda\lambda\T\phi+\diag(\psi),
+\]
+and under a communality rule that recovers \(h_i=\lambda_i^2\phi\),
+\[
+  \omega_G
+    =
+  \frac{\phi(\mathbf{1}\T\lambda)^2}
+       {\phi(\mathbf{1}\T\lambda)^2+\mathbf{1}\T\psi},
+\]
+which is the usual omega total for the unit-weight sum score. In the same
+case,
+\[
+  \omega_G-\alpha
+    =
+  \frac{
+    \phi\{p\sum_i\lambda_i^2-(\sum_i\lambda_i)^2\}
+  }{
+    (p-1)T
+  }
+  \ge 0,
+\]
+with equality exactly when the keyed loadings are equal. Thus alpha and
+Guttman omega agree in the tau-equivalent case; with congeneric loadings,
+alpha is lower because it has no direct diagonal common-variance estimate.
+
+Away from the exact one-factor model, both quantities remain smooth covariance
+functionals, but they target different summaries. Alpha needs no loading
+pattern and is easiest to compute. Guttman omega is still non-iterative, but it
+imports the CFA grouping pattern and the chosen communality estimator. Its
+large-sample variance follows immediately by the delta method:
+\[
+  \sqrt n\{\hat\omega_G-\omega_G\}
+    \Rightarrow
+  N\{0,\nabla\omega_G(\sigma_0)\T\Gamma\nabla\omega_G(\sigma_0)\},
+\]
+and alpha has the same form with \(\nabla\alpha(\sigma_0)\).
+
 \section{Moment-Quadratic Estimators}
 
 Let \(m(\theta)\) be the model-implied covariance moment vector and
@@ -433,6 +555,13 @@ Browne, M. W. (1974).
 structures.
 \newblock \emph{South African Statistical Journal}, 8, 1--24.
 
+\bibitem{cronbach1951}
+Cronbach, L. J. (1951).
+\newblock Coefficient alpha and the internal structure of tests.
+\newblock \emph{Psychometrika}, 16, 297--334.
+\newblock \href{https://doi.org/10.1007/BF02310555}
+{doi:10.1007/BF02310555}.
+
 \bibitem{dhaene2024}
 Dhaene, S., \& Rosseel, Y. (2024).
 \newblock An evaluation of non-iterative estimators in confirmatory factor
@@ -454,6 +583,11 @@ computation, and interpretation.
 Harman, H. H. (1976).
 \newblock \emph{Modern factor analysis} (3rd ed.).
 \newblock University of Chicago Press.
+
+\bibitem{mcdonald1999}
+McDonald, R. P. (1999).
+\newblock \emph{Test theory: A unified treatment}.
+\newblock Lawrence Erlbaum.
 
 \end{thebibliography}
 
