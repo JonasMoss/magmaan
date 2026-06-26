@@ -75,12 +75,13 @@ bootstrap confirms it: the percentile interval inherits the same bias and
 under-covers, while an interval that reflects the bias out does markedly better. So
 the missing piece Li & Savalei point to is a *bias correction*, not just a variance
 estimate. Correcting the estimate after the fact with the analytic second-order term
-bears this out: once N is at least about 200 it removes essentially all the bias
-(residual under 0.02) and brings coverage to nominal for both coefficients, but in
-the smallest samples the single correction term over-shoots, badly for the weak
-group factor (driving the estimate negative), because the reliability functional is
-too nonlinear there for a one-term expansion. The coefficients sit in the two
-regimes they describe: the general factor
+bears this out: done on the raw scale it removes the bias for N>=200 but over-shoots
+in the smallest samples (driving the weak group factor's estimate negative); done on
+the logit scale and mapped back, it stays bounded, is essentially unbiased by N=100,
+and lifts the group factor's small-N coverage. The one case it cannot rescue is the
+general factor at N<=100, whose distribution is piled against the upper bound at 1,
+where the residual problem is the boundary rather than the bias. The coefficients
+sit in the two regimes they describe: the general factor
 is reliable (population value
 `r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==9]))`-`r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==18]))`),
 the group factor is not
@@ -212,12 +213,17 @@ its plug-in estimate gives the corrected value
 $\tilde\rho = \hat\rho^* - \tfrac{1}{2}\operatorname{tr}(\nabla^2 g\,\hat V)$,
 computed from the same fit with no refit.
 
+The correction can be taken on the raw scale or, since `g` is closer to linear on
+the unbounded logit scale, on the logit scale with the result mapped back: the
+inverse logit keeps the corrected value inside (0, 1) by construction.
+
 ```{r fig-correction, eval = !is.null(corr)}
-#| fig-cap: "Bias of the estimate before and after the second-order correction, vs sample size (500 replications). The y-axis is clipped; at N=50 the corrected group-factor estimate over-shoots far below the panel (to about -1.2 at 9 indicators)."
+#| fig-cap: "Bias of the estimate before and after correction, vs sample size (500 replications). The y-axis is clipped; the raw-scale correction over-shoots far below the panel at N=50 (to about -1.2 for the group factor at 9 indicators). The logit-scale correction stays bounded."
 if (has_gg) {
   cc <- corr; cc$coeff <- coef_lab[cc$coef]; cc$panel <- paste0(cc$p, " indicators, ", cc$dist)
-  cc$method <- factor(cc$method, levels = c("uncorrected","second_order"),
-                      labels = c("uncorrected","second-order corrected"))
+  cc$method <- factor(cc$method,
+    levels = c("uncorrected","second_order","second_order_logit"),
+    labels = c("uncorrected","second-order (raw)","second-order (logit)"))
   ggplot(cc, aes(n, bias, colour = method, group = method)) +
     geom_hline(yintercept = 0, colour = "grey60") +
     geom_line() + geom_point(size = 1.3) +
@@ -232,28 +238,35 @@ if (has_gg) {
 }
 ```
 
-Once N is at least about 200 the correction works cleanly for both coefficients:
-the residual bias is under 0.02 and the under-covering general factor moves to
-nominal (at 18 indicators, N=500, its bias falls from
-`r fp(cg("gen",18,500,"normal","uncorrected","bias"))` to
-`r fp(cg("gen",18,500,"normal","second_order","bias"))` and coverage from
-`r fp(cg("gen",18,500,"normal","uncorrected","coverage"))` to
-`r fp(cg("gen",18,500,"normal","second_order","coverage"))`). Below N around 100 the
-single term over-shoots: for the group factor at 9 indicators, N=50 it swings the
-estimate from `r fp(cg("grp",9,50,"normal","uncorrected","bias"))` to about
+The raw-scale correction works at N>=200 but over-shoots in the smallest samples:
+for the group factor at 9 indicators, N=50 it swings the estimate from
+`r fp(cg("grp",9,50,"normal","uncorrected","bias"))` to about
 `r fp(cg("grp",9,50,"normal","second_order","bias"))`, off any sensible scale,
-because the functional is too curved there for a one-term expansion. So the
-correction is a real fix in the moderate-to-large-N regime, and the smallest cells
-(where the group-factor coefficient is already least trustworthy) defeat it.
+because the functional is too curved there for a one-term expansion on that scale.
+The **logit-scale correction removes that failure mode**: the same group-factor cell
+goes from `r fp(cg("grp",9,50,"normal","uncorrected","bias"))` to a controlled
+`r fp(cg("grp",9,50,"normal","second_order_logit","bias"))`, and across the whole
+grid the logit correction is essentially unbiased by N=100 and never over-shoots.
+For the group factor it also lifts coverage at small N (18 indicators, N=50:
+`r fp(cg("grp",18,50,"normal","uncorrected","coverage"))` to
+`r fp(cg("grp",18,50,"normal","second_order_logit","coverage"))`).
+
+One case resists all of this: the **general factor at N<=100**. The correction
+removes its bias but does not restore coverage (18 indicators, N=50:
+`r fp(cg("gen",18,50,"normal","uncorrected","coverage"))` uncorrected,
+`r fp(cg("gen",18,50,"normal","second_order_logit","coverage"))` corrected), because
+its sampling distribution is piled against the ceiling at 1 (see above): the
+residual problem there is the boundary, not the bias, and a Wald interval cannot fix
+it on any scale. That is the cell for a resampling or skew-aware interval.
 
 ## Caveats
 
 - One model family: an orthogonal bifactor with three subscales, equal loadings,
   correct specification, complete data, continuous ML. The two distributions are
   normal and a strongly skewed one with the same covariance.
-- The bias correction tested here is the single analytic second-order term; it works
-  at N>=200 and over-shoots below that. A higher-order or bootstrap-based correction
-  in the small-N corner is the natural next step.
+- The bias correction is the single analytic second-order term. On the logit scale
+  it is stable down to N=50; the remaining gap is the general factor's boundary
+  pileup at small N, where a skew-aware or resampling (BCa) interval is the next step.
 - The bootstrap arm is a focused reference at 18 indicators, N=100. A full bootstrap
   sweep is impractical at the smallest cells: at 9 indicators and N=50 the resampled
   bifactor models frequently fail to converge, which is itself a reason to prefer an

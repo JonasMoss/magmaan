@@ -137,11 +137,20 @@ free_pos_to_row <- function(pt) {
   m
 }
 
-curvature_bias <- function(theta, pt, rebuild, pop, which, V) {
+# (1/2) tr(g'' V), or the same for the transformed functional logit(g) when
+# link = "logit": there g lives on the unbounded scale where it is closer to
+# linear, so the curvature term is smaller and the back-transformed correction
+# stays inside (0, 1) by construction (no catastrophic over-shoot at small N).
+curvature_bias <- function(theta, pt, rebuild, pop, which, V,
+                           link = c("identity", "logit")) {
+  link <- match.arg(link)
+  lf <- switch(link,
+    identity = function(x) x,
+    logit    = function(x) stats::qlogis(pmin(1 - 1e-9, pmax(1e-9, x))))
   pos2row <- free_pos_to_row(pt)
   p <- length(pos2row)
   eg <- eigen((V + t(V)) / 2, symmetric = TRUE)
-  g0 <- rho_of_theta(theta, rebuild, pop, which)
+  g0 <- lf(rho_of_theta(theta, rebuild, pop, which))
   bump <- function(v, s) { th <- theta; th[pos2row] <- th[pos2row] + s * v; th }
   acc <- 0
   for (k in seq_len(p)) {
@@ -149,8 +158,8 @@ curvature_bias <- function(theta, pt, rebuild, pop, which, V) {
     if (abs(lam) < 1e-10) next
     v <- eg$vectors[, k]
     h <- 1e-4
-    d2 <- (rho_of_theta(bump(v, h), rebuild, pop, which) - 2 * g0 +
-           rho_of_theta(bump(v, -h), rebuild, pop, which)) / h^2
+    d2 <- (lf(rho_of_theta(bump(v, h), rebuild, pop, which)) - 2 * g0 +
+           lf(rho_of_theta(bump(v, -h), rebuild, pop, which))) / h^2
     acc <- acc + lam * d2
   }
   0.5 * acc
