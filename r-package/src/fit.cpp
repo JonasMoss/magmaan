@@ -31,6 +31,7 @@
 #include "magmaan/measures/composite_weights.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/measures/residuals.hpp"
+#include "magmaan/measures/reliability.hpp"
 #include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
@@ -153,6 +154,69 @@ Rcpp::List standardized_to_list(
     const magmaan::measures::standardize::StandardizedSolution& r) {
   return Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(r.theta),
                             Rcpp::_["se"] = Rcpp::wrap(r.se));
+}
+
+Rcpp::List reliability_results_to_r(
+    const Eigen::MatrixXd& S,
+    Rcpp::Nullable<Rcpp::NumericMatrix> gamma,
+    int n) {
+  namespace rel = magmaan::measures::frontier::reliability;
+
+  const rel::Coefficient coefs[] = {
+      rel::Coefficient::Alpha,
+      rel::Coefficient::Lambda6,
+      rel::Coefficient::SpearmanGuttmanOmega};
+  const char* names[] = {"alpha", "lambda6", "spearman_guttman_omega"};
+  const char* grad_method[] = {"analytic", "analytic", "finite_difference"};
+  constexpr R_xlen_t n_coef = 3;
+
+  const bool has_gamma = gamma.isNotNull();
+  Eigen::MatrixXd G;
+  if (has_gamma) {
+    if (n <= 0) Rcpp::stop("magmaan: measures_reliability_cov() needs n > 0 when gamma is supplied");
+    G = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(gamma.get()));
+  }
+
+  Rcpp::CharacterVector coef_col(n_coef), grad_method_col(n_coef);
+  Rcpp::NumericVector value_col(n_coef), avar_col(n_coef), se_col(n_coef);
+  Rcpp::IntegerVector n_col(n_coef);
+  Rcpp::List gradients(n_coef);
+
+  for (R_xlen_t i = 0; i < n_coef; ++i) {
+    coef_col[i] = names[i];
+    grad_method_col[i] = grad_method[i];
+    if (has_gamma) {
+      auto out_or = rel::delta_method(coefs[i], S, G, n);
+      if (!out_or.has_value()) stop_post(out_or.error());
+      value_col[i] = out_or->value;
+      avar_col[i] = out_or->avar;
+      se_col[i] = out_or->se;
+      gradients[i] = Rcpp::wrap(out_or->gradient);
+      n_col[i] = n;
+    } else {
+      auto value_or = rel::value(coefs[i], S);
+      if (!value_or.has_value()) stop_post(value_or.error());
+      auto grad_or = rel::gradient(coefs[i], S);
+      if (!grad_or.has_value()) stop_post(grad_or.error());
+      value_col[i] = *value_or;
+      avar_col[i] = NA_REAL;
+      se_col[i] = NA_REAL;
+      gradients[i] = Rcpp::wrap(*grad_or);
+      n_col[i] = NA_INTEGER;
+    }
+  }
+
+  gradients.attr("names") = coef_col;
+  Rcpp::DataFrame table = Rcpp::DataFrame::create(
+      Rcpp::_["coefficient"] = coef_col,
+      Rcpp::_["value"] = value_col,
+      Rcpp::_["se"] = se_col,
+      Rcpp::_["avar"] = avar_col,
+      Rcpp::_["n"] = n_col,
+      Rcpp::_["gradient_method"] = grad_method_col,
+      Rcpp::_["stringsAsFactors"] = false);
+  return Rcpp::List::create(Rcpp::_["table"] = table,
+                            Rcpp::_["gradient"] = gradients);
 }
 
 Rcpp::DataFrame composite_weights_df(
@@ -3988,6 +4052,18 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
       ctx.pt, ctx.rep, ctx.samp, est);
   if (!r_or.has_value()) stop_post(r_or.error());
   return standardized_residuals_to_r(*r_or, ctx.rep.ov_names);
+}
+
+// measures_reliability_cov() — covariance-only reliability coefficients and
+// optional delta-method SEs from an asymptotic covariance of vech(S).
+//
+// [[Rcpp::export]]
+Rcpp::List measures_reliability_cov(
+    Rcpp::NumericMatrix S,
+    Rcpp::Nullable<Rcpp::NumericMatrix> gamma = R_NilValue,
+    int n = 0) {
+  const Eigen::MatrixXd S_m = Rcpp::as<Eigen::MatrixXd>(S);
+  return reliability_results_to_r(S_m, gamma, n);
 }
 
 // measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`

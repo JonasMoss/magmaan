@@ -56,6 +56,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 38 | [jamil-rosseel-2026-rbm-sem](38-jamil-rosseel-2026-rbm-sem/report.qmd) | replication | active | Can we reproduce the SEM reduced-bias paper's two-factor and growth-curve RBM examples from the authors' OSF outputs before magmaan-owned reruns? |
 | 39 | [rbm-bias-small](39-rbm-bias-small/report.qmd) | probe | active | In a small magmaan-owned CFA run, do standard, explicit post-hoc RBM, and implicit integrated RBM differ in finite-sample bias for GLS, FIML, and ordinal DWLS? |
 | 40 | [guttman-cfa-asymptotics](40-guttman-cfa-asymptotics/report.qmd) | benchmark | active | How do Guttman's closed-form CFA estimates compare with NT/ULS/GLS/WLS in asymptotic variance and fixed-misspecification risk? |
+| 41 | [reliability-lambda6](41-reliability-lambda6/report.qmd) | benchmark | active | How do alpha, Guttman's lambda6, covariance omega, and fitted NT omega compare for total-score reliability under correct and misspecified one-factor summaries? |
 
 ## Archived
 

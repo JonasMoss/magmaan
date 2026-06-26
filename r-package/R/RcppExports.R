@@ -317,6 +317,10 @@ measures_standardized_residuals <- function(fit) {
     .Call(`_magmaan_measures_standardized_residuals`, fit)
 }
 
+measures_reliability_cov <- function(S, gamma = NULL, n = 0L) {
+    .Call(`_magmaan_measures_reliability_cov`, S, gamma, n)
+}
+
 measures_factor_scores <- function(fit, raw_data, method = "regression") {
     .Call(`_magmaan_measures_factor_scores`, fit, raw_data, method)
 }

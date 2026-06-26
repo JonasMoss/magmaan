@@ -1,0 +1,3 @@
+# Keep results/ present but ignore generated simulation output.
+*
+!.gitignore
