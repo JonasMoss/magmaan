@@ -29,6 +29,15 @@ namespace {
 struct State {
   std::vector<Token> tokens;
   std::size_t        pos = 0;
+  // Current block, advanced by each `group:` / `level:` / `block:` header
+  // (production: block_header). Every formula row emitted is stamped with this
+  // value. lavaan numbers blocks 1, 2, 3, … in header order: the *first* header
+  // opens block 1, the second opens block 2, and so on. Single-level /
+  // single-group models never see a header, so `block` stays 1 and the flat
+  // partable is byte-identical to the pre-multilevel parser. `header_count`
+  // tracks how many headers have been seen; `block` is set to it on each header.
+  std::uint32_t      block = 1;
+  std::uint32_t      header_count = 0;
 
   const Token& peek(std::size_t offset = 0) const noexcept {
     const std::size_t i = pos + offset;
@@ -615,13 +624,18 @@ parse_expected<Expr> parse_expr(State& st, std::uint8_t min_bp) noexcept {
 // increase paren depth so we don't mistake a c(... == ...) — though no
 // such modifier exists in v0, the discipline is right.
 struct StatementShape {
-  enum class Kind { Formula, Constraint, Define, Unknown };
+  enum class Kind { Formula, Constraint, Define, BlockHeader, Unknown };
   Kind         kind = Kind::Unknown;
-  std::size_t  op_pos = 0;        // index of the dispatching Op token
+  std::size_t  op_pos = 0;        // index of the dispatching Op / Colon token
   Op           op = Op::Measurement;
   std::string_view op_text;
   SourceSpan   op_span;
 };
+
+// True if `text` is one of the block-header keywords (group / level / block).
+bool is_block_keyword(std::string_view text) noexcept {
+  return text == "group" || text == "level" || text == "block";
+}
 
 StatementShape classify_statement(const State& st) noexcept {
   StatementShape out;
@@ -633,6 +647,15 @@ StatementShape classify_statement(const State& st) noexcept {
       if (t.kind == TokenKind::Newline ||
           t.kind == TokenKind::Semicolon ||
           t.kind == TokenKind::EndOfFile) {
+        return out;
+      }
+      // A top-level `:` makes this a block header (production: block_header).
+      // It must be the second token, immediately after a `group`/`level`/`block`
+      // keyword identifier; `parse_block_header` validates the full form.
+      if (t.kind == TokenKind::Colon) {
+        out.op_pos  = i;
+        out.op_span = t.span;
+        out.kind    = StatementShape::Kind::BlockHeader;
         return out;
       }
       if (t.kind == TokenKind::Op) {
@@ -795,12 +818,12 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
                       const SourceSpan& span,
                       const std::vector<Modifier>& modifiers) {
     if (modifiers.empty()) {
-      flat.rows.push_back(FlatRow{lhs, row_op, rhs_text, /*block=*/1, 0, span});
+      flat.rows.push_back(FlatRow{lhs, row_op, rhs_text, st.block, 0, span});
       return;
     }
     for (const auto& modifier : modifiers) {
       const std::uint32_t mi = flat.add_modifier(modifier);
-      flat.rows.push_back(FlatRow{lhs, row_op, rhs_text, /*block=*/1, mi,
+      flat.rows.push_back(FlatRow{lhs, row_op, rhs_text, st.block, mi,
                                   span});
     }
   };
@@ -835,15 +858,65 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
   return {};
 }
 
+// production: block_header
+//
+//   block_header  ::= block_keyword ':' ( num_lit | identifier | string_lit )
+//   block_keyword ::= 'group' | 'level' | 'block'
+//
+// A header on its own line opens a new block: subsequent formula rows are
+// stamped with `st.block`, which advances 1, 2, 3, … in header order. The
+// block *value* token (the `1` / `2` / label after `:`) is consumed for
+// syntactic well-formedness but is not retained on the flat row — lavaan's
+// `lavParseModelString` likewise carries only the running block index, with
+// the verbal level label resolved later. v1 supports the two-level `level:`
+// axis over a shared observed set; `group:`/`block:` headers and 3+ levels
+// parse but their downstream lavaanify support is intentionally limited.
+parse_expected<void>
+parse_block_header(State& st, FlatPartable& /*flat*/) noexcept {
+  const Token& kw = st.peek();
+  if (kw.kind != TokenKind::Identifier || !is_block_keyword(kw.text)) {
+    return std::unexpected(make_err(
+        ParseError::Kind::UnsupportedOperator, kw.span,
+        std::string("a ':' block header must begin with 'group', 'level', "
+                    "or 'block'; got '") +
+            std::string(kw.text) + "'"));
+  }
+  st.consume();  // the keyword
+  const Token& colon = st.peek();
+  if (colon.kind != TokenKind::Colon) {
+    return std::unexpected(make_err(
+        ParseError::Kind::ExpectedOperator, colon.span,
+        "expected ':' after block-header keyword"));
+  }
+  st.consume();  // the ':'
+  const Token& val = st.peek();
+  if (val.kind != TokenKind::NumLit && val.kind != TokenKind::Identifier &&
+      val.kind != TokenKind::StringLit) {
+    return std::unexpected(make_err(
+        ParseError::Kind::ExpectedRhsTerm, val.span,
+        "expected a block index or label after the ':' block header"));
+  }
+  st.consume();  // the block index / label
+  // Advance the running block to the header ordinal: the first header opens
+  // block 1, the second block 2, … (lavaan's header-order numbering). Rows
+  // before any header — there should be none in a well-formed multilevel model —
+  // keep the default block 1.
+  ++st.header_count;
+  st.block = st.header_count;
+  return {};
+}
+
 // production: statement
 //
-// Dispatches between formula / constraint / define-param by classifying
-// the upcoming statement: scan ahead for the first top-level Op token and
-// branch on its kind.
+// Dispatches between block-header / formula / constraint / define-param by
+// classifying the upcoming statement: scan ahead for the first top-level Op or
+// Colon token and branch on its kind.
 parse_expected<void>
 parse_statement(State& st, FlatPartable& flat) noexcept {
   const StatementShape shape = classify_statement(st);
   switch (shape.kind) {
+    case StatementShape::Kind::BlockHeader:
+      return parse_block_header(st, flat);
     case StatementShape::Kind::Constraint:
       return parse_constraint(st, flat, shape);
     case StatementShape::Kind::Define:

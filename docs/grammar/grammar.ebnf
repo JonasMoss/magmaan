@@ -26,7 +26,19 @@
 model               ::= statement_sep* statement (statement_sep+ statement)*
                         statement_sep*
 statement_sep       ::= NEWLINE | ';'
-statement           ::= formula | constraint | define_param
+statement           ::= block_header | formula | constraint | define_param
+
+(* === Block headers =========================================================
+   A `group:` / `level:` header on its own line opens a new block. lavaan's
+   `lavParseModelString` treats the keyword + ':' + block index/label as a
+   block boundary: every formula that follows lands in that block until the
+   next header. `block` advances 1, 2, 3, … in header order. v1 supports the
+   two-level `level:` axis (1 = within / L1, 2 = between / L2) over a shared
+   observed variable set; `group:` headers and 3+ levels are reserved.
+   The `:` is lexed as its own `Colon` punctuation token only in this header
+   position (the lexer otherwise still rejects a lone ':'). *)
+block_header        ::= block_keyword ':' ( num_lit | identifier | string_lit )
+block_keyword       ::= 'group' | 'level' | 'block'
 
 
 (* === Formulas ============================================================== *)

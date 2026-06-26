@@ -24,6 +24,7 @@ input is a `TokenKind::EndOfFile` value, not an error.
 | `Caret` | `^` | Binary power, right-associative, only inside `expr`. |
 | `Question` | `?` | Start-value modifier separator. |
 | `Comma` | `,` | Inside `c(...)` and `start(...)`. |
+| `Colon` | `:` | Block-header punctuation in `group:` / `level:` / `block:`. A lone `:` always lexes as `Colon` (the `:=` operator is longest-matched first); the parser accepts it only in a block-header position and errors otherwise. |
 | `LParen` / `RParen` | `(` / `)` | |
 | `Semicolon` | `;` | Statement separator. |
 | `Newline` | `\n` &#124; `\r\n` &#124; `\r` | Statement separator. Significant. |

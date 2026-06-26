@@ -278,6 +278,10 @@ parse_expected<Token> scan_operator_or_punct(Cursor& cur) noexcept {
   if (c0 == '^') return emit_op(1, TokenKind::Caret);
   if (c0 == '?') return emit_op(1, TokenKind::Question);
   if (c0 == ',') return emit_op(1, TokenKind::Comma);
+  // A lone ':' (not the `:=` operator, which was longest-matched above) is the
+  // block-header punctuation in `group:` / `level:` / `block:`. The parser
+  // only accepts it in that header position; anywhere else it is a parse error.
+  if (c0 == ':') return emit_op(1, TokenKind::Colon);
   if (c0 == '(') return emit_op(1, TokenKind::LParen);
   if (c0 == ')') return emit_op(1, TokenKind::RParen);
   if (c0 == ';') return emit_op(1, TokenKind::Semicolon);
