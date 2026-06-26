@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 # Bell et al. (2024)-style omega bias without finite-sample noise:
 # evaluate omega functionals directly at population covariance matrices,
-# subtract Bell's population reliability target, and inspect a small
-# CFA model-set sensitivity coefficient for main-factor reliability.
+# subtract Bell's population reliability target, and inspect congeneric
+# closeness diagnostics for main-factor reliability.
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -23,8 +23,8 @@ usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [--results-dir DIR] [--smoke] [--help]\n",
     "\n",
-    "Population-moment Bell-style bias for ordinary one-factor omega plus a\n",
-    "small CFA model-set sensitivity check for main-factor reliability. The\n",
+    "Population-moment Bell-style bias for ordinary one-factor omega plus\n",
+    "small congeneric-closeness checks for main-factor reliability. The\n",
     "functionals are evaluated at Bell-inspired population covariance matrices;\n",
     "no finite-N simulation, SE, or coverage is computed.\n",
     "\n",
@@ -154,6 +154,11 @@ sample_stats_from_cov <- function(Sigma, n = 1000000L) {
 
 target_reliability <- function(common, Sigma) {
   sum(common) / sum(Sigma)
+}
+
+cov_to_cor <- function(Sigma) {
+  s <- sqrt(diag(Sigma))
+  sweep(sweep(Sigma, 1L, s, "/"), 2L, s, "/")
 }
 
 population_record <- function(name, label, reliability_level, Sigma, common,
@@ -335,6 +340,103 @@ fit_omega_rows <- function(pop) {
     stringsAsFactors = FALSE
   )
   do.call(rbind, out)
+}
+
+spearman_h_values <- function(R) {
+  p <- nrow(R)
+  out <- list()
+  idx <- 1L
+  for (i in seq_len(p)) {
+    anchors <- setdiff(seq_len(p), i)
+    pairs <- utils::combn(anchors, 2L)
+    for (k in seq_len(ncol(pairs))) {
+      j <- pairs[1L, k]
+      ell <- pairs[2L, k]
+      denom <- R[j, ell]
+      out[[idx]] <- data.frame(
+        item = i,
+        anchor_j = j,
+        anchor_l = ell,
+        h = if (is.finite(denom) && abs(denom) > 1e-12) {
+          R[i, j] * R[i, ell] / denom
+        } else {
+          NA_real_
+        },
+        stringsAsFactors = FALSE
+      )
+      idx <- idx + 1L
+    }
+  }
+  do.call(rbind, out)
+}
+
+tetrad_values <- function(R) {
+  p <- nrow(R)
+  quads <- utils::combn(seq_len(p), 4L)
+  out <- numeric(3L * ncol(quads))
+  idx <- 1L
+  for (k in seq_len(ncol(quads))) {
+    i <- quads[1L, k]
+    j <- quads[2L, k]
+    ell <- quads[3L, k]
+    m <- quads[4L, k]
+    a <- R[i, j] * R[ell, m]
+    b <- R[i, ell] * R[j, m]
+    c <- R[i, m] * R[j, ell]
+    out[idx] <- a - b
+    out[idx + 1L] <- a - c
+    out[idx + 2L] <- b - c
+    idx <- idx + 3L
+  }
+  out
+}
+
+sg_congeneric_diagnostics <- function(pop) {
+  R <- cov_to_cor(pop$Sigma)
+  h <- spearman_h_values(R)
+  h_valid <- is.finite(h$h)
+  by_item <- split(h$h[h_valid], h$item[h_valid])
+  h_mean <- vapply(by_item, mean, numeric(1L))
+  h_dev <- unlist(Map(function(x, m) x - m, by_item, h_mean),
+                  use.names = FALSE)
+  h_center <- rep(h_mean, lengths(by_item))
+  h_rms <- sqrt(mean(h_dev^2))
+  h_relative_rms <- sqrt(sum(h_dev^2) / sum(h_center^2))
+  h_range_mean <- mean(vapply(by_item, function(x) max(x) - min(x),
+                              numeric(1L)))
+  h_invalid_share <- mean(!h_valid | h$h < 0.0 | h$h > 1.0)
+
+  tetrads <- tetrad_values(R)
+  tetrad_rms <- sqrt(mean(tetrads^2))
+  tetrad_max_abs <- max(abs(tetrads))
+
+  row_cov <- rowSums(R) - 1.0
+  sg_load <- sign(row_cov) * sqrt(pmax(h_mean, 0.0))
+  C_sg <- tcrossprod(sg_load)
+  off <- upper.tri(R)
+  off_resid <- R[off] - C_sg[off]
+  sg_offdiag_abs_share <- sum(abs(off_resid)) / sum(abs(R[off]))
+  sg_offdiag_signed_share <- 2.0 * sum(off_resid) / sum(R)
+
+  rel <- magmaan_core$measures_reliability_cov(pop$Sigma)$table
+  rval <- setNames(as.numeric(rel$value), rel$coefficient)
+
+  data.frame(
+    h_rms = h_rms,
+    h_relative_rms = h_relative_rms,
+    h_range_mean = h_range_mean,
+    h_invalid_share = h_invalid_share,
+    tetrad_rms = tetrad_rms,
+    tetrad_max_abs = tetrad_max_abs,
+    sg_offdiag_abs_share = sg_offdiag_abs_share,
+    sg_offdiag_signed_share = sg_offdiag_signed_share,
+    alpha = rval[["alpha"]],
+    lambda6 = rval[["lambda6"]],
+    spearman_guttman_omega = rval[["spearman_guttman_omega"]],
+    sg_minus_alpha = rval[["spearman_guttman_omega"]] - rval[["alpha"]],
+    sg_minus_lambda6 = rval[["spearman_guttman_omega"]] - rval[["lambda6"]],
+    stringsAsFactors = FALSE
+  )
 }
 
 cfa_candidates <- function(pop) {
@@ -535,6 +637,25 @@ cfa_summary <- cfa_summary[order(cfa_summary$population,
                                  cfa_summary$reliability_level), ]
 write_csv(cfa_summary, file.path(res_dir, "cfa_sensitivity_summary.csv"))
 
+congeneric_rows <- do.call(rbind, lapply(populations, function(pop) {
+  x <- sg_congeneric_diagnostics(pop)
+  x$population <- pop$name
+  x$population_label <- pop$label
+  x$reliability_level <- pop$reliability_level
+  x$p <- pop$p
+  x$true_reliability <- pop$true_reliability
+  x
+}))
+congeneric_rows <- congeneric_rows[, c(
+  "population", "population_label", "reliability_level", "p",
+  "true_reliability", "h_rms", "h_relative_rms", "h_range_mean",
+  "h_invalid_share", "tetrad_rms", "tetrad_max_abs",
+  "sg_offdiag_abs_share", "sg_offdiag_signed_share", "alpha", "lambda6",
+  "spearman_guttman_omega", "sg_minus_alpha", "sg_minus_lambda6")]
+congeneric_rows <- congeneric_rows[order(congeneric_rows$population,
+                                         congeneric_rows$reliability_level), ]
+write_csv(congeneric_rows, file.path(res_dir, "congeneric_diagnostics.csv"))
+
 write_metadata(
   file.path(res_dir, "metadata.csv"),
   values = list(
@@ -546,6 +667,7 @@ write_metadata(
     denominators = "model-implied total variance and observed/population total variance",
     fit_indices = "for fitted models only: population_discrepancy = 2*fmin; rmsea_like = sqrt(population_discrepancy / df), not comparable across ML/ULS/GLS scales",
     cfa_sensitivity = "ML CFA model set; omega_main_observed = one' C_main(theta_hat) one / one' S one; cfa_sensitivity_summary reports omega range over candidate models",
+    congeneric_diagnostics = "correlation-scale tetrad RMS, Spearman-Guttman anchor h dispersion, and SG rank-one off-diagonal reconstruction error",
     smoke = cfg$smoke,
     results_dir = res_dir
   ),
