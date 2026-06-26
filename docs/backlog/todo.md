@@ -1128,7 +1128,13 @@ decisions in the simulation backlog.
   Wald z under-rejects and the fix references `2n(omega − alpha)` against its
   Imhof tail. If promoted, the natural shape is a `measures::frontier`
   reliability module (alpha, omega, the joint `omega − alpha` SE, and its
-  second-order Imhof calibration) plus a thin R wrapper. Not required.
+  second-order Imhof calibration) plus a thin R wrapper. First slice landed
+  2026-06-26: `measures::frontier::reliability` now provides covariance-only
+  alpha, Guttman's lambda6, and Spearman-Guttman covariance omega with
+  delta-method SEs, plus the exploratory R primitive
+  `magmaan_core$measures_reliability_cov` and
+  `experiments/41-reliability-lambda6`. The non-regular joint
+  `omega - alpha` test and Imhof calibration remain unpromoted. Not required.
 - **L/XL.** Remaining C++ estimator work on the ordinal SNLLS / Gamma workspace
   track (the landed split is in the roadmap and
   [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);

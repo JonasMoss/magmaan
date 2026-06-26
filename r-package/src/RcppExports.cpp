@@ -1071,6 +1071,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// measures_reliability_cov
+Rcpp::List measures_reliability_cov(Rcpp::NumericMatrix S, Rcpp::Nullable<Rcpp::NumericMatrix> gamma, int n);
+RcppExport SEXP _magmaan_measures_reliability_cov(SEXP SSEXP, SEXP gammaSEXP, SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type S(SSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_reliability_cov(S, gamma, n));
+    return rcpp_result_gen;
+END_RCPP
+}
 // measures_factor_scores
 Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data, std::string method);
 RcppExport SEXP _magmaan_measures_factor_scores(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP methodSEXP) {
@@ -2893,6 +2906,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_composite_weights", (DL_FUNC) &_magmaan_measures_composite_weights, 2},
     {"_magmaan_measures_residuals", (DL_FUNC) &_magmaan_measures_residuals, 1},
     {"_magmaan_measures_standardized_residuals", (DL_FUNC) &_magmaan_measures_standardized_residuals, 1},
+    {"_magmaan_measures_reliability_cov", (DL_FUNC) &_magmaan_measures_reliability_cov, 3},
     {"_magmaan_measures_factor_scores", (DL_FUNC) &_magmaan_measures_factor_scores, 3},
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},

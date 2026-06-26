@@ -149,6 +149,7 @@ add_library(magmaan STATIC
   src/measures/composite_weights.cpp
   src/measures/residuals.cpp
   src/measures/factor_scores.cpp
+  src/measures/reliability.cpp
   src/optim/nlopt_optimizer.cpp
   src/optim/optimizers.cpp
   src/optim/reparameterize.cpp

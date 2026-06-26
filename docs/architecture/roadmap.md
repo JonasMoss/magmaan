@@ -141,7 +141,11 @@ golden `parTable()` fixtures.
   builds missing-data `XX3`/`df3`/`c.hat3` and baseline counterparts in the EM
   saturated-moment metric, and ML2S `robust.two.stage` robust/scaled global
   indices (`estimate::fiml::two_stage_fit_measures`),
-  structural-aware standardization, and C++ defined-parameter evaluation.
+  structural-aware standardization, C++ defined-parameter evaluation, and the
+  first frontier reliability covariance functionals
+  (`measures::frontier::reliability`: alpha, Guttman's lambda6, and
+  Spearman-Guttman covariance omega with delta-method covariance-scale SEs;
+  exposed in R through `magmaan_core$measures_reliability_cov`).
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling

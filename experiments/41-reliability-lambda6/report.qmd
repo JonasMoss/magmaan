@@ -1,0 +1,125 @@
+---
+title: "Lambda6 Reliability Experiment"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  results_dir: "results"
+---
+
+```{r}
+res_dir <- params$results_dir
+needed <- file.path(res_dir, c("simulation_summary.csv",
+                               "population_targets.csv",
+                               "metadata.csv"))
+if (!all(file.exists(needed))) {
+  stop("Missing result files. Run: Rscript experiments/41-reliability-lambda6/run_experiment.R --smoke",
+       call. = FALSE)
+}
+summary <- read.csv(file.path(res_dir, "simulation_summary.csv"))
+targets <- read.csv(file.path(res_dir, "population_targets.csv"))
+metadata <- read.csv(file.path(res_dir, "metadata.csv"))
+meta <- setNames(metadata$value, metadata$key)
+fmt <- function(x, digits = 3) {
+  ifelse(is.na(x), "", format(round(x, digits), nsmall = digits))
+}
+pct <- function(x) {
+  ifelse(is.na(x), "", sprintf("%.1f%%", 100 * x))
+}
+label_method <- c(
+  alpha = "Alpha",
+  lambda6 = "Lambda6",
+  spearman_guttman_omega = "Spearman-Guttman omega",
+  nt_omega_model_se = "NT omega, model SE",
+  nt_omega_robust_se = "NT omega, robust SE"
+)
+summary$Method <- unname(label_method[summary$method])
+summary$Method[is.na(summary$Method)] <- summary$method[is.na(summary$Method)]
+summary$Population <- summary$population_label
+summary$N <- summary$n
+
+show <- summary[summary$n == min(summary$n), ]
+show <- show[order(show$population, match(show$method, names(label_method))), ]
+tab <- data.frame(
+  Population = show$Population,
+  N = show$N,
+  Method = show$Method,
+  Target = fmt(show$target_functional),
+  `True reliability` = fmt(show$true_reliability),
+  `RMSE vs target` = fmt(show$rmse_functional),
+  `RMSE vs true` = fmt(show$rmse_true),
+  `Coverage vs target` = pct(show$coverage_functional),
+  `Coverage vs true` = pct(show$coverage_true),
+  `Mean SE` = fmt(show$mean_se),
+  check.names = FALSE
+)
+
+best_target <- do.call(rbind, lapply(split(show, show$population), function(d) {
+  d[which.min(d$rmse_functional), , drop = FALSE]
+}))
+best_true <- do.call(rbind, lapply(split(show, show$population), function(d) {
+  d[which.min(d$rmse_true), , drop = FALSE]
+}))
+best_sentence <- paste(sprintf("%s target-RMSE: %s; true-RMSE: %s",
+                               best_target$population_label,
+                               best_target$Method,
+                               best_true$Method),
+                       collapse = ". ")
+target_slice <- targets[targets$population == "one_factor", ]
+lambda6_target <- target_slice$target_functional[target_slice$method == "lambda6"]
+alpha_target <- target_slice$target_functional[target_slice$method == "alpha"]
+```
+
+## Question
+
+If Guttman's lambda6 is just a sample-covariance functional, how does it behave
+as a reliability estimator beside alpha, the Spearman-Guttman covariance omega,
+and fitted normal-theory omega?
+
+## Short Answer
+
+For the correctly specified one-factor population, the Spearman-Guttman
+covariance omega and fitted omega target the same total-score reliability,
+whereas lambda6 targets `r fmt(lambda6_target)` and alpha targets
+`r fmt(alpha_target)`. In the displayed `r meta[["reps"]]`-rep smoke slice at
+the smallest \(N\), `r best_sentence`.
+
+Under the two-factor population fit as one factor, every number should be read
+against its own population functional unless the column explicitly says "true":
+the robust fitted-omega interval is the misspecification-aware one, while the
+model-SE interval is the ordinary one-factor NT interval.
+
+## Evidence
+
+```{r}
+knitr::kable(tab, row.names = FALSE)
+```
+
+The raw replicate file also records squared error and coverage against the
+generating reliability, so the persistent bias of alpha and lambda6 is visible
+separately from interval calibration for their own covariance functionals.
+
+## Caveats
+
+This is a small normal-data run. It checks the first implementation slice:
+sample covariance, empirical-Gamma delta intervals for covariance functionals,
+and one fitted one-factor omega. The misspecified population is deliberately
+simple: two correlated factors summarized by one fitted factor. Non-normal data,
+multi-group reliability, and analytic gradients for the Spearman-Guttman
+covariance omega are left for later runs.
+
+Smoke results are noisy. For coverage, rerun with at least a few hundred
+replications before making a statistical call.
+
+## Reproduce
+
+```sh
+Rscript experiments/41-reliability-lambda6/run_experiment.R --smoke
+Rscript experiments/41-reliability-lambda6/run_experiment.R --reps 500 --n 250,500
+quarto render experiments/41-reliability-lambda6/report.qmd
+```
