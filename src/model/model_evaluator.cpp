@@ -57,6 +57,7 @@ ModelEvaluator::build(const spec::LatentStructure& pt, const MatrixRep& rep) {
   }
 
   ModelEvaluator out;
+  out.rep_ = &rep;  // borrowed; caller keeps rep alive (see header contract)
 
   // Per-block buffers.
   out.blocks_.resize(rep.dims.size());

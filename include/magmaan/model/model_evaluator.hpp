@@ -89,6 +89,12 @@ class ModelEvaluator {
   std::size_t n_free() const noexcept { return n_free_; }
   std::size_t n_blocks() const noexcept { return blocks_.size(); }
 
+  // The borrowed MatrixRep this evaluator was built from (the caller keeps it
+  // alive, per build()'s contract). Lets consumers recover per-block structure
+  // such as the multilevel within/between roles (model::level_block_pairs)
+  // without threading the rep separately.
+  const MatrixRep& matrix_rep() const noexcept { return *rep_; }
+
   // Σ(θ). The returned ImpliedMoments references internal buffers that
   // get overwritten on the next sigma() call — copy if you need to keep
   // it across a subsequent evaluation.
@@ -167,6 +173,7 @@ class ModelEvaluator {
     double        fixed_value;
   };
 
+  const MatrixRep*        rep_ = nullptr;  // borrowed; set in build()
   std::vector<BlockState> blocks_;
   std::vector<CellWrite>  writes_;     // one per non-constraint, used cell
   // Structural (auto-inserted) cells with fixed values, e.g. phantom-Λ
