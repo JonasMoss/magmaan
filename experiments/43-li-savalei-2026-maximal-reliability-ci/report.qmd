@@ -26,6 +26,10 @@ meta <- read.csv(file.path(res_dir, "metadata.csv"))
 meta <- setNames(meta$value, meta$key)
 boot_path <- file.path(res_dir, "bootstrap.csv")
 boot <- if (file.exists(boot_path)) read.csv(boot_path) else NULL
+corr_path <- file.path(res_dir, "correction.csv")
+corr <- if (file.exists(corr_path)) read.csv(corr_path) else NULL
+cg <- function(coef, p, n, dist, method, col)
+  corr[[col]][corr$coef==coef & corr$p==p & corr$n==n & corr$dist==dist & corr$method==method]
 
 has_gg <- requireNamespace("ggplot2", quietly = TRUE)
 method_lab <- c(wald_model = "normal SE", wald_robust = "robust SE",
@@ -64,7 +68,13 @@ value) for the group-factor coefficient at 18 indicators and N=50. A nonparametr
 bootstrap confirms it: the percentile interval inherits the same bias and
 under-covers, while an interval that reflects the bias out does markedly better. So
 the missing piece Li & Savalei point to is a *bias correction*, not just a variance
-estimate. The coefficients sit in the two regimes they describe: the general factor
+estimate. Correcting the estimate after the fact with the analytic second-order term
+bears this out: once N is at least about 200 it removes essentially all the bias
+(residual under 0.02) and brings coverage to nominal for both coefficients, but in
+the smallest samples the single correction term over-shoots, badly for the weak
+group factor (driving the estimate negative), because the reliability functional is
+too nonlinear there for a one-term expansion. The coefficients sit in the two
+regimes they describe: the general factor
 is reliable (population value
 `r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==9]))`-`r fp(unique(cov$rho_pop[cov$coef=="gen" & cov$p==18]))`),
 the group factor is not
@@ -145,26 +155,77 @@ cat("*Bootstrap reference not yet generated. Run `Rscript",
     "experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bootstrap.R --pkeys p18 --ns 100`.*\n")
 ```
 
+### Correcting the bias after the fact
+
+The bias belongs to the estimate, so we correct the estimate, not the model
+parameters: bias-reducing the parameters leaves the dominant term untouched.
+Writing the estimate as a smooth function `g` of the fitted parameters, its
+small-sample bias splits into a propagated parameter bias and the curvature of `g`
+itself,
+
+$$\operatorname{bias}(\hat\rho^*) \;\approx\; \nabla g(\theta)' b_\theta \;+\; \tfrac{1}{2}\operatorname{tr}\!\big(\nabla^2 g(\theta)\,V\big),$$
+
+and for a reliability coefficient the second (curvature) term dominates. Subtracting
+its plug-in estimate gives the corrected value
+$\tilde\rho = \hat\rho^* - \tfrac{1}{2}\operatorname{tr}(\nabla^2 g\,\hat V)$,
+computed from the same fit with no refit.
+
+```{r fig-correction, eval = !is.null(corr)}
+#| fig-cap: "Bias of the estimate before and after the second-order correction, vs sample size (500 replications). The y-axis is clipped; at N=50 the corrected group-factor estimate over-shoots far below the panel (to about -1.2 at 9 indicators)."
+if (has_gg) {
+  cc <- corr; cc$coeff <- coef_lab[cc$coef]; cc$panel <- paste0(cc$p, " indicators, ", cc$dist)
+  cc$method <- factor(cc$method, levels = c("uncorrected","second_order"),
+                      labels = c("uncorrected","second-order corrected"))
+  ggplot(cc, aes(n, bias, colour = method, group = method)) +
+    geom_hline(yintercept = 0, colour = "grey60") +
+    geom_line() + geom_point(size = 1.3) +
+    facet_grid(coeff ~ panel) +
+    scale_x_continuous(trans = "log10", breaks = sort(unique(cc$n))) +
+    coord_cartesian(ylim = c(-0.25, 0.25)) +
+    labs(x = "N (log scale)", y = "bias of the estimate", colour = NULL) +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+} else {
+  knitr::kable(corr[, c("coef","p","dist","n","method","bias","coverage")], digits = 3)
+}
+```
+
+Once N is at least about 200 the correction works cleanly for both coefficients:
+the residual bias is under 0.02 and the under-covering general factor moves to
+nominal (at 18 indicators, N=500, its bias falls from
+`r fp(cg("gen",18,500,"normal","uncorrected","bias"))` to
+`r fp(cg("gen",18,500,"normal","second_order","bias"))` and coverage from
+`r fp(cg("gen",18,500,"normal","uncorrected","coverage"))` to
+`r fp(cg("gen",18,500,"normal","second_order","coverage"))`). Below N around 100 the
+single term over-shoots: for the group factor at 9 indicators, N=50 it swings the
+estimate from `r fp(cg("grp",9,50,"normal","uncorrected","bias"))` to about
+`r fp(cg("grp",9,50,"normal","second_order","bias"))`, off any sensible scale,
+because the functional is too curved there for a one-term expansion. So the
+correction is a real fix in the moderate-to-large-N regime, and the smallest cells
+(where the group-factor coefficient is already least trustworthy) defeat it.
+
 ## Caveats
 
 - One model family: an orthogonal bifactor with three subscales, equal loadings,
   correct specification, complete data, continuous ML. The two distributions are
   normal and a strongly skewed one with the same covariance.
-- The bias is the headline obstacle but this run only quantifies it; it does not
-  build or test a bias-corrected estimate or a BCa-type interval, which is the
-  natural next step.
+- The bias correction tested here is the single analytic second-order term; it works
+  at N>=200 and over-shoots below that. A higher-order or bootstrap-based correction
+  in the small-N corner is the natural next step.
 - The bootstrap arm is a focused reference at 18 indicators, N=100. A full bootstrap
   sweep is impractical at the smallest cells: at 9 indicators and N=50 the resampled
   bifactor models frequently fail to converge, which is itself a reason to prefer an
-  analytic bias-corrected interval over bootstrapping here.
-- Coverage rates are from 1000 replications (the bootstrap arm from 150); read them
-  as approximate.
+  analytic correction over bootstrapping here.
+- Coverage rates are from 1000 replications (the correction arm 500, the bootstrap
+  arm 150); read them as approximate.
 
 ## Reproduce
 
 ```sh
 # main coverage sweep (~3 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/run_experiment.R
+# second-order bias correction (~2 min)
+Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bias_correction.R
 # focused bootstrap reference (~6 min)
 Rscript experiments/43-li-savalei-2026-maximal-reliability-ci/scripts/bootstrap.R --pkeys p18 --ns 100
 quarto render experiments/43-li-savalei-2026-maximal-reliability-ci/report.qmd
