@@ -57,7 +57,10 @@ LavaanParTable to_lavaan_partable(const LatentStructure& s,
     out.lhs[i]    = names.row_lhs[i];
     out.op[i]     = s.op[i];
     out.rhs[i]    = names.row_rhs[i];
-    out.block[i]  = s.group[i];   // block == group (no multilevel modeled)
+    // block = (group-1)*n_levels + level (1-based; 0 for constraint rows).
+    // Collapses to `group` for single-level models (empty/all-zero `level`),
+    // so single-level partables are byte-identical to the pre-multilevel view.
+    out.block[i]  = s.block_of(i);
     out.group[i]  = s.group[i];
     out.free[i]   = s.free[i];
     out.exo[i]    = s.exo[i];
@@ -167,14 +170,37 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
   for (std::size_t k = 0; k < inv.lv_ext_order.size(); ++k)
     s.lv_ext_pos[static_cast<std::size_t>(inv.lv_ext_order[k])] = static_cast<std::int32_t>(k);
 
+  // Recover the level axis from the lavaan block index. lavaan numbers blocks
+  // `(group-1)*n_levels + level` (1-based; 0 for constraint rows), so with
+  // n_groups = max(group) and n_blocks = max(block), n_levels = n_blocks /
+  // n_groups and level = ((block-1) mod n_levels) + 1. Single-level partables
+  // have block == group throughout ⇒ n_levels == 1 ⇒ every `s.level` is 1,
+  // which `n_levels()` / `block_of` treat exactly as the single-level default.
+  std::int32_t pt_n_groups = 1, pt_n_blocks = 1;
+  for (std::size_t i = 0; i < n_in; ++i) {
+    if (pt.group[i] > pt_n_groups) pt_n_groups = pt.group[i];
+    if (pt.block[i] > pt_n_blocks) pt_n_blocks = pt.block[i];
+  }
+  const std::int32_t pt_n_levels =
+      (pt_n_groups > 0 && pt_n_blocks % pt_n_groups == 0)
+          ? pt_n_blocks / pt_n_groups
+          : 1;
+
   // Per-row structural columns.
-  s.op.resize(n);  s.group.resize(n);  s.free.resize(n);  s.exo.resize(n);
+  s.op.resize(n);  s.group.resize(n);  s.level.resize(n);  s.free.resize(n);
+  s.exo.resize(n);
   s.fixed_value.resize(n);  s.lhs_var.resize(n);  s.rhs_var.resize(n);
   std::int32_t n_free = 0;
   for (std::size_t j = 0; j < n; ++j) {
     const std::size_t i = keep[j];
     s.op[j]    = pt.op[i];
     s.group[j] = pt.group[i];
+    // Single-level (n_levels == 1): leave `level` at 0 everywhere, exactly as
+    // `build()` does, so the single-level structure is byte-identical across
+    // both construction paths. Two-level: recover the 1-based level.
+    s.level[j] = (pt_n_levels <= 1 || pt.block[i] <= 0)
+                     ? 0
+                     : ((pt.block[i] - 1) % pt_n_levels) + 1;
     s.free[j]  = pt.free[i];
     s.exo[j]   = pt.exo[i];
     if (s.free[j] > n_free) n_free = s.free[j];

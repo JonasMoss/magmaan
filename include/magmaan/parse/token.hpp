@@ -20,6 +20,7 @@ enum class TokenKind : std::uint8_t {
   Caret,        // ^   (binary power in expressions, right-associative)
   Question,     // ?
   Comma,        // ,
+  Colon,        // :   (block headers: `group:` / `level:` / `block:`)
   LParen,       // (
   RParen,       // )
   Semicolon,    // ;
@@ -50,6 +51,7 @@ constexpr std::string_view to_string(TokenKind k) noexcept {
     case TokenKind::Caret:      return "Caret";
     case TokenKind::Question:   return "Question";
     case TokenKind::Comma:      return "Comma";
+    case TokenKind::Colon:      return "Colon";
     case TokenKind::LParen:     return "LParen";
     case TokenKind::RParen:     return "RParen";
     case TokenKind::Semicolon:  return "Semicolon";
