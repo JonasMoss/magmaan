@@ -221,6 +221,89 @@ recipe as a unified `mixed_*_shared_robust_*` taking the recipe as an option,
 then flavor 1 (observed/overlap missing-data treatment) then flavor 2 (hybrid
 FIML-normal continuous block).
 
+### ESEM (exploratory structural equation modeling): free loading blocks + rotation
+
+An EFA measurement block embedded in an SEM (Asparouhov & Muthén 2009): a set of
+`m` factors with all `p x m` loadings free, identified up to an `m x m` rotation,
+estimated as the unrotated MLE under `m^2` identification constraints (factor
+variances/covariances fixed via `Psi_block = I` plus the `m(m-1)/2` echelon zeros
+in the upper triangle of the block's `Lambda`), then *rotated* to a criterion
+(geomin, quartimin/oblimin, Crawford-Ferguson family, target, varimax) by the
+Bernaards-Jennrich gradient projection algorithm, with delta-method standard
+errors for the rotated solution. ESEM does not violate the charter (it is linear,
+complete-data normal-theory ML), it was simply deferred: EFA/ESEM is listed out
+of scope in [docs/architecture/roadmap.md](../architecture/roadmap.md) (line ~7),
+[docs/validation/lavaan_tutorial_parity.md](../validation/lavaan_tutorial_parity.md)
+(section 18), and the tutorial README. Adopting it would flip those three
+statements; the natural home is `frontier`-tier (`estimate::frontier::efa` or a
+`measures/rotation/` module), so it carries no lavaan-stable promise even though
+v1 would still be gated against lavaan.
+
+Most of the substrate already exists. The *unrotated* block needs almost no new
+numeric code: "free every loading, no marker" is the `effect_coding` pattern
+(`src/spec/build.cpp:1160`) plus the `auto_fix_first` skip; `Psi_block = I` is
+`apply_std_lv` (`build.cpp:502`); the echelon zeros are ordinary fixed cells; and
+`model::ModelEvaluator` is sparsity-agnostic (it reads a write-table), so a dense
+`Lambda` column block estimates with zero evaluator changes. Estimated EFA factors
+are then ordinary latents in the Reduced form (`src/model/matrix_rep.cpp:33`), so
+EFA factors regressing on/with other factors already works structurally. Rotated
+SEs have a near-exact template in `src/measures/standardized.cpp`: build
+`J = Identity(n_free)`, overwrite the transformed rows (mixing analytic rows and the
+finite-difference `fill_fd_row` helper), then `SE = sqrt(diag(J vcov J^T))`, with the
+unrotated covariance (including the constrained `Z(Z^T I Z)^-1 Z^T` null-space form)
+coming straight from `inference::vcov`.
+
+Two pieces are genuinely new. (1) The rotation module itself: criteria + the
+orthogonal/oblique GPA + random restarts (Bernaards & Jennrich 2005, the
+GPArotation reference). It is self-contained, off the hot path, and unit-testable
+against GPArotation/lavaan in isolation. (2) The rotation Jacobian for SEs: the
+Asparouhov-Muthén delta method propagates the unrotated covariance through
+`d(rotated)/d(unrotated)`, whose implicit part comes from the implicit-function
+theorem on the rotation criterion's stationarity conditions (Jennrich 2007); a v1
+can ship a full finite-difference Jacobian through the rotate-from-unrotated map
+(slow but correct and parity-checkable) and swap in the analytic derivative once
+validated. The remaining cost is parity finickiness: matching lavaan's rotated
+output requires replicating its column reordering, sign reflections, and Kaiser
+normalization (`lav_matrix_rotate` / `lav_efa`). Other small new bits: grammar for
+the `efa("block")` modifier (currently rejected as `ModifierEvalFailed`,
+[docs/grammar/grammar.md](../grammar/grammar.md) line ~78; edit the EBNF first); an
+"EFA block" grouping on `LatentStructure` (template: `composite_blocks`); and an
+EFA start (the FABIN/Guttman producers in `estimate/start_values.hpp` assume marker
+CFA, so a PCA/principal-axis start is needed).
+
+Tiering: **v1 (lavaan parity)** = single-group ML, one EFA block alongside
+CFA/structural rows, oblique geomin + quartimin + target + varimax, GPA, rotated
+point estimates and delta-method SEs gated against lavaan `efa()` / `rotation=`
+(shipped since 0.6-13, so a real oracle exists). **Literature-scope** = multiple
+EFA blocks; multigroup ESEM with rotation (and rotation-based invariance); full CF
+family + promax + Jennrich-Bentler bifactor rotations; FIML; robust/MLR rotated
+SEs. **Research-tier** = rotated SEs under misspecification (sandwich / the exp-35
+robust bread), ESEM on the frontier robust/DPD estimators, ordinal/polychoric
+ESEM. Two design forks to settle before any code: (i) `frontier`-module vs
+supported track (recommend `frontier`, v1 still lavaan-gated); (ii) post-fit
+rotation of the unrotated MLE vs imposing rotation as a constraint during
+estimation (recommend post-fit, which is the classic CEFA-then-rotate pipeline and
+how lavaan structures it; the constrained-optimizer path exists but is the harder
+road).
+
+**Alternative already available.** None inside magmaan today; for the practical
+case, lavaan's `efa()` / `rotation=` on a refit is the full implementation and the
+parity oracle. magmaan's confirmatory surface (marker / `std.lv` / `effect.coding`
+identification, structural regressions among latents) covers every model where the
+loading sparsity pattern is known a priori, which is the entire current scope.
+
+**Build if.** A paper row or methods workflow needs an exploratory loading block
+on a magmaan fit rather than a lavaan refit. The most likely trigger is a research
+question that wants rotation *plus* something magmaan already owns and lavaan does
+not combine with ESEM: rotated SEs under misspecification, ESEM under the frontier
+robust/DPD estimators, or ordinal/polychoric ESEM. The adjacent EFA hook already
+on this list (the dMACS / EDM rotational-indeterminacy caveat under
+[MI effect sizes](#mi-effect-sizes-dmacs--edm-family-for-fitted-multi-group-models))
+would also be unblocked by a real rotation convention. v1 is a transcription +
+parity task (the algorithms are fully specified in Asparouhov-Muthén 2009 and
+Bernaards-Jennrich 2005); the analytic rotation-Jacobian SE is the one piece with
+genuine derivation work.
+
 ## Measures / reporting
 
 ### MI effect sizes (dMACS / EDM family) for fitted multi-group models
