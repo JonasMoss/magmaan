@@ -185,4 +185,11 @@ magmaan_add_test_target(magmaan_test_parity parity
 magmaan_add_test_target(magmaan_test_robcat robcat
   golden/robcat_parity_golden_test.cpp)
 
+# Two-level (multilevel) sufficient statistics — Stream B (Contract 2). Kept as
+# its own target (append-only) so the parallel two-level streams do not collide
+# on the shared estimate/inference target lists; Stream D folds this into the
+# integration `magmaan_test_twolevel` target.
+magmaan_add_test_target(magmaan_test_cluster_stats cluster_stats
+  unit/cluster_stats_test.cpp)
+
 add_custom_target(magmaan_tests DEPENDS ${MAGMAAN_TEST_TARGETS})
