@@ -74,6 +74,20 @@ struct StructuralCell {
 //             structural_cells); Σ = Λ (I−B)⁻¹ Ψ (I−B)⁻ᵀ Λᵀ + Θ.
 enum class RepForm : std::uint8_t { PureCFA, Reduced };
 
+// Per-block level role for multilevel (two-level) models. `Single` is the
+// single-level / multi-group case where a block is simply a group. `Within` /
+// `Between` tag the level-1 / level-2 blocks of a two-level model so the
+// estimation core can pair them (see `level_block_pairs`). `build_matrix_rep`
+// fills this; single-level builds tag every block `Single`.
+enum class BlockLevel : std::uint8_t { Single, Within, Between };
+
+// A block's (group, level) coordinates plus its level role.
+struct BlockInfo {
+  std::int16_t group = 0;   // 0-based group
+  std::int16_t level = 0;   // 0-based level (0 = within / single, 1 = between)
+  BlockLevel   role  = BlockLevel::Single;
+};
+
 // Static map from a LatentStructure to LISREL matrix layout. Built once per
 // partable; consumed by ModelEvaluator. No floating-point math here —
 // just integer indexing and variable orderings.
@@ -87,6 +101,10 @@ struct MatrixRep {
   // placeholders (the numeric path uses var ids / orderings, never the names).
   std::vector<std::vector<std::string>> ov_names;   // per block
   std::vector<std::vector<std::string>> lv_names;   // per block (extended)
+  // Per-block (group, level) role map; `block_info.size() == dims.size()`.
+  // Single-level builds tag every block `Single`; the two-level front-end sets
+  // `Within`/`Between`. The estimation core reads it via `level_block_pairs`.
+  std::vector<BlockInfo> block_info;                // per block
 };
 
 // production: build_matrix_rep
@@ -106,5 +124,16 @@ struct MatrixRep {
 model_expected<MatrixRep>
 build_matrix_rep(const spec::LatentStructure& pt,
                  const spec::LatentNames* names = nullptr);
+
+// Pairs the within/between block indices of each group for a two-level model.
+// `pairs[g].within` / `.between` index into `MatrixRep::dims` and the block
+// ordering of `ImpliedMoments::sigma` / `dsigma_dtheta`; either is -1 when that
+// level is absent. For a single-level (or multi-group single-level) MatrixRep
+// each `Single` block yields a pair with `within = block index, between = -1`.
+struct LevelBlockPair {
+  std::int32_t within  = -1;
+  std::int32_t between = -1;
+};
+std::vector<LevelBlockPair> level_block_pairs(const MatrixRep& rep);
 
 }  // namespace magmaan::model

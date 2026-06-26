@@ -53,6 +53,8 @@ struct PendingRow {
   std::string      rhs;
   std::int32_t     block = 1;
   std::int32_t     group = 1;
+  std::int32_t     level = 0;  // 1-based level within the group; 0 ⇒ single-level
+                               // (collapses to block == group, level column empty)
   // Raw modifier intent (resolved to free / fixed_value / start hint at the end).
   bool             user_fixed_value = false;
   double           fixed_value = kNaN;
@@ -399,13 +401,19 @@ partable_expected<void>
 apply_modifiers_to_rows(const parse::FlatPartable& flat,
                         std::vector<PendingRow>& rows,
                         const std::vector<std::size_t>& flat_to_row,
-                        std::int32_t group_idx, std::int32_t n_groups) {
+                        std::int32_t group_idx, std::int32_t n_groups,
+                        std::int32_t level_filter) {
   // `flat_to_row[i]` is the PendingRow that flat.rows[i] feeds: usually a
   // distinct row each, but repeated `lhs op rhs` terms in one block
   // (`f =~ NA*x1 + c(a,b)*x1`) share one row, so their modifiers accumulate
   // onto a single parameter — matching lavaan's per-term modifier merge.
+  // `level_filter > 0` restricts to flat rows whose block matches that level
+  // (multilevel); 0 means the whole model (single-level, byte-identical).
   for (std::size_t i = 0; i < flat.rows.size(); ++i) {
     const auto& fr = flat.rows[i];
+    if (level_filter > 0 &&
+        static_cast<std::int32_t>(fr.block) != level_filter)
+      continue;
     if (fr.mod_idx == 0) continue;
     auto atom_or = select_group_atom(flat.mods[fr.mod_idx],
                                      group_idx, n_groups,
@@ -658,6 +666,7 @@ void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
   const std::size_t n = src.size();
   out.op.resize(n);
   out.group.resize(n);
+  out.level.resize(n);
   out.free.resize(n);
   out.exo.resize(n);
   out.fixed_value.resize(n);
@@ -690,6 +699,7 @@ void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
     const PendingRow& r = src[i];
     out.op[i]    = r.op;
     out.group[i] = r.group;
+    out.level[i] = r.level;
     out.exo[i]   = r.exo;
 
     const bool is_constraint =
@@ -749,7 +759,17 @@ build_group_template(const parse::FlatPartable& flat,
                      const BuildOptions&        opts,
                      const VarSets&             v,
                      const std::vector<CompositeInfo>& native_composites,
-                     std::int32_t               group_idx) {
+                     std::int32_t               group_idx,
+                     std::int32_t               level_filter = 0) {
+  // `level_filter > 0` restricts the user-row scan to flat rows whose block
+  // matches that level (the multilevel case); `v` must then be the per-level
+  // VarSets so auto.var / auto.cov only fire over that level's variables. The
+  // default 0 means "use every flat row" — the single-level / multi-group path,
+  // byte-identical to the pre-multilevel build.
+  auto in_level = [&](const parse::FlatRow& fr) noexcept {
+    return level_filter == 0 ||
+           static_cast<std::int32_t>(fr.block) == level_filter;
+  };
   std::vector<PendingRow> rows;
   rows.reserve(flat.rows.size() + 16);
   // Merge repeated `lhs op rhs` terms within one block into a single row.
@@ -758,10 +778,12 @@ build_group_template(const parse::FlatPartable& flat,
   // term becomes its own free parameter writing the same matrix cell — the
   // second silently overwrites the first, leaving a phantom parameter that
   // moves nothing yet still carries a nonzero analytic gradient.
-  std::vector<std::size_t> flat_to_row(flat.rows.size());
+  std::vector<std::size_t> flat_to_row(flat.rows.size(),
+                                       static_cast<std::size_t>(-1));
   std::unordered_map<std::string, std::size_t> row_of_term;
   for (std::size_t i = 0; i < flat.rows.size(); ++i) {
     const auto& r = flat.rows[i];
+    if (!in_level(r)) continue;  // wrong level: skip (sentinel flat_to_row)
     std::string key;
     key.reserve(r.lhs.size() + r.rhs.size() + 8);
     key.append(r.lhs);
@@ -779,7 +801,7 @@ build_group_template(const parse::FlatPartable& flat,
     }
   }
   if (auto e = apply_modifiers_to_rows(flat, rows, flat_to_row, group_idx,
-                                       opts.n_groups);
+                                       opts.n_groups, level_filter);
       !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -811,6 +833,7 @@ build_group_template(const parse::FlatPartable& flat,
     // uncorrelated by default, exactly as in lavaan.
     OrderedSet endo_lv;
     for (const auto& fr : flat.rows) {
+      if (!in_level(fr)) continue;
       if (fr.op == parse::Op::Regression && v.lv.contains(fr.lhs)) {
         endo_lv.insert(fr.lhs);
       }
@@ -852,6 +875,7 @@ build_group_template(const parse::FlatPartable& flat,
     // overrides this with its own (no-terminal-filter) loop when active.
     OrderedSet endogenous, predictors;
     for (const auto& fr : flat.rows) {
+      if (!in_level(fr)) continue;
       if (fr.op != parse::Op::Regression) continue;
       // lavaan's `lvov.names.y = c(lv.names.y, ov.y)` excludes measurement
       // indicators from `ov.y` (an indicator that is also a regression target
@@ -1037,9 +1061,23 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   }
   const parse::FlatPartable& eflat = *flatp;
 
-  // Step 2: classify variables (same set across groups in v0 — no
-  // group-specific variable structure yet) and build the name-free inventory
-  // (var ids, roles, canonical orderings) that matrix_rep otherwise re-derives.
+  // Number of levels = the largest flat-row block. The parser advances
+  // `FlatRow.block` across `level:` / `group:` headers; a single-level (and a
+  // multi-group single-level) model never sees a header, so every block is 1
+  // and `n_levels == 1` — the whole multilevel branch below collapses to the
+  // pre-multilevel single-group-template loop. (v1: a `group:` header is not
+  // yet a separate axis here; the supported two-level form is `level:`-only.)
+  std::int32_t n_levels = 1;
+  for (const auto& r : eflat.rows)
+    if (static_cast<std::int32_t>(r.block) > n_levels)
+      n_levels = static_cast<std::int32_t>(r.block);
+
+  // Step 2: classify variables and build the name-free inventory (var ids,
+  // roles, canonical orderings) that matrix_rep otherwise re-derives. The
+  // inventory is built over *all* rows (both levels) so the shared observed
+  // set and every level's latents land in one ov_order / lv_ext_order — the
+  // v1 shared-observed-variable-set assumption. The per-level VarSets used to
+  // drive auto.var / auto.cov / identification are computed inside the loop.
   const VarSets v = classify_vars(eflat.rows);
   bool has_regression = false;
   for (const auto& r : eflat.rows)
@@ -1063,20 +1101,53 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
                 GroupEqual::Thresholds) != opts.group_equal.end()) {
     tmpl_opts.meanstructure = true;
   }
+  // Per-level VarSets cache (1-based; index 0 unused). For single-level this is
+  // just `v`; for two-level each level classifies only its own rows so auto.var
+  // / auto.cov fire over that level's latents and observed variables.
+  auto level_varsets = [&](std::int32_t level) -> VarSets {
+    if (n_levels <= 1) return v;
+    std::vector<parse::FlatRow> sub;
+    sub.reserve(eflat.rows.size());
+    for (const auto& r : eflat.rows)
+      if (static_cast<std::int32_t>(r.block) == level) sub.push_back(r);
+    return classify_vars(sub);
+  };
+
   std::vector<PendingRow> rows;
   for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
-    auto group_rows_or = build_group_template(eflat, tmpl_opts, v,
+   for (std::int32_t level = 1; level <= n_levels; ++level) {
+    // The within level of a two-level model carries no mean structure (no ν /
+    // α rows); the means live entirely at the between level. Single-level keeps
+    // whatever the caller asked for. (lavaan: the within block has no
+    // intercepts; the between block holds the indicator means.)
+    BuildOptions lvl_opts = tmpl_opts;
+    const std::int32_t level_filter = (n_levels > 1) ? level : 0;
+    if (n_levels > 1) {
+      lvl_opts.meanstructure = (level == n_levels);  // between level only
+    }
+    const VarSets vlev = level_varsets(level);
+    auto group_rows_or = build_group_template(eflat, lvl_opts, vlev,
                                               native_composites,
-                                              /*group_idx=*/g - 1);
+                                              /*group_idx=*/g - 1,
+                                              level_filter);
     if (!group_rows_or.has_value()) {
       return std::unexpected(group_rows_or.error());
     }
     auto& group_rows = *group_rows_or;
     for (auto& r : group_rows) {
-      r.block = g;
       r.group = g;
+      // Single-level: leave `level` at 0 and `block == group` (byte-identical
+      // to the pre-multilevel build). Two-level: stamp the 1-based level and
+      // the lavaan block index (group-1)*n_levels + level.
+      if (n_levels > 1) {
+        r.level = level;
+        r.block = (g - 1) * n_levels + level;
+      } else {
+        r.block = g;
+      }
       rows.push_back(std::move(r));
     }
+   }
   }
 
   // Step 8b: `group.equal` / `group.partial`. Tie the requested families across

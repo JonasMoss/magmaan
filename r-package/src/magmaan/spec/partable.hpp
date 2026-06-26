@@ -181,9 +181,14 @@ struct LatentStructure {
   std::vector<CompositeBlock> composite_blocks;
 
   // Per-row group index — 1-based (matches lavaan); 0 for constraint rows.
-  // (No multilevel yet: lavaan's `block` equals `group` here. When multilevel
-  // lands, re-add a `block` column alongside.)
   std::vector<std::int32_t> group;
+
+  // Per-row level index — 1-based *within a group* (1 = within / L1, 2 =
+  // between / L2 for two-level models); 0 for constraint rows. Empty or all-1
+  // ⇒ single-level, in which case `block_of` collapses to `group` and the
+  // matrix layout is byte-identical to the pre-multilevel build. lavaan's
+  // block axis is `block = (group-1)*n_levels + level`; see `block_of`.
+  std::vector<std::int32_t> level;
 
   // Resolved `group.equal` families (≙ lavaan `group.equal`), stamped by
   // `build` from `BuildOptions::group_equal`. `build` ties the data-free
@@ -263,6 +268,29 @@ struct LatentStructure {
     std::int32_t n = 1;
     for (auto g : group) if (g > n) n = g;
     return n;
+  }
+
+  // Number of levels (the largest `level` index over formula rows; ≥ 1
+  // always). Single-level (empty `level`, or all 1) ⇒ 1.
+  std::int32_t n_levels() const noexcept {
+    std::int32_t n = 1;
+    for (auto l : level) if (l > n) n = l;
+    return n;
+  }
+
+  // Number of blocks = n_groups() * n_levels(). Single-level ⇒ n_groups().
+  std::int32_t n_blocks() const noexcept { return n_groups() * n_levels(); }
+
+  // lavaan block index for row `i`: (group[i]-1)*n_levels() + level[i], 1-based;
+  // 0 for constraint rows (group[i] == 0). When `level` is empty or 0 for the
+  // row, the level defaults to 1, so `block_of` collapses to `group[i]` and the
+  // single-level layout is unchanged.
+  std::int32_t block_of(std::size_t i) const noexcept {
+    const std::int32_t g = (i < group.size()) ? group[i] : 0;
+    if (g <= 0) return 0;  // constraint row
+    const std::int32_t l =
+        (i < level.size() && level[i] > 0) ? level[i] : 1;
+    return (g - 1) * n_levels() + l;
   }
 
   bool is_constraint_row(std::size_t i) const noexcept {

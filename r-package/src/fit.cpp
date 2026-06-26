@@ -35,6 +35,7 @@
 #include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/twolevel.hpp"
 #include "magmaan/estimate/frontier/rbm.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
@@ -1954,6 +1955,105 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ML");
+}
+
+// fit_twolevel() — two-level (multilevel) normal-theory ML over clustered raw
+// data. `data` holds the observed columns (named); `cluster_id` is a 0-based
+// cluster index per row. Single group, v1. Returns theta-hat, observed-info SEs,
+// the LRT chi-square (vs the saturated H1), df, and basic diagnostics.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
+                             Rcpp::IntegerVector cluster_id,
+                             Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                             Rcpp::Nullable<Rcpp::List>   control   = R_NilValue) {
+  namespace tl = magmaan::estimate::twolevel;
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "fit_twolevel");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  magmaan::spec::LatentStructure pt = std::move(parsed.structure);
+  magmaan::spec::LatentNames names = std::move(parsed.names);
+
+  auto rep_or = magmaan::model::build_matrix_rep(pt, &names);
+  if (!rep_or.has_value()) {
+    Rcpp::stop("magmaan: fit_twolevel(): matrix_rep failed: %s",
+               rep_or.error().detail.c_str());
+  }
+  const magmaan::model::MatrixRep rep = std::move(*rep_or);
+  if (rep.ov_names.empty()) Rcpp::stop("magmaan: fit_twolevel(): empty model");
+
+  // Order data columns to the within-block observed order (shared variable set).
+  const std::vector<int> perm = perm_for_cols(data, rep.ov_names[0], "data");
+  const int n = data.nrow();
+  const int p = static_cast<int>(perm.size());
+  Eigen::MatrixXd X(n, p);
+  for (int r = 0; r < n; ++r)
+    for (int k = 0; k < p; ++k)
+      X(r, k) = data(r, perm[static_cast<std::size_t>(k)]);
+
+  if (cluster_id.size() != n) {
+    Rcpp::stop("magmaan: fit_twolevel(): cluster_id length (%d) != nrow(data) (%d)",
+               static_cast<int>(cluster_id.size()), n);
+  }
+  std::vector<std::int32_t> cid(cluster_id.begin(), cluster_id.end());
+  std::vector<std::int32_t> cols(static_cast<std::size_t>(p));
+  for (int k = 0; k < p; ++k) cols[static_cast<std::size_t>(k)] = k;
+
+  auto cs_or = magmaan::data::cluster_sample_stats(X, cid, cols, cols);
+  if (!cs_or.has_value()) {
+    Rcpp::stop("magmaan: fit_twolevel(): cluster statistics failed: %s",
+               cs_or.error().detail.c_str());
+  }
+  const magmaan::data::ClusterSampleStats cs = std::move(*cs_or);
+
+  auto x0_or = tl::twolevel_start_values(pt, rep, cs, starts);
+  if (!x0_or.has_value()) stop_fit(x0_or.error());
+  const Eigen::VectorXd x0 = std::move(*x0_or);
+
+  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+  auto est_or = tl::fit_ml_twolevel(pt, rep, cs, x0, {}, backend,
+                                    optim_opts_from(control));
+  if (!est_or.has_value()) stop_fit(est_or.error());
+  const magmaan::estimate::Estimates est = std::move(*est_or);
+
+  // Observed-information SEs.
+  Rcpp::NumericVector se(est.theta.size(), NA_REAL);
+  auto ev_or = magmaan::model::ModelEvaluator::build(pt, rep);
+  if (ev_or.has_value()) {
+    const magmaan::model::ModelEvaluator ev = std::move(*ev_or);
+    auto info_or = tl::twolevel_information(ev, cs, est.theta, /*expected=*/true);
+    if (info_or.has_value()) {
+      const Eigen::MatrixXd vcov = info_or->inverse();
+      for (Eigen::Index k = 0; k < est.theta.size(); ++k) {
+        const double v = vcov(k, k);
+        se[k] = (v > 0.0) ? std::sqrt(v) : NA_REAL;
+      }
+    }
+  }
+
+  // LRT chi-square vs the saturated H1 (chi2 = F_model - F_H1 = 2*fmin - F_H1).
+  double chisq = NA_REAL;
+  int df = NA_INTEGER;
+  auto h1_or = tl::twolevel_h1_moments(cs);
+  if (h1_or.has_value()) {
+    chisq = 2.0 * est.fmin - h1_or->value;
+    const long psat = static_cast<long>(p) * p + 2L * p;  // p(p+1)+p, single group
+    df = static_cast<int>(psat - static_cast<long>(pt.n_free()));
+  }
+
+  Rcpp::NumericVector theta(est.theta.size());
+  for (Eigen::Index k = 0; k < est.theta.size(); ++k) theta[k] = est.theta[k];
+
+  return Rcpp::List::create(
+      Rcpp::_["theta"]      = theta,
+      Rcpp::_["se"]         = se,
+      Rcpp::_["fmin"]       = est.fmin,
+      Rcpp::_["chisq"]      = chisq,
+      Rcpp::_["df"]         = df,
+      Rcpp::_["npar"]       = static_cast<int>(pt.n_free()),
+      Rcpp::_["iterations"] = est.iterations,
+      Rcpp::_["converged"]  =
+          (est.optimizer_status == magmaan::optim::OptimStatus::Converged));
 }
 
 // fit_ml_fisher() — normal-theory ML via local Fisher scoring. This path uses
