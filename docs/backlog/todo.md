@@ -1135,6 +1135,15 @@ decisions in the simulation backlog.
   `magmaan_core$measures_reliability_cov` and
   `experiments/41-reliability-lambda6`. The non-regular joint
   `omega - alpha` test and Imhof calibration remain unpromoted. Not required.
+  Prior-art oracle for the Spearman-Guttman covariance omega is Hancock & An
+  (2020) (closed-form single-factor omega; see
+  [paper-eval](../research/paper-evals/2020-hancock-closed-form-omega.md)): their
+  Spearman-1927 ratio-of-sums loading aggregation is more numerically stable than
+  the average-of-ratios communality and is the parity target for exp 41. Their
+  256-cell sim is the validation oracle. Open lane beyond Hancock & An (single
+  factor only): the multi-factor / multi-group / weighted `ω_G(σ;w)` form and
+  omega-hierarchical via a second-stage Schmid-Leiman centroid on `Φ_G` (k>=3),
+  derived in the `guttman_cfa_asymptotics.tex` note.
 - **L/XL.** Remaining C++ estimator work on the ordinal SNLLS / Gamma workspace
   track (the landed split is in the roadmap and
   [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);
