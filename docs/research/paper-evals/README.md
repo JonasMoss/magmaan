@@ -68,3 +68,4 @@ complete eval.
 | 2026-06-25 | [De Jonckere & Rosseel 2023](2023-dejonckere-model-based-shrinkage-target.md) | Model-based covariance-shrinkage target for small-N nonconvergence | → speculative (penalized-ML alternative) |
 | 2026-06-26 | [Bell, Chalmers & Flora 2024](2024-bell-omega-misspecification.md) | Bias of model-based omega (omega_u / omega_H) under structural misspecification | → speculative (model-based omega) |
 | 2026-06-26 | [Lee & Gates 2026](2026-lee-cgsem-vs-classic.md) | cgSEM (tensorsem/Adam) vs classic SEM (lavaan/quasi-Newton); admissibility-conditioned bias | background |
+| 2026-06-26 | [Li & Savalei 2026](2026-li-bifactor-maximal-reliability.md) | Correct maximal reliability (coefficient-H redone) + OLC/OLSC/FD for bifactor models | → speculative |
