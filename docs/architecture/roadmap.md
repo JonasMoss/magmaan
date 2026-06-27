@@ -147,7 +147,14 @@ golden `parTable()` fixtures.
   first frontier reliability covariance functionals
   (`measures::frontier::reliability`: alpha, Guttman's lambda6, and
   Spearman-Guttman covariance omega with delta-method covariance-scale SEs;
-  exposed in R through `magmaan_core$measures_reliability_cov`).
+  exposed in R through `magmaan_core$measures_reliability_cov`). Extended with
+  closed-form **multidimensional** omega: `omega_multidim` for
+  `OmegaTarget::Total` (the weighted composite `w'CX(X'CX)^-1 X'C w / w'Sw`) and
+  `OmegaTarget::Hierarchical` (two-stage centroid Schmid-Leiman general factor,
+  k>=3), with Spearman ratio-of-sums communalities, a finite-difference gradient,
+  and the full-Gamma `omega_multidim_delta` SE; exposed through
+  `magmaan_core$measures_reliability_omega_multidim`. Consumed by
+  `papers/closed-form-omega`.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling
