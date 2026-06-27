@@ -334,6 +334,16 @@ fiml_corrected_fit_measures(spec::LatentStructure pt,
                             const FIMLPack& pack,
                             const FIMLH1& h1);
 
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            const FIMLPack& pack,
+                            const FIMLH1& h1,
+                            const SaturatedMoments& sm);
+
 // Shared sandwich ingredients for the FIML MLR corner: the analytic
 // per-observation-averaged deviance Hessian `H` (the bare averaged Hessian, so
 // the observed information is `(N/2)·H`) and the casewise observed-pattern

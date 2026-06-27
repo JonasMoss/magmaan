@@ -3066,24 +3066,13 @@ fiml_eta_jacobian(spec::LatentStructure pt,
 
 namespace {
 
-// Single-model FIML residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV in the saturated
-// η-metric, with Δ the constraint-collapsed model Jacobian ∂[μ; vech Σ]/∂θ. The
-// weight V is supplied by the caller (sm.H saturated, or the structured H1
-// curvature) so a nested difference U0 − U1 can share a common V. Shared by the
-// GOF spectrum (fiml_ugamma_spectrum_impl) and the method-2001 nested spectrum.
 post_expected<Eigen::MatrixXd>
-fiml_residual_projector_impl(const spec::LatentStructure& pt,
-                             const model::MatrixRep& rep,
-                             const RawData& raw,
-                             const Estimates& est,
-                             const FIMLPack& pack,
-                             const Eigen::Ref<const Eigen::MatrixXd>& V) {
-  const Eigen::Index Q = V.rows();
-  if (V.cols() != Q || Q == 0) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_residual_projector: V must be square and non-empty"));
-  }
-
+fiml_projector_delta_impl(const spec::LatentStructure& pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack,
+                          Eigen::Index Q) {
   // Δ = ∂[μ(θ); vech Σ(θ)]/∂θ at θ̂.
   auto jac_or = fiml_eta_jacobian_impl(pt, rep, raw, est, pack);
   if (!jac_or.has_value()) return std::unexpected(jac_or.error());
@@ -3129,6 +3118,29 @@ fiml_residual_projector_impl(const spec::LatentStructure& pt,
     }
     Delta = (Delta * svd.matrixV().rightCols(nz)).eval();
   }
+  return Delta;
+}
+
+// Single-model FIML residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV in the saturated
+// η-metric, with Δ the constraint-collapsed model Jacobian ∂[μ; vech Σ]/∂θ. The
+// weight V is supplied by the caller (sm.H saturated, or the structured H1
+// curvature) so a nested difference U0 − U1 can share a common V. Shared by the
+// GOF spectrum (fiml_ugamma_spectrum_impl) and the method-2001 nested spectrum.
+post_expected<Eigen::MatrixXd>
+fiml_residual_projector_impl(const spec::LatentStructure& pt,
+                             const model::MatrixRep& rep,
+                             const RawData& raw,
+                             const Estimates& est,
+                             const FIMLPack& pack,
+                             const Eigen::Ref<const Eigen::MatrixXd>& V) {
+  const Eigen::Index Q = V.rows();
+  if (V.cols() != Q || Q == 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_residual_projector: V must be square and non-empty"));
+  }
+  auto delta_or = fiml_projector_delta_impl(pt, rep, raw, est, pack, Q);
+  if (!delta_or.has_value()) return std::unexpected(delta_or.error());
+  const Eigen::MatrixXd& Delta = *delta_or;
 
   // U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV (rank df).
   const Eigen::MatrixXd VD = V * Delta;
@@ -3429,14 +3441,34 @@ residual_projector_trace(const Eigen::MatrixXd& V,
   auto DtVDinv_or = invert_symmetric(DtVD,
                                      std::string(label) + ": DtVD");
   if (!DtVDinv_or.has_value()) return std::unexpected(DtVDinv_or.error());
-  Eigen::MatrixXd U = V - VD * (*DtVDinv_or) * VD.transpose();
-  U = 0.5 * (U + U.transpose()).eval();
-  const double tr = (U * G).trace();
+  const double tr_vg = V.cwiseProduct(G.transpose()).sum();
+  Eigen::MatrixXd DtGVD = VD.transpose() * (G * VD);
+  DtGVD = 0.5 * (DtGVD + DtGVD.transpose()).eval();
+  const double tr = tr_vg - ((*DtVDinv_or) * DtGVD).trace();
   if (!std::isfinite(tr)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         std::string(label) + ": non-finite trace"));
   }
   return tr;
+}
+
+post_expected<double>
+fiml_residual_projector_trace_impl(const spec::LatentStructure& pt,
+                                   const model::MatrixRep& rep,
+                                   const RawData& raw,
+                                   const Estimates& est,
+                                   const FIMLPack& pack,
+                                   const Eigen::MatrixXd& V,
+                                   const Eigen::MatrixXd& G,
+                                   std::string_view label) {
+  const Eigen::Index Q = V.rows();
+  if (V.cols() != Q || Q == 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": V must be square and non-empty"));
+  }
+  auto delta_or = fiml_projector_delta_impl(pt, rep, raw, est, pack, Q);
+  if (!delta_or.has_value()) return std::unexpected(delta_or.error());
+  return residual_projector_trace(V, G, *delta_or, label);
 }
 
 post_expected<FIMLCorrectedFitMeasures>
@@ -3446,7 +3478,8 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
                                  const Estimates& est,
                                  int df,
                                  const FIMLPack& pack,
-                                 const FIMLH1& h1) {
+                                 const FIMLH1& h1,
+                                 const SaturatedMoments* sm_precomputed) {
   if (df <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_corrected_fit_measures: requires df > 0"));
@@ -3475,18 +3508,23 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
         "ModelEvaluator::evaluate failed: " + implied_or.error().detail));
   }
 
-  auto sm_or = saturated_em_moments(raw, pack, h1);
-  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
-  const SaturatedMoments& sm = *sm_or;
+  SaturatedMoments sm_owned;
+  if (!sm_precomputed) {
+    auto sm_or = saturated_em_moments(raw, pack, h1);
+    if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+    sm_owned = std::move(*sm_or);
+  }
+  const SaturatedMoments& sm = sm_precomputed ? *sm_precomputed : sm_owned;
 
   auto xx3_or = normal_theory_chisq_from_moments(
       implied_or->moments.mu, implied_or->moments.sigma, h1.mu, h1.sigma, sm.n_obs,
       "fiml_corrected_fit_measures: user XX3");
   if (!xx3_or.has_value()) return std::unexpected(xx3_or.error());
 
-  auto spec_or = fiml_ugamma_spectrum_impl(
-      pt, rep, raw, est, df, *xx3_or, pack, h1, &sm);
-  if (!spec_or.has_value()) return std::unexpected(spec_or.error());
+  auto tr_or = fiml_residual_projector_trace_impl(
+      pt, rep, raw, est, pack, sm.H, sm.acov,
+      "fiml_corrected_fit_measures: user");
+  if (!tr_or.has_value()) return std::unexpected(tr_or.error());
 
   const std::vector<Eigen::Index> exo_idx = observed_exogenous_indices(pt);
   const std::vector<Eigen::MatrixXd> sigma_null =
@@ -3510,7 +3548,7 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
   FIMLCorrectedFitMeasures out;
   out.xx3 = *xx3_or;
   out.df3 = df;
-  out.c_hat3 = spec_or->trace_xcheck / static_cast<double>(df);
+  out.c_hat3 = *tr_or / static_cast<double>(df);
   out.xx3_scaled = (out.c_hat3 > 0.0)
       ? out.xx3 / out.c_hat3
       : std::numeric_limits<double>::quiet_NaN();
@@ -3555,7 +3593,7 @@ fiml_corrected_fit_measures(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
   }
   return fiml_corrected_fit_measures_impl(std::move(pt), rep, raw, est, df,
-                                          *pack_or, *h1_or);
+                                          *pack_or, *h1_or, nullptr);
 }
 
 post_expected<FIMLCorrectedFitMeasures>
@@ -3567,7 +3605,20 @@ fiml_corrected_fit_measures(spec::LatentStructure pt,
                             const FIMLPack& pack,
                             const FIMLH1& h1) {
   return fiml_corrected_fit_measures_impl(std::move(pt), rep, raw, est, df,
-                                          pack, h1);
+                                          pack, h1, nullptr);
+}
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            const FIMLPack& pack,
+                            const FIMLH1& h1,
+                            const SaturatedMoments& sm) {
+  return fiml_corrected_fit_measures_impl(std::move(pt), rep, raw, est, df,
+                                          pack, h1, &sm);
 }
 
 post_expected<Eigen::MatrixXd>
