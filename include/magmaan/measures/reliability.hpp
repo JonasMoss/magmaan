@@ -42,4 +42,46 @@ delta_method(Coefficient coef,
              const Eigen::Ref<const Eigen::MatrixXd>& gamma,
              std::int64_t n);
 
+// ---------------------------------------------------------------------------
+// Multidimensional closed-form reliability (omega-total and omega-hierarchical)
+//
+// A two-stage Guttman/centroid map turns a multi-factor congeneric covariance
+// into closed-form reliability with no iterated CFA. The single-factor case is
+// Hancock & An (2020); these extend it to k factors. Both are smooth covariance
+// functionals g(S), so inference is the ordinary delta method on full Gamma.
+// ---------------------------------------------------------------------------
+
+enum class OmegaTarget : std::uint8_t {
+  Total,         // reliability of the (weighted) total score across all factors
+  Hierarchical,  // share carried by a Schmid-Leiman general factor (k >= 3)
+};
+
+// Simple-structure factor model. `block[i]` in [0, k) names the single factor
+// item i loads on; k is inferred as max(block)+1. `weights` (length p) applies
+// to OmegaTarget::Total only; empty means unit weights. Communalities are the
+// within-block Spearman (1927) ratio-of-sums (Hancock & An 2020), so each block
+// needs at least 3 items; OmegaTarget::Hierarchical additionally needs k >= 3.
+struct OmegaSpec {
+  Eigen::VectorXi block;
+  Eigen::VectorXd weights;  // empty => unit weights
+};
+
+post_expected<double>
+omega_multidim(OmegaTarget target,
+               const Eigen::Ref<const Eigen::MatrixXd>& S,
+               const OmegaSpec& spec);
+
+// Central finite-difference gradient over vech(S) (lower-triangle, column major).
+post_expected<Eigen::VectorXd>
+omega_multidim_gradient(OmegaTarget target,
+                        const Eigen::Ref<const Eigen::MatrixXd>& S,
+                        const OmegaSpec& spec);
+
+post_expected<DeltaResult>
+omega_multidim_delta(OmegaTarget target,
+                     const Eigen::Ref<const Eigen::MatrixXd>& S,
+                     const OmegaSpec& spec,
+                     const Eigen::Ref<const Eigen::MatrixXd>& gamma,
+                     std::int64_t n);
+
 }  // namespace magmaan::measures::frontier::reliability
