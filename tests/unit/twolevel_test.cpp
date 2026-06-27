@@ -142,6 +142,56 @@ ImpliedMoments moments_of(const Eigen::MatrixXd& Sw, const Eigen::MatrixXd& Sb,
   return m;
 }
 
+// d x (d-1) Helmert basis: orthonormal columns, each orthogonal to 1_d.
+// Column k (0-based) is the contrast (1,...,1,-(k+1),0,...,0) with k+1 leading
+// ones, normalized. Used to build zero-sum within-cluster deviations.
+Eigen::MatrixXd helmert(int d) {
+  Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(d, d - 1);
+  for (int k = 0; k < d - 1; ++k) {
+    for (int i = 0; i <= k; ++i) Q(i, k) = 1.0;
+    Q(k + 1, k) = -static_cast<double>(k + 1);
+    Q.col(k) /= Q.col(k).norm();
+  }
+  return Q;
+}
+
+// Construct clustered data that *exactly* reproduces a chosen two-level model
+// at (Sw, Sb, mu): every pseudo-block residual vanishes, so the observed and
+// expected information coincide. For each distinct size d we emit J_d = 2p
+// clusters whose cluster-mean cross-product about mu equals (J_d/d)·C_d (the
+// size-d pseudo-block scatter d·A_d then equals J_d·C_d) and whose pooled
+// within scatter sums to (N-J)·Sw. Sizes are deliberately unequal so the
+// size-pattern sum is exercised.
+Clusters perfect_following(const Eigen::MatrixXd& Sw, const Eigen::MatrixXd& Sb,
+                           const Eigen::VectorXd& mu, const std::vector<int>& sizes) {
+  const Eigen::Index p = Sw.rows();
+  const Eigen::LLT<Eigen::MatrixXd> llt_w(Sw);
+  const Eigen::MatrixXd Lw = llt_w.matrixL();  // Sw = Lw Lw'
+  Clusters clusters;
+  for (int d : sizes) {
+    const Eigen::MatrixXd Cd = Sw + static_cast<double>(d) * Sb;
+    const Eigen::MatrixXd Lc = Eigen::LLT<Eigen::MatrixXd>(Cd).matrixL();
+    // Within-deviation block E (d x p): E'E = (d-1)·Sw, column sums zero.
+    const Eigen::MatrixXd Q = helmert(d);                // d x (d-1)
+    Eigen::MatrixXd R = Eigen::MatrixXd::Zero(d - 1, p);  // R'R = Sw
+    R.topRows(p) = Lw.transpose();
+    const Eigen::MatrixXd E =
+        std::sqrt(static_cast<double>(d - 1)) * (Q * R);  // d x p
+    // Cluster means: 2p clusters at mu ± sqrt(p/d)·Lc[:,i], i = 0..p-1.
+    const double s = std::sqrt(static_cast<double>(p) / static_cast<double>(d));
+    for (Eigen::Index i = 0; i < p; ++i) {
+      for (double sign : {+1.0, -1.0}) {
+        const Eigen::VectorXd ybar = mu + sign * s * Lc.col(i);
+        Cluster cl;
+        for (int row = 0; row < d; ++row)
+          cl.push_back(Eigen::VectorXd(ybar + E.row(row).transpose()));
+        clusters.push_back(std::move(cl));
+      }
+    }
+  }
+  return clusters;
+}
+
 }  // namespace
 
 TEST_CASE("twolevel_value matches the brute-force stacked-cluster -2logL") {
@@ -332,4 +382,81 @@ TEST_CASE("twolevel_h1_moments drives the score to zero (unbalanced)") {
   auto F = tl::twolevel_value(cs, *cache, mm, rep);
   REQUIRE(F.has_value());
   CHECK(*F == doctest::Approx(h1->value).epsilon(1e-10));
+}
+
+TEST_CASE(
+    "twolevel_expected_information equals observed FD info at residual-zero "
+    "(unbalanced)") {
+  // The closed-form expected (Fisher) information ½·E[∂²F/∂θ²] and the observed
+  // information ½·∂²F/∂θ² coincide exactly when every pseudo-block residual
+  // vanishes. perfect_following() builds unbalanced clustered data (sizes
+  // {3, 4}, so the per-size sum is exercised) that reproduces the chosen model
+  // moments exactly, so the analytic expected info must match a central finite
+  // difference of the analytic full-deviance gradient to FD tolerance.
+  const Eigen::Index p = 2;
+  Eigen::MatrixXd Sw(2, 2), Sb(2, 2);
+  Sw << 1.6, 0.45, 0.45, 1.1;
+  Sb << 0.8, 0.25, 0.25, 0.5;
+  const Eigen::VectorXd mu = vec2(0.4, -0.2);
+  const std::vector<int> sizes = {3, 4};
+
+  ClusterSampleStats cs;
+  cs.groups = {stats_from_clusters(perfect_following(Sw, Sb, mu, sizes))};
+  const MatrixRep rep = two_block_rep();
+  auto cache = tl::twolevel_prepare(cs);
+  REQUIRE(cache.has_value());
+
+  const Eigen::Index pv = magmaan::detail::vech_len(p);  // 3
+  const Eigen::Index nfree = 2 * pv + p;                 // 8
+  auto [Js, Jm] = identity_jacobians(p);
+
+  // Sanity: residuals really do vanish here -> this point is the optimum.
+  auto vg0 = tl::twolevel_value_gradient(cs, *cache, moments_of(Sw, Sb, mu), Js,
+                                         Jm, rep);
+  REQUIRE(vg0.has_value());
+  CHECK(vg0->gradient.norm() < 1e-9);
+
+  // Analytic expected information at the model moments.
+  auto info_exp = tl::twolevel_expected_information(
+      cs, *cache, moments_of(Sw, Sb, mu), Js, Jm, rep);
+  if (!info_exp) {
+    CHECK_MESSAGE(false, "twolevel_expected_information failed: "
+                             << info_exp.error().detail);
+    return;
+  }
+  REQUIRE(info_exp->rows() == nfree);
+
+  // Observed info: ½ × central-FD Hessian of the analytic gradient ∂F/∂θ.
+  Eigen::VectorXd theta(nfree);
+  theta << magmaan::detail::vech_lower(Sw), magmaan::detail::vech_lower(Sb), mu;
+  auto grad_at = [&](const Eigen::VectorXd& th) -> Eigen::VectorXd {
+    Eigen::MatrixXd Sw_(p, p), Sb_(p, p);
+    magmaan::detail::vech_unpack(th.segment(0, pv), p, Sw_);
+    magmaan::detail::vech_unpack(th.segment(pv, pv), p, Sb_);
+    ImpliedMoments mm;
+    mm.sigma = {Sw_, Sb_};
+    mm.mu = {Eigen::VectorXd(), Eigen::VectorXd(th.segment(2 * pv, p))};
+    auto vg = tl::twolevel_value_gradient(cs, *cache, mm, Js, Jm, rep);
+    REQUIRE(vg.has_value());
+    return vg->gradient;
+  };
+  const double h = 1e-6;
+  Eigen::MatrixXd Hess(nfree, nfree);
+  for (Eigen::Index j = 0; j < nfree; ++j) {
+    Eigen::VectorXd tp = theta, tm = theta;
+    tp(j) += h;
+    tm(j) -= h;
+    Hess.col(j) = (grad_at(tp) - grad_at(tm)) / (2.0 * h);
+  }
+  Hess = (0.5 * (Hess + Hess.transpose())).eval();
+  const Eigen::MatrixXd info_obs = 0.5 * Hess;
+
+  const double max_abs = (*info_exp - info_obs).cwiseAbs().maxCoeff();
+  const double scale = info_obs.cwiseAbs().maxCoeff();
+  CHECK(max_abs / scale < 1e-5);
+
+  // The expected info is symmetric positive definite, so it inverts to a vcov.
+  CHECK((*info_exp - info_exp->transpose()).cwiseAbs().maxCoeff() < 1e-10);
+  Eigen::LLT<Eigen::MatrixXd> llt(*info_exp);
+  CHECK(llt.info() == Eigen::Success);
 }

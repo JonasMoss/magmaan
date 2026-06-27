@@ -60,6 +60,19 @@ twolevel_value_gradient(const ClusterSampleStats& cs, const TwoLevelCache& cache
                         const Eigen::MatrixXd& J_mu,
                         const model::MatrixRep& rep);
 
+// Closed-form expected (Fisher) information of the two-level deviance F at the
+// implied moments: ½·E[∂²F/∂θ²], the same scale twolevel_information returns.
+// Analytic core over the raw per-block Jacobians (mirrors
+// twolevel_value_gradient) so it is exercisable with identity Jacobians;
+// twolevel_information wraps it with a ModelEvaluator when `expected == true`.
+fit_expected<Eigen::MatrixXd>
+twolevel_expected_information(const ClusterSampleStats& cs,
+                             const TwoLevelCache& cache,
+                             const model::ImpliedMoments& moments,
+                             const Eigen::MatrixXd& J_sigma,
+                             const Eigen::MatrixXd& J_mu,
+                             const model::MatrixRep& rep);
+
 // Optimizer-ready scalar problem over the free θ. `ev` must outlive the result.
 fit_expected<optim::ScalarProblem>
 twolevel_ml_objective(const model::ModelEvaluator& ev,
