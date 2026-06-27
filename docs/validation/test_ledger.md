@@ -115,6 +115,22 @@ Guard: `tests/unit/fiml_test.cpp` (metric-invariance Unstructured degeneracy
 Scope: Expected bread only (the FMG path); the Observed-bread spectrum tail is
 left as-is. `robust_se` uses its own w_b-weighted bread and was unaffected.
 
+**ML2S weighted nested-test dispatch.**
+Regression: R `robust_nested_lrt()` recognized only the exact estimator label
+`"ML2S"` as two-stage. Weighted two-stage fits such as `"ML2S_DWLS"` still carry
+`magmaan_fiml_data`, so the wrapper misrouted them into the FIML nested-test
+binding and paid the saturated FIML difference-spectrum cost while using the
+wrong metric. The ML2S branch now matches the `ML2S` prefix, runs before the
+FIML raw-data check, and passes the fit's Stage-2 weight (`nt`, `uls`, `dwls`,
+`adf`, or `dls`) into the ML2S Satorra-2000/2001 cores.
+Guard: `r-package/tests/testthat/test-nested-test.R` stubs the low-level ML2S
+and FIML bindings and asserts that `ML2S_DWLS`/`ML2S_ULS` go through the ML2S
+branch with the selected weight; `tests/unit/fiml_test.cpp` pins ULS as the
+identity two-stage moment weight.
+Scope: scalar SB2001/SB2010 compatibility approximations remain baseline
+comparison paths; the FMG-able restriction-map and U0-U1 difference spectra are
+the weighted ML2S routes.
+
 **Ordinal/mixed standardized delta-unit.**
 Regression: the generic `λ·√Var(η)/√σ_rr` formula divided by `σ_rr ≈ λ²ψ+1`, but
 a delta-ordinal `y*` is unit-variance, so a true .6 loading came back ~.52; the

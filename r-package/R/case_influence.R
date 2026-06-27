@@ -487,7 +487,8 @@ mahalanobis_rerun <- function(fit, data = NULL) {
   # Two-stage (ML2S) estimated-weight path: the missing-data member. The
   # influence rides the Stage-1 saturated-moment per-case influence plus the
   # Stage-2 data-dependent-weight term. The Stage-2 weight is encoded in the
-  # estimator label ("ML2S" = NT, "ML2S_DWLS"/"_ADF"/"_DLS"/"_WLS" = non-NT);
+  # estimator label ("ML2S" = NT, "ML2S_ULS"/"_DWLS"/"_ADF"/"_DLS"/"_WLS"
+  # = non-NT);
   # NT treats the weight as fixed (correction zero). Case ids are sequential
   # (block-stacked per-case rows, no original-row map).
   if (type == "estimated.weight" &&

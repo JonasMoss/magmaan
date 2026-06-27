@@ -4441,9 +4441,9 @@ ml2s_weight_correction_block(const RawData& raw,
         "two_stage_em_ml_inference: DLS mixing scalar a must lie in [0, 1]"));
   }
 
-  // The non-NT weights (DWLS/ADF/DLS with a>0) carry the estimated-weight
+  // The data-dependent weights (DWLS/ADF/DLS with a>0) carry the estimated-weight
   // channel through the analytic Stage-1 sandwich-Γ influence; build its
-  // per-block precompute once.
+  // per-block precompute once. ULS is a fixed identity weight.
   const bool needs_gamma = kind == TwoStageWeight::Dwls ||
                            kind == TwoStageWeight::Adf ||
                            (kind == TwoStageWeight::Dls && dls.a > 0.0);
@@ -4632,6 +4632,10 @@ two_stage_stage2_weight_blocks(const SaturatedMoments& sm, TwoStageWeight kind,
         W.bottomRightCorner(ps, ps) = *cinv;
         break;
       }
+      case TwoStageWeight::Uls: {
+        W.setIdentity();
+        break;
+      }
       case TwoStageWeight::Adf: {
         auto winv = sym_pd_inverse(Gf, "Gamma_FIML block");
         if (!winv.has_value()) return std::unexpected(winv.error());
@@ -4746,7 +4750,7 @@ two_stage_complete_data_weighted_ij_from_sm(spec::LatentStructure pt,
                                             TwoStageDlsOptions dls,
                                             TwoStageBread bread) {
   if (bread != TwoStageBread::Observed || !raw_has_no_missing_mask(raw) ||
-      kind == TwoStageWeight::Nt) {
+      kind == TwoStageWeight::Nt || kind == TwoStageWeight::Uls) {
     return two_stage_em_weighted_inference_from_sm(
         std::move(pt), rep, est, sm, kind, dls, bread);
   }
@@ -4775,6 +4779,7 @@ two_stage_complete_data_weighted_ij_from_sm(spec::LatentStructure pt,
           std::move(pt), rep, samp, est, raw, opts);
       break;
     }
+    case TwoStageWeight::Uls:
     case TwoStageWeight::Nt:
       break;
   }
@@ -4914,7 +4919,7 @@ two_stage_missing_data_weighted_ij_from_sm(spec::LatentStructure pt,
                                            TwoStageDlsOptions dls,
                                            TwoStageBread bread) {
   if (bread != TwoStageBread::Observed || raw_has_no_missing_mask(raw) ||
-      kind == TwoStageWeight::Nt) {
+      kind == TwoStageWeight::Nt || kind == TwoStageWeight::Uls) {
     return two_stage_em_weighted_inference_from_sm(
         std::move(pt), rep, est, sm, kind, dls, bread);
   }
@@ -5068,7 +5073,8 @@ two_stage_casewise_influence_ij(spec::LatentStructure pt,
   // `continuous_ls_*_ij`, so the per-case rows reproduce that vcov). Everything
   // else — non-NT missing data, and the NT weight (correction zero) — goes
   // through the shared IJ-block assembly with the observed bread.
-  if (kind != TwoStageWeight::Nt && raw_has_no_missing_mask(raw)) {
+  if (kind != TwoStageWeight::Nt && kind != TwoStageWeight::Uls &&
+      raw_has_no_missing_mask(raw)) {
     SampleStats samp = sample_stats_from_saturated(*sm_or);
     ContinuousLsIJWeightMode mode = ContinuousLsIJWeightMode::SampleEmpiricalWls;
     if (kind == TwoStageWeight::Dwls)

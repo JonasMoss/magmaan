@@ -430,7 +430,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
 // infer_ml2s_lr_test_satorra2000() — two-stage ML restriction-map nested LR
 // test. Uses the Stage-1 saturated EM moments as the Stage-2 sample moments:
 // T_diff is the complete-data ML chi-square difference on those moments, while
-// the difference spectrum uses complete-data NT weight + EM-ACOV meat.
+// the difference spectrum uses the selected Stage-2 weight + EM-ACOV meat.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
@@ -438,7 +438,9 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           std::string gamma = "empirical",
                                           std::string a_method = "exact",
                                           double      h_step = 1e-4,
-                                          std::string ud_method = "2000") {
+                                          std::string ud_method = "2000",
+                                          std::string stage2_weight = "nt",
+                                          double      dls_a = 0.5) {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
     Rcpp::stop("infer_ml2s_lr_test_satorra2000: both ML2S fits must carry $raw_data");
@@ -446,6 +448,9 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
   if (ud_method != "2000" && ud_method != "2001") {
     Rcpp::stop("infer_ml2s_lr_test_satorra2000: ud_method must be '2000' or '2001'");
   }
+  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  magmaan::estimate::fiml::TwoStageDlsOptions dls;
+  dls.a = dls_a;
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
   magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
@@ -484,7 +489,7 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
     auto r_or = magmaan::robust::lr_test_satorra2001_ml2s_from_data(
         ctx_H1.pt, ctx_H1.rep, est_H1.theta,
         ctx_H0.pt, ctx_H0.rep, est_H0.theta,
-        raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or, h_step, &sm);
+        raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or, h_step, &sm, kind, dls);
     if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
     return satorra2000_to_list(*r_or);
   }
@@ -500,7 +505,7 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or,
-      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm);
+      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm, kind, dls);
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }

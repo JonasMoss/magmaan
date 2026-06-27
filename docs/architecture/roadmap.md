@@ -506,11 +506,12 @@ golden `parTable()` fixtures.
   robust.sem machinery; missing-data golden tests gate the TS scaling and global
   indices against lavaan `missing = "robust.two.stage"`.
   - *Frontier:* the Stage-2 weight is selectable
-    (`estimate::fiml::TwoStageWeight` ∈ {`Nt`, `Dwls`, `Adf`, `Dls`}, built by
-    `two_stage_stage2_weight`). `Nt` is the lavaan `robust.two.stage` default
-    and is unchanged; the non-NT members are missingness-aware weighted-LS
-    Stage-2 estimators (`Dwls` = `diag(Γ_FIML)⁻¹`, `Adf` = `Γ_FIML⁻¹`,
-    `Dls` = Browne `Γ_NT`/`Γ_FIML` mix) that route the single-model GOF/SE path
+    (`estimate::fiml::TwoStageWeight` ∈ {`Nt`, `Uls`, `Dwls`, `Adf`, `Dls`},
+    built by `two_stage_stage2_weight`). `Nt` is the lavaan
+    `robust.two.stage` default and is unchanged; the non-NT members are
+    weighted-LS Stage-2 estimators (`Uls` = identity, `Dwls` =
+    `diag(Γ_FIML)⁻¹`, `Adf` = `Γ_FIML⁻¹`, `Dls` = Browne
+    `Γ_NT`/`Γ_FIML` mix) that route the single-model GOF/SE path
     through `robust_continuous_ls` and the ML2S Satorra-2000/2001 difference
     tests through the same eigen-cores (a `(V, Γ)` swap, no new test machinery).
     R: `magmaan(estimator = "ML2S", stage2_weight =, dls_a =)`. Rationale and
@@ -614,13 +615,12 @@ golden `parTable()` fixtures.
   Two-stage ML (`ML2S`) pairs are routed the same way
   (`robust_nested_lrt()` / `nestedTest()` dispatch ML2S before the FIML check,
   since an ML2S fit's `raw_data` is a `magmaan_fiml_data`; `computation =
-  "ml2s_eta"`). The ML2S difference reduction uses the two-stage convention — the
-  complete-data normal-theory weight `V = Gamma_NT(Sigma)^-1`
-  (`ml2s_nt_weight_from_saturated`, *not* the saturated `V = H` of the FIML
-  route) with the EM-ACOV meat `two_stage_gamma_from_acov(sm)` and the Stage-2 ML
-  chi-square difference as the base — matching the single-model ML2S GOF spectrum;
-  a `GammaSource::NT` collapse (every difference eigenvalue exactly 1) gates the
-  weight convention. The eigenvalue-tail battery is applied to any of these
+  "ml2s_eta"`). The ML2S difference reduction uses the selected Stage-2
+  two-stage weight (`Nt` by default; `Uls`/`Dwls`/`Adf`/`Dls` for weighted
+  Stage-2 fits, not the saturated `V = H` of the FIML route) with the EM-ACOV
+  meat `two_stage_gamma_from_acov(sm)` and the Stage-2 chi-square difference as
+  the base. A `GammaSource::NT` collapse (every difference eigenvalue exactly 1)
+  gates the NT convention. The eigenvalue-tail battery is applied to any of these
   difference spectra (continuous ML / FIML / ML2S) through `fmg_nested(fit_H1,
   fit_H0, ...)`, the model-pair analogue of `fmg_nested_ordinal()`: it harvests
   `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
@@ -1643,8 +1643,9 @@ stop rather than any usable non-error return.
   `TwoStageBread::Observed`, and the saturated-EM moment influence primitive
   is available as `saturated_em_moment_influence`. Raw complete-data ML2S
   observed-bread covariance for `TwoStageWeight::{Dwls,Adf,Dls}` now reduces
-  through the continuous-LS IJ adapters. Raw missing-data ML2S observed-bread
-  covariance for those non-NT weights now includes the FIML Stage-1
+  through the continuous-LS IJ adapters, while fixed-weight `Uls` stays on the
+  shared ML2S IJ assembly. Raw missing-data ML2S observed-bread covariance for
+  those estimated weights now includes the FIML Stage-1
   sandwich-Gamma influence via a case-weight finite-difference over the
   saturated EM `(H,J,ACOV)` stack; scaled-test fields remain fixed-weight. The
   remaining performance follow-up is an analytic replacement for that

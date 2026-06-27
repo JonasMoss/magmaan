@@ -992,6 +992,8 @@ inline bool saturated_from_stage1(Rcpp::List fit,
 inline magmaan::estimate::fiml::TwoStageWeight
 two_stage_weight_from_arg(const std::string& s) {
   if (s == "nt" || s == "NT") return magmaan::estimate::fiml::TwoStageWeight::Nt;
+  if (s == "uls" || s == "ULS")
+    return magmaan::estimate::fiml::TwoStageWeight::Uls;
   if (s == "dwls" || s == "DWLS")
     return magmaan::estimate::fiml::TwoStageWeight::Dwls;
   if (s == "adf" || s == "ADF" || s == "wls" || s == "WLS")
@@ -999,7 +1001,7 @@ two_stage_weight_from_arg(const std::string& s) {
   if (s == "dls" || s == "DLS")
     return magmaan::estimate::fiml::TwoStageWeight::Dls;
   Rcpp::stop("magmaan: unknown stage2_weight '" + s +
-             "' (expected nt, dwls, adf, dls)");
+             "' (expected nt, uls, dwls, adf, dls)");
 }
 
 // ---- profile-LRT result serializers (shared by robust.cpp + fit.cpp) -------

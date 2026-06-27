@@ -25,7 +25,8 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                                        dls_a = 0.5) {
   kind <- match.arg(kind)
   stage2_weight <- match.arg(stage2_weight,
-                             c("nt", "dwls", "adf", "dls", "wls"))
+                             c("nt", "uls", "dwls", "adf", "dls", "wls"))
+  if (identical(stage2_weight, "wls")) stage2_weight <- "adf"
 
   # Stage 1 (saturated EM moments) depends only on the data, so a caller fitting
   # several models to one dataset can build it once and pass it in via `stage1`
@@ -69,6 +70,8 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   fit$estimator <- if (identical(kind, "gls")) "two_stage_gls"
                    else if (identical(stage2_weight, "nt")) "ML2S"
                    else paste0("ML2S_", toupper(stage2_weight))
+  fit$stage2_weight <- stage2_weight
+  fit$stage2_dls_a <- dls_a
   fit$stage1 <- list(
     mean = em$mean, cov = em$cov, n_obs = em$n_obs,
     H = em$H, J = em$J, acov = em$acov)

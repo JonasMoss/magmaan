@@ -60,12 +60,27 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   fit_estimator <- function(fit) {
     toupper(as.character(fit$estimator %||% fit$options$estimator %||% ""))
   }
-  is_fiml <- function(fit) {
-    isTRUE(fit$fiml) || identical(fit_estimator(fit), "FIML") ||
-      inherits(fit$raw_data, "magmaan_fiml_data")
-  }
   is_ml2s <- function(fit) {
-    identical(fit_estimator(fit), "ML2S")
+    grepl("^ML2S(_|$)", fit_estimator(fit))
+  }
+  is_fiml <- function(fit) {
+    !is_ml2s(fit) &&
+      (isTRUE(fit$fiml) || identical(fit_estimator(fit), "FIML") ||
+         inherits(fit$raw_data, "magmaan_fiml_data"))
+  }
+  ml2s_stage2_weight <- function(fit) {
+    w <- fit$stage2_weight
+    if (is.null(w)) {
+      est <- fit_estimator(fit)
+      w <- if (identical(est, "ML2S")) "nt" else sub("^ML2S_", "", est)
+    }
+    w <- tolower(as.character(w)[1L])
+    if (identical(w, "wls")) w <- "adf"
+    if (!w %in% c("nt", "uls", "dwls", "adf", "dls")) {
+      stop("robust_nested_lrt(): unknown ML2S stage2_weight '", w,
+           "' (expected nt, uls, dwls, adf/wls, or dls).", call. = FALSE)
+    }
+    w
   }
   ml2s_H1 <- is_ml2s(fit_H1)
   ml2s_H0 <- is_ml2s(fit_H0)
@@ -93,9 +108,31 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
            "the `data` argument is not supported for ML2S fits.",
            call. = FALSE)
     }
+    stage2_H1 <- ml2s_stage2_weight(fit_H1)
+    stage2_H0 <- ml2s_stage2_weight(fit_H0)
+    if (!identical(stage2_H1, stage2_H0)) {
+      stop("robust_nested_lrt(): ML2S model pairs must use the same ",
+           "stage2_weight (H1 = '", stage2_H1, "', H0 = '", stage2_H0, "').",
+           call. = FALSE)
+    }
+    dls_H1 <- fit_H1$stage2_dls_a %||% fit_H1$dls_a %||% 0.5
+    dls_H0 <- fit_H0$stage2_dls_a %||% fit_H0$dls_a %||% 0.5
+    if (identical(stage2_H1, "dls") &&
+        !isTRUE(all.equal(as.numeric(dls_H1), as.numeric(dls_H0),
+                          tolerance = 1e-12))) {
+      stop("robust_nested_lrt(): ML2S DLS model pairs must use the same ",
+           "dls_a (H1 = ", dls_H1, ", H0 = ", dls_H0, ").",
+           call. = FALSE)
+    }
+    if (!identical(method, "restriction_map") && !identical(stage2_H1, "nt")) {
+      stop("robust_nested_lrt(): ML2S method = '", method, "' is currently ",
+           "NT-only; use method = 'restriction_map' for stage2_weight = '",
+           stage2_H1, "'.", call. = FALSE)
+    }
     res <- switch(method,
       restriction_map = infer_ml2s_lr_test_satorra2000(
-        fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method),
+        fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method,
+        stage2_weight = stage2_H1, dls_a = as.numeric(dls_H1)),
       lavaan_sb2001 = infer_ml2s_lr_test_satorra_bentler2001(fit_H1, fit_H0),
       lavaan_sb2010 = infer_ml2s_lr_test_satorra_bentler2010(fit_H1, fit_H0),
       stop("robust_nested_lrt(): unsupported method '", method, "' for ML2S.",
@@ -106,6 +143,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$ud_method <- ud_method
     res$computation <- if (identical(method, "restriction_map") &&
                            identical(ud_method, "2001")) "ml2s_eta_2001" else "ml2s_eta"
+    res$stage2_weight <- stage2_H1
+    if (identical(stage2_H1, "dls")) res$dls_a <- as.numeric(dls_H1)
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
   }

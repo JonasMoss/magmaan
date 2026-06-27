@@ -244,7 +244,7 @@ Remaining work:
   continuous ML and FIML. The 2026-06-25 extension adds the moment-quadratic
   family: continuous ULS/GLS/WLS through `continuous_ls_rbm_parts()`, ordinal
   and mixed ordinal through `ordinal_rbm_parts()` /
-  `mixed_ordinal_rbm_parts()`, and ML2S NT/DWLS/ADF/DLS through
+  `mixed_ordinal_rbm_parts()`, and ML2S NT/ULS/DWLS/ADF/DLS through
   `two_stage_rbm_parts()`. All use the same reduced-space trace algebra as ML
   (`K' J K`, `K' E K`) and the R frontier dispatcher now routes existing fit
   objects through `magmaan_core$frontier_rbm()`. Remaining work:
@@ -257,7 +257,7 @@ Remaining work:
     penalty `P(θ)=−½tr(j⁻¹e)`, solve `j_α·δ=∇P`, assert `correction≈δ` and
     `adjustment≈∇P` — guards sign, the −½, the K-reduction, the solve), run on
     **every** family (continuous ULS/GLS/WLS, ML, FIML complete+missing, ordinal
-    DWLS/WLS/ULS, mixed DWLS, ML2S Nt/Dwls/Adf); **B** explicit↔implicit
+    DWLS/WLS/ULS, mixed DWLS, ML2S Nt/Uls/Dwls/Adf); **B** explicit↔implicit
     agreement to `O(‖corr‖²)` (confirmed second-order: the gap shrinks faster
     than `‖corr‖²` as N grows); **C** implicit stationarity of
     `M(θ)=base.f(θ)+trace(θ)/(2N)` (the adjusted estimating equation verbatim).
@@ -379,7 +379,8 @@ Remaining work:
     `IF'IF == SaturatedMoments::acov` gates.
     ML2S raw complete-data observed-bread covariance for non-NT Stage-2 weights
     **landed 2026-06-20** by routing
-    `TwoStageWeight::{Dwls,Adf,Dls}` through the continuous-LS IJ adapters;
+    `TwoStageWeight::{Dwls,Adf,Dls}` through the continuous-LS IJ adapters
+    while fixed-weight `Uls` stays on the shared ML2S IJ assembly;
     tests gate ADF/DWLS/DLS against
     `robust_continuous_ls_{wls,dwls,dls}_ij`. The scaled-test fields remain
     the fixed-weight Satorra-Bentler quantities.
@@ -1061,7 +1062,7 @@ is now its Gram. Remaining:
   its correction is exactly zero (complete == naive); the non-NT Stage-2 weights
   (DWLS/ADF/DLS) carry the live term (HS missing+misspecified DWLS: naive-diff
   0.036). Bound `infer_ml2s_casewise_influence_ij_fit`, routed by the `^ML2S`
-  estimator label (Stage-2 weight parsed from `ML2S_{DWLS,ADF,DLS,WLS}`).
+  estimator label (Stage-2 weight parsed from `ML2S_{ULS,DWLS,ADF,DLS,WLS}`).
   Self-check `Σ_i c_i c_iᵀ ≡` the observed-bread ML2S IJ vcov to 1e-8
   (`fiml_test.cpp`); R example exercises NT (zero) vs DWLS (live).
 - **Remaining (case-influence one-step):** the per-drop exact leave-one-out

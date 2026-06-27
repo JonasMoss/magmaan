@@ -2510,7 +2510,21 @@ TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT 
   CHECK((a - b).cwiseAbs().maxCoeff() < 1e-7);
   CHECK(std::abs(rr_nt->satorra_bentler.scale_c - nt->scaling_factor) < 1e-7);
 
-  // (2) ADF (W = Γ_FIML⁻¹): UΓ is a projector, so every eigenvalue is 1 and the
+  // (2) ULS is the unweighted EM-moment quadratic.
+  auto w_uls = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Uls);
+  REQUIRE(w_uls.has_value());
+  for (const auto& W : *w_uls) {
+    CHECK(W.isApprox(Eigen::MatrixXd::Identity(W.rows(), W.cols()), 1e-12));
+  }
+  auto rr_uls = magmaan::estimate::robust_continuous_ls(
+      *built.pt, *built.rep, samp, *est, *w_uls, gamma);
+  REQUIRE_MESSAGE(rr_uls.has_value(),
+      "robust_continuous_ls (ULS) failed: " <<
+      (rr_uls.has_value() ? "" : rr_uls.error().detail));
+  CHECK(rr_uls->eigvals.allFinite());
+  CHECK(rr_uls->satorra_bentler.scale_c > 0.0);
+
+  // (3) ADF (W = Γ_FIML⁻¹): UΓ is a projector, so every eigenvalue is 1 and the
   //     robust scaling collapses to c = 1 — independent of the estimate.
   auto w_adf = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Adf);
   REQUIRE(w_adf.has_value());
@@ -2520,7 +2534,7 @@ TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT 
   CHECK((rr_adf->eigvals.array() - 1.0).abs().maxCoeff() < 1e-6);
   CHECK(std::abs(rr_adf->satorra_bentler.scale_c - 1.0) < 1e-6);
 
-  // (3) DLS endpoints: a = 0 recovers the NT weight, a = 1 recovers ADF.
+  // (4) DLS endpoints: a = 0 recovers the NT weight, a = 1 recovers ADF.
   auto w_dls0 = mf::two_stage_stage2_weight_blocks(
       *sm, mf::TwoStageWeight::Dls, {0.0});
   auto w_dls1 = mf::two_stage_stage2_weight_blocks(
