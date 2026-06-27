@@ -4534,6 +4534,56 @@ Rcpp::List measures_reliability_omega_multidim(
       Rcpp::_["k"] = k);
 }
 
+// measures_reliability_omega_from_fit() — model-based coefficient omega
+// (omega-total or omega-hierarchical) from a FITTED CFA, with an analytic-
+// Jacobian delta-method robust SE that reuses a caller-supplied empirical Gamma.
+// Mirrors measures::frontier::reliability::omega_from_fit. `target` is "total"
+// or "hierarchical"; `weight` (the fitting estimator) is "ML", "GLS", or "ULS"
+// and selects the robust-vcov path. `gamma` is the p* x p* empirical ACOV of
+// vech(S) in the evaluator's lower-tri column-major vech metric. Returns the
+// value, robust SE, asymptotic variance, and the per-free-parameter gradient.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_reliability_omega_from_fit(Rcpp::List fit,
+                                               std::string target,
+                                               std::string weight,
+                                               Rcpp::NumericMatrix gamma,
+                                               double n) {
+  namespace rel = magmaan::measures::frontier::reliability;
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+
+  rel::OmegaTarget tgt;
+  if (target == "total") {
+    tgt = rel::OmegaTarget::Total;
+  } else if (target == "hierarchical") {
+    tgt = rel::OmegaTarget::Hierarchical;
+  } else {
+    Rcpp::stop("magmaan: target must be 'total' or 'hierarchical'");
+  }
+
+  rel::FitWeight w;
+  if (weight == "ML") {
+    w = rel::FitWeight::ML;
+  } else if (weight == "GLS") {
+    w = rel::FitWeight::GLS;
+  } else if (weight == "ULS") {
+    w = rel::FitWeight::ULS;
+  } else {
+    Rcpp::stop("magmaan: weight must be 'ML', 'GLS', or 'ULS'");
+  }
+
+  const Eigen::MatrixXd G = Rcpp::as<Eigen::MatrixXd>(gamma);
+  auto r_or = rel::omega_from_fit(tgt, w, ctx.pt, ctx.rep, ctx.samp, est, G,
+                                  static_cast<std::int64_t>(n));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["value"] = r_or->value,
+      Rcpp::_["se"] = r_or->se,
+      Rcpp::_["avar"] = r_or->avar,
+      Rcpp::_["gradient"] = Rcpp::wrap(r_or->gradient));
+}
+
 // measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`
 // must contain complete observed data in the model's observed-variable order,
 // or carry column names so it can be reordered.

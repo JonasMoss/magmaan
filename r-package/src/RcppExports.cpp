@@ -334,18 +334,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// fiml_fit_measures_impl
-Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust);
-RcppExport SEXP _magmaan_fiml_fit_measures_impl(SEXP fitSEXP, SEXP robustSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
-    rcpp_result_gen = Rcpp::wrap(fiml_fit_measures_impl(fit, robust));
-    return rcpp_result_gen;
-END_RCPP
-}
 // saturated_em_moments_impl
 Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step);
 RcppExport SEXP _magmaan_saturated_em_moments_impl(SEXP raw_dataSEXP, SEXP h_stepSEXP) {
@@ -989,6 +977,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fiml_fit_measures_impl
+Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust);
+RcppExport SEXP _magmaan_fiml_fit_measures_impl(SEXP fitSEXP, SEXP robustSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
+    rcpp_result_gen = Rcpp::wrap(fiml_fit_measures_impl(fit, robust));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_ml2s_casewise_influence_ij_fit
 Rcpp::List infer_ml2s_casewise_influence_ij_fit(Rcpp::List fit, SEXP raw_data, std::string stage2_weight, double dls_a);
 RcppExport SEXP _magmaan_infer_ml2s_casewise_influence_ij_fit(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
@@ -1127,6 +1127,21 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type gamma(gammaSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
     rcpp_result_gen = Rcpp::wrap(measures_reliability_omega_multidim(S, block, target, weights, gamma, n));
+    return rcpp_result_gen;
+END_RCPP
+}
+// measures_reliability_omega_from_fit
+Rcpp::List measures_reliability_omega_from_fit(Rcpp::List fit, std::string target, std::string weight, Rcpp::NumericMatrix gamma, double n);
+RcppExport SEXP _magmaan_measures_reliability_omega_from_fit(SEXP fitSEXP, SEXP targetSEXP, SEXP weightSEXP, SEXP gammaSEXP, SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< double >::type n(nSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_reliability_omega_from_fit(fit, target, weight, gamma, n));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2898,7 +2913,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fcsem_fit_measures_impl", (DL_FUNC) &_magmaan_fcsem_fit_measures_impl, 1},
     {"_magmaan_fcsem_standardized_rows_impl", (DL_FUNC) &_magmaan_fcsem_standardized_rows_impl, 2},
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
-    {"_magmaan_fiml_fit_measures_impl", (DL_FUNC) &_magmaan_fiml_fit_measures_impl, 2},
     {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 2},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
     {"_magmaan_fit_gls_pairwise_impl", (DL_FUNC) &_magmaan_fit_gls_pairwise_impl, 6},
@@ -2947,6 +2961,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaan_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaan_infer_fiml_observed_vcov", (DL_FUNC) &_magmaan_infer_fiml_observed_vcov, 1},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
+    {"_magmaan_fiml_fit_measures_impl", (DL_FUNC) &_magmaan_fiml_fit_measures_impl, 2},
     {"_magmaan_infer_ml2s_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ml2s_casewise_influence_ij_fit, 4},
     {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 5},
     {"_magmaan_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_two_stage_stage2_weight_blocks_impl, 3},
@@ -2958,6 +2973,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_standardized_residuals", (DL_FUNC) &_magmaan_measures_standardized_residuals, 1},
     {"_magmaan_measures_reliability_cov", (DL_FUNC) &_magmaan_measures_reliability_cov, 3},
     {"_magmaan_measures_reliability_omega_multidim", (DL_FUNC) &_magmaan_measures_reliability_omega_multidim, 6},
+    {"_magmaan_measures_reliability_omega_from_fit", (DL_FUNC) &_magmaan_measures_reliability_omega_from_fit, 5},
     {"_magmaan_measures_factor_scores", (DL_FUNC) &_magmaan_measures_factor_scores, 3},
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},

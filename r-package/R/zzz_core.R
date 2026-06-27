@@ -440,6 +440,7 @@ magmaan_core <- local({
       "measures_standardized_residuals_estimated_weight",
       "measures_reliability_cov",
       "measures_reliability_omega_multidim",
+      "measures_reliability_omega_from_fit",
       "measures_factor_scores",
       "measures_factor_score_precision",
       "measures_compute_defined"
