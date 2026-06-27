@@ -4060,6 +4060,107 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
       Rcpp::_["chisq"] = extras_or->chi2);
 }
 
+// fiml_fit_measures_impl() — FIML-specific standard and optional robust/scaled
+// global fit measures. Standard measures use the FIML model-vs-saturated LRT
+// and FIML independence baseline; robust = TRUE adds the corrected XX3/c.hat3
+// user and baseline reductions used by lavaan-style robust CFI/RMSEA.
+//
+// [[Rcpp::export]]
+Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust = false) {
+  if (!fit.containsElementNamed("raw_data")) {
+    Rcpp::stop("magmaan: fiml_fit_measures_impl() requires a FIML fit with $raw_data");
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
+
+  auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
+  if (!df_or.has_value()) stop_post(df_or.error());
+  auto extras_or = magmaan::estimate::fiml::fiml_extras(
+      ctx.pt, ctx.rep, raw, est, pack, h1);
+  if (!extras_or.has_value()) stop_post(extras_or.error());
+  auto baseline_or = magmaan::estimate::fiml::fiml_baseline_chi2(
+      ctx.pt, raw, pack, h1);
+  if (!baseline_or.has_value()) stop_post(baseline_or.error());
+
+  const auto& fx = *extras_or;
+  const auto& bl = *baseline_or;
+  const magmaan::measures::FitMeasures fm =
+      magmaan::measures::fit_measures(
+          fx.chi2, *df_or, bl, pack.cache.n_total, pack.cache.block_p.size());
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["chisq"] = fx.chi2,
+      Rcpp::_["df"] = *df_or,
+      Rcpp::_["pvalue"] = magmaan::inference::chi2_pvalue(fx.chi2, *df_or),
+      Rcpp::_["baseline.chisq"] = bl.chi2,
+      Rcpp::_["baseline.df"] = bl.df,
+      Rcpp::_["cfi"] = fm.cfi,
+      Rcpp::_["tli"] = fm.tli,
+      Rcpp::_["rmsea"] = fm.rmsea,
+      Rcpp::_["rmsea.ci.lower"] = fm.rmsea_ci_lower,
+      Rcpp::_["rmsea.ci.upper"] = fm.rmsea_ci_upper,
+      Rcpp::_["rmsea.pvalue"] = fm.rmsea_pvalue,
+      Rcpp::_["rmsea.close.h0"] = fm.rmsea_close_h0,
+      Rcpp::_["rmsea.notclose.pvalue"] = fm.rmsea_notclose_pvalue,
+      Rcpp::_["rmsea.notclose.h0"] = fm.rmsea_notclose_h0,
+      Rcpp::_["srmr"] = fx.srmr,
+      Rcpp::_["logl"] = fx.logl,
+      Rcpp::_["unrestricted.logl"] = fx.unrestricted_logl,
+      Rcpp::_["aic"] = fx.aic,
+      Rcpp::_["bic"] = fx.bic,
+      Rcpp::_["bic2"] = fx.bic2,
+      Rcpp::_["npar"] = fx.npar,
+      Rcpp::_["ntotal"] = static_cast<double>(fx.ntotal));
+
+  if (robust && *df_or > 0) {
+    auto r_or = magmaan::estimate::fiml::fiml_corrected_fit_measures(
+        ctx.pt, ctx.rep, raw, est, *df_or, pack, h1);
+    if (!r_or.has_value()) stop_post(r_or.error());
+    const auto& r = *r_or;
+    const auto& rf = r.indices;
+    out["XX3"] = r.xx3;
+    out["df3"] = r.df3;
+    out["c.hat3"] = r.c_hat3;
+    out["XX3.scaled"] = r.xx3_scaled;
+    out["baseline.XX3"] = r.xx3_null;
+    out["baseline.df3"] = r.df3_null;
+    out["baseline.c.hat3"] = r.c_hat3_null;
+    out["baseline.XX3.scaled"] = r.xx3_null_scaled;
+    out["chisq.scaled"] = rf.chisq_scaled;
+    out["df.scaled"] = rf.df_scaled;
+    out["pvalue.scaled"] = rf.pvalue_scaled;
+    out["chisq.scaling.factor"] = rf.chisq_scaling_factor;
+    out["baseline.chisq.scaled"] = rf.baseline_chisq_scaled;
+    out["baseline.df.scaled"] = rf.baseline_df_scaled;
+    out["baseline.pvalue.scaled"] = rf.baseline_pvalue_scaled;
+    out["baseline.chisq.scaling.factor"] =
+        rf.baseline_chisq_scaling_factor;
+    out["cfi.scaled"] = rf.cfi_scaled;
+    out["tli.scaled"] = rf.tli_scaled;
+    out["cfi.robust"] = rf.cfi_robust;
+    out["tli.robust"] = rf.tli_robust;
+    out["rmsea.scaled"] = rf.rmsea_scaled;
+    out["rmsea.ci.lower.scaled"] = rf.rmsea_ci_lower_scaled;
+    out["rmsea.ci.upper.scaled"] = rf.rmsea_ci_upper_scaled;
+    out["rmsea.pvalue.scaled"] = rf.rmsea_pvalue_scaled;
+    out["rmsea.notclose.pvalue.scaled"] =
+        rf.rmsea_notclose_pvalue_scaled;
+    out["rmsea.robust"] = rf.rmsea_robust;
+    out["rmsea.ci.lower.robust"] = rf.rmsea_ci_lower_robust;
+    out["rmsea.ci.upper.robust"] = rf.rmsea_ci_upper_robust;
+    out["rmsea.pvalue.robust"] = rf.rmsea_pvalue_robust;
+    out["rmsea.notclose.pvalue.robust"] =
+        rf.rmsea_notclose_pvalue_robust;
+  }
+
+  return out;
+}
+
 // infer_ml2s_casewise_influence_ij_fit() — per-case one-step misspecification-
 // robust ("complete-sandwich") parameter influences for a two-stage (ML2S) fit:
 // the missing-data member of the estimated-weight case-influence family, the

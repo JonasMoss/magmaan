@@ -40,6 +40,19 @@ reason the test exists; unresolved work still belongs in the backlog.
 The notes below are cross-subsystem, oracle-dependent fixes. Full root-cause
 write-ups live in the commits that introduced each guard.
 
+**FIML fit measures used complete-data ML plumbing.**
+Regression: the R `fit_measures()` wrapper treated FIML fits like complete-data
+ML by deriving `chisq = 2N*fmin` and calling the sample-statistics baseline
+helper, so complete-data FIML could report impossible ordinary CFI/RMSEA values;
+automatic robust FIML CFI/RMSEA also lacked the baseline scaled fields even
+though the core `fiml_corrected_fit_measures()` reduction already computed them.
+Guard: `r-package/tests/testthat/test-fit-measures.R` mocks the FIML branch so
+the complete-data helpers fail if reached, then fits the same complete dataset
+under FIML and ML and requires ordinary `chisq`/baseline/CFI/RMSEA parity while
+checking finite FIML robust baseline, CFI, and RMSEA fields.
+Scope: complete-data MLM/MLR and ordinal WLSMV automatic robust fit-measure
+dispatch remain backlog items.
+
 **Mixed Γ ignored the continuous stage-1 estimating equations.**
 Regression: the mixed continuous/ordinal NACOV put continuous means/variances
 and continuous-continuous covariances into Γ̂ as raw moment residuals and

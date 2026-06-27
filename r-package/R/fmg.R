@@ -870,6 +870,20 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL) {
   )
 }
 
+.fit_measures_fiml_robust_auto <- function(robust) {
+  if (is.null(robust) || identical(robust, FALSE) || is.list(robust)) {
+    return(FALSE)
+  }
+  if (isTRUE(robust)) return(TRUE)
+  if (is.character(robust) && length(robust) == 1L) {
+    key <- toupper(robust)
+    if (key %in% c("MLR", "ROBUST", "TRUE")) return(TRUE)
+  }
+  stop("fit_measures(): FIML automatic robust fit measures support ",
+       "`robust = TRUE` or `robust = \"MLR\"`; pass a scalar robust list for ",
+       "other corrections.", call. = FALSE)
+}
+
 #' Normal-theory fit measures, optionally with FMG robust p-values.
 #'
 #' Convenience wrapper over the existing fit-measure primitives. By default it
@@ -888,6 +902,27 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL) {
 #' @export
 fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
                          data = NULL) {
+  if (.fmg_is_fiml(fit)) {
+    if (!is.null(baseline)) {
+      stop("fit_measures(): FIML fit measures use the FIML independence ",
+           "baseline; the `baseline` argument is not supported for FIML fits.",
+           call. = FALSE)
+    }
+    out <- fiml_fit_measures_impl(
+      fit, robust = .fit_measures_fiml_robust_auto(robust))
+    if (is.list(robust) && !identical(robust, FALSE)) {
+      n_total <- as.numeric(out$ntotal %||% sum(as.numeric(fit$nobs)))
+      n_groups <- as.integer(fit$ngroups %||% length(fit$nobs) %||% 1L)
+      out <- c(out, .robust_fit_measures_from_scalars(
+        robust, n_total = n_total, n_groups = n_groups))
+    }
+    if (!is.null(fmg) && !identical(fmg, FALSE)) {
+      tests <- if (isTRUE(fmg)) NULL else fmg
+      out$fmg <- fmg_tests(fit, tests = tests, data = data)
+    }
+    return(out)
+  }
+
   ss <- fit_sample_stats(fit)
   chi2 <- infer_chi2_stat(ss, fit$fmin)
   df <- infer_df_stat(fit$partable, ss)

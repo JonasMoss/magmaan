@@ -536,7 +536,11 @@ golden `parTable()` fixtures.
   than approximating lavaan's conditional likelihood behavior.
 - The R boundary exposes `df_to_fiml_data()`, estimate-only `fit_fiml()` with
   retained FIML pack/H1 state, and packaged `fit_ml2s()` /
-  `estimate_two_stage_em(..., kind = "ml")`. ML2S attaches its corrected
+  `estimate_two_stage_em(..., kind = "ml")`. `fit_measures()` dispatches FIML
+  fits to the FIML likelihood and independence-baseline path rather than the
+  complete-data `2N*fmin` baseline helper; `robust = TRUE` / `"MLR"` adds the
+  corrected `XX3`/baseline scaling and robust CFI/TLI/RMSEA fields from
+  `estimate::fiml::fiml_corrected_fit_measures`. ML2S attaches its corrected
   `vcov`, `se`, `chisq`, `df`, `chisq_scaled`, and `scaling_factor` fields
   directly because those corrections are part of the named two-stage estimator
   rather than optional post-fit reporting; the C++ post-fit surface also exposes

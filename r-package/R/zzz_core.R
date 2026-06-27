@@ -531,6 +531,7 @@ magmaan_core <- local({
       "bounds_wide_impl",
       "bounds_loading_impl",
       "fit_fiml_impl",
+      "fiml_fit_measures_impl",
       "fit_uls_impl",
       "fit_gls_impl",
       "fit_wls_impl",
