@@ -6,6 +6,7 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -274,6 +275,257 @@ delta_method(Coefficient coef,
   const double avar = g_or->dot(gamma * *g_or);
   if (!std::isfinite(avar)) {
     return std::unexpected(err("reliability delta_method: asymptotic variance is not finite"));
+  }
+  DeltaResult out;
+  out.value = *v_or;
+  out.gradient = std::move(*g_or);
+  out.avar = std::max(0.0, avar);
+  out.se = std::sqrt(out.avar / static_cast<double>(n));
+  return out;
+}
+
+namespace {
+
+// Spearman (1927) ratio-of-sums communality of index i within an index set
+// `others` (the co-members of i's factor, or the other factors for the second
+// stage), over a symmetric matrix M:
+//   h_i = sum_{j<l in others} M_ij M_il / sum_{j<l in others} M_jl.
+// On the congeneric manifold each ratio equals lambda_i^2 (or gamma_f^2); the
+// pooled ratio-of-sums is the numerically stable Hancock & An (2020) form.
+post_expected<double>
+ratio_of_sums_communality(const Eigen::MatrixXd& M, Eigen::Index i,
+                          const std::vector<Eigen::Index>& others,
+                          const char* call) {
+  if (others.size() < 2) {
+    return std::unexpected(err(std::string(call) +
+        ": a factor needs at least three indicators for a closed-form loading"));
+  }
+  double num = 0.0;
+  double den = 0.0;
+  for (std::size_t a = 0; a < others.size(); ++a) {
+    for (std::size_t b = a + 1; b < others.size(); ++b) {
+      const Eigen::Index j = others[a];
+      const Eigen::Index l = others[b];
+      num += M(i, j) * M(i, l);
+      den += M(j, l);
+    }
+  }
+  if (!std::isfinite(den) || std::abs(den) < 1e-12) {
+    return std::unexpected(err(std::string(call) +
+        ": degenerate communality denominator (near-zero within-factor covariance)"));
+  }
+  const double h = num / den;
+  if (!std::isfinite(h)) {
+    return std::unexpected(err(std::string(call) + ": non-finite communality"));
+  }
+  return h;
+}
+
+// Value of the multidimensional closed form on an already-symmetric S.
+post_expected<double>
+omega_value_impl(OmegaTarget target, const Eigen::MatrixXd& S,
+                 const OmegaSpec& spec) {
+  const char* call = (target == OmegaTarget::Hierarchical)
+                         ? "omega_hierarchical"
+                         : "omega_total";
+  const Eigen::Index p = S.rows();
+  if (spec.block.size() != p) {
+    return std::unexpected(err(std::string(call) + ": block length must equal p"));
+  }
+  int kmax = -1;
+  for (Eigen::Index i = 0; i < p; ++i) {
+    if (spec.block(i) < 0) {
+      return std::unexpected(err(std::string(call) + ": block ids must be non-negative"));
+    }
+    kmax = std::max(kmax, spec.block(i));
+  }
+  const Eigen::Index k = static_cast<Eigen::Index>(kmax) + 1;
+  std::vector<std::vector<Eigen::Index>> items(static_cast<std::size_t>(k));
+  for (Eigen::Index i = 0; i < p; ++i) {
+    items[static_cast<std::size_t>(spec.block(i))].push_back(i);
+  }
+  for (Eigen::Index f = 0; f < k; ++f) {
+    if (items[static_cast<std::size_t>(f)].empty()) {
+      return std::unexpected(err(std::string(call) + ": empty factor (gap in block ids)"));
+    }
+  }
+  if (target == OmegaTarget::Hierarchical && k < 3) {
+    return std::unexpected(err("omega_hierarchical: needs at least three factors"));
+  }
+
+  Eigen::VectorXd w;
+  if (spec.weights.size() == 0) {
+    w = Eigen::VectorXd::Ones(p);
+  } else if (spec.weights.size() == p) {
+    w = spec.weights;
+  } else {
+    return std::unexpected(err(std::string(call) + ": weights length must equal p"));
+  }
+
+  // Stage 1: C = S with the diagonal replaced by within-block communalities.
+  Eigen::MatrixXd C = S;
+  for (Eigen::Index f = 0; f < k; ++f) {
+    const auto& blk = items[static_cast<std::size_t>(f)];
+    for (std::size_t a = 0; a < blk.size(); ++a) {
+      std::vector<Eigen::Index> others;
+      others.reserve(blk.size() - 1);
+      for (std::size_t b = 0; b < blk.size(); ++b) {
+        if (b != a) others.push_back(blk[b]);
+      }
+      auto h_or = ratio_of_sums_communality(S, blk[a], others, call);
+      if (!h_or.has_value()) return std::unexpected(h_or.error());
+      C(blk[a], blk[a]) = *h_or;
+    }
+  }
+
+  // B = X'CX, simple-structure block sums.
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(k, k);
+  for (Eigen::Index f = 0; f < k; ++f) {
+    for (Eigen::Index g = 0; g < k; ++g) {
+      double s = 0.0;
+      for (Eigen::Index i : items[static_cast<std::size_t>(f)]) {
+        for (Eigen::Index j : items[static_cast<std::size_t>(g)]) s += C(i, j);
+      }
+      B(f, g) = s;
+    }
+  }
+  const double T = w.dot(S * w);
+  if (!std::isfinite(T) || T <= 0.0) {
+    return std::unexpected(err(std::string(call) + ": total-score variance must be positive"));
+  }
+  Eigen::LLT<Eigen::MatrixXd> Bllt(B);
+  if (Bllt.info() != Eigen::Success) {
+    return std::unexpected(err(std::string(call) +
+        ": X'CX is not positive definite (weak or collinear factors)"));
+  }
+
+  if (target == OmegaTarget::Total) {
+    const Eigen::VectorXd Cw = C * w;
+    Eigen::VectorXd c = Eigen::VectorXd::Zero(k);
+    for (Eigen::Index f = 0; f < k; ++f) {
+      double s = 0.0;
+      for (Eigen::Index i : items[static_cast<std::size_t>(f)]) s += Cw(i);
+      c(f) = s;
+    }
+    const double num = c.dot(Bllt.solve(c));
+    return num / T;
+  }
+
+  // Stage 2 (hierarchical): centroid extraction on the factor correlation P.
+  const Eigen::VectorXd d = B.diagonal();
+  for (Eigen::Index f = 0; f < k; ++f) {
+    if (!(d(f) > 0.0)) {
+      return std::unexpected(err("omega_hierarchical: non-positive factor variance"));
+    }
+  }
+  Eigen::MatrixXd P(k, k);
+  for (Eigen::Index f = 0; f < k; ++f) {
+    for (Eigen::Index g = 0; g < k; ++g) {
+      P(f, g) = B(f, g) / (std::sqrt(d(f)) * std::sqrt(d(g)));
+    }
+  }
+  Eigen::MatrixXd CP = P;
+  for (Eigen::Index f = 0; f < k; ++f) {
+    std::vector<Eigen::Index> others;
+    others.reserve(static_cast<std::size_t>(k - 1));
+    for (Eigen::Index g = 0; g < k; ++g) {
+      if (g != f) others.push_back(g);
+    }
+    auto hf_or = ratio_of_sums_communality(P, f, others, call);
+    if (!hf_or.has_value()) return std::unexpected(hf_or.error());
+    CP(f, f) = *hf_or;
+  }
+
+  const Eigen::VectorXd C1 = C.rowwise().sum();
+  Eigen::VectorXd a = Eigen::VectorXd::Zero(k);
+  for (Eigen::Index f = 0; f < k; ++f) {
+    double s = 0.0;
+    for (Eigen::Index i : items[static_cast<std::size_t>(f)]) s += C1(i);
+    a(f) = s;
+  }
+  const Eigen::VectorXd CP1 = CP.rowwise().sum();
+  const double denom_cp = CP1.sum();  // 1'C_P 1
+  if (!std::isfinite(denom_cp) || denom_cp <= 0.0) {
+    return std::unexpected(err("omega_hierarchical: non-positive second-order normalizer"));
+  }
+  const Eigen::VectorXd v = d.cwiseSqrt().cwiseProduct(CP1);  // D^{1/2} C_P 1
+  const double t = a.dot(Bllt.solve(v));                      // a'B^{-1}D^{1/2}C_P 1
+  return (t * t) / (denom_cp * T);
+}
+
+}  // namespace
+
+post_expected<double>
+omega_multidim(OmegaTarget target,
+               const Eigen::Ref<const Eigen::MatrixXd>& S,
+               const OmegaSpec& spec) {
+  auto S_or = sym_cov(S, 2,
+                      target == OmegaTarget::Hierarchical ? "omega_hierarchical"
+                                                          : "omega_total");
+  if (!S_or.has_value()) return std::unexpected(S_or.error());
+  return omega_value_impl(target, *S_or, spec);
+}
+
+post_expected<Eigen::VectorXd>
+omega_multidim_gradient(OmegaTarget target,
+                        const Eigen::Ref<const Eigen::MatrixXd>& S,
+                        const OmegaSpec& spec) {
+  auto S_or = sym_cov(S, 2,
+                      target == OmegaTarget::Hierarchical ? "omega_hierarchical"
+                                                          : "omega_total");
+  if (!S_or.has_value()) return std::unexpected(S_or.error());
+  const Eigen::Index p = S_or->rows();
+  auto base_or = omega_value_impl(target, *S_or, spec);
+  if (!base_or.has_value()) return std::unexpected(base_or.error());
+
+  Eigen::VectorXd g(detail::vech_len(p));
+  Eigen::Index idx = 0;
+  constexpr double rel = 1e-6;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j; i < p; ++i) {
+      const double h = rel * std::max(1.0, std::abs((*S_or)(i, j)));
+      Eigen::MatrixXd Sp = *S_or;
+      Eigen::MatrixXd Sm = *S_or;
+      Sp(i, j) += h;
+      Sm(i, j) -= h;
+      if (i != j) {
+        Sp(j, i) += h;
+        Sm(j, i) -= h;
+      }
+      auto fp_or = omega_value_impl(target, Sp, spec);
+      if (!fp_or.has_value()) return std::unexpected(fp_or.error());
+      auto fm_or = omega_value_impl(target, Sm, spec);
+      if (!fm_or.has_value()) return std::unexpected(fm_or.error());
+      g(idx++) = (*fp_or - *fm_or) / (2.0 * h);
+    }
+  }
+  return g;
+}
+
+post_expected<DeltaResult>
+omega_multidim_delta(OmegaTarget target,
+                     const Eigen::Ref<const Eigen::MatrixXd>& S,
+                     const OmegaSpec& spec,
+                     const Eigen::Ref<const Eigen::MatrixXd>& gamma,
+                     std::int64_t n) {
+  if (n <= 0) {
+    return std::unexpected(err("omega_multidim_delta: n must be positive"));
+  }
+  auto S_or = sym_cov(S, 2,
+                      target == OmegaTarget::Hierarchical ? "omega_hierarchical"
+                                                          : "omega_total");
+  if (!S_or.has_value()) return std::unexpected(S_or.error());
+  const Eigen::Index pstar = detail::vech_len(S_or->rows());
+  if (gamma.rows() != pstar || gamma.cols() != pstar || !gamma.allFinite()) {
+    return std::unexpected(err("omega_multidim_delta: gamma has invalid shape or non-finite entries"));
+  }
+  auto v_or = omega_value_impl(target, *S_or, spec);
+  if (!v_or.has_value()) return std::unexpected(v_or.error());
+  auto g_or = omega_multidim_gradient(target, *S_or, spec);
+  if (!g_or.has_value()) return std::unexpected(g_or.error());
+  const double avar = g_or->dot(gamma * *g_or);
+  if (!std::isfinite(avar)) {
+    return std::unexpected(err("omega_multidim_delta: asymptotic variance is not finite"));
   }
   DeltaResult out;
   out.value = *v_or;

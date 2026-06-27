@@ -14,6 +14,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
@@ -4346,6 +4347,87 @@ Rcpp::List measures_reliability_cov(
     int n = 0) {
   const Eigen::MatrixXd S_m = Rcpp::as<Eigen::MatrixXd>(S);
   return reliability_results_to_r(S_m, gamma, n);
+}
+
+// measures_reliability_omega_multidim() — closed-form multidimensional omega
+// (omega-total or omega-hierarchical) with an optional full-Gamma delta-method
+// SE. `block` gives each item's factor id (any integer labels; remapped to dense
+// 0-based codes). `target` is "total" or "hierarchical". `weights` (length p)
+// applies to the total only. With `gamma` (asymptotic cov of vech(S)) and n > 0
+// the value, SE, avar, and gradient are returned; otherwise value + FD gradient.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_reliability_omega_multidim(
+    Rcpp::NumericMatrix S,
+    Rcpp::IntegerVector block,
+    std::string target = "total",
+    Rcpp::Nullable<Rcpp::NumericVector> weights = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericMatrix> gamma = R_NilValue,
+    int n = 0) {
+  namespace rel = magmaan::measures::frontier::reliability;
+  const Eigen::MatrixXd S_m = Rcpp::as<Eigen::MatrixXd>(S);
+  const R_xlen_t p = S_m.rows();
+  if (static_cast<R_xlen_t>(block.size()) != p) {
+    Rcpp::stop("magmaan: block length must equal nrow(S)");
+  }
+
+  rel::OmegaTarget tgt;
+  if (target == "total") {
+    tgt = rel::OmegaTarget::Total;
+  } else if (target == "hierarchical") {
+    tgt = rel::OmegaTarget::Hierarchical;
+  } else {
+    Rcpp::stop("magmaan: target must be 'total' or 'hierarchical'");
+  }
+
+  // Remap arbitrary integer block labels to dense 0-based codes (sorted unique).
+  std::vector<int> labels(block.begin(), block.end());
+  std::vector<int> uniq = labels;
+  std::sort(uniq.begin(), uniq.end());
+  uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+  rel::OmegaSpec spec;
+  spec.block.resize(p);
+  for (R_xlen_t i = 0; i < p; ++i) {
+    const auto it = std::lower_bound(uniq.begin(), uniq.end(), labels[i]);
+    spec.block(i) = static_cast<int>(it - uniq.begin());
+  }
+  if (weights.isNotNull()) {
+    spec.weights = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(weights.get()));
+    if (static_cast<R_xlen_t>(spec.weights.size()) != p) {
+      Rcpp::stop("magmaan: weights length must equal nrow(S)");
+    }
+  }
+  const int k = static_cast<int>(uniq.size());
+
+  if (gamma.isNotNull()) {
+    if (n <= 0) {
+      Rcpp::stop("magmaan: measures_reliability_omega_multidim() needs n > 0 when gamma is supplied");
+    }
+    const Eigen::MatrixXd G =
+        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(gamma.get()));
+    auto r_or = rel::omega_multidim_delta(tgt, S_m, spec, G, n);
+    if (!r_or.has_value()) stop_post(r_or.error());
+    return Rcpp::List::create(
+        Rcpp::_["value"] = r_or->value,
+        Rcpp::_["se"] = r_or->se,
+        Rcpp::_["avar"] = r_or->avar,
+        Rcpp::_["gradient"] = Rcpp::wrap(r_or->gradient),
+        Rcpp::_["n"] = n,
+        Rcpp::_["target"] = target,
+        Rcpp::_["k"] = k);
+  }
+  auto v_or = rel::omega_multidim(tgt, S_m, spec);
+  if (!v_or.has_value()) stop_post(v_or.error());
+  auto g_or = rel::omega_multidim_gradient(tgt, S_m, spec);
+  if (!g_or.has_value()) stop_post(g_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["value"] = *v_or,
+      Rcpp::_["se"] = NA_REAL,
+      Rcpp::_["avar"] = NA_REAL,
+      Rcpp::_["gradient"] = Rcpp::wrap(*g_or),
+      Rcpp::_["n"] = NA_INTEGER,
+      Rcpp::_["target"] = target,
+      Rcpp::_["k"] = k);
 }
 
 // measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`
