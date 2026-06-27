@@ -80,9 +80,15 @@ The following modifiers are not parsed and produce
 - `rv(...)` — random-variable / random-slope labels (multilevel).
 - `lower(...)` / `upper(...)` — explicit bounds (use `<` / `>` instead in v0).
 
-The block syntax `group:` / `level:` / `block:` is rejected at the
-parser level: an identifier immediately followed by `:` produces
-`ParseError::Kind::UnsupportedOperator` naming the keyword.
+The block-header syntax is now accepted (see the `block_header` production in
+`grammar.ebnf`). A `block_keyword` (`group` / `level` / `block`) immediately
+followed by `:` and a block index/label opens a new block; the lexer emits a
+`Colon` punctuation token only in this header position, and
+`parse_block_header` consumes `keyword : index`. v1 supports the two-level
+`level:` axis (`level: 1` = within / L1, `level: 2` = between / L2) over a
+shared observed variable set; `group:` headers and 3+ levels are reserved. A
+lone `:` outside the block-header position is still rejected at the lexer
+level.
 
 ## Walking the grammar
 
@@ -134,7 +140,13 @@ visual =~ a*x1 + a*x2 + a*x3
 visual =~ 1*x1 + NA*x2 + start(0.7)*x3
 
 # Multi-group, per-group fixed value
-visual =~ 1*x1 + c(0.8, 1.2)*x2 + x3 ; group: 1 # ← `:` rejected in v0
+visual =~ 1*x1 + c(0.8, 1.2)*x2 + x3   # group: header axis reserved (level: is live)
+
+# Two-level (multilevel) random-intercept CFA: the `level:` block axis is live
+level: 1
+  fw =~ y1 + y2 + y3
+level: 2
+  fb =~ y1 + y2 + y3
 
 # Defined indirect effect
 indirect := a * b

@@ -3,12 +3,10 @@
 // by tests/tools/regen_oracle_twolevel.R and checks theta-hat, standard SEs,
 // chi-square, and df against lavaan::sem(model, data, cluster="cluster").
 //
-// During the parallel fan-out the level: parser (Stream A), the cluster
-// statistics (Stream B), and the two-level core (Stream C) are Phase-0 stubs,
-// so api::model_from_lavaan / data_from_cluster / fit return a known sentinel.
-// The test verifies that sentinel and reports the case PENDING rather than
-// asserting parity; once A/B/C integrate, those early branches are no longer
-// taken and the full parity assertions below run.
+// The level: parser, the cluster statistics, and the two-level core are now
+// integrated, so any failure of api::model_from_lavaan / data_from_cluster /
+// fit is a real parity failure (the old Phase-0 PENDING sentinel guard is
+// gone).
 
 #include <doctest/doctest.h>
 
@@ -39,16 +37,6 @@ constexpr const char* kFixtures[] = {
     "twolevel/twolevel_2f6.json",  // df=16, well-fitting
 };
 
-// True while the pipeline is still wired to Phase-0 stubs (or the level: parser
-// is not yet integrated). Keyed on the documented sentinel strings.
-bool is_pending(const magmaan::api::Error& e) {
-  const std::string& d = e.detail;
-  const auto has = [&](const char* s) { return d.find(s) != std::string::npos; };
-  return has("not yet implemented") || has("not implemented") ||
-         has("level") ||   // `level:` block header (Stream A)
-         has("':'");       // lexer rejects the `:` after level/group (Stream A)
-}
-
 // (lhs, op, rhs, block) — the lavaan parameter identity, block == level for a
 // single-group two-level model (1 = within, 2 = between).
 using Key = std::tuple<std::string, std::string, std::string, int>;
@@ -74,16 +62,14 @@ TEST_CASE("twolevel golden: lavaan cluster-ML parity") {
     const std::string syntax = j.at("model").get<std::string>();
     const auto& exp = j.at("expected");
 
-    // 1) model (Stream A: the level: block axis).
+    // 1) model (the level: block axis).
     auto model = api::model_from_lavaan(syntax);
     if (!model) {
-      CHECK_MESSAGE(is_pending(model.error()),
-                    "unexpected model error: ", model.error().detail);
-      MESSAGE("twolevel PENDING (model / level: parser): ", rel);
+      FAIL_CHECK("twolevel model_from_lavaan() failed: ", model.error().detail);
       continue;
     }
 
-    // 2) clustered sufficient statistics (Stream B).
+    // 2) clustered sufficient statistics.
     Eigen::MatrixXd X = matrix_from_json(j.at("data").at("X"));
     std::vector<std::int32_t> cluster_id =
         cluster_ids_from(j.at("data").at("cluster_id"));
@@ -91,18 +77,14 @@ TEST_CASE("twolevel golden: lavaan cluster-ML parity") {
     raw.X = {std::move(X)};
     auto data = api::data_from_cluster(*model, std::move(raw), cluster_id);
     if (!data) {
-      CHECK_MESSAGE(is_pending(data.error()),
-                    "unexpected cluster-stats error: ", data.error().detail);
-      MESSAGE("twolevel PENDING (cluster stats): ", rel);
+      FAIL_CHECK("twolevel data_from_cluster() failed: ", data.error().detail);
       continue;
     }
 
-    // 3) two-level ML fit (Stream C).
+    // 3) two-level ML fit.
     auto fit = api::fit(*model, *data, api::twolevel_ml());
     if (!fit) {
-      CHECK_MESSAGE(is_pending(fit.error()),
-                    "unexpected fit error: ", fit.error().detail);
-      MESSAGE("twolevel PENDING (two-level core): ", rel);
+      FAIL_CHECK("twolevel fit() failed: ", fit.error().detail);
       continue;
     }
 
