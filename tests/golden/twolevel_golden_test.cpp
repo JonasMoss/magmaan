@@ -100,8 +100,10 @@ TEST_CASE("twolevel golden: lavaan cluster-ML parity") {
     CHECK(t->statistic ==
           doctest::Approx(exp.at("chisq").get<double>()).epsilon(1e-4));
 
-    // standard SEs (expected-information inverse).
-    auto se = api::standard_errors(*fit, api::expected_information());
+    // standard SEs. lavaan's two-level ML default is information="observed",
+    // so the lavaan-parity path is observed_information_fd(); the analytic
+    // expected-information path is exercised separately in twolevel_test.cpp.
+    auto se = api::standard_errors(*fit, api::observed_information_fd());
     if (!se) {
       FAIL_CHECK("twolevel standard_errors() failed: ", se.error().detail);
       continue;
@@ -228,7 +230,7 @@ TEST_CASE("twolevel multigroup: two-group self-consistency vs single-group oracl
     CHECK(fit_m->estimates().theta.size() ==
           2 * fit_s->estimates().theta.size());
 
-    auto se_m = api::standard_errors(*fit_m, api::expected_information());
+    auto se_m = api::standard_errors(*fit_m, api::observed_information_fd());
     if (!se_m) { FAIL_CHECK("multigroup standard_errors() failed: ",
                             se_m.error().detail); continue; }
     const Eigen::VectorXd& theta_m = fit_m->estimates().theta;

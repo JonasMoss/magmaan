@@ -2103,7 +2103,7 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
   auto ev_or = magmaan::model::ModelEvaluator::build(pt, rep);
   if (ev_or.has_value()) {
     const magmaan::model::ModelEvaluator ev = std::move(*ev_or);
-    auto info_or = tl::twolevel_information(ev, cs, est.theta, /*expected=*/true);
+    auto info_or = tl::twolevel_information(ev, cs, est.theta, /*expected=*/false);
     if (info_or.has_value()) {
       const Eigen::MatrixXd vcov = info_or->inverse();
       for (Eigen::Index k = 0; k < est.theta.size(); ++k) {
