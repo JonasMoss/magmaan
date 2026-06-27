@@ -33,6 +33,10 @@ test_that("single-group two-level ML matches lavaan (saturated CFA)", {
 
   expect_s3_class(fit, "magmaan_fit")
   expect_true(fit$converged)
+  expect_true(is.list(fit$audit))
+  expect_true(is.logical(fit$audit$stationary))
+  expect_true(is.list(fit$diagnostics))
+  expect_true(isTRUE(fit$diagnostics$sigma_pd_all))
   expect_equal(fit$ngroups, 1L)
   expect_equal(fit$df, lav_df)
   expect_equal(fit$chisq, lav_chisq, tolerance = 1e-3)
