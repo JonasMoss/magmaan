@@ -47,3 +47,14 @@ r-package/src/.magmaan-build-config
 
 # Private rslurm/Slurm scratch (R scripts, binary .RData/.RDS, job artifacts).
 dev/slurm/
+
+# LaTeX build intermediates for research notes (keep .tex and .pdf only).
+docs/research/notes/*.aux
+docs/research/notes/*.log
+docs/research/notes/*.out
+docs/research/notes/*.toc
+docs/research/notes/*.fls
+docs/research/notes/*.fdb_latexmk
+docs/research/notes/*.synctex.gz
+docs/research/notes/*.bbl
+docs/research/notes/*.blg
