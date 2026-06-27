@@ -241,6 +241,170 @@ twolevel_value_gradient(const ClusterSampleStats& cs,
   return out;
 }
 
+// Closed-form expected (Fisher) information ½·E[∂²F/∂θ²] of the two-level
+// deviance (derivation note Thm 1). F is a sum of independent Gaussian
+// pseudo-blocks per group:
+//
+//   • within  : n = N_g − J_g obs, covariance Σ_W, no mean;
+//   • size d   : n = J_d obs, covariance C_d = Σ_W + d·Σ_B, mean √d·μ.
+//
+// A Gaussian block of n obs, covariance Σ, mean ν(θ) contributes
+//   (n/2)·tr(Σ⁻¹ ∂_aΣ Σ⁻¹ ∂_bΣ) + n·(∂_aν)' Σ⁻¹ (∂_bν)
+// to ½·E[∂²F/∂θ²]. The size-d mean is √d·μ, so its mean Jacobian is √d·∂μ and
+// the mean term picks up the factor d. Summing the pseudo-blocks (∂_aC_d =
+// ∂_aΣ_W + d·∂_aΣ_B):
+//
+//   I[a,b] = Σ_g { ((N_g−J_g)/2)·tr(Σ_W⁻¹ ∂_aΣ_W Σ_W⁻¹ ∂_bΣ_W)
+//                  + Σ_d [ (J_d/2)·tr(C_d⁻¹ ∂_aC_d C_d⁻¹ ∂_bC_d)
+//                          + J_d·d·(∂_aμ)' C_d⁻¹ (∂_bμ) ] }.
+//
+// This is the same per-block contraction inference::information_expected runs
+// for the single-level model, with the pseudo-blocks and the J_W + d·J_B
+// σ-Jacobian combination as the only two-level coupling. Returned on the same
+// scale as the observed finite-difference path (½·∂²F/∂θ²), so the caller
+// inverts it for vcov unchanged. Independent of the data sufficient statistics
+// (the defining property of expected information): only the counts N_g, J_g,
+// J_d, d and the implied moments enter.
+fit_expected<Eigen::MatrixXd>
+twolevel_expected_information(const ClusterSampleStats& cs,
+                             const TwoLevelCache& /*cache*/,
+                             const model::ImpliedMoments& moments,
+                             const Eigen::MatrixXd& J_sigma,
+                             const Eigen::MatrixXd& J_mu,
+                             const model::MatrixRep& rep) {
+  const auto pairs = model::level_block_pairs(rep);
+
+  // Block offsets into the stacked vech / mean Jacobian rows (block order ==
+  // sigma), sliced exactly as twolevel_value_gradient does.
+  const std::size_t nb = moments.sigma.size();
+  std::vector<Eigen::Index> vech_off(nb), mu_off(nb);
+  Eigen::Index total_vech = 0, total_p = 0;
+  for (std::size_t b = 0; b < nb; ++b) {
+    vech_off[b] = total_vech;
+    mu_off[b] = total_p;
+    total_vech += vech_len(moments.sigma[b].rows());
+    total_p += moments.sigma[b].rows();
+  }
+  if (J_sigma.rows() != total_vech) {
+    return std::unexpected(err(
+        "twolevel expected information: J_sigma row count " +
+        std::to_string(J_sigma.rows()) + " != stacked vech length " +
+        std::to_string(total_vech)));
+  }
+  const bool has_means = J_mu.size() > 0;
+  if (has_means && J_mu.rows() != total_p) {
+    return std::unexpected(err(
+        "twolevel expected information: J_mu row count " +
+        std::to_string(J_mu.rows()) + " != stacked p " +
+        std::to_string(total_p)));
+  }
+
+  const Eigen::Index nfree = J_sigma.cols();
+  Eigen::MatrixXd info = Eigen::MatrixXd::Zero(nfree, nfree);
+
+  for (std::size_t g = 0; g < cs.groups.size(); ++g) {
+    auto gb = group_blocks(g, pairs, moments);
+    if (!gb) return std::unexpected(gb.error());
+    const data::ClusterGroupStats& cg = cs.groups[g];
+    const Eigen::Index p = moments.sigma[gb->bW].rows();
+    // Symmetrize defensively: the chained LISREL products carry O(1e-14)
+    // asymmetric float noise that an LLT would otherwise reject.
+    const Eigen::MatrixXd Sw =
+        0.5 * (moments.sigma[gb->bW] + moments.sigma[gb->bW].transpose());
+    const Eigen::MatrixXd Sb =
+        0.5 * (moments.sigma[gb->bB] + moments.sigma[gb->bB].transpose());
+    const Eigen::MatrixXd Id = Eigen::MatrixXd::Identity(p, p);
+
+    // Per-parameter ∂Σ_W/∂θ_a, ∂Σ_B/∂θ_a (un-vech of this group's within /
+    // between block columns of J_sigma) and ∂μ/∂θ_a (the between block segment
+    // of J_mu). The within pseudo-block has no mean, so only the between mean
+    // Jacobian enters.
+    std::vector<Eigen::MatrixXd> dSw(static_cast<std::size_t>(nfree)),
+        dSb(static_cast<std::size_t>(nfree));
+    std::vector<Eigen::VectorXd> dmu;
+    if (has_means)
+      dmu.assign(static_cast<std::size_t>(nfree), Eigen::VectorXd::Zero(p));
+    for (Eigen::Index a = 0; a < nfree; ++a) {
+      Eigen::MatrixXd MW = Eigen::MatrixXd::Zero(p, p);
+      Eigen::MatrixXd MB = Eigen::MatrixXd::Zero(p, p);
+      for (Eigen::Index c = 0; c < p; ++c) {
+        for (Eigen::Index r = c; r < p; ++r) {
+          const Eigen::Index k = vech_index(p, r, c);
+          const double vw = J_sigma(vech_off[gb->bW] + k, a);
+          const double vb = J_sigma(vech_off[gb->bB] + k, a);
+          MW(r, c) = vw;
+          MB(r, c) = vb;
+          if (r != c) {
+            MW(c, r) = vw;
+            MB(c, r) = vb;
+          }
+        }
+      }
+      dSw[static_cast<std::size_t>(a)] = std::move(MW);
+      dSb[static_cast<std::size_t>(a)] = std::move(MB);
+      if (has_means)
+        dmu[static_cast<std::size_t>(a)] = J_mu.col(a).segment(mu_off[gb->bB], p);
+    }
+
+    // Within pseudo-block: T_a = Σ_W⁻¹ ∂_aΣ_W, weight (N_g − J_g)/2.
+    Eigen::LLT<Eigen::MatrixXd> llt_w(Sw);
+    if (llt_w.info() != Eigen::Success)
+      return std::unexpected(npd("Sigma_W"));
+    const Eigen::MatrixXd W0 = llt_w.solve(Id);
+    std::vector<Eigen::MatrixXd> TW(static_cast<std::size_t>(nfree));
+    for (Eigen::Index a = 0; a < nfree; ++a)
+      TW[static_cast<std::size_t>(a)].noalias() =
+          W0 * dSw[static_cast<std::size_t>(a)];
+    const double w_within =
+        0.5 * static_cast<double>(cg.n_within - cg.n_clusters);
+    for (Eigen::Index a = 0; a < nfree; ++a) {
+      for (Eigen::Index b = a; b < nfree; ++b) {
+        // tr(T_a · T_b) = Σ_{i,j} T_a(j,i)·T_b(i,j).
+        info(a, b) += w_within * (TW[static_cast<std::size_t>(a)].transpose().array() *
+                                  TW[static_cast<std::size_t>(b)].array())
+                                     .sum();
+      }
+    }
+
+    // Per cluster-size pattern d: C_d = Σ_W + d·Σ_B, T_a = C_d⁻¹ ∂_aC_d with
+    // ∂_aC_d = ∂_aΣ_W + d·∂_aΣ_B, weights (J_d/2) covariance, J_d·d mean.
+    for (const auto& sp : cg.size_patterns) {
+      const double d = static_cast<double>(sp.cluster_size);
+      const double Jd = static_cast<double>(sp.n_clusters);
+      const Eigen::MatrixXd Cd = Sw + d * Sb;
+      Eigen::LLT<Eigen::MatrixXd> llt_c(Cd);
+      if (llt_c.info() != Eigen::Success)
+        return std::unexpected(npd("Sigma_W + d*Sigma_B"));
+      const Eigen::MatrixXd Md = llt_c.solve(Id);
+      std::vector<Eigen::MatrixXd> TC(static_cast<std::size_t>(nfree));
+      std::vector<Eigen::VectorXd> eta;
+      if (has_means) eta.assign(static_cast<std::size_t>(nfree), Eigen::VectorXd());
+      for (Eigen::Index a = 0; a < nfree; ++a) {
+        const std::size_t ua = static_cast<std::size_t>(a);
+        const Eigen::MatrixXd dCd = dSw[ua] + d * dSb[ua];  // ∂C_d/∂θ_a
+        TC[ua].noalias() = Md * dCd;
+        if (has_means) eta[ua].noalias() = Md * dmu[ua];
+      }
+      const double w_cov = 0.5 * Jd;
+      const double w_mean = Jd * d;
+      for (Eigen::Index a = 0; a < nfree; ++a) {
+        const std::size_t ua = static_cast<std::size_t>(a);
+        for (Eigen::Index b = a; b < nfree; ++b) {
+          const std::size_t ub = static_cast<std::size_t>(b);
+          double acc = w_cov * (TC[ua].transpose().array() * TC[ub].array()).sum();
+          if (has_means) acc += w_mean * dmu[ua].dot(eta[ub]);
+          info(a, b) += acc;
+        }
+      }
+    }
+  }
+
+  // Mirror the upper triangle: I is symmetric in (a, b).
+  for (Eigen::Index a = 0; a < nfree; ++a)
+    for (Eigen::Index b = a + 1; b < nfree; ++b) info(b, a) = info(a, b);
+  return info;
+}
+
 fit_expected<optim::ScalarProblem>
 twolevel_ml_objective(const model::ModelEvaluator& ev,
                       const ClusterSampleStats& cs) {
@@ -267,15 +431,27 @@ twolevel_ml_objective(const model::ModelEvaluator& ev,
 fit_expected<Eigen::MatrixXd>
 twolevel_information(const model::ModelEvaluator& ev,
                      const ClusterSampleStats& cs, const Eigen::VectorXd& theta,
-                     bool /*expected*/) {
-  // v1: observed information by central finite differences of the analytic
-  // full-deviance gradient. info = ½·∂²F/∂θ² is the Fisher information on the
-  // F = -2logL scale; the caller inverts it for vcov. (`expected` is accepted
-  // for the contract but the expected-information path is deferred.)
+                     bool expected) {
+  // info = ½·∂²F/∂θ² on the F = -2logL scale; the caller inverts it for vcov.
   auto cache_or = twolevel_prepare(cs);
   if (!cache_or) return std::unexpected(cache_or.error());
   const TwoLevelCache cache = *cache_or;
   const model::MatrixRep& rep = ev.matrix_rep();
+
+  if (expected) {
+    // Closed-form expected (Fisher) information ½·E[∂²F/∂θ²]: evaluate the
+    // implied moments + analytic Jacobians once, then contract per pseudo-block.
+    auto e = ev.evaluate(theta, /*with_sigma_jac=*/true, /*with_mu_jac=*/true);
+    if (!e) {
+      return std::unexpected(
+          err("twolevel expected information: evaluator failed at θ"));
+    }
+    return twolevel_expected_information(cs, cache, e->moments, e->J_sigma,
+                                         e->J_mu, rep);
+  }
+
+  // Observed information by central finite differences of the analytic
+  // full-deviance gradient.
   const Eigen::Index n = theta.size();
 
   auto grad_at = [&](const Eigen::VectorXd& th) -> fit_expected<Eigen::VectorXd> {
