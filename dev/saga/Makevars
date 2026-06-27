@@ -7,10 +7,20 @@
 # so the whole vendored tree compiles at -O3 -march=native. The package's own
 # -std=gnu11 (for the f2c C) and -std=c++23 (CXX_STD) still win, appended last.
 #
+# IMPORTANT: magmaan's core sets CXX_STD = CXX23, and R compiles those TUs with
+# $(CXX23FLAGS), which in R's Makeconf is defined INDEPENDENTLY of CXXFLAGS
+# (default -O2). Setting only CXXFLAGS would leave the entire C++23 core at -O2.
+# So the per-standard CXX{14,17,23}FLAGS are overridden too, or the tuning never
+# reaches the code that matters.
+#
 # CAUTION: -march=native bakes in the BUILD node's microarchitecture. Saga's
 # compute nodes are heterogeneous, so build inside a Slurm job on the SAME
 # partition you run on. To build once and run anywhere, swap -march=native for an
 # explicit baseline such as -march=x86-64-v3.
-CFLAGS   = -O3 -march=native -pipe -DNDEBUG
-CXXFLAGS = -O3 -march=native -pipe -DNDEBUG
-FFLAGS   = -O3 -march=native -pipe
+CFLAGS     = -O3 -march=native -pipe -DNDEBUG
+CXXFLAGS   = -O3 -march=native -pipe -DNDEBUG
+CXX14FLAGS = -O3 -march=native -pipe -DNDEBUG
+CXX17FLAGS = -O3 -march=native -pipe -DNDEBUG
+CXX20FLAGS = -O3 -march=native -pipe -DNDEBUG
+CXX23FLAGS = -O3 -march=native -pipe -DNDEBUG
+FFLAGS     = -O3 -march=native -pipe
