@@ -205,6 +205,36 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     Binning `u` was considered and rejected: it would perturb the
     polyserial/polychoric estimate and break lavaan parity.
 
+## Two-level (multilevel) SEM
+
+V1 landed 2026-06: two-level normal-theory ML for random-intercept models over
+a SHARED observed variable set, single group, complete data, no constraints,
+observed + analytic-expected SE, lavaan-parity. The `level:` block header is a
+real `(group, level)` axis. Entry points: `estimate::twolevel::fit_ml_twolevel`,
+`api::twolevel_ml()` + `api::data_from_cluster()`, R `fit_twolevel`. Gated by
+`tests/golden/twolevel_golden_test.cpp` against
+`lavaan::sem(model, data, cluster=)`; fixtures from
+`tests/tools/regen_oracle_twolevel.R`, with an Mplus 9.1 Demo cross-check for
+unbalanced cells via `tests/tools/regen_oracle_twolevel_mplus.R`.
+
+Remaining work:
+
+- **L (in progress).** Multi-group two-level: replicate the `(group, level)`
+  block axis across groups, with cross-group equality via shared labels as in
+  the single-level multi-group path.
+- **L (deferred).** Between-only and within-only observed variables: the v1
+  shared-observed-set restriction assumes every observed variable decomposes
+  into a within and a between part. Lift it to support level-2-only covariates
+  and within-only variables (lavaan's general `%WITHIN%` / `%BETWEEN%` blocks).
+- **M (deferred).** Constraints under two-level: `fit_ml_twolevel` currently
+  rejects equality/inequality constraints; wire the linear-reduced /
+  Jacobian-projected constraint machinery through the two-level fit.
+- **XL.** Categorical / robust two-level: ordinal two-level estimators and
+  robust (sandwich / scaled) two-level test statistics.
+- **XL.** 3+ levels and random slopes: out of the current single-axis design;
+  needs the `rv(...)` random-slope modifier (currently parser-rejected) and a
+  multi-level block axis.
+
 ## Misspecification-robust SE for the moment-quadratic family (frontier)
 
 - **Reduced-bias estimation (RBM) frontier.** V1 landed 2026-06 for raw-data

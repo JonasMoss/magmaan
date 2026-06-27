@@ -19,8 +19,14 @@ Installation) are non-technical. The technical sections are 4–18.
 - **In scope** — sections 4–16: model syntax, CFA, SEM, meanstructures,
   multiple groups, growth curves, categorical data, covariance-matrix input,
   estimators, mediation, modification indices, extracting information.
-- **Out of scope** — section 17 (Multilevel SEM) and section 18 (ESEM/EFA):
-  magmaan is a linear-SEM library and does not target these.
+- **Partial** — section 17 (Multilevel SEM): two-level random-intercept
+  normal-theory ML over a shared observed variable set is now supported
+  (`api::twolevel_ml()` + `data_from_cluster()`, gated by
+  `tests/golden/twolevel_golden_test.cpp` against lavaan's
+  `sem(model, data, cluster=)`). Still out of scope within §17: 3+ levels,
+  random slopes, and categorical/robust two-level.
+- **Out of scope** — section 18 (ESEM/EFA): magmaan is a linear-SEM library and
+  does not target this.
 
 magmaan deliberately exposes an *estimate-then-explicit-post-fit* API rather
 than lavaan's `cfa()`/`sem()`/`growth()`/`summary()` one-shot ergonomics (see
