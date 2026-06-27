@@ -111,6 +111,38 @@ Upstream: not filed (PR to semfindr planned — see docs/backlog/todo.md). Found
         2026-06-23.
 ```
 
+```text
+Defect: lavaan cannot fit a multi-group two-level model: sem(model, data,
+        cluster=, group=) on a `level:` model errors with "subscript out of
+        bounds" in lav_data_cl_patterns. lavaanify drops the group axis for
+        `level:` models (it emits only n_levels blocks, not n_groups*n_levels),
+        so no multigroup-twolevel oracle output exists at all.
+Scope: lavaan 0.7-1.2691. Any model combining `level:` (two-level) with a
+        grouping variable. Single-group two-level and single-level multi-group
+        both work; only the crossing breaks.
+Proof: not "wrong output" but "no output" — so magmaan is gated SELF-
+        CONSISTENTLY rather than against lavaan. First principles: with no
+        cross-group equality constraints a K-group fit is K independent fits,
+        so its likelihood is block-diagonal and (i) each group's θ̂/SE must
+        equal the lavaan-validated single-group fit on that group's data and
+        (ii) the LRT statistic and df both scale by K exactly. Independent
+        reference: the single-group two-level path, which IS lavaan-gated
+        (tests/golden/twolevel_golden_test.cpp first case + the *.json oracles).
+        Repro: lavaan::sem(level-syntax model, data, cluster="c", group="g").
+magmaan: multi-group two-level works end to end (the objective/H1/information
+        and level_block_pairs already loop over cs.groups; cluster_sample_stats
+        and data_from_cluster build one ClusterGroupStats per group; df =
+        Σ_g [p_g(p_g+1)+p_g] − q). Gated by a two-group-on-duplicated-data
+        self-consistency check: per-group θ̂/SE equal the single-group oracle
+        and the LRT/df double. Tests:
+        tests/golden/twolevel_golden_test.cpp
+        "twolevel multigroup: two-group self-consistency vs single-group oracle"
+        and r-package/tests/testthat/test-twolevel.R (the direct multigroup
+        lavaan-parity case skips with this reason). Mplus could serve as a
+        future oracle (see tests/tools/regen_oracle_twolevel_mplus.R).
+Upstream: not filed. Found 2026-06-27 (multi-group two-level finish-up).
+```
+
 ## Investigated — not a defect
 
 - **Satorra-2000 scaled-difference parity** (2026-05-17): a divergence first
