@@ -52,29 +52,9 @@ twolevel_start_values(const spec::LatentStructure& pt, const model::MatrixRep& r
   // Seed each level's structural starts from the unstructured saturated moments:
   // feed the H1 within/between covariances (and the between mean) into the
   // existing per-block start producer as that block's "sample" statistics.
-  auto h1 = twolevel_h1_moments(cs);
-  if (!h1) return std::unexpected(h1.error());
-
-  const auto pairs = model::level_block_pairs(rep);
-  const std::size_t nb = rep.dims.size();
-  data::SampleStats samp;
-  samp.S.assign(nb, Eigen::MatrixXd());
-  samp.mean.assign(nb, Eigen::VectorXd());
-  samp.n_obs.assign(nb, 0);
-  for (std::size_t g = 0; g < cs.groups.size(); ++g) {
-    if (g >= pairs.size() || pairs[g].within < 0 || pairs[g].between < 0) {
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "twolevel_start_values: group lacks a within/between block pair"));
-    }
-    const auto w = static_cast<std::size_t>(pairs[g].within);
-    const auto b = static_cast<std::size_t>(pairs[g].between);
-    samp.S[w] = h1->sigma_w[g];
-    samp.S[b] = h1->sigma_b[g];
-    samp.mean[b] = h1->mu_b[g];  // within level carries no mean structure
-    samp.n_obs[w] = cs.groups[g].n_within;
-    samp.n_obs[b] = cs.groups[g].n_clusters;
-  }
-  return simple_start_values(pt, rep, samp, starts);
+  auto samp = twolevel_h1_sample_stats(cs, rep);
+  if (!samp) return std::unexpected(samp.error());
+  return simple_start_values(pt, rep, *samp, starts);
 }
 
 fit_expected<Estimates>

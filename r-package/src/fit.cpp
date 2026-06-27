@@ -13,6 +13,7 @@
 #include <cctype>
 #include <cmath>
 #include <memory>
+#include <string>
 
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
@@ -1038,6 +1039,64 @@ Rcpp::List bounds_to_r(const magmaan::estimate::Bounds& bounds) {
       Rcpp::_["upper"] = Rcpp::wrap(bounds.upper));
 }
 
+std::string bounds_preset_key(Rcpp::Nullable<Rcpp::String> preset) {
+  if (preset.isNull()) return "none";
+  std::string key = Rcpp::as<std::string>(preset.get());
+  const auto first = key.find_first_not_of(" \t\r\n");
+  const auto last = key.find_last_not_of(" \t\r\n");
+  key = (first == std::string::npos) ? std::string{} :
+      key.substr(first, last - first + 1);
+  for (char& ch : key) {
+    if (ch == '_') ch = '-';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  return key;
+}
+
+magmaan::estimate::Bounds twolevel_bounds_from_nullable(
+    Rcpp::Nullable<Rcpp::List> bounds,
+    Rcpp::Nullable<Rcpp::String> preset,
+    const magmaan::spec::LatentStructure& pt,
+    const magmaan::model::MatrixRep& rep,
+    const magmaan::data::ClusterSampleStats& cs) {
+  magmaan::estimate::Bounds explicit_bounds = bounds_from_nullable(bounds);
+  const std::string key = bounds_preset_key(preset);
+  if (key.empty() || key == "none" || key == "no" || key == "false" ||
+      key == "unbounded") {
+    return explicit_bounds;
+  }
+  if (!explicit_bounds.empty()) {
+    Rcpp::stop("magmaan: fit_twolevel(): pass either explicit `bounds` or a "
+               "named bounds preset, not both");
+  }
+
+  if (key == "pos.var" || key == "pos-var" || key == "variance" ||
+      key == "variance-bounds") {
+    auto b_or = magmaan::estimate::variance_bounds(pt);
+    if (!b_or.has_value()) stop_post(b_or.error());
+    return *b_or;
+  }
+  if (key != "standard" && key != "wide" && key != "default" &&
+      key != "loading" && key != "loadings") {
+    Rcpp::stop("magmaan: fit_twolevel(): unsupported bounds preset '%s'",
+               key.c_str());
+  }
+
+  auto samp_or = magmaan::estimate::twolevel::twolevel_h1_sample_stats(cs, rep);
+  if (!samp_or.has_value()) stop_fit(samp_or.error());
+
+  magmaan::post_expected<magmaan::estimate::Bounds> b_or;
+  if (key == "standard") {
+    b_or = magmaan::estimate::standard_bounds(pt, *samp_or);
+  } else if (key == "wide" || key == "default") {
+    b_or = magmaan::estimate::wide_bounds(pt, *samp_or);
+  } else if (key == "loading" || key == "loadings") {
+    b_or = magmaan::estimate::loading_bounds(pt, *samp_or);
+  }
+  if (!b_or.has_value()) stop_post(b_or.error());
+  return *b_or;
+}
+
 magmaan::estimate::frontier::RBMOptions
 rbm_options_from(Rcpp::Nullable<Rcpp::String> optimizer,
                  Rcpp::Nullable<Rcpp::List> control) {
@@ -1973,7 +2032,9 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
                              Rcpp::IntegerVector cluster_id,
                              Rcpp::Nullable<Rcpp::IntegerVector> group_id = R_NilValue,
                              Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-                             Rcpp::Nullable<Rcpp::List>   control   = R_NilValue) {
+                             Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                             Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+                             Rcpp::Nullable<Rcpp::String> bounds_preset = R_NilValue) {
   namespace tl = magmaan::estimate::twolevel;
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "fit_twolevel");
@@ -2093,7 +2154,9 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
   const Eigen::VectorXd x0 = std::move(*x0_or);
 
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
-  auto est_or = tl::fit_ml_twolevel(pt, rep, cs, x0, {}, backend,
+  const magmaan::estimate::Bounds fit_bounds =
+      twolevel_bounds_from_nullable(bounds, bounds_preset, pt, rep, cs);
+  auto est_or = tl::fit_ml_twolevel(pt, rep, cs, x0, fit_bounds, backend,
                                     optim_opts_from(control));
   if (!est_or.has_value()) stop_fit(est_or.error());
   const magmaan::estimate::Estimates est = std::move(*est_or);

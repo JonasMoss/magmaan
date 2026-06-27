@@ -1270,6 +1270,32 @@ bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
   stop(caller, "(): unsupported `bounds` preset '", bounds[[1L]], "'")
 }
 
+.twolevel_bounds_arg <- function(bounds, caller = "fit_twolevel") {
+  if (bounds_is_none(bounds)) {
+    return(list(bounds = NULL, bounds_preset = NULL))
+  }
+  if (is.list(bounds)) {
+    if (is.null(bounds$lower) || is.null(bounds$upper)) {
+      stop(caller, "(): `bounds` list must contain `lower` and `upper`")
+    }
+    return(list(bounds = bounds, bounds_preset = NULL))
+  }
+  if (!is.character(bounds) || length(bounds) != 1L || is.na(bounds)) {
+    stop(caller, "(): `bounds` must be NULL, a list(lower, upper), ",
+         "or one of 'pos.var', 'standard', 'wide', 'loading'")
+  }
+  key <- trimws(tolower(bounds[[1L]]))
+  key <- gsub("_", "-", key, fixed = TRUE)
+  if (key %in% c("none", "no", "false", "unbounded")) {
+    return(list(bounds = NULL, bounds_preset = NULL))
+  }
+  if (key %in% c("pos.var", "pos-var", "variance", "variance-bounds",
+                 "standard", "wide", "default", "loading", "loadings")) {
+    return(list(bounds = NULL, bounds_preset = key))
+  }
+  stop(caller, "(): unsupported `bounds` preset '", bounds[[1L]], "'")
+}
+
 # Per-estimator entry points. Each takes an `optimizer = "nlopt-lbfgs"` (default)
 # string + a generic `control = list(...)` of solver tuning knobs (the union
 # of OptimOptions and Ceres extras; see the C++ `Backend` enum docstring for
@@ -1404,6 +1430,7 @@ fit_wls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
 # set, complete data (listwise), normal-theory ML.
 fit_twolevel <- function(model, data, cluster, group = NULL,
                          optimizer = "nlopt-lbfgs", control = NULL,
+                         bounds = NULL,
                          missing = c("listwise", "error")) {
   missing <- match.arg(missing)
   group_var <- if (is.null(group)) NULL else as.character(group)[1L]
@@ -1436,9 +1463,12 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 
   parts <- .twolevel_data_arg(data, spec, cluster = cluster, group = group_var,
                               missing = missing, caller = "fit_twolevel")
+  b <- .twolevel_bounds_arg(bounds, "fit_twolevel")
   fit <- fit_twolevel_impl(spec$partable, parts$X, parts$cid,
                            group_id = parts$gid,
-                           optimizer = optimizer, control = control)
+                           optimizer = optimizer, control = control,
+                           bounds = b$bounds,
+                           bounds_preset = b$bounds_preset)
   finalize_magmaan_fit(fit, spec, "ML", missing, "none", "none")
 }
 
@@ -1764,9 +1794,6 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     if (ordinal_requested) {
       stop("magmaan(): two-level (cluster = ) does not support ordinal data in v1")
     }
-    if (!bounds_is_none(bounds)) {
-      stop("magmaan(): `bounds` are not supported for two-level (cluster = ) fits")
-    }
     if (!is.data.frame(data)) {
       stop("magmaan(): two-level (cluster = ) requires a data.frame `data`")
     }
@@ -1776,6 +1803,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     } else missing
     return(fit_twolevel(spec, data, cluster = cluster, group = group_var,
                         optimizer = optimizer, control = control,
+                        bounds = bounds,
                         missing = tl_missing))
   }
 

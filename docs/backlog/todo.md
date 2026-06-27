@@ -209,10 +209,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 
 V1 landed 2026-06: two-level normal-theory ML for random-intercept models over
 a SHARED observed variable set, single group, complete data, no constraints,
-observed + analytic-expected SE, lavaan-parity. The `level:` block header is a
-real `(group, level)` axis. Entry points: `estimate::twolevel::fit_ml_twolevel`,
-`api::twolevel_ml()` + `api::data_from_cluster()`, R `fit_twolevel`. Gated by
-`tests/golden/twolevel_golden_test.cpp` against
+observed + analytic-expected SE, optional box bounds, lavaan-parity. The
+`level:` block header is a real `(group, level)` axis. Entry points:
+`estimate::twolevel::fit_ml_twolevel`, `api::twolevel_ml()` +
+`api::data_from_cluster()`, R `fit_twolevel`. Named R bounds presets compute
+their boxes from the two-level H1 within/between covariance blocks, matching the
+ordinary lavaan-style stabilizer scheme without changing the unbounded default.
+Gated by `tests/golden/twolevel_golden_test.cpp` against
 `lavaan::sem(model, data, cluster=)`; fixtures from
 `tests/tools/regen_oracle_twolevel.R`, with an Mplus 9.1 Demo cross-check for
 unbalanced cells via `tests/tools/regen_oracle_twolevel_mplus.R`.

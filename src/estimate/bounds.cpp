@@ -119,8 +119,8 @@ compute_auto_bounds(const spec::LatentStructure& pt,
   out.upper = Eigen::VectorXd::Constant(n_free,  kInf);
   if (n_free == 0) return out;
 
-  const std::int32_t n_groups = pt.n_groups();
-  if (static_cast<std::int32_t>(samp.S.size()) < n_groups) {
+  const std::int32_t n_blocks = pt.n_blocks();
+  if (static_cast<std::int32_t>(samp.S.size()) < n_blocks) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "auto bounds: sample covariance has fewer blocks than the model"));
   }
@@ -146,11 +146,11 @@ compute_auto_bounds(const spec::LatentStructure& pt,
 
   // Per-block largest observed variance — the fallback latent-variance upper
   // for a factor with no marker indicator.
-  std::vector<double> max_ov_var(static_cast<std::size_t>(n_groups), kNaN);
-  for (std::int32_t g = 0; g < n_groups; ++g) {
-    const Eigen::MatrixXd& S = samp.S[static_cast<std::size_t>(g)];
+  std::vector<double> max_ov_var(static_cast<std::size_t>(n_blocks), kNaN);
+  for (std::int32_t b = 0; b < n_blocks; ++b) {
+    const Eigen::MatrixXd& S = samp.S[static_cast<std::size_t>(b)];
     if (S.rows() > 0) {
-      max_ov_var[static_cast<std::size_t>(g)] = S.diagonal().maxCoeff();
+      max_ov_var[static_cast<std::size_t>(b)] = S.diagonal().maxCoeff();
     }
   }
 
@@ -238,8 +238,9 @@ compute_auto_bounds(const spec::LatentStructure& pt,
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "auto bounds: free[" + std::to_string(i) + "] exceeds n_free"));
     }
-    if (pt.group[i] <= 0) continue;
-    const std::int32_t blk = pt.group[i] - 1;
+    const std::int32_t blk1 = pt.block_of(i);
+    if (blk1 <= 0) continue;
+    const std::int32_t blk = blk1 - 1;
     const parse::Op op = pt.op[i];
     const std::int32_t lhs = pt.lhs_var[i];
     const std::int32_t rhs = pt.rhs_var[i];
@@ -290,12 +291,14 @@ compute_auto_bounds(const spec::LatentStructure& pt,
   if (preset.covariances.lower || preset.covariances.upper) {
     for (std::size_t i = 0; i < pt.size(); ++i) {
       const std::int32_t fr = pt.free[i];
-      if (fr <= 0 || pt.group[i] <= 0) continue;
+      if (fr <= 0) continue;
       if (pt.op[i] != parse::Op::Covariance) continue;
       const std::int32_t lhs = pt.lhs_var[i];
       const std::int32_t rhs = pt.rhs_var[i];
       if (lhs < 0 || rhs < 0 || lhs == rhs) continue;
-      const std::int32_t blk = pt.group[i] - 1;
+      const std::int32_t blk1 = pt.block_of(i);
+      if (blk1 <= 0) continue;
+      const std::int32_t blk = blk1 - 1;
       const auto lit = var_upper.find({blk, lhs});
       const auto rit = var_upper.find({blk, rhs});
       if (lit == var_upper.end() || rit == var_upper.end()) continue;

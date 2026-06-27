@@ -18,6 +18,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/data/cluster_stats.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"            // Estimates, Bounds, Backend, OptimOptions
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"   // ImpliedMoments, ModelEvaluator
@@ -96,6 +97,14 @@ struct TwoLevelH1 {
 // the analogue of estimate::fiml::fiml_h1_moments.
 fit_expected<TwoLevelH1>
 twolevel_h1_moments(const ClusterSampleStats& cs, TwoLevelH1Options opts = {});
+
+// Project the two-level saturated H1 moments into ordinary per-block
+// SampleStats, aligned to MatrixRep block order. This lets the existing
+// lavaan-compatible bounds builders (`standard_bounds`, `wide_bounds`, ...)
+// derive level-specific boxes from the unstructured within/between variances.
+fit_expected<data::SampleStats>
+twolevel_h1_sample_stats(const ClusterSampleStats& cs, const model::MatrixRep& rep,
+                         TwoLevelH1Options opts = {});
 
 // ---- Contract 6: start values + fit composer ------------------------------
 

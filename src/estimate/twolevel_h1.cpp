@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <vector>
 
 #include <Eigen/Cholesky>
@@ -180,6 +181,34 @@ twolevel_h1_moments(const ClusterSampleStats& cs, TwoLevelH1Options opts) {
   h1.value = value;
   h1.iterations = iters;
   return h1;
+}
+
+fit_expected<data::SampleStats>
+twolevel_h1_sample_stats(const ClusterSampleStats& cs, const model::MatrixRep& rep,
+                         TwoLevelH1Options opts) {
+  auto h1 = twolevel_h1_moments(cs, opts);
+  if (!h1) return std::unexpected(h1.error());
+
+  const auto pairs = model::level_block_pairs(rep);
+  const std::size_t nb = rep.dims.size();
+  data::SampleStats samp;
+  samp.S.assign(nb, Eigen::MatrixXd());
+  samp.mean.assign(nb, Eigen::VectorXd());
+  samp.n_obs.assign(nb, 0);
+  for (std::size_t g = 0; g < cs.groups.size(); ++g) {
+    if (g >= pairs.size() || pairs[g].within < 0 || pairs[g].between < 0) {
+      return std::unexpected(h1_err(
+          "twolevel_h1_sample_stats: group lacks a within/between block pair"));
+    }
+    const auto w = static_cast<std::size_t>(pairs[g].within);
+    const auto b = static_cast<std::size_t>(pairs[g].between);
+    samp.S[w] = h1->sigma_w[g];
+    samp.S[b] = h1->sigma_b[g];
+    samp.mean[b] = h1->mu_b[g];  // within level carries no mean structure
+    samp.n_obs[w] = cs.groups[g].n_within;
+    samp.n_obs[b] = cs.groups[g].n_clusters;
+  }
+  return samp;
 }
 
 }  // namespace magmaan::estimate::twolevel
