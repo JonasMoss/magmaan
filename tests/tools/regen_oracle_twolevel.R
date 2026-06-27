@@ -172,4 +172,42 @@ emit_twolevel <- function(spec) {
 }
 
 for (spec in twolevel_models) emit_twolevel(spec)
+
+# ---- multi-group two-level: lavaan has no oracle for this combination ------
+# A multilevel model with `group=` is not supported by this lavaan: lavaanify
+# drops the group axis for `level:` models (it emits only n_levels blocks, not
+# n_groups * n_levels), so sem(model, data, cluster=, group=) then fails inside
+# lav_data_cl_patterns with "subscript out of bounds" on ov_names_l[[g]]. We do
+# NOT fabricate a multigroup fixture. The C++ side validates multi-group
+# two-level by SELF-CONSISTENCY against the single-group oracle instead (two
+# groups with no cross-group equality = two independent fits; see
+# tests/golden/twolevel_golden_test.cpp). This probe documents the limitation
+# and will light up automatically if a future lavaan gains the feature.
+probe_multigroup_twolevel <- function() {
+  d <- dat
+  cl <- sort(unique(d$cluster))
+  d$g <- ifelse(match(d$cluster, cl) <= floor(length(cl) / 2), "A", "B")
+  m <- "
+    level: 1
+      fw =~ y1 + y2 + y3
+    level: 2
+      fb =~ y1 + y2 + y3
+  "
+  fit <- tryCatch(sem(m, data = d, cluster = "cluster", group = "g"),
+                  error = function(e) e)
+  if (inherits(fit, "error")) {
+    cat(sprintf(
+      "[multigroup] lavaan cannot fit multigroup-multilevel (no oracle): %s\n",
+      conditionMessage(fit)))
+    cat("[multigroup] -> validated in C++ by single-group self-consistency.\n")
+    return(invisible(FALSE))
+  }
+  # If we ever get here, lavaan grew the feature: emit a real 2-group fixture.
+  cat("[multigroup] lavaan now fits multigroup-multilevel; add a fixture cell ",
+      "to twolevel_models / emit_twolevel with per-group data + parTable.\n",
+      sep = "")
+  invisible(TRUE)
+}
+probe_multigroup_twolevel()
+
 cat("two-level oracle fixtures ->", tl_dir, "\n")

@@ -428,25 +428,43 @@ Result<Data> data_from_cluster_stats(const Model &,
   return Data::from_cluster_stats(std::move(stats));
 }
 
-Result<Data> data_from_cluster(const Model &model, data::RawData raw,
-                               std::vector<std::int32_t> cluster_id) {
-  // v1: a single group with a shared observed variable set. `raw` columns are
-  // assumed already aligned to MatrixRep ov order, so the within / between
-  // column selectors are the identity over all p observed variables.
-  if (raw.X.size() != 1) {
+Result<Data> data_from_cluster(
+    const Model &model, data::RawData raw,
+    std::vector<std::vector<std::int32_t>> cluster_ids) {
+  // Multi-group two-level over a shared observed variable set. magmaan lays out
+  // groups as a vector of per-group raw matrices (`raw.X[g]`); each group gets
+  // its own `cluster_id` vector. `raw` columns are assumed already aligned to
+  // MatrixRep ov order, so the within / between column selectors are the
+  // identity over all p observed variables (shared across groups).
+  if (raw.X.empty()) {
     return std::unexpected(make_error(
-        ErrorStage::UnsupportedCombination,
-        "data_from_cluster: v1 two-level supports a single group only"));
+        ErrorStage::Data, "data_from_cluster: no data groups"));
   }
-  const Eigen::MatrixXd &X = raw.X.front();
-  if (X.rows() != static_cast<Eigen::Index>(cluster_id.size())) {
+  if (raw.X.size() != cluster_ids.size()) {
     return std::unexpected(make_error(
         ErrorStage::Data,
-        "data_from_cluster: cluster_id length must equal the number of rows"));
+        "data_from_cluster: expected one cluster_id vector per data group"));
   }
-  std::vector<std::int32_t> cols(static_cast<std::size_t>(X.cols()));
+  const Eigen::Index p = raw.X.front().cols();
+  for (std::size_t g = 0; g < raw.X.size(); ++g) {
+    if (raw.X[g].cols() != p) {
+      return std::unexpected(make_error(
+          ErrorStage::Data,
+          "data_from_cluster: all groups must share the observed-variable "
+          "count (shared observed set)"));
+    }
+    if (raw.X[g].rows() !=
+        static_cast<Eigen::Index>(cluster_ids[g].size())) {
+      return std::unexpected(make_error(
+          ErrorStage::Data,
+          "data_from_cluster: cluster_id length must equal the number of rows "
+          "in each group"));
+    }
+  }
+  std::vector<std::int32_t> cols(static_cast<std::size_t>(p));
   std::iota(cols.begin(), cols.end(), 0);
-  auto cs = data::cluster_sample_stats(X, cluster_id, cols, cols);
+  auto cs =
+      data::cluster_sample_stats_multigroup(raw.X, cluster_ids, cols, cols);
   if (!cs) {
     return std::unexpected(make_error(ErrorStage::Data, cs.error()));
   }
@@ -456,6 +474,16 @@ Result<Data> data_from_cluster(const Model &model, data::RawData raw,
   if (cs->between_ov_index.empty()) cs->between_ov_index = std::move(cols);
   (void)model;
   return Data::from_cluster_stats(std::move(*cs));
+}
+
+Result<Data> data_from_cluster(const Model &model, data::RawData raw,
+                               std::vector<std::int32_t> cluster_id) {
+  // Single-group convenience overload: forward to the multi-group builder with
+  // a one-group cluster-id list. Backward-compatible with v1 callers (a single
+  // group with a shared observed variable set).
+  return data_from_cluster(
+      model, std::move(raw),
+      std::vector<std::vector<std::int32_t>>{std::move(cluster_id)});
 }
 
 namespace frontier {
@@ -1258,12 +1286,17 @@ Result<TestResult> test(const Fit &fit, TestSpec spec) {
     // f = ½F, so F(θ̂) = 2·fmin; the LRT is the saturated subtraction
     // T = F(θ̂) − F_{H1} (twolevel_ml_derivation, "Objective scale").
     const double chi2 = 2.0 * fit.estimates().fmin - h1->value;
-    // Saturated two-level moments over a shared p-variable set = within cov
-    // (p(p+1)/2) + between cov (p(p+1)/2) + between means (p) = p(p+1) + p.
-    const Eigen::Index p = cs->groups.front().p_within;
-    const int n_moments = static_cast<int>(p * (p + 1) + p);
+    // Saturated two-level moments per group over a shared p-variable set =
+    // within cov (p(p+1)/2) + between cov (p(p+1)/2) + between means (p) =
+    // p(p+1) + p. Each group is its own saturated within/between law, so the
+    // moment count is summed over groups: n_moments = Σ_g [p_g(p_g+1) + p_g].
+    std::int64_t n_moments = 0;
+    for (const auto &gst : cs->groups) {
+      const std::int64_t pg = static_cast<std::int64_t>(gst.p_within);
+      n_moments += pg * (pg + 1) + pg;
+    }
     const int q = static_cast<int>(fit.estimates().theta.size());
-    const int df = n_moments - q;
+    const int df = static_cast<int>(n_moments) - q;
     return TestResult{"twolevel-standard", chi2, df,
                       inference::chi2_pvalue(chi2, df)};
   }

@@ -65,4 +65,21 @@ cluster_sample_stats(const Eigen::Ref<const Eigen::MatrixXd>& X,
                      const std::vector<std::int32_t>& within_cols,
                      const std::vector<std::int32_t>& between_cols);
 
+// Multi-group two-level sufficient statistics. magmaan represents groups as a
+// vector of per-group raw matrices (`data::RawData::X[g]`), so this takes one
+// (n_g × p) matrix and one matching `cluster_id` vector per group, reduces each
+// group independently via the single-group `cluster_sample_stats` above, and
+// concatenates the per-group results into one ClusterSampleStats whose `groups`
+// has one entry per input group (group order preserved). `within_cols` /
+// `between_cols` are shared across groups (v1: identical — the shared observed
+// variable set). Cluster labels need only be unique *within* each group; the
+// per-group reduction never compares labels across groups. The single-group
+// builder is the `X_by_group.size() == 1` special case.
+post_expected<ClusterSampleStats>
+cluster_sample_stats_multigroup(
+    const std::vector<Eigen::MatrixXd>& X_by_group,
+    const std::vector<std::vector<std::int32_t>>& cluster_id_by_group,
+    const std::vector<std::int32_t>& within_cols,
+    const std::vector<std::int32_t>& between_cols);
+
 }  // namespace magmaan::data

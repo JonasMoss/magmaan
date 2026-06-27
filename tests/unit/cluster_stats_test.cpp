@@ -23,6 +23,7 @@
 
 using magmaan::data::ClusterSampleStats;
 using magmaan::data::cluster_sample_stats;
+using magmaan::data::cluster_sample_stats_multigroup;
 
 namespace {
 
@@ -340,6 +341,78 @@ TEST_CASE("cluster_stats: malformed input is rejected") {
     std::vector<std::int32_t> id = {0, 0, 1};
     std::vector<std::int32_t> none;
     auto res = cluster_sample_stats(X, id, none, none);
+    CHECK_FALSE(res.has_value());
+  }
+}
+
+TEST_CASE("cluster_stats: multigroup merge preserves per-group statistics") {
+  // Build a two-group ClusterSampleStats from the balanced (group 0) and
+  // unbalanced (group 1) lavaan-parity datasets, and assert each merged group
+  // equals the single-group reduction. The multigroup builder is just a
+  // per-group fan-out of the single-group reducer, so this pins that contract.
+  auto [Xb, idb] = unpack(balanced_data);
+  auto [Xu, idu] = unpack(unbalanced_data);
+  std::vector<std::int32_t> cols = {0, 1};
+
+  auto single_b = cluster_sample_stats(Xb, idb, cols, cols);
+  auto single_u = cluster_sample_stats(Xu, idu, cols, cols);
+  REQUIRE(single_b.has_value());
+  REQUIRE(single_u.has_value());
+
+  std::vector<Eigen::MatrixXd> X_by_group = {Xb, Xu};
+  std::vector<std::vector<std::int32_t>> id_by_group = {idb, idu};
+  auto mg = cluster_sample_stats_multigroup(X_by_group, id_by_group, cols, cols);
+  REQUIRE(mg.has_value());
+  REQUIRE(mg->groups.size() == 2);
+  CHECK(mg->within_ov_index == cols);
+  CHECK(mg->between_ov_index == cols);
+
+  // group 0 == single balanced; group 1 == single unbalanced.
+  const auto check_group = [](const auto& got, const auto& want) {
+    CHECK(got.n_within == want.n_within);
+    CHECK(got.n_clusters == want.n_clusters);
+    CHECK(got.p_within == want.p_within);
+    CHECK(got.p_between == want.p_between);
+    CHECK((got.grand_mean - want.grand_mean).cwiseAbs().maxCoeff() < kTol);
+    CHECK((got.within_scatter - want.within_scatter).cwiseAbs().maxCoeff() < kTol);
+    REQUIRE(got.size_patterns.size() == want.size_patterns.size());
+    for (std::size_t s = 0; s < got.size_patterns.size(); ++s) {
+      CHECK(got.size_patterns[s].cluster_size == want.size_patterns[s].cluster_size);
+      CHECK(got.size_patterns[s].n_clusters == want.size_patterns[s].n_clusters);
+      CHECK((got.size_patterns[s].sum_cluster_mean -
+             want.size_patterns[s].sum_cluster_mean).cwiseAbs().maxCoeff() < kTol);
+      CHECK((got.size_patterns[s].sum_cluster_mean_cp -
+             want.size_patterns[s].sum_cluster_mean_cp).cwiseAbs().maxCoeff() < kTol);
+    }
+  };
+  check_group(mg->groups[0], single_b->groups[0]);
+  check_group(mg->groups[1], single_u->groups[0]);
+}
+
+TEST_CASE("cluster_stats: multigroup malformed input is rejected") {
+  auto [Xb, idb] = unpack(balanced_data);
+  std::vector<std::int32_t> cols = {0, 1};
+
+  // empty group list.
+  {
+    std::vector<Eigen::MatrixXd> X;
+    std::vector<std::vector<std::int32_t>> id;
+    auto res = cluster_sample_stats_multigroup(X, id, cols, cols);
+    CHECK_FALSE(res.has_value());
+  }
+  // group / cluster_id count mismatch.
+  {
+    std::vector<Eigen::MatrixXd> X = {Xb, Xb};
+    std::vector<std::vector<std::int32_t>> id = {idb};  // one short
+    auto res = cluster_sample_stats_multigroup(X, id, cols, cols);
+    CHECK_FALSE(res.has_value());
+  }
+  // a per-group reduction failure (cluster_id length mismatch in group 1)
+  // propagates as an overall failure.
+  {
+    std::vector<Eigen::MatrixXd> X = {Xb, Xb};
+    std::vector<std::vector<std::int32_t>> id = {idb, {0, 0, 1}};
+    auto res = cluster_sample_stats_multigroup(X, id, cols, cols);
     CHECK_FALSE(res.has_value());
   }
 }
