@@ -24,9 +24,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   plumbing: build the independence/baseline robust scaling for complete-data
   MLM/MLR and all-ordinal WLSMV baseline CATML ingredients, then let
   `fit_measures(fit, robust = "MLM"/"MLR"/"WLSMV")` compute those scalars
-  automatically. The FIML corrected `XX3`/baseline reduction is implemented as
-  `estimate::fiml::fiml_corrected_fit_measures`; lavaan's `MLR` fitMeasures
-  fields are fixture references rather than the oracle for that explicit helper.
+  automatically. FIML `robust = TRUE` / `"MLR"` is wired on the R surface
+  through `estimate::fiml::fiml_corrected_fit_measures`, including the corrected
+  `XX3` user/baseline reductions and robust CFI/TLI/RMSEA fields; lavaan's
+  `MLR` fitMeasures fields are fixture references rather than the oracle for
+  that explicit helper.
   The ML2S `robust.two.stage` robust/scaled CFI/TLI/RMSEA family is implemented
   as `estimate::fiml::two_stage_fit_measures` and lavaan-gated in the FIML
   golden fixtures.
