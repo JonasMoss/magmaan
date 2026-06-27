@@ -397,6 +397,91 @@ loadings whenever \(k\ge 3\), and hence a closed-form \(\omega_h\); a
 non-proportional bifactor solution lies outside the simple-structure \(X\) and is
 not available by this route.
 
+\section{Guttman Omega Hierarchical}
+
+Omega hierarchical \(\omega_h\) is the share of total score variance carried by a
+single general factor under a Schmid-Leiman \cite{schmidleiman1957}
+orthogonalization of a correlated \(k\)-factor model. Write
+\(\Sigma=\Lambda\Phi\Lambda\T+\Psi\) with the second-order factorization of the
+factor correlation \(\Phi=\gamma\gamma\T+\Psi_\varphi\), where
+\(\gamma\in\mathbb{R}^k\) holds the loadings of the first-order factors on the
+general factor. With simple structure the general-factor item loadings are
+\(\lambda_g=\Lambda\gamma\), and
+\[
+  \omega_h=\frac{(\mathbf 1\T\lambda_g)^2}{\mathbf 1\T S\mathbf 1}
+    =\frac{(\mathbf 1\T\Lambda\gamma)^2}{T},\qquad T=\mathbf 1\T S\mathbf 1 .
+\]
+
+The first stage is the Guttman map already given: in the unit-variance metric the
+loadings are \(K^\star=CXB^{-1}D^{1/2}\) and the factor correlation is
+\(P=D^{-1/2}BD^{-1/2}\), with \(B=X\T C X\), \(D=\operatorname{Diag}B\). The second
+stage applies the \emph{same} centroid extraction to \(P\): replace its unit
+diagonal by second-order communalities to form \(C_P\), and read off
+\[
+  \gamma_P=\frac{C_P\mathbf 1}{\sqrt{\mathbf 1\T C_P\mathbf 1}},\qquad
+  \lambda_g=K^\star\gamma_P .
+\]
+Then \(\lambda_g\lambda_g\T=K^\star\gamma_P\gamma_P\T K^{\star\T}\) is the
+general-factor item covariance and
+\begin{equation}\label{eq:omega-h}
+  \omega_h(\sigma)
+    =\frac{(\mathbf 1\T K^\star\gamma_P)^2}{T}
+    =\frac{\bigl(a\T B^{-1}D^{1/2}C_P\mathbf 1\bigr)^2}
+          {(\mathbf 1\T C_P\mathbf 1)\,T},\qquad a=X\T C\mathbf 1 .
+\end{equation}
+This needs \(k\ge3\) first-order factors, since the second-stage triples are over
+factors. It is the Schmid-Leiman \emph{proportional} general factor; a free
+(non-proportional) bifactor is outside the simple-structure \(X\).
+
+In Hancock and An's \cite{hancockan2020} elementary form this is their
+ratio-of-sums rule applied at two levels. Within block \(f\),
+\(\hat\lambda_i=\{\sum_{j<\ell\in f}S_{ij}S_{i\ell}/\sum_{j<\ell\in f}S_{j\ell}\}^{1/2}\)
+and \(s_f=\sum_{i\in f}\hat\lambda_i\); the factor correlations are
+\(\hat\varphi_{fg}=\sum_{i\in f,\,j\in g}S_{ij}/(s_fs_g)\); the same rule one level
+up gives
+\(\hat\gamma_f=\{\sum_{g<h\ne f}\hat\varphi_{fg}\hat\varphi_{fh}/\hat\varphi_{gh}\}^{1/2}\);
+and \(\hat\omega_h=(\sum_f\hat\gamma_fs_f)^2/T\). On the exact higher-order
+manifold this two-level form and \eqref{eq:omega-h} coincide and recover the true
+\(\omega_h\).
+
+\paragraph{Influence function.} \(\omega_h=g(\sigma)\) is a smooth covariance
+functional, so by the delta method
+\(\sqrt n\{\hat\omega_h-\omega_h\}\Rightarrow N(0,\nabla g\T\Gamma\nabla g)\) with
+\(\IF(y_i)=\nabla g(\sigma_0)\T z_i\). The gradient composes the matrix
+differentials
+\[
+\begin{aligned}
+  dC &= dS-\operatorname{Diag}(\operatorname{diag}dS)+\operatorname{Diag}(dh),\\
+  dB &= X\T\,dC\,X,\\
+  dP &= D^{-1/2}\,dB\,D^{-1/2}-\tfrac12(\Delta P+P\Delta),
+        \quad \Delta=D^{-1}\operatorname{Diag}(dB),\\
+  dC_P &= dP-\operatorname{Diag}(\operatorname{diag}dP)+\operatorname{Diag}(dh^\varphi),
+\end{aligned}
+\]
+where \(dh\) and \(dh^\varphi\) are the first- and second-stage communality
+differentials, the only stage-specific pieces; a different communality rule
+changes nothing else. Vectorizing, each stage is Kronecker-linear in
+\(\operatorname{vech}dS\): the lift is \(\operatorname{vec}dB=(X\T\otimes
+X\T)\operatorname{vec}dC\), the inverse uses \(d(B^{-1})=-B^{-1}(dB)B^{-1}\), and
+every scalar contraction uses \(a\T(dM)b=(b\T\otimes a\T)\operatorname{vec}dM\).
+With \(N=a\T B^{-1}D^{1/2}C_P\mathbf 1\),
+\[
+\begin{aligned}
+  dN ={}& (X\T dC\,\mathbf 1)\T B^{-1}D^{1/2}C_P\mathbf 1
+     - a\T B^{-1}(dB)B^{-1}D^{1/2}C_P\mathbf 1 \\
+     &+ a\T B^{-1}(dD^{1/2})C_P\mathbf 1
+     + a\T B^{-1}D^{1/2}(dC_P)\mathbf 1,
+\end{aligned}
+\]
+and the quotient rule on \(\omega_h=N^2/[(\mathbf 1\T C_P\mathbf 1)T]\) gives
+\(\nabla\omega_h\). Only the lift \(X\T\otimes X\T\) and the two communality blocks
+distinguish this from the single-factor case, so \(\Gamma\)'s vech structure
+passes straight into \(\Omega=\nabla\omega_h\T\Gamma\nabla\omega_h\). Numerically,
+\eqref{eq:omega-h} recovers the true \(\omega_h\) to machine precision on a
+higher-order population (\(k=3\) blocks of three items, \(\omega_h=0.6134277\)),
+and its delta-method standard error matches a Monte Carlo standard deviation to
+within one percent.
+
 \section{Moment-Quadratic Estimators}
 
 Let \(m(\theta)\) be the model-implied covariance moment vector and
@@ -670,6 +755,13 @@ Spearman, C. (1927).
 McDonald, R. P. (1999).
 \newblock \emph{Test theory: A unified treatment}.
 \newblock Lawrence Erlbaum.
+
+\bibitem{schmidleiman1957}
+Schmid, J., \& Leiman, J. M. (1957).
+\newblock The development of hierarchical factor solutions.
+\newblock \emph{Psychometrika}, 22(1), 53--61.
+\newblock \href{https://doi.org/10.1007/BF02289209}
+{doi:10.1007/BF02289209}.
 
 \end{thebibliography}
 
