@@ -93,10 +93,6 @@ fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) 
     .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
 
-fiml_fit_measures_impl <- function(fit, robust = FALSE) {
-    .Call(`_magmaan_fiml_fit_measures_impl`, fit, robust)
-}
-
 saturated_em_moments_impl <- function(raw_data, h_step = 1e-4) {
     .Call(`_magmaan_saturated_em_moments_impl`, raw_data, h_step)
 }
@@ -289,6 +285,10 @@ estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
     .Call(`_magmaan_estimate_fiml_robust_mlr`, fit, h_step)
 }
 
+fiml_fit_measures_impl <- function(fit, robust = FALSE) {
+    .Call(`_magmaan_fiml_fit_measures_impl`, fit, robust)
+}
+
 infer_ml2s_casewise_influence_ij_fit <- function(fit, raw_data, stage2_weight = "nt", dls_a = 0.5) {
     .Call(`_magmaan_infer_ml2s_casewise_influence_ij_fit`, fit, raw_data, stage2_weight, dls_a)
 }
@@ -331,6 +331,10 @@ measures_reliability_cov <- function(S, gamma = NULL, n = 0L) {
 
 measures_reliability_omega_multidim <- function(S, block, target = "total", weights = NULL, gamma = NULL, n = 0L) {
     .Call(`_magmaan_measures_reliability_omega_multidim`, S, block, target, weights, gamma, n)
+}
+
+measures_reliability_omega_from_fit <- function(fit, target, weight, gamma, n) {
+    .Call(`_magmaan_measures_reliability_omega_from_fit`, fit, target, weight, gamma, n)
 }
 
 measures_factor_scores <- function(fit, raw_data, method = "regression") {
@@ -788,3 +792,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+

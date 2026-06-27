@@ -13,6 +13,8 @@
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/robust/robust.hpp"
 #include "../detail_vech.hpp"
 
 namespace magmaan::measures::frontier::reliability {
@@ -533,6 +535,154 @@ omega_multidim_delta(OmegaTarget target,
   out.gradient = std::move(*g_or);
   out.avar = std::max(0.0, avar);
   out.se = std::sqrt(out.avar / static_cast<double>(n));
+  return out;
+}
+
+namespace {
+
+// Model-implied omega (total or hierarchical) at θ via the fitted LISREL
+// matrices of block 0. Mirrors the verified R reference .omega_from_matrices /
+// .omega_total_from / .omega_h_from: common = LamA Ψ LamAᵀ, Σ = common + Θ,
+// omega_total = sum(common)/sum(Σ); the general factor is the all-zero Λ column
+// (gload = LamA·e_gen, psi_gen = Ψ_gen,gen), omega_h = sum(gload)² psi_gen /
+// sum(Σ).
+post_expected<double>
+omega_value_from_eval(OmegaTarget target, const model::ModelEvaluator& evalr,
+                      const Eigen::VectorXd& theta) {
+  auto asm_or = evalr.assembled(theta);
+  if (!asm_or.has_value()) {
+    return std::unexpected(
+        err("omega_from_fit: assembled() failed: " + asm_or.error().detail));
+  }
+  if (asm_or->blocks.empty()) {
+    return std::unexpected(err("omega_from_fit: model has no blocks"));
+  }
+  const model::BlockMatrices& b = asm_or->blocks.front();
+  const Eigen::MatrixXd common = b.LamA * b.Psi * b.LamA.transpose();
+  const Eigen::MatrixXd Sigma = common + b.Theta;
+  const double t = Sigma.sum();
+  if (!std::isfinite(t) || t <= 0.0) {
+    return std::unexpected(
+        err("omega_from_fit: implied total-score variance must be positive"));
+  }
+  if (target == OmegaTarget::Total) {
+    return common.sum() / t;
+  }
+  // Hierarchical: the general factor is the latent with no direct indicators
+  // (an all-zero Λ column). Require exactly one for a well-defined omega_h.
+  Eigen::Index gen = -1;
+  int n_gen = 0;
+  for (Eigen::Index c = 0; c < b.Lambda.cols(); ++c) {
+    if (b.Lambda.col(c).cwiseAbs().maxCoeff() < 1e-10) {
+      gen = c;
+      ++n_gen;
+    }
+  }
+  if (n_gen != 1) {
+    return std::unexpected(err(
+        "omega_from_fit: omega-hierarchical needs exactly one indicator-free "
+        "(all-zero Λ column) general factor"));
+  }
+  const double gload_sum = b.LamA.col(gen).sum();
+  const double psi_gen = b.Psi(gen, gen);
+  return (gload_sum * gload_sum * psi_gen) / t;
+}
+
+}  // namespace
+
+post_expected<DeltaResult>
+omega_from_fit(OmegaTarget target, FitWeight weight,
+               const spec::LatentStructure& pt, const model::MatrixRep& rep,
+               const data::SampleStats& samp, const estimate::Estimates& est,
+               const Eigen::Ref<const Eigen::MatrixXd>& gamma_hat,
+               std::int64_t n) {
+  if (n <= 0) {
+    return std::unexpected(err("omega_from_fit: n must be positive"));
+  }
+  auto eval_or = model::ModelEvaluator::build(pt, rep);
+  if (!eval_or.has_value()) {
+    return std::unexpected(
+        err("omega_from_fit: evaluator build failed: " + eval_or.error().detail));
+  }
+  const model::ModelEvaluator& evalr = *eval_or;
+  const Eigen::VectorXd theta = est.theta;
+
+  // Value (and general-factor validation) at θ̂.
+  auto val_or = omega_value_from_eval(target, evalr, theta);
+  if (!val_or.has_value()) return std::unexpected(val_or.error());
+
+  // Gradient grad_θ(ω): cheap central FD over θ (each assembled() is µs).
+  const Eigen::Index nf = theta.size();
+  Eigen::VectorXd g(nf);
+  for (Eigen::Index k = 0; k < nf; ++k) {
+    const double h = 1e-6 * std::max(1.0, std::abs(theta(k)));
+    Eigen::VectorXd tp = theta;
+    Eigen::VectorXd tm = theta;
+    tp(k) += h;
+    tm(k) -= h;
+    auto fp = omega_value_from_eval(target, evalr, tp);
+    if (!fp.has_value()) return std::unexpected(fp.error());
+    auto fm = omega_value_from_eval(target, evalr, tm);
+    if (!fm.has_value()) return std::unexpected(fm.error());
+    g(k) = (*fp - *fm) / (2.0 * h);
+  }
+
+  // Robust parameter vcov V (n_free × n_free), already carrying 1/n.
+  Eigen::MatrixXd V;
+  if (weight == FitWeight::ML || weight == FitWeight::GLS) {
+    const robust::InferenceSpec spec =
+        (weight == FitWeight::ML)
+            ? robust::InferenceSpec{robust::Information::Observed,
+                                    robust::WeightMoments::Structured,
+                                    robust::ScoreCovariance::Empirical}
+            : robust::InferenceSpec{robust::Information::Expected,
+                                    robust::WeightMoments::Unstructured,
+                                    robust::ScoreCovariance::Empirical};
+    auto rs_or =
+        robust::robust_se(pt, rep, samp, est, Eigen::MatrixXd(gamma_hat), spec);
+    if (!rs_or.has_value()) {
+      return std::unexpected(
+          err("omega_from_fit: robust_se failed: " + rs_or.error().detail));
+    }
+    V = std::move(rs_or->vcov);
+  } else {  // ULS: identity-weight minimum-distance sandwich.
+    auto delta_or = evalr.dsigma_dtheta(theta);
+    if (!delta_or.has_value()) {
+      return std::unexpected(
+          err("omega_from_fit: dsigma_dtheta() failed: " + delta_or.error().detail));
+    }
+    const Eigen::MatrixXd& Delta = *delta_or;  // p* × n_free
+    if (gamma_hat.rows() != Delta.rows() || gamma_hat.cols() != Delta.rows()) {
+      return std::unexpected(err(
+          "omega_from_fit: gamma_hat shape does not match dvech(Σ) dimension"));
+    }
+    const Eigen::MatrixXd A = Delta.transpose() * Delta;  // bread (Δ'Δ)
+    Eigen::LLT<Eigen::MatrixXd> llt(A);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(
+          err("omega_from_fit: Δ'Δ is singular (rank-deficient Jacobian)"));
+    }
+    const Eigen::MatrixXd Ainv =
+        llt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+    const Eigen::MatrixXd meat = Delta.transpose() * gamma_hat * Delta;
+    V = (Ainv * meat * Ainv) / static_cast<double>(n);
+  }
+
+  if (V.rows() != nf || V.cols() != nf) {
+    return std::unexpected(
+        err("omega_from_fit: parameter vcov has unexpected dimension"));
+  }
+
+  const double avar_param = g.dot(V * g);
+  if (!std::isfinite(avar_param)) {
+    return std::unexpected(
+        err("omega_from_fit: asymptotic variance is not finite"));
+  }
+  DeltaResult out;
+  out.value = *val_or;
+  out.gradient = std::move(g);
+  out.avar = std::max(0.0, avar_param) * static_cast<double>(n);
+  out.se = std::sqrt(std::max(0.0, avar_param));
   return out;
 }
 

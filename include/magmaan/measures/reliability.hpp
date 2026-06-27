@@ -5,6 +5,10 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"          // estimate::Estimates
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::measures::frontier::reliability {
 
@@ -83,5 +87,41 @@ omega_multidim_delta(OmegaTarget target,
                      const OmegaSpec& spec,
                      const Eigen::Ref<const Eigen::MatrixXd>& gamma,
                      std::int64_t n);
+
+// ---------------------------------------------------------------------------
+// Model-based coefficient omega from a fitted CFA
+//
+// omega-total and omega-hierarchical as model-implied closed forms on the
+// fitted LISREL matrices (Λ, Ψ, Θ, B). With A = (I − B)⁻¹ and LamA = Λ A,
+//   common = LamA Ψ LamAᵀ = Λ A Ψ Aᵀ Λᵀ,   Σ = common + Θ,
+//   omega_total = 1ᵀ common 1 / 1ᵀ Σ 1.
+// The general factor is the latent with no direct indicators (an all-zero Λ
+// column); with gload = (Λ A)·e_gen and psi_gen = Ψ_{gen,gen},
+//   omega_h = (1ᵀ gload)² · psi_gen / 1ᵀ Σ 1.
+//
+// The robust delta-method SE is √(grad_θ(ω)ᵀ V grad_θ(ω)), with V a robust
+// parameter vcov that reuses a caller-supplied empirical Γ̂ (in the
+// evaluator's lower-tri column-major vech metric — the same metric as
+// `ModelEvaluator::dsigma_dtheta`). The Σ-Jacobian inside V is analytic; only
+// the cheap scalar gradient grad_θ(ω) is finite-differenced over θ (each
+// evaluation is a single `assembled()` call). This is the fast in-core
+// replacement for the finite-difference R comparator.
+// ---------------------------------------------------------------------------
+
+// Fitting weight that produced the estimates; selects the robust-vcov path.
+//   ML  ≙ robust.huber.white (observed bread, structured weight, empirical meat)
+//   GLS ≙ robust.sem with the Γ_NT(S)⁻¹ weight (expected bread, unstructured)
+//   ULS ≙ the identity-weight minimum-distance sandwich (Δ'Δ)⁻¹Δ'Γ̂Δ(Δ'Δ)⁻¹/n
+enum class FitWeight : std::uint8_t { ML, GLS, ULS };
+
+// Model-based omega + robust delta-method SE from a fitted single-group CFA.
+// `gamma_hat` is the p* × p* empirical ACOV of vech(S) in the evaluator's
+// vech metric; `n` is the sample size.
+post_expected<DeltaResult>
+omega_from_fit(OmegaTarget target, FitWeight weight,
+               const spec::LatentStructure& pt, const model::MatrixRep& rep,
+               const data::SampleStats& samp, const estimate::Estimates& est,
+               const Eigen::Ref<const Eigen::MatrixXd>& gamma_hat,
+               std::int64_t n);
 
 }  // namespace magmaan::measures::frontier::reliability

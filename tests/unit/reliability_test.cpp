@@ -1,15 +1,22 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/LU>
 
 #include "magmaan/data/raw_data.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/measures/reliability.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace rel = magmaan::measures::frontier::reliability;
 
@@ -245,5 +252,56 @@ TEST_CASE("multidimensional omega delta method uses Gamma on the vech scale") {
     CHECK(out->avar >= 0.0);
     CHECK(out->se == doctest::Approx(std::sqrt(out->avar / 1000.0)).epsilon(1e-14));
     CHECK(out->se > 0.0);
+  }
+}
+
+TEST_CASE("omega_from_fit recovers higher-order truth from a fitted CFA") {
+  const HigherOrderPop pop = higher_order_pop();
+
+  // Second-order CFA: three first-order factors (three indicators each) and a
+  // general factor with no direct indicators (its Λ column is all zero, so the
+  // hierarchical path detects it). Fitting ML to the population covariance
+  // reproduces it exactly, so the model-implied omega equals the closed-form
+  // truth (omega is identification-invariant; marker identification is fine).
+  auto fp = magmaan::parse::Parser::parse(
+      "f1 =~ x1 + x2 + x3\n"
+      "f2 =~ x4 + x5 + x6\n"
+      "f3 =~ x7 + x8 + x9\n"
+      "g  =~ f1 + f2 + f3");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);             REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
+
+  magmaan::data::SampleStats samp;
+  samp.S = {pop.Sigma};
+  samp.n_obs = {std::int64_t{1000}};
+
+  auto est_or = magmaan::test::fit(*pt, *mr, samp);
+  REQUIRE(est_or.has_value());
+  const magmaan::estimate::Estimates& est = *est_or;
+
+  auto gamma = magmaan::data::gamma_nt(pop.Sigma);
+  REQUIRE(gamma.has_value());
+
+  // The point estimate is independent of the SE path, so every FitWeight gives
+  // the same value (the truth); each weight exercises a distinct robust vcov.
+  for (rel::FitWeight w :
+       {rel::FitWeight::ML, rel::FitWeight::GLS, rel::FitWeight::ULS}) {
+    auto ot = rel::omega_from_fit(rel::OmegaTarget::Total, w, *pt, *mr, samp, est,
+                                  *gamma, 1000);
+    REQUIRE(ot.has_value());
+    CHECK(ot->value == doctest::Approx(pop.omega_total_true).epsilon(1e-5));
+    CHECK(ot->gradient.size() == static_cast<Eigen::Index>(est.theta.size()));
+    CHECK(ot->se > 0.0);
+    CHECK(ot->avar == doctest::Approx(ot->se * ot->se * 1000.0).epsilon(1e-10));
+
+    auto oh = rel::omega_from_fit(rel::OmegaTarget::Hierarchical, w, *pt, *mr,
+                                  samp, est, *gamma, 1000);
+    REQUIRE(oh.has_value());
+    CHECK(oh->value == doctest::Approx(pop.omega_h_true).epsilon(1e-5));
+    CHECK(oh->se > 0.0);
+
+    // The general factor carries less than the full common part.
+    CHECK(oh->value < ot->value);
   }
 }
