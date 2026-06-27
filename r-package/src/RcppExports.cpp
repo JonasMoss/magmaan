@@ -149,8 +149,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_twolevel_impl
-Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data, Rcpp::IntegerVector cluster_id, Rcpp::Nullable<Rcpp::IntegerVector> group_id, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
-RcppExport SEXP _magmaan_fit_twolevel_impl(SEXP partableSEXP, SEXP dataSEXP, SEXP cluster_idSEXP, SEXP group_idSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
+Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data, Rcpp::IntegerVector cluster_id, Rcpp::Nullable<Rcpp::IntegerVector> group_id, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, Rcpp::Nullable<Rcpp::String> bounds_preset);
+RcppExport SEXP _magmaan_fit_twolevel_impl(SEXP partableSEXP, SEXP dataSEXP, SEXP cluster_idSEXP, SEXP group_idSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP bounds_presetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -160,7 +160,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type group_id(group_idSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_twolevel_impl(partable, data, cluster_id, group_id, optimizer, control));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type bounds_preset(bounds_presetSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_twolevel_impl(partable, data, cluster_id, group_id, optimizer, control, bounds, bounds_preset));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2853,7 +2855,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_bounds_loading_impl", (DL_FUNC) &_magmaan_bounds_loading_impl, 2},
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
-    {"_magmaan_fit_twolevel_impl", (DL_FUNC) &_magmaan_fit_twolevel_impl, 6},
+    {"_magmaan_fit_twolevel_impl", (DL_FUNC) &_magmaan_fit_twolevel_impl, 8},
     {"_magmaan_fit_ml_fisher_impl", (DL_FUNC) &_magmaan_fit_ml_fisher_impl, 4},
     {"_magmaan_fit_ml_fisher_snlls_impl", (DL_FUNC) &_magmaan_fit_ml_fisher_snlls_impl, 4},
     {"_magmaan_fit_ml_irls_impl", (DL_FUNC) &_magmaan_fit_ml_irls_impl, 5},

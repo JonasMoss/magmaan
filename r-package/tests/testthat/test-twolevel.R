@@ -108,6 +108,46 @@ test_that("single-group two-level ML matches lavaan on a non-saturated model", {
   expect_lt(max(abs(cmp$se.m  - cmp$se.l)),  5e-2)
 })
 
+test_that("two-level standard bounds stabilize a weak six-indicator between factor", {
+  skip_if_not_installed("lavaan")
+  d <- .tl_demo()
+  model <- "
+    level: 1
+      fw =~ y1 + y2 + y3 + y4 + y5 + y6
+    level: 2
+      fb =~ y1 + y2 + y3 + y4 + y5 + y6
+  "
+  fit_lav <- lavaan::sem(model, data = d, cluster = "cluster")
+  lav_chisq <- unname(lavaan::fitMeasures(fit_lav, "chisq"))
+  lav_df    <- as.integer(unname(lavaan::fitMeasures(fit_lav, "df")))
+  pt_l      <- lavaan::parTable(fit_lav)
+
+  fit <- fit_twolevel(model, d, cluster = "cluster", bounds = "standard")
+
+  expect_true(fit$converged)
+  expect_true(isTRUE(fit$diagnostics$sigma_pd_all))
+  expect_equal(fit$df, lav_df)
+  expect_equal(fit$chisq, lav_chisq, tolerance = 1e-2)
+  expect_gt(subset(fit$partable, lhs == "fb" & op == "~~" & rhs == "fb")$est,
+            1e-2)
+
+  mfree <- fit$partable[fit$partable$free > 0, ]
+  mfree$k  <- .tl_key(mfree)
+  mfree$se <- fit$se[mfree$free]
+  lfree <- pt_l[pt_l$free > 0, ]
+  lfree$k <- .tl_key(lfree)
+  cmp <- merge(mfree[, c("k", "est", "se")], lfree[, c("k", "est", "se")],
+               by = "k", suffixes = c(".m", ".l"))
+  expect_equal(nrow(cmp), sum(fit$partable$free > 0))
+  expect_lt(max(abs(cmp$est.m - cmp$est.l)), 1e-3)
+  expect_lt(max(abs(cmp$se.m  - cmp$se.l)),  1e-3)
+
+  fit_one <- magmaan(model, d, estimator = "ML", cluster = "cluster",
+                     bounds = "standard")
+  expect_equal(fit_one$theta, fit$theta, tolerance = 1e-8)
+  expect_equal(fit_one$chisq, fit$chisq, tolerance = 1e-8)
+})
+
 test_that("multi-group two-level ML separates into independent single-group fits", {
   # Internal-validity check that needs no oracle: an unconstrained multi-group
   # model's joint likelihood separates over groups, so each group's MLE must

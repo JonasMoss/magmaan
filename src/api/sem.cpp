@@ -693,11 +693,6 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
           ErrorStage::UnsupportedCombination,
           "two-level ML requires clustered data (api::data_from_cluster)"));
     }
-    if (estimator.bounds_mode != BoundsMode::None) {
-      return std::unexpected(make_error(
-          ErrorStage::UnsupportedCombination,
-          "two-level ML fitting does not accept bounds"));
-    }
     if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
         estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
         estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
@@ -719,8 +714,13 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
       x0 = std::move(*starts);
     }
 
+    auto bounds = bounds_for(pt, estimator);
+    if (!bounds) {
+      return std::unexpected(bounds.error());
+    }
+
     auto est = estimate::twolevel::fit_ml_twolevel(
-        pt, rep, *cs, x0, {}, backend_from(estimator.optimizer_spec),
+        pt, rep, *cs, x0, *bounds, backend_from(estimator.optimizer_spec),
         estimator.optimizer_spec.options);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
