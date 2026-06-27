@@ -4118,8 +4118,11 @@ Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust = false) {
       Rcpp::_["ntotal"] = static_cast<double>(fx.ntotal));
 
   if (robust && *df_or > 0) {
+    std::unique_ptr<SaturatedMoments> owned_sm;
+    const SaturatedMoments& sm =
+        fiml_saturated_for_fit(fit, raw, pack, h1, owned_sm);
     auto r_or = magmaan::estimate::fiml::fiml_corrected_fit_measures(
-        ctx.pt, ctx.rep, raw, est, *df_or, pack, h1);
+        ctx.pt, ctx.rep, raw, est, *df_or, pack, h1, sm);
     if (!r_or.has_value()) stop_post(r_or.error());
     const auto& r = *r_or;
     const auto& rf = r.indices;
