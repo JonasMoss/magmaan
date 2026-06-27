@@ -145,13 +145,20 @@ Result<Data> data_from_mixed_ordinal(const Model &,
                                      data::MixedOrdinalStats stats);
 // Two-level (multilevel) clustered data. `data_from_cluster_stats` wraps
 // already-built sufficient statistics; `data_from_cluster` builds them from
-// clustered raw data via data::cluster_sample_stats (v1: a single group, a
-// shared observed variable set, and `raw` columns already in MatrixRep ov
-// order — `cluster_id[r]` is the 0-based cluster of raw row r).
+// clustered raw data via data::cluster_sample_stats over a shared observed
+// variable set, with `raw` columns already in MatrixRep ov order.
+//
+// Single-group overload: `raw.X` holds the one (N × p) matrix and `cluster_id[r]`
+// is the 0-based cluster of raw row r. Multi-group overload: `raw.X[g]` is the
+// per-group (N_g × p) matrix and `cluster_ids[g]` its matching per-row cluster
+// labels (unique within the group); the result carries one block group per
+// input group. The single-group form is the one-group special case.
 Result<Data> data_from_cluster_stats(const Model &,
                                      data::ClusterSampleStats stats);
 Result<Data> data_from_cluster(const Model &model, data::RawData raw,
                                std::vector<std::int32_t> cluster_id);
+Result<Data> data_from_cluster(const Model &model, data::RawData raw,
+                               std::vector<std::vector<std::int32_t>> cluster_ids);
 // Frontier (research / non-lavaan) data builders. No deprecation-cycle
 // promise; see docs/design/ideas.md for the core/frontier tier model.
 namespace frontier {

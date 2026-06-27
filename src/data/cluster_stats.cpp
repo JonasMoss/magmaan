@@ -151,4 +151,39 @@ cluster_sample_stats(const Eigen::Ref<const Eigen::MatrixXd>& X,
   return out;
 }
 
+post_expected<ClusterSampleStats>
+cluster_sample_stats_multigroup(
+    const std::vector<Eigen::MatrixXd>& X_by_group,
+    const std::vector<std::vector<std::int32_t>>& cluster_id_by_group,
+    const std::vector<std::int32_t>& within_cols,
+    const std::vector<std::int32_t>& between_cols) {
+  if (X_by_group.empty()) {
+    return std::unexpected(PostError{
+        PostError::Kind::NumericIssue,
+        "data::cluster_sample_stats_multigroup: no groups"});
+  }
+  if (X_by_group.size() != cluster_id_by_group.size()) {
+    return std::unexpected(PostError{
+        PostError::Kind::NumericIssue,
+        "data::cluster_sample_stats_multigroup: expected one cluster_id vector "
+        "per data group"});
+  }
+
+  ClusterSampleStats out;
+  out.groups.reserve(X_by_group.size());
+  // Each group is its own within/between law: reduce it with the single-group
+  // builder (which validates the column selectors and shared-set contract per
+  // group) and append its lone ClusterGroupStats, preserving group order.
+  for (std::size_t g = 0; g < X_by_group.size(); ++g) {
+    auto cs_g = cluster_sample_stats(X_by_group[g], cluster_id_by_group[g],
+                                     within_cols, between_cols);
+    if (!cs_g) return std::unexpected(cs_g.error());
+    out.groups.push_back(std::move(cs_g->groups.front()));
+  }
+  out.within_ov_index = within_cols;
+  out.between_ov_index = between_cols;
+
+  return out;
+}
+
 }  // namespace magmaan::data
