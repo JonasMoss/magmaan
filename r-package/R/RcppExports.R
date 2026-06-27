@@ -41,8 +41,8 @@ fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL
     .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-fit_twolevel_impl <- function(partable, data, cluster_id, optimizer = NULL, control = NULL) {
-    .Call(`_magmaan_fit_twolevel_impl`, partable, data, cluster_id, optimizer, control)
+fit_twolevel_impl <- function(partable, data, cluster_id, group_id = NULL, optimizer = NULL, control = NULL) {
+    .Call(`_magmaan_fit_twolevel_impl`, partable, data, cluster_id, group_id, optimizer, control)
 }
 
 fit_ml_fisher_impl <- function(partable, sample_stats, control = NULL, bounds = NULL) {
