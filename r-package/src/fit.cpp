@@ -2170,6 +2170,8 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
   out["level"] = 2;
   out["optimizer_status"] = optim_status_to_r(est.optimizer_status);
   out["grad_norm"]        = est.grad_inf_norm;
+  out["audit"]            = audit_to_r(est.audit);
+  out["diagnostics"]      = diagnostics_to_r(est.diagnostics);
   return out;
 }
 

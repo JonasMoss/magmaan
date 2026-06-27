@@ -212,7 +212,7 @@ cross_check_one <- function(fx_path, workdir) {
   if (p > MPLUS_DV_CAP) {
     cat(sprintf("[%s] SKIP — %d observed > Mplus Demo %d-DV cap\n",
                 id, p, MPLUS_DV_CAP))
-    return(invisible(NULL))
+    return(invisible(NA))
   }
 
   # Raw data: X rows (ov order) + cluster id as the last column. The fixture
@@ -239,7 +239,8 @@ cross_check_one <- function(fx_path, workdir) {
     return(invisible(FALSE))
   }
   out <- readLines(out_path, warn = FALSE)
-  if (any(grepl("THE MODEL ESTIMATION TERMINATED NORMALLY", out)) == FALSE) {
+  term_ok <- any(grepl("THE MODEL ESTIMATION TERMINATED NORMALLY", out))
+  if (!term_ok) {
     cat(sprintf("[%s] WARN — Mplus did not report normal termination\n", id))
   }
 
@@ -278,13 +279,16 @@ cross_check_one <- function(fx_path, workdir) {
       if (ds > max_ds) max_ds <- ds
       n_cmp <- n_cmp + 1L
     }
+  } else {
+    n_miss <- sum(vapply(j$expected$params, function(pr)
+      as.integer(pr$free) > 0L, logical(1)))
   }
-  est_ok <- (max_de <= TOL_EST) && (max_ds <= TOL_SE)
+  est_ok <- !is.null(mp) && (max_de <= TOL_EST) && (max_ds <= TOL_SE)
   cat(sprintf("    params: matched=%d unmatched=%d  max|d est|=%.4f max|d se|=%.4f (worst est: %s) -> %s\n",
               n_cmp, n_miss, max_de, max_ds, worst,
               ifelse(est_ok && n_miss == 0L, "OK", "CHECK")))
 
-  invisible(df_ok && chisq_ok && est_ok && n_miss == 0L)
+  invisible(term_ok && df_ok && chisq_ok && est_ok && n_miss == 0L)
 }
 
 # ---- driver ---------------------------------------------------------------
@@ -312,9 +316,15 @@ workdir <- if (keep_work)
   tempfile("twolevel_mplus_")
 dir.create(workdir, showWarnings = FALSE, recursive = TRUE)
 
-results <- logical(0)
-for (fx in fixtures) results <- c(results, isTRUE(cross_check_one(fx, workdir)))
+results <- vapply(fixtures, function(fx) {
+  res <- cross_check_one(fx, workdir)
+  if (is.na(res)) NA else isTRUE(res)
+}, logical(1))
 
-cat(sprintf("\nMplus cross-check: %d/%d fixtures fully matched the lavaan oracle.\n",
-            sum(results), length(results)))
+checked <- !is.na(results)
+cat(sprintf("\nMplus cross-check: %d/%d checked fixtures fully matched the lavaan oracle",
+            sum(results[checked]), sum(checked)))
+if (any(!checked)) cat(sprintf(" (%d skipped by Mplus Demo limits)", sum(!checked)))
+cat(".\n")
 if (keep_work) cat(sprintf("scratch kept in %s\n", workdir))
+if (any(checked) && any(!results[checked])) quit(status = 1)

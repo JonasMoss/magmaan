@@ -4,6 +4,8 @@
 #include <utility>
 
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/optim/optimizers.hpp"
 
@@ -112,9 +114,13 @@ fit_ml_twolevel(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto out = drive(*prob, x0, bounds, backend, opts);
   if (!out) return std::unexpected(out.error());
 
-  return Estimates{prob->expand(out->x), out->fmin,        out->iterations,
-                   out->f_evals,         out->g_evals,     out->status,
-                   out->grad_inf_norm,   std::move(out->audit)};
+  Estimates est{prob->expand(out->x), out->fmin,        out->iterations,
+                out->f_evals,         out->g_evals,     out->status,
+                out->grad_inf_norm,   std::move(out->audit)};
+  est.diagnostics =
+      finalize_fit_diagnostics(est.theta, ev, *con, NonlinearEqConstraints{},
+                               bounds);
+  return est;
 }
 
 }  // namespace magmaan::estimate::twolevel
