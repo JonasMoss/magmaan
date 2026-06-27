@@ -19,7 +19,7 @@
 # all three SEs are analytic, so the N-sweep is cheap.
 #
 # Usage:
-#   Rscript scripts/coverage_sweep.R [--reps 400] [--ns 600,1500,3000,6000]
+#   Rscript scripts/coverage_sweep.R [--reps 1000] [--ns 100,150,...,1500]
 #                                    [--cross 0.4] [--seed-base S] [--smoke]
 
 .support_helpers <- function() {
@@ -32,8 +32,9 @@
 source(.support_helpers()); rm(.support_helpers)
 
 parse_args <- function(a) {
-  o <- list(reps = 400L, ns = c(600L, 1500L, 3000L, 6000L), cross = 0.4,
-            seed_base = 20260624L, smoke = FALSE)
+  o <- list(reps = 1000L,
+            ns = c(100L, 150L, 200L, 300L, 450L, 600L, 1500L),
+            cross = 0.4, seed_base = 20260624L, smoke = FALSE)
   i <- 1L
   while (i <= length(a)) {
     x <- a[[i]]
@@ -47,7 +48,7 @@ parse_args <- function(a) {
     i <- i + 1L
   }
   if (o$smoke) { o$reps <- 20L; o$ns <- c(600L) }
-  if (any(!is.finite(o$ns)) || any(o$ns < 120L)) stop("--ns values must be >= 120")
+  if (any(!is.finite(o$ns)) || any(o$ns < 80L)) stop("--ns values must be >= 80")
   if (!is.finite(o$reps) || o$reps < 2L) stop("--reps must be >= 2")
   o
 }
