@@ -1392,6 +1392,141 @@ fit_wls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
   attach_complete_raw_data(fit, data)
 }
 
+# fit_twolevel() — two-level (multilevel) normal-theory ML over clustered raw
+# data. The thin exported R surface over the direct-core fit_twolevel_impl().
+# Mirrors lavaan sem(model, data, cluster = "cluster", group = "g"): `cluster`
+# is a column name in `data` (or an id vector aligned to its rows) and `group`
+# is a grouping column name (or NULL for single group). Estimation only; the v1
+# observed-information SEs come back in `$se` for convenience, but tests and
+# other post-fit quantities stay explicit calls.
+#
+# v1 scope: random-intercept two-level models over a shared observed variable
+# set, complete data (listwise), normal-theory ML.
+fit_twolevel <- function(model, data, cluster, group = NULL,
+                         optimizer = "nlopt-lbfgs", control = NULL,
+                         missing = c("listwise", "error")) {
+  missing <- match.arg(missing)
+  group_var <- if (is.null(group)) NULL else as.character(group)[1L]
+  if (!is.null(group_var) && !nzchar(group_var)) group_var <- NULL
+
+  if (inherits(model, "magmaan_model_spec")) {
+    spec <- model
+    spec_gv <- spec$group_var %||% ""
+    if (!is.null(group_var) && !identical(spec_gv, group_var)) {
+      stop("fit_twolevel(): `group` ('", group_var, "') differs from the model ",
+           "spec's grouping ('", spec_gv, "'); rebuild the spec with `group = `")
+    }
+    if (is.null(group_var) && nzchar(spec_gv)) group_var <- spec_gv
+  } else if (is.character(model) && length(model) == 1L) {
+    group_labels <- NULL
+    if (!is.null(group_var) && is.data.frame(data)) {
+      if (!group_var %in% names(data)) {
+        stop("fit_twolevel(): grouping column not found: ", group_var)
+      }
+      group_labels <- unique(as.character(data[[group_var]]))
+    }
+    spec <- model_spec(model, group = group_var, group_labels = group_labels)
+  } else {
+    spec <- as_magmaan_model_spec(model)
+    if (is.null(group_var)) {
+      sg <- spec$group_var %||% ""
+      if (nzchar(sg)) group_var <- sg
+    }
+  }
+
+  parts <- .twolevel_data_arg(data, spec, cluster = cluster, group = group_var,
+                              missing = missing, caller = "fit_twolevel")
+  fit <- fit_twolevel_impl(spec$partable, parts$X, parts$cid,
+                           group_id = parts$gid,
+                           optimizer = optimizer, control = control)
+  finalize_magmaan_fit(fit, spec, "ML", missing, "none", "none")
+}
+
+# Coerce a data.frame + cluster/group selectors into the matrix + id vectors
+# fit_twolevel_impl() wants. Observed columns come from the within block of the
+# model rep (v1: shared observed set). Listwise-deletes incomplete rows. Group
+# ids are 0-based indices into the spec's group labels (lavaan's group order),
+# so they line up with the model's per-group level blocks.
+.twolevel_data_arg <- function(data, spec, cluster, group = NULL,
+                               missing = c("listwise", "error"),
+                               caller = "fit_twolevel") {
+  missing <- match.arg(missing)
+  if (!is.data.frame(data)) {
+    stop(caller, "(): `data` must be a data.frame carrying the observed",
+         if (!is.null(group)) ", cluster and group" else " and cluster",
+         " columns")
+  }
+  rep <- model_matrix_rep(spec$partable)
+  ov_by_block <- rep$ov_names
+  if (!is.list(ov_by_block)) ov_by_block <- list(ov_by_block)
+  ov <- ov_by_block[[1L]]  # within block; v1 shares the observed set across blocks
+  miss_cols <- setdiff(ov, names(data))
+  if (length(miss_cols)) {
+    stop(caller, "(): data is missing observed variables: ",
+         paste(miss_cols, collapse = ", "))
+  }
+
+  if (is.character(cluster) && length(cluster) == 1L) {
+    if (!cluster %in% names(data)) {
+      stop(caller, "(): cluster column not found: ", cluster)
+    }
+    cl <- data[[cluster]]
+  } else {
+    cl <- cluster
+    if (length(cl) != nrow(data)) {
+      stop(caller, "(): cluster id length (", length(cl), ") != nrow(data) (",
+           nrow(data), ")")
+    }
+  }
+
+  gvals <- NULL
+  if (!is.null(group) && nzchar(group)) {
+    if (!group %in% names(data)) {
+      stop(caller, "(): grouping column not found: ", group)
+    }
+    gvals <- as.character(data[[group]])
+  }
+
+  block <- data[, ov, drop = FALSE]
+  bad_type <- names(block)[!vapply(block, is.numeric, logical(1))]
+  if (length(bad_type)) {
+    stop(caller, "(): observed variables must be numeric: ",
+         paste(bad_type, collapse = ", "))
+  }
+  keep <- stats::complete.cases(block) & !is.na(cl)
+  if (!is.null(gvals)) keep <- keep & !is.na(gvals)
+  if (!all(keep)) {
+    if (missing == "error") {
+      stop(caller, "(): missing values in the observed/cluster/group columns")
+    }
+    block <- block[keep, , drop = FALSE]
+    cl <- cl[keep]
+    if (!is.null(gvals)) gvals <- gvals[keep]
+  }
+  if (nrow(block) < 2L) {
+    stop(caller, "(): fewer than 2 complete rows")
+  }
+
+  X <- as.matrix(block)
+  storage.mode(X) <- "double"
+  cid <- as.integer(factor(cl)) - 1L
+
+  gid <- NULL
+  if (!is.null(gvals)) {
+    labels <- spec$group_labels
+    if (is.null(labels) || !length(labels)) labels <- unique(gvals)
+    labels <- as.character(labels)
+    extra <- setdiff(unique(gvals), labels)
+    if (length(extra)) {
+      stop(caller, "(): data contains groups outside the model labels: ",
+           paste(extra, collapse = ", "))
+    }
+    gid <- as.integer(match(gvals, labels) - 1L)
+  }
+
+  list(X = X, cid = as.integer(cid), gid = gid)
+}
+
 # evaluate_at() — no-optimizer companion. Runs the same terminal audit /
 # diagnostics suite the fit_* paths run, but at an externally-supplied
 # `theta` (e.g. a parameter vector returned by lavaan or by a published
@@ -1518,6 +1653,7 @@ fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
 }
 
 magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
+                    cluster = NULL,
                     ordered = NULL, parameterization = "delta",
                     missing = c("listwise", "error", "pairwise"),
                     pd_gamma = c("overlap", "nominal"),
@@ -1619,6 +1755,29 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
     inherits(data, "magmaan_mixed_ordinal_data")
+
+  if (!is.null(cluster)) {
+    if (!identical(estimator, "ML")) {
+      stop("magmaan(): two-level (cluster = ) fits are normal-theory ML only in ",
+           "v1; set estimator = 'ML'")
+    }
+    if (ordinal_requested) {
+      stop("magmaan(): two-level (cluster = ) does not support ordinal data in v1")
+    }
+    if (!bounds_is_none(bounds)) {
+      stop("magmaan(): `bounds` are not supported for two-level (cluster = ) fits")
+    }
+    if (!is.data.frame(data)) {
+      stop("magmaan(): two-level (cluster = ) requires a data.frame `data`")
+    }
+    tl_missing <- if (identical(missing, "pairwise")) {
+      stop("magmaan(): two-level (cluster = ) supports missing = \"listwise\" or ",
+           "\"error\" only")
+    } else missing
+    return(fit_twolevel(spec, data, cluster = cluster, group = group_var,
+                        optimizer = optimizer, control = control,
+                        missing = tl_missing))
+  }
 
   if (identical(estimator, "FIML")) {
     if (!bounds_is_none(bounds)) {

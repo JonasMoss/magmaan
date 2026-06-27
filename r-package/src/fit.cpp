@@ -1958,13 +1958,20 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
 }
 
 // fit_twolevel() — two-level (multilevel) normal-theory ML over clustered raw
-// data. `data` holds the observed columns (named); `cluster_id` is a 0-based
-// cluster index per row. Single group, v1. Returns theta-hat, observed-info SEs,
-// the LRT chi-square (vs the saturated H1), df, and basic diagnostics.
+// data. `data` holds the observed columns (named); `cluster_id` is a (per-row)
+// cluster index; `group_id` (optional) is a per-row 0-based, contiguous group
+// index for multi-group models (NULL ⇒ single group). Returns theta-hat,
+// observed-info SEs, the LRT chi-square (vs the saturated H1), df, a fitted
+// partable, and basic diagnostics.
+//
+// DIRECT-CORE BYPASS (v1 contract): this builds matrix_rep + cluster sample
+// stats + start values and drives estimate::twolevel directly; it does *not*
+// route through api::fit / sem.cpp.
 //
 // [[Rcpp::export]]
 Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
                              Rcpp::IntegerVector cluster_id,
+                             Rcpp::Nullable<Rcpp::IntegerVector> group_id = R_NilValue,
                              Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
                              Rcpp::Nullable<Rcpp::List>   control   = R_NilValue) {
   namespace tl = magmaan::estimate::twolevel;
@@ -1982,6 +1989,16 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
   const magmaan::model::MatrixRep rep = std::move(*rep_or);
   if (rep.ov_names.empty()) Rcpp::stop("magmaan: fit_twolevel(): empty model");
 
+  // v1 (shared observed set): every block — within/between, all groups — carries
+  // the same p observed variables in the same order, so a single column
+  // permutation to the block-0 within order serves every group.
+  for (std::size_t b = 1; b < rep.ov_names.size(); ++b) {
+    if (rep.ov_names[b] != rep.ov_names[0]) {
+      Rcpp::stop("magmaan: fit_twolevel(): v1 requires a shared observed set "
+                 "with identical ordering across level/group blocks");
+    }
+  }
+
   // Order data columns to the within-block observed order (shared variable set).
   const std::vector<int> perm = perm_for_cols(data, rep.ov_names[0], "data");
   const int n = data.nrow();
@@ -1996,15 +2013,80 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
                static_cast<int>(cluster_id.size()), n);
   }
   std::vector<std::int32_t> cid(cluster_id.begin(), cluster_id.end());
+
+  // Per-row group index. NULL ⇒ a single group (all rows). When supplied, the
+  // values are taken as 0-based, contiguous group indices that line up with the
+  // model's per-group level blocks (no first-appearance remap) so the index is
+  // unambiguous and matches lavaan's fixed group ordering.
+  std::vector<int> grow(static_cast<std::size_t>(n), 0);
+  int ng = 1;
+  if (group_id.isNotNull()) {
+    Rcpp::IntegerVector gv(group_id.get());
+    if (gv.size() != n) {
+      Rcpp::stop("magmaan: fit_twolevel(): group_id length (%d) != nrow(data) (%d)",
+                 static_cast<int>(gv.size()), n);
+    }
+    int gmax = -1;
+    for (int r = 0; r < n; ++r) {
+      const int g = gv[r];
+      if (g < 0) Rcpp::stop("magmaan: fit_twolevel(): group_id must be 0-based");
+      grow[static_cast<std::size_t>(r)] = g;
+      if (g > gmax) gmax = g;
+    }
+    ng = gmax + 1;
+    std::vector<char> seen(static_cast<std::size_t>(ng), 0);
+    for (int r = 0; r < n; ++r)
+      seen[static_cast<std::size_t>(grow[static_cast<std::size_t>(r)])] = 1;
+    for (int g = 0; g < ng; ++g)
+      if (!seen[static_cast<std::size_t>(g)])
+        Rcpp::stop("magmaan: fit_twolevel(): group_id has an empty group index %d", g);
+  }
+
   std::vector<std::int32_t> cols(static_cast<std::size_t>(p));
   for (int k = 0; k < p; ++k) cols[static_cast<std::size_t>(k)] = k;
 
-  auto cs_or = magmaan::data::cluster_sample_stats(X, cid, cols, cols);
-  if (!cs_or.has_value()) {
-    Rcpp::stop("magmaan: fit_twolevel(): cluster statistics failed: %s",
-               cs_or.error().detail.c_str());
+  // Build per-group two-level sufficient statistics and stitch them into one
+  // ClusterSampleStats. The per-group sufficient statistics are independent (no
+  // cross-group coupling), so calling the single-group cluster_sample_stats once
+  // per group subset is numerically identical to one multi-group pass.
+  //
+  // TODO(stream-A multi-group core): once data::cluster_sample_stats gains its
+  // group selector (and data_from_cluster accepts multiple groups), replace this
+  // per-group stitch with that single canonical multi-group call. The downstream
+  // estimation (objective/H1/information) already loops over cs.groups, so only
+  // this construction step changes.
+  magmaan::data::ClusterSampleStats cs;
+  cs.within_ov_index = cols;
+  cs.between_ov_index = cols;
+  cs.groups.reserve(static_cast<std::size_t>(ng));
+  for (int g = 0; g < ng; ++g) {
+    std::vector<int> rows;
+    rows.reserve(static_cast<std::size_t>(n));
+    for (int r = 0; r < n; ++r)
+      if (grow[static_cast<std::size_t>(r)] == g) rows.push_back(r);
+    const int ng_rows = static_cast<int>(rows.size());
+    Eigen::MatrixXd Xg(ng_rows, p);
+    std::vector<std::int32_t> cidg(static_cast<std::size_t>(ng_rows));
+    for (int i = 0; i < ng_rows; ++i) {
+      Xg.row(i) = X.row(rows[static_cast<std::size_t>(i)]);
+      cidg[static_cast<std::size_t>(i)] =
+          cid[static_cast<std::size_t>(rows[static_cast<std::size_t>(i)])];
+    }
+    auto cg_or = magmaan::data::cluster_sample_stats(Xg, cidg, cols, cols);
+    if (!cg_or.has_value()) {
+      Rcpp::stop("magmaan: fit_twolevel(): cluster statistics failed: %s",
+                 cg_or.error().detail.c_str());
+    }
+    cs.groups.push_back(std::move(cg_or->groups.front()));
   }
-  const magmaan::data::ClusterSampleStats cs = std::move(*cs_or);
+
+  // Multi-group two-level needs per-group within/between level blocks in the rep.
+  const auto pairs = magmaan::model::level_block_pairs(rep);
+  if (static_cast<int>(pairs.size()) < ng) {
+    Rcpp::stop("magmaan: fit_twolevel(): data has %d group(s) but the model has "
+               "%d level-block group(s); multi-group two-level requires a "
+               "grouped two-level model", ng, static_cast<int>(pairs.size()));
+  }
 
   auto x0_or = tl::twolevel_start_values(pt, rep, cs, starts);
   if (!x0_or.has_value()) stop_fit(x0_or.error());
@@ -2037,23 +2119,58 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
   auto h1_or = tl::twolevel_h1_moments(cs);
   if (h1_or.has_value()) {
     chisq = 2.0 * est.fmin - h1_or->value;
-    const long psat = static_cast<long>(p) * p + 2L * p;  // p(p+1)+p, single group
+    // Saturated free parameters, summed over groups: per group Σ_W and Σ_B are
+    // each unstructured p_g(p_g+1)/2 and μ_B adds p_g, i.e. p_g(p_g+1) + p_g.
+    // df = Σ_g [ p_g(p_g+1) + p_g ] − q.  Single group reduces to p(p+1)+p.
+    long psat = 0;
+    for (const auto& gst : cs.groups) {
+      const long pg = static_cast<long>(gst.p_within);
+      psat += pg * (pg + 1L) + pg;
+    }
     df = static_cast<int>(psat - static_cast<long>(pt.n_free()));
   }
 
   Rcpp::NumericVector theta(est.theta.size());
   for (Eigen::Index k = 0; k < est.theta.size(); ++k) theta[k] = est.theta[k];
 
-  return Rcpp::List::create(
-      Rcpp::_["theta"]      = theta,
-      Rcpp::_["se"]         = se,
-      Rcpp::_["fmin"]       = est.fmin,
-      Rcpp::_["chisq"]      = chisq,
-      Rcpp::_["df"]         = df,
-      Rcpp::_["npar"]       = static_cast<int>(pt.n_free()),
-      Rcpp::_["iterations"] = est.iterations,
-      Rcpp::_["converged"]  =
-          (est.optimizer_status == magmaan::optim::OptimStatus::Converged));
+  // Per-group level-1 sizes (within) and cluster counts (between), for printing.
+  Rcpp::IntegerVector nobs_out(ng), nclusters_out(ng);
+  long ntotal = 0, ncl_total = 0;
+  for (int g = 0; g < ng; ++g) {
+    const auto& gst = cs.groups[static_cast<std::size_t>(g)];
+    nobs_out[g]      = static_cast<int>(gst.n_within);
+    nclusters_out[g] = static_cast<int>(gst.n_clusters);
+    ntotal    += gst.n_within;
+    ncl_total += gst.n_clusters;
+  }
+
+  using magmaan::optim::OptimStatus;
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["converged"]    = (est.optimizer_status == OptimStatus::Converged),
+      Rcpp::_["estimator"]    = "ML",
+      Rcpp::_["fmin"]         = est.fmin,
+      Rcpp::_["iterations"]   = est.iterations,
+      Rcpp::_["f_evals"]      = est.f_evals,
+      Rcpp::_["g_evals"]      = est.g_evals,
+      Rcpp::_["npar"]         = static_cast<int>(pt.n_free()),
+      Rcpp::_["ngroups"]      = ng,
+      Rcpp::_["ntotal"]       = static_cast<int>(ntotal),
+      Rcpp::_["nclusters"]    = static_cast<int>(ncl_total),
+      Rcpp::_["group_var"]    = names.group_var,
+      Rcpp::_["group_labels"] = Rcpp::wrap(names.group_labels),
+      Rcpp::_["theta"]        = theta,
+      Rcpp::_["se"]           = se,
+      Rcpp::_["ov_names"]     = Rcpp::wrap(rep.ov_names[0]),
+      Rcpp::_["partable"]     = partable_df(pt, names, est, &starts),
+      Rcpp::_["nobs"]         = nobs_out,
+      Rcpp::_["nclusters_by_group"] = nclusters_out,
+      Rcpp::_["meanstructure"] = true);
+  out["chisq"] = chisq;
+  out["df"]    = df;
+  out["level"] = 2;
+  out["optimizer_status"] = optim_status_to_r(est.optimizer_status);
+  out["grad_norm"]        = est.grad_inf_norm;
+  return out;
 }
 
 // fit_ml_fisher() — normal-theory ML via local Fisher scoring. This path uses
