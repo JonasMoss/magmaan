@@ -262,8 +262,9 @@
 # Is this a FIML / missing-data fit? FIML fits carry $fiml = TRUE, estimator
 # "FIML", and a `magmaan_fiml_data` raw object.
 .fmg_is_fiml <- function(fit) {
-  isTRUE(fit$fiml) || identical(.fmg_fit_estimator(fit), "FIML") ||
-    inherits(fit$raw_data, "magmaan_fiml_data")
+  !.fmg_is_ml2s(fit) &&
+    (isTRUE(fit$fiml) || identical(.fmg_fit_estimator(fit), "FIML") ||
+       inherits(fit$raw_data, "magmaan_fiml_data"))
 }
 
 .fmg_default_tests_fiml <- function() {
@@ -349,7 +350,7 @@
 # so the complete-data RLS base (`_rls`) is rejected.
 
 .fmg_is_ml2s <- function(fit) {
-  identical(.fmg_fit_estimator(fit), "ML2S")
+  grepl("^ML2S(_|$)", .fmg_fit_estimator(fit))
 }
 
 .fmg_default_tests_ml2s <- function() {
