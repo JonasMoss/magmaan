@@ -1450,8 +1450,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_ml2s_lr_test_satorra2000
-Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string gamma, std::string a_method, double h_step, std::string ud_method);
-RcppExport SEXP _magmaan_infer_ml2s_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP h_stepSEXP, SEXP ud_methodSEXP) {
+Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string gamma, std::string a_method, double h_step, std::string ud_method, std::string stage2_weight, double dls_a);
+RcppExport SEXP _magmaan_infer_ml2s_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP h_stepSEXP, SEXP ud_methodSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1461,7 +1461,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type a_method(a_methodSEXP);
     Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
     Rcpp::traits::input_parameter< std::string >::type ud_method(ud_methodSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_ml2s_lr_test_satorra2000(fit_H1, fit_H0, gamma, a_method, h_step, ud_method));
+    Rcpp::traits::input_parameter< std::string >::type stage2_weight(stage2_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ml2s_lr_test_satorra2000(fit_H1, fit_H0, gamma, a_method, h_step, ud_method, stage2_weight, dls_a));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2967,7 +2969,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 6},
-    {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 6},
+    {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 8},
     {"_magmaan_infer_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ordinal_lr_test_satorra2000, 9},
     {"_magmaan_infer_mixed_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_mixed_ordinal_lr_test_satorra2000, 9},
     {"_magmaan_infer_fiml_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra_bentler2001, 3},

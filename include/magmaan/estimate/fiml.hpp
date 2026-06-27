@@ -430,13 +430,14 @@ two_stage_saturated_gamma_influence(const RawData& raw, std::size_t block,
 // Γ_NT = blockdiag(Σ, gamma_nt(Σ)) and the missingness-aware Stage-1 ACOV
 // Γ_FIML = n·acov (the `se_weighted=false` convention of `two_stage_gamma_from_acov`):
 //   Nt   → V = Γ_NT⁻¹             (normal-theory; lavaan robust.two.stage default)
+//   Uls  → V = I                  (unweighted EM moment quadratic)
 //   Dwls → V = diag(Γ_FIML)⁻¹     (missingness-aware diagonal; the polychoric analog)
 //   Adf  → V = Γ_FIML⁻¹           (full optimal / asymptotically distribution-free)
 //   Dls  → V = ((1-a)Γ_NT + a Γ_FIML)⁻¹  (Browne mix over the full block; a=0≡Nt, a=1≡Adf)
 // NT weighting is blind to the missingness pattern that governs Γ_FIML; it is
 // only licensed when Γ_FIML ≈ Γ_NT (complete, near-normal data). The non-NT
 // members are frontier research surface; Nt is the lavaan-parity default.
-enum class TwoStageWeight { Nt, Dwls, Adf, Dls };
+enum class TwoStageWeight { Nt, Uls, Dwls, Adf, Dls };
 
 struct TwoStageDlsOptions {
   double a = 0.5;  // DLS mixing scalar in [0, 1]; ignored unless kind == Dls.
