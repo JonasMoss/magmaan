@@ -31,7 +31,8 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   exposed `delta` / `WLS.V` / `gamma` matrices give a scale near lavaan's
   reported `lavTestLRT(method = "satorra.2000", A.method = "exact")` value.
   `docs/research/notes/nested-fiml-satorra2000-eta.tex` derives the eta-space
-  restriction-map law under the ordinary true nested null; the broader
+  restriction-map law under the ordinary true nested null. This is the
+  data-robust, not structural-misspecification-robust, target; the broader
   misspecified nested profile-Hessian law is still a separate research target.
   Do not replace the eta-space FMG route by default without a calibration
   decision. If lavaan-compatible missing-data nested tests are needed, expose a
