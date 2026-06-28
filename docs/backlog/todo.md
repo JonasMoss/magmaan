@@ -17,6 +17,22 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
+- **M/L — FIML/ML2S missing-data Satorra-2000 nested parity.** The complete-data
+  restriction-map route matches lavaan, but the missing-data FIML/ML2S route is
+  red under missingness (documented in
+  [docs/validation/satorra2000_parity.md](../validation/satorra2000_parity.md)).
+  The unscaled difference and per-model FIML MLR scaling match lavaan; the
+  divergence is the nested difference scaling. Current C++ computes the
+  missing-data spectrum in saturated EM eta space with
+  `V = SaturatedMoments::H` and `Gamma = SaturatedMoments::acov`; reconstructing
+  the equation with those matrices reproduces magmaan's scale, while lavaan's
+  exposed `delta` / `WLS.V` / `gamma` matrices give a scale near lavaan's
+  reported `lavTestLRT(method = "satorra.2000", A.method = "exact")` value.
+  Decide whether to split the current first-principles eta-space FMG route from
+  a lavaan-compatible nested-test route, then implement the lavaan-compatible
+  missing-data `V/Gamma` convention or clear the oracle-defect bar before using
+  the current result as a parity baseline.
+
 - **M — automatic robust fit-measure dispatch.** The lavaan-style robust/scaled
   fit-measure formulas are available for the core global-index family
   (`chisq.scaled`, scaled baseline, CFI/TLI, RMSEA CI/p-values) once the user
