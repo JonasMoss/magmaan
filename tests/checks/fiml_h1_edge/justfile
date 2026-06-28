@@ -1,0 +1,10 @@
+set shell := ["bash", "-uc"]
+
+default:
+    @just --list
+
+quick:
+    Rscript fiml_h1_edge.R --cases=400:0.30:1000008,200:0.50:1000008,120:0.60:1000008
+
+harsh:
+    Rscript fiml_h1_edge.R --cases=80:0.70:1000008

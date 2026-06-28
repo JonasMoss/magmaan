@@ -972,6 +972,16 @@ inline bool saturated_from_list(Rcpp::List st,
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
   }
   out.acov = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["acov"]));
+  out.warnings.clear();
+  if (st.containsElementNamed("warnings") && !Rf_isNull(st["warnings"])) {
+    Rcpp::CharacterVector warnings(st["warnings"]);
+    for (R_xlen_t i = 0; i < warnings.size(); ++i) {
+      SEXP warning = warnings[i];
+      if (warning != NA_STRING) {
+        out.warnings.push_back(Rcpp::as<std::string>(warning));
+      }
+    }
+  }
   if (st.containsElementNamed("H") && !Rf_isNull(st["H"]))
     out.H = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["H"]));
   if (st.containsElementNamed("J") && !Rf_isNull(st["J"]))

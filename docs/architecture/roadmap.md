@@ -463,6 +463,10 @@ golden `parTable()` fixtures.
   `FIMLPack` (immutable pattern cache + pairwise-complete start statistics,
   built by `fiml_pack`) and `FIMLH1` (per-block saturated EM moments plus the
   converged H1 objective value, built by one EM run in `fiml_h1_moments`).
+  The H1 EM follows lavaan's edge-case policy in spirit: near-singular EM
+  covariance updates are diagonally floored, an iteration-cap hit returns the
+  last finite iterate, and `FIMLH1::warnings` records the condition rather than
+  turning a usable H1 fit into a hard error.
   Every post-fit helper (`fiml_extras`, `fiml_observed_information`,
   `fiml_robust_mlr`, `saturated_em_moments`, `fiml_eta_jacobian`,
   `fiml_ugamma_spectrum`, `fiml_baseline_chi2`), the FIML score/MI helpers
@@ -487,6 +491,13 @@ golden `parTable()` fixtures.
 - Post-fit FIML extras include observed-data normal constants, saturated/H1
   likelihood, baseline/independence likelihood accounting, chi-square,
   information criteria, and fit-index inputs for the current fixture tranche.
+- `SaturatedMoments` carries propagated H1 warnings plus warnings from the
+  saturated information repair. The saturated information matrix is symmetrized
+  and diagonally floored only when needed before forming `H^-1 J H^-1`; routine
+  well-conditioned cases are unchanged, while high-dimensional sparse-missing
+  cases now return a diagnostic Stage-1 object instead of aborting on a singular
+  495x495 H1 information matrix. The advisory stress harness is
+  `tests/checks/fiml_h1_edge`.
 - Two-stage EM ML (`ML2S`) is a packaged missing-data estimator path alongside
   direct FIML. Stage 1 fits the saturated EM mean/covariance model and exposes
   `(H, J, ACOV)` plus casewise saturated-moment influence rows through
