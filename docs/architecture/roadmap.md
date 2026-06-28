@@ -645,12 +645,12 @@ golden `parTable()` fixtures.
   `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
   table.
-  Open validation caveat (2026-06-28): this eta-space FIML/ML2S missing-data
-  route is not lavaan-compatible for `lavTestLRT(method = "satorra.2000")`
-  under missingness, even though complete-data Satorra-2000 and per-model FIML
-  MLR scaling match. See `docs/validation/satorra2000_parity.md` and the
-  backlog item before using missing-data nested Satorra-2000 as a lavaan parity
-  baseline.
+  Convention caveat (2026-06-28): this eta-space FIML/ML2S missing-data route is
+  the robust method under study, not a lavaan-compatible
+  `lavTestLRT(method = "satorra.2000")` baseline under missingness. Complete-data
+  Satorra-2000 and per-model FIML MLR scaling still match lavaan. See
+  `docs/validation/satorra2000_parity.md` and the backlog item before comparing
+  missing-data nested Satorra-2000 numbers to lavaan.
 - **Method-2001 difference spectrum (`U_D = U0 - U1`) for FIML/ML2S.** Alongside
   the Satorra-2000 restriction map ("method 2000", `U_D` from the H1 fit),
   `robust_nested_lrt()` / `nestedTest(ud_method = "2001")` builds the
