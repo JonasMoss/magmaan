@@ -50,6 +50,9 @@ magmaan,
 are plug-in estimates of the curvature and first-stage sandwich covariance.
 The estimated curvature or two-stage weight does not add a first-order term at
 this null, because both fitted residuals are \(\Op(N^{-1/2})\).
+Thus ``robust'' here means robust to the data distribution and missing-data
+first-stage covariance under the true nested null; it does not mean robust to
+structural misspecification of the larger model.
 
 The same derivation does not prove the statistic for the broader null in which
 the nested restriction holds only at the pseudo-true point while the larger
@@ -285,7 +288,10 @@ The derivation above assumes the smaller model contains the first-stage target:
 \]
 This is the usual calibration null for a nested difference test and the regime
 in which size is defined when the data-generating model satisfies the smaller
-model.
+model. It is data-robust in the Satorra--Bentler/Yuan--Bentler sense: the
+sandwich covariance may differ from the normal-theory covariance because the
+observed data are nonnormal or incomplete, but the model restriction being
+tested is still evaluated under a correctly specified smaller model.
 
 A different null is possible: the larger and smaller profiled criteria have the
 same pseudo-true optimum because the restriction is true inside a misspecified

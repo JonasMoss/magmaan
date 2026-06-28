@@ -202,8 +202,9 @@ it uses the saturated EM eta-space sandwich, not lavaan's missing-data
 under the ordinary nested null, where the smaller model contains the saturated
 FIML/ML2S eta target, the Satorra restriction-map law follows with
 `V = SaturatedMoments::H` and `Gamma = SaturatedMoments::acov`; the full
-misspecified nested profile-Hessian law remains a separate problem. A local
-probe using the
+misspecified nested profile-Hessian law remains a separate problem. In this
+route, robust means data-distribution robust under the true nested null, not
+structural-misspecification robust. A local probe using the
 experiment-25 two-group one-factor invariance population (`n = 200 + 200`,
 seed `20260616`, weak/configural-to-metric step, `A.method = "exact"`) shows:
 
@@ -232,7 +233,7 @@ far from magmaan's current value.
 
 This is not, by itself, evidence that the magmaan route is wrong; it is evidence
 that the current route is **not a lavaan-compatible missing-data nested-test
-baseline**. Treat it as magmaan's eta-space robust nested-null route. If a
+baseline**. Treat it as magmaan's eta-space data-robust nested-null route. If a
 lavaan-compatible missing-data Satorra-2000 statistic is needed, it should be
 exposed as a separate compatibility route or option rather than replacing the
 eta-space FMG route without a calibration decision.

@@ -649,8 +649,9 @@ golden `parTable()` fixtures.
   magmaan's robust nested-null route, not a lavaan-compatible
   `lavTestLRT(method = "satorra.2000")` baseline under missingness. Its local
   derivation for the ordinary true nested null is in
-  `docs/research/notes/nested-fiml-satorra2000-eta.tex`; the misspecified
-  nested profile-Hessian law remains separate. Complete-data Satorra-2000 and
+  `docs/research/notes/nested-fiml-satorra2000-eta.tex`; this is data-robust,
+  not structural-misspecification-robust, and the misspecified nested
+  profile-Hessian law remains separate. Complete-data Satorra-2000 and
   per-model FIML MLR scaling still match lavaan. See
   `docs/validation/satorra2000_parity.md` and the backlog item before comparing
   missing-data nested Satorra-2000 numbers to lavaan.
