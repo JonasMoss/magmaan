@@ -646,9 +646,12 @@ golden `parTable()` fixtures.
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
   table.
   Convention caveat (2026-06-28): this eta-space FIML/ML2S missing-data route is
-  the robust method under study, not a lavaan-compatible
-  `lavTestLRT(method = "satorra.2000")` baseline under missingness. Complete-data
-  Satorra-2000 and per-model FIML MLR scaling still match lavaan. See
+  magmaan's robust nested-null route, not a lavaan-compatible
+  `lavTestLRT(method = "satorra.2000")` baseline under missingness. Its local
+  derivation for the ordinary true nested null is in
+  `docs/research/notes/nested-fiml-satorra2000-eta.tex`; the misspecified
+  nested profile-Hessian law remains separate. Complete-data Satorra-2000 and
+  per-model FIML MLR scaling still match lavaan. See
   `docs/validation/satorra2000_parity.md` and the backlog item before comparing
   missing-data nested Satorra-2000 numbers to lavaan.
 - **Method-2001 difference spectrum (`U_D = U0 - U1`) for FIML/ML2S.** Alongside

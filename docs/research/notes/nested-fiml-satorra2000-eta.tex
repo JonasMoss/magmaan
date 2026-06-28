@@ -1,0 +1,369 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Nested FIML Satorra--2000 in Saturated Eta Space}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\eig}{\operatorname{eig}}
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\op}{o_p}
+\newcommand{\Op}{O_p}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The question is whether magmaan's missing-data nested
+\texttt{method = "restriction\_map"} statistic has an analytical target, or
+whether it is only a diagnostic convention. The answer is conditional.
+
+Under the ordinary nested null, where the smaller model is correct in the
+saturated first-stage eta target, the eta-space statistic is the standard local
+Satorra restricted-test derivation with the complete-data sample moments
+replaced by the saturated FIML eta estimator. The finite-sample objects used by
+magmaan,
+\[
+  V=\widehat H_\eta,\qquad
+  \widehat\Gamma_{\mathrm{mis}}
+  =\widehat H_\eta^{-1}\widehat J_\eta\widehat H_\eta^{-1},
+\]
+are plug-in estimates of the curvature and first-stage sandwich covariance.
+The estimated curvature or two-stage weight does not add a first-order term at
+this null, because both fitted residuals are \(\Op(N^{-1/2})\).
+
+The same derivation does not prove the statistic for the broader null in which
+the nested restriction holds only at the pseudo-true point while the larger
+model remains misspecified. In that regime the residual is nonzero, and the
+limiting law is the Hessian of the two profiled discrepancies, including
+curvature and estimated-weight derivative channels.
+
+\section{Generic eta-space nested result}
+\label{sec:generic}
+
+Let \(\hat\eta\) be a first-stage estimator of a saturated moment vector
+\(\eta_0\), with
+\[
+  Z_N=\sqrt N(\hat\eta-\eta_0)
+  \Rightarrow Z,\qquad Z\sim N(0,\Gamma).
+\]
+Let the larger model \(M_1\) contain \(\eta_0\) and have local coordinates
+\(\alpha\in\mathbb R^r\),
+\[
+  \eta_1(\alpha_N)
+  =\eta_0+N^{-1/2}\Delta\alpha+\op(N^{-1/2}),
+  \qquad \Delta\in\mathbb R^{q\times r}.
+\]
+The smaller model \(M_0\subset M_1\) is represented locally by
+\[
+  R\alpha=0,\qquad R\in\mathbb R^{m\times r},\qquad \rank(R)=m.
+\]
+Assume the local contrast for model \(M\) has the quadratic representation
+\[
+  T_M
+  =
+  \min_t (Z_N-\Delta_M t)\T V(Z_N-\Delta_M t)+\op(1),
+  \label{eq:local-contrast}
+\]
+where \(V\) is symmetric positive definite and \(\Delta_M\) is the local tangent
+matrix for model \(M\). For the larger model write
+\[
+  A=\Delta\T V\Delta,\qquad
+  B=\Delta\T V\Gamma V\Delta.
+\]
+
+\begin{proposition}[Nested eta-space restriction map]
+\label{prop:restriction}
+Under the assumptions above,
+\[
+  T_0-T_1
+  \Rightarrow
+  (R\hat\alpha)\T C^{-1}(R\hat\alpha),
+  \qquad
+  \hat\alpha=A^{-1}\Delta\T VZ,
+  \qquad
+  C=RA^{-1}R\T.
+  \label{eq:wald-form}
+\]
+Equivalently,
+\[
+  T_0-T_1
+  \Rightarrow
+  \sum_{j=1}^m\lambda_j\chi^2_{1j},
+  \qquad
+  \lambda_j
+  =
+  \eig_j(C^{-1}S),
+  \label{eq:spectrum}
+\]
+where
+\[
+  S=RA^{-1}BA^{-1}R\T .
+\]
+\end{proposition}
+
+\begin{proof}
+The unconstrained minimizer in the larger tangent space is
+\[
+  \hat\alpha_N
+  =
+  A^{-1}\Delta\T VZ_N+\op(1).
+\]
+The smaller model minimizes the same quadratic subject to \(R\alpha=0\). The
+ordinary equality-constrained quadratic-program identity gives
+\[
+  T_0-T_1
+  =
+  (R\hat\alpha_N)\T(RA^{-1}R\T)^{-1}(R\hat\alpha_N)+\op(1).
+\]
+Since
+\[
+  \hat\alpha_N\Rightarrow A^{-1}\Delta\T VZ,\qquad
+  \Var(\hat\alpha)=A^{-1}BA^{-1},
+\]
+the covariance of \(R\hat\alpha\) is \(S\). The quadratic form
+\((R\hat\alpha)\T C^{-1}(R\hat\alpha)\) therefore has the weighted chi-square
+law in \eqref{eq:spectrum}, by simultaneous whitening of the pair \((C,S)\).
+\end{proof}
+
+\begin{corollary}[Normal-theory collapse]
+\label{cor:nt}
+If \(\Gamma=V^{-1}\), then \(B=A\), \(S=C\), and every nonzero eigenvalue in
+\eqref{eq:spectrum} is one. Hence \(T_0-T_1\Rightarrow\chi^2_m\).
+\end{corollary}
+
+\begin{proof}
+Substitution gives \(B=\Delta\T VV^{-1}V\Delta=A\), so
+\[
+  S=RA^{-1}AA^{-1}R\T=RA^{-1}R\T=C.
+\]
+\end{proof}
+
+\section{FIML specialization}
+\label{sec:fiml}
+
+For raw incomplete continuous data, the saturated observed-data normal H1 model
+has eta vector
+\[
+  \eta=(\mu,\vech\Sigma)
+\]
+per independent group or block. Let \(\hat\eta\) be the saturated EM/FIML
+estimator. With observed-data normal log likelihood \(\ell_i(\eta)\), define
+\[
+  H_\eta
+  =
+  -\E\left\{\frac{\partial^2\ell_i(\eta_0)}
+                  {\partial\eta\,\partial\eta\T}\right\},
+  \qquad
+  J_\eta
+  =
+  \E\left[
+    \frac{\partial\ell_i(\eta_0)}{\partial\eta}
+    \frac{\partial\ell_i(\eta_0)}{\partial\eta\T}
+  \right].
+\]
+The first-stage sandwich covariance is
+\[
+  \Gamma_{\mathrm{mis}}=H_\eta^{-1}J_\eta H_\eta^{-1}.
+\]
+The saturated likelihood expansion around \(\hat\eta\) gives, for local
+\(\eta=\eta_0+N^{-1/2}h\),
+\[
+  2\{\ell_N(\hat\eta)-\ell_N(\eta)\}
+  =
+  (Z_N-h)\T H_\eta (Z_N-h)+\op(1),
+  \label{eq:fiml-local}
+\]
+so \eqref{eq:local-contrast} holds with \(V=H_\eta\) and
+\(\Gamma=\Gamma_{\mathrm{mis}}\). If the larger SEM has local Jacobian
+\[
+  \Delta_1=\frac{\partial\eta_1(\theta)}{\partial\alpha\T}
+\]
+after equality-constraint tangent projection, and the smaller SEM is the local
+restriction \(R\alpha=0\), Proposition~\ref{prop:restriction} gives
+\[
+  A_1=\Delta_1\T H_\eta\Delta_1,
+  \qquad
+  B_1=\Delta_1\T H_\eta\Gamma_{\mathrm{mis}}H_\eta\Delta_1,
+\]
+\[
+  C=RA_1^{-1}R\T,
+  \qquad
+  S=RA_1^{-1}B_1A_1^{-1}R\T,
+\]
+and the Satorra--2000 mean scaling
+\[
+  \hat c=\frac{1}{m}\tr(C^{-1}S).
+\]
+
+This is exactly the route implemented by magmaan's FIML nested restriction map:
+the code constructs \(V\) from saturated EM information, uses
+\(\widehat\Gamma_{\mathrm{mis}}\) from saturated score meat, builds
+\(\Delta_1\) in the same eta layout, obtains \(R\) from the H1-to-H0 local
+restriction, and solves the generalized eigenproblem for the pair \((S,C)\).
+
+\section{Why the estimated metric does not enter at this null}
+\label{sec:estimated}
+
+The FIML implementation uses finite-sample plug-in matrices, not fixed
+population matrices. This does not change the first-order nested null law.
+Let \(\hat V=V+\op(1)\), and let \(r_M(\hat\theta_M)\) be the fitted eta-space
+residual for \(M\). If \(M_0\) is true in the saturated eta target, both
+\[
+  r_0(\hat\theta_0)=\Op(N^{-1/2}),\qquad
+  r_1(\hat\theta_1)=\Op(N^{-1/2}).
+\]
+Therefore
+\[
+  N r_M(\hat\theta_M)\T(\hat V-V)r_M(\hat\theta_M)
+  =
+  \op(1).
+\]
+The same argument covers a smooth two-stage weight \(\hat W=W+\op(1)\) under
+ML2S. Weight-estimation derivative terms are multiplied by the pseudo-true
+residual. At the true nested null that residual is zero, so they vanish from
+the first-order reference law.
+
+The finite-sample scaling convention also cancels in the generalized
+eigenproblem. magmaan stores the saturated information in summed
+log-likelihood units, \(V_N\approx N V\), and the sandwich covariance in
+\(1/N\) units, \(\Gamma_N\approx \Gamma/N\). Then
+\[
+  A_{1,N}=N A_1,\qquad B_{1,N}=N B_1,\qquad
+  C_N=N^{-1}C,\qquad S_N=N^{-1}S,
+\]
+so the eigenvalues of \((S_N,C_N)\) equal those of \((S,C)\).
+
+\section{ML2S specialization}
+\label{sec:ml2s}
+
+ML2S uses the same first-stage saturated EM estimator \(\hat\eta\), then fits
+the structural model by a moment-quadratic criterion with a stage-two weight
+\(W\). If \(W\) is treated as the local metric in
+\eqref{eq:local-contrast}, Proposition~\ref{prop:restriction} applies with
+\[
+  A_1=\Delta_1\T W\Delta_1,
+  \qquad
+  B_1=\Delta_1\T W\Gamma_{\mathrm{mis}}W\Delta_1.
+\]
+For the normal-theory two-stage weight \(W=\Gamma_{\mathrm{NT}}^{-1}\) and
+normal complete-data first-stage law, Corollary~\ref{cor:nt} again yields
+unit eigenvalues. For empirical robust ML2S, \(\Gamma_{\mathrm{mis}}\) is the
+saturated EM sandwich and the eigenvalues are the robust nested reference
+spectrum.
+
+When the stage-two weight is estimated from the same first-stage eta, its
+derivative is still asymptotically irrelevant at the true nested null by the
+argument in Section~\ref{sec:estimated}. It is not irrelevant when the nested
+restriction is tested inside a misspecified larger model.
+
+\section{Boundary of the derivation}
+\label{sec:boundary}
+
+The derivation above assumes the smaller model contains the first-stage target:
+\[
+  \eta_0\in M_0\subset M_1.
+\]
+This is the usual calibration null for a nested difference test and the regime
+in which size is defined when the data-generating model satisfies the smaller
+model.
+
+A different null is possible: the larger and smaller profiled criteria have the
+same pseudo-true optimum because the restriction is true inside a misspecified
+larger model, but the common fitted residual \(r_*\) is nonzero. Then the first
+derivative of the profiled difference still cancels, but the second derivative
+is not the residual-projector covariance above. It is the profile Hessian
+difference
+\[
+  Z\T(Q_0-Q_1)Z,
+\]
+where \(Q_M\) contains both model curvature terms and, when the metric is
+estimated, derivatives of the metric map. This is the regime isolated in the
+relative-fit and nested-profile note. The eta-space restriction map is recovered
+from that profile-Hessian law only in special cases: fixed metric, zero
+pseudo-true residual, or cancellations that make the profile Hessian equal the
+ordinary Satorra projector.
+
+\section{Implications for the lavaan parity gap}
+\label{sec:parity}
+
+The missing-data divergence from
+\texttt{lavTestLRT(method = "satorra.2000")} is therefore not, by itself, an
+oracle defect or a magmaan defect. It says that lavaan and magmaan are using
+different missing-data conventions for the difference-test scaling quantity.
+The eta-space route has a first-principles null derivation for saturated FIML
+and ML2S under the true nested null. It is the robust method under study.
+
+Two additional claims would require separate work.
+\begin{enumerate}
+\item Lavaan compatibility: derive and expose lavaan's missing-data finite-sample
+  convention as a separate route, then gate that route against lavaan.
+\item Misspecified nested robustness: implement or approximate the full
+  profile-Hessian law for \(r_*\neq0\), including estimated-metric derivative
+  terms, then calibrate it by simulation.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem{satorra1989}
+Satorra, A. (1989).
+Alternative test criteria in covariance structure analysis: A unified approach.
+\emph{Psychometrika}, 54(1), 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{satorra2000}
+Satorra, A. (2000).
+Scaled and adjusted restricted tests in multi-sample analysis of moment
+structures. In R. D. H. Heijmans, D. S. G. Pollock, \& A. Satorra (Eds.),
+\emph{Innovations in Multivariate Statistical Analysis} (pp. 233--247).
+Kluwer.
+\href{https://doi.org/10.1007/978-1-4615-4603-0_17}{doi:10.1007/978-1-4615-4603-0\_17}.
+
+\bibitem{satorrabentler2001}
+Satorra, A., \& Bentler, P. M. (2001).
+A scaled difference chi-square test statistic for moment structure analysis.
+\emph{Psychometrika}, 66(4), 507--514.
+\href{https://doi.org/10.1007/BF02296192}{doi:10.1007/BF02296192}.
+
+\bibitem{savaleibentler2009}
+Savalei, V., \& Bentler, P. M. (2009).
+A two-stage approach to missing data: Theory and application to auxiliary
+variables.
+\emph{Structural Equation Modeling}, 16(3), 477--497.
+\href{https://doi.org/10.1080/10705510903008238}{doi:10.1080/10705510903008238}.
+
+\bibitem{white1982}
+White, H. (1982).
+Maximum likelihood estimation of misspecified models.
+\emph{Econometrica}, 50(1), 1--25.
+\href{https://doi.org/10.2307/1912526}{doi:10.2307/1912526}.
+
+\bibitem{yuanbentler2000}
+Yuan, K.-H., \& Bentler, P. M. (2000).
+Three likelihood-based methods for mean and covariance structure analysis with
+nonnormal missing data.
+\emph{Sociological Methodology}, 30, 165--200.
+\href{https://doi.org/10.1111/0081-1750.00078}{doi:10.1111/0081-1750.00078}.
+
+\end{thebibliography}
+
+\end{document}
