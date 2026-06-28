@@ -74,6 +74,7 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   fit$stage2_dls_a <- dls_a
   fit$stage1 <- list(
     mean = em$mean, cov = em$cov, n_obs = em$n_obs,
+    warnings = em$warnings,
     H = em$H, J = em$J, acov = em$acov)
   fit$raw_data <- raw_data
   if (identical(kind, "ml")) {

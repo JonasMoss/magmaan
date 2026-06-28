@@ -1485,6 +1485,15 @@ work lives in [`speculative.md`](speculative.md). Open work:
   `experiments/24-fiml-twostage-fmg-chisq`; unit gate:
   `two_stage_em_ml_inference` self-consistency in `tests/unit/fiml_test.cpp` and
   the `ml2s_*` rows of `tests/golden/fiml_golden_test.cpp`.
+  - **Done 2026-06-28 — lavaan-like H1 edge behavior.** The saturated H1 EM now
+    keeps the EM path but treats near-singular covariance updates and iteration
+    caps as diagnostic conditions: covariance updates are diagonally floored,
+    cap hits return the last iterate, and `FIMLH1`/`SaturatedMoments` carry
+    warnings. The saturated information matrix used for Stage-1 ACOV is
+    symmetrized and floored only when needed before inversion, preventing
+    high-dimensional sparse-missing p30 cases from aborting on a singular H1
+    information matrix. The non-routine lavaan comparison/stress harness lives
+    in `tests/checks/fiml_h1_edge`.
   - **Structured/unstructured weight axis carries to ML2S (resolved 2026-06-17).**
     The Satorra-Bentler U-metric weight choice - `WeightMoments::Structured`
     (model-implied Σ̂(θ̂)) vs `Unstructured` (sample/saturated h1, =

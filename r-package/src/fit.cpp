@@ -2796,6 +2796,7 @@ Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step = 1e-4) {
       Rcpp::Named("mean") = mean_out,
       Rcpp::Named("cov")  = cov_out,
       Rcpp::Named("n_obs") = nobs,
+      Rcpp::Named("warnings") = Rcpp::wrap(out.warnings),
       Rcpp::Named("H")    = Rcpp::wrap(out.H),
       Rcpp::Named("J")    = Rcpp::wrap(out.J),
       Rcpp::Named("acov") = Rcpp::wrap(out.acov));

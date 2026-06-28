@@ -6,8 +6,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iomanip>
 #include <limits>
 #include <map>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -73,6 +75,44 @@ using detail::vech_lower;
 using detail::vech_unpack;
 
 constexpr double two_pi = 6.283185307179586476925286766559;
+constexpr int h1_em_max_iter = 10000;
+constexpr double h1_em_tol = 1e-11;
+constexpr double h1_em_cov_floor = 1e-6;
+constexpr double h1_em_cov_warn = 1e-5;
+constexpr double saturated_info_rel_floor = 1e-10;
+
+struct SymmetricFloorReport {
+  bool applied = false;
+  double ridge = 0.0;
+  double min_eigen_before = std::numeric_limits<double>::quiet_NaN();
+  double min_eigen_after = std::numeric_limits<double>::quiet_NaN();
+};
+
+struct H1EMStep {
+  double value = 0.0;
+  SymmetricFloorReport sigma_repair;
+};
+
+struct H1EMResult {
+  double value = 0.0;
+  int iterations = 0;
+  bool converged = false;
+  int covariance_repairs = 0;
+  double max_covariance_ridge = 0.0;
+  double min_covariance_eigen = std::numeric_limits<double>::infinity();
+};
+
+void add_unique_warning(std::vector<std::string>& warnings, std::string warning) {
+  if (std::find(warnings.begin(), warnings.end(), warning) == warnings.end()) {
+    warnings.push_back(std::move(warning));
+  }
+}
+
+std::string fmt_sci(double value) {
+  std::ostringstream os;
+  os << std::scientific << std::setprecision(6) << value;
+  return os.str();
+}
 
 bool finite_observed_row(const Eigen::MatrixXd& X,
                          const std::vector<Eigen::Index>& obs,
@@ -138,6 +178,95 @@ double log_det_from_llt(const Eigen::LLT<Eigen::MatrixXd>& llt) {
   const auto L = llt.matrixL();
   for (Eigen::Index i = 0; i < L.rows(); ++i) out += std::log(L(i, i));
   return 2.0 * out;
+}
+
+double symmetric_scale(const Eigen::MatrixXd& S) {
+  if (S.size() == 0) return 1.0;
+  double scale = S.cwiseAbs().maxCoeff();
+  if (!std::isfinite(scale) || scale <= 0.0) scale = 1.0;
+  return std::max(1.0, scale);
+}
+
+fit_expected<SymmetricFloorReport>
+floor_symmetric_fit(Eigen::MatrixXd& S,
+                    double absolute_floor,
+                    double relative_floor,
+                    const char* what) {
+  if (S.rows() != S.cols()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        std::string(what) + " is not square"));
+  }
+  S = 0.5 * (S + S.transpose()).eval();
+  if (!S.allFinite()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        std::string(what) + " contains non-finite values"));
+  }
+  SymmetricFloorReport report;
+  const Eigen::Index q = S.rows();
+  if (q == 0) {
+    report.min_eigen_before = 0.0;
+    report.min_eigen_after = 0.0;
+    return report;
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(S, Eigen::EigenvaluesOnly);
+  if (eig.info() != Eigen::Success) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        std::string(what) + " eigen decomposition failed"));
+  }
+  report.min_eigen_before = eig.eigenvalues().minCoeff();
+  const double floor =
+      std::max(absolute_floor, relative_floor * symmetric_scale(S));
+  if (report.min_eigen_before < floor) {
+    report.applied = true;
+    report.ridge = floor - report.min_eigen_before;
+    S.diagonal().array() += report.ridge;
+    S = 0.5 * (S + S.transpose()).eval();
+    report.min_eigen_after = report.min_eigen_before + report.ridge;
+  } else {
+    report.min_eigen_after = report.min_eigen_before;
+  }
+  return report;
+}
+
+post_expected<SymmetricFloorReport>
+floor_symmetric_post(Eigen::MatrixXd& S,
+                     double absolute_floor,
+                     double relative_floor,
+                     std::string what) {
+  if (S.rows() != S.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  S = 0.5 * (S + S.transpose()).eval();
+  if (!S.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " contains non-finite values"));
+  }
+  SymmetricFloorReport report;
+  const Eigen::Index q = S.rows();
+  if (q == 0) {
+    report.min_eigen_before = 0.0;
+    report.min_eigen_after = 0.0;
+    return report;
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(S, Eigen::EigenvaluesOnly);
+  if (eig.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " eigen decomposition failed"));
+  }
+  report.min_eigen_before = eig.eigenvalues().minCoeff();
+  const double floor =
+      std::max(absolute_floor, relative_floor * symmetric_scale(S));
+  if (report.min_eigen_before < floor) {
+    report.applied = true;
+    report.ridge = floor - report.min_eigen_before;
+    S.diagonal().array() += report.ridge;
+    S = 0.5 * (S + S.transpose()).eval();
+    report.min_eigen_after = report.min_eigen_before + report.ridge;
+  } else {
+    report.min_eigen_after = report.min_eigen_before;
+  }
+  return report;
 }
 
 std::vector<Eigen::Index>
@@ -354,7 +483,7 @@ Eigen::MatrixXd select_rect(const Eigen::MatrixXd& M,
 // One EM sweep over the block's patterns: returns the H1 objective evaluated
 // at the *input* (mu, Sigma) — sharing each pattern's Cholesky with the
 // E-step — and writes the M-step update into (mu_next, Sigma_next).
-fit_expected<double>
+fit_expected<H1EMStep>
 h1_em_step_block(const FIMLCache& cache,
                  std::size_t block,
                  const Eigen::VectorXd& mu,
@@ -452,14 +581,18 @@ h1_em_step_block(const FIMLCache& cache,
   Sigma_next = sum_xx / static_cast<double>(n_block) -
                mu_next * mu_next.transpose();
   Sigma_next = 0.5 * (Sigma_next + Sigma_next.transpose());
-  return f;
+  auto repair = floor_symmetric_fit(
+      Sigma_next, h1_em_cov_floor, /*relative_floor=*/0.0,
+      "FIML H1 EM covariance update");
+  if (!repair.has_value()) return std::unexpected(repair.error());
+  return H1EMStep{f, *repair};
 }
 
 // Runs the EM iteration for one block. On return (mu, Sigma) hold the
 // converged moments and the returned value is the H1 objective at exactly
 // those moments — the same value/update ordering as the previous two-pass
 // loop, with one Cholesky per pattern per iteration instead of two.
-fit_expected<double>
+fit_expected<H1EMResult>
 h1_em_iterate_block(const FIMLCache& cache,
                     std::size_t block,
                     Eigen::VectorXd& mu,
@@ -468,13 +601,25 @@ h1_em_iterate_block(const FIMLCache& cache,
   Eigen::MatrixXd Sigma_next;
   double prev = std::numeric_limits<double>::infinity();
   double cur = std::numeric_limits<double>::infinity();
-  for (int iter = 0; iter < 10000; ++iter) {
+  H1EMResult result;
+  for (int iter = 0; iter < h1_em_max_iter; ++iter) {
     auto step = h1_em_step_block(cache, block, mu, Sigma, mu_next, Sigma_next);
     if (!step.has_value()) return std::unexpected(step.error());
-    cur = *step;
+    cur = step->value;
+    if (step->sigma_repair.applied) {
+      ++result.covariance_repairs;
+      result.max_covariance_ridge =
+          std::max(result.max_covariance_ridge, step->sigma_repair.ridge);
+    }
+    result.min_covariance_eigen =
+        std::min(result.min_covariance_eigen,
+                 step->sigma_repair.min_eigen_after);
     if (std::isfinite(prev) &&
-        std::abs(prev - cur) <= 1e-11 * (1.0 + std::abs(cur))) {
-      return cur;
+        std::abs(prev - cur) <= h1_em_tol * (1.0 + std::abs(cur))) {
+      result.value = cur;
+      result.iterations = iter + 1;
+      result.converged = true;
+      return result;
     }
     prev = cur;
     mu.swap(mu_next);
@@ -484,7 +629,10 @@ h1_em_iterate_block(const FIMLCache& cache,
   // was evaluated at, so re-evaluate to keep value/moment consistency.
   auto final_val = h1_block_value_from_moments(cache, block, mu, Sigma);
   if (!final_val.has_value()) return std::unexpected(final_val.error());
-  return *final_val;
+  result.value = *final_val;
+  result.iterations = h1_em_max_iter;
+  result.converged = false;
+  return result;
 }
 
 // Light consistency check before indexing a caller-supplied FIMLH1 against a
@@ -2286,9 +2434,31 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack) {
 
     // The converged value is evaluated at the same (mu, Sigma) the iteration
     // returns, so the H1 value and moments stay mutually consistent.
-    auto final_val = h1_em_iterate_block(cache, b, mu, Sigma);
-    if (!final_val.has_value()) return std::unexpected(final_val.error());
-    total += *final_val;
+    auto em_or = h1_em_iterate_block(cache, b, mu, Sigma);
+    if (!em_or.has_value()) return std::unexpected(em_or.error());
+    const H1EMResult& em = *em_or;
+    total += em.value;
+    if (!em.converged) {
+      add_unique_warning(out.warnings,
+          "FIML H1 EM: block " + std::to_string(b + 1) +
+          " reached the iteration cap (" + std::to_string(h1_em_max_iter) +
+          "); returning the last iterate");
+    }
+    if (em.covariance_repairs > 0) {
+      add_unique_warning(out.warnings,
+          "FIML H1 EM: block " + std::to_string(b + 1) +
+          " covariance was regularized " +
+          std::to_string(em.covariance_repairs) +
+          " time(s); max diagonal ridge = " +
+          fmt_sci(em.max_covariance_ridge));
+    }
+    if (em.min_covariance_eigen < h1_em_cov_warn) {
+      add_unique_warning(out.warnings,
+          "FIML H1 EM: block " + std::to_string(b + 1) +
+          " covariance had eigenvalue below " +
+          fmt_sci(h1_em_cov_warn) +
+          "; interpret edge-case results with caution");
+    }
     out.mu[b] = std::move(mu);
     out.sigma[b] = std::move(Sigma);
   }
@@ -3879,6 +4049,7 @@ saturated_em_moments_impl(const RawData& raw,
   out.mean.resize(B);
   out.cov.resize(B);
   out.n_obs.resize(B);
+  out.warnings = h1.warnings;
   out.H = Eigen::MatrixXd::Zero(Q, Q);
   out.J = Eigen::MatrixXd::Zero(Q, Q);
 
@@ -3915,8 +4086,20 @@ saturated_em_moments_impl(const RawData& raw,
     out.n_obs[b] = static_cast<std::int64_t>(raw.X[b].rows());
   }
 
-  auto Hinv_or = invert_symmetric(out.H,
+  auto H_repair = floor_symmetric_post(
+      out.H, /*absolute_floor=*/0.0, saturated_info_rel_floor,
       std::string(caller) + ": aggregated saturated information");
+  if (!H_repair.has_value()) return std::unexpected(H_repair.error());
+  if (H_repair->applied) {
+    add_unique_warning(out.warnings,
+        std::string(caller) +
+        ": aggregated saturated information was regularized; min eigenvalue = " +
+        fmt_sci(H_repair->min_eigen_before) +
+        ", diagonal ridge = " + fmt_sci(H_repair->ridge));
+  }
+
+  auto Hinv_or = invert_symmetric(
+      out.H, std::string(caller) + ": aggregated saturated information");
   if (!Hinv_or.has_value()) {
     return std::unexpected(Hinv_or.error());
   }
@@ -3971,7 +4154,12 @@ saturated_em_moment_influence_impl(const RawData& raw,
         std::string(caller) + ": saturated information shape mismatch"));
   }
 
-  auto Hinv_or = invert_symmetric(sm.H,
+  Eigen::MatrixXd H_for_inv = sm.H;
+  auto H_repair = floor_symmetric_post(
+      H_for_inv, /*absolute_floor=*/0.0, saturated_info_rel_floor,
+      std::string(caller) + ": aggregated saturated information");
+  if (!H_repair.has_value()) return std::unexpected(H_repair.error());
+  auto Hinv_or = invert_symmetric(H_for_inv,
       std::string(caller) + ": aggregated saturated information");
   if (!Hinv_or.has_value()) return std::unexpected(Hinv_or.error());
   const Eigen::MatrixXd& Hinv = *Hinv_or;

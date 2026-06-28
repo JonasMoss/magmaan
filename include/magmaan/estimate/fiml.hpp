@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -74,6 +75,7 @@ struct FIMLPack {
 struct FIMLH1 {
   std::vector<Eigen::VectorXd> mu;
   std::vector<Eigen::MatrixXd> sigma;
+  std::vector<std::string> warnings;
   double value = 0.0;
 };
 
@@ -115,6 +117,7 @@ struct SaturatedMoments {
   std::vector<Eigen::VectorXd> mean;   // μ̂_S per block (size p_b)
   std::vector<Eigen::MatrixXd> cov;    // Σ̂_S per block (p_b × p_b)
   std::vector<std::int64_t>    n_obs;  // rows per block
+  std::vector<std::string>     warnings;
   Eigen::MatrixXd              H;      // block-diagonal saturated information
   Eigen::MatrixXd              J;      // block-diagonal saturated score covariance
   Eigen::MatrixXd              acov;   // sandwich ACOV(η̂_S) = H⁻¹ J H⁻¹
