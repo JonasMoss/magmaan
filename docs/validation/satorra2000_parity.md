@@ -197,7 +197,13 @@ The complete-data lavaan-parity diagnosis above does **not** extend to the
 current FIML / ML2S missing-data `method = "restriction_map"` route. That route
 was wired as magmaan's first-principles robust missing-data difference spectrum:
 it uses the saturated EM eta-space sandwich, not lavaan's missing-data
-`lavTestLRT()` compatibility convention. A local probe using the
+`lavTestLRT()` compatibility convention. The local first-order derivation is in
+[docs/research/notes/nested-fiml-satorra2000-eta.tex](../research/notes/nested-fiml-satorra2000-eta.tex):
+under the ordinary nested null, where the smaller model contains the saturated
+FIML/ML2S eta target, the Satorra restriction-map law follows with
+`V = SaturatedMoments::H` and `Gamma = SaturatedMoments::acov`; the full
+misspecified nested profile-Hessian law remains a separate problem. A local
+probe using the
 experiment-25 two-group one-factor invariance population (`n = 200 + 200`,
 seed `20260616`, weak/configural-to-metric step, `A.method = "exact"`) shows:
 
@@ -226,7 +232,7 @@ far from magmaan's current value.
 
 This is not, by itself, evidence that the magmaan route is wrong; it is evidence
 that the current route is **not a lavaan-compatible missing-data nested-test
-baseline**. Treat it as the robust method under study. If a lavaan-compatible
-missing-data nested Satorra-2000 statistic is needed, it should be exposed as a
-separate compatibility route or option rather than replacing the eta-space FMG
-route without a calibration decision.
+baseline**. Treat it as magmaan's eta-space robust nested-null route. If a
+lavaan-compatible missing-data Satorra-2000 statistic is needed, it should be
+exposed as a separate compatibility route or option rather than replacing the
+eta-space FMG route without a calibration decision.
