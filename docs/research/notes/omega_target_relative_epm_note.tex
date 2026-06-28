@@ -200,6 +200,78 @@ omega is .584; in the two one-factor local-dependence interpretations it is .75
 or .40. The denominator, \(\Var(X)=15.42\), has not changed. Only the numerator,
 the part of the sum-score variance assigned to the target factor, has changed.
 
+\section{A Speculative Projection Interpretation}
+
+There may still be a useful way to interpret omega estimates from a
+misspecified one-factor fit. At the population level, fitting a congeneric model
+to a covariance matrix \(\Sigma\) selects a pseudo-true covariance matrix
+\[
+  \Sigma_\ast=\lambda_\ast\lambda_\ast\T+\Psi_\ast
+\]
+inside the congeneric model class. The meaning of ``closest'' depends on the
+discrepancy: unweighted least squares gives one projection, normal-theory
+maximum likelihood gives another, and GLS or WLS give still others. The fitted
+omega can then be viewed as the sum-score reliability of the nearest
+congeneric approximation,
+\[
+  \omega_\ast
+  =
+  \frac{(\one\T\lambda_\ast)^2}{\one\T\Sigma_\ast\one}
+\]
+or, if the observed denominator is used, as
+\[
+  \omega_\ast^{obs}
+  =
+  \frac{(\one\T\lambda_\ast)^2}{\one\T\Sigma\one}.
+\]
+
+This projection interpretation is not the same as an equivalent-model
+interpretation. The fitted residual
+\[
+  \Delta=\Sigma-\Sigma_\ast
+\]
+is generally not a covariance matrix. For example, under ordinary ULS with free
+residual variances and an interior solution, the diagonal of \(\Sigma_\ast\)
+matches the diagonal of \(\Sigma\). Then \(\Delta\) has zero diagonal, so a
+nonzero \(\Delta\) cannot be positive semidefinite. It is a discrepancy
+residual, not an additional source of reliable covariance.
+
+The more promising question is whether the fitted loading vector can be kept
+while the residual part is merged back into the original covariance:
+\[
+  \Sigma
+  =
+  \lambda_\ast\lambda_\ast\T
+  +
+  E_\ast,
+  \qquad
+  E_\ast=\Sigma-\lambda_\ast\lambda_\ast\T .
+\]
+If \(E_\ast\succeq0\), then the misspecified one-factor loading vector defines
+an exact one-factor model with correlated residuals for the original
+\(\Sigma\). In that special case, \(\omega_\ast^{obs}\) is not merely the
+reliability of the nearest congeneric approximation. It is also a legitimate
+sum-score reliability target for an equivalent local-dependence model. If
+\(E_\ast\) is not positive semidefinite, the same number is still an algebraic
+projection index, but it is not literally a variance decomposition of the
+original covariance matrix.
+
+This suggests a useful diagnostic for misspecification simulations. Alongside
+the usual bias relative to the declared population target, one can ask whether
+the fitted one-factor loadings can be embedded in the true covariance as a
+valid correlated-residual model. Algebraically, this requires
+\[
+  \Sigma-\lambda_\ast\lambda_\ast\T\succeq0,
+\]
+equivalently, for nonsingular \(\Sigma\),
+\[
+  \lambda_\ast\T\Sigma^{-1}\lambda_\ast\le 1 .
+\]
+When the condition holds, the fitted one-factor omega has a possible
+target-factor interpretation under an equivalent local-dependence model. When
+it fails, the omega remains interpretable as a projection summary, but not as
+the reliability of an actual common-factor component in \(\Sigma\).
+
 \section{Re-reading Bell et al.'s Simulation Results}
 
 The example clarifies what Bell et al.'s \cite{bell2024} simulations do and do
