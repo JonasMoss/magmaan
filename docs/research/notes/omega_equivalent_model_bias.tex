@@ -1,0 +1,263 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Model-Relative Bias of Omega Under Equivalent Measurement Models}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\T}{^{\mathsf T}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Bell, Chalmers, and Flora \cite{bell2024} define population reliability as the
+omega parameter attached to the model that generated the covariance matrix.
+They then call an estimated omega biased when its expectation differs from that
+model-relative target. That is internally coherent.
+
+The problem is that the target is not, in general, a functional of the observed
+item distribution. Equivalent latent decompositions can imply the same
+covariance matrix while assigning different amounts of composite variance to the
+named target factor. In that case the same omega estimate has different
+population bias under different, observationally indistinguishable, ``true''
+models. This note gives a simple theorem and a numerical example where the bias
+sign changes without changing the observable covariance matrix.
+
+\section{Model-Relative Omega}
+
+Let \(y\in\mathbb{R}^p\) be the item vector and let \(X=w\T y\) be the composite,
+usually with \(w=\mathbf{1}\). Write \(\Sigma=\Var(y)\). If a target factor \(f\)
+with \(\Var(f)=1\) contributes the item loading vector \(a\), then the omega
+target for the composite is
+\begin{equation}\label{eq:omega}
+  \omega(a,\Sigma;w)
+  =
+  \frac{(w\T a)^2}{w\T\Sigma w}.
+\end{equation}
+For a one-factor model, \(a\) is the loading vector. For a bifactor model, \(a\)
+is the general-factor loading vector. For a higher-order model, \(a\) is the
+vector of indirect effects from the higher-order factor to the items. The
+Bell et al. bias calculation is therefore
+\[
+  \E(\hat\omega)-\omega(a_{\mathrm{true}},\Sigma;w),
+\]
+where \(a_{\mathrm{true}}\) is supplied by the chosen population model.
+
+The word ``chosen'' matters. The covariance matrix alone need not determine
+\(a_{\mathrm{true}}\).
+
+\section{A Non-Identification Result}
+
+\begin{theorem}[Equivalent models with arbitrary composite omega]
+\label{thm:anyomega}
+Let \(\Sigma\) be positive definite and let \(w\ne 0\). For every
+\(r\in[0,1]\), define
+\begin{equation}\label{eq:ar}
+  a_r
+  =
+  \sqrt{r}\,
+  \frac{\Sigma w}{\sqrt{w\T\Sigma w}},
+  \qquad
+  \Psi_r
+  =
+  \Sigma-a_r a_r\T .
+\end{equation}
+Then \(\Psi_r\succeq0\), the one-factor representation
+\[
+  y=a_r f+u,\qquad \Var(f)=1,\qquad \Cov(f,u)=0,\qquad \Var(u)=\Psi_r
+\]
+implies the same covariance matrix \(\Sigma\), and
+\[
+  \omega(a_r,\Sigma;w)=r .
+\]
+If all entries of \(\Sigma w\) are nonzero, the target factor loads on every
+item for every \(r>0\).
+\end{theorem}
+
+\begin{proof}
+The covariance equality is immediate:
+\[
+  \Var(a_r f+u)=a_r a_r\T+\Psi_r=\Sigma .
+\]
+For any vector \(x\), Cauchy's inequality in the inner product
+\(\langle x,z\rangle_\Sigma=x\T\Sigma z\) gives
+\[
+  (x\T\Sigma w)^2
+  \le
+  (x\T\Sigma x)(w\T\Sigma w).
+\]
+Therefore
+\[
+  x\T\Psi_r x
+  =
+  x\T\Sigma x
+  -
+  r\frac{(x\T\Sigma w)^2}{w\T\Sigma w}
+  \ge
+  (1-r)x\T\Sigma x
+  \ge 0 ,
+\]
+so \(\Psi_r\succeq0\). Finally,
+\[
+  (w\T a_r)^2
+  =
+  r\,w\T\Sigma w ,
+\]
+which proves \(\omega(a_r,\Sigma;w)=r\).
+\end{proof}
+
+\begin{corollary}[Bias sign is not identified]
+\label{cor:bias}
+Let an omega estimator converge under the observed covariance \(\Sigma\) to
+some value \(T(\Sigma)\in(0,1)\). In the equivalent model family from
+Theorem~\ref{thm:anyomega}, its asymptotic bias is
+\[
+  T(\Sigma)-r .
+\]
+Thus, without changing the observed covariance matrix, one can choose an
+equivalent population model under which the estimator is positively biased,
+unbiased, or negatively biased.
+\end{corollary}
+
+The corollary is the clean version of the objection. Bias is identifiable only
+after fixing a target factor by theory or by a restrictive model class that makes
+the target unique. It is not identified by the covariance matrix itself.
+
+\section{Numerical Example}
+
+Take \(p=8\), \(w=\mathbf{1}\), and the compound-symmetry correlation matrix
+\[
+  \Sigma_\rho=(1-\rho)I+\rho\mathbf{1}\mathbf{1}\T,
+  \qquad
+  \rho=.30 .
+\]
+The independent-error one-factor decomposition has
+\[
+  a_0=\sqrt{\rho}\,\mathbf{1},
+  \qquad
+  \Psi_0=(1-\rho)I .
+\]
+Its omega is
+\[
+  \omega_0
+  =
+  \frac{p^2\rho}{p+p(p-1)\rho}
+  =
+  0.774194 .
+\]
+A correctly fitted one-factor omega also converges to \(T(\Sigma_\rho)=0.774194\).
+
+But the same \(\Sigma_\rho\) has the following equivalent one-factor
+representations with correlated residuals:
+\[
+\begin{array}{c|c|c|c|c}
+  r & a_r\text{ entry} & \Psi_r\text{ diagonal} &
+  \Psi_r\text{ off diagonal} & T(\Sigma_\rho)-r\\
+  \hline
+  .600000 & .482183 & .767500 & .067500 & .174194\\
+  .774194 & .547723 & .700000 & .000000 & .000000\\
+  .850000 & .573912 & .670625 & -.029375 & -.075806
+\end{array}
+\]
+All three rows generate exactly the same item covariance matrix. The first says
+the same fitted omega is positively biased by about .17. The second says it is
+unbiased. The third says it is negatively biased by about .08. The only thing
+that changed is the latent story used to split \(\Sigma_\rho\) into target-factor
+variance and residual covariance.
+
+\section{What This Does and Does Not Refute}
+
+The theorem does not show that Bell et al. made a computational mistake. Once
+their population model and target factor are stipulated, their Monte Carlo bias
+quantity is a legitimate model-relative quantity.
+
+It does show that the broader language ``omega is biased for reliability under
+misspecification'' needs a qualification. If reliability means the proportion of
+composite variance attributable to a substantively named factor, then that
+factor is part of the estimand. Equivalent measurement models that change the
+factor contribution vector \(a\) change the estimand while leaving the data
+distribution fixed. No sample size or fit index can recover which bias statement
+is the correct one from \(\Sigma\) alone.
+
+There is also an important non-objection. Some equivalent representations
+preserve the target contribution vector. For example, the Schmid-Leiman
+transformation relates restricted bifactor and higher-order models
+\cite{schmid1957,yung1999}. When the bifactor general-factor loadings equal the
+higher-order indirect effects, the numerator in \eqref{eq:omega} is the same,
+so omega is invariant. Equivalence is damaging only when it is not
+target-preserving.
+
+\section{Implication for Simulation Design}
+
+A simulation can still answer a conditional question:
+\[
+  \text{If this latent model is the true target story, what does this fitted
+  omega estimate?}
+\]
+It cannot, by itself, answer an unconditional question:
+\[
+  \text{How biased is omega for the reliability encoded in the observed
+  covariance matrix?}
+\]
+There is no such covariance-only reliability target unless additional
+identifying restrictions are imposed.
+
+For future reliability simulations, the defensible formulation is therefore:
+\begin{quote}
+  Bias is relative to a declared target model. Before interpreting it as a
+  failure of an estimator, show that the target is invariant across the relevant
+  equivalent models, or explicitly treat the result as a sensitivity analysis
+  over plausible target decompositions.
+\end{quote}
+
+Under that standard, the user's objection is right in the strong sense: there
+are equivalent ``true'' models under which the same fitted omega has smaller,
+larger, zero, or opposite-signed bias. The objection does not make Bell et al.'s
+conditional Monte Carlo invalid, but it blocks a covariance-only or
+model-free reading of their bias claims.
+
+\begin{thebibliography}{9}
+
+\bibitem{bell2024}
+Bell, S. M., Chalmers, R. P., \& Flora, D. B. (2024).
+The impact of measurement model misspecification on coefficient omega estimates
+of composite reliability.
+\emph{Educational and Psychological Measurement}, 84(1), 5--39.
+\href{https://doi.org/10.1177/00131644231155804}{doi:10.1177/00131644231155804}.
+
+\bibitem{schmid1957}
+Schmid, J., \& Leiman, J. M. (1957).
+The development of hierarchical factor solutions.
+\emph{Psychometrika}, 22(1), 83--90.
+\href{https://doi.org/10.1007/BF02289209}{doi:10.1007/BF02289209}.
+
+\bibitem{yung1999}
+Yung, Y. F., Thissen, D., \& McLeod, L. D. (1999).
+On the relationship between the higher-order factor model and the hierarchical
+factor model.
+\emph{Psychometrika}, 64(2), 113--128.
+\href{https://doi.org/10.1007/BF02294531}{doi:10.1007/BF02294531}.
+
+\end{thebibliography}
+
+\end{document}
