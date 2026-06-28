@@ -76,6 +76,13 @@ stopifnot(max(abs(V_model_ns - fiml_model_ns$vcov)) < 1e-10)
 stopifnot(max(abs(V_robust_ns - fiml_robust_ns$vcov)) < 1e-10)
 stopifnot(all(is.finite(fiml_model_ns$se)))
 stopifnot(all(is.finite(fiml_robust_ns$se)))
+fm_fiml_ns <- fit_measures(fit_fiml_ns, robust = TRUE)
+lav_fiml_ns <- cfa(model_ml2s, data = df, missing = "fiml",
+                   estimator = "MLR", meanstructure = TRUE)
+fm_keys_fiml <- c("cfi.robust", "tli.robust", "rmsea.robust")
+fm_diff_fiml <- unlist(fm_fiml_ns[fm_keys_fiml]) -
+  as.numeric(fitMeasures(lav_fiml_ns)[fm_keys_fiml])
+stopifnot(max(abs(fm_diff_fiml), na.rm = TRUE) < 5e-4)
 
 fit_ml2s <- magmaan(
   model_ml2s, data = df, estimator = "ML2S",
