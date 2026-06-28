@@ -191,10 +191,13 @@ explicit per-group intercept labels plus `factor ~ c(0, NA)*1` latent-mean rows
 when an exact metric→scalar test is needed; the fits then match lavaan exactly.
 This is a `spec::build` lavaanify gap, not a nested-test gap.
 
-## Missing-data caveat (open 2026-06-28)
+## Missing-data convention split (2026-06-28)
 
-The complete-data diagnosis above does **not** extend to the current FIML /
-ML2S missing-data `method = "restriction_map"` route. A local probe using the
+The complete-data lavaan-parity diagnosis above does **not** extend to the
+current FIML / ML2S missing-data `method = "restriction_map"` route. That route
+was wired as magmaan's first-principles robust missing-data difference spectrum:
+it uses the saturated EM eta-space sandwich, not lavaan's missing-data
+`lavTestLRT()` compatibility convention. A local probe using the
 experiment-25 two-group one-factor invariance population (`n = 200 + 200`,
 seed `20260616`, weak/configural-to-metric step, `A.method = "exact"`) shows:
 
@@ -207,9 +210,11 @@ seed `20260616`, weak/configural-to-metric step, `A.method = "exact"`) shows:
 The unscaled difference statistic matches lavaan in each row. The per-model
 FIML MLR helper also matches lavaan for the H1 model in the MCAR probe
 (`chisq.scaled = 24.2191`, `chisq.scaling.factor = 1.00328`). The divergence is
-therefore localized to the missing-data Satorra-2000 difference scaling.
+therefore localized to the missing-data Satorra-2000 difference scaling
+convention.
 
-The root cause is the metric/meat convention feeding the restriction map:
+The source of the split is the metric/meat convention feeding the restriction
+map:
 `lr_test_satorra2000_fiml_from_data()` currently computes the missing-data
 difference spectrum in saturated EM eta space with `V = SaturatedMoments::H` and
 `Gamma = SaturatedMoments::acov`. Reconstructing the Satorra-2000 equation with
@@ -219,6 +224,9 @@ with the exact restriction matrix gives a scale near lavaan's reported value
 (`c = 0.685` before lavaan's finite-sample details, versus reported `0.708`),
 far from magmaan's current value.
 
-Until this is fixed or an oracle-defect standard is met, missing-data FIML/ML2S
-Satorra-2000 nested parity is red. Treat the current eta-space route as an open
-research/implementation issue, not as a lavaan-compatible baseline.
+This is not, by itself, evidence that the magmaan route is wrong; it is evidence
+that the current route is **not a lavaan-compatible missing-data nested-test
+baseline**. Treat it as the robust method under study. If a lavaan-compatible
+missing-data nested Satorra-2000 statistic is needed, it should be exposed as a
+separate compatibility route or option rather than replacing the eta-space FMG
+route without a calibration decision.
