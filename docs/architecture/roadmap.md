@@ -140,9 +140,10 @@ golden `parTable()` fixtures.
   lavaan-style robust/scaled fit-measure formula helpers for the core
   `chisq.scaled`/baseline/CFI/TLI/RMSEA family, the FIML corrected robust
   fit-measure reduction (`estimate::fiml::fiml_corrected_fit_measures`) that
-  builds missing-data `XX3`/`df3`/`c.hat3` and baseline counterparts in the EM
-  saturated-moment metric using a trace-only projector and optional precomputed
-  saturated moments, and ML2S `robust.two.stage` robust/scaled global indices
+  builds missing-data `XX3`/`df3`/`c.hat3` and baseline counterparts with
+  lavaan's FIML-C(V3) trace correction, using the missing-data saturated H1
+  information plus the complete-data H1 information at the EM moments, and ML2S
+  `robust.two.stage` robust/scaled global indices
   (`estimate::fiml::two_stage_fit_measures`),
   structural-aware standardization, C++ defined-parameter evaluation, and the
   first frontier reliability covariance functionals
@@ -541,8 +542,9 @@ golden `parTable()` fixtures.
   fits to the FIML likelihood and independence-baseline path rather than the
   complete-data `2N*fmin` baseline helper; `robust = TRUE` / `"MLR"` adds the
   corrected `XX3`/baseline scaling and robust CFI/TLI/RMSEA fields from
-  `estimate::fiml::fiml_corrected_fit_measures`, reusing a fit's retained
-  Stage-1 saturated moments when present. ML2S attaches its corrected
+  `estimate::fiml::fiml_corrected_fit_measures`, using lavaan's FIML-C(V3)
+  trace and reusing a fit's retained Stage-1 saturated moments when present.
+  ML2S attaches its corrected
   `vcov`, `se`, `chisq`, `df`, `chisq_scaled`, and `scaling_factor` fields
   directly because those corrections are part of the named two-stage estimator
   rather than optional post-fit reporting; the C++ post-fit surface also exposes

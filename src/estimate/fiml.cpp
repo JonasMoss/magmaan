@@ -3342,23 +3342,27 @@ normal_theory_chisq_from_moments(
 }
 
 std::vector<Eigen::MatrixXd>
-independence_covariances_from_saturated(
-    const std::vector<Eigen::MatrixXd>& sigma_sat,
+independence_covariances_from_baseline(
+    const std::vector<Eigen::VectorXd>& vars,
+    const std::vector<Eigen::MatrixXd>& covs,
     const std::vector<Eigen::Index>& exo_idx) {
   std::vector<Eigen::MatrixXd> out;
-  out.reserve(sigma_sat.size());
-  for (const Eigen::MatrixXd& S : sigma_sat) {
-    Eigen::MatrixXd Sigma = S.diagonal().asDiagonal();
-    for (Eigen::Index a = 0;
-         a < static_cast<Eigen::Index>(exo_idx.size()); ++a) {
-      const Eigen::Index ia = exo_idx[static_cast<std::size_t>(a)];
-      if (ia < 0 || ia >= S.rows()) continue;
-      for (Eigen::Index b = a + 1;
-           b < static_cast<Eigen::Index>(exo_idx.size()); ++b) {
-        const Eigen::Index ib = exo_idx[static_cast<std::size_t>(b)];
-        if (ib < 0 || ib >= S.rows()) continue;
-        Sigma(ia, ib) = S(ia, ib);
-        Sigma(ib, ia) = S(ib, ia);
+  out.reserve(vars.size());
+  for (std::size_t b = 0; b < vars.size(); ++b) {
+    const Eigen::Index p = vars[b].size();
+    Eigen::MatrixXd Sigma = vars[b].asDiagonal();
+    if (b < covs.size() && covs[b].rows() == p && covs[b].cols() == p) {
+      for (Eigen::Index a = 0;
+           a < static_cast<Eigen::Index>(exo_idx.size()); ++a) {
+        const Eigen::Index ia = exo_idx[static_cast<std::size_t>(a)];
+        if (ia < 0 || ia >= p) continue;
+        for (Eigen::Index c = a + 1;
+             c < static_cast<Eigen::Index>(exo_idx.size()); ++c) {
+          const Eigen::Index ic = exo_idx[static_cast<std::size_t>(c)];
+          if (ic < 0 || ic >= p) continue;
+          Sigma(ia, ic) = covs[b](ia, ic);
+          Sigma(ic, ia) = covs[b](ic, ia);
+        }
       }
     }
     out.push_back(std::move(Sigma));
@@ -3417,6 +3421,75 @@ Eigen::MatrixXd baseline_eta_delta_from_block_p(
   return Delta;
 }
 
+post_expected<Eigen::MatrixXd>
+fiml_complete_h1_information_from_moments(
+    const RawData& raw,
+    const std::vector<Eigen::MatrixXd>& sigma,
+    std::string_view label) {
+  const std::size_t B = raw.X.size();
+  if (B == 0 || sigma.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": block count mismatch"));
+  }
+
+  std::vector<Eigen::Index> q_b(B);
+  std::vector<Eigen::Index> off_b(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    if (sigma[b].rows() != p || sigma[b].cols() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": covariance dimension mismatch"));
+    }
+    q_b[b] = p + vech_len(p);
+    off_b[b + 1] = off_b[b] + q_b[b];
+  }
+  const Eigen::Index Q = off_b.back();
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(Q, Q);
+
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index pstar = vech_len(p);
+    Eigen::LLT<Eigen::MatrixXd> llt(0.5 * (sigma[b] + sigma[b].transpose()));
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": covariance is not positive definite"));
+    }
+    Eigen::MatrixXd A = llt.solve(Eigen::MatrixXd::Identity(p, p));
+    A = 0.5 * (A + A.transpose()).eval();
+
+    Eigen::MatrixXd Hdev = Eigen::MatrixXd::Zero(p + pstar, p + pstar);
+    Hdev.topLeftCorner(p, p) = 2.0 * A;
+
+    std::vector<SigmaBasis> basis;
+    basis.reserve(static_cast<std::size_t>(pstar));
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r0 = c; r0 < p; ++r0) {
+        SigmaBasis e;
+        e.full_index = p + vech_index(p, r0, c);
+        e.a = r0;
+        e.b = c;
+        basis.push_back(e);
+      }
+    }
+    for (std::size_t kk = 0; kk < basis.size(); ++kk) {
+      const SigmaBasis& k = basis[kk];
+      for (std::size_t ll = 0; ll <= kk; ++ll) {
+        const SigmaBasis& l = basis[ll];
+        const double h = basis_trace_xy(A, A, k, l);
+        Hdev(k.full_index, l.full_index) += h;
+        if (kk != ll) Hdev(l.full_index, k.full_index) += h;
+      }
+    }
+
+    const double n_b = static_cast<double>(raw.X[b].rows());
+    const Eigen::Index q = q_b[b];
+    const Eigen::Index off = off_b[b];
+    H.block(off, off, q, q) = (n_b / 2.0) * Hdev;
+  }
+
+  return Eigen::MatrixXd(0.5 * (H + H.transpose()));
+}
+
 std::vector<Eigen::Index> block_p_from_saturated(const SaturatedMoments& sm) {
   std::vector<Eigen::Index> out;
   out.reserve(sm.cov.size());
@@ -3452,22 +3525,56 @@ residual_projector_trace(const Eigen::MatrixXd& V,
 }
 
 post_expected<double>
-fiml_residual_projector_trace_impl(const spec::LatentStructure& pt,
-                                   const model::MatrixRep& rep,
-                                   const RawData& raw,
-                                   const Estimates& est,
-                                   const FIMLPack& pack,
-                                   const Eigen::MatrixXd& V,
-                                   const Eigen::MatrixXd& G,
-                                   std::string_view label) {
-  const Eigen::Index Q = V.rows();
-  if (V.cols() != Q || Q == 0) {
+fiml_corrected_v3_trace(const Eigen::MatrixXd& H_model,
+                        const Eigen::MatrixXd& H_complete,
+                        const Eigen::MatrixXd& J_model,
+                        const Eigen::MatrixXd& Delta,
+                        const Eigen::MatrixXd& H_info,
+                        std::string_view label) {
+  if (H_model.rows() != H_model.cols() ||
+      H_complete.rows() != H_complete.cols() ||
+      J_model.rows() != J_model.cols() ||
+      H_info.rows() != H_info.cols() ||
+      H_model.rows() != H_complete.rows() ||
+      H_model.rows() != J_model.rows() ||
+      H_model.rows() != H_info.rows() ||
+      Delta.rows() != H_model.rows()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        std::string(label) + ": V must be square and non-empty"));
+        std::string(label) + ": eta-space dimension mismatch"));
   }
-  auto delta_or = fiml_projector_delta_impl(pt, rep, raw, est, pack, Q);
-  if (!delta_or.has_value()) return std::unexpected(delta_or.error());
-  return residual_projector_trace(V, G, *delta_or, label);
+
+  auto Hm_inv_or = invert_symmetric(H_model,
+                                    std::string(label) + ": Hm inverse");
+  if (!Hm_inv_or.has_value()) return std::unexpected(Hm_inv_or.error());
+  const Eigen::MatrixXd& Hm_inv = *Hm_inv_or;
+
+  const Eigen::MatrixXd HinfoD = H_info * Delta;
+  Eigen::MatrixXd DtHinfoD = Delta.transpose() * HinfoD;
+  DtHinfoD = 0.5 * (DtHinfoD + DtHinfoD.transpose()).eval();
+  auto E_or = invert_symmetric(DtHinfoD,
+                               std::string(label) + ": information inverse");
+  if (!E_or.has_value()) return std::unexpected(E_or.error());
+  const Eigen::MatrixXd& E = *E_or;
+
+  const Eigen::MatrixXd gamma = Hm_inv * J_model * Hm_inv;
+  const double tr11 = H_complete.cwiseProduct(gamma.transpose()).sum();
+
+  const Eigen::MatrixXd HcD = H_complete * Delta;
+  const Eigen::MatrixXd tr12_mat =
+      Delta.transpose() * J_model * Hm_inv * HcD;
+  const double tr12 = tr12_mat.cwiseProduct(E).sum();
+
+  const Eigen::MatrixXd JD_E =
+      (Delta.transpose() * J_model * Delta) * E;
+  const Eigen::MatrixXd HcD_E = (Delta.transpose() * HcD) * E;
+  const double tr22 = JD_E.cwiseProduct(HcD_E.transpose()).sum();
+
+  const double out = tr11 - 2.0 * tr12 + tr22;
+  if (!std::isfinite(out)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": non-finite trace"));
+  }
+  return out;
 }
 
 post_expected<FIMLCorrectedFitMeasures>
@@ -3520,16 +3627,32 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
       "fiml_corrected_fit_measures: user XX3");
   if (!xx3_or.has_value()) return std::unexpected(xx3_or.error());
 
-  auto tr_or = fiml_residual_projector_trace_impl(
-      pt, rep, raw, est, pack, sm.H, sm.acov,
+  auto H_complete_or = fiml_complete_h1_information_from_moments(
+      raw, h1.sigma,
+      "fiml_corrected_fit_measures: complete-data H1 information");
+  if (!H_complete_or.has_value()) return std::unexpected(H_complete_or.error());
+
+  auto delta_or = fiml_projector_delta_impl(
+      pt, rep, raw, est, pack, sm.H.rows());
+  if (!delta_or.has_value()) return std::unexpected(delta_or.error());
+
+  auto tr_or = fiml_corrected_v3_trace(
+      sm.H, *H_complete_or, sm.J, *delta_or, sm.H,
       "fiml_corrected_fit_measures: user");
   if (!tr_or.has_value()) return std::unexpected(tr_or.error());
 
   const std::vector<Eigen::Index> exo_idx = observed_exogenous_indices(pt);
+  std::vector<Eigen::VectorXd> means_null;
+  std::vector<Eigen::VectorXd> vars_null;
+  if (auto ok = independence_moments_from_raw(raw, means_null, vars_null);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
   const std::vector<Eigen::MatrixXd> sigma_null =
-      independence_covariances_from_saturated(h1.sigma, exo_idx);
+      independence_covariances_from_baseline(vars_null, pack.start_stats.S,
+                                             exo_idx);
   auto xx3_null_or = normal_theory_chisq_from_moments(
-      h1.mu, sigma_null, h1.mu, h1.sigma, sm.n_obs,
+      means_null, sigma_null, h1.mu, h1.sigma, sm.n_obs,
       "fiml_corrected_fit_measures: baseline XX3");
   if (!xx3_null_or.has_value()) return std::unexpected(xx3_null_or.error());
 
@@ -3540,8 +3663,9 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
   }
   const Eigen::MatrixXd D_null =
       baseline_eta_delta_from_block_p(pack.cache.block_p, exo_idx);
-  auto tr_null_or = residual_projector_trace(
-      sm.H, sm.acov, D_null, "fiml_corrected_fit_measures: baseline");
+  auto tr_null_or = fiml_corrected_v3_trace(
+      sm.H, *H_complete_or, sm.J, D_null, sm.H,
+      "fiml_corrected_fit_measures: baseline");
   if (!tr_null_or.has_value()) return std::unexpected(tr_null_or.error());
 
   FIMLCorrectedFitMeasures out;
