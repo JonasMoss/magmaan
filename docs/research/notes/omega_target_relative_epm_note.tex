@@ -1,0 +1,273 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\title{Reliability Under Measurement Model Misspecification Is Target-Relative:\\
+A Short Note on Omega Simulation Studies}
+\author{}
+\date{\today}
+
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\T}{^{\mathsf T}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Simulation studies of coefficient omega under measurement model
+misspecification usually begin by choosing a population factor model, computing
+the omega implied by that model, fitting alternative models to generated data,
+and reporting bias relative to the population omega. This is a coherent
+model-relative exercise. It is not, however, a model-free assessment of bias for
+``the'' reliability of the composite. The reason is familiar from the literature
+on equivalent structural equation models: the observed covariance matrix does
+not, by itself, identify the substantive latent decomposition. Since omega as a
+construct-reliability coefficient is the proportion of composite variance
+attributed to a named target factor, equivalent decompositions can imply the
+same item covariance matrix while assigning different reliabilities to the same
+composite. Consequently, reliability under misspecification is difficult to pin
+down unless the target construct, not only the observed covariance structure, is
+declared. We use this point to reinterpret recent omega simulations as
+conditional sensitivity analyses and suggest how future simulations can separate
+estimator behavior from target uncertainty.
+\end{abstract}
+
+\noindent\textbf{Keywords:} coefficient omega, reliability, equivalent models,
+measurement model misspecification, bifactor model
+
+\section{The Problem}
+
+Coefficient omega is attractive because it asks a substantively meaningful
+question: how much of a composite score is attributable to the latent variable
+the score is intended to measure? That question is also what makes omega
+fragile. The answer depends on which latent variable is treated as the target
+construct and which parts of the covariance structure are treated as nuisance,
+method, local dependence, specific-factor variance, or error.
+
+Bell, Chalmers, and Flora \cite{bell2024} give a useful recent example. They
+simulate data from several population models, including a one-factor model with
+correlated errors, bifactor models, and higher-order models. They then compare
+omega estimates from fitted models with the omega implied by the population
+model. Their central message is cautious: omega estimates are accurate when the
+measurement model is correct, and can be biased when the model is misspecified.
+
+The present note argues that there is a deeper target issue behind such
+simulation results. Once a population model and target factor are stipulated,
+the bias calculation is well-defined. But the word ``true'' is doing more work
+than it may appear to do. It supplies not only a covariance matrix, but also a
+substantive allocation of covariance to the target factor rather than to other
+latent or residual sources. Under model misspecification, that allocation is
+often exactly what is in question.
+
+This is not a new problem in structural equation modeling. Equivalent models can
+fit the same covariance matrix while representing different substantive
+stories \cite{bollen1989,maccallum1993}. Fit alone cannot determine which story
+is the data-generating one. The same difficulty becomes sharper for reliability
+because the estimand itself can change across equivalent stories. Reliability is
+not always a single property of a test; it can depend on what the score is meant
+to measure \cite{borsboom2002,ellis2021,savalei2019}.
+
+\section{Target-Factor Reliability}
+
+Let \(y\) be the vector of item scores and let \(X=w\T y\) be the composite,
+with \(w\) often equal to a vector of ones. Suppose a model says that a target
+factor \(f\), scaled to have variance one, contributes loadings \(a\) to the
+items:
+\[
+  y=a f+u,\qquad \Cov(f,u)=0,\qquad \Var(y)=\Sigma .
+\]
+The target-factor omega for \(X\) is
+\begin{equation}\label{eq:omega}
+  \omega_f
+  =
+  \frac{\Var(w\T a f)}{\Var(w\T y)}
+  =
+  \frac{(w\T a)^2}{w\T\Sigma w}.
+\end{equation}
+This definition uses the full composite variance in the denominator. If the
+model contains correlated residuals, specific factors, or lower-order factors,
+their contribution remains in \(w\T\Sigma w\). What changes from model to model
+is the numerator: which part of the item covariance is assigned to the named
+target factor?
+
+This distinction is easy to miss. A simulation can label a population
+reliability as .60 or .85, but that label is not a property of the covariance
+matrix alone. It is a property of the covariance matrix together with a
+particular latent interpretation.
+
+\section{Equivalent Models Can Change the Target}
+
+The issue can be seen with a simple construction. It is not meant as a proposed
+measurement model. It is only a way to show what is, and is not, identified by
+the covariance matrix. Let \(\Sigma\) be any positive definite item covariance
+matrix. For any value \(r\) between zero and one, set
+\[
+  a_r=\sqrt{r}\frac{\Sigma w}{\sqrt{w\T\Sigma w}},
+  \qquad
+  \Psi_r=\Sigma-a_r a_r\T .
+\]
+Then
+\[
+  \Sigma=a_r a_r\T+\Psi_r
+\]
+is a one-factor model with correlated residuals. The residual covariance
+\(\Psi_r\) is nonnegative definite by Cauchy's inequality, and
+\((w\T a_r)^2=r\,w\T\Sigma w\). Equation~\eqref{eq:omega} therefore gives
+\(\omega_{f_r}=r\) for the composite \(X=w\T y\).
+
+Thus, if correlated residuals are allowed without further restriction, the same
+observed covariance matrix can be paired with many different target-factor
+reliabilities. An omega estimator that converges to a fixed function of
+\(\Sigma\) can therefore be positively biased, unbiased, or negatively biased
+depending only on which equivalent latent decomposition is called the population
+model.
+
+This is the sense in which reliability under misspecification is hard to pin
+down. The issue is not only that the fitted model may be wrong. It is that the
+target against which the fitted model is judged may not be identified without
+extra theory.
+
+\section{Re-reading Omega Misspecification Simulations}
+
+The point above does not make Bell et al.'s \cite{bell2024} simulations
+incorrect. Their population models define clear conditional targets. For a
+one-factor correlated-error population, the target is the part of composite
+variance due to the one common factor. For a bifactor population, the target is
+the part due to the general factor. For a higher-order population, the target is
+the part due to the higher-order factor through its indirect effects.
+
+The limitation is that these are target-relative claims. Consider a bifactor
+population,
+\[
+  \Sigma=gg\T+SS\T+\Theta ,
+\]
+where \(g\) is the general-factor loading vector and \(S\) contains specific
+factor loadings. The bifactor omega treats \(gg\T\) as construct-relevant
+general-factor variance and treats \(SS\T+\Theta\) as non-target variance for
+the total score. Marginally, however, \(SS\T+\Theta\) is a structured residual
+covariance matrix around the general factor. Another one-factor
+correlated-residual decomposition can imply the same \(\Sigma\) but assign a
+different amount of composite variance to its common factor. The observed item
+covariance matrix cannot decide which target is substantively correct.
+
+The higher-order case illustrates the important qualification. A higher-order
+model and a restricted bifactor model can be related by the Schmid-Leiman
+transformation \cite{schmid1957,yung1999}. When that transformation preserves
+the vector of general-factor contributions to the items, omega is preserved too.
+Equivalent models are not automatically a problem for reliability. They become a
+problem when the equivalent representations change the target contribution
+vector in Equation~\eqref{eq:omega}.
+
+Thus, simulations of misspecified omega estimates are best read as answering a
+conditional question:
+\[
+  \text{If this latent target story is true, how does this fitted omega behave?}
+\]
+They do not answer the unconditional question:
+\[
+  \text{How biased is omega for the reliability encoded in the covariance matrix?}
+\]
+There is no such covariance-only target without further restrictions.
+
+\section{Implications}
+
+The practical implication is not that omega should be abandoned, or that
+misspecification simulations are useless. The implication is that simulations
+should separate two problems that are often blended together.
+
+First, there is an estimator problem. Given a target model, a target factor, and
+a population covariance matrix, what does a fitted omega estimate in finite
+samples or asymptotically? Bell et al. address this problem.
+
+Second, there is a target problem. Given the same observed covariance matrix,
+which part of the composite variance should count as construct-relevant
+reliability? This problem is not solved by Monte Carlo replication, larger
+sample size, or better fit indices. It requires theory, design information,
+external validation, or explicit sensitivity analysis over plausible equivalent
+or near-equivalent decompositions.
+
+Future simulation studies can make this distinction explicit by reporting their
+results as conditional on a declared target factor, by noting whether the target
+is invariant across relevant equivalent models, and by including sensitivity
+conditions that move covariance between general factors, specific factors, and
+correlated residuals while holding the item covariance matrix fixed or nearly
+fixed. Such designs would not merely ask whether an estimator is biased under
+misspecification. They would ask whether the proposed reliability target itself
+is stable under the kinds of model uncertainty that applied researchers face.
+
+\section{Conclusion}
+
+The established lesson from equivalent-model work in SEM is that the same
+covariance matrix can support different substantive explanations. For
+model-based reliability coefficients, the consequence is stronger: different
+explanations can define different reliabilities for the same composite. Bias
+under misspecification is therefore not a model-free property of coefficient
+omega. It is a property of an estimator relative to a declared latent target.
+That framing preserves the value of recent omega simulations while clarifying
+their scope. They are conditional sensitivity studies, not definitive evidence
+about bias for a uniquely identified reliability of the observed composite.
+
+\begin{thebibliography}{9}
+
+\bibitem{bell2024}
+Bell, S. M., Chalmers, R. P., \& Flora, D. B. (2024).
+The impact of measurement model misspecification on coefficient omega estimates
+of composite reliability.
+\emph{Educational and Psychological Measurement}, 84(1), 5--39.
+\href{https://doi.org/10.1177/00131644231155804}{doi:10.1177/00131644231155804}.
+
+\bibitem{bollen1989}
+Bollen, K. A. (1989).
+\emph{Structural equations with latent variables}.
+Wiley.
+
+\bibitem{borsboom2002}
+Borsboom, D., \& Mellenbergh, G. J. (2002).
+True scores, latent variables, and constructs: A comment on Schmidt and Hunter.
+\emph{Intelligence}, 30(6), 505--514.
+\href{https://doi.org/10.1016/S0160-2896(02)00082-X}{doi:10.1016/S0160-2896(02)00082-X}.
+
+\bibitem{ellis2021}
+Ellis, J. L. (2021).
+A test can have multiple reliabilities.
+\emph{Psychometrika}, 86(4), 869--876.
+\href{https://doi.org/10.1007/s11336-021-09800-2}{doi:10.1007/s11336-021-09800-2}.
+
+\bibitem{maccallum1993}
+MacCallum, R. C., Wegener, D. T., Uchino, B. N., \& Fabrigar, L. R. (1993).
+The problem of equivalent models in applications of covariance structure
+analysis.
+\emph{Psychological Bulletin}, 114(1), 185--199.
+\href{https://doi.org/10.1037/0033-2909.114.1.185}{doi:10.1037/0033-2909.114.1.185}.
+
+\bibitem{savalei2019}
+Savalei, V., \& Reise, S. P. (2019).
+Don't forget the model in your model-based reliability coefficients: A reply to
+McNeish (2018).
+\emph{Collabra: Psychology}, 5(1), Article 36.
+\href{https://doi.org/10.1525/collabra.247}{doi:10.1525/collabra.247}.
+
+\bibitem{schmid1957}
+Schmid, J., \& Leiman, J. M. (1957).
+The development of hierarchical factor solutions.
+\emph{Psychometrika}, 22(1), 83--90.
+\href{https://doi.org/10.1007/BF02289209}{doi:10.1007/BF02289209}.
+
+\bibitem{yung1999}
+Yung, Y. F., Thissen, D., \& McLeod, L. D. (1999).
+On the relationship between the higher-order factor model and the hierarchical
+factor model.
+\emph{Psychometrika}, 64(2), 113--128.
+\href{https://doi.org/10.1007/BF02294531}{doi:10.1007/BF02294531}.
+
+\end{thebibliography}
+
+% Development note: before submission, add a fuller review of equivalent-model
+% results specific to CFA, local dependence, bifactor models, and reliability
+% under multidimensional or method-factor interpretations.
+
+\end{document}
