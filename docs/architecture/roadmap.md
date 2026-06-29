@@ -624,13 +624,17 @@ golden `parTable()` fixtures.
   `experiments/24-fiml-twostage-fmg-chisq`. Nested/model-pair FIML FMG is
   available through the existing `robust_nested_lrt()` / `nestedTest()`
   `method = "restriction_map"` route when both fits are FIML and carry
-  compatible `raw_data`: it builds the H1-anchored saturated eta-space
-  `Delta1/P/A/C/S` reduction from `V = H` and `Gamma_mis`, supports exact
-  equality-constraint maps and delta tangent maps, reports the existing
-  unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
-  shape. Nonlinear equality constraints are supported by local tangent bases for
-  both models; when `"exact"` is requested for such a pair, the route warns and
-  uses the local tangent restriction because no global affine exact map exists.
+  compatible `raw_data`: for empirical Gamma it builds the H1-anchored split
+  sandwich `A1 = K1' I_obs(theta_H1) K1`,
+  `B1 = (V Delta K1)' Gamma_mis (V Delta K1)` with
+  `V = SaturatedMoments::H` and `Gamma_mis = SaturatedMoments::acov`, supports
+  exact equality-constraint maps and delta tangent maps, and reports the
+  existing unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested
+  result shape. `GammaSource::NT` intentionally keeps the saturated eta-space
+  bread so every difference eigenvalue collapses to one. Nonlinear equality
+  constraints are supported by local tangent bases for both models; when
+  `"exact"` is requested for such a pair, the route warns and uses the local
+  tangent restriction because no global affine exact map exists.
   Two-stage ML (`ML2S`) pairs are routed the same way
   (`robust_nested_lrt()` / `nestedTest()` dispatch ML2S before the FIML check,
   since an ML2S fit's `raw_data` is a `magmaan_fiml_data`; `computation =
@@ -645,28 +649,25 @@ golden `parTable()` fixtures.
   `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
   table.
-  Convention caveat (2026-06-28): this eta-space FIML/ML2S missing-data route is
-  magmaan's robust nested-null route, not a lavaan-compatible
-  `lavTestLRT(method = "satorra.2000")` baseline under missingness. Its local
-  derivation for the ordinary true nested null is in
-  `docs/research/notes/nested-fiml-satorra2000-eta.tex`; this is data-robust,
-  not structural-misspecification-robust, and the misspecified nested
-  profile-Hessian law remains separate. Complete-data Satorra-2000 and
-  per-model FIML MLR scaling still match lavaan. See
-  `docs/validation/satorra2000_parity.md` and the backlog item before comparing
-  missing-data nested Satorra-2000 numbers to lavaan.
+  FIML convention note (2026-06-29): lavaan's public
+  `lavTestLRT(method = "satorra.2000")` default is delta/scaled-shifted, and
+  magmaan's FIML empirical delta path now follows that observed-bread split. The
+  strict-invariance `"exact"` row space can still differ from lavaan's internal
+  exact helper because lavaan carries earlier invariance rows into that exact
+  body before projection; use `A.method = "delta"` for the lavaan-default oracle.
+  See `docs/validation/satorra2000_parity.md`.
 - **Method-2001 difference spectrum (`U_D = U0 - U1`) for FIML/ML2S.** Alongside
   the Satorra-2000 restriction map ("method 2000", `U_D` from the H1 fit),
   `robust_nested_lrt()` / `nestedTest(ud_method = "2001")` builds the
   Satorra-Bentler (2001) difference of the two single-model residual projectors
   (`compute_diff_spectrum_2001`, the top `df0 - df1` eigenvalues of `(U0-U1)·Γ`
-  in a common saturated η-metric; `core::fiml_residual_projector` factors `U` out
-  of the GOF spectrum, shared by FIML `V = sm.H, Γ = sm.acov` and ML2S
+  in a common saturated meat space; FIML uses observed model-information bread
+  with `V = sm.H, Γ = sm.acov`, while ML2S uses
   `V = ml2s NT weight, Γ = two_stage_gamma`). It feeds the same scaled/mixture
   readouts and the FMG/pEBA transforms, and unlike method 2000 accepts non-`==`
-  nesting (different parameter counts) but can carry negative eigenvalues (flagged
-  for fallback). This is the second `U_D` estimator the FMG-nested paper and
-  `semTests::ugamma_nested(., "2001")` cross against; validated to ~5e-5 vs
+  nesting (different parameter counts) but can carry negative eigenvalues
+  (flagged for fallback). This is the second `U_D` estimator the FMG-nested paper
+  and `semTests::ugamma_nested(., "2001")` cross against; validated to ~5e-5 vs
   semTests on complete data (single + multi-group). The scalar two-constant
   baselines also exist for FIML/ML2S: `nestedTest(method =
   "satorra.bentler.2001"/"2010")` (the trace-based SB2001 and the M10 positivity

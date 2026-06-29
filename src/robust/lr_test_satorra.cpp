@@ -93,6 +93,78 @@ local_constraint_basis(const spec::LatentStructure& pt,
   return Eigen::MatrixXd(svd.matrixV().rightCols(nz));
 }
 
+post_expected<Eigen::MatrixXd>
+fiml_residual_projector_observed_bread(
+    const spec::LatentStructure&      pt,
+    const model::MatrixRep&           rep,
+    const Eigen::VectorXd&            theta,
+    const data::RawData&              raw,
+    const estimate::fiml::FIMLPack&   pack,
+    const Eigen::Ref<const Eigen::MatrixXd>& V,
+    const char*                       label) {
+  const Eigen::Index Q = V.rows();
+  if (V.cols() != Q || Q == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": V must be square and non-empty"));
+  }
+
+  estimate::Estimates est;
+  est.theta = theta;
+  auto D_or = estimate::fiml::fiml_eta_jacobian(pt, rep, raw, est, pack);
+  if (!D_or.has_value()) return std::unexpected(D_or.error());
+  if (D_or->Delta_theta.rows() != Q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": eta Jacobian row count disagrees with V"));
+  }
+
+  auto con_or = estimate::build_eq_constraints(pt, /*allow_nonlinear=*/true);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  if (D_or->Delta_theta.cols() != con_or->Kmat.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": eta Jacobian column count disagrees with "
+        "constraint basis"));
+  }
+  auto basis_or = local_constraint_basis(pt, *con_or, theta, label);
+  if (!basis_or.has_value()) return std::unexpected(basis_or.error());
+  const Eigen::MatrixXd& basis = *basis_or;
+  const Eigen::MatrixXd Vsym = 0.5 * (V + V.transpose());
+  if (basis.cols() == 0) {
+    return Vsym;
+  }
+  const Eigen::MatrixXd Delta_alpha = D_or->Delta_theta * basis;
+
+  auto info_or = estimate::fiml::fiml_observed_information(
+      pt, rep, raw, est, pack);
+  if (!info_or.has_value()) return std::unexpected(info_or.error());
+  if (info_or->rows() != basis.rows() || info_or->cols() != basis.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": observed information shape disagrees with "
+        "constraint basis"));
+  }
+  Eigen::MatrixXd P = basis.transpose() * (*info_or) * basis;
+  P = 0.5 * (P + P.transpose()).eval();
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
+  if (ldlt_P.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": observed alpha-space information is not "
+        "invertible"));
+  }
+  {
+    const Eigen::VectorXd d_abs = ldlt_P.vectorD().cwiseAbs();
+    const double tol_pivot = 1e-10 * d_abs.maxCoeff();
+    if (d_abs.minCoeff() <= tol_pivot) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": observed alpha-space information is "
+          "rank-deficient"));
+    }
+  }
+
+  const Eigen::MatrixXd VD = Vsym * Delta_alpha;
+  Eigen::MatrixXd U = Vsym - VD * ldlt_P.solve(VD.transpose());
+  U = 0.5 * (U + U.transpose()).eval();
+  return U;
+}
+
 Eigen::VectorXd denom_from_sample(const data::SampleStats& samp) {
   Eigen::VectorXd denom(static_cast<Eigen::Index>(samp.n_obs.size()));
   for (Eigen::Index i = 0; i < denom.size(); ++i) {
@@ -903,7 +975,8 @@ lr_test_satorra2000_fiml_from_data_impl(
       pt_H1, K_H1, theta_H1_full,
       "lr_test_satorra2000_fiml_from_data: H1");
   if (!B1_or.has_value()) return std::unexpected(B1_or.error());
-  const Eigen::MatrixXd Delta1_alpha = D1_or->Delta_theta * (*B1_or);
+  const Eigen::MatrixXd& basis_H1 = *B1_or;
+  const Eigen::MatrixXd Delta1_alpha = D1_or->Delta_theta * basis_H1;
 
   Eigen::MatrixXd A_alpha;
   if (a_method == SatorraAMethod::Exact && !has_nonlinear) {
@@ -944,7 +1017,36 @@ lr_test_satorra2000_fiml_from_data_impl(
         " but df_H0 - df_H1 = " + std::to_string(df_diff_from_T)));
   }
 
-  auto sd_or = compute_fiml_satorra2000(Delta1_alpha, V, Gamma, A_alpha);
+  post_expected<SatorraDiffResult> sd_or =
+      std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_fiml_from_data: internal initialization error"));
+  if (gamma == GammaSource::NT) {
+    sd_or = compute_fiml_satorra2000(Delta1_alpha, V, Gamma, A_alpha);
+  } else {
+    auto info_or = use_pack
+        ? estimate::fiml::fiml_observed_information(
+              pt_H1, rep_H1, raw, est_H1, *pack)
+        : estimate::fiml::fiml_observed_information(
+              pt_H1, rep_H1, raw, est_H1, estimate::fiml::FIML{}, h_step);
+    if (!info_or.has_value()) return std::unexpected(info_or.error());
+    if (info_or->rows() != basis_H1.rows() ||
+        info_or->cols() != basis_H1.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_fiml_from_data: observed information shape "
+          "disagrees with H1 parameter basis"));
+    }
+
+    Eigen::MatrixXd A1 = basis_H1.transpose() * (*info_or) * basis_H1;
+    A1 = 0.5 * (A1 + A1.transpose()).eval();
+
+    const Eigen::MatrixXd Vsym = 0.5 * (V + V.transpose());
+    const Eigen::MatrixXd Gsym = 0.5 * (Gamma + Gamma.transpose());
+    const Eigen::MatrixXd VD = Vsym * Delta1_alpha;
+    Eigen::MatrixXd B1_sandwich = VD.transpose() * Gsym * VD;
+    B1_sandwich = 0.5 * (B1_sandwich + B1_sandwich.transpose()).eval();
+
+    sd_or = compute_satorra2000_from_sandwich(A1, B1_sandwich, A_alpha);
+  }
   if (!sd_or.has_value()) return std::unexpected(sd_or.error());
   auto out_or = lr_test_satorra2000(T_H0 - T_H1, *sd_or);
   if (!out_or.has_value()) return std::unexpected(out_or.error());
@@ -1145,8 +1247,9 @@ namespace {
 // Shared FIML / ML2S "method 2001" difference-spectrum driver. `two_stage`
 // selects the two-stage NT weight + two-stage Γ (ML2S) over the saturated
 // observed information + saturated ACOV (FIML). U0/U1 are the single-model
-// residual projectors against the common V; the spectrum is the top
-// df_H0 − df_H1 eigenvalues of (U0 − U1)·Γ.
+// residual projectors against the common V; empirical FIML uses the observed
+// model information as projector bread, while ML2S keeps the Stage-2 weight
+// convention. The spectrum is the top df_H0 − df_H1 eigenvalues of (U0 − U1)·Γ.
 post_expected<LRSatorra2000Result>
 lr_test_satorra2001_missing_impl(
     const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
@@ -1198,16 +1301,42 @@ lr_test_satorra2001_missing_impl(
     Gamma = sm.acov;
   }
 
+  estimate::fiml::FIMLPack pack_owned;
+  const estimate::fiml::FIMLPack* pack_ptr = nullptr;
+  if (!two_stage) {
+    auto pack_or = estimate::fiml::fiml_pack(raw);
+    if (!pack_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": fiml_pack failed: " +
+          pack_or.error().detail));
+    }
+    pack_owned = std::move(*pack_or);
+    pack_ptr = &pack_owned;
+  }
+
   estimate::Estimates est_H1;
   est_H1.theta = theta_H1_full;
   estimate::Estimates est_H0;
   est_H0.theta = theta_H0_full;
 
-  auto U1_or = estimate::fiml::fiml_residual_projector(pt_H1, rep_H1, raw,
-                                                       est_H1, V);
+  post_expected<Eigen::MatrixXd> U1_or =
+      std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": internal initialization error"));
+  post_expected<Eigen::MatrixXd> U0_or =
+      std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": internal initialization error"));
+  if (two_stage) {
+    U1_or = estimate::fiml::fiml_residual_projector(pt_H1, rep_H1, raw,
+                                                    est_H1, V);
+    U0_or = estimate::fiml::fiml_residual_projector(pt_H0, rep_H0, raw,
+                                                    est_H0, V);
+  } else {
+    U1_or = fiml_residual_projector_observed_bread(
+        pt_H1, rep_H1, theta_H1_full, raw, *pack_ptr, V, label);
+    U0_or = fiml_residual_projector_observed_bread(
+        pt_H0, rep_H0, theta_H0_full, raw, *pack_ptr, V, label);
+  }
   if (!U1_or.has_value()) return std::unexpected(U1_or.error());
-  auto U0_or = estimate::fiml::fiml_residual_projector(pt_H0, rep_H0, raw,
-                                                       est_H0, V);
   if (!U0_or.has_value()) return std::unexpected(U0_or.error());
 
   auto sd_or = compute_diff_spectrum_2001(*U0_or, *U1_or, Gamma, df_diff);
@@ -1251,10 +1380,8 @@ lr_test_satorra2001_ml2s_from_data(
 namespace {
 
 // Single-model FIML / ML2S goodness-of-fit scaling c = mean of the df nonzero
-// U·Γ eigenvalues at (pt, rep, theta). Reuses fiml_residual_projector for U and
-// compute_diff_spectrum_2001 (with U1 = 0) for the top-df eigenvalue reduction;
-// for FIML this reproduces fiml_ugamma_spectrum's scaling, for ML2S the
-// two-stage NT-weight / two-stage-Γ analogue.
+// U·Γ eigenvalues at (pt, rep, theta). FIML uses the observed model information
+// as projector bread; ML2S uses the two-stage NT-weight / two-stage-Γ analogue.
 post_expected<double>
 single_model_missing_scale(const spec::LatentStructure& pt,
                            const model::MatrixRep& rep,
@@ -1262,6 +1389,19 @@ single_model_missing_scale(const spec::LatentStructure& pt,
                            const data::RawData& raw,
                            int df, bool two_stage, double h_step) {
   if (df <= 0) return 1.0;
+  estimate::fiml::FIMLPack pack_owned;
+  const estimate::fiml::FIMLPack* pack_ptr = nullptr;
+  if (!two_stage) {
+    auto pack_or = estimate::fiml::fiml_pack(raw);
+    if (!pack_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "single_model_missing_scale: fiml_pack failed: " +
+          pack_or.error().detail));
+    }
+    pack_owned = std::move(*pack_or);
+    pack_ptr = &pack_owned;
+  }
+
   auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
   if (!sm_or.has_value()) return std::unexpected(sm_or.error());
   const estimate::fiml::SaturatedMoments& sm = *sm_or;
@@ -1283,7 +1423,15 @@ single_model_missing_scale(const spec::LatentStructure& pt,
 
   estimate::Estimates est;
   est.theta = theta;
-  auto U_or = estimate::fiml::fiml_residual_projector(pt, rep, raw, est, V);
+  post_expected<Eigen::MatrixXd> U_or =
+      std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "single_model_missing_scale: internal initialization error"));
+  if (two_stage) {
+    U_or = estimate::fiml::fiml_residual_projector(pt, rep, raw, est, V);
+  } else {
+    U_or = fiml_residual_projector_observed_bread(
+        pt, rep, theta, raw, *pack_ptr, V, "single_model_missing_scale");
+  }
   if (!U_or.has_value()) return std::unexpected(U_or.error());
 
   const Eigen::MatrixXd Zero =

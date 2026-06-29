@@ -268,6 +268,37 @@ FimlProjectionPieces fiml_projection_pieces(
   return out;
 }
 
+magmaan::post_expected<magmaan::robust::SatorraDiffResult>
+fiml_observed_bread_satorra_reference(
+    const BuiltModel& h1,
+    const magmaan::data::RawData& raw,
+    const Eigen::Ref<const Eigen::VectorXd>& theta1,
+    const magmaan::estimate::EqConstraints& K1,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha) {
+  magmaan::estimate::Estimates est1;
+  est1.theta = theta1;
+  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
+      *h1.pt, *h1.rep, raw, est1);
+  if (!D1.has_value()) return std::unexpected(D1.error());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  if (!sm.has_value()) return std::unexpected(sm.error());
+  auto info = magmaan::estimate::fiml::fiml_observed_information(
+      *h1.pt, *h1.rep, raw, est1);
+  if (!info.has_value()) return std::unexpected(info.error());
+
+  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1.Kmat;
+  Eigen::MatrixXd A1 = K1.Kmat.transpose() * (*info) * K1.Kmat;
+  A1 = symmetrized(A1);
+
+  const Eigen::MatrixXd V = symmetrized(sm->H);
+  const Eigen::MatrixXd G = symmetrized(sm->acov);
+  const Eigen::MatrixXd VD = V * Delta1;
+  Eigen::MatrixXd B1 = VD.transpose() * G * VD;
+  B1 = symmetrized(B1);
+
+  return magmaan::robust::compute_satorra2000_from_sandwich(A1, B1, A_alpha);
+}
+
 Eigen::VectorXd projected_ugamma_eigenvalues(const Eigen::MatrixXd& U,
                                              const Eigen::MatrixXd& Gamma,
                                              int df) {
@@ -1111,7 +1142,7 @@ TEST_CASE("nested FIML restriction map: precomputed SaturatedMoments is "
   CHECK(d_reuse->eigenvalues == d_rebuild->eigenvalues);
 }
 
-TEST_CASE("nested FIML restriction map: reduced and dense eta-space eigensolves agree") {
+TEST_CASE("nested FIML restriction map: empirical path uses observed FIML bread") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
   Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
@@ -1151,52 +1182,19 @@ TEST_CASE("nested FIML restriction map: reduced and dense eta-space eigensolves 
   REQUIRE(delta->eigenvalues.size() == 1);
   CHECK(exact->eigenvalues(0) == doctest::Approx(delta->eigenvalues(0)).epsilon(1e-7));
 
-  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
-  REQUIRE(sm.has_value());
-  magmaan::estimate::Estimates est1;
-  est1.theta = theta1;
-  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
-      *h1.pt, *h1.rep, raw, est1);
-  REQUIRE(D1.has_value());
-  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1->Kmat;
   auto restr = magmaan::robust::restriction_alpha_from_K(*K1, *K0);
   REQUIRE(restr.has_value());
-  auto reduced = magmaan::robust::compute_fiml_satorra2000(
-      Delta1, sm->H, sm->acov, restr->A);
-  REQUIRE(reduced.has_value());
+  auto ref = fiml_observed_bread_satorra_reference(
+      h1, raw, theta1, *K1, restr->A);
+  REQUIRE_MESSAGE(ref.has_value(),
+      "observed-bread reference failed: " <<
+      (ref.has_value() ? "" : ref.error().detail));
 
-  const Eigen::MatrixXd V = 0.5 * (sm->H + sm->H.transpose());
-  const Eigen::MatrixXd G = 0.5 * (sm->acov + sm->acov.transpose());
-  const Eigen::MatrixXd VD = V * Delta1;
-  Eigen::MatrixXd P = Delta1.transpose() * VD;
-  P = 0.5 * (P + P.transpose()).eval();
-  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
-  REQUIRE(ldlt_P.info() == Eigen::Success);
-  const Eigen::MatrixXd Pinv =
-      ldlt_P.solve(Eigen::MatrixXd::Identity(P.rows(), P.cols()));
-  Eigen::MatrixXd C = restr->A * Pinv * restr->A.transpose();
-  C = 0.5 * (C + C.transpose()).eval();
-  Eigen::LDLT<Eigen::MatrixXd> ldlt_C(C);
-  REQUIRE(ldlt_C.info() == Eigen::Success);
-  const Eigen::MatrixXd Cinv =
-      ldlt_C.solve(Eigen::MatrixXd::Identity(C.rows(), C.cols()));
-  Eigen::MatrixXd U = VD * Pinv * restr->A.transpose() * Cinv *
-                      restr->A * Pinv * VD.transpose();
-  U = 0.5 * (U + U.transpose()).eval();
-
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(G);
-  REQUIRE(es_g.info() == Eigen::Success);
-  const Eigen::VectorXd d =
-      es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
-  const Eigen::MatrixXd Gsqrt =
-      es_g.eigenvectors() * d.asDiagonal() * es_g.eigenvectors().transpose();
-  Eigen::MatrixXd dense_op = Gsqrt * U * Gsqrt;
-  dense_op = 0.5 * (dense_op + dense_op.transpose()).eval();
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_dense(dense_op);
-  REQUIRE(es_dense.info() == Eigen::Success);
-  const Eigen::VectorXd ev_dense =
-      es_dense.eigenvalues().tail(reduced->eigenvalues.size());
-  CHECK(ev_dense(0) == doctest::Approx(reduced->eigenvalues(0)).epsilon(1e-7));
+  REQUIRE(ref->eigenvalues.size() == 1);
+  CHECK(exact->eigenvalues(0) ==
+        doctest::Approx(ref->eigenvalues(0)).epsilon(1e-7));
+  CHECK(exact->scale_c ==
+        doctest::Approx(ref->trace_CinvS).epsilon(1e-7));
 }
 
 TEST_CASE("nested FIML restriction map: trace_CinvS matches C/S algebra") {
@@ -1230,20 +1228,12 @@ TEST_CASE("nested FIML restriction map: trace_CinvS matches C/S algebra") {
       "nested FIML exact failed: " << (exact.has_value() ? "" : exact.error().detail));
   REQUIRE(exact->eigenvalues.size() == 2);
 
-  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
-  REQUIRE(sm.has_value());
-  magmaan::estimate::Estimates est1;
-  est1.theta = theta1;
-  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
-      *h1.pt, *h1.rep, raw, est1);
-  REQUIRE(D1.has_value());
-  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1->Kmat;
   auto restr = magmaan::robust::restriction_alpha_from_K(*K1, *K0);
   REQUIRE(restr.has_value());
-  auto reduced = magmaan::robust::compute_fiml_satorra2000(
-      Delta1, sm->H, sm->acov, restr->A);
+  auto reduced = fiml_observed_bread_satorra_reference(
+      h1, raw, theta1, *K1, restr->A);
   REQUIRE_MESSAGE(reduced.has_value(),
-      "compute_fiml_satorra2000 failed: " <<
+      "observed-bread reference failed: " <<
       (reduced.has_value() ? "" : reduced.error().detail));
   REQUIRE(reduced->eigenvalues.size() == 2);
 
@@ -1487,20 +1477,12 @@ TEST_CASE("nested FIML restriction map: multi-group metric trace_CinvS algebra a
       (exact.has_value() ? "" : exact.error().detail));
   REQUIRE(exact->eigenvalues.size() == 3);
 
-  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
-  REQUIRE(sm.has_value());
-  magmaan::estimate::Estimates est1;
-  est1.theta = theta1;
-  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
-      *h1.pt, *h1.rep, raw, est1);
-  REQUIRE(D1.has_value());
-  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1->Kmat;
   auto restr = magmaan::robust::restriction_alpha_from_K(*K1, *K0);
   REQUIRE(restr.has_value());
-  auto reduced = magmaan::robust::compute_fiml_satorra2000(
-      Delta1, sm->H, sm->acov, restr->A);
+  auto reduced = fiml_observed_bread_satorra_reference(
+      h1, raw, theta1, *K1, restr->A);
   REQUIRE_MESSAGE(reduced.has_value(),
-      "compute_fiml_satorra2000 failed: " <<
+      "observed-bread reference failed: " <<
       (reduced.has_value() ? "" : reduced.error().detail));
   REQUIRE(reduced->eigenvalues.size() == 3);
 

@@ -22,7 +22,8 @@
 #'   or `"delta"` (lavaan-style covariance/moment Jacobian column-space
 #'   restriction). FIML pairs with nonlinear equality constraints use the local
 #'   tangent restriction map even when `"exact"` is requested, because no global
-#'   affine exact map exists.
+#'   affine exact map exists. For lavaan's default FIML
+#'   `lavTestLRT(method = "satorra.2000")` comparison, use `"delta"`.
 #' @param computation `"streaming"` (default, projects casewise empirical
 #'   Gamma contributions before crossproducts), `"materialized"` (forms the
 #'   full empirical Gamma block before reducing), or `"dense"` (forms the full
