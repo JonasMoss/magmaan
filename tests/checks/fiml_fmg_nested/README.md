@@ -13,8 +13,8 @@ H0: f =~ x1 + a*x2 + a*x3 + a*x4 + x5
 ```
 
 It then imposes MCAR missingness, fits both models with FIML, and calls
-`nestedTest(..., method = "restriction_map")`. The reported rejection rates are
-stochastic smoke checks for the nested p-values:
+`nestedTest(..., method = "restriction_map", A.method = "delta")` by default.
+The reported rejection rates are stochastic smoke checks for the nested p-values:
 
 - unscaled chi-square;
 - mean-scaled/Satorra-Bentler;
@@ -23,11 +23,10 @@ stochastic smoke checks for the nested p-values:
 - exact positive weighted-chi-square mixture.
 
 `--dist=t --t-df=5` keeps the model restriction true while making the data
-heavy-tailed, so normal-theory and robust nested behavior can be compared. This
-is a smoke check, not a calibration claim: early runs show the robust
-restriction-map p-values are much less anti-conservative than the unscaled
-normal-theory difference, but the nested heavy-tail case needs a larger
-simulation grid before treating it as nominal.
+heavy-tailed, so normal-theory and robust nested behavior can be compared.
+`--a-method=exact` is available for exact row-space diagnostics; `delta` is the
+lavaan-default Satorra-2000 nested-test convention. This is a smoke check, not a
+calibration claim.
 
 ## Run
 

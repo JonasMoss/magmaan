@@ -282,16 +282,17 @@ lr_test_satorra2000_ml2s_from_data(
 // ============================================================================
 // Satorra-Bentler "method 2001" difference-spectrum nested tests for missing
 // data: the U_D = U0 − U1 estimator (vs the restriction-map "method 2000"
-// above). Each model's residual projector is built in the shared saturated
-// η-metric (common weight V and common Γ), differenced, and the top
-// df_H0 − df_H1 eigenvalues of (U0 − U1)·Γ are read out through the same
-// LRSatorra2000Result family (SB / mean-var / scaled-shifted / mixture); the
-// eigenvalues also feed the FMG/pEBA tail transforms. No restriction matrix or
-// EqConstraints are needed — the spectrum comes from the two single-model fits.
+// above). Each model's residual projector is built against the common saturated
+// eta-space meat side, differenced, and the top df_H0 − df_H1 eigenvalues of
+// (U0 − U1)·Γ are read out through the same LRSatorra2000Result family
+// (SB / mean-var / scaled-shifted / mixture); the eigenvalues also feed the
+// FMG/pEBA tail transforms. No restriction matrix or EqConstraints are needed:
+// the spectrum comes from the two single-model fits.
 // (Satorra & Bentler 2001 p.510; semTests::ugamma_nested(m0, m1, "2001").)
 //
-// FIML: V = saturated observed information (sm.H), Γ = saturated ACOV (sm.acov).
-// ML2S: V = two-stage NT weight, Γ = two-stage moment ACOV.
+// FIML: model projectors use observed FIML information as bread, with
+// V = saturated information (sm.H) and Γ = saturated ACOV (sm.acov) on the meat
+// side. ML2S: V = two-stage NT weight, Γ = two-stage moment ACOV.
 post_expected<LRSatorra2000Result>
 lr_test_satorra2001_fiml_from_data(
     const spec::LatentStructure&     pt_H1,

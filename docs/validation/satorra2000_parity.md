@@ -191,49 +191,50 @@ explicit per-group intercept labels plus `factor ~ c(0, NA)*1` latent-mean rows
 when an exact metric→scalar test is needed; the fits then match lavaan exactly.
 This is a `spec::build` lavaanify gap, not a nested-test gap.
 
-## Missing-data convention split (2026-06-28)
+## Missing-data FIML bread split (2026-06-29)
 
-The complete-data lavaan-parity diagnosis above does **not** extend to the
-current FIML / ML2S missing-data `method = "restriction_map"` route. That route
-was wired as magmaan's first-principles robust missing-data difference spectrum:
-it uses the saturated EM eta-space sandwich, not lavaan's missing-data
-`lavTestLRT()` compatibility convention. The local first-order derivation is in
-[docs/research/notes/nested-fiml-satorra2000-eta.tex](../research/notes/nested-fiml-satorra2000-eta.tex):
-under the ordinary nested null, where the smaller model contains the saturated
-FIML/ML2S eta target, the Satorra restriction-map law follows with
-`V = SaturatedMoments::H` and `Gamma = SaturatedMoments::acov`; the full
-misspecified nested profile-Hessian law remains a separate problem. In this
-route, robust means data-distribution robust under the true nested null, not
-structural-misspecification robust. A local probe using the
-experiment-25 two-group one-factor invariance population (`n = 200 + 200`,
-seed `20260616`, weak/configural-to-metric step, `A.method = "exact"`) shows:
+The FIML empirical missing-data route uses the same split convention as lavaan's
+MLR difference test: parameter-space bread comes from the fitted H1 model's
+observed FIML information, while the meat side is still the saturated
+missing-data eta sandwich. In symbols, `lr_test_satorra2000_fiml_from_data()` now
+uses
 
-| data | arm | magmaan T_scaled | lavaan T_scaled | magmaan c | lavaan c |
-|---|---:|---:|---:|---:|---:|
-| complete | FIML | 9.2523 | 9.1071 | 1.0231 | 1.0394 |
-| MCAR 30% | FIML | 6.0260 | 8.6537 | 1.0173 | 0.7084 |
-| MAR 30% | FIML | 7.3822 | 12.4193 | 0.9982 | 0.5933 |
+```text
+A1 = K1' I_obs(theta_H1) K1
+B1 = (V Delta K1)' Gamma (V Delta K1)
+V = SaturatedMoments::H
+Gamma = SaturatedMoments::acov
+```
 
-The unscaled difference statistic matches lavaan in each row. The per-model
-FIML MLR helper also matches lavaan for the H1 model in the MCAR probe
-(`chisq.scaled = 24.2191`, `chisq.scaling.factor = 1.00328`). The divergence is
-therefore localized to the missing-data Satorra-2000 difference scaling
-convention.
+for `gamma = "empirical"`. The `gamma = "NT"` sanity path intentionally keeps the
+older saturated-bread form so every difference eigenvalue collapses to one under
+the normal-theory reference. ML2S also keeps its two-stage convention: the
+selected Stage-2 weight is both the moment metric and the Stage-2 bread.
 
-The source of the split is the metric/meat convention feeding the restriction
-map:
-`lr_test_satorra2000_fiml_from_data()` currently computes the missing-data
-difference spectrum in saturated EM eta space with `V = SaturatedMoments::H` and
-`Gamma = SaturatedMoments::acov`. Reconstructing the Satorra-2000 equation with
-those exact matrices reproduces magmaan's MCAR scale (`c = 1.017291`). Using
-lavaan's exposed `lavInspect(fit, "delta")`, `"wls.v"`, and `"gamma"` matrices
-with the exact restriction matrix gives a scale near lavaan's reported value
-(`c = 0.685` before lavaan's finite-sample details, versus reported `0.708`),
-far from magmaan's current value.
+The 2026-06-28 probe that motivated this change localized the FIML problem to the
+bread choice, not to `T_diff`, `df`, `Delta`, or `Gamma`. On the strict
+scalar→strict invariance replicate (`p = 8`, `N = 200 + 200`, independent
+generator 2 margins), reconstructing the Satorra equation with magmaan's old
+saturated bread reproduced the old strict-delta scale (`c = 6.274`). Replacing
+only the bread with observed FIML information gave `c = 7.682`, near lavaan's
+default delta value (`c = 7.820`), with the unscaled `T_diff` unchanged. In an
+80-replicate strict calibration probe, magmaan's delta scaled-shifted rejection
+rate moved to `0.087` versus lavaan default `0.075`.
 
-This is not, by itself, evidence that the magmaan route is wrong; it is evidence
-that the current route is **not a lavaan-compatible missing-data nested-test
-baseline**. Treat it as magmaan's eta-space data-robust nested-null route. If a
-lavaan-compatible missing-data Satorra-2000 statistic is needed, it should be
-exposed as a separate compatibility route or option rather than replacing the
-eta-space FMG route without a calibration decision.
+The failure surfaced most sharply at the strict residual-variance rung because
+that is where the heavy-tailed fourth-moment contribution is largest and the old
+saturated bread under-counted the H1 restriction projection. Weak loading and
+strong/intercept rungs moved less because their restriction directions were less
+dominated by residual-kurtosis information; normal data masked the issue because
+the saturated and observed breads nearly collapse. Companion probes over
+complete-data ML and ML2S did not show the same strict-delta failure. Their exact
+strict routes can still be liberal, but that is the exact-row-space issue below,
+not the FIML observed-bread bug.
+
+The remaining strict `A.method = "exact"` discrepancy is a row-space convention,
+not the bread bug. lavaan's internal exact helper for that invariance step carries
+earlier equality rows into the exact restriction body before projection, whereas
+magmaan's exact route uses the clean `K_H1` versus `K_H0` complement. lavaan's
+public `lavTestLRT(method = "satorra.2000")` default is still
+`A.method = "delta", scaled.shifted = TRUE`; use magmaan
+`A.method = "delta"` when that is the oracle.

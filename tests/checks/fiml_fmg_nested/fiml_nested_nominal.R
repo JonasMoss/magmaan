@@ -10,6 +10,7 @@ parse_args <- function(args) {
     dist = "normal",
     t_df = 5.0,
     alpha = 0.05,
+    a_method = "delta",
     seed = 20260609L,
     max_iter = 10000L
   )
@@ -30,6 +31,8 @@ parse_args <- function(args) {
       out$t_df <- as.numeric(val)
     } else if (identical(key, "alpha")) {
       out$alpha <- as.numeric(val)
+    } else if (identical(key, "a-method")) {
+      out$a_method <- val
     } else if (identical(key, "seed")) {
       out$seed <- as.integer(val)
     } else if (identical(key, "max-iter")) {
@@ -69,7 +72,7 @@ draw_null_data <- function(n, pop, missing_prob, dist, t_df) {
   as.data.frame(X)
 }
 
-fit_pair <- function(df, spec_h1, spec_h0, max_iter, alpha) {
+fit_pair <- function(df, spec_h1, spec_h0, max_iter, alpha, a_method) {
   raw_h1 <- df_to_fiml_data(df, spec_h1)
   raw_h0 <- df_to_fiml_data(df, spec_h0)
   fit_h1 <- magmaan_core$fit_fiml(
@@ -81,7 +84,7 @@ fit_pair <- function(df, spec_h1, spec_h0, max_iter, alpha) {
     control = list(max_iter = max_iter, ftol = 1e-12, gtol = 1e-8)
   )
   nt <- nestedTest(fit_h1, fit_h0, method = "restriction_map",
-                   A.method = "exact")
+                   A.method = a_method)
   data.frame(
     T_diff = nt$T_diff,
     df_diff = nt$df_diff,
@@ -130,6 +133,9 @@ if (!is.finite(cfg$missing) || cfg$missing < 0 || cfg$missing >= 1) {
   stop("--missing must be in [0, 1)")
 }
 if (!cfg$dist %in% c("normal", "t")) stop("--dist must be 'normal' or 't'")
+if (!cfg$a_method %in% c("exact", "delta")) {
+  stop("--a-method must be 'exact' or 'delta'")
+}
 if (identical(cfg$dist, "t") && (!is.finite(cfg$t_df) || cfg$t_df <= 2.0)) {
   stop("--t-df must be finite and > 2")
 }
@@ -153,6 +159,7 @@ cat("FIML nested FMG nominal smoke under the null\n")
 cat("H0 restriction: x2, x3, x4 loadings equal\n")
 cat("data: ", cfg$dist, ", MCAR missingness\n", sep = "")
 if (identical(cfg$dist, "t")) cat("t_df=", cfg$t_df, "\n", sep = "")
+cat("A.method=", cfg$a_method, "\n", sep = "")
 cat("missing=", cfg$missing, " reps=", cfg$reps,
     " alpha=", cfg$alpha, " seed=", cfg$seed, "\n\n", sep = "")
 
@@ -162,7 +169,7 @@ for (n in cfg$n) {
   for (rep in seq_len(cfg$reps)) {
     df <- draw_null_data(n, pop, cfg$missing, cfg$dist, cfg$t_df)
     row <- tryCatch(
-      fit_pair(df, spec_h1, spec_h0, cfg$max_iter, cfg$alpha),
+      fit_pair(df, spec_h1, spec_h0, cfg$max_iter, cfg$alpha, cfg$a_method),
       error = function(e) {
         warning("n=", n, " rep=", rep, " failed: ", conditionMessage(e),
                 call. = FALSE)
@@ -187,6 +194,8 @@ print(summary, digits = 4, row.names = FALSE)
 
 cat("\nInterpretation: rejection columns are stochastic smoke checks against ",
     "the nominal alpha. Heavy-tailed H0-true data should penalize the unscaled ",
-    "normal-theory difference more than the robust restriction-map p-values, ",
-    "but this script is not a standalone calibration study.\n",
+    "normal-theory difference more than the robust restriction-map p-values. ",
+    "Use --a-method=exact only for exact row-space diagnostics; delta is the ",
+    "lavaan-default nested-test convention. This script is not a standalone ",
+    "calibration study.\n",
     sep = "")
