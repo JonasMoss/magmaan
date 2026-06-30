@@ -365,6 +365,21 @@ stabilization at tiny N (trimmed / shrunken influence kurtosis) is research-tier
 with its own validation ([[feedback-shortcut-variants]]); the Bartlett-corrected
 profile-LR is the heavier alternative when df-widening underperforms.
 
+Design cautions (author, 2026-06-30, after the experiment-44 2x2):
+
+- *Mix-and-match risk.* transform + KC effective-df + HC2 avar-debias is a stack
+  of corrections that interact (the KC df and the HC2 meat-debias both bear on the
+  variance estimate and can over-correct together; the bias correction adds yet
+  another estimated higher moment). Treat the stack as a deliberate study with its
+  own calibration check, not a free pile-up; add arms one at a time and watch for
+  over-coverage, especially at small N.
+- *Do not target exactly 0.95 at tiny N.* Distribution-free inference cannot
+  recover fourth-moment information the sample does not contain, so the honest goal
+  at N<=30 (heavy tails) is calibration *improvement* and left/right *balance*, not
+  nominal coverage. experiment 44's `transform + KC t` already delivers that
+  (near-nominal and balanced on normal data to N=20; the residual is heavy-tails x
+  tiny-N, the avar-debias's territory).
+
 ## Measures / reporting
 
 ### MI effect sizes (dMACS / EDM family) for fitted multi-group models
