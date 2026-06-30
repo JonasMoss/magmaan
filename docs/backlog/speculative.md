@@ -304,6 +304,58 @@ parity task (the algorithms are fully specified in Asparouhov-Muthén 2009 and
 Bernaards-Jennrich 2005); the analytic rotation-Jacobian SE is the one piece with
 genuine derivation work.
 
+### Small-sample distribution-free intervals for covariance functionals (Kauermann-Carroll)
+
+A small-N coverage correction for the distribution-free Wald interval of any
+smooth covariance functional `g(S)`: Cronbach's alpha, the omega family
+(omega_total, omega_h, H, H_general), reliability differences, correlations, and
+standardized SEM parameters. Each has an ADF/influence SE `se^2 = var(v)/N` with
+`v_k = <grad g(S), d_k d_k' - S>` the per-case influence values; the plain Wald
+(z) interval undercovers at small N because, per Kauermann & Carroll (2001, JASA;
+PDF in `external/refs/corrections/`), the variance estimate is itself noisy with
+undercoverage `= c_p * var(se^2)/se^4`, `c_p = phi(z_p)(z_p^3 + z_p)/8` (a
+Cornish-Fisher term), and `var(se^2)` is governed by the KURTOSIS of the
+influence values. The correction is a t reference on effective df
+`f = 2N/(kappa_hat - 1)`, `kappa_hat = mean(e^4)/mean(e^2)^2` (`e = v - mean(v)`),
+the Satterthwaite realization of their quantile adjustment, from the same
+influence values; no fit, no bootstrap. It is design-free, so it applies to every
+covariance functional, unlike the leverage-driven Bell-McCaffrey / Imbens-Kolesar
+df (inert for a plain functional). Reference set and the keystone derivation in
+[`external/refs/corrections/README.md`](../../external/refs/corrections/README.md)
+(KC 2001, Bell-McCaffrey 2002, Imbens-Kolesar 2016, Yuan-Bentler 1997/1998,
+Satterthwaite 1946).
+
+**Proof of concept landed.** `experiments/44-alpha-kc-coverage`: for Cronbach's
+alpha (congeneric p=6; normal and contaminated-normal data sharing the population
+covariance) the correction recovers most of the small-N undercoverage in both
+laws (N=20: normal 0.90 -> 0.93, contaminated 0.84 -> 0.89), near-nominal by
+N=50-100. Honest residual at N<=30 under heavy tails: `kappa_hat` is itself a
+fourth moment estimated from few cases, the ADF SE is downward-biased there
+(SE/MC-SD ~0.63-0.75 at N=20, the HC2/Bell-McCaffrey meat-debiasing's job, not the
+df's), and alpha carries a point bias no symmetric widening removes.
+
+**Alternative already available.** The bootstrap (Kelley & Pornprasertmanit 2016)
+is the field's small-N omega-CI recommendation and, for a closed form, nearly
+free; plain logit-Wald is what `papers/closed-form-omega` ships, and that interval
+was deliberately kept simple to keep the paper focused. The maximal-reliability
+entry below already lands a heavier *per-coefficient* small-N CI stack (logit +
+robust sandwich + second-order functional bias correction + Bartlett-corrected
+profile-LR, `experiments/43`); the KC route is the lighter, family-wide
+alternative.
+
+**Build if.** A "small-sample psychometric inference" paper or methods workflow
+wants one calibrated, fit-free, bootstrap-free interval recipe across several
+psychometric covariance functionals (alpha, the omega/H family, reliability
+differences, correlations), or a closed-form-omega referee pushes on small-N
+coverage hard enough to want more than logit-Wald. Sequencing: port the
+experiment-44 correction to the omega family on the closed-form-omega /
+reliability harness first (same influence values), then add the HC2 meat-debiasing
+(Bell-McCaffrey) for the SE downward bias and a second-order functional bias
+correction for the point bias to close the N<=30 residual. The `kappa_hat`
+stabilization at tiny N (trimmed / shrunken influence kurtosis) is research-tier
+with its own validation ([[feedback-shortcut-variants]]); the Bartlett-corrected
+profile-LR is the heavier alternative when df-widening underperforms.
+
 ## Measures / reporting
 
 ### MI effect sizes (dMACS / EDM family) for fitted multi-group models
