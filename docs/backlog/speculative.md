@@ -325,14 +325,20 @@ df (inert for a plain functional). Reference set and the keystone derivation in
 (KC 2001, Bell-McCaffrey 2002, Imbens-Kolesar 2016, Yuan-Bentler 1997/1998,
 Satterthwaite 1946).
 
-**Proof of concept landed.** `experiments/44-alpha-kc-coverage`: for Cronbach's
-alpha (congeneric p=6; normal and contaminated-normal data sharing the population
-covariance) the correction recovers most of the small-N undercoverage in both
-laws (N=20: normal 0.90 -> 0.93, contaminated 0.84 -> 0.89), near-nominal by
-N=50-100. Honest residual at N<=30 under heavy tails: `kappa_hat` is itself a
+**Proof of concept landed.** `experiments/44-alpha-kc-coverage` covers two
+functionals, Cronbach's alpha (congeneric p=6) and the Pearson correlation
+(p=2, rho=0.5), under normal and contaminated-normal data sharing the population
+covariance. The correction recovers most of the small-N undercoverage in every
+cell (N=20: alpha normal 0.90 -> 0.93, alpha contaminated 0.84 -> 0.89;
+correlation normal 0.86 -> 0.89, correlation contaminated 0.77 -> 0.84),
+near-nominal by N=50-100; the correlation SE reproduces the textbook
+`(1-r^2)^2/N`. Honest residual at N<=30 under heavy tails: `kappa_hat` is itself a
 fourth moment estimated from few cases, the ADF SE is downward-biased there
-(SE/MC-SD ~0.63-0.75 at N=20, the HC2/Bell-McCaffrey meat-debiasing's job, not the
-df's), and alpha carries a point bias no symmetric widening removes.
+(SE/MC-SD ~0.63-0.78 at N=20, the HC2/Bell-McCaffrey meat-debiasing's job, not the
+df's), and the point estimate carries a bias no symmetric widening removes. The
+residual is larger for the correlation, whose raw-scale skew/boundedness wants a
+variance-stabilizing transform (Fisher z, the analog of logit for omega) the
+symmetric df-widening cannot supply.
 
 **Alternative already available.** The bootstrap (Kelley & Pornprasertmanit 2016)
 is the field's small-N omega-CI recommendation and, for a closed form, nearly
