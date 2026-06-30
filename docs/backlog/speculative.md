@@ -325,20 +325,23 @@ df (inert for a plain functional). Reference set and the keystone derivation in
 (KC 2001, Bell-McCaffrey 2002, Imbens-Kolesar 2016, Yuan-Bentler 1997/1998,
 Satterthwaite 1946).
 
-**Proof of concept landed.** `experiments/44-alpha-kc-coverage` covers two
-functionals, Cronbach's alpha (congeneric p=6) and the Pearson correlation
-(p=2, rho=0.5), under normal and contaminated-normal data sharing the population
-covariance. The correction recovers most of the small-N undercoverage in every
-cell (N=20: alpha normal 0.90 -> 0.93, alpha contaminated 0.84 -> 0.89;
-correlation normal 0.86 -> 0.89, correlation contaminated 0.77 -> 0.84),
-near-nominal by N=50-100; the correlation SE reproduces the textbook
-`(1-r^2)^2/N`. Honest residual at N<=30 under heavy tails: `kappa_hat` is itself a
-fourth moment estimated from few cases, the ADF SE is downward-biased there
-(SE/MC-SD ~0.63-0.78 at N=20, the HC2/Bell-McCaffrey meat-debiasing's job, not the
-df's), and the point estimate carries a bias no symmetric widening removes. The
-residual is larger for the correlation, whose raw-scale skew/boundedness wants a
-variance-stabilizing transform (Fisher z, the analog of logit for omega) the
-symmetric df-widening cannot supply.
+**Proof of concept landed.** `experiments/44-alpha-kc-coverage` runs the 2x2
+{raw, transform} x {Wald z, KC eff-df t} on Cronbach's alpha (congeneric p=6,
+logit transform) and the Pearson correlation swept over rho (Fisher-z transform),
+under normal and contaminated-normal data. The rho sweep separates **two
+orthogonal small-N defects**: (1) the two-sided coverage deficit = variance of the
+variance, roughly FLAT in rho, fixed by the KC effective-df t (the influence-SE
+reproduces the textbook `(1-r^2)^2/N`); (2) the left/right miss imbalance =
+skewness, ~zero at rho=0 and GROWING with rho (raw Wald misses below/above ~97/6
+per 1000 at rho=0.9, N=30, vs balanced ~58/56 at rho=0), fixed by the transform.
+The transform alone balances the sides but does not lift the total; the KC t alone
+lifts the total but stays imbalanced; only `transform + KC t` is both near-nominal
+and balanced, for alpha and the correlation alike. The two corrections compose for
+free: the transform rescales every influence value by one constant, leaving the
+kurtosis (hence the KC df) unchanged, so order does not matter. Honest residual at
+N<=30 under heavy tails: `kappa_hat` is a fourth moment estimated from few cases
+and the ADF SE is downward-biased there (the HC2/Bell-McCaffrey meat-debiasing's
+job, not a df or transform job).
 
 **Alternative already available.** The bootstrap (Kelley & Pornprasertmanit 2016)
 is the field's small-N omega-CI recommendation and, for a closed form, nearly
