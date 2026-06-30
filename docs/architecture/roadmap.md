@@ -626,15 +626,22 @@ golden `parTable()` fixtures.
   `method = "restriction_map"` route when both fits are FIML and carry
   compatible `raw_data`: for empirical Gamma it builds the H1-anchored split
   sandwich `A1 = K1' I_obs(theta_H1) K1`,
-  `B1 = (V Delta K1)' Gamma_mis (V Delta K1)` with
-  `V = SaturatedMoments::H` and `Gamma_mis = SaturatedMoments::acov`, supports
-  exact equality-constraint maps and delta tangent maps, and reports the
-  existing unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested
-  result shape. `GammaSource::NT` intentionally keeps the saturated eta-space
-  bread so every difference eigenvalue collapses to one. Nonlinear equality
-  constraints are supported by local tangent bases for both models; when
-  `"exact"` is requested for such a pair, the route warns and uses the local
-  tangent restriction because no global affine exact map exists.
+  `B1 = (V Delta K1)' Gamma_mis (V Delta K1)`. The default
+  `convention = "magmaan"` uses the saturated-EM eta-space metric
+  (`V = SaturatedMoments::H`, `Gamma_mis = SaturatedMoments::acov`). The
+  `convention = "lavaan"` compatibility mode instead mirrors
+  `lavTestLRT(method = "satorra.2000")`: parameter bread is the per-observation
+  observed FIML information, `WLS.V` is the per-group expected H1 information
+  over observed missingness patterns using the saturated H1 covariance, and
+  `Gamma` is the model-based raw-moment Gamma centered at the H1 model-implied
+  moments. The R wrapper defaults `A.method` to `"delta"` when
+  `convention = "lavaan"` is requested. Both conventions report the existing
+  unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
+  shape. `GammaSource::NT` intentionally keeps the saturated eta-space bread so
+  every difference eigenvalue collapses to one. Nonlinear equality constraints
+  are supported by local tangent bases for both models; when `"exact"` is
+  requested for such a pair, the route warns and uses the local tangent
+  restriction because no global affine exact map exists.
   Two-stage ML (`ML2S`) pairs are routed the same way
   (`robust_nested_lrt()` / `nestedTest()` dispatch ML2S before the FIML check,
   since an ML2S fit's `raw_data` is a `magmaan_fiml_data`; `computation =
@@ -642,16 +649,21 @@ golden `parTable()` fixtures.
   two-stage weight (`Nt` by default; `Uls`/`Dwls`/`Adf`/`Dls` for weighted
   Stage-2 fits, not the saturated `V = H` of the FIML route) with the EM-ACOV
   meat `two_stage_gamma_from_acov(sm)` and the Stage-2 chi-square difference as
-  the base. A `GammaSource::NT` collapse (every difference eigenvalue exactly 1)
+  the base. Under `convention = "lavaan"`, ML2S keeps the selected Stage-2
+  `WLS.V` but swaps the meat to lavaan's model-based raw-moment Gamma, which
+  matches `missing = "robust.two.stage"` nested differences in the paper parity
+  gate. A `GammaSource::NT` collapse (every difference eigenvalue exactly 1)
   gates the NT convention. The eigenvalue-tail battery is applied to any of these
   difference spectra (continuous ML / FIML / ML2S) through `fmg_nested(fit_H1,
   fit_H0, ...)`, the model-pair analogue of `fmg_nested_ordinal()`: it harvests
   `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
   table.
-  FIML convention note (2026-06-29): lavaan's public
-  `lavTestLRT(method = "satorra.2000")` default is delta/scaled-shifted, and
-  magmaan's FIML empirical delta path now follows that observed-bread split. The
+  FIML convention note (2026-06-30): lavaan's public
+  `lavTestLRT(method = "satorra.2000")` default is delta/scaled-shifted with
+  the lavaan `WLS.V`/Gamma convention above. `convention = "lavaan"` matches
+  that oracle for complete, MCAR, and MAR FIML/ML2S paper parity cells; the
+  independent saturated-EM convention remains the magmaan default. The
   strict-invariance `"exact"` row space can still differ from lavaan's internal
   exact helper because lavaan carries earlier invariance rows into that exact
   body before projection; use `A.method = "delta"` for the lavaan-default oracle.

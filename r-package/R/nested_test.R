@@ -30,6 +30,12 @@
 #'   q-by-q Gamma and U matrices and eigendecomposes the q-by-q product, as
 #'   standard SEM software does). The latter two are diagnostic/reference paths
 #'   for timing the algebraic reduction.
+#' @param convention `"magmaan"` (default) keeps magmaan's estimator-specific
+#'   Satorra-2000 moment convention. `"lavaan"` uses lavaan's public
+#'   `lavTestLRT(method = "satorra.2000")` convention for FIML/ML2S missing-data
+#'   pairs: model-based raw-moment `Gamma`, lavaan-style per-group `WLS.V`
+#'   weighting, and `"delta"` as the default `A.method` when the caller does not
+#'   specify one.
 #' @param ud_method Estimator of the U_D difference matrix whose `U_D * Gamma`
 #'   eigenvalues drive the scaled statistic: `"2000"` (default, Satorra 2000
 #'   restriction map from the H1 fit) or `"2001"` (Satorra-Bentler 2001
@@ -50,10 +56,13 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                               A.method = c("exact", "delta"),
                               computation = c("streaming", "materialized",
                                               "dense"),
+                              convention = c("magmaan", "lavaan"),
                               ud_method = c("2000", "2001"),
                               weight = NULL) {
   gamma <- match.arg(gamma)
   method <- match.arg(method)
+  convention <- match.arg(convention)
+  if (missing(A.method) && identical(convention, "lavaan")) A.method <- "delta"
   A.method <- match.arg(A.method)
   computation <- match.arg(computation)
   ud_method <- match.arg(ud_method)
@@ -133,7 +142,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res <- switch(method,
       restriction_map = infer_ml2s_lr_test_satorra2000(
         fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method,
-        stage2_weight = stage2_H1, dls_a = as.numeric(dls_H1)),
+        stage2_weight = stage2_H1, dls_a = as.numeric(dls_H1),
+        convention = convention),
       lavaan_sb2001 = infer_ml2s_lr_test_satorra_bentler2001(fit_H1, fit_H0),
       lavaan_sb2010 = infer_ml2s_lr_test_satorra_bentler2010(fit_H1, fit_H0),
       stop("robust_nested_lrt(): unsupported method '", method, "' for ML2S.",
@@ -142,8 +152,11 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$method <- method
     res$A.method <- A.method
     res$ud_method <- ud_method
+    res$convention <- convention
     res$computation <- if (identical(method, "restriction_map") &&
-                           identical(ud_method, "2001")) "ml2s_eta_2001" else "ml2s_eta"
+                           identical(ud_method, "2001")) "ml2s_eta_2001"
+                       else if (identical(convention, "lavaan")) "ml2s_lavaan"
+                       else "ml2s_eta"
     res$stage2_weight <- stage2_H1
     if (identical(stage2_H1, "dls")) res$dls_a <- as.numeric(dls_H1)
     class(res) <- c("magmaan_nested_test", "list")
@@ -157,7 +170,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     }
     res <- switch(method,
       restriction_map = infer_fiml_lr_test_satorra2000(
-        fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method),
+        fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method,
+        convention = convention),
       lavaan_sb2001 = infer_fiml_lr_test_satorra_bentler2001(fit_H1, fit_H0),
       lavaan_sb2010 = infer_fiml_lr_test_satorra_bentler2010(fit_H1, fit_H0),
       stop("robust_nested_lrt(): unsupported method '", method, "' for FIML.",
@@ -166,8 +180,11 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$method <- method
     res$A.method <- A.method
     res$ud_method <- ud_method
+    res$convention <- convention
     res$computation <- if (identical(method, "restriction_map") &&
-                           identical(ud_method, "2001")) "fiml_eta_2001" else "fiml_eta"
+                           identical(ud_method, "2001")) "fiml_eta_2001"
+                       else if (identical(convention, "lavaan")) "fiml_lavaan"
+                       else "fiml_eta"
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
   }
@@ -208,6 +225,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$gamma <- gamma
     res$method <- method
     res$A.method <- A.method
+    res$convention <- convention
     res$computation <- "mixed_ordinal_moment"
     res$weight <- resolved_weight
     class(res) <- c("magmaan_nested_test", "list")
@@ -238,6 +256,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$gamma <- gamma
     res$method <- method
     res$A.method <- A.method
+    res$convention <- convention
     res$computation <- "ordinal_moment"
     res$weight <- resolved_weight
     class(res) <- c("magmaan_nested_test", "list")
@@ -304,6 +323,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   res$gamma <- gamma
   res$method <- method
   res$A.method <- A.method
+  res$convention <- convention
   res$computation <- computation
   class(res) <- c("magmaan_nested_test", "list")
   res
@@ -324,10 +344,13 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
                        A.method = c("exact", "delta"),
                        computation = c("streaming", "materialized",
                                        "dense"),
+                       convention = c("magmaan", "lavaan"),
                        ud_method = c("2000", "2001"),
                        weight = NULL) {
   method <- match.arg(method)
   computation <- match.arg(computation)
+  convention <- match.arg(convention)
+  if (missing(A.method) && identical(convention, "lavaan")) A.method <- "delta"
   ud_method <- match.arg(ud_method)
   canonical <- switch(method,
     satorra.2000 = "restriction_map",
@@ -336,7 +359,8 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
     method)
   out <- robust_nested_lrt(fit_H1, fit_H0, data, gamma = gamma,
                            method = canonical, A.method = A.method,
-                           computation = computation, ud_method = ud_method,
+                           computation = computation, convention = convention,
+                           ud_method = ud_method,
                            weight = weight)
   out$compat_method <- method
   out
