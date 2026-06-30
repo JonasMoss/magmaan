@@ -1,6 +1,7 @@
 # Satorra-2000 nested-test lavaan parity
 
-**Status:** resolved 2026-05-17. This was not a confirmed lavaan bug.
+**Status:** resolved 2026-05-17; missing-data lavaan convention added
+2026-06-30. This was not a confirmed lavaan bug.
 
 The apparent parity gap between magmaan's nested robust LRT helper
 (`robust_nested_lrt()`, historically `nestedTest()`) and lavaan's
@@ -18,8 +19,9 @@ explicit parameter equality in simple parameter-nested comparisons.
 
 ## Bottom line
 
-Use this as the lavaan parity target for magmaan's current
-`robust_nested_lrt(method = "restriction_map")`:
+Use this as the lavaan parity target for magmaan's default
+`robust_nested_lrt(method = "restriction_map", convention = "magmaan")`
+on complete-data parameter-nested equality constraints:
 
 ```r
 lavTestLRT(fit_h1, fit_h0, method = "satorra.2000",
@@ -37,6 +39,17 @@ That call uses `A.method = "delta"`. The difference can be tiny for weakly
 binding restrictions and visible for strongly binding restrictions. It also
 uses `scaled.shifted = TRUE`, so for `m > 1` it reports lavaan's
 scaled-shifted statistic rather than the mean-scaled `T / c` statistic.
+
+For a deliberate lavaan-default comparison, including the FIML/ML2S missing-data
+paper parity gate, use magmaan's compatibility flag:
+
+```r
+nestedTest(fit_h1, fit_h0, method = "satorra.2000",
+           convention = "lavaan")
+```
+
+The R wrapper then defaults the restriction map to `A.method = "delta"` and
+returns the lavaan scaled-shifted p-value in `p_scaled_shifted`.
 
 ## Evidence
 
@@ -191,13 +204,12 @@ explicit per-group intercept labels plus `factor ~ c(0, NA)*1` latent-mean rows
 when an exact metric→scalar test is needed; the fits then match lavaan exactly.
 This is a `spec::build` lavaanify gap, not a nested-test gap.
 
-## Missing-data FIML bread split (2026-06-29)
+## Missing-data FIML/ML2S lavaan convention (2026-06-30)
 
-The FIML empirical missing-data route uses the same split convention as lavaan's
-MLR difference test: parameter-space bread comes from the fitted H1 model's
-observed FIML information, while the meat side is still the saturated
-missing-data eta sandwich. In symbols, `lr_test_satorra2000_fiml_from_data()` now
-uses
+The FIML empirical missing-data route now exposes two finite-sample moment
+conventions.
+
+`convention = "magmaan"` is the independent saturated-EM eta-space convention:
 
 ```text
 A1 = K1' I_obs(theta_H1) K1
@@ -206,35 +218,35 @@ V = SaturatedMoments::H
 Gamma = SaturatedMoments::acov
 ```
 
-for `gamma = "empirical"`. The `gamma = "NT"` sanity path intentionally keeps the
-older saturated-bread form so every difference eigenvalue collapses to one under
-the normal-theory reference. ML2S also keeps its two-stage convention: the
-selected Stage-2 weight is both the moment metric and the Stage-2 bread.
+`convention = "lavaan"` mirrors the public
+`lavTestLRT(method = "satorra.2000")` construction. The parameter-space bread is
+the per-observation observed FIML information from the H1 model. The `WLS.V`
+side is lavaan's H1 **expected** information in the saturated
+`[mean; vech(cov)]` metric: for FIML missing data it averages, over observed
+missingness patterns, the embedded inverse saturated H1 covariance and its
+normal-theory covariance block. The `Gamma` side is the model-based raw-moment
+Gamma centered at the H1 model-implied mean/covariance and pairwise skipped
+over missing entries. ML2S uses the selected Stage-2 `WLS.V` with the same
+lavaan model-based raw-moment Gamma.
 
-The 2026-06-28 probe that motivated this change localized the FIML problem to the
-bread choice, not to `T_diff`, `df`, `Delta`, or `Gamma`. On the strict
-scalar→strict invariance replicate (`p = 8`, `N = 200 + 200`, independent
-generator 2 margins), reconstructing the Satorra equation with magmaan's old
-saturated bread reproduced the old strict-delta scale (`c = 6.274`). Replacing
-only the bread with observed FIML information gave `c = 7.682`, near lavaan's
-default delta value (`c = 7.820`), with the unscaled `T_diff` unchanged. In an
-80-replicate strict calibration probe, magmaan's delta scaled-shifted rejection
-rate moved to `0.087` versus lavaan default `0.075`.
+The earlier 2026-06-28 probe localized the original strict-rung failure to the
+Satorra-2000 ingredients, not to `T_diff`, `df`, model specification, partables,
+or constraints. Replacing only the parameter bread with observed information
+moved the strict replicate in the right direction but did not fully match
+lavaan. The remaining gap was lavaan's FIML `WLS.V` convention: complete data
+reduces to `SaturatedMoments::H / n_g`, while missing data uses the
+pattern-expected H1 information above, not the saturated EM observed Hessian.
 
-The failure surfaced most sharply at the strict residual-variance rung because
-that is where the heavy-tailed fourth-moment contribution is largest and the old
-saturated bread under-counted the H1 restriction projection. Weak loading and
-strong/intercept rungs moved less because their restriction directions were less
-dominated by residual-kurtosis information; normal data masked the issue because
-the saturated and observed breads nearly collapse. Companion probes over
-complete-data ML and ML2S did not show the same strict-delta failure. Their exact
-strict routes can still be liberal, but that is the exact-row-space issue below,
-not the FIML observed-bread bug.
+The paper parity gate (`papers/fiml-fmg/analysis/parity_lavaan.R`) now checks
+complete, MCAR, and MAR-linear cells for FIML and ML2S against lavaan
+0.7.1.2691. With `convention = "lavaan"` it reports 90/90 passing checks,
+including every nested scaled-shifted statistic and p-value. The `gamma = "NT"`
+sanity path still keeps the saturated eta-space bread so every difference
+eigenvalue collapses to one under the normal-theory reference.
 
-The remaining strict `A.method = "exact"` discrepancy is a row-space convention,
-not the bread bug. lavaan's internal exact helper for that invariance step carries
-earlier equality rows into the exact restriction body before projection, whereas
-magmaan's exact route uses the clean `K_H1` versus `K_H0` complement. lavaan's
-public `lavTestLRT(method = "satorra.2000")` default is still
-`A.method = "delta", scaled.shifted = TRUE`; use magmaan
-`A.method = "delta"` when that is the oracle.
+The strict `A.method = "exact"` discrepancy remains a row-space convention, not
+the moment-convention bug. lavaan's internal exact helper for that invariance
+step carries earlier equality rows into the exact restriction body before
+projection, whereas magmaan's exact route uses the clean `K_H1` versus `K_H0`
+complement. lavaan's public default is `A.method = "delta", scaled.shifted =
+TRUE`; use magmaan `convention = "lavaan"` when that is the oracle.

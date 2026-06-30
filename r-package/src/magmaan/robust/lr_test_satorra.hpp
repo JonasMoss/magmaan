@@ -25,6 +25,11 @@ enum class SatorraAMethod {
   Delta
 };
 
+enum class SatorraMomentConvention {
+  Magmaan,
+  Lavaan
+};
+
 struct Satorra2000Options {
   SatorraAMethod   a_method    = SatorraAMethod::Exact;
   GammaSource      gamma       = GammaSource::Empirical;
@@ -256,7 +261,8 @@ lr_test_satorra2000_fiml_from_data(
     GammaSource                      gamma = GammaSource::Empirical,
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
     double                           h_step = 1e-4,
-    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr);
+    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
+    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan);
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_ml2s_from_data(
@@ -278,7 +284,8 @@ lr_test_satorra2000_ml2s_from_data(
     double                           h_step = 1e-4,
     const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
     estimate::fiml::TwoStageWeight    kind = estimate::fiml::TwoStageWeight::Nt,
-    estimate::fiml::TwoStageDlsOptions dls = {});
+    estimate::fiml::TwoStageDlsOptions dls = {},
+    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan);
 
 // ============================================================================
 // Satorra-Bentler "method 2001" difference-spectrum nested tests for missing
@@ -347,6 +354,7 @@ lr_test_satorra2000_fiml_from_data(
     const estimate::fiml::FIMLH1&    h1,
     GammaSource                      gamma = GammaSource::Empirical,
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
-    double                           h_step = 1e-4);
+    double                           h_step = 1e-4,
+    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan);
 
 }  // namespace magmaan::robust

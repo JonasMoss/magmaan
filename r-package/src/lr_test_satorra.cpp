@@ -36,6 +36,18 @@ magmaan::robust::SatorraAMethod parse_a_method(const std::string& s) {
   return magmaan::robust::SatorraAMethod::Exact;
 }
 
+magmaan::robust::SatorraMomentConvention parse_moment_convention(
+    const std::string& s) {
+  if (s == "magmaan" || s == "Magmaan") {
+    return magmaan::robust::SatorraMomentConvention::Magmaan;
+  }
+  if (s == "lavaan" || s == "Lavaan") {
+    return magmaan::robust::SatorraMomentConvention::Lavaan;
+  }
+  Rcpp::stop("magmaan: nested Satorra-2000 `convention` must be 'magmaan' "
+             "or 'lavaan' (got '%s')", s);
+}
+
 magmaan::robust::GammaComputation parse_gamma_computation(const std::string& s) {
   if (s == "materialized" || s == "full" || s == "explicit") {
     return magmaan::robust::GammaComputation::Materialized;
@@ -359,7 +371,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           std::string gamma = "empirical",
                                           std::string a_method = "exact",
                                           double      h_step = 1e-4,
-                                          std::string ud_method = "2000") {
+                                          std::string ud_method = "2000",
+                                          std::string convention = "magmaan") {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
     Rcpp::stop("infer_fiml_lr_test_satorra2000: both FIML fits must carry $raw_data");
@@ -422,7 +435,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
-      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm);
+      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm,
+      parse_moment_convention(convention));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }
@@ -440,7 +454,8 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           double      h_step = 1e-4,
                                           std::string ud_method = "2000",
                                           std::string stage2_weight = "nt",
-                                          double      dls_a = 0.5) {
+                                          double      dls_a = 0.5,
+                                          std::string convention = "magmaan") {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
     Rcpp::stop("infer_ml2s_lr_test_satorra2000: both ML2S fits must carry $raw_data");
@@ -505,7 +520,8 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or,
-      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm, kind, dls);
+      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm, kind, dls,
+      parse_moment_convention(convention));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }
