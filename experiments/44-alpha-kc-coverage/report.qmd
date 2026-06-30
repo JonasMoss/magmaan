@@ -1,5 +1,5 @@
 ---
-title: "A Variance-of-Variance Correction for Distribution-Free Reliability and Correlation Intervals"
+title: "Two Small-Sample Defects of Distribution-Free Intervals, and Two Corrections That Compose"
 format:
   html:
     toc: true
@@ -22,116 +22,122 @@ if (!all(file.exists(needed))) {
 d <- read.csv(file.path(res_dir, "coverage.csv"))
 reps <- max(d$reps)
 fmt <- function(x, k = 3) formatC(x, format = "f", digits = k)
-pick <- function(q, law, n, method, col)
-  d[[col]][d$quantity == q & d$law == law & d$n == n & d$method == method][1]
-ns <- sort(unique(d$n)); nlo <- min(ns); nhi <- max(ns)
-quants <- c("alpha", "correlation")
-qlab <- c(alpha = "Cronbach's alpha", correlation = "Pearson correlation")
-laws <- c("normal", "contaminated")
+rhos <- sort(unique(d$param[d$quantity == "correlation"]))
+ns <- sort(unique(d$n)); nlo <- min(ns)
+mlab <- c(wald = "raw + z (Wald)", kc = "raw + KC t",
+          twald = "transform + z", tkc = "transform + KC t")
+mcol <- c(wald = "#b2182b", kc = "#ef8a62", twald = "#67a9cf", tkc = "#1b7837")
+cor_pick <- function(rho, law, n, method, col)
+  d[[col]][d$quantity == "correlation" & d$param == rho & d$law == law &
+           d$n == n & d$method == method][1]
 ```
 
 ## The question and the answer
 
-Cronbach's alpha and the Pearson correlation are both smooth covariance
-functionals $g(S)$, so each has a distribution-free (ADF) Wald interval built on
-the influence-function SE, $se^2 = \operatorname{var}(v)/n$ with
-$v_k = d_k' G\, d_k$ the per-case influence values ($d_k = x_k-\bar x$,
-$G = \partial g/\partial\Sigma$). Both **undercover at small $N$**, for the reason
-**Kauermann & Carroll (2001)** identified: the variance estimate is itself noisy,
-with relative variability set by the *kurtosis of the influence values*, which is
-large because the $v_k$ are quadratic forms (heavy-tailed **even when the data are
-normal**).
+A distribution-free (ADF) Wald interval for a covariance functional $g(S)$ -- a
+correlation, Cronbach's alpha -- undercovers at small $N$ for **two separate
+reasons that need two separate corrections**:
 
-Replacing the normal quantile with a $t$ on Kauermann-Carroll **effective degrees
-of freedom**, $f = 2N/(\hat\kappa-1)$ computed from the same $v_k$, restores most
-of the coverage, for **both** functionals and both data laws. At $N=`r nlo`$:
+1. **Variance of the variance.** The influence-function SE $se^2=\operatorname{var}(v)/n$
+   is itself a noisy estimate, so the $z$ interval is too short. Kauermann &
+   Carroll (2001): the deficit is governed by the kurtosis of the influence
+   values; the fix is a $t$ on effective df $f=2N/(\hat\kappa-1)$. This hits the
+   **two-sided** coverage and is roughly **constant in the correlation $\rho$**.
+2. **Skewness / boundedness.** The raw estimate is skewed and range-bounded, so a
+   symmetric interval misses asymmetrically. The fix is a variance-stabilizing
+   transform (Fisher's $z$ for a correlation, the logit for a reliability). This
+   hits the **left/right balance** of the misses, and the imbalance **grows with
+   $\rho$**.
 
-| | Wald (z) | KC (t) |
-|---|--:|--:|
-| alpha, normal | `r fmt(pick("alpha","normal",nlo,"wald","coverage"))` | **`r fmt(pick("alpha","normal",nlo,"kc","coverage"))`** |
-| alpha, contaminated | `r fmt(pick("alpha","contaminated",nlo,"wald","coverage"))` | **`r fmt(pick("alpha","contaminated",nlo,"kc","coverage"))`** |
-| correlation, normal | `r fmt(pick("correlation","normal",nlo,"wald","coverage"))` | **`r fmt(pick("correlation","normal",nlo,"kc","coverage"))`** |
-| correlation, contaminated | `r fmt(pick("correlation","contaminated",nlo,"wald","coverage"))` | **`r fmt(pick("correlation","contaminated",nlo,"kc","coverage"))`** |
+Sweeping $\rho$ pulls the two apart. Raw two-sided coverage is flat in $\rho$,
+but its miss turns almost entirely one-sided: at $N=`r nlo`$ (normal) the raw
+Wald interval misses below/above the true $\rho$ about
+`r fmt(1000*cor_pick(0.9,"normal",nlo,"wald","miss_lower"),0)`/`r fmt(1000*cor_pick(0.9,"normal",nlo,"wald","miss_upper"),0)`
+per 1000 at $\rho=0.9$ versus a balanced
+`r fmt(1000*cor_pick(0,"normal",nlo,"wald","miss_lower"),0)`/`r fmt(1000*cor_pick(0,"normal",nlo,"wald","miss_upper"),0)`
+at $\rho=0$. The transform keeps the two sides balanced at every $\rho$ but does
+not lift the total; the KC $t$ lifts the total but stays imbalanced. **Only the
+combination (transform + KC $t$) is both near-nominal and balanced**, across
+$\rho$ and $N$, for the correlation and for alpha alike. The two corrections are
+orthogonal and they compose.
 
-By $N=50$-$100$ the corrected interval is essentially nominal. It needs **no fit
-and no bootstrap**, only the influence values already used for the SE, and it is
-**design-free** (the same two lines serve any covariance functional). One honest
-asymmetry: the correlation residual at the smallest $N$ is larger than alpha's,
-because raw-scale $r$ is skewed and bounded, and the symmetric $t$-widening does
-not repair skewness. That part is the job of a variance-stabilizing transform
-(Fisher's $z$ for $r$, the logit for a reliability coefficient), complementary to
-the KC correction, not a substitute for it.
-
-```{r, fig.width=8, fig.height=7}
-op <- par(mfrow = c(2, 2), mar = c(4, 4, 2.4, 1), cex = 0.9)
-for (q in quants) for (law in laws) {
-  cw <- sapply(ns, function(n) pick(q, law, n, "wald", "coverage"))
-  ck <- sapply(ns, function(n) pick(q, law, n, "kc", "coverage"))
-  yl <- range(0.74, 0.97, cw, ck)
-  plot(ns, ck, type = "b", pch = 19, col = "#1b7837", ylim = yl, log = "x",
-       xlab = "N (log scale)", ylab = "95% CI coverage",
-       main = sprintf("%s, %s data", qlab[[q]], law), xaxt = "n")
-  axis(1, at = ns, labels = ns)
-  abline(h = 0.95, lty = 3, col = "grey50")
-  lines(ns, cw, type = "b", pch = 17, col = "#b2182b")
-  legend("bottomright", bty = "n", pch = c(17, 19),
-         col = c("#b2182b", "#1b7837"), legend = c("Wald (z)", "KC (t, eff. df)"))
-}
+```{r, fig.width=9, fig.height=4.2}
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2.4, 1), cex = 0.9)
+meths <- names(mlab)
+# Panel 1: two-sided coverage vs rho
+cov_at <- function(m) sapply(rhos, function(r) cor_pick(r, "normal", nlo, m, "coverage"))
+plot(NA, xlim = range(rhos), ylim = c(0.80, 0.97), xlab = expression(rho),
+     ylab = "two-sided coverage", main = sprintf("Coverage (normal, N=%d)", nlo))
+abline(h = 0.95, lty = 3, col = "grey50")
+for (m in meths) lines(rhos, cov_at(m), type = "b", pch = 19, col = mcol[[m]])
+legend("bottomleft", bty = "n", lwd = 2, col = mcol[meths], legend = mlab[meths], cex = 0.85)
+# Panel 2: signed one-sidedness (miss-below minus miss-above) vs rho
+imb_at <- function(m) sapply(rhos, function(r)
+  cor_pick(r, "normal", nlo, m, "miss_lower") - cor_pick(r, "normal", nlo, m, "miss_upper"))
+yl <- range(0, sapply(meths, imb_at))
+plot(NA, xlim = range(rhos), ylim = yl, xlab = expression(rho),
+     ylab = "P(true below) - P(true above)", main = sprintf("Imbalance (normal, N=%d)", nlo))
+abline(h = 0, lty = 3, col = "grey50")
+for (m in meths) lines(rhos, imb_at(m), type = "b", pch = 19, col = mcol[[m]])
 par(op)
 ```
 
-Coverage of the nominal-95% interval (`r reps` replications per cell). The
-Kauermann-Carroll interval (green) tracks the 0.95 line far more closely than the
-plain Wald interval (red), for both quantities, both data laws, at every $N$.
+Left: two-sided coverage is flat in $\rho$; the raw + KC $t$ (orange) and
+transform + KC $t$ (green) lift it, the latter most. Right: the signed imbalance
+of the misses grows with $\rho$ for the **raw** intervals (red, orange) and stays
+near zero for the **transform** intervals (blue, green). The KC $t$ moves points
+up in the left panel; the transform moves them toward zero in the right panel.
+The two corrections act on different panels.
 
-## The numbers
+## Two-sided coverage across $N$
 
 ```{r}
-w <- d[d$method == "wald", c("quantity", "law", "n", "coverage", "mean_kappa", "mean_se", "mc_sd")]
-kc <- d[d$method == "kc", c("quantity", "law", "n", "coverage", "mean_df")]
-m <- merge(w, kc, by = c("quantity", "law", "n"), suffixes = c("_wald", "_kc"))
-m <- m[order(match(m$quantity, quants), match(m$law, laws), m$n), ]
-tab <- data.frame(
-  Quantity = qlab[m$quantity], Law = m$law, N = m$n,
-  `Wald cover` = fmt(m$coverage_wald),
-  `KC cover`   = fmt(m$coverage_kc),
-  `KC eff. df` = fmt(m$mean_df, 1),
-  `infl. kurtosis` = fmt(m$mean_kappa, 1),
-  `SE / MC-SD` = fmt(m$mean_se / m$mc_sd, 2),
-  check.names = FALSE, row.names = NULL, stringsAsFactors = FALSE)
-knitr::kable(tab, align = "lllrrrrr")
+laws <- c("normal", "contaminated")
+rho_hi <- max(rhos[rhos <= 0.8])
+rowblock <- function(q, param, plab) {
+  do.call(rbind, lapply(laws, function(law) do.call(rbind, lapply(ns, function(n) {
+    g <- function(m) d$coverage[d$quantity == q &
+      (if (is.na(param)) is.na(d$param) else d$param == param) &
+      d$law == law & d$n == n & d$method == m][1]
+    data.frame(Quantity = plab, Law = law, N = n,
+      `raw+z` = fmt(g("wald")), `raw+KC` = fmt(g("kc")),
+      `tr+z` = fmt(g("twald")), `tr+KC` = fmt(g("tkc")),
+      check.names = FALSE, stringsAsFactors = FALSE)
+  }))))
+}
+tab <- rbind(rowblock("correlation", rho_hi, sprintf("correlation (rho=%.1f)", rho_hi)),
+             rowblock("alpha", NA, "alpha"))
+knitr::kable(tab, align = "lllrrrr")
 ```
 
-The **influence kurtosis** is well above the normal value of 3 even under normal
-data (the $v_k$ are quadratic forms) and grows under contamination, so the
-**effective df** $f=2N/(\hat\kappa-1)$ sits far below $N$. The **SE / MC-SD**
-column is the downward bias of the ADF SE: near 1 at large $N$ (the SE is right),
-but well below 1 at small $N$, which the df-widening compensates for but does not
-formally repair.
+Two-sided 95% coverage (`r reps` reps). Reading across the row, `raw+z` is lowest,
+the KC $t$ and the transform each help, and `tr+KC` is the best in nearly every
+cell; the gains are largest under contaminated data (heavier influence kurtosis)
+and at small $N$. Alpha (logit transform) shows the same ordering, with a smaller
+transform effect since $\alpha\approx0.85$ is less boundary-pressed than a high
+correlation.
 
 ## How much to trust it
 
-- **Mechanism is verified, not assumed.** The SE/MC-SD ratio reaches ~1 at
-  $N=`r nhi`$ for both quantities, confirming the influence-function SE is the
-  correct ADF SE (for the correlation it reproduces the textbook
-  $(1-r^2)^2/N$). The small-$N$ undercoverage is the Kauermann-Carroll
-  variance-of-the-variance effect, plus an SE downward bias, plus point bias.
-- **The correction is the cited one, not ad hoc.** $f=2N/(\hat\kappa-1)$ is the
-  Satterthwaite realization of Kauermann & Carroll's quantile adjustment
-  (undercoverage $=c_p\,\operatorname{var}(\hat\sigma^2)/\sigma^4$ with the
-  relative variance equal to the influence kurtosis), and it is design-free, so
-  alpha and the correlation use identical code.
-- **Honest residual.** Under heavy tails at $N\le 30$ the corrected interval still
-  undercovers, more so for the correlation: $\hat\kappa$ is itself a fourth moment
-  estimated from few cases, the ADF SE is biased low there (the HC2/Bell-McCaffrey
-  meat-debiasing's job, not the df's), and the raw-scale skew of $r$ is a separate
-  defect a symmetric interval cannot fix. No distribution-free interval recovers
-  fourth-moment information the sample does not contain.
+- **The two axes are real, not an artifact.** The $\rho$ sweep separates them
+  cleanly: the KC gain is ~flat in $\rho$ (it is a kurtosis effect), the
+  imbalance is ~zero at $\rho=0$ and grows with $\rho$ (a skew effect). Neither
+  correction touches the other's panel.
+- **The corrections compose for a free reason.** The transform rescales every
+  influence value by one constant, which leaves the kurtosis -- hence the KC
+  effective df -- unchanged, so "transform then correct" and "correct then
+  transform" are the same interval. The df lives in the quantile; the transform
+  lives in the geometry.
+- **Honest residual.** Even `tr+KC` undercovers somewhat at $N\le 30$ under heavy
+  tails: $\hat\kappa$ is a fourth moment estimated from few cases, and the ADF SE
+  is biased low there (a meat-debiasing job, Bell-McCaffrey, not a df or transform
+  job). No distribution-free interval recovers fourth-moment information the
+  sample does not contain.
 
 ## Reproduce
 
 ```text
-Rscript experiments/44-alpha-kc-coverage/run_experiment.R          # full grid (~4s)
+Rscript experiments/44-alpha-kc-coverage/run_experiment.R          # full grid
 Rscript experiments/44-alpha-kc-coverage/run_experiment.R --smoke  # quick check
 quarto render experiments/44-alpha-kc-coverage/report.qmd
 ```
