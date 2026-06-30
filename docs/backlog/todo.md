@@ -1130,6 +1130,27 @@ landed; remaining open items:
   `lavaan::sem()`. Observed-inference currently has no no-oracle fixtures
   under the regenerated lavaan-backed corpus; that bucket is literal-count
   pinned at zero so future structural missing-oracle cases must be explicit.
+- **M, calibration parity for robust statistics.** Single-dataset value parity
+  cannot detect a miscalibrated scaling *convention*: a robust or scaled statistic
+  can match the oracle on one draw (or be exempted as a "known convention
+  difference") yet carry the wrong sampling distribution and mis-size the test.
+  The nested Satorra-2000 eta-space scaling did exactly this — it passed value
+  parity as a KNOWN divergence ("magmaan believed correct" on normal-data
+  evidence) while over-rejecting 5x under nonnormality (.45 vs lavaan .085 at the
+  strict rung), caught only by a paired rejection-rate Monte Carlo and fixed by
+  the `convention = "lavaan"` selector (`fbb8914`). Write-up:
+  [docs/validation/calibration-parity.md](../validation/calibration-parity.md).
+  Two follow-ups: (1) add a Monte Carlo calibration check (advisory, under
+  `tests/checks/`) that pins magmaan rejection rates to lavaan **and** to nominal,
+  in the regime the statistic exists to handle (nonnormal / missing / ordinal),
+  for the robust-statistic family: Satorra-Bentler scaled and scaled-shifted GOF,
+  Satorra-2000 nested (FIML and ML2S), FMG/pEBA spectrum, robust SE / Wald, ML2S,
+  ordinal WLSMV. The fiml-fmg paper's `analysis/parity_calibration.R` is the
+  prototype to port and generalize. (2) Audit every existing "known divergence" /
+  "believed correct" / convention exemption in the parity suite and in
+  [oracle-defects.md](../validation/oracle-defects.md): each must carry a
+  calibration proof in the target regime or convert to a tracked bug. This raises
+  the oracle-defects standard of proof.
 - **M, later.** Layer CI on top only after the local commands are useful: run
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before

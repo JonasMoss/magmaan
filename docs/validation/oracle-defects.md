@@ -29,6 +29,16 @@ almost always a magmaan bug. Require at least:
   probability that does not integrate to one, a statistic that is not invariant
   where it must be).
 
+For a **scaled or robust test statistic**, "defensible convention difference" is
+not defensible on a single-dataset comparison. magmaan and the oracle can use
+different finite-sample conventions that agree on one draw yet imply different
+rejection rates. Before exempting such a row, prove calibration in the target
+regime (nonnormal / missing / ordinal): a null Monte Carlo whose magmaan
+rejection rate tracks the oracle and sits near nominal. Normal-data calibration
+does not license a nonnormal-data method. The nested Satorra-2000 scaling was a
+near-miss: exempted here as "believed correct," it over-rejected 5x under
+nonnormality. See [calibration-parity.md](calibration-parity.md).
+
 If you investigate a divergence and the oracle turns out to be right (or the
 call is a defensible convention difference), record it in the **Investigated —
 not a defect** section so the next person does not redo the work.

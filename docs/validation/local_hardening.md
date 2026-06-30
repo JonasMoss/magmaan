@@ -25,6 +25,12 @@ next.
   invariant tests. R/API glue wants smoke examples and shape checks.
 - **Reports should orient future work.** A good report answers "where am I
   unsafe?" faster than it answers "what percentage did I score?"
+- **Scaled statistics need calibration parity, not just value parity.** A robust
+  or scaled test statistic can match the oracle on one dataset, or look like a
+  defensible convention difference, yet carry the wrong sampling distribution and
+  mis-size the test. Single-dataset parity cannot see that; a null
+  rejection-rate Monte Carlo against the oracle, in the regime the statistic is
+  meant for, can. See [calibration-parity.md](calibration-parity.md).
 
 ## Local Tools
 
