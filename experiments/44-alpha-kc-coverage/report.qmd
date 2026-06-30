@@ -1,5 +1,5 @@
 ---
-title: "A Variance-of-Variance Correction for the Distribution-Free Alpha Interval"
+title: "A Variance-of-Variance Correction for Distribution-Free Reliability and Correlation Intervals"
 format:
   html:
     toc: true
@@ -20,51 +20,57 @@ if (!all(file.exists(needed))) {
        call. = FALSE)
 }
 d <- read.csv(file.path(res_dir, "coverage.csv"))
-meta <- read.csv(file.path(res_dir, "metadata.csv"))
-true_alpha <- d$true_alpha[1]
 reps <- max(d$reps)
 fmt <- function(x, k = 3) formatC(x, format = "f", digits = k)
-pick <- function(law, n, method, col)
-  d[[col]][d$law == law & d$n == n & d$method == method][1]
+pick <- function(q, law, n, method, col)
+  d[[col]][d$quantity == q & d$law == law & d$n == n & d$method == method][1]
 ns <- sort(unique(d$n)); nlo <- min(ns); nhi <- max(ns)
+quants <- c("alpha", "correlation")
+qlab <- c(alpha = "Cronbach's alpha", correlation = "Pearson correlation")
+laws <- c("normal", "contaminated")
 ```
 
 ## The question and the answer
 
-Cronbach's alpha is a covariance functional, $\alpha = \tfrac{p}{p-1}\bigl(1-\operatorname{tr}(S)/\mathbf 1'S\mathbf 1\bigr)$,
-so its distribution-free (ADF) Wald interval **undercovers at small $N$**, for the
-reason **Kauermann & Carroll (2001)** identified: the variance estimate is itself
-noisy, with relative variability set by the *kurtosis of alpha's per-case
-influence values* $v_k=d_k'\,G\,d_k$ (with $d_k=x_k-\bar x$, $G=\partial\alpha/\partial\Sigma$).
-That kurtosis is large because the influence values are quadratic forms, so they
-are heavy-tailed **even when the data are normal**.
+Cronbach's alpha and the Pearson correlation are both smooth covariance
+functionals $g(S)$, so each has a distribution-free (ADF) Wald interval built on
+the influence-function SE, $se^2 = \operatorname{var}(v)/n$ with
+$v_k = d_k' G\, d_k$ the per-case influence values ($d_k = x_k-\bar x$,
+$G = \partial g/\partial\Sigma$). Both **undercover at small $N$**, for the reason
+**Kauermann & Carroll (2001)** identified: the variance estimate is itself noisy,
+with relative variability set by the *kurtosis of the influence values*, which is
+large because the $v_k$ are quadratic forms (heavy-tailed **even when the data are
+normal**).
 
 Replacing the normal quantile with a $t$ on Kauermann-Carroll **effective degrees
-of freedom**, $f = 2N/(\hat\kappa-1)$ with $\hat\kappa$ the influence kurtosis,
-computed from the same $v_k$, recovers most of the gap. At $N=`r nlo`$ it lifts
-coverage from `r fmt(pick("normal",nlo,"wald","coverage"))` to
-`r fmt(pick("normal",nlo,"kc","coverage"))` under normal data and from
-`r fmt(pick("contaminated",nlo,"wald","coverage"))` to
-`r fmt(pick("contaminated",nlo,"kc","coverage"))` under contaminated-normal data;
-by $N=50$-$100$ the corrected interval is essentially nominal in both. It needs
-**no fit and no bootstrap**, only the influence values already used for the SE.
+of freedom**, $f = 2N/(\hat\kappa-1)$ computed from the same $v_k$, restores most
+of the coverage, for **both** functionals and both data laws. At $N=`r nlo`$:
 
-It does **not** fully close the gap at the very smallest $N$ under heavy tails.
-Two things the df-widening cannot fix live there: alpha's own downward point bias,
-and a downward-biased ADF SE (the mean SE is only `r fmt(100*pick("contaminated",nlo,"mean_se","mean_se")/pick("contaminated",nlo,"mean_se","mc_sd"),0)`%
-of the Monte-Carlo SD at $N=`r nlo`$ under contamination). The Kauermann-Carroll
-correction targets the variance-of-the-variance; closing the rest would need the
-HC2-style meat de-biasing (Bell-McCaffrey) and is bounded below by the point bias.
+| | Wald (z) | KC (t) |
+|---|--:|--:|
+| alpha, normal | `r fmt(pick("alpha","normal",nlo,"wald","coverage"))` | **`r fmt(pick("alpha","normal",nlo,"kc","coverage"))`** |
+| alpha, contaminated | `r fmt(pick("alpha","contaminated",nlo,"wald","coverage"))` | **`r fmt(pick("alpha","contaminated",nlo,"kc","coverage"))`** |
+| correlation, normal | `r fmt(pick("correlation","normal",nlo,"wald","coverage"))` | **`r fmt(pick("correlation","normal",nlo,"kc","coverage"))`** |
+| correlation, contaminated | `r fmt(pick("correlation","contaminated",nlo,"wald","coverage"))` | **`r fmt(pick("correlation","contaminated",nlo,"kc","coverage"))`** |
 
-```{r, fig.width=8, fig.height=3.8}
-laws <- c("normal", "contaminated")
-op <- par(mfrow = c(1, 2), mar = c(4, 4, 2.4, 1), cex = 0.9)
-for (law in laws) {
-  cw <- sapply(ns, function(n) pick(law, n, "wald", "coverage"))
-  ck <- sapply(ns, function(n) pick(law, n, "kc", "coverage"))
-  plot(ns, ck, type = "b", pch = 19, col = "#1b7837", ylim = c(0.80, 0.97),
-       log = "x", xlab = "N (log scale)", ylab = "95% CI coverage",
-       main = sprintf("%s data", law), xaxt = "n")
+By $N=50$-$100$ the corrected interval is essentially nominal. It needs **no fit
+and no bootstrap**, only the influence values already used for the SE, and it is
+**design-free** (the same two lines serve any covariance functional). One honest
+asymmetry: the correlation residual at the smallest $N$ is larger than alpha's,
+because raw-scale $r$ is skewed and bounded, and the symmetric $t$-widening does
+not repair skewness. That part is the job of a variance-stabilizing transform
+(Fisher's $z$ for $r$, the logit for a reliability coefficient), complementary to
+the KC correction, not a substitute for it.
+
+```{r, fig.width=8, fig.height=7}
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2.4, 1), cex = 0.9)
+for (q in quants) for (law in laws) {
+  cw <- sapply(ns, function(n) pick(q, law, n, "wald", "coverage"))
+  ck <- sapply(ns, function(n) pick(q, law, n, "kc", "coverage"))
+  yl <- range(0.74, 0.97, cw, ck)
+  plot(ns, ck, type = "b", pch = 19, col = "#1b7837", ylim = yl, log = "x",
+       xlab = "N (log scale)", ylab = "95% CI coverage",
+       main = sprintf("%s, %s data", qlab[[q]], law), xaxt = "n")
   axis(1, at = ns, labels = ns)
   abline(h = 0.95, lty = 3, col = "grey50")
   lines(ns, cw, type = "b", pch = 17, col = "#b2182b")
@@ -74,54 +80,58 @@ for (law in laws) {
 par(op)
 ```
 
-Coverage of the nominal-95% interval for true $\alpha=`r fmt(true_alpha)`$ (`r reps`
-replications per cell, $p=`r meta$p[1]`$ congeneric items). The Kauermann-Carroll
-interval (green) tracks the 0.95 line far more closely than the plain Wald interval
-(red), in both data laws, at every $N$.
+Coverage of the nominal-95% interval (`r reps` replications per cell). The
+Kauermann-Carroll interval (green) tracks the 0.95 line far more closely than the
+plain Wald interval (red), for both quantities, both data laws, at every $N$.
 
 ## The numbers
 
 ```{r}
-tab <- do.call(rbind, lapply(laws, function(law) do.call(rbind, lapply(ns, function(n) {
-  data.frame(Law = law, N = n,
-    `Wald cover` = fmt(pick(law, n, "wald", "coverage")),
-    `KC cover`   = fmt(pick(law, n, "kc", "coverage")),
-    `KC eff. df` = fmt(pick(law, n, "kc", "mean_df"), 1),
-    `infl. kurtosis` = fmt(pick(law, n, "wald", "mean_kappa"), 1),
-    `SE / MC-SD` = fmt(pick(law, n, "wald", "mean_se") / pick(law, n, "wald", "mc_sd"), 2),
-    check.names = FALSE, stringsAsFactors = FALSE)
-}))))
-knitr::kable(tab, align = "llrrrrr")
+w <- d[d$method == "wald", c("quantity", "law", "n", "coverage", "mean_kappa", "mean_se", "mc_sd")]
+kc <- d[d$method == "kc", c("quantity", "law", "n", "coverage", "mean_df")]
+m <- merge(w, kc, by = c("quantity", "law", "n"), suffixes = c("_wald", "_kc"))
+m <- m[order(match(m$quantity, quants), match(m$law, laws), m$n), ]
+tab <- data.frame(
+  Quantity = qlab[m$quantity], Law = m$law, N = m$n,
+  `Wald cover` = fmt(m$coverage_wald),
+  `KC cover`   = fmt(m$coverage_kc),
+  `KC eff. df` = fmt(m$mean_df, 1),
+  `infl. kurtosis` = fmt(m$mean_kappa, 1),
+  `SE / MC-SD` = fmt(m$mean_se / m$mc_sd, 2),
+  check.names = FALSE, row.names = NULL, stringsAsFactors = FALSE)
+knitr::kable(tab, align = "lllrrrrr")
 ```
 
-Reading the table: the **influence kurtosis** is well above the normal value of 3
-even under normal data (the influence values are quadratic forms), and it grows
-under contamination, so the **effective df** $f=2N/(\hat\kappa-1)$ sits far below
-$N$ (at $N=`r nhi`$ contaminated it is only ~`r fmt(pick("contaminated",nhi,"kc","mean_df"),0)`).
-The **SE / MC-SD** column is the downward bias of the ADF SE: near 1 at large $N$
-(the SE is right), but well below 1 at small $N$, which is the part the
-df-widening compensates for but does not formally repair.
+The **influence kurtosis** is well above the normal value of 3 even under normal
+data (the $v_k$ are quadratic forms) and grows under contamination, so the
+**effective df** $f=2N/(\hat\kappa-1)$ sits far below $N$. The **SE / MC-SD**
+column is the downward bias of the ADF SE: near 1 at large $N$ (the SE is right),
+but well below 1 at small $N$, which the df-widening compensates for but does not
+formally repair.
 
 ## How much to trust it
 
-- **Mechanism is verified, not assumed.** The SE/MC-SD ratio reaching ~1 at
-  $N=`r nhi`$ confirms the influence-function SE is the correct ADF SE; the
-  undercoverage at small $N$ is the Kauermann-Carroll variance-of-the-variance
-  effect, plus an SE downward bias, plus alpha's point bias.
+- **Mechanism is verified, not assumed.** The SE/MC-SD ratio reaches ~1 at
+  $N=`r nhi`$ for both quantities, confirming the influence-function SE is the
+  correct ADF SE (for the correlation it reproduces the textbook
+  $(1-r^2)^2/N$). The small-$N$ undercoverage is the Kauermann-Carroll
+  variance-of-the-variance effect, plus an SE downward bias, plus point bias.
 - **The correction is the cited one, not ad hoc.** $f=2N/(\hat\kappa-1)$ is the
-  Satterthwaite realization of Kauermann & Carroll's quantile adjustment (their
-  undercoverage $=c_p\,\operatorname{var}(\hat\sigma^2)/\sigma^4$, with the
-  relative variance equal to the influence kurtosis).
+  Satterthwaite realization of Kauermann & Carroll's quantile adjustment
+  (undercoverage $=c_p\,\operatorname{var}(\hat\sigma^2)/\sigma^4$ with the
+  relative variance equal to the influence kurtosis), and it is design-free, so
+  alpha and the correlation use identical code.
 - **Honest residual.** Under heavy tails at $N\le 30$ the corrected interval still
-  undercovers, because $\hat\kappa$ is itself a fourth moment estimated from few
-  cases and because no quantile widening removes a biased point estimate. This is
-  the expected floor: no distribution-free interval recovers fourth-moment
-  information that the sample does not contain.
+  undercovers, more so for the correlation: $\hat\kappa$ is itself a fourth moment
+  estimated from few cases, the ADF SE is biased low there (the HC2/Bell-McCaffrey
+  meat-debiasing's job, not the df's), and the raw-scale skew of $r$ is a separate
+  defect a symmetric interval cannot fix. No distribution-free interval recovers
+  fourth-moment information the sample does not contain.
 
 ## Reproduce
 
 ```text
-Rscript experiments/44-alpha-kc-coverage/run_experiment.R          # full grid (~2s)
+Rscript experiments/44-alpha-kc-coverage/run_experiment.R          # full grid (~4s)
 Rscript experiments/44-alpha-kc-coverage/run_experiment.R --smoke  # quick check
 quarto render experiments/44-alpha-kc-coverage/report.qmd
 ```
