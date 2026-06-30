@@ -1,0 +1,131 @@
+---
+title: "A Variance-of-Variance Correction for the Distribution-Free Alpha Interval"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  results_dir: "results"
+---
+
+```{r}
+res_dir <- params$results_dir
+needed <- file.path(res_dir, c("coverage.csv", "metadata.csv"))
+if (!all(file.exists(needed))) {
+  stop("Missing result files. Run: Rscript experiments/44-alpha-kc-coverage/run_experiment.R",
+       call. = FALSE)
+}
+d <- read.csv(file.path(res_dir, "coverage.csv"))
+meta <- read.csv(file.path(res_dir, "metadata.csv"))
+true_alpha <- d$true_alpha[1]
+reps <- max(d$reps)
+fmt <- function(x, k = 3) formatC(x, format = "f", digits = k)
+pick <- function(law, n, method, col)
+  d[[col]][d$law == law & d$n == n & d$method == method][1]
+ns <- sort(unique(d$n)); nlo <- min(ns); nhi <- max(ns)
+```
+
+## The question and the answer
+
+Cronbach's alpha is a covariance functional, $\alpha = \tfrac{p}{p-1}\bigl(1-\operatorname{tr}(S)/\mathbf 1'S\mathbf 1\bigr)$,
+so its distribution-free (ADF) Wald interval **undercovers at small $N$**, for the
+reason **Kauermann & Carroll (2001)** identified: the variance estimate is itself
+noisy, with relative variability set by the *kurtosis of alpha's per-case
+influence values* $v_k=d_k'\,G\,d_k$ (with $d_k=x_k-\bar x$, $G=\partial\alpha/\partial\Sigma$).
+That kurtosis is large because the influence values are quadratic forms, so they
+are heavy-tailed **even when the data are normal**.
+
+Replacing the normal quantile with a $t$ on Kauermann-Carroll **effective degrees
+of freedom**, $f = 2N/(\hat\kappa-1)$ with $\hat\kappa$ the influence kurtosis,
+computed from the same $v_k$, recovers most of the gap. At $N=`r nlo`$ it lifts
+coverage from `r fmt(pick("normal",nlo,"wald","coverage"))` to
+`r fmt(pick("normal",nlo,"kc","coverage"))` under normal data and from
+`r fmt(pick("contaminated",nlo,"wald","coverage"))` to
+`r fmt(pick("contaminated",nlo,"kc","coverage"))` under contaminated-normal data;
+by $N=50$-$100$ the corrected interval is essentially nominal in both. It needs
+**no fit and no bootstrap**, only the influence values already used for the SE.
+
+It does **not** fully close the gap at the very smallest $N$ under heavy tails.
+Two things the df-widening cannot fix live there: alpha's own downward point bias,
+and a downward-biased ADF SE (the mean SE is only `r fmt(100*pick("contaminated",nlo,"mean_se","mean_se")/pick("contaminated",nlo,"mean_se","mc_sd"),0)`%
+of the Monte-Carlo SD at $N=`r nlo`$ under contamination). The Kauermann-Carroll
+correction targets the variance-of-the-variance; closing the rest would need the
+HC2-style meat de-biasing (Bell-McCaffrey) and is bounded below by the point bias.
+
+```{r, fig.width=8, fig.height=3.8}
+laws <- c("normal", "contaminated")
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2.4, 1), cex = 0.9)
+for (law in laws) {
+  cw <- sapply(ns, function(n) pick(law, n, "wald", "coverage"))
+  ck <- sapply(ns, function(n) pick(law, n, "kc", "coverage"))
+  plot(ns, ck, type = "b", pch = 19, col = "#1b7837", ylim = c(0.80, 0.97),
+       log = "x", xlab = "N (log scale)", ylab = "95% CI coverage",
+       main = sprintf("%s data", law), xaxt = "n")
+  axis(1, at = ns, labels = ns)
+  abline(h = 0.95, lty = 3, col = "grey50")
+  lines(ns, cw, type = "b", pch = 17, col = "#b2182b")
+  legend("bottomright", bty = "n", pch = c(17, 19),
+         col = c("#b2182b", "#1b7837"), legend = c("Wald (z)", "KC (t, eff. df)"))
+}
+par(op)
+```
+
+Coverage of the nominal-95% interval for true $\alpha=`r fmt(true_alpha)`$ (`r reps`
+replications per cell, $p=`r meta$p[1]`$ congeneric items). The Kauermann-Carroll
+interval (green) tracks the 0.95 line far more closely than the plain Wald interval
+(red), in both data laws, at every $N$.
+
+## The numbers
+
+```{r}
+tab <- do.call(rbind, lapply(laws, function(law) do.call(rbind, lapply(ns, function(n) {
+  data.frame(Law = law, N = n,
+    `Wald cover` = fmt(pick(law, n, "wald", "coverage")),
+    `KC cover`   = fmt(pick(law, n, "kc", "coverage")),
+    `KC eff. df` = fmt(pick(law, n, "kc", "mean_df"), 1),
+    `infl. kurtosis` = fmt(pick(law, n, "wald", "mean_kappa"), 1),
+    `SE / MC-SD` = fmt(pick(law, n, "wald", "mean_se") / pick(law, n, "wald", "mc_sd"), 2),
+    check.names = FALSE, stringsAsFactors = FALSE)
+}))))
+knitr::kable(tab, align = "llrrrrr")
+```
+
+Reading the table: the **influence kurtosis** is well above the normal value of 3
+even under normal data (the influence values are quadratic forms), and it grows
+under contamination, so the **effective df** $f=2N/(\hat\kappa-1)$ sits far below
+$N$ (at $N=`r nhi`$ contaminated it is only ~`r fmt(pick("contaminated",nhi,"kc","mean_df"),0)`).
+The **SE / MC-SD** column is the downward bias of the ADF SE: near 1 at large $N$
+(the SE is right), but well below 1 at small $N$, which is the part the
+df-widening compensates for but does not formally repair.
+
+## How much to trust it
+
+- **Mechanism is verified, not assumed.** The SE/MC-SD ratio reaching ~1 at
+  $N=`r nhi`$ confirms the influence-function SE is the correct ADF SE; the
+  undercoverage at small $N$ is the Kauermann-Carroll variance-of-the-variance
+  effect, plus an SE downward bias, plus alpha's point bias.
+- **The correction is the cited one, not ad hoc.** $f=2N/(\hat\kappa-1)$ is the
+  Satterthwaite realization of Kauermann & Carroll's quantile adjustment (their
+  undercoverage $=c_p\,\operatorname{var}(\hat\sigma^2)/\sigma^4$, with the
+  relative variance equal to the influence kurtosis).
+- **Honest residual.** Under heavy tails at $N\le 30$ the corrected interval still
+  undercovers, because $\hat\kappa$ is itself a fourth moment estimated from few
+  cases and because no quantile widening removes a biased point estimate. This is
+  the expected floor: no distribution-free interval recovers fourth-moment
+  information that the sample does not contain.
+
+## Reproduce
+
+```text
+Rscript experiments/44-alpha-kc-coverage/run_experiment.R          # full grid (~2s)
+Rscript experiments/44-alpha-kc-coverage/run_experiment.R --smoke  # quick check
+quarto render experiments/44-alpha-kc-coverage/report.qmd
+```
+
+Background and the reference set (Kauermann-Carroll, Bell-McCaffrey,
+Imbens-Kolesár, Yuan-Bentler, Satterthwaite) live in
+`external/refs/corrections/`.
