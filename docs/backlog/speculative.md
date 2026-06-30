@@ -363,7 +363,9 @@ reliability harness first (same influence values), then add the HC2 meat-debiasi
 correction for the point bias to close the N<=30 residual. The `kappa_hat`
 stabilization at tiny N (trimmed / shrunken influence kurtosis) is research-tier
 with its own validation ([[feedback-shortcut-variants]]); the Bartlett-corrected
-profile-LR is the heavier alternative when df-widening underperforms.
+profile-LR is the heavier alternative when df-widening underperforms (now scoped as
+its own family-wide project, *Small-sample-corrected profile-LR confidence intervals
+for the reliability family*, in the Measures section below).
 
 Design cautions (author, 2026-06-30, after the experiment-44 2x2):
 
@@ -529,9 +531,90 @@ at every N including 50, for both coefficients. So the recommended built surface
 the logit-scale-corrected point estimate + robust delta SE for routine use, and a
 Bartlett-corrected profile-LR interval for the small-N / boundary regime; the point
 coefficients still gate against lavInspect for free. Open: the LR is normal-theory
-only (non-normal data needs a Satorra-Bentler weight on it, not Bartlett), interval
+only (non-normal data needs a Satorra-Bentler weight on it, not Bartlett; that robust
+LR is Falk's 2018 R-LCI and already exists in `semlbci`, so what is *actually* open is
+small-sample-correcting it, now scoped family-wide in the entry below), interval
 *width* (vs the coverage shown) needs profile root-finding, and everything is
 conditional on an admissible (non-Heywood) fit.
+
+### Small-sample-corrected profile-LR confidence intervals for the reliability family
+
+The likelihood-ratio (test-inversion) sibling of the Kauermann-Carroll Wald lane
+above: rather than widen a Wald interval's df, build the interval by inverting a
+(robust) chi-square difference test, `{g0 : T(g0) <= q}` with `T(g0) = N(F_con(g0) -
+F_unc)` the LR for the nonlinear constraint `g(theta) = g0`. One engine serves the
+whole reliability family (omega, omega_total, omega_h, H, H_general, model-based
+maximal reliability, and reliability *differences* via a 2-parameter region); only the
+constraint `g` changes. Test inversion is transformation-invariant, range-respecting
+(the constrained fit cannot leave `[0,1]`), and asymmetric by construction, so it
+sidesteps the logit-vs-Fisher scale choice and the boundary pile-up that defeat every
+estimator-centred interval. `experiments/43` already lands this for bifactor maximal
+reliability (the entry above); this item is the generalization to the family as a
+standalone project, deliberately NOT folded into `papers/closed-form-omega` (which
+ships plain logit-Wald to stay focused). It is the fit-based counterpart to the
+fit-free KC Wald route, and `experiments/44` is the Wald-side precedent in the same
+spirit.
+
+**Prior-art map (gated 2026-06-30).** The construction is fully owned; the
+small-sample correction is the unoccupied cell.
+
+| piece | owner | status |
+| --- | --- | --- |
+| profile-LR CI for a function `g(theta)` | Pek & Wu 2015; Wu & Neale 2012; Cheung 2009 | done; `semlbci` (Cheung & Pesigan 2023) |
+| robust (Satorra-2000-scaled) LR CI | Falk 2018 | done; in `semlbci` |
+| which scaled difference test is best for it | Falk & Chen 2026 | done (use Satorra 2000) |
+| single attainable-bound LR correction | Pritikin et al. 2017; Wu & Neale 2012 | done (one-sided, normal, mixture-chi^2) |
+| logit-scale omega interval | Raykov & Marcoulides 2011 | done (delta method) |
+| **small-sample / Bartlett correction of the (robust) LR CI** | -- | **OPEN** |
+| **two-sided `[0,1]` bounded-reliability LR CI** | -- | **OPEN** |
+| **reliability application of any of it** | -- | **OPEN** |
+
+The SEM Bartlett literature (Yuan, Tian & Yanagihara 2015) corrects the *overall*
+model `T_ML`, not a df-1 profile-LR CI for a function. The bounded-parameter LR work
+(Pritikin, Wu-Neale) is one-sided, normal-theory, variance-component flavour, never
+two-sided `[0,1]` and never small-sample-corrected; Falk & Chen 2026 explicitly
+exclude the boundary case ("we do not consider this case ... nor that part of
+[Wu-Neale's] algorithm").
+
+**The correction is the contribution, not a footnote.** Under correct normal theory
+the df-1 profile-LR is already mean-inflated at the N reliability is reported at
+(`E[LR] ~ 3-4` at N=50 in exp-43), so the plain `chi^2_1` interval under-covers; a
+Bartlett-type rescaling (an analytic Lawley 1956 factor, or a parametric-bootstrap
+`E[LR]`) is what restores nominal coverage. Without it the method fails in the regime
+that matters; with it, exp-43 shows nominal coverage at every N including 50, where
+robust-SE, logit, second-order bias correction, Cornish-Fisher, and the percentile
+bootstrap all fall short. The motivating contrast: Falk & Chen 2026 already found the
+*uncorrected* robust LR comparable to the percentile bootstrap, so a
+small-sample-corrected, range-aware version should pass bootstrap precisely in the
+small-N bounded regime where bootstrap is expensive and (per exp-43) frequently
+non-convergent.
+
+**Build if.** A "small-sample reliability inference" paper or workflow wants one
+calibrated interval recipe across the reliability family with a likelihood (fit-based)
+construction, rather than the fit-free KC Wald route above; or a downstream consumer
+needs CIs for a *bounded* reliability where Wald df-widening underperforms (high
+reliability near 1; reliability differences near 0). Sequencing: (1) generalize the
+exp-43 constrained-fit + Bartlett engine from the bifactor maximal-reliability
+constraint to a generic `g(theta)` over a `ModelEvaluator` (omega, omega_h, H first);
+(2) make the Bartlett factor operational without the oracle (analytic Lawley term or
+parametric-bootstrap `E[LR]`); (3) layer the robust (Satorra-2000) scaling for
+non-normal data, i.e. small-sample-correct Falk's R-LCI; (4) the 2-parameter
+confidence-region route (Pek-Wu 2015 sec 3) for reliability *differences* (ties to the
+exp-20 alpha-omega difference thread). Magmaan's core does the constrained fits
+cleanly, itself worth something given Falk & Chen document `semlbci` / forked-`lavaan`
+as finicky and optimizer-dependent. The robust + small-sample combination is
+research-tier with its own calibration ([[feedback-shortcut-variants]]); add arms one
+at a time per the KC entry's design cautions.
+
+Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
+in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
+(`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
+Pesigan 2023 / `semlbci` (`10.1080/10705511.2023.2183860`), Falk 2018
+(`10.1080/10705511.2017.1367254`), Falk & Chen 2026 (`10.1080/10705511.2025.2555612`),
+Pritikin, Rappaport & Neale 2017 (`10.1080/10705511.2016.1275969`), Satorra 2000
+(`10.1007/978-1-4615-4603-0_17`), Lawley 1956 (`10.1093/biomet/43.3-4.295`), Yuan,
+Tian & Yanagihara 2015 (`10.1007/s11336-013-9386-5`), Lai 2018
+(`10.1080/10705511.2018.1505522`, robust SE under misspecification, adjacent).
 
 ### Structural-model fit indices, tests, and CIs (two-step / SAM)
 
