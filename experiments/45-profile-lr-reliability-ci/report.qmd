@@ -1,5 +1,5 @@
 ---
-title: "A generic profile-LR confidence interval for the reliability family"
+title: "A small-sample-corrected profile-LR confidence interval for the reliability family"
 format:
   html:
     toc: true
@@ -11,96 +11,115 @@ execute:
 ---
 
 ```{r setup}
-res <- file.path("results", "semlbci_parity.csv")
-if (!file.exists(res)) stop("Run: Rscript run_experiment.R  (then re-render)")
-d <- read.csv(res, stringsAsFactors = FALSE)
-fmt <- function(x, k = 4) formatC(x, format = "f", digits = k)
+fmt <- function(x, k = 3) formatC(x, format = "f", digits = k)
+rd <- function(f) if (file.exists(file.path("results", f))) read.csv(file.path("results", f)) else NULL
+par_d <- rd("semlbci_parity.csv")
+cov_h <- rd("coverage_H.csv")
+cov_o <- rd("coverage_omega.csv")
 ```
 
 ## Question
 
-We want small-sample, range-respecting, transformation-invariant confidence
-intervals for the whole reliability family (omega_total, omega_h, H, and their
-kin) by inverting the likelihood-ratio test of `g(theta) = g0`. The first thing
-to establish is that a *single generic engine*, which knows nothing about which
-coefficient it is bounding, reproduces the established construction. The
-reference is `semlbci` (the R implementation of the Wu-Neale / Pek-Wu
-likelihood-based CI). Does one profile-LR engine, fed only a functional closure,
-match `semlbci` across the family under normal-theory ML on complete data?
+We are building small-sample, range-respecting confidence intervals for the
+reliability family (omega_total, omega_h, coefficient H, maximal reliability) by
+inverting the likelihood-ratio test of `g(theta) = g0`. Two things must hold for
+the engine to be trustworthy: (1) it must reproduce the established construction,
+and (2) its intervals must actually cover at the sample sizes reliability is
+reported at. Does a single generic engine, fed only a functional closure,
+reproduce `semlbci`, and where the plain profile-LR miscalibrates at small N,
+does a Bartlett correction fix it?
 
 ## Short answer
 
-Yes. Across omega_total and H on a one-factor congeneric model and omega_total
-and omega_h on an orthogonal three-group bifactor, wherever `semlbci` converges
-the engine's interval reproduces its likelihood-based interval to `1e-7`. The
-engine is the *same* code for all four coefficients: only the scalar functional
-passed in changes. Two things went beyond a plain match. First, every engine
-bound satisfies its own defining equation, `T(bound) = qchisq(.95, 1)`, to
-machine tolerance. Second, on some bifactor upper bounds `semlbci`'s default
-(Wu-Neale) search returns a bound where the true likelihood ratio is well below
-the threshold (its constrained refit is stuck at a suboptimal optimum, and its
-own post-check re-uses that stuck fit and so certifies the wrong value); the
-engine's constrained fit is strictly better there and its bound is the one that
-solves the equation. So this is the normal-theory foundation the small-sample
-(Bartlett) and robust tiers build on, and the engine is at least as reliable as
-the reference at the boundary.
+**Construction is exact.** Wherever `semlbci` (the Wu-Neale reference) converges,
+the engine reproduces its likelihood-based bounds to `1e-7`, across omega_total,
+H, and omega_h on one- and three-factor models. The engine also carries a
+first-principles gate (`T(bound) = qchisq(.95,1)`) that every engine bound passes
+and `semlbci`'s default search fails on some bifactor upper bounds.
+
+**Calibration depends sharply on the coefficient.** For omega the plain
+profile-LR is already near-exact (coverage ~0.93-0.97). For **maximal reliability
+it collapses**: on a bifactor general factor at N=50 the nominal-95% interval
+covers only **0.61**, because the LR statistic is inflated to `E[T] ~ 4.2` instead
+of 1. Rescaling the chi-square threshold by the Bartlett factor `c = E[T]` is
+necessary and, at the oracle factor, sufficient (0.61 -> 0.98). The feasible
+factor from a *null-model* parametric bootstrap recovers most of the gap
+(0.61 -> 0.89) and fully fixes the milder one-factor H case (0.93 -> 0.95, beating
+Wald's 0.89); closing the last points at the hardest near-ceiling functionals is
+the open estimator problem. Everything shown here is normal-theory; the robust
+and misspec tiers are the same engine with a swappable reference scaling that, as
+expected, reduces to 1 under normal data.
 
 ## Evidence
 
-```{r summary}
-vtol <- 0.02
-summ <- do.call(rbind, lapply(split(d, d$func), function(g) {
-  ok_lo <- abs(g$tdev_sl_lo) <= vtol; ok_hi <- abs(g$tdev_sl_hi) <= vtol
-  agree <- max(c(abs(g$d_lo[ok_lo]), abs(g$d_hi[ok_hi])), na.rm = TRUE)
-  data.frame(
-    Coefficient = g$label[1],
-    Cells = nrow(g),
-    `Engine bounds off eqn` = sum(abs(c(g$tdev_eng_lo, g$tdev_eng_hi)) > vtol, na.rm = TRUE),
-    `semlbci bounds off eqn` = sum(abs(c(g$tdev_sl_lo, g$tdev_sl_hi)) > vtol, na.rm = TRUE),
-    `Max diff (semlbci valid)` = formatC(agree, format = "e", digits = 2),
-    check.names = FALSE)
-}))
-knitr::kable(summ[order(summ$Coefficient), ], row.names = FALSE,
-             caption = "Per coefficient: number of bounds failing T=q (|T(bound)-qchisq(.95,1)|>0.02) for each method, and the worst engine-vs-semlbci bound difference over cells where semlbci's bound is valid. All seeds and sample sizes.")
+### Construction parity vs semlbci
+
+```{r parity}
+if (is.null(par_d)) cat("Run: Rscript run_experiment.R\n") else {
+  vtol <- 0.02
+  s <- do.call(rbind, lapply(split(par_d, par_d$func), function(g) {
+    ok_lo <- abs(g$tdev_sl_lo) <= vtol; ok_hi <- abs(g$tdev_sl_hi) <= vtol
+    data.frame(Coefficient = g$label[1], Cells = nrow(g),
+      `Engine off eqn` = sum(abs(c(g$tdev_eng_lo, g$tdev_eng_hi)) > vtol, na.rm = TRUE),
+      `semlbci off eqn` = sum(abs(c(g$tdev_sl_lo, g$tdev_sl_hi)) > vtol, na.rm = TRUE),
+      `Max diff (semlbci valid)` = formatC(max(c(abs(g$d_lo[ok_lo]), abs(g$d_hi[ok_hi])), na.rm = TRUE), format = "e", digits = 1),
+      check.names = FALSE)
+  }))
+  knitr::kable(s[order(s$Coefficient), ], row.names = FALSE,
+    caption = "Engine profile-LR vs semlbci (Wu-Neale). 'off eqn' counts bounds failing T=qchisq(.95,1).")
+}
 ```
 
-Each cell is one simulated normal dataset; both methods invert the same
-normal-theory ML likelihood ratio, so the comparison isolates the engine's
-constrained-fit and bisection machinery from any modelling choice. The interval
-is `{g0 : N (F_con(g0) - F_unc) <= q}` with `q = qchisq(0.95, 1)`; the constrained
-fit imposes `g(theta) = g0` through a nonlinear equality constraint, so the bound
-always stays inside the admissible reliability range. The "off eqn" columns count
-bounds where the true likelihood ratio at the reported bound misses the threshold
-by more than `0.02`, an independent, solver-agnostic check of correctness: the
-engine misses on none, `semlbci` on a few bifactor upper bounds.
+### Small-sample coverage of maximal reliability, and the Bartlett fix
+
+```{r coverage}
+if (is.null(cov_h)) cat("Run: Rscript scripts/coverage.R --func H\n") else {
+  lab <- c(high = "H, 1-factor (omega~.87)", mod = "H, 1-factor (omega~.67)",
+           bf = "max reliability, bifactor")
+  tab <- data.frame(
+    Coefficient = lab[cov_h$pop], N = cov_h$n, `E[T]` = fmt(cov_h$mean_T, 2),
+    `Uncorrected` = fmt(cov_h$cov_nt), `Bartlett oracle` = fmt(cov_h$cov_bart_oracle),
+    `Bartlett null-boot` = fmt(cov_h$cov_bart_null),
+    `Wald` = ifelse(is.na(cov_h$cov_wald), "-", fmt(cov_h$cov_wald)),
+    check.names = FALSE)
+  knitr::kable(tab, row.names = FALSE,
+    caption = "Coverage of the population value (nominal 0.95), normal data. E[T]=1 would mean the chi-square-1 reference is exact.")
+}
+```
+
+The uncorrected profile-LR is exact only when `E[T] ~ 1`. It holds for omega and
+one-factor H, and breaks for maximal reliability, where the near-ceiling,
+strongly nonlinear functional inflates the LR. The oracle Bartlett factor
+(cell-mean `E[T]`, infeasible) shows the correction is sufficient; the feasible
+null-model bootstrap (simulate from the constrained MLE that imposes `g = g0`,
+average the LR) recovers most of it. omega coverage (separate run) stays
+0.93-0.97 across N with `E[T] ~ 1`, so the correction is a near-no-op there.
 
 ## Caveats
 
-- Normal-theory only, complete data, correctly specified model. This run
-  establishes construction parity, not coverage. The point of the project, the
-  small-sample (Bartlett) rescaling that makes the bounded interval actually
-  cover at the sample sizes reliability is reported at, is a separate step and is
-  not exercised here.
-- The oracle coefficients are written in `semlbci`'s `:=` algebra, which is why
-  the functionals chosen here avoid a genuine matrix inverse (H on one factor
-  uses the diagonal-residual reduction). The engine itself has no such
-  restriction; it takes an opaque closure and can bound functionals `semlbci`
-  cannot express.
-- Small grid (a few seeds per cell). The agreement is a numerical-identity check,
-  not a statistical estimate, so a large grid adds nothing.
-- The `semlbci` boundary failures are a note about the reference implementation's
-  default search on this harder model, not a coverage claim; they do not affect
-  the one-factor cases, where both methods agree to `1e-7` on every bound.
-- A few bifactor cells are dropped because the ML fit is improper (a badly
-  negative residual variance, or non-convergence) at these sample sizes;
-  reliability is undefined there and both methods skip them. Every retained cell
-  is a proper solution.
+- **Normal data throughout.** This establishes the NT tier. The robust and
+  misspec tiers are the same engine with a reference scaling equal to a variance
+  ratio (sandwich over expected, or over observed, information); under normal
+  data both reduce to ~1 (verified), so they coincide with NT here. Non-normal
+  stress is the next run.
+- **The feasible small-sample factor is not fully solved for the hardest cases.**
+  The null-model Gaussian bootstrap leaves a residual gap (~0.89 vs 0.95) at the
+  bifactor ceiling because a small-N fitted DGP is "cleaner" than the truth. The
+  consistent ~76% recovery across N hints at a fixable multiplicative bias
+  (iterated bootstrap) or an analytic (Lawley) factor; both are open.
+- A distribution-free Bollen-Stine bootstrap and an unconstrained-DGP bootstrap
+  are available as options for later non-normal comparisons; they are not the
+  headline.
+- Modest reps per cell and a few improper (Heywood) drops at the smallest N;
+  the qualitative pattern (collapse for maximal reliability, near-exact for
+  omega) is stable across runs.
 
 ## Reproduce
 
 ```sh
 cd experiments/45-profile-lr-reliability-ci
-Rscript run_experiment.R --smoke          # quick check
-Rscript run_experiment.R --seeds 1,2,3,4,5,6,7,8 --ns 100,200
+Rscript run_experiment.R                          # construction parity vs semlbci
+Rscript scripts/coverage.R --func H  --scalings   # maximal-reliability collapse + Bartlett
+Rscript scripts/coverage.R --func omega           # omega is near-nominal (control)
 quarto render report.qmd
 ```

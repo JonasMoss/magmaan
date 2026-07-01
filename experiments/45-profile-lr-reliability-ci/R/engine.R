@@ -104,6 +104,121 @@ lr_profile <- function(eng, S, logdetS, n, unc, gfun, g0) {
   max(0, n * (con$F - unc$F))
 }
 
+# Parametric-bootstrap estimate of the Bartlett factor c = E[T] for the profile-LR
+# test of g = g0, simulating B datasets from Sig_sim (rows ~ N(0, Sig_sim)) and
+# averaging the LR statistic. Under H0 the LR is asymptotically chi^2_1 (mean 1),
+# so c = E[T]/df = E[T] is the finite-sample scale; multiplying the chi^2 threshold
+# by c (equivalently dividing T by c) is the "Bartlett by simulation" correction.
+#
+# Two DGP choices for Sig_sim / g0:
+#   unconstrained: Sig_sim = Sigma(theta_hat), g0 = ghat   (simulate the fitted model)
+#   null:          Sig_sim = Sigma(theta_tilde(g0)), g0    (simulate the constrained
+#                  model that imposes g = g0; the DGP that matches the hypothesis)
+# `z_seed` seeds each bootstrap fit (theta_hat or theta_tilde). Returns list(c, g_boot,
+# reps_ok) or NULL if too few bootstrap replicates yield a valid LR.
+boot_lr_mean <- function(eng, Sig_sim, n, z_seed, gfun, g0, B, min_frac = 0.4) {
+  p <- eng$p
+  L <- tryCatch(chol(Sig_sim), error = function(e) NULL)
+  if (is.null(L)) return(NULL)
+  Ts <- numeric(0); gs <- numeric(0)
+  for (b in seq_len(B)) {
+    Xb <- matrix(stats::rnorm(n * p), n, p) %*% L        # rows ~ N(0, Sig_sim)
+    Xb <- sweep(Xb, 2, colMeans(Xb))                     # center (no mean struct)
+    Sb <- crossprod(Xb) / n                              # MLE covariance
+    ldSb <- tryCatch(as.numeric(determinant(Sb, logarithm = TRUE)$modulus),
+                     error = function(e) NA_real_)
+    if (is.na(ldSb)) next
+    ub <- tryCatch(eng$fit_unc(Sb, ldSb, z_seed), error = function(e) NULL)
+    if (is.null(ub)) next
+    gb <- eng$gval(gfun, ub$z)
+    cb <- eng$fit_con(Sb, ldSb, ub$z, gfun, g0)          # test g = g0
+    if (is.null(cb) || !is.finite(gb)) next
+    Ts <- c(Ts, max(0, n * (cb$F - ub$F))); gs <- c(gs, gb)
+  }
+  if (length(Ts) < min_frac * B) return(NULL)
+  list(c = mean(Ts), g_boot = gs, reps_ok = length(Ts))
+}
+
+# Bollen-Stine (distribution-free) null bootstrap: rotate the data so its sample
+# covariance equals the null-model Sigma0 = Sigma(theta_tilde(g0)) while keeping
+# the empirical higher-moment structure, then CASE-resample rows and average the
+# LR testing g = g0. This is the robust analog of the Gaussian null bootstrap:
+# it does not assume normality, so under non-normal data the resampled LR carries
+# the true fourth-order moments (its mean is jointly the Satorra-type scaling and
+# the finite-sample Bartlett inflation). Under normal data it reproduces the
+# Gaussian null bootstrap. `X` is the raw n x p data.
+boot_lr_mean_bs <- function(eng, X, n, z_seed, gfun, g0, Sig0, B, min_frac = 0.4) {
+  Xc <- sweep(X, 2, colMeans(X)); S <- crossprod(Xc) / n
+  Sc <- tryCatch(chol(S), error = function(e) NULL)
+  C0 <- tryCatch(chol(Sig0), error = function(e) NULL)
+  if (is.null(Sc) || is.null(C0)) return(NULL)
+  Z <- Xc %*% solve(Sc) %*% C0                      # sample cov(Z) = Sig0 exactly
+  Ts <- numeric(0)
+  for (b in seq_len(B)) {
+    Xb <- Z[sample.int(n, n, replace = TRUE), , drop = FALSE]
+    Xb <- sweep(Xb, 2, colMeans(Xb)); Sb <- crossprod(Xb) / n
+    ldSb <- tryCatch(as.numeric(determinant(Sb, logarithm = TRUE)$modulus),
+                     error = function(e) NA_real_)
+    if (is.na(ldSb)) next
+    ub <- tryCatch(eng$fit_unc(Sb, ldSb, z_seed), error = function(e) NULL)
+    if (is.null(ub)) next
+    cb <- eng$fit_con(Sb, ldSb, ub$z, gfun, g0)
+    if (is.null(cb)) next
+    Ts <- c(Ts, max(0, n * (cb$F - ub$F)))
+  }
+  if (length(Ts) < min_frac * B) return(NULL)
+  list(c = mean(Ts), reps_ok = length(Ts))
+}
+
+# --- reference-scaling for the profile-LR of a scalar functional --------------
+# The scaled profile-LR for a df-1 functional is c * chi^2_1 with c the ratio of
+# the target asymptotic variance of ghat to the reference variance (Satorra 2000
+# for a single restriction). We form all three parameter covariances in z-space
+# and take variance ratios of the functional:
+#   c_robust  = Var_robust(g) / Var_expected(g)   (ADF sandwich over NT expected)
+#   c_misspec = Var_robust(g) / Var_observed(g)   (denominator uses observed info)
+# Under normal data + correct model all three coincide and c -> 1, so the robust
+# and misspec tiers reduce to NT (expected vs observed information); the small-
+# sample Bartlett factor multiplies whichever c is chosen.
+
+# vec-Jacobian of Sigma wrt z (p^2 x nz), central FD.
+sigma_jac <- function(eng, z, h = 1e-6) {
+  nz <- length(z); base <- as.vector(eng$sigma_of(z))
+  J <- matrix(0, length(base), nz)
+  for (i in seq_len(nz)) { zp <- z; zm <- z; zp[i] <- zp[i] + h; zm[i] <- zm[i] - h
+    J[, i] <- (as.vector(eng$sigma_of(zp)) - as.vector(eng$sigma_of(zm))) / (2 * h) }
+  J
+}
+# gradient of the functional wrt z (nz), central FD.
+g_grad_z <- function(eng, gfun, z, h = 1e-6) {
+  nz <- length(z); g <- numeric(nz)
+  for (i in seq_len(nz)) { zp <- z; zm <- z; zp[i] <- zp[i] + h; zm[i] <- zm[i] - h
+    g[i] <- (eng$gval(gfun, zp) - eng$gval(gfun, zm)) / (2 * h) }
+  g
+}
+# delta-method SEs (model / robust / observed) and the two scalings, at fitted z
+# and raw data X. Validated: se_model reproduces lavaan's delta SE to 5 decimals.
+lr_scalings <- function(eng, z, X, gfun, n) {
+  p <- eng$p; Sig <- eng$sigma_of(z); Si <- solve(Sig); D <- sigma_jac(eng, z)
+  Wm <- 0.5 * kronecker(Si, Si)                       # NT weight (vec convention)
+  A <- t(D) %*% Wm %*% D; Ainv <- solve(A)            # per-obs expected info
+  Xc <- sweep(X, 2, colMeans(X)); S <- crossprod(Xc) / n
+  M <- t(apply(Xc, 1, function(r) as.vector(tcrossprod(r))))
+  Gamma <- crossprod(sweep(M, 2, as.vector(S))) / n   # ADF cov of vec(S)
+  meat <- t(D) %*% Wm %*% Gamma %*% Wm %*% D
+  Vrob <- Ainv %*% meat %*% Ainv                      # per-obs robust (sandwich)
+  Hobs <- matrix(0, length(z), length(z)); h <- 1e-5  # observed info = 0.5 * Hess(F)
+  for (i in seq_along(z)) { zp <- z; zm <- z; zp[i] <- zp[i] + h; zm[i] <- zm[i] - h
+    Hobs[, i] <- (eng$grad_fml(zp, S) - eng$grad_fml(zm, S)) / (2 * h) }
+  Aobs <- 0.5 * ((Hobs + t(Hobs)) / 2)
+  gg <- g_grad_z(eng, gfun, z)
+  ve <- as.numeric(t(gg) %*% Ainv %*% gg)
+  vr <- as.numeric(t(gg) %*% Vrob %*% gg)
+  vo <- as.numeric(t(gg) %*% solve(Aobs) %*% gg)
+  list(se_model = sqrt(ve / n), se_robust = sqrt(vr / n), se_obs = sqrt(vo / n),
+       c_robust = vr / ve, c_misspec = vr / vo)
+}
+
 # Profile-LR CI by monotone bisection out from ghat on each side, on the natural
 # [0,1] scale (reliability). Returns c(lo, hi, est). `cscale` multiplies the
 # chi^2 threshold (the tier hook: 1 = NT; Bartlett / Satorra-2000 / sandwich
