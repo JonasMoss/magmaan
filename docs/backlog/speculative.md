@@ -606,6 +606,56 @@ as finicky and optimizer-dependent. The robust + small-sample combination is
 research-tier with its own calibration ([[feedback-shortcut-variants]]); add arms one
 at a time per the KC entry's design cautions.
 
+**Design (2026-07-01, co-designed; target venue JASA).** The reliability family is
+the motivating application; the method is the headline: small-sample-corrected
+profile-LR confidence intervals for a smooth *bounded* functional of a *possibly
+misspecified* moment-structure model, valid under normal-theory, non-normal, and
+misspecified regimes. Concrete decisions:
+
+- *Constraint mechanism = C++ closure, NOT the partable `:=`/`==` DSL.* Magmaan
+  already imposes nonlinear equality constraints end to end (`optim::ConstrainedScalarProblem`
+  carries `std::function` `h` / `J_h` closures; `estimate::run_scalar_constrained`
+  dispatches to NLopt SLSQP or IPOPT; `compose_scalar_ml` already merges the linear
+  K-reparameterization with the nonlinear block). But the partable constraint DSL is
+  scalar-arithmetic forward-mode AD only (`Add/Sub/Mul/Div/Pow/Exp/Log` over named
+  params; `expr_eval.hpp`), so it cannot express matrix-inverse functionals (`H`,
+  `H_general`, `rho*`), and `g0` is a moving bisection target (re-lavaanifying per step
+  is absurd). So `g(theta)=g0` is a programmatic constraint injected by the CI
+  algorithm as a closure, not a user model row.
+- *Only new core surface = one thin additive `estimate::frontier` entry point*,
+  `fit_ml_constrained(pt, rep, samp, x0, extra_nl_closure, bounds, backend)`, that
+  appends the caller-supplied nonlinear-equality closure to the partable-derived `nl`
+  block before the existing dispatch. The optimizer layer is untouched (SLSQP default,
+  IPOPT fallback because SLSQP-based constrained fits are finicky per Falk & Chen). A
+  boundary is rejected when the reused `NonlinearEqConstraints` residual shows
+  `|g(theta_con)-g0| > tol` (exp-43's NULL-if-infeasible guard, promoted). Because it
+  is a closure, the whole family prototypes in the exp-43 R style (`nloptr` + a generic
+  `g`-closure) with ZERO core change; `fit_ml_constrained` is pure productization and
+  the only `src/` touch.
+- *Functional interface = one value-and-gradient callable* returning
+  `{double value; VectorXd grad_theta}` given `(MatrixRep, want_grad)`; analytic
+  gradient is the practice default (`dg/d{Lambda,Psi,Phi} . d{blocks}/dtheta`, or
+  `dg/dSigma . dsigma/dtheta` reusing the `inference` model Jacobian), empty grad
+  triggers an FD fallback. The engine (a) gates the gradient by `want_grad` so
+  root-only evaluations skip it, (b) memoizes on `x` so SLSQP's separate `h`/`J_h`
+  calls factor the shared inverses (`Sigma^-1`, `(Sigma-gg')^-1`) once, and (c) applies
+  the `K'` reduction to driven coordinates itself, so the functional stays in theta
+  space and never sees user constraints.
+- *Three robustness tiers = one engine with a swappable reference-scaling policy*,
+  mapped 1:1 to magmaan's information/covariance regimes. (1) NT: `T ~ chi^2_1` +
+  small-sample Bartlett factor (parametric bootstrap or analytic Lawley); the
+  load-bearing correction. (2) Robust (non-normal, correct model): `T ~ c*chi^2_1` with
+  Satorra-2000 `c` from the ADF `Gamma-hat` (reuses `robust::`); this is
+  small-sample-corrected Falk R-LCI. (3) Misspec-robust (research-grade, the JASA
+  "completeness" tier): a sandwich/observed-bread reference targeting the pseudo-true
+  `g(theta*)` under a wrong model, tying [[misspec-robust-se-weight-influence]] and Lai
+  2018 / the estimated-weight-SE thread. For a scalar focal `g` the misspec reference
+  is again a scalar scaling `c_misspec` (one eigenvalue of the sandwich pencil),
+  structurally like Satorra's `c` with the misspec meat; the genuinely hard part is
+  small-sample-correcting *that* (a robust bootstrap under a pseudo-true DGP), which is
+  why it is the completeness tier and not the MVP. The Bartlett/small-sample correction
+  composes on top of each tier.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
