@@ -666,8 +666,34 @@ first-principles validity gate (`T(bound) = qchisq(.95,1)`): every engine bound 
 across all cells, while `semlbci`'s default search fails 7 bifactor upper bounds (its
 constrained refit sticks at a suboptimal optimum and its post-check re-certifies the
 stuck value); the engine's constrained fit is strictly better and its bound is the one
-that solves the equation. Next: analytic functional gradients, then the load-bearing
-Bartlett small-sample correction and coverage, then the robust (Satorra-2000) tier.
+that solves the equation.
+
+**Progress (2026-07-01): coverage + Bartlett, and the estimator problem.** Same
+experiment, `scripts/coverage.R`. Coverage of the population value is exactly
+`{T(g_pop) <= threshold}`, so only `T(g_pop)` is needed per replication (normal data,
+correct model). Findings: (a) for `omega` the plain profile-LR is ALREADY near-exact
+(`E[T] ~ 1`, coverage 0.93-0.97), so the correction is a near-no-op; (b) for MAXIMAL
+RELIABILITY it collapses: bifactor general-factor `rho*` at N=50 gives `E[T] ~ 4.2` and
+coverage `0.61` (the exp-43 inflation, confirmed). The Bartlett rescaling of the
+threshold by `c = E[T]` is necessary and, at the ORACLE `c`, sufficient (0.61 -> 0.98).
+The crux: estimating `c` feasibly is hard for the near-ceiling functional. A
+parametric bootstrap from the fitted model underestimates because a small-N fitted DGP
+is "cleaner" than the truth; bootstrapping from the NULL model `theta_tilde(g0)` (the
+constrained MLE imposing `g=g0`) is better (0.61 -> 0.89, vs 0.77 for the unconstrained
+DGP) but still recovers only ~76% of `c` (stable across N -> looks like a fixable
+multiplicative bias). Open feasible-estimator routes: iterated/double bootstrap, or the
+analytic Lawley factor. Design refinements this session: the three robustness tiers are
+a swappable REFERENCE SCALING = a variance ratio, `c_robust = Var_robust(g)/Var_expected(g)`
+and `c_misspec = Var_robust(g)/Var_observed(g)` (sandwich/ADF numerator; expected vs
+OBSERVED-Hessian denominator) — VALIDATED: engine `se_model` reproduces lavaan's delta SE
+to 5 decimals, and under normal+correct both `c -> 1`, so robust/misspec reduce to NT
+(expected-vs-observed info) exactly as expected. The small-sample factor is separate and
+multiplies on top. All three bootstraps kept as selectable options (`--boot unc,null,bs`):
+the two Gaussian ones (NT) and a distribution-free Bollen-Stine null bootstrap (rotate
+data to the null Sigma, case-resample) whose bootstrapped `E[T]` folds the Satorra
+scaling and the Bartlett inflation into one number under non-normality; Bollen-Stine
+reproduces the Gaussian null bootstrap on normal data (validated). Non-normal stress and
+the feasible-`c` fix are the next runs. Still deferred: analytic functional gradients.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
