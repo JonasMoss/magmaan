@@ -406,6 +406,26 @@ inline magmaan::optim::OptimOptions optim_opts_from(Rcpp::Nullable<Rcpp::List> c
   return o;
 }
 
+inline magmaan::estimate::fiml::FIMLH1Options
+fiml_h1_opts_from(Rcpp::Nullable<Rcpp::List> control) {
+  magmaan::estimate::fiml::FIMLH1Options o;
+  if (control.isNotNull()) {
+    Rcpp::List l(control.get());
+    if (l.containsElementNamed("h1_em_max_iter"))
+      o.max_iter = Rcpp::as<int>(l["h1_em_max_iter"]);
+    if (l.containsElementNamed("h1_em_tol"))
+      o.tol = Rcpp::as<double>(l["h1_em_tol"]);
+    if (l.containsElementNamed("h1_em_cov_floor"))
+      o.covariance_floor = Rcpp::as<double>(l["h1_em_cov_floor"]);
+    if (l.containsElementNamed("h1_em_cov_warn"))
+      o.covariance_warn = Rcpp::as<double>(l["h1_em_cov_warn"]);
+    if (l.containsElementNamed("h1_em_error_on_nonconvergence"))
+      o.error_on_nonconvergence =
+          Rcpp::as<bool>(l["h1_em_error_on_nonconvergence"]);
+  }
+  return o;
+}
+
 // Pulls IRLS outer-loop knobs out of the same `control` list `optim_opts_from`
 // parses for the inner solver. The `irls_` prefix keeps the inner-solver
 // `max_iter` / `ftol` / `gtol` namespace clean — the two layers share a

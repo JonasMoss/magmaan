@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <string>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -327,6 +328,32 @@ TEST_CASE("saturated_em_moments: missingness converges and packages cleanly") {
   // Sandwich identity: H · acov · H ≡ J (to floating-point round-off).
   const Eigen::MatrixXd reconstructed = out.H * out.acov * out.H;
   CHECK((reconstructed - out.J).cwiseAbs().maxCoeff() < 1e-6);
+}
+
+TEST_CASE("fiml_h1_moments: EM iteration cap fails closed by default") {
+  const auto raw = missing_single_block();
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack_or.has_value());
+
+  magmaan::estimate::fiml::FIMLH1Options options;
+  options.max_iter = 1;
+
+  auto hard = magmaan::estimate::fiml::fiml_h1_moments(
+      raw, *pack_or, options);
+  REQUIRE_FALSE(hard.has_value());
+  CHECK(hard.error().kind ==
+        magmaan::FitError::Kind::OptimizerNonConvergence);
+  CHECK(hard.error().iterations == 1);
+  CHECK(hard.error().detail.find("reached the iteration cap") !=
+        std::string::npos);
+
+  options.error_on_nonconvergence = false;
+  auto soft = magmaan::estimate::fiml::fiml_h1_moments(
+      raw, *pack_or, options);
+  REQUIRE(soft.has_value());
+  REQUIRE_FALSE(soft->warnings.empty());
+  CHECK(soft->warnings.front().find("reached the iteration cap") !=
+        std::string::npos);
 }
 
 TEST_CASE("saturated_em_moment_influence: missing data crossproduct reproduces saturated ACOV") {
