@@ -97,15 +97,17 @@ null-model bootstrap (simulate from the constrained MLE that imposes `g = g0`,
 average the LR) recovers most of it. omega coverage (separate run) stays
 0.93-0.97 across N with `E[T] ~ 1`, so the correction is a near-no-op there.
 
-### Why the correction is estimated, not computed
+### Why the correction must be a calibrated constant
 
-The obvious cheaper alternative to a bootstrap is an analytic small-sample
-factor. It does not work for the case that needs it. The maximal-reliability
-inflation is not a smooth property of the coefficient: it lives almost entirely
-in samples that land near a boundary (a near-zero fitted uniqueness, where the
-coefficient becomes unstable). Splitting `E[T]` by how close the fitted model is
-to that boundary shows the overall value is set by the near-boundary quarter,
-not by the typical (interior) sample.
+Two natural shortcuts both fail for the case that needs correcting, and the way
+they fail says what the right factor looks like.
+
+*Not an analytic formula.* The maximal-reliability inflation is not a smooth
+property of the coefficient: it lives almost entirely in samples that land near a
+boundary (a near-zero fitted uniqueness, where the coefficient becomes unstable).
+Splitting `E[T]` by how close the fitted model is to that boundary shows the
+overall value is set by the near-boundary quarter, not by the typical (interior)
+sample, and a smooth factor sees only the interior.
 
 ```{r lawley}
 if (is.null(lw)) cat("Run: Rscript scripts/lawley.R --pop bf\n") else {
@@ -120,14 +122,40 @@ if (is.null(lw)) cat("Run: Rscript scripts/lawley.R --pop bf\n") else {
 }
 ```
 
-An analytic factor built from the smooth curvature of the coefficient tracks the
-interior quarter but cannot see the near-boundary mass, so it recovers only about
-a quarter of the inflation and does not improve with N. The members where such a
-factor is accurate (omega, one-factor H) are already near-nominal and need no
-correction. The correction must therefore be estimated by refitting the model
-(the bootstrap), which reproduces the near-boundary behaviour; the open question
-is how to make that estimate boundary-aware, not whether to replace it with a
-formula.
+A smooth factor built from the curvature of the coefficient tracks the interior
+quarter but cannot see the near-boundary mass, so it recovers only about a quarter
+of the inflation and does not improve with N. (The members where such a factor is
+accurate, omega and one-factor H, are already near-nominal and need no correction.)
+
+*Not re-estimated per dataset.* The opposite shortcut, a bootstrap that estimates
+the factor separately for each sample, also fails, and instructively. The factor a
+sample needs is largest exactly when its statistic is largest (near a boundary),
+but the bootstrap estimate is *smallest* there; the two are anti-correlated. So
+although the average bootstrap factor is roughly right, applied one dataset at a
+time its variance and this anti-correlation cost about ten points of coverage,
+and neither a larger bootstrap nor an iterated (double) bootstrap closes the gap.
+The identical average factor applied as a single constant recovers those points.
+
+```{r perssample}
+db <- rd("double_boot_bf_n50.csv")
+if (is.null(db)) cat("Run: Rscript scripts/double_boot.R --pop bf --samples 200\n") else {
+  q1 <- qchisq(0.95, 1)
+  oc <- if (!is.null(lw)) lw$oracle_ET[lw$func == "rho" & lw$n == 50][1] else NA
+  covp <- function(cs) mean(db$T_real <= pmax(1, cs) * q1)   # per-sample factor
+  covc <- function(k)  mean(db$T_real <= k * q1)             # same mean, as a constant
+  tab <- data.frame(
+    `Factor` = c("uncorrected", "one-level bootstrap", "double bootstrap", "oracle constant"),
+    `Applied per sample` = c(fmt(covc(1)), fmt(covp(db$c_plugin)), fmt(covp(db$c_mult)), "-"),
+    `Same mean, as a constant` = c("-", fmt(covc(mean(db$c_plugin))), fmt(covc(mean(db$c_mult))), fmt(covc(oc))),
+    check.names = FALSE)
+  knitr::kable(tab, row.names = FALSE,
+    caption = "Maximal reliability coverage (nominal 0.95, bifactor, N=50). A per-sample factor caps near 0.85; the same factor as a constant reaches 0.93-0.98.")
+}
+```
+
+So the small-sample factor for the hard members must be a stable, model-level
+constant (calibrated by simulation), not a smooth formula and not a per-dataset
+resampling estimate.
 
 ## Caveats
 
@@ -137,12 +165,12 @@ formula.
   data both reduce to ~1 (verified), so they coincide with NT here. Non-normal
   stress is the next run.
 - **The feasible small-sample factor is not fully solved for the hardest cases.**
-  The null-model Gaussian bootstrap leaves a residual gap (~0.89 vs 0.95) at the
-  bifactor ceiling because a small-N fitted DGP is "cleaner" than the truth. An
-  analytic small-sample factor was investigated and ruled out for this case (it
-  captures only the interior, smooth part of the inflation; see above), so the
-  remaining route is a boundary-aware resampling estimate (iterated/double
-  bootstrap, or a DGP that preserves the near-boundary mass).
+  A per-dataset factor (one-level or double bootstrap) caps coverage near 0.85 at
+  the bifactor ceiling; an analytic factor is ruled out (boundary-driven, not
+  smooth). The same factor as a model-level constant reaches 0.93-0.98, so the
+  open task is a low-variance, calibrated constant for the model class rather than
+  a per-dataset estimate; the point-estimate near-Heywood bias is the deeper
+  remaining source.
 - A distribution-free Bollen-Stine bootstrap and an unconstrained-DGP bootstrap
   are available as options for later non-normal comparisons; they are not the
   headline.
@@ -157,6 +185,7 @@ cd experiments/45-profile-lr-reliability-ci
 Rscript run_experiment.R                          # construction parity vs semlbci
 Rscript scripts/coverage.R --func H  --scalings   # maximal-reliability collapse + Bartlett
 Rscript scripts/coverage.R --func omega           # omega is near-nominal (control)
-Rscript scripts/lawley.R --pop bf                 # why the correction is estimated, not computed
+Rscript scripts/lawley.R --pop bf                 # analytic factor cannot see the boundary mass
+Rscript scripts/double_boot.R --pop bf --samples 200  # per-sample factor fails; a constant works
 quarto render report.qmd
 ```
