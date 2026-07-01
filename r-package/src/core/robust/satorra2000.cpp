@@ -15,6 +15,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 
+#include "../detail_linalg.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::robust {
@@ -26,6 +27,55 @@ namespace {
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
+}
+
+std::string gate_detail(const std::string& what,
+                        const detail::SymmetricGateResult& g,
+                        const char* expectation) {
+  if (!g.finite) {
+    return what + " is not square and finite";
+  }
+  if (!g.decomposed) {
+    return what + " eigendecomposition failed";
+  }
+  return what + " is not " + expectation + " (min eigen " +
+         std::to_string(g.min_eval) + ", max eigen " +
+         std::to_string(g.max_eval) + ", tol " + std::to_string(g.tol) +
+         ", rank " + std::to_string(g.rank) + "/" +
+         std::to_string(g.dim) + ", rcond " + std::to_string(g.rcond) + ")";
+}
+
+template <class Derived>
+post_expected<void> require_finite_matrix(const Eigen::MatrixBase<Derived>& A,
+                                          const std::string& what) {
+  if (!A.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + " contains non-finite entries"));
+  }
+  return {};
+}
+
+post_expected<void> require_spd_matrix(const Eigen::MatrixXd& A,
+                                       const std::string& what) {
+  const auto g = detail::symmetric_pd_gated(A);
+  if (!g.ok) {
+    const PostError::Kind kind = (!g.finite || !g.decomposed)
+        ? PostError::Kind::NumericIssue
+        : PostError::Kind::InfoMatrixSingular;
+    return std::unexpected(make_err(kind,
+        gate_detail(what, g, "positive definite/well-conditioned")));
+  }
+  return {};
+}
+
+post_expected<void> require_psd_matrix(const Eigen::MatrixXd& A,
+                                       const std::string& what) {
+  const auto g = detail::symmetric_psd_gated(A);
+  if (!g.ok) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        gate_detail(what, g, "positive semidefinite")));
+  }
+  return {};
 }
 
 // Apply V_g = Γ_NT(Σ_g)⁻¹ to vech(M).  Closed form:
@@ -108,6 +158,11 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         "compute_satorra2000: A_alpha is wider than tall (m > r1) — "
         "expected an m × r1 matrix with m ≤ r1."));
   }
+  if (auto ok = require_finite_matrix(A_alpha,
+          "compute_satorra2000: restriction matrix A_alpha");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
 
   // ── 1. Per-group preprocessing.  We need V_g = Σ_g⁻¹⊗-style operator;
   //       fetch the per-group inverses up-front.
@@ -139,6 +194,16 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
           " Pi_alpha has " + std::to_string(gr.Pi_alpha.rows()) +
           " rows, expected mu_dim + p*_g = " + std::to_string(gr.mu_dim + pstar)));
     }
+    if (auto ok = require_spd_matrix(gr.Sigma,
+            "compute_satorra2000: group " + std::to_string(g) + " Sigma");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    if (auto ok = require_finite_matrix(gr.Pi_alpha,
+            "compute_satorra2000: group " + std::to_string(g) + " Pi_alpha");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
     Eigen::LLT<Eigen::MatrixXd> llt(gr.Sigma);
     if (llt.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -168,6 +233,11 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
     P.noalias() += gr.weight * (gr.Pi_alpha.transpose() * V_Pi);
   }
   P = 0.5 * (P + P.transpose()).eval();
+  if (auto ok = require_spd_matrix(P,
+          "compute_satorra2000: pooled expected info P");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
   Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
   if (ldlt_P.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -196,10 +266,19 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
 
   // ── 3. Y = P⁻¹ · A_αᵀ   (r1 × m)
   const Eigen::MatrixXd Y = ldlt_P.solve(A_alpha.transpose());
+  if (auto ok = require_finite_matrix(Y, "compute_satorra2000: P^{-1} A_alpha'");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
 
   // ── 4. C = A_α · Y     (m × m)
   Eigen::MatrixXd C = A_alpha * Y;
   C = 0.5 * (C + C.transpose()).eval();
+  if (auto ok = require_spd_matrix(C,
+          "compute_satorra2000: companion matrix C");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
 
   // ── 5. S accumulator.  Per-group casewise reduction:
   //       D_g = V_g · Π_α_g · Y            (p*_g × m)
@@ -242,10 +321,26 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
             " X has " + std::to_string(gr.X.cols()) +
             " columns, expected p_g = " + std::to_string(gr.Sigma.rows())));
       }
+      if (auto ok = require_finite_matrix(gr.X,
+              "compute_satorra2000: group " + std::to_string(g) + " X");
+          !ok.has_value()) {
+        return std::unexpected(ok.error());
+      }
+      if (auto ok = require_finite_matrix(gr.mean,
+              "compute_satorra2000: group " + std::to_string(g) + " mean");
+          !ok.has_value()) {
+        return std::unexpected(ok.error());
+      }
       // D_g = V_g · (Π_α_g · Y)            ((mu_dim+p*_g) × m)
       const Eigen::MatrixXd PiY     = gr.Pi_alpha * Y;   // (mu_dim+p*_g) × m
       const Eigen::MatrixXd D_g =
           apply_V_augmented_columns(inv_sigma[g], gr.mu_dim, PiY);
+      if (auto ok = require_finite_matrix(D_g,
+              "compute_satorra2000: projected moment directions for group " +
+                  std::to_string(g));
+          !ok.has_value()) {
+        return std::unexpected(ok.error());
+      }
       // s_g = vech(S_g_sample) — but the casewise residual d_gi − s_g cancels
       // the constant centring, so we instead use the per-group mean of d_gi
       // over i.  Numerically equivalent to subtracting vech(S_g) up to a
@@ -321,20 +416,41 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
     // result-struct consistency.
     S = D_stack.transpose() * Gamma_block * D_stack;
     S = 0.5 * (S + S.transpose()).eval();
-    Eigen::LDLT<Eigen::MatrixXd> ldlt_C(C);
-    if (ldlt_C.info() != Eigen::Success) {
+    if (auto ok = require_psd_matrix(S,
+            "compute_satorra2000: dense reduced S matrix");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt_C(C);
+    if (llt_C.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "compute_satorra2000: companion matrix C is not invertible "
+          "compute_satorra2000: companion matrix C Cholesky failed "
           "(dense path)"));
     }
-    Eigen::MatrixXd U_d = D_stack * ldlt_C.solve(D_stack.transpose());
+    Eigen::MatrixXd U_d = D_stack * llt_C.solve(D_stack.transpose());
+    if (auto ok = require_finite_matrix(U_d,
+            "compute_satorra2000: dense U matrix");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
     const Eigen::MatrixXd prod = U_d * Gamma_block;   // q×q, non-symmetric
+    if (auto ok = require_finite_matrix(prod,
+            "compute_satorra2000: dense U-Gamma product");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
     U_d.resize(0, 0);
     Gamma_block.resize(0, 0);
     Eigen::EigenSolver<Eigen::MatrixXd> es(prod, /*computeEigenvectors=*/false);
     if (es.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "compute_satorra2000: dense q×q eigensolver failed"));
+    }
+    if (!es.eigenvalues().real().allFinite() ||
+        !es.eigenvalues().imag().allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_satorra2000: dense q×q eigensolver returned non-finite "
+          "eigenvalues"));
     }
     Eigen::VectorXd rev   = es.eigenvalues().real();
     const double imag_max = es.eigenvalues().imag().cwiseAbs().maxCoeff();
@@ -352,6 +468,11 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
     // Reduced paths (and the NT short-circuit): the m generalised
     // eigenvalues of  S · v = λ · C · v.
     S = 0.5 * (S + S.transpose()).eval();
+    if (auto ok = require_psd_matrix(S,
+            "compute_satorra2000: reduced S matrix");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
     Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
         S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
     if (ges.info() != Eigen::Success) {
@@ -360,6 +481,10 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
           "singular — the restriction is degenerate against H1's curvature)"));
     }
     eig = ges.eigenvalues();
+  }
+  if (!eig.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_satorra2000: eigensolver returned non-finite eigenvalues"));
   }
   // Clip tiny round-off negatives (the eigvals are non-negative in exact
   // arithmetic).

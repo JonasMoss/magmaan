@@ -75,10 +75,6 @@ using detail::vech_lower;
 using detail::vech_unpack;
 
 constexpr double two_pi = 6.283185307179586476925286766559;
-constexpr int h1_em_max_iter = 10000;
-constexpr double h1_em_tol = 1e-11;
-constexpr double h1_em_cov_floor = 1e-6;
-constexpr double h1_em_cov_warn = 1e-5;
 constexpr double saturated_info_rel_floor = 1e-10;
 
 struct SymmetricFloorReport {
@@ -106,6 +102,28 @@ void add_unique_warning(std::vector<std::string>& warnings, std::string warning)
   if (std::find(warnings.begin(), warnings.end(), warning) == warnings.end()) {
     warnings.push_back(std::move(warning));
   }
+}
+
+fit_expected<void> validate_h1_options(const FIMLH1Options& options) {
+  if (options.max_iter < 1) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "FIML H1 EM: max_iter must be >= 1"));
+  }
+  if (!(options.tol > 0.0) || !std::isfinite(options.tol)) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "FIML H1 EM: tol must be finite and > 0"));
+  }
+  if (!(options.covariance_floor >= 0.0) ||
+      !std::isfinite(options.covariance_floor)) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "FIML H1 EM: covariance_floor must be finite and >= 0"));
+  }
+  if (!(options.covariance_warn >= 0.0) ||
+      !std::isfinite(options.covariance_warn)) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "FIML H1 EM: covariance_warn must be finite and >= 0"));
+  }
+  return {};
 }
 
 std::string fmt_sci(double value) {
@@ -488,6 +506,7 @@ h1_em_step_block(const FIMLCache& cache,
                  std::size_t block,
                  const Eigen::VectorXd& mu,
                  const Eigen::MatrixXd& Sigma,
+                 const FIMLH1Options& options,
                  Eigen::VectorXd& mu_next,
                  Eigen::MatrixXd& Sigma_next) {
   const Eigen::Index p = cache.block_p[block];
@@ -582,7 +601,7 @@ h1_em_step_block(const FIMLCache& cache,
                mu_next * mu_next.transpose();
   Sigma_next = 0.5 * (Sigma_next + Sigma_next.transpose());
   auto repair = floor_symmetric_fit(
-      Sigma_next, h1_em_cov_floor, /*relative_floor=*/0.0,
+      Sigma_next, options.covariance_floor, /*relative_floor=*/0.0,
       "FIML H1 EM covariance update");
   if (!repair.has_value()) return std::unexpected(repair.error());
   return H1EMStep{f, *repair};
@@ -596,14 +615,16 @@ fit_expected<H1EMResult>
 h1_em_iterate_block(const FIMLCache& cache,
                     std::size_t block,
                     Eigen::VectorXd& mu,
-                    Eigen::MatrixXd& Sigma) {
+                    Eigen::MatrixXd& Sigma,
+                    const FIMLH1Options& options) {
   Eigen::VectorXd mu_next;
   Eigen::MatrixXd Sigma_next;
   double prev = std::numeric_limits<double>::infinity();
   double cur = std::numeric_limits<double>::infinity();
   H1EMResult result;
-  for (int iter = 0; iter < h1_em_max_iter; ++iter) {
-    auto step = h1_em_step_block(cache, block, mu, Sigma, mu_next, Sigma_next);
+  for (int iter = 0; iter < options.max_iter; ++iter) {
+    auto step = h1_em_step_block(cache, block, mu, Sigma, options,
+                                 mu_next, Sigma_next);
     if (!step.has_value()) return std::unexpected(step.error());
     cur = step->value;
     if (step->sigma_repair.applied) {
@@ -615,7 +636,7 @@ h1_em_iterate_block(const FIMLCache& cache,
         std::min(result.min_covariance_eigen,
                  step->sigma_repair.min_eigen_after);
     if (std::isfinite(prev) &&
-        std::abs(prev - cur) <= h1_em_tol * (1.0 + std::abs(cur))) {
+        std::abs(prev - cur) <= options.tol * (1.0 + std::abs(cur))) {
       result.value = cur;
       result.iterations = iter + 1;
       result.converged = true;
@@ -630,7 +651,7 @@ h1_em_iterate_block(const FIMLCache& cache,
   auto final_val = h1_block_value_from_moments(cache, block, mu, Sigma);
   if (!final_val.has_value()) return std::unexpected(final_val.error());
   result.value = *final_val;
-  result.iterations = h1_em_max_iter;
+  result.iterations = options.max_iter;
   result.converged = false;
   return result;
 }
@@ -2400,6 +2421,15 @@ fiml_pack(const RawData& raw) {
 
 fit_expected<FIMLH1>
 fiml_h1_moments(const RawData& raw, const FIMLPack& pack) {
+  return fiml_h1_moments(raw, pack, FIMLH1Options{});
+}
+
+fit_expected<FIMLH1>
+fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
+                FIMLH1Options options) {
+  if (auto ok = validate_h1_options(options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
   const FIMLCache& cache = pack.cache;
   const SampleStats& starts = pack.start_stats;
   const std::size_t B = cache.block_p.size();
@@ -2434,16 +2464,25 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack) {
 
     // The converged value is evaluated at the same (mu, Sigma) the iteration
     // returns, so the H1 value and moments stay mutually consistent.
-    auto em_or = h1_em_iterate_block(cache, b, mu, Sigma);
+    auto em_or = h1_em_iterate_block(cache, b, mu, Sigma, options);
     if (!em_or.has_value()) return std::unexpected(em_or.error());
     const H1EMResult& em = *em_or;
-    total += em.value;
     if (!em.converged) {
+      if (options.error_on_nonconvergence) {
+        FitError err = make_fit_err(FitError::Kind::OptimizerNonConvergence,
+            "FIML H1 EM: block " + std::to_string(b + 1) +
+            " reached the iteration cap (" +
+            std::to_string(options.max_iter) + ")");
+        err.iterations = em.iterations;
+        err.f_value = em.value;
+        return std::unexpected(err);
+      }
       add_unique_warning(out.warnings,
           "FIML H1 EM: block " + std::to_string(b + 1) +
-          " reached the iteration cap (" + std::to_string(h1_em_max_iter) +
+          " reached the iteration cap (" + std::to_string(options.max_iter) +
           "); returning the last iterate");
     }
+    total += em.value;
     if (em.covariance_repairs > 0) {
       add_unique_warning(out.warnings,
           "FIML H1 EM: block " + std::to_string(b + 1) +
@@ -2452,11 +2491,11 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack) {
           " time(s); max diagonal ridge = " +
           fmt_sci(em.max_covariance_ridge));
     }
-    if (em.min_covariance_eigen < h1_em_cov_warn) {
+    if (em.min_covariance_eigen < options.covariance_warn) {
       add_unique_warning(out.warnings,
           "FIML H1 EM: block " + std::to_string(b + 1) +
           " covariance had eigenvalue below " +
-          fmt_sci(h1_em_cov_warn) +
+          fmt_sci(options.covariance_warn) +
           "; interpret edge-case results with caution");
     }
     out.mu[b] = std::move(mu);
@@ -4195,13 +4234,14 @@ post_expected<SaturatedMoments>
 saturated_em_moments_from_raw(const RawData& raw,
                               double h_step,
                               SaturatedHessianKind hessian_kind,
-                              const char* caller) {
+                              const char* caller,
+                              FIMLH1Options options = {}) {
   auto pack_or = fiml_pack(raw);
   if (!pack_or.has_value()) {
     return std::unexpected(fit_to_post(pack_or.error(),
         std::string(caller) + ": fiml_pack"));
   }
-  auto h1_or = fiml_h1_moments(raw, *pack_or);
+  auto h1_or = fiml_h1_moments(raw, *pack_or, options);
   if (!h1_or.has_value()) {
     return std::unexpected(fit_to_post(h1_or.error(),
         std::string(caller) + ": H1 EM"));
@@ -4217,6 +4257,15 @@ saturated_em_moments(const RawData& raw, double h_step) {
   return saturated_em_moments_from_raw(raw, h_step,
                                        SaturatedHessianKind::Analytic,
                                        "saturated_em_moments");
+}
+
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw, FIMLH1Options options,
+                     double h_step) {
+  return saturated_em_moments_from_raw(raw, h_step,
+                                       SaturatedHessianKind::Analytic,
+                                       "saturated_em_moments",
+                                       options);
 }
 
 post_expected<SaturatedMoments>

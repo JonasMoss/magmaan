@@ -9,13 +9,8 @@
 
 namespace magmaan::detail {
 
-// Result of a gated symmetric positive-definite inverse. `ok == false` means the
-// inverse must NOT be used; the diagnostic fields explain why (non-finite/non-
-// square input, eigensolver failure, or rank deficiency). The same eigen-floor
-// gate is used for every fourth-moment weight inversion in magmaan (continuous
-// ADF/WLS Γ̂, structured Γ, ordinal NACOV / A11) so the policy lives in one place.
-struct SymInverseResult {
-  bool            ok         = false;  // finite & square & decomposed & λmin > tol
+struct SymmetricGateResult {
+  bool            ok         = false;
   bool            finite     = false;  // input was finite and square
   bool            decomposed = false;  // eigensolver succeeded, eigenvalues finite
   Eigen::Index    dim        = 0;
@@ -24,8 +19,23 @@ struct SymInverseResult {
   double          min_eval   = 0.0;
   double          max_eval   = 0.0;
   double          rcond      = 0.0;    // min_eval / max_eval (0 if max_eval <= 0)
+};
+
+// Result of a gated symmetric positive-definite inverse. `ok == false` means the
+// inverse must NOT be used; the diagnostic fields explain why (non-finite/non-
+// square input, eigensolver failure, or rank deficiency). The same eigen-floor
+// gate is used for every fourth-moment weight inversion in magmaan (continuous
+// ADF/WLS Γ̂, structured Γ, ordinal NACOV / A11) so the policy lives in one place.
+struct SymInverseResult : SymmetricGateResult {
   Eigen::MatrixXd inverse;             // populated only when ok == true
 };
+
+// Symmetric finite/eigendecomposition gate on 0.5*(A + Aᵀ).  `PD` requires
+// λ_min > tol; `PSD` allows rank deficiency but rejects λ_min < -tol.  These
+// helpers do not invert, so callers can guard generalized eigensolver and square
+// root preconditions without constructing an unnecessary inverse.
+SymmetricGateResult symmetric_pd_gated(const Eigen::MatrixXd& A);
+SymmetricGateResult symmetric_psd_gated(const Eigen::MatrixXd& A);
 
 // Symmetric PD inverse via SelfAdjointEigenSolver on 0.5*(A + Aᵀ), gated on the
 // smallest eigenvalue. The gate is `min_eval > tol` with

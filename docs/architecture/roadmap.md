@@ -463,10 +463,14 @@ golden `parTable()` fixtures.
   `FIMLPack` (immutable pattern cache + pairwise-complete start statistics,
   built by `fiml_pack`) and `FIMLH1` (per-block saturated EM moments plus the
   converged H1 objective value, built by one EM run in `fiml_h1_moments`).
-  The H1 EM follows lavaan's edge-case policy in spirit: near-singular EM
-  covariance updates are diagonally floored, an iteration-cap hit returns the
-  last finite iterate, and `FIMLH1::warnings` records the condition rather than
-  turning a usable H1 fit into a hard error.
+  The H1 EM fails closed by default when a missing-data block reaches its
+  iteration cap, returning `FitError::OptimizerNonConvergence` rather than a
+  last-iterate H1 value. `FIMLH1Options` exposes `max_iter`, tolerance,
+  covariance floor/warning thresholds, and an explicit
+  `error_on_nonconvergence = false` diagnostic mode that restores the old
+  last-iterate-with-warning behavior. Near-singular EM covariance updates are
+  still diagonally floored before iteration continues, with
+  `FIMLH1::warnings` recording any repairs or low eigenvalues.
   Every post-fit helper (`fiml_extras`, `fiml_observed_information`,
   `fiml_robust_mlr`, `saturated_em_moments`, `fiml_eta_jacobian`,
   `fiml_ugamma_spectrum`, `fiml_baseline_chi2`), the FIML score/MI helpers
@@ -2166,7 +2170,13 @@ need, and no more. The current C++ core mostly follows this:
   `A.method` option (`exact` default, `delta` for lavaan-style
   moment-Jacobian column-space restrictions). Its empirical-Gamma computation
   can run in the default streaming casewise-reduced mode or in a materialized
-  full-Gamma reference mode for diagnostics and benchmarks.
+  full-Gamma reference mode for diagnostics and benchmarks. The numeric kernels
+  fail closed on non-finite or singular pencils: model-implied covariance
+  blocks, the pooled expected-information `P`, and restriction companion `C`
+  are finite/SPD-gated; reduced meats are finite/PSD-gated; the FIML sandwich
+  route allows finite nonsingular observed bread that is indefinite in finite
+  samples, but still rejects singular bread and degenerate `C` before any
+  generalized eigensolver is called.
 
 The remaining pressure point is the R boundary. Several exported R wrappers
 currently accept the transparent fit list for convenience and then unpack the

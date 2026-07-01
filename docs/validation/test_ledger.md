@@ -256,6 +256,24 @@ Scope: lavaan's bare default (`A.method = "delta"`, `scaled.shifted = TRUE`) is 
 documented compatibility alternative for covariance-nested checks, not the
 magmaan oracle. Full investigation: `docs/validation/satorra2000_parity.md`.
 
+**Satorra-2000 degenerate-pencil fail-closed guards.**
+Regression: near-Heywood missing-data invariance fits could feed the FIML
+Satorra-2000 lavaan/exact path singular or non-finite `WLS.V`/model-Gamma/
+restriction pencils. The low-level path then reached unguarded solves and
+eigensolvers; on AVX-512 optimized builds this surfaced as a flaky segfault or
+hang rather than a value-level `PostError`. Relatedly, the saturated FIML H1 EM
+returned a last iterate on an iteration-cap hit by default, letting bad Stage-1
+objects propagate into nested tests.
+Guard: `tests/unit/satorra2000_test.cpp` pins sandwich degenerate-pencil
+rejection, indefinite-but-nonsingular observed bread acceptance, singular pooled
+info, and rank-deficient restrictions; `tests/unit/saturated_em_moments_test.cpp`
+pins the default H1 cap as `FitError::OptimizerNonConvergence` plus the explicit
+diagnostic opt-out. Existing FIML nested tests cover finite nonsingular observed
+bread that is not SPD.
+Scope: no exact Saga C++ file:line was recovered from the flaky AVX-512 crash;
+the shipped fix is input validation and fail-closed numerical preconditions, not
+an ISA-specific workaround.
+
 **Ordinal WLSMV nested Satorra-2000 row convention.**
 Finding: lavaan's ordinal WLSMV `lavTestLRT(..., method = "satorra.2000",
 A.method = "exact", scaled.shifted = FALSE)` table reports the

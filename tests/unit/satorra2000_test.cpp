@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
 
 #include <Eigen/Cholesky>
@@ -523,6 +524,50 @@ TEST_CASE("compute_satorra2000_from_sandwich matches moment-space wrapper") {
         doctest::Approx(sandwich_or->trace_CinvS_sq).epsilon(1e-12));
 }
 
+TEST_CASE("compute_satorra2000_from_sandwich rejects degenerate pencils") {
+  Eigen::MatrixXd A1 = Eigen::MatrixXd::Identity(2, 2);
+  Eigen::MatrixXd B1 = Eigen::MatrixXd::Identity(2, 2);
+  Eigen::MatrixXd A_alpha = Eigen::MatrixXd::Identity(2, 2);
+
+  Eigen::MatrixXd indefinite_A1 = A1;
+  indefinite_A1(1, 1) = -1.0;
+  Eigen::MatrixXd one_direction(1, 2);
+  one_direction << 1.0, 0.0;
+  auto ok_indefinite = magmaan::robust::compute_satorra2000_from_sandwich(
+      indefinite_A1, B1, one_direction);
+  REQUIRE(ok_indefinite.has_value());
+
+  Eigen::MatrixXd singular_A1 = A1;
+  singular_A1(1, 1) = 0.0;
+  auto bad_bread = magmaan::robust::compute_satorra2000_from_sandwich(
+      singular_A1, B1, A_alpha);
+  CHECK_FALSE(bad_bread.has_value());
+  CHECK(bad_bread.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
+
+  Eigen::MatrixXd rank_def_A(2, 2);
+  rank_def_A << 1.0, 0.0,
+                1.0, 0.0;
+  auto bad_restriction = magmaan::robust::compute_satorra2000_from_sandwich(
+      A1, B1, rank_def_A);
+  CHECK_FALSE(bad_restriction.has_value());
+  CHECK(bad_restriction.error().kind ==
+        magmaan::PostError::Kind::InfoMatrixSingular);
+
+  Eigen::MatrixXd nonfinite_B1 = B1;
+  nonfinite_B1(0, 0) = std::numeric_limits<double>::quiet_NaN();
+  auto bad_meat = magmaan::robust::compute_satorra2000_from_sandwich(
+      A1, nonfinite_B1, A_alpha);
+  CHECK_FALSE(bad_meat.has_value());
+  CHECK(bad_meat.error().kind == magmaan::PostError::Kind::NumericIssue);
+
+  Eigen::MatrixXd indefinite_B1 = B1;
+  indefinite_B1(1, 1) = -1.0;
+  auto bad_s = magmaan::robust::compute_satorra2000_from_sandwich(
+      A1, indefinite_B1, A_alpha);
+  CHECK_FALSE(bad_s.has_value());
+  CHECK(bad_s.error().kind == magmaan::PostError::Kind::NumericIssue);
+}
+
 // ── m = 0 degenerate ───────────────────────────────────────────────────────
 
 TEST_CASE("compute_satorra2000: degenerate m=0 (H0 ≡ H1)") {
@@ -790,4 +835,20 @@ TEST_CASE("compute_satorra2000: rejects singular pooled info") {
   A_alpha << 1, 0, 0, -1;
   auto r = magmaan::robust::compute_satorra2000({gr}, A_alpha);
   CHECK_FALSE(r.has_value());
+}
+
+TEST_CASE("compute_satorra2000: rejects rank-deficient restrictions") {
+  Eigen::MatrixXd Pi_alpha = Eigen::MatrixXd::Identity(3, 3);
+  const Eigen::MatrixXd S = Eigen::MatrixXd::Identity(2, 2);
+  const Eigen::Index n = 10;
+  const Eigen::MatrixXd X = Eigen::MatrixXd::Random(n, 2);
+  const Eigen::VectorXd mean = X.colwise().mean();
+  magmaan::robust::SatorraGroup gr{Pi_alpha, S, X, mean, 1.0,
+                      static_cast<std::int32_t>(n)};
+  Eigen::MatrixXd A_alpha(2, 3);
+  A_alpha << 1, 0, 0,
+             1, 0, 0;
+  auto r = magmaan::robust::compute_satorra2000({gr}, A_alpha);
+  CHECK_FALSE(r.has_value());
+  CHECK(r.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
 }

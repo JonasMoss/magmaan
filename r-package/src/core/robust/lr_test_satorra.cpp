@@ -25,6 +25,7 @@
 #include "magmaan/robust/weighted_chisq.hpp"   // weighted_chisq_upper
 #include "magmaan/model/model_evaluator.hpp"
 
+#include "../detail_linalg.hpp"
 #include "detail_vech.hpp"                // vech_len
 
 namespace magmaan::robust {
@@ -44,6 +45,83 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 double quiet_nan() {
   return std::numeric_limits<double>::quiet_NaN();
+}
+
+std::string gate_detail(const std::string& what,
+                        const detail::SymmetricGateResult& g,
+                        const char* expectation) {
+  if (!g.finite) {
+    return what + " is not square and finite";
+  }
+  if (!g.decomposed) {
+    return what + " eigendecomposition failed";
+  }
+  return what + " is not " + expectation + " (min eigen " +
+         std::to_string(g.min_eval) + ", max eigen " +
+         std::to_string(g.max_eval) + ", tol " + std::to_string(g.tol) +
+         ", rank " + std::to_string(g.rank) + "/" +
+         std::to_string(g.dim) + ", rcond " + std::to_string(g.rcond) + ")";
+}
+
+template <class Derived>
+post_expected<void> require_finite_matrix(const Eigen::MatrixBase<Derived>& A,
+                                          const std::string& what) {
+  if (!A.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + " contains non-finite entries"));
+  }
+  return {};
+}
+
+post_expected<void> require_spd_matrix(const Eigen::MatrixXd& A,
+                                       const std::string& what) {
+  const auto g = detail::symmetric_pd_gated(A);
+  if (!g.ok) {
+    const PostError::Kind kind = (!g.finite || !g.decomposed)
+        ? PostError::Kind::NumericIssue
+        : PostError::Kind::InfoMatrixSingular;
+    return std::unexpected(make_err(kind,
+        gate_detail(what, g, "positive definite/well-conditioned")));
+  }
+  return {};
+}
+
+post_expected<void> require_symmetric_nonsingular_matrix(
+    const Eigen::MatrixXd& A,
+    const std::string& what) {
+  if (A.rows() != A.cols() || !A.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + " is not square and finite"));
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+      0.5 * (A + A.transpose()), Eigen::EigenvaluesOnly);
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + " eigendecomposition failed"));
+  }
+  const Eigen::VectorXd evals = es.eigenvalues();
+  const double max_abs = evals.cwiseAbs().maxCoeff();
+  const double min_abs = evals.cwiseAbs().minCoeff();
+  const double tol = 1e-10 * std::max(1.0, max_abs);
+  if (min_abs <= tol) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        what + " is singular or ill-conditioned (min |eigen| " +
+        std::to_string(min_abs) + ", max |eigen| " +
+        std::to_string(max_abs) + ", tol " + std::to_string(tol) +
+        ", min eigen " + std::to_string(evals.minCoeff()) +
+        ", max eigen " + std::to_string(evals.maxCoeff()) + ")"));
+  }
+  return {};
+}
+
+post_expected<void> require_psd_matrix(const Eigen::MatrixXd& A,
+                                       const std::string& what) {
+  const auto g = detail::symmetric_psd_gated(A);
+  if (!g.ok) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        gate_detail(what, g, "positive semidefinite")));
+  }
+  return {};
 }
 
 post_expected<Eigen::MatrixXd>
@@ -1177,33 +1255,57 @@ compute_satorra2000_from_sandwich(
         "compute_satorra2000_from_sandwich: A_alpha has more rows than H1 "
         "alpha directions"));
   }
+  if (auto ok = require_finite_matrix(A1,
+          "compute_satorra2000_from_sandwich: H1 alpha-space bread A1");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = require_finite_matrix(B1,
+          "compute_satorra2000_from_sandwich: H1 alpha-space meat B1");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = require_finite_matrix(A_alpha,
+          "compute_satorra2000_from_sandwich: restriction matrix A_alpha");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
 
   Eigen::MatrixXd P = 0.5 * (A1 + A1.transpose());
+  if (auto ok = require_symmetric_nonsingular_matrix(P,
+          "compute_satorra2000_from_sandwich: H1 alpha-space bread A1");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
   Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
   if (ldlt_P.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_satorra2000_from_sandwich: H1 alpha-space bread A1 is not "
-        "invertible"));
-  }
-  {
-    const Eigen::VectorXd d_abs = ldlt_P.vectorD().cwiseAbs();
-    const double tol_pivot = 1e-10 * d_abs.maxCoeff();
-    if (d_abs.minCoeff() <= tol_pivot) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "compute_satorra2000_from_sandwich: H1 alpha-space bread A1 is "
-          "rank-deficient (smallest |D| pivot " +
-          std::to_string(d_abs.minCoeff()) + " <= tol " +
-          std::to_string(tol_pivot) + ")"));
-    }
+        "compute_satorra2000_from_sandwich: H1 alpha-space bread A1 "
+        "LDLT failed"));
   }
 
   const Eigen::MatrixXd Y = ldlt_P.solve(A_alpha.transpose());
+  if (auto ok = require_finite_matrix(Y,
+          "compute_satorra2000_from_sandwich: A1^{-1} A_alpha'");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
   Eigen::MatrixXd C = A_alpha * Y;
   C = 0.5 * (C + C.transpose()).eval();
+  if (auto ok = require_spd_matrix(C,
+          "compute_satorra2000_from_sandwich: restriction companion matrix C");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
 
   const Eigen::MatrixXd Bsym = 0.5 * (B1 + B1.transpose());
   Eigen::MatrixXd S = Y.transpose() * Bsym * Y;
   S = 0.5 * (S + S.transpose()).eval();
+  if (auto ok = require_psd_matrix(S,
+          "compute_satorra2000_from_sandwich: reduced S matrix");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
 
   Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
       S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
@@ -1213,6 +1315,11 @@ compute_satorra2000_from_sandwich(
         "(restriction C may be singular against H1 eta-space curvature)"));
   }
   Eigen::VectorXd eig = ges.eigenvalues();
+  if (!eig.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_satorra2000_from_sandwich: eigensolver returned non-finite "
+        "eigenvalues"));
+  }
 
   std::vector<std::string> warnings;
   const double clip_thresh = 1e-12 * std::max(1.0, eig.cwiseAbs().maxCoeff());

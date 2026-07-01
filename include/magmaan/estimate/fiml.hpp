@@ -66,6 +66,14 @@ struct FIMLPack {
   SampleStats start_stats;
 };
 
+struct FIMLH1Options {
+  int    max_iter = 10000;
+  double tol = 1e-11;
+  double covariance_floor = 1e-6;
+  double covariance_warn = 1e-5;
+  bool   error_on_nonconvergence = true;
+};
+
 // Saturated (H1) EM moments plus the converged H1 objective value, computed
 // by one EM run per block via `fiml_h1_moments` and shared by every post-fit
 // consumer (likelihood accounting, SRMR, robust traces, saturated
@@ -236,6 +244,9 @@ fiml_pack(const RawData& raw);
 // saturated information) consumes the result.
 fit_expected<FIMLH1>
 fiml_h1_moments(const RawData& raw, const FIMLPack& pack);
+fit_expected<FIMLH1>
+fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
+                FIMLH1Options options);
 
 // Start-value and fixed.x helper for FIML. Means use all observed values in
 // each column; covariances use pairwise observed rows with an N divisor.
@@ -377,6 +388,9 @@ fiml_score_meat_bread(const spec::LatentStructure& pt,
 // H1 information.
 post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw, FIMLH1Options options,
+                     double h_step = 1e-4);
 
 post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw,

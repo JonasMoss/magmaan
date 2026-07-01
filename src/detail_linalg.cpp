@@ -6,8 +6,11 @@
 
 namespace magmaan::detail {
 
-SymInverseResult symmetric_inverse_pd_gated(const Eigen::MatrixXd& A) {
-  SymInverseResult r;
+namespace {
+
+SymmetricGateResult symmetric_eigen_gate(const Eigen::MatrixXd& A,
+                                         bool require_strict_pd) {
+  SymmetricGateResult r;
   r.dim = A.rows();
 
   if (A.rows() != A.cols() || !A.allFinite()) {
@@ -27,14 +30,29 @@ SymInverseResult symmetric_inverse_pd_gated(const Eigen::MatrixXd& A) {
   r.tol      = 1e-10 * std::max(1.0, r.max_eval);
   r.rank     = (evals.array() > r.tol).count();
   r.rcond    = r.max_eval > 0.0 ? r.min_eval / r.max_eval : 0.0;
+  r.ok       = require_strict_pd ? (r.min_eval > r.tol)
+                                 : (r.min_eval >= -r.tol);
+  return r;
+}
 
-  if (r.min_eval <= r.tol) {
-    return r;  // rank deficient, ok == false
-  }
+}  // namespace
 
+SymmetricGateResult symmetric_pd_gated(const Eigen::MatrixXd& A) {
+  return symmetric_eigen_gate(A, true);
+}
+
+SymmetricGateResult symmetric_psd_gated(const Eigen::MatrixXd& A) {
+  return symmetric_eigen_gate(A, false);
+}
+
+SymInverseResult symmetric_inverse_pd_gated(const Eigen::MatrixXd& A) {
+  SymInverseResult r;
+  static_cast<SymmetricGateResult&>(r) = symmetric_pd_gated(A);
+  if (!r.ok) return r;
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (A + A.transpose()));
+  const Eigen::VectorXd& evals = es.eigenvalues();
   r.inverse = es.eigenvectors() * evals.cwiseInverse().asDiagonal() *
               es.eigenvectors().transpose();
-  r.ok = true;
   return r;
 }
 

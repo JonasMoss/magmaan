@@ -2706,8 +2706,10 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fiml_fit_result(ctx, raw, est, &starts);
-  auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack_or);
-  if (h1_or.has_value()) out["fiml_h1"] = fiml_h1_xptr(std::move(*h1_or));
+  auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(
+      raw, *pack_or, fiml_h1_opts_from(control));
+  if (!h1_or.has_value()) stop_fit(h1_or.error());
+  out["fiml_h1"] = fiml_h1_xptr(std::move(*h1_or));
   out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
   return out;
 }
