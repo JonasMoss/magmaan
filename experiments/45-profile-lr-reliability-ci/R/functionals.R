@@ -1,13 +1,17 @@
 # The reliability family as functional closures over the engine's z-vector. Each
-# builder returns a function g(z) -> scalar; the engine finite-differences the
-# constraint Jacobian (grad = NULL). Analytic gradients are the planned in-core
-# optimization; the NT parity milestone does not need them, and semlbci itself
-# differentiates the := algebra numerically, so FD keeps the two comparable.
+# builder returns a function g(z) -> list(value, grad) with grad the ANALYTIC
+# gradient in z-space (free loadings in the engine's ordering, then d/d log psi);
+# the engine uses it directly for the constraint Jacobian (no finite differencing),
+# which is what makes the constrained fits cheap enough for nested bootstraps. The
+# gradients are validated against central FD to ~1e-11. semlbci differentiates its
+# := algebra numerically, so the NT parity check is unaffected (it compares bounds,
+# not Jacobians).
 #
 # All coefficients are functions of the model-implied Sigma = Lambda Lambda' +
 # diag(psi) with unit factor variances (std.lv), so they are scale-free in the
-# usual reliability sense. `eng` supplies unpack(); `cols` names which loading
-# column is the general/target factor.
+# usual reliability sense. `eng` supplies unpack(), cols, m, p. z-gradients: for a
+# free loading z holds L_{ab} directly (dg/dz = dg/dL_{ab}); for a residual z holds
+# log psi_i (dg/dz = psi_i * dg/dpsi_i).
 
 # omega_total: proportion of unit-weighted total-score variance that is common,
 #   1 - 1' Theta 1 / 1' Sigma 1.
@@ -15,10 +19,13 @@
 # the general form also covers the orthogonal bifactor (all common variance).
 make_omega_total <- function(eng) {
   function(z) {
-    u <- eng$unpack(z)
-    Sig <- tcrossprod(u$Lam) + diag(u$psi)
-    vt <- sum(Sig)
-    1 - sum(u$psi) / vt
+    u <- eng$unpack(z); Lam <- u$Lam; psi <- u$psi
+    vt <- sum(tcrossprod(Lam)) + sum(psi); Spsi <- sum(psi); cmn <- vt - Spsi
+    # dg/dL_{ij} = 2 Spsi colsum_j / vt^2 (const across i); dg/dpsi_i = -cmn/vt^2
+    dL <- matrix(rep(2 * Spsi * colSums(Lam) / vt^2, each = eng$p), eng$p, eng$m)
+    dlogpsi <- (-cmn / vt^2) * psi
+    list(value = 1 - Spsi / vt,
+         grad = c(unlist(lapply(seq_len(eng$m), function(j) dL[eng$cols[[j]], j])), dlogpsi))
   }
 }
 
@@ -26,10 +33,15 @@ make_omega_total <- function(eng) {
 # alone (column `gcol`, default 1): (1' lambda_G)^2 / 1' Sigma 1.
 make_omega_h <- function(eng, gcol = 1L) {
   function(z) {
-    u <- eng$unpack(z)
-    Sig <- tcrossprod(u$Lam) + diag(u$psi)
-    sG <- sum(u$Lam[, gcol])
-    sG^2 / sum(Sig)
+    u <- eng$unpack(z); Lam <- u$Lam; psi <- u$psi
+    vt <- sum(tcrossprod(Lam)) + sum(psi); sG <- sum(Lam[, gcol]); colsum <- colSums(Lam)
+    # dg/dL_{i,gcol} = 2 sG (vt - sG^2)/vt^2; dg/dL_{ij, j!=gcol} = -2 sG^2 colsum_j/vt^2
+    dL <- matrix(0, eng$p, eng$m)
+    for (j in seq_len(eng$m))
+      dL[, j] <- if (j == gcol) 2 * sG * (vt - sG^2) / vt^2 else -2 * sG^2 * colsum[j] / vt^2
+    dlogpsi <- (-sG^2 / vt^2) * psi
+    list(value = sG^2 / vt,
+         grad = c(unlist(lapply(seq_len(eng$m), function(j) dL[eng$cols[[j]], j])), dlogpsi))
   }
 }
 
@@ -42,12 +54,16 @@ make_omega_h <- function(eng, gcol = 1L) {
 # which is what the semlbci := oracle uses for the 1-factor check.
 make_H <- function(eng, tcol = 1L) {
   function(z) {
-    u <- eng$unpack(z)
-    lam <- u$Lam[, tcol]
-    Sig <- tcrossprod(u$Lam) + diag(u$psi)
-    E <- Sig - tcrossprod(lam)
-    qv <- as.numeric(crossprod(lam, solve(E, lam)))
-    1 / (1 + 1 / qv)
+    u <- eng$unpack(z); Lam <- u$Lam; psi <- u$psi; lam <- Lam[, tcol]
+    E <- tcrossprod(Lam) + diag(psi) - tcrossprod(lam)
+    w <- solve(E, lam); q <- as.numeric(crossprod(lam, w)); dgdq <- 1 / (1 + q)^2
+    # dq/dL_{.,tcol} = 2 w; dq/dL_{.,j!=tcol} = -2 w (L[,j]'w); dq/dpsi_i = -w_i^2
+    cb <- as.numeric(crossprod(Lam, w))
+    dL <- matrix(0, eng$p, eng$m)
+    for (j in seq_len(eng$m)) dL[, j] <- if (j == tcol) 2 * w else -2 * w * cb[j]
+    dlogpsi <- -w^2 * psi
+    grad_q <- c(unlist(lapply(seq_len(eng$m), function(j) dL[eng$cols[[j]], j])), dlogpsi)
+    list(value = q / (1 + q), grad = dgdq * grad_q)
   }
 }
 
