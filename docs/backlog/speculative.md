@@ -656,6 +656,19 @@ misspecified regimes. Concrete decisions:
   why it is the completeness tier and not the MVP. The Bartlett/small-sample correction
   composes on top of each tier.
 
+**Progress (2026-07-01): NT generic engine validated.** `experiments/45-profile-lr-reliability-ci`
+lands the generic-`g` profile-LR engine (a functional closure + `nloptr` constrained
+fit, zero core change, exactly the R-prototype path above) and checks it against
+`semlbci` (Wu-Neale). Wherever `semlbci` converges the engine reproduces its
+likelihood-based bounds to `<=1e-7` for omega_total and `H` (one-factor) and
+omega_total and omega_h (orthogonal three-group bifactor). It also carries a
+first-principles validity gate (`T(bound) = qchisq(.95,1)`): every engine bound passes
+across all cells, while `semlbci`'s default search fails 7 bifactor upper bounds (its
+constrained refit sticks at a suboptimal optimum and its post-check re-certifies the
+stuck value); the engine's constrained fit is strictly better and its bound is the one
+that solves the equation. Next: analytic functional gradients, then the load-bearing
+Bartlett small-sample correction and coverage, then the robust (Satorra-2000) tier.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
