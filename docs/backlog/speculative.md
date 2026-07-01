@@ -731,6 +731,35 @@ curvature and omits the model-cumulant term, so it lower-bounds analytic-achieva
 interior-quartile proxy shows the shortfall is fundamental regardless. Files:
 `scripts/lawley.R`, `results/lawley_bf.csv`, `results/lawley_high.csv`.
 
+**Progress (2026-07-01): double bootstrap + the CONSTANT-vs-per-sample finding (the
+correction must be a calibrated constant).** First, ENABLER: added closed-form analytic
+z-space gradients to the reliability functionals (`omega_total`, `omega_h`, `H`/`rho*`),
+validated vs central FD to ~1e-11 (`for H`: `dq/dlambda_t=2w`, `dq/dL_{.,j}=-2w(L[,j]'w)`,
+`dq/dpsi_i=-w_i^2`, `w=E^-1 lambda`); the engine already skips FD when a functional supplies
+its grad, so every constrained fit now uses an analytic constraint Jacobian -> 11x speedup
+(double-boot smoke 434s -> 38s), which is what makes nested bootstraps affordable. Then the
+DOUBLE BOOTSTRAP (`scripts/double_boot.R`, motivated by the stable ~76% one-level recovery =
+multiplicative-bias fingerprint): it correctly fixes the MEAN of `c` (60% -> 72% additive ->
+82% multiplicative, exactly as `rho`-constant theory predicts), BUT coverage does NOT improve
+(0.85 plug-in -> 0.83/0.84 double) because coverage never depended on the mean. Decisive
+diagnostic: (a) `cor(T_real, c) = -0.19/-0.15` -> the per-sample bootstrap factor is
+ANTI-CORRELATED with need (smallest `c` exactly on the near-boundary samples where `T` is
+biggest); (b) the double bootstrap INFLATES the per-sample CV (0.41 -> 0.72); (c) a CONSTANT
+factor beats a per-sample one at every mean level (`c_plugin`: per-sample 0.85 vs constant
+0.898; `c_mult`: per-sample 0.84 vs constant 0.934; oracle constant `c=5.04` -> 0.976); (d)
+bootstrap size is NOT the lever: `cov_bart_null = 0.803` IDENTICAL at `B in {40,120,400}`, so
+the per-sample ceiling (~0.80-0.85) is structural (theta_tilde variation + anti-correlation),
+not Monte-Carlo. VERDICT: the small-sample factor for the boundary-dominated members must be a
+STABLE MODEL-LEVEL CONSTANT (calibrated by simulation over the model class), NOT a smooth
+analytic formula (misses the boundary) and NOT a per-dataset resampling estimate (anti-
+correlated, high-variance). This is a cleaner and more publishable message than "double-boot
+fixes it": the per-sample-bootstrap paradigm itself is the wrong frame for near-boundary
+coefficients. OPEN: a low-variance calibrated-constant recipe usable from one dataset (the
+point-estimate near-Heywood bias is the deeper residual); the double-boot machinery + analytic
+grads are kept as validated infrastructure. Report gained the finding "Why the correction must
+be a calibrated constant" (constant-vs-per-sample coverage table). Files: `scripts/double_boot.R`,
+`results/double_boot_bf_n50.csv`, faster `R/functionals.R`.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
