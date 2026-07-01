@@ -16,6 +16,7 @@ rd <- function(f) if (file.exists(file.path("results", f))) read.csv(file.path("
 par_d <- rd("semlbci_parity.csv")
 cov_h <- rd("coverage_H.csv")
 cov_o <- rd("coverage_omega.csv")
+lw <- rd("lawley_bf.csv")
 ```
 
 ## Question
@@ -96,6 +97,38 @@ null-model bootstrap (simulate from the constrained MLE that imposes `g = g0`,
 average the LR) recovers most of it. omega coverage (separate run) stays
 0.93-0.97 across N with `E[T] ~ 1`, so the correction is a near-no-op there.
 
+### Why the correction is estimated, not computed
+
+The obvious cheaper alternative to a bootstrap is an analytic small-sample
+factor. It does not work for the case that needs it. The maximal-reliability
+inflation is not a smooth property of the coefficient: it lives almost entirely
+in samples that land near a boundary (a near-zero fitted uniqueness, where the
+coefficient becomes unstable). Splitting `E[T]` by how close the fitted model is
+to that boundary shows the overall value is set by the near-boundary quarter,
+not by the typical (interior) sample.
+
+```{r lawley}
+if (is.null(lw)) cat("Run: Rscript scripts/lawley.R --pop bf\n") else {
+  r <- lw[lw$func == "rho", ]
+  tab <- data.frame(N = r$n,
+    `E[T], all samples` = fmt(r$oracle_ET, 2),
+    `E[T], near-boundary quarter` = fmt(r$et_near_bd, 2),
+    `E[T], interior quarter` = fmt(r$et_far_bd, 2),
+    check.names = FALSE)
+  knitr::kable(tab, row.names = FALSE,
+    caption = "Maximal reliability: the LR inflation concentrates in near-boundary samples (bifactor, normal data). E[T]=1 is the calibrated target.")
+}
+```
+
+An analytic factor built from the smooth curvature of the coefficient tracks the
+interior quarter but cannot see the near-boundary mass, so it recovers only about
+a quarter of the inflation and does not improve with N. The members where such a
+factor is accurate (omega, one-factor H) are already near-nominal and need no
+correction. The correction must therefore be estimated by refitting the model
+(the bootstrap), which reproduces the near-boundary behaviour; the open question
+is how to make that estimate boundary-aware, not whether to replace it with a
+formula.
+
 ## Caveats
 
 - **Normal data throughout.** This establishes the NT tier. The robust and
@@ -105,9 +138,11 @@ average the LR) recovers most of it. omega coverage (separate run) stays
   stress is the next run.
 - **The feasible small-sample factor is not fully solved for the hardest cases.**
   The null-model Gaussian bootstrap leaves a residual gap (~0.89 vs 0.95) at the
-  bifactor ceiling because a small-N fitted DGP is "cleaner" than the truth. The
-  consistent ~76% recovery across N hints at a fixable multiplicative bias
-  (iterated bootstrap) or an analytic (Lawley) factor; both are open.
+  bifactor ceiling because a small-N fitted DGP is "cleaner" than the truth. An
+  analytic small-sample factor was investigated and ruled out for this case (it
+  captures only the interior, smooth part of the inflation; see above), so the
+  remaining route is a boundary-aware resampling estimate (iterated/double
+  bootstrap, or a DGP that preserves the near-boundary mass).
 - A distribution-free Bollen-Stine bootstrap and an unconstrained-DGP bootstrap
   are available as options for later non-normal comparisons; they are not the
   headline.
@@ -122,5 +157,6 @@ cd experiments/45-profile-lr-reliability-ci
 Rscript run_experiment.R                          # construction parity vs semlbci
 Rscript scripts/coverage.R --func H  --scalings   # maximal-reliability collapse + Bartlett
 Rscript scripts/coverage.R --func omega           # omega is near-nominal (control)
+Rscript scripts/lawley.R --pop bf                 # why the correction is estimated, not computed
 quarto render report.qmd
 ```

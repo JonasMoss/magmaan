@@ -695,6 +695,42 @@ scaling and the Bartlett inflation into one number under non-normality; Bollen-S
 reproduces the Gaussian null bootstrap on normal data (validated). Non-normal stress and
 the feasible-`c` fix are the next runs. Still deferred: analytic functional gradients.
 
+**Progress (2026-07-01): analytic Lawley factor investigated -> insufficient for the one
+case that needs it (the decisive result).** `scripts/lawley.R` decomposes the mean
+inflation `E[T]` with a LOCAL-GAUSSIAN comparator that is exactly the analytic curvature
+(Lawley-type) factor evaluated by simulation: draw `theta_hat ~ N(theta_pop, A^-1/N)` and
+set `W = N * min_{g(theta)=g_pop}(theta-theta_hat)' A (theta-theta_hat)` — a quadratic
+likelihood + asymptotic-normal `theta_hat` but the EXACT nonlinear constraint, so it
+carries the functional's constraint-surface curvature to all orders and nothing else. The
+profile-LR is reparameterization-invariant, so `E[T] != 1` is a property of the constraint
+SURFACE `{g=g_pop}` inside the model manifold, not of `g`'s scaling. Validated: a linear
+control functional gives local-Gauss `E[W] = 1` exactly. Findings (bifactor, 1500 reps /
+2500 draws): (a) the mild members (`omega`, `omega_h`, and 1-factor `H`) are pure smooth
+`O(1/N)`: their whole inflation is the generic model term (linear control `E[T] ~ 1.12` at
+N=50, halving to `~1.045` at N=100), they are already near-nominal, and need no correction;
+(b) bifactor `rho*` is BOUNDARY-DOMINATED at every N: curvature recovers only 19% (N=50) ->
+25% (N=100) of the inflation (oracle `E[T]` 5.04 -> 2.92; curvature 1.78 -> 1.47), barely
+improving with N. The near-Heywood quartile (smallest fitted uniqueness) sits at
+`E[T|near] = 7.4 / 5.4` vs the interior quartile `E[T|far] = 2.9 / 2.1`
+(`cor(T, min psi_hat) ~ -0.3`); even the INTERIOR level (2.9) is far below the overall
+mean (5.0), and the correct Bartlett constant is set by the boundary mass. The
+model contrast is the clincher: SAME functional form (maximal reliability) at the SAME
+`g_pop ~ 0.8-0.9` gives 1-factor `H` a near-nominal `E[T] = 1.15` but bifactor `rho*`
+`5.04` — the 40x is the bifactor's competing factors making fitted uniquenesses swing
+near-singular at small N, which detonates `lambda' E^-1 lambda`. **Verdict:** a smooth
+`O(1/N)` analytic factor (curvature-only OR a full Lawley with the model 3rd/4th-cumulant
+term, whose smooth ceiling the interior-quartile `E[T]` proxies at 2.9 << 5.0) is
+structurally capped near the interior level and cannot hit the boundary-driven overall
+mean; only a method that refits the real (non-quadratic) likelihood and reproduces the
+near-boundary mass can — which is exactly why the null-model bootstrap wins on `rho*` and
+recovers more than curvature. So the correction for the hard member must be ESTIMATED
+(bootstrapped), not COMPUTED. This RE-FRAMES the open feasible-`c` problem from
+"analytic vs bootstrap" to "make the bootstrap boundary-aware" (iterated/double bootstrap,
+or a DGP that does not clean up the near-Heywood mass). Caveat: local-Gauss isolates
+curvature and omits the model-cumulant term, so it lower-bounds analytic-achievable; the
+interior-quartile proxy shows the shortfall is fundamental regardless. Files:
+`scripts/lawley.R`, `results/lawley_bf.csv`, `results/lawley_high.csv`.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
