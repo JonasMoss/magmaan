@@ -42,10 +42,11 @@ profile-LR is already near-exact (coverage ~0.93-0.97). For **maximal reliabilit
 it collapses**: on a bifactor general factor at N=50 the nominal-95% interval
 covers only **0.61**, because the LR statistic is inflated to `E[T] ~ 4.2` instead
 of 1. Rescaling the chi-square threshold by the Bartlett factor `c = E[T]` is
-necessary and, at the oracle factor, sufficient (0.61 -> 0.98). The feasible
+necessary and, at the oracle factor, sufficient (0.61 -> 0.97). The feasible
 factor from a *null-model* parametric bootstrap recovers most of the gap
-(0.61 -> 0.89) and fully fixes the milder one-factor H case (0.93 -> 0.95, beating
-Wald's 0.89); closing the last points at the hardest near-ceiling functionals is
+(0.61 -> 0.87 at N=50, 0.92 at N=100) and fully fixes the milder one-factor H
+case (0.92 -> 0.94, beating Wald's 0.88); closing the last points at the hardest
+near-ceiling functionals is
 the open estimator problem. Everything shown here is normal-theory; the robust
 and misspec tiers are the same engine with a swappable reference scaling that, as
 expected, reduces to 1 under normal data.
