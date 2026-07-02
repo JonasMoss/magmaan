@@ -711,6 +711,14 @@ magmaan::estimate::OrdinalWeightKind ordinal_weight_from_estimator(
   Rcpp::stop("magmaan: %s requires an ordinal ULS/DWLS/WLS fit", call);
 }
 
+magmaan::measures::frontier::reliability::OmegaTarget
+omega_target_from_string(const std::string& target, const char* call) {
+  namespace rel = magmaan::measures::frontier::reliability;
+  if (target == "total") return rel::OmegaTarget::Total;
+  if (target == "hierarchical") return rel::OmegaTarget::Hierarchical;
+  Rcpp::stop("magmaan: %s target must be 'total' or 'hierarchical'", call);
+}
+
 magmaan::estimate::frontier::OrdinalStage2Weight
 ordinal_stage2_weight_from_string(const std::string& s) {
   std::string key = s;
@@ -764,6 +772,18 @@ std::string ordinal_weight_for_postfit(Rcpp::List fit,
     return Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
   }
   return estimator;
+}
+
+std::string ordinal_weight_key_from_arg(const std::string& weight,
+                                        Rcpp::List fit,
+                                        const std::string& estimator) {
+  std::string key = weight;
+  std::transform(key.begin(), key.end(), key.begin(),
+                 [](unsigned char ch) { return std::tolower(ch); });
+  if (key.empty() || key == "fit") return ordinal_weight_for_postfit(fit, estimator);
+  std::transform(key.begin(), key.end(), key.begin(),
+                 [](unsigned char ch) { return std::toupper(ch); });
+  return key;
 }
 
 Rcpp::List stats_from_fit_or_arg(Rcpp::List fit, SEXP arg,
@@ -4585,6 +4605,82 @@ Rcpp::List measures_reliability_omega_from_fit(Rcpp::List fit,
       Rcpp::_["se"] = r_or->se,
       Rcpp::_["avar"] = r_or->avar,
       Rcpp::_["gradient"] = Rcpp::wrap(r_or->gradient));
+}
+
+// measures_reliability_ordinal_observed_omega() — observed-category-score
+// omega from a fitted single-group all-ordinal LS model. The fitted thresholds
+// and latent-response correlations induce the covariance of integer category
+// scores (0,1,...,K-1); the SE is the complete ordinal IJ sandwich delta SE.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_reliability_ordinal_observed_omega(
+    Rcpp::List fit,
+    Rcpp::IntegerVector block,
+    std::string target = "total",
+    std::string weight = "fit",
+    SEXP ordinal_stats = R_NilValue) {
+  namespace rel = magmaan::measures::frontier::reliability;
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
+  if (!fit.containsElementNamed("ordinal") ||
+      !Rcpp::as<bool>(fit["ordinal"])) {
+    Rcpp::stop("magmaan: measures_reliability_ordinal_observed_omega() "
+               "requires an all-ordinal fit");
+  }
+
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(
+      stats_from_fit_or_arg(fit, ordinal_stats, "ordinal_stats",
+                            "measures_reliability_ordinal_observed_omega"));
+  if (stats.R.empty()) {
+    Rcpp::stop("magmaan: ordinal_stats has no blocks");
+  }
+  const R_xlen_t p = stats.R[0].rows();
+  if (static_cast<R_xlen_t>(block.size()) != p) {
+    Rcpp::stop("magmaan: block length must equal the number of ordinal indicators");
+  }
+
+  std::vector<int> labels(block.begin(), block.end());
+  std::vector<int> uniq = labels;
+  std::sort(uniq.begin(), uniq.end());
+  uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+  rel::OmegaSpec spec;
+  spec.block.resize(p);
+  for (R_xlen_t i = 0; i < p; ++i) {
+    const auto it = std::lower_bound(uniq.begin(), uniq.end(), labels[i]);
+    spec.block(i) = static_cast<int>(it - uniq.begin());
+  }
+  const int k = static_cast<int>(uniq.size());
+
+  const std::string weight_key =
+      ordinal_weight_key_from_arg(weight, fit, estimator);
+  const auto ow = ordinal_weight_from_estimator(
+      weight_key, "measures_reliability_ordinal_observed_omega");
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : ordinal_parameterization_attr(fit["partable"]);
+  const auto r_or = magmaan::estimate::frontier::ordinal_observed_omega(
+      ctx.pt, ctx.rep, stats, est, spec,
+      omega_target_from_string(target,
+                               "measures_reliability_ordinal_observed_omega"),
+      ow, ordinal_parameterization_from_string(parameterization_name));
+  if (!r_or.has_value()) stop_post(r_or.error());
+
+  std::int64_t n_total = 0;
+  for (std::int64_t n : stats.n_obs) n_total += n;
+  return Rcpp::List::create(
+      Rcpp::_["value"] = r_or->value,
+      Rcpp::_["se"] = r_or->se,
+      Rcpp::_["avar"] = r_or->avar,
+      Rcpp::_["gradient"] = Rcpp::wrap(r_or->gradient),
+      Rcpp::_["n"] = static_cast<double>(n_total),
+      Rcpp::_["target"] = target,
+      Rcpp::_["k"] = k,
+      Rcpp::_["weight"] = weight_key,
+      Rcpp::_["parameterization"] = parameterization_name);
 }
 
 // measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`

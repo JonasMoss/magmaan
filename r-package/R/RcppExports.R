@@ -337,6 +337,10 @@ measures_reliability_omega_from_fit <- function(fit, target, weight, gamma, n) {
     .Call(`_magmaan_measures_reliability_omega_from_fit`, fit, target, weight, gamma, n)
 }
 
+measures_reliability_ordinal_observed_omega <- function(fit, block, target = "total", weight = "fit", ordinal_stats = NULL) {
+    .Call(`_magmaan_measures_reliability_ordinal_observed_omega`, fit, block, target, weight, ordinal_stats)
+}
+
 measures_factor_scores <- function(fit, raw_data, method = "regression") {
     .Call(`_magmaan_measures_factor_scores`, fit, raw_data, method)
 }
