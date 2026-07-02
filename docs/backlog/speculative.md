@@ -507,7 +507,13 @@ The no-integration latent-response/polychoric sibling is also exposed in R as
 `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it applies
 `omega_multidim` to `stats$R[[group]]` and reuses the ordinal `NACOV` correlation
 block for a robust delta SE. This is the simple ordinal-omega coefficient people
-actually report, not the observed-score Green-Yang/Flora target.
+actually report, not the observed-score Green-Yang/Flora target. Experiment 49
+(`ordinal-polychoric-omega-coverage`) stress-tests that helper in correctly
+specified ordinal-probit data: with 200 reps per cell over `N in {50,100,250}`,
+balanced and threshold-extreme cuts had 95% coverage 0.915-0.965 among
+successful draws for the latent-response omega target 0.829. The only
+construction failures were 6/200 threshold-extreme `N=50` draws with an empty
+item category.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a
 magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a

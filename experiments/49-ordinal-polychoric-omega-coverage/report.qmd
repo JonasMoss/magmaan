@@ -1,0 +1,67 @@
+---
+title: "Ordinal Polychoric Omega Coverage Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- "results/simulation_summary.csv"
+metadata_path <- "results/metadata.csv"
+if (!file.exists(summary_path) || !file.exists(metadata_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+}
+summary <- read.csv(summary_path)
+metadata <- read.csv(metadata_path)
+worst <- summary[which.min(summary$coverage_95), ]
+```
+
+## Question
+
+Does the ordinal polychoric omega delta-method interval cover its population
+latent-response target in the small-N cells we would use before profile-LR work?
+
+## Short Answer
+
+```{r, results='asis'}
+cat(sprintf(
+  "At %s reps per cell and target omega %.3f, coverage among successful draws ranges from %.3f to %.3f. The weakest cell is %s at N = %d. The grid recorded %d construction failures.",
+  metadata$reps, metadata$target, min(summary$coverage_95),
+  max(summary$coverage_95), worst$regime, worst$n, sum(summary$failures)))
+```
+
+## Evidence
+
+```{r}
+shown <- summary[, c(
+  "regime", "n", "failures", "mean_value", "bias", "sd_value", "mean_se",
+  "coverage_95", "mean_width_95", "min_variable_category_count_p05"
+)]
+names(shown) <- c(
+  "Regime", "N", "Failures", "Mean Omega", "Bias", "SD", "Mean SE",
+  "Coverage", "Mean Width", "P05 Min Variable Category Count"
+)
+shown[] <- lapply(shown, function(x) if (is.numeric(x)) round(x, 4) else x)
+knitr::kable(shown)
+```
+
+## Caveats
+
+This is a correctly specified ordinal probit simulation with one factor and
+three-category indicators. It only evaluates the ordinary Wald delta interval
+for the polychoric correlation-matrix omega; it does not test observed-score
+Green-Yang omega, nonnormal latent responses, profile-LR inversion, or Bartlett
+calibration.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R
+quarto render report.qmd
+```
