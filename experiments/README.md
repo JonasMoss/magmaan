@@ -60,7 +60,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 42 | [bell-omega-bias](42-bell-omega-bias/report.qmd) | benchmark | active | At Bell-style population moments, how biased is ordinary one-factor omega under misspecification for ML, ULS, GLS, and the Spearman-Guttman covariance form? |
 | 43 | [li-savalei-2026-maximal-reliability-ci](43-li-savalei-2026-maximal-reliability-ci/report.qmd) | replication | active | Can you put a trustworthy confidence interval around bifactor maximal reliability, the inference Li & Savalei (2026) leave open? |
 | 44 | [alpha-kc-coverage](44-alpha-kc-coverage/report.qmd) | benchmark | active | A distribution-free interval for a covariance functional (alpha, correlation) has two small-N defects: does the Kauermann-Carroll effective-df t fix the two-sided coverage deficit (variance-of-variance, flat in rho) while a variance-stabilizing transform (Fisher z / logit) fixes the skew-driven left/right imbalance (growing in rho), and do the two compose? |
-| 45 | [profile-lr-reliability-ci](45-profile-lr-reliability-ci/report.qmd) | probe | active | Does one generic profile-LR (test-inversion) engine, fed only a scalar functional closure, reproduce semlbci's likelihood-based CI across the reliability family (omega_total, omega_h, H) under normal-theory ML? |
+| 45 | [profile-lr-reliability-ci](45-profile-lr-reliability-ci/report.qmd) | probe | active | Can a generic profile-LR (test-inversion) engine reproduce semlbci across the reliability family (omega_total, omega_h, H, maximal reliability), and can the small-sample under-coverage of near-boundary coefficients be repaired by a Bartlett factor (analytic, bootstrap, or calibrated constant)? |
 
 ## Archived
 
