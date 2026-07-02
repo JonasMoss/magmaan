@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -13,6 +14,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
+#include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "../detail_vech.hpp"
@@ -153,6 +155,104 @@ finite_difference_gradient(Coefficient coef,
     }
   }
   return g;
+}
+
+constexpr double kInf = std::numeric_limits<double>::infinity();
+
+double normal_cdf(double x) noexcept {
+  if (x == kInf) return 1.0;
+  if (x == -kInf) return 0.0;
+  return 0.5 * std::erfc(-x / std::sqrt(2.0));
+}
+
+post_expected<std::vector<Eigen::VectorXd>>
+thresholds_by_variable(const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+                       const std::vector<std::int32_t>& threshold_ov,
+                       const std::vector<std::int32_t>& threshold_level,
+                       const std::vector<std::int32_t>& n_levels,
+                       Eigen::Index p,
+                       const char* call) {
+  if (p <= 0 || static_cast<Eigen::Index>(n_levels.size()) != p) {
+    return std::unexpected(
+        err(std::string(call) + ": n_levels length must match R dimension"));
+  }
+  if (threshold_ov.size() != threshold_level.size() ||
+      static_cast<Eigen::Index>(threshold_ov.size()) != thresholds.size()) {
+    return std::unexpected(
+        err(std::string(call) + ": threshold metadata length mismatch"));
+  }
+
+  std::vector<Eigen::VectorXd> out(static_cast<std::size_t>(p));
+  std::vector<std::vector<char>> seen(static_cast<std::size_t>(p));
+  Eigen::Index expected_nth = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const auto lev = n_levels[static_cast<std::size_t>(j)];
+    if (lev < 2) {
+      return std::unexpected(
+          err(std::string(call) + ": every ordinal variable needs >= 2 levels"));
+    }
+    const Eigen::Index nth_j = static_cast<Eigen::Index>(lev - 1);
+    out[static_cast<std::size_t>(j)] = Eigen::VectorXd::Zero(nth_j);
+    seen[static_cast<std::size_t>(j)].assign(static_cast<std::size_t>(nth_j), 0);
+    expected_nth += nth_j;
+  }
+  if (expected_nth != thresholds.size()) {
+    return std::unexpected(
+        err(std::string(call) + ": n_levels does not match threshold count"));
+  }
+
+  for (Eigen::Index k = 0; k < thresholds.size(); ++k) {
+    const auto pos = static_cast<std::size_t>(k);
+    const std::int32_t ov = threshold_ov[pos];
+    if (ov < 0 || ov >= p) {
+      return std::unexpected(
+          err(std::string(call) + ": threshold ov index out of range"));
+    }
+    const std::int32_t lev = threshold_level[pos];
+    const std::int32_t lev_max = n_levels[static_cast<std::size_t>(ov)] - 1;
+    if (lev < 1 || lev > lev_max) {
+      return std::unexpected(
+          err(std::string(call) + ": threshold level out of range"));
+    }
+    const auto j = static_cast<std::size_t>(ov);
+    const auto l = static_cast<std::size_t>(lev - 1);
+    if (seen[j][l] != 0) {
+      return std::unexpected(
+          err(std::string(call) + ": duplicate threshold metadata row"));
+    }
+    const double tau = thresholds(k);
+    if (!std::isfinite(tau)) {
+      return std::unexpected(
+          err(std::string(call) + ": thresholds must be finite"));
+    }
+    out[j](lev - 1) = tau;
+    seen[j][l] = 1;
+  }
+
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const auto js = static_cast<std::size_t>(j);
+    for (std::size_t l = 0; l < seen[js].size(); ++l) {
+      if (seen[js][l] == 0) {
+        return std::unexpected(
+            err(std::string(call) + ": missing threshold metadata row"));
+      }
+    }
+    for (Eigen::Index l = 1; l < out[js].size(); ++l) {
+      if (!(out[js](l - 1) < out[js](l))) {
+        return std::unexpected(
+            err(std::string(call) + ": thresholds must be strictly increasing"));
+      }
+    }
+  }
+  return out;
+}
+
+double category_lower(const Eigen::VectorXd& th, Eigen::Index c) noexcept {
+  return c == 0 ? -kInf : th(c - 1);
+}
+
+double category_upper(const Eigen::VectorXd& th, Eigen::Index c) noexcept {
+  return c == th.size() ? kInf : th(c);
 }
 
 }  // namespace
@@ -536,6 +636,114 @@ omega_multidim_delta(OmegaTarget target,
   out.avar = std::max(0.0, avar);
   out.se = std::sqrt(out.avar / static_cast<double>(n));
   return out;
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_observed_score_covariance(
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const std::vector<std::int32_t>& threshold_ov,
+    const std::vector<std::int32_t>& threshold_level,
+    const std::vector<std::int32_t>& n_levels,
+    const Eigen::Ref<const Eigen::MatrixXd>& R) {
+  constexpr const char* call = "ordinal_observed_score_covariance";
+  if (R.rows() != R.cols()) {
+    return std::unexpected(err(std::string(call) + ": R must be square"));
+  }
+  if (!R.allFinite()) {
+    return std::unexpected(err(std::string(call) + ": R must be finite"));
+  }
+  const Eigen::Index p = R.rows();
+  auto th_or = thresholds_by_variable(
+      thresholds, threshold_ov, threshold_level, n_levels, p, call);
+  if (!th_or.has_value()) return std::unexpected(th_or.error());
+  const std::vector<Eigen::VectorXd>& th = *th_or;
+
+  Eigen::VectorXd mean = Eigen::VectorXd::Zero(p);
+  Eigen::VectorXd second = Eigen::VectorXd::Zero(p);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const auto& thj = th[static_cast<std::size_t>(j)];
+    const Eigen::Index klev = thj.size() + 1;
+    double psum = 0.0;
+    for (Eigen::Index c = 0; c < klev; ++c) {
+      const double lo = category_lower(thj, c);
+      const double hi = category_upper(thj, c);
+      const double pr = normal_cdf(hi) - normal_cdf(lo);
+      if (!(pr > 0.0) || !std::isfinite(pr)) {
+        return std::unexpected(
+            err(std::string(call) + ": non-positive category probability"));
+      }
+      const double score = static_cast<double>(c);
+      mean(j) += score * pr;
+      second(j) += score * score * pr;
+      psum += pr;
+    }
+    if (std::abs(psum - 1.0) > 1e-10) {
+      return std::unexpected(
+          err(std::string(call) + ": category probabilities do not sum to one"));
+    }
+  }
+
+  Eigen::MatrixXd S = Eigen::MatrixXd::Zero(p, p);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    S(j, j) = second(j) - mean(j) * mean(j);
+    if (!(S(j, j) > 0.0) || !std::isfinite(S(j, j))) {
+      return std::unexpected(
+          err(std::string(call) + ": non-positive observed category variance"));
+    }
+  }
+
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const auto& thj = th[static_cast<std::size_t>(j)];
+    const Eigen::Index kj = thj.size() + 1;
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const double rho = 0.5 * (R(i, j) + R(j, i));
+      if (!(rho > -1.0 && rho < 1.0) || !std::isfinite(rho)) {
+        return std::unexpected(
+            err(std::string(call) + ": off-diagonal correlations must be in (-1, 1)"));
+      }
+      const auto& thi = th[static_cast<std::size_t>(i)];
+      const Eigen::Index ki = thi.size() + 1;
+      double exy = 0.0;
+      double psum = 0.0;
+      for (Eigen::Index ci = 0; ci < ki; ++ci) {
+        const double lo_i = category_lower(thi, ci);
+        const double hi_i = category_upper(thi, ci);
+        for (Eigen::Index cj = 0; cj < kj; ++cj) {
+          const double lo_j = category_lower(thj, cj);
+          const double hi_j = category_upper(thj, cj);
+          const double pr =
+              data::ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+          if (!std::isfinite(pr)) {
+            return std::unexpected(
+                err(std::string(call) + ": non-finite bivariate probability"));
+          }
+          exy += static_cast<double>(ci) * static_cast<double>(cj) * pr;
+          psum += pr;
+        }
+      }
+      if (std::abs(psum - 1.0) > 1e-7) {
+        return std::unexpected(
+            err(std::string(call) + ": bivariate probabilities do not sum to one"));
+      }
+      S(i, j) = exy - mean(i) * mean(j);
+      S(j, i) = S(i, j);
+    }
+  }
+  return S;
+}
+
+post_expected<double>
+omega_ordinal_observed(OmegaTarget target,
+                       const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+                       const std::vector<std::int32_t>& threshold_ov,
+                       const std::vector<std::int32_t>& threshold_level,
+                       const std::vector<std::int32_t>& n_levels,
+                       const Eigen::Ref<const Eigen::MatrixXd>& R,
+                       const OmegaSpec& spec) {
+  auto S_or = ordinal_observed_score_covariance(
+      thresholds, threshold_ov, threshold_level, n_levels, R);
+  if (!S_or.has_value()) return std::unexpected(S_or.error());
+  return omega_multidim(target, *S_or, spec);
 }
 
 namespace {

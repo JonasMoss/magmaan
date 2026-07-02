@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -88,6 +89,28 @@ omega_multidim_delta(OmegaTarget target,
                      const OmegaSpec& spec,
                      const Eigen::Ref<const Eigen::MatrixXd>& gamma,
                      std::int64_t n);
+
+// Observed-category-score covariance implied by ordinal thresholds and a
+// latent-response correlation matrix. Category scores are 0, 1, ..., K-1 in
+// the same metric as OrdinalStats::int_data. `threshold_ov` and
+// `threshold_level` use the OrdinalStats convention: observed-variable index
+// and 1-based threshold level.
+post_expected<Eigen::MatrixXd>
+ordinal_observed_score_covariance(
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const std::vector<std::int32_t>& threshold_ov,
+    const std::vector<std::int32_t>& threshold_level,
+    const std::vector<std::int32_t>& n_levels,
+    const Eigen::Ref<const Eigen::MatrixXd>& R);
+
+post_expected<double>
+omega_ordinal_observed(OmegaTarget target,
+                       const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+                       const std::vector<std::int32_t>& threshold_ov,
+                       const std::vector<std::int32_t>& threshold_level,
+                       const std::vector<std::int32_t>& n_levels,
+                       const Eigen::Ref<const Eigen::MatrixXd>& R,
+                       const OmegaSpec& spec);
 
 // ---------------------------------------------------------------------------
 // Model-based coefficient omega from a fitted CFA

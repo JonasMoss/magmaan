@@ -8355,7 +8355,183 @@ struct MixedOrdinalObjectiveState {
   OrdinalParameterization parameterization = OrdinalParameterization::Delta;
 };
 
+post_expected<double>
+ordinal_observed_omega_value(
+    const data::OrdinalStats& stats,
+    const ThresholdLayout& layout,
+    const model::ModelEvaluator& ev,
+    const Eigen::VectorXd& theta,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget target,
+    OrdinalParameterization parameterization) {
+  namespace rel = measures::frontier::reliability;
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: only single-group ordinal fits are supported"));
+  }
+  auto eval = ev.evaluate(theta, false, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+  if (eval->moments.sigma.empty()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: fitted model has no implied covariance block"));
+  }
+
+  constexpr std::size_t b = 0;
+  const Eigen::MatrixXd& Sig = eval->moments.sigma[b];
+  const Eigen::Index p = Sig.rows();
+  Eigen::VectorXd thresholds = implied_thresholds(layout, theta, b);
+  Eigen::MatrixXd R;
+
+  const bool theta_param = parameterization == OrdinalParameterization::Theta;
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  if (theta_param || block_released) {
+    const bool have_mu =
+        b < eval->moments.mu.size() && eval->moments.mu[b].size() == p;
+    std::vector<std::int32_t> scale_free(static_cast<std::size_t>(p), 1);
+    if (!theta_param) {
+      scale_free.assign(static_cast<std::size_t>(p), 0);
+      for (Eigen::Index i = 0; i < p; ++i) {
+        if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
+          scale_free[static_cast<std::size_t>(i)] =
+              layout.scale_free[b][static_cast<std::size_t>(i)];
+        }
+      }
+    }
+    for (Eigen::Index k = 0; k < thresholds.size(); ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double mu = have_mu ? eval->moments.mu[b](ov) : 0.0;
+      const bool standardize =
+          theta_param || scale_free[static_cast<std::size_t>(ov)] != 0;
+      if (standardize && (!(Sig(ov, ov) > 0.0) || !std::isfinite(Sig(ov, ov)))) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "ordinal_observed_omega: non-positive latent-response variance"));
+      }
+      const double delta = standardize ? 1.0 / std::sqrt(Sig(ov, ov)) : 1.0;
+      thresholds(k) = (thresholds(k) - mu) * delta;
+    }
+    if (theta_param) {
+      auto R_or = ordinal_catml_correlation_matrix(
+          Sig, parameterization, "ordinal_observed_omega implied covariance");
+      if (!R_or.has_value()) return std::unexpected(R_or.error());
+      R = std::move(*R_or);
+    } else {
+      R = Eigen::MatrixXd::Identity(p, p);
+      for (Eigen::Index j = 0; j < p; ++j) {
+        for (Eigen::Index i = j + 1; i < p; ++i) {
+          R(i, j) = mixed_assoc_moment(
+              Sig, scale_free, i, j, OrdinalParameterization::Theta);
+          R(j, i) = R(i, j);
+        }
+      }
+    }
+  } else {
+    auto R_or = ordinal_catml_correlation_matrix(
+        Sig, parameterization, "ordinal_observed_omega implied covariance");
+    if (!R_or.has_value()) return std::unexpected(R_or.error());
+    R = std::move(*R_or);
+  }
+
+  return rel::omega_ordinal_observed(
+      target, thresholds, stats.threshold_ov[b], stats.threshold_level[b],
+      stats.n_levels[b], R, omega_spec);
+}
+
 }  // namespace
+
+post_expected<measures::frontier::reliability::DeltaResult>
+ordinal_observed_omega(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& est,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget target,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization) {
+  namespace rel = measures::frontier::reliability;
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  auto n_or = total_n_obs(stats);
+  if (!n_or.has_value()) return std::unexpected(fit_to_post(n_or.error()));
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: only single-group ordinal fits are supported"));
+  }
+
+  spec::LatentStructure pt_eval = pt;
+  if (auto p = prepare_ordinal_delta_partable(pt_eval, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt_eval.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: fitted theta length does not match ordinal "
+        "delta partable"));
+  }
+  auto layout_or = make_threshold_layout(pt_eval, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  auto ev_or = model::ModelEvaluator::build(pt_eval, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+
+  const Eigen::VectorXd theta = est.theta;
+  auto val_or = ordinal_observed_omega_value(
+      stats, *layout_or, *ev_or, theta, omega_spec, target, parameterization);
+  if (!val_or.has_value()) return std::unexpected(val_or.error());
+
+  const Eigen::Index nf = theta.size();
+  Eigen::VectorXd grad(nf);
+  for (Eigen::Index k = 0; k < nf; ++k) {
+    const double h = 1e-6 * std::max(1.0, std::abs(theta(k)));
+    Eigen::VectorXd tp = theta;
+    Eigen::VectorXd tm = theta;
+    tp(k) += h;
+    tm(k) -= h;
+    auto fp = ordinal_observed_omega_value(
+        stats, *layout_or, *ev_or, tp, omega_spec, target, parameterization);
+    if (!fp.has_value()) return std::unexpected(fp.error());
+    auto fm = ordinal_observed_omega_value(
+        stats, *layout_or, *ev_or, tm, omega_spec, target, parameterization);
+    if (!fm.has_value()) return std::unexpected(fm.error());
+    grad(k) = (*fp - *fm) / (2.0 * h);
+  }
+
+  auto rb_or = robust_ordinal_ij(
+      std::move(pt), rep, stats, est, weights, parameterization);
+  if (!rb_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: robust_ordinal_ij failed: " +
+            rb_or.error().detail));
+  }
+  if (rb_or->vcov.rows() != nf || rb_or->vcov.cols() != nf) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: robust covariance has unexpected dimension"));
+  }
+
+  const double var = grad.dot(rb_or->vcov * grad);
+  if (!std::isfinite(var)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_observed_omega: asymptotic variance is not finite"));
+  }
+  rel::DeltaResult out;
+  out.value = *val_or;
+  out.gradient = std::move(grad);
+  out.avar = std::max(0.0, var) * static_cast<double>(*n_or);
+  out.se = std::sqrt(std::max(0.0, var));
+  return out;
+}
 
 fit_expected<OrdinalLsObjective>
 ordinal_ls_objective(spec::LatentStructure pt,

@@ -255,6 +255,49 @@ TEST_CASE("multidimensional omega delta method uses Gamma on the vech scale") {
   }
 }
 
+TEST_CASE("ordinal observed-score covariance integrates thresholds and polychorics") {
+  Eigen::VectorXd thresholds(2);
+  thresholds << 0.0, 0.0;
+  const std::vector<std::int32_t> threshold_ov{0, 1};
+  const std::vector<std::int32_t> threshold_level{1, 1};
+  const std::vector<std::int32_t> n_levels{2, 2};
+  Eigen::MatrixXd R(2, 2);
+  R << 1.0, 0.5,
+       0.5, 1.0;
+
+  auto S = rel::ordinal_observed_score_covariance(
+      thresholds, threshold_ov, threshold_level, n_levels, R);
+  REQUIRE(S.has_value());
+  CHECK((*S)(0, 0) == doctest::Approx(0.25).epsilon(1e-14));
+  CHECK((*S)(1, 1) == doctest::Approx(0.25).epsilon(1e-14));
+  CHECK((*S)(1, 0) ==
+        doctest::Approx(std::asin(0.5) / (2.0 * 3.14159265358979323846))
+            .epsilon(1e-12));
+}
+
+TEST_CASE("ordinal observed omega is the multidimensional omega of category scores") {
+  Eigen::VectorXd thresholds(3);
+  thresholds << 0.0, 0.0, 0.0;
+  const std::vector<std::int32_t> threshold_ov{0, 1, 2};
+  const std::vector<std::int32_t> threshold_level{1, 1, 1};
+  const std::vector<std::int32_t> n_levels{2, 2, 2};
+  Eigen::MatrixXd R = Eigen::MatrixXd::Constant(3, 3, 0.4);
+  R.diagonal().setOnes();
+
+  rel::OmegaSpec spec;
+  spec.block = Eigen::VectorXi::Zero(3);
+  auto S = rel::ordinal_observed_score_covariance(
+      thresholds, threshold_ov, threshold_level, n_levels, R);
+  REQUIRE(S.has_value());
+  auto direct = rel::omega_multidim(rel::OmegaTarget::Total, *S, spec);
+  REQUIRE(direct.has_value());
+  auto ordinal = rel::omega_ordinal_observed(
+      rel::OmegaTarget::Total, thresholds, threshold_ov, threshold_level,
+      n_levels, R, spec);
+  REQUIRE(ordinal.has_value());
+  CHECK(*ordinal == doctest::Approx(*direct).epsilon(1e-14));
+}
+
 TEST_CASE("omega_from_fit recovers higher-order truth from a fitted CFA") {
   const HigherOrderPop pop = higher_order_pop();
 

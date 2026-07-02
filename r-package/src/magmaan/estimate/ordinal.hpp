@@ -16,6 +16,7 @@
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/inference/score.hpp"
 #include "magmaan/measures/fit_measures.hpp"
+#include "magmaan/measures/reliability.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -451,6 +452,24 @@ struct OrdinalLsObjective {
   spec::LatentStructure pt;
   optim::GmmProblem problem;
 };
+
+// Observed-category-score omega for a fitted single-group all-ordinal model,
+// with a misspecification-robust delta-method SE from the complete IJ sandwich
+// (`robust_ordinal_ij`). The target covariance is the model-implied covariance
+// of the integer category scores 0,1,...,K-1 induced by fitted thresholds and
+// latent-response correlations. Frontier: this is not a lavaan compatibility
+// coefficient and the small-sample correction policy is intentionally absent.
+post_expected<measures::frontier::reliability::DeltaResult>
+ordinal_observed_omega(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& est,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget target =
+        measures::frontier::reliability::OmegaTarget::Total,
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
 
 fit_expected<OrdinalLsObjective>
 ordinal_ls_objective(spec::LatentStructure pt,

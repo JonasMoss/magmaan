@@ -145,6 +145,25 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     public coefficient; add them only with explicit names and a concrete
     downstream consumer.
 
+- **Ordinal observed-score omega follow-ups (2026-07).**
+  Landed first C++ frontier slice:
+  `estimate::frontier::ordinal_observed_omega` maps fitted all-ordinal
+  thresholds + latent-response correlations to the observed integer category
+  covariance, computes `OmegaTarget::Total` / `Hierarchical` through
+  `measures::frontier::reliability`, and gets a misspecification-robust
+  delta-method SE from `robust_ordinal_ij` (including DWLS/WLS estimated-weight
+  influence). Remaining:
+  - **S/M.** Add the thin R binding once the call shape is settled
+    (`fit_ordinal_stage2` / `magmaan()` fit object plus block/target/weight
+    arguments). Keep the core wrapper visible; do not add R-only SEM logic.
+  - **M.** Define and test the multi-group target before lifting the guard:
+    pooled observed category covariance, sample-size-weighted group omegas, or
+    explicit per-group output are different estimands.
+  - **M/L.** Add non-normal and threshold-extreme stress checks against the
+    existing complete-sandwich DWLS/WLS machinery. Small-sample/profile-LR
+    corrections stay in the funLR lane until the calibrated-constant problem is
+    solved.
+
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
   cell-cached `ordinal_pair_scores`, an `x_tol` stop for the rho searches, and

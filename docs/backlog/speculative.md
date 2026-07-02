@@ -439,23 +439,34 @@ omega-alpha thread in [todo.md](todo.md) (omega from a one-factor ML fit, alpha 
 of a ULS tau-equivalent fit) and the roadmap `infer_gamma_nt` omega.
 
 **Alternative already available.** magmaan already produces every input from a fitted
-CFA (`Lambda`, model-implied `Sigma-hat`), so omega_u / omega_H are a one-liner over a
-`ModelEvaluator`; semTools::reliability is the parity oracle on a lavaan refit. The
-S-based glb-family coefficients (in flight) and the exp-20 omega-alpha difference test
-cover the adjacent reliability questions.
+CFA (`Lambda`, model-implied `Sigma-hat`), and the continuous C++ frontier surface now
+does this directly as `omega_from_fit` with robust delta SEs. The S-based glb-family
+coefficients and the exp-20 omega-alpha difference test cover the adjacent reliability
+questions.
+
+**Progress (2026-07-02).** The first ordinal proving slice landed in C++:
+`ordinal_observed_score_covariance` / `omega_ordinal_observed` compute omega on the
+observed integer category-score covariance induced by thresholds and a latent-response
+correlation matrix, and `estimate::frontier::ordinal_observed_omega` applies that to a
+single-group all-ordinal DWLS/WLS/ULS fit with a complete IJ-sandwich delta SE. This
+addresses the "can the ordinal/DWLS stack express the Green-Yang/Flora observed-score
+metric?" infrastructure question. It does not settle the Bell-style misspecification
+bias study, omega_ho/maximal-reliability ordinal extensions, multi-group target
+definition, R exposure, or small-sample/profile-LR corrections.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a
 magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a
 misspecification-bias study replicating Bell. The genuinely novel cell is the ordinal
-one: Bell uses continuous normal data only and explicitly leaves polychoric-CFA omega
-under misspecification (scaled into the observed total-score metric, Green-Yang 2009b /
-Flora 2020) and omega_ho finite-sample behavior unexamined; magmaan's ordinal/DWLS/sim
-stack makes that an author-flagged gap. Note this is *structural-form* misspecification
-biasing a point estimate, orthogonal to the distributional/weight misspecification of
-the [[misspec-robust-se-weight-influence]] / `papers/estimated-weight-se` SE track;
-do not fold the two together. Research-tier interpretive cutoffs are not core. The
-*maximal* (optimally-weighted) counterpart of omega_H is the separate
-maximal-reliability entry below, which omega_H lower-bounds (ρ_gen ≥ omega_H).
+one beyond that first slice: Bell uses continuous normal data only and explicitly
+leaves polychoric-CFA omega under misspecification (scaled into the observed total-score
+metric, Green-Yang 2009b / Flora 2020) and omega_ho finite-sample behavior unexamined;
+magmaan's ordinal/DWLS/sim stack makes that an author-flagged gap. Note this is
+*structural-form* misspecification biasing a point estimate, orthogonal to the
+distributional/weight misspecification of the [[misspec-robust-se-weight-influence]] /
+`papers/estimated-weight-se` SE track; do not fold the two together. Research-tier
+interpretive cutoffs are not core. The *maximal* (optimally-weighted) counterpart of
+omega_H is the separate maximal-reliability entry below, which omega_H lower-bounds
+(ρ_gen ≥ omega_H).
 
 ### Maximal reliability / corrected coefficient H for bifactor models
 
