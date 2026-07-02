@@ -514,6 +514,13 @@ balanced and threshold-extreme cuts had 95% coverage 0.915-0.965 among
 successful draws for the latent-response omega target 0.829. The only
 construction failures were 6/200 threshold-extreme `N=50` draws with an empty
 item category.
+Experiment 50 (`ordinal-polychoric-omega-stress`) extends that to skewed,
+heavy-tailed, and locally dependent ordinal DGPs, targeting the large-sample
+pseudo-true polychoric omega. Mild/local-dependence cells remain near nominal,
+but skew/heavy-tail cells bend: skew-extreme gives 0.815/0.903/0.935 and
+heavy-tail extreme gives 0.778/0.808/0.845 for `N=50/100/250`, with 42/200
+heavy-tail `N=50` construction failures. The no-integration delta path is not
+the small-N stress solution.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a
 magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a

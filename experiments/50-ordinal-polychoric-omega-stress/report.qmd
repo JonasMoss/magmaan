@@ -1,0 +1,94 @@
+---
+title: "Ordinal Polychoric Omega Stress Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- "results/simulation_summary.csv"
+metadata_path <- "results/metadata.csv"
+targets_path <- "results/pseudo_targets.csv"
+if (!file.exists(summary_path) || !file.exists(metadata_path) ||
+    !file.exists(targets_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+}
+summary <- read.csv(summary_path)
+metadata <- read.csv(metadata_path)
+targets <- read.csv(targets_path)
+worst <- summary[which.min(summary$coverage_pseudo_95), ]
+```
+
+## Question
+
+When ordinal data are nonnormal or locally dependent, does the robust
+delta-method interval for polychoric omega cover the pseudo-true polychoric
+omega target?
+
+## Short Answer
+
+```{r, results='asis'}
+cat(sprintf(
+  "At %s reps per cell, pseudo-target coverage among successful draws ranges from %.3f to %.3f. The weakest cell is %s / %s at N = %d. The grid recorded %d construction failures.",
+  metadata$reps, min(summary$coverage_pseudo_95), max(summary$coverage_pseudo_95),
+  worst$dgp, worst$cuts, worst$n, sum(summary$failures)))
+```
+
+## Pseudo-Targets
+
+```{r}
+target_shown <- targets
+target_shown[] <- lapply(target_shown, function(x) {
+  if (is.numeric(x)) round(x, 4) else x
+})
+knitr::kable(target_shown)
+```
+
+## Coverage
+
+```{r}
+shown <- summary[, c(
+  "dgp", "cuts", "n", "failures", "target_pseudo",
+  "pseudo_minus_continuous", "mean_value", "bias_pseudo", "sd_value",
+  "mean_se", "median_se", "coverage_pseudo_95", "coverage_continuous_95",
+  "mean_width_95", "median_width_95", "min_variable_category_count_p05"
+)]
+names(shown) <- c(
+  "DGP", "Cuts", "N", "Failures", "Pseudo Target",
+  "Pseudo - Continuous", "Mean Omega", "Bias", "SD", "Mean SE",
+  "Median SE", "Coverage Pseudo", "Coverage Continuous", "Mean Width",
+  "Median Width",
+  "P05 Min Variable Category Count"
+)
+shown[] <- lapply(shown, function(x) if (is.numeric(x)) round(x, 4) else x)
+knitr::kable(shown)
+```
+
+## Interpretation
+
+The coverage target is the large-sample polychoric omega produced by the same
+ordinal-statistics pipeline, not the continuous latent-response Pearson omega.
+The continuous target is reported only as a bias diagnostic: when the polychoric
+pseudo-target moves away from it, coverage against the continuous target is not
+the relevant inferential criterion.
+
+## Caveats
+
+The pseudo-targets are Monte Carlo approximations from a large generated data set,
+not analytic population roots of the polychoric likelihood. This probe still uses
+the fit-free polychoric correlation-matrix coefficient; it does not test fitted
+DWLS model-based omega, observed-score Green-Yang/Flora omega, profile-LR
+inversion, or Bartlett calibration.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R
+quarto render report.qmd
+```
