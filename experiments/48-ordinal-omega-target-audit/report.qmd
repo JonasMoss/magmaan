@@ -1,0 +1,81 @@
+---
+title: "Ordinal Omega Target Audit"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- "results/target_summary.csv"
+item_path <- "results/item_diagnostics.csv"
+metadata_path <- "results/metadata.csv"
+if (!file.exists(summary_path) || !file.exists(item_path) || !file.exists(metadata_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+}
+summary <- read.csv(summary_path)
+item <- read.csv(item_path)
+metadata <- read.csv(metadata_path)
+worst <- summary[which.max(summary$abs_difference), ]
+close_enough <- max(summary$abs_difference) < 1e-3
+```
+
+## Question
+
+Does the current ordinal observed-score covariance omega equal the direct
+one-factor ordinal true-score target, or is it only on the same observed-score
+metric?
+
+## Short Answer
+
+```{r, results='asis'}
+if (close_enough) {
+  cat(sprintf(
+    "In this %d-cell population audit, the two targets are numerically close: the largest absolute difference is %.4f.",
+    metadata$n_cells, max(summary$abs_difference)))
+} else {
+  cat(sprintf(
+    "No. In this %d-cell population audit, the largest absolute difference is %.4f (%s), with the covariance target %.4f versus the direct target %.4f.",
+    metadata$n_cells, max(summary$abs_difference), worst$cell,
+    worst$current_covariance_omega, worst$direct_true_score_omega))
+}
+```
+
+## Evidence
+
+```{r}
+shown <- summary[, c(
+  "loading_pattern", "threshold_pattern", "min_category_prob",
+  "current_covariance_omega", "direct_true_score_omega", "difference",
+  "numerator_ratio", "max_abs_communality_gap"
+)]
+names(shown) <- c(
+  "Loadings", "Thresholds", "Min Category Prob.",
+  "Covariance Omega", "Direct Omega", "Difference",
+  "Numerator Ratio", "Max Diagonal Gap"
+)
+shown[] <- lapply(shown, function(x) if (is.numeric(x)) round(x, 4) else x)
+knitr::kable(shown)
+```
+
+The diagnostic gap is on the diagonal: the current covariance target recovers
+item true-score variances from off-diagonal covariances, while the direct target
+integrates the conditional expected category scores.
+
+## Caveats
+
+This is a population target audit under a one-factor probit response model with
+local independence and integer category scores. It does not fit models, evaluate
+sampling behavior, handle multi-group pooling, or choose an interval method.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R
+quarto render report.qmd
+```
