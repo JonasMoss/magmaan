@@ -110,6 +110,49 @@ model-based *covariance* target as core: it biases the GOF toward the fitted
 model (shrinking S toward a model-shaped target); if added at all it belongs in
 experiment 04's target menu with that caveat documented.
 
+### Regularized stage-1 input moments for two-stage SEM
+
+A separate methods/paper track for regularizing the *input moments* consumed by
+two-stage estimators. The motivating case is ML2S under missing data: Stage 1
+fits the saturated FIML mean/covariance model, but hard small-N / high-p cells can
+produce a near-singular saturated covariance that makes the Stage-2 ML surface and
+the robust/nested-test spectra numerically pathological. The categorical analogy is
+direct: ordinal SEM estimates thresholds plus a polychoric/polyserial association
+matrix in Stage 1, then fits the substantive model to those summaries in Stage 2;
+PD repair/shrinkage of that association matrix is a familiar preprocessing/repair
+layer, not the estimator's default scientific definition.
+
+The proposed estimator family would transform the Stage-1 summaries,
+`S_reg = (1 - λ) S_H1 + λ T`, before the Stage-2 fit. Use non-model-shaped targets
+first (`diag(S)` for covariance-scale summaries, `I` for correlation-scale
+summaries), choose the smallest λ needed to hit a prespecified eigenvalue or
+condition-number floor, and ledger λ plus raw/repaired eigen diagnostics. For
+inference, the same transformation must be propagated through the Stage-1
+asymptotic covariance by the delta method (`Γ_reg = J Γ J'`), mirroring the landed
+`data::frontier::shrink_mixed_ordinal_stats()` behavior that rebuilds `NACOV`,
+DWLS, and WLS weights after shrinking mixed ordinal moments. Fit-only shrinkage is
+a diagnostic, not a valid robust/nested-test pipeline.
+
+**Alternative already available.** Standard ML2S/lavaan-parity remains the core
+path for the FIML-FMG paper. Existing stabilizers are narrower and do not change
+the estimand: fail-closed PD guards, hard iteration/walltime caps, parameter
+bounds, SLSQP fallback for line-search failures, and the H1 EM moment-tolerance
+fix. Existing `data::frontier` covariance shrinkage and complete-data
+`fit_ml_ridge_continuation()` cover ordinary complete-data ML and mixed ordinal
+moment experiments, but they are not yet an ML2S-H1 regularized-input estimator
+with coherent two-stage Gamma propagation.
+
+**Build if.** A dedicated regularized-two-stage project wants the bias/variance,
+coverage, and reference-law consequences of input-moment conditioning, especially
+for missing-data ML2S and categorical-style summary-input estimators in
+near-singular small-N / high-p regimes. This should not be folded into
+`papers/fiml-fmg`: it changes the estimator and would dilute that paper's
+reference-law question. Sequencing: (1) point-estimate/timing probe on frozen hard
+ML2S cells using minimal eigenfloor shrinkage; (2) Gamma propagation for robust SE,
+GOF, and nested/full-spectrum tests; (3) simulation comparing raw ML2S,
+regularized-input ML2S, categorical ULS/DWLS analogues, and parameter-space
+regularization under correct specification and misspecification.
+
 ### `statistic = "N" | "N-1"` selector for the GLS/WLS test multiplier
 
 A user-facing selector (or report-both mode) for the GLS/WLS chi-square

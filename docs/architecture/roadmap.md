@@ -1854,8 +1854,11 @@ stop rather than any usable non-error return.
   shrinkage leaves thresholds and continuous means in place, transforms the
   lower-triangle association/covariance block, propagates the moment
   transformation through `NACOV`, and rebuilds DWLS/WLS weights so C++ and R
-  consume the same shrunk moment stack. The old `magmaan/data/shrinkage.hpp`
-  include path remains a forwarding shim.
+  consume the same shrunk moment stack. The missing-data ML2S extension where the
+  saturated FIML Stage-1 moments are regularized before Stage 2 is not a current
+  core capability; it is recorded as a separate speculative project because it
+  changes the estimator and its reference law. The old
+  `magmaan/data/shrinkage.hpp` include path remains a forwarding shim.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
