@@ -106,6 +106,7 @@ frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
   frontier_rbm_impl(fit, raw_data, weight, stage2_weight, dls_a,
                     method, optimizer, control, bounds)
 }
+frontier_profile_lrt_parameter_ml <- frontier_profile_lrt_parameter_ml_impl
 
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
@@ -457,6 +458,7 @@ magmaan_core <- local({
       "frontier_fit_ml_auto_identification",
       "frontier_fit_ml_ridge_continuation",
       "frontier_rbm",
+      "frontier_profile_lrt_parameter_ml",
       "frontier_pairwise_ordinal_composite_nested"
     ),
     helpers = c(
@@ -552,6 +554,7 @@ magmaan_core <- local({
       "fit_ml_fcsem_impl",
       "frontier_fit_ml_ridge_continuation_impl",
       "frontier_rbm_impl",
+      "frontier_profile_lrt_parameter_ml_impl",
       "frontier_pairwise_ordinal_composite_nested_impl",
       "fcsem_standard_errors_impl",
       "fcsem_fit_measures_impl",

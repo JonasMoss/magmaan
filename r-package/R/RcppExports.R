@@ -69,6 +69,10 @@ frontier_rbm_impl <- function(fit, raw_data = NULL, weight = NULL, stage2_weight
     .Call(`_magmaan_frontier_rbm_impl`, fit, raw_data, weight, stage2_weight, dls_a, method, optimizer, control, bounds)
 }
 
+frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-06) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol)
+}
+
 fcsem_model_spec_impl <- function(syntax) {
     .Call(`_magmaan_fcsem_model_spec_impl`, syntax)
 }

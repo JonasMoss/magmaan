@@ -62,6 +62,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 44 | [alpha-kc-coverage](44-alpha-kc-coverage/report.qmd) | benchmark | active | A distribution-free interval for a covariance functional (alpha, correlation) has two small-N defects: does the Kauermann-Carroll effective-df t fix the two-sided coverage deficit (variance-of-variance, flat in rho) while a variance-stabilizing transform (Fisher z / logit) fixes the skew-driven left/right imbalance (growing in rho), and do the two compose? |
 | 45 | [profile-lr-reliability-ci](45-profile-lr-reliability-ci/report.qmd) | probe | active | **funLR (Functional profile-LR CI).** Can a generic profile-LR (test-inversion) engine reproduce semlbci across the reliability family (omega_total, omega_h, H, maximal reliability), and can the small-sample under-coverage of near-boundary coefficients be repaired by a Bartlett factor (analytic, bootstrap, or calibrated constant)? |
 | 46 | [ordinal-observed-omega-dwls](46-ordinal-observed-omega-dwls/report.qmd) | probe | active | Does observed-category-score omega from an all-ordinal DWLS fit run end-to-end with complete-sandwich delta SEs, and where do balanced vs threshold-extreme smoke cells first bend? |
+| 47 | [ml-parameter-profile-lrt](47-ml-parameter-profile-lrt/report.qmd) | probe | active | Does the new C++ complete-data ML scalar/profile-LR seed calibrate as ordinary `chi^2_1` for an interior free parameter at small N, before robust scaling and bounded functionals are layered on? |
 
 ## Archived
 
