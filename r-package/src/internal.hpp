@@ -413,8 +413,12 @@ fiml_h1_opts_from(Rcpp::Nullable<Rcpp::List> control) {
     Rcpp::List l(control.get());
     if (l.containsElementNamed("h1_em_max_iter"))
       o.max_iter = Rcpp::as<int>(l["h1_em_max_iter"]);
+    if (l.containsElementNamed("h1_em_param_tol"))
+      o.parameter_tol = Rcpp::as<double>(l["h1_em_param_tol"]);
     if (l.containsElementNamed("h1_em_tol"))
-      o.tol = Rcpp::as<double>(l["h1_em_tol"]);
+      o.parameter_tol = Rcpp::as<double>(l["h1_em_tol"]);
+    if (l.containsElementNamed("h1_em_objective_tol"))
+      o.objective_tol = Rcpp::as<double>(l["h1_em_objective_tol"]);
     if (l.containsElementNamed("h1_em_cov_floor"))
       o.covariance_floor = Rcpp::as<double>(l["h1_em_cov_floor"]);
     if (l.containsElementNamed("h1_em_cov_warn"))

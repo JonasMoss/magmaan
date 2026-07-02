@@ -90,6 +90,9 @@ struct H1EMStep {
 
 struct H1EMResult {
   double value = 0.0;
+  double parameter_change = std::numeric_limits<double>::infinity();
+  double objective_change = std::numeric_limits<double>::infinity();
+  bool objective_converged = false;
   int iterations = 0;
   bool converged = false;
   int covariance_repairs = 0;
@@ -108,9 +111,14 @@ fit_expected<void> validate_h1_options(const FIMLH1Options& options) {
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
         "FIML H1 EM: max_iter must be >= 1"));
   }
-  if (!(options.tol > 0.0) || !std::isfinite(options.tol)) {
+  if (!(options.parameter_tol > 0.0) || !std::isfinite(options.parameter_tol)) {
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
-        "FIML H1 EM: tol must be finite and > 0"));
+        "FIML H1 EM: parameter_tol must be finite and > 0"));
+  }
+  if (!(options.objective_tol >= 0.0) ||
+      !std::isfinite(options.objective_tol)) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "FIML H1 EM: objective_tol must be finite and >= 0"));
   }
   if (!(options.covariance_floor >= 0.0) ||
       !std::isfinite(options.covariance_floor)) {
@@ -606,6 +614,20 @@ h1_em_step_block(const FIMLCache& cache,
   return H1EMStep{f, *repair};
 }
 
+double h1_em_parameter_change(const Eigen::VectorXd& mu,
+                              const Eigen::MatrixXd& Sigma,
+                              const Eigen::VectorXd& mu_next,
+                              const Eigen::MatrixXd& Sigma_next) {
+  double out = 0.0;
+  if (mu.size() > 0) {
+    out = std::max(out, (mu_next - mu).cwiseAbs().maxCoeff());
+  }
+  if (Sigma.size() > 0) {
+    out = std::max(out, (Sigma_next - Sigma).cwiseAbs().maxCoeff());
+  }
+  return out;
+}
+
 // Runs the EM iteration for one block. On return (mu, Sigma) hold the
 // converged moments and the returned value is the H1 objective at exactly
 // those moments — the same value/update ordering as the previous two-pass
@@ -634,9 +656,20 @@ h1_em_iterate_block(const FIMLCache& cache,
     result.min_covariance_eigen =
         std::min(result.min_covariance_eigen,
                  step->sigma_repair.min_eigen_after);
-    if (std::isfinite(prev) &&
-        std::abs(prev - cur) <= options.tol * (1.0 + std::abs(cur))) {
-      result.value = cur;
+    result.parameter_change =
+        h1_em_parameter_change(mu, Sigma, mu_next, Sigma_next);
+    result.objective_change = std::isfinite(prev)
+        ? std::abs(prev - cur)
+        : std::numeric_limits<double>::infinity();
+    result.objective_converged =
+        result.objective_change <=
+            options.objective_tol * (1.0 + std::abs(cur));
+    if (result.parameter_change <= options.parameter_tol) {
+      mu.swap(mu_next);
+      Sigma.swap(Sigma_next);
+      auto final_val = h1_block_value_from_moments(cache, block, mu, Sigma);
+      if (!final_val.has_value()) return std::unexpected(final_val.error());
+      result.value = *final_val;
       result.iterations = iter + 1;
       result.converged = true;
       return result;
@@ -2471,7 +2504,13 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
         FitError err = make_fit_err(FitError::Kind::OptimizerNonConvergence,
             "FIML H1 EM: block " + std::to_string(b + 1) +
             " reached the iteration cap (" +
-            std::to_string(options.max_iter) + ")");
+            std::to_string(options.max_iter) +
+            "); final max parameter change = " +
+            fmt_sci(em.parameter_change) +
+            ", final objective change = " +
+            fmt_sci(em.objective_change) +
+            ", objective gate " +
+            std::string(em.objective_converged ? "met" : "not met"));
         err.iterations = em.iterations;
         err.f_value = em.value;
         return std::unexpected(err);
@@ -2479,7 +2518,12 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
       add_unique_warning(out.warnings,
           "FIML H1 EM: block " + std::to_string(b + 1) +
           " reached the iteration cap (" + std::to_string(options.max_iter) +
-          "); returning the last iterate");
+          "); returning the last iterate; final max parameter change = " +
+          fmt_sci(em.parameter_change) +
+          ", final objective change = " +
+          fmt_sci(em.objective_change) +
+          ", objective gate " +
+          std::string(em.objective_converged ? "met" : "not met"));
     }
     total += em.value;
     if (em.covariance_repairs > 0) {

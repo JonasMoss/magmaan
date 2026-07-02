@@ -69,7 +69,13 @@ struct FIMLPack {
 
 struct FIMLH1Options {
   int    max_iter = 10000;
-  double tol = 1e-6;
+  // Lavaan-style absolute max update in the saturated H1 parameters
+  // (mu, vech(Sigma)). This is the primary EM convergence gate because the
+  // resulting moments are reused by downstream robust tests and fit measures.
+  double parameter_tol = 1e-5;
+  // Objective-change tolerance is tracked as a diagnostic only; objective
+  // flatness is not enough to declare the saturated moments converged.
+  double objective_tol = 1e-6;
   double covariance_floor = 1e-6;
   double covariance_warn = 1e-5;
   bool   error_on_nonconvergence = true;

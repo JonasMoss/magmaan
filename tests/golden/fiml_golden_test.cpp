@@ -150,7 +150,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     const auto& est = *est_or;
 
     magmaan::estimate::fiml::FIMLH1Options strict_h1;
-    strict_h1.tol = 1e-11;
+    strict_h1.parameter_tol = 1e-11;
     auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
     if (!pack_or.has_value()) {
       failures.push_back(id + ": fiml_pack — " + pack_or.error().detail);
