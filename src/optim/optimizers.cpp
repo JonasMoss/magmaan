@@ -1,6 +1,7 @@
 #include "magmaan/optim/optimizers.hpp"
 
 #include <limits>
+#include <string>
 #include <utility>
 
 #include <Eigen/Core>
@@ -235,6 +236,26 @@ fit_expected<OptimResult>
 nlopt_lbfgs(const ScalarProblem& prob, const Eigen::VectorXd& x0,
             const Bounds& bounds, OptimOptions opts) {
   return run_nlopt(prob, x0, bounds, opts, NloptAlgorithm::Lbfgs);
+}
+
+fit_expected<OptimResult>
+nlopt_lbfgs_slsqp_fallback(const ScalarProblem& prob,
+                           const Eigen::VectorXd& x0,
+                           const Bounds& bounds,
+                           OptimOptions opts) {
+  auto first = nlopt_lbfgs(prob, x0, bounds, opts);
+  if (first.has_value() && first->status == OptimStatus::Converged) {
+    return first;
+  }
+
+  auto second = nlopt_slsqp(prob, x0, bounds, opts);
+  if (second.has_value()) return second;
+  if (first.has_value()) return first;
+
+  FitError err = second.error();
+  err.detail = "SLSQP fallback after L-BFGS failure also failed; L-BFGS: " +
+               first.error().detail + "; SLSQP: " + err.detail;
+  return std::unexpected(std::move(err));
 }
 
 }  // namespace magmaan::optim

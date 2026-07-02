@@ -97,8 +97,8 @@ fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) 
     .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
 
-saturated_em_moments_impl <- function(raw_data, h_step = 1e-4) {
-    .Call(`_magmaan_saturated_em_moments_impl`, raw_data, h_step)
+saturated_em_moments_impl <- function(raw_data, h_step = 1e-4, control = NULL) {
+    .Call(`_magmaan_saturated_em_moments_impl`, raw_data, h_step, control)
 }
 
 fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {

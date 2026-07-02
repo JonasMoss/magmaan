@@ -68,7 +68,7 @@ struct FIMLPack {
 
 struct FIMLH1Options {
   int    max_iter = 10000;
-  double tol = 1e-11;
+  double tol = 1e-6;
   double covariance_floor = 1e-6;
   double covariance_warn = 1e-5;
   bool   error_on_nonconvergence = true;
@@ -865,7 +865,8 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                    const FIMLH1& h1);
 
 // Full-information ML fit over raw continuous data. `backend` selects the
-// scalar optimizer (NLopt L-BFGS by default, optional IPOPT when enabled);
+// scalar optimizer (NLopt L-BFGS with SLSQP fallback by default, optional IPOPT
+// when enabled);
 // equality constraints are folded in via the θ = θ₀ + K·α reparameterization.
 fit_expected<Estimates>
 fit_fiml(spec::LatentStructure pt,
@@ -873,7 +874,7 @@ fit_fiml(spec::LatentStructure pt,
          const RawData& raw,
          const Eigen::VectorXd& x0,      // start values, size pt.n_free()
          FIML discrepancy = {},
-         Backend backend = Backend::NloptLbfgs,
+         Backend backend = Backend::NloptLbfgsSlsqpFallback,
          optim::OptimOptions opts = {});
 
 fit_expected<Estimates>
@@ -882,7 +883,7 @@ fit_fiml(spec::LatentStructure pt,
          const RawData& raw,
          const Eigen::VectorXd& x0,      // start values, size pt.n_free()
          const FIMLPack& pack,
-         Backend backend = Backend::NloptLbfgs,
+         Backend backend = Backend::NloptLbfgsSlsqpFallback,
          optim::OptimOptions opts = {});
 
 }  // namespace magmaan::estimate::fiml

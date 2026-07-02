@@ -74,6 +74,8 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
       return optim::nlopt_var2(prob, x0, bounds, opts);
     case Backend::NloptLbfgs:
       return optim::nlopt_lbfgs(prob, x0, bounds, opts);
+    case Backend::NloptLbfgsSlsqpFallback:
+      return optim::nlopt_lbfgs_slsqp_fallback(prob, x0, bounds, opts);
     case Backend::Ipopt:
 #ifdef MAGMAAN_WITH_IPOPT
       return optim::ipopt(prob, x0, bounds, opts);
@@ -162,6 +164,7 @@ run_scalar_constrained(const optim::ScalarProblem& prob,
 
   switch (backend) {
     case Backend::NloptSlsqp:
+    case Backend::NloptLbfgsSlsqpFallback:
       return optim::nlopt_slsqp_constrained(cprob, x0, bounds, opts);
     case Backend::Ipopt:
 #ifdef MAGMAAN_WITH_IPOPT

@@ -26,7 +26,9 @@ namespace magmaan::estimate {
 //   "nlopt-bobyqa"   → Backend::NloptBobyqa  (Powell 2009 DF TR)
 //   "nlopt-tnewton"  → Backend::NloptTnewton (Nash 1985 truncated Newton)
 //   "nlopt-var2"     → Backend::NloptVar2    (Shanno-Phua 1980 full BFGS)
-//   "nlopt-lbfgs"    → Backend::NloptLbfgs   (NLopt's own L-BFGS, current default)
+//   "nlopt-lbfgs"    → Backend::NloptLbfgs   (NLopt's own L-BFGS)
+//   "nlopt-lbfgs-slsqp-fallback" → Backend::NloptLbfgsSlsqpFallback
+//                                  (L-BFGS first, retry SLSQP)
 //   "port"           → Backend::Port         (drmngb_, = R nlminb)
 //   "port-nls"       → Backend::PortNls      (drn2gb_, = R nls)
 //

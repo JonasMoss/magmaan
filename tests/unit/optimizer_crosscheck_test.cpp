@@ -64,6 +64,15 @@ TEST_CASE("optimizer dispatch: Backend::Ipopt string round-trips") {
   CHECK(magmaan::estimate::backend_name(Backend::Ipopt) == "ipopt");
 }
 
+TEST_CASE("optimizer dispatch: L-BFGS/SLSQP fallback string round-trips") {
+  auto backend =
+      magmaan::estimate::backend_from_string("nlopt-lbfgs-slsqp-fallback");
+  REQUIRE(backend.has_value());
+  CHECK(*backend == Backend::NloptLbfgsSlsqpFallback);
+  CHECK(magmaan::estimate::backend_name(Backend::NloptLbfgsSlsqpFallback) ==
+        "nlopt-lbfgs-slsqp-fallback");
+}
+
 #ifdef MAGMAAN_WITH_PORT
 TEST_CASE("optimizer cross-check: PORT drmngb matches NLopt L-BFGS on ML") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");

@@ -29,6 +29,8 @@ drive(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
   switch (backend) {
     case Backend::NloptLbfgs:
       return optim::nlopt_lbfgs(prob, x0, bounds, opts);
+    case Backend::NloptLbfgsSlsqpFallback:
+      return optim::nlopt_lbfgs_slsqp_fallback(prob, x0, bounds, opts);
     case Backend::NloptSlsqp:
       return optim::nlopt_slsqp(prob, x0, bounds, opts);
     case Backend::Ipopt:

@@ -84,7 +84,9 @@ struct Estimates {
 //   NloptVar2    — NLopt LD_VAR2 (Shanno-Phua 1980); *full* (dense) BFGS
 //                  variable-metric. The non-limited-memory counterpart to
 //                  L-BFGS; can outperform L-BFGS at SEM-sized n.
-//   NloptLbfgs   — NLopt's own L-BFGS; current default scalar backend.
+//   NloptLbfgs   — NLopt's own L-BFGS; scalar line-search backend.
+//   NloptLbfgsSlsqpFallback — policy backend: L-BFGS first, retry SLSQP when
+//                  L-BFGS fails or returns a non-clean status.
 //   Ipopt        — IPOPT interior-point backend with limited-memory Hessian
 //                  approximation. Needs MAGMAAN_WITH_IPOPT. General scalar
 //                  backend and an optional nonlinear-equality constraint
@@ -106,6 +108,7 @@ enum class Backend {
   NloptTnewton,
   NloptVar2,
   NloptLbfgs,
+  NloptLbfgsSlsqpFallback,
   Ipopt,
   Port,
   PortNls,

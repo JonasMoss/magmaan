@@ -185,6 +185,7 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
 
 enum class OptimizerKind : std::uint8_t {
   NloptLbfgs,
+  NloptLbfgsSlsqpFallback,
   NloptSlsqp,
   Ceres,
   Ipopt,
@@ -201,6 +202,11 @@ inline OptimizerSpec ceres(optim::OptimOptions options = {}) {
 
 inline OptimizerSpec nlopt_slsqp(optim::OptimOptions options = {}) {
   return OptimizerSpec{OptimizerKind::NloptSlsqp, options};
+}
+
+inline OptimizerSpec nlopt_lbfgs_slsqp_fallback(
+    optim::OptimOptions options = {}) {
+  return OptimizerSpec{OptimizerKind::NloptLbfgsSlsqpFallback, options};
 }
 
 inline OptimizerSpec ipopt(optim::OptimOptions options = {}) {

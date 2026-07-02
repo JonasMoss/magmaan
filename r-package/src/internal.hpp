@@ -450,16 +450,30 @@ irls_opts_from(Rcpp::Nullable<Rcpp::List> control) {
   return o;
 }
 
-// Parse the user-facing `optimizer = "..."` string into the C++ Backend
-// enum. Empty / NULL ⇒ default "nlopt-lbfgs". Unknown strings are surfaced as a
-// magmaan-style Rcpp::stop with the accepted-names list — same wording as
-// the C++ backend_from_string error, so users typing `optimizer = "ceres-lm"`
-// get a clear "did you mean..." correction.
+// Parse the user-facing `optimizer = "..."` string into the C++ Backend enum.
+// Empty / NULL uses the complete-data default "nlopt-lbfgs". Unknown strings
+// are surfaced as a magmaan-style Rcpp::stop with the accepted-names list —
+// same wording as the C++ backend_from_string error, so users typing
+// `optimizer = "ceres-lm"` get a clear "did you mean..." correction.
 inline magmaan::estimate::Backend
 backend_from_optimizer_arg(Rcpp::Nullable<Rcpp::String> optimizer) {
   if (optimizer.isNull()) return magmaan::estimate::Backend::NloptLbfgs;
   const std::string name = Rcpp::as<std::string>(optimizer.get());
   if (name.empty()) return magmaan::estimate::Backend::NloptLbfgs;
+  auto b_or = magmaan::estimate::backend_from_string(name);
+  if (!b_or.has_value()) Rcpp::stop("magmaan: " + b_or.error().detail);
+  return *b_or;
+}
+
+inline magmaan::estimate::Backend
+fiml_backend_from_optimizer_arg(Rcpp::Nullable<Rcpp::String> optimizer) {
+  if (optimizer.isNull()) {
+    return magmaan::estimate::Backend::NloptLbfgsSlsqpFallback;
+  }
+  const std::string name = Rcpp::as<std::string>(optimizer.get());
+  if (name.empty()) {
+    return magmaan::estimate::Backend::NloptLbfgsSlsqpFallback;
+  }
   auto b_or = magmaan::estimate::backend_from_string(name);
   if (!b_or.has_value()) Rcpp::stop("magmaan: " + b_or.error().detail);
   return *b_or;

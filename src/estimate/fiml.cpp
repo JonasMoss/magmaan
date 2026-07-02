@@ -6148,6 +6148,8 @@ fit_fiml_impl(spec::LatentStructure pt,
         return optim::nlopt_slsqp(prob, start, {}, opts);
       case Backend::NloptLbfgs:
         return optim::nlopt_lbfgs(prob, start, {}, opts);
+      case Backend::NloptLbfgsSlsqpFallback:
+        return optim::nlopt_lbfgs_slsqp_fallback(prob, start, {}, opts);
       case Backend::Ipopt:
 #ifdef MAGMAAN_WITH_IPOPT
         return optim::ipopt(prob, start, {}, opts);
@@ -6158,7 +6160,7 @@ fit_fiml_impl(spec::LatentStructure pt,
       default:
         return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
             "fit_fiml: requested optimizer backend is not supported; use "
-            "nlopt-lbfgs, nlopt-slsqp, or ipopt"));
+            "nlopt-lbfgs, nlopt-lbfgs-slsqp-fallback, nlopt-slsqp, or ipopt"));
     }
   };
 
@@ -6175,7 +6177,8 @@ fit_fiml_impl(spec::LatentStructure pt,
     cprob.n_constraint = m;
     cprob.constraint_lower = Eigen::VectorXd::Zero(m);
     cprob.constraint_upper = Eigen::VectorXd::Zero(m);
-    if (backend == Backend::NloptSlsqp) {
+    if (backend == Backend::NloptSlsqp ||
+        backend == Backend::NloptLbfgsSlsqpFallback) {
       return optim::nlopt_slsqp_constrained(cprob, start, {}, opts);
     }
 #ifdef MAGMAAN_WITH_IPOPT

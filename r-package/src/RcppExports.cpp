@@ -352,14 +352,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // saturated_em_moments_impl
-Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step);
-RcppExport SEXP _magmaan_saturated_em_moments_impl(SEXP raw_dataSEXP, SEXP h_stepSEXP) {
+Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaan_saturated_em_moments_impl(SEXP raw_dataSEXP, SEXP h_stepSEXP, SEXP controlSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
     Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
-    rcpp_result_gen = Rcpp::wrap(saturated_em_moments_impl(raw_data, h_step));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(saturated_em_moments_impl(raw_data, h_step, control));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2948,7 +2949,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fcsem_fit_measures_impl", (DL_FUNC) &_magmaan_fcsem_fit_measures_impl, 1},
     {"_magmaan_fcsem_standardized_rows_impl", (DL_FUNC) &_magmaan_fcsem_standardized_rows_impl, 2},
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
-    {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 2},
+    {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 3},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
     {"_magmaan_fit_gls_pairwise_impl", (DL_FUNC) &_magmaan_fit_gls_pairwise_impl, 6},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},

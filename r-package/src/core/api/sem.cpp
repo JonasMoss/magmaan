@@ -117,6 +117,8 @@ estimate::Backend backend_from(const OptimizerSpec &optimizer) {
     return estimate::Backend::NloptSlsqp;
   case OptimizerKind::NloptLbfgs:
     return estimate::Backend::NloptLbfgs;
+  case OptimizerKind::NloptLbfgsSlsqpFallback:
+    return estimate::Backend::NloptLbfgsSlsqpFallback;
   }
   return estimate::Backend::NloptLbfgs;
 }
@@ -607,6 +609,7 @@ EstimatorSpec ml() {
 EstimatorSpec fiml() {
   EstimatorSpec out;
   out.kind = EstimatorKind::FIML;
+  out.optimizer_spec = nlopt_lbfgs_slsqp_fallback();
   return out;
 }
 
@@ -695,12 +698,13 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
           "two-level ML requires clustered data (api::data_from_cluster)"));
     }
     if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
+        estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgsSlsqpFallback &&
         estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
         estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
       return std::unexpected(make_error(
           ErrorStage::UnsupportedCombination,
-          "two-level ML currently supports only the NLopt L-BFGS, NLopt "
-          "SLSQP, or IPOPT optimizer"));
+          "two-level ML currently supports only NLopt L-BFGS, NLopt L-BFGS "
+          "with SLSQP fallback, NLopt SLSQP, or IPOPT"));
     }
 
     Eigen::VectorXd x0;
@@ -742,11 +746,12 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
                      "FIML facade fitting does not accept bounds"));
     }
     if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
+        estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgsSlsqpFallback &&
         estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
         estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
       return std::unexpected(
           make_error(ErrorStage::UnsupportedCombination,
-                     "FIML currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
+                     "FIML currently supports only NLopt L-BFGS, NLopt L-BFGS with SLSQP fallback, NLopt SLSQP, or IPOPT"));
     }
 
     // Same precedence as the raw-only fit_fiml: report the fixed.x-missing
@@ -871,11 +876,12 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   switch (estimator.kind) {
   case EstimatorKind::ML:
     if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
+        estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgsSlsqpFallback &&
         estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
         estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
       return std::unexpected(
           make_error(ErrorStage::UnsupportedCombination,
-                     "ML currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
+                     "ML currently supports only NLopt L-BFGS, NLopt L-BFGS with SLSQP fallback, NLopt SLSQP, or IPOPT"));
     }
     est = estimate::fit_ml(pt, rep, *stats, *x0, *bounds,
                            backend_from(estimator.optimizer_spec),
@@ -943,11 +949,12 @@ Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
         "fit_ml_fcsem requires complete-data sample statistics"));
   }
   if (optimizer.kind != OptimizerKind::NloptLbfgs &&
+      optimizer.kind != OptimizerKind::NloptLbfgsSlsqpFallback &&
       optimizer.kind != OptimizerKind::NloptSlsqp &&
       optimizer.kind != OptimizerKind::Ipopt) {
     return std::unexpected(make_error(
         ErrorStage::UnsupportedCombination,
-        "fit_ml_fcsem currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
+        "fit_ml_fcsem currently supports only NLopt L-BFGS, NLopt L-BFGS with SLSQP fallback, NLopt SLSQP, or IPOPT"));
   }
 
   Eigen::VectorXd x0;
