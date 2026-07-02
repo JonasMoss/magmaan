@@ -25,6 +25,7 @@
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/measures/reliability.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -6308,6 +6309,65 @@ TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenva
   CHECK(std::isfinite(rob->satorra_bentler.scale_c));
   CHECK(std::isfinite(rob->mean_var_adjusted.df_adj));
   CHECK(std::isfinite(rob->scaled_shifted.scale_a));
+}
+
+TEST_CASE("frontier ordinal observed omega uses DWLS IJ sandwich") {
+  std::mt19937 rng(20260702);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(700, 4);
+  const double loading[4] = {0.86, 0.78, 0.70, 0.62};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.55) + (y > 0.45);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  using magmaan::estimate::OrdinalWeightKind;
+  auto fit = magmaan::test::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  namespace rel = magmaan::measures::frontier::reliability;
+  rel::OmegaSpec omega_spec;
+  omega_spec.block = Eigen::VectorXi::Zero(4);
+  auto omega = magmaan::estimate::frontier::ordinal_observed_omega(
+      *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+      OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(omega.has_value(),
+      "ordinal observed omega failed: "
+          << (omega.has_value() ? "" : omega.error().detail));
+  CHECK(omega->value > 0.0);
+  CHECK(omega->value < 1.0);
+  CHECK(omega->gradient.size() == fit->theta.size());
+  CHECK(omega->se > 0.0);
+  CHECK(std::isfinite(omega->se));
+  CHECK(omega->avar ==
+        doctest::Approx(omega->se * omega->se *
+                        static_cast<double>(stats->n_obs[0]))
+            .epsilon(1e-10));
 }
 
 TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {

@@ -156,7 +156,19 @@ golden `parTable()` fixtures.
   k>=3), with Spearman ratio-of-sums communalities, a finite-difference gradient,
   and the full-Gamma `omega_multidim_delta` SE; exposed through
   `magmaan_core$measures_reliability_omega_multidim`. Consumed by
-  `papers/closed-form-omega`.
+  `papers/closed-form-omega`. Model-based CFA omega is also present:
+  `omega_from_fit` computes continuous single-group `omega_total` /
+  `omega_hierarchical` from fitted LISREL matrices and reuses ML/GLS/ULS robust
+  parameter vcovs for delta SEs; the all-ordinal frontier slice adds
+  `ordinal_observed_score_covariance` / `omega_ordinal_observed` plus
+  `estimate::frontier::ordinal_observed_omega` for a fitted single-group
+  DWLS/WLS/ULS model. That ordinal path maps fitted thresholds and
+  latent-response correlations to the observed integer category-score covariance
+  (0,1,...,K-1), then contracts the finite-difference scalar gradient with the
+  complete IJ parameter sandwich from `robust_ordinal_ij`. It intentionally has
+  no Bartlett/profile-LR/small-sample scaling policy; those remain research
+  layers above the delta surface. R binding for the ordinal wrapper is not yet
+  exposed.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling
@@ -1658,6 +1670,15 @@ stop rather than any usable non-error return.
   support-aware observed Gamma influence/Jacobian helpers for DWLS/WLS
   estimated-weight corrections. The observed helpers are gated by
   missing-pattern case-weight finite differences and complete-data reduction.
+  A first reliability consumer now sits on top of that stack:
+  `estimate::frontier::ordinal_observed_omega` is a single-group all-ordinal
+  post-fit functional for observed category-score omega. It reuses the fitted
+  ordinal threshold layout and delta/theta/released-scale standardization rules,
+  computes the category-score covariance via the same bivariate-normal rectangle
+  probabilities as the polychoric stage, and reports the delta-method SE from
+  `robust_ordinal_ij` (including DWLS/WLS estimated-weight influence). This is
+  the canonical DWLS ordinal-omega proving slice; multi-group pooling semantics,
+  R exposure, and small-sample/profile-LR corrections remain separate follow-ups.
   Complete mixed ordinal/polyserial fixed-weight ULS now has
   `robust_mixed_ordinal_ij`, with mixed casewise moment influence rows stored on
   `MixedOrdinalStats`; it reduces exactly to the analytic observed-bread
