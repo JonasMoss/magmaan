@@ -1607,11 +1607,40 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method,
     double                           h_step,
     SatorraMomentConvention          convention) {
+  return lr_test_satorra2000_fiml_from_data(
+      pt_H1, rep_H1, theta_H1_full, K_H1,
+      pt_H0, rep_H0, theta_H0_full, K_H0,
+      raw, T_H0, T_H1, df_H0, df_H1,
+      pack, h1, gamma, a_method, h_step, nullptr, convention);
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_fiml_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const EqConstraints&             K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const EqConstraints&             K_H0,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    const estimate::fiml::FIMLPack&  pack,
+    const estimate::fiml::FIMLH1&    h1,
+    GammaSource                      gamma,
+    SatorraAMethod                   a_method,
+    double                           h_step,
+    const estimate::fiml::SaturatedMoments* sm_precomputed,
+    SatorraMomentConvention          convention) {
   return lr_test_satorra2000_fiml_from_data_impl(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
-      &pack, &h1, gamma, a_method, h_step, nullptr, convention);
+      &pack, &h1, gamma, a_method, h_step, sm_precomputed, convention);
 }
 
 post_expected<LRSatorra2000Result>
