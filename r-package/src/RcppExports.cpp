@@ -1145,6 +1145,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// measures_reliability_ordinal_observed_omega
+Rcpp::List measures_reliability_ordinal_observed_omega(Rcpp::List fit, Rcpp::IntegerVector block, std::string target, std::string weight, SEXP ordinal_stats);
+RcppExport SEXP _magmaan_measures_reliability_ordinal_observed_omega(SEXP fitSEXP, SEXP blockSEXP, SEXP targetSEXP, SEXP weightSEXP, SEXP ordinal_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type block(blockSEXP);
+    Rcpp::traits::input_parameter< std::string >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordinal_stats(ordinal_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_reliability_ordinal_observed_omega(fit, block, target, weight, ordinal_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
 // measures_factor_scores
 Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data, std::string method);
 RcppExport SEXP _magmaan_measures_factor_scores(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP methodSEXP) {
@@ -2976,6 +2991,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_reliability_cov", (DL_FUNC) &_magmaan_measures_reliability_cov, 3},
     {"_magmaan_measures_reliability_omega_multidim", (DL_FUNC) &_magmaan_measures_reliability_omega_multidim, 6},
     {"_magmaan_measures_reliability_omega_from_fit", (DL_FUNC) &_magmaan_measures_reliability_omega_from_fit, 5},
+    {"_magmaan_measures_reliability_ordinal_observed_omega", (DL_FUNC) &_magmaan_measures_reliability_ordinal_observed_omega, 5},
     {"_magmaan_measures_factor_scores", (DL_FUNC) &_magmaan_measures_factor_scores, 3},
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},

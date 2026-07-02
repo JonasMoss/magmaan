@@ -146,16 +146,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     downstream consumer.
 
 - **Ordinal observed-score omega follow-ups (2026-07).**
-  Landed first C++ frontier slice:
+  Landed first C++/R frontier slice:
   `estimate::frontier::ordinal_observed_omega` maps fitted all-ordinal
   thresholds + latent-response correlations to the observed integer category
   covariance, computes `OmegaTarget::Total` / `Hierarchical` through
   `measures::frontier::reliability`, and gets a misspecification-robust
   delta-method SE from `robust_ordinal_ij` (including DWLS/WLS estimated-weight
-  influence). Remaining:
-  - **S/M.** Add the thin R binding once the call shape is settled
-    (`fit_ordinal_stage2` / `magmaan()` fit object plus block/target/weight
-    arguments). Keep the core wrapper visible; do not add R-only SEM logic.
+  influence). R exposure is
+  `magmaan_core$measures_reliability_ordinal_observed_omega`; experiment
+  `46-ordinal-observed-omega-dwls` is the smoke/calibration probe. Remaining:
   - **M.** Define and test the multi-group target before lifting the guard:
     pooled observed category covariance, sample-size-weighted group omegas, or
     explicit per-group output are different estimands.

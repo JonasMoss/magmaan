@@ -1,0 +1,58 @@
+---
+title: "Ordinal Observed-Score Omega DWLS Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- "results/simulation_summary.csv"
+metadata_path <- "results/metadata.csv"
+if (!file.exists(summary_path) || !file.exists(metadata_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+}
+summary <- read.csv(summary_path)
+metadata <- read.csv(metadata_path)
+```
+
+## Question
+
+Does the new all-ordinal observed-score omega surface run end-to-end on a DWLS fit,
+and are its first delta-method intervals at least numerically sane before we spend
+effort on profile-LR or small-sample corrections?
+
+## Short Answer
+
+This is a smoke/probe lane, not a calibration result. In the current run
+(`r metadata$reps` reps per regime, N = `r metadata$n`), the wrapper returns finite
+estimates and SEs in both balanced and threshold-extreme three-category regimes.
+Use the table below only to catch gross failures; coverage is too noisy until the
+grid is expanded.
+
+## Evidence
+
+```{r}
+shown <- summary
+shown[] <- lapply(shown, function(x) if (is.numeric(x)) round(x, 4) else x)
+knitr::kable(shown)
+```
+
+## Caveats
+
+The target is a large Monte-Carlo category-score covariance, not an analytic
+population integral. The design is a one-factor correct-model check; structural
+misspecification, non-normal latent responses, multi-group pooling, and any
+profile-LR/Bartlett correction are intentionally outside this first probe.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --reps 200 --n 500 --n-pop 500000
+quarto render report.qmd
+```

@@ -452,7 +452,9 @@ single-group all-ordinal DWLS/WLS/ULS fit with a complete IJ-sandwich delta SE. 
 addresses the "can the ordinal/DWLS stack express the Green-Yang/Flora observed-score
 metric?" infrastructure question. It does not settle the Bell-style misspecification
 bias study, omega_ho/maximal-reliability ordinal extensions, multi-group target
-definition, R exposure, or small-sample/profile-LR corrections.
+definition, or small-sample/profile-LR corrections. R exposure landed immediately after
+as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
+`experiments/46-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a
 magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a

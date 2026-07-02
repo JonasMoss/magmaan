@@ -441,6 +441,7 @@ magmaan_core <- local({
       "measures_reliability_cov",
       "measures_reliability_omega_multidim",
       "measures_reliability_omega_from_fit",
+      "measures_reliability_ordinal_observed_omega",
       "measures_factor_scores",
       "measures_factor_score_precision",
       "measures_compute_defined"

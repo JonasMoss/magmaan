@@ -89,6 +89,19 @@ stopifnot(is.finite(rob_dwls$scaled_shifted$scale_a))
 stopifnot(all(is.finite(rob_wls$se)))
 stopifnot(identical(rob_wls$df, 2L))
 
+omega_ord <- core$measures_reliability_ordinal_observed_omega(
+  fit_dwls, block = rep(1L, length(ordered)))
+omega_ord_explicit <- core$measures_reliability_ordinal_observed_omega(
+  fit_dwls, block = rep(1L, length(ordered)), ordinal_stats = d)
+omega_ord_wls <- core$measures_reliability_ordinal_observed_omega(
+  fit_wls, block = rep(1L, length(ordered)), weight = "WLS")
+stopifnot(is.finite(omega_ord$value), omega_ord$value > 0, omega_ord$value < 1)
+stopifnot(is.finite(omega_ord$se), omega_ord$se > 0)
+stopifnot(length(omega_ord$gradient) == length(fit_dwls$theta))
+stopifnot(abs(omega_ord$value - omega_ord_explicit$value) < 1e-12)
+stopifnot(abs(omega_ord$se - omega_ord_explicit$se) < 1e-12)
+stopifnot(is.finite(omega_ord_wls$value), is.finite(omega_ord_wls$se))
+
 mi_dwls <- magmaan::modification_indices(fit_dwls)
 mi_dwls_explicit <- magmaan::modification_indices(fit_dwls, d)
 model_score <- "f =~ x1 + L*x2 + L*x3 + x4"

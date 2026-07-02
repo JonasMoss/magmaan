@@ -167,8 +167,8 @@ golden `parTable()` fixtures.
   (0,1,...,K-1), then contracts the finite-difference scalar gradient with the
   complete IJ parameter sandwich from `robust_ordinal_ij`. It intentionally has
   no Bartlett/profile-LR/small-sample scaling policy; those remain research
-  layers above the delta surface. R binding for the ordinal wrapper is not yet
-  exposed.
+  layers above the delta surface. The R surface is
+  `magmaan_core$measures_reliability_ordinal_observed_omega`.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling
@@ -1677,8 +1677,11 @@ stop rather than any usable non-error return.
   computes the category-score covariance via the same bivariate-normal rectangle
   probabilities as the polychoric stage, and reports the delta-method SE from
   `robust_ordinal_ij` (including DWLS/WLS estimated-weight influence). This is
-  the canonical DWLS ordinal-omega proving slice; multi-group pooling semantics,
-  R exposure, and small-sample/profile-LR corrections remain separate follow-ups.
+  the canonical DWLS ordinal-omega proving slice; it is exposed in R through
+  `magmaan_core$measures_reliability_ordinal_observed_omega` and has a smoke
+  calibration probe in `experiments/46-ordinal-observed-omega-dwls`. Multi-group
+  pooling semantics and small-sample/profile-LR corrections remain separate
+  follow-ups.
   Complete mixed ordinal/polyserial fixed-weight ULS now has
   `robust_mixed_ordinal_ij`, with mixed casewise moment influence rows stored on
   `MixedOrdinalStats`; it reduces exactly to the analytic observed-bread
