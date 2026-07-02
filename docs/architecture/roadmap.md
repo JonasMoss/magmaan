@@ -177,7 +177,13 @@ golden `parTable()` fixtures.
   complete IJ parameter sandwich from `robust_ordinal_ij`. It intentionally has
   no Bartlett/profile-LR/small-sample scaling policy; those remain research
   layers above the delta surface. The R surface is
-  `magmaan_core$measures_reliability_ordinal_observed_omega`.
+  `magmaan_core$measures_reliability_ordinal_observed_omega`. The simpler
+  no-integration ordinal reliability target,
+  `magmaan_core$measures_reliability_ordinal_polychoric_omega`, computes
+  closed-form omega directly on the all-ordinal polychoric correlation matrix:
+  it extracts the correlation block of the ordinal `NACOV`, pads it into the
+  off-diagonal slots of a full vech-correlation Gamma with fixed unit diagonals,
+  and reuses `omega_multidim_delta` for the robust delta SE.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling

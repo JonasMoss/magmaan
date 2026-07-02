@@ -95,12 +95,26 @@ omega_ord_explicit <- core$measures_reliability_ordinal_observed_omega(
   fit_dwls, block = rep(1L, length(ordered)), ordinal_stats = d)
 omega_ord_wls <- core$measures_reliability_ordinal_observed_omega(
   fit_wls, block = rep(1L, length(ordered)), weight = "WLS")
+omega_poly <- core$measures_reliability_ordinal_polychoric_omega(
+  d, block = rep(1L, length(ordered)))
+omega_poly_fit <- core$measures_reliability_ordinal_polychoric_omega(
+  fit_dwls, block = rep(1L, length(ordered)))
+omega_poly_direct <- core$measures_reliability_omega_multidim(
+  d$R[[1]], block = rep(1L, length(ordered)),
+  gamma = core$ordinal_polychoric_gamma_for_omega(d),
+  n = d$nobs[[1]])
 stopifnot(is.finite(omega_ord$value), omega_ord$value > 0, omega_ord$value < 1)
 stopifnot(is.finite(omega_ord$se), omega_ord$se > 0)
 stopifnot(length(omega_ord$gradient) == length(fit_dwls$theta))
 stopifnot(abs(omega_ord$value - omega_ord_explicit$value) < 1e-12)
 stopifnot(abs(omega_ord$se - omega_ord_explicit$se) < 1e-12)
 stopifnot(is.finite(omega_ord_wls$value), is.finite(omega_ord_wls$se))
+stopifnot(is.finite(omega_poly$value), omega_poly$value > 0, omega_poly$value < 1)
+stopifnot(is.finite(omega_poly$se), omega_poly$se > 0)
+stopifnot(abs(omega_poly$value - omega_poly_fit$value) < 1e-12)
+stopifnot(abs(omega_poly$se - omega_poly_fit$se) < 1e-12)
+stopifnot(abs(omega_poly$value - omega_poly_direct$value) < 1e-12)
+stopifnot(abs(omega_poly$se - omega_poly_direct$se) < 1e-12)
 
 mi_dwls <- magmaan::modification_indices(fit_dwls)
 mi_dwls_explicit <- magmaan::modification_indices(fit_dwls, d)
