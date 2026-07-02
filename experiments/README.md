@@ -63,6 +63,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 45 | [profile-lr-reliability-ci](45-profile-lr-reliability-ci/report.qmd) | probe | active | **funLR (Functional profile-LR CI).** Can a generic profile-LR (test-inversion) engine reproduce semlbci across the reliability family (omega_total, omega_h, H, maximal reliability), and can the small-sample under-coverage of near-boundary coefficients be repaired by a Bartlett factor (analytic, bootstrap, or calibrated constant)? |
 | 46 | [ordinal-observed-omega-dwls](46-ordinal-observed-omega-dwls/report.qmd) | probe | active | Does observed-category-score omega from an all-ordinal DWLS fit run end-to-end with complete-sandwich delta SEs, and where do balanced vs threshold-extreme smoke cells first bend? |
 | 47 | [ml-parameter-profile-lrt](47-ml-parameter-profile-lrt/report.qmd) | probe | active | Does the new C++ complete-data ML scalar/profile-LR seed calibrate as ordinary `chi^2_1` for an interior free parameter at small N, before robust scaling and bounded functionals are layered on? |
+| 48 | [ordinal-omega-target-audit](48-ordinal-omega-target-audit/report.qmd) | probe | active | Does the current ordinal observed-score covariance omega equal the direct one-factor ordinal true-score target, or is it only on the same observed-score metric? |
 
 ## Archived
 

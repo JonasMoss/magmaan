@@ -449,11 +449,16 @@ questions.
 observed integer category-score covariance induced by thresholds and a latent-response
 correlation matrix, and `estimate::frontier::ordinal_observed_omega` applies that to a
 single-group all-ordinal DWLS/WLS/ULS fit with a complete IJ-sandwich delta SE. This
-addresses the "can the ordinal/DWLS stack express the Green-Yang/Flora observed-score
-metric?" infrastructure question. It does not settle the Bell-style misspecification
-bias study, omega_ho/maximal-reliability ordinal extensions, multi-group target
-definition, or small-sample/profile-LR corrections. R exposure landed immediately after
-as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
+addresses the "can the ordinal/DWLS stack report an observed-score reliability metric?"
+infrastructure question, but not the literal Green-Yang/Flora target. Experiment 48
+(`ordinal-omega-target-audit`) compares this covariance omega to the direct one-factor
+ordinal true-score target `Var(sum E[Y_j | eta]) / Var(sum Y_j)`: tau-equivalent
+equal-threshold cells match, equal-threshold congeneric cells are nearly identical, and
+heterogeneous thresholds reached a 0.0158 absolute population-target gap. It does not
+settle the Bell-style misspecification bias study, omega_ho/maximal-reliability ordinal
+extensions, multi-group target definition, direct Green-Yang/Flora coefficient
+implementation, or small-sample/profile-LR corrections. R exposure landed immediately
+after as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
 `experiments/46-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a

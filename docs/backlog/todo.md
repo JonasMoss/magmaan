@@ -154,7 +154,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   delta-method SE from `robust_ordinal_ij` (including DWLS/WLS estimated-weight
   influence). R exposure is
   `magmaan_core$measures_reliability_ordinal_observed_omega`; experiment
-  `46-ordinal-observed-omega-dwls` is the smoke/calibration probe. Remaining:
+  `46-ordinal-observed-omega-dwls` is the smoke/calibration probe. Experiment
+  `48-ordinal-omega-target-audit` now shows this is an observed-score
+  covariance omega, not literally the direct one-factor ordinal true-score
+  target: tau-equivalent equal-threshold cells match, ordinary equal-threshold
+  congeneric cells are near-identical, but heterogeneous thresholds reached a
+  0.0158 absolute difference in the population target. Remaining:
+  - **M.** Add the direct conditional-mean ordinal omega target
+    `Var(sum E[Y_j | eta]) / Var(sum Y_j)` as a separately named coefficient
+    before calling anything Green-Yang/Flora omega.
   - **M.** Define and test the multi-group target before lifting the guard:
     pooled observed category covariance, sample-size-weighted group omegas, or
     explicit per-group output are different estimands.
