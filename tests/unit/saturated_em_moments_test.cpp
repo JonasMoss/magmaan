@@ -356,9 +356,27 @@ TEST_CASE("fiml_h1_moments: EM iteration cap fails closed by default") {
         std::string::npos);
 }
 
+TEST_CASE("fiml_h1_moments: objective flatness does not declare convergence") {
+  const auto raw = missing_single_block();
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack_or.has_value());
+
+  magmaan::estimate::fiml::FIMLH1Options options;
+  options.max_iter = 2;
+  options.parameter_tol = 1e-300;
+  options.objective_tol = 1e50;
+
+  auto out = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack_or, options);
+  REQUIRE_FALSE(out.has_value());
+  CHECK(out.error().kind ==
+        magmaan::FitError::Kind::OptimizerNonConvergence);
+  CHECK(out.error().detail.find("final max parameter change") !=
+        std::string::npos);
+}
+
 TEST_CASE("saturated_em_moment_influence: missing data crossproduct reproduces saturated ACOV") {
   magmaan::estimate::fiml::FIMLH1Options strict_h1;
-  strict_h1.tol = 1e-11;
+  strict_h1.parameter_tol = 1e-11;
   for (const auto& raw : {missing_single_block(), two_missing_blocks()}) {
     auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
     REQUIRE(pack_or.has_value());
