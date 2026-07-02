@@ -424,7 +424,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
             ok = ml2s_cmp("ml2s_chisq_scaled", m2.chisq_scaled, 1e-3) && ok;
             ok = ml2s_cmp("ml2s_chisq", m2.chisq, 1e-3) && ok;
             auto fm2_or = magmaan::estimate::fiml::two_stage_fit_measures(
-                *pt, *mr, *est2, *sm_or);
+                *pt, *sm_or, m2);
             if (!fm2_or.has_value()) {
               failures.push_back(id + ": two_stage_fit_measures — " +
                                  fm2_or.error().detail);

@@ -4324,7 +4324,7 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
 
   if (r_or->df > 0) {
     auto fm_or = magmaan::estimate::fiml::two_stage_fit_measures(
-        ctx.pt, ctx.rep, est, *sm_ptr, kind, dls);
+        ctx.pt, *sm_ptr, *r_or, kind, dls);
     if (!fm_or.has_value()) stop_post(fm_or.error());
     const auto& bl = fm_or->baseline;
     const auto& fm = fm_or->indices;

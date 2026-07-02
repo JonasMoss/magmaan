@@ -676,6 +676,15 @@ two_stage_fit_measures(spec::LatentStructure pt,
                        TwoStageWeight kind = TwoStageWeight::Nt,
                        TwoStageDlsOptions dls = {});
 
+// Fit measures from already-computed user-model ML2S inference. This keeps the
+// baseline correction but skips rebuilding the user UΓ spectrum.
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const SaturatedMoments& sm,
+                       const TwoStageEMMLInference& user,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
 namespace diagnostic {
 
 // Regression-only comparator for the old finite-difference saturated H1
