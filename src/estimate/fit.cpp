@@ -773,6 +773,24 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   return est;
 }
 
+fit_expected<Estimates>
+fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
+                    const SampleStats& samp, const Eigen::VectorXd& x0,
+                    gmm::Weight weight, ExtraNonlinearEqConstraints extra,
+                    Bounds bounds, Backend backend, OptimOptions opts) {
+  auto pre = prelude(pt, rep, samp, x0, "fit_gmm_constrained");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto prob_or = gmm::residuals(pre->ev, samp, x0, weight);
+  if (!prob_or.has_value()) return std::unexpected(prob_or.error());
+  const optim::ScalarProblem prob = optim::scalarize(*prob_or);
+  auto est = compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0,
+                                     bounds, backend, opts,
+                                     "fit_gmm_constrained");
+  if (!est.has_value()) return est;
+  attach_diagnostics(*est, *pre, bounds);
+  return est;
+}
+
 namespace {
 
 Eigen::VectorXd
@@ -938,6 +956,130 @@ profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   return profile_lrt_scalar_ml(std::move(pt), rep, samp, unrestricted,
                                std::move(functional), target, std::move(bounds),
                                backend, opts, constraint_tol);
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
+                       const SampleStats& samp,
+                       const Estimates& unrestricted,
+                       gmm::Weight weight,
+                       ScalarFunctional functional, double target,
+                       Bounds bounds, Backend backend, OptimOptions opts,
+                       double constraint_tol) {
+  constexpr const char* who = "profile_lrt_scalar_gmm";
+  if (!functional.value) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional needs a value callback"));
+  }
+  if (!std::isfinite(target)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": target must be finite"));
+  }
+  if (!(constraint_tol > 0.0) || !std::isfinite(constraint_tol)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constraint_tol must be positive and finite"));
+  }
+  if (unrestricted.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": unrestricted theta size (" +
+            std::to_string(unrestricted.theta.size()) + ") != n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
+  const double g_un = functional.value(unrestricted.theta);
+  if (!std::isfinite(g_un)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional is not finite at theta_hat"));
+  }
+  auto grad0 = scalar_gradient(functional, unrestricted.theta,
+                               unrestricted.theta.size(), who);
+  if (!grad0.has_value()) return std::unexpected(grad0.error());
+
+  ExtraNonlinearEqConstraints extra;
+  extra.n_constraint = 1;
+  extra.h = [functional, target](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd h(1);
+    h(0) = functional.value(theta) - target;
+    return h;
+  };
+  extra.jacobian = [functional](const Eigen::VectorXd& theta) {
+    Eigen::MatrixXd J(1, theta.size());
+    auto grad = scalar_gradient(functional, theta, theta.size(), who);
+    if (!grad.has_value()) {
+      J.setConstant(std::numeric_limits<double>::quiet_NaN());
+    } else {
+      J.row(0) = grad->transpose();
+    }
+    return J;
+  };
+
+  auto constrained = fit_gmm_constrained(
+      std::move(pt), rep, samp, unrestricted.theta, std::move(weight),
+      std::move(extra), std::move(bounds), backend, opts);
+  if (!constrained.has_value()) return std::unexpected(constrained.error());
+
+  const double g_con = functional.value(constrained->theta);
+  const double resid = g_con - target;
+  if (!std::isfinite(g_con) || std::abs(resid) > constraint_tol) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained fit did not satisfy g(theta)=target; "
+            "residual=" + std::to_string(resid)));
+  }
+  auto n_or = sample_n_total(samp, who);
+  if (!n_or.has_value()) return std::unexpected(n_or.error());
+  const double diff = constrained->fmin - unrestricted.fmin;
+  const double raw_T = 2.0 * (*n_or) * diff;
+  const double stat_tol =
+      1e-10 * std::max({1.0, std::abs(constrained->fmin),
+                        std::abs(unrestricted.fmin)}) * 2.0 * (*n_or);
+  if (raw_T < -stat_tol) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained fit improved the unrestricted "
+            "objective by " + std::to_string(-raw_T)));
+  }
+  const double T = std::max(0.0, raw_T);
+
+  ScalarProfileLrtResult out;
+  out.constrained = std::move(*constrained);
+  out.unrestricted_value = g_un;
+  out.constrained_value = g_con;
+  out.target = target;
+  out.constraint_residual = resid;
+  out.fmin_unrestricted = unrestricted.fmin;
+  out.fmin_constrained = out.constrained.fmin;
+  out.T = T;
+  out.p_value = inference::chi2_pvalue(T, 1);
+  out.n_obs = *n_or;
+  out.df = 1;
+  return out;
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
+                          const SampleStats& samp,
+                          const Estimates& unrestricted,
+                          gmm::Weight weight,
+                          Eigen::Index parameter, double target,
+                          Bounds bounds, Backend backend, OptimOptions opts,
+                          double constraint_tol) {
+  constexpr const char* who = "profile_lrt_parameter_gmm";
+  if (parameter < 0 ||
+      parameter >= static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  ScalarFunctional functional;
+  functional.value = [parameter](const Eigen::VectorXd& theta) {
+    return theta(parameter);
+  };
+  functional.gradient = [parameter](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd grad = Eigen::VectorXd::Zero(theta.size());
+    grad(parameter) = 1.0;
+    return grad;
+  };
+  return profile_lrt_scalar_gmm(std::move(pt), rep, samp, unrestricted,
+                                std::move(weight), std::move(functional),
+                                target, std::move(bounds), backend, opts,
+                                constraint_tol);
 }
 
 }  // namespace frontier

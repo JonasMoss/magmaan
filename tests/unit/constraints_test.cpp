@@ -496,6 +496,76 @@ TEST_CASE("frontier profile_lrt_parameter_ml reports the ordinary df-1 LR statis
   CHECK(lrt->df == 1);
 }
 
+TEST_CASE("frontier fit_gmm_constrained appends a programmatic scalar equality") {
+  auto samp = fixture_samp_3();
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto est = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  REQUIRE(k_x2 >= 0);
+  const double target = 0.95 * est.theta(k_x2);
+
+  magmaan::estimate::frontier::ExtraNonlinearEqConstraints extra;
+  extra.n_constraint = 1;
+  extra.h = [k_x2, target](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd h(1);
+    h(0) = theta(k_x2) - target;
+    return h;
+  };
+  extra.jacobian = [k_x2](const Eigen::VectorXd& theta) {
+    Eigen::MatrixXd J = Eigen::MatrixXd::Zero(1, theta.size());
+    J(0, k_x2) = 1.0;
+    return J;
+  };
+
+  auto con = magmaan::estimate::frontier::fit_gmm_constrained(
+      pt, rep, samp, est.theta, {}, std::move(extra), {},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(con.has_value(), "programmatic constrained GMM fit failed: "
+      << (con.has_value() ? std::string{} : con.error().detail));
+  CHECK(con->theta(k_x2) == doctest::Approx(target).epsilon(1e-7));
+  CHECK(con->fmin >= est.fmin - 1e-10);
+}
+
+TEST_CASE("frontier profile_lrt_parameter_gmm reports the ordinary df-1 statistic") {
+  auto samp = fixture_samp_3();
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto est = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  REQUIRE(k_x2 >= 0);
+  const double target = 0.95 * est.theta(k_x2);
+
+  auto lrt = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      pt, rep, samp, est, {}, k_x2, target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(lrt.has_value(), "parameter GMM profile LRT failed: "
+      << (lrt.has_value() ? std::string{} : lrt.error().detail));
+
+  CHECK(lrt->unrestricted_value == doctest::Approx(est.theta(k_x2)));
+  CHECK(lrt->constrained_value == doctest::Approx(target).epsilon(1e-7));
+  CHECK(std::abs(lrt->constraint_residual) < 1e-7);
+  CHECK(lrt->fmin_unrestricted == doctest::Approx(est.fmin));
+  CHECK(lrt->T == doctest::Approx(
+      2.0 * static_cast<double>(samp.n_obs[0]) *
+      (lrt->fmin_constrained - est.fmin)));
+  CHECK(lrt->p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(lrt->T, 1)));
+  CHECK(lrt->df == 1);
+}
+
 TEST_CASE("fit_gmm: linear and nonlinear equality constraints accept NLopt SLSQP") {
   Eigen::Vector4d lam(1.0, 0.49, 0.7, 1.19);
   Eigen::MatrixXd S = lam * lam.transpose();
