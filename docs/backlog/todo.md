@@ -170,6 +170,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   cuts, the 95% robust delta interval had coverage 0.915-0.965 among successful
   draws for the latent-response omega target 0.829. The only construction
   failures were 6/200 threshold-extreme `N=50` draws with an empty item category.
+  Experiment `50-ordinal-polychoric-omega-stress` then uses large-sample
+  pseudo-targets for skewed one-factor, heavy-tailed one-factor, and normally
+  locally dependent ordinal DGPs. The same interval covers the pseudo-true
+  polychoric omega target at 0.907-0.950 in local-dependence cells, but bends
+  under skew/heavy tails: skew-balanced is 0.885-0.945, skew-extreme is
+  0.815/0.903/0.935 for `N = 50/100/250`, and heavy-tail extreme falls to
+  0.778/0.808/0.845 with 42/200 empty-category or singular-score failures at
+  `N=50`.
   Remaining:
   - **M.** Add the direct conditional-mean ordinal omega target
     `Var(sum E[Y_j | eta]) / Var(sum Y_j)` as a separately named coefficient
@@ -177,10 +185,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   - **M.** Define and test the multi-group target before lifting the guard:
     pooled observed category covariance, sample-size-weighted group omegas, or
     explicit per-group output are different estimands.
-  - **M/L.** Add non-normal, misspecified, and fitted-model stress checks
-    against the existing complete-sandwich DWLS/WLS machinery. Small-sample /
-    profile-LR corrections stay in the funLR lane until the calibrated-constant
-    problem is solved.
+  - **M/L.** Add fitted-model stress checks against the existing
+    complete-sandwich DWLS/WLS machinery. Small-sample / profile-LR corrections
+    stay in the funLR lane until the calibrated-constant problem is solved.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
