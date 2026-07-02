@@ -857,16 +857,27 @@ reference scaling, no Bartlett/calibrated-constant policy, no CI inversion wrapp
 the initial landing had no R exposure. Unit tests gate constraint satisfaction and the
 `2N·Δfmin` statistic.
 
+**Progress (2026-07-03): fixed-weight GMM scalar/profile-LRT seed.** The continuous
+moment-quadratic sibling now exists:
+`estimate::frontier::fit_gmm_constrained` scalarizes a caller-fixed GMM/LS objective,
+appends the same programmatic equality closure, and uses SLSQP/IPOPT. The scalar and
+parameter helpers (`profile_lrt_scalar_gmm`, `profile_lrt_parameter_gmm`) report the
+ordinary df-1 `2N·Δfmin` statistic; R exposes the parameter slice as
+`magmaan_core$frontier_profile_lrt_parameter_gmm()`. This removes the cheap continuous
+LS infrastructure gap, but it is still not the ordinal/fitted-functional solution:
+robust/Satorra scaling, CI inversion, estimated-weight policy, and an ordinal DWLS
+functional constraint path remain open.
+
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
 with experiment 47 (`experiments/47-ml-parameter-profile-lrt`) as the small-N
 interior-parameter calibration check. At 200 reps over `N in {30,50,100,500}`,
 the ordinary `chi^2_1` reference is stable for the free loading baseline
 (`type1_05` 0.050-0.055, zero constrained-solve failures). This remains only
-the proving slice for the C++ seed; bounded functionals, LS/ordinal constrained
+the proving slice for the C++ seed; bounded functionals, ordinal constrained
 fits, robust/misspec scaling, and small-sample constants remain open.
 
-**Open next steps (as of 2026-07-02), roughly in priority order:**
+**Open next steps (as of 2026-07-03), roughly in priority order:**
 
 1. **Calibrated-constant recipe from one dataset** (the "what do we ship" question, now the
    crux). The factor must be a stable model-level constant; the per-dataset bootstrap is
@@ -885,15 +896,16 @@ fits, robust/misspec scaling, and small-sample constants remain open.
    `rho*` mirrors it). Ties [[small-sample-df-coverage-lane]].
 4. **Reliability-difference two-parameter confidence regions** (Pek-Wu sec 3; ties
    [[exp20-deng-chan-alpha-omega]]).
-5. **Extend the C++ seed beyond ordinary ML parameters:** LS/GMM and all-ordinal DWLS
-   functional constrained fits; robust/Satorra and misspec scalar reference scaling;
-   CI root inversion; then expose the functional surface in R once an experiment
-   consumes it.
+5. **Extend the C++ seed beyond ordinary ML/GMM parameters:** all-ordinal DWLS
+   functional constrained fits; robust/Satorra and misspec scalar reference
+   scaling; CI root inversion; then expose the functional surface in R once an
+   experiment consumes it.
 6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
    + Bartlett characterization; analytic Lawley ruled out (boundary); double bootstrap ruled out
    (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11);
    complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed;
-   R parameter wrapper + experiment-47 interior-parameter calibration probe.
+   fixed-weight GMM scalar/parameter profile seed; R parameter wrappers +
+   experiment-47 interior-parameter calibration probe.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012

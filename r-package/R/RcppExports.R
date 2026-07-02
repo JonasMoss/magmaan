@@ -41,6 +41,14 @@ fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL
     .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
+frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol)
+}
+
+frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol)
+}
+
 fit_twolevel_impl <- function(partable, data, cluster_id, group_id = NULL, optimizer = NULL, control = NULL, bounds = NULL, bounds_preset = NULL) {
     .Call(`_magmaan_fit_twolevel_impl`, partable, data, cluster_id, group_id, optimizer, control, bounds, bounds_preset)
 }
@@ -67,10 +75,6 @@ frontier_fit_ml_ridge_continuation_impl <- function(partable, sample_stats, opti
 
 frontier_rbm_impl <- function(fit, raw_data = NULL, weight = NULL, stage2_weight = "nt", dls_a = 0.5, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_frontier_rbm_impl`, fit, raw_data, weight, stage2_weight, dls_a, method, optimizer, control, bounds)
-}
-
-frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-06) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol)
 }
 
 fcsem_model_spec_impl <- function(syntax) {

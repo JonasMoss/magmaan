@@ -2091,6 +2091,64 @@ Rcpp::List frontier_profile_lrt_parameter_ml_impl(
       Rcpp::_["constrained"] = fit_result(ctx, r.constrained, nullptr, "ML"));
 }
 
+// frontier_profile_lrt_parameter_gmm() - ordinary df-1 profile statistic for one
+// continuous moment-quadratic free parameter. `parameter` is the 1-based
+// free-parameter ordinal from `fit$partable$free`; the C++ core receives the
+// 0-based theta index. ULS uses the identity weight, GLS rebuilds the
+// normal-theory weight, and WLS requires the caller-supplied weight.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    SEXP weight = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
+    Rcpp::stop("frontier_profile_lrt_parameter_gmm() requires a continuous "
+               "ULS/GLS/WLS fit, got estimator '%s'", estimator.c_str());
+  }
+  if (parameter <= 0 ||
+      parameter > static_cast<int>(ctx.pt.n_free())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_gmm(): parameter index %d is "
+               "outside 1..%d", parameter, static_cast<int>(ctx.pt.n_free()));
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  magmaan::estimate::gmm::Weight w =
+      continuous_ls_weight(ctx, est, estimator, weight,
+                           "frontier_profile_lrt_parameter_gmm");
+  auto r_or = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      ctx.pt, ctx.rep, ctx.samp, est, std::move(w),
+      static_cast<Eigen::Index>(parameter - 1), target,
+      bounds_from_nullable(bounds), backend, optim_opts_from(control),
+      constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  const auto& r = *r_or;
+  return Rcpp::List::create(
+      Rcpp::_["parameter"] = parameter,
+      Rcpp::_["target"] = r.target,
+      Rcpp::_["unrestricted_value"] = r.unrestricted_value,
+      Rcpp::_["constrained_value"] = r.constrained_value,
+      Rcpp::_["constraint_residual"] = r.constraint_residual,
+      Rcpp::_["fmin_unrestricted"] = r.fmin_unrestricted,
+      Rcpp::_["fmin_constrained"] = r.fmin_constrained,
+      Rcpp::_["T"] = r.T,
+      Rcpp::_["p_value"] = r.p_value,
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["nobs"] = r.n_obs,
+      Rcpp::_["constrained"] =
+          fit_result(ctx, r.constrained, nullptr, estimator.c_str()));
+}
+
 // fit_twolevel() — two-level (multilevel) normal-theory ML over clustered raw
 // data. `data` holds the observed columns (named); `cluster_id` is a (per-row)
 // cluster index; `group_id` (optional) is a per-row 0-based, contiguous group

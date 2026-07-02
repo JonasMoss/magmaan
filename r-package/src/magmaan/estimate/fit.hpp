@@ -208,6 +208,39 @@ profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                          OptimOptions opts = {},
                          double constraint_tol = 1e-6);
 
+// Moment-quadratic analogues for a caller-fixed GMM/LS weight. These are the
+// first functional profile-LRT building blocks outside ML; robust Satorra /
+// sandwich scaling and Bartlett factors remain explicit policy layers above.
+fit_expected<Estimates>
+fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
+                    const SampleStats& samp, const Eigen::VectorXd& x0,
+                    gmm::Weight weight, ExtraNonlinearEqConstraints extra,
+                    Bounds bounds = {},
+                    Backend backend = Backend::NloptSlsqp,
+                    OptimOptions opts = {});
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
+                       const SampleStats& samp,
+                       const Estimates& unrestricted,
+                       gmm::Weight weight,
+                       ScalarFunctional functional, double target,
+                       Bounds bounds = {},
+                       Backend backend = Backend::NloptSlsqp,
+                       OptimOptions opts = {},
+                       double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
+                          const SampleStats& samp,
+                          const Estimates& unrestricted,
+                          gmm::Weight weight,
+                          Eigen::Index parameter, double target,
+                          Bounds bounds = {},
+                          Backend backend = Backend::NloptSlsqp,
+                          OptimOptions opts = {},
+                          double constraint_tol = 1e-6);
+
 }  // namespace frontier
 
 // Normal-theory ML via local Fisher scoring. At each iterate this computes the

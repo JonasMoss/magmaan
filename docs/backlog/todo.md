@@ -672,8 +672,18 @@ Remaining work:
       `profile_lrt_parameter_ml` build the first df-1 ordinary profile-LR test
       on top, reporting `2N·Δfmin` and `χ²_1` p-values. This is deliberately only
       the normal-theory ML seed: robust/Satorra scaling, Bartlett or calibrated
-      small-sample factors, CI root inversion, R exposure, and the continuous
-      LS / ordinal DWLS functional versions remain open funLR work.
+      small-sample factors, CI root inversion, and the continuous LS / ordinal
+      DWLS functional versions remain open funLR work.
+    - **Done 2026-07-03 (fixed-weight GMM scalar/profile-LRT seed).**
+      `estimate::frontier::fit_gmm_constrained` reuses the same programmatic
+      nonlinear equality closure path after scalarizing the moment-quadratic
+      objective. `profile_lrt_scalar_gmm` and `profile_lrt_parameter_gmm` report
+      the ordinary df-1 `2N·Δfmin` statistic for a caller-fixed ULS/GLS/WLS
+      weight; R exposes the parameter special case as
+      `magmaan_core$frontier_profile_lrt_parameter_gmm()`, with
+      `r-package/examples/profile_lrt_parameter_gmm.R` as the smoke check.
+      Robust/Satorra scaling, CI inversion, and ordinal fitted-functional
+      constraints remain open.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric
