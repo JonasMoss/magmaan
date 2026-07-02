@@ -108,6 +108,77 @@ frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
 }
 frontier_profile_lrt_parameter_ml <- frontier_profile_lrt_parameter_ml_impl
 
+ordinal_polychoric_gamma_for_omega <- function(ordinal_stats, group = 1L) {
+  if (!is.null(ordinal_stats$ordinal_stats)) {
+    ordinal_stats <- ordinal_stats$ordinal_stats
+  }
+  if (!is.list(ordinal_stats) || is.null(ordinal_stats$R) ||
+      is.null(ordinal_stats$thresholds) || is.null(ordinal_stats$NACOV)) {
+    stop("ordinal_polychoric_gamma_for_omega(): `ordinal_stats` must be an ",
+         "ordinal stats object or an all-ordinal fit carrying $ordinal_stats")
+  }
+  group <- as.integer(group)[1L]
+  if (is.na(group) || group < 1L || group > length(ordinal_stats$R)) {
+    stop("ordinal_polychoric_gamma_for_omega(): `group` is outside 1..",
+         length(ordinal_stats$R))
+  }
+  R <- ordinal_stats$R[[group]]
+  if (!is.matrix(R) || nrow(R) != ncol(R)) {
+    stop("ordinal_polychoric_gamma_for_omega(): R block must be square")
+  }
+  p <- nrow(R)
+  nth <- length(ordinal_stats$thresholds[[group]])
+  n_rho <- p * (p - 1L) / 2L
+  G <- ordinal_stats$NACOV[[group]]
+  if (!is.matrix(G) || nrow(G) < nth + n_rho || ncol(G) < nth + n_rho) {
+    stop("ordinal_polychoric_gamma_for_omega(): NACOV block has invalid shape")
+  }
+
+  pstar <- p * (p + 1L) / 2L
+  full <- matrix(0, pstar, pstar)
+  vech_off <- integer(n_rho)
+  k <- 1L
+  pos <- 1L
+  for (j in seq_len(p)) {
+    for (i in j:p) {
+      if (i != j) {
+        vech_off[[k]] <- pos
+        k <- k + 1L
+      }
+      pos <- pos + 1L
+    }
+  }
+  rho_idx <- nth + seq_len(n_rho)
+  full[vech_off, vech_off] <- G[rho_idx, rho_idx, drop = FALSE]
+  full
+}
+
+measures_reliability_ordinal_polychoric_omega <- function(
+    ordinal_stats, block, target = "total", group = 1L) {
+  if (!is.null(ordinal_stats$ordinal_stats)) {
+    ordinal_stats <- ordinal_stats$ordinal_stats
+  }
+  if (!is.list(ordinal_stats) || is.null(ordinal_stats$R)) {
+    stop("measures_reliability_ordinal_polychoric_omega(): `ordinal_stats` ",
+         "must be an ordinal stats object or an all-ordinal fit carrying ",
+         "$ordinal_stats")
+  }
+  group <- as.integer(group)[1L]
+  if (is.na(group) || group < 1L || group > length(ordinal_stats$R)) {
+    stop("measures_reliability_ordinal_polychoric_omega(): `group` is outside 1..",
+         length(ordinal_stats$R))
+  }
+  R <- ordinal_stats$R[[group]]
+  n <- if (!is.null(ordinal_stats$nobs)) as.integer(ordinal_stats$nobs[[group]]) else 0L
+  gamma <- ordinal_polychoric_gamma_for_omega(ordinal_stats, group)
+  out <- measures_reliability_omega_multidim(
+    R, block = block, target = target, gamma = gamma, n = n)
+  out$coefficient <- "ordinal_polychoric_omega"
+  out$metric <- "polychoric_correlation"
+  out$group <- group
+  out
+}
+
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
 inference_information_observed_analytic <- infer_information_observed_analytic
@@ -442,6 +513,7 @@ magmaan_core <- local({
       "measures_reliability_cov",
       "measures_reliability_omega_multidim",
       "measures_reliability_omega_from_fit",
+      "measures_reliability_ordinal_polychoric_omega",
       "measures_reliability_ordinal_observed_omega",
       "measures_factor_scores",
       "measures_factor_score_precision",
@@ -470,6 +542,7 @@ magmaan_core <- local({
       "data_mixed_ordinal_stats_observed_from_df",
       "data_mixed_ordinal_stats_hybrid_fiml_from_df",
       "shrink_mixed_ordinal_stats",
+      "ordinal_polychoric_gamma_for_omega",
       "fit_ml",
       "fit_ml_fisher",
       "fit_ml_fisher_snlls",

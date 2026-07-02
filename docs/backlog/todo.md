@@ -159,7 +159,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   covariance omega, not literally the direct one-factor ordinal true-score
   target: tau-equivalent equal-threshold cells match, ordinary equal-threshold
   congeneric cells are near-identical, but heterogeneous thresholds reached a
-  0.0158 absolute difference in the population target. Remaining:
+  0.0158 absolute difference in the population target. The simpler
+  no-integration latent-response/polychoric coefficient is also exposed as
+  `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it computes
+  `omega_multidim` on `stats$R[[group]]` and pads the ordinal `NACOV`
+  correlation block into a full vech-correlation Gamma for the robust delta SE.
+  Remaining:
   - **M.** Add the direct conditional-mean ordinal omega target
     `Var(sum E[Y_j | eta]) / Var(sum Y_j)` as a separately named coefficient
     before calling anything Green-Yang/Flora omega.

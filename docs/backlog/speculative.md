@@ -503,6 +503,11 @@ extensions, multi-group target definition, direct Green-Yang/Flora coefficient
 implementation, or small-sample/profile-LR corrections. R exposure landed immediately
 after as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
 `experiments/46-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
+The no-integration latent-response/polychoric sibling is also exposed in R as
+`magmaan_core$measures_reliability_ordinal_polychoric_omega`: it applies
+`omega_multidim` to `stats$R[[group]]` and reuses the ordinal `NACOV` correlation
+block for a robust delta SE. This is the simple ordinal-omega coefficient people
+actually report, not the observed-score Green-Yang/Flora target.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a
 magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a
