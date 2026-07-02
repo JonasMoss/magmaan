@@ -164,6 +164,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it computes
   `omega_multidim` on `stats$R[[group]]` and pads the ordinal `NACOV`
   correlation block into a full vech-correlation Gamma for the robust delta SE.
+  Experiment `49-ordinal-polychoric-omega-coverage` probes that no-integration
+  coefficient under a correctly specified one-factor ordinal-probit generator:
+  at 200 reps per cell, `N in {50,100,250}`, and balanced vs threshold-extreme
+  cuts, the 95% robust delta interval had coverage 0.915-0.965 among successful
+  draws for the latent-response omega target 0.829. The only construction
+  failures were 6/200 threshold-extreme `N=50` draws with an empty item category.
   Remaining:
   - **M.** Add the direct conditional-mean ordinal omega target
     `Var(sum E[Y_j | eta]) / Var(sum Y_j)` as a separately named coefficient
@@ -171,10 +177,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   - **M.** Define and test the multi-group target before lifting the guard:
     pooled observed category covariance, sample-size-weighted group omegas, or
     explicit per-group output are different estimands.
-  - **M/L.** Add non-normal and threshold-extreme stress checks against the
-    existing complete-sandwich DWLS/WLS machinery. Small-sample/profile-LR
-    corrections stay in the funLR lane until the calibrated-constant problem is
-    solved.
+  - **M/L.** Add non-normal, misspecified, and fitted-model stress checks
+    against the existing complete-sandwich DWLS/WLS machinery. Small-sample /
+    profile-LR corrections stay in the funLR lane until the calibrated-constant
+    problem is solved.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:

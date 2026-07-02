@@ -1,0 +1,5 @@
+results/*.csv
+report.html
+report_files/
+.quarto/
+resources/
