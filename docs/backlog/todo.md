@@ -1819,7 +1819,7 @@ experiment evidence, so they are visible from the active backlog. Detailed
 findings and next steps stay in `speculative.md`; nothing here is scheduled core
 work until a concrete downstream consumer appears.
 
-- **Small-sample profile-LR reliability CIs** (JASA-target;
+- **funLR — Functional profile-LR CI** (small-sample reliability CIs, JASA-target;
   `experiments/45-profile-lr-reliability-ci`). Generic-`g` profile-LR (test-inversion)
   engine validated vs `semlbci`; coverage + Bartlett characterized (omega near-nominal,
   bifactor maximal reliability `rho*` collapses to 0.61 @ N=50). **Key finding:** the

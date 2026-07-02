@@ -539,6 +539,11 @@ conditional on an admissible (non-Heywood) fit.
 
 ### Small-sample-corrected profile-LR confidence intervals for the reliability family
 
+**Name: funLR (Functional profile-LR CI).** The engine is generic over any scalar
+functional `g(theta)`; reliability is the flagship application, not the scope. Use
+"funLR" as the short handle for this lane in commits, notes, and discussion.
+`experiments/45-profile-lr-reliability-ci` is its home.
+
 The likelihood-ratio (test-inversion) sibling of the Kauermann-Carroll Wald lane
 above: rather than widen a Wald interval's df, build the interval by inverting a
 (robust) chi-square difference test, `{g0 : T(g0) <= q}` with `T(g0) = N(F_con(g0) -
