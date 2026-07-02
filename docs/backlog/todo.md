@@ -1810,3 +1810,26 @@ into `<domain>::frontier`. Canonical public headers now live under
   (`r-package/src/{robust,fit}.cpp`), `experiments/36`, the unit tests, and the
   vendored mirrors (`just vendor`). Flagged by the 2026-06-22 audit of the
   estimated-weight fit-index stream.
+
+## Speculative research lanes (pointers)
+
+Deferred research projects live in [docs/backlog/speculative.md](speculative.md)
+(a trigger list, not a parallel roadmap). Signposts to the lanes with landed
+experiment evidence, so they are visible from the active backlog. Detailed
+findings and next steps stay in `speculative.md`; nothing here is scheduled core
+work until a concrete downstream consumer appears.
+
+- **Small-sample profile-LR reliability CIs** (JASA-target;
+  `experiments/45-profile-lr-reliability-ci`). Generic-`g` profile-LR (test-inversion)
+  engine validated vs `semlbci`; coverage + Bartlett characterized (omega near-nominal,
+  bifactor maximal reliability `rho*` collapses to 0.61 @ N=50). **Key finding:** the
+  small-sample factor must be a stable model-level **constant** — an analytic Lawley
+  factor misses the near-boundary mass (~20-25% recovery), and a per-dataset bootstrap
+  (one-level or double) is anti-correlated with need (caps ~0.85, and is `B`-invariant).
+  Analytic functional gradients landed (11x faster constrained fits). Next: calibrated-
+  constant recipe from one dataset; non-normal stress run; reliability-difference regions;
+  build-if core surface = thin `estimate::frontier fit_ml_constrained` closure. See
+  speculative.md for the full list.
+- **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
+  variance-of-variance `t`-on-effective-df correction for covariance functionals. See
+  speculative.md.

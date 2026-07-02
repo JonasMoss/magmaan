@@ -760,6 +760,33 @@ grads are kept as validated infrastructure. Report gained the finding "Why the c
 be a calibrated constant" (constant-vs-per-sample coverage table). Files: `scripts/double_boot.R`,
 `results/double_boot_bf_n50.csv`, faster `R/functionals.R`.
 
+**Open next steps (as of 2026-07-02), roughly in priority order:**
+
+1. **Calibrated-constant recipe from one dataset** (the "what do we ship" question, now the
+   crux). The factor must be a stable model-level constant; the per-dataset bootstrap is
+   anti-correlated with need. Candidates: (a) a big bootstrap from a *regularized* / de-biased
+   theta_hat that breaks the T-vs-c anti-correlation; (b) a precomputed calibration surface
+   `c(model structure, N, functional)` (a Bartlett table) applied at the fitted structure;
+   (c) shrinkage of the per-sample factor toward a model-class prior. Metric = coverage, not
+   mean-c recovery (coverage is the robust target; means are tail-noisy).
+2. **Non-normal stress run** (the queued breadth item; makes the robust/misspec tier do real
+   work). Under non-normal data `c_robust`/`c_misspec` finally diverge from 1 and from each
+   other, and the "constant factor" becomes a Satorra-2000-scaled constant; tests whether the
+   constant-vs-per-sample verdict survives leaving NT. Reuse `scripts/coverage.R` with a
+   non-normal generator; exercise `--boot unc,null,bs --scalings`.
+3. **Point-estimate near-Heywood bias** = the deeper residual under-coverage source (even the
+   oracle constant leaves a small gap at N<=30 in the KC lane; the near-boundary point bias of
+   `rho*` mirrors it). Ties [[small-sample-df-coverage-lane]].
+4. **Reliability-difference two-parameter confidence regions** (Pek-Wu sec 3; ties
+   [[exp20-deng-chan-alpha-omega]]).
+5. **Core deliverable (build-if trigger only):** thin additive `estimate::frontier`
+   `fit_ml_constrained(..., extra_nl_closure)` appending the nonlinear closure to the partable
+   `nl` block (optimizer layer untouched; SLSQP default, IPOPT fallback). Prototype stays in
+   exp-45 R with zero core change until a concrete downstream consumer appears.
+6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
+   + Bartlett characterization; analytic Lawley ruled out (boundary); double bootstrap ruled out
+   (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11).
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
