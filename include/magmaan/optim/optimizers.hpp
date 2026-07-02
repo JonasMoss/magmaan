@@ -136,4 +136,12 @@ fit_expected<OptimResult>
 nlopt_lbfgs(const ScalarProblem& prob, const Eigen::VectorXd& x0,
             const Bounds& bounds = {}, OptimOptions opts = {});
 
+// Policy backend: try NLopt L-BFGS first and retry NLopt SLSQP from the same
+// start if L-BFGS fails or returns a non-clean optimizer status.
+fit_expected<OptimResult>
+nlopt_lbfgs_slsqp_fallback(const ScalarProblem& prob,
+                           const Eigen::VectorXd& x0,
+                           const Bounds& bounds = {},
+                           OptimOptions opts = {});
+
 }  // namespace magmaan::optim

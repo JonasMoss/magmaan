@@ -631,6 +631,8 @@ run_composite_scalar(const optim::ScalarProblem& prob,
       return optim::nlopt_var2(prob, x0, bounds, opts);
     case Backend::NloptLbfgs:
       return optim::nlopt_lbfgs(prob, x0, bounds, opts);
+    case Backend::NloptLbfgsSlsqpFallback:
+      return optim::nlopt_lbfgs_slsqp_fallback(prob, x0, bounds, opts);
     case Backend::Port:
 #ifdef MAGMAAN_WITH_PORT
       return optim::port(prob, x0, bounds, opts);

@@ -9005,7 +9005,14 @@ run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
         "is off"));
 #endif
   }
-  return optim::nlopt_lbfgs(optim::scalarize(prob), x0, bounds, opts);
+  const optim::ScalarProblem scalar = optim::scalarize(prob);
+  if (backend == Backend::NloptSlsqp) {
+    return optim::nlopt_slsqp(scalar, x0, bounds, opts);
+  }
+  if (backend == Backend::NloptLbfgsSlsqpFallback) {
+    return optim::nlopt_lbfgs_slsqp_fallback(scalar, x0, bounds, opts);
+  }
+  return optim::nlopt_lbfgs(scalar, x0, bounds, opts);
 }
 
 // Solve a data-only ordinal LS problem `prob` (residual size `prob.n_resid`,

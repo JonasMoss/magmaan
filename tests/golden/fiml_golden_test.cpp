@@ -149,7 +149,22 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
     const auto& est = *est_or;
 
-    auto fx_or = magmaan::estimate::fiml_extras(*pt, *mr, raw, est);
+    magmaan::estimate::fiml::FIMLH1Options strict_h1;
+    strict_h1.tol = 1e-11;
+    auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+    if (!pack_or.has_value()) {
+      failures.push_back(id + ": fiml_pack — " + pack_or.error().detail);
+      continue;
+    }
+    auto h1_or =
+        magmaan::estimate::fiml::fiml_h1_moments(raw, *pack_or, strict_h1);
+    if (!h1_or.has_value()) {
+      failures.push_back(id + ": FIML H1 moments — " + h1_or.error().detail);
+      continue;
+    }
+
+    auto fx_or =
+        magmaan::estimate::fiml_extras(*pt, *mr, raw, est, *pack_or, *h1_or);
     if (!fx_or.has_value()) {
       failures.push_back(id + ": fiml_extras — " + fx_or.error().detail);
       continue;
@@ -163,7 +178,8 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       continue;
     }
 
-    auto bl_or = magmaan::estimate::fiml::fiml_baseline_chi2(*pt, raw);
+    auto bl_or =
+        magmaan::estimate::fiml::fiml_baseline_chi2(*pt, raw, *pack_or, *h1_or);
     if (!bl_or.has_value()) {
       failures.push_back(id + ": fiml_baseline_chi2 — " +
                          bl_or.error().detail);
@@ -306,7 +322,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
         finite_json(exp["mlr_chisq_scaled"]) &&
         df > 0) {
       auto rob_or = magmaan::estimate::fiml::fiml_robust_mlr(
-          *pt, *mr, raw, est, df, fx.chi2);
+          *pt, *mr, raw, est, df, fx.chi2, *pack_or, *h1_or);
       if (!rob_or.has_value()) {
         failures.push_back(id + ": fiml_robust_mlr — " +
                            rob_or.error().detail);
@@ -377,7 +393,8 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
         failures.push_back(id + ": " + buf);
         return false;
       };
-      auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw);
+      auto sm_or =
+          magmaan::estimate::fiml::saturated_em_moments(raw, *pack_or, *h1_or);
       if (!sm_or.has_value()) {
         failures.push_back(id + ": saturated_em_moments — " + sm_or.error().detail);
         ok = false;
@@ -395,7 +412,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
           ok = false;
         } else {
           auto ml2s_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
-              *pt, *mr, raw, *est2);
+              *pt, *mr, raw, *est2, *pack_or, *h1_or);
           if (!ml2s_or.has_value()) {
             failures.push_back(id + ": two_stage_em_ml_inference — " +
                                ml2s_or.error().detail);

@@ -1296,10 +1296,9 @@ bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
   stop(caller, "(): unsupported `bounds` preset '", bounds[[1L]], "'")
 }
 
-# Per-estimator entry points. Each takes an `optimizer = "nlopt-lbfgs"` (default)
-# string + a generic `control = list(...)` of solver tuning knobs (the union
-# of OptimOptions and Ceres extras; see the C++ `Backend` enum docstring for
-# the supported strings).
+# Per-estimator entry points. Each takes an `optimizer` string plus a generic
+# `control = list(...)` of solver tuning knobs (the union of OptimOptions and
+# Ceres extras; see the C++ `Backend` enum docstring for the supported strings).
 fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                    bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml")
@@ -1375,7 +1374,9 @@ frontier_fit_ml_ridge_continuation <- function(
   )
 }
 
-fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
+fit_fiml <- function(model, data,
+                     optimizer = "nlopt-lbfgs-slsqp-fallback",
+                     control = NULL) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
   fit_fiml_impl(partable_arg(model), fiml_data_arg(data),
                 optimizer = optimizer, control = control)
@@ -1688,7 +1689,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     missing = c("listwise", "error", "pairwise"),
                     pd_gamma = c("overlap", "nominal"),
                     se = "none", test = "none",
-                    W = NULL, optimizer = "nlopt-lbfgs", control = NULL,
+                    W = NULL, optimizer = NULL, control = NULL,
                     bounds = NULL, stage2_weight = "nt", dls_a = 0.5) {
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)

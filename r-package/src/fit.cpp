@@ -2774,7 +2774,8 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   if (!ctx.meanstructure) ctx.samp.mean.clear();
 
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
-  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+  const magmaan::estimate::Backend backend =
+      fiml_backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_fiml(
       ctx.pt, ctx.rep, raw, x0, *pack_or, backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
@@ -2796,7 +2797,9 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
 // `SaturatedMoments` doc comment for the η = (μ, vech(Σ)) layout convention.
 //
 // [[Rcpp::export]]
-Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step = 1e-4) {
+Rcpp::List saturated_em_moments_impl(
+    SEXP raw_data, double h_step = 1e-4,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
   SEXP X_arg = raw_data;
   SEXP mask_arg = R_NilValue;
   if (TYPEOF(raw_data) == VECSXP) {
@@ -2854,7 +2857,8 @@ Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step = 1e-4) {
   }
   if (any_missing) raw.mask = std::move(masks);
 
-  auto out_or = magmaan::estimate::fiml::saturated_em_moments(raw, h_step);
+  auto out_or = magmaan::estimate::fiml::saturated_em_moments(
+      raw, fiml_h1_opts_from(control), h_step);
   if (!out_or.has_value()) stop_post(out_or.error());
   const auto& out = *out_or;
 

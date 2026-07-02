@@ -1701,14 +1701,15 @@ work lives in [`speculative.md`](speculative.md). Open work:
   identity, the affine constraint split, and the fact that magmaan reuses the
   ordinary LISREL moment Jacobian instead of hand-writing pages of tensor
   products.
-- **M/L.** Revisit the provisional default-backend choice once the optimizer
-  comparison studies land. `Backend::NloptLbfgs` is now the default and NLopt is
-  a required dependency, but the final default should still be justified across
-  ML, complete-data LS, bounded ordinal LS, FIML/direct optimizer callers,
+- **M/L.** Revisit the remaining complete-data default-backend choice once the
+  optimizer comparison studies land. FIML now defaults to the NLopt
+  L-BFGS-to-SLSQP fallback after the missing-data optimizer panel, and NLopt is
+  a required dependency. The broader default still needs justification across
+  ML, complete-data LS, bounded ordinal LS, direct optimizer callers,
   augmented-Lagrangian inner solves, and nonlinear-constraint paths (NLopt SLSQP
   and IPOPT). Document tolerance semantics (`gtol` vs NLopt `xtol_rel`),
-  iteration/evaluation reporting, and bounded behavior before changing the default
-  again.
+  iteration/evaluation reporting, and bounded behavior before changing the
+  remaining defaults.
 - **S/M, newsom corpus.** The Little/Newsom continuous golden
   (`tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
   NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`. Same

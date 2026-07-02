@@ -479,14 +479,17 @@ golden `parTable()` fixtures.
 - Direct observed-pattern ML over raw continuous data with missingness masks.
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
-- `fit_fiml()` currently optimizes directly with NLopt L-BFGS.
+- `fit_fiml()` defaults to NLopt L-BFGS with an SLSQP retry when the L-BFGS
+  run fails or returns a non-clean optimizer status; explicit `nlopt-lbfgs` and
+  `nlopt-slsqp` remain available for diagnostics and parity checks.
 - Cross-call precomputation is value-based, with no mutable cache state:
   `FIMLPack` (immutable pattern cache + pairwise-complete start statistics,
   built by `fiml_pack`) and `FIMLH1` (per-block saturated EM moments plus the
   converged H1 objective value, built by one EM run in `fiml_h1_moments`).
   The H1 EM fails closed by default when a missing-data block reaches its
   iteration cap, returning `FitError::OptimizerNonConvergence` rather than a
-  last-iterate H1 value. `FIMLH1Options` exposes `max_iter`, tolerance,
+  last-iterate H1 value. The default relative EM tolerance is `1e-6`.
+  `FIMLH1Options` exposes `max_iter`, tolerance,
   covariance floor/warning thresholds, and an explicit
   `error_on_nonconvergence = false` diagnostic mode that restores the old
   last-iterate-with-warning behavior. Near-singular EM covariance updates are
@@ -1126,7 +1129,8 @@ fit_wls/fit_*_snlls/fit_*_ordinal` entries; the table lives in
 `include/magmaan/estimate/backend_strings.hpp` and parses into the C++
 `Backend` enum. Accepted strings: `"ceres"`, `"ceres-bfgs"`,
 `"nlopt-slsqp"`, `"nlopt-bobyqa"`, `"nlopt-tnewton"`, `"nlopt-var2"`,
-`"nlopt-lbfgs"`, `"ipopt"`, `"port"`, `"port-nls"`. The R side passes the same
+`"nlopt-lbfgs"`, `"nlopt-lbfgs-slsqp-fallback"`, `"ipopt"`, `"port"`,
+`"port-nls"`. The R side passes the same
 string through to a single Rcpp shim per fit family — no per-Backend wrapper
 explosion. Solver tuning rides on a generic `control = list(max_iter, ftol,
 gtol, history)` argument.
@@ -1148,9 +1152,11 @@ legacy `converged` boolean is now true only for a clean stationary optimizer
 stop rather than any usable non-error return.
 
 
-- `Backend::NloptLbfgs` is the current default for scalar discrepancies. NLopt
-  is a required dependency in the ordinary build, so the default is always
-  available.
+- `Backend::NloptLbfgs` is the complete-data scalar default. FIML defaults to
+  `Backend::NloptLbfgsSlsqpFallback`, which retries NLopt SLSQP from the same
+  start if L-BFGS fails or returns a non-clean optimizer status. NLopt is a
+  required dependency in the ordinary build, so both pieces of the fallback are
+  always available.
 - `Backend::Port` is the trust-region cross-check: vendored PORT (Bell Labs)
   `drmngb_` (TOMS 611 Dennis-Gay-Welsch model-Hessian trust region; the
   algorithm behind R's `nlminb`), supports bounds natively. Vendored at
