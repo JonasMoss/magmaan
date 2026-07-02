@@ -640,16 +640,17 @@ misspecified regimes. Concrete decisions:
   `H_general`, `rho*`), and `g0` is a moving bisection target (re-lavaanifying per step
   is absurd). So `g(theta)=g0` is a programmatic constraint injected by the CI
   algorithm as a closure, not a user model row.
-- *Only new core surface = one thin additive `estimate::frontier` entry point*,
+- *Only new core surface = one thin additive `estimate::frontier` entry point*
+  (landed 2026-07-02 for complete-data ML),
   `fit_ml_constrained(pt, rep, samp, x0, extra_nl_closure, bounds, backend)`, that
   appends the caller-supplied nonlinear-equality closure to the partable-derived `nl`
   block before the existing dispatch. The optimizer layer is untouched (SLSQP default,
   IPOPT fallback because SLSQP-based constrained fits are finicky per Falk & Chen). A
-  boundary is rejected when the reused `NonlinearEqConstraints` residual shows
+  boundary is rejected by the profile helper when the achieved scalar residual has
   `|g(theta_con)-g0| > tol` (exp-43's NULL-if-infeasible guard, promoted). Because it
-  is a closure, the whole family prototypes in the exp-43 R style (`nloptr` + a generic
-  `g`-closure) with ZERO core change; `fit_ml_constrained` is pure productization and
-  the only `src/` touch.
+  is a closure, the whole family can still prototype in the exp-45 R style (`nloptr`
+  + a generic `g`-closure); the C++ surface is productization, not the small-sample
+  contribution.
 - *Functional interface = one value-and-gradient callable* returning
   `{double value; VectorXd grad_theta}` given `(MatrixRep, want_grad)`; analytic
   gradient is the practice default (`dg/d{Lambda,Psi,Phi} . d{blocks}/dtheta`, or
@@ -778,6 +779,17 @@ grads are kept as validated infrastructure. Report gained the finding "Why the c
 be a calibrated constant" (constant-vs-per-sample coverage table). Files: `scripts/double_boot.R`,
 `results/double_boot_bf_n50.csv`, faster `R/functionals.R`.
 
+**Progress (2026-07-02): first C++ productization slice.** The formerly build-if-only
+core hook now exists for complete-data ML:
+`estimate::frontier::fit_ml_constrained` accepts extra programmatic nonlinear equality
+closures in θ-space, appends them to any partable nonlinear `==` rows, and reuses the
+existing SLSQP/IPOPT constrained scalar optimizer. `profile_lrt_scalar_ml` wraps that
+as a df-1 ordinary profile-LR test for `g(θ)=g0`; `profile_lrt_parameter_ml` is the
+unit-gradient parameter special case. This is not a solution to the hard funLR problem:
+there is no LS/ordinal constrained-fit counterpart yet, no robust/Satorra scalar
+reference scaling, no Bartlett/calibrated-constant policy, no CI inversion wrapper, and
+no R exposure. Unit tests gate constraint satisfaction and the `2N·Δfmin` statistic.
+
 **Open next steps (as of 2026-07-02), roughly in priority order:**
 
 1. **Calibrated-constant recipe from one dataset** (the "what do we ship" question, now the
@@ -797,13 +809,13 @@ be a calibrated constant" (constant-vs-per-sample coverage table). Files: `scrip
    `rho*` mirrors it). Ties [[small-sample-df-coverage-lane]].
 4. **Reliability-difference two-parameter confidence regions** (Pek-Wu sec 3; ties
    [[exp20-deng-chan-alpha-omega]]).
-5. **Core deliverable (build-if trigger only):** thin additive `estimate::frontier`
-   `fit_ml_constrained(..., extra_nl_closure)` appending the nonlinear closure to the partable
-   `nl` block (optimizer layer untouched; SLSQP default, IPOPT fallback). Prototype stays in
-   exp-45 R with zero core change until a concrete downstream consumer appears.
+5. **Extend the C++ seed beyond ordinary ML parameters:** LS/GMM and all-ordinal DWLS
+   functional constrained fits; robust/Satorra and misspec scalar reference scaling;
+   CI root inversion; then R exposure once an experiment consumes it.
 6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
    + Bartlett characterization; analytic Lawley ruled out (boundary); double bootstrap ruled out
-   (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11).
+   (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11);
+   complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012

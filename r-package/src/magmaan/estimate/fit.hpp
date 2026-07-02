@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include <Eigen/Core>
 
@@ -111,6 +112,44 @@ enum class Backend {
   PortNls,
 };
 
+namespace frontier {
+
+// Programmatic nonlinear equality constraints, evaluated in the full free
+// parameter vector θ. This is the frontier counterpart to the partable
+// nonlinear-`==` rows: callers can append constraints such as g(θ) = g0 where
+// g is a matrix functional that the lavaan-style expression DSL cannot spell.
+struct ExtraNonlinearEqConstraints {
+  optim::ConstraintFn    h;             // residuals, length n_constraint
+  optim::ConstraintJacFn jacobian;      // n_constraint × n_free
+  Eigen::Index           n_constraint = 0;
+
+  bool active() const noexcept { return n_constraint > 0; }
+};
+
+// Scalar function used by profile-LR helpers. `value(theta)` returns g(θ).
+// `gradient(theta)` may be left empty; the implementation then uses a central
+// finite-difference fallback in θ-space.
+struct ScalarFunctional {
+  std::function<double(const Eigen::VectorXd&)> value;
+  std::function<Eigen::VectorXd(const Eigen::VectorXd&)> gradient;
+};
+
+struct ScalarProfileLrtResult {
+  Estimates constrained;
+  double unrestricted_value = 0.0;
+  double constrained_value = 0.0;
+  double target = 0.0;
+  double constraint_residual = 0.0;
+  double fmin_unrestricted = 0.0;  // optimizer scale, 0.5 * F
+  double fmin_constrained = 0.0;
+  double T = 0.0;                  // 2N * (fmin_constrained - fmin_unrestricted)
+  double p_value = 1.0;            // ordinary χ²_1 reference; robust/Bartlett layers sit above
+  double n_obs = 0.0;
+  int df = 1;
+};
+
+}  // namespace frontier
+
 // ============================================================================
 // Convenience composers — the template-free core entry points.
 // ============================================================================
@@ -130,6 +169,43 @@ fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},
        Backend backend = Backend::NloptLbfgs, OptimOptions opts = {});
+
+namespace frontier {
+
+// Normal-theory ML with caller-supplied nonlinear equality constraints appended
+// to any partable-derived nonlinear constraints. The optimizer layer is the
+// same constrained scalar path used by ordinary nonlinear `==` rows.
+fit_expected<Estimates>
+fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
+                   const SampleStats& samp, const Eigen::VectorXd& x0,
+                   ExtraNonlinearEqConstraints extra, Bounds bounds = {},
+                   Backend backend = Backend::NloptSlsqp,
+                   OptimOptions opts = {});
+
+// Profile-LR test of H0: g(θ) = target against the already-fitted unrestricted
+// ML estimate. This is intentionally only the ordinary χ²_1 reference; robust
+// Satorra scaling and small-sample/Bartlett factors are separate policies.
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
+                      const SampleStats& samp,
+                      const Estimates& unrestricted,
+                      ScalarFunctional functional, double target,
+                      Bounds bounds = {},
+                      Backend backend = Backend::NloptSlsqp,
+                      OptimOptions opts = {},
+                      double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
+                         const SampleStats& samp,
+                         const Estimates& unrestricted,
+                         Eigen::Index parameter, double target,
+                         Bounds bounds = {},
+                         Backend backend = Backend::NloptSlsqp,
+                         OptimOptions opts = {},
+                         double constraint_tol = 1e-6);
+
+}  // namespace frontier
 
 // Normal-theory ML via local Fisher scoring. At each iterate this computes the
 // analytic ML gradient and the expected-information Hessian approximation on

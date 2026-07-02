@@ -639,6 +639,15 @@ Remaining work:
       `lrt_p_obs` dispatch now covers **every** estimator magmaan fits: ML, ordinal
       DWLS, mixed-ordinal DWLS, continuous ULS/GLS/WLS, FIML, and ML2S. Validated by
       a WLS arm (ADF weight from `robust_empirical_gamma`) in the example.
+    - **Done 2026-07-02 (ML scalar/profile-LR seed).**
+      `estimate::frontier::fit_ml_constrained` appends a programmatic nonlinear
+      equality closure to the ordinary partable nonlinear constraints and reuses
+      the existing constrained ML optimizer path. `profile_lrt_scalar_ml` and
+      `profile_lrt_parameter_ml` build the first df-1 ordinary profile-LR test
+      on top, reporting `2N·Δfmin` and `χ²_1` p-values. This is deliberately only
+      the normal-theory ML seed: robust/Satorra scaling, Bartlett or calibrated
+      small-sample factors, CI root inversion, R exposure, and the continuous
+      LS / ordinal DWLS functional versions remain open funLR work.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

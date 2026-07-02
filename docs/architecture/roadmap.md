@@ -80,6 +80,15 @@ golden `parTable()` fixtures.
   sign each free loading by its indicator's covariance with the factor's
   marker, and terminal audit records projected-gradient stationarity at the
   returned iterate so soft optimizer failures can be classified by geometry.
+- Frontier profile-LR scalar infrastructure for complete-data ML:
+  `estimate::frontier::fit_ml_constrained()` appends caller-supplied nonlinear
+  equality closures `h(θ)` / `J_h(θ)` to any partable nonlinear `==` rows and
+  runs the existing SLSQP/IPOPT constrained scalar optimizer. The first helper
+  layer, `profile_lrt_scalar_ml()` / `profile_lrt_parameter_ml()`, refits
+  `g(θ)=g0` and reports the ordinary df-1 LR statistic
+  `2N(fmin_constrained - fmin_unrestricted)`. Robust scaling, Bartlett /
+  small-sample correction, CI inversion, and LS/ordinal functional profile-LR
+  remain research layers above this seed surface.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
   identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and
