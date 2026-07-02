@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,6 +64,33 @@ magmaan::estimate::OrdinalWeightKind parse_ordinal_weight(const std::string& s) 
   if (s == "WLS" || s == "wls") return magmaan::estimate::OrdinalWeightKind::WLS;
   if (s == "ULS" || s == "uls") return magmaan::estimate::OrdinalWeightKind::ULS;
   Rcpp::stop("magmaan: ordinal nested test `weight` must be 'DWLS', 'WLS', or 'ULS' (got '%s')", s);
+}
+
+using FimlPack = magmaan::estimate::fiml::FIMLPack;
+using FimlH1 = magmaan::estimate::fiml::FIMLH1;
+
+const FimlPack* fiml_pack_ptr_from_fit(Rcpp::List fit) {
+  if (!fit.containsElementNamed("fiml_pack")) return nullptr;
+  SEXP xp = fit["fiml_pack"];
+  if (Rf_isNull(xp)) return nullptr;
+  if (TYPEOF(xp) != EXTPTRSXP) {
+    Rcpp::stop("magmaan: fit$fiml_pack is not an external pointer");
+  }
+  void* addr = R_ExternalPtrAddr(xp);
+  if (addr == nullptr) Rcpp::stop("magmaan: fit$fiml_pack is null");
+  return static_cast<const FimlPack*>(addr);
+}
+
+const FimlH1* fiml_h1_ptr_from_fit(Rcpp::List fit) {
+  if (!fit.containsElementNamed("fiml_h1")) return nullptr;
+  SEXP xp = fit["fiml_h1"];
+  if (Rf_isNull(xp)) return nullptr;
+  if (TYPEOF(xp) != EXTPTRSXP) {
+    Rcpp::stop("magmaan: fit$fiml_h1 is not an external pointer");
+  }
+  void* addr = R_ExternalPtrAddr(xp);
+  if (addr == nullptr) Rcpp::stop("magmaan: fit$fiml_h1 is null");
+  return static_cast<const FimlH1*>(addr);
 }
 
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
@@ -391,6 +419,26 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
   validate_same_fiml_raw(raw_H1, raw_H0, "infer_fiml_lr_test_satorra2000");
 
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack* pack = fiml_pack_ptr_from_fit(fit_H1);
+  if (!pack) pack = fiml_pack_ptr_from_fit(fit_H0);
+  if (!pack) {
+    auto pack_or = magmaan::estimate::fiml::fiml_pack(raw_H1);
+    if (!pack_or.has_value()) magmaanr::stop_fit(pack_or.error());
+    owned_pack = std::make_unique<FimlPack>(std::move(*pack_or));
+    pack = owned_pack.get();
+  }
+
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlH1* h1 = fiml_h1_ptr_from_fit(fit_H1);
+  if (!h1) h1 = fiml_h1_ptr_from_fit(fit_H0);
+  if (!h1) {
+    auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(raw_H1, *pack);
+    if (!h1_or.has_value()) magmaanr::stop_fit(h1_or.error());
+    owned_h1 = std::make_unique<FimlH1>(std::move(*h1_or));
+    h1 = owned_h1.get();
+  }
+
   // One saturated build for the whole nested test: H0 and H1 share it (same
   // data). Reuse a fit's $stage1 (e.g. stamped by the caller or carried by an
   // ML2S fit) so neither the df/T path below nor the difference-spectrum driver
@@ -398,7 +446,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   magmaan::estimate::fiml::SaturatedMoments sm;
   if (!magmaanr::saturated_from_stage1(fit_H1, sm) &&
       !magmaanr::saturated_from_stage1(fit_H0, sm)) {
-    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw_H1, h_step);
+    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(
+        raw_H1, *pack, *h1);
     if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());
     sm = std::move(*sm_or);
   }
@@ -408,10 +457,10 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   auto df_H0_or = magmaan::inference::df_stat(ctx_H0.pt, ctx_H0.samp, est_H0.theta);
   if (!df_H0_or.has_value()) magmaanr::stop_post(df_H0_or.error());
   auto fx_H1_or = magmaan::estimate::fiml::fiml_extras(
-      ctx_H1.pt, ctx_H1.rep, raw_H1, est_H1);
+      ctx_H1.pt, ctx_H1.rep, raw_H1, est_H1, *pack, *h1);
   if (!fx_H1_or.has_value()) magmaanr::stop_post(fx_H1_or.error());
   auto fx_H0_or = magmaan::estimate::fiml::fiml_extras(
-      ctx_H0.pt, ctx_H0.rep, raw_H0, est_H0);
+      ctx_H0.pt, ctx_H0.rep, raw_H1, est_H0, *pack, *h1);
   if (!fx_H0_or.has_value()) magmaanr::stop_post(fx_H0_or.error());
 
   if (ud_method == "2001") {
@@ -435,7 +484,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
-      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm,
+      *pack, *h1, parse_gamma(gamma), parse_a_method(a_method), h_step, &sm,
       parse_moment_convention(convention));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
