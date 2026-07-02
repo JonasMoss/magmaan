@@ -788,7 +788,17 @@ as a df-1 ordinary profile-LR test for `g(θ)=g0`; `profile_lrt_parameter_ml` is
 unit-gradient parameter special case. This is not a solution to the hard funLR problem:
 there is no LS/ordinal constrained-fit counterpart yet, no robust/Satorra scalar
 reference scaling, no Bartlett/calibrated-constant policy, no CI inversion wrapper, and
-no R exposure. Unit tests gate constraint satisfaction and the `2N·Δfmin` statistic.
+the initial landing had no R exposure. Unit tests gate constraint satisfaction and the
+`2N·Δfmin` statistic.
+
+**Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
+special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
+with experiment 47 (`experiments/47-ml-parameter-profile-lrt`) as the small-N
+interior-parameter calibration check. At 200 reps over `N in {30,50,100,500}`,
+the ordinary `chi^2_1` reference is stable for the free loading baseline
+(`type1_05` 0.050-0.055, zero constrained-solve failures). This remains only
+the proving slice for the C++ seed; bounded functionals, LS/ordinal constrained
+fits, robust/misspec scaling, and small-sample constants remain open.
 
 **Open next steps (as of 2026-07-02), roughly in priority order:**
 
@@ -811,11 +821,13 @@ no R exposure. Unit tests gate constraint satisfaction and the `2N·Δfmin` stat
    [[exp20-deng-chan-alpha-omega]]).
 5. **Extend the C++ seed beyond ordinary ML parameters:** LS/GMM and all-ordinal DWLS
    functional constrained fits; robust/Satorra and misspec scalar reference scaling;
-   CI root inversion; then R exposure once an experiment consumes it.
+   CI root inversion; then expose the functional surface in R once an experiment
+   consumes it.
 6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
    + Bartlett characterization; analytic Lawley ruled out (boundary); double bootstrap ruled out
    (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11);
-   complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed.
+   complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed;
+   R parameter wrapper + experiment-47 interior-parameter calibration probe.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012

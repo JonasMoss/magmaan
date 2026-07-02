@@ -1,0 +1,31 @@
+---
+title: "ML Parameter Profile-LR Small-N Probe"
+format:
+  html:
+    toc: true
+---
+
+```{r}
+summary <- read.csv("results/profile_lrt_summary.csv")
+failures <- read.csv("results/profile_lrt_failures.csv")
+metadata <- read.csv("results/metadata.csv")
+knitr::kable(metadata)
+```
+
+## Calibration
+
+```{r}
+knitr::kable(summary, digits = 4)
+```
+
+The target is the true loading of `x2` in a correctly specified one-factor normal-theory ML model. `mean_T` should be near 1 under the ordinary `chi^2_1` reference; `type1_05` should be near 0.05. This probe is only the interior-parameter baseline for the new C++ scalar/profile-LR surface.
+
+## Failures
+
+```{r}
+if (nrow(failures)) {
+  knitr::kable(head(failures, 20))
+} else {
+  cat("No failures recorded.\n")
+}
+```
