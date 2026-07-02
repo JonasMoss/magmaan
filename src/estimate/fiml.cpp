@@ -5913,17 +5913,12 @@ two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
 namespace {
 
 post_expected<TwoStageFitMeasures>
-two_stage_fit_measures_from_sm(spec::LatentStructure pt,
-                               const model::MatrixRep& rep,
-                               const Estimates& est,
-                               const SaturatedMoments& sm,
-                               TwoStageWeight kind,
-                               TwoStageDlsOptions dls) {
+two_stage_fit_measures_from_user(spec::LatentStructure pt,
+                                 const SaturatedMoments& sm,
+                                 const TwoStageEMMLInference& user,
+                                 TwoStageWeight kind,
+                                 TwoStageDlsOptions dls) {
   SampleStats samp = sample_stats_from_saturated(sm);
-  auto user_or = two_stage_em_ml_inference_from_sm(
-      pt, rep, est, sm, kind, dls, TwoStageBread::Expected);
-  if (!user_or.has_value()) return std::unexpected(user_or.error());
-  const TwoStageEMMLInference& user = *user_or;
   if (user.df <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "two_stage_fit_measures: requires df > 0"));
@@ -5971,6 +5966,20 @@ two_stage_fit_measures_from_sm(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures_from_sm(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const Estimates& est,
+                               const SaturatedMoments& sm,
+                               TwoStageWeight kind,
+                               TwoStageDlsOptions dls) {
+  auto user_or = two_stage_em_ml_inference_from_sm(
+      pt, rep, est, sm, kind, dls, TwoStageBread::Expected);
+  if (!user_or.has_value()) return std::unexpected(user_or.error());
+  return two_stage_fit_measures_from_user(std::move(pt), sm, *user_or, kind,
+                                          dls);
+}
+
 }  // namespace
 
 post_expected<TwoStageFitMeasures>
@@ -5982,6 +5991,15 @@ two_stage_fit_measures(spec::LatentStructure pt,
                        TwoStageDlsOptions dls) {
   return two_stage_fit_measures_from_sm(std::move(pt), rep, est, sm,
                                         kind, dls);
+}
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const SaturatedMoments& sm,
+                       const TwoStageEMMLInference& user,
+                       TwoStageWeight kind,
+                       TwoStageDlsOptions dls) {
+  return two_stage_fit_measures_from_user(std::move(pt), sm, user, kind, dls);
 }
 
 post_expected<TwoStageEMMLInference>
