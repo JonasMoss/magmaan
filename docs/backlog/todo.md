@@ -737,6 +737,10 @@ Remaining work:
       for the correct-model robust reference. Still open: complete
       weight-derivative / misspecification scaling, functional R callbacks,
       ordinal fitted-functional constraints, and Bartlett/calibrated constants.
+      Experiment 47 now also carries the paired non-normal coverage probe:
+      multivariate `t(5)` data, ULS/GMM parameter CI inversion, fixed versus
+      fitted profile weights, and ordinary versus robust-scaled references over
+      `N in {100,200,500}`.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

@@ -1,31 +1,49 @@
 ---
-title: "ML Parameter Profile-LR Small-N Probe"
+title: "Parameter Profile-LR Small-N Probe"
 format:
   html:
     toc: true
 ---
 
 ```{r}
-summary <- read.csv("results/profile_lrt_summary.csv")
-failures <- read.csv("results/profile_lrt_failures.csv")
+lrt_summary <- read.csv("results/profile_lrt_summary.csv")
+lrt_failures <- read.csv("results/profile_lrt_failures.csv")
+ci_summary <- read.csv("results/profile_ci_summary.csv")
+ci_failures <- read.csv("results/profile_ci_failures.csv")
 metadata <- read.csv("results/metadata.csv")
 knitr::kable(metadata)
 ```
 
-## Calibration
+## ML LRT Calibration
 
 ```{r}
-knitr::kable(summary, digits = 4)
+knitr::kable(lrt_summary, digits = 4)
 ```
 
 The target is the true loading of `x2` in a correctly specified one-factor normal-theory ML model. `mean_T` should be near 1 under the ordinary `chi^2_1` reference; `type1_05` should be near 0.05. This probe is only the interior-parameter baseline for the new C++ scalar/profile-LR surface.
 
+## Robust CI Coverage
+
+```{r}
+knitr::kable(ci_summary, digits = 4)
+```
+
+The CI branch uses multivariate `t(5)` data scaled to the same population covariance, fits the one-factor model with ULS, and inverts the GMM profile-LR surface for the `x2` loading. The four rows compare fixed-weight versus fitted-weight profiling and ordinary versus sandwich-scaled one-degree references. This is a non-normal stress check for the continuous robust profile machinery; it is not a Bartlett or small-sample correction.
+
 ## Failures
 
 ```{r}
-if (nrow(failures)) {
-  knitr::kable(head(failures, 20))
+if (nrow(lrt_failures)) {
+  cat("ML LRT failures\n\n")
+  knitr::kable(head(lrt_failures, 20))
 } else {
-  cat("No failures recorded.\n")
+  cat("No ML LRT failures recorded.\n")
+}
+cat("\n\n")
+if (nrow(ci_failures)) {
+  cat("Robust CI failures\n\n")
+  knitr::kable(head(ci_failures, 20))
+} else {
+  cat("No robust CI failures recorded.\n")
 }
 ```

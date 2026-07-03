@@ -902,6 +902,9 @@ then roots CIs on `T_scaled` when requested. This closes the cheap asymptotic-ro
 parameter proving slice across ML, fixed-weight GMM, and fitted-weight GMM, but not
 the hard funLR gate: complete weight-derivative / misspec references, functional
 callbacks, ordinal fitted-functionals, and Bartlett/calibrated constants remain open.
+Experiment 47 now carries the paired empirical probe: multivariate `t(5)` data,
+ULS/GMM loading CI inversion, fixed versus fitted profile weights, and ordinary
+versus robust-scaled references over `N in {100,200,500}`.
 
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
