@@ -301,7 +301,8 @@ lr_test_satorra2000_fiml_from_data(
     double                           h_step = 1e-4,
     const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
     SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan,
-    H1ReferenceRegularizationOptions h1_reference_regularization = {});
+    H1ReferenceRegularizationOptions h1_reference_regularization = {},
+    GammaComputation                 computation = GammaComputation::Streaming);
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_ml2s_from_data(
@@ -396,7 +397,8 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
     double                           h_step = 1e-4,
     SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan,
-    H1ReferenceRegularizationOptions h1_reference_regularization = {});
+    H1ReferenceRegularizationOptions h1_reference_regularization = {},
+    GammaComputation                 computation = GammaComputation::Streaming);
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_fiml_from_data(
@@ -420,6 +422,7 @@ lr_test_satorra2000_fiml_from_data(
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
     SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan,
-    H1ReferenceRegularizationOptions h1_reference_regularization = {});
+    H1ReferenceRegularizationOptions h1_reference_regularization = {},
+    GammaComputation                 computation = GammaComputation::Streaming);
 
 }  // namespace magmaan::robust

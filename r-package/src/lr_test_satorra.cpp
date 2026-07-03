@@ -562,6 +562,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           double      h_step = 1e-4,
                                           std::string ud_method = "2000",
                                           std::string convention = "magmaan",
+                                          std::string computation = "streaming",
                                           SEXP h1_reference_regularization = R_NilValue) {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
@@ -572,6 +573,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   }
   const auto h1_ref_opts =
       h1_reference_regularization_options_from(h1_reference_regularization);
+  const auto computation_kind = parse_gamma_computation(computation);
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
   magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
@@ -649,7 +651,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
       *pack, *h1, parse_gamma(gamma), parse_a_method(a_method), h_step, &sm,
-      parse_moment_convention(convention), h1_ref_opts);
+      parse_moment_convention(convention), h1_ref_opts, computation_kind);
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }

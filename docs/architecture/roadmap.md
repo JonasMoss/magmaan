@@ -2319,14 +2319,18 @@ need, and no more. The current C++ core mostly follows this:
   raw-data pieces, chi-square values, degrees of freedom, and an explicit
   `A.method` option (`exact` default, `delta` for lavaan-style
   moment-Jacobian column-space restrictions). Its empirical-Gamma computation
-  can run in the default streaming casewise-reduced mode or in a materialized
-  full-Gamma reference mode for diagnostics and benchmarks. The numeric kernels
-  fail closed on non-finite or singular pencils: model-implied covariance
-  blocks, the pooled expected-information `P`, and restriction companion `C`
-  are finite/SPD-gated; reduced meats are finite/PSD-gated; the FIML sandwich
-  route allows finite nonsingular observed bread that is indefinite in finite
-  samples, but still rejects singular bread and degenerate `C` before any
-  generalized eigensolver is called.
+  can run in the default streaming casewise-reduced mode, in a materialized
+  full-Gamma reference mode, or in a dense full-`UΓ` diagnostic mode for
+  benchmarks. The same computation flag is honored by the FIML lavaan-
+  convention restriction-map path: streaming projects through the lavaan-style
+  expected `WLS.V` columns before casewise crossproducts, while materialized
+  keeps the legacy sandwich and dense eigendecomposes the full raw-moment
+  product. The numeric kernels fail closed on non-finite or singular pencils:
+  model-implied covariance blocks, the pooled expected-information `P`, and
+  restriction companion `C` are finite/SPD-gated; reduced meats are
+  finite/PSD-gated; the FIML sandwich route allows finite nonsingular observed
+  bread that is indefinite in finite samples, but still rejects singular bread
+  and degenerate `C` before any generalized eigensolver is called.
 
 The remaining pressure point is the R boundary. Several exported R wrappers
 currently accept the transparent fit list for convenience and then unpack the

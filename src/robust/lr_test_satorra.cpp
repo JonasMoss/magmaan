@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -429,6 +430,331 @@ double symmetric_basis_trace(const Eigen::Ref<const Eigen::MatrixXd>& A,
   return out;
 }
 
+Eigen::MatrixXd apply_lavaan_cov_weight_columns(
+    const Eigen::Ref<const Eigen::MatrixXd>& A_full,
+    const Eigen::Ref<const Eigen::MatrixXd>& cols) {
+  const Eigen::Index p = A_full.rows();
+  const Eigen::Index pstar = detail::vech_len(p);
+  const Eigen::Index ncol = cols.cols();
+  Eigen::MatrixXd out(pstar, ncol);
+  Eigen::MatrixXd Mbuf(p, p);
+  for (Eigen::Index c = 0; c < ncol; ++c) {
+    detail::vech_unpack(cols.col(c), p, Mbuf);
+    const Eigen::MatrixXd Z = A_full * Mbuf * A_full;
+    Eigen::Index k = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j; i < p; ++i) {
+        out(k++, c) = (i == j) ? 0.5 * Z(i, j) : Z(i, j);
+      }
+    }
+  }
+  return out;
+}
+
+Eigen::MatrixXd apply_lavaan_wls_pattern_columns(
+    const Eigen::Ref<const Eigen::MatrixXd>& A_full,
+    const Eigen::Ref<const Eigen::MatrixXd>& cols) {
+  const Eigen::Index p = A_full.rows();
+  const Eigen::Index pstar = detail::vech_len(p);
+  Eigen::MatrixXd out(cols.rows(), cols.cols());
+  out.topRows(p).noalias() = A_full * cols.topRows(p);
+  out.bottomRows(pstar) =
+      apply_lavaan_cov_weight_columns(A_full, cols.bottomRows(pstar));
+  return out;
+}
+
+post_expected<Eigen::VectorXd>
+fiml_lavaan_implied_mu_block(const model::ImpliedMoments& implied,
+                             std::size_t b,
+                             Eigen::Index p,
+                             const std::string& caller) {
+  Eigen::VectorXd mu = Eigen::VectorXd::Zero(p);
+  if (b < implied.mu.size() && implied.mu[b].size() == p) {
+    mu = implied.mu[b];
+  } else if (b < implied.mu.size() && implied.mu[b].size() != 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": implied mean shape mismatch"));
+  }
+  return mu;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_lavaan_expected_wls_v_columns(
+    const data::RawData& raw,
+    const estimate::fiml::SaturatedMoments& sm,
+    std::size_t block,
+    const Eigen::Ref<const Eigen::MatrixXd>& cols) {
+  if (block >= raw.X.size() || block >= sm.cov.size() ||
+      block >= sm.n_obs.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fiml_lavaan_expected_wls_v_columns: block index out of range"));
+  }
+  const Eigen::MatrixXd& X = raw.X[block];
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::Index q = p + detail::vech_len(p);
+  if (n <= 0 || sm.n_obs[block] != n || sm.cov[block].rows() != p ||
+      sm.cov[block].cols() != p || cols.rows() != q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fiml_lavaan_expected_wls_v_columns: malformed block inputs"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask) {
+    if (raw.mask.size() != raw.X.size() ||
+        raw.mask[block].rows() != n || raw.mask[block].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "fiml_lavaan_expected_wls_v_columns: malformed missingness mask"));
+    }
+  }
+
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(q, cols.cols());
+  std::vector<Eigen::Index> obs;
+  std::map<std::vector<Eigen::Index>, Eigen::MatrixXd> cache;
+  for (Eigen::Index row = 0; row < n; ++row) {
+    obs.clear();
+    obs.reserve(static_cast<std::size_t>(p));
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const double x = X(row, j);
+      const bool observed = has_mask ? (raw.mask[block](row, j) != 0)
+                                     : std::isfinite(x);
+      if (observed && !std::isfinite(x)) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "fiml_lavaan_expected_wls_v_columns: mask marks a non-finite "
+            "value as observed"));
+      }
+      if (observed) obs.push_back(j);
+    }
+    if (obs.empty()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "fiml_lavaan_expected_wls_v_columns: empty observed row"));
+    }
+
+    auto it = cache.find(obs);
+    if (it == cache.end()) {
+      const Eigen::Index qobs = static_cast<Eigen::Index>(obs.size());
+      Eigen::MatrixXd Sigma_o(qobs, qobs);
+      for (Eigen::Index c = 0; c < qobs; ++c) {
+        for (Eigen::Index r = 0; r < qobs; ++r) {
+          Sigma_o(r, c) =
+              sm.cov[block](obs[static_cast<std::size_t>(r)],
+                            obs[static_cast<std::size_t>(c)]);
+        }
+      }
+      Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "fiml_lavaan_expected_wls_v_columns: saturated Sigma_oo is not "
+            "positive definite"));
+      }
+      Eigen::MatrixXd A =
+          llt.solve(Eigen::MatrixXd::Identity(qobs, qobs));
+      A = 0.5 * (A + A.transpose()).eval();
+
+      Eigen::MatrixXd A_full = Eigen::MatrixXd::Zero(p, p);
+      for (Eigen::Index c = 0; c < qobs; ++c) {
+        for (Eigen::Index r = 0; r < qobs; ++r) {
+          A_full(obs[static_cast<std::size_t>(r)],
+                 obs[static_cast<std::size_t>(c)]) = A(r, c);
+        }
+      }
+      auto inserted = cache.emplace(
+          obs, apply_lavaan_wls_pattern_columns(A_full, cols));
+      it = inserted.first;
+    }
+    out.noalias() += it->second;
+  }
+  out /= static_cast<double>(n);
+  return out;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_lavaan_model_gamma_projected_crossprod(
+    const data::RawData& raw,
+    std::size_t block,
+    const Eigen::Ref<const Eigen::VectorXd>& mu,
+    const Eigen::Ref<const Eigen::MatrixXd>& Sigma,
+    const Eigen::Ref<const Eigen::MatrixXd>& projected) {
+  if (block >= raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fiml_lavaan_model_gamma_projected_crossprod: block index out of range"));
+  }
+  const Eigen::MatrixXd& X = raw.X[block];
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::Index q = p + detail::vech_len(p);
+  const Eigen::Index m = projected.cols();
+  if (n <= 0 || p <= 0 || mu.size() != p ||
+      Sigma.rows() != p || Sigma.cols() != p || projected.rows() != q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fiml_lavaan_model_gamma_projected_crossprod: malformed block inputs"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask) {
+    if (raw.mask.size() != raw.X.size() ||
+        raw.mask[block].rows() != n || raw.mask[block].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "fiml_lavaan_model_gamma_projected_crossprod: malformed "
+          "missingness mask"));
+    }
+  }
+
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(m, m);
+  std::vector<std::uint8_t> obs(static_cast<std::size_t>(p), 0);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    std::fill(obs.begin(), obs.end(), static_cast<std::uint8_t>(0));
+    Eigen::VectorXd u = Eigen::VectorXd::Zero(m);
+
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const double x = X(r, j);
+      const bool observed = has_mask
+          ? (raw.mask[block](r, j) != 0)
+          : std::isfinite(x);
+      if (observed && !std::isfinite(x)) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "fiml_lavaan_model_gamma_projected_crossprod: mask marks a "
+            "non-finite value as observed"));
+      }
+      if (observed) {
+        obs[static_cast<std::size_t>(j)] = 1;
+        u.noalias() += projected.row(j).transpose() * (x - mu(j));
+      }
+    }
+
+    Eigen::Index k = p;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index i = c; i < p; ++i) {
+        const bool observed =
+            obs[static_cast<std::size_t>(i)] != 0 &&
+            obs[static_cast<std::size_t>(c)] != 0;
+        if (observed) {
+          const double val =
+              (X(r, i) - mu(i)) * (X(r, c) - mu(c)) - Sigma(i, c);
+          u.noalias() += projected.row(k).transpose() * val;
+        }
+        ++k;
+      }
+    }
+    out.noalias() += u * u.transpose();
+  }
+  out /= static_cast<double>(n);
+  out = 0.5 * (out + out.transpose()).eval();
+  return out;
+}
+
+struct FimlLavaanRestrictionCore {
+  Eigen::MatrixXd A1;
+  Eigen::MatrixXd Y;
+  Eigen::MatrixXd C;
+};
+
+post_expected<SatorraDiffResult> degenerate_satorra_diff_result() {
+  SatorraDiffResult deg;
+  deg.C = Eigen::MatrixXd::Zero(0, 0);
+  deg.S = Eigen::MatrixXd::Zero(0, 0);
+  deg.eigenvalues    = Eigen::VectorXd::Zero(0);
+  deg.trace_CinvS    = 0.0;
+  deg.trace_CinvS_sq = 0.0;
+  deg.trace_signed   = 0.0;
+  deg.spectrum_rank  = 0;
+  return deg;
+}
+
+post_expected<FimlLavaanRestrictionCore>
+fiml_lavaan_restriction_core(
+    const Eigen::Ref<const Eigen::MatrixXd>& basis_H1,
+    const Eigen::Ref<const Eigen::MatrixXd>& observed_info,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha,
+    double N,
+    const std::string& caller) {
+  if (!(N > 0.0) || observed_info.rows() != basis_H1.rows() ||
+      observed_info.cols() != basis_H1.rows() ||
+      A_alpha.cols() != basis_H1.cols()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": malformed restriction-core inputs"));
+  }
+  FimlLavaanRestrictionCore core;
+  core.A1 = basis_H1.transpose() * (observed_info / N) * basis_H1;
+  core.A1 = 0.5 * (core.A1 + core.A1.transpose()).eval();
+  if (auto ok = require_symmetric_nonsingular_matrix(
+          core.A1, caller + ": H1 alpha-space bread A1");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_A1(core.A1);
+  if (ldlt_A1.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": H1 alpha-space bread A1 LDLT failed"));
+  }
+  core.Y = ldlt_A1.solve(A_alpha.transpose());
+  if (auto ok = require_finite_matrix(core.Y, caller + ": A1^{-1} A_alpha'");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  core.C = A_alpha * core.Y;
+  core.C = 0.5 * (core.C + core.C.transpose()).eval();
+  if (auto ok = require_spd_matrix(core.C, caller + ": companion matrix C");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return core;
+}
+
+post_expected<SatorraDiffResult>
+finish_satorra_reduced_spectrum(Eigen::MatrixXd C,
+                                Eigen::MatrixXd S,
+                                const std::string& caller) {
+  const Eigen::Index m = C.rows();
+  if (m == 0) return degenerate_satorra_diff_result();
+  C = 0.5 * (C + C.transpose()).eval();
+  S = 0.5 * (S + S.transpose()).eval();
+  if (auto ok = require_spd_matrix(C, caller + ": companion matrix C");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = require_psd_matrix(S, caller + ": reduced S matrix");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
+      S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+  if (ges.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": generalized eigensolver failed"));
+  }
+  Eigen::VectorXd eig = ges.eigenvalues();
+  if (!eig.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": eigensolver returned non-finite eigenvalues"));
+  }
+
+  std::vector<std::string> warnings;
+  const double clip_thresh = 1e-12 * std::max(1.0, eig.cwiseAbs().maxCoeff());
+  for (Eigen::Index k = 0; k < eig.size(); ++k) {
+    if (eig(k) < 0.0) {
+      if (eig(k) >= -clip_thresh) {
+        eig(k) = 0.0;
+      } else {
+        warnings.emplace_back(caller + ": detected eigenvalue " +
+            std::to_string(eig(k)) + " below clip threshold " +
+            std::to_string(-clip_thresh) + " -- clipped to 0");
+        eig(k) = 0.0;
+      }
+    }
+  }
+
+  SatorraDiffResult out;
+  out.C = std::move(C);
+  out.S = std::move(S);
+  out.eigenvalues = eig;
+  out.trace_CinvS = eig.sum();
+  out.trace_CinvS_sq = eig.squaredNorm();
+  out.trace_signed = out.trace_CinvS;
+  out.spectrum_rank = static_cast<int>(eig.size());
+  out.warnings = std::move(warnings);
+  return out;
+}
+
 post_expected<Eigen::MatrixXd>
 fiml_lavaan_expected_wls_v(
     const data::RawData& raw,
@@ -632,7 +958,7 @@ fiml_lavaan_model_gamma_block(
 }
 
 post_expected<SatorraDiffResult>
-compute_fiml_satorra2000_lavaan_convention(
+compute_fiml_satorra2000_lavaan_convention_materialized(
     const data::RawData& raw,
     const estimate::fiml::SaturatedMoments& sm,
     const Eigen::Ref<const Eigen::MatrixXd>& W_full,
@@ -705,6 +1031,266 @@ compute_fiml_satorra2000_lavaan_convention(
   }
   B1 = 0.5 * (B1 + B1.transpose()).eval();
   return compute_satorra2000_from_sandwich(A1, B1, A_alpha);
+}
+
+post_expected<SatorraDiffResult>
+compute_fiml_satorra2000_lavaan_convention_streaming(
+    const data::RawData& raw,
+    const estimate::fiml::SaturatedMoments& sm,
+    const model::ImpliedMoments& implied,
+    const Eigen::Ref<const Eigen::MatrixXd>& Delta1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& basis_H1,
+    const Eigen::Ref<const Eigen::MatrixXd>& observed_info,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha) {
+  const std::size_t B = raw.X.size();
+  if (B == 0 || implied.sigma.size() != B ||
+      observed_info.rows() != basis_H1.rows() ||
+      observed_info.cols() != basis_H1.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_streaming: malformed "
+        "inputs"));
+  }
+  if (A_alpha.rows() == 0) return degenerate_satorra_diff_result();
+
+  double N = 0.0;
+  for (std::size_t b = 0; b < B; ++b) {
+    if (b >= sm.n_obs.size() || sm.n_obs[b] <= 0 ||
+        raw.X[b].rows() != sm.n_obs[b]) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_fiml_satorra2000_lavaan_convention_streaming: malformed "
+          "group n"));
+    }
+    N += static_cast<double>(sm.n_obs[b]);
+  }
+  if (!(N > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_streaming: total N must "
+        "be positive"));
+  }
+
+  auto core_or = fiml_lavaan_restriction_core(
+      basis_H1, observed_info, A_alpha, N,
+      "compute_fiml_satorra2000_lavaan_convention_streaming");
+  if (!core_or.has_value()) return std::unexpected(core_or.error());
+
+  const Eigen::Index m = A_alpha.rows();
+  Eigen::MatrixXd S = Eigen::MatrixXd::Zero(m, m);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index q = p + detail::vech_len(p);
+    if (Delta1_alpha.rows() < off + q ||
+        implied.sigma[b].rows() != p || implied.sigma[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_fiml_satorra2000_lavaan_convention_streaming: block shape "
+          "mismatch"));
+    }
+    auto mu_or = fiml_lavaan_implied_mu_block(
+        implied, b, p,
+        "compute_fiml_satorra2000_lavaan_convention_streaming");
+    if (!mu_or.has_value()) return std::unexpected(mu_or.error());
+
+    const Eigen::MatrixXd DbY =
+        Delta1_alpha.block(off, 0, q, Delta1_alpha.cols()) * core_or->Y;
+    auto E_or = fiml_lavaan_expected_wls_v_columns(raw, sm, b, DbY);
+    if (!E_or.has_value()) return std::unexpected(E_or.error());
+    auto G_or = fiml_lavaan_model_gamma_projected_crossprod(
+        raw, b, *mu_or, implied.sigma[b], *E_or);
+    if (!G_or.has_value()) return std::unexpected(G_or.error());
+
+    const double f_b = static_cast<double>(sm.n_obs[b]) / N;
+    S.noalias() += f_b * (*G_or);
+    off += q;
+  }
+  if (off != Delta1_alpha.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_streaming: block offsets "
+        "do not span Delta"));
+  }
+  return finish_satorra_reduced_spectrum(
+      core_or->C, S, "compute_fiml_satorra2000_lavaan_convention_streaming");
+}
+
+post_expected<SatorraDiffResult>
+compute_fiml_satorra2000_lavaan_convention_dense(
+    const data::RawData& raw,
+    const estimate::fiml::SaturatedMoments& sm,
+    const model::ImpliedMoments& implied,
+    const Eigen::Ref<const Eigen::MatrixXd>& Delta1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& basis_H1,
+    const Eigen::Ref<const Eigen::MatrixXd>& observed_info,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha) {
+  const std::size_t B = raw.X.size();
+  if (B == 0 || implied.sigma.size() != B ||
+      observed_info.rows() != basis_H1.rows() ||
+      observed_info.cols() != basis_H1.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_dense: malformed inputs"));
+  }
+  if (A_alpha.rows() == 0) return degenerate_satorra_diff_result();
+
+  double N = 0.0;
+  for (std::size_t b = 0; b < B; ++b) {
+    if (b >= sm.n_obs.size() || sm.n_obs[b] <= 0 ||
+        raw.X[b].rows() != sm.n_obs[b]) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_fiml_satorra2000_lavaan_convention_dense: malformed group n"));
+    }
+    N += static_cast<double>(sm.n_obs[b]);
+  }
+  if (!(N > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_dense: total N must be "
+        "positive"));
+  }
+
+  auto core_or = fiml_lavaan_restriction_core(
+      basis_H1, observed_info, A_alpha, N,
+      "compute_fiml_satorra2000_lavaan_convention_dense");
+  if (!core_or.has_value()) return std::unexpected(core_or.error());
+
+  const Eigen::Index m = A_alpha.rows();
+  const Eigen::Index Q = Delta1_alpha.rows();
+  Eigen::MatrixXd Gamma_block = Eigen::MatrixXd::Zero(Q, Q);
+  Eigen::MatrixXd D_stack = Eigen::MatrixXd::Zero(Q, m);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index q = p + detail::vech_len(p);
+    if (off + q > Q ||
+        implied.sigma[b].rows() != p || implied.sigma[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_fiml_satorra2000_lavaan_convention_dense: block shape "
+          "mismatch"));
+    }
+    auto mu_or = fiml_lavaan_implied_mu_block(
+        implied, b, p,
+        "compute_fiml_satorra2000_lavaan_convention_dense");
+    if (!mu_or.has_value()) return std::unexpected(mu_or.error());
+    auto Gamma_or = fiml_lavaan_model_gamma_block(
+        raw, b, *mu_or, implied.sigma[b]);
+    if (!Gamma_or.has_value()) return std::unexpected(Gamma_or.error());
+
+    const Eigen::MatrixXd DbY =
+        Delta1_alpha.block(off, 0, q, Delta1_alpha.cols()) * core_or->Y;
+    auto E_or = fiml_lavaan_expected_wls_v_columns(raw, sm, b, DbY);
+    if (!E_or.has_value()) return std::unexpected(E_or.error());
+
+    const double f_b = static_cast<double>(sm.n_obs[b]) / N;
+    Gamma_block.block(off, off, q, q) = std::move(*Gamma_or);
+    D_stack.middleRows(off, q) = std::sqrt(f_b) * (*E_or);
+    off += q;
+  }
+  if (off != Q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_dense: block offsets do "
+        "not span Delta"));
+  }
+
+  Eigen::MatrixXd S = D_stack.transpose() * Gamma_block * D_stack;
+  S = 0.5 * (S + S.transpose()).eval();
+  if (auto ok = require_psd_matrix(
+          S, "compute_fiml_satorra2000_lavaan_convention_dense: reduced S");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  Eigen::LLT<Eigen::MatrixXd> llt_C(core_or->C);
+  if (llt_C.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_dense: companion matrix C "
+        "Cholesky failed"));
+  }
+  Eigen::MatrixXd U_d = D_stack * llt_C.solve(D_stack.transpose());
+  if (auto ok = require_finite_matrix(
+          U_d, "compute_fiml_satorra2000_lavaan_convention_dense: U matrix");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  const Eigen::MatrixXd prod = U_d * Gamma_block;
+  if (auto ok = require_finite_matrix(
+          prod,
+          "compute_fiml_satorra2000_lavaan_convention_dense: U-Gamma product");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  Eigen::EigenSolver<Eigen::MatrixXd> es(prod, /*computeEigenvectors=*/false);
+  if (es.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_dense: q-by-q "
+        "eigensolver failed"));
+  }
+  if (!es.eigenvalues().real().allFinite() ||
+      !es.eigenvalues().imag().allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000_lavaan_convention_dense: q-by-q "
+        "eigensolver returned non-finite eigenvalues"));
+  }
+
+  Eigen::VectorXd eig = es.eigenvalues().real();
+  std::vector<std::string> warnings;
+  const double imag_max = es.eigenvalues().imag().cwiseAbs().maxCoeff();
+  const double scale_ref = std::max(1.0, eig.cwiseAbs().maxCoeff());
+  if (imag_max > 1e-8 * scale_ref) {
+    warnings.emplace_back(
+        "compute_fiml_satorra2000_lavaan_convention_dense: U-Gamma spectrum "
+        "carries imaginary part " + std::to_string(imag_max) +
+        " -- real parts used");
+  }
+  std::sort(eig.data(), eig.data() + eig.size());
+  Eigen::VectorXd leading_eig = eig.tail(m).eval();
+  eig = std::move(leading_eig);
+
+  const double clip_thresh = 1e-12 * std::max(1.0, eig.cwiseAbs().maxCoeff());
+  for (Eigen::Index k = 0; k < eig.size(); ++k) {
+    if (eig(k) < 0.0) {
+      if (eig(k) >= -clip_thresh) {
+        eig(k) = 0.0;
+      } else {
+        warnings.emplace_back(
+            "compute_fiml_satorra2000_lavaan_convention_dense: detected "
+            "eigenvalue " + std::to_string(eig(k)) +
+            " below clip threshold " + std::to_string(-clip_thresh) +
+            " -- clipped to 0");
+        eig(k) = 0.0;
+      }
+    }
+  }
+
+  SatorraDiffResult out;
+  out.C = std::move(core_or->C);
+  out.S = std::move(S);
+  out.eigenvalues = eig;
+  out.trace_CinvS = eig.sum();
+  out.trace_CinvS_sq = eig.squaredNorm();
+  out.trace_signed = out.trace_CinvS;
+  out.spectrum_rank = static_cast<int>(eig.size());
+  out.warnings = std::move(warnings);
+  return out;
+}
+
+post_expected<SatorraDiffResult>
+compute_fiml_satorra2000_lavaan_convention(
+    const data::RawData& raw,
+    const estimate::fiml::SaturatedMoments& sm,
+    const model::ImpliedMoments& implied,
+    const Eigen::Ref<const Eigen::MatrixXd>& Delta1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& basis_H1,
+    const Eigen::Ref<const Eigen::MatrixXd>& observed_info,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha,
+    GammaComputation computation) {
+  if (computation == GammaComputation::Streaming) {
+    return compute_fiml_satorra2000_lavaan_convention_streaming(
+        raw, sm, implied, Delta1_alpha, basis_H1, observed_info, A_alpha);
+  }
+  if (computation == GammaComputation::Dense) {
+    return compute_fiml_satorra2000_lavaan_convention_dense(
+        raw, sm, implied, Delta1_alpha, basis_H1, observed_info, A_alpha);
+  }
+  auto W_or = fiml_lavaan_expected_wls_v(raw, sm);
+  if (!W_or.has_value()) return std::unexpected(W_or.error());
+  return compute_fiml_satorra2000_lavaan_convention_materialized(
+      raw, sm, *W_or, implied, Delta1_alpha, basis_H1, observed_info, A_alpha);
 }
 
 post_expected<SatorraDiffResult>
@@ -1667,7 +2253,8 @@ lr_test_satorra2000_fiml_from_data_impl(
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
     SatorraMomentConvention          convention,
-    H1ReferenceRegularizationOptions h1_reference_regularization) {
+    H1ReferenceRegularizationOptions h1_reference_regularization,
+    GammaComputation                 computation) {
   const int df_diff_from_T = df_H0 - df_H1;
   if (df_diff_from_T < 0) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1835,11 +2422,9 @@ lr_test_satorra2000_fiml_from_data_impl(
             "lr_test_satorra2000_fiml_from_data: ModelEvaluator::evaluate "
             "failed for lavaan convention: " + eval_or.error().detail));
       }
-      auto W_or = fiml_lavaan_expected_wls_v(raw, *sm_for_lavaan);
-      if (!W_or.has_value()) return std::unexpected(W_or.error());
       sd_or = compute_fiml_satorra2000_lavaan_convention(
-          raw, *sm_for_lavaan, *W_or, eval_or->moments, Delta1_alpha,
-          basis_H1, *info_or, A_alpha);
+          raw, *sm_for_lavaan, eval_or->moments, Delta1_alpha,
+          basis_H1, *info_or, A_alpha, computation);
     } else {
       Eigen::MatrixXd A1 = basis_H1.transpose() * (*info_or) * basis_H1;
       A1 = 0.5 * (A1 + A1.transpose()).eval();
@@ -1885,13 +2470,14 @@ lr_test_satorra2000_fiml_from_data(
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
     SatorraMomentConvention          convention,
-    H1ReferenceRegularizationOptions h1_reference_regularization) {
+    H1ReferenceRegularizationOptions h1_reference_regularization,
+    GammaComputation                 computation) {
   return lr_test_satorra2000_fiml_from_data_impl(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
       nullptr, nullptr, gamma, a_method, h_step, sm_precomputed, convention,
-      h1_reference_regularization);
+      h1_reference_regularization, computation);
 }
 
 post_expected<LRSatorra2000Result>
@@ -1915,13 +2501,14 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method,
     double                           h_step,
     SatorraMomentConvention          convention,
-    H1ReferenceRegularizationOptions h1_reference_regularization) {
+    H1ReferenceRegularizationOptions h1_reference_regularization,
+    GammaComputation                 computation) {
   return lr_test_satorra2000_fiml_from_data(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
       pack, h1, gamma, a_method, h_step, nullptr, convention,
-      h1_reference_regularization);
+      h1_reference_regularization, computation);
 }
 
 post_expected<LRSatorra2000Result>
@@ -1946,13 +2533,14 @@ lr_test_satorra2000_fiml_from_data(
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
     SatorraMomentConvention          convention,
-    H1ReferenceRegularizationOptions h1_reference_regularization) {
+    H1ReferenceRegularizationOptions h1_reference_regularization,
+    GammaComputation                 computation) {
   return lr_test_satorra2000_fiml_from_data_impl(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
       &pack, &h1, gamma, a_method, h_step, sm_precomputed, convention,
-      h1_reference_regularization);
+      h1_reference_regularization, computation);
 }
 
 post_expected<LRSatorra2000Result>

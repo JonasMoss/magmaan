@@ -1872,8 +1872,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_fiml_lr_test_satorra2000
-Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string gamma, std::string a_method, double h_step, std::string ud_method, std::string convention, SEXP h1_reference_regularization);
-RcppExport SEXP _magmaan_infer_fiml_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP h_stepSEXP, SEXP ud_methodSEXP, SEXP conventionSEXP, SEXP h1_reference_regularizationSEXP) {
+Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string gamma, std::string a_method, double h_step, std::string ud_method, std::string convention, std::string computation, SEXP h1_reference_regularization);
+RcppExport SEXP _magmaan_infer_fiml_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP h_stepSEXP, SEXP ud_methodSEXP, SEXP conventionSEXP, SEXP computationSEXP, SEXP h1_reference_regularizationSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1884,8 +1884,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
     Rcpp::traits::input_parameter< std::string >::type ud_method(ud_methodSEXP);
     Rcpp::traits::input_parameter< std::string >::type convention(conventionSEXP);
+    Rcpp::traits::input_parameter< std::string >::type computation(computationSEXP);
     Rcpp::traits::input_parameter< SEXP >::type h1_reference_regularization(h1_reference_regularizationSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_fiml_lr_test_satorra2000(fit_H1, fit_H0, gamma, a_method, h_step, ud_method, convention, h1_reference_regularization));
+    rcpp_result_gen = Rcpp::wrap(infer_fiml_lr_test_satorra2000(fit_H1, fit_H0, gamma, a_method, h_step, ud_method, convention, computation, h1_reference_regularization));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3430,7 +3431,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_partable_marker_to_std_lv_impl", (DL_FUNC) &_magmaan_frontier_partable_marker_to_std_lv_impl, 1},
     {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
-    {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 8},
+    {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},
     {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 9},
     {"_magmaan_infer_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ordinal_lr_test_satorra2000, 9},
     {"_magmaan_infer_mixed_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_mixed_ordinal_lr_test_satorra2000, 9},

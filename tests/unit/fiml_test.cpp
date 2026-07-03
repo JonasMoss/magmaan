@@ -1246,6 +1246,82 @@ TEST_CASE("nested FIML lavaan convention: H1 covariance regularization is opt-in
   CHECK(r->eigenvalues.allFinite());
 }
 
+TEST_CASE("nested FIML lavaan convention: streaming Gamma matches materialized and dense") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + a*x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {160});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 2);
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+  magmaan::robust::H1ReferenceRegularizationOptions no_reg;
+
+  auto def = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta, /*h_step=*/1e-4, &*sm,
+      magmaan::robust::SatorraMomentConvention::Lavaan);
+  auto streaming = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta, /*h_step=*/1e-4, &*sm,
+      magmaan::robust::SatorraMomentConvention::Lavaan, no_reg,
+      magmaan::robust::GammaComputation::Streaming);
+  auto materialized = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta, /*h_step=*/1e-4, &*sm,
+      magmaan::robust::SatorraMomentConvention::Lavaan, no_reg,
+      magmaan::robust::GammaComputation::Materialized);
+  auto dense = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta, /*h_step=*/1e-4, &*sm,
+      magmaan::robust::SatorraMomentConvention::Lavaan, no_reg,
+      magmaan::robust::GammaComputation::Dense);
+
+  REQUIRE_MESSAGE(def.has_value(),
+      "default lavaan-convention FIML failed: " <<
+      (def.has_value() ? "" : def.error().detail));
+  REQUIRE_MESSAGE(streaming.has_value(),
+      "streaming lavaan-convention FIML failed: " <<
+      (streaming.has_value() ? "" : streaming.error().detail));
+  REQUIRE_MESSAGE(materialized.has_value(),
+      "materialized lavaan-convention FIML failed: " <<
+      (materialized.has_value() ? "" : materialized.error().detail));
+  REQUIRE_MESSAGE(dense.has_value(),
+      "dense lavaan-convention FIML failed: " <<
+      (dense.has_value() ? "" : dense.error().detail));
+
+  REQUIRE(streaming->eigenvalues.size() == 2);
+  CHECK((def->eigenvalues - streaming->eigenvalues).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((streaming->eigenvalues - materialized->eigenvalues).cwiseAbs().maxCoeff() < 1e-8);
+  CHECK((streaming->eigenvalues - dense->eigenvalues).cwiseAbs().maxCoeff() < 1e-7);
+  CHECK(streaming->scale_c == doctest::Approx(materialized->scale_c).epsilon(1e-8));
+  CHECK(streaming->scale_c == doctest::Approx(dense->scale_c).epsilon(1e-7));
+  CHECK(streaming->adjust_d0 == doctest::Approx(materialized->adjust_d0).epsilon(1e-8));
+  CHECK(streaming->adjust_d0 == doctest::Approx(dense->adjust_d0).epsilon(1e-7));
+}
+
 TEST_CASE("nested FIML restriction map: empirical path uses observed FIML bread") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
