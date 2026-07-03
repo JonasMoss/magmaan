@@ -97,16 +97,22 @@ golden `parTable()` fixtures.
   under the same policy. The first CI-inversion seed,
   `profile_lrt_ci_parameter_{ml,gmm,gmm_fitted_weight}()`, bisects the df-1
   profile statistic and returns root diagnostics. The complete-data ML and
-  caller-fixed GMM parameter helpers also accept raw data for opt-in robust
-  1-df sandwich scaling: the result keeps ordinary `T`/`p_value` and adds
-  `scaling_factor`, `T_scaled`, and `p_value_scaled`; CI inversion can root on
-  `T_scaled`. The fitted-weight GMM parameter helpers expose the same scaled
-  fields by rebuilding the final expected-information weight `W(theta)` at each
-  constrained endpoint and treating that as the profile metric. Complete
-  weight-derivative / misspecification scaling remains research policy rather
-  than part of this reference. R exposes the parameter special cases as
+  caller-fixed GMM parameter helpers also accept raw data for opt-in profile
+  reference tiers: `RobustScaled` keeps ordinary `T`/`p_value` and adds the
+  Satorra-style `scaling_factor`, `T_scaled`, and `p_value_scaled`, while
+  `MisspecScaled` / `MisspecMixture` add the observed-bread misspecification
+  fields (`misspec_scaling_factor`, `T_misspec_scaled`, mixture eigenvalues,
+  mixture p-value, and endpoint cutoffs for CI inversion). ML routes the
+  misspecification reference through observed Hessian bread plus empirical
+  score meat; caller-fixed GMM routes it through the continuous-LS observed
+  bread plus fixed-weight or IJ estimated-weight meat. The fitted-weight GMM
+  parameter helpers rebuild the final expected-information weight `W(theta)` at
+  each constrained endpoint and treat that as the profile metric for both
+  robust and misspecification references; complete derivative-of-weight
+  corrections remain research policy. R exposes the parameter special cases as
   `frontier_profile_lrt_parameter_*` and
-  `frontier_profile_lrt_ci_parameter_*`. The all-ordinal frontier companion,
+  `frontier_profile_lrt_ci_parameter_*`, with `reference=` selecting the
+  target. The all-ordinal frontier companion,
   `fit_ordinal_constrained()` plus `profile_lrt_scalar_ordinal()` /
   `profile_lrt_parameter_ordinal()`, applies the same programmatic equality
   pattern to the full ordinal ULS/DWLS/WLS threshold + polychoric moment stack;
@@ -118,14 +124,13 @@ golden `parTable()` fixtures.
   `profile_lrt_ci_ordinal_polychoric_omega()` and the matching R helpers,
   profiles model-implied latent-response/polychoric omega through the same
   fixed-weight path. All ordinal parameter and polychoric-omega profile helpers
-  also accept an opt-in robust 1-df sandwich scaling: the result keeps ordinary
-  `T`/`p_value` and adds `scaling_factor`, `T_scaled`, and `p_value_scaled`;
-  CI inversion can root on `T_scaled`. The scaling is recomputed at each
-  constrained profile point from the same complete IJ ordinal sandwich used by
-  robust SE/MI, including fitted DWLS/WLS weight influence. Bartlett /
-  small-sample correction, observed-score / Green-Yang-like ordinal omega
-  targets, and functional R callbacks remain research layers above this seed
-  surface.
+  support the same ordinary, robust-scaled, misspec-scaled, and misspec-mixture
+  references. The robust/misspec scaling is recomputed at each constrained
+  profile point from the complete ordinal IJ sandwich used by robust SE/MI,
+  including fitted DWLS/WLS weight influence; the misspec reference pairs that
+  meat with the analytic observed ordinal bread. Bartlett / small-sample
+  correction, observed-score / Green-Yang-like ordinal omega targets, and
+  functional R callbacks remain research layers above this seed surface.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
   identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and
@@ -1715,12 +1720,16 @@ stop rather than any usable non-error return.
   the mixing scalar as fixed and carries the mixed sample-built
   normal-theory/empirical-Gamma weight influence.
   The continuous fixed-weight GMM parameter profile-LR/CI surface can now opt
-  into those complete-data IJ weight effects when `robust = TRUE` and
-  `estimated_weight = TRUE`: GLS routes the scale through
-  `SampleNormalTheory`, WLS through `SampleEmpiricalWls`, while ULS remains a
-  fixed-weight case. Fitted-weight profile LR still rebuilds `W(theta)` at the
-  endpoint and uses the fixed profile metric; full derivative/misspec
-  references for fitted weights remain research-tier.
+  into those complete-data IJ weight effects when `estimated_weight = TRUE`:
+  GLS routes the robust or misspec meat through `SampleNormalTheory`, WLS
+  through `SampleEmpiricalWls`, while ULS remains a fixed-weight case. The
+  scalar profile reference is explicit (`Ordinary`, `RobustScaled`,
+  `MisspecScaled`, or `MisspecMixture`); the misspec references use the
+  analytic observed LS bread reduced through the equality-constraint basis and
+  either the fixed empirical meat or IJ estimated-weight meat. Fitted-weight
+  profile LR still rebuilds `W(theta)` at the endpoint and uses the fixed
+  profile metric for robust/misspec references; full derivative-of-weight
+  corrections remain research-tier.
   Continuous-LS observed-bread computation now uses an analytic moment Hessian:
   the Gauss-Newton `Delta' W Delta` term plus the residual-weighted LISREL
   second-derivative contraction, reduced through the equality-constraint basis

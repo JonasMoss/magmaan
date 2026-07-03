@@ -807,6 +807,23 @@ Remaining work:
       `robust_estimated_weight` rows. Still open: fitted-weight derivative /
       misspecification references, scalar functional callbacks, ordinal
       fitted-functional constraints, and Bartlett/calibrated constants.
+    - **Done 2026-07-03 (model-misspec profile references).**
+      Scalar profile LRT/CI now separates the reference target from the legacy
+      `robust` switch with `ScalarProfileReference::{Ordinary,RobustScaled,
+      MisspecScaled,MisspecMixture}` and the R-facing `reference=` argument.
+      ML, caller-fixed continuous GMM, fitted-weight continuous GMM, ordinal
+      parameter profiles, and ordinal polychoric-omega profiles now expose the
+      observed-bread misspecification scale, singleton mixture eigenvalue, and
+      endpoint-specific mixture cutoffs for CI inversion. Continuous fixed
+      GLS/WLS can combine the misspec reference with IJ estimated-weight meat;
+      ordinal uses the same complete ordinal IJ meat as robust SE/MI. The
+      fitted-weight continuous path is deliberately a profile-metric reference:
+      it rebuilds the endpoint `W(theta)` and treats it as fixed, leaving
+      derivative-of-weight corrections as a research extension. The canonical
+      no-integration categorical proving slice is now ordinal polychoric omega.
+      Still open: model-level small-sample/Bartlett/calibrated constants,
+      richer functional R callbacks, observed-score / Green-Yang-like omega
+      targets, and validation beyond the current focused smokes.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric
@@ -2013,10 +2030,13 @@ work until a concrete downstream consumer appears.
   small-sample factor must be a stable model-level **constant** — an analytic Lawley
   factor misses the near-boundary mass (~20-25% recovery), and a per-dataset bootstrap
   (one-level or double) is anti-correlated with need (caps ~0.85, and is `B`-invariant).
-  Analytic functional gradients landed (11x faster constrained fits). Next: calibrated-
-  constant recipe from one dataset; non-normal stress run; reliability-difference regions;
-  extend the landed parameter-profile seed to functional/categorical constraints only
-  when an experiment consumes it. See speculative.md for the full list.
+  Analytic functional gradients landed (11x faster constrained fits), and the
+  C++/R seed now covers ordinary, robust-scaled, misspec-scaled, and
+  misspec-mixture parameter profiles plus ordinal polychoric-omega profiles.
+  Next: calibrated-constant recipe from one dataset; non-normal stress run;
+  reliability-difference regions; richer functional callbacks / observed-score
+  categorical omega only when an experiment consumes them. See speculative.md
+  for the full list.
 - **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
   variance-of-variance `t`-on-effective-df correction for covariance functionals. See
   speculative.md.
