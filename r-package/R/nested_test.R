@@ -28,8 +28,9 @@
 #'   Gamma contributions before crossproducts), `"materialized"` (forms the
 #'   full empirical Gamma block before reducing), or `"dense"` (forms the full
 #'   q-by-q Gamma and U matrices and eigendecomposes the q-by-q product, as
-#'   standard SEM software does). The latter two are diagnostic/reference paths
-#'   for timing the algebraic reduction.
+#'   standard SEM software does). FIML lavaan-convention tests use the same
+#'   choices after projecting through lavaan-style `WLS.V`; `"materialized"`
+#'   keeps the legacy sandwich path and `"dense"` is a diagnostic oracle.
 #' @param convention `"magmaan"` (default) keeps magmaan's estimator-specific
 #'   Satorra-2000 moment convention. `"lavaan"` uses lavaan's public
 #'   `lavTestLRT(method = "satorra.2000")` convention for FIML/ML2S missing-data
@@ -187,7 +188,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res <- switch(method,
       restriction_map = infer_fiml_lr_test_satorra2000(
         fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method,
-        convention = convention,
+        convention = convention, computation = computation,
         h1_reference_regularization = h1_reference_regularization),
       lavaan_sb2001 = infer_fiml_lr_test_satorra_bentler2001(fit_H1, fit_H0),
       lavaan_sb2010 = infer_fiml_lr_test_satorra_bentler2010(fit_H1, fit_H0),
@@ -200,7 +201,9 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$convention <- convention
     res$computation <- if (identical(method, "restriction_map") &&
                            identical(ud_method, "2001")) "fiml_eta_2001"
-                       else if (identical(convention, "lavaan")) "fiml_lavaan"
+                       else if (identical(convention, "lavaan")) {
+                         paste0("fiml_lavaan_", computation)
+                       }
                        else "fiml_eta"
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
