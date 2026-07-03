@@ -1897,10 +1897,11 @@ stop rather than any usable non-error return.
   shrinkage leaves thresholds and continuous means in place, transforms the
   lower-triangle association/covariance block, propagates the moment
   transformation through `NACOV`, and rebuilds DWLS/WLS weights so C++ and R
-  consume the same shrunk moment stack. The missing-data ML2S extension where the
-  saturated FIML Stage-1 moments are regularized before Stage 2 is not a current
-  core capability; it is recorded as a separate speculative project because it
-  changes the estimator and its reference law. The old
+  consume the same shrunk moment stack. Missing-data extensions that regularize
+  saturated FIML H1 references — either Stage-1 moments before ML2S Stage 2 or
+  the H1 information/acov used by FIML nested spectra — are not current core
+  capabilities; they are tracked as frontier/backlog work because they change the
+  estimator and/or reference law. The old
   `magmaan/data/shrinkage.hpp` include path remains a forwarding shim.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho

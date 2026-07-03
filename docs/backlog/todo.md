@@ -17,7 +17,7 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
-- **Satorra-2000 nested test: regularize the saturated-H1 reference under
+- **L — Satorra-2000 nested test: regularize the saturated-H1 reference under
   missing data (frontier).** The scaled and mixture nested difference tests
   (`nestedTest(method = "satorra.2000")`, FIML and ML2S) collapse to
   conservative (Type-I toward 0) under missing data at moderate model size. The
@@ -28,17 +28,45 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   `c = trace(U*Gamma)/df` then over-scales by 30-70x (arbitrarily large once the
   reference is singular) and crushes the statistic. This is not a lavaan-parity
   bug (magmaan matches lavaan per dataset); it is a conditioning defect both
-  share. The statistic `T` itself is fine: a constant oracle scale
-  `c = mean(T)/df` recalibrates every cell to nominal. Fix: add optional
-  regularization of the saturated-H1 reference before forming the difference
-  spectrum (ridge `Gamma + lambda*I` or a truncated pseudo-inverse that floors or
-  drops the near-zero directions), exposed as an opt-in `nestedTest` option
-  (frontier, since it changes results), not the default. A post-hoc spectrum
-  trim recovers small p but not the singular large-p regime, so regularize the
-  source. Same ill-conditioning as the deferred ML2S stage-2 weight, so a shared
+  share. A constant oracle scale `c = mean(T)/df` recalibrates every probed cell
+  to nominal, so the dominant defect is the per-replicate reference scale/spectrum
+  rather than the likelihood-ratio statistic.
+
+  Add optional reference regularization before forming the difference spectrum,
+  exposed as an opt-in `nestedTest` option (frontier, since it changes results),
+  not the default. Candidate strategies:
+  - **Information-side floor / truncated inverse.** Regularize the saturated H1
+    information before inversion, e.g. floor eigenvalues of `H` or use a
+    truncated pseudo-inverse, then form `Gamma_reg = H_reg^-1 J H_reg^-1`.
+  - **Gamma-side shrink / condition cap.** Transform the final moment acov toward
+    a well-conditioned non-model target, e.g. `Gamma_reg = (1-lambda) Gamma +
+    lambda T` with diagonal/scaled-identity/correlation-scale targets, choosing
+    the smallest `lambda` that meets a condition-number or eigenvalue floor.
+    Avoid an unqualified additive `Gamma + lambda I` default: it can increase
+    `trace(U Gamma)` and worsen over-scaling unless the transformation is
+    scale-controlled or trace-aware. A post-hoc spectrum trim recovers small p
+    but not the singular large-p regime, so it is only a diagnostic proxy.
+
+  Asymptotic accounting must be explicit. If the Stage-1 moments themselves are
+  transformed, propagate the transformation by delta method
+  (`Gamma_reg = J_g Gamma J_g'`), including the derivative of any data-adaptive
+  intensity when it is part of the estimator, as in
+  `data::frontier::shrink_mixed_ordinal_stats()`. If only the reference
+  covariance/information used by the spectrum is regularized, treat it as a
+  regularized variance estimator: it is first-order equivalent to the raw
+  Satorra reference under fixed-p asymptotics only when the floor/intensity
+  vanishes or the repair activates with probability tending to zero; fixed
+  finite caps define a different frontier reference law that needs simulation or
+  bootstrap calibration. Return diagnostics (`raw/regularized min eigen`,
+  condition number, effective rank, lambda/floor, trace before/after) with every
+  regularized spectrum.
+
+  Same ill-conditioning as the deferred ML2S stage-2 weight, so a shared
   reference-regularization utility could serve both. Evidence, per-regime
   numbers, and a calibration gate are in the fiml-fmg invariance experiment
-  (private paper).
+  (private paper). Use the ref-conditioning gate before/after implementation:
+  p8 and p16, normal/vm2/ig2 x complete/MARnl, with regularization required to
+  rescue missing cells without making complete-data controls liberal.
 
 - **M — automatic robust fit-measure dispatch.** The lavaan-style robust/scaled
   fit-measure formulas are available for the core global-index family
