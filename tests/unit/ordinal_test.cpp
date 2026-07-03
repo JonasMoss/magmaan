@@ -4308,6 +4308,67 @@ TEST_CASE("mixed_ordinal_dwls_profile_lrt compares nested mixed DWLS models") {
   CHECK(std::isfinite(lrt->p_mixture));
   CHECK(lrt->p_mixture >= 0.0);
   CHECK(lrt->p_mixture <= 1.0);
+
+  auto ev1 = magmaan::model::ModelEvaluator::build(pt1, mr1);
+  REQUIRE(ev1.has_value());
+  Eigen::Index k_loading = -1;
+  const auto locs = ev1->param_locations();
+  for (Eigen::Index k = 0; k < static_cast<Eigen::Index>(locs.size()); ++k) {
+    const auto& loc = locs[static_cast<std::size_t>(k)];
+    if (loc.mat == magmaan::model::MatId::Lambda &&
+        loc.row == 1 && loc.col == 0) {
+      k_loading = k;
+      break;
+    }
+  }
+  REQUIRE(k_loading >= 0);
+
+  magmaan::optim::OptimOptions prof_opts;
+  prof_opts.max_iter = 500;
+  prof_opts.ftol = 1e-10;
+  prof_opts.gtol = 1e-7;
+  const double target = 0.96 * fit1.theta(k_loading);
+  auto param_lrt =
+      magmaan::estimate::frontier::profile_lrt_parameter_mixed_ordinal(
+          pt1, mr1, *stats, fit1, k_loading, target, {},
+          magmaan::estimate::OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, prof_opts,
+          magmaan::estimate::OrdinalParameterization::Delta);
+  REQUIRE_MESSAGE(param_lrt.has_value(),
+      "mixed ordinal parameter profile LRT failed: "
+          << (param_lrt.has_value() ? "" : param_lrt.error().detail));
+  CHECK(param_lrt->unrestricted_value ==
+        doctest::Approx(fit1.theta(k_loading)));
+  CHECK(param_lrt->constrained_value ==
+        doctest::Approx(target).epsilon(1e-7));
+  CHECK(std::abs(param_lrt->constraint_residual) < 1e-7);
+  CHECK(param_lrt->T == doctest::Approx(
+      2.0 * 620.0 * (param_lrt->fmin_constrained - fit1.fmin)));
+  CHECK(param_lrt->p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(param_lrt->T, 1)));
+  CHECK(param_lrt->df == 1);
+
+  magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
+  ci_opts.cutoff = 0.25;
+  ci_opts.initial_step = 0.03 * std::abs(fit1.theta(k_loading));
+  ci_opts.target_tol = 1e-4;
+  ci_opts.statistic_tol = 1e-4;
+  ci_opts.max_iter = 35;
+  auto param_ci =
+      magmaan::estimate::frontier::profile_lrt_ci_parameter_mixed_ordinal(
+          pt1, mr1, *stats, fit1, k_loading, ci_opts, {},
+          magmaan::estimate::OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, prof_opts,
+          magmaan::estimate::OrdinalParameterization::Delta);
+  REQUIRE_MESSAGE(param_ci.has_value(),
+      "mixed ordinal parameter profile CI failed: "
+          << (param_ci.has_value() ? "" : param_ci.error().detail));
+  CHECK(param_ci->lower < fit1.theta(k_loading));
+  CHECK(param_ci->upper > fit1.theta(k_loading));
+  CHECK(param_ci->lower_profile.T ==
+        doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
+  CHECK(param_ci->upper_profile.T ==
+        doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
 }
 
 TEST_CASE("robust_ordinal_ij DWLS and WLS support observed MCAR ordinal stats") {

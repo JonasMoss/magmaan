@@ -2540,6 +2540,125 @@ TEST_CASE("two_stage_nt_profile: missing data raw and saturated moments agree") 
   CHECK(std::isfinite(lrt_sm->p_mixture));
 }
 
+TEST_CASE("frontier FIML and ML2S NT parameter profile LRTs invert ordinary CIs") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta, {180});
+
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: "
+          << (sm.has_value() ? "" : sm.error().detail));
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1200;
+  Eigen::VectorXd start(static_cast<Eigen::Index>(built.ev.n_free()));
+  start.setConstant(0.55);
+  auto fiml = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, start, *pack,
+      magmaan::estimate::Backend::NloptLbfgsSlsqpFallback, opts);
+  REQUIRE_MESSAGE(fiml.has_value(),
+      "FIML fit failed: " << (fiml.has_value() ? "" : fiml.error().detail));
+
+  Eigen::Index k_loading = -1;
+  const auto locs = built.ev.param_locations();
+  for (Eigen::Index k = 0; k < static_cast<Eigen::Index>(locs.size()); ++k) {
+    const auto& loc = locs[static_cast<std::size_t>(k)];
+    if (loc.mat == magmaan::model::MatId::Lambda &&
+        loc.row == 1 && loc.col == 0) {
+      k_loading = k;
+      break;
+    }
+  }
+  REQUIRE(k_loading >= 0);
+
+  const double target = 0.96 * fiml->theta(k_loading);
+  auto fiml_lrt = magmaan::estimate::fiml::frontier::profile_lrt_parameter_fiml(
+      *built.pt, *built.rep, raw, *fiml, *pack, k_loading, target,
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(fiml_lrt.has_value(),
+      "FIML profile LRT failed: "
+          << (fiml_lrt.has_value() ? "" : fiml_lrt.error().detail));
+  CHECK(fiml_lrt->unrestricted_value ==
+        doctest::Approx(fiml->theta(k_loading)));
+  CHECK(fiml_lrt->constrained_value == doctest::Approx(target).epsilon(1e-7));
+  CHECK(std::abs(fiml_lrt->constraint_residual) < 1e-7);
+  CHECK(fiml_lrt->T == doctest::Approx(
+      2.0 * static_cast<double>(pack->cache.n_total) *
+      (fiml_lrt->fmin_constrained - fiml->fmin)));
+  CHECK(fiml_lrt->p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(fiml_lrt->T, 1)));
+  CHECK(fiml_lrt->df == 1);
+
+  magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
+  ci_opts.cutoff = 0.25;
+  ci_opts.initial_step = 0.03 * std::abs(fiml->theta(k_loading));
+  ci_opts.target_tol = 1e-4;
+  ci_opts.statistic_tol = 1e-4;
+  ci_opts.max_iter = 35;
+  auto fiml_ci =
+      magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_fiml(
+          *built.pt, *built.rep, raw, *fiml, *pack, k_loading, ci_opts,
+          magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(fiml_ci.has_value(),
+      "FIML profile CI failed: "
+          << (fiml_ci.has_value() ? "" : fiml_ci.error().detail));
+  CHECK(fiml_ci->lower < fiml->theta(k_loading));
+  CHECK(fiml_ci->upper > fiml->theta(k_loading));
+  CHECK(fiml_ci->lower_profile.T ==
+        doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
+  CHECK(fiml_ci->upper_profile.T ==
+        doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
+
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+  auto ml2s = magmaan::estimate::fit_ml(
+      *built.pt, *built.rep, samp, start, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(ml2s.has_value(),
+      "ML2S stage-2 fit failed: "
+          << (ml2s.has_value() ? "" : ml2s.error().detail));
+  const double target_ml2s = 0.96 * ml2s->theta(k_loading);
+  auto ml2s_lrt =
+      magmaan::estimate::fiml::frontier::profile_lrt_parameter_ml2s_nt(
+          *built.pt, *built.rep, *ml2s, *sm, k_loading, target_ml2s,
+          magmaan::estimate::Backend::NloptSlsqp, opts);
+  auto ml_ref = magmaan::estimate::frontier::profile_lrt_parameter_ml(
+      *built.pt, *built.rep, samp, *ml2s, k_loading, target_ml2s, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, nullptr,
+      magmaan::estimate::frontier::ScalarProfileReference::Ordinary);
+  REQUIRE_MESSAGE(ml2s_lrt.has_value(),
+      "ML2S NT profile LRT failed: "
+          << (ml2s_lrt.has_value() ? "" : ml2s_lrt.error().detail));
+  REQUIRE_MESSAGE(ml_ref.has_value(),
+      "ML reference profile LRT failed: "
+          << (ml_ref.has_value() ? "" : ml_ref.error().detail));
+  CHECK(ml2s_lrt->T == doctest::Approx(ml_ref->T).epsilon(1e-10));
+  CHECK(ml2s_lrt->constrained.theta.isApprox(ml_ref->constrained.theta, 1e-9));
+  CHECK(ml2s_lrt->n_obs == doctest::Approx(180.0));
+
+  auto ml2s_ci =
+      magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_ml2s_nt(
+          *built.pt, *built.rep, *ml2s, *sm, k_loading, ci_opts,
+          magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(ml2s_ci.has_value(),
+      "ML2S NT profile CI failed: "
+          << (ml2s_ci.has_value() ? "" : ml2s_ci.error().detail));
+  CHECK(ml2s_ci->lower < ml2s->theta(k_loading));
+  CHECK(ml2s_ci->upper > ml2s->theta(k_loading));
+  CHECK(ml2s_ci->lower_profile.T ==
+        doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
+  CHECK(ml2s_ci->upper_profile.T ==
+        doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
+}
+
 TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT "
           "spectrum; ADF collapses to c=1; DLS endpoints match Nt/Adf") {
   namespace mf = magmaan::estimate::fiml;

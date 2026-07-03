@@ -825,6 +825,19 @@ Remaining work:
       Still open: model-level small-sample/Bartlett/calibrated constants,
       richer functional R callbacks, observed-score / Green-Yang-like omega
       targets, and validation beyond the current focused smokes.
+    - **Done 2026-07-03 (ordinary mainline estimator parameter profiles).**
+      The ordinary df-1 scalar/profile-LRT parameter path now covers the
+      remaining mainline estimators needed before robust extensions:
+      direct FIML (`fit_fiml_constrained`,
+      `profile_lrt_parameter_fiml`, CI inversion), ML2S-NT
+      (`profile_lrt_parameter_ml2s_nt`, CI inversion over retained Stage-1 EM
+      moments), and mixed continuous/ordinal ULS/DWLS/WLS
+      (`profile_lrt_parameter_mixed_ordinal`, CI inversion). R exposes the
+      thin frontier wrappers as
+      `frontier_profile_lrt_{parameter,ci}_{fiml,ml2s_nt,mixed_ordinal}`, with
+      `r-package/examples/profile_lrt_parameter_mainline.R` as the smoke check.
+      Robust/misspec references for these three estimator-specific surfaces
+      remain outside this ordinary mainline slice.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

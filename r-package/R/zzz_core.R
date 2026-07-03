@@ -110,10 +110,16 @@ frontier_profile_lrt_parameter_ml <- frontier_profile_lrt_parameter_ml_impl
 frontier_profile_lrt_parameter_gmm <- frontier_profile_lrt_parameter_gmm_impl
 frontier_profile_lrt_parameter_gmm_fitted_weight <- frontier_profile_lrt_parameter_gmm_fitted_weight_impl
 frontier_profile_lrt_parameter_ordinal <- frontier_profile_lrt_parameter_ordinal_impl
+frontier_profile_lrt_parameter_fiml <- frontier_profile_lrt_parameter_fiml_impl
+frontier_profile_lrt_parameter_ml2s_nt <- frontier_profile_lrt_parameter_ml2s_nt_impl
+frontier_profile_lrt_parameter_mixed_ordinal <- frontier_profile_lrt_parameter_mixed_ordinal_impl
 frontier_profile_lrt_ci_parameter_ml <- frontier_profile_lrt_ci_parameter_ml_impl
 frontier_profile_lrt_ci_parameter_gmm <- frontier_profile_lrt_ci_parameter_gmm_impl
 frontier_profile_lrt_ci_parameter_gmm_fitted_weight <- frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl
 frontier_profile_lrt_ci_parameter_ordinal <- frontier_profile_lrt_ci_parameter_ordinal_impl
+frontier_profile_lrt_ci_parameter_fiml <- frontier_profile_lrt_ci_parameter_fiml_impl
+frontier_profile_lrt_ci_parameter_ml2s_nt <- frontier_profile_lrt_ci_parameter_ml2s_nt_impl
+frontier_profile_lrt_ci_parameter_mixed_ordinal <- frontier_profile_lrt_ci_parameter_mixed_ordinal_impl
 frontier_profile_lrt_ordinal_polychoric_omega <- frontier_profile_lrt_ordinal_polychoric_omega_impl
 frontier_profile_lrt_ci_ordinal_polychoric_omega <- frontier_profile_lrt_ci_ordinal_polychoric_omega_impl
 
@@ -544,10 +550,16 @@ magmaan_core <- local({
       "frontier_profile_lrt_parameter_gmm",
       "frontier_profile_lrt_parameter_gmm_fitted_weight",
       "frontier_profile_lrt_parameter_ordinal",
+      "frontier_profile_lrt_parameter_fiml",
+      "frontier_profile_lrt_parameter_ml2s_nt",
+      "frontier_profile_lrt_parameter_mixed_ordinal",
       "frontier_profile_lrt_ci_parameter_ml",
       "frontier_profile_lrt_ci_parameter_gmm",
       "frontier_profile_lrt_ci_parameter_gmm_fitted_weight",
       "frontier_profile_lrt_ci_parameter_ordinal",
+      "frontier_profile_lrt_ci_parameter_fiml",
+      "frontier_profile_lrt_ci_parameter_ml2s_nt",
+      "frontier_profile_lrt_ci_parameter_mixed_ordinal",
       "frontier_profile_lrt_ordinal_polychoric_omega",
       "frontier_profile_lrt_ci_ordinal_polychoric_omega",
       "frontier_pairwise_ordinal_composite_nested"
@@ -650,10 +662,16 @@ magmaan_core <- local({
       "frontier_profile_lrt_parameter_gmm_impl",
       "frontier_profile_lrt_parameter_gmm_fitted_weight_impl",
       "frontier_profile_lrt_parameter_ordinal_impl",
+      "frontier_profile_lrt_parameter_fiml_impl",
+      "frontier_profile_lrt_parameter_ml2s_nt_impl",
+      "frontier_profile_lrt_parameter_mixed_ordinal_impl",
       "frontier_profile_lrt_ci_parameter_ml_impl",
       "frontier_profile_lrt_ci_parameter_gmm_impl",
       "frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl",
       "frontier_profile_lrt_ci_parameter_ordinal_impl",
+      "frontier_profile_lrt_ci_parameter_fiml_impl",
+      "frontier_profile_lrt_ci_parameter_ml2s_nt_impl",
+      "frontier_profile_lrt_ci_parameter_mixed_ordinal_impl",
       "frontier_profile_lrt_ordinal_polychoric_omega_impl",
       "frontier_profile_lrt_ci_ordinal_polychoric_omega_impl",
       "frontier_pairwise_ordinal_composite_nested_impl",

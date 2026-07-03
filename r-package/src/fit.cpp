@@ -1726,6 +1726,42 @@ Rcpp::List fiml_fit_result(Ctx& ctx,
   return out;
 }
 
+Rcpp::List fiml_profile_fit_result(
+    Ctx& ctx,
+    const magmaan::data::RawData& raw,
+    const magmaan::estimate::Estimates& est,
+    Rcpp::List source_fit) {
+  Rcpp::List out = fiml_fit_result(ctx, raw, est, nullptr);
+  if (source_fit.containsElementNamed("fiml_pack")) {
+    out["fiml_pack"] = source_fit["fiml_pack"];
+  }
+  if (source_fit.containsElementNamed("fiml_h1")) {
+    out["fiml_h1"] = source_fit["fiml_h1"];
+  }
+  return out;
+}
+
+Rcpp::List ml2s_profile_fit_result(
+    Ctx& ctx,
+    const magmaan::estimate::Estimates& est,
+    Rcpp::List source_fit) {
+  Rcpp::List out = fit_result(ctx, est, nullptr, "ML2S");
+  if (source_fit.containsElementNamed("stage1")) {
+    out["stage1"] = source_fit["stage1"];
+  }
+  if (source_fit.containsElementNamed("stage1_raw")) {
+    out["stage1_raw"] = source_fit["stage1_raw"];
+  }
+  if (source_fit.containsElementNamed("stage1_regularization")) {
+    out["stage1_regularization"] = source_fit["stage1_regularization"];
+  }
+  if (source_fit.containsElementNamed("raw_data")) {
+    out["raw_data"] = source_fit["raw_data"];
+  }
+  out["stage2_weight"] = "nt";
+  return out;
+}
+
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
   const char* what = "ordinal_stats";
   for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
@@ -1820,6 +1856,20 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   out["ordinal_stats"] = stats_r;
   out["thresholds"] = stats_r["thresholds"];
   out["polychoric"] = stats_r["R"];
+  return out;
+}
+
+Rcpp::List mixed_ordinal_fit_result(
+    Ctx& ctx,
+    const magmaan::data::MixedOrdinalStats& stats,
+    const magmaan::estimate::Estimates& est,
+    const magmaan::spec::Starts* starts,
+    const char* estimator,
+    const char* parameterization = "delta") {
+  Rcpp::List out = fit_result(ctx, est, starts, estimator);
+  out["mixed_ordinal"] = true;
+  out["parameterization"] = parameterization;
+  out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
   return out;
 }
 
@@ -2273,18 +2323,10 @@ OmegaBlockSpec omega_spec_from_block(Rcpp::IntegerVector block,
   return out;
 }
 
-Rcpp::List scalar_profile_lrt_to_list(
-    Ctx& ctx,
+Rcpp::List scalar_profile_lrt_base_to_list(
     const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
     int parameter,
-    const char* estimator,
-    const magmaan::data::OrdinalStats* ordinal_stats = nullptr,
-    const char* ordinal_parameterization = "delta") {
-  Rcpp::List constrained =
-      ordinal_stats == nullptr
-          ? fit_result(ctx, r.constrained, nullptr, estimator)
-          : ordinal_fit_result(ctx, *ordinal_stats, r.constrained, nullptr,
-                               estimator, ordinal_parameterization);
+    Rcpp::List constrained) {
   return Rcpp::List::create(
       Rcpp::_["parameter"] = parameter,
       Rcpp::_["target"] = r.target,
@@ -2307,6 +2349,21 @@ Rcpp::List scalar_profile_lrt_to_list(
       Rcpp::_["df"] = r.df,
       Rcpp::_["nobs"] = r.n_obs,
       Rcpp::_["constrained"] = constrained);
+}
+
+Rcpp::List scalar_profile_lrt_to_list(
+    Ctx& ctx,
+    const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
+    int parameter,
+    const char* estimator,
+    const magmaan::data::OrdinalStats* ordinal_stats = nullptr,
+    const char* ordinal_parameterization = "delta") {
+  Rcpp::List constrained =
+      ordinal_stats == nullptr
+          ? fit_result(ctx, r.constrained, nullptr, estimator)
+          : ordinal_fit_result(ctx, *ordinal_stats, r.constrained, nullptr,
+                               estimator, ordinal_parameterization);
+  return scalar_profile_lrt_base_to_list(r, parameter, constrained);
 }
 
 Rcpp::List scalar_profile_ci_to_list(
@@ -2335,6 +2392,114 @@ Rcpp::List scalar_profile_ci_to_list(
       Rcpp::_["upper_profile"] = scalar_profile_lrt_to_list(
           ctx, r.upper_profile, parameter, estimator, ordinal_stats,
           ordinal_parameterization));
+}
+
+Rcpp::List scalar_profile_lrt_to_list_fiml(
+    Ctx& ctx,
+    const magmaan::data::RawData& raw,
+    Rcpp::List source_fit,
+    const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
+    int parameter) {
+  Rcpp::List constrained =
+      fiml_profile_fit_result(ctx, raw, r.constrained, source_fit);
+  return scalar_profile_lrt_base_to_list(r, parameter, constrained);
+}
+
+Rcpp::List scalar_profile_lrt_to_list_ml2s(
+    Ctx& ctx,
+    Rcpp::List source_fit,
+    const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
+    int parameter) {
+  Rcpp::List constrained =
+      ml2s_profile_fit_result(ctx, r.constrained, source_fit);
+  return scalar_profile_lrt_base_to_list(r, parameter, constrained);
+}
+
+Rcpp::List scalar_profile_lrt_to_list_mixed_ordinal(
+    Ctx& ctx,
+    const magmaan::data::MixedOrdinalStats& stats,
+    const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
+    int parameter,
+    const char* estimator,
+    const char* parameterization) {
+  Rcpp::List constrained = mixed_ordinal_fit_result(
+      ctx, stats, r.constrained, nullptr, estimator, parameterization);
+  return scalar_profile_lrt_base_to_list(r, parameter, constrained);
+}
+
+Rcpp::List scalar_profile_ci_to_list_fiml(
+    Ctx& ctx,
+    const magmaan::data::RawData& raw,
+    Rcpp::List source_fit,
+    const magmaan::estimate::frontier::ScalarProfileCiResult& r,
+    int parameter) {
+  return Rcpp::List::create(
+      Rcpp::_["parameter"] = parameter,
+      Rcpp::_["estimate"] = r.estimate,
+      Rcpp::_["lower"] = r.lower,
+      Rcpp::_["upper"] = r.upper,
+      Rcpp::_["confidence_level"] = r.confidence_level,
+      Rcpp::_["cutoff"] = r.cutoff,
+      Rcpp::_["lower_cutoff"] = r.lower_cutoff,
+      Rcpp::_["upper_cutoff"] = r.upper_cutoff,
+      Rcpp::_["lower_evals"] = r.lower_evals,
+      Rcpp::_["upper_evals"] = r.upper_evals,
+      Rcpp::_["lower_at_bound"] = r.lower_at_bound,
+      Rcpp::_["upper_at_bound"] = r.upper_at_bound,
+      Rcpp::_["lower_profile"] = scalar_profile_lrt_to_list_fiml(
+          ctx, raw, source_fit, r.lower_profile, parameter),
+      Rcpp::_["upper_profile"] = scalar_profile_lrt_to_list_fiml(
+          ctx, raw, source_fit, r.upper_profile, parameter));
+}
+
+Rcpp::List scalar_profile_ci_to_list_ml2s(
+    Ctx& ctx,
+    Rcpp::List source_fit,
+    const magmaan::estimate::frontier::ScalarProfileCiResult& r,
+    int parameter) {
+  return Rcpp::List::create(
+      Rcpp::_["parameter"] = parameter,
+      Rcpp::_["estimate"] = r.estimate,
+      Rcpp::_["lower"] = r.lower,
+      Rcpp::_["upper"] = r.upper,
+      Rcpp::_["confidence_level"] = r.confidence_level,
+      Rcpp::_["cutoff"] = r.cutoff,
+      Rcpp::_["lower_cutoff"] = r.lower_cutoff,
+      Rcpp::_["upper_cutoff"] = r.upper_cutoff,
+      Rcpp::_["lower_evals"] = r.lower_evals,
+      Rcpp::_["upper_evals"] = r.upper_evals,
+      Rcpp::_["lower_at_bound"] = r.lower_at_bound,
+      Rcpp::_["upper_at_bound"] = r.upper_at_bound,
+      Rcpp::_["lower_profile"] = scalar_profile_lrt_to_list_ml2s(
+          ctx, source_fit, r.lower_profile, parameter),
+      Rcpp::_["upper_profile"] = scalar_profile_lrt_to_list_ml2s(
+          ctx, source_fit, r.upper_profile, parameter));
+}
+
+Rcpp::List scalar_profile_ci_to_list_mixed_ordinal(
+    Ctx& ctx,
+    const magmaan::data::MixedOrdinalStats& stats,
+    const magmaan::estimate::frontier::ScalarProfileCiResult& r,
+    int parameter,
+    const char* estimator,
+    const char* parameterization) {
+  return Rcpp::List::create(
+      Rcpp::_["parameter"] = parameter,
+      Rcpp::_["estimate"] = r.estimate,
+      Rcpp::_["lower"] = r.lower,
+      Rcpp::_["upper"] = r.upper,
+      Rcpp::_["confidence_level"] = r.confidence_level,
+      Rcpp::_["cutoff"] = r.cutoff,
+      Rcpp::_["lower_cutoff"] = r.lower_cutoff,
+      Rcpp::_["upper_cutoff"] = r.upper_cutoff,
+      Rcpp::_["lower_evals"] = r.lower_evals,
+      Rcpp::_["upper_evals"] = r.upper_evals,
+      Rcpp::_["lower_at_bound"] = r.lower_at_bound,
+      Rcpp::_["upper_at_bound"] = r.upper_at_bound,
+      Rcpp::_["lower_profile"] = scalar_profile_lrt_to_list_mixed_ordinal(
+          ctx, stats, r.lower_profile, parameter, estimator, parameterization),
+      Rcpp::_["upper_profile"] = scalar_profile_lrt_to_list_mixed_ordinal(
+          ctx, stats, r.upper_profile, parameter, estimator, parameterization));
 }
 
 Rcpp::List scalar_functional_profile_lrt_to_list(
@@ -2904,6 +3069,298 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ordinal_impl(
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list(
       ctx, *r_or, parameter, weight_key.c_str(), &stats,
+      parameterization_name.c_str());
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_fiml_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    double constraint_tol = 1e-6,
+    SEXP raw_data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  const bool is_fiml = fit.containsElementNamed("fiml") &&
+                       Rcpp::as<bool>(fit["fiml"]);
+  if (!is_fiml && estimator != "FIML") {
+    Rcpp::stop("frontier_profile_lrt_parameter_fiml() requires a FIML fit");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_fiml(): parameter index %d is "
+               "outside 1..%d", parameter, static_cast<int>(est.theta.size()));
+  }
+  SEXP rd = raw_data;
+  if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) rd = fit["raw_data"];
+  if (Rf_isNull(rd)) {
+    Rcpp::stop("frontier_profile_lrt_parameter_fiml() requires raw_data or a "
+               "FIML fit carrying $raw_data");
+  }
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, rd);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : fiml_backend_from_optimizer_arg(optimizer);
+  auto r_or = magmaan::estimate::fiml::frontier::profile_lrt_parameter_fiml(
+      ctx.pt, ctx.rep, raw, est, pack,
+      static_cast<Eigen::Index>(parameter - 1), target, backend,
+      optim_opts_from(control), constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_lrt_to_list_fiml(ctx, raw, fit, *r_or, parameter);
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_ml2s_nt_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    double constraint_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+      ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  if (estimator != "ML2S" || stage2_weight != "nt") {
+    Rcpp::stop("frontier_profile_lrt_parameter_ml2s_nt() requires an ML2S fit "
+               "with stage2_weight = 'nt'");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ml2s_nt(): parameter index %d "
+               "is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ml2s_nt() requires fit$stage1");
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto r_or =
+      magmaan::estimate::fiml::frontier::profile_lrt_parameter_ml2s_nt(
+          ctx.pt, ctx.rep, est, sm,
+          static_cast<Eigen::Index>(parameter - 1), target, backend,
+          optim_opts_from(control), constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_lrt_to_list_ml2s(ctx, fit, *r_or, parameter);
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_mixed_ordinal_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    std::string weight = "fit",
+    SEXP mixed_ordinal_stats = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!fit.containsElementNamed("mixed_ordinal") ||
+      !Rcpp::as<bool>(fit["mixed_ordinal"])) {
+    Rcpp::stop("frontier_profile_lrt_parameter_mixed_ordinal() requires a "
+               "mixed-ordinal ULS/DWLS/WLS fit");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_mixed_ordinal(): parameter "
+               "index %d is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(
+      stats_from_fit_or_arg(fit, mixed_ordinal_stats, "mixed_ordinal_stats",
+                            "frontier_profile_lrt_parameter_mixed_ordinal"));
+  const std::string weight_key =
+      ordinal_weight_key_from_arg(weight, fit, estimator);
+  const auto ow = ordinal_weight_from_estimator(
+      weight_key, "frontier_profile_lrt_parameter_mixed_ordinal");
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : ordinal_parameterization_attr(fit["partable"]);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto r_or = magmaan::estimate::frontier::profile_lrt_parameter_mixed_ordinal(
+      ctx.pt, ctx.rep, stats, est,
+      static_cast<Eigen::Index>(parameter - 1), target,
+      bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
+      ordinal_parameterization_from_string(parameterization_name),
+      constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_lrt_to_list_mixed_ordinal(
+      ctx, stats, *r_or, parameter, weight_key.c_str(),
+      parameterization_name.c_str());
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_fiml_impl(
+    Rcpp::List fit,
+    int parameter,
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6,
+    SEXP raw_data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const bool is_fiml = fit.containsElementNamed("fiml") &&
+                       Rcpp::as<bool>(fit["fiml"]);
+  if (!is_fiml) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_fiml() requires a FIML fit");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_fiml(): parameter index %d "
+               "is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  SEXP rd = raw_data;
+  if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) rd = fit["raw_data"];
+  if (Rf_isNull(rd)) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_fiml() requires raw_data or "
+               "a FIML fit carrying $raw_data");
+  }
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, rd);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : fiml_backend_from_optimizer_arg(optimizer);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  ci_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::Ordinary;
+  auto r_or =
+      magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_fiml(
+          ctx.pt, ctx.rep, raw, est, pack,
+          static_cast<Eigen::Index>(parameter - 1), ci_opts, backend,
+          optim_opts_from(control), constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list_fiml(ctx, raw, fit, *r_or, parameter);
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_nt_impl(
+    Rcpp::List fit,
+    int parameter,
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+      ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  if (estimator != "ML2S" || stage2_weight != "nt") {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s_nt() requires an ML2S "
+               "fit with stage2_weight = 'nt'");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s_nt(): parameter index "
+               "%d is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s_nt() requires fit$stage1");
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  ci_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::Ordinary;
+  auto r_or =
+      magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_ml2s_nt(
+          ctx.pt, ctx.rep, est, sm,
+          static_cast<Eigen::Index>(parameter - 1), ci_opts, backend,
+          optim_opts_from(control), constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list_ml2s(ctx, fit, *r_or, parameter);
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_mixed_ordinal_impl(
+    Rcpp::List fit,
+    int parameter,
+    std::string weight = "fit",
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    SEXP mixed_ordinal_stats = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!fit.containsElementNamed("mixed_ordinal") ||
+      !Rcpp::as<bool>(fit["mixed_ordinal"])) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_mixed_ordinal() requires a "
+               "mixed-ordinal ULS/DWLS/WLS fit");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_mixed_ordinal(): parameter "
+               "index %d is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(
+      stats_from_fit_or_arg(fit, mixed_ordinal_stats, "mixed_ordinal_stats",
+                            "frontier_profile_lrt_ci_parameter_mixed_ordinal"));
+  const std::string weight_key =
+      ordinal_weight_key_from_arg(weight, fit, estimator);
+  const auto ow = ordinal_weight_from_estimator(
+      weight_key, "frontier_profile_lrt_ci_parameter_mixed_ordinal");
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : ordinal_parameterization_attr(fit["partable"]);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  ci_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::Ordinary;
+  auto r_or =
+      magmaan::estimate::frontier::profile_lrt_ci_parameter_mixed_ordinal(
+          ctx.pt, ctx.rep, stats, est,
+          static_cast<Eigen::Index>(parameter - 1), ci_opts,
+          bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
+          ordinal_parameterization_from_string(parameterization_name),
+          constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list_mixed_ordinal(
+      ctx, stats, *r_or, parameter, weight_key.c_str(),
       parameterization_name.c_str());
 }
 
