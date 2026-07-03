@@ -95,9 +95,14 @@ golden `parTable()` fixtures.
   the expected-information weight `W(θ)` in an outer fixed-point loop and the
   fitted-weight profile helper compares the unrestricted and constrained fits
   under the same policy. The first CI-inversion seed,
-  `profile_lrt_ci_parameter_{ml,gmm,gmm_fitted_weight}()`, bisects the ordinary
-  df-1 profile statistic and returns root diagnostics. R exposes the parameter
-  special cases as `frontier_profile_lrt_parameter_*` and
+  `profile_lrt_ci_parameter_{ml,gmm,gmm_fitted_weight}()`, bisects the df-1
+  profile statistic and returns root diagnostics. The complete-data ML and
+  caller-fixed GMM parameter helpers also accept raw data for opt-in robust
+  1-df sandwich scaling: the result keeps ordinary `T`/`p_value` and adds
+  `scaling_factor`, `T_scaled`, and `p_value_scaled`; CI inversion can root on
+  `T_scaled`. The fitted-weight GMM parameter profile remains ordinary-only
+  until the complete estimated-weight sandwich policy is settled. R exposes the
+  parameter special cases as `frontier_profile_lrt_parameter_*` and
   `frontier_profile_lrt_ci_parameter_*`. The all-ordinal frontier companion,
   `fit_ordinal_constrained()` plus `profile_lrt_scalar_ordinal()` /
   `profile_lrt_parameter_ordinal()`, applies the same programmatic equality

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -18,6 +19,7 @@
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -68,6 +70,27 @@ SampleStats fixture_samp_3() {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
   return samp;
+}
+
+magmaan::data::RawData multivariate_t_raw(std::mt19937& rng, Eigen::Index n,
+                                          const Eigen::MatrixXd& Sigma,
+                                          double df) {
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const Eigen::Index p = Sigma.rows();
+  std::normal_distribution<double> z(0.0, 1.0);
+  std::chi_squared_distribution<double> chi(df);
+  const double scale = std::sqrt((df - 2.0) / df);
+  Eigen::MatrixXd X(n, p);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    Eigen::VectorXd zi(p);
+    for (Eigen::Index j = 0; j < p; ++j) zi(j) = z(rng);
+    X.row(i) = (scale * (L * zi) / std::sqrt(chi(rng) / df)).transpose();
+  }
+  magmaan::data::RawData raw;
+  raw.X.push_back(std::move(X));
+  return raw;
 }
 
 // Free index of the cell Λ[row, 0] (the loading of the `row`-th observed
@@ -494,6 +517,98 @@ TEST_CASE("frontier profile_lrt_parameter_ml reports the ordinary df-1 LR statis
   CHECK(lrt->p_value == doctest::Approx(
       magmaan::inference::chi2_pvalue(lrt->T, 1)));
   CHECK(lrt->df == 1);
+}
+
+TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI") {
+  Eigen::Vector4d lam;
+  lam << 1.0, 0.82, 0.74, 0.68;
+  Eigen::MatrixXd Sigma = lam * lam.transpose();
+  Sigma.diagonal().array() += 0.45;
+  std::mt19937 rng(20260703);
+  auto raw = multivariate_t_raw(rng, 360, Sigma, 5.0);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE_MESSAGE(samp_or.has_value(),
+      "sample_stats_from_raw failed: "
+          << (samp_or.has_value() ? "" : samp_or.error().detail));
+  SampleStats samp = std::move(*samp_or);
+  samp.mean.clear();
+
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3 + x4");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+
+  auto ml = magmaan::test::fit(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
+  auto gmm = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  REQUIRE(k_x2 >= 0);
+  const double ml_target = 0.95 * ml.theta(k_x2);
+  const double gmm_target = 0.95 * gmm.theta(k_x2);
+
+  auto ml_plain = magmaan::estimate::frontier::profile_lrt_parameter_ml(
+      pt, rep, samp, ml, k_x2, ml_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE(ml_plain.has_value());
+  auto ml_robust = magmaan::estimate::frontier::profile_lrt_parameter_ml(
+      pt, rep, samp, ml, k_x2, ml_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(ml_robust.has_value(),
+      "ML robust profile LRT failed: "
+          << (ml_robust.has_value() ? "" : ml_robust.error().detail));
+  CHECK(ml_robust->T == doctest::Approx(ml_plain->T).epsilon(1e-8));
+  CHECK(std::isfinite(ml_robust->scaling_factor));
+  CHECK(ml_robust->scaling_factor > 0.0);
+  CHECK(ml_robust->T_scaled ==
+        doctest::Approx(ml_robust->T / ml_robust->scaling_factor));
+  CHECK(ml_robust->p_value_scaled == doctest::Approx(
+      magmaan::inference::chi2_pvalue(ml_robust->T_scaled, 1)));
+
+  auto gmm_plain = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      pt, rep, samp, gmm, {}, k_x2, gmm_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE(gmm_plain.has_value());
+  auto gmm_robust = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      pt, rep, samp, gmm, {}, k_x2, gmm_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(gmm_robust.has_value(),
+      "GMM robust profile LRT failed: "
+          << (gmm_robust.has_value() ? "" : gmm_robust.error().detail));
+  CHECK(gmm_robust->T == doctest::Approx(gmm_plain->T).epsilon(1e-8));
+  CHECK(std::isfinite(gmm_robust->scaling_factor));
+  CHECK(gmm_robust->scaling_factor > 0.0);
+  CHECK(gmm_robust->T_scaled ==
+        doctest::Approx(gmm_robust->T / gmm_robust->scaling_factor));
+  CHECK(gmm_robust->p_value_scaled == doctest::Approx(
+      magmaan::inference::chi2_pvalue(gmm_robust->T_scaled, 1)));
+
+  magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
+  ci_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  ci_opts.target_tol = 1e-4;
+  ci_opts.statistic_tol = 1e-3;
+  ci_opts.initial_step = 0.05 * std::abs(gmm.theta(k_x2));
+  ci_opts.max_iter = 40;
+
+  auto ci = magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
+      pt, rep, samp, gmm, {}, k_x2, ci_opts, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(ci.has_value(),
+      "GMM robust profile CI failed: "
+          << (ci.has_value() ? "" : ci.error().detail));
+  CHECK(ci->lower < gmm.theta(k_x2));
+  CHECK(ci->upper > gmm.theta(k_x2));
+  CHECK(ci->lower_profile.scaling_factor > 0.0);
+  CHECK(ci->upper_profile.scaling_factor > 0.0);
+  CHECK(ci->lower_profile.T_scaled ==
+        doctest::Approx(ci->cutoff).epsilon(2e-3));
+  CHECK(ci->upper_profile.T_scaled ==
+        doctest::Approx(ci->cutoff).epsilon(2e-3));
 }
 
 TEST_CASE("frontier fit_gmm_constrained appends a programmatic scalar equality") {
