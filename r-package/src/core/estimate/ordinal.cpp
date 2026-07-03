@@ -9427,17 +9427,22 @@ fit_expected<OrdinalProfileRootPoint>
 eval_ordinal_profile_point(const OrdinalProfileEvaluator& eval,
                            double target,
                            double cutoff,
+                           frontier::ScalarProfileReference reference,
                            const char* who) {
   auto r = eval(target);
   if (!r.has_value()) return std::unexpected(r.error());
-  if (!std::isfinite(r->T)) {
+  double stat = r->T;
+  if (reference == frontier::ScalarProfileReference::RobustScaled) {
+    stat = r->T_scaled;
+  }
+  if (!std::isfinite(stat)) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         std::string(who) + ": profile statistic is not finite at target " +
             std::to_string(target)));
   }
   OrdinalProfileRootPoint out;
   out.profile = std::move(*r);
-  out.signed_stat = out.profile.T - cutoff;
+  out.signed_stat = stat - cutoff;
   return out;
 }
 
@@ -9458,7 +9463,8 @@ solve_ordinal_profile_root_side(
   OrdinalProfileRootPoint outside;
 
   if (has_bound) {
-    auto p = eval_ordinal_profile_point(eval, outside_x, cutoff, who);
+    auto p = eval_ordinal_profile_point(eval, outside_x, cutoff,
+                                        options.reference, who);
     ++evals;
     if (!p.has_value()) return std::unexpected(p.error());
     if (p->signed_stat < 0.0) {
@@ -9473,7 +9479,8 @@ solve_ordinal_profile_root_side(
     bool bracketed = false;
     for (int k = 0; k < options.max_expand; ++k) {
       outside_x = estimate + sign * step;
-      auto p = eval_ordinal_profile_point(eval, outside_x, cutoff, who);
+      auto p = eval_ordinal_profile_point(eval, outside_x, cutoff,
+                                          options.reference, who);
       ++evals;
       if (!p.has_value()) return std::unexpected(p.error());
       if (p->signed_stat >= 0.0) {
@@ -9496,7 +9503,8 @@ solve_ordinal_profile_root_side(
   double best_x = outside_x;
   for (int k = 0; k < options.max_iter; ++k) {
     const double mid = 0.5 * (inside_x + outside_x);
-    auto p = eval_ordinal_profile_point(eval, mid, cutoff, who);
+    auto p = eval_ordinal_profile_point(eval, mid, cutoff, options.reference,
+                                        who);
     ++evals;
     if (!p.has_value()) return std::unexpected(p.error());
     const double signed_stat = p->signed_stat;
@@ -9697,6 +9705,110 @@ make_ordinal_polychoric_omega_functional(
   return OrdinalPolychoricOmegaFunctional{std::move(functional), *value};
 }
 
+fit_expected<double>
+ordinal_scalar_profile_scaling_factor(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& constrained,
+    const frontier::ScalarFunctional& functional,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization,
+    const char* who) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  if (stats.NACOV.size() != stats.R.size() ||
+      stats.moment_influence.size() != stats.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": robust profile scaling requires ordinal stats "
+            "with NACOV and per-case moment influence"));
+  }
+  auto missing_or = ordinal_ij_block_missing(stats, weights);
+  if (!missing_or.has_value()) return std::unexpected(post_to_fit(missing_or.error()));
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  if (constrained.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": constrained theta size does not match prepared "
+            "ordinal partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(constrained.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained evaluation failed: " +
+            eval.error().detail));
+  }
+  const Eigen::MatrixXd Delta_full =
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                              constrained.theta, parameterization);
+  auto Ws = ordinal_sandwich_weights(stats, weights);
+  if (!Ws.has_value()) return std::unexpected(post_to_fit(Ws.error()));
+  auto sw = ordinal_param_space_sandwich_ij(
+      stats, *layout_or, eval->moments, constrained.theta, *Ws, Delta_full,
+      weights, parameterization, *missing_or);
+  if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
+
+  auto con_or = build_eq_constraints(pt, true);
+  if (!con_or.has_value()) return std::unexpected(post_to_fit(con_or.error()));
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != sw->A1.rows()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constraint reparameterization has incompatible "
+            "shape for robust scaling"));
+  }
+
+  auto grad = scalar_gradient_ordinal(functional, constrained.theta,
+                                      constrained.theta.size(), who);
+  if (!grad.has_value()) return std::unexpected(grad.error());
+  if (grad->size() != constrained.theta.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar gradient length mismatch for robust "
+            "profile scaling"));
+  }
+
+  const Eigen::MatrixXd A =
+      (K.transpose() * sw->A1 * K).eval();
+  const Eigen::MatrixXd B =
+      (K.transpose() * sw->B1 * K).eval();
+  const Eigen::VectorXd r = K.transpose() * *grad;
+  if (r.size() == 0 || !A.allFinite() || !B.allFinite() || !r.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": non-finite robust profile scaling inputs"));
+  }
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(0.5 * (A + A.transpose()).eval());
+  if (ldlt.info() != Eigen::Success) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": robust profile bread factorization failed"));
+  }
+  const Eigen::VectorXd x = ldlt.solve(r);
+  if (ldlt.info() != Eigen::Success || !x.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": robust profile bread solve failed"));
+  }
+  const Eigen::MatrixXd Bsym = 0.5 * (B + B.transpose()).eval();
+  const double bread_q = x.dot(A * x);
+  const double meat_q = x.dot(Bsym * x);
+  const double tol = 1e-12 * std::max(1.0, std::abs(bread_q));
+  if (!(bread_q > tol) || !std::isfinite(meat_q) || !(meat_q > 0.0)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": robust profile sandwich quadratic form is not "
+            "positive"));
+  }
+  return meat_q / bread_q;
+}
+
 }  // namespace
 
 namespace frontier {
@@ -9754,7 +9866,8 @@ profile_lrt_scalar_ordinal(spec::LatentStructure pt,
                            Backend backend,
                            OptimOptions opts,
                            OrdinalParameterization parameterization,
-                           double constraint_tol) {
+                           double constraint_tol,
+                           bool robust_scaled) {
   constexpr const char* who = "profile_lrt_scalar_ordinal";
   if (!functional.value) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -9797,7 +9910,7 @@ profile_lrt_scalar_ordinal(spec::LatentStructure pt,
   };
 
   auto constrained = fit_ordinal_constrained(
-      std::move(pt), rep, stats, unrestricted, std::move(extra),
+      spec::LatentStructure(pt), rep, stats, unrestricted, std::move(extra),
       std::move(bounds), weights, backend, opts, parameterization);
   if (!constrained.has_value()) return std::unexpected(constrained.error());
 
@@ -9835,6 +9948,15 @@ profile_lrt_scalar_ordinal(spec::LatentStructure pt,
   out.p_value = chi2_pvalue(T, 1);
   out.n_obs = n;
   out.df = 1;
+  if (robust_scaled) {
+    auto scale = ordinal_scalar_profile_scaling_factor(
+        std::move(pt), rep, stats, out.constrained, functional, weights,
+        parameterization, who);
+    if (!scale.has_value()) return std::unexpected(scale.error());
+    out.scaling_factor = *scale;
+    out.T_scaled = out.T / *scale;
+    out.p_value_scaled = chi2_pvalue(out.T_scaled, 1);
+  }
   return out;
 }
 
@@ -9851,7 +9973,8 @@ profile_lrt_parameter_ordinal(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled) {
   constexpr const char* who = "profile_lrt_parameter_ordinal";
   if (parameter < 0 || parameter >= unrestricted.theta.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -9869,7 +9992,7 @@ profile_lrt_parameter_ordinal(
   return profile_lrt_scalar_ordinal(
       std::move(pt), rep, stats, unrestricted, std::move(functional), target,
       std::move(bounds), weights, backend, opts, parameterization,
-      constraint_tol);
+      constraint_tol, robust_scaled);
 }
 
 fit_expected<ScalarProfileCiResult>
@@ -9885,22 +10008,26 @@ profile_lrt_ci_parameter_ordinal(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled) {
   constexpr const char* who = "profile_lrt_ci_parameter_ordinal";
   if (parameter < 0 || parameter >= unrestricted.theta.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         std::string(who) + ": parameter index out of range"));
   }
   const double estimate = unrestricted.theta(parameter);
+  const bool use_scaled_reference =
+      ci_options.reference == ScalarProfileReference::RobustScaled;
   OrdinalProfileEvaluator eval =
       [pt, &rep, &stats, unrestricted, parameter, bounds, weights, backend, opts,
-       parameterization, constraint_tol](double target) mutable {
+       parameterization, constraint_tol, robust_scaled,
+       use_scaled_reference](double target) mutable {
         spec::LatentStructure pt_eval = pt;
         Bounds bounds_eval = bounds;
         return profile_lrt_parameter_ordinal(
             std::move(pt_eval), rep, stats, unrestricted, parameter, target,
             std::move(bounds_eval), weights, backend, opts, parameterization,
-            constraint_tol);
+            constraint_tol, robust_scaled || use_scaled_reference);
       };
   return ordinal_profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
@@ -9919,7 +10046,8 @@ profile_lrt_ordinal_polychoric_omega(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled) {
   constexpr const char* who = "profile_lrt_ordinal_polychoric_omega";
   auto fn = make_ordinal_polychoric_omega_functional(
       pt, rep, stats, unrestricted, omega_spec, omega_target,
@@ -9928,7 +10056,7 @@ profile_lrt_ordinal_polychoric_omega(
   return profile_lrt_scalar_ordinal(
       std::move(pt), rep, stats, unrestricted, std::move(fn->functional),
       target, std::move(bounds), weights, backend, opts, parameterization,
-      constraint_tol);
+      constraint_tol, robust_scaled);
 }
 
 fit_expected<ScalarProfileCiResult>
@@ -9945,7 +10073,8 @@ profile_lrt_ci_ordinal_polychoric_omega(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled) {
   constexpr const char* who = "profile_lrt_ci_ordinal_polychoric_omega";
   auto fn = make_ordinal_polychoric_omega_functional(
       pt, rep, stats, unrestricted, omega_spec, omega_target,
@@ -9955,7 +10084,8 @@ profile_lrt_ci_ordinal_polychoric_omega(
   const double estimate = fn->unrestricted_value;
   OrdinalProfileEvaluator eval =
       [pt, &rep, &stats, unrestricted, functional = fn->functional, bounds,
-       weights, backend, opts, parameterization, constraint_tol](
+       weights, backend, opts, parameterization, constraint_tol, robust_scaled,
+       reference = ci_options.reference](
           double target_value) mutable {
         spec::LatentStructure pt_eval = pt;
         frontier::ScalarFunctional fn_eval = functional;
@@ -9963,7 +10093,8 @@ profile_lrt_ci_ordinal_polychoric_omega(
         return profile_lrt_scalar_ordinal(
             std::move(pt_eval), rep, stats, unrestricted, std::move(fn_eval),
             target_value, std::move(bounds_eval), weights, backend, opts,
-            parameterization, constraint_tol);
+            parameterization, constraint_tol, robust_scaled ||
+                reference == ScalarProfileReference::RobustScaled);
       };
   return ordinal_profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
