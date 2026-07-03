@@ -2229,7 +2229,9 @@ Rcpp::List frontier_profile_lrt_parameter_ml_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6) {
+    double constraint_tol = 1e-6,
+    SEXP raw_data = R_NilValue,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   if (fit.containsElementNamed("estimator")) {
@@ -2249,11 +2251,20 @@ Rcpp::List frontier_profile_lrt_parameter_ml_impl(
   const magmaan::estimate::Backend backend =
       optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                          : backend_from_optimizer_arg(optimizer);
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  if (robust) {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("frontier_profile_lrt_parameter_ml() robust=TRUE requires "
+                 "raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        complete_raw_from_arg(ctx.rep, raw_data));
+  }
   auto r_or = magmaan::estimate::frontier::profile_lrt_parameter_ml(
       ctx.pt, ctx.rep, ctx.samp, est,
       static_cast<Eigen::Index>(parameter - 1), target,
       bounds_from_nullable(bounds), backend, optim_opts_from(control),
-      constraint_tol);
+      constraint_tol, raw_holder.get());
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list(ctx, *r_or, parameter, "ML");
 }
@@ -2273,7 +2284,9 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6) {
+    double constraint_tol = 1e-6,
+    SEXP raw_data = R_NilValue,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2293,11 +2306,20 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
   magmaan::estimate::gmm::Weight w =
       continuous_ls_weight(ctx, est, estimator, weight,
                            "frontier_profile_lrt_parameter_gmm");
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  if (robust) {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("frontier_profile_lrt_parameter_gmm() robust=TRUE requires "
+                 "raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        complete_raw_from_arg(ctx.rep, raw_data));
+  }
   auto r_or = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
       ctx.pt, ctx.rep, ctx.samp, est, std::move(w),
       static_cast<Eigen::Index>(parameter - 1), target,
       bounds_from_nullable(bounds), backend, optim_opts_from(control),
-      constraint_tol);
+      constraint_tol, raw_holder.get());
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list(ctx, *r_or, parameter, estimator.c_str());
 }
@@ -2421,7 +2443,9 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml_impl(
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
-    double statistic_tol = 1e-6) {
+    double statistic_tol = 1e-6,
+    SEXP raw_data = R_NilValue,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   if (parameter <= 0 ||
@@ -2434,11 +2458,22 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml_impl(
                          : backend_from_optimizer_arg(optimizer);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  if (robust) {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("frontier_profile_lrt_ci_parameter_ml() robust=TRUE requires "
+                 "raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        complete_raw_from_arg(ctx.rep, raw_data));
+    ci_opts.reference =
+        magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  }
   auto r_or = magmaan::estimate::frontier::profile_lrt_ci_parameter_ml(
       ctx.pt, ctx.rep, ctx.samp, est,
       static_cast<Eigen::Index>(parameter - 1), ci_opts,
       bounds_from_nullable(bounds), backend, optim_opts_from(control),
-      constraint_tol);
+      constraint_tol, raw_holder.get());
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list(ctx, *r_or, parameter, "ML");
 }
@@ -2457,7 +2492,9 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
-    double statistic_tol = 1e-6) {
+    double statistic_tol = 1e-6,
+    SEXP raw_data = R_NilValue,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2479,11 +2516,22 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
                            "frontier_profile_lrt_ci_parameter_gmm");
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  if (robust) {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm() robust=TRUE requires "
+                 "raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        complete_raw_from_arg(ctx.rep, raw_data));
+    ci_opts.reference =
+        magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  }
   auto r_or = magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
       ctx.pt, ctx.rep, ctx.samp, est, std::move(w),
       static_cast<Eigen::Index>(parameter - 1), ci_opts,
       bounds_from_nullable(bounds), backend, optim_opts_from(control),
-      constraint_tol);
+      constraint_tol, raw_holder.get());
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list(ctx, *r_or, parameter, estimator.c_str());
 }

@@ -880,9 +880,22 @@ profile statistic against the chi-square cutoff, returning endpoint diagnostics 
 the endpoint constrained fits. R exposes these parameter-only wrappers through
 `magmaan_core$frontier_profile_lrt_parameter_gmm_fitted_weight` and
 `magmaan_core$frontier_profile_lrt_ci_parameter_*`. This is still infrastructure, not
-the funLR scientific gate: robust/Satorra/misspec scaling, Bartlett/calibrated
-constants, functional R callbacks, and ordinal DWLS fitted-functional constraints are
-still open.
+the funLR scientific gate: fitted-weight robust/Satorra/misspec scaling,
+Bartlett/calibrated constants, functional R callbacks, and ordinal DWLS
+fitted-functional constraints are still open.
+
+**Progress (2026-07-03): continuous parameter robust scaling seed.** Complete-data ML
+and caller-fixed continuous GMM parameter profile LRT/CI now accept complete raw data
+for empirical 1-df sandwich scaling. The constrained result keeps ordinary `T` and
+`p_value`, adds `scaling_factor`, `T_scaled`, and `p_value_scaled`, and the CI inverter
+can root on `ScalarProfileReference::RobustScaled`. ML reuses
+`robust::param_space_sandwich`; fixed-weight GMM reuses
+`continuous_ls_param_space_sandwich` with the caller-supplied weight. R exposes the
+option as `raw_data=` plus `robust=TRUE` for the ML/GMM parameter LRT and CI helpers,
+and the fixed-weight profile example smokes the scaled LRT/CI path. This closes the
+cheap asymptotic-robust parameter proving slice, but not the hard funLR gate:
+fitted-weight complete-sandwich scaling, misspec references, functional callbacks,
+ordinal fitted-functionals, and Bartlett/calibrated constants remain open.
 
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
@@ -912,17 +925,17 @@ fits, robust/misspec scaling, and small-sample constants remain open.
    `rho*` mirrors it). Ties [[small-sample-df-coverage-lane]].
 4. **Reliability-difference two-parameter confidence regions** (Pek-Wu sec 3; ties
    [[exp20-deng-chan-alpha-omega]]).
-5. **Extend the C++ seed beyond ordinary ML/GMM parameter CIs:** all-ordinal DWLS
-   functional constrained fits; robust/Satorra and misspec scalar reference
-   scaling; functional R callbacks; then expose the ordinal/fitted-functional
-   surface once an experiment consumes it.
+5. **Extend the C++ seed beyond the current ML/fixed-GMM parameter CIs:**
+   fitted-weight complete-sandwich scaling; all-ordinal DWLS functional constrained
+   fits; misspec scalar reference scaling; functional R callbacks; then expose the
+   ordinal/fitted-functional surface once an experiment consumes it.
 6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
    + Bartlett characterization; analytic Lawley ruled out (boundary); double bootstrap ruled out
    (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11);
    complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed;
    fixed-weight and fitted-weight GMM scalar/parameter profile seeds; parameter
-   CI inversion; R parameter wrappers + experiment-47 interior-parameter
-   calibration probe.
+   CI inversion; complete-data ML and fixed-weight GMM parameter robust scaling;
+   R parameter wrappers + experiment-47 interior-parameter calibration probe.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012

@@ -41,12 +41,12 @@ fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL
     .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol)
+frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust)
 }
 
-frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol)
+frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol, raw_data, robust)
 }
 
 frontier_profile_lrt_parameter_gmm_fitted_weight_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, max_outer = 20L, theta_tol = 1e-7, fmin_tol = 1e-10) {
@@ -57,12 +57,12 @@ frontier_profile_lrt_parameter_ordinal_impl <- function(fit, parameter, target, 
     .Call(`_magmaan_frontier_profile_lrt_parameter_ordinal_impl`, fit, parameter, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol, robust)
 }
 
-frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol)
+frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE) {
+    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust)
 }
 
-frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol)
+frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE) {
+    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust)
 }
 
 frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, max_outer = 20L, theta_tol = 1e-7, fmin_tol = 1e-10) {

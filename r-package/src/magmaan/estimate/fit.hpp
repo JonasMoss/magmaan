@@ -243,7 +243,8 @@ profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                       Bounds bounds = {},
                       Backend backend = Backend::NloptSlsqp,
                       OptimOptions opts = {},
-                      double constraint_tol = 1e-6);
+                      double constraint_tol = 1e-6,
+                      const data::RawData* robust_raw = nullptr);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -253,7 +254,8 @@ profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                          Bounds bounds = {},
                          Backend backend = Backend::NloptSlsqp,
                          OptimOptions opts = {},
-                         double constraint_tol = 1e-6);
+                         double constraint_tol = 1e-6,
+                         const data::RawData* robust_raw = nullptr);
 
 // Moment-quadratic analogues for a caller-fixed GMM/LS weight. These are the
 // first functional profile-LRT building blocks outside ML; robust Satorra /
@@ -275,7 +277,8 @@ profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                        Bounds bounds = {},
                        Backend backend = Backend::NloptSlsqp,
                        OptimOptions opts = {},
-                       double constraint_tol = 1e-6);
+                       double constraint_tol = 1e-6,
+                       const data::RawData* robust_raw = nullptr);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -286,7 +289,8 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                           Bounds bounds = {},
                           Backend backend = Backend::NloptSlsqp,
                           OptimOptions opts = {},
-                          double constraint_tol = 1e-6);
+                          double constraint_tol = 1e-6,
+                          const data::RawData* robust_raw = nullptr);
 
 // Fitted-weight moment-quadratic profile helpers. The current fitted-weight
 // policy refreshes the normal-theory expected-information weight W(θ) in an
@@ -346,7 +350,8 @@ profile_lrt_ci_parameter_ml(spec::LatentStructure pt,
                             Bounds bounds = {},
                             Backend backend = Backend::NloptSlsqp,
                             OptimOptions opts = {},
-                            double constraint_tol = 1e-6);
+                            double constraint_tol = 1e-6,
+                            const data::RawData* robust_raw = nullptr);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
@@ -359,7 +364,8 @@ profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
                              Bounds bounds = {},
                              Backend backend = Backend::NloptSlsqp,
                              OptimOptions opts = {},
-                             double constraint_tol = 1e-6);
+                             double constraint_tol = 1e-6,
+                             const data::RawData* robust_raw = nullptr);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_gmm_fitted_weight(

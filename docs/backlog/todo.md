@@ -680,10 +680,11 @@ Remaining work:
       equality closure to the ordinary partable nonlinear constraints and reuses
       the existing constrained ML optimizer path. `profile_lrt_scalar_ml` and
       `profile_lrt_parameter_ml` build the first df-1 ordinary profile-LR test
-      on top, reporting `2N·Δfmin` and `χ²_1` p-values. This is deliberately only
-      the normal-theory ML seed: robust/Satorra scaling, Bartlett or calibrated
-      small-sample factors, CI root inversion, and the continuous LS / ordinal
-      DWLS functional versions remain open funLR work.
+      on top, reporting `2N·Δfmin` and `χ²_1` p-values. This initial landing was
+      deliberately only the normal-theory ML seed; the later parameter-CI and
+      raw-data robust-scaling slices reuse the same constrained-fit surface.
+      Bartlett or calibrated small-sample factors, functional callbacks, and
+      ordinal DWLS functional versions remain open funLR work.
     - **Done 2026-07-03 (fixed-weight GMM scalar/profile-LRT seed).**
       `estimate::frontier::fit_gmm_constrained` reuses the same programmatic
       nonlinear equality closure path after scalarizing the moment-quadratic
@@ -693,7 +694,8 @@ Remaining work:
       `magmaan_core$frontier_profile_lrt_parameter_gmm()`, with
       `r-package/examples/profile_lrt_parameter_gmm.R` as the smoke check.
       Robust/Satorra scaling, fitted-weight policy, CI inversion, and ordinal
-      fitted-functional constraints remained open at this slice.
+      fitted-functional constraints remained open at this slice; later same-day
+      slices closed the fixed-weight parameter robust/CI pieces.
     - **Done 2026-07-03 (fitted-weight parameter profile + CI inversion seed).**
       The continuous moment-quadratic profile surface now has a fitted-weight
       policy: `estimate::frontier::fit_gmm_fitted_weight` and
@@ -710,8 +712,23 @@ Remaining work:
       wrappers as `magmaan_core$frontier_profile_lrt_parameter_gmm_fitted_weight`
       and `magmaan_core$frontier_profile_lrt_ci_parameter_*`; the existing
       profile-LRT example now smokes fixed-weight, fitted-weight, and CI paths.
-      Still open: robust/Satorra/misspec scaling, Bartlett/calibrated constants,
-      functional R callbacks, and ordinal DWLS fitted-functional constraints.
+      Still open at this slice: robust/Satorra/misspec scaling,
+      Bartlett/calibrated constants, functional R callbacks, and ordinal DWLS
+      fitted-functional constraints.
+    - **Done 2026-07-03 (continuous parameter robust profile scaling).**
+      Complete-data ML and caller-fixed continuous GMM parameter profile LRT/CI
+      now accept complete raw data for empirical 1-df sandwich scaling. The
+      constrained point keeps the ordinary `T`/`p_value`, adds
+      `scaling_factor`, `T_scaled = T / c`, and `p_value_scaled`, and the CI
+      inverter can target the scaled statistic through
+      `ScalarProfileReference::RobustScaled`. ML uses
+      `robust::param_space_sandwich`; fixed-weight GMM uses
+      `continuous_ls_param_space_sandwich` with the caller's fixed weight. R
+      exposes the option as `raw_data=` plus `robust=TRUE` on the ML/GMM
+      parameter LRT and CI helpers, and the fixed-weight GMM example now smokes
+      the robust scaled LRT/CI path. Still open: fitted-weight complete-sandwich
+      scaling, functional R callbacks, ordinal fitted-functional constraints,
+      misspec reference policies, and Bartlett/calibrated constants.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric
