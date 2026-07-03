@@ -296,8 +296,9 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
 // policy refreshes the normal-theory expected-information weight W(θ) in an
 // outer fixed-point loop, then solves each frozen-weight subproblem with the
 // same constrained scalar optimizer as the fixed-weight GMM seed. This is an
-// optimization policy only; robust/Satorra, misspec-sandwich, and Bartlett
-// reference scaling remain separate layers.
+// optimization policy only; robust scaling treats the final W(theta) as the
+// profile metric. Misspec/weight-derivative and Bartlett reference scaling
+// remain separate layers.
 fit_expected<Estimates>
 fit_gmm_fitted_weight(spec::LatentStructure pt, const model::MatrixRep& rep,
                       const SampleStats& samp, const Eigen::VectorXd& x0,
@@ -326,7 +327,8 @@ profile_lrt_scalar_gmm_fitted_weight(
     Bounds bounds = {},
     Backend backend = Backend::NloptSlsqp,
     OptimOptions opts = {},
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    const data::RawData* robust_raw = nullptr);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_gmm_fitted_weight(
@@ -338,7 +340,8 @@ profile_lrt_parameter_gmm_fitted_weight(
     Bounds bounds = {},
     Backend backend = Backend::NloptSlsqp,
     OptimOptions opts = {},
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    const data::RawData* robust_raw = nullptr);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_ml(spec::LatentStructure pt,
@@ -378,7 +381,8 @@ profile_lrt_ci_parameter_gmm_fitted_weight(
     Bounds bounds = {},
     Backend backend = Backend::NloptSlsqp,
     OptimOptions opts = {},
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    const data::RawData* robust_raw = nullptr);
 
 }  // namespace frontier
 
