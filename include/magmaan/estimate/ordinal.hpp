@@ -591,6 +591,64 @@ mixed_ordinal_ls_objective(spec::LatentStructure pt,
                            OrdinalParameterization parameterization =
                                OrdinalParameterization::Delta);
 
+fit_expected<Estimates>
+fit_mixed_ordinal_constrained(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& start,
+    ExtraNonlinearEqConstraints extra,
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_mixed_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& unrestricted,
+    ScalarFunctional functional,
+    double target,
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_mixed_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& unrestricted,
+    Eigen::Index parameter,
+    double target,
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_mixed_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& unrestricted,
+    Eigen::Index parameter,
+    ScalarProfileCiOptions ci_options = {},
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
 // Experimental all-ordinal second-stage weights over an already-built
 // threshold + polychoric `OrdinalStats` object. This is intended for research
 // comparisons: callers can build pairwise/listwise ordinal moments and Gamma

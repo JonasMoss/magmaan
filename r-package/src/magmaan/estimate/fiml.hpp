@@ -702,6 +702,91 @@ two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
                          const FIMLH1& h1,
                          double eig_tol = 1e-10);
 
+namespace frontier {
+
+fit_expected<Estimates>
+fit_fiml_constrained(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Eigen::VectorXd& x0,
+                     const FIMLPack& pack,
+                     estimate::frontier::ExtraNonlinearEqConstraints extra,
+                     Backend backend = Backend::NloptSlsqp,
+                     optim::OptimOptions opts = {});
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_scalar_fiml(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& unrestricted,
+                        const FIMLPack& pack,
+                        estimate::frontier::ScalarFunctional functional,
+                        double target,
+                        Backend backend = Backend::NloptSlsqp,
+                        optim::OptimOptions opts = {},
+                        double constraint_tol = 1e-6);
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_parameter_fiml(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& unrestricted,
+                           const FIMLPack& pack,
+                           Eigen::Index parameter,
+                           double target,
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           double constraint_tol = 1e-6);
+
+fit_expected<estimate::frontier::ScalarProfileCiResult>
+profile_lrt_ci_parameter_fiml(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const RawData& raw,
+    const Estimates& unrestricted,
+    const FIMLPack& pack,
+    Eigen::Index parameter,
+    estimate::frontier::ScalarProfileCiOptions ci_options = {},
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    double constraint_tol = 1e-6);
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& unrestricted,
+                           const SaturatedMoments& sm,
+                           estimate::frontier::ScalarFunctional functional,
+                           double target,
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           double constraint_tol = 1e-6);
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const Estimates& unrestricted,
+                              const SaturatedMoments& sm,
+                              Eigen::Index parameter,
+                              double target,
+                              Backend backend = Backend::NloptSlsqp,
+                              optim::OptimOptions opts = {},
+                              double constraint_tol = 1e-6);
+
+fit_expected<estimate::frontier::ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml2s_nt(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const Estimates& unrestricted,
+    const SaturatedMoments& sm,
+    Eigen::Index parameter,
+    estimate::frontier::ScalarProfileCiOptions ci_options = {},
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    double constraint_tol = 1e-6);
+
+}  // namespace frontier
+
 post_expected<TwoStageFitMeasures>
 two_stage_fit_measures(spec::LatentStructure pt,
                        const model::MatrixRep& rep,

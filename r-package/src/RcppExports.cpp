@@ -234,6 +234,58 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_profile_lrt_parameter_fiml_impl
+Rcpp::List frontier_profile_lrt_parameter_fiml_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double constraint_tol, SEXP raw_data);
+RcppExport SEXP _magmaan_frontier_profile_lrt_parameter_fiml_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP constraint_tolSEXP, SEXP raw_dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type parameter(parameterSEXP);
+    Rcpp::traits::input_parameter< double >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< double >::type constraint_tol(constraint_tolSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_parameter_fiml_impl(fit, parameter, target, optimizer, control, constraint_tol, raw_data));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_profile_lrt_parameter_ml2s_nt_impl
+Rcpp::List frontier_profile_lrt_parameter_ml2s_nt_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double constraint_tol);
+RcppExport SEXP _magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP constraint_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type parameter(parameterSEXP);
+    Rcpp::traits::input_parameter< double >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< double >::type constraint_tol(constraint_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_parameter_ml2s_nt_impl(fit, parameter, target, optimizer, control, constraint_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_profile_lrt_parameter_mixed_ordinal_impl
+Rcpp::List frontier_profile_lrt_parameter_mixed_ordinal_impl(Rcpp::List fit, int parameter, double target, std::string weight, SEXP mixed_ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol);
+RcppExport SEXP _magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP weightSEXP, SEXP mixed_ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type parameter(parameterSEXP);
+    Rcpp::traits::input_parameter< double >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mixed_ordinal_stats(mixed_ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< double >::type constraint_tol(constraint_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_parameter_mixed_ordinal_impl(fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_profile_lrt_ci_parameter_ml_impl
 Rcpp::List frontier_profile_lrt_ci_parameter_ml_impl(Rcpp::List fit, int parameter, double level, double lower, double upper, double initial_step, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, double root_tol, double statistic_tol, SEXP raw_data, bool robust, Rcpp::Nullable<Rcpp::String> reference);
 RcppExport SEXP _magmaan_frontier_profile_lrt_ci_parameter_ml_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP levelSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP initial_stepSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP root_tolSEXP, SEXP statistic_tolSEXP, SEXP raw_dataSEXP, SEXP robustSEXP, SEXP referenceSEXP) {
@@ -337,6 +389,73 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type reference(referenceSEXP);
     rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_ci_parameter_ordinal_impl(fit, parameter, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_profile_lrt_ci_parameter_fiml_impl
+Rcpp::List frontier_profile_lrt_ci_parameter_fiml_impl(Rcpp::List fit, int parameter, double level, double lower, double upper, double initial_step, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double constraint_tol, double root_tol, double statistic_tol, SEXP raw_data);
+RcppExport SEXP _magmaan_frontier_profile_lrt_ci_parameter_fiml_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP levelSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP initial_stepSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP constraint_tolSEXP, SEXP root_tolSEXP, SEXP statistic_tolSEXP, SEXP raw_dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type parameter(parameterSEXP);
+    Rcpp::traits::input_parameter< double >::type level(levelSEXP);
+    Rcpp::traits::input_parameter< double >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< double >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< double >::type initial_step(initial_stepSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< double >::type constraint_tol(constraint_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type root_tol(root_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type statistic_tol(statistic_tolSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_ci_parameter_fiml_impl(fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_profile_lrt_ci_parameter_ml2s_nt_impl
+Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_nt_impl(Rcpp::List fit, int parameter, double level, double lower, double upper, double initial_step, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double constraint_tol, double root_tol, double statistic_tol);
+RcppExport SEXP _magmaan_frontier_profile_lrt_ci_parameter_ml2s_nt_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP levelSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP initial_stepSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP constraint_tolSEXP, SEXP root_tolSEXP, SEXP statistic_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type parameter(parameterSEXP);
+    Rcpp::traits::input_parameter< double >::type level(levelSEXP);
+    Rcpp::traits::input_parameter< double >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< double >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< double >::type initial_step(initial_stepSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< double >::type constraint_tol(constraint_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type root_tol(root_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type statistic_tol(statistic_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_ci_parameter_ml2s_nt_impl(fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_profile_lrt_ci_parameter_mixed_ordinal_impl
+Rcpp::List frontier_profile_lrt_ci_parameter_mixed_ordinal_impl(Rcpp::List fit, int parameter, std::string weight, double level, double lower, double upper, double initial_step, SEXP mixed_ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, double root_tol, double statistic_tol);
+RcppExport SEXP _magmaan_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP weightSEXP, SEXP levelSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP initial_stepSEXP, SEXP mixed_ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP root_tolSEXP, SEXP statistic_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type parameter(parameterSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< double >::type level(levelSEXP);
+    Rcpp::traits::input_parameter< double >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< double >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< double >::type initial_step(initial_stepSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mixed_ordinal_stats(mixed_ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< double >::type constraint_tol(constraint_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type root_tol(root_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type statistic_tol(statistic_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_ci_parameter_mixed_ordinal_impl(fit, parameter, weight, level, lower, upper, initial_step, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3176,10 +3295,16 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_profile_lrt_parameter_gmm_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_gmm_impl, 12},
     {"_magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl, 13},
     {"_magmaan_frontier_profile_lrt_parameter_ordinal_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_ordinal_impl, 11},
+    {"_magmaan_frontier_profile_lrt_parameter_fiml_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_fiml_impl, 7},
+    {"_magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl, 6},
+    {"_magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl, 9},
     {"_magmaan_frontier_profile_lrt_ci_parameter_ml_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_ml_impl, 15},
     {"_magmaan_frontier_profile_lrt_ci_parameter_gmm_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_gmm_impl, 17},
     {"_magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl, 18},
     {"_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl, 16},
+    {"_magmaan_frontier_profile_lrt_ci_parameter_fiml_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_fiml_impl, 12},
+    {"_magmaan_frontier_profile_lrt_ci_parameter_ml2s_nt_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_ml2s_nt_impl, 11},
+    {"_magmaan_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl, 14},
     {"_magmaan_frontier_profile_lrt_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ordinal_polychoric_omega_impl, 12},
     {"_magmaan_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl, 17},
     {"_magmaan_fit_twolevel_impl", (DL_FUNC) &_magmaan_fit_twolevel_impl, 8},
