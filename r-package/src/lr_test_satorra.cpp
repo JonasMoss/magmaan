@@ -444,8 +444,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   // ML2S fit) so neither the df/T path below nor the difference-spectrum driver
   // rebuilds the EM + observed information again.
   magmaan::estimate::fiml::SaturatedMoments sm;
-  if (!magmaanr::saturated_from_stage1(fit_H1, sm) &&
-      !magmaanr::saturated_from_stage1(fit_H0, sm)) {
+  if (!magmaanr::saturated_from_stage1_with_information(fit_H1, sm) &&
+      !magmaanr::saturated_from_stage1_with_information(fit_H0, sm)) {
     auto sm_or = magmaan::estimate::fiml::saturated_em_moments(
         raw_H1, *pack, *h1);
     if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());

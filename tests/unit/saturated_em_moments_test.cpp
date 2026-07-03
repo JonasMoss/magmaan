@@ -463,3 +463,76 @@ TEST_CASE("saturated_em_moments: public analytic path is h_step invariant") {
   CHECK((loose->J - tight->J).cwiseAbs().maxCoeff() == 0.0);
   CHECK((loose->acov - tight->acov).cwiseAbs().maxCoeff() == 0.0);
 }
+
+TEST_CASE("regularize_saturated_stage1: disabled path leaves moments unchanged") {
+  magmaan::estimate::fiml::SaturatedMoments sm;
+  sm.mean.push_back(Eigen::Vector2d::Zero());
+  sm.cov.push_back((Eigen::Matrix2d() << 1.0, 0.4, 0.4, 1.0).finished());
+  sm.n_obs.push_back(100);
+  sm.H = Eigen::MatrixXd::Identity(5, 5);
+  sm.J = Eigen::MatrixXd::Identity(5, 5);
+  sm.acov = Eigen::MatrixXd::Identity(5, 5);
+
+  auto r = magmaan::estimate::fiml::regularize_saturated_stage1(sm, {});
+  REQUIRE(r.has_value());
+  REQUIRE(r->block_diagnostics.size() == 1u);
+  CHECK_FALSE(r->block_diagnostics[0].applied);
+  CHECK((r->moments.cov[0] - sm.cov[0]).cwiseAbs().maxCoeff() == 0.0);
+  CHECK((r->moments.acov - sm.acov).cwiseAbs().maxCoeff() == 0.0);
+}
+
+TEST_CASE("regularize_saturated_stage1: condition cap chooses minimal diagonal shrinkage") {
+  magmaan::estimate::fiml::SaturatedMoments sm;
+  sm.mean.push_back(Eigen::Vector2d::Zero());
+  sm.cov.push_back((Eigen::Matrix2d() << 1.0, 0.999999, 0.999999, 1.0).finished());
+  sm.n_obs.push_back(100);
+  sm.H = Eigen::MatrixXd::Identity(5, 5);
+  sm.J = Eigen::MatrixXd::Identity(5, 5);
+  sm.acov = Eigen::MatrixXd::Identity(5, 5);
+
+  magmaan::estimate::fiml::Stage1RegularizationOptions opts;
+  opts.enabled = true;
+  opts.target = magmaan::estimate::fiml::Stage1RegularizationTarget::Diagonal;
+  opts.condition_max = 1000.0;
+
+  auto r = magmaan::estimate::fiml::regularize_saturated_stage1(sm, opts);
+  REQUIRE_MESSAGE(r.has_value(),
+      "regularize_saturated_stage1 failed: " <<
+      (r.has_value() ? "" : r.error().detail));
+  const auto& d = r->block_diagnostics[0];
+  CHECK(d.applied);
+  CHECK(d.raw_condition > 1e6);
+  CHECK(d.condition <= doctest::Approx(1000.0).epsilon(1e-9));
+  CHECK(d.intensity > 0.0);
+  CHECK(d.intensity < 0.01);
+}
+
+TEST_CASE("regularize_saturated_stage1: fixed diagonal shrinkage transforms ACOV") {
+  magmaan::estimate::fiml::SaturatedMoments sm;
+  sm.mean.push_back(Eigen::Vector2d::Zero());
+  sm.cov.push_back((Eigen::Matrix2d() << 1.0, 0.6, 0.6, 2.0).finished());
+  sm.n_obs.push_back(100);
+  sm.H = Eigen::MatrixXd::Identity(5, 5);
+  sm.J = Eigen::MatrixXd::Identity(5, 5);
+  sm.acov = Eigen::MatrixXd::Identity(5, 5);
+
+  magmaan::estimate::fiml::Stage1RegularizationOptions opts;
+  opts.enabled = true;
+  opts.target = magmaan::estimate::fiml::Stage1RegularizationTarget::Diagonal;
+  opts.intensity = 0.5;
+
+  auto r = magmaan::estimate::fiml::regularize_saturated_stage1(sm, opts);
+  REQUIRE(r.has_value());
+  const Eigen::Matrix2d expected_cov =
+      (Eigen::Matrix2d() << 1.0, 0.3, 0.3, 2.0).finished();
+  CHECK((r->moments.cov[0] - expected_cov).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK(r->block_diagnostics[0].intensity == doctest::Approx(0.5));
+
+  // Layout is [mu1, mu2, S11, S21, S22]. Diagonal target leaves variances and
+  // means unchanged and scales the off-diagonal covariance row by (1 - lambda).
+  CHECK(r->moments.acov(0, 0) == doctest::Approx(1.0));
+  CHECK(r->moments.acov(1, 1) == doctest::Approx(1.0));
+  CHECK(r->moments.acov(2, 2) == doctest::Approx(1.0));
+  CHECK(r->moments.acov(3, 3) == doctest::Approx(0.25).epsilon(1e-8));
+  CHECK(r->moments.acov(4, 4) == doctest::Approx(1.0));
+}

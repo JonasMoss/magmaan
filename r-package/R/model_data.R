@@ -1384,12 +1384,14 @@ fit_fiml <- function(model, data,
 
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                      bounds = NULL, h_step = 1e-4, stage1 = NULL,
+                     stage1_regularization = NULL,
                      stage2_weight = "nt", dls_a = 0.5) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
   fit <- estimate_two_stage_em_impl(partable_arg(model), fiml_data_arg(data),
                                     kind = "ml", h_step = h_step,
                                     optimizer = optimizer, control = control,
                                     bounds = bounds, stage1 = stage1,
+                                    stage1_regularization = stage1_regularization,
                                     stage2_weight = stage2_weight, dls_a = dls_a)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
   fit
@@ -1690,7 +1692,8 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     pd_gamma = c("overlap", "nominal"),
                     se = "none", test = "none",
                     W = NULL, optimizer = NULL, control = NULL,
-                    bounds = NULL, stage2_weight = "nt", dls_a = 0.5) {
+                    bounds = NULL, stage2_weight = "nt", dls_a = 0.5,
+                    stage1_regularization = NULL) {
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
@@ -1705,6 +1708,9 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS")
   if (!estimator %in% allowed) {
     stop("magmaan(): unsupported estimator '", estimator, "'")
+  }
+  if (!identical(estimator, "ML2S") && !is.null(stage1_regularization)) {
+    stop("magmaan(): `stage1_regularization` is only available for estimator = 'ML2S'")
   }
   if (inherits(model, "magmaan_fcsem_model_spec") ||
       inherits(data, "magmaan_fcsem_data")) {
@@ -1823,7 +1829,9 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
     fit <- fit_ml2s(spec, data, optimizer = optimizer, control = control,
-                    bounds = bounds, stage2_weight = stage2_weight, dls_a = dls_a)
+                    bounds = bounds,
+                    stage1_regularization = stage1_regularization,
+                    stage2_weight = stage2_weight, dls_a = dls_a)
     return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
   }
 

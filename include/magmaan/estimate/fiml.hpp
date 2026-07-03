@@ -137,6 +137,44 @@ struct SaturatedMoments {
   Eigen::MatrixXd              acov;   // sandwich ACOV(η̂_S) = H⁻¹ J H⁻¹
 };
 
+enum class Stage1RegularizationTarget : std::uint8_t {
+  Diagonal,        // T = diag(S)
+  ScaledIdentity,  // T = tr(S) / p * I
+  Identity,        // T = I
+};
+
+struct Stage1RegularizationOptions {
+  bool enabled = false;
+  Stage1RegularizationTarget target = Stage1RegularizationTarget::Diagonal;
+
+  // Fixed shrinkage intensity when finite; otherwise the smallest intensity in
+  // [0, 1] that satisfies `condition_max` / `min_eigenvalue` is selected.
+  double intensity = std::numeric_limits<double>::quiet_NaN();
+  double condition_max = std::numeric_limits<double>::infinity();
+  double min_eigenvalue = 0.0;
+
+  // Relative central-difference step for the delta-method Jacobian of the
+  // moment transformation, including any data-adaptive intensity selection.
+  double jacobian_step = 1e-7;
+};
+
+struct Stage1RegularizationBlockDiagnostic {
+  std::string target;
+  double raw_min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double raw_max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double raw_condition = std::numeric_limits<double>::quiet_NaN();
+  double min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double condition = std::numeric_limits<double>::quiet_NaN();
+  double intensity = 0.0;
+  bool applied = false;
+};
+
+struct Stage1RegularizedMoments {
+  SaturatedMoments moments;
+  std::vector<Stage1RegularizationBlockDiagnostic> block_diagnostics;
+};
+
 struct FIMLRobustMLR {
   Eigen::MatrixXd vcov;
   Eigen::VectorXd se;
@@ -402,6 +440,15 @@ post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw,
                      const FIMLPack& pack,
                      const FIMLH1& h1);
+
+// Optional frontier conditioning for ML2S Stage-1 saturated moments. It
+// regularizes the covariance input S used by Stage 2 and propagates the same
+// moment map through `acov` by delta method. `H`/`J` remain the raw saturated
+// information/score covariance and should not be used as the metric for the
+// transformed moments.
+post_expected<Stage1RegularizedMoments>
+regularize_saturated_stage1(const SaturatedMoments& sm,
+                            Stage1RegularizationOptions options);
 
 // Casewise influence rows for the saturated EM moment estimator eta_S. Rows are
 // stacked by raw block, columns use the same block-stacked [mu; vech(Sigma)]

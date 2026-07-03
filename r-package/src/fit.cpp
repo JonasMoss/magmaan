@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1707,7 +1708,8 @@ const SaturatedMoments& fiml_saturated_for_fit(
     Rcpp::List fit, const magmaan::data::RawData& raw, const FimlPack& pack,
     const FimlH1& h1, std::unique_ptr<SaturatedMoments>& owned) {
   owned = std::make_unique<SaturatedMoments>();
-  if (magmaanr::saturated_from_stage1(fit, *owned)) return *owned;
+  if (magmaanr::saturated_from_stage1_with_information(fit, *owned))
+    return *owned;
   auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw, pack, h1);
   if (!sm_or.has_value()) stop_post(sm_or.error());
   *owned = std::move(*sm_or);
@@ -1913,6 +1915,139 @@ shrinkage_kind_from_string(const std::string& kind) {
   if (kind == "diagonal") return K::DiagonalTarget;
   if (kind == "constant_correlation") return K::ConstantCorrelation;
   Rcpp::stop("magmaan: shrinkage kind must be none, ridge, identity, diagonal, or constant_correlation");
+}
+
+magmaan::estimate::fiml::Stage1RegularizationTarget
+stage1_regularization_target_from_string(const std::string& target) {
+  using T = magmaan::estimate::fiml::Stage1RegularizationTarget;
+  if (target == "diagonal") return T::Diagonal;
+  if (target == "scaled_identity" || target == "scaled.identity")
+    return T::ScaledIdentity;
+  if (target == "identity") return T::Identity;
+  Rcpp::stop("magmaan: stage1_regularization$target must be diagonal, "
+             "scaled_identity, or identity");
+}
+
+magmaan::estimate::fiml::Stage1RegularizationOptions
+stage1_regularization_options_from(SEXP arg) {
+  using Opt = magmaan::estimate::fiml::Stage1RegularizationOptions;
+  Opt opts;
+  if (Rf_isNull(arg)) return opts;
+
+  opts.enabled = true;
+  opts.condition_max = 1e6;
+  if (Rf_isLogical(arg) && Rf_length(arg) == 1) {
+    const int flag = LOGICAL(arg)[0];
+    opts.enabled = flag != 0 && flag != NA_LOGICAL;
+    return opts;
+  }
+  if (TYPEOF(arg) != VECSXP) {
+    Rcpp::stop("magmaan: stage1_regularization must be NULL, TRUE/FALSE, or a list");
+  }
+
+  Rcpp::List l(arg);
+  if (l.containsElementNamed("enabled") && !Rf_isNull(l["enabled"])) {
+    opts.enabled = Rcpp::as<bool>(l["enabled"]);
+  }
+  if (!opts.enabled) return opts;
+  if (l.containsElementNamed("target") && !Rf_isNull(l["target"])) {
+    opts.target = stage1_regularization_target_from_string(
+        Rcpp::as<std::string>(l["target"]));
+  }
+  if (l.containsElementNamed("intensity") && !Rf_isNull(l["intensity"])) {
+    const double x = Rcpp::as<double>(l["intensity"]);
+    opts.intensity = std::isfinite(x)
+        ? x
+        : std::numeric_limits<double>::quiet_NaN();
+  }
+  if (l.containsElementNamed("condition_max") &&
+      !Rf_isNull(l["condition_max"])) {
+    const double x = Rcpp::as<double>(l["condition_max"]);
+    opts.condition_max = (std::isfinite(x) || std::isinf(x))
+        ? x
+        : std::numeric_limits<double>::infinity();
+  }
+  if (l.containsElementNamed("min_eigenvalue") &&
+      !Rf_isNull(l["min_eigenvalue"])) {
+    opts.min_eigenvalue = Rcpp::as<double>(l["min_eigenvalue"]);
+  }
+  if (l.containsElementNamed("jacobian_step") &&
+      !Rf_isNull(l["jacobian_step"])) {
+    opts.jacobian_step = Rcpp::as<double>(l["jacobian_step"]);
+  }
+  return opts;
+}
+
+Rcpp::List saturated_moments_to_r(
+    const magmaan::estimate::fiml::SaturatedMoments& out,
+    bool include_information = true) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(out.mean.size());
+  Rcpp::List mean_out(nb), cov_out(nb);
+  Rcpp::IntegerVector nobs(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::size_t bi = static_cast<std::size_t>(b);
+    mean_out[b] = Rcpp::wrap(out.mean[bi]);
+    cov_out[b]  = Rcpp::wrap(out.cov[bi]);
+    nobs[b]     = static_cast<int>(out.n_obs[bi]);
+  }
+
+  Rcpp::List ans = Rcpp::List::create(
+      Rcpp::Named("mean") = mean_out,
+      Rcpp::Named("cov")  = cov_out,
+      Rcpp::Named("n_obs") = nobs,
+      Rcpp::Named("warnings") = Rcpp::wrap(out.warnings),
+      Rcpp::Named("acov") = Rcpp::wrap(out.acov));
+  if (include_information) {
+    ans["H"] = Rcpp::wrap(out.H);
+    ans["J"] = Rcpp::wrap(out.J);
+  }
+  return ans;
+}
+
+Rcpp::List stage1_regularization_diagnostics_to_r(
+    const magmaan::estimate::fiml::Stage1RegularizedMoments& r,
+    const magmaan::estimate::fiml::Stage1RegularizationOptions& opts) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(r.block_diagnostics.size());
+  Rcpp::CharacterVector target(nb);
+  Rcpp::NumericVector raw_min(nb), raw_max(nb), raw_cond(nb);
+  Rcpp::NumericVector min_eig(nb), max_eig(nb), cond(nb), intensity(nb);
+  Rcpp::LogicalVector applied(nb);
+  bool any = false;
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const auto& d = r.block_diagnostics[static_cast<std::size_t>(b)];
+    target[b] = d.target;
+    raw_min[b] = d.raw_min_eigen;
+    raw_max[b] = d.raw_max_eigen;
+    raw_cond[b] = d.raw_condition;
+    min_eig[b] = d.min_eigen;
+    max_eig[b] = d.max_eigen;
+    cond[b] = d.condition;
+    intensity[b] = d.intensity;
+    applied[b] = d.applied;
+    any = any || d.applied;
+  }
+  Rcpp::List blocks = Rcpp::List::create(
+      Rcpp::_["target"] = target,
+      Rcpp::_["raw_min_eigen"] = raw_min,
+      Rcpp::_["raw_max_eigen"] = raw_max,
+      Rcpp::_["raw_condition"] = raw_cond,
+      Rcpp::_["min_eigen"] = min_eig,
+      Rcpp::_["max_eigen"] = max_eig,
+      Rcpp::_["condition"] = cond,
+      Rcpp::_["intensity"] = intensity,
+      Rcpp::_["applied"] = applied);
+  const std::string first_target =
+      target.size() > 0 ? Rcpp::as<std::string>(target[0]) : "";
+  return Rcpp::List::create(
+      Rcpp::_["enabled"] = opts.enabled,
+      Rcpp::_["target"] = first_target,
+      Rcpp::_["condition_max"] = opts.condition_max,
+      Rcpp::_["min_eigenvalue"] = opts.min_eigenvalue,
+      Rcpp::_["fixed_intensity"] =
+          std::isfinite(opts.intensity) ? opts.intensity : NA_REAL,
+      Rcpp::_["jacobian_step"] = opts.jacobian_step,
+      Rcpp::_["applied"] = any,
+      Rcpp::_["blocks"] = blocks);
 }
 
 // The Phase 3-era Ceres-specific option helpers were
@@ -3612,26 +3747,33 @@ Rcpp::List saturated_em_moments_impl(
   auto out_or = magmaan::estimate::fiml::saturated_em_moments(
       raw, fiml_h1_opts_from(control), h_step);
   if (!out_or.has_value()) stop_post(out_or.error());
-  const auto& out = *out_or;
+  return saturated_moments_to_r(*out_or);
+}
 
-  const R_xlen_t nb = static_cast<R_xlen_t>(out.mean.size());
-  Rcpp::List mean_out(nb), cov_out(nb);
-  Rcpp::IntegerVector nobs(nb);
-  for (R_xlen_t b = 0; b < nb; ++b) {
-    const std::size_t bi = static_cast<std::size_t>(b);
-    mean_out[b] = Rcpp::wrap(out.mean[bi]);
-    cov_out[b]  = Rcpp::wrap(out.cov[bi]);
-    nobs[b]     = static_cast<int>(out.n_obs[bi]);
+// regularize_saturated_stage1_impl() — frontier ML2S Stage-1 conditioning.
+// Regularizes the saturated EM covariance used as Stage-2 input and propagates
+// the same transformation through Stage-1 ACOV. The raw input list is preserved
+// by the R wrapper as `$stage1_raw`; this helper returns only the transformed
+// Stage-1 list and diagnostics.
+//
+// [[Rcpp::export]]
+Rcpp::List regularize_saturated_stage1_impl(Rcpp::List stage1,
+                                            SEXP regularization = R_NilValue) {
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_list(stage1, sm)) {
+    Rcpp::stop("magmaan: regularize_saturated_stage1_impl needs a Stage-1 "
+               "list with mean/cov/n_obs/acov");
   }
-
+  auto opts = stage1_regularization_options_from(regularization);
+  auto r_or = magmaan::estimate::fiml::regularize_saturated_stage1(sm, opts);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  bool any_applied = false;
+  for (const auto& d : r_or->block_diagnostics) any_applied = any_applied || d.applied;
   return Rcpp::List::create(
-      Rcpp::Named("mean") = mean_out,
-      Rcpp::Named("cov")  = cov_out,
-      Rcpp::Named("n_obs") = nobs,
-      Rcpp::Named("warnings") = Rcpp::wrap(out.warnings),
-      Rcpp::Named("H")    = Rcpp::wrap(out.H),
-      Rcpp::Named("J")    = Rcpp::wrap(out.J),
-      Rcpp::Named("acov") = Rcpp::wrap(out.acov));
+      Rcpp::_["stage1"] = saturated_moments_to_r(r_or->moments,
+                                                 /*include_information=*/!any_applied),
+      Rcpp::_["diagnostics"] =
+          stage1_regularization_diagnostics_to_r(*r_or, opts));
 }
 
 // fit_uls() — composes fit_gmm(pt, rep, samp, x0, {}, bounds, backend).

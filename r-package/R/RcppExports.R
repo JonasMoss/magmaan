@@ -137,6 +137,10 @@ saturated_em_moments_impl <- function(raw_data, h_step = 1e-4, control = NULL) {
     .Call(`_magmaan_saturated_em_moments_impl`, raw_data, h_step, control)
 }
 
+regularize_saturated_stage1_impl <- function(stage1, regularization = NULL) {
+    .Call(`_magmaan_regularize_saturated_stage1_impl`, stage1, regularization)
+}
+
 fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
 }

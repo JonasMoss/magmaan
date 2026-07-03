@@ -598,9 +598,16 @@ golden `parTable()` fixtures.
     `Γ_NT`/`Γ_FIML` mix) that route the single-model GOF/SE path
     through `robust_continuous_ls` and the ML2S Satorra-2000/2001 difference
     tests through the same eigen-cores (a `(V, Γ)` swap, no new test machinery).
-    R: `magmaan(estimator = "ML2S", stage2_weight =, dls_a =)`. Rationale and
-    the open heavy-MAR efficiency/calibration sim: `docs/research/notes/
-    two_stage_weighting.tex`.
+    R: `magmaan(estimator = "ML2S", stage2_weight =, dls_a =)`. Opt-in
+    Stage-1 covariance conditioning is also exposed as
+    `stage1_regularization = TRUE` / `list(...)`: it regularizes the saturated
+    EM covariance before Stage 2 with a diagonal/scaled-identity/identity target,
+    chooses the smallest intensity needed to meet the requested condition/eigen
+    cap when no fixed intensity is supplied, preserves `$stage1_raw`, and
+    propagates the same moment map through `$stage1$acov` by delta method.
+    Regularized ML2S is frontier/non-lavaan-parity; the default remains raw
+    robust.two.stage. Rationale and the open heavy-MAR efficiency/calibration
+    sim: `docs/research/notes/two_stage_weighting.tex`.
 - Robust FIML MLR post-fit reporting computes observed-pattern casewise
   sandwich SEs and Yuan-Bentler Mplus scaled-test traces for fixture-backed
   non-saturated single- and multi-group cases. The R surface also exposes
@@ -1904,11 +1911,12 @@ stop rather than any usable non-error return.
   shrinkage leaves thresholds and continuous means in place, transforms the
   lower-triangle association/covariance block, propagates the moment
   transformation through `NACOV`, and rebuilds DWLS/WLS weights so C++ and R
-  consume the same shrunk moment stack. Missing-data extensions that regularize
-  saturated FIML H1 references — either Stage-1 moments before ML2S Stage 2 or
-  the H1 information/acov used by FIML nested spectra — are not current core
-  capabilities; they are tracked as frontier/backlog work because they change the
-  estimator and/or reference law. The old
+  consume the same shrunk moment stack. Missing-data ML2S now has a narrower
+  frontier analogue through `regularize_saturated_stage1`: it conditions the
+  saturated FIML Stage-1 covariance input before Stage 2 and delta-propagates the
+  transformed ACOV. The distinct direct-FIML nested-test problem — regularizing
+  the H1 information/acov reference used by Satorra spectra — remains backlog
+  work because it changes the reference law. The old
   `magmaan/data/shrinkage.hpp` include path remains a forwarding shim.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
