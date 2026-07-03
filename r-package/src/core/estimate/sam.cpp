@@ -167,9 +167,10 @@ fit_sam_impl(spec::LatentStructure pt, const model::MatrixRep& rep,
   SamResult out;
   out.measurement.reserve(part.mm.size());
 
-  // Standard-error bookkeeping: a (lhs,op,rhs) -> value map of all measurement
-  // and structural estimates, plus per-block free-index -> key, used to compose
-  // the joint θ̂ and place the block vcovs for the twostep partition.
+  // Joint-result bookkeeping: a (lhs,op,rhs) -> value map of all measurement
+  // and structural estimates composes θ̂ in the original lavaan free order.
+  // Per-block free-index -> key is only needed when placing the block vcovs for
+  // the twostep partition.
   const bool want_se = opts.se != SamSe::None;
   auto keyof = [](const std::string& l, parse::Op o, const std::string& r) {
     return l + "\x1f" + std::string(parse::to_string(o)) + "\x1f" + r;
@@ -234,8 +235,8 @@ fit_sam_impl(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (!x0_or.has_value()) return std::unexpected(x0_or.error());
     auto bounds_or = variance_bounds(parsed.structure);
     Bounds bounds = bounds_or.has_value() ? std::move(*bounds_or) : Bounds{};
-    auto fit_or =
-        fit_ml(parsed.structure, rep_b, samp_b, *x0_or, bounds, opts.mm_backend);
+    auto fit_or = fit_ml(parsed.structure, rep_b, samp_b, *x0_or, bounds,
+                         opts.mm_backend, opts.mm_control);
     if (!fit_or.has_value()) return std::unexpected(fit_or.error());
     const Estimates est_b = std::move(*fit_or);
 
@@ -281,6 +282,24 @@ fit_sam_impl(spec::LatentStructure pt, const model::MatrixRep& rep,
     smb.Theta = B0.Theta;
     smb.Nu = B0.Nu;
 
+    const int bnf = static_cast<int>(est_b.theta.size());
+    std::vector<std::string> bfk(sz(bnf));
+    for (std::size_t r = 0; r < parsed.structure.op.size(); ++r) {
+      const parse::Op o = parsed.structure.op[r];
+      if (o != parse::Op::Measurement && o != parse::Op::Regression &&
+          o != parse::Op::Covariance && o != parse::Op::Intercept)
+        continue;
+      const std::int32_t lid = parsed.structure.lhs_var[r];
+      const std::int32_t rid = parsed.structure.rhs_var[r];
+      const std::string k = keyof(
+          lid >= 0 ? parsed.names.var_name[sz(lid)] : std::string(), o,
+          rid >= 0 ? parsed.names.var_name[sz(rid)] : std::string());
+      const std::int32_t f = parsed.structure.free[r];
+      se_value[k] =
+          f > 0 ? est_b.theta[f - 1] : parsed.structure.fixed_value[r];
+      if (want_se && f > 0) bfk[sz(f - 1)] = k;
+    }
+
     if (want_se) {
       auto bi_or = inference::information_expected(parsed.structure, rep_b,
                                                    samp_b, est_b);
@@ -296,23 +315,6 @@ fit_sam_impl(spec::LatentStructure pt, const model::MatrixRep& rep,
             bv_or.error().detail));
       }
       smb.vcov = std::move(*bv_or);
-      const int bnf = static_cast<int>(est_b.theta.size());
-      std::vector<std::string> bfk(sz(bnf));
-      for (std::size_t r = 0; r < parsed.structure.op.size(); ++r) {
-        const parse::Op o = parsed.structure.op[r];
-        if (o != parse::Op::Measurement && o != parse::Op::Regression &&
-            o != parse::Op::Covariance && o != parse::Op::Intercept)
-          continue;
-        const std::int32_t lid = parsed.structure.lhs_var[r];
-        const std::int32_t rid = parsed.structure.rhs_var[r];
-        const std::string k = keyof(
-            lid >= 0 ? parsed.names.var_name[sz(lid)] : std::string(), o,
-            rid >= 0 ? parsed.names.var_name[sz(rid)] : std::string());
-        const std::int32_t f = parsed.structure.free[r];
-        se_value[k] =
-            f > 0 ? est_b.theta[f - 1] : parsed.structure.fixed_value[r];
-        if (f > 0) bfk[sz(f - 1)] = k;
-      }
       block_free_keys.push_back(std::move(bfk));
     }
     if (opts.se == SamSe::TwostepRobust) {
@@ -419,60 +421,61 @@ fit_sam_impl(spec::LatentStructure pt, const model::MatrixRep& rep,
       simple_start_values(parsed_s.structure, rep_s, samp_s, parsed_s.starts);
   if (!x0s_or.has_value()) return std::unexpected(x0s_or.error());
   auto fits_or = fit_ml(parsed_s.structure, rep_s, samp_s, *x0s_or, Bounds{},
-                        opts.struc_backend);
+                        opts.struc_backend, opts.struc_control);
   if (!fits_or.has_value()) return std::unexpected(fits_or.error());
 
   out.structural = std::move(*fits_or);
 
+  std::unordered_map<std::string, char> step2;
+  for (std::size_t r = 0; r < parsed_s.structure.op.size(); ++r) {
+    const parse::Op o = parsed_s.structure.op[r];
+    if (o != parse::Op::Regression && o != parse::Op::Covariance &&
+        o != parse::Op::Intercept)
+      continue;
+    const std::int32_t lid = parsed_s.structure.lhs_var[r];
+    const std::int32_t rid = parsed_s.structure.rhs_var[r];
+    const std::string k = keyof(
+        lid >= 0 ? parsed_s.names.var_name[sz(lid)] : std::string(), o,
+        rid >= 0 ? parsed_s.names.var_name[sz(rid)] : std::string());
+    const std::int32_t f = parsed_s.structure.free[r];
+    se_value[k] = f > 0 ? out.structural.theta[f - 1]
+                        : parsed_s.structure.fixed_value[r];
+    if (f > 0) step2[k] = 1;
+  }
+
+  const std::int32_t nfree = pt.n_free();
+  std::vector<std::string> key_of_free(sz(nfree));
+  std::vector<char> seen(sz(nfree), 0);
+  std::unordered_map<std::string, int> joint_free_of_key;
+  for (std::size_t r = 0; r < full.op.size(); ++r) {
+    const std::int32_t f = full.free[r];
+    if (f > 0 && !seen[sz(f - 1)]) {
+      const std::string k = keyof(full.lhs[r], full.op[r], full.rhs[r]);
+      key_of_free[sz(f - 1)] = k;
+      joint_free_of_key[k] = f;
+      seen[sz(f - 1)] = 1;
+    }
+  }
+
+  Eigen::VectorXd theta_joint(nfree);
+  std::vector<char> is_step2(sz(nfree), 0);
+  bool ok = true;
+  for (std::int32_t f = 0; f < nfree && ok; ++f) {
+    auto it = se_value.find(key_of_free[sz(f)]);
+    if (it == se_value.end()) { ok = false; break; }
+    theta_joint(f) = it->second;
+    is_step2[sz(f)] = step2.count(key_of_free[sz(f)]) ? 1 : 0;
+  }
+
+  if (!ok) {
+    return std::unexpected(mapping_error(
+        "fit_sam: could not assemble joint parameter vector for SAM result"));
+  }
+  out.theta = theta_joint;
+
   // Twostep / standard standard errors: partition the joint information.
   if (opts.se == SamSe::Twostep || opts.se == SamSe::Standard ||
       opts.se == SamSe::TwostepRobust) {
-    std::unordered_map<std::string, char> step2;
-    for (std::size_t r = 0; r < parsed_s.structure.op.size(); ++r) {
-      const parse::Op o = parsed_s.structure.op[r];
-      if (o != parse::Op::Regression && o != parse::Op::Covariance &&
-          o != parse::Op::Intercept)
-        continue;
-      const std::int32_t lid = parsed_s.structure.lhs_var[r];
-      const std::int32_t rid = parsed_s.structure.rhs_var[r];
-      const std::string k = keyof(
-          lid >= 0 ? parsed_s.names.var_name[sz(lid)] : std::string(), o,
-          rid >= 0 ? parsed_s.names.var_name[sz(rid)] : std::string());
-      const std::int32_t f = parsed_s.structure.free[r];
-      se_value[k] = f > 0 ? out.structural.theta[f - 1]
-                          : parsed_s.structure.fixed_value[r];
-      if (f > 0) step2[k] = 1;
-    }
-
-    const std::int32_t nfree = pt.n_free();
-    std::vector<std::string> key_of_free(sz(nfree));
-    std::vector<char> seen(sz(nfree), 0);
-    std::unordered_map<std::string, int> joint_free_of_key;
-    for (std::size_t r = 0; r < full.op.size(); ++r) {
-      const std::int32_t f = full.free[r];
-      if (f > 0 && !seen[sz(f - 1)]) {
-        const std::string k = keyof(full.lhs[r], full.op[r], full.rhs[r]);
-        key_of_free[sz(f - 1)] = k;
-        joint_free_of_key[k] = f;
-        seen[sz(f - 1)] = 1;
-      }
-    }
-
-    Eigen::VectorXd theta_joint(nfree);
-    std::vector<char> is_step2(sz(nfree), 0);
-    bool ok = true;
-    for (std::int32_t f = 0; f < nfree && ok; ++f) {
-      auto it = se_value.find(key_of_free[sz(f)]);
-      if (it == se_value.end()) { ok = false; break; }
-      theta_joint(f) = it->second;
-      is_step2[sz(f)] = step2.count(key_of_free[sz(f)]) ? 1 : 0;
-    }
-
-    if (!ok) {
-      return std::unexpected(mapping_error(
-          "fit_sam: could not assemble joint parameter vector for SAM SE"));
-    }
-
     Eigen::MatrixXd Sigma11_full = Eigen::MatrixXd::Zero(nfree, nfree);
     std::vector<Eigen::Index> robust_step1_info_order;
     std::vector<char> robust_step1_seen(sz(nfree), 0);

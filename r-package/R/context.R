@@ -31,6 +31,12 @@ vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
   regime <- match.arg(regime)
   bread <- if (identical(regime, "robust")) "observed" else "expected"
   fit <- object
+  if (inherits(fit, "magmaan_sam_fit")) {
+    if (is.null(fit$vcov)) {
+      stop("vcov(): SAM fit does not carry a covariance matrix; refit with se != 'none'")
+    }
+    return(fit$vcov)
+  }
   if (isTRUE(fit$ordinal)) {
     stats <- fit$ordinal_stats
     if (is.null(stats)) {

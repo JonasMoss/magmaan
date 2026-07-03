@@ -39,9 +39,11 @@ enum class SamMethod : std::uint8_t { Local, Global };
 enum class SamMapping : std::uint8_t { ML, GLS, ULS };
 
 // Standard-error method for the structural step. `Twostep`/`TwostepRobust`
-// mirror lavaan's default and Yuan-Chan (2002) corrections; `Standard` uses the
-// structural-info inverse without the step-1 correction term; `Naive` grabs the
-// structural fit's own vcov (treating VETA as raw data).
+// mirror lavaan's default and Yuan-Chan (2002) corrections; `TwostepRobust` is
+// lavaan's nonnormality-robust raw-data correction, not a full estimated-weight
+// / misspecification-robust sandwich. `Standard` uses the structural-info inverse
+// without the step-1 correction term; `Naive` grabs the structural fit's own vcov
+// (treating VETA as raw data).
 enum class SamSe : std::uint8_t { None, Standard, Naive, Twostep, TwostepRobust };
 
 // Local-SAM VETA construction knobs (lavaan `local.options`).
@@ -64,6 +66,8 @@ struct SamOptions {
   bool            meanstructure = false;
   Backend         mm_backend    = Backend::NloptLbfgs;   // measurement fit(s)
   Backend         struc_backend = Backend::NloptLbfgs;   // structural fit
+  OptimOptions    mm_control    = {};
+  OptimOptions    struc_control = {};
 };
 
 // One fitted measurement block. For global SAM the `measurement` vector holds a
@@ -83,6 +87,7 @@ struct SamMeasurementBlock {
 
 struct SamResult {
   Estimates             structural;    // β̂, Ψ̂ (and α̂ with a mean structure)
+  Eigen::VectorXd       theta;         // full-model joint θ̂, lavaan free order
   Eigen::MatrixXd       VETA;          // m × m bias-corrected latent covariance
   Eigen::VectorXd       EETA;          // m latent means (empty if cov-only)
   Eigen::MatrixXd       mapping;       // m × p full mapping M (block-diagonal

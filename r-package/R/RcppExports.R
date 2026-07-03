@@ -57,18 +57,6 @@ frontier_profile_lrt_parameter_ordinal_impl <- function(fit, parameter, target, 
     .Call(`_magmaan_frontier_profile_lrt_parameter_ordinal_impl`, fit, parameter, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
 }
 
-frontier_profile_lrt_parameter_fiml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_fiml_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data)
-}
-
-frontier_profile_lrt_parameter_ml2s_nt_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl`, fit, parameter, target, optimizer, control, constraint_tol)
-}
-
-frontier_profile_lrt_parameter_mixed_ordinal_impl <- function(fit, parameter, target, weight = "fit", mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl`, fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol)
-}
-
 frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
     .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
 }
@@ -83,6 +71,18 @@ frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl <- function(fit, parame
 
 frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
     .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
+}
+
+frontier_profile_lrt_parameter_fiml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_fiml_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data)
+}
+
+frontier_profile_lrt_parameter_ml2s_nt_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl`, fit, parameter, target, optimizer, control, constraint_tol)
+}
+
+frontier_profile_lrt_parameter_mixed_ordinal_impl <- function(fit, parameter, target, weight = "fit", mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl`, fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol)
 }
 
 frontier_profile_lrt_ci_parameter_fiml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL) {
@@ -127,6 +127,10 @@ fit_ml_irls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, con
 
 frontier_fit_ml_ridge_continuation_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL, alphas = NULL, target = "diagonal", include_endpoint = TRUE, diagonal_floor = 1e-8) {
     .Call(`_magmaan_frontier_fit_ml_ridge_continuation_impl`, partable, sample_stats, optimizer, control, bounds, alphas, target, include_endpoint, diagonal_floor)
+}
+
+frontier_sam_impl <- function(partable, sample_stats, raw_data = NULL, method = "local", mapping = "ml", se = "twostep", lambda_correction = TRUE, alpha_correction = 0L, meanstructure = FALSE, mm_optimizer = NULL, struc_optimizer = NULL, mm_control = NULL, struc_control = NULL) {
+    .Call(`_magmaan_frontier_sam_impl`, partable, sample_stats, raw_data, method, mapping, se, lambda_correction, alpha_correction, meanstructure, mm_optimizer, struc_optimizer, mm_control, struc_control)
 }
 
 frontier_rbm_impl <- function(fit, raw_data = NULL, weight = NULL, stage2_weight = "nt", dls_a = 0.5, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {

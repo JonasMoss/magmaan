@@ -66,6 +66,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 48 | [ordinal-omega-target-audit](48-ordinal-omega-target-audit/report.qmd) | probe | active | Does the current ordinal observed-score covariance omega equal the direct one-factor ordinal true-score target, or is it only on the same observed-score metric? |
 | 49 | [ordinal-polychoric-omega-coverage](49-ordinal-polychoric-omega-coverage/report.qmd) | probe | active | Does the robust delta interval for no-integration ordinal polychoric omega cover its latent-response target across small-N balanced and threshold-extreme ordinal cells? |
 | 50 | [ordinal-polychoric-omega-stress](50-ordinal-polychoric-omega-stress/report.qmd) | probe | active | Under nonnormal or locally dependent ordinal data, does the robust delta interval for no-integration ordinal polychoric omega cover the pseudo-true polychoric target? |
+| 51 | [sam-efficiency-stability](51-sam-efficiency-stability/report.qmd) | benchmark | active | Under normal, native independent-generator, and pseudo-continuous ordinal stress data, how do local SAM and joint ML compare on SE calibration, failures, and runtime at small N? |
 
 ## Archived
 

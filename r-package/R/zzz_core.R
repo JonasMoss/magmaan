@@ -106,6 +106,7 @@ frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
   frontier_rbm_impl(fit, raw_data, weight, stage2_weight, dls_a,
                     method, optimizer, control, bounds)
 }
+frontier_sam <- frontier_sam_impl
 frontier_profile_lrt_parameter_ml <- frontier_profile_lrt_parameter_ml_impl
 frontier_profile_lrt_parameter_gmm <- frontier_profile_lrt_parameter_gmm_impl
 frontier_profile_lrt_parameter_gmm_fitted_weight <- frontier_profile_lrt_parameter_gmm_fitted_weight_impl
@@ -546,6 +547,7 @@ magmaan_core <- local({
       "frontier_fit_ml_auto_identification",
       "frontier_fit_ml_ridge_continuation",
       "frontier_rbm",
+      "frontier_sam",
       "frontier_profile_lrt_parameter_ml",
       "frontier_profile_lrt_parameter_gmm",
       "frontier_profile_lrt_parameter_gmm_fitted_weight",
@@ -658,6 +660,7 @@ magmaan_core <- local({
       "fit_ml_fcsem_impl",
       "frontier_fit_ml_ridge_continuation_impl",
       "frontier_rbm_impl",
+      "frontier_sam_impl",
       "frontier_profile_lrt_parameter_ml_impl",
       "frontier_profile_lrt_parameter_gmm_impl",
       "frontier_profile_lrt_parameter_gmm_fitted_weight_impl",

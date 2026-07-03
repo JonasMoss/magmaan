@@ -1374,6 +1374,92 @@ frontier_fit_ml_ridge_continuation <- function(
   )
 }
 
+sam <- function(model, data,
+                method = c("local", "global"),
+                mapping = c("ml", "gls", "uls"),
+                se = c("twostep", "twostep.robust", "standard", "none"),
+                lambda_correction = TRUE,
+                alpha_correction = 0L,
+                meanstructure = FALSE,
+                mm_optimizer = "nlopt-lbfgs",
+                struc_optimizer = mm_optimizer,
+                mm_control = NULL,
+                struc_control = NULL,
+                raw_data = NULL,
+                missing = c("listwise", "error"),
+                ...) {
+  method <- match.arg(method)
+  mapping <- match.arg(mapping)
+  se <- match.arg(se)
+  missing <- match.arg(missing)
+  dots <- list(...)
+  if ("meanstructure" %in% names(dots)) {
+    stop("sam(): pass `meanstructure` directly, not through `...`")
+  }
+
+  if (inherits(model, "magmaan_model_spec")) {
+    if (length(dots)) {
+      stop("sam(): model option arguments are only accepted when `model` is a syntax string")
+    }
+    spec <- model
+  } else if (is.character(model) && length(model) == 1L) {
+    spec <- do.call(model_spec,
+                    c(list(syntax = model, meanstructure = meanstructure), dots))
+  } else {
+    if (length(dots)) {
+      stop("sam(): model option arguments require a syntax string")
+    }
+    spec <- as_magmaan_model_spec(model)
+  }
+
+  if (is.data.frame(data)) {
+    data <- df_to_data(data, spec, missing = missing)
+  }
+  ss <- sample_stats_arg(data)
+  raw <- raw_data
+  if (is.null(raw)) raw <- complete_raw_data(data)
+  if (identical(se, "twostep.robust") && is.null(raw)) {
+    stop("sam(): se = 'twostep.robust' requires complete raw data; ",
+         "pass a data.frame or `raw_data`")
+  }
+  raw_for_fit <- if (identical(se, "twostep.robust")) raw else NULL
+
+  fit <- frontier_sam_impl(
+    partable_arg(spec), ss,
+    raw_data = raw_for_fit,
+    method = method,
+    mapping = mapping,
+    se = se,
+    lambda_correction = isTRUE(lambda_correction),
+    alpha_correction = as.integer(alpha_correction),
+    meanstructure = isTRUE(meanstructure),
+    mm_optimizer = mm_optimizer,
+    struc_optimizer = struc_optimizer,
+    mm_control = mm_control,
+    struc_control = struc_control
+  )
+  if (!is.null(raw)) fit$raw_data <- raw
+  fit$model <- spec
+  fit$syntax <- spec$syntax
+  fit$options <- list(
+    estimator = "SAM",
+    method = method,
+    mapping = mapping,
+    se = se,
+    lambda_correction = isTRUE(lambda_correction),
+    alpha_correction = as.integer(alpha_correction),
+    meanstructure = isTRUE(meanstructure),
+    missing = missing,
+    model_options = spec$options
+  )
+  fit$ordered <- spec$ordered
+  fit$parameterization <- spec$parameterization
+  fit$group_var <- spec$group_var %||% fit$group_var %||% ""
+  fit$group_labels <- spec$group_labels %||% fit$group_labels %||% character()
+  class(fit) <- c("magmaan_sam_fit", "magmaan_fit", "list")
+  fit
+}
+
 fit_fiml <- function(model, data,
                      optimizer = "nlopt-lbfgs-slsqp-fallback",
                      control = NULL) {

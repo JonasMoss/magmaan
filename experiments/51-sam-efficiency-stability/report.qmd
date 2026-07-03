@@ -1,0 +1,82 @@
+---
+title: "SAM Efficiency And Stability"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- file.path("results", "summary.csv")
+rep_path <- file.path("results", "replicates.csv")
+if (!file.exists(summary_path) || !file.exists(rep_path)) {
+  stop("Missing results. Run: Rscript experiments/51-sam-efficiency-stability/run_experiment.R --budget-min 30")
+}
+tab <- read.csv(summary_path, stringsAsFactors = FALSE)
+reps <- read.csv(rep_path, stringsAsFactors = FALSE)
+fmt <- function(x, digits = 3) {
+  ifelse(is.na(x), "", format(round(x, digits), nsmall = digits, trim = TRUE))
+}
+```
+
+## Question
+
+How do local SAM and joint ML compare on a simple two-factor structural path when the data are normal, nonnormal from magmaan's independent-generator stack, or five-category ordinal scores treated as continuous?
+
+The point is not a definitive simulation result; it is a bounded engineering probe for SE calibration, optimizer failures, and runtime before broader SAM work.
+
+## Short Answer
+
+```{r}
+if (!nrow(tab)) {
+  cat("No completed cells are available yet.")
+} else {
+  ok <- aggregate(ok ~ estimator, reps, mean)
+  names(ok)[2] <- "ok_rate"
+  med <- aggregate(elapsed_ms ~ estimator, reps, median)
+  merged <- merge(ok, med, by = "estimator", all = TRUE)
+  best <- merged[order(-merged$ok_rate, merged$elapsed_ms), , drop = FALSE][1L, ]
+  cat(sprintf(
+    "This run completed %d fits. The highest observed convergence rate was %s for %s; median fit+SE time for that estimator was %.1f ms.",
+    nrow(reps), fmt(best$ok_rate, 3), best$estimator, best$elapsed_ms
+  ))
+}
+```
+
+## Evidence
+
+```{r}
+show <- tab
+show$ok_rate <- fmt(show$ok_rate)
+show$failure_rate <- fmt(show$failure_rate)
+show$bias <- fmt(show$bias)
+show$emp_sd <- fmt(show$emp_sd)
+show$mean_se <- fmt(show$mean_se)
+show$se_to_sd <- fmt(show$se_to_sd)
+show$coverage95 <- fmt(show$coverage95)
+show$median_ms <- fmt(show$median_ms, 1)
+show$p90_ms <- fmt(show$p90_ms, 1)
+names(show) <- c("Generator", "N", "Estimator", "Reps", "OK Rate",
+                 "Failure Rate", "Bias", "Emp SD", "Mean SE", "SE / SD",
+                 "Coverage 95", "Median Time (ms)", "P90 Time (ms)")
+knitr::kable(show)
+```
+
+The raw replicate-level output is in `results/replicates.csv`; the table above is `results/summary.csv`.
+
+## Caveats
+
+This is a small-N engineering probe. The ordinal condition is deliberately pseudo-continuous: it feeds integer category scores to the current continuous SAM and ML paths, so its target is estimator-specific and estimated by a large reference draw.
+
+The default runner enforces the budget at cell boundaries, so a 30-minute run may finish only part of the requested grid.
+
+## Reproduce
+
+```sh
+Rscript experiments/51-sam-efficiency-stability/run_experiment.R --budget-min 30
+Rscript experiments/51-sam-efficiency-stability/run_experiment.R --smoke
+```
