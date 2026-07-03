@@ -4293,6 +4293,271 @@ saturated_em_moments_from_raw(const RawData& raw,
                                    hessian_kind, caller);
 }
 
+struct Stage1CovMetrics {
+  double min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double condition = std::numeric_limits<double>::quiet_NaN();
+};
+
+struct Stage1CovApply {
+  Eigen::MatrixXd cov;
+  Stage1RegularizationBlockDiagnostic diagnostic;
+};
+
+std::string stage1_target_name(Stage1RegularizationTarget target) {
+  switch (target) {
+    case Stage1RegularizationTarget::Diagonal:
+      return "diagonal";
+    case Stage1RegularizationTarget::ScaledIdentity:
+      return "scaled_identity";
+    case Stage1RegularizationTarget::Identity:
+      return "identity";
+  }
+  return "unknown";
+}
+
+post_expected<void>
+validate_stage1_regularization_options(
+    const Stage1RegularizationOptions& options) {
+  if (!options.enabled) return {};
+  if (std::isfinite(options.intensity) &&
+      (options.intensity < 0.0 || options.intensity > 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: fixed intensity must lie in [0, 1]"));
+  }
+  if (!(options.min_eigenvalue >= 0.0) ||
+      !std::isfinite(options.min_eigenvalue)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: min_eigenvalue must be finite and >= 0"));
+  }
+  if (!(options.jacobian_step > 0.0) ||
+      !std::isfinite(options.jacobian_step)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: jacobian_step must be finite and > 0"));
+  }
+  if (std::isfinite(options.condition_max) &&
+      !(options.condition_max >= 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: condition_max must be >= 1"));
+  }
+  return {};
+}
+
+post_expected<Stage1CovMetrics>
+stage1_cov_metrics(const Eigen::MatrixXd& S, const std::string& what) {
+  if (S.rows() != S.cols() || S.rows() <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        what + " must be a non-empty square matrix"));
+  }
+  if (!S.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        what + " contains non-finite entries"));
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+      0.5 * (S + S.transpose()), Eigen::EigenvaluesOnly);
+  if (es.info() != Eigen::Success || es.eigenvalues().size() == 0 ||
+      !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        what + " eigendecomposition failed"));
+  }
+  Stage1CovMetrics out;
+  out.min_eigen = es.eigenvalues().minCoeff();
+  out.max_eigen = es.eigenvalues().maxCoeff();
+  out.condition = (out.min_eigen > 0.0)
+      ? out.max_eigen / out.min_eigen
+      : std::numeric_limits<double>::infinity();
+  return out;
+}
+
+bool stage1_metrics_meet(const Stage1CovMetrics& m,
+                         const Stage1RegularizationOptions& options) {
+  if (!std::isfinite(m.min_eigen) || !std::isfinite(m.max_eigen) ||
+      !(m.min_eigen > 0.0)) {
+    return false;
+  }
+  if (m.min_eigen < options.min_eigenvalue) return false;
+  if (std::isfinite(options.condition_max) &&
+      !(m.condition <= options.condition_max)) {
+    return false;
+  }
+  return true;
+}
+
+post_expected<Eigen::MatrixXd>
+stage1_regularization_target(const Eigen::MatrixXd& S,
+                             Stage1RegularizationTarget target,
+                             const std::string& what) {
+  const Eigen::Index p = S.rows();
+  Eigen::MatrixXd T = Eigen::MatrixXd::Zero(p, p);
+  switch (target) {
+    case Stage1RegularizationTarget::Diagonal:
+      T = S.diagonal().asDiagonal();
+      break;
+    case Stage1RegularizationTarget::ScaledIdentity: {
+      const double scale = S.trace() / static_cast<double>(p);
+      if (!(scale > 0.0) || !std::isfinite(scale)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "regularize_saturated_stage1: scaled-identity target for " + what +
+            " is not positive"));
+      }
+      T = scale * Eigen::MatrixXd::Identity(p, p);
+      break;
+    }
+    case Stage1RegularizationTarget::Identity:
+      T = Eigen::MatrixXd::Identity(p, p);
+      break;
+  }
+  if (!T.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: non-finite target for " + what));
+  }
+  auto mt = stage1_cov_metrics(T, "regularize_saturated_stage1 target " + what);
+  if (!mt.has_value()) return std::unexpected(mt.error());
+  if (!(mt->min_eigen > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: target for " + what +
+        " is not positive definite"));
+  }
+  return T;
+}
+
+Eigen::MatrixXd stage1_convex_cov(const Eigen::MatrixXd& S,
+                                  const Eigen::MatrixXd& T,
+                                  double intensity) {
+  if (intensity <= 0.0) return S;
+  if (intensity >= 1.0) return T;
+  return (1.0 - intensity) * S + intensity * T;
+}
+
+post_expected<Stage1CovApply>
+stage1_regularize_covariance_matrix(
+    const Eigen::MatrixXd& S0,
+    const Stage1RegularizationOptions& options,
+    const std::string& what) {
+  const Eigen::MatrixXd S = 0.5 * (S0 + S0.transpose());
+  auto raw = stage1_cov_metrics(S, "regularize_saturated_stage1 " + what);
+  if (!raw.has_value()) return std::unexpected(raw.error());
+
+  Stage1CovApply out;
+  out.cov = S;
+  auto& d = out.diagnostic;
+  d.target = stage1_target_name(options.target);
+  d.raw_min_eigen = raw->min_eigen;
+  d.raw_max_eigen = raw->max_eigen;
+  d.raw_condition = raw->condition;
+
+  if (!options.enabled) {
+    d.min_eigen = raw->min_eigen;
+    d.max_eigen = raw->max_eigen;
+    d.condition = raw->condition;
+    return out;
+  }
+
+  const bool fixed_intensity = std::isfinite(options.intensity);
+  double s = fixed_intensity ? options.intensity : 0.0;
+  if (!fixed_intensity && !stage1_metrics_meet(*raw, options)) {
+    auto target = stage1_regularization_target(S, options.target, what);
+    if (!target.has_value()) return std::unexpected(target.error());
+
+    const Eigen::MatrixXd S1 = stage1_convex_cov(S, *target, 1.0);
+    auto m1 = stage1_cov_metrics(S1,
+        "regularize_saturated_stage1 " + what + " target");
+    if (!m1.has_value()) return std::unexpected(m1.error());
+    if (!stage1_metrics_meet(*m1, options)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "regularize_saturated_stage1: target cannot satisfy conditioning "
+          "constraints for " + what));
+    }
+
+    double lo = 0.0;
+    double hi = 1.0;
+    for (int iter = 0; iter < 80; ++iter) {
+      const double mid = 0.5 * (lo + hi);
+      const Eigen::MatrixXd Smid = stage1_convex_cov(S, *target, mid);
+      auto mmid = stage1_cov_metrics(Smid,
+          "regularize_saturated_stage1 " + what + " candidate");
+      if (!mmid.has_value()) return std::unexpected(mmid.error());
+      if (stage1_metrics_meet(*mmid, options)) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    s = hi;
+    out.cov = stage1_convex_cov(S, *target, s);
+  } else if (fixed_intensity && s > 0.0) {
+    auto target = stage1_regularization_target(S, options.target, what);
+    if (!target.has_value()) return std::unexpected(target.error());
+    out.cov = stage1_convex_cov(S, *target, s);
+  }
+
+  auto fin = stage1_cov_metrics(out.cov,
+      "regularize_saturated_stage1 " + what + " result");
+  if (!fin.has_value()) return std::unexpected(fin.error());
+  if (!stage1_metrics_meet(*fin, options)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: regularized covariance for " + what +
+        " is not positive definite or does not meet conditioning constraints"));
+  }
+  d.min_eigen = fin->min_eigen;
+  d.max_eigen = fin->max_eigen;
+  d.condition = fin->condition;
+  d.intensity = s;
+  d.applied = options.enabled && (s > 0.0);
+  return out;
+}
+
+post_expected<Eigen::MatrixXd>
+stage1_covariance_jacobian(const Eigen::MatrixXd& S,
+                           const Stage1RegularizationOptions& options,
+                           const Stage1RegularizationBlockDiagnostic& diag,
+                           const std::string& what) {
+  const Eigen::Index p = S.rows();
+  const Eigen::Index ps = vech_len(p);
+  if (!options.enabled || !diag.applied) {
+    return Eigen::MatrixXd::Identity(ps, ps);
+  }
+
+  Eigen::MatrixXd J(ps, ps);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j; i < p; ++i) {
+      const Eigen::Index col = vech_index(p, i, j);
+      double h = options.jacobian_step *
+          std::max(1.0, std::abs(S(i, j)));
+      post_expected<Stage1CovApply> plus =
+          std::unexpected(make_post_err(PostError::Kind::NumericIssue, ""));
+      post_expected<Stage1CovApply> minus =
+          std::unexpected(make_post_err(PostError::Kind::NumericIssue, ""));
+      for (int shrink = 0; shrink < 8; ++shrink) {
+        Eigen::MatrixXd Sp = S;
+        Eigen::MatrixXd Sm = S;
+        Sp(i, j) += h;
+        Sm(i, j) -= h;
+        if (i != j) {
+          Sp(j, i) += h;
+          Sm(j, i) -= h;
+        }
+        plus = stage1_regularize_covariance_matrix(
+            Sp, options, what + " jacobian +");
+        minus = stage1_regularize_covariance_matrix(
+            Sm, options, what + " jacobian -");
+        if (plus.has_value() && minus.has_value()) break;
+        h *= 0.25;
+      }
+      if (!plus.has_value()) return std::unexpected(plus.error());
+      if (!minus.has_value()) return std::unexpected(minus.error());
+      J.col(col) =
+          (vech_lower(plus->cov) - vech_lower(minus->cov)) / (2.0 * h);
+    }
+  }
+  if (!J.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: non-finite covariance Jacobian for " +
+        what));
+  }
+  return J;
+}
+
 }  // namespace
 
 post_expected<SaturatedMoments>
@@ -4318,6 +4583,76 @@ saturated_em_moments(const RawData& raw,
   return saturated_em_moments_impl(raw, pack, h1, /*h_step=*/1e-4,
                                    SaturatedHessianKind::Analytic,
                                    "saturated_em_moments");
+}
+
+post_expected<Stage1RegularizedMoments>
+regularize_saturated_stage1(const SaturatedMoments& sm,
+                            Stage1RegularizationOptions options) {
+  if (auto ok = validate_stage1_regularization_options(options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  const std::size_t B = sm.cov.size();
+  if (sm.mean.size() != B || sm.n_obs.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: inconsistent block counts"));
+  }
+  std::vector<Eigen::Index> q_b(B);
+  std::vector<Eigen::Index> off_b(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    if (p <= 0 || sm.cov[b].cols() != p || sm.mean[b].size() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "regularize_saturated_stage1: malformed block " +
+          std::to_string(b)));
+    }
+    q_b[b] = p + vech_len(p);
+    off_b[b + 1] = off_b[b] + q_b[b];
+  }
+  const Eigen::Index Q = off_b.back();
+  if (sm.acov.rows() != Q || sm.acov.cols() != Q || !sm.acov.allFinite()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "regularize_saturated_stage1: saturated ACOV shape mismatch"));
+  }
+
+  Stage1RegularizedMoments out;
+  out.moments = sm;
+  out.block_diagnostics.reserve(B);
+  Eigen::MatrixXd D = Eigen::MatrixXd::Identity(Q, Q);
+  bool any_applied = false;
+
+  for (std::size_t b = 0; b < B; ++b) {
+    const std::string what = "block " + std::to_string(b);
+    auto cov_or =
+        stage1_regularize_covariance_matrix(sm.cov[b], options, what);
+    if (!cov_or.has_value()) return std::unexpected(cov_or.error());
+    out.moments.cov[b] = std::move(cov_or->cov);
+    out.block_diagnostics.push_back(cov_or->diagnostic);
+    any_applied = any_applied || cov_or->diagnostic.applied;
+
+    auto Jcov_or = stage1_covariance_jacobian(
+        sm.cov[b], options, cov_or->diagnostic, what);
+    if (!Jcov_or.has_value()) return std::unexpected(Jcov_or.error());
+    const Eigen::Index p = sm.cov[b].rows();
+    const Eigen::Index ps = vech_len(p);
+    const Eigen::Index off = off_b[b] + p;
+    D.block(off, off, ps, ps) = std::move(*Jcov_or);
+  }
+
+  if (any_applied) {
+    out.moments.acov = D * sm.acov * D.transpose();
+    out.moments.acov =
+        (0.5 * (out.moments.acov + out.moments.acov.transpose())).eval();
+    if (!out.moments.acov.allFinite()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "regularize_saturated_stage1: transformed ACOV is non-finite"));
+    }
+    add_unique_warning(out.moments.warnings,
+        "regularize_saturated_stage1: Stage-1 covariance was regularized; "
+        "ACOV was delta-method transformed");
+  }
+  return out;
 }
 
 post_expected<Eigen::MatrixXd>

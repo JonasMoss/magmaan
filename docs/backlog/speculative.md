@@ -131,7 +131,10 @@ transform the Stage-1 summaries, `S_reg = (1 - λ) S_H1 + λ T`, before the Stag
 fit. Use non-model-shaped targets first (`diag(S)` for covariance-scale summaries,
 `I` for correlation-scale summaries), choose the smallest λ needed to hit a
 prespecified eigenvalue or condition-number floor, and ledger λ plus raw/repaired
-eigen diagnostics. For reference spectra, regularize either the H1 information
+eigen diagnostics. The continuous ML2S covariance-input version of this surface
+now exists as opt-in `stage1_regularization`; the broader project remains for
+calibration, categorical analogues, and reference-law regularization. For
+reference spectra, regularize either the H1 information
 before inversion (eigenfloor/truncated pseudo-inverse) or the final `Gamma`
 toward a well-conditioned target; do not treat an unqualified additive
 `Gamma + λI` as automatically benign, because it can inflate the trace that drives
@@ -149,8 +152,9 @@ the estimand: fail-closed PD guards, hard iteration/walltime caps, parameter
 bounds, SLSQP fallback for line-search failures, and the H1 EM moment-tolerance
 fix. Existing `data::frontier` covariance shrinkage and complete-data
 `fit_ml_ridge_continuation()` cover ordinary complete-data ML and mixed ordinal
-moment experiments, but they are not yet an ML2S-H1 regularized-input estimator
-with coherent two-stage Gamma propagation.
+moment experiments. The new ML2S-H1 regularized-input estimator is available as
+frontier infrastructure, but it is not a calibrated default and does not cover
+the direct-FIML H/Gamma nested-reference problem.
 
 **Build if.** A dedicated regularized-reference project wants the bias/variance,
 coverage, and reference-law consequences of H1 conditioning, especially for
@@ -159,8 +163,9 @@ summary-input estimators in near-singular small-N / high-p regimes. This should
 not be folded into `papers/fiml-fmg`: it changes the estimator/reference law and
 would dilute that paper's reference-law question. Sequencing: (1) point-estimate
 and nested-spectrum probes on frozen hard cells using minimal eigenfloor/condition
-cap regularization; (2) Gamma propagation for transformed input moments and
-diagnostics for reference-only regularization; (3) simulation comparing raw ML2S,
+cap regularization; (2) diagnostics and calibration for reference-only
+regularization, building on the landed Gamma propagation for transformed ML2S
+input moments; (3) simulation comparing raw ML2S,
 regularized-input ML2S, regularized FIML nested references, categorical ULS/DWLS
 analogues, and parameter-space regularization under correct specification and
 misspecification.

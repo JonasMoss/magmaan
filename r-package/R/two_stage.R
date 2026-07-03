@@ -21,6 +21,7 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                                        control = NULL,
                                        bounds = NULL,
                                        stage1 = NULL,
+                                       stage1_regularization = NULL,
                                        stage2_weight = "nt",
                                        dls_a = 0.5) {
   kind <- match.arg(kind)
@@ -35,6 +36,17 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   em <- if (is.null(stage1)) {
     saturated_em_moments_impl(raw_data, h_step = h_step, control = control)
   } else stage1
+
+  stage1_raw <- NULL
+  stage1_regularization_diagnostics <- NULL
+  if (!is.null(stage1_regularization) &&
+      !identical(stage1_regularization, FALSE)) {
+    stage1_raw <- em
+    regularized <- regularize_saturated_stage1_impl(
+      em, stage1_regularization)
+    em <- regularized$stage1
+    stage1_regularization_diagnostics <- regularized$diagnostics
+  }
 
   n_blocks <- length(em$cov)
   if (n_blocks == 0L)
@@ -76,7 +88,13 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   fit$stage1 <- list(
     mean = em$mean, cov = em$cov, n_obs = em$n_obs,
     warnings = em$warnings,
-    H = em$H, J = em$J, acov = em$acov)
+    acov = em$acov)
+  if (!is.null(em$H)) fit$stage1$H <- em$H
+  if (!is.null(em$J)) fit$stage1$J <- em$J
+  if (!is.null(stage1_raw)) {
+    fit$stage1_raw <- stage1_raw
+    fit$stage1_regularization <- stage1_regularization_diagnostics
+  }
   fit$raw_data <- raw_data
   if (identical(kind, "ml")) {
     correction <- estimate_two_stage_em_ml_inference(

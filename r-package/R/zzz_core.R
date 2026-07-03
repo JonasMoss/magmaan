@@ -381,7 +381,8 @@ magmaan_core <- local({
       "estimate_structured_gamma_weight",
       "fiml_observed_vcov",
       "estimate_fiml_robust_mlr",
-      "estimate_two_stage_em_ml_inference"
+      "estimate_two_stage_em_ml_inference",
+      "regularize_saturated_stage1_impl"
     ),
     inference = c(
       "inference_information_expected",

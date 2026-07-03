@@ -1027,12 +1027,47 @@ inline bool saturated_from_list(Rcpp::List st,
   return true;
 }
 
+inline bool saturated_has_information(
+    const magmaan::estimate::fiml::SaturatedMoments& sm) {
+  Eigen::Index Q = 0;
+  for (const auto& S : sm.cov) {
+    if (S.rows() <= 0 || S.rows() != S.cols()) return false;
+    Q += S.rows() + S.rows() * (S.rows() + 1) / 2;
+  }
+  return sm.H.rows() == Q && sm.H.cols() == Q &&
+         sm.J.rows() == Q && sm.J.cols() == Q &&
+         sm.acov.rows() == Q && sm.acov.cols() == Q;
+}
+
+inline bool saturated_from_list_with_information(
+    Rcpp::List st, magmaan::estimate::fiml::SaturatedMoments& out) {
+  if (!saturated_from_list(st, out)) return false;
+  return saturated_has_information(out);
+}
+
 inline bool saturated_from_stage1(Rcpp::List fit,
                                   magmaan::estimate::fiml::SaturatedMoments& out) {
   if (!fit.containsElementNamed("stage1")) return false;
   SEXP s1 = fit["stage1"];
   if (Rf_isNull(s1)) return false;
   return saturated_from_list(Rcpp::List(s1), out);
+}
+
+inline bool saturated_from_stage1_raw(
+    Rcpp::List fit, magmaan::estimate::fiml::SaturatedMoments& out) {
+  if (!fit.containsElementNamed("stage1_raw")) return false;
+  SEXP s1 = fit["stage1_raw"];
+  if (Rf_isNull(s1)) return false;
+  return saturated_from_list_with_information(Rcpp::List(s1), out);
+}
+
+inline bool saturated_from_stage1_with_information(
+    Rcpp::List fit, magmaan::estimate::fiml::SaturatedMoments& out) {
+  if (saturated_from_stage1_raw(fit, out)) return true;
+  if (!fit.containsElementNamed("stage1")) return false;
+  SEXP s1 = fit["stage1"];
+  if (Rf_isNull(s1)) return false;
+  return saturated_from_list_with_information(Rcpp::List(s1), out);
 }
 
 // Map an R stage2_weight string to the TwoStageWeight enum. "wls" is an alias

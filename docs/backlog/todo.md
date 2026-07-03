@@ -17,9 +17,9 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
-- **L — Satorra-2000 nested test: regularize the saturated-H1 reference under
-  missing data (frontier).** The scaled and mixture nested difference tests
-  (`nestedTest(method = "satorra.2000")`, FIML and ML2S) collapse to
+- **L — FIML Satorra-2000 nested test: regularize the saturated-H1 reference
+  under missing data (frontier).** The scaled and mixture nested difference tests
+  (`nestedTest(method = "satorra.2000")`, especially direct FIML) collapse to
   conservative (Type-I toward 0) under missing data at moderate model size. The
   saturated-H1 reference (the EM covariance and the moment acov Gamma) goes
   near-singular under missing data at p >= 16, N ~ 200 (cond(acov) toward Inf),
@@ -32,9 +32,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   to nominal, so the dominant defect is the per-replicate reference scale/spectrum
   rather than the likelihood-ratio statistic.
 
-  Add optional reference regularization before forming the difference spectrum,
-  exposed as an opt-in `nestedTest` option (frontier, since it changes results),
-  not the default. Candidate strategies:
+  Add optional reference regularization before forming the direct-FIML difference
+  spectrum, exposed as an opt-in `nestedTest` option (frontier, since it changes
+  results), not the default. Candidate strategies:
   - **Information-side floor / truncated inverse.** Regularize the saturated H1
     information before inversion, e.g. floor eigenvalues of `H` or use a
     truncated pseudo-inverse, then form `Gamma_reg = H_reg^-1 J H_reg^-1`.
@@ -61,12 +61,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   condition number, effective rank, lambda/floor, trace before/after) with every
   regularized spectrum.
 
-  Same ill-conditioning as the deferred ML2S stage-2 weight, so a shared
-  reference-regularization utility could serve both. Evidence, per-regime
-  numbers, and a calibration gate are in the fiml-fmg invariance experiment
-  (private paper). Use the ref-conditioning gate before/after implementation:
-  p8 and p16, normal/vm2/ig2 x complete/MARnl, with regularization required to
-  rescue missing cells without making complete-data controls liberal.
+  The related ML2S input-moment surface landed 2026-07-03 as opt-in
+  `stage1_regularization`: it regularizes the saturated Stage-1 covariance before
+  Stage 2, preserves `$stage1_raw`, and delta-propagates `$stage1$acov`. That
+  does not solve the distinct direct-FIML H/Gamma reference-law problem here.
+  Evidence, per-regime numbers, and a calibration gate are in the fiml-fmg
+  invariance experiment (private paper). Use the ref-conditioning gate
+  before/after implementation: p8 and p16, normal/vm2/ig2 x complete/MARnl, with
+  regularization required to rescue missing cells without making complete-data
+  controls liberal.
 
 - **M — automatic robust fit-measure dispatch.** The lavaan-style robust/scaled
   fit-measure formulas are available for the core global-index family
