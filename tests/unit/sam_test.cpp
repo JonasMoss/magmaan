@@ -188,6 +188,8 @@ TEST_CASE("fit_sam local point estimates match lavaan::sam(sam.method=local)") {
   // Structural coefficient beta = f2~f1 = VETA[f1,f2]/VETA[f1,f1] (just-identified).
   const double beta = res->VETA(0, 1) / res->VETA(0, 0);
   CHECK(beta == doctest::Approx(0.66603).epsilon(1e-4));
+  REQUIRE(res->theta.size() == 13);
+  CHECK(res->theta(4) == doctest::Approx(beta).epsilon(1e-6));
 
   // Measurement block loadings and residuals (block f1: x1,x2,x3).
   REQUIRE(res->measurement.size() == 2);
@@ -234,6 +236,7 @@ TEST_CASE("fit_sam GLS and ULS mappings match lavaan local.options M.method") {
     auto res = fit_sam(bm.pt, bm.rep, bm.names, lavaan_samp(), opts);
     REQUIRE(res.has_value());
     if (!res.has_value()) return;
+    REQUIRE(res->theta.size() == 13);
     CHECK(res->VETA(0, 0) == doctest::Approx(t.v00).epsilon(1e-4));
     CHECK(res->VETA(1, 1) == doctest::Approx(t.v11).epsilon(1e-4));
     CHECK(res->VETA(0, 1) == doctest::Approx(t.v01).epsilon(1e-4));
@@ -248,9 +251,11 @@ TEST_CASE("fit_sam twostep standard errors match lavaan::sam(se=twostep)") {
   auto res = fit_sam(bm.pt, bm.rep, bm.names, lavaan_samp(), opts);
   REQUIRE(res.has_value());
   if (!res.has_value()) return;
+  REQUIRE(res->theta.size() == 13);
   REQUIRE(res->se.size() == 13);
   // Joint free order mirrors lavaan: f1=~x2(0) f1=~x3(1) f2=~y2(2) f2=~y3(3)
   // f2~f1(4) x1~~x1(5)..y3~~y3(10) f1~~f1(11) f2~~f2(12).
+  CHECK(res->theta(4) == doctest::Approx(0.666030).epsilon(1e-4));
   CHECK(res->se(0) == doctest::Approx(0.070991).epsilon(1e-4));   // f1=~x2
   CHECK(res->se(4) == doctest::Approx(0.081207).epsilon(1e-4));   // f2~f1
   CHECK(res->se(5) == doctest::Approx(0.078815).epsilon(1e-4));   // x1~~x1
@@ -267,6 +272,7 @@ TEST_CASE("fit_sam twostep.robust structural SEs match lavaan raw-data SAM") {
   auto res = fit_sam(bm.pt, bm.rep, bm.names, robust_raw(), opts);
   REQUIRE(res.has_value());
   if (!res.has_value()) return;
+  REQUIRE(res->theta.size() == 13);
   REQUIRE(res->se.size() == 13);
 
   CHECK(res->structural.theta(0) == doctest::Approx(0.798053).epsilon(1e-4));

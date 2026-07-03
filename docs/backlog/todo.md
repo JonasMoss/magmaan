@@ -354,15 +354,24 @@ Remaining work:
 The C++ frontier core now has lavaan-parity SAM point estimates
 (`estimate::frontier::fit_sam`) for local/global ML measurement fits, ML/GLS/ULS
 mapping, Fuller lambda correction, classic `se = "standard"` /
-`se = "twostep"` from `SampleStats`, and `se = "twostep.robust"` from complete
-raw data for the single-group local covariance-only scope.
+`se = "twostep"` from `SampleStats`, and lavaan-style nonnormality-robust
+`se = "twostep.robust"` from complete raw data for the single-group local
+covariance-only scope. The current robust SE is not yet the misspecification /
+estimated-weight sandwich used by the newer profile and residual surfaces.
 
 Remaining work:
 
-- **M.** R bindings / developer surface: expose a thin `magmaan_core` wrapper
-  over the C++ SAM entry, plus an R helper that parses/lavaanifies and builds
-  `RawData` when robust SEs are requested. Keep SE/test/fit-measure calls
-  explicit rather than folding them into `magmaan()`.
+- **Done 2026-07-03.** R bindings / developer surface: expose a thin
+  `magmaan_core$frontier_sam()` wrapper over the C++ SAM entry, plus exported
+  `sam()` helper that parses/lavaanifies and builds `RawData` when robust SEs
+  are requested. SAM stays out of `magmaan(estimator = ...)`; SE/test/fit-
+  measure calls remain explicit.
+- **L/XL.** Robustify SAM beyond lavaan `twostep.robust`: derive and implement
+  a misspecification-robust / estimated-weight sandwich with observed-Hessian
+  bread, data-dependent mapping / VETA influence terms, and diagnostics that
+  show which pieces are active. This should share the moment-IJ accounting style
+  used by continuous-LS and ordinal estimated-weight surfaces rather than
+  silently reusing the lavaan nonnormality correction.
 - **M.** Broaden robust parity fixtures beyond the current deterministic
   two-factor gate: overidentified measurement blocks, non-normal data, and
   optimizer backend variants that still stay inside single-group local

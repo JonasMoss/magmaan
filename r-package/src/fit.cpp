@@ -40,6 +40,7 @@
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/twolevel.hpp"
 #include "magmaan/estimate/frontier/rbm.hpp"
+#include "magmaan/estimate/frontier/sam.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -3895,6 +3896,293 @@ Rcpp::List frontier_fit_ml_ridge_continuation_impl(
   out["frontier_method"] = "ml_ridge_continuation";
   out["continuation"] = continuation_to_r(fit, cont.target);
   return out;
+}
+
+magmaan::estimate::frontier::SamMethod
+sam_method_from_string(std::string x) {
+  for (char& ch : x) {
+    if (ch == '_') ch = '-';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  if (x == "local") return magmaan::estimate::frontier::SamMethod::Local;
+  if (x == "global") return magmaan::estimate::frontier::SamMethod::Global;
+  Rcpp::stop("magmaan: frontier_sam(): unsupported method '%s' "
+             "(accepted: local, global)", x.c_str());
+  return magmaan::estimate::frontier::SamMethod::Local;
+}
+
+magmaan::estimate::frontier::SamMapping
+sam_mapping_from_string(std::string x) {
+  for (char& ch : x) {
+    if (ch == '_') ch = '-';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  if (x == "ml") return magmaan::estimate::frontier::SamMapping::ML;
+  if (x == "gls") return magmaan::estimate::frontier::SamMapping::GLS;
+  if (x == "uls") return magmaan::estimate::frontier::SamMapping::ULS;
+  Rcpp::stop("magmaan: frontier_sam(): unsupported mapping '%s' "
+             "(accepted: ml, gls, uls)", x.c_str());
+  return magmaan::estimate::frontier::SamMapping::ML;
+}
+
+magmaan::estimate::frontier::SamSe
+sam_se_from_string(std::string x) {
+  for (char& ch : x) {
+    if (ch == '_') ch = '-';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  if (x == "none") return magmaan::estimate::frontier::SamSe::None;
+  if (x == "standard") return magmaan::estimate::frontier::SamSe::Standard;
+  if (x == "twostep") return magmaan::estimate::frontier::SamSe::Twostep;
+  if (x == "twostep.robust" || x == "twostep-robust" || x == "robust")
+    return magmaan::estimate::frontier::SamSe::TwostepRobust;
+  Rcpp::stop("magmaan: frontier_sam(): unsupported se '%s' "
+             "(accepted: none, standard, twostep, twostep.robust)", x.c_str());
+  return magmaan::estimate::frontier::SamSe::Twostep;
+}
+
+const char* sam_method_to_string(magmaan::estimate::frontier::SamMethod x) {
+  using magmaan::estimate::frontier::SamMethod;
+  return x == SamMethod::Global ? "global" : "local";
+}
+
+const char* sam_mapping_to_string(magmaan::estimate::frontier::SamMapping x) {
+  using magmaan::estimate::frontier::SamMapping;
+  if (x == SamMapping::GLS) return "gls";
+  if (x == SamMapping::ULS) return "uls";
+  return "ml";
+}
+
+const char* sam_se_to_string(magmaan::estimate::frontier::SamSe x) {
+  using magmaan::estimate::frontier::SamSe;
+  if (x == SamSe::None) return "none";
+  if (x == SamSe::Standard) return "standard";
+  if (x == SamSe::TwostepRobust) return "twostep.robust";
+  return "twostep";
+}
+
+std::vector<std::string>
+names_for_indices(const std::vector<std::int32_t>& idx,
+                  const std::vector<std::string>& names) {
+  std::vector<std::string> out;
+  out.reserve(idx.size());
+  for (std::int32_t id : idx) {
+    if (id >= 0 && static_cast<std::size_t>(id) < names.size()) {
+      out.push_back(names[static_cast<std::size_t>(id)]);
+    } else {
+      out.push_back(std::to_string(id + 1));
+    }
+  }
+  return out;
+}
+
+Rcpp::IntegerVector
+one_based_indices(const std::vector<std::int32_t>& idx,
+                  const std::vector<std::string>& names) {
+  Rcpp::IntegerVector out(static_cast<R_xlen_t>(idx.size()));
+  for (R_xlen_t i = 0; i < out.size(); ++i)
+    out[i] = static_cast<int>(idx[static_cast<std::size_t>(i)] + 1);
+  const std::vector<std::string> nm = names_for_indices(idx, names);
+  if (!nm.empty()) out.attr("names") = Rcpp::wrap(nm);
+  return out;
+}
+
+Rcpp::NumericMatrix
+matrix_to_r(const Eigen::MatrixXd& x,
+            const std::vector<std::string>& row_names = {},
+            const std::vector<std::string>& col_names = {}) {
+  Rcpp::NumericMatrix out = Rcpp::wrap(x);
+  if (static_cast<Eigen::Index>(row_names.size()) == x.rows() &&
+      static_cast<Eigen::Index>(col_names.size()) == x.cols()) {
+    out.attr("dimnames") = Rcpp::List::create(Rcpp::wrap(row_names),
+                                              Rcpp::wrap(col_names));
+  }
+  return out;
+}
+
+Rcpp::NumericVector
+vector_to_r(const Eigen::VectorXd& x,
+            const std::vector<std::string>& names = {}) {
+  Rcpp::NumericVector out = Rcpp::wrap(x);
+  if (static_cast<Eigen::Index>(names.size()) == x.size()) {
+    out.attr("names") = Rcpp::wrap(names);
+  }
+  return out;
+}
+
+Rcpp::List sam_estimates_to_r(const magmaan::estimate::Estimates& est) {
+  return Rcpp::List::create(
+      Rcpp::_["converged"] = (est.optimizer_status ==
+                              magmaan::optim::OptimStatus::Converged),
+      Rcpp::_["theta"] = Rcpp::wrap(est.theta),
+      Rcpp::_["fmin"] = est.fmin,
+      Rcpp::_["iterations"] = est.iterations,
+      Rcpp::_["f_evals"] = est.f_evals,
+      Rcpp::_["g_evals"] = est.g_evals,
+      Rcpp::_["optimizer_status"] = optim_status_to_r(est.optimizer_status),
+      Rcpp::_["grad_norm"] = est.grad_inf_norm);
+}
+
+Rcpp::List
+sample_stats_to_r(const magmaan::data::SampleStats& samp,
+                  const std::vector<std::vector<std::string>>& names_by_block) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(samp.S.size());
+  Rcpp::List S_out(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::vector<std::string> nm =
+        static_cast<std::size_t>(b) < names_by_block.size()
+            ? names_by_block[static_cast<std::size_t>(b)]
+            : std::vector<std::string>{};
+    S_out[b] = matrix_to_r(samp.S[static_cast<std::size_t>(b)], nm, nm);
+  }
+  SEXP mean_out = R_NilValue;
+  if (!samp.mean.empty()) {
+    Rcpp::List M_out(nb);
+    for (R_xlen_t b = 0; b < nb; ++b) {
+      const std::vector<std::string> nm =
+          static_cast<std::size_t>(b) < names_by_block.size()
+              ? names_by_block[static_cast<std::size_t>(b)]
+              : std::vector<std::string>{};
+      M_out[b] = vector_to_r(samp.mean[static_cast<std::size_t>(b)], nm);
+    }
+    mean_out = M_out;
+  }
+  Rcpp::IntegerVector nobs(static_cast<R_xlen_t>(samp.n_obs.size()));
+  for (R_xlen_t b = 0; b < nobs.size(); ++b)
+    nobs[b] = static_cast<int>(samp.n_obs[static_cast<std::size_t>(b)]);
+  return Rcpp::List::create(Rcpp::_["S"] = S_out,
+                            Rcpp::_["mean"] = mean_out,
+                            Rcpp::_["nobs"] = nobs);
+}
+
+Rcpp::List
+sam_measurement_block_to_r(
+    const magmaan::estimate::frontier::SamMeasurementBlock& block,
+    const std::vector<std::string>& latent_names_full,
+    const std::vector<std::string>& ov_names_full) {
+  const std::vector<std::string> lat_names =
+      names_for_indices(block.latents, latent_names_full);
+  const std::vector<std::string> ind_names =
+      names_for_indices(block.indicators, ov_names_full);
+  return Rcpp::List::create(
+      Rcpp::_["latents"] = one_based_indices(block.latents, latent_names_full),
+      Rcpp::_["indicators"] =
+          one_based_indices(block.indicators, ov_names_full),
+      Rcpp::_["latent_names"] = Rcpp::wrap(lat_names),
+      Rcpp::_["indicator_names"] = Rcpp::wrap(ind_names),
+      Rcpp::_["estimates"] = sam_estimates_to_r(block.estimates),
+      Rcpp::_["Lambda"] = matrix_to_r(block.Lambda, ind_names, lat_names),
+      Rcpp::_["Theta"] = matrix_to_r(block.Theta, ind_names, ind_names),
+      Rcpp::_["M"] = matrix_to_r(block.M, lat_names, ind_names),
+      Rcpp::_["Nu"] = block.Nu.size() > 0
+          ? static_cast<SEXP>(vector_to_r(block.Nu, ind_names))
+          : R_NilValue,
+      Rcpp::_["vcov"] = block.vcov.size() > 0
+          ? static_cast<SEXP>(Rcpp::wrap(block.vcov))
+          : R_NilValue);
+}
+
+Rcpp::List
+sam_result_to_r(Ctx& ctx,
+                const magmaan::estimate::frontier::SamResult& sam,
+                magmaan::estimate::frontier::SamMethod method,
+                magmaan::estimate::frontier::SamMapping mapping,
+                magmaan::estimate::frontier::SamSe se_method,
+                bool lambda_correction,
+                int alpha_correction) {
+  magmaan::estimate::Estimates joint = sam.structural;
+  joint.theta = sam.theta;
+  Rcpp::List out = fit_result(ctx, joint, nullptr, "SAM");
+  out["vcov"] = sam.vcov.size() > 0
+      ? static_cast<SEXP>(Rcpp::wrap(sam.vcov))
+      : R_NilValue;
+  out["se"] = sam.se.size() > 0
+      ? static_cast<SEXP>(Rcpp::wrap(sam.se))
+      : R_NilValue;
+
+  const std::vector<std::string> latent_names =
+      (!ctx.rep.lv_names.empty() &&
+       ctx.rep.lv_names[0].size() == static_cast<std::size_t>(sam.VETA.rows()))
+          ? ctx.rep.lv_names[0]
+          : std::vector<std::string>{};
+  const std::vector<std::string> ov_names =
+      !ctx.rep.ov_names.empty() ? ctx.rep.ov_names[0]
+                                : std::vector<std::string>{};
+  std::vector<std::vector<std::string>> latent_samp_names =
+      sam.structural_rep.ov_names;
+
+  Rcpp::List measurement(static_cast<R_xlen_t>(sam.measurement.size()));
+  for (R_xlen_t i = 0; i < measurement.size(); ++i) {
+    measurement[i] = sam_measurement_block_to_r(
+        sam.measurement[static_cast<std::size_t>(i)], latent_names, ov_names);
+  }
+
+  out["sam"] = Rcpp::List::create(
+      Rcpp::_["method"] = sam_method_to_string(method),
+      Rcpp::_["mapping"] = sam_mapping_to_string(mapping),
+      Rcpp::_["se_method"] = sam_se_to_string(se_method),
+      Rcpp::_["lambda_correction"] = lambda_correction,
+      Rcpp::_["alpha_correction"] = alpha_correction,
+      Rcpp::_["VETA"] = matrix_to_r(sam.VETA, latent_names, latent_names),
+      Rcpp::_["EETA"] = sam.EETA.size() > 0
+          ? static_cast<SEXP>(vector_to_r(sam.EETA, latent_names))
+          : R_NilValue,
+      Rcpp::_["mapping_matrix"] = matrix_to_r(sam.mapping, latent_names, ov_names),
+      Rcpp::_["reliability"] = Rcpp::wrap(sam.reliability),
+      Rcpp::_["lambda_star"] = sam.lambda_star,
+      Rcpp::_["latent_samp"] =
+          sample_stats_to_r(sam.latent_samp, latent_samp_names),
+      Rcpp::_["structural"] = sam_estimates_to_r(sam.structural),
+      Rcpp::_["measurement"] = measurement);
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_sam_impl(
+    SEXP partable,
+    Rcpp::List sample_stats,
+    SEXP raw_data = R_NilValue,
+    std::string method = "local",
+    std::string mapping = "ml",
+    std::string se = "twostep",
+    bool lambda_correction = true,
+    int alpha_correction = 0,
+    bool meanstructure = false,
+    Rcpp::Nullable<Rcpp::String> mm_optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> struc_optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> mm_control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> struc_control = R_NilValue) {
+  Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
+                                           "frontier_sam");
+  magmaan::estimate::frontier::SamOptions opts;
+  opts.method = sam_method_from_string(method);
+  opts.local.mapping = sam_mapping_from_string(mapping);
+  opts.se = sam_se_from_string(se);
+  opts.local.lambda_correction = lambda_correction;
+  opts.local.alpha_correction = alpha_correction;
+  opts.meanstructure = meanstructure;
+  opts.mm_backend = backend_from_optimizer_arg(mm_optimizer);
+  opts.struc_backend = struc_optimizer.isNull()
+      ? opts.mm_backend
+      : backend_from_optimizer_arg(struc_optimizer);
+  opts.mm_control = optim_opts_from(mm_control);
+  opts.struc_control = struc_control.isNull()
+      ? opts.mm_control
+      : optim_opts_from(struc_control);
+
+  auto sam_or = [&]() {
+    if (Rf_isNull(raw_data)) {
+      return magmaan::estimate::frontier::fit_sam(
+          ctx.pt, ctx.rep, ctx.names, ctx.samp, opts);
+    }
+    magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+    return magmaan::estimate::frontier::fit_sam(
+        ctx.pt, ctx.rep, ctx.names, raw, opts);
+  }();
+  if (!sam_or.has_value()) stop_fit(sam_or.error());
+  return sam_result_to_r(ctx, *sam_or, opts.method, opts.local.mapping,
+                         opts.se, opts.local.lambda_correction,
+                         opts.local.alpha_correction);
 }
 
 // [[Rcpp::export]]
