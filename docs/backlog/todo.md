@@ -682,8 +682,26 @@ Remaining work:
       weight; R exposes the parameter special case as
       `magmaan_core$frontier_profile_lrt_parameter_gmm()`, with
       `r-package/examples/profile_lrt_parameter_gmm.R` as the smoke check.
-      Robust/Satorra scaling, CI inversion, and ordinal fitted-functional
-      constraints remain open.
+      Robust/Satorra scaling, fitted-weight policy, CI inversion, and ordinal
+      fitted-functional constraints remained open at this slice.
+    - **Done 2026-07-03 (fitted-weight parameter profile + CI inversion seed).**
+      The continuous moment-quadratic profile surface now has a fitted-weight
+      policy: `estimate::frontier::fit_gmm_fitted_weight` and
+      `fit_gmm_fitted_weight_constrained` refresh the expected-information
+      weight `W(θ)` in an outer fixed-point loop, and
+      `profile_lrt_parameter_gmm_fitted_weight` reports the same ordinary df-1
+      `2N·Δfmin` statistic after refitting the unrestricted point under that
+      policy. The first CI inverter landed for parameter profiles:
+      `profile_lrt_ci_parameter_ml`,
+      `profile_lrt_ci_parameter_gmm`, and
+      `profile_lrt_ci_parameter_gmm_fitted_weight` adaptively bracket and bisect
+      the ordinary profile statistic against the χ²₁ cutoff, returning endpoint
+      diagnostics and the endpoint constrained fits. R exposes the parameter
+      wrappers as `magmaan_core$frontier_profile_lrt_parameter_gmm_fitted_weight`
+      and `magmaan_core$frontier_profile_lrt_ci_parameter_*`; the existing
+      profile-LRT example now smokes fixed-weight, fitted-weight, and CI paths.
+      Still open: robust/Satorra/misspec scaling, Bartlett/calibrated constants,
+      functional R callbacks, and ordinal DWLS fitted-functional constraints.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <limits>
 
 #include <Eigen/Core>
 
@@ -151,6 +152,43 @@ struct ScalarProfileLrtResult {
   int df = 1;
 };
 
+enum class GmmFittedWeightKind {
+  ExpectedInformation,
+};
+
+struct GmmFittedWeightOptions {
+  GmmFittedWeightKind kind = GmmFittedWeightKind::ExpectedInformation;
+  int max_outer = 20;
+  double theta_tol = 1e-7;
+  double fmin_tol = 1e-10;
+};
+
+struct ScalarProfileCiOptions {
+  double confidence_level = 0.95;
+  double cutoff = std::numeric_limits<double>::quiet_NaN();
+  double lower_bound = std::numeric_limits<double>::quiet_NaN();
+  double upper_bound = std::numeric_limits<double>::quiet_NaN();
+  double initial_step = std::numeric_limits<double>::quiet_NaN();
+  double target_tol = 1e-5;
+  double statistic_tol = 1e-6;
+  int max_iter = 60;
+  int max_expand = 40;
+};
+
+struct ScalarProfileCiResult {
+  ScalarProfileLrtResult lower_profile;
+  ScalarProfileLrtResult upper_profile;
+  double estimate = 0.0;
+  double lower = 0.0;
+  double upper = 0.0;
+  double confidence_level = 0.95;
+  double cutoff = 0.0;
+  int lower_evals = 0;
+  int upper_evals = 0;
+  bool lower_at_bound = false;
+  bool upper_at_bound = false;
+};
+
 }  // namespace frontier
 
 // ============================================================================
@@ -240,6 +278,92 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                           Backend backend = Backend::NloptSlsqp,
                           OptimOptions opts = {},
                           double constraint_tol = 1e-6);
+
+// Fitted-weight moment-quadratic profile helpers. The current fitted-weight
+// policy refreshes the normal-theory expected-information weight W(θ) in an
+// outer fixed-point loop, then solves each frozen-weight subproblem with the
+// same constrained scalar optimizer as the fixed-weight GMM seed. This is an
+// optimization policy only; robust/Satorra, misspec-sandwich, and Bartlett
+// reference scaling remain separate layers.
+fit_expected<Estimates>
+fit_gmm_fitted_weight(spec::LatentStructure pt, const model::MatrixRep& rep,
+                      const SampleStats& samp, const Eigen::VectorXd& x0,
+                      GmmFittedWeightOptions fitted_opts = {},
+                      Bounds bounds = {},
+                      Backend backend = Backend::NloptSlsqp,
+                      OptimOptions opts = {});
+
+fit_expected<Estimates>
+fit_gmm_fitted_weight_constrained(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Eigen::VectorXd& x0,
+    ExtraNonlinearEqConstraints extra,
+    GmmFittedWeightOptions fitted_opts = {},
+    Bounds bounds = {},
+    Backend backend = Backend::NloptSlsqp,
+    OptimOptions opts = {});
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp,
+    const Estimates& unrestricted_start,
+    ScalarFunctional functional, double target,
+    GmmFittedWeightOptions fitted_opts = {},
+    Bounds bounds = {},
+    Backend backend = Backend::NloptSlsqp,
+    OptimOptions opts = {},
+    double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp,
+    const Estimates& unrestricted_start,
+    Eigen::Index parameter, double target,
+    GmmFittedWeightOptions fitted_opts = {},
+    Bounds bounds = {},
+    Backend backend = Backend::NloptSlsqp,
+    OptimOptions opts = {},
+    double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const Estimates& unrestricted,
+                            Eigen::Index parameter,
+                            ScalarProfileCiOptions ci_options = {},
+                            Bounds bounds = {},
+                            Backend backend = Backend::NloptSlsqp,
+                            OptimOptions opts = {},
+                            double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const SampleStats& samp,
+                             const Estimates& unrestricted,
+                             gmm::Weight weight,
+                             Eigen::Index parameter,
+                             ScalarProfileCiOptions ci_options = {},
+                             Bounds bounds = {},
+                             Backend backend = Backend::NloptSlsqp,
+                             OptimOptions opts = {},
+                             double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp,
+    const Estimates& unrestricted_start,
+    Eigen::Index parameter,
+    GmmFittedWeightOptions fitted_opts = {},
+    ScalarProfileCiOptions ci_options = {},
+    Bounds bounds = {},
+    Backend backend = Backend::NloptSlsqp,
+    OptimOptions opts = {},
+    double constraint_tol = 1e-6);
 
 }  // namespace frontier
 
