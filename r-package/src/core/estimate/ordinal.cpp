@@ -9299,6 +9299,269 @@ scalar_gradient_ordinal(const frontier::ScalarFunctional& functional,
   return grad;
 }
 
+double standard_normal_quantile_ordinal(double p) noexcept {
+  if (!(p > 0.0 && p < 1.0) || !std::isfinite(p)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  constexpr double a1 = -3.969683028665376e+01;
+  constexpr double a2 =  2.209460984245205e+02;
+  constexpr double a3 = -2.759285104469687e+02;
+  constexpr double a4 =  1.383577518672690e+02;
+  constexpr double a5 = -3.066479806614716e+01;
+  constexpr double a6 =  2.506628277459239e+00;
+
+  constexpr double b1 = -5.447609879822406e+01;
+  constexpr double b2 =  1.615858368580409e+02;
+  constexpr double b3 = -1.556989798598866e+02;
+  constexpr double b4 =  6.680131188771972e+01;
+  constexpr double b5 = -1.328068155288572e+01;
+
+  constexpr double c1 = -7.784894002430293e-03;
+  constexpr double c2 = -3.223964580411365e-01;
+  constexpr double c3 = -2.400758277161838e+00;
+  constexpr double c4 = -2.549732539343734e+00;
+  constexpr double c5 =  4.374664141464968e+00;
+  constexpr double c6 =  2.938163982698783e+00;
+
+  constexpr double d1 =  7.784695709041462e-03;
+  constexpr double d2 =  3.224671290700398e-01;
+  constexpr double d3 =  2.445134137142996e+00;
+  constexpr double d4 =  3.754408661907416e+00;
+
+  constexpr double plow = 0.02425;
+  constexpr double phigh = 1.0 - plow;
+
+  if (p < plow) {
+    const double q = std::sqrt(-2.0 * std::log(p));
+    return (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+           ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  if (p > phigh) {
+    const double q = std::sqrt(-2.0 * std::log(1.0 - p));
+    return -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  const double q = p - 0.5;
+  const double r = q * q;
+  return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+         (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
+}
+
+fit_expected<double>
+profile_ci_cutoff_ordinal(
+    const frontier::ScalarProfileCiOptions& options,
+    const char* who) {
+  if (!(options.confidence_level > 0.0 && options.confidence_level < 1.0) ||
+      !std::isfinite(options.confidence_level)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": confidence_level must be in (0, 1)"));
+  }
+  if (std::isfinite(options.cutoff)) {
+    if (!(options.cutoff > 0.0)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": cutoff must be positive"));
+    }
+    return options.cutoff;
+  }
+  const double z = standard_normal_quantile_ordinal(
+      0.5 * (1.0 + options.confidence_level));
+  if (!std::isfinite(z)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": failed to compute chi-square cutoff"));
+  }
+  return z * z;
+}
+
+fit_expected<void>
+validate_ci_options_ordinal(
+    const frontier::ScalarProfileCiOptions& options,
+    double estimate,
+    const char* who) {
+  if (!(options.target_tol > 0.0) || !std::isfinite(options.target_tol)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": target_tol must be positive and finite"));
+  }
+  if (!(options.statistic_tol > 0.0) ||
+      !std::isfinite(options.statistic_tol)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": statistic_tol must be positive and finite"));
+  }
+  if (options.max_iter <= 0 || options.max_expand <= 0) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": max_iter and max_expand must be positive"));
+  }
+  if (std::isfinite(options.initial_step) && !(options.initial_step > 0.0)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": initial_step must be positive"));
+  }
+  if (std::isfinite(options.lower_bound) &&
+      !(options.lower_bound < estimate)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": lower_bound must be below the estimate"));
+  }
+  if (std::isfinite(options.upper_bound) &&
+      !(options.upper_bound > estimate)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": upper_bound must be above the estimate"));
+  }
+  return {};
+}
+
+struct OrdinalProfileRootPoint {
+  frontier::ScalarProfileLrtResult profile;
+  double signed_stat = 0.0;
+};
+
+struct OrdinalProfileRootResult {
+  frontier::ScalarProfileLrtResult profile;
+  double root = 0.0;
+  int evals = 0;
+  bool at_bound = false;
+};
+
+using OrdinalProfileEvaluator =
+    std::function<fit_expected<frontier::ScalarProfileLrtResult>(double)>;
+
+fit_expected<OrdinalProfileRootPoint>
+eval_ordinal_profile_point(const OrdinalProfileEvaluator& eval,
+                           double target,
+                           double cutoff,
+                           const char* who) {
+  auto r = eval(target);
+  if (!r.has_value()) return std::unexpected(r.error());
+  if (!std::isfinite(r->T)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": profile statistic is not finite at target " +
+            std::to_string(target)));
+  }
+  OrdinalProfileRootPoint out;
+  out.profile = std::move(*r);
+  out.signed_stat = out.profile.T - cutoff;
+  return out;
+}
+
+fit_expected<OrdinalProfileRootResult>
+solve_ordinal_profile_root_side(
+    const OrdinalProfileEvaluator& eval,
+    double estimate,
+    const frontier::ScalarProfileCiOptions& options,
+    double cutoff,
+    bool lower_side,
+    const char* who) {
+  int evals = 0;
+  const double sign = lower_side ? -1.0 : 1.0;
+  const double finite_bound =
+      lower_side ? options.lower_bound : options.upper_bound;
+  const bool has_bound = std::isfinite(finite_bound);
+  double outside_x = finite_bound;
+  OrdinalProfileRootPoint outside;
+
+  if (has_bound) {
+    auto p = eval_ordinal_profile_point(eval, outside_x, cutoff, who);
+    ++evals;
+    if (!p.has_value()) return std::unexpected(p.error());
+    if (p->signed_stat < 0.0) {
+      return OrdinalProfileRootResult{
+          std::move(p->profile), outside_x, evals, true};
+    }
+    outside = std::move(*p);
+  } else {
+    double step = std::isfinite(options.initial_step)
+                    ? options.initial_step
+                    : 0.1 * std::max(1.0, std::abs(estimate));
+    bool bracketed = false;
+    for (int k = 0; k < options.max_expand; ++k) {
+      outside_x = estimate + sign * step;
+      auto p = eval_ordinal_profile_point(eval, outside_x, cutoff, who);
+      ++evals;
+      if (!p.has_value()) return std::unexpected(p.error());
+      if (p->signed_stat >= 0.0) {
+        outside = std::move(*p);
+        bracketed = true;
+        break;
+      }
+      step *= 2.0;
+    }
+    if (!bracketed) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + (lower_side
+              ? ": failed to bracket lower profile-CI root"
+              : ": failed to bracket upper profile-CI root")));
+    }
+  }
+
+  double inside_x = estimate;
+  OrdinalProfileRootPoint best = std::move(outside);
+  double best_x = outside_x;
+  for (int k = 0; k < options.max_iter; ++k) {
+    const double mid = 0.5 * (inside_x + outside_x);
+    auto p = eval_ordinal_profile_point(eval, mid, cutoff, who);
+    ++evals;
+    if (!p.has_value()) return std::unexpected(p.error());
+    const double signed_stat = p->signed_stat;
+    if (std::abs(p->signed_stat) < std::abs(best.signed_stat)) {
+      best = std::move(*p);
+      best_x = mid;
+    }
+    if (signed_stat >= 0.0) {
+      outside_x = mid;
+    } else {
+      inside_x = mid;
+    }
+
+    const double width = std::abs(outside_x - inside_x);
+    const double scale = std::max(1.0, std::abs(mid));
+    if (std::abs(best.signed_stat) <= options.statistic_tol ||
+        width <= options.target_tol * scale) {
+      return OrdinalProfileRootResult{
+          std::move(best.profile), best_x, evals, false};
+    }
+  }
+
+  return OrdinalProfileRootResult{
+      std::move(best.profile), best_x, evals, false};
+}
+
+fit_expected<frontier::ScalarProfileCiResult>
+ordinal_profile_ci_from_evaluator(
+    double estimate,
+    const frontier::ScalarProfileCiOptions& options,
+    const OrdinalProfileEvaluator& eval,
+    const char* who) {
+  if (!std::isfinite(estimate)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": estimate is not finite"));
+  }
+  if (auto ok = validate_ci_options_ordinal(options, estimate, who);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto cutoff = profile_ci_cutoff_ordinal(options, who);
+  if (!cutoff.has_value()) return std::unexpected(cutoff.error());
+
+  auto lower = solve_ordinal_profile_root_side(eval, estimate, options,
+                                               *cutoff, true, who);
+  if (!lower.has_value()) return std::unexpected(lower.error());
+  auto upper = solve_ordinal_profile_root_side(eval, estimate, options,
+                                               *cutoff, false, who);
+  if (!upper.has_value()) return std::unexpected(upper.error());
+
+  frontier::ScalarProfileCiResult out;
+  out.lower_profile = std::move(lower->profile);
+  out.upper_profile = std::move(upper->profile);
+  out.estimate = estimate;
+  out.lower = lower->root;
+  out.upper = upper->root;
+  out.confidence_level = options.confidence_level;
+  out.cutoff = *cutoff;
+  out.lower_evals = lower->evals;
+  out.upper_evals = upper->evals;
+  out.lower_at_bound = lower->at_bound;
+  out.upper_at_bound = upper->at_bound;
+  return out;
+}
+
 }  // namespace
 
 namespace frontier {
@@ -9472,6 +9735,39 @@ profile_lrt_parameter_ordinal(
       std::move(pt), rep, stats, unrestricted, std::move(functional), target,
       std::move(bounds), weights, backend, opts, parameterization,
       constraint_tol);
+}
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    Eigen::Index parameter,
+    ScalarProfileCiOptions ci_options,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    Backend backend,
+    OptimOptions opts,
+    OrdinalParameterization parameterization,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_ci_parameter_ordinal";
+  if (parameter < 0 || parameter >= unrestricted.theta.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  const double estimate = unrestricted.theta(parameter);
+  OrdinalProfileEvaluator eval =
+      [pt, &rep, &stats, unrestricted, parameter, bounds, weights, backend, opts,
+       parameterization, constraint_tol](double target) mutable {
+        spec::LatentStructure pt_eval = pt;
+        Bounds bounds_eval = bounds;
+        return profile_lrt_parameter_ordinal(
+            std::move(pt_eval), rep, stats, unrestricted, parameter, target,
+            std::move(bounds_eval), weights, backend, opts, parameterization,
+            constraint_tol);
+      };
+  return ordinal_profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
 
 }  // namespace frontier

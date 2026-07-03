@@ -6449,6 +6449,28 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
   CHECK(lrt->p_value == doctest::Approx(
       magmaan::inference::chi2_pvalue(lrt->T, 1)));
   CHECK(lrt->df == 1);
+
+  magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
+  ci_opts.target_tol = 1e-4;
+  ci_opts.statistic_tol = 1e-4;
+  ci_opts.initial_step = 0.08 * std::abs(fit->theta(k_loading));
+  ci_opts.max_iter = 40;
+
+  auto ci = magmaan::estimate::frontier::profile_lrt_ci_parameter_ordinal(
+      *pt, *mr, *stats, *fit, k_loading, ci_opts, {},
+      OrdinalWeightKind::DWLS, magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(ci.has_value(),
+      "ordinal parameter profile CI failed: "
+          << (ci.has_value() ? "" : ci.error().detail));
+
+  CHECK(ci->lower < fit->theta(k_loading));
+  CHECK(ci->upper > fit->theta(k_loading));
+  CHECK_FALSE(ci->lower_at_bound);
+  CHECK_FALSE(ci->upper_at_bound);
+  CHECK(ci->lower_profile.T == doctest::Approx(ci->cutoff).epsilon(1e-3));
+  CHECK(ci->upper_profile.T == doctest::Approx(ci->cutoff).epsilon(1e-3));
+  CHECK(magmaan::inference::chi2_pvalue(ci->cutoff, 1) ==
+        doctest::Approx(1.0 - ci->confidence_level).epsilon(1e-6));
 }
 
 TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {
