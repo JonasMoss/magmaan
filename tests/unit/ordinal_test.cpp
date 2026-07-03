@@ -28,6 +28,7 @@
 #include "magmaan/measures/reliability.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/spec/build.hpp"
@@ -6368,6 +6369,86 @@ TEST_CASE("frontier ordinal observed omega uses DWLS IJ sandwich") {
         doctest::Approx(omega->se * omega->se *
                         static_cast<double>(stats->n_obs[0]))
             .epsilon(1e-10));
+}
+
+TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 statistic") {
+  std::mt19937 rng(20260703);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(720, 4);
+  const double loading[4] = {0.84, 0.76, 0.68, 0.60};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.50) + (y > 0.50);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  using magmaan::estimate::OrdinalWeightKind;
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto fit = magmaan::test::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto prepared = *pt;
+  auto prep = magmaan::estimate::prepare_ordinal_delta_partable(
+      prepared, *stats, nullptr);
+  REQUIRE(prep.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(prepared, *mr);
+  REQUIRE(ev.has_value());
+  Eigen::Index k_loading = -1;
+  const auto locs = ev->param_locations();
+  for (Eigen::Index k = 0; k < static_cast<Eigen::Index>(locs.size()); ++k) {
+    if (locs[static_cast<std::size_t>(k)].mat ==
+            magmaan::model::MatId::Lambda &&
+        locs[static_cast<std::size_t>(k)].row == 1 &&
+        locs[static_cast<std::size_t>(k)].col == 0) {
+      k_loading = k;
+      break;
+    }
+  }
+  REQUIRE(k_loading >= 0);
+  const double target = 0.95 * fit->theta(k_loading);
+
+  auto lrt = magmaan::estimate::frontier::profile_lrt_parameter_ordinal(
+      *pt, *mr, *stats, *fit, k_loading, target, {},
+      OrdinalWeightKind::DWLS, magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(lrt.has_value(),
+      "ordinal parameter profile LRT failed: "
+          << (lrt.has_value() ? "" : lrt.error().detail));
+
+  CHECK(lrt->unrestricted_value == doctest::Approx(fit->theta(k_loading)));
+  CHECK(lrt->constrained_value == doctest::Approx(target).epsilon(1e-7));
+  CHECK(std::abs(lrt->constraint_residual) < 1e-7);
+  CHECK(lrt->fmin_unrestricted == doctest::Approx(fit->fmin));
+  CHECK(lrt->T == doctest::Approx(
+      2.0 * static_cast<double>(stats->n_obs[0]) *
+      (lrt->fmin_constrained - fit->fmin)));
+  CHECK(lrt->p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(lrt->T, 1)));
+  CHECK(lrt->df == 1);
 }
 
 TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {

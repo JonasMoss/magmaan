@@ -109,6 +109,7 @@ frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
 frontier_profile_lrt_parameter_ml <- frontier_profile_lrt_parameter_ml_impl
 frontier_profile_lrt_parameter_gmm <- frontier_profile_lrt_parameter_gmm_impl
 frontier_profile_lrt_parameter_gmm_fitted_weight <- frontier_profile_lrt_parameter_gmm_fitted_weight_impl
+frontier_profile_lrt_parameter_ordinal <- frontier_profile_lrt_parameter_ordinal_impl
 frontier_profile_lrt_ci_parameter_ml <- frontier_profile_lrt_ci_parameter_ml_impl
 frontier_profile_lrt_ci_parameter_gmm <- frontier_profile_lrt_ci_parameter_gmm_impl
 frontier_profile_lrt_ci_parameter_gmm_fitted_weight <- frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl
@@ -538,6 +539,7 @@ magmaan_core <- local({
       "frontier_profile_lrt_parameter_ml",
       "frontier_profile_lrt_parameter_gmm",
       "frontier_profile_lrt_parameter_gmm_fitted_weight",
+      "frontier_profile_lrt_parameter_ordinal",
       "frontier_profile_lrt_ci_parameter_ml",
       "frontier_profile_lrt_ci_parameter_gmm",
       "frontier_profile_lrt_ci_parameter_gmm_fitted_weight",
@@ -640,6 +642,7 @@ magmaan_core <- local({
       "frontier_profile_lrt_parameter_ml_impl",
       "frontier_profile_lrt_parameter_gmm_impl",
       "frontier_profile_lrt_parameter_gmm_fitted_weight_impl",
+      "frontier_profile_lrt_parameter_ordinal_impl",
       "frontier_profile_lrt_ci_parameter_ml_impl",
       "frontier_profile_lrt_ci_parameter_gmm_impl",
       "frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl",

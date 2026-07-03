@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -26,6 +27,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/start_values.hpp"
@@ -9015,6 +9017,78 @@ run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
   return optim::nlopt_lbfgs(scalar, x0, bounds, opts);
 }
 
+fit_expected<optim::OptimResult>
+run_ordinal_scalar_constrained(const optim::ScalarProblem& prob,
+                               const optim::ConstraintFn& h,
+                               const optim::ConstraintJacFn& J_h,
+                               Eigen::Index n_constraint,
+                               const Eigen::VectorXd& x0,
+                               const Bounds& bounds,
+                               Backend backend,
+                               OptimOptions opts,
+                               const char* who) {
+  optim::ConstrainedScalarProblem cprob;
+  cprob.objective = prob;
+  cprob.h = h;
+  cprob.J_h = J_h;
+  cprob.n_constraint = n_constraint;
+  cprob.constraint_lower = Eigen::VectorXd::Zero(n_constraint);
+  cprob.constraint_upper = Eigen::VectorXd::Zero(n_constraint);
+
+  switch (backend) {
+    case Backend::NloptSlsqp:
+    case Backend::NloptLbfgsSlsqpFallback:
+      return optim::nlopt_slsqp_constrained(cprob, x0, bounds, opts);
+    case Backend::Ipopt:
+#ifdef MAGMAAN_WITH_IPOPT
+      return optim::ipopt_constrained(cprob, x0, bounds, opts);
+#else
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) +
+              ": nonlinear equality constraints require optimizer "
+              "\"nlopt-slsqp\" or an IPOPT-enabled build with optimizer "
+              "\"ipopt\""));
+#endif
+    default:
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) +
+              ": nonlinear equality constraints require optimizer "
+              "\"nlopt-slsqp\" or \"ipopt\""));
+  }
+  return std::unexpected(make_err(FitError::Kind::NumericIssue,
+      "unknown constrained optimizer backend"));
+}
+
+fit_expected<void>
+validate_extra_ordinal_constraints(
+    const frontier::ExtraNonlinearEqConstraints& extra,
+    const Eigen::VectorXd& theta0,
+    Eigen::Index npar,
+    const char* who) {
+  if (!extra.active()) return {};
+  if (!extra.h || !extra.jacobian) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) +
+            ": active extra nonlinear constraints require both h and jacobian"));
+  }
+  const Eigen::VectorXd h0 = extra.h(theta0);
+  if (h0.size() != extra.n_constraint) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": extra h(theta) length (" +
+            std::to_string(h0.size()) + ") != n_constraint (" +
+            std::to_string(extra.n_constraint) + ")"));
+  }
+  const Eigen::MatrixXd J0 = extra.jacobian(theta0);
+  if (J0.rows() != extra.n_constraint || J0.cols() != npar) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": extra jacobian shape (" +
+            std::to_string(J0.rows()) + " x " + std::to_string(J0.cols()) +
+            ") != (" + std::to_string(extra.n_constraint) + " x " +
+            std::to_string(npar) + ")"));
+  }
+  return {};
+}
+
 // Solve a data-only ordinal LS problem `prob` (residual size `prob.n_resid`,
 // `prob.expand` the identity in full θ) under linear equality constraints.
 //
@@ -9031,7 +9105,9 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
   if (!con.active()) {
     auto out = run_ordinal_ls(prob, x0, bounds, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
-    return Estimates{prob.expand(out->x), out->fmin, out->iterations};
+    return Estimates{prob.expand(out->x), out->fmin, out->iterations,
+                     out->f_evals, out->g_evals, out->status,
+                     out->grad_inf_norm, std::move(out->audit)};
   }
 
   const optim::GmmProblem prob_a = optim::reparameterize(prob, con);
@@ -9064,10 +9140,340 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
       }
     }
   }
-  return Estimates{std::move(theta_hat), out->fmin, out->iterations};
+  return Estimates{std::move(theta_hat), out->fmin, out->iterations,
+                   out->f_evals, out->g_evals, out->status,
+                   out->grad_inf_norm, std::move(out->audit)};
+}
+
+fit_expected<Estimates>
+solve_ordinal_ls_extra(const optim::GmmProblem& prob,
+                       const Eigen::VectorXd& x0,
+                       const Bounds& bounds,
+                       const EqConstraints& con,
+                       const NonlinearEqConstraints& nl,
+                       const frontier::ExtraNonlinearEqConstraints& extra,
+                       Backend backend,
+                       OptimOptions opts,
+                       const char* who) {
+  if (auto ok = validate_extra_ordinal_constraints(extra, x0, prob.n_param, who);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  const Eigen::Index n_constraint =
+      static_cast<Eigen::Index>(nl.m()) + extra.n_constraint;
+  if (n_constraint == 0) {
+    return solve_ordinal_ls(prob, x0, bounds, con, backend, opts, who);
+  }
+
+  auto h_theta = [&nl, &extra, n_constraint](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd out(n_constraint);
+    Eigen::Index off = 0;
+    if (nl.active()) {
+      out.segment(off, nl.m()) = nl.h(theta);
+      off += nl.m();
+    }
+    if (extra.active()) {
+      out.segment(off, extra.n_constraint) = extra.h(theta);
+    }
+    return out;
+  };
+  auto J_theta = [&nl, &extra, n_constraint](const Eigen::VectorXd& theta) {
+    Eigen::MatrixXd out(n_constraint, theta.size());
+    Eigen::Index off = 0;
+    if (nl.active()) {
+      out.block(off, 0, nl.m(), theta.size()) = nl.jacobian(theta);
+      off += nl.m();
+    }
+    if (extra.active()) {
+      out.block(off, 0, extra.n_constraint, theta.size()) =
+          extra.jacobian(theta);
+    }
+    return out;
+  };
+
+  if (!con.active()) {
+    const optim::ScalarProblem sprob = optim::scalarize(prob);
+    auto r = run_ordinal_scalar_constrained(
+        sprob, h_theta, J_theta, n_constraint, x0, bounds, backend, opts, who);
+    if (!r.has_value()) return std::unexpected(r.error());
+    return Estimates{prob.expand(r->x), r->fmin, r->iterations,
+                     r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
+                     std::move(r->audit)};
+  }
+
+  const optim::GmmProblem prob_a = optim::reparameterize(prob, con);
+  if (con.n_alpha == 0) {
+    Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+    const Eigen::VectorXd h0 = h_theta(theta);
+    constexpr double tol = 1e-8;
+    if (h0.lpNorm<Eigen::Infinity>() > tol) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) +
+              ": all parameters are fixed by linear constraints and nonlinear "
+              "constraints are not satisfied"));
+    }
+    auto r = prob.r(theta);
+    if (!r.has_value()) return std::unexpected(r.error());
+    return Estimates{std::move(theta), 0.5 * r->squaredNorm(), 0};
+  }
+
+  const optim::ScalarProblem sprob_a = optim::scalarize(prob_a);
+  auto h_a = [&h_theta, &con](const Eigen::VectorXd& a) {
+    return h_theta(con.expand(a));
+  };
+  auto J_a = [&J_theta, &con](const Eigen::VectorXd& a) {
+    return Eigen::MatrixXd(J_theta(con.expand(a)) * con.K());
+  };
+
+  Eigen::VectorXd alpha0 = con.contract(x0);
+  Bounds abounds;
+  const bool pure_merge = !con.group.empty();
+  if (!bounds.empty() && pure_merge) {
+    abounds = optim::fold_alpha_bounds(con, bounds);
+    alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
+  }
+
+  auto r = run_ordinal_scalar_constrained(
+      sprob_a, h_a, J_a, n_constraint, alpha0, abounds, backend, opts, who);
+  if (!r.has_value()) return std::unexpected(r.error());
+
+  Eigen::VectorXd theta_hat = prob_a.expand(r->x);
+  if (!bounds.empty() && !pure_merge) {
+    constexpr double tol = 1e-6;
+    for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
+      if (theta_hat(k) < bounds.lower(k) - tol ||
+          theta_hat(k) > bounds.upper(k) + tol) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            std::string(who) +
+                ": general-linear equality drove parameter " +
+                std::to_string(k) + " past its bound"));
+      }
+    }
+  }
+  return Estimates{std::move(theta_hat), r->fmin, r->iterations,
+                   r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
+                   std::move(r->audit)};
+}
+
+Eigen::VectorXd fd_scalar_gradient_ordinal(
+    const std::function<double(const Eigen::VectorXd&)>& value,
+    const Eigen::VectorXd& theta) {
+  Eigen::VectorXd grad(theta.size());
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    const double h = 1e-6 * std::max(1.0, std::abs(theta(k)));
+    Eigen::VectorXd xp = theta;
+    Eigen::VectorXd xm = theta;
+    xp(k) += h;
+    xm(k) -= h;
+    const double fp = value(xp);
+    const double fm = value(xm);
+    grad(k) = (fp - fm) / (2.0 * h);
+  }
+  return grad;
+}
+
+fit_expected<Eigen::VectorXd>
+scalar_gradient_ordinal(const frontier::ScalarFunctional& functional,
+                        const Eigen::VectorXd& theta,
+                        Eigen::Index npar,
+                        const char* who) {
+  if (!functional.value) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional needs a value callback"));
+  }
+  Eigen::VectorXd grad =
+      functional.gradient ? functional.gradient(theta)
+                          : fd_scalar_gradient_ordinal(functional.value, theta);
+  if (grad.size() != npar) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional gradient length (" +
+            std::to_string(grad.size()) + ") != n_free (" +
+            std::to_string(npar) + ")"));
+  }
+  if (!grad.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional gradient is not finite"));
+  }
+  return grad;
 }
 
 }  // namespace
+
+namespace frontier {
+
+fit_expected<Estimates>
+fit_ordinal_constrained(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::OrdinalStats& stats,
+                        const Estimates& start,
+                        ExtraNonlinearEqConstraints extra,
+                        Bounds bounds,
+                        OrdinalWeightKind weights,
+                        Backend backend,
+                        OptimOptions opts,
+                        OrdinalParameterization parameterization) {
+  constexpr const char* who = "fit_ordinal_constrained";
+  auto obj = ordinal_ls_objective(
+      std::move(pt), rep, stats, start, weights, parameterization);
+  if (!obj.has_value()) return std::unexpected(obj.error());
+
+  if (bounds.empty()) {
+    auto b_or = bounds_from_partable(obj->pt);
+    if (!b_or.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": bounds_from_partable failed: " +
+              b_or.error().detail));
+    }
+    bounds = std::move(*b_or);
+  }
+  if (bounds.lower.size() != start.theta.size() ||
+      bounds.upper.size() != start.theta.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": bounds size mismatch"));
+  }
+
+  auto con_or = build_eq_constraints(obj->pt, true);
+  if (!con_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constraint: " + con_or.error().detail));
+  }
+  const NonlinearEqConstraints nl = build_nl_constraints(obj->pt);
+  return solve_ordinal_ls_extra(
+      obj->problem, start.theta, bounds, *con_or, nl, extra, backend, opts, who);
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_ordinal(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Estimates& unrestricted,
+                           ScalarFunctional functional,
+                           double target,
+                           Bounds bounds,
+                           OrdinalWeightKind weights,
+                           Backend backend,
+                           OptimOptions opts,
+                           OrdinalParameterization parameterization,
+                           double constraint_tol) {
+  constexpr const char* who = "profile_lrt_scalar_ordinal";
+  if (!functional.value) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional needs a value callback"));
+  }
+  if (!std::isfinite(target)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": target must be finite"));
+  }
+  if (!(constraint_tol > 0.0) || !std::isfinite(constraint_tol)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constraint_tol must be positive and finite"));
+  }
+
+  const double g_un = functional.value(unrestricted.theta);
+  if (!std::isfinite(g_un)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional is not finite at theta_hat"));
+  }
+  auto grad0 = scalar_gradient_ordinal(
+      functional, unrestricted.theta, unrestricted.theta.size(), who);
+  if (!grad0.has_value()) return std::unexpected(grad0.error());
+
+  ExtraNonlinearEqConstraints extra;
+  extra.n_constraint = 1;
+  extra.h = [functional, target](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd h(1);
+    h(0) = functional.value(theta) - target;
+    return h;
+  };
+  extra.jacobian = [functional](const Eigen::VectorXd& theta) {
+    Eigen::MatrixXd J(1, theta.size());
+    auto grad = scalar_gradient_ordinal(functional, theta, theta.size(), who);
+    if (!grad.has_value()) {
+      J.setConstant(std::numeric_limits<double>::quiet_NaN());
+    } else {
+      J.row(0) = grad->transpose();
+    }
+    return J;
+  };
+
+  auto constrained = fit_ordinal_constrained(
+      std::move(pt), rep, stats, unrestricted, std::move(extra),
+      std::move(bounds), weights, backend, opts, parameterization);
+  if (!constrained.has_value()) return std::unexpected(constrained.error());
+
+  const double g_con = functional.value(constrained->theta);
+  const double resid = g_con - target;
+  if (!std::isfinite(g_con) || std::abs(resid) > constraint_tol) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained fit did not satisfy g(theta)=target; "
+            "residual=" + std::to_string(resid)));
+  }
+  auto n_or = total_n_obs(stats);
+  if (!n_or.has_value()) return std::unexpected(n_or.error());
+  const double n = static_cast<double>(*n_or);
+  const double diff = constrained->fmin - unrestricted.fmin;
+  const double raw_T = 2.0 * n * diff;
+  const double stat_tol =
+      1e-10 * std::max({1.0, std::abs(constrained->fmin),
+                        std::abs(unrestricted.fmin)}) * 2.0 * n;
+  if (raw_T < -stat_tol) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained fit improved the unrestricted "
+            "objective by " + std::to_string(-raw_T)));
+  }
+  const double T = std::max(0.0, raw_T);
+
+  ScalarProfileLrtResult out;
+  out.constrained = std::move(*constrained);
+  out.unrestricted_value = g_un;
+  out.constrained_value = g_con;
+  out.target = target;
+  out.constraint_residual = resid;
+  out.fmin_unrestricted = unrestricted.fmin;
+  out.fmin_constrained = out.constrained.fmin;
+  out.T = T;
+  out.p_value = chi2_pvalue(T, 1);
+  out.n_obs = n;
+  out.df = 1;
+  return out;
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    Eigen::Index parameter,
+    double target,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    Backend backend,
+    OptimOptions opts,
+    OrdinalParameterization parameterization,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_parameter_ordinal";
+  if (parameter < 0 || parameter >= unrestricted.theta.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  ScalarFunctional functional;
+  functional.value = [parameter](const Eigen::VectorXd& theta) {
+    return theta(parameter);
+  };
+  functional.gradient = [parameter](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd grad = Eigen::VectorXd::Zero(theta.size());
+    grad(parameter) = 1.0;
+    return grad;
+  };
+  return profile_lrt_scalar_ordinal(
+      std::move(pt), rep, stats, unrestricted, std::move(functional), target,
+      std::move(bounds), weights, backend, opts, parameterization,
+      constraint_tol);
+}
+
+}  // namespace frontier
 
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,

@@ -98,9 +98,15 @@ golden `parTable()` fixtures.
   `profile_lrt_ci_parameter_{ml,gmm,gmm_fitted_weight}()`, bisects the ordinary
   df-1 profile statistic and returns root diagnostics. R exposes the parameter
   special cases as `frontier_profile_lrt_parameter_*` and
-  `frontier_profile_lrt_ci_parameter_*`. Robust scaling, Bartlett /
-  small-sample correction, functional R callbacks, and ordinal fitted-
-  functional profile-LR remain research layers above this seed surface.
+  `frontier_profile_lrt_ci_parameter_*`. The all-ordinal frontier companion,
+  `fit_ordinal_constrained()` plus `profile_lrt_scalar_ordinal()` /
+  `profile_lrt_parameter_ordinal()`, applies the same programmatic equality
+  pattern to the full ordinal ULS/DWLS/WLS threshold + polychoric moment stack;
+  R exposes the parameter helper as
+  `frontier_profile_lrt_parameter_ordinal()`. Robust scaling, Bartlett /
+  small-sample correction, functional R callbacks, CI inversion beyond ordinary
+  continuous parameters, and ordinal omega/functionals remain research layers
+  above this seed surface.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
   identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and

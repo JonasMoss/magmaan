@@ -2070,7 +2070,14 @@ Rcpp::List scalar_profile_lrt_to_list(
     Ctx& ctx,
     const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
     int parameter,
-    const char* estimator) {
+    const char* estimator,
+    const magmaan::data::OrdinalStats* ordinal_stats = nullptr,
+    const char* ordinal_parameterization = "delta") {
+  Rcpp::List constrained =
+      ordinal_stats == nullptr
+          ? fit_result(ctx, r.constrained, nullptr, estimator)
+          : ordinal_fit_result(ctx, *ordinal_stats, r.constrained, nullptr,
+                               estimator, ordinal_parameterization);
   return Rcpp::List::create(
       Rcpp::_["parameter"] = parameter,
       Rcpp::_["target"] = r.target,
@@ -2083,8 +2090,7 @@ Rcpp::List scalar_profile_lrt_to_list(
       Rcpp::_["p_value"] = r.p_value,
       Rcpp::_["df"] = r.df,
       Rcpp::_["nobs"] = r.n_obs,
-      Rcpp::_["constrained"] = fit_result(ctx, r.constrained, nullptr,
-                                          estimator));
+      Rcpp::_["constrained"] = constrained);
 }
 
 Rcpp::List scalar_profile_ci_to_list(
@@ -2241,6 +2247,64 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list(ctx, *r_or, parameter,
                                     "GMM-fitted-weight");
+}
+
+// frontier_profile_lrt_parameter_ordinal() - ordinary df-1 profile statistic
+// for one all-ordinal ULS/DWLS/WLS free parameter. `parameter` is the 1-based
+// free-parameter ordinal from the prepared ordinal fit partable.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_ordinal_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    std::string weight = "fit",
+    SEXP ordinal_stats = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!fit.containsElementNamed("ordinal") ||
+      !Rcpp::as<bool>(fit["ordinal"])) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ordinal() requires an "
+               "all-ordinal ULS/DWLS/WLS fit");
+  }
+  if (parameter <= 0 ||
+      parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ordinal(): parameter index %d "
+               "is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(
+      stats_from_fit_or_arg(fit, ordinal_stats, "ordinal_stats",
+                            "frontier_profile_lrt_parameter_ordinal"));
+  const std::string weight_key =
+      ordinal_weight_key_from_arg(weight, fit, estimator);
+  const auto ow = ordinal_weight_from_estimator(
+      weight_key, "frontier_profile_lrt_parameter_ordinal");
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : ordinal_parameterization_attr(fit["partable"]);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+
+  auto r_or = magmaan::estimate::frontier::profile_lrt_parameter_ordinal(
+      ctx.pt, ctx.rep, stats, est,
+      static_cast<Eigen::Index>(parameter - 1), target,
+      bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
+      ordinal_parameterization_from_string(parameterization_name),
+      constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_lrt_to_list(
+      ctx, *r_or, parameter, weight_key.c_str(), &stats,
+      parameterization_name.c_str());
 }
 
 // [[Rcpp::export]]

@@ -480,6 +480,53 @@ ordinal_ls_objective(spec::LatentStructure pt,
                      OrdinalParameterization parameterization =
                          OrdinalParameterization::Delta);
 
+// All-ordinal LS refit with caller-supplied nonlinear equality constraints in
+// the prepared free-parameter vector. This uses the same full ordinal
+// threshold + polychoric moment stack as `ordinal_ls_objective`; it is the
+// frontier seed for ordinal profile-LR work, not a robust/small-sample policy.
+fit_expected<Estimates>
+fit_ordinal_constrained(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::OrdinalStats& stats,
+                        const Estimates& start,
+                        ExtraNonlinearEqConstraints extra,
+                        Bounds bounds = {},
+                        OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+                        Backend backend = Backend::NloptSlsqp,
+                        optim::OptimOptions opts = {},
+                        OrdinalParameterization parameterization =
+                            OrdinalParameterization::Delta);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_ordinal(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Estimates& unrestricted,
+                           ScalarFunctional functional,
+                           double target,
+                           Bounds bounds = {},
+                           OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           OrdinalParameterization parameterization =
+                               OrdinalParameterization::Delta,
+                           double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    Eigen::Index parameter,
+    double target,
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
 fit_expected<OrdinalLsObjective>
 mixed_ordinal_ls_objective(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
