@@ -17,8 +17,8 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
-- **L — FIML Satorra-2000 nested test: regularize the saturated-H1 reference
-  under missing data (frontier).** The scaled and mixture nested difference tests
+- **M — FIML Satorra-2000 nested test: calibrate the opt-in saturated-H1
+  reference regularizer under missing data (frontier).** The scaled and mixture nested difference tests
   (`nestedTest(method = "satorra.2000")`, especially direct FIML) collapse to
   conservative (Type-I toward 0) under missing data at moderate model size. The
   saturated-H1 reference (the EM covariance and the moment acov Gamma) goes
@@ -32,20 +32,21 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   to nominal, so the dominant defect is the per-replicate reference scale/spectrum
   rather than the likelihood-ratio statistic.
 
-  Add optional reference regularization before forming the direct-FIML difference
-  spectrum, exposed as an opt-in `nestedTest` option (frontier, since it changes
-  results), not the default. Candidate strategies:
-  - **Information-side floor / truncated inverse.** Regularize the saturated H1
-    information before inversion, e.g. floor eigenvalues of `H` or use a
-    truncated pseudo-inverse, then form `Gamma_reg = H_reg^-1 J H_reg^-1`.
-  - **Gamma-side shrink / condition cap.** Transform the final moment acov toward
-    a well-conditioned non-model target, e.g. `Gamma_reg = (1-lambda) Gamma +
-    lambda T` with diagonal/scaled-identity/correlation-scale targets, choosing
-    the smallest `lambda` that meets a condition-number or eigenvalue floor.
-    Avoid an unqualified additive `Gamma + lambda I` default: it can increase
-    `trace(U Gamma)` and worsen over-scaling unless the transformation is
-    scale-controlled or trace-aware. A post-hoc spectrum trim recovers small p
-    but not the singular large-p regime, so it is only a diagnostic proxy.
+  Core implementation landed 2026-07-03 as opt-in
+  `nestedTest(..., h1_reference_regularization = ...)` for direct-FIML
+  restriction-map tests. Defaults remain raw/lavaan-parity. When enabled,
+  `TRUE` uses `condition_max = 1e6`; explicit lists can set `condition_max`,
+  `min_eigenvalue`, and covariance/information sub-options. The lavaan
+  convention regularizes the saturated H1 covariance before building the
+  lavaan-style `WLS.V`; the native eta-space and `ud_method = "2001"` FIML paths
+  floor the saturated H1 information before inversion and form
+  `Gamma_reg = H_reg^-1 J H_reg^-1` (or `H_reg^-1` for NT Gamma). ML2S remains
+  controlled by fit-time `stage1_regularization`, not this nested-test option.
+
+  Remaining work: calibrate candidate caps in `papers/fiml-fmg/dev/refcond/`
+  before using the option in the paper grid. A post-hoc spectrum trim recovers
+  small p but not the singular large-p regime, so it remains only a diagnostic
+  proxy, not the implemented fix.
 
   Asymptotic accounting must be explicit. If the Stage-1 moments themselves are
   transformed, propagate the transformation by delta method

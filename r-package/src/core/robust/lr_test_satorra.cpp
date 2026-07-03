@@ -133,6 +133,281 @@ ml2s_nt_weight_from_saturated(const estimate::fiml::SaturatedMoments& sm) {
       sm, estimate::fiml::TwoStageWeight::Nt);
 }
 
+post_expected<void>
+validate_h1_reference_regularization_options(
+    const H1ReferenceRegularizationOptions& options,
+    const std::string& caller) {
+  if (!options.enabled) return {};
+  if (std::isfinite(options.covariance_condition_max) &&
+      !(options.covariance_condition_max >= 1.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": covariance_condition_max must be >= 1"));
+  }
+  if (!(options.covariance_min_eigenvalue >= 0.0) ||
+      !std::isfinite(options.covariance_min_eigenvalue)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": covariance_min_eigenvalue must be finite and >= 0"));
+  }
+  if (std::isfinite(options.covariance_intensity) &&
+      (options.covariance_intensity < 0.0 ||
+       options.covariance_intensity > 1.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": covariance_intensity must lie in [0, 1]"));
+  }
+  if (!(options.covariance_jacobian_step > 0.0) ||
+      !std::isfinite(options.covariance_jacobian_step)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": covariance_jacobian_step must be finite and > 0"));
+  }
+  if (std::isfinite(options.information_condition_max) &&
+      !(options.information_condition_max >= 1.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": information_condition_max must be >= 1"));
+  }
+  if (!(options.information_min_eigenvalue >= 0.0) ||
+      !std::isfinite(options.information_min_eigenvalue)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": information_min_eigenvalue must be finite and >= 0"));
+  }
+  return {};
+}
+
+estimate::fiml::Stage1RegularizationOptions
+stage1_options_from_h1_reference(
+    const H1ReferenceRegularizationOptions& options) {
+  estimate::fiml::Stage1RegularizationOptions out;
+  out.enabled = options.enabled;
+  out.target = options.covariance_target;
+  out.intensity = options.covariance_intensity;
+  out.condition_max = options.covariance_condition_max;
+  out.min_eigenvalue = options.covariance_min_eigenvalue;
+  out.jacobian_step = options.covariance_jacobian_step;
+  return out;
+}
+
+H1ReferenceRegularizationDiagnostics
+h1_covariance_diagnostics_from_stage1(
+    const estimate::fiml::Stage1RegularizedMoments& r,
+    const H1ReferenceRegularizationOptions& options) {
+  H1ReferenceRegularizationDiagnostics out;
+  out.enabled = options.enabled;
+  out.component = "covariance";
+  out.condition_max = options.covariance_condition_max;
+  out.min_eigenvalue = options.covariance_min_eigenvalue;
+  out.blocks.reserve(r.block_diagnostics.size());
+  for (const auto& d0 : r.block_diagnostics) {
+    H1ReferenceRegularizationBlockDiagnostic d;
+    d.component = "covariance";
+    d.target = d0.target;
+    d.raw_min_eigen = d0.raw_min_eigen;
+    d.raw_max_eigen = d0.raw_max_eigen;
+    d.raw_condition = d0.raw_condition;
+    d.min_eigen = d0.min_eigen;
+    d.max_eigen = d0.max_eigen;
+    d.condition = d0.condition;
+    d.intensity = d0.intensity;
+    d.applied = d0.applied;
+    out.applied = out.applied || d.applied;
+    out.blocks.push_back(std::move(d));
+  }
+  return out;
+}
+
+post_expected<estimate::fiml::Stage1RegularizedMoments>
+regularize_h1_reference_covariance(
+    const estimate::fiml::SaturatedMoments& sm,
+    const H1ReferenceRegularizationOptions& options) {
+  auto r_or = estimate::fiml::regularize_saturated_stage1(
+      sm, stage1_options_from_h1_reference(options));
+  if (!r_or.has_value()) {
+    return std::unexpected(make_err(r_or.error().kind,
+        "h1_reference_regularization covariance: " + r_or.error().detail));
+  }
+  return r_or;
+}
+
+struct H1InfoBlockApply {
+  Eigen::MatrixXd H;
+  Eigen::MatrixXd Hinv;
+  H1ReferenceRegularizationBlockDiagnostic diagnostic;
+};
+
+struct H1ReferenceMatrices {
+  Eigen::MatrixXd V;
+  Eigen::MatrixXd Gamma;
+  H1ReferenceRegularizationDiagnostics diagnostics;
+};
+
+post_expected<H1InfoBlockApply>
+regularize_h1_information_block(
+    const Eigen::Ref<const Eigen::MatrixXd>& H0,
+    const H1ReferenceRegularizationOptions& options,
+    const std::string& what) {
+  if (H0.rows() != H0.cols() || H0.rows() <= 0 || !H0.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + ": H block must be square, non-empty, and finite"));
+  }
+  const Eigen::MatrixXd Hsym = 0.5 * (H0 + H0.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(Hsym);
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + ": saturated information eigendecomposition failed"));
+  }
+
+  const Eigen::VectorXd raw_evals = es.eigenvalues();
+  const double raw_min = raw_evals.minCoeff();
+  const double raw_max = raw_evals.maxCoeff();
+  if (!(raw_max > 0.0) || !std::isfinite(raw_max)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + ": saturated information has no positive eigenvalue"));
+  }
+  double floor = options.information_min_eigenvalue;
+  if (std::isfinite(options.information_condition_max)) {
+    floor = std::max(floor, raw_max / options.information_condition_max);
+  }
+  if (!(floor > 0.0) && raw_min <= 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        what + ": saturated information is not positive definite and no "
+        "positive information floor was requested"));
+  }
+
+  Eigen::VectorXd evals = raw_evals;
+  bool applied = false;
+  if (floor > 0.0) {
+    for (Eigen::Index i = 0; i < evals.size(); ++i) {
+      if (evals(i) < floor) {
+        evals(i) = floor;
+        applied = true;
+      }
+    }
+  }
+
+  H1InfoBlockApply out;
+  out.H = es.eigenvectors() * evals.asDiagonal() * es.eigenvectors().transpose();
+  out.H = 0.5 * (out.H + out.H.transpose()).eval();
+  const Eigen::VectorXd inv_evals = evals.cwiseInverse();
+  out.Hinv = es.eigenvectors() * inv_evals.asDiagonal() *
+             es.eigenvectors().transpose();
+  out.Hinv = 0.5 * (out.Hinv + out.Hinv.transpose()).eval();
+
+  const double min_after = evals.minCoeff();
+  const double max_after = evals.maxCoeff();
+  auto& d = out.diagnostic;
+  d.component = "information";
+  d.target = "eigen_floor";
+  d.raw_min_eigen = raw_min;
+  d.raw_max_eigen = raw_max;
+  d.raw_condition = (raw_min > 0.0)
+      ? raw_max / raw_min
+      : std::numeric_limits<double>::infinity();
+  d.min_eigen = min_after;
+  d.max_eigen = max_after;
+  d.condition = max_after / min_after;
+  d.floor = floor;
+  d.applied = applied;
+  return out;
+}
+
+post_expected<H1ReferenceMatrices>
+h1_information_reference_matrices(
+    const estimate::fiml::SaturatedMoments& sm,
+    GammaSource gamma,
+    const H1ReferenceRegularizationOptions& options,
+    const std::string& caller) {
+  const std::size_t B = sm.cov.size();
+  if (sm.mean.size() != B || sm.n_obs.size() != B) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": saturated moment block counts are inconsistent"));
+  }
+  std::vector<Eigen::Index> q_b(B);
+  std::vector<Eigen::Index> off_b(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    if (p <= 0 || sm.cov[b].cols() != p || sm.mean[b].size() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          caller + ": malformed saturated block " + std::to_string(b)));
+    }
+    q_b[b] = p + detail::vech_len(p);
+    off_b[b + 1] = off_b[b] + q_b[b];
+  }
+  const Eigen::Index Q = off_b.back();
+  if (sm.H.rows() != Q || sm.H.cols() != Q || sm.J.rows() != Q ||
+      sm.J.cols() != Q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": saturated H/J shapes do not match eta layout"));
+  }
+  if (!sm.H.allFinite() || !sm.J.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": saturated H/J contain non-finite entries"));
+  }
+
+  H1ReferenceMatrices out;
+  out.V = sm.H;
+  out.Gamma = Eigen::MatrixXd::Zero(Q, Q);
+  out.diagnostics.enabled = options.enabled;
+  out.diagnostics.component = "information";
+  out.diagnostics.condition_max = options.information_condition_max;
+  out.diagnostics.min_eigenvalue = options.information_min_eigenvalue;
+
+  if (!options.enabled && gamma == GammaSource::Empirical) {
+    if (sm.acov.rows() != Q || sm.acov.cols() != Q || !sm.acov.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          caller + ": saturated ACOV shape mismatch"));
+    }
+    out.Gamma = sm.acov;
+    return out;
+  }
+
+  Eigen::MatrixXd Hinv = Eigen::MatrixXd::Zero(Q, Q);
+  if (options.enabled) {
+    out.V.setZero(Q, Q);
+    out.diagnostics.blocks.reserve(B);
+    for (std::size_t b = 0; b < B; ++b) {
+      const Eigen::Index off = off_b[b];
+      const Eigen::Index q = q_b[b];
+      auto block_or = regularize_h1_information_block(
+          sm.H.block(off, off, q, q), options,
+          caller + ": H1 information block " + std::to_string(b));
+      if (!block_or.has_value()) return std::unexpected(block_or.error());
+      out.V.block(off, off, q, q) = std::move(block_or->H);
+      Hinv.block(off, off, q, q) = std::move(block_or->Hinv);
+      out.diagnostics.applied =
+          out.diagnostics.applied || block_or->diagnostic.applied;
+      out.diagnostics.blocks.push_back(std::move(block_or->diagnostic));
+    }
+  } else {
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_H(0.5 * (out.V + out.V.transpose()));
+    if (ldlt_H.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          caller + ": saturated information is not invertible"));
+    }
+    Hinv = ldlt_H.solve(Eigen::MatrixXd::Identity(Q, Q));
+    Hinv = 0.5 * (Hinv + Hinv.transpose()).eval();
+  }
+
+  if (gamma == GammaSource::NT) {
+    out.Gamma = Hinv;
+  } else {
+    const Eigen::MatrixXd Jsym = 0.5 * (sm.J + sm.J.transpose());
+    out.Gamma = Hinv * Jsym * Hinv;
+    out.Gamma = 0.5 * (out.Gamma + out.Gamma.transpose()).eval();
+  }
+  if (!out.Gamma.allFinite() || !out.V.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        caller + ": regularized H1 reference produced non-finite entries"));
+  }
+  return out;
+}
+
+void append_h1_reference_warning(
+    std::vector<std::string>& warnings,
+    const H1ReferenceRegularizationDiagnostics& diagnostics,
+    const std::string& label) {
+  if (!diagnostics.enabled || !diagnostics.applied) return;
+  warnings.emplace_back(label + ": H1 reference regularization applied (" +
+                        diagnostics.component + ")");
+}
+
 double symmetric_basis_trace(const Eigen::Ref<const Eigen::MatrixXd>& A,
                              Eigen::Index r1, Eigen::Index c1,
                              Eigen::Index r2, Eigen::Index c2) {
@@ -1392,7 +1667,8 @@ lr_test_satorra2000_fiml_from_data_impl(
     SatorraAMethod                   a_method,
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
-    SatorraMomentConvention          convention) {
+    SatorraMomentConvention          convention,
+    H1ReferenceRegularizationOptions h1_reference_regularization) {
   const int df_diff_from_T = df_H0 - df_H1;
   if (df_diff_from_T < 0) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1402,6 +1678,12 @@ lr_test_satorra2000_fiml_from_data_impl(
   if (!(h_step > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "lr_test_satorra2000_fiml_from_data: h_step must be > 0"));
+  }
+  if (auto ok = validate_h1_reference_regularization_options(
+          h1_reference_regularization,
+          "lr_test_satorra2000_fiml_from_data");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
   }
   const bool has_nonlinear =
       !pt_H1.nl_constraints.empty() || !pt_H0.nl_constraints.empty();
@@ -1426,21 +1708,41 @@ lr_test_satorra2000_fiml_from_data_impl(
   }
   const estimate::fiml::SaturatedMoments& sm =
       sm_precomputed ? *sm_precomputed : sm_owned;
-  const Eigen::MatrixXd& V = sm.H;
 
-  Eigen::MatrixXd Gamma;
-  if (gamma == GammaSource::NT) {
-    Eigen::LDLT<Eigen::MatrixXd> ldlt_V(0.5 * (V + V.transpose()));
-    if (ldlt_V.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "lr_test_satorra2000_fiml_from_data: saturated information V is "
-          "not invertible"));
-    }
-    Gamma = ldlt_V.solve(Eigen::MatrixXd::Identity(V.rows(), V.cols()));
-    Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
-  } else {
-    Gamma = sm.acov;
+  estimate::fiml::Stage1RegularizedMoments lavaan_sm_regularized;
+  const estimate::fiml::SaturatedMoments* sm_for_lavaan = &sm;
+  H1ReferenceRegularizationDiagnostics ref_diag;
+  if (h1_reference_regularization.enabled &&
+      gamma == GammaSource::Empirical &&
+      convention == SatorraMomentConvention::Lavaan) {
+    auto reg_or =
+        regularize_h1_reference_covariance(sm, h1_reference_regularization);
+    if (!reg_or.has_value()) return std::unexpected(reg_or.error());
+    lavaan_sm_regularized = std::move(*reg_or);
+    sm_for_lavaan = &lavaan_sm_regularized.moments;
+    ref_diag = h1_covariance_diagnostics_from_stage1(
+        lavaan_sm_regularized, h1_reference_regularization);
   }
+
+  H1ReferenceMatrices eta_ref;
+  Eigen::MatrixXd V_lavaan_shape;
+  Eigen::MatrixXd Gamma;
+  const Eigen::MatrixXd* V_ptr = nullptr;
+  if (gamma == GammaSource::Empirical &&
+      convention == SatorraMomentConvention::Lavaan) {
+    V_lavaan_shape = sm.H;
+    V_ptr = &V_lavaan_shape;
+  } else {
+    auto ref_or = h1_information_reference_matrices(
+        sm, gamma, h1_reference_regularization,
+        "lr_test_satorra2000_fiml_from_data");
+    if (!ref_or.has_value()) return std::unexpected(ref_or.error());
+    eta_ref = std::move(*ref_or);
+    V_ptr = &eta_ref.V;
+    Gamma = eta_ref.Gamma;
+    ref_diag = eta_ref.diagnostics;
+  }
+  const Eigen::MatrixXd& V = *V_ptr;
 
   estimate::Estimates est_H1;
   est_H1.theta = theta_H1_full;
@@ -1534,11 +1836,11 @@ lr_test_satorra2000_fiml_from_data_impl(
             "lr_test_satorra2000_fiml_from_data: ModelEvaluator::evaluate "
             "failed for lavaan convention: " + eval_or.error().detail));
       }
-      auto W_or = fiml_lavaan_expected_wls_v(raw, sm);
+      auto W_or = fiml_lavaan_expected_wls_v(raw, *sm_for_lavaan);
       if (!W_or.has_value()) return std::unexpected(W_or.error());
       sd_or = compute_fiml_satorra2000_lavaan_convention(
-          raw, sm, *W_or, eval_or->moments, Delta1_alpha, basis_H1, *info_or,
-          A_alpha);
+          raw, *sm_for_lavaan, *W_or, eval_or->moments, Delta1_alpha,
+          basis_H1, *info_or, A_alpha);
     } else {
       Eigen::MatrixXd A1 = basis_H1.transpose() * (*info_or) * basis_H1;
       A1 = 0.5 * (A1 + A1.transpose()).eval();
@@ -1555,6 +1857,10 @@ lr_test_satorra2000_fiml_from_data_impl(
   if (!sd_or.has_value()) return std::unexpected(sd_or.error());
   auto out_or = lr_test_satorra2000(T_H0 - T_H1, *sd_or);
   if (!out_or.has_value()) return std::unexpected(out_or.error());
+  out_or->h1_reference_regularization = std::move(ref_diag);
+  append_h1_reference_warning(out_or->warnings,
+                              out_or->h1_reference_regularization,
+                              "lr_test_satorra2000_fiml_from_data");
   out_or->warnings.insert(out_or->warnings.end(),
                           warnings.begin(), warnings.end());
   return out_or;
@@ -1579,12 +1885,14 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method,
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
-    SatorraMomentConvention          convention) {
+    SatorraMomentConvention          convention,
+    H1ReferenceRegularizationOptions h1_reference_regularization) {
   return lr_test_satorra2000_fiml_from_data_impl(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
-      nullptr, nullptr, gamma, a_method, h_step, sm_precomputed, convention);
+      nullptr, nullptr, gamma, a_method, h_step, sm_precomputed, convention,
+      h1_reference_regularization);
 }
 
 post_expected<LRSatorra2000Result>
@@ -1607,12 +1915,14 @@ lr_test_satorra2000_fiml_from_data(
     GammaSource                      gamma,
     SatorraAMethod                   a_method,
     double                           h_step,
-    SatorraMomentConvention          convention) {
+    SatorraMomentConvention          convention,
+    H1ReferenceRegularizationOptions h1_reference_regularization) {
   return lr_test_satorra2000_fiml_from_data(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
-      pack, h1, gamma, a_method, h_step, nullptr, convention);
+      pack, h1, gamma, a_method, h_step, nullptr, convention,
+      h1_reference_regularization);
 }
 
 post_expected<LRSatorra2000Result>
@@ -1636,12 +1946,14 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method,
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
-    SatorraMomentConvention          convention) {
+    SatorraMomentConvention          convention,
+    H1ReferenceRegularizationOptions h1_reference_regularization) {
   return lr_test_satorra2000_fiml_from_data_impl(
       pt_H1, rep_H1, theta_H1_full, K_H1,
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
-      &pack, &h1, gamma, a_method, h_step, sm_precomputed, convention);
+      &pack, &h1, gamma, a_method, h_step, sm_precomputed, convention,
+      h1_reference_regularization);
 }
 
 post_expected<LRSatorra2000Result>
@@ -1819,7 +2131,8 @@ lr_test_satorra2001_missing_impl(
     bool two_stage, double h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
     estimate::fiml::TwoStageWeight kind = estimate::fiml::TwoStageWeight::Nt,
-    estimate::fiml::TwoStageDlsOptions dls = {}) {
+    estimate::fiml::TwoStageDlsOptions dls = {},
+    H1ReferenceRegularizationOptions h1_reference_regularization = {}) {
   const int df_diff = df_H0 - df_H1;
   const char* label = two_stage ? "lr_test_satorra2001_ml2s_from_data"
                                 : "lr_test_satorra2001_fiml_from_data";
@@ -1831,6 +2144,17 @@ lr_test_satorra2001_missing_impl(
   if (!(h_step > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         std::string(label) + ": h_step must be > 0"));
+  }
+  if (two_stage && h1_reference_regularization.enabled) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": h1_reference_regularization is only "
+        "available for direct FIML; use ML2S stage1_regularization at fit "
+        "time"));
+  }
+  if (auto ok = validate_h1_reference_regularization_options(
+          h1_reference_regularization, label);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
   }
 
   // Both single-model projectors share one saturated build; reuse a Stage-1
@@ -1846,6 +2170,7 @@ lr_test_satorra2001_missing_impl(
 
   Eigen::MatrixXd V;
   Eigen::MatrixXd Gamma;
+  H1ReferenceRegularizationDiagnostics ref_diag;
   if (two_stage) {
     auto V_or = estimate::fiml::two_stage_stage2_weight(sm, kind, dls);
     if (!V_or.has_value()) return std::unexpected(V_or.error());
@@ -1855,8 +2180,12 @@ lr_test_satorra2001_missing_impl(
     if (!G_or.has_value()) return std::unexpected(G_or.error());
     Gamma = std::move(*G_or);
   } else {
-    V = sm.H;
-    Gamma = sm.acov;
+    auto ref_or = h1_information_reference_matrices(
+        sm, GammaSource::Empirical, h1_reference_regularization, label);
+    if (!ref_or.has_value()) return std::unexpected(ref_or.error());
+    V = std::move(ref_or->V);
+    Gamma = std::move(ref_or->Gamma);
+    ref_diag = std::move(ref_or->diagnostics);
   }
 
   estimate::fiml::FIMLPack pack_owned;
@@ -1899,7 +2228,13 @@ lr_test_satorra2001_missing_impl(
 
   auto sd_or = compute_diff_spectrum_2001(*U0_or, *U1_or, Gamma, df_diff);
   if (!sd_or.has_value()) return std::unexpected(sd_or.error());
-  return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+  auto out_or = lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+  if (!out_or.has_value()) return std::unexpected(out_or.error());
+  out_or->h1_reference_regularization = std::move(ref_diag);
+  append_h1_reference_warning(out_or->warnings,
+                              out_or->h1_reference_regularization,
+                              label);
+  return out_or;
 }
 
 }  // namespace
@@ -1912,10 +2247,12 @@ lr_test_satorra2001_fiml_from_data(
     const Eigen::VectorXd& theta_H0_full,
     const data::RawData& raw,
     double T_H0, double T_H1, int df_H0, int df_H1, double h_step,
-    const estimate::fiml::SaturatedMoments* sm_precomputed) {
+    const estimate::fiml::SaturatedMoments* sm_precomputed,
+    H1ReferenceRegularizationOptions h1_reference_regularization) {
   return lr_test_satorra2001_missing_impl(
       pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
-      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/false, h_step, sm_precomputed);
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/false, h_step, sm_precomputed,
+      estimate::fiml::TwoStageWeight::Nt, {}, h1_reference_regularization);
 }
 
 post_expected<LRSatorra2000Result>

@@ -49,6 +49,120 @@ magmaan::robust::SatorraMomentConvention parse_moment_convention(
              "or 'lavaan' (got '%s')", s);
 }
 
+magmaan::estimate::fiml::Stage1RegularizationTarget
+h1_reference_covariance_target_from_string(const std::string& target) {
+  using T = magmaan::estimate::fiml::Stage1RegularizationTarget;
+  if (target == "diagonal") return T::Diagonal;
+  if (target == "scaled_identity" || target == "scaled.identity")
+    return T::ScaledIdentity;
+  if (target == "identity") return T::Identity;
+  Rcpp::stop("magmaan: h1_reference_regularization covariance target must be "
+             "diagonal, scaled_identity, or identity");
+}
+
+bool list_has_nonnull(Rcpp::List x, const char* name) {
+  return x.containsElementNamed(name) && !Rf_isNull(x[name]);
+}
+
+void apply_h1_reference_common_options(
+    Rcpp::List l,
+    magmaan::robust::H1ReferenceRegularizationOptions& opts) {
+  if (list_has_nonnull(l, "condition_max")) {
+    const double x = Rcpp::as<double>(l["condition_max"]);
+    const double val = (std::isfinite(x) || std::isinf(x))
+        ? x
+        : std::numeric_limits<double>::infinity();
+    opts.covariance_condition_max = val;
+    opts.information_condition_max = val;
+  }
+  if (list_has_nonnull(l, "min_eigenvalue")) {
+    const double x = Rcpp::as<double>(l["min_eigenvalue"]);
+    opts.covariance_min_eigenvalue = x;
+    opts.information_min_eigenvalue = x;
+  }
+}
+
+void apply_h1_reference_covariance_options(
+    Rcpp::List l,
+    magmaan::robust::H1ReferenceRegularizationOptions& opts) {
+  if (list_has_nonnull(l, "condition_max")) {
+    const double x = Rcpp::as<double>(l["condition_max"]);
+    opts.covariance_condition_max = (std::isfinite(x) || std::isinf(x))
+        ? x
+        : std::numeric_limits<double>::infinity();
+  }
+  if (list_has_nonnull(l, "min_eigenvalue")) {
+    opts.covariance_min_eigenvalue = Rcpp::as<double>(l["min_eigenvalue"]);
+  }
+  if (list_has_nonnull(l, "target")) {
+    opts.covariance_target = h1_reference_covariance_target_from_string(
+        Rcpp::as<std::string>(l["target"]));
+  }
+  if (list_has_nonnull(l, "intensity")) {
+    const double x = Rcpp::as<double>(l["intensity"]);
+    opts.covariance_intensity = std::isfinite(x)
+        ? x
+        : std::numeric_limits<double>::quiet_NaN();
+  }
+  if (list_has_nonnull(l, "jacobian_step")) {
+    opts.covariance_jacobian_step = Rcpp::as<double>(l["jacobian_step"]);
+  }
+}
+
+void apply_h1_reference_information_options(
+    Rcpp::List l,
+    magmaan::robust::H1ReferenceRegularizationOptions& opts) {
+  if (list_has_nonnull(l, "condition_max")) {
+    const double x = Rcpp::as<double>(l["condition_max"]);
+    opts.information_condition_max = (std::isfinite(x) || std::isinf(x))
+        ? x
+        : std::numeric_limits<double>::infinity();
+  }
+  if (list_has_nonnull(l, "min_eigenvalue")) {
+    opts.information_min_eigenvalue = Rcpp::as<double>(l["min_eigenvalue"]);
+  }
+}
+
+magmaan::robust::H1ReferenceRegularizationOptions
+h1_reference_regularization_options_from(SEXP arg) {
+  magmaan::robust::H1ReferenceRegularizationOptions opts;
+  if (Rf_isNull(arg)) return opts;
+
+  opts.enabled = true;
+  opts.covariance_condition_max = 1e6;
+  opts.information_condition_max = 1e6;
+  if (Rf_isLogical(arg) && Rf_length(arg) == 1) {
+    const int flag = LOGICAL(arg)[0];
+    opts.enabled = flag != 0 && flag != NA_LOGICAL;
+    return opts;
+  }
+  if (TYPEOF(arg) != VECSXP) {
+    Rcpp::stop("magmaan: h1_reference_regularization must be NULL, TRUE/FALSE, or a list");
+  }
+
+  Rcpp::List l(arg);
+  if (list_has_nonnull(l, "enabled")) {
+    opts.enabled = Rcpp::as<bool>(l["enabled"]);
+  }
+  if (!opts.enabled) return opts;
+  apply_h1_reference_common_options(l, opts);
+  apply_h1_reference_covariance_options(l, opts);
+  apply_h1_reference_information_options(l, opts);
+  if (list_has_nonnull(l, "covariance")) {
+    if (TYPEOF(l["covariance"]) != VECSXP) {
+      Rcpp::stop("magmaan: h1_reference_regularization$covariance must be a list");
+    }
+    apply_h1_reference_covariance_options(Rcpp::List(l["covariance"]), opts);
+  }
+  if (list_has_nonnull(l, "information")) {
+    if (TYPEOF(l["information"]) != VECSXP) {
+      Rcpp::stop("magmaan: h1_reference_regularization$information must be a list");
+    }
+    apply_h1_reference_information_options(Rcpp::List(l["information"]), opts);
+  }
+  return opts;
+}
+
 magmaan::robust::GammaComputation parse_gamma_computation(const std::string& s) {
   if (s == "materialized" || s == "full" || s == "explicit") {
     return magmaan::robust::GammaComputation::Materialized;
@@ -231,12 +345,54 @@ Rcpp::List sb_diff_to_list(const magmaan::robust::LRSatorraBentlerDiffResult& r)
       Rcpp::_["warnings"] = warns);
 }
 
+Rcpp::List h1_reference_regularization_to_list(
+    const magmaan::robust::H1ReferenceRegularizationDiagnostics& d) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(d.blocks.size());
+  Rcpp::CharacterVector component(nb), target(nb);
+  Rcpp::NumericVector raw_min(nb), raw_max(nb), raw_cond(nb);
+  Rcpp::NumericVector min_eig(nb), max_eig(nb), cond(nb);
+  Rcpp::NumericVector floor(nb), intensity(nb);
+  Rcpp::LogicalVector applied(nb);
+  for (R_xlen_t i = 0; i < nb; ++i) {
+    const auto& b = d.blocks[static_cast<std::size_t>(i)];
+    component[i] = b.component;
+    target[i] = b.target;
+    raw_min[i] = b.raw_min_eigen;
+    raw_max[i] = b.raw_max_eigen;
+    raw_cond[i] = b.raw_condition;
+    min_eig[i] = b.min_eigen;
+    max_eig[i] = b.max_eigen;
+    cond[i] = b.condition;
+    floor[i] = b.floor;
+    intensity[i] = b.intensity;
+    applied[i] = b.applied;
+  }
+  return Rcpp::List::create(
+      Rcpp::_["enabled"] = d.enabled,
+      Rcpp::_["applied"] = d.applied,
+      Rcpp::_["component"] = d.component,
+      Rcpp::_["condition_max"] = d.condition_max,
+      Rcpp::_["min_eigenvalue"] = d.min_eigenvalue,
+      Rcpp::_["blocks"] = Rcpp::List::create(
+          Rcpp::_["component"] = component,
+          Rcpp::_["target"] = target,
+          Rcpp::_["raw_min_eigen"] = raw_min,
+          Rcpp::_["raw_max_eigen"] = raw_max,
+          Rcpp::_["raw_condition"] = raw_cond,
+          Rcpp::_["min_eigen"] = min_eig,
+          Rcpp::_["max_eigen"] = max_eig,
+          Rcpp::_["condition"] = cond,
+          Rcpp::_["floor"] = floor,
+          Rcpp::_["intensity"] = intensity,
+          Rcpp::_["applied"] = applied));
+}
+
 Rcpp::List satorra2000_to_list(const magmaan::robust::LRSatorra2000Result& r) {
   Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
   for (std::size_t k = 0; k < r.warnings.size(); ++k) {
     warns[static_cast<R_xlen_t>(k)] = r.warnings[k];
   }
-  return Rcpp::List::create(
+  Rcpp::List out = Rcpp::List::create(
       Rcpp::_["T_diff"]      = r.T_diff,
       Rcpp::_["df_diff"]     = r.df_diff,
       Rcpp::_["p_unscaled"]  = r.p_unscaled,
@@ -256,6 +412,11 @@ Rcpp::List satorra2000_to_list(const magmaan::robust::LRSatorra2000Result& r) {
       Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
       Rcpp::_["p_mixture"]   = r.p_mixture,
       Rcpp::_["warnings"]    = warns);
+  if (r.h1_reference_regularization.enabled) {
+    out["h1_reference_regularization"] =
+        h1_reference_regularization_to_list(r.h1_reference_regularization);
+  }
+  return out;
 }
 
 void validate_same_fiml_raw(const magmaan::data::RawData& h1,
@@ -400,7 +561,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           std::string a_method = "exact",
                                           double      h_step = 1e-4,
                                           std::string ud_method = "2000",
-                                          std::string convention = "magmaan") {
+                                          std::string convention = "magmaan",
+                                          SEXP h1_reference_regularization = R_NilValue) {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
     Rcpp::stop("infer_fiml_lr_test_satorra2000: both FIML fits must carry $raw_data");
@@ -408,6 +570,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   if (ud_method != "2000" && ud_method != "2001") {
     Rcpp::stop("infer_fiml_lr_test_satorra2000: ud_method must be '2000' or '2001'");
   }
+  const auto h1_ref_opts =
+      h1_reference_regularization_options_from(h1_reference_regularization);
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
   magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
@@ -468,7 +632,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
         ctx_H1.pt, ctx_H1.rep, est_H1.theta,
         ctx_H0.pt, ctx_H0.rep, est_H0.theta,
         raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or, h_step,
-        &sm);
+        &sm, h1_ref_opts);
     if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
     return satorra2000_to_list(*r_or);
   }
@@ -485,7 +649,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
       *pack, *h1, parse_gamma(gamma), parse_a_method(a_method), h_step, &sm,
-      parse_moment_convention(convention));
+      parse_moment_convention(convention), h1_ref_opts);
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }

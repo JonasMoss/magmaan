@@ -477,8 +477,8 @@ infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, 
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }
 
-infer_fiml_lr_test_satorra2000 <- function(fit_H1, fit_H0, gamma = "empirical", a_method = "exact", h_step = 1e-4, ud_method = "2000", convention = "magmaan") {
-    .Call(`_magmaan_infer_fiml_lr_test_satorra2000`, fit_H1, fit_H0, gamma, a_method, h_step, ud_method, convention)
+infer_fiml_lr_test_satorra2000 <- function(fit_H1, fit_H0, gamma = "empirical", a_method = "exact", h_step = 1e-4, ud_method = "2000", convention = "magmaan", h1_reference_regularization = NULL) {
+    .Call(`_magmaan_infer_fiml_lr_test_satorra2000`, fit_H1, fit_H0, gamma, a_method, h_step, ud_method, convention, h1_reference_regularization)
 }
 
 infer_ml2s_lr_test_satorra2000 <- function(fit_H1, fit_H0, gamma = "empirical", a_method = "exact", h_step = 1e-4, ud_method = "2000", stage2_weight = "nt", dls_a = 0.5, convention = "magmaan") {

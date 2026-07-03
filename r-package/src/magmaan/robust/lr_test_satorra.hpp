@@ -36,6 +36,43 @@ struct Satorra2000Options {
   GammaComputation computation = GammaComputation::Streaming;
 };
 
+struct H1ReferenceRegularizationOptions {
+  bool enabled = false;
+
+  double covariance_condition_max = std::numeric_limits<double>::infinity();
+  double covariance_min_eigenvalue = 0.0;
+  estimate::fiml::Stage1RegularizationTarget covariance_target =
+      estimate::fiml::Stage1RegularizationTarget::Diagonal;
+  double covariance_intensity = std::numeric_limits<double>::quiet_NaN();
+  double covariance_jacobian_step = 1e-7;
+
+  double information_condition_max = std::numeric_limits<double>::infinity();
+  double information_min_eigenvalue = 0.0;
+};
+
+struct H1ReferenceRegularizationBlockDiagnostic {
+  std::string component;
+  std::string target;
+  double raw_min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double raw_max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double raw_condition = std::numeric_limits<double>::quiet_NaN();
+  double min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double condition = std::numeric_limits<double>::quiet_NaN();
+  double floor = std::numeric_limits<double>::quiet_NaN();
+  double intensity = std::numeric_limits<double>::quiet_NaN();
+  bool applied = false;
+};
+
+struct H1ReferenceRegularizationDiagnostics {
+  bool enabled = false;
+  bool applied = false;
+  std::string component;
+  double condition_max = std::numeric_limits<double>::quiet_NaN();
+  double min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  std::vector<H1ReferenceRegularizationBlockDiagnostic> blocks;
+};
+
 struct LRSatorraBentlerDiffResult {
   double T_diff   = 0.0;
   int    df_diff  = 0;
@@ -173,6 +210,8 @@ struct LRSatorra2000Result {
 
   double           p_mixture;      // weighted-χ² tail of T_diff
 
+  H1ReferenceRegularizationDiagnostics h1_reference_regularization;
+
   std::vector<std::string> warnings;
 };
 
@@ -262,7 +301,8 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
     double                           h_step = 1e-4,
     const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
-    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan);
+    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan,
+    H1ReferenceRegularizationOptions h1_reference_regularization = {});
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_ml2s_from_data(
@@ -315,7 +355,8 @@ lr_test_satorra2001_fiml_from_data(
     int                              df_H0,
     int                              df_H1,
     double                           h_step = 1e-4,
-    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr);
+    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
+    H1ReferenceRegularizationOptions h1_reference_regularization = {});
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2001_ml2s_from_data(
@@ -355,7 +396,8 @@ lr_test_satorra2000_fiml_from_data(
     GammaSource                      gamma = GammaSource::Empirical,
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
     double                           h_step = 1e-4,
-    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan);
+    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan,
+    H1ReferenceRegularizationOptions h1_reference_regularization = {});
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_fiml_from_data(
@@ -378,6 +420,7 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method,
     double                           h_step,
     const estimate::fiml::SaturatedMoments* sm_precomputed,
-    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan);
+    SatorraMomentConvention          convention = SatorraMomentConvention::Magmaan,
+    H1ReferenceRegularizationOptions h1_reference_regularization = {});
 
 }  // namespace magmaan::robust
