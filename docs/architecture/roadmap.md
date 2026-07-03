@@ -725,6 +725,16 @@ golden `parTable()` fixtures.
   are supported by local tangent bases for both models; when `"exact"` is
   requested for such a pair, the route warns and uses the local tangent
   restriction because no global affine exact map exists.
+  Frontier reference regularization is opt-in through
+  `h1_reference_regularization` on `robust_nested_lrt()` / `nestedTest()` for
+  direct-FIML restriction-map tests. Defaults remain raw/lavaan-parity. In the
+  lavaan convention, the option regularizes the saturated H1 covariance before
+  constructing the lavaan-style `WLS.V`; in the native eta-space convention it
+  floors saturated H1 information blocks before inversion and recomputes the
+  coherent H1 reference Gamma. The returned nested-test list includes
+  `$h1_reference_regularization` diagnostics when the option is enabled. ML2S
+  does not consume this option; its separate Stage-1 input regularization stays
+  fit-time only.
   Two-stage ML (`ML2S`) pairs are routed the same way
   (`robust_nested_lrt()` / `nestedTest()` dispatch ML2S before the FIML check,
   since an ML2S fit's `raw_data` is a `magmaan_fiml_data`; `computation =
@@ -757,7 +767,8 @@ golden `parTable()` fixtures.
   Satorra-Bentler (2001) difference of the two single-model residual projectors
   (`compute_diff_spectrum_2001`, the top `df0 - df1` eigenvalues of `(U0-U1)·Γ`
   in a common saturated meat space; FIML uses observed model-information bread
-  with `V = sm.H, Γ = sm.acov`, while ML2S uses
+  with `V = sm.H, Γ = sm.acov` unless the same direct-FIML
+  `h1_reference_regularization` option is enabled, while ML2S uses
   `V = ml2s NT weight, Γ = two_stage_gamma`). It feeds the same scaled/mixture
   readouts and the FMG/pEBA transforms, and unlike method 2000 accepts non-`==`
   nesting (different parameter counts) but can carry negative eigenvalues

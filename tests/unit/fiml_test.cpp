@@ -1142,6 +1142,110 @@ TEST_CASE("nested FIML restriction map: precomputed SaturatedMoments is "
   CHECK(d_reuse->eigenvalues == d_rebuild->eigenvalues);
 }
 
+TEST_CASE("nested FIML restriction map: H1 information regularization is opt-in") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {150});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+  const Eigen::Index Q = sm->H.rows();
+  sm->H = Eigen::MatrixXd::Identity(Q, Q);
+  sm->H(0, 0) = 1e-12;
+  sm->J = Eigen::MatrixXd::Identity(Q, Q);
+  sm->acov = Eigen::MatrixXd::Identity(Q, Q);
+
+  magmaan::robust::H1ReferenceRegularizationOptions opts;
+  opts.enabled = true;
+  opts.information_condition_max = 1000.0;
+  opts.covariance_condition_max = 1000.0;
+
+  auto r = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact, /*h_step=*/1e-4, &*sm,
+      magmaan::robust::SatorraMomentConvention::Magmaan, opts);
+  REQUIRE_MESSAGE(r.has_value(),
+      "regularized nested FIML failed: " <<
+      (r.has_value() ? "" : r.error().detail));
+  CHECK(r->h1_reference_regularization.enabled);
+  CHECK(r->h1_reference_regularization.applied);
+  CHECK(r->h1_reference_regularization.component == "information");
+  REQUIRE(!r->h1_reference_regularization.blocks.empty());
+  const auto& d = r->h1_reference_regularization.blocks.front();
+  CHECK(d.applied);
+  CHECK(d.raw_condition > 1e10);
+  CHECK(d.condition <= doctest::Approx(1000.0).epsilon(1e-10));
+  CHECK(r->eigenvalues.allFinite());
+}
+
+TEST_CASE("nested FIML lavaan convention: H1 covariance regularization is opt-in") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {150});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+  sm->cov[0].setIdentity();
+  sm->cov[0](0, 1) = 0.999999;
+  sm->cov[0](1, 0) = 0.999999;
+
+  magmaan::robust::H1ReferenceRegularizationOptions opts;
+  opts.enabled = true;
+  opts.covariance_condition_max = 1000.0;
+  opts.information_condition_max = 1000.0;
+
+  auto r = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta, /*h_step=*/1e-4, &*sm,
+      magmaan::robust::SatorraMomentConvention::Lavaan, opts);
+  REQUIRE_MESSAGE(r.has_value(),
+      "regularized lavaan-convention nested FIML failed: " <<
+      (r.has_value() ? "" : r.error().detail));
+  CHECK(r->h1_reference_regularization.enabled);
+  CHECK(r->h1_reference_regularization.applied);
+  CHECK(r->h1_reference_regularization.component == "covariance");
+  REQUIRE(!r->h1_reference_regularization.blocks.empty());
+  const auto& d = r->h1_reference_regularization.blocks.front();
+  CHECK(d.applied);
+  CHECK(d.raw_condition > 1e6);
+  CHECK(d.condition <= doctest::Approx(1000.0).epsilon(1e-9));
+  CHECK(r->eigenvalues.allFinite());
+}
+
 TEST_CASE("nested FIML restriction map: empirical path uses observed FIML bread") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");

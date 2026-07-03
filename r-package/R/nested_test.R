@@ -43,6 +43,10 @@
 #'   `semTests::ugamma_nested(., "2001")`). `"2001"` is implemented for FIML and
 #'   ML2S fits only and, unlike `"2000"`, accepts non-`==`-constrained nesting
 #'   (different parameter counts); its spectrum can carry negative eigenvalues.
+#' @param h1_reference_regularization FIML restriction-map tests only. `NULL`
+#'   or `FALSE` keeps the raw saturated-H1 reference. `TRUE` applies the
+#'   frontier condition-cap defaults. A list may set `condition_max`,
+#'   `min_eigenvalue`, and optional `covariance` / `information` sublists.
 #' @param weight Ordinal nested tests only: `"DWLS"`, `"WLS"`, or `"ULS"`.
 #'   Defaults to `fit_H1$estimator`.
 #'
@@ -58,6 +62,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                                               "dense"),
                               convention = c("magmaan", "lavaan"),
                               ud_method = c("2000", "2001"),
+                              h1_reference_regularization = NULL,
                               weight = NULL) {
   gamma <- match.arg(gamma)
   method <- match.arg(method)
@@ -66,6 +71,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   A.method <- match.arg(A.method)
   computation <- match.arg(computation)
   ud_method <- match.arg(ud_method)
+  h1_ref_requested <- !is.null(h1_reference_regularization) &&
+    !identical(h1_reference_regularization, FALSE)
 
   fit_estimator <- function(fit) {
     toupper(as.character(fit$estimator %||% fit$options$estimator %||% ""))
@@ -113,6 +120,11 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
          "supported; fit both models with the same estimator.", call. = FALSE)
   }
   if (ml2s_H1) {
+    if (h1_ref_requested) {
+      stop("robust_nested_lrt(): `h1_reference_regularization` is only ",
+           "available for direct FIML nested tests; use ML2S ",
+           "`stage1_regularization` at fit time.", call. = FALSE)
+    }
     if (!is.null(data)) {
       stop("robust_nested_lrt(): ML2S nested tests use fit_H1$raw_data; ",
            "the `data` argument is not supported for ML2S fits.",
@@ -163,6 +175,10 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     return(res)
   }
   if (fiml_H1) {
+    if (h1_ref_requested && !identical(method, "restriction_map")) {
+      stop("robust_nested_lrt(): `h1_reference_regularization` is only ",
+           "available for FIML method = 'restriction_map'.", call. = FALSE)
+    }
     if (!is.null(data)) {
       stop("robust_nested_lrt(): FIML nested tests use fit_H1$raw_data; ",
            "the `data` argument is not supported for FIML fits.",
@@ -171,7 +187,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res <- switch(method,
       restriction_map = infer_fiml_lr_test_satorra2000(
         fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method,
-        convention = convention),
+        convention = convention,
+        h1_reference_regularization = h1_reference_regularization),
       lavaan_sb2001 = infer_fiml_lr_test_satorra_bentler2001(fit_H1, fit_H0),
       lavaan_sb2010 = infer_fiml_lr_test_satorra_bentler2010(fit_H1, fit_H0),
       stop("robust_nested_lrt(): unsupported method '", method, "' for FIML.",
@@ -187,6 +204,10 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                        else "fiml_eta"
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
+  }
+  if (h1_ref_requested) {
+    stop("robust_nested_lrt(): `h1_reference_regularization` is only ",
+         "available for direct FIML nested tests.", call. = FALSE)
   }
   if (identical(ud_method, "2001")) {
     stop("robust_nested_lrt(): ud_method = '2001' (the U0-U1 difference ",
@@ -346,6 +367,7 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
                                        "dense"),
                        convention = c("magmaan", "lavaan"),
                        ud_method = c("2000", "2001"),
+                       h1_reference_regularization = NULL,
                        weight = NULL) {
   method <- match.arg(method)
   computation <- match.arg(computation)
@@ -361,6 +383,7 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
                            method = canonical, A.method = A.method,
                            computation = computation, convention = convention,
                            ud_method = ud_method,
+                           h1_reference_regularization = h1_reference_regularization,
                            weight = weight)
   out$compat_method <- method
   out
