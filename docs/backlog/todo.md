@@ -726,9 +726,17 @@ Remaining work:
       `continuous_ls_param_space_sandwich` with the caller's fixed weight. R
       exposes the option as `raw_data=` plus `robust=TRUE` on the ML/GMM
       parameter LRT and CI helpers, and the fixed-weight GMM example now smokes
-      the robust scaled LRT/CI path. Still open: fitted-weight complete-sandwich
-      scaling, functional R callbacks, ordinal fitted-functional constraints,
-      misspec reference policies, and Bartlett/calibrated constants.
+      the robust scaled LRT/CI path.
+    - **Done 2026-07-03 (fitted-weight profile-metric robust scaling).**
+      The fitted-weight continuous GMM parameter profile LRT/CI now accepts the
+      same `raw_data` / `robust=TRUE` path. At each constrained endpoint it
+      rebuilds the final expected-information weight `W(theta)` and computes the
+      empirical 1-df sandwich scale for that profile metric, filling
+      `scaling_factor`, `T_scaled`, and `p_value_scaled`; the CI inverter can
+      root on `T_scaled`. This closes the fitted-weight parameter proving slice
+      for the correct-model robust reference. Still open: complete
+      weight-derivative / misspecification scaling, functional R callbacks,
+      ordinal fitted-functional constraints, and Bartlett/calibrated constants.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric

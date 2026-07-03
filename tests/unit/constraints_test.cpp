@@ -587,6 +587,28 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
   CHECK(gmm_robust->p_value_scaled == doctest::Approx(
       magmaan::inference::chi2_pvalue(gmm_robust->T_scaled, 1)));
 
+  auto fitw_plain =
+      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
+          pt, rep, samp, gmm, k_x2, gmm_target, {},
+          magmaan::estimate::Bounds{},
+          magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE(fitw_plain.has_value());
+  auto fitw_robust =
+      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
+          pt, rep, samp, gmm, k_x2, gmm_target, {},
+          magmaan::estimate::Bounds{},
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(fitw_robust.has_value(),
+      "fitted-weight GMM robust profile LRT failed: "
+          << (fitw_robust.has_value() ? "" : fitw_robust.error().detail));
+  CHECK(fitw_robust->T == doctest::Approx(fitw_plain->T).epsilon(1e-8));
+  CHECK(std::isfinite(fitw_robust->scaling_factor));
+  CHECK(fitw_robust->scaling_factor > 0.0);
+  CHECK(fitw_robust->T_scaled ==
+        doctest::Approx(fitw_robust->T / fitw_robust->scaling_factor));
+  CHECK(fitw_robust->p_value_scaled == doctest::Approx(
+      magmaan::inference::chi2_pvalue(fitw_robust->T_scaled, 1)));
+
   magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
   ci_opts.reference =
       magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;

@@ -2339,7 +2339,9 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(
     double constraint_tol = 1e-6,
     int max_outer = 20,
     double theta_tol = 1e-7,
-    double fmin_tol = 1e-10) {
+    double fmin_tol = 1e-10,
+    SEXP raw_data = R_NilValue,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2360,12 +2362,21 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(
                          : backend_from_optimizer_arg(optimizer);
   auto fitted_opts = fitted_weight_options_from_args(
       max_outer, theta_tol, fmin_tol);
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  if (robust) {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("frontier_profile_lrt_parameter_gmm_fitted_weight() "
+                 "robust=TRUE requires raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        complete_raw_from_arg(ctx.rep, raw_data));
+  }
   auto r_or =
       magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
           ctx.pt, ctx.rep, ctx.samp, est,
           static_cast<Eigen::Index>(parameter - 1), target,
           fitted_opts, bounds_from_nullable(bounds), backend,
-          optim_opts_from(control), constraint_tol);
+          optim_opts_from(control), constraint_tol, raw_holder.get());
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list(ctx, *r_or, parameter,
                                     "GMM-fitted-weight");
@@ -2552,7 +2563,9 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(
     double statistic_tol = 1e-6,
     int max_outer = 20,
     double theta_tol = 1e-7,
-    double fmin_tol = 1e-10) {
+    double fmin_tol = 1e-10,
+    SEXP raw_data = R_NilValue,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2575,12 +2588,23 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(
       max_outer, theta_tol, fmin_tol);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  if (robust) {
+    if (Rf_isNull(raw_data)) {
+      Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm_fitted_weight() "
+                 "robust=TRUE requires raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        complete_raw_from_arg(ctx.rep, raw_data));
+    ci_opts.reference =
+        magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  }
   auto r_or =
       magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm_fitted_weight(
           ctx.pt, ctx.rep, ctx.samp, est,
           static_cast<Eigen::Index>(parameter - 1), fitted_opts, ci_opts,
           bounds_from_nullable(bounds), backend, optim_opts_from(control),
-          constraint_tol);
+          constraint_tol, raw_holder.get());
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list(ctx, *r_or, parameter,
                                    "GMM-fitted-weight");

@@ -188,8 +188,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_profile_lrt_parameter_gmm_fitted_weight_impl
-Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, int max_outer, double theta_tol, double fmin_tol);
-RcppExport SEXP _magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP max_outerSEXP, SEXP theta_tolSEXP, SEXP fmin_tolSEXP) {
+Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, int max_outer, double theta_tol, double fmin_tol, SEXP raw_data, bool robust);
+RcppExport SEXP _magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP max_outerSEXP, SEXP theta_tolSEXP, SEXP fmin_tolSEXP, SEXP raw_dataSEXP, SEXP robustSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -203,7 +203,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type max_outer(max_outerSEXP);
     Rcpp::traits::input_parameter< double >::type theta_tol(theta_tolSEXP);
     Rcpp::traits::input_parameter< double >::type fmin_tol(fmin_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_parameter_gmm_fitted_weight_impl(fit, parameter, target, optimizer, control, bounds, constraint_tol, max_outer, theta_tol, fmin_tol));
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_parameter_gmm_fitted_weight_impl(fit, parameter, target, optimizer, control, bounds, constraint_tol, max_outer, theta_tol, fmin_tol, raw_data, robust));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -277,8 +279,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl
-Rcpp::List frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(Rcpp::List fit, int parameter, double level, double lower, double upper, double initial_step, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, double root_tol, double statistic_tol, int max_outer, double theta_tol, double fmin_tol);
-RcppExport SEXP _magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP levelSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP initial_stepSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP root_tolSEXP, SEXP statistic_tolSEXP, SEXP max_outerSEXP, SEXP theta_tolSEXP, SEXP fmin_tolSEXP) {
+Rcpp::List frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(Rcpp::List fit, int parameter, double level, double lower, double upper, double initial_step, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, double root_tol, double statistic_tol, int max_outer, double theta_tol, double fmin_tol, SEXP raw_data, bool robust);
+RcppExport SEXP _magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP levelSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP initial_stepSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP root_tolSEXP, SEXP statistic_tolSEXP, SEXP max_outerSEXP, SEXP theta_tolSEXP, SEXP fmin_tolSEXP, SEXP raw_dataSEXP, SEXP robustSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -297,7 +299,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type max_outer(max_outerSEXP);
     Rcpp::traits::input_parameter< double >::type theta_tol(theta_tolSEXP);
     Rcpp::traits::input_parameter< double >::type fmin_tol(fmin_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, max_outer, theta_tol, fmin_tol));
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, max_outer, theta_tol, fmin_tol, raw_data, robust));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3145,11 +3149,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
     {"_magmaan_frontier_profile_lrt_parameter_ml_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_ml_impl, 9},
     {"_magmaan_frontier_profile_lrt_parameter_gmm_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_gmm_impl, 10},
-    {"_magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl, 10},
+    {"_magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_gmm_fitted_weight_impl, 12},
     {"_magmaan_frontier_profile_lrt_parameter_ordinal_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_parameter_ordinal_impl, 10},
     {"_magmaan_frontier_profile_lrt_ci_parameter_ml_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_ml_impl, 14},
     {"_magmaan_frontier_profile_lrt_ci_parameter_gmm_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_gmm_impl, 15},
-    {"_magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl, 15},
+    {"_magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl, 17},
     {"_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl, 15},
     {"_magmaan_frontier_profile_lrt_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ordinal_polychoric_omega_impl, 11},
     {"_magmaan_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaan_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl, 16},

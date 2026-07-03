@@ -25,6 +25,9 @@ lrt_robust <- core$frontier_profile_lrt_parameter_gmm(
 lrt_fitw <- core$frontier_profile_lrt_parameter_gmm_fitted_weight(
   fit, free_id, target
 )
+lrt_fitw_robust <- core$frontier_profile_lrt_parameter_gmm_fitted_weight(
+  fit, free_id, target, raw_data = X, robust = TRUE
+)
 ci <- core$frontier_profile_lrt_ci_parameter_gmm(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-4, statistic_tol = 1e-4
@@ -37,6 +40,11 @@ ci_robust <- core$frontier_profile_lrt_ci_parameter_gmm(
 ci_fitw <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-4, statistic_tol = 1e-4
+)
+ci_fitw_robust <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
+  fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
+  root_tol = 1e-5, statistic_tol = 1e-5,
+  raw_data = X, robust = TRUE
 )
 
 stopifnot(
@@ -53,6 +61,11 @@ stopifnot(
   is.finite(lrt_fitw$T),
   lrt_fitw$df == 1L,
   abs(lrt_fitw$constrained_value - target) < 1e-5,
+  is.finite(lrt_fitw_robust$scaling_factor),
+  lrt_fitw_robust$scaling_factor > 0,
+  abs(lrt_fitw_robust$T - lrt_fitw$T) < 1e-8,
+  abs(lrt_fitw_robust$T_scaled -
+        lrt_fitw_robust$T / lrt_fitw_robust$scaling_factor) < 1e-8,
   ci$lower < fit$theta[free_id],
   ci$upper > fit$theta[free_id],
   abs(ci$lower_profile$T - ci$cutoff) < 1e-3,
@@ -62,11 +75,20 @@ stopifnot(
   abs(ci_robust$lower_profile$T_scaled - ci_robust$cutoff) < 1e-3,
   abs(ci_robust$upper_profile$T_scaled - ci_robust$cutoff) < 1e-3,
   ci_fitw$lower < ci_fitw$estimate,
-  ci_fitw$upper > ci_fitw$estimate
+  ci_fitw$upper > ci_fitw$estimate,
+  ci_fitw_robust$lower < ci_fitw_robust$estimate,
+  ci_fitw_robust$upper > ci_fitw_robust$estimate,
+  abs(ci_fitw_robust$lower_profile$T_scaled -
+        ci_fitw_robust$cutoff) < 1e-3,
+  abs(ci_fitw_robust$upper_profile$T_scaled -
+        ci_fitw_robust$cutoff) < 1e-3
 )
 
 print(lrt[c("parameter", "target", "T", "p_value")])
 print(lrt_robust[c("parameter", "target", "T_scaled", "p_value_scaled",
                    "scaling_factor")])
+print(lrt_fitw_robust[c("parameter", "target", "T_scaled", "p_value_scaled",
+                        "scaling_factor")])
 print(ci[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(ci_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
+print(ci_fitw_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
