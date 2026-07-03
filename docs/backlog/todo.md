@@ -349,6 +349,30 @@ Remaining work:
   needs the `rv(...)` random-slope modifier (currently parser-rejected) and a
   multi-level block axis.
 
+## Structural-after-measurement (SAM / LSAM) frontier
+
+The C++ frontier core now has lavaan-parity SAM point estimates
+(`estimate::frontier::fit_sam`) for local/global ML measurement fits, ML/GLS/ULS
+mapping, Fuller lambda correction, classic `se = "standard"` /
+`se = "twostep"` from `SampleStats`, and `se = "twostep.robust"` from complete
+raw data for the single-group local covariance-only scope.
+
+Remaining work:
+
+- **M.** R bindings / developer surface: expose a thin `magmaan_core` wrapper
+  over the C++ SAM entry, plus an R helper that parses/lavaanifies and builds
+  `RawData` when robust SEs are requested. Keep SE/test/fit-measure calls
+  explicit rather than folding them into `magmaan()`.
+- **M.** Broaden robust parity fixtures beyond the current deterministic
+  two-factor gate: overidentified measurement blocks, non-normal data, and
+  optimizer backend variants that still stay inside single-group local
+  covariance-only complete data.
+- **L.** Extend `twostep.robust` only after matching lavaan conventions for the
+  added scope: mean structures need the mean+vech empirical Gamma block, global
+  SAM needs the corresponding step-1 Jacobian, and nonzero
+  `alpha_correction` needs the lavaan SSC/weighted-SE convention documented
+  before implementation.
+
 ## Misspecification-robust SE for the moment-quadratic family (frontier)
 
 - **Reduced-bias estimation (RBM) frontier.** V1 landed 2026-06 for raw-data

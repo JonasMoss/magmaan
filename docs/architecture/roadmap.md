@@ -164,6 +164,17 @@ golden `parTable()` fixtures.
   correction, and implicit penalty are computed in the linear-constraint-reduced
   alpha space (`K' J K`, `K' E K`); full and reduced bread/meat matrices are
   reported for diagnostics. Nonlinear equality constraints are still rejected.
+- Frontier structural-after-measurement (SAM / LSAM) estimation is available as
+  `estimate::frontier::fit_sam()`. The C++ core fits local or global
+  measurement blocks, builds the Croon/Wall-Amemiya latent covariance with
+  ML/GLS/ULS mapping and Fuller lambda correction, then fits the promoted
+  structural submodel. Lavaan `sam()` parity is covered for point estimates and
+  classic `se = "standard"` / `se = "twostep"` standard errors from
+  `SampleStats`. The raw-data overload adds lavaan-parity
+  `se = "twostep.robust"` for the landed scope: single-group, local,
+  covariance-only, complete continuous data with `alpha_correction = 0`; it uses
+  lavaan's unbiased empirical Gamma and the same Yuan-Chan step-1 ordering
+  convention.
 - Experimental complete-data ML IRLS paths fit the same ML objective through
   outer Fisher reweighting and inner GLS solves:
   `estimate::fit_ml_irls()` uses the full parameter block, while

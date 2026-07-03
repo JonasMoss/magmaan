@@ -10,11 +10,13 @@
 #include <Eigen/Eigenvalues>
 
 #include "magmaan/compat/lavaan/partable_view.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
+#include "detail_vech.hpp"
 #include "detail_sam_partition.hpp"
 #include "detail_sam_se.hpp"
 
@@ -93,11 +95,36 @@ mapping_matrix(const Eigen::MatrixXd& Lambda, const Eigen::MatrixXd& Theta,
   return M;
 }
 
+namespace {
+
 fit_expected<SamResult>
-fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
-        const spec::LatentNames& names, const data::SampleStats& samp,
-        SamOptions opts) {
+fit_sam_impl(spec::LatentStructure pt, const model::MatrixRep& rep,
+             const spec::LatentNames& names, const data::SampleStats& samp,
+             const data::RawData* raw, SamOptions opts) {
   namespace lv = compat::lavaan;
+  if (opts.se == SamSe::Naive) {
+    return std::unexpected(mapping_error(
+        "fit_sam: se=naive is not implemented; use se=standard, twostep, "
+        "or twostep.robust"));
+  }
+  if (opts.se == SamSe::TwostepRobust) {
+    if (raw == nullptr) {
+      return std::unexpected(mapping_error(
+          "fit_sam: se=twostep.robust requires the RawData overload"));
+    }
+    if (opts.method != SamMethod::Local) {
+      return std::unexpected(mapping_error(
+          "fit_sam: se=twostep.robust currently supports local SAM only"));
+    }
+    if (opts.meanstructure) {
+      return std::unexpected(mapping_error(
+          "fit_sam: se=twostep.robust currently supports covariance-only SAM"));
+    }
+    if (opts.local.alpha_correction != 0) {
+      return std::unexpected(mapping_error(
+          "fit_sam: se=twostep.robust currently requires alpha_correction=0"));
+    }
+  }
   if (samp.S.size() != 1) {
     return std::unexpected(mapping_error(
         "fit_sam: single-group only (got " + std::to_string(samp.S.size()) +
@@ -148,6 +175,8 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
   };
   std::unordered_map<std::string, double> se_value;
   std::vector<std::vector<std::string>> block_free_keys;
+  std::vector<detail::SamStep1JacBlock> robust_blocks;
+  if (opts.se == SamSe::TwostepRobust) robust_blocks.reserve(part.mm.size());
 
   for (const detail::MeasurementBlockSpec& mb : part.mm) {
     lv::ParsedLavaanParTable parsed = lv::from_lavaan_partable(mb.pt);
@@ -171,6 +200,19 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
             "' not found in sample stats"));
       }
       idx_b[sz(k)] = it->second;
+    }
+    std::vector<Eigen::Index> full_moment_cols;
+    if (opts.se == SamSe::TwostepRobust) {
+      full_moment_cols.reserve(sz(::magmaan::detail::vech_len(p_b)));
+      for (Eigen::Index col = 0; col < p_b; ++col) {
+        for (Eigen::Index row = col; row < p_b; ++row) {
+          Eigen::Index fr = idx_b[sz(row)];
+          Eigen::Index fc = idx_b[sz(col)];
+          if (fr < fc) std::swap(fr, fc);
+          full_moment_cols.push_back(
+              ::magmaan::detail::vech_index(p_full, fr, fc));
+        }
+      }
     }
 
     Eigen::MatrixXd S_b(p_b, p_b);
@@ -241,10 +283,18 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (want_se) {
       auto bi_or = inference::information_expected(parsed.structure, rep_b,
                                                    samp_b, est_b);
-      if (bi_or.has_value()) {
-        auto bv_or = inference::vcov(*bi_or, parsed.structure);
-        if (bv_or.has_value()) smb.vcov = std::move(*bv_or);
+      if (!bi_or.has_value()) {
+        return std::unexpected(mapping_error(
+            "fit_sam: measurement-block information failed: " +
+            bi_or.error().detail));
       }
+      auto bv_or = inference::vcov(*bi_or, parsed.structure);
+      if (!bv_or.has_value()) {
+        return std::unexpected(mapping_error(
+            "fit_sam: measurement-block vcov failed: " +
+            bv_or.error().detail));
+      }
+      smb.vcov = std::move(*bv_or);
       const int bnf = static_cast<int>(est_b.theta.size());
       std::vector<std::string> bfk(sz(bnf));
       for (std::size_t r = 0; r < parsed.structure.op.size(); ++r) {
@@ -263,6 +313,15 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
         if (f > 0) bfk[sz(f - 1)] = k;
       }
       block_free_keys.push_back(std::move(bfk));
+    }
+    if (opts.se == SamSe::TwostepRobust) {
+      detail::SamStep1JacBlock rb;
+      rb.pt = parsed.structure;
+      rb.rep = rep_b;
+      rb.est = est_b;
+      rb.full_moment_cols = std::move(full_moment_cols);
+      rb.joint_free.assign(sz(est_b.theta.size()), 0);
+      robust_blocks.push_back(std::move(rb));
     }
     out.measurement.push_back(std::move(smb));
   }
@@ -365,7 +424,8 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
   out.structural = std::move(*fits_or);
 
   // Twostep / standard standard errors: partition the joint information.
-  if (opts.se == SamSe::Twostep || opts.se == SamSe::Standard) {
+  if (opts.se == SamSe::Twostep || opts.se == SamSe::Standard ||
+      opts.se == SamSe::TwostepRobust) {
     std::unordered_map<std::string, char> step2;
     for (std::size_t r = 0; r < parsed_s.structure.op.size(); ++r) {
       const parse::Op o = parsed_s.structure.op[r];
@@ -407,23 +467,52 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
       is_step2[sz(f)] = step2.count(key_of_free[sz(f)]) ? 1 : 0;
     }
 
-    if (ok) {
-      Eigen::MatrixXd Sigma11_full = Eigen::MatrixXd::Zero(nfree, nfree);
-      for (std::size_t bi = 0; bi < part.mm.size(); ++bi) {
-        const Eigen::MatrixXd& bv = out.measurement[bi].vcov;
-        const std::vector<std::string>& bfk = block_free_keys[bi];
-        if (bv.size() == 0) continue;
-        const int bnf = static_cast<int>(bfk.size());
-        std::vector<int> b2j(sz(bnf), 0);
-        for (int a = 0; a < bnf; ++a) {
-          auto it = joint_free_of_key.find(bfk[sz(a)]);
-          b2j[sz(a)] = it != joint_free_of_key.end() ? it->second : 0;
-        }
-        for (int a = 0; a < bnf; ++a)
-          for (int c = 0; c < bnf; ++c)
-            if (b2j[sz(a)] > 0 && b2j[sz(c)] > 0)
-              Sigma11_full(b2j[sz(a)] - 1, b2j[sz(c)] - 1) = bv(a, c);
+    if (!ok) {
+      return std::unexpected(mapping_error(
+          "fit_sam: could not assemble joint parameter vector for SAM SE"));
+    }
+
+    Eigen::MatrixXd Sigma11_full = Eigen::MatrixXd::Zero(nfree, nfree);
+    std::vector<Eigen::Index> robust_step1_info_order;
+    std::vector<char> robust_step1_seen(sz(nfree), 0);
+    for (std::size_t bi = 0; bi < part.mm.size(); ++bi) {
+      const Eigen::MatrixXd& bv = out.measurement[bi].vcov;
+      const std::vector<std::string>& bfk = block_free_keys[bi];
+      if (bv.size() == 0) continue;
+      const int bnf = static_cast<int>(bfk.size());
+      std::vector<int> b2j(sz(bnf), 0);
+      for (int a = 0; a < bnf; ++a) {
+        auto it = joint_free_of_key.find(bfk[sz(a)]);
+        b2j[sz(a)] = it != joint_free_of_key.end() ? it->second : 0;
       }
+      for (int a = 0; a < bnf; ++a)
+        for (int c = 0; c < bnf; ++c)
+          if (b2j[sz(a)] > 0 && b2j[sz(c)] > 0)
+            Sigma11_full(b2j[sz(a)] - 1, b2j[sz(c)] - 1) = bv(a, c);
+      if (opts.se == SamSe::TwostepRobust) {
+        for (int a = 0; a < bnf; ++a) {
+          robust_blocks[bi].joint_free[sz(a)] = b2j[sz(a)];
+          const int jf = b2j[sz(a)];
+          if (jf > 0 && !is_step2[sz(jf - 1)] &&
+              !robust_step1_seen[sz(jf - 1)]) {
+            robust_step1_info_order.push_back(jf - 1);
+            robust_step1_seen[sz(jf - 1)] = 1;
+          }
+        }
+      }
+    }
+
+    if (opts.se == SamSe::TwostepRobust) {
+      auto se_or = detail::sam_twostep_robust_se(
+          pt, rep, samp, *raw, theta_joint, is_step2, Sigma11_full,
+          robust_step1_info_order, robust_blocks);
+      if (se_or.has_value()) {
+        out.vcov = std::move(se_or->vcov);
+        out.se = std::move(se_or->se);
+      } else {
+        return std::unexpected(se_or.error());
+      }
+    } else {
       auto se_or =
           detail::sam_twostep_se(pt, rep, samp, theta_joint, is_step2,
                                  Sigma11_full, opts.se == SamSe::Standard);
@@ -440,6 +529,27 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
   out.structural_rep = std::move(rep_s);
   out.latent_samp = std::move(samp_s);
   return out;
+}
+
+}  // namespace
+
+fit_expected<SamResult>
+fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
+        const spec::LatentNames& names, const data::SampleStats& samp,
+        SamOptions opts) {
+  return fit_sam_impl(std::move(pt), rep, names, samp, nullptr, opts);
+}
+
+fit_expected<SamResult>
+fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
+        const spec::LatentNames& names, const data::RawData& raw,
+        SamOptions opts) {
+  auto samp_or = data::sample_stats_from_raw(raw);
+  if (!samp_or.has_value()) {
+    return std::unexpected(mapping_error(
+        "fit_sam: sample_stats_from_raw failed: " + samp_or.error().detail));
+  }
+  return fit_sam_impl(std::move(pt), rep, names, *samp_or, &raw, opts);
 }
 
 }  // namespace magmaan::estimate::frontier

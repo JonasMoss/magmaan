@@ -7,6 +7,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -22,9 +23,8 @@ namespace magmaan::estimate::frontier {
 // measurement part first compartmentalizes structural misspecification away from
 // the loadings and is far better behaved than joint ML at small N.
 //
-// lavaan `sam()` is the parity oracle. See `docs/backlog/todo.md` (promoted from
-// `speculative.md`) for the phase sequencing and the twostep vs twostep.robust
-// standard-error design.
+// lavaan `sam()` is the parity oracle. The landed scope and remaining follow-ups
+// live in `docs/architecture/roadmap.md` and `docs/backlog/todo.md`.
 
 // Local (block-by-block) vs global (joint) measurement fit. Local SAM keeps
 // structural misspecification from leaking back into any measurement block;
@@ -92,8 +92,8 @@ struct SamResult {
   spec::LatentStructure structural_pt; // latents-promoted-to-observed sub-spec
   model::MatrixRep      structural_rep;
 
-  Eigen::MatrixXd       vcov;          // structural parameter covariance
-  Eigen::VectorXd       se;            // sqrt(diag(vcov))
+  Eigen::MatrixXd       vcov;          // joint free-parameter covariance
+  Eigen::VectorXd       se;            // sqrt(diag(vcov)), joint free order
 
   std::vector<double>   reliability;   // per-latent diag(VETA)/diag(MSM)
   double                lambda_star =
@@ -114,6 +114,14 @@ mapping_matrix(const Eigen::MatrixXd& Lambda, const Eigen::MatrixXd& Theta,
 fit_expected<SamResult>
 fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
         const spec::LatentNames& names, const data::SampleStats& samp,
+        SamOptions opts = {});
+
+// Raw-data overload. Required for `SamSe::TwostepRobust`, which consumes the
+// empirical ADF Γ̂ of vech(S). The sample moments are derived with
+// `data::sample_stats_from_raw()` so covariance/mean conventions stay aligned.
+fit_expected<SamResult>
+fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
+        const spec::LatentNames& names, const data::RawData& raw,
         SamOptions opts = {});
 
 }  // namespace magmaan::estimate::frontier
