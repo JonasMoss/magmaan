@@ -300,6 +300,31 @@ continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
                                       ContinuousLsIJWeightMode mode,
                                       frontier::DlsWeightOptions dls_opts = {});
 
+// Misspecification-robust scalar profile-LRT sandwich for continuous
+// moment-quadratic fits. The bread is the observed LS Hessian reduced by the
+// partable equality-constraint K; the meat matches either the caller-fixed
+// empirical raw-data moment covariance or the estimated-weight IJ covariance.
+// This is the profile-test reference counterpart of the complete-sandwich SE:
+// the scalar profile layer supplies the tested functional direction.
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich_observed(spec::LatentStructure pt,
+                                            const model::MatrixRep& rep,
+                                            const data::SampleStats& samp,
+                                            const Estimates& est,
+                                            const gmm::Weight& weight,
+                                            const data::RawData& raw);
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich_observed_ij(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Estimates& est,
+    const gmm::Weight& weight,
+    const data::RawData& raw,
+    ContinuousLsIJWeightMode mode,
+    frontier::DlsWeightOptions dls_opts = {});
+
 // Per-case one-step (infinitesimal-jackknife) parameter influences for a
 // continuous moment-quadratic fit: the casewise decomposition of the estimated-
 // weight ("complete-sandwich") covariance, and the misspecification-robust dual

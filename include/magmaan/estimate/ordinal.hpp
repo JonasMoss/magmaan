@@ -510,7 +510,9 @@ profile_lrt_scalar_ordinal(spec::LatentStructure pt,
                            OrdinalParameterization parameterization =
                                OrdinalParameterization::Delta,
                            double constraint_tol = 1e-6,
-                           bool robust_scaled = false);
+                           bool robust_scaled = false,
+                           ScalarProfileReference reference =
+                               ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_ordinal(
@@ -526,7 +528,8 @@ profile_lrt_parameter_ordinal(
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
     double constraint_tol = 1e-6,
-    bool robust_scaled = false);
+    bool robust_scaled = false,
+    ScalarProfileReference reference = ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_ordinal(
@@ -559,7 +562,8 @@ profile_lrt_ordinal_polychoric_omega(
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
     double constraint_tol = 1e-6,
-    bool robust_scaled = false);
+    bool robust_scaled = false,
+    ScalarProfileReference reference = ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_ordinal_polychoric_omega(

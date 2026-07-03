@@ -60,12 +60,29 @@ omega_lrt <- core$frontier_profile_lrt_ordinal_polychoric_omega(
 omega_lrt_robust <- core$frontier_profile_lrt_ordinal_polychoric_omega(
   fit, block = block, omega0 = omega_target, robust = TRUE
 )
+omega_lrt_misspec <- core$frontier_profile_lrt_ordinal_polychoric_omega(
+  fit, block = block, omega0 = omega_target, reference = "misspec_mixture"
+)
 omega_ci_robust <- core$frontier_profile_lrt_ci_ordinal_polychoric_omega(
   fit, block = block,
   initial_step = 0.02,
   root_tol = 1e-6,
   statistic_tol = 1e-5,
   robust = TRUE
+)
+omega_ci_misspec_scaled <- core$frontier_profile_lrt_ci_ordinal_polychoric_omega(
+  fit, block = block,
+  initial_step = 0.02,
+  root_tol = 1e-6,
+  statistic_tol = 1e-5,
+  reference = "misspec_scaled"
+)
+omega_ci_misspec_mixture <- core$frontier_profile_lrt_ci_ordinal_polychoric_omega(
+  fit, block = block,
+  initial_step = 0.02,
+  root_tol = 1e-6,
+  statistic_tol = 1e-5,
+  reference = "misspec_mixture"
 )
 
 stopifnot(
@@ -97,6 +114,12 @@ stopifnot(
   omega_lrt_robust$scaling_factor > 0,
   abs(omega_lrt_robust$T_scaled -
         omega_lrt_robust$T / omega_lrt_robust$scaling_factor) < 1e-8,
+  abs(omega_lrt_misspec$T - omega_lrt$T) < 1e-8,
+  is.finite(omega_lrt_misspec$misspec_scaling_factor),
+  omega_lrt_misspec$misspec_scaling_factor > 0,
+  length(omega_lrt_misspec$misspec_eigvals) == 1L,
+  abs(omega_lrt_misspec$misspec_eigvals[1] -
+        omega_lrt_misspec$misspec_scaling_factor) < 1e-8,
   omega_ci$coefficient == "ordinal_polychoric_omega",
   omega_ci$lower < omega_ci$estimate,
   omega_ci$upper > omega_ci$estimate,
@@ -107,7 +130,15 @@ stopifnot(
   abs(omega_ci_robust$lower_profile$T_scaled -
         omega_ci_robust$cutoff) < 1e-3,
   abs(omega_ci_robust$upper_profile$T_scaled -
-        omega_ci_robust$cutoff) < 1e-3
+        omega_ci_robust$cutoff) < 1e-3,
+  abs(omega_ci_misspec_scaled$lower_profile$T_misspec_scaled -
+        omega_ci_misspec_scaled$cutoff) < 3e-3,
+  abs(omega_ci_misspec_scaled$upper_profile$T_misspec_scaled -
+        omega_ci_misspec_scaled$cutoff) < 3e-3,
+  abs(omega_ci_misspec_mixture$lower_profile$T -
+        omega_ci_misspec_mixture$lower_cutoff) < 3e-3,
+  abs(omega_ci_misspec_mixture$upper_profile$T -
+        omega_ci_misspec_mixture$upper_cutoff) < 3e-3
 )
 
 print(lrt[c("parameter", "target", "T", "p_value")])
@@ -118,5 +149,12 @@ print(ci_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(omega_lrt[c("coefficient", "omega_target", "target", "T", "p_value")])
 print(omega_lrt_robust[c("coefficient", "omega_target", "target", "T_scaled",
                          "p_value_scaled", "scaling_factor")])
+print(omega_lrt_misspec[c("coefficient", "omega_target", "target",
+                          "p_value_misspec_mixture",
+                          "misspec_scaling_factor")])
 print(omega_ci[c("coefficient", "estimate", "lower", "upper", "cutoff")])
 print(omega_ci_robust[c("coefficient", "estimate", "lower", "upper", "cutoff")])
+print(omega_ci_misspec_scaled[c("coefficient", "estimate", "lower", "upper",
+                                "cutoff")])
+print(omega_ci_misspec_mixture[c("coefficient", "estimate", "lower", "upper",
+                                 "lower_cutoff", "upper_cutoff")])

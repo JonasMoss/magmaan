@@ -27,6 +27,7 @@
 #include "magmaan/optim/reparameterize.hpp"
 #include "magmaan/optim/terminal_audit.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -1069,6 +1070,31 @@ void fill_scaled_profile(ScalarProfileLrtResult& out, double scale) {
   out.p_value_scaled = inference::chi2_pvalue(out.T_scaled, 1);
 }
 
+void fill_misspec_profile(ScalarProfileLrtResult& out, double scale) {
+  out.misspec_scaling_factor = scale;
+  out.T_misspec_scaled = out.T / scale;
+  out.p_value_misspec_scaled =
+      inference::chi2_pvalue(out.T_misspec_scaled, 1);
+  out.misspec_eigvals = Eigen::VectorXd::Constant(1, scale);
+  out.p_value_misspec_mixture =
+      robust::weighted_chisq_upper(out.misspec_eigvals, out.T);
+}
+
+bool reference_needs_sandwich(ScalarProfileReference reference) noexcept {
+  return reference == ScalarProfileReference::RobustScaled ||
+         reference == ScalarProfileReference::MisspecScaled ||
+         reference == ScalarProfileReference::MisspecMixture;
+}
+
+bool reference_wants_robust_scaled(ScalarProfileReference reference) noexcept {
+  return reference == ScalarProfileReference::RobustScaled;
+}
+
+bool reference_wants_misspec(ScalarProfileReference reference) noexcept {
+  return reference == ScalarProfileReference::MisspecScaled ||
+         reference == ScalarProfileReference::MisspecMixture;
+}
+
 fit_expected<robust::ParamSpaceSandwich>
 profile_gmm_param_space_sandwich(
     spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -1081,6 +1107,23 @@ profile_gmm_param_space_sandwich(
                 std::move(pt), rep, samp, est, weight, raw,
                 robust_options.ij_weight_mode)
           : continuous_ls_param_space_sandwich(
+                std::move(pt), rep, samp, est, weight, raw);
+  if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
+  return *sw;
+}
+
+fit_expected<robust::ParamSpaceSandwich>
+profile_gmm_param_space_sandwich_observed(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Estimates& est,
+    const gmm::Weight& weight, const data::RawData& raw,
+    GmmProfileRobustOptions robust_options) {
+  post_expected<robust::ParamSpaceSandwich> sw =
+      robust_options.estimated_weight
+          ? continuous_ls_param_space_sandwich_observed_ij(
+                std::move(pt), rep, samp, est, weight, raw,
+                robust_options.ij_weight_mode)
+          : continuous_ls_param_space_sandwich_observed(
                 std::move(pt), rep, samp, est, weight, raw);
   if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
   return *sw;
@@ -1118,7 +1161,8 @@ profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                       ScalarFunctional functional, double target,
                       Bounds bounds, Backend backend, OptimOptions opts,
                       double constraint_tol,
-                      const data::RawData* robust_raw) {
+                      const data::RawData* robust_raw,
+                      ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_scalar_ml";
   if (!functional.value) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
@@ -1203,7 +1247,7 @@ profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   out.p_value = inference::chi2_pvalue(T, 1);
   out.n_obs = *n_or;
   out.df = 1;
-  if (robust_raw != nullptr) {
+  if (robust_raw != nullptr && reference_wants_robust_scaled(reference)) {
     auto sw = robust::param_space_sandwich(
         spec::LatentStructure(pt), rep, samp, out.constrained, *robust_raw,
         robust::InferenceSpec{}, true);
@@ -1212,6 +1256,23 @@ profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
         pt, *sw, out.constrained, functional, who);
     if (!scale.has_value()) return std::unexpected(scale.error());
     fill_scaled_profile(out, *scale);
+  }
+  if (robust_raw != nullptr && reference_wants_misspec(reference)) {
+    auto sw_misspec = robust::param_space_sandwich(
+        spec::LatentStructure(pt), rep, samp, out.constrained, *robust_raw,
+        robust::InferenceSpec{robust::Information::Observed,
+                              robust::WeightMoments::Structured,
+                              robust::ScoreCovariance::Empirical},
+        true);
+    if (!sw_misspec.has_value()) {
+      return std::unexpected(post_to_fit(sw_misspec.error()));
+    }
+    auto misspec_scale = scalar_profile_scaling_factor(
+        pt, *sw_misspec, out.constrained, functional, who);
+    if (!misspec_scale.has_value()) {
+      return std::unexpected(misspec_scale.error());
+    }
+    fill_misspec_profile(out, *misspec_scale);
   }
   return out;
 }
@@ -1223,7 +1284,8 @@ profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                          Eigen::Index parameter, double target,
                          Bounds bounds, Backend backend, OptimOptions opts,
                          double constraint_tol,
-                         const data::RawData* robust_raw) {
+                         const data::RawData* robust_raw,
+                         ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_parameter_ml";
   if (parameter < 0 ||
       parameter >= static_cast<Eigen::Index>(pt.n_free())) {
@@ -1241,7 +1303,8 @@ profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   };
   return profile_lrt_scalar_ml(std::move(pt), rep, samp, unrestricted,
                                std::move(functional), target, std::move(bounds),
-                               backend, opts, constraint_tol, robust_raw);
+                               backend, opts, constraint_tol, robust_raw,
+                               reference);
 }
 
 fit_expected<ScalarProfileLrtResult>
@@ -1253,7 +1316,8 @@ profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                        Bounds bounds, Backend backend, OptimOptions opts,
                        double constraint_tol,
                        const data::RawData* robust_raw,
-                       GmmProfileRobustOptions robust_options) {
+                       GmmProfileRobustOptions robust_options,
+                       ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_scalar_gmm";
   if (!functional.value) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
@@ -1344,7 +1408,7 @@ profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
   out.p_value = inference::chi2_pvalue(T, 1);
   out.n_obs = *n_or;
   out.df = 1;
-  if (robust_raw != nullptr) {
+  if (robust_raw != nullptr && reference_wants_robust_scaled(reference)) {
     auto sw = profile_gmm_param_space_sandwich(
         spec::LatentStructure(pt), rep, samp, out.constrained,
         weight_for_scale, *robust_raw, robust_options);
@@ -1353,6 +1417,18 @@ profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         pt, *sw, out.constrained, functional, who);
     if (!scale.has_value()) return std::unexpected(scale.error());
     fill_scaled_profile(out, *scale);
+  }
+  if (robust_raw != nullptr && reference_wants_misspec(reference)) {
+    auto sw_misspec = profile_gmm_param_space_sandwich_observed(
+        spec::LatentStructure(pt), rep, samp, out.constrained,
+        weight_for_scale, *robust_raw, robust_options);
+    if (!sw_misspec.has_value()) return std::unexpected(sw_misspec.error());
+    auto misspec_scale = scalar_profile_scaling_factor(
+        pt, *sw_misspec, out.constrained, functional, who);
+    if (!misspec_scale.has_value()) {
+      return std::unexpected(misspec_scale.error());
+    }
+    fill_misspec_profile(out, *misspec_scale);
   }
   return out;
 }
@@ -1366,7 +1442,8 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                           Bounds bounds, Backend backend, OptimOptions opts,
                           double constraint_tol,
                           const data::RawData* robust_raw,
-                          GmmProfileRobustOptions robust_options) {
+                          GmmProfileRobustOptions robust_options,
+                          ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_parameter_gmm";
   if (parameter < 0 ||
       parameter >= static_cast<Eigen::Index>(pt.n_free())) {
@@ -1385,7 +1462,8 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
   return profile_lrt_scalar_gmm(std::move(pt), rep, samp, unrestricted,
                                 std::move(weight), std::move(functional),
                                 target, std::move(bounds), backend, opts,
-                                constraint_tol, robust_raw, robust_options);
+                                constraint_tol, robust_raw, robust_options,
+                                reference);
 }
 
 fit_expected<ScalarProfileLrtResult>
@@ -1397,7 +1475,8 @@ profile_lrt_scalar_gmm_fitted_weight(
     GmmFittedWeightOptions fitted_opts,
     Bounds bounds, Backend backend, OptimOptions opts,
     double constraint_tol,
-    const data::RawData* robust_raw) {
+    const data::RawData* robust_raw,
+    ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_scalar_gmm_fitted_weight";
   if (!functional.value) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
@@ -1489,7 +1568,7 @@ profile_lrt_scalar_gmm_fitted_weight(
   out.p_value = inference::chi2_pvalue(T, 1);
   out.n_obs = *n_or;
   out.df = 1;
-  if (robust_raw != nullptr) {
+  if (robust_raw != nullptr && reference_wants_robust_scaled(reference)) {
     auto weight = profile_fitted_weight_at(
         pt, rep, samp, out.constrained.theta, fitted_opts, who);
     if (!weight.has_value()) return std::unexpected(weight.error());
@@ -1501,6 +1580,23 @@ profile_lrt_scalar_gmm_fitted_weight(
         pt, *sw, out.constrained, functional, who);
     if (!scale.has_value()) return std::unexpected(scale.error());
     fill_scaled_profile(out, *scale);
+  }
+  if (robust_raw != nullptr && reference_wants_misspec(reference)) {
+    auto weight = profile_fitted_weight_at(
+        pt, rep, samp, out.constrained.theta, fitted_opts, who);
+    if (!weight.has_value()) return std::unexpected(weight.error());
+    auto sw_misspec = continuous_ls_param_space_sandwich_observed(
+        spec::LatentStructure(pt), rep, samp, out.constrained, *weight,
+        *robust_raw);
+    if (!sw_misspec.has_value()) {
+      return std::unexpected(post_to_fit(sw_misspec.error()));
+    }
+    auto misspec_scale = scalar_profile_scaling_factor(
+        pt, *sw_misspec, out.constrained, functional, who);
+    if (!misspec_scale.has_value()) {
+      return std::unexpected(misspec_scale.error());
+    }
+    fill_misspec_profile(out, *misspec_scale);
   }
   return out;
 }
@@ -1514,7 +1610,8 @@ profile_lrt_parameter_gmm_fitted_weight(
     GmmFittedWeightOptions fitted_opts,
     Bounds bounds, Backend backend, OptimOptions opts,
     double constraint_tol,
-    const data::RawData* robust_raw) {
+    const data::RawData* robust_raw,
+    ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_parameter_gmm_fitted_weight";
   if (parameter < 0 ||
       parameter >= static_cast<Eigen::Index>(pt.n_free())) {
@@ -1533,7 +1630,7 @@ profile_lrt_parameter_gmm_fitted_weight(
   return profile_lrt_scalar_gmm_fitted_weight(
       std::move(pt), rep, samp, unrestricted_start, std::move(functional),
       target, fitted_opts, std::move(bounds), backend, opts, constraint_tol,
-      robust_raw);
+      robust_raw, reference);
 }
 
 }  // namespace frontier
@@ -1665,22 +1762,45 @@ using ProfileEvaluator =
 
 fit_expected<ProfileRootPoint>
 eval_profile_point(const ProfileEvaluator& eval, double target,
-                   double cutoff, ScalarProfileReference reference,
+                   double cutoff, const ScalarProfileCiOptions& options,
                    const char* who) {
   auto r = eval(target);
   if (!r.has_value()) return std::unexpected(r.error());
   double stat = r->T;
-  if (reference == ScalarProfileReference::RobustScaled) {
-    stat = r->T_scaled;
+  double endpoint_cutoff = cutoff;
+  switch (options.reference) {
+    case ScalarProfileReference::Ordinary:
+      stat = r->T;
+      break;
+    case ScalarProfileReference::RobustScaled:
+      stat = r->T_scaled;
+      break;
+    case ScalarProfileReference::MisspecScaled:
+      stat = r->T_misspec_scaled;
+      break;
+    case ScalarProfileReference::MisspecMixture:
+      stat = r->T;
+      if (!std::isfinite(options.cutoff)) {
+        if (r->misspec_eigvals.size() == 0 ||
+            !r->misspec_eigvals.allFinite()) {
+          return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+              std::string(who) + ": misspec mixture reference requires finite "
+                  "weighted chi-square eigenvalues"));
+        }
+        endpoint_cutoff = robust::weighted_chisq_quantile(
+            r->misspec_eigvals, options.confidence_level);
+      }
+      r->misspec_mixture_cutoff = endpoint_cutoff;
+      break;
   }
-  if (!std::isfinite(stat)) {
+  if (!std::isfinite(stat) || !std::isfinite(endpoint_cutoff)) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": profile statistic is not finite at target " +
             std::to_string(target)));
   }
   ProfileRootPoint out;
   out.profile = std::move(*r);
-  out.signed_stat = stat - cutoff;
+  out.signed_stat = stat - endpoint_cutoff;
   return out;
 }
 
@@ -1700,7 +1820,7 @@ solve_profile_root_side(const ProfileEvaluator& eval,
   ProfileRootPoint outside;
 
   if (has_bound) {
-    auto p = eval_profile_point(eval, outside_x, cutoff, options.reference, who);
+    auto p = eval_profile_point(eval, outside_x, cutoff, options, who);
     ++evals;
     if (!p.has_value()) return std::unexpected(p.error());
     if (p->signed_stat < 0.0) {
@@ -1714,8 +1834,7 @@ solve_profile_root_side(const ProfileEvaluator& eval,
     bool bracketed = false;
     for (int k = 0; k < options.max_expand; ++k) {
       outside_x = estimate + sign * step;
-      auto p = eval_profile_point(eval, outside_x, cutoff, options.reference,
-                                  who);
+      auto p = eval_profile_point(eval, outside_x, cutoff, options, who);
       ++evals;
       if (!p.has_value()) return std::unexpected(p.error());
       if (p->signed_stat >= 0.0) {
@@ -1738,7 +1857,7 @@ solve_profile_root_side(const ProfileEvaluator& eval,
   double best_x = outside_x;
   for (int k = 0; k < options.max_iter; ++k) {
     const double mid = 0.5 * (inside_x + outside_x);
-    auto p = eval_profile_point(eval, mid, cutoff, options.reference, who);
+    auto p = eval_profile_point(eval, mid, cutoff, options, who);
     ++evals;
     if (!p.has_value()) return std::unexpected(p.error());
     const double signed_stat = p->signed_stat;
@@ -1793,6 +1912,14 @@ profile_ci_from_evaluator(double estimate,
   out.upper = upper->root;
   out.confidence_level = options.confidence_level;
   out.cutoff = *cutoff;
+  out.lower_cutoff =
+      options.reference == ScalarProfileReference::MisspecMixture
+          ? lower->profile.misspec_mixture_cutoff
+          : *cutoff;
+  out.upper_cutoff =
+      options.reference == ScalarProfileReference::MisspecMixture
+          ? upper->profile.misspec_mixture_cutoff
+          : *cutoff;
   out.lower_evals = lower->evals;
   out.upper_evals = upper->evals;
   out.lower_at_bound = lower->at_bound;
@@ -1819,20 +1946,21 @@ profile_lrt_ci_parameter_ml(spec::LatentStructure pt,
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": parameter index out of range"));
   }
-  if (ci_options.reference == ScalarProfileReference::RobustScaled &&
-      robust_raw == nullptr) {
+  if (reference_needs_sandwich(ci_options.reference) && robust_raw == nullptr) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-        std::string(who) + ": robust-scaled CI requires raw data"));
+        std::string(who) + ": robust/misspec CI requires raw data"));
   }
   const double estimate = unrestricted.theta(parameter);
   ProfileEvaluator eval =
       [pt, &rep, &samp, unrestricted, parameter, bounds, backend, opts,
-       constraint_tol, robust_raw](double target) mutable {
+       constraint_tol, robust_raw,
+       reference = ci_options.reference](double target) mutable {
         spec::LatentStructure pt_eval = pt;
         Bounds bounds_eval = bounds;
         return profile_lrt_parameter_ml(
             std::move(pt_eval), rep, samp, unrestricted, parameter, target,
-            std::move(bounds_eval), backend, opts, constraint_tol, robust_raw);
+            std::move(bounds_eval), backend, opts, constraint_tol, robust_raw,
+            reference);
       };
   return profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
@@ -1856,22 +1984,22 @@ profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": parameter index out of range"));
   }
-  if (ci_options.reference == ScalarProfileReference::RobustScaled &&
-      robust_raw == nullptr) {
+  if (reference_needs_sandwich(ci_options.reference) && robust_raw == nullptr) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-        std::string(who) + ": robust-scaled CI requires raw data"));
+        std::string(who) + ": robust/misspec CI requires raw data"));
   }
   const double estimate = unrestricted.theta(parameter);
   ProfileEvaluator eval =
       [pt, &rep, &samp, unrestricted, weight, parameter, bounds, backend, opts,
-       constraint_tol, robust_raw, robust_options](double target) mutable {
+       constraint_tol, robust_raw, robust_options,
+       reference = ci_options.reference](double target) mutable {
         spec::LatentStructure pt_eval = pt;
         gmm::Weight weight_eval = weight;
         Bounds bounds_eval = bounds;
         return profile_lrt_parameter_gmm(
             std::move(pt_eval), rep, samp, unrestricted, std::move(weight_eval),
             parameter, target, std::move(bounds_eval), backend, opts,
-            constraint_tol, robust_raw, robust_options);
+            constraint_tol, robust_raw, robust_options, reference);
       };
   return profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
@@ -1893,10 +2021,9 @@ profile_lrt_ci_parameter_gmm_fitted_weight(
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": parameter index out of range"));
   }
-  if (ci_options.reference == ScalarProfileReference::RobustScaled &&
-      robust_raw == nullptr) {
+  if (reference_needs_sandwich(ci_options.reference) && robust_raw == nullptr) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-        std::string(who) + ": robust-scaled CI requires raw data"));
+        std::string(who) + ": robust/misspec CI requires raw data"));
   }
   auto unrestricted = fit_gmm_fitted_weight(
       pt, rep, samp, unrestricted_start.theta, fitted_opts, bounds,
@@ -1906,13 +2033,14 @@ profile_lrt_ci_parameter_gmm_fitted_weight(
 
   ProfileEvaluator eval =
       [pt, &rep, &samp, unrestricted = *unrestricted, parameter, fitted_opts,
-       bounds, backend, opts, constraint_tol, robust_raw](double target) mutable {
+       bounds, backend, opts, constraint_tol, robust_raw,
+       reference = ci_options.reference](double target) mutable {
         spec::LatentStructure pt_eval = pt;
         Bounds bounds_eval = bounds;
         return profile_lrt_parameter_gmm_fitted_weight(
             std::move(pt_eval), rep, samp, unrestricted, parameter, target,
             fitted_opts, std::move(bounds_eval), backend, opts,
-            constraint_tol, robust_raw);
+            constraint_tol, robust_raw, reference);
       };
   return profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }

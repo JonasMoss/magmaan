@@ -161,6 +161,12 @@ struct ScalarProfileLrtResult {
   double scaling_factor = std::numeric_limits<double>::quiet_NaN();
   double T_scaled = std::numeric_limits<double>::quiet_NaN();
   double p_value_scaled = std::numeric_limits<double>::quiet_NaN();
+  double misspec_scaling_factor = std::numeric_limits<double>::quiet_NaN();
+  double T_misspec_scaled = std::numeric_limits<double>::quiet_NaN();
+  double p_value_misspec_scaled = std::numeric_limits<double>::quiet_NaN();
+  Eigen::VectorXd misspec_eigvals;
+  double p_value_misspec_mixture = std::numeric_limits<double>::quiet_NaN();
+  double misspec_mixture_cutoff = std::numeric_limits<double>::quiet_NaN();
   double n_obs = 0.0;
   int df = 1;
 };
@@ -168,6 +174,8 @@ struct ScalarProfileLrtResult {
 enum class ScalarProfileReference {
   Ordinary,
   RobustScaled,
+  MisspecScaled,
+  MisspecMixture,
 };
 
 enum class GmmFittedWeightKind {
@@ -207,6 +215,8 @@ struct ScalarProfileCiResult {
   double upper = 0.0;
   double confidence_level = 0.95;
   double cutoff = 0.0;
+  double lower_cutoff = 0.0;
+  double upper_cutoff = 0.0;
   int lower_evals = 0;
   int upper_evals = 0;
   bool lower_at_bound = false;
@@ -259,7 +269,9 @@ profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                       Backend backend = Backend::NloptSlsqp,
                       OptimOptions opts = {},
                       double constraint_tol = 1e-6,
-                      const data::RawData* robust_raw = nullptr);
+                      const data::RawData* robust_raw = nullptr,
+                      ScalarProfileReference reference =
+                          ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -270,7 +282,9 @@ profile_lrt_parameter_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                          Backend backend = Backend::NloptSlsqp,
                          OptimOptions opts = {},
                          double constraint_tol = 1e-6,
-                         const data::RawData* robust_raw = nullptr);
+                         const data::RawData* robust_raw = nullptr,
+                         ScalarProfileReference reference =
+                             ScalarProfileReference::RobustScaled);
 
 // Moment-quadratic analogues for a caller-fixed GMM/LS weight. These are the
 // first functional profile-LRT building blocks outside ML; robust Satorra /
@@ -294,7 +308,9 @@ profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                        OptimOptions opts = {},
                        double constraint_tol = 1e-6,
                        const data::RawData* robust_raw = nullptr,
-                       GmmProfileRobustOptions robust_options = {});
+                       GmmProfileRobustOptions robust_options = {},
+                       ScalarProfileReference reference =
+                           ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -307,7 +323,9 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                           OptimOptions opts = {},
                           double constraint_tol = 1e-6,
                           const data::RawData* robust_raw = nullptr,
-                          GmmProfileRobustOptions robust_options = {});
+                          GmmProfileRobustOptions robust_options = {},
+                          ScalarProfileReference reference =
+                              ScalarProfileReference::RobustScaled);
 
 // Fitted-weight moment-quadratic profile helpers. The current fitted-weight
 // policy refreshes the normal-theory expected-information weight W(θ) in an
@@ -345,7 +363,8 @@ profile_lrt_scalar_gmm_fitted_weight(
     Backend backend = Backend::NloptSlsqp,
     OptimOptions opts = {},
     double constraint_tol = 1e-6,
-    const data::RawData* robust_raw = nullptr);
+    const data::RawData* robust_raw = nullptr,
+    ScalarProfileReference reference = ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_gmm_fitted_weight(
@@ -358,7 +377,8 @@ profile_lrt_parameter_gmm_fitted_weight(
     Backend backend = Backend::NloptSlsqp,
     OptimOptions opts = {},
     double constraint_tol = 1e-6,
-    const data::RawData* robust_raw = nullptr);
+    const data::RawData* robust_raw = nullptr,
+    ScalarProfileReference reference = ScalarProfileReference::RobustScaled);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_ml(spec::LatentStructure pt,

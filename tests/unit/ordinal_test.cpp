@@ -31,6 +31,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/spec/build.hpp"
 
 namespace {
@@ -6555,6 +6556,31 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
                         omega_lrt_robust->scaling_factor));
   CHECK(omega_lrt_robust->p_value_scaled == doctest::Approx(
       magmaan::inference::chi2_pvalue(omega_lrt_robust->T_scaled, 1)));
+  auto omega_lrt_misspec =
+      magmaan::estimate::frontier::profile_lrt_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_target, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true,
+          magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(omega_lrt_misspec.has_value(),
+      "ordinal polychoric omega misspec profile LRT failed: "
+          << (omega_lrt_misspec.has_value() ? ""
+                                            : omega_lrt_misspec.error().detail));
+  CHECK(omega_lrt_misspec->T == doctest::Approx(omega_lrt->T).epsilon(1e-8));
+  CHECK(omega_lrt_misspec->misspec_scaling_factor > 0.0);
+  CHECK(std::isfinite(omega_lrt_misspec->misspec_scaling_factor));
+  REQUIRE(omega_lrt_misspec->misspec_eigvals.size() == 1);
+  CHECK(omega_lrt_misspec->misspec_eigvals(0) == doctest::Approx(
+      omega_lrt_misspec->misspec_scaling_factor));
+  CHECK(omega_lrt_misspec->T_misspec_scaled == doctest::Approx(
+      omega_lrt_misspec->T / omega_lrt_misspec->misspec_scaling_factor));
+  CHECK(omega_lrt_misspec->p_value_misspec_scaled == doctest::Approx(
+      magmaan::inference::chi2_pvalue(
+          omega_lrt_misspec->T_misspec_scaled, 1)));
+  CHECK(omega_lrt_misspec->p_value_misspec_mixture == doctest::Approx(
+      magmaan::robust::weighted_chisq_upper(
+          omega_lrt_misspec->misspec_eigvals, omega_lrt_misspec->T)));
 
   magmaan::estimate::frontier::ScalarProfileCiOptions omega_ci_opts;
   omega_ci_opts.target_tol = 1e-5;
@@ -6601,6 +6627,62 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
         doctest::Approx(omega_ci_robust->cutoff).epsilon(1e-3));
   CHECK(omega_ci_robust->upper_profile.T_scaled ==
         doctest::Approx(omega_ci_robust->cutoff).epsilon(1e-3));
+
+  auto omega_ci_misspec_scaled_opts = omega_ci_opts;
+  omega_ci_misspec_scaled_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::MisspecScaled;
+  auto omega_ci_misspec_scaled =
+      magmaan::estimate::frontier::profile_lrt_ci_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_ci_misspec_scaled_opts, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true);
+  REQUIRE_MESSAGE(omega_ci_misspec_scaled.has_value(),
+      "ordinal polychoric omega misspec-scaled profile CI failed: "
+          << (omega_ci_misspec_scaled.has_value() ? ""
+              : omega_ci_misspec_scaled.error().detail));
+  CHECK(omega_ci_misspec_scaled->lower_profile.misspec_scaling_factor > 0.0);
+  CHECK(omega_ci_misspec_scaled->upper_profile.misspec_scaling_factor > 0.0);
+  CHECK(omega_ci_misspec_scaled->lower_profile.T_misspec_scaled ==
+        doctest::Approx(omega_ci_misspec_scaled->cutoff).epsilon(3e-3));
+  CHECK(omega_ci_misspec_scaled->upper_profile.T_misspec_scaled ==
+        doctest::Approx(omega_ci_misspec_scaled->cutoff).epsilon(3e-3));
+  CHECK(omega_ci_misspec_scaled->lower_cutoff ==
+        doctest::Approx(omega_ci_misspec_scaled->cutoff));
+  CHECK(omega_ci_misspec_scaled->upper_cutoff ==
+        doctest::Approx(omega_ci_misspec_scaled->cutoff));
+
+  auto omega_ci_mixture_opts = omega_ci_opts;
+  omega_ci_mixture_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture;
+  auto omega_ci_mixture =
+      magmaan::estimate::frontier::profile_lrt_ci_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_ci_mixture_opts, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true);
+  REQUIRE_MESSAGE(omega_ci_mixture.has_value(),
+      "ordinal polychoric omega misspec-mixture profile CI failed: "
+          << (omega_ci_mixture.has_value() ? ""
+              : omega_ci_mixture.error().detail));
+  REQUIRE(omega_ci_mixture->lower_profile.misspec_eigvals.size() == 1);
+  REQUIRE(omega_ci_mixture->upper_profile.misspec_eigvals.size() == 1);
+  CHECK(omega_ci_mixture->lower_cutoff == doctest::Approx(
+      magmaan::robust::weighted_chisq_quantile(
+          omega_ci_mixture->lower_profile.misspec_eigvals,
+          omega_ci_mixture->confidence_level)));
+  CHECK(omega_ci_mixture->upper_cutoff == doctest::Approx(
+      magmaan::robust::weighted_chisq_quantile(
+          omega_ci_mixture->upper_profile.misspec_eigvals,
+          omega_ci_mixture->confidence_level)));
+  CHECK(omega_ci_mixture->lower_profile.misspec_mixture_cutoff ==
+        doctest::Approx(omega_ci_mixture->lower_cutoff));
+  CHECK(omega_ci_mixture->upper_profile.misspec_mixture_cutoff ==
+        doctest::Approx(omega_ci_mixture->upper_cutoff));
+  CHECK(omega_ci_mixture->lower_profile.T ==
+        doctest::Approx(omega_ci_mixture->lower_cutoff).epsilon(3e-3));
+  CHECK(omega_ci_mixture->upper_profile.T ==
+        doctest::Approx(omega_ci_mixture->upper_cutoff).epsilon(3e-3));
 }
 
 TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {

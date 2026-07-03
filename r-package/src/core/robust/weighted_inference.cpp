@@ -2591,6 +2591,84 @@ continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
   return weighted_param_space_sandwich_ij(asmbl->blocks);
 }
 
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich_observed(spec::LatentStructure pt,
+                                            const model::MatrixRep& rep,
+                                            const data::SampleStats& samp,
+                                            const Estimates& est,
+                                            const gmm::Weight& weight,
+                                            const data::RawData& raw) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con_or = build_eq_constraints(pt, true);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_param_space_sandwich_observed: constraint "
+        "reparameterization has incompatible shape"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  const auto layout = make_layout(samp, eval->moments);
+  auto gamma = gamma_blocks_from_raw(raw, samp, layout);
+  if (!gamma.has_value()) return std::unexpected(gamma.error());
+  auto blocks = build_continuous_ls_blocks(pt, rep, samp, est, weight, *gamma);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  auto sw = weighted_param_space_sandwich(*blocks);
+  if (!sw.has_value()) return std::unexpected(sw.error());
+  auto ob = continuous_ls_observed_bread(pt, rep, samp, est, weight, K);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd B = (K.transpose() * sw->B1 * K).eval();
+  B = 0.5 * (B + B.transpose()).eval();
+  return robust::ParamSpaceSandwich{std::move(*ob), std::move(B), K,
+                                    K.cols()};
+}
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich_observed_ij(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Estimates& est,
+    const gmm::Weight& weight,
+    const data::RawData& raw,
+    ContinuousLsIJWeightMode mode,
+    frontier::DlsWeightOptions dls_opts) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con_or = build_eq_constraints(pt, true);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_param_space_sandwich_observed_ij: constraint "
+        "reparameterization has incompatible shape"));
+  }
+
+  auto asmbl = build_continuous_ls_ij_blocks(
+      pt, rep, samp, est, weight, raw, mode, dls_opts,
+      "continuous_ls_param_space_sandwich_observed_ij");
+  if (!asmbl.has_value()) return std::unexpected(asmbl.error());
+  auto sw = weighted_param_space_sandwich_ij(asmbl->blocks);
+  if (!sw.has_value()) return std::unexpected(sw.error());
+  auto ob = continuous_ls_observed_bread(pt, rep, samp, est,
+                                         asmbl->active_weight, K);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  Eigen::MatrixXd B = (K.transpose() * sw->B1 * K).eval();
+  B = 0.5 * (B + B.transpose()).eval();
+  return robust::ParamSpaceSandwich{std::move(*ob), std::move(B), K,
+                                    K.cols()};
+}
+
 post_expected<CasewiseInfluenceIJ>
 casewise_influence_from_ij_blocks(const std::vector<WeightedMomentIJBlock>& blocks,
                                   const Eigen::MatrixXd& K,

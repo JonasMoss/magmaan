@@ -3,16 +3,18 @@ library(magmaan)
 core <- magmaan_core
 
 set.seed(20260703)
-n <- 200
-eta <- rnorm(n)
+n <- 360
+eta <- rt(n, df = 5)
 dat <- data.frame(
   x1 = eta + rnorm(n, sd = 0.60),
   x2 = 0.80 * eta + rnorm(n, sd = 0.70),
-  x3 = 0.70 * eta + rnorm(n, sd = 0.80)
+  x3 = 0.70 * eta + rnorm(n, sd = 0.80),
+  x4 = 0.62 * eta + rnorm(n, sd = 0.85)
 )
 X <- as.matrix(dat)
 
-fit <- magmaan("f =~ x1 + x2 + x3", dat, estimator = "ULS")
+model <- "f =~ x1 + x2 + x3 + x4"
+fit <- magmaan(model, dat, estimator = "ULS")
 loading_row <- which(fit$partable$op == "=~" & fit$partable$rhs == "x2")
 free_id <- fit$partable$free[loading_row]
 stopifnot(length(free_id) == 1L, free_id > 0L)
@@ -21,6 +23,9 @@ target <- 0.95 * fit$theta[free_id]
 lrt <- core$frontier_profile_lrt_parameter_gmm(fit, free_id, target)
 lrt_robust <- core$frontier_profile_lrt_parameter_gmm(
   fit, free_id, target, raw_data = X, robust = TRUE
+)
+lrt_misspec <- core$frontier_profile_lrt_parameter_gmm(
+  fit, free_id, target, raw_data = X, reference = "misspec_mixture"
 )
 lrt_fitw <- core$frontier_profile_lrt_parameter_gmm_fitted_weight(
   fit, free_id, target
@@ -37,6 +42,11 @@ ci_robust <- core$frontier_profile_lrt_ci_parameter_gmm(
   root_tol = 1e-5, statistic_tol = 1e-5,
   raw_data = X, robust = TRUE
 )
+ci_misspec <- core$frontier_profile_lrt_ci_parameter_gmm(
+  fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
+  root_tol = 1e-5, statistic_tol = 1e-5,
+  raw_data = X, reference = "misspec_mixture"
+)
 ci_fitw <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-4, statistic_tol = 1e-4
@@ -47,7 +57,7 @@ ci_fitw_robust <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
   raw_data = X, robust = TRUE
 )
 
-fit_gls <- magmaan("f =~ x1 + x2 + x3", dat, estimator = "GLS")
+fit_gls <- magmaan(model, dat, estimator = "GLS")
 free_gls <- fit_gls$partable$free[loading_row]
 target_gls <- 0.95 * fit_gls$theta[free_gls]
 lrt_gls_robust <- core$frontier_profile_lrt_parameter_gmm(
@@ -64,7 +74,7 @@ ci_gls_estw <- core$frontier_profile_lrt_ci_parameter_gmm(
 )
 
 W_adf <- solve(core$robust_empirical_gamma(X))
-fit_wls <- magmaan("f =~ x1 + x2 + x3", dat, estimator = "WLS", W = W_adf)
+fit_wls <- magmaan(model, dat, estimator = "WLS", W = W_adf)
 free_wls <- fit_wls$partable$free[loading_row]
 target_wls <- 0.95 * fit_wls$theta[free_wls]
 lrt_wls_robust <- core$frontier_profile_lrt_parameter_gmm(
@@ -90,6 +100,10 @@ stopifnot(
   abs(lrt_robust$T - lrt$T) < 1e-8,
   abs(lrt_robust$T_scaled -
         lrt_robust$T / lrt_robust$scaling_factor) < 1e-8,
+  abs(lrt_misspec$T - lrt$T) < 1e-8,
+  is.finite(lrt_misspec$misspec_scaling_factor),
+  lrt_misspec$misspec_scaling_factor > 0,
+  length(lrt_misspec$misspec_eigvals) == 1L,
   is.finite(lrt_fitw$T),
   lrt_fitw$df == 1L,
   abs(lrt_fitw$constrained_value - target) < 1e-5,
@@ -106,6 +120,10 @@ stopifnot(
   ci_robust$upper > fit$theta[free_id],
   abs(ci_robust$lower_profile$T_scaled - ci_robust$cutoff) < 1e-3,
   abs(ci_robust$upper_profile$T_scaled - ci_robust$cutoff) < 1e-3,
+  ci_misspec$lower < fit$theta[free_id],
+  ci_misspec$upper > fit$theta[free_id],
+  abs(ci_misspec$lower_profile$T - ci_misspec$lower_cutoff) < 3e-3,
+  abs(ci_misspec$upper_profile$T - ci_misspec$upper_cutoff) < 3e-3,
   ci_fitw$lower < ci_fitw$estimate,
   ci_fitw$upper > ci_fitw$estimate,
   ci_fitw_robust$lower < ci_fitw_robust$estimate,
@@ -135,10 +153,14 @@ stopifnot(
 print(lrt[c("parameter", "target", "T", "p_value")])
 print(lrt_robust[c("parameter", "target", "T_scaled", "p_value_scaled",
                    "scaling_factor")])
+print(lrt_misspec[c("parameter", "target", "p_value_misspec_mixture",
+                    "misspec_scaling_factor")])
 print(lrt_fitw_robust[c("parameter", "target", "T_scaled", "p_value_scaled",
                         "scaling_factor")])
 print(ci[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(ci_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
+print(ci_misspec[c("parameter", "estimate", "lower", "upper",
+                   "lower_cutoff", "upper_cutoff")])
 print(ci_fitw_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(lrt_gls_estw[c("parameter", "target", "T_scaled", "p_value_scaled",
                      "scaling_factor")])

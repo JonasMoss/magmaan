@@ -24,6 +24,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -596,6 +597,23 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
         doctest::Approx(ml_robust->T / ml_robust->scaling_factor));
   CHECK(ml_robust->p_value_scaled == doctest::Approx(
       magmaan::inference::chi2_pvalue(ml_robust->T_scaled, 1)));
+  auto ml_misspec = magmaan::estimate::frontier::profile_lrt_parameter_ml(
+      pt, rep, samp, ml, k_x2, ml_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw,
+      magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(ml_misspec.has_value(),
+      "ML misspec profile LRT failed: "
+          << (ml_misspec.has_value() ? "" : ml_misspec.error().detail));
+  CHECK(ml_misspec->T == doctest::Approx(ml_plain->T).epsilon(1e-8));
+  CHECK(ml_misspec->misspec_scaling_factor > 0.0);
+  REQUIRE(ml_misspec->misspec_eigvals.size() == 1);
+  CHECK(ml_misspec->misspec_eigvals(0) ==
+        doctest::Approx(ml_misspec->misspec_scaling_factor));
+  CHECK(ml_misspec->T_misspec_scaled ==
+        doctest::Approx(ml_misspec->T / ml_misspec->misspec_scaling_factor));
+  CHECK(ml_misspec->p_value_misspec_mixture == doctest::Approx(
+      magmaan::robust::weighted_chisq_upper(
+          ml_misspec->misspec_eigvals, ml_misspec->T)));
 
   auto gmm_plain = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
       pt, rep, samp, gmm, {}, k_x2, gmm_target, {},
@@ -614,6 +632,18 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
         doctest::Approx(gmm_robust->T / gmm_robust->scaling_factor));
   CHECK(gmm_robust->p_value_scaled == doctest::Approx(
       magmaan::inference::chi2_pvalue(gmm_robust->T_scaled, 1)));
+  auto gmm_misspec = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      pt, rep, samp, gmm, {}, k_x2, gmm_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw, {},
+      magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(gmm_misspec.has_value(),
+      "GMM misspec profile LRT failed: "
+          << (gmm_misspec.has_value() ? "" : gmm_misspec.error().detail));
+  CHECK(gmm_misspec->T == doctest::Approx(gmm_plain->T).epsilon(1e-8));
+  CHECK(gmm_misspec->misspec_scaling_factor > 0.0);
+  REQUIRE(gmm_misspec->misspec_eigvals.size() == 1);
+  CHECK(gmm_misspec->misspec_eigvals(0) ==
+        doctest::Approx(gmm_misspec->misspec_scaling_factor));
 
   auto fitw_plain =
       magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
@@ -636,6 +666,20 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
         doctest::Approx(fitw_robust->T / fitw_robust->scaling_factor));
   CHECK(fitw_robust->p_value_scaled == doctest::Approx(
       magmaan::inference::chi2_pvalue(fitw_robust->T_scaled, 1)));
+  auto fitw_misspec =
+      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
+          pt, rep, samp, gmm, k_x2, gmm_target, {},
+          magmaan::estimate::Bounds{},
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw,
+          magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(fitw_misspec.has_value(),
+      "fitted-weight GMM misspec profile LRT failed: "
+          << (fitw_misspec.has_value() ? "" : fitw_misspec.error().detail));
+  CHECK(fitw_misspec->T == doctest::Approx(fitw_plain->T).epsilon(1e-8));
+  CHECK(fitw_misspec->misspec_scaling_factor > 0.0);
+  REQUIRE(fitw_misspec->misspec_eigvals.size() == 1);
+  CHECK(fitw_misspec->misspec_eigvals(0) ==
+        doctest::Approx(fitw_misspec->misspec_scaling_factor));
 
   magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
   ci_opts.reference =
@@ -659,6 +703,44 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
         doctest::Approx(ci->cutoff).epsilon(2e-3));
   CHECK(ci->upper_profile.T_scaled ==
         doctest::Approx(ci->cutoff).epsilon(2e-3));
+
+  auto ci_misspec_scaled_opts = ci_opts;
+  ci_misspec_scaled_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::MisspecScaled;
+  auto ci_misspec_scaled =
+      magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
+          pt, rep, samp, gmm, {}, k_x2, ci_misspec_scaled_opts, {},
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(ci_misspec_scaled.has_value(),
+      "GMM misspec-scaled profile CI failed: "
+          << (ci_misspec_scaled.has_value() ? ""
+              : ci_misspec_scaled.error().detail));
+  CHECK(ci_misspec_scaled->lower_profile.T_misspec_scaled ==
+        doctest::Approx(ci_misspec_scaled->cutoff).epsilon(2e-3));
+  CHECK(ci_misspec_scaled->upper_profile.T_misspec_scaled ==
+        doctest::Approx(ci_misspec_scaled->cutoff).epsilon(2e-3));
+
+  auto ci_mixture_opts = ci_opts;
+  ci_mixture_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture;
+  auto ci_mixture = magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
+      pt, rep, samp, gmm, {}, k_x2, ci_mixture_opts, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(ci_mixture.has_value(),
+      "GMM misspec-mixture profile CI failed: "
+          << (ci_mixture.has_value() ? "" : ci_mixture.error().detail));
+  CHECK(ci_mixture->lower_cutoff == doctest::Approx(
+      magmaan::robust::weighted_chisq_quantile(
+          ci_mixture->lower_profile.misspec_eigvals,
+          ci_mixture->confidence_level)));
+  CHECK(ci_mixture->upper_cutoff == doctest::Approx(
+      magmaan::robust::weighted_chisq_quantile(
+          ci_mixture->upper_profile.misspec_eigvals,
+          ci_mixture->confidence_level)));
+  CHECK(ci_mixture->lower_profile.T ==
+        doctest::Approx(ci_mixture->lower_cutoff).epsilon(2e-3));
+  CHECK(ci_mixture->upper_profile.T ==
+        doctest::Approx(ci_mixture->upper_cutoff).epsilon(2e-3));
 
   auto W_gls = magmaan::estimate::gmm::normal_theory_weight(ev, samp, gls.theta);
   REQUIRE_MESSAGE(W_gls.has_value(),

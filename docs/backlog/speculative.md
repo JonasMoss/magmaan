@@ -938,6 +938,24 @@ slice, but does not solve the funLR gate: fitted-weight derivative/misspec
 references, scalar functionals, ordinal fitted-functionals, and
 Bartlett/calibrated constants remain open.
 
+**Progress (2026-07-03): model-misspec profile references.** The scalar profile
+LRT/CI surface now has explicit reference modes rather than overloading
+`robust`: ordinary chi-square, Satorra-style robust scaled, misspec scaled, and
+misspec mixture. Results expose both ordinary and reference-specific fields,
+including observed-bread misspec scale, the singleton mixture eigenvalue, and
+endpoint-specific mixture cutoffs for CI inversion. The implementation covers
+ML, caller-fixed continuous GMM, fitted-weight continuous GMM, ordinal parameter
+profiles, and the no-integration ordinal polychoric-omega functional. Continuous
+fixed GLS/WLS can route misspec meat through the IJ estimated-weight correction;
+ordinal uses the complete ordinal IJ meat, including fitted DWLS/WLS weight
+influence. The fitted-weight continuous path is explicitly profile-metric only:
+it rebuilds endpoint `W(theta)` and treats it as fixed, so derivative-of-weight
+misspec corrections remain a research extension. R exposes the choice as
+`reference=` and examples smoke the GMM and ordinal omega paths. This closes the
+model-misspec asymptotic reference slice, but still not the hard funLR gate:
+model-level small-sample/Bartlett/calibrated constants and richer functional
+targets remain open.
+
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
 with experiment 47 (`experiments/47-ml-parameter-profile-lrt`) as the small-N
@@ -966,18 +984,20 @@ fits, robust/misspec scaling, and small-sample constants remain open.
    `rho*` mirrors it). Ties [[small-sample-df-coverage-lane]].
 4. **Reliability-difference two-parameter confidence regions** (Pek-Wu sec 3; ties
    [[exp20-deng-chan-alpha-omega]]).
-5. **Extend the C++ seed beyond the current parameter CIs:** all-ordinal DWLS
-   functional constrained fits; fitted-weight derivative / misspec scalar
-   reference scaling; functional R callbacks; then expose the ordinal/fitted-
-   functional surface once an experiment consumes it.
+5. **Extend the C++ seed beyond the current exposed functionals:** richer
+   functional R callbacks; observed-score / Green-Yang-like ordinal omega
+   targets; fitted-weight derivative-of-weight misspec corrections if an
+   experiment needs them; then expose additional ordinal/fitted-functional
+   surfaces only once an experiment consumes them.
 6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
    + Bartlett characterization; analytic Lawley ruled out (boundary); double bootstrap ruled out
    (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11);
    complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed;
    fixed-weight and fitted-weight GMM scalar/parameter profile seeds; parameter
    CI inversion; complete-data ML, fixed-weight GMM, fitted-weight GMM, and
-   fixed-profile estimated-weight GLS/WLS parameter robust scaling; R parameter
-   wrappers + experiment-47
+   fixed-profile estimated-weight GLS/WLS parameter robust scaling; model-misspec
+   scaled/mixture references for ML, continuous GMM, ordinal parameters, and
+   ordinal polychoric omega; R parameter/omega wrappers + experiment-47
    interior-parameter calibration probe.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
