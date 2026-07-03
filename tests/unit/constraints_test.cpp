@@ -566,6 +566,80 @@ TEST_CASE("frontier profile_lrt_parameter_gmm reports the ordinary df-1 statisti
   CHECK(lrt->df == 1);
 }
 
+TEST_CASE("frontier profile_lrt_parameter_gmm_fitted_weight reports the ordinary df-1 statistic") {
+  auto samp = fixture_samp_3();
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto start = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  REQUIRE(k_x2 >= 0);
+  const double target = 0.95 * start.theta(k_x2);
+
+  auto lrt = magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
+      pt, rep, samp, start, k_x2, target, {},
+      magmaan::estimate::Bounds{}, magmaan::estimate::Backend::NloptSlsqp,
+      opts);
+  REQUIRE_MESSAGE(lrt.has_value(), "fitted-weight parameter GMM profile LRT failed: "
+      << (lrt.has_value() ? std::string{} : lrt.error().detail));
+
+  CHECK(lrt->constrained_value == doctest::Approx(target).epsilon(1e-7));
+  CHECK(std::abs(lrt->constraint_residual) < 1e-7);
+  CHECK(lrt->T == doctest::Approx(
+      2.0 * static_cast<double>(samp.n_obs[0]) *
+      (lrt->fmin_constrained - lrt->fmin_unrestricted)));
+  CHECK(lrt->p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(lrt->T, 1)));
+  CHECK(lrt->df == 1);
+}
+
+TEST_CASE("frontier profile_lrt_ci_parameter_gmm inverts the df-1 cutoff") {
+  Eigen::Vector4d lam(1.0, 0.82, 0.74, 0.68);
+  Eigen::MatrixXd S = lam * lam.transpose();
+  S.diagonal().array() += 0.45;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {1500};
+
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3 + x4");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto est = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  REQUIRE(k_x2 >= 0);
+
+  magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
+  ci_opts.target_tol = 1e-4;
+  ci_opts.statistic_tol = 1e-4;
+  ci_opts.initial_step = 0.05 * std::abs(est.theta(k_x2));
+  ci_opts.max_iter = 40;
+
+  auto ci = magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
+      pt, rep, samp, est, {}, k_x2, ci_opts, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(ci.has_value(), "parameter GMM profile CI failed: "
+      << (ci.has_value() ? std::string{} : ci.error().detail));
+
+  CHECK(ci->lower < est.theta(k_x2));
+  CHECK(ci->upper > est.theta(k_x2));
+  CHECK_FALSE(ci->lower_at_bound);
+  CHECK_FALSE(ci->upper_at_bound);
+  CHECK(ci->lower_profile.T == doctest::Approx(ci->cutoff).epsilon(1e-3));
+  CHECK(ci->upper_profile.T == doctest::Approx(ci->cutoff).epsilon(1e-3));
+  CHECK(magmaan::inference::chi2_pvalue(ci->cutoff, 1) ==
+        doctest::Approx(1.0 - ci->confidence_level).epsilon(1e-6));
+}
+
 TEST_CASE("fit_gmm: linear and nonlinear equality constraints accept NLopt SLSQP") {
   Eigen::Vector4d lam(1.0, 0.49, 0.7, 1.19);
   Eigen::MatrixXd S = lam * lam.transpose();

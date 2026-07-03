@@ -2037,6 +2037,80 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   return fit_result(ctx, est, &starts, "ML");
 }
 
+namespace {
+
+double nan_if_not_finite(double x) {
+  return std::isfinite(x) ? x : std::numeric_limits<double>::quiet_NaN();
+}
+
+magmaan::estimate::frontier::ScalarProfileCiOptions profile_ci_options_from_args(
+    double level, double lower, double upper, double initial_step,
+    double root_tol, double statistic_tol) {
+  magmaan::estimate::frontier::ScalarProfileCiOptions out;
+  out.confidence_level = level;
+  out.lower_bound = nan_if_not_finite(lower);
+  out.upper_bound = nan_if_not_finite(upper);
+  out.initial_step = nan_if_not_finite(initial_step);
+  out.target_tol = root_tol;
+  out.statistic_tol = statistic_tol;
+  return out;
+}
+
+magmaan::estimate::frontier::GmmFittedWeightOptions
+fitted_weight_options_from_args(int max_outer, double theta_tol,
+                                double fmin_tol) {
+  magmaan::estimate::frontier::GmmFittedWeightOptions out;
+  out.max_outer = max_outer;
+  out.theta_tol = theta_tol;
+  out.fmin_tol = fmin_tol;
+  return out;
+}
+
+Rcpp::List scalar_profile_lrt_to_list(
+    Ctx& ctx,
+    const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
+    int parameter,
+    const char* estimator) {
+  return Rcpp::List::create(
+      Rcpp::_["parameter"] = parameter,
+      Rcpp::_["target"] = r.target,
+      Rcpp::_["unrestricted_value"] = r.unrestricted_value,
+      Rcpp::_["constrained_value"] = r.constrained_value,
+      Rcpp::_["constraint_residual"] = r.constraint_residual,
+      Rcpp::_["fmin_unrestricted"] = r.fmin_unrestricted,
+      Rcpp::_["fmin_constrained"] = r.fmin_constrained,
+      Rcpp::_["T"] = r.T,
+      Rcpp::_["p_value"] = r.p_value,
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["nobs"] = r.n_obs,
+      Rcpp::_["constrained"] = fit_result(ctx, r.constrained, nullptr,
+                                          estimator));
+}
+
+Rcpp::List scalar_profile_ci_to_list(
+    Ctx& ctx,
+    const magmaan::estimate::frontier::ScalarProfileCiResult& r,
+    int parameter,
+    const char* estimator) {
+  return Rcpp::List::create(
+      Rcpp::_["parameter"] = parameter,
+      Rcpp::_["estimate"] = r.estimate,
+      Rcpp::_["lower"] = r.lower,
+      Rcpp::_["upper"] = r.upper,
+      Rcpp::_["confidence_level"] = r.confidence_level,
+      Rcpp::_["cutoff"] = r.cutoff,
+      Rcpp::_["lower_evals"] = r.lower_evals,
+      Rcpp::_["upper_evals"] = r.upper_evals,
+      Rcpp::_["lower_at_bound"] = r.lower_at_bound,
+      Rcpp::_["upper_at_bound"] = r.upper_at_bound,
+      Rcpp::_["lower_profile"] = scalar_profile_lrt_to_list(
+          ctx, r.lower_profile, parameter, estimator),
+      Rcpp::_["upper_profile"] = scalar_profile_lrt_to_list(
+          ctx, r.upper_profile, parameter, estimator));
+}
+
+}  // namespace
+
 // frontier_profile_lrt_parameter_ml() - ordinary df-1 profile-LR test for one
 // complete-data ML free parameter. `parameter` is the 1-based free-parameter
 // ordinal from `fit$partable$free`; the C++ core receives the 0-based theta index.
@@ -2075,20 +2149,7 @@ Rcpp::List frontier_profile_lrt_parameter_ml_impl(
       bounds_from_nullable(bounds), backend, optim_opts_from(control),
       constraint_tol);
   if (!r_or.has_value()) stop_fit(r_or.error());
-  const auto& r = *r_or;
-  return Rcpp::List::create(
-      Rcpp::_["parameter"] = parameter,
-      Rcpp::_["target"] = r.target,
-      Rcpp::_["unrestricted_value"] = r.unrestricted_value,
-      Rcpp::_["constrained_value"] = r.constrained_value,
-      Rcpp::_["constraint_residual"] = r.constraint_residual,
-      Rcpp::_["fmin_unrestricted"] = r.fmin_unrestricted,
-      Rcpp::_["fmin_constrained"] = r.fmin_constrained,
-      Rcpp::_["T"] = r.T,
-      Rcpp::_["p_value"] = r.p_value,
-      Rcpp::_["df"] = r.df,
-      Rcpp::_["nobs"] = r.n_obs,
-      Rcpp::_["constrained"] = fit_result(ctx, r.constrained, nullptr, "ML"));
+  return scalar_profile_lrt_to_list(ctx, *r_or, parameter, "ML");
 }
 
 // frontier_profile_lrt_parameter_gmm() - ordinary df-1 profile statistic for one
@@ -2132,21 +2193,184 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
       bounds_from_nullable(bounds), backend, optim_opts_from(control),
       constraint_tol);
   if (!r_or.has_value()) stop_fit(r_or.error());
-  const auto& r = *r_or;
-  return Rcpp::List::create(
-      Rcpp::_["parameter"] = parameter,
-      Rcpp::_["target"] = r.target,
-      Rcpp::_["unrestricted_value"] = r.unrestricted_value,
-      Rcpp::_["constrained_value"] = r.constrained_value,
-      Rcpp::_["constraint_residual"] = r.constraint_residual,
-      Rcpp::_["fmin_unrestricted"] = r.fmin_unrestricted,
-      Rcpp::_["fmin_constrained"] = r.fmin_constrained,
-      Rcpp::_["T"] = r.T,
-      Rcpp::_["p_value"] = r.p_value,
-      Rcpp::_["df"] = r.df,
-      Rcpp::_["nobs"] = r.n_obs,
-      Rcpp::_["constrained"] =
-          fit_result(ctx, r.constrained, nullptr, estimator.c_str()));
+  return scalar_profile_lrt_to_list(ctx, *r_or, parameter, estimator.c_str());
+}
+
+// frontier_profile_lrt_parameter_gmm_fitted_weight() - fitted-weight
+// moment-quadratic profile statistic. The current fitted-weight policy refreshes
+// W(theta) as the expected-information weight in an outer fixed-point loop.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6,
+    int max_outer = 20,
+    double theta_tol = 1e-7,
+    double fmin_tol = 1e-10) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
+    Rcpp::stop("frontier_profile_lrt_parameter_gmm_fitted_weight() requires a "
+               "continuous ULS/GLS/WLS fit, got estimator '%s'",
+               estimator.c_str());
+  }
+  if (parameter <= 0 ||
+      parameter > static_cast<int>(ctx.pt.n_free())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_gmm_fitted_weight(): parameter "
+               "index %d is outside 1..%d", parameter,
+               static_cast<int>(ctx.pt.n_free()));
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto fitted_opts = fitted_weight_options_from_args(
+      max_outer, theta_tol, fmin_tol);
+  auto r_or =
+      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
+          ctx.pt, ctx.rep, ctx.samp, est,
+          static_cast<Eigen::Index>(parameter - 1), target,
+          fitted_opts, bounds_from_nullable(bounds), backend,
+          optim_opts_from(control), constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_lrt_to_list(ctx, *r_or, parameter,
+                                    "GMM-fitted-weight");
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_ml_impl(
+    Rcpp::List fit,
+    int parameter,
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  if (parameter <= 0 ||
+      parameter > static_cast<int>(ctx.pt.n_free())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml(): parameter index %d is "
+               "outside 1..%d", parameter, static_cast<int>(ctx.pt.n_free()));
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  auto r_or = magmaan::estimate::frontier::profile_lrt_ci_parameter_ml(
+      ctx.pt, ctx.rep, ctx.samp, est,
+      static_cast<Eigen::Index>(parameter - 1), ci_opts,
+      bounds_from_nullable(bounds), backend, optim_opts_from(control),
+      constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list(ctx, *r_or, parameter, "ML");
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
+    Rcpp::List fit,
+    int parameter,
+    SEXP weight = R_NilValue,
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm() requires a continuous "
+               "ULS/GLS/WLS fit, got estimator '%s'", estimator.c_str());
+  }
+  if (parameter <= 0 ||
+      parameter > static_cast<int>(ctx.pt.n_free())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm(): parameter index %d is "
+               "outside 1..%d", parameter, static_cast<int>(ctx.pt.n_free()));
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  magmaan::estimate::gmm::Weight w =
+      continuous_ls_weight(ctx, est, estimator, weight,
+                           "frontier_profile_lrt_ci_parameter_gmm");
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  auto r_or = magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
+      ctx.pt, ctx.rep, ctx.samp, est, std::move(w),
+      static_cast<Eigen::Index>(parameter - 1), ci_opts,
+      bounds_from_nullable(bounds), backend, optim_opts_from(control),
+      constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list(ctx, *r_or, parameter, estimator.c_str());
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(
+    Rcpp::List fit,
+    int parameter,
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6,
+    int max_outer = 20,
+    double theta_tol = 1e-7,
+    double fmin_tol = 1e-10) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm_fitted_weight() requires "
+               "a continuous ULS/GLS/WLS fit, got estimator '%s'",
+               estimator.c_str());
+  }
+  if (parameter <= 0 ||
+      parameter > static_cast<int>(ctx.pt.n_free())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm_fitted_weight(): "
+               "parameter index %d is outside 1..%d", parameter,
+               static_cast<int>(ctx.pt.n_free()));
+  }
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto fitted_opts = fitted_weight_options_from_args(
+      max_outer, theta_tol, fmin_tol);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  auto r_or =
+      magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm_fitted_weight(
+          ctx.pt, ctx.rep, ctx.samp, est,
+          static_cast<Eigen::Index>(parameter - 1), fitted_opts, ci_opts,
+          bounds_from_nullable(bounds), backend, optim_opts_from(control),
+          constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list(ctx, *r_or, parameter,
+                                   "GMM-fitted-weight");
 }
 
 // fit_twolevel() — two-level (multilevel) normal-theory ML over clustered raw

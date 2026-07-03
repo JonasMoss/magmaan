@@ -794,6 +794,135 @@ fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
 
 namespace {
 
+double inf_norm(const Eigen::VectorXd& x) {
+  if (x.size() == 0) return 0.0;
+  return x.cwiseAbs().maxCoeff();
+}
+
+fit_expected<void>
+validate_fitted_weight_options(const GmmFittedWeightOptions& opts,
+                               const char* who) {
+  if (opts.max_outer <= 0) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": max_outer must be positive"));
+  }
+  if (!(opts.theta_tol > 0.0) || !std::isfinite(opts.theta_tol)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": theta_tol must be positive and finite"));
+  }
+  if (!(opts.fmin_tol > 0.0) || !std::isfinite(opts.fmin_tol)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": fmin_tol must be positive and finite"));
+  }
+  return {};
+}
+
+fit_expected<gmm::Weight>
+build_fitted_weight(const model::ModelEvaluator& ev, const SampleStats& samp,
+                    const Eigen::VectorXd& theta,
+                    GmmFittedWeightKind kind, const char* who) {
+  switch (kind) {
+    case GmmFittedWeightKind::ExpectedInformation: {
+      auto w = gmm::expected_information_weight(ev, samp, theta);
+      if (!w.has_value()) {
+        return std::unexpected(fit_err(w.error().kind,
+            std::string(who) + ": expected-information weight failed: " +
+                w.error().detail));
+      }
+      return *w;
+    }
+  }
+  return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+      std::string(who) + ": unknown fitted-weight kind"));
+}
+
+fit_expected<Estimates>
+fit_gmm_fitted_weight_impl(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const SampleStats& samp,
+                           const Eigen::VectorXd& x0,
+                           const ExtraNonlinearEqConstraints& extra,
+                           GmmFittedWeightOptions fitted_opts,
+                           Bounds bounds, Backend backend,
+                           OptimOptions opts, const char* who) {
+  if (auto ok = validate_fitted_weight_options(fitted_opts, who);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto pre = prelude(pt, rep, samp, x0, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+
+  Eigen::VectorXd theta = x0;
+  Estimates last;
+  bool have_last = false;
+  bool converged = false;
+  double prev_fmin = std::numeric_limits<double>::infinity();
+  int total_f_evals = 0;
+  int total_g_evals = 0;
+  int outer_iter = 0;
+
+  for (int k = 0; k < fitted_opts.max_outer; ++k) {
+    auto w = build_fitted_weight(pre->ev, samp, theta, fitted_opts.kind, who);
+    if (!w.has_value()) return std::unexpected(w.error());
+
+    auto prob_or = gmm::residuals(pre->ev, samp, theta, *w);
+    if (!prob_or.has_value()) return std::unexpected(prob_or.error());
+    const optim::ScalarProblem prob = optim::scalarize(*prob_or);
+
+    auto est = compose_scalar_ml_extra(prob, pre->con, pre->nl, extra,
+                                       theta, bounds, backend, opts, who);
+    if (!est.has_value()) return std::unexpected(est.error());
+
+    Estimates candidate = std::move(*est);
+    total_f_evals += candidate.f_evals;
+    total_g_evals += candidate.g_evals;
+    outer_iter = k + 1;
+
+    const double step = inf_norm(candidate.theta - theta);
+    const double theta_scale = std::max(1.0, inf_norm(theta));
+    const double f_change = std::abs(candidate.fmin - prev_fmin);
+    const double f_scale =
+        std::max({1.0, std::abs(candidate.fmin), std::abs(prev_fmin)});
+
+    theta = candidate.theta;
+    last = std::move(candidate);
+    have_last = true;
+
+    if (step <= fitted_opts.theta_tol * theta_scale &&
+        (k == 0 || f_change <= fitted_opts.fmin_tol * f_scale)) {
+      converged = true;
+      break;
+    }
+    prev_fmin = last.fmin;
+  }
+
+  if (!have_last) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": fitted-weight loop did not run"));
+  }
+
+  auto w_final =
+      build_fitted_weight(pre->ev, samp, last.theta, fitted_opts.kind, who);
+  if (!w_final.has_value()) return std::unexpected(w_final.error());
+  auto prob_final_or = gmm::residuals(pre->ev, samp, last.theta, *w_final);
+  if (!prob_final_or.has_value()) return std::unexpected(prob_final_or.error());
+  const optim::ScalarProblem prob_final = optim::scalarize(*prob_final_or);
+  Eigen::VectorXd grad(last.theta.size());
+  last.fmin = prob_final.f(last.theta, grad);
+  ++total_f_evals;
+  ++total_g_evals;
+
+  last.iterations = outer_iter;
+  last.f_evals = total_f_evals;
+  last.g_evals = total_g_evals;
+  if (!converged && last.optimizer_status == optim::OptimStatus::Converged) {
+    last.optimizer_status = optim::OptimStatus::BudgetExhausted;
+  }
+  attach_diagnostics(last, *pre, bounds);
+  return last;
+}
+
 Eigen::VectorXd
 fd_gradient(const std::function<double(const Eigen::VectorXd&)>& value,
             const Eigen::VectorXd& theta) {
@@ -837,6 +966,29 @@ scalar_gradient(const ScalarFunctional& functional,
 }
 
 }  // namespace
+
+fit_expected<Estimates>
+fit_gmm_fitted_weight(spec::LatentStructure pt, const model::MatrixRep& rep,
+                      const SampleStats& samp, const Eigen::VectorXd& x0,
+                      GmmFittedWeightOptions fitted_opts,
+                      Bounds bounds, Backend backend, OptimOptions opts) {
+  return fit_gmm_fitted_weight_impl(
+      std::move(pt), rep, samp, x0, ExtraNonlinearEqConstraints{},
+      fitted_opts, std::move(bounds), backend, opts,
+      "fit_gmm_fitted_weight");
+}
+
+fit_expected<Estimates>
+fit_gmm_fitted_weight_constrained(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Eigen::VectorXd& x0,
+    ExtraNonlinearEqConstraints extra,
+    GmmFittedWeightOptions fitted_opts,
+    Bounds bounds, Backend backend, OptimOptions opts) {
+  return fit_gmm_fitted_weight_impl(
+      std::move(pt), rep, samp, x0, extra, fitted_opts, std::move(bounds),
+      backend, opts, "fit_gmm_fitted_weight_constrained");
+}
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_scalar_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -1081,6 +1233,494 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                                 std::move(weight), std::move(functional),
                                 target, std::move(bounds), backend, opts,
                                 constraint_tol);
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp,
+    const Estimates& unrestricted_start,
+    ScalarFunctional functional, double target,
+    GmmFittedWeightOptions fitted_opts,
+    Bounds bounds, Backend backend, OptimOptions opts,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_scalar_gmm_fitted_weight";
+  if (!functional.value) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional needs a value callback"));
+  }
+  if (!std::isfinite(target)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": target must be finite"));
+  }
+  if (!(constraint_tol > 0.0) || !std::isfinite(constraint_tol)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constraint_tol must be positive and finite"));
+  }
+  if (unrestricted_start.theta.size() !=
+      static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": unrestricted theta size (" +
+            std::to_string(unrestricted_start.theta.size()) + ") != n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
+
+  auto unrestricted = fit_gmm_fitted_weight(
+      pt, rep, samp, unrestricted_start.theta, fitted_opts, bounds,
+      backend, opts);
+  if (!unrestricted.has_value()) return std::unexpected(unrestricted.error());
+
+  const double g_un = functional.value(unrestricted->theta);
+  if (!std::isfinite(g_un)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": scalar functional is not finite at theta_hat"));
+  }
+  auto grad0 = scalar_gradient(functional, unrestricted->theta,
+                               unrestricted->theta.size(), who);
+  if (!grad0.has_value()) return std::unexpected(grad0.error());
+
+  ExtraNonlinearEqConstraints extra;
+  extra.n_constraint = 1;
+  extra.h = [functional, target](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd h(1);
+    h(0) = functional.value(theta) - target;
+    return h;
+  };
+  extra.jacobian = [functional](const Eigen::VectorXd& theta) {
+    Eigen::MatrixXd J(1, theta.size());
+    auto grad = scalar_gradient(functional, theta, theta.size(), who);
+    if (!grad.has_value()) {
+      J.setConstant(std::numeric_limits<double>::quiet_NaN());
+    } else {
+      J.row(0) = grad->transpose();
+    }
+    return J;
+  };
+
+  auto constrained = fit_gmm_fitted_weight_constrained(
+      std::move(pt), rep, samp, unrestricted->theta, std::move(extra),
+      fitted_opts, std::move(bounds), backend, opts);
+  if (!constrained.has_value()) return std::unexpected(constrained.error());
+
+  const double g_con = functional.value(constrained->theta);
+  const double resid = g_con - target;
+  if (!std::isfinite(g_con) || std::abs(resid) > constraint_tol) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained fit did not satisfy g(theta)=target; "
+            "residual=" + std::to_string(resid)));
+  }
+  auto n_or = sample_n_total(samp, who);
+  if (!n_or.has_value()) return std::unexpected(n_or.error());
+  const double diff = constrained->fmin - unrestricted->fmin;
+  const double raw_T = 2.0 * (*n_or) * diff;
+  const double stat_tol =
+      1e-10 * std::max({1.0, std::abs(constrained->fmin),
+                        std::abs(unrestricted->fmin)}) * 2.0 * (*n_or);
+  if (raw_T < -stat_tol) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constrained fit improved the unrestricted "
+            "objective by " + std::to_string(-raw_T)));
+  }
+  const double T = std::max(0.0, raw_T);
+
+  ScalarProfileLrtResult out;
+  out.constrained = std::move(*constrained);
+  out.unrestricted_value = g_un;
+  out.constrained_value = g_con;
+  out.target = target;
+  out.constraint_residual = resid;
+  out.fmin_unrestricted = unrestricted->fmin;
+  out.fmin_constrained = out.constrained.fmin;
+  out.T = T;
+  out.p_value = inference::chi2_pvalue(T, 1);
+  out.n_obs = *n_or;
+  out.df = 1;
+  return out;
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp,
+    const Estimates& unrestricted_start,
+    Eigen::Index parameter, double target,
+    GmmFittedWeightOptions fitted_opts,
+    Bounds bounds, Backend backend, OptimOptions opts,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_parameter_gmm_fitted_weight";
+  if (parameter < 0 ||
+      parameter >= static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  ScalarFunctional functional;
+  functional.value = [parameter](const Eigen::VectorXd& theta) {
+    return theta(parameter);
+  };
+  functional.gradient = [parameter](const Eigen::VectorXd& theta) {
+    Eigen::VectorXd grad = Eigen::VectorXd::Zero(theta.size());
+    grad(parameter) = 1.0;
+    return grad;
+  };
+  return profile_lrt_scalar_gmm_fitted_weight(
+      std::move(pt), rep, samp, unrestricted_start, std::move(functional),
+      target, fitted_opts, std::move(bounds), backend, opts, constraint_tol);
+}
+
+}  // namespace frontier
+
+namespace frontier {
+
+namespace {
+
+double standard_normal_quantile(double p) noexcept {
+  if (!(p > 0.0 && p < 1.0) || !std::isfinite(p)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  constexpr double a1 = -3.969683028665376e+01;
+  constexpr double a2 =  2.209460984245205e+02;
+  constexpr double a3 = -2.759285104469687e+02;
+  constexpr double a4 =  1.383577518672690e+02;
+  constexpr double a5 = -3.066479806614716e+01;
+  constexpr double a6 =  2.506628277459239e+00;
+
+  constexpr double b1 = -5.447609879822406e+01;
+  constexpr double b2 =  1.615858368580409e+02;
+  constexpr double b3 = -1.556989798598866e+02;
+  constexpr double b4 =  6.680131188771972e+01;
+  constexpr double b5 = -1.328068155288572e+01;
+
+  constexpr double c1 = -7.784894002430293e-03;
+  constexpr double c2 = -3.223964580411365e-01;
+  constexpr double c3 = -2.400758277161838e+00;
+  constexpr double c4 = -2.549732539343734e+00;
+  constexpr double c5 =  4.374664141464968e+00;
+  constexpr double c6 =  2.938163982698783e+00;
+
+  constexpr double d1 =  7.784695709041462e-03;
+  constexpr double d2 =  3.224671290700398e-01;
+  constexpr double d3 =  2.445134137142996e+00;
+  constexpr double d4 =  3.754408661907416e+00;
+
+  constexpr double plow = 0.02425;
+  constexpr double phigh = 1.0 - plow;
+
+  if (p < plow) {
+    const double q = std::sqrt(-2.0 * std::log(p));
+    return (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+           ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  if (p > phigh) {
+    const double q = std::sqrt(-2.0 * std::log(1.0 - p));
+    return -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  const double q = p - 0.5;
+  const double r = q * q;
+  return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+         (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
+}
+
+fit_expected<double>
+profile_ci_cutoff(const ScalarProfileCiOptions& options, const char* who) {
+  if (!(options.confidence_level > 0.0 && options.confidence_level < 1.0) ||
+      !std::isfinite(options.confidence_level)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": confidence_level must be in (0, 1)"));
+  }
+  if (std::isfinite(options.cutoff)) {
+    if (!(options.cutoff > 0.0)) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": cutoff must be positive"));
+    }
+    return options.cutoff;
+  }
+  const double z = standard_normal_quantile(
+      0.5 * (1.0 + options.confidence_level));
+  if (!std::isfinite(z)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": failed to compute chi-square cutoff"));
+  }
+  return z * z;
+}
+
+fit_expected<void>
+validate_ci_options(const ScalarProfileCiOptions& options,
+                    double estimate, const char* who) {
+  if (!(options.target_tol > 0.0) || !std::isfinite(options.target_tol)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": target_tol must be positive and finite"));
+  }
+  if (!(options.statistic_tol > 0.0) ||
+      !std::isfinite(options.statistic_tol)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": statistic_tol must be positive and finite"));
+  }
+  if (options.max_iter <= 0 || options.max_expand <= 0) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": max_iter and max_expand must be positive"));
+  }
+  if (std::isfinite(options.initial_step) &&
+      !(options.initial_step > 0.0)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": initial_step must be positive"));
+  }
+  if (std::isfinite(options.lower_bound) &&
+      !(options.lower_bound < estimate)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": lower_bound must be below the estimate"));
+  }
+  if (std::isfinite(options.upper_bound) &&
+      !(options.upper_bound > estimate)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": upper_bound must be above the estimate"));
+  }
+  return {};
+}
+
+struct ProfileRootPoint {
+  ScalarProfileLrtResult profile;
+  double signed_stat = 0.0;
+};
+
+struct ProfileRootResult {
+  ScalarProfileLrtResult profile;
+  double root = 0.0;
+  int evals = 0;
+  bool at_bound = false;
+};
+
+using ProfileEvaluator =
+    std::function<fit_expected<ScalarProfileLrtResult>(double)>;
+
+fit_expected<ProfileRootPoint>
+eval_profile_point(const ProfileEvaluator& eval, double target,
+                   double cutoff, const char* who) {
+  auto r = eval(target);
+  if (!r.has_value()) return std::unexpected(r.error());
+  if (!std::isfinite(r->T)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": profile statistic is not finite at target " +
+            std::to_string(target)));
+  }
+  ProfileRootPoint out;
+  out.profile = std::move(*r);
+  out.signed_stat = out.profile.T - cutoff;
+  return out;
+}
+
+fit_expected<ProfileRootResult>
+solve_profile_root_side(const ProfileEvaluator& eval,
+                        double estimate,
+                        const ScalarProfileCiOptions& options,
+                        double cutoff,
+                        bool lower_side,
+                        const char* who) {
+  int evals = 0;
+  const double sign = lower_side ? -1.0 : 1.0;
+  const double finite_bound =
+      lower_side ? options.lower_bound : options.upper_bound;
+  const bool has_bound = std::isfinite(finite_bound);
+  double outside_x = finite_bound;
+  ProfileRootPoint outside;
+
+  if (has_bound) {
+    auto p = eval_profile_point(eval, outside_x, cutoff, who);
+    ++evals;
+    if (!p.has_value()) return std::unexpected(p.error());
+    if (p->signed_stat < 0.0) {
+      return ProfileRootResult{std::move(p->profile), outside_x, evals, true};
+    }
+    outside = std::move(*p);
+  } else {
+    double step = std::isfinite(options.initial_step)
+                    ? options.initial_step
+                    : 0.1 * std::max(1.0, std::abs(estimate));
+    bool bracketed = false;
+    for (int k = 0; k < options.max_expand; ++k) {
+      outside_x = estimate + sign * step;
+      auto p = eval_profile_point(eval, outside_x, cutoff, who);
+      ++evals;
+      if (!p.has_value()) return std::unexpected(p.error());
+      if (p->signed_stat >= 0.0) {
+        outside = std::move(*p);
+        bracketed = true;
+        break;
+      }
+      step *= 2.0;
+    }
+    if (!bracketed) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          std::string(who) + (lower_side
+              ? ": failed to bracket lower profile-CI root"
+              : ": failed to bracket upper profile-CI root")));
+    }
+  }
+
+  double inside_x = estimate;
+  ProfileRootPoint best = std::move(outside);
+  double best_x = outside_x;
+  for (int k = 0; k < options.max_iter; ++k) {
+    const double mid = 0.5 * (inside_x + outside_x);
+    auto p = eval_profile_point(eval, mid, cutoff, who);
+    ++evals;
+    if (!p.has_value()) return std::unexpected(p.error());
+    const double signed_stat = p->signed_stat;
+    if (std::abs(p->signed_stat) < std::abs(best.signed_stat)) {
+      best = std::move(*p);
+      best_x = mid;
+    }
+    if (signed_stat >= 0.0) {
+      outside_x = mid;
+    } else {
+      inside_x = mid;
+    }
+
+    const double width = std::abs(outside_x - inside_x);
+    const double scale = std::max(1.0, std::abs(mid));
+    if (std::abs(best.signed_stat) <= options.statistic_tol ||
+        width <= options.target_tol * scale) {
+      return ProfileRootResult{std::move(best.profile), best_x, evals, false};
+    }
+  }
+
+  return ProfileRootResult{std::move(best.profile), best_x, evals, false};
+}
+
+fit_expected<ScalarProfileCiResult>
+profile_ci_from_evaluator(double estimate,
+                          const ScalarProfileCiOptions& options,
+                          const ProfileEvaluator& eval,
+                          const char* who) {
+  if (!std::isfinite(estimate)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": estimate is not finite"));
+  }
+  if (auto ok = validate_ci_options(options, estimate, who); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto cutoff = profile_ci_cutoff(options, who);
+  if (!cutoff.has_value()) return std::unexpected(cutoff.error());
+
+  auto lower = solve_profile_root_side(eval, estimate, options, *cutoff,
+                                       true, who);
+  if (!lower.has_value()) return std::unexpected(lower.error());
+  auto upper = solve_profile_root_side(eval, estimate, options, *cutoff,
+                                       false, who);
+  if (!upper.has_value()) return std::unexpected(upper.error());
+
+  ScalarProfileCiResult out;
+  out.lower_profile = std::move(lower->profile);
+  out.upper_profile = std::move(upper->profile);
+  out.estimate = estimate;
+  out.lower = lower->root;
+  out.upper = upper->root;
+  out.confidence_level = options.confidence_level;
+  out.cutoff = *cutoff;
+  out.lower_evals = lower->evals;
+  out.upper_evals = upper->evals;
+  out.lower_at_bound = lower->at_bound;
+  out.upper_at_bound = upper->at_bound;
+  return out;
+}
+
+}  // namespace
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const Estimates& unrestricted,
+                            Eigen::Index parameter,
+                            ScalarProfileCiOptions ci_options,
+                            Bounds bounds, Backend backend,
+                            OptimOptions opts,
+                            double constraint_tol) {
+  constexpr const char* who = "profile_lrt_ci_parameter_ml";
+  if (parameter < 0 ||
+      parameter >= static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  const double estimate = unrestricted.theta(parameter);
+  ProfileEvaluator eval =
+      [pt, &rep, &samp, unrestricted, parameter, bounds, backend, opts,
+       constraint_tol](double target) mutable {
+        spec::LatentStructure pt_eval = pt;
+        Bounds bounds_eval = bounds;
+        return profile_lrt_parameter_ml(
+            std::move(pt_eval), rep, samp, unrestricted, parameter, target,
+            std::move(bounds_eval), backend, opts, constraint_tol);
+      };
+  return profile_ci_from_evaluator(estimate, ci_options, eval, who);
+}
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const SampleStats& samp,
+                             const Estimates& unrestricted,
+                             gmm::Weight weight,
+                             Eigen::Index parameter,
+                             ScalarProfileCiOptions ci_options,
+                             Bounds bounds, Backend backend,
+                             OptimOptions opts,
+                             double constraint_tol) {
+  constexpr const char* who = "profile_lrt_ci_parameter_gmm";
+  if (parameter < 0 ||
+      parameter >= static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  const double estimate = unrestricted.theta(parameter);
+  ProfileEvaluator eval =
+      [pt, &rep, &samp, unrestricted, weight, parameter, bounds, backend, opts,
+       constraint_tol](double target) mutable {
+        spec::LatentStructure pt_eval = pt;
+        gmm::Weight weight_eval = weight;
+        Bounds bounds_eval = bounds;
+        return profile_lrt_parameter_gmm(
+            std::move(pt_eval), rep, samp, unrestricted, std::move(weight_eval),
+            parameter, target, std::move(bounds_eval), backend, opts,
+            constraint_tol);
+      };
+  return profile_ci_from_evaluator(estimate, ci_options, eval, who);
+}
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp,
+    const Estimates& unrestricted_start,
+    Eigen::Index parameter,
+    GmmFittedWeightOptions fitted_opts,
+    ScalarProfileCiOptions ci_options,
+    Bounds bounds, Backend backend, OptimOptions opts,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_ci_parameter_gmm_fitted_weight";
+  if (parameter < 0 ||
+      parameter >= static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  auto unrestricted = fit_gmm_fitted_weight(
+      pt, rep, samp, unrestricted_start.theta, fitted_opts, bounds,
+      backend, opts);
+  if (!unrestricted.has_value()) return std::unexpected(unrestricted.error());
+  const double estimate = unrestricted->theta(parameter);
+
+  ProfileEvaluator eval =
+      [pt, &rep, &samp, unrestricted = *unrestricted, parameter, fitted_opts,
+       bounds, backend, opts, constraint_tol](double target) mutable {
+        spec::LatentStructure pt_eval = pt;
+        Bounds bounds_eval = bounds;
+        return profile_lrt_parameter_gmm_fitted_weight(
+            std::move(pt_eval), rep, samp, unrestricted, parameter, target,
+            fitted_opts, std::move(bounds_eval), backend, opts,
+            constraint_tol);
+      };
+  return profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
 
 }  // namespace frontier
