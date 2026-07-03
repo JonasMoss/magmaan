@@ -17,6 +17,29 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
+- **Satorra-2000 nested test: regularize the saturated-H1 reference under
+  missing data (frontier).** The scaled and mixture nested difference tests
+  (`nestedTest(method = "satorra.2000")`, FIML and ML2S) collapse to
+  conservative (Type-I toward 0) under missing data at moderate model size. The
+  saturated-H1 reference (the EM covariance and the moment acov Gamma) goes
+  near-singular under missing data at p >= 16, N ~ 200 (cond(acov) toward Inf),
+  so the difference spectrum (eigenvalues of `U*Gamma`) develops one giant plus
+  a cascade of numerical-garbage eigenvalues. The Satorra-Bentler scale
+  `c = trace(U*Gamma)/df` then over-scales by 30-70x (arbitrarily large once the
+  reference is singular) and crushes the statistic. This is not a lavaan-parity
+  bug (magmaan matches lavaan per dataset); it is a conditioning defect both
+  share. The statistic `T` itself is fine: a constant oracle scale
+  `c = mean(T)/df` recalibrates every cell to nominal. Fix: add optional
+  regularization of the saturated-H1 reference before forming the difference
+  spectrum (ridge `Gamma + lambda*I` or a truncated pseudo-inverse that floors or
+  drops the near-zero directions), exposed as an opt-in `nestedTest` option
+  (frontier, since it changes results), not the default. A post-hoc spectrum
+  trim recovers small p but not the singular large-p regime, so regularize the
+  source. Same ill-conditioning as the deferred ML2S stage-2 weight, so a shared
+  reference-regularization utility could serve both. Evidence, per-regime
+  numbers, and a calibration gate are in the fiml-fmg invariance experiment
+  (private paper).
+
 - **M — automatic robust fit-measure dispatch.** The lavaan-style robust/scaled
   fit-measure formulas are available for the core global-index family
   (`chisq.scaled`, scaled baseline, CFI/TLI, RMSEA CI/p-values) once the user
