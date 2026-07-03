@@ -73,6 +73,14 @@ frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weigh
     .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol)
 }
 
+frontier_profile_lrt_ordinal_polychoric_omega_impl <- function(fit, block, omega0, target = "total", weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
+    .Call(`_magmaan_frontier_profile_lrt_ordinal_polychoric_omega_impl`, fit, block, omega0, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol)
+}
+
+frontier_profile_lrt_ci_ordinal_polychoric_omega_impl <- function(fit, block, target = "total", weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6) {
+    .Call(`_magmaan_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl`, fit, block, target, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol)
+}
+
 fit_twolevel_impl <- function(partable, data, cluster_id, group_id = NULL, optimizer = NULL, control = NULL, bounds = NULL, bounds_preset = NULL) {
     .Call(`_magmaan_fit_twolevel_impl`, partable, data, cluster_id, group_id, optimizer, control, bounds, bounds_preset)
 }

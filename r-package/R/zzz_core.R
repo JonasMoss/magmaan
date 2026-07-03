@@ -114,6 +114,8 @@ frontier_profile_lrt_ci_parameter_ml <- frontier_profile_lrt_ci_parameter_ml_imp
 frontier_profile_lrt_ci_parameter_gmm <- frontier_profile_lrt_ci_parameter_gmm_impl
 frontier_profile_lrt_ci_parameter_gmm_fitted_weight <- frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl
 frontier_profile_lrt_ci_parameter_ordinal <- frontier_profile_lrt_ci_parameter_ordinal_impl
+frontier_profile_lrt_ordinal_polychoric_omega <- frontier_profile_lrt_ordinal_polychoric_omega_impl
+frontier_profile_lrt_ci_ordinal_polychoric_omega <- frontier_profile_lrt_ci_ordinal_polychoric_omega_impl
 
 ordinal_polychoric_gamma_for_omega <- function(ordinal_stats, group = 1L) {
   if (!is.null(ordinal_stats$ordinal_stats)) {
@@ -545,6 +547,8 @@ magmaan_core <- local({
       "frontier_profile_lrt_ci_parameter_gmm",
       "frontier_profile_lrt_ci_parameter_gmm_fitted_weight",
       "frontier_profile_lrt_ci_parameter_ordinal",
+      "frontier_profile_lrt_ordinal_polychoric_omega",
+      "frontier_profile_lrt_ci_ordinal_polychoric_omega",
       "frontier_pairwise_ordinal_composite_nested"
     ),
     helpers = c(
@@ -649,6 +653,8 @@ magmaan_core <- local({
       "frontier_profile_lrt_ci_parameter_gmm_impl",
       "frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl",
       "frontier_profile_lrt_ci_parameter_ordinal_impl",
+      "frontier_profile_lrt_ordinal_polychoric_omega_impl",
+      "frontier_profile_lrt_ci_ordinal_polychoric_omega_impl",
       "frontier_pairwise_ordinal_composite_nested_impl",
       "fcsem_standard_errors_impl",
       "fcsem_fit_measures_impl",

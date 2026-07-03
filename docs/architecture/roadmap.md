@@ -105,9 +105,13 @@ golden `parTable()` fixtures.
   R exposes the parameter helper as
   `frontier_profile_lrt_parameter_ordinal()`, and
   `profile_lrt_ci_parameter_ordinal()` / the matching R helper invert that
-  ordinary df-1 statistic by bisection. Robust scaling, Bartlett / small-sample
-  correction, functional R callbacks, and ordinal omega/functionals remain
-  research layers above this seed surface.
+  ordinary df-1 statistic by bisection. The first no-integration ordinal
+  functional slice, `profile_lrt_ordinal_polychoric_omega()` /
+  `profile_lrt_ci_ordinal_polychoric_omega()` and the matching R helpers,
+  profiles model-implied latent-response/polychoric omega through the same
+  ordinary df-1 fixed-weight path. Robust scaling, Bartlett / small-sample
+  correction, observed-score / Green-Yang-like ordinal omega targets, and
+  functional R callbacks remain research layers above this seed surface.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
   identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and

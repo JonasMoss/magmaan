@@ -9562,6 +9562,141 @@ ordinal_profile_ci_from_evaluator(
   return out;
 }
 
+fit_expected<Eigen::MatrixXd>
+ordinal_polychoric_model_correlation(
+    const ThresholdLayout& layout,
+    const model::Evaluation& eval,
+    OrdinalParameterization parameterization,
+    const char* who) {
+  if (eval.moments.sigma.empty()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": fitted model has no implied covariance block"));
+  }
+  constexpr std::size_t b = 0;
+  const Eigen::MatrixXd& Sig = eval.moments.sigma[b];
+  const Eigen::Index p = Sig.rows();
+
+  const bool theta_param = parameterization == OrdinalParameterization::Theta;
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  if (!theta_param && block_released) {
+    std::vector<std::int32_t> scale_free(static_cast<std::size_t>(p), 0);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
+        scale_free[static_cast<std::size_t>(i)] =
+            layout.scale_free[b][static_cast<std::size_t>(i)];
+      }
+    }
+    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        R(i, j) = mixed_assoc_moment(
+            Sig, scale_free, i, j, OrdinalParameterization::Theta);
+        R(j, i) = R(i, j);
+      }
+    }
+    return R;
+  }
+
+  auto R_or = ordinal_catml_correlation_matrix(
+      Sig, parameterization,
+      std::string(who) + " implied latent-response covariance");
+  if (!R_or.has_value()) return std::unexpected(post_to_fit(R_or.error()));
+  return std::move(*R_or);
+}
+
+fit_expected<double>
+ordinal_polychoric_omega_value(
+    const ThresholdLayout& layout,
+    const model::ModelEvaluator& ev,
+    const Eigen::VectorXd& theta,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget omega_target,
+    OrdinalParameterization parameterization,
+    const char* who) {
+  namespace rel = measures::frontier::reliability;
+  auto eval = ev.evaluate(theta, false, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": fitted evaluation failed: " +
+            eval.error().detail));
+  }
+  auto R_or = ordinal_polychoric_model_correlation(
+      layout, *eval, parameterization, who);
+  if (!R_or.has_value()) return std::unexpected(R_or.error());
+  auto omega_or = rel::omega_multidim(omega_target, *R_or, omega_spec);
+  if (!omega_or.has_value()) return std::unexpected(post_to_fit(omega_or.error()));
+  return *omega_or;
+}
+
+struct OrdinalPolychoricOmegaFunctional {
+  frontier::ScalarFunctional functional;
+  double unrestricted_value = 0.0;
+};
+
+struct OrdinalPolychoricOmegaState {
+  ThresholdLayout layout;
+  model::ModelEvaluator ev;
+  measures::frontier::reliability::OmegaSpec omega_spec;
+  measures::frontier::reliability::OmegaTarget omega_target =
+      measures::frontier::reliability::OmegaTarget::Total;
+  OrdinalParameterization parameterization = OrdinalParameterization::Delta;
+  const char* who = "";
+};
+
+fit_expected<OrdinalPolychoricOmegaFunctional>
+make_ordinal_polychoric_omega_functional(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget omega_target,
+    OrdinalParameterization parameterization,
+    const char* who) {
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": only single-group ordinal fits are supported"));
+  }
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  if (unrestricted.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": unrestricted theta size does not match "
+            "prepared ordinal partable"));
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+
+  auto state = std::make_shared<OrdinalPolychoricOmegaState>(
+      OrdinalPolychoricOmegaState{
+          std::move(*layout_or), std::move(*ev_or), omega_spec, omega_target,
+          parameterization, who});
+  auto value = ordinal_polychoric_omega_value(
+      state->layout, state->ev, unrestricted.theta, state->omega_spec,
+      state->omega_target, state->parameterization, who);
+  if (!value.has_value()) return std::unexpected(value.error());
+
+  frontier::ScalarFunctional functional;
+  functional.value = [state](const Eigen::VectorXd& theta) {
+    auto v = ordinal_polychoric_omega_value(
+        state->layout, state->ev, theta, state->omega_spec,
+        state->omega_target, state->parameterization, state->who);
+    return v.has_value() ? *v : std::numeric_limits<double>::quiet_NaN();
+  };
+  return OrdinalPolychoricOmegaFunctional{std::move(functional), *value};
+}
+
 }  // namespace
 
 namespace frontier {
@@ -9766,6 +9901,69 @@ profile_lrt_ci_parameter_ordinal(
             std::move(pt_eval), rep, stats, unrestricted, parameter, target,
             std::move(bounds_eval), weights, backend, opts, parameterization,
             constraint_tol);
+      };
+  return ordinal_profile_ci_from_evaluator(estimate, ci_options, eval, who);
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_ordinal_polychoric_omega(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget omega_target,
+    double target,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    Backend backend,
+    OptimOptions opts,
+    OrdinalParameterization parameterization,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_ordinal_polychoric_omega";
+  auto fn = make_ordinal_polychoric_omega_functional(
+      pt, rep, stats, unrestricted, omega_spec, omega_target,
+      parameterization, who);
+  if (!fn.has_value()) return std::unexpected(fn.error());
+  return profile_lrt_scalar_ordinal(
+      std::move(pt), rep, stats, unrestricted, std::move(fn->functional),
+      target, std::move(bounds), weights, backend, opts, parameterization,
+      constraint_tol);
+}
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_ordinal_polychoric_omega(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget omega_target,
+    ScalarProfileCiOptions ci_options,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    Backend backend,
+    OptimOptions opts,
+    OrdinalParameterization parameterization,
+    double constraint_tol) {
+  constexpr const char* who = "profile_lrt_ci_ordinal_polychoric_omega";
+  auto fn = make_ordinal_polychoric_omega_functional(
+      pt, rep, stats, unrestricted, omega_spec, omega_target,
+      parameterization, who);
+  if (!fn.has_value()) return std::unexpected(fn.error());
+
+  const double estimate = fn->unrestricted_value;
+  OrdinalProfileEvaluator eval =
+      [pt, &rep, &stats, unrestricted, functional = fn->functional, bounds,
+       weights, backend, opts, parameterization, constraint_tol](
+          double target_value) mutable {
+        spec::LatentStructure pt_eval = pt;
+        frontier::ScalarFunctional fn_eval = functional;
+        Bounds bounds_eval = bounds;
+        return profile_lrt_scalar_ordinal(
+            std::move(pt_eval), rep, stats, unrestricted, std::move(fn_eval),
+            target_value, std::move(bounds_eval), weights, backend, opts,
+            parameterization, constraint_tol);
       };
   return ordinal_profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }
