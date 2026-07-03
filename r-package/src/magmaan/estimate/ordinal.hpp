@@ -510,7 +510,8 @@ profile_lrt_scalar_ordinal(spec::LatentStructure pt,
                            optim::OptimOptions opts = {},
                            OrdinalParameterization parameterization =
                                OrdinalParameterization::Delta,
-                           double constraint_tol = 1e-6);
+                           double constraint_tol = 1e-6,
+                           bool robust_scaled = false);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_ordinal(
@@ -525,7 +526,8 @@ profile_lrt_parameter_ordinal(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_ordinal(
@@ -540,7 +542,8 @@ profile_lrt_ci_parameter_ordinal(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_ordinal_polychoric_omega(
@@ -556,7 +559,8 @@ profile_lrt_ordinal_polychoric_omega(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_ordinal_polychoric_omega(
@@ -572,7 +576,8 @@ profile_lrt_ci_ordinal_polychoric_omega(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false);
 
 fit_expected<OrdinalLsObjective>
 mixed_ordinal_ls_objective(spec::LatentStructure pt,

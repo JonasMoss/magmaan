@@ -6450,6 +6450,21 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
       magmaan::inference::chi2_pvalue(lrt->T, 1)));
   CHECK(lrt->df == 1);
 
+  auto lrt_robust = magmaan::estimate::frontier::profile_lrt_parameter_ordinal(
+      *pt, *mr, *stats, *fit, k_loading, target, {},
+      OrdinalWeightKind::DWLS, magmaan::estimate::Backend::NloptSlsqp, opts,
+      magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true);
+  REQUIRE_MESSAGE(lrt_robust.has_value(),
+      "ordinal parameter robust profile LRT failed: "
+          << (lrt_robust.has_value() ? "" : lrt_robust.error().detail));
+  CHECK(lrt_robust->T == doctest::Approx(lrt->T).epsilon(1e-8));
+  CHECK(lrt_robust->scaling_factor > 0.0);
+  CHECK(std::isfinite(lrt_robust->scaling_factor));
+  CHECK(lrt_robust->T_scaled ==
+        doctest::Approx(lrt_robust->T / lrt_robust->scaling_factor));
+  CHECK(lrt_robust->p_value_scaled == doctest::Approx(
+      magmaan::inference::chi2_pvalue(lrt_robust->T_scaled, 1)));
+
   magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
   ci_opts.target_tol = 1e-4;
   ci_opts.statistic_tol = 1e-4;
@@ -6471,6 +6486,27 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
   CHECK(ci->upper_profile.T == doctest::Approx(ci->cutoff).epsilon(1e-3));
   CHECK(magmaan::inference::chi2_pvalue(ci->cutoff, 1) ==
         doctest::Approx(1.0 - ci->confidence_level).epsilon(1e-6));
+
+  auto ci_robust_opts = ci_opts;
+  ci_robust_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  auto ci_robust =
+      magmaan::estimate::frontier::profile_lrt_ci_parameter_ordinal(
+          *pt, *mr, *stats, *fit, k_loading, ci_robust_opts, {},
+          OrdinalWeightKind::DWLS, magmaan::estimate::Backend::NloptSlsqp,
+          opts, magmaan::estimate::OrdinalParameterization::Delta, 1e-6,
+          true);
+  REQUIRE_MESSAGE(ci_robust.has_value(),
+      "ordinal parameter robust profile CI failed: "
+          << (ci_robust.has_value() ? "" : ci_robust.error().detail));
+  CHECK(ci_robust->lower < fit->theta(k_loading));
+  CHECK(ci_robust->upper > fit->theta(k_loading));
+  CHECK(ci_robust->lower_profile.scaling_factor > 0.0);
+  CHECK(ci_robust->upper_profile.scaling_factor > 0.0);
+  CHECK(ci_robust->lower_profile.T_scaled ==
+        doctest::Approx(ci_robust->cutoff).epsilon(1e-3));
+  CHECK(ci_robust->upper_profile.T_scaled ==
+        doctest::Approx(ci_robust->cutoff).epsilon(1e-3));
 
   namespace rel = magmaan::measures::frontier::reliability;
   rel::OmegaSpec omega_spec;
@@ -6502,6 +6538,24 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
       magmaan::inference::chi2_pvalue(omega_lrt->T, 1)));
   CHECK(omega_lrt->df == 1);
 
+  auto omega_lrt_robust =
+      magmaan::estimate::frontier::profile_lrt_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_target, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true);
+  REQUIRE_MESSAGE(omega_lrt_robust.has_value(),
+      "ordinal polychoric omega robust profile LRT failed: "
+          << (omega_lrt_robust.has_value() ? ""
+                                           : omega_lrt_robust.error().detail));
+  CHECK(omega_lrt_robust->T == doctest::Approx(omega_lrt->T).epsilon(1e-8));
+  CHECK(omega_lrt_robust->scaling_factor > 0.0);
+  CHECK(omega_lrt_robust->T_scaled ==
+        doctest::Approx(omega_lrt_robust->T /
+                        omega_lrt_robust->scaling_factor));
+  CHECK(omega_lrt_robust->p_value_scaled == doctest::Approx(
+      magmaan::inference::chi2_pvalue(omega_lrt_robust->T_scaled, 1)));
+
   magmaan::estimate::frontier::ScalarProfileCiOptions omega_ci_opts;
   omega_ci_opts.target_tol = 1e-5;
   omega_ci_opts.statistic_tol = 1e-5;
@@ -6525,6 +6579,28 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
         doctest::Approx(omega_ci->cutoff).epsilon(1e-3));
   CHECK(omega_ci->upper_profile.T ==
         doctest::Approx(omega_ci->cutoff).epsilon(1e-3));
+
+  auto omega_ci_robust_opts = omega_ci_opts;
+  omega_ci_robust_opts.reference =
+      magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  auto omega_ci_robust =
+      magmaan::estimate::frontier::profile_lrt_ci_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_ci_robust_opts, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true);
+  REQUIRE_MESSAGE(omega_ci_robust.has_value(),
+      "ordinal polychoric omega robust profile CI failed: "
+          << (omega_ci_robust.has_value() ? ""
+                                          : omega_ci_robust.error().detail));
+  CHECK(omega_ci_robust->lower < omega_ci_robust->estimate);
+  CHECK(omega_ci_robust->upper > omega_ci_robust->estimate);
+  CHECK(omega_ci_robust->lower_profile.scaling_factor > 0.0);
+  CHECK(omega_ci_robust->upper_profile.scaling_factor > 0.0);
+  CHECK(omega_ci_robust->lower_profile.T_scaled ==
+        doctest::Approx(omega_ci_robust->cutoff).epsilon(1e-3));
+  CHECK(omega_ci_robust->upper_profile.T_scaled ==
+        doctest::Approx(omega_ci_robust->cutoff).epsilon(1e-3));
 }
 
 TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {

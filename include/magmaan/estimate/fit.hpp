@@ -147,8 +147,16 @@ struct ScalarProfileLrtResult {
   double fmin_constrained = 0.0;
   double T = 0.0;                  // 2N * (fmin_constrained - fmin_unrestricted)
   double p_value = 1.0;            // ordinary χ²_1 reference; robust/Bartlett layers sit above
+  double scaling_factor = std::numeric_limits<double>::quiet_NaN();
+  double T_scaled = std::numeric_limits<double>::quiet_NaN();
+  double p_value_scaled = std::numeric_limits<double>::quiet_NaN();
   double n_obs = 0.0;
   int df = 1;
+};
+
+enum class ScalarProfileReference {
+  Ordinary,
+  RobustScaled,
 };
 
 enum class GmmFittedWeightKind {
@@ -172,6 +180,7 @@ struct ScalarProfileCiOptions {
   double statistic_tol = 1e-6;
   int max_iter = 60;
   int max_expand = 40;
+  ScalarProfileReference reference = ScalarProfileReference::Ordinary;
 };
 
 struct ScalarProfileCiResult {

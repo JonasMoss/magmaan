@@ -2119,6 +2119,9 @@ Rcpp::List scalar_profile_lrt_to_list(
       Rcpp::_["fmin_constrained"] = r.fmin_constrained,
       Rcpp::_["T"] = r.T,
       Rcpp::_["p_value"] = r.p_value,
+      Rcpp::_["scaling_factor"] = r.scaling_factor,
+      Rcpp::_["T_scaled"] = r.T_scaled,
+      Rcpp::_["p_value_scaled"] = r.p_value_scaled,
       Rcpp::_["df"] = r.df,
       Rcpp::_["nobs"] = r.n_obs,
       Rcpp::_["constrained"] = constrained);
@@ -2175,6 +2178,9 @@ Rcpp::List scalar_functional_profile_lrt_to_list(
       Rcpp::_["fmin_constrained"] = r.fmin_constrained,
       Rcpp::_["T"] = r.T,
       Rcpp::_["p_value"] = r.p_value,
+      Rcpp::_["scaling_factor"] = r.scaling_factor,
+      Rcpp::_["T_scaled"] = r.T_scaled,
+      Rcpp::_["p_value_scaled"] = r.p_value_scaled,
       Rcpp::_["df"] = r.df,
       Rcpp::_["nobs"] = r.n_obs,
       Rcpp::_["constrained"] = constrained);
@@ -2357,7 +2363,8 @@ Rcpp::List frontier_profile_lrt_parameter_ordinal_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6) {
+    double constraint_tol = 1e-6,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2394,7 +2401,7 @@ Rcpp::List frontier_profile_lrt_parameter_ordinal_impl(
       static_cast<Eigen::Index>(parameter - 1), target,
       bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
       ordinal_parameterization_from_string(parameterization_name),
-      constraint_tol);
+      constraint_tol, robust);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list(
       ctx, *r_or, parameter, weight_key.c_str(), &stats,
@@ -2546,7 +2553,8 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ordinal_impl(
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
-    double statistic_tol = 1e-6) {
+    double statistic_tol = 1e-6,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2579,13 +2587,17 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ordinal_impl(
                          : backend_from_optimizer_arg(optimizer);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
+  if (robust) {
+    ci_opts.reference =
+        magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  }
 
   auto r_or = magmaan::estimate::frontier::profile_lrt_ci_parameter_ordinal(
       ctx.pt, ctx.rep, stats, est,
       static_cast<Eigen::Index>(parameter - 1), ci_opts,
       bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
       ordinal_parameterization_from_string(parameterization_name),
-      constraint_tol);
+      constraint_tol, robust);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list(
       ctx, *r_or, parameter, weight_key.c_str(), &stats,
@@ -2606,7 +2618,8 @@ Rcpp::List frontier_profile_lrt_ordinal_polychoric_omega_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6) {
+    double constraint_tol = 1e-6,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2647,7 +2660,7 @@ Rcpp::List frontier_profile_lrt_ordinal_polychoric_omega_impl(
           omega0, bounds_from_nullable(bounds), ow, backend,
           optim_opts_from(control),
           ordinal_parameterization_from_string(parameterization_name),
-          constraint_tol);
+          constraint_tol, robust);
   if (!r_or.has_value()) stop_fit(r_or.error());
 
   Rcpp::List out = scalar_functional_profile_lrt_to_list(
@@ -2676,7 +2689,8 @@ Rcpp::List frontier_profile_lrt_ci_ordinal_polychoric_omega_impl(
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
-    double statistic_tol = 1e-6) {
+    double statistic_tol = 1e-6,
+    bool robust = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -2711,6 +2725,10 @@ Rcpp::List frontier_profile_lrt_ci_ordinal_polychoric_omega_impl(
                          : backend_from_optimizer_arg(optimizer);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
+  if (robust) {
+    ci_opts.reference =
+        magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
+  }
 
   auto r_or =
       magmaan::estimate::frontier::profile_lrt_ci_ordinal_polychoric_omega(
@@ -2720,7 +2738,7 @@ Rcpp::List frontier_profile_lrt_ci_ordinal_polychoric_omega_impl(
           ci_opts, bounds_from_nullable(bounds), ow, backend,
           optim_opts_from(control),
           ordinal_parameterization_from_string(parameterization_name),
-          constraint_tol);
+          constraint_tol, robust);
   if (!r_or.has_value()) stop_fit(r_or.error());
 
   Rcpp::List out = scalar_functional_profile_ci_to_list(

@@ -109,9 +109,15 @@ golden `parTable()` fixtures.
   functional slice, `profile_lrt_ordinal_polychoric_omega()` /
   `profile_lrt_ci_ordinal_polychoric_omega()` and the matching R helpers,
   profiles model-implied latent-response/polychoric omega through the same
-  ordinary df-1 fixed-weight path. Robust scaling, Bartlett / small-sample
-  correction, observed-score / Green-Yang-like ordinal omega targets, and
-  functional R callbacks remain research layers above this seed surface.
+  fixed-weight path. All ordinal parameter and polychoric-omega profile helpers
+  also accept an opt-in robust 1-df sandwich scaling: the result keeps ordinary
+  `T`/`p_value` and adds `scaling_factor`, `T_scaled`, and `p_value_scaled`;
+  CI inversion can root on `T_scaled`. The scaling is recomputed at each
+  constrained profile point from the same complete IJ ordinal sandwich used by
+  robust SE/MI, including fitted DWLS/WLS weight influence. Bartlett /
+  small-sample correction, observed-score / Green-Yang-like ordinal omega
+  targets, and functional R callbacks remain research layers above this seed
+  surface.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
   identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and

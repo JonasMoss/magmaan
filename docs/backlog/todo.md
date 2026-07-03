@@ -191,10 +191,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `profile_lrt_ci_parameter_ordinal`, ordinary df-1 reference, fixed
     ULS/DWLS/WLS weight), and the no-integration model-implied
     latent-response/polychoric omega functional has the same seed surface
-    (`profile_lrt_ordinal_polychoric_omega` and CI inversion). Observed-score /
-    Green-Yang-like omega profiling, robust/Satorra scaling, and small-sample
-    profile-LR corrections stay in the funLR lane until the calibrated-constant
-    problem is solved.
+    (`profile_lrt_ordinal_polychoric_omega` and CI inversion). Both ordinal
+    parameter and polychoric-omega profiles now have opt-in robust 1-df
+    sandwich scaling and scaled CI inversion (`robust = TRUE` on the R
+    frontier helpers), using the complete IJ ordinal sandwich at each
+    constrained point. Observed-score / Green-Yang-like omega profiling and
+    small-sample profile-LR corrections stay in the funLR lane until the
+    calibrated-constant problem is solved.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
