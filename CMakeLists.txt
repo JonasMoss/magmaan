@@ -109,6 +109,7 @@ add_library(magmaan STATIC
   src/estimate/nt.cpp
   src/estimate/ml_continuation.cpp
   src/estimate/rbm.cpp
+  src/estimate/sam.cpp
   src/estimate/fiml.cpp
   src/estimate/bounds.cpp
   src/estimate/ordinal.cpp

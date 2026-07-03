@@ -78,6 +78,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ml_continuation_test.cpp
   unit/rbm_test.cpp
   unit/rbm_fd_test.cpp
+  unit/sam_test.cpp
   unit/fcsem_ml_test.cpp
   unit/fiml_test.cpp
   unit/saturated_em_moments_test.cpp
