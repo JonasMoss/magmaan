@@ -189,9 +189,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     complete-sandwich DWLS/WLS machinery. A first all-ordinal parameter
     profile-LRT/CI seed now exists (`profile_lrt_parameter_ordinal` and
     `profile_lrt_ci_parameter_ordinal`, ordinary df-1 reference, fixed
-    ULS/DWLS/WLS weight), but ordinal omega/functionals, robust/Satorra scaling,
-    and small-sample profile-LR corrections stay in the funLR lane until the
-    calibrated-constant problem is solved.
+    ULS/DWLS/WLS weight), and the no-integration model-implied
+    latent-response/polychoric omega functional has the same seed surface
+    (`profile_lrt_ordinal_polychoric_omega` and CI inversion). Observed-score /
+    Green-Yang-like omega profiling, robust/Satorra scaling, and small-sample
+    profile-LR corrections stay in the funLR lane until the calibrated-constant
+    problem is solved.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:

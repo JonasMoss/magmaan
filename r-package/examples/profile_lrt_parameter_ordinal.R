@@ -37,6 +37,18 @@ ci <- core$frontier_profile_lrt_ci_parameter_ordinal(
   statistic_tol = 1e-5
 )
 
+block <- rep.int(1L, length(ordered))
+omega_ci <- core$frontier_profile_lrt_ci_ordinal_polychoric_omega(
+  fit, block = block,
+  initial_step = 0.02,
+  root_tol = 1e-5,
+  statistic_tol = 1e-5
+)
+omega_target <- 0.98 * omega_ci$estimate
+omega_lrt <- core$frontier_profile_lrt_ordinal_polychoric_omega(
+  fit, block = block, omega0 = omega_target
+)
+
 stopifnot(
   isTRUE(lrt$constrained$ordinal),
   lrt$df == 1L,
@@ -47,8 +59,21 @@ stopifnot(
   ci$lower < fit$theta[free_id],
   ci$upper > fit$theta[free_id],
   abs(ci$lower_profile$T - ci$cutoff) < 1e-3,
-  abs(ci$upper_profile$T - ci$cutoff) < 1e-3
+  abs(ci$upper_profile$T - ci$cutoff) < 1e-3,
+  omega_lrt$coefficient == "ordinal_polychoric_omega",
+  omega_lrt$omega_target == "total",
+  omega_lrt$df == 1L,
+  abs(omega_lrt$constrained_value - omega_target) < 1e-5,
+  abs(omega_lrt$T - 2 * omega_lrt$nobs *
+        (omega_lrt$fmin_constrained - omega_lrt$fmin_unrestricted)) < 1e-8,
+  omega_ci$coefficient == "ordinal_polychoric_omega",
+  omega_ci$lower < omega_ci$estimate,
+  omega_ci$upper > omega_ci$estimate,
+  abs(omega_ci$lower_profile$T - omega_ci$cutoff) < 1e-3,
+  abs(omega_ci$upper_profile$T - omega_ci$cutoff) < 1e-3
 )
 
 print(lrt[c("parameter", "target", "T", "p_value")])
 print(ci[c("parameter", "estimate", "lower", "upper", "cutoff")])
+print(omega_lrt[c("coefficient", "omega_target", "target", "T", "p_value")])
+print(omega_ci[c("coefficient", "estimate", "lower", "upper", "cutoff")])

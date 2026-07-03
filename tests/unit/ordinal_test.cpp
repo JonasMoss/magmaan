@@ -6471,6 +6471,60 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
   CHECK(ci->upper_profile.T == doctest::Approx(ci->cutoff).epsilon(1e-3));
   CHECK(magmaan::inference::chi2_pvalue(ci->cutoff, 1) ==
         doctest::Approx(1.0 - ci->confidence_level).epsilon(1e-6));
+
+  namespace rel = magmaan::measures::frontier::reliability;
+  rel::OmegaSpec omega_spec;
+  omega_spec.block = Eigen::VectorXi::Zero(X.cols());
+  auto omega_sample =
+      rel::omega_multidim(rel::OmegaTarget::Total, stats->R[0], omega_spec);
+  REQUIRE(omega_sample.has_value());
+  const double omega_target = 0.98 * *omega_sample;
+
+  auto omega_lrt =
+      magmaan::estimate::frontier::profile_lrt_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_target, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(omega_lrt.has_value(),
+      "ordinal polychoric omega profile LRT failed: "
+          << (omega_lrt.has_value() ? "" : omega_lrt.error().detail));
+
+  CHECK(omega_lrt->unrestricted_value > 0.0);
+  CHECK(omega_lrt->unrestricted_value < 1.0);
+  CHECK(omega_lrt->constrained_value ==
+        doctest::Approx(omega_target).epsilon(1e-5));
+  CHECK(std::abs(omega_lrt->constraint_residual) < 1e-5);
+  CHECK(omega_lrt->fmin_unrestricted == doctest::Approx(fit->fmin));
+  CHECK(omega_lrt->T == doctest::Approx(
+      2.0 * static_cast<double>(stats->n_obs[0]) *
+      (omega_lrt->fmin_constrained - fit->fmin)));
+  CHECK(omega_lrt->p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(omega_lrt->T, 1)));
+  CHECK(omega_lrt->df == 1);
+
+  magmaan::estimate::frontier::ScalarProfileCiOptions omega_ci_opts;
+  omega_ci_opts.target_tol = 1e-5;
+  omega_ci_opts.statistic_tol = 1e-5;
+  omega_ci_opts.initial_step = 0.02;
+  omega_ci_opts.max_iter = 50;
+
+  auto omega_ci =
+      magmaan::estimate::frontier::profile_lrt_ci_ordinal_polychoric_omega(
+          *pt, *mr, *stats, *fit, omega_spec, rel::OmegaTarget::Total,
+          omega_ci_opts, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(omega_ci.has_value(),
+      "ordinal polychoric omega profile CI failed: "
+          << (omega_ci.has_value() ? "" : omega_ci.error().detail));
+
+  CHECK(omega_ci->lower < omega_ci->estimate);
+  CHECK(omega_ci->upper > omega_ci->estimate);
+  CHECK_FALSE(omega_ci->lower_at_bound);
+  CHECK_FALSE(omega_ci->upper_at_bound);
+  CHECK(omega_ci->lower_profile.T ==
+        doctest::Approx(omega_ci->cutoff).epsilon(1e-3));
+  CHECK(omega_ci->upper_profile.T ==
+        doctest::Approx(omega_ci->cutoff).epsilon(1e-3));
 }
 
 TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {

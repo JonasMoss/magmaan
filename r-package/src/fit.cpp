@@ -2066,6 +2066,37 @@ fitted_weight_options_from_args(int max_outer, double theta_tol,
   return out;
 }
 
+struct OmegaBlockSpec {
+  magmaan::measures::frontier::reliability::OmegaSpec spec;
+  int k = 0;
+};
+
+OmegaBlockSpec omega_spec_from_block(Rcpp::IntegerVector block,
+                                     Eigen::Index p,
+                                     const char* call) {
+  if (p <= 0) {
+    Rcpp::stop("magmaan: %s requires at least one ordinal indicator", call);
+  }
+  if (block.size() != p) {
+    Rcpp::stop("magmaan: %s block length must equal the number of ordinal "
+               "indicators", call);
+  }
+  std::vector<int> labels(block.begin(), block.end());
+  std::vector<int> uniq = labels;
+  std::sort(uniq.begin(), uniq.end());
+  uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+
+  OmegaBlockSpec out;
+  out.spec.block.resize(p);
+  for (Eigen::Index i = 0; i < p; ++i) {
+    const auto it = std::lower_bound(
+        uniq.begin(), uniq.end(), labels[static_cast<std::size_t>(i)]);
+    out.spec.block(i) = static_cast<int>(it - uniq.begin());
+  }
+  out.k = static_cast<int>(uniq.size());
+  return out;
+}
+
 Rcpp::List scalar_profile_lrt_to_list(
     Ctx& ctx,
     const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
@@ -2117,6 +2148,65 @@ Rcpp::List scalar_profile_ci_to_list(
       Rcpp::_["upper_profile"] = scalar_profile_lrt_to_list(
           ctx, r.upper_profile, parameter, estimator, ordinal_stats,
           ordinal_parameterization));
+}
+
+Rcpp::List scalar_functional_profile_lrt_to_list(
+    Ctx& ctx,
+    const magmaan::estimate::frontier::ScalarProfileLrtResult& r,
+    const char* coefficient,
+    const char* coefficient_target,
+    const char* estimator,
+    const magmaan::data::OrdinalStats* ordinal_stats = nullptr,
+    const char* ordinal_parameterization = "delta") {
+  Rcpp::List constrained =
+      ordinal_stats == nullptr
+          ? fit_result(ctx, r.constrained, nullptr, estimator)
+          : ordinal_fit_result(ctx, *ordinal_stats, r.constrained, nullptr,
+                               estimator, ordinal_parameterization);
+  return Rcpp::List::create(
+      Rcpp::_["coefficient"] = coefficient,
+      Rcpp::_["coefficient_target"] = coefficient_target,
+      Rcpp::_["omega_target"] = coefficient_target,
+      Rcpp::_["target"] = r.target,
+      Rcpp::_["unrestricted_value"] = r.unrestricted_value,
+      Rcpp::_["constrained_value"] = r.constrained_value,
+      Rcpp::_["constraint_residual"] = r.constraint_residual,
+      Rcpp::_["fmin_unrestricted"] = r.fmin_unrestricted,
+      Rcpp::_["fmin_constrained"] = r.fmin_constrained,
+      Rcpp::_["T"] = r.T,
+      Rcpp::_["p_value"] = r.p_value,
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["nobs"] = r.n_obs,
+      Rcpp::_["constrained"] = constrained);
+}
+
+Rcpp::List scalar_functional_profile_ci_to_list(
+    Ctx& ctx,
+    const magmaan::estimate::frontier::ScalarProfileCiResult& r,
+    const char* coefficient,
+    const char* coefficient_target,
+    const char* estimator,
+    const magmaan::data::OrdinalStats* ordinal_stats = nullptr,
+    const char* ordinal_parameterization = "delta") {
+  return Rcpp::List::create(
+      Rcpp::_["coefficient"] = coefficient,
+      Rcpp::_["coefficient_target"] = coefficient_target,
+      Rcpp::_["omega_target"] = coefficient_target,
+      Rcpp::_["estimate"] = r.estimate,
+      Rcpp::_["lower"] = r.lower,
+      Rcpp::_["upper"] = r.upper,
+      Rcpp::_["confidence_level"] = r.confidence_level,
+      Rcpp::_["cutoff"] = r.cutoff,
+      Rcpp::_["lower_evals"] = r.lower_evals,
+      Rcpp::_["upper_evals"] = r.upper_evals,
+      Rcpp::_["lower_at_bound"] = r.lower_at_bound,
+      Rcpp::_["upper_at_bound"] = r.upper_at_bound,
+      Rcpp::_["lower_profile"] = scalar_functional_profile_lrt_to_list(
+          ctx, r.lower_profile, coefficient, coefficient_target, estimator,
+          ordinal_stats, ordinal_parameterization),
+      Rcpp::_["upper_profile"] = scalar_functional_profile_lrt_to_list(
+          ctx, r.upper_profile, coefficient, coefficient_target, estimator,
+          ordinal_stats, ordinal_parameterization));
 }
 
 }  // namespace
@@ -2500,6 +2590,147 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ordinal_impl(
   return scalar_profile_ci_to_list(
       ctx, *r_or, parameter, weight_key.c_str(), &stats,
       parameterization_name.c_str());
+}
+
+// frontier_profile_lrt_ordinal_polychoric_omega() - ordinary df-1 profile
+// statistic for the model-implied latent-response/polychoric omega functional.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ordinal_polychoric_omega_impl(
+    Rcpp::List fit,
+    Rcpp::IntegerVector block,
+    double omega0,
+    std::string target = "total",
+    std::string weight = "fit",
+    SEXP ordinal_stats = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!fit.containsElementNamed("ordinal") ||
+      !Rcpp::as<bool>(fit["ordinal"])) {
+    Rcpp::stop("frontier_profile_lrt_ordinal_polychoric_omega() requires an "
+               "all-ordinal ULS/DWLS/WLS fit");
+  }
+
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(
+      stats_from_fit_or_arg(fit, ordinal_stats, "ordinal_stats",
+                            "frontier_profile_lrt_ordinal_polychoric_omega"));
+  if (stats.R.size() != 1) {
+    Rcpp::stop("frontier_profile_lrt_ordinal_polychoric_omega() currently "
+               "supports single-group all-ordinal fits only");
+  }
+  const OmegaBlockSpec omega_spec = omega_spec_from_block(
+      block, stats.R[0].rows(),
+      "frontier_profile_lrt_ordinal_polychoric_omega()");
+  const std::string weight_key =
+      ordinal_weight_key_from_arg(weight, fit, estimator);
+  const auto ow = ordinal_weight_from_estimator(
+      weight_key, "frontier_profile_lrt_ordinal_polychoric_omega");
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : ordinal_parameterization_attr(fit["partable"]);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+
+  auto r_or =
+      magmaan::estimate::frontier::profile_lrt_ordinal_polychoric_omega(
+          ctx.pt, ctx.rep, stats, est, omega_spec.spec,
+          omega_target_from_string(
+              target, "frontier_profile_lrt_ordinal_polychoric_omega"),
+          omega0, bounds_from_nullable(bounds), ow, backend,
+          optim_opts_from(control),
+          ordinal_parameterization_from_string(parameterization_name),
+          constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+
+  Rcpp::List out = scalar_functional_profile_lrt_to_list(
+      ctx, *r_or, "ordinal_polychoric_omega", target.c_str(),
+      weight_key.c_str(), &stats, parameterization_name.c_str());
+  out["block"] = Rcpp::clone(block);
+  out["k"] = omega_spec.k;
+  out["weight"] = weight_key;
+  out["parameterization"] = parameterization_name;
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_ordinal_polychoric_omega_impl(
+    Rcpp::List fit,
+    Rcpp::IntegerVector block,
+    std::string target = "total",
+    std::string weight = "fit",
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    SEXP ordinal_stats = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!fit.containsElementNamed("ordinal") ||
+      !Rcpp::as<bool>(fit["ordinal"])) {
+    Rcpp::stop("frontier_profile_lrt_ci_ordinal_polychoric_omega() requires "
+               "an all-ordinal ULS/DWLS/WLS fit");
+  }
+
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(
+      stats_from_fit_or_arg(
+          fit, ordinal_stats, "ordinal_stats",
+          "frontier_profile_lrt_ci_ordinal_polychoric_omega"));
+  if (stats.R.size() != 1) {
+    Rcpp::stop("frontier_profile_lrt_ci_ordinal_polychoric_omega() currently "
+               "supports single-group all-ordinal fits only");
+  }
+  const OmegaBlockSpec omega_spec = omega_spec_from_block(
+      block, stats.R[0].rows(),
+      "frontier_profile_lrt_ci_ordinal_polychoric_omega()");
+  const std::string weight_key =
+      ordinal_weight_key_from_arg(weight, fit, estimator);
+  const auto ow = ordinal_weight_from_estimator(
+      weight_key, "frontier_profile_lrt_ci_ordinal_polychoric_omega");
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : ordinal_parameterization_attr(fit["partable"]);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+
+  auto r_or =
+      magmaan::estimate::frontier::profile_lrt_ci_ordinal_polychoric_omega(
+          ctx.pt, ctx.rep, stats, est, omega_spec.spec,
+          omega_target_from_string(
+              target, "frontier_profile_lrt_ci_ordinal_polychoric_omega"),
+          ci_opts, bounds_from_nullable(bounds), ow, backend,
+          optim_opts_from(control),
+          ordinal_parameterization_from_string(parameterization_name),
+          constraint_tol);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+
+  Rcpp::List out = scalar_functional_profile_ci_to_list(
+      ctx, *r_or, "ordinal_polychoric_omega", target.c_str(),
+      weight_key.c_str(), &stats, parameterization_name.c_str());
+  out["block"] = Rcpp::clone(block);
+  out["k"] = omega_spec.k;
+  out["weight"] = weight_key;
+  out["parameterization"] = parameterization_name;
+  return out;
 }
 
 // fit_twolevel() — two-level (multilevel) normal-theory ML over clustered raw

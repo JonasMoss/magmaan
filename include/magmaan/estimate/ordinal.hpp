@@ -541,6 +541,38 @@ profile_lrt_ci_parameter_ordinal(
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
     double constraint_tol = 1e-6);
 
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_ordinal_polychoric_omega(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget omega_target,
+    double target,
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_ordinal_polychoric_omega(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    const measures::frontier::reliability::OmegaSpec& omega_spec,
+    measures::frontier::reliability::OmegaTarget omega_target,
+    ScalarProfileCiOptions ci_options = {},
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
 fit_expected<OrdinalLsObjective>
 mixed_ordinal_ls_objective(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
