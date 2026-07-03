@@ -527,6 +527,21 @@ profile_lrt_parameter_ordinal(
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
     double constraint_tol = 1e-6);
 
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Estimates& unrestricted,
+    Eigen::Index parameter,
+    ScalarProfileCiOptions ci_options = {},
+    Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    double constraint_tol = 1e-6);
+
 fit_expected<OrdinalLsObjective>
 mixed_ordinal_ls_objective(spec::LatentStructure pt,
                            const model::MatrixRep& rep,

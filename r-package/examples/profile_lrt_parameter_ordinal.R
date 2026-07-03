@@ -30,6 +30,12 @@ stopifnot(length(free_id) == 1L, free_id > 0L)
 
 target <- 0.95 * fit$theta[free_id]
 lrt <- core$frontier_profile_lrt_parameter_ordinal(fit, free_id, target)
+ci <- core$frontier_profile_lrt_ci_parameter_ordinal(
+  fit, free_id,
+  initial_step = 0.08 * abs(fit$theta[free_id]),
+  root_tol = 1e-5,
+  statistic_tol = 1e-5
+)
 
 stopifnot(
   isTRUE(lrt$constrained$ordinal),
@@ -37,7 +43,12 @@ stopifnot(
   is.finite(lrt$T),
   abs(lrt$constrained_value - target) < 1e-5,
   abs(lrt$T - 2 * lrt$nobs *
-        (lrt$fmin_constrained - lrt$fmin_unrestricted)) < 1e-8
+        (lrt$fmin_constrained - lrt$fmin_unrestricted)) < 1e-8,
+  ci$lower < fit$theta[free_id],
+  ci$upper > fit$theta[free_id],
+  abs(ci$lower_profile$T - ci$cutoff) < 1e-3,
+  abs(ci$upper_profile$T - ci$cutoff) < 1e-3
 )
 
 print(lrt[c("parameter", "target", "T", "p_value")])
+print(ci[c("parameter", "estimate", "lower", "upper", "cutoff")])
