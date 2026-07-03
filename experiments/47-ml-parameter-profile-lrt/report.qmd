@@ -28,7 +28,7 @@ The target is the true loading of `x2` in a correctly specified one-factor norma
 knitr::kable(ci_summary, digits = 4)
 ```
 
-The CI branch uses multivariate `t(5)` data scaled to the same population covariance, fits the one-factor model with ULS, and inverts the GMM profile-LR surface for the `x2` loading. The four rows compare fixed-weight versus fitted-weight profiling and ordinary versus sandwich-scaled one-degree references. This is a non-normal stress check for the continuous robust profile machinery; it is not a Bartlett or small-sample correction.
+The CI branch uses multivariate `t(5)` data scaled to the same population covariance and inverts the continuous GMM profile-LR surface for the `x2` loading. ULS keeps the original fixed/fitted profile-weight comparison. GLS and WLS add fixed-profile ordinary, fixed robust, and estimated-weight robust references, where `robust_estimated_weight` routes the scale through the complete IJ weight influence. This is a non-normal stress check for the continuous robust profile machinery; it is not a Bartlett or small-sample correction.
 
 ## Failures
 

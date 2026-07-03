@@ -99,32 +99,52 @@ profile_scale <- function(profile, robust) {
 }
 
 ci_methods <- data.frame(
-  profile_weight = c("fixed", "fixed", "fitted", "fitted"),
-  reference = c("ordinary", "robust_scaled", "ordinary", "robust_scaled"),
+  estimator = c(rep("ULS", 4L), rep("GLS", 3L), rep("WLS", 3L)),
+  profile_weight = c(
+    "fixed", "fixed", "fitted", "fitted",
+    "fixed", "fixed", "fixed",
+    "fixed", "fixed", "fixed"
+  ),
+  reference = c(
+    "ordinary", "robust_fixed", "ordinary", "robust_fixed",
+    "ordinary", "robust_fixed", "robust_estimated_weight",
+    "ordinary", "robust_fixed", "robust_estimated_weight"
+  ),
   stringsAsFactors = FALSE
 )
 
-ci_failure_rows <- function(n, rep_id, stage, error) {
+is_robust_reference <- function(reference) !identical(reference, "ordinary")
+is_estimated_weight_reference <- function(reference) {
+  identical(reference, "robust_estimated_weight")
+}
+
+ci_failure_rows <- function(n, rep_id, stage, error, estimator = NULL) {
+  methods <- if (is.null(estimator)) {
+    ci_methods
+  } else {
+    ci_methods[ci_methods$estimator == estimator, , drop = FALSE]
+  }
   data.frame(
     n = n,
     rep = rep_id,
-    profile_weight = ci_methods$profile_weight,
-    reference = ci_methods$reference,
+    estimator = methods$estimator,
+    profile_weight = methods$profile_weight,
+    reference = methods$reference,
     stage = stage,
     error = error,
     stringsAsFactors = FALSE
   )
 }
 
-ci_to_row <- function(ci, n, rep_id, profile_weight, reference) {
-  robust <- identical(reference, "robust_scaled")
+ci_to_row <- function(ci, n, rep_id, estimator, profile_weight, reference) {
+  robust <- is_robust_reference(reference)
   lower_stat <- profile_stat(ci$lower_profile, robust)
   upper_stat <- profile_stat(ci$upper_profile, robust)
   data.frame(
     n = n,
     rep = rep_id,
     generator = sprintf("t%g", ci_df),
-    estimator = "ULS",
+    estimator = estimator,
     profile_weight = profile_weight,
     reference = reference,
     parameter = ci$parameter,
@@ -150,89 +170,121 @@ ci_to_row <- function(ci, n, rep_id, profile_weight, reference) {
   )
 }
 
+fit_ci_model <- function(estimator, dat, X) {
+  if (identical(estimator, "WLS")) {
+    W <- tryCatch(solve(core$robust_empirical_gamma(X)), error = function(e) e)
+    if (inherits(W, "error")) return(list(error = conditionMessage(W)))
+    fit <- tryCatch(
+      magmaan::magmaan(model, dat, estimator = "WLS", W = W),
+      error = function(e) e
+    )
+    if (inherits(fit, "error")) return(list(error = conditionMessage(fit)))
+    return(list(fit = fit, weight = W))
+  }
+  fit <- tryCatch(
+    magmaan::magmaan(model, dat, estimator = estimator),
+    error = function(e) e
+  )
+  if (inherits(fit, "error")) return(list(error = conditionMessage(fit)))
+  list(fit = fit, weight = NULL)
+}
+
+run_fixed_ci <- function(fit, weight, k, step, X, reference, ci_control) {
+  robust <- is_robust_reference(reference)
+  args <- list(
+    fit = fit,
+    parameter = k,
+    initial_step = step,
+    control = ci_control,
+    root_tol = if (robust) 1e-5 else 1e-4,
+    statistic_tol = if (robust) 1e-5 else 1e-4
+  )
+  if (!is.null(weight)) args$weight <- weight
+  if (robust) {
+    args$raw_data <- X
+    args$robust <- TRUE
+  }
+  if (is_estimated_weight_reference(reference)) {
+    args$estimated_weight <- TRUE
+  }
+  do.call(core$frontier_profile_lrt_ci_parameter_gmm, args)
+}
+
+run_fitted_ci <- function(fit, k, step, X, reference, ci_control) {
+  robust <- is_robust_reference(reference)
+  args <- list(
+    fit = fit,
+    parameter = k,
+    initial_step = step,
+    control = ci_control,
+    root_tol = if (robust) 1e-5 else 1e-4,
+    statistic_tol = if (robust) 1e-5 else 1e-4
+  )
+  if (robust) {
+    args$raw_data <- X
+    args$robust <- TRUE
+  }
+  do.call(core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight, args)
+}
+
 fit_and_test_ci <- function(n, rep_id) {
   X <- draw_t_data(n, seed_base + 200000L * n + rep_id, df = ci_df)
   dat <- as.data.frame(X)
-  fit <- tryCatch(
-    magmaan::magmaan(model, dat, estimator = "ULS"),
-    error = function(e) e
-  )
-  if (inherits(fit, "error")) {
-    return(list(
-      raw = data.frame(),
-      fail = ci_failure_rows(n, rep_id, "fit", conditionMessage(fit))
-    ))
-  }
-
-  k <- loading_free_index(fit)
-  step <- max(0.02, 0.1 * abs(as.numeric(fit$theta[[k]])))
   ci_control <- list(max_iter = 10000L, ftol = 1e-10, gtol = 1e-7)
-  runners <- list(
-    list(
-      profile_weight = "fixed",
-      reference = "ordinary",
-      run = function() core$frontier_profile_lrt_ci_parameter_gmm(
-        fit, k, initial_step = step,
-        control = ci_control, root_tol = 1e-4, statistic_tol = 1e-4
-      )
-    ),
-    list(
-      profile_weight = "fixed",
-      reference = "robust_scaled",
-      run = function() core$frontier_profile_lrt_ci_parameter_gmm(
-        fit, k, initial_step = step,
-        control = ci_control, root_tol = 1e-5, statistic_tol = 1e-5,
-        raw_data = X, robust = TRUE
-      )
-    ),
-    list(
-      profile_weight = "fitted",
-      reference = "ordinary",
-      run = function() core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
-        fit, k, initial_step = step,
-        control = ci_control, root_tol = 1e-4, statistic_tol = 1e-4
-      )
-    ),
-    list(
-      profile_weight = "fitted",
-      reference = "robust_scaled",
-      run = function() core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
-        fit, k, initial_step = step,
-        control = ci_control, root_tol = 1e-5, statistic_tol = 1e-5,
-        raw_data = X, robust = TRUE
-      )
-    )
-  )
-
   raw_rows <- list()
   fail_rows <- list()
-  for (i in seq_along(runners)) {
-    runner <- runners[[i]]
-    out <- tryCatch(runner$run(), error = function(e) e)
-    if (inherits(out, "error")) {
-      fail_rows[[length(fail_rows) + 1L]] <- data.frame(
-        n = n,
-        rep = rep_id,
-        profile_weight = runner$profile_weight,
-        reference = runner$reference,
-        stage = "ci",
-        error = conditionMessage(out),
-        stringsAsFactors = FALSE
+
+  for (estimator in unique(ci_methods$estimator)) {
+    fit_info <- fit_ci_model(estimator, dat, X)
+    if (!is.null(fit_info$error)) {
+      fail_rows[[length(fail_rows) + 1L]] <- ci_failure_rows(
+        n, rep_id, "fit", fit_info$error, estimator = estimator
       )
-    } else {
-      raw_rows[[length(raw_rows) + 1L]] <- ci_to_row(
-        out, n, rep_id, runner$profile_weight, runner$reference
-      )
+      next
+    }
+
+    fit <- fit_info$fit
+    k <- loading_free_index(fit)
+    step <- max(0.02, 0.1 * abs(as.numeric(fit$theta[[k]])))
+    methods <- ci_methods[ci_methods$estimator == estimator, , drop = FALSE]
+    for (i in seq_len(nrow(methods))) {
+      method <- methods[i, ]
+      out <- tryCatch({
+        if (identical(method$profile_weight, "fitted")) {
+          run_fitted_ci(fit, k, step, X, method$reference, ci_control)
+        } else {
+          run_fixed_ci(fit, fit_info$weight, k, step, X,
+                       method$reference, ci_control)
+        }
+      }, error = function(e) e)
+      if (inherits(out, "error")) {
+        fail_rows[[length(fail_rows) + 1L]] <- data.frame(
+          n = n,
+          rep = rep_id,
+          estimator = estimator,
+          profile_weight = method$profile_weight,
+          reference = method$reference,
+          stage = "ci",
+          error = conditionMessage(out),
+          stringsAsFactors = FALSE
+        )
+      } else {
+        raw_rows[[length(raw_rows) + 1L]] <- ci_to_row(
+          out, n, rep_id, estimator, method$profile_weight, method$reference
+        )
+      }
     }
   }
+
   list(
     raw = if (length(raw_rows)) do.call(rbind, raw_rows) else data.frame(),
     fail = if (length(fail_rows)) {
       do.call(rbind, fail_rows)
     } else {
       data.frame(
-        n = integer(), rep = integer(), profile_weight = character(),
-        reference = character(), stage = character(), error = character()
+        n = integer(), rep = integer(), estimator = character(),
+        profile_weight = character(), reference = character(),
+        stage = character(), error = character()
       )
     }
   )
@@ -268,21 +320,24 @@ summarize_lrt <- function(raw, fail) {
 
 summarize_ci <- function(raw, fail) {
   if (!nrow(raw)) return(data.frame())
-  groups <- unique(raw[c("n", "profile_weight", "reference")])
+  groups <- unique(raw[c("n", "estimator", "profile_weight", "reference")])
   rows <- vector("list", nrow(groups))
   for (i in seq_len(nrow(groups))) {
     g <- groups[i, ]
     keep <- raw$n == g$n &
+      raw$estimator == g$estimator &
       raw$profile_weight == g$profile_weight &
       raw$reference == g$reference
     sub <- raw[keep, ]
     rows[[i]] <- data.frame(
       n = g$n,
+      estimator = g$estimator,
       profile_weight = g$profile_weight,
       reference = g$reference,
       reps = nrow(sub),
       failures = sum(
         fail$n == g$n &
+          fail$estimator == g$estimator &
           fail$profile_weight == g$profile_weight &
           fail$reference == g$reference
       ),
@@ -300,7 +355,7 @@ summarize_ci <- function(raw, fail) {
     )
   }
   out <- do.call(rbind, rows)
-  out[order(out$n, out$profile_weight, out$reference), ]
+  out[order(out$n, out$estimator, out$profile_weight, out$reference), ]
 }
 
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -353,8 +408,9 @@ ci_fail <- if (length(ci_fail_rows)) {
   do.call(rbind, ci_fail_rows)
 } else {
   data.frame(
-    n = integer(), rep = integer(), profile_weight = character(),
-    reference = character(), stage = character(), error = character()
+    n = integer(), rep = integer(), estimator = character(),
+    profile_weight = character(), reference = character(),
+    stage = character(), error = character()
   )
 }
 ci_summary <- summarize_ci(ci_raw, ci_fail)
@@ -367,6 +423,8 @@ meta <- data.frame(
   ci_n_grid = paste(ci_n_grid, collapse = ","),
   ci_generator = "multivariate_t",
   ci_df = ci_df,
+  ci_estimators = paste(unique(ci_methods$estimator), collapse = ","),
+  ci_references = paste(unique(ci_methods$reference), collapse = ","),
   seed_base = seed_base,
   target_loading = target_loading,
   stringsAsFactors = FALSE

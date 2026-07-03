@@ -116,6 +116,17 @@ enum class Backend {
   PortNls,
 };
 
+// Which second-stage weight's data influence the continuous-LS IJ blocks carry.
+// `Fixed` means caller-fixed weight (no correction; ULS and pre-supplied weights);
+// the sample modes rebuild the weight from raw data and add IF(W-hat) rows.
+enum class ContinuousLsIJWeightMode {
+  Fixed,
+  SampleNormalTheory,   // GLS: W from the sample S
+  SampleEmpiricalWls,   // WLS/ADF: dense Browne empirical Gamma-hat inverse
+  SampleEmpiricalDwls,  // DWLS: diagonal Browne empirical Gamma-hat inverse
+  SampleDls,            // DLS: mixed (1-a)Gamma_NT + a Gamma_ADF
+};
+
 namespace frontier {
 
 // Programmatic nonlinear equality constraints, evaluated in the full free
@@ -169,6 +180,11 @@ struct GmmFittedWeightOptions {
   int max_outer = 20;
   double theta_tol = 1e-7;
   double fmin_tol = 1e-10;
+};
+
+struct GmmProfileRobustOptions {
+  bool estimated_weight = false;
+  ContinuousLsIJWeightMode ij_weight_mode = ContinuousLsIJWeightMode::Fixed;
 };
 
 struct ScalarProfileCiOptions {
@@ -278,7 +294,8 @@ profile_lrt_scalar_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                        Backend backend = Backend::NloptSlsqp,
                        OptimOptions opts = {},
                        double constraint_tol = 1e-6,
-                       const data::RawData* robust_raw = nullptr);
+                       const data::RawData* robust_raw = nullptr,
+                       GmmProfileRobustOptions robust_options = {});
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -290,7 +307,8 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                           Backend backend = Backend::NloptSlsqp,
                           OptimOptions opts = {},
                           double constraint_tol = 1e-6,
-                          const data::RawData* robust_raw = nullptr);
+                          const data::RawData* robust_raw = nullptr,
+                          GmmProfileRobustOptions robust_options = {});
 
 // Fitted-weight moment-quadratic profile helpers. The current fitted-weight
 // policy refreshes the normal-theory expected-information weight W(θ) in an
@@ -368,7 +386,8 @@ profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
                              Backend backend = Backend::NloptSlsqp,
                              OptimOptions opts = {},
                              double constraint_tol = 1e-6,
-                             const data::RawData* robust_raw = nullptr);
+                             const data::RawData* robust_raw = nullptr,
+                             GmmProfileRobustOptions robust_options = {});
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_gmm_fitted_weight(
