@@ -12,9 +12,11 @@
 #include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_sam_partition.hpp"
+#include "detail_sam_se.hpp"
 
 namespace magmaan::estimate::frontier {
 
@@ -96,7 +98,6 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
         const spec::LatentNames& names, const data::SampleStats& samp,
         SamOptions opts) {
   namespace lv = compat::lavaan;
-  (void)rep;
   if (samp.S.size() != 1) {
     return std::unexpected(mapping_error(
         "fit_sam: single-group only (got " + std::to_string(samp.S.size()) +
@@ -137,6 +138,16 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
 
   SamResult out;
   out.measurement.reserve(part.mm.size());
+
+  // Standard-error bookkeeping: a (lhs,op,rhs) -> value map of all measurement
+  // and structural estimates, plus per-block free-index -> key, used to compose
+  // the joint θ̂ and place the block vcovs for the twostep partition.
+  const bool want_se = opts.se != SamSe::None;
+  auto keyof = [](const std::string& l, parse::Op o, const std::string& r) {
+    return l + "\x1f" + std::string(parse::to_string(o)) + "\x1f" + r;
+  };
+  std::unordered_map<std::string, double> se_value;
+  std::vector<std::vector<std::string>> block_free_keys;
 
   for (const detail::MeasurementBlockSpec& mb : part.mm) {
     lv::ParsedLavaanParTable parsed = lv::from_lavaan_partable(mb.pt);
@@ -226,6 +237,33 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
     smb.Lambda = B0.Lambda;
     smb.Theta = B0.Theta;
     smb.Nu = B0.Nu;
+
+    if (want_se) {
+      auto bi_or = inference::information_expected(parsed.structure, rep_b,
+                                                   samp_b, est_b);
+      if (bi_or.has_value()) {
+        auto bv_or = inference::vcov(*bi_or, parsed.structure);
+        if (bv_or.has_value()) smb.vcov = std::move(*bv_or);
+      }
+      const int bnf = static_cast<int>(est_b.theta.size());
+      std::vector<std::string> bfk(sz(bnf));
+      for (std::size_t r = 0; r < parsed.structure.op.size(); ++r) {
+        const parse::Op o = parsed.structure.op[r];
+        if (o != parse::Op::Measurement && o != parse::Op::Regression &&
+            o != parse::Op::Covariance && o != parse::Op::Intercept)
+          continue;
+        const std::int32_t lid = parsed.structure.lhs_var[r];
+        const std::int32_t rid = parsed.structure.rhs_var[r];
+        const std::string k = keyof(
+            lid >= 0 ? parsed.names.var_name[sz(lid)] : std::string(), o,
+            rid >= 0 ? parsed.names.var_name[sz(rid)] : std::string());
+        const std::int32_t f = parsed.structure.free[r];
+        se_value[k] =
+            f > 0 ? est_b.theta[f - 1] : parsed.structure.fixed_value[r];
+        if (f > 0) bfk[sz(f - 1)] = k;
+      }
+      block_free_keys.push_back(std::move(bfk));
+    }
     out.measurement.push_back(std::move(smb));
   }
 
@@ -325,6 +363,79 @@ fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!fits_or.has_value()) return std::unexpected(fits_or.error());
 
   out.structural = std::move(*fits_or);
+
+  // Twostep / standard standard errors: partition the joint information.
+  if (opts.se == SamSe::Twostep || opts.se == SamSe::Standard) {
+    std::unordered_map<std::string, char> step2;
+    for (std::size_t r = 0; r < parsed_s.structure.op.size(); ++r) {
+      const parse::Op o = parsed_s.structure.op[r];
+      if (o != parse::Op::Regression && o != parse::Op::Covariance &&
+          o != parse::Op::Intercept)
+        continue;
+      const std::int32_t lid = parsed_s.structure.lhs_var[r];
+      const std::int32_t rid = parsed_s.structure.rhs_var[r];
+      const std::string k = keyof(
+          lid >= 0 ? parsed_s.names.var_name[sz(lid)] : std::string(), o,
+          rid >= 0 ? parsed_s.names.var_name[sz(rid)] : std::string());
+      const std::int32_t f = parsed_s.structure.free[r];
+      se_value[k] = f > 0 ? out.structural.theta[f - 1]
+                          : parsed_s.structure.fixed_value[r];
+      if (f > 0) step2[k] = 1;
+    }
+
+    const std::int32_t nfree = pt.n_free();
+    std::vector<std::string> key_of_free(sz(nfree));
+    std::vector<char> seen(sz(nfree), 0);
+    std::unordered_map<std::string, int> joint_free_of_key;
+    for (std::size_t r = 0; r < full.op.size(); ++r) {
+      const std::int32_t f = full.free[r];
+      if (f > 0 && !seen[sz(f - 1)]) {
+        const std::string k = keyof(full.lhs[r], full.op[r], full.rhs[r]);
+        key_of_free[sz(f - 1)] = k;
+        joint_free_of_key[k] = f;
+        seen[sz(f - 1)] = 1;
+      }
+    }
+
+    Eigen::VectorXd theta_joint(nfree);
+    std::vector<char> is_step2(sz(nfree), 0);
+    bool ok = true;
+    for (std::int32_t f = 0; f < nfree && ok; ++f) {
+      auto it = se_value.find(key_of_free[sz(f)]);
+      if (it == se_value.end()) { ok = false; break; }
+      theta_joint(f) = it->second;
+      is_step2[sz(f)] = step2.count(key_of_free[sz(f)]) ? 1 : 0;
+    }
+
+    if (ok) {
+      Eigen::MatrixXd Sigma11_full = Eigen::MatrixXd::Zero(nfree, nfree);
+      for (std::size_t bi = 0; bi < part.mm.size(); ++bi) {
+        const Eigen::MatrixXd& bv = out.measurement[bi].vcov;
+        const std::vector<std::string>& bfk = block_free_keys[bi];
+        if (bv.size() == 0) continue;
+        const int bnf = static_cast<int>(bfk.size());
+        std::vector<int> b2j(sz(bnf), 0);
+        for (int a = 0; a < bnf; ++a) {
+          auto it = joint_free_of_key.find(bfk[sz(a)]);
+          b2j[sz(a)] = it != joint_free_of_key.end() ? it->second : 0;
+        }
+        for (int a = 0; a < bnf; ++a)
+          for (int c = 0; c < bnf; ++c)
+            if (b2j[sz(a)] > 0 && b2j[sz(c)] > 0)
+              Sigma11_full(b2j[sz(a)] - 1, b2j[sz(c)] - 1) = bv(a, c);
+      }
+      auto se_or =
+          detail::sam_twostep_se(pt, rep, samp, theta_joint, is_step2,
+                                 Sigma11_full, opts.se == SamSe::Standard);
+      if (se_or.has_value()) {
+        out.vcov = std::move(se_or->vcov);
+        out.se = std::move(se_or->se);
+      } else {
+        return std::unexpected(se_or.error());
+      }
+    }
+  }
+
   out.structural_pt = std::move(parsed_s.structure);
   out.structural_rep = std::move(rep_s);
   out.latent_samp = std::move(samp_s);
