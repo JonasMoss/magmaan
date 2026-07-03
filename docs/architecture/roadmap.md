@@ -1707,6 +1707,13 @@ stop rather than any usable non-error return.
   Complete continuous DLS now has `robust_continuous_ls_dls_ij`, which treats
   the mixing scalar as fixed and carries the mixed sample-built
   normal-theory/empirical-Gamma weight influence.
+  The continuous fixed-weight GMM parameter profile-LR/CI surface can now opt
+  into those complete-data IJ weight effects when `robust = TRUE` and
+  `estimated_weight = TRUE`: GLS routes the scale through
+  `SampleNormalTheory`, WLS through `SampleEmpiricalWls`, while ULS remains a
+  fixed-weight case. Fitted-weight profile LR still rebuilds `W(theta)` at the
+  endpoint and uses the fixed profile metric; full derivative/misspec
+  references for fitted weights remain research-tier.
   Continuous-LS observed-bread computation now uses an analytic moment Hessian:
   the Gauss-Newton `Delta' W Delta` term plus the residual-weighted LISREL
   second-derivative contraction, reduced through the equality-constraint basis
@@ -1953,7 +1960,10 @@ stop rather than any usable non-error return.
 
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
-  paths when enabled, and data-frame-to-model sample statistics.
+  paths when enabled, and data-frame-to-model sample statistics. Frontier
+  parameter profile-LR wrappers expose robust scaling for ML and continuous
+  GMM, including opt-in estimated-weight GLS/WLS scaling for caller-fixed GMM
+  weights.
 - The `magmaan_core` data/robust surface includes explicit observed-missing
   mixed continuous/ordinal builders:
   `data_mixed_ordinal_stats_observed_from_{raw,df}` for fully pairwise

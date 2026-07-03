@@ -24,6 +24,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/build.hpp"
 
 #include "../inference_bundle.hpp"
@@ -103,6 +104,29 @@ Eigen::Index lambda_free_idx(const ModelEvaluator& ev, std::int16_t row) {
     }
   }
   return -1;
+}
+
+double parameter_profile_scale(const magmaan::robust::ParamSpaceSandwich& sw,
+                               Eigen::Index parameter) {
+  REQUIRE(sw.K_con.size() == 0);
+  REQUIRE(sw.A1.rows() == sw.A1.cols());
+  REQUIRE(sw.B1.rows() == sw.B1.cols());
+  REQUIRE(sw.A1.rows() == sw.B1.rows());
+  REQUIRE(parameter >= 0);
+  REQUIRE(parameter < sw.A1.rows());
+  Eigen::VectorXd grad = Eigen::VectorXd::Zero(sw.A1.rows());
+  grad(parameter) = 1.0;
+  const Eigen::MatrixXd A = 0.5 * (sw.A1 + sw.A1.transpose()).eval();
+  const Eigen::MatrixXd B = 0.5 * (sw.B1 + sw.B1.transpose()).eval();
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(A);
+  REQUIRE(ldlt.info() == Eigen::Success);
+  const Eigen::VectorXd x = ldlt.solve(grad);
+  REQUIRE(ldlt.info() == Eigen::Success);
+  const double bread_q = x.dot(A * x);
+  const double meat_q = x.dot(B * x);
+  REQUIRE(bread_q > 0.0);
+  REQUIRE(meat_q > 0.0);
+  return meat_q / bread_q;
 }
 
 }  // namespace
@@ -544,12 +568,16 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
   auto gmm = magmaan::test::fit_gmm(
       pt, rep, samp, {}, magmaan::estimate::Bounds{},
       magmaan::estimate::Backend::NloptSlsqp, opts).value();
+  auto gls = magmaan::test::fit_gls(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts).value();
 
   auto ev = ModelEvaluator::build(pt, rep).value();
   const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
   REQUIRE(k_x2 >= 0);
   const double ml_target = 0.95 * ml.theta(k_x2);
   const double gmm_target = 0.95 * gmm.theta(k_x2);
+  const double gls_target = 0.95 * gls.theta(k_x2);
 
   auto ml_plain = magmaan::estimate::frontier::profile_lrt_parameter_ml(
       pt, rep, samp, ml, k_x2, ml_target, {},
@@ -631,6 +659,56 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
         doctest::Approx(ci->cutoff).epsilon(2e-3));
   CHECK(ci->upper_profile.T_scaled ==
         doctest::Approx(ci->cutoff).epsilon(2e-3));
+
+  auto W_gls = magmaan::estimate::gmm::normal_theory_weight(ev, samp, gls.theta);
+  REQUIRE_MESSAGE(W_gls.has_value(),
+      "normal_theory_weight failed: "
+          << (W_gls.has_value() ? "" : W_gls.error().detail));
+  auto gls_fixed = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      pt, rep, samp, gls, *W_gls, k_x2, gls_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
+  REQUIRE_MESSAGE(gls_fixed.has_value(),
+      "GLS fixed-weight robust profile LRT failed: "
+          << (gls_fixed.has_value() ? "" : gls_fixed.error().detail));
+
+  magmaan::estimate::frontier::GmmProfileRobustOptions ew_opts;
+  ew_opts.estimated_weight = true;
+  ew_opts.ij_weight_mode =
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory;
+  auto gls_ew = magmaan::estimate::frontier::profile_lrt_parameter_gmm(
+      pt, rep, samp, gls, *W_gls, k_x2, gls_target, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw, ew_opts);
+  REQUIRE_MESSAGE(gls_ew.has_value(),
+      "GLS estimated-weight robust profile LRT failed: "
+          << (gls_ew.has_value() ? "" : gls_ew.error().detail));
+  CHECK(gls_ew->T == doctest::Approx(gls_fixed->T).epsilon(1e-8));
+  CHECK(std::isfinite(gls_ew->scaling_factor));
+  CHECK(gls_ew->scaling_factor > 0.0);
+  CHECK(gls_ew->T_scaled ==
+        doctest::Approx(gls_ew->T / gls_ew->scaling_factor));
+  CHECK(std::abs(gls_ew->scaling_factor - gls_fixed->scaling_factor) > 1e-5);
+
+  auto sw_ij = magmaan::estimate::continuous_ls_param_space_sandwich_ij(
+      pt, rep, samp, gls_ew->constrained, *W_gls, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory);
+  REQUIRE_MESSAGE(sw_ij.has_value(),
+      "IJ sandwich failed: "
+          << (sw_ij.has_value() ? "" : sw_ij.error().detail));
+  CHECK(gls_ew->scaling_factor ==
+        doctest::Approx(parameter_profile_scale(*sw_ij, k_x2)).epsilon(1e-8));
+
+  auto ci_gls_ew = magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm(
+      pt, rep, samp, gls, *W_gls, k_x2, ci_opts, {},
+      magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw, ew_opts);
+  REQUIRE_MESSAGE(ci_gls_ew.has_value(),
+      "GLS estimated-weight robust profile CI failed: "
+          << (ci_gls_ew.has_value() ? "" : ci_gls_ew.error().detail));
+  CHECK(ci_gls_ew->lower < gls.theta(k_x2));
+  CHECK(ci_gls_ew->upper > gls.theta(k_x2));
+  CHECK(ci_gls_ew->lower_profile.T_scaled ==
+        doctest::Approx(ci_gls_ew->cutoff).epsilon(2e-3));
+  CHECK(ci_gls_ew->upper_profile.T_scaled ==
+        doctest::Approx(ci_gls_ew->cutoff).epsilon(2e-3));
 }
 
 TEST_CASE("frontier fit_gmm_constrained appends a programmatic scalar equality") {

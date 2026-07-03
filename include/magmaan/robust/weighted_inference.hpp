@@ -283,17 +283,6 @@ weighted_param_space_sandwich(const std::vector<WeightedMomentBlock>& blocks);
 post_expected<robust::ParamSpaceSandwich>
 weighted_param_space_sandwich_ij(const std::vector<WeightedMomentIJBlock>& blocks);
 
-// Which second-stage weight's data influence the continuous-LS IJ blocks carry.
-// `Fixed` ⇒ caller-fixed weight (no correction; ULS and pre-supplied weights);
-// the rest re-estimate the weight from `raw` and add its IF(Ŵ) correction rows.
-enum class ContinuousLsIJWeightMode {
-  Fixed,
-  SampleNormalTheory,   // GLS: W from the sample S
-  SampleEmpiricalWls,   // WLS/ADF: dense Browne empirical Γ̂⁻¹
-  SampleEmpiricalDwls,  // DWLS: diagonal Browne empirical Γ̂⁻¹
-  SampleDls,            // DLS: mixed (1-a)Γ_NT + a Γ_ADF
-};
-
 // Estimated-weight moment-metric sandwich {A1, B1} for a continuous moment-
 // quadratic fit, the IJ counterpart of `continuous_ls_param_space_sandwich`.
 // `weight` is the caller-fixed estimation weight (used for `Fixed`); for the

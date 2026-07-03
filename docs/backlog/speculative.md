@@ -918,6 +918,21 @@ Experiment 47 now carries the paired empirical probe: multivariate `t(5)` data,
 ULS/GMM loading CI inversion, fixed versus fitted profile weights, and ordinary
 versus robust-scaled references over `N in {100,200,500}`.
 
+**Progress (2026-07-03): fixed-profile estimated-weight robust scaling.**
+Caller-fixed continuous GMM parameter profile LRT/CI can now request
+estimated-weight robust scaling with complete raw data. The new
+`GmmProfileRobustOptions` switch leaves ordinary `T` unchanged, but routes the
+1-df scale through `continuous_ls_param_space_sandwich_ij`: GLS uses the
+sample-normal-theory IJ weight mode, WLS uses the empirical-WLS IJ weight mode,
+and ULS remains the fixed-weight reference. R exposes this as
+`estimated_weight=TRUE` on the fixed GMM parameter LRT/CI wrappers, requiring
+`robust=TRUE` and `raw_data`. Experiment 47 now keeps the ULS fixed/fitted
+comparison and adds GLS/WLS fixed-profile rows for `ordinary`, `robust_fixed`,
+and `robust_estimated_weight`. This advances the continuous non-normal stress
+slice, but does not solve the funLR gate: fitted-weight derivative/misspec
+references, scalar functionals, ordinal fitted-functionals, and
+Bartlett/calibrated constants remain open.
+
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
 with experiment 47 (`experiments/47-ml-parameter-profile-lrt`) as the small-N
@@ -947,7 +962,7 @@ fits, robust/misspec scaling, and small-sample constants remain open.
 4. **Reliability-difference two-parameter confidence regions** (Pek-Wu sec 3; ties
    [[exp20-deng-chan-alpha-omega]]).
 5. **Extend the C++ seed beyond the current parameter CIs:** all-ordinal DWLS
-   functional constrained fits; complete weight-derivative / misspec scalar
+   functional constrained fits; fitted-weight derivative / misspec scalar
    reference scaling; functional R callbacks; then expose the ordinal/fitted-
    functional surface once an experiment consumes it.
 6. **Done / infrastructure (do not redo):** NT generic-g engine + semlbci validation; coverage
@@ -955,8 +970,9 @@ fits, robust/misspec scaling, and small-sample constants remain open.
    (anti-correlation); analytic functional gradients (11x speedup, validated ~1e-11);
    complete-data ML `fit_ml_constrained` / scalar and parameter profile-LR seed;
    fixed-weight and fitted-weight GMM scalar/parameter profile seeds; parameter
-   CI inversion; complete-data ML, fixed-weight GMM, and fitted-weight GMM
-   parameter robust scaling; R parameter wrappers + experiment-47
+   CI inversion; complete-data ML, fixed-weight GMM, fitted-weight GMM, and
+   fixed-profile estimated-weight GLS/WLS parameter robust scaling; R parameter
+   wrappers + experiment-47
    interior-parameter calibration probe.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored

@@ -792,6 +792,18 @@ Remaining work:
       multivariate `t(5)` data, ULS/GMM parameter CI inversion, fixed versus
       fitted profile weights, and ordinary versus robust-scaled references over
       `N in {100,200,500}`.
+    - **Done 2026-07-03 (fixed-profile estimated-weight robust scaling).**
+      Caller-fixed continuous GMM parameter LRT/CI now has an opt-in
+      estimated-weight robust scale for GLS/WLS via
+      `GmmProfileRobustOptions::estimated_weight`: GLS uses the
+      sample-normal-theory IJ weight mode, WLS uses the empirical-WLS IJ mode,
+      and ULS remains the fixed-weight reference. R exposes this as
+      `estimated_weight=TRUE`, requiring `robust=TRUE` and complete `raw_data`.
+      Experiment 47's CI branch now keeps ULS fixed/fitted rows and adds GLS/WLS
+      fixed-profile `ordinary`, `robust_fixed`, and
+      `robust_estimated_weight` rows. Still open: fitted-weight derivative /
+      misspecification references, scalar functional callbacks, ordinal
+      fitted-functional constraints, and Bartlett/calibrated constants.
     - **Done 2026-06-22 (mean-structure ML wiring).**
       `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
       mean-structure ML in addition to covariance-only ML. The two-metric
@@ -2000,8 +2012,8 @@ work until a concrete downstream consumer appears.
   (one-level or double) is anti-correlated with need (caps ~0.85, and is `B`-invariant).
   Analytic functional gradients landed (11x faster constrained fits). Next: calibrated-
   constant recipe from one dataset; non-normal stress run; reliability-difference regions;
-  build-if core surface = thin `estimate::frontier fit_ml_constrained` closure. See
-  speculative.md for the full list.
+  extend the landed parameter-profile seed to functional/categorical constraints only
+  when an experiment consumes it. See speculative.md for the full list.
 - **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
   variance-of-variance `t`-on-effective-df correction for covariance functionals. See
   speculative.md.
