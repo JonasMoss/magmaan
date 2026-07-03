@@ -1,7 +1,10 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
+
 #include <Eigen/Core>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/frontier/sam.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -135,6 +138,34 @@ magmaan::data::SampleStats lavaan_samp() {
   return s;
 }
 
+Eigen::MatrixXd robust_raw_X() {
+  const Eigen::Index n = 240;
+  Eigen::MatrixXd X(n, 6);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    const int i = static_cast<int>(r + 1);
+    const double t = static_cast<double>(i);
+    const double f1 = std::sin(0.071 * t) + 0.35 * std::cos(0.017 * t) +
+                      0.002 * static_cast<double>((i % 11) - 5);
+    const double f2 = 0.62 * f1 + 0.75 * std::cos(0.053 * t) +
+                      0.20 * std::sin(0.113 * t);
+    X(r, 0) = f1 + 0.45 * std::sin(0.19 * t);
+    X(r, 1) = 0.82 * f1 + 0.55 * std::cos(0.13 * t) +
+              0.10 * static_cast<double>((i % 5) - 2);
+    X(r, 2) = 1.18 * f1 + 0.50 * std::sin(0.07 * t + 0.4);
+    X(r, 3) = f2 + 0.50 * std::cos(0.11 * t);
+    X(r, 4) = 0.92 * f2 + 0.45 * std::sin(0.09 * t) +
+              0.08 * static_cast<double>((i % 7) - 3);
+    X(r, 5) = 1.08 * f2 + 0.40 * std::cos(0.15 * t + 0.2);
+  }
+  return X;
+}
+
+magmaan::data::RawData robust_raw() {
+  magmaan::data::RawData raw;
+  raw.X = {robust_raw_X()};
+  return raw;
+}
+
 }  // namespace
 
 TEST_CASE("fit_sam local point estimates match lavaan::sam(sam.method=local)") {
@@ -225,4 +256,49 @@ TEST_CASE("fit_sam twostep standard errors match lavaan::sam(se=twostep)") {
   CHECK(res->se(5) == doctest::Approx(0.078815).epsilon(1e-4));   // x1~~x1
   CHECK(res->se(11) == doctest::Approx(0.131773).epsilon(1e-4));  // f1~~f1
   CHECK(res->se(12) == doctest::Approx(0.117461).epsilon(1e-4));  // f2~~f2
+}
+
+TEST_CASE("fit_sam twostep.robust structural SEs match lavaan raw-data SAM") {
+  BuiltModel bm = build_two_factor();
+  SamOptions opts;
+  opts.method = SamMethod::Local;
+  opts.se = SamSe::TwostepRobust;
+
+  auto res = fit_sam(bm.pt, bm.rep, bm.names, robust_raw(), opts);
+  REQUIRE(res.has_value());
+  if (!res.has_value()) return;
+  REQUIRE(res->se.size() == 13);
+
+  CHECK(res->structural.theta(0) == doctest::Approx(0.798053).epsilon(1e-4));
+  CHECK(res->structural.theta(1) == doctest::Approx(0.611640).epsilon(1e-4));
+  CHECK(res->structural.theta(2) == doctest::Approx(0.305760).epsilon(1e-4));
+  CHECK(res->se(4) == doctest::Approx(0.050554).epsilon(1e-4));   // f2~f1
+  CHECK(res->se(11) == doctest::Approx(0.053457).epsilon(1e-4));  // f1~~f1
+  CHECK(res->se(12) == doctest::Approx(0.023753).epsilon(1e-4));  // f2~~f2
+}
+
+TEST_CASE("fit_sam twostep.robust rejects unsupported entry points") {
+  BuiltModel bm = build_two_factor();
+  const magmaan::data::RawData raw = robust_raw();
+
+  SamOptions robust;
+  robust.method = SamMethod::Local;
+  robust.se = SamSe::TwostepRobust;
+  CHECK_FALSE(fit_sam(bm.pt, bm.rep, bm.names, lavaan_samp(), robust).has_value());
+
+  SamOptions global = robust;
+  global.method = SamMethod::Global;
+  CHECK_FALSE(fit_sam(bm.pt, bm.rep, bm.names, raw, global).has_value());
+
+  SamOptions means = robust;
+  means.meanstructure = true;
+  CHECK_FALSE(fit_sam(bm.pt, bm.rep, bm.names, raw, means).has_value());
+
+  SamOptions alpha = robust;
+  alpha.local.alpha_correction = 1;
+  CHECK_FALSE(fit_sam(bm.pt, bm.rep, bm.names, raw, alpha).has_value());
+
+  SamOptions naive;
+  naive.se = SamSe::Naive;
+  CHECK_FALSE(fit_sam(bm.pt, bm.rep, bm.names, lavaan_samp(), naive).has_value());
 }

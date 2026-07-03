@@ -15,18 +15,24 @@
 // covariances. magmaan information is total-N scaled, so V2 = I22.inv with no
 // extra 1/N (the N factors in V1 cancel), matching lavaan's unit-scaled V2+V1.
 
+#include <cstddef>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/spec/partable.hpp"
+
+#include "detail_vech.hpp"
 
 namespace magmaan::estimate::frontier::detail {
 
@@ -34,6 +40,108 @@ struct SamSeResult {
   Eigen::MatrixXd vcov;   // n_free × n_free (joint free order)
   Eigen::VectorXd se;     // n_free (joint free order)
 };
+
+struct SamStep1JacBlock {
+  spec::LatentStructure      pt;
+  model::MatrixRep           rep;
+  Estimates                  est;
+  std::vector<Eigen::Index>  full_moment_cols;  // local vech(S_b) -> full vech(S)
+  std::vector<int>           joint_free;        // local free index -> 1-based joint free
+};
+
+inline FitError sam_se_error(std::string detail) {
+  return FitError{FitError::Kind::NumericIssue, std::move(detail), 0, 0.0};
+}
+
+inline fit_expected<Eigen::MatrixXd>
+sym_inverse(const Eigen::MatrixXd& A, const char* what) {
+  const Eigen::Index n = A.rows();
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(0.5 * (A + A.transpose()));
+  if (ldlt.info() != Eigen::Success) {
+    return std::unexpected(sam_se_error(std::string(what) + " not invertible"));
+  }
+  return Eigen::MatrixXd(ldlt.solve(Eigen::MatrixXd::Identity(n, n)));
+}
+
+inline fit_expected<Eigen::MatrixXd>
+sam_lavaan_unbiased_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X,
+                          const Eigen::Ref<const Eigen::MatrixXd>& S) {
+  const Eigen::Index n = X.rows();
+  if (n <= 3) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: unbiased empirical Gamma needs n > 3"));
+  }
+  auto gamma_or = data::empirical_gamma(X);
+  if (!gamma_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: empirical_gamma failed: " +
+        gamma_or.error().detail));
+  }
+  auto gamma_nt_or = data::gamma_nt(S);
+  if (!gamma_nt_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: sample gamma_nt failed: " +
+        gamma_nt_or.error().detail));
+  }
+
+  // Browne's unbiased distribution-free covariance estimator, as used by
+  // lavaan when `gamma.unbiased = TRUE` for complete covariance-only data.
+  const double nd = static_cast<double>(n);
+  const double denom = (nd - 2.0) * (nd - 3.0);
+  const Eigen::VectorXd s_vech = ::magmaan::detail::vech_lower(S);
+  return Eigen::MatrixXd(
+      (nd * (nd - 1.0) / denom) * (*gamma_or) -
+      (nd / denom) *
+          ((*gamma_nt_or) -
+           (2.0 / (nd - 1.0)) * (s_vech * s_vech.transpose())));
+}
+
+inline Eigen::MatrixXd
+pick_matrix(const Eigen::MatrixXd& A, const std::vector<Eigen::Index>& r,
+            const std::vector<Eigen::Index>& c) {
+  Eigen::MatrixXd out(static_cast<Eigen::Index>(r.size()),
+                      static_cast<Eigen::Index>(c.size()));
+  for (std::size_t i = 0; i < r.size(); ++i)
+    for (std::size_t j = 0; j < c.size(); ++j)
+      out(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
+          A(r[i], c[j]);
+  return out;
+}
+
+inline Eigen::MatrixXd
+pick_cols(const Eigen::MatrixXd& A, const std::vector<Eigen::Index>& c) {
+  Eigen::MatrixXd out(A.rows(), static_cast<Eigen::Index>(c.size()));
+  for (std::size_t j = 0; j < c.size(); ++j)
+    out.col(static_cast<Eigen::Index>(j)) = A.col(c[j]);
+  return out;
+}
+
+inline void
+split_step_indices(Eigen::Index n, const std::vector<char>& is_step2,
+                   std::vector<Eigen::Index>& s1,
+                   std::vector<Eigen::Index>& s2) {
+  s1.clear();
+  s2.clear();
+  for (Eigen::Index t = 0; t < n; ++t)
+    (is_step2[static_cast<std::size_t>(t)] ? s2 : s1).push_back(t);
+}
+
+inline std::vector<Eigen::Index>
+all_indices(Eigen::Index n) {
+  std::vector<Eigen::Index> idx(static_cast<std::size_t>(n));
+  for (Eigen::Index k = 0; k < n; ++k) idx[static_cast<std::size_t>(k)] = k;
+  return idx;
+}
+
+inline void
+fill_se_from_vcov(SamSeResult& out) {
+  out.se = Eigen::VectorXd::Constant(out.vcov.rows(),
+                                     std::numeric_limits<double>::quiet_NaN());
+  for (Eigen::Index t = 0; t < out.vcov.rows(); ++t) {
+    const double v = out.vcov(t, t);
+    out.se(t) = v >= 0.0 ? std::sqrt(v) : std::numeric_limits<double>::quiet_NaN();
+  }
+}
 
 // `is_step2` and `sigma11_full` are indexed by joint free index (0-based).
 // `sigma11_full` holds the block measurement vcovs placed at their joint
@@ -48,44 +156,22 @@ sam_twostep_se(const spec::LatentStructure& pt, const model::MatrixRep& rep,
   est_joint.theta = theta_joint;
   auto info_or = inference::information_expected(pt, rep, samp, est_joint);
   if (!info_or.has_value()) {
-    return std::unexpected(FitError{FitError::Kind::NumericIssue,
-                                    "sam_twostep_se: joint information failed: " +
-                                        info_or.error().detail,
-                                    0, 0.0});
+    return std::unexpected(sam_se_error(
+        "sam_twostep_se: joint information failed: " + info_or.error().detail));
   }
   const Eigen::MatrixXd& I = *info_or;
   const Eigen::Index n = I.rows();
 
   std::vector<Eigen::Index> s1, s2;
-  for (Eigen::Index t = 0; t < n; ++t)
-    (is_step2[static_cast<std::size_t>(t)] ? s2 : s1).push_back(t);
-  const Eigen::Index n2 = static_cast<Eigen::Index>(s2.size());
+  split_step_indices(n, is_step2, s1, s2);
 
-  auto pick = [&](const Eigen::MatrixXd& A, const std::vector<Eigen::Index>& r,
-                  const std::vector<Eigen::Index>& c) {
-    Eigen::MatrixXd out(static_cast<Eigen::Index>(r.size()),
-                        static_cast<Eigen::Index>(c.size()));
-    for (std::size_t i = 0; i < r.size(); ++i)
-      for (std::size_t j = 0; j < c.size(); ++j)
-        out(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
-            A(r[i], c[j]);
-    return out;
-  };
+  const Eigen::MatrixXd I22 = pick_matrix(I, s2, s2);
+  const Eigen::MatrixXd I21 = pick_matrix(I, s2, s1);
+  const Eigen::MatrixXd Sigma11 = pick_matrix(sigma11_full, s1, s1);
 
-  const Eigen::MatrixXd I22 = pick(I, s2, s2);
-  const Eigen::MatrixXd I21 = pick(I, s2, s1);
-  const Eigen::MatrixXd Sigma11 = pick(sigma11_full, s1, s1);
-
-  Eigen::MatrixXd I22inv;
-  {
-    Eigen::LDLT<Eigen::MatrixXd> ldlt(0.5 * (I22 + I22.transpose()));
-    if (ldlt.info() != Eigen::Success) {
-      return std::unexpected(FitError{FitError::Kind::NumericIssue,
-                                      "sam_twostep_se: I22 not invertible", 0,
-                                      0.0});
-    }
-    I22inv = ldlt.solve(Eigen::MatrixXd::Identity(n2, n2));
-  }
+  auto I22inv_or = sym_inverse(I22, "sam_twostep_se: I22");
+  if (!I22inv_or.has_value()) return std::unexpected(I22inv_or.error());
+  const Eigen::MatrixXd& I22inv = *I22inv_or;
 
   const Eigen::MatrixXd V2 = I22inv;
   Eigen::MatrixXd VCOV = V2;
@@ -106,11 +192,214 @@ sam_twostep_se(const spec::LatentStructure& pt, const model::MatrixRep& rep,
       out.vcov(s2[i], s2[j]) =
           VCOV(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j));
 
-  out.se = Eigen::VectorXd::Constant(n, std::numeric_limits<double>::quiet_NaN());
-  for (Eigen::Index t = 0; t < n; ++t) {
-    const double v = out.vcov(t, t);
-    out.se(t) = v >= 0.0 ? std::sqrt(v) : std::numeric_limits<double>::quiet_NaN();
+  fill_se_from_vcov(out);
+  return out;
+}
+
+inline fit_expected<Eigen::MatrixXd>
+sam_local_step1_jacobian_p(const std::vector<SamStep1JacBlock>& blocks,
+                           Eigen::Index n_joint_free,
+                           Eigen::Index pstar_full) {
+  Eigen::MatrixXd P =
+      Eigen::MatrixXd::Zero(n_joint_free, pstar_full);
+
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const SamStep1JacBlock& blk = blocks[b];
+    auto ev_or = model::ModelEvaluator::build(blk.pt, blk.rep);
+    if (!ev_or.has_value()) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 evaluator build failed in block " +
+          std::to_string(b) + ": " + ev_or.error().detail));
+    }
+    auto sm_or = ev_or->sigma(blk.est.theta);
+    if (!sm_or.has_value()) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 sigma failed in block " +
+          std::to_string(b) + ": " + sm_or.error().detail));
+    }
+    if (sm_or->sigma.size() != 1) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 block is not single-group"));
+    }
+    auto delta_or = ev_or->dsigma_dtheta(blk.est.theta);
+    if (!delta_or.has_value()) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 Delta failed in block " +
+          std::to_string(b) + ": " + delta_or.error().detail));
+    }
+    const Eigen::MatrixXd& Delta = *delta_or;
+    if (Delta.cols() != static_cast<Eigen::Index>(blk.joint_free.size()) ||
+        Delta.rows() != static_cast<Eigen::Index>(blk.full_moment_cols.size())) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 Jacobian shape mismatch in block " +
+          std::to_string(b)));
+    }
+
+    auto gamma_nt_or = data::gamma_nt(sm_or->sigma[0]);
+    if (!gamma_nt_or.has_value()) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 gamma_nt failed in block " +
+          std::to_string(b) + ": " + gamma_nt_or.error().detail));
+    }
+    auto W_or = sym_inverse(*gamma_nt_or,
+                            "sam_twostep_robust_se: step1 Gamma_NT");
+    if (!W_or.has_value()) return std::unexpected(W_or.error());
+    const Eigen::MatrixXd& W = *W_or;
+    if (W.rows() != Delta.rows() || W.cols() != Delta.rows()) {
+      return std::unexpected(sam_se_error(
+          "sam_twostep_robust_se: step1 weight shape mismatch in block " +
+          std::to_string(b)));
+    }
+    auto I_or = sym_inverse(Delta.transpose() * W * Delta,
+                            "sam_twostep_robust_se: step1 information");
+    if (!I_or.has_value()) return std::unexpected(I_or.error());
+    const Eigen::MatrixXd Pb = (*I_or) * Delta.transpose() * W;
+
+    for (Eigen::Index j = 0; j < Pb.cols(); ++j) {
+      const Eigen::Index full_col =
+          blk.full_moment_cols[static_cast<std::size_t>(j)];
+      if (full_col < 0 || full_col >= pstar_full) {
+        return std::unexpected(sam_se_error(
+            "sam_twostep_robust_se: step1 full-moment index out of range"));
+      }
+      for (Eigen::Index a = 0; a < Pb.rows(); ++a) {
+        const int jf = blk.joint_free[static_cast<std::size_t>(a)];
+        if (jf > 0) P(static_cast<Eigen::Index>(jf - 1), full_col) = Pb(a, j);
+      }
+    }
   }
+  return P;
+}
+
+// lavaan's robust SAM multiplies B in measurement-block order, while P rows
+// remain in joint free order.
+inline fit_expected<SamSeResult>
+sam_twostep_robust_se(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const data::SampleStats& samp,
+                      const data::RawData& raw,
+                      const Eigen::VectorXd& theta_joint,
+                      const std::vector<char>& is_step2,
+                      const Eigen::MatrixXd& sigma11_full,
+                      const std::vector<Eigen::Index>& step1_info_order,
+                      const std::vector<SamStep1JacBlock>& step1_blocks) {
+  if (samp.S.size() != 1 || samp.n_obs.size() != 1 || raw.X.size() != 1 ||
+      !raw.mask.empty()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: requires single-group complete raw data"));
+  }
+  const Eigen::Index p = samp.S[0].rows();
+  const Eigen::Index pstar = ::magmaan::detail::vech_len(p);
+  const double N = static_cast<double>(samp.n_obs[0]);
+  if (!(N > 0.0) || raw.X[0].rows() != samp.n_obs[0] || raw.X[0].cols() != p) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: raw data and SampleStats dimensions differ"));
+  }
+
+  Estimates est_joint;
+  est_joint.theta = theta_joint;
+  auto info_or = inference::information_expected(pt, rep, samp, est_joint);
+  if (!info_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: joint information failed: " +
+        info_or.error().detail));
+  }
+  const Eigen::MatrixXd I = (*info_or) / N;  // lavaan's unit information scale
+  const Eigen::Index n = I.rows();
+
+  std::vector<Eigen::Index> s1, s2;
+  split_step_indices(n, is_step2, s1, s2);
+  if (step1_info_order.size() != s1.size()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: step1 information order has wrong length"));
+  }
+  const Eigen::Index n2 = static_cast<Eigen::Index>(s2.size());
+  if (n2 == 0) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: no step-2 free parameters"));
+  }
+
+  const Eigen::MatrixXd I22 = pick_matrix(I, s2, s2);
+  const Eigen::MatrixXd I21 = pick_matrix(I, s2, step1_info_order);
+  auto I22inv_or = sym_inverse(I22, "sam_twostep_robust_se: I22");
+  if (!I22inv_or.has_value()) return std::unexpected(I22inv_or.error());
+  const Eigen::MatrixXd& I22inv = *I22inv_or;
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: joint evaluator build failed: " +
+        ev_or.error().detail));
+  }
+  auto sm_or = ev_or->sigma(theta_joint);
+  if (!sm_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: joint sigma failed: " + sm_or.error().detail));
+  }
+  auto delta_or = ev_or->dsigma_dtheta(theta_joint);
+  if (!delta_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: joint Delta failed: " +
+        delta_or.error().detail));
+  }
+  const Eigen::MatrixXd& Delta = *delta_or;
+  if (Delta.rows() != pstar || Delta.cols() != n) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: joint Delta shape mismatch"));
+  }
+
+  auto gamma_or = sam_lavaan_unbiased_gamma(raw.X[0], samp.S[0]);
+  if (!gamma_or.has_value()) {
+    return std::unexpected(gamma_or.error());
+  }
+  const Eigen::MatrixXd& Gamma = *gamma_or;
+  if (Gamma.rows() != pstar || Gamma.cols() != pstar) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: empirical Gamma shape mismatch"));
+  }
+
+  auto gamma_nt_or = data::gamma_nt(sm_or->sigma[0]);
+  if (!gamma_nt_or.has_value()) {
+    return std::unexpected(sam_se_error(
+        "sam_twostep_robust_se: joint gamma_nt failed: " +
+        gamma_nt_or.error().detail));
+  }
+  auto W_or = sym_inverse(*gamma_nt_or,
+                          "sam_twostep_robust_se: joint Gamma_NT");
+  if (!W_or.has_value()) return std::unexpected(W_or.error());
+  const Eigen::MatrixXd& W = *W_or;
+
+  auto P_full_or = sam_local_step1_jacobian_p(step1_blocks, n, pstar);
+  if (!P_full_or.has_value()) return std::unexpected(P_full_or.error());
+  const Eigen::MatrixXd P = pick_matrix(*P_full_or, s1, all_indices(pstar));
+  const Eigen::MatrixXd Delta2 = pick_cols(Delta, s2);
+
+  const Eigen::MatrixXd WD2 = W * Delta2;
+  const Eigen::MatrixXd V22 = WD2.transpose() * Gamma * WD2;
+  const Eigen::MatrixXd V11 = P * Gamma * P.transpose();
+  const Eigen::MatrixXd V21 = Delta2.transpose() * W * Gamma * P.transpose();
+  const Eigen::MatrixXd V12 = V21.transpose();
+
+  const Eigen::MatrixXd Ainv = -I22inv;
+  const Eigen::MatrixXd B = -I21;
+  const Eigen::MatrixXd core =
+      V22 + B * V12 + V21 * B.transpose() + B * V11 * B.transpose();
+  Eigen::MatrixXd VCOV2 = (Ainv * core * Ainv.transpose()) / N;
+  VCOV2 = 0.5 * (VCOV2 + VCOV2.transpose()).eval();
+
+  SamSeResult out;
+  out.vcov = Eigen::MatrixXd::Zero(n, n);
+  const Eigen::MatrixXd Sigma11 = pick_matrix(sigma11_full, s1, s1);
+  for (std::size_t i = 0; i < s1.size(); ++i)
+    for (std::size_t j = 0; j < s1.size(); ++j)
+      out.vcov(s1[i], s1[j]) = Sigma11(static_cast<Eigen::Index>(i),
+                                       static_cast<Eigen::Index>(j));
+  for (std::size_t i = 0; i < s2.size(); ++i)
+    for (std::size_t j = 0; j < s2.size(); ++j)
+      out.vcov(s2[i], s2[j]) =
+          VCOV2(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j));
+
+  fill_se_from_vcov(out);
   return out;
 }
 
