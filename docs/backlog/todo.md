@@ -2145,6 +2145,11 @@ work until a concrete downstream consumer appears.
   normal-theory Gamma gives *asymptotically* wrong SEs on non-normal data
   (coverage flat at ~0.79 on the independent generator), tracking robust ML;
   the residual GOF brackets nominal (NT over-rejects, empirical conservative at
-  small N) with near-full power; Guttman's RMSE runs a few percent over ML.
-  Later slots for the enum: FABIN2/Bentler/James-Stein/MIIV maps (loadings
-  producers already exist) and a polychoric-ADF Gamma path.
+  small N) with near-full power. A **reliability sweep** (0.3/0.5/0.7) shows the
+  efficiency gap widens as reliability drops and spreads from loadings to the
+  structural parameters (loadings RMSE ratio ~1.1 at 0.7 to ~1.2-1.25 at 0.3,
+  factor covariances similar; residual variances stay at parity), while the
+  empirical-Gamma inference stays calibrated throughout; at low reliability x
+  small N the closed form throws fewer Heywood cases than ML and never fails to
+  converge. Later slots for the enum: FABIN2/Bentler/James-Stein/MIIV maps
+  (loadings producers already exist) and a polychoric-ADF Gamma path.

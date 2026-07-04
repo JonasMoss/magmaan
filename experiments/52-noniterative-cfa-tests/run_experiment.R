@@ -22,11 +22,19 @@
 # and coverage measure Type-I / nominal calibration; a second misspecified arm
 # (one omitted cross-loading in the population) measures GOF power.
 #
-# The message the design is built to expose: the delta-method inference is
-# calibrated on all three generators *when the empirical Gamma is used*; the
-# normal-theory Gamma is calibrated only under normality. This is the ULS/NTML,
-# residual-GOF analogue of the well-known Satorra-Bentler robustness story, and
-# it mirrors the Dhaene-Rosseel (2024) continuous closed-form CFA setup.
+# The base message: the delta-method inference is calibrated on all three
+# generators *when the empirical Gamma is used*; the normal-theory Gamma is
+# calibrated only under normality (the ULS/NTML residual-GOF analogue of the
+# Satorra-Bentler robustness story, mirroring Dhaene-Rosseel 2024).
+#
+# The extension sweeps indicator reliability (default 0.3 / 0.5 / 0.7) down to
+# where the closed form is stressed: low reliability shrinks the observed
+# correlations, so (a) ML's optimal weighting should pull ahead on the loadings,
+# and (b) the clamp-free Guttman map approaches its interior-point assumptions.
+# We track the loadings efficiency gap vs reliability, whether inference stays
+# calibrated in the hard regime, and how gracefully the estimators degrade
+# (Heywood / improper rate, and convergence: the closed form cannot fail to
+# converge, unlike iterative ML).
 
 suppressWarnings(suppressMessages(library(magmaan)))
 source(file.path(
@@ -47,9 +55,10 @@ usage <- function() {
     "closed-form Guttman CFA estimator against magmaan ML.\n\n",
     "Options:\n",
     "  --smoke            One quick slice (n=250, reps=40, normal+ordinal). Default.\n",
-    "  --full             Full generator x n grid at --reps replications.\n",
+    "  --full             Full generator x reliability x n grid at --reps reps.\n",
     "  --reps N           Replications per cell (full). Default: 1000.\n",
-    "  --n LIST           Comma-separated sample sizes. Default: 100,250,500,1000.\n",
+    "  --n LIST           Comma-separated sample sizes. Default: 50,100,250,500,1000.\n",
+    "  --reliability LIST Indicator reliabilities to sweep. Default: 0.3,0.5,0.7.\n",
     "  --generators LIST  Subset of normal,ig,ordinal. Default: all.\n",
     "  --specs LIST       Subset of correct,misspec. Default: both.\n",
     "  --ref-n N          Reference draw for the ordinal population target. Default: 200000.\n",
@@ -66,7 +75,8 @@ parse_args <- function(args) {
   opts <- list(
     smoke = TRUE, full = FALSE,
     reps = 1000L,
-    n = c(100L, 250L, 500L, 1000L),
+    n = c(50L, 100L, 250L, 500L, 1000L),
+    reliability = c(0.3, 0.5, 0.7),
     generators = c("normal", "ig", "ordinal"),
     specs = c("correct", "misspec"),
     ref_n = 200000L,
@@ -89,6 +99,7 @@ parse_args <- function(args) {
     else if (a == "--full") { opts$full <- TRUE; opts$smoke <- FALSE }
     else if (a == "--reps") { opts$reps <- as.integer(take()); explicit <- c(explicit, "reps") }
     else if (a == "--n") { opts$n <- as.integer(parse_csv_arg(take())); explicit <- c(explicit, "n") }
+    else if (a == "--reliability") { opts$reliability <- parse_csv_numeric(take()); explicit <- c(explicit, "reliability") }
     else if (a == "--generators") { opts$generators <- parse_csv_arg(take()); explicit <- c(explicit, "generators") }
     else if (a == "--specs") { opts$specs <- parse_csv_arg(take()); explicit <- c(explicit, "specs") }
     else if (a == "--ref-n") { opts$ref_n <- as.integer(take()); explicit <- c(explicit, "ref_n") }
@@ -104,6 +115,9 @@ parse_args <- function(args) {
   if (length(bad)) stop("unknown generators: ", paste(bad, collapse = ","), call. = FALSE)
   bad <- setdiff(opts$specs, c("correct", "misspec"))
   if (length(bad)) stop("unknown specs: ", paste(bad, collapse = ","), call. = FALSE)
+  if (any(!is.finite(opts$reliability) | opts$reliability <= 0 | opts$reliability >= 1)) {
+    stop("--reliability values must lie in (0, 1)", call. = FALSE)
+  }
   opts
 }
 
@@ -115,6 +129,7 @@ set_single_threaded_math()
 if (isTRUE(opts$smoke)) {
   if (!"reps" %in% opts$explicit) opts$reps <- 40L
   if (!"n" %in% opts$explicit) opts$n <- 250L
+  if (!"reliability" %in% opts$explicit) opts$reliability <- c(0.3, 0.7)
   if (!"generators" %in% opts$explicit) opts$generators <- c("normal", "ordinal")
   if (!"ref_n" %in% opts$explicit) opts$ref_n <- 40000L
 }
@@ -132,13 +147,16 @@ ov <- paste0("x", 1:9)
 factor_of <- rep(1:3, each = 3)          # indicator -> factor
 lambda_free <- c(0.9, 0.8)               # non-marker loadings per factor
 lambda_all <- rep(c(1.0, 0.9, 0.8), 3)   # incl markers, indicator order
-reliability <- 0.7
 cross_load <- 0.35                        # misspec: x4 also loads on f1
 
 model_h1 <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9\n"
 model_h0 <- paste0(model_h1, "f1 ~~ 0*f3\n")
 
-make_population <- function(spec) {
+# `reliability` is the target per-indicator reliability lambda^2 / (lambda^2 + theta);
+# residual variances scale to hit it. Lower reliability shrinks the observed
+# correlations, which is where the closed-form communality step is stressed and
+# where optimal weighting (ML) should pull ahead on the loadings.
+make_population <- function(spec, reliability) {
   L <- matrix(0, 9, 3)
   L[cbind(1:9, factor_of)] <- lambda_all
   Phi <- matrix(c(1, .3, 0,
@@ -152,7 +170,8 @@ make_population <- function(spec) {
     stop("population covariance not PD for spec=", spec, call. = FALSE)
   }
   dimnames(Sigma) <- list(ov, ov)
-  list(Sigma = Sigma, Lambda = L, Phi = Phi, theta = theta, spec = spec)
+  list(Sigma = Sigma, Lambda = L, Phi = Phi, theta = theta,
+       spec = spec, reliability = reliability)
 }
 
 # ---------------------------------------------------------------------------
@@ -176,9 +195,12 @@ param_group <- vapply(free_rows, function(r) {
 
 group_levels <- c("loadings", "factor_cov", "residual", "all")
 
-# analysis target theta for the on-model (correct) population, keyed by free row.
-target_correct <- (function() {
-  pop <- make_population("correct")
+# Analysis target theta for an on-model (correct) population, keyed by free row.
+# Per-cell targets come from population_target() (the Guttman map of the actual
+# population covariance); this closed form is only used for the startup sanity
+# check that Guttman(Sigma) reproduces the truth.
+analytic_target <- function(reliability) {
+  pop <- make_population("correct", reliability)
   vapply(free_rows, function(r) {
     op <- pt_h1$op[r]; lhs <- pt_h1$lhs[r]; rhs <- pt_h1$rhs[r]
     if (op == "=~") {
@@ -189,7 +211,7 @@ target_correct <- (function() {
       pop$theta[as.integer(sub("x", "", lhs))]
     }
   }, numeric(1))
-})()
+}
 
 # ---------------------------------------------------------------------------
 # Generators. Each (generator, spec) is calibrated once; per-cell draws are
@@ -208,8 +230,8 @@ ordinal_probs <- {
   diff(c(0, stats::pnorm(tau), 1))
 }
 
-calibrate_generator <- function(generator, spec) {
-  pop <- make_population(spec)
+calibrate_generator <- function(generator, spec, reliability) {
+  pop <- make_population(spec, reliability)
   Sigma <- pop$Sigma
   if (generator == "normal") {
     return(list(pop = pop, kind = "normal", chol = chol(Sigma)))
@@ -294,7 +316,7 @@ metric_names <- c(
   paste0("rej_ml_", ml_gof_ptypes),
   as.vector(outer(diff_variants, diff_ptypes, function(v, p) paste0("rej_diff_", v, "_", p))),
   paste0("gofT_", gof_variants),
-  "conv_guttman", "conv_ml"
+  "conv_guttman", "conv_ml", "improper_guttman", "improper_ml"
 )
 
 group_reduce <- function(vals) {
@@ -318,6 +340,7 @@ worker <- function(i, sampler, target, spec) {
   out["conv_guttman"] <- as.numeric(!is.null(gfit))
   if (!is.null(gfit)) {
     est_g <- gfit$theta[free_idx]
+    out["improper_guttman"] <- as.numeric(any(est_g[param_group == "residual"] < 0))
     infs <- list(
       g_ntml_nt  = tryCatch(core$noniterative_cfa_inference_impl(gfit, "guttman", "ntml", "nt", NULL), error = function(e) NULL),
       g_ntml_emp = tryCatch(core$noniterative_cfa_inference_impl(gfit, "guttman", "ntml", "empirical", X), error = function(e) NULL),
@@ -361,6 +384,7 @@ worker <- function(i, sampler, target, spec) {
   out["conv_ml"] <- as.numeric(ok_ml)
   if (ok_ml) {
     est_m <- mlfit$partable$est[free_rows]
+    out["improper_ml"] <- as.numeric(any(est_m[param_group == "residual"] < 0))
     if (identical(spec, "correct")) {
       se_nt <- tryCatch(sqrt(diag(stats::vcov(mlfit, regime = "model", data = Xdf)))[free_idx],
                         error = function(e) rep(NA_real_, length(free_idx)))
@@ -397,11 +421,11 @@ worker <- function(i, sampler, target, spec) {
 # ---------------------------------------------------------------------------
 
 local({
-  pop <- make_population("correct")
+  pop <- make_population("correct", 0.7)
   gt <- core$noniterative_cfa_fit_impl(pt_h1, list(S = pop$Sigma, nobs = 1000L), "guttman")$theta[free_idx]
-  if (max(abs(gt - target_correct)) > 1e-6) {
+  if (max(abs(gt - analytic_target(0.7))) > 1e-6) {
     stop("Guttman(Sigma) does not reproduce the analysis target (max err ",
-         signif(max(abs(gt - target_correct)), 3), ")", call. = FALSE)
+         signif(max(abs(gt - analytic_target(0.7))), 3), ")", call. = FALSE)
   }
   X <- matrix(stats::rnorm(500 * 9), 500, 9) %*% chol(pop$Sigma); colnames(X) <- ov
   ml <- suppressMessages(magmaan::magmaan(model_h1, as.data.frame(X), estimator = "ML"))
@@ -414,22 +438,24 @@ local({
 # Run the grid.
 # ---------------------------------------------------------------------------
 
-design <- expand.grid(generator = opts$generators, spec = opts$specs, n = opts$n,
+design <- expand.grid(generator = opts$generators, spec = opts$specs,
+                      reliability = opts$reliability, n = opts$n,
                       stringsAsFactors = FALSE)
-design <- design[order(design$generator, design$spec, design$n), ]
+design <- design[order(design$generator, design$spec, design$reliability, design$n), ]
 
-message(sprintf("Grid: %d cells (%s) x n(%s) x spec(%s); reps=%d cores=%d",
+message(sprintf("Grid: %d cells (%s) x rel(%s) x n(%s) x spec(%s); reps=%d cores=%d",
                 nrow(design), paste(opts$generators, collapse = ","),
+                paste(opts$reliability, collapse = ","),
                 paste(opts$n, collapse = ","), paste(opts$specs, collapse = ","),
                 opts$reps, opts$cores))
 
 gen_cache <- new.env(parent = emptyenv())
-gen_setup <- function(generator, spec, gi, si) {
-  key <- paste(generator, spec, sep = "|")
+gen_setup <- function(generator, spec, reliability, gi, si, ri) {
+  key <- paste(generator, spec, reliability, sep = "|")
   if (!is.null(gen_cache[[key]])) return(gen_cache[[key]])
-  message(sprintf("  calibrating %s / %s ...", generator, spec))
-  gcal <- calibrate_generator(generator, spec)
-  tgt <- population_target(gcal, opts$seed_base + gi * 1000003L + si * 300007L + 777L)
+  message(sprintf("  calibrating %s / %s / rel=%.2f ...", generator, spec, reliability))
+  gcal <- calibrate_generator(generator, spec, reliability)
+  tgt <- population_target(gcal, opts$seed_base + gi * 1000003L + si * 300007L + ri * 90001L + 777L)
   setup <- list(gcal = gcal, target = tgt$theta,
                 calib_err = if (is.null(gcal$calib_err)) NA_real_ else gcal$calib_err)
   gen_cache[[key]] <- setup
@@ -442,21 +468,25 @@ push <- function(lst, row) { lst[[length(lst) + 1L]] <- row; lst }
 
 t_start <- proc.time()[["elapsed"]]
 for (ci in seq_len(nrow(design))) {
-  generator <- design$generator[ci]; spec <- design$spec[ci]; n <- design$n[ci]
+  generator <- design$generator[ci]; spec <- design$spec[ci]
+  reliability <- design$reliability[ci]; n <- design$n[ci]
   gi <- match(generator, c("normal", "ig", "ordinal"))
   si <- match(spec, c("correct", "misspec"))
-  setup <- gen_setup(generator, spec, gi, si)
-  cell_seed <- opts$seed_base + gi * 1000003L + si * 300007L + n * 101L
+  ri <- match(reliability, sort(unique(opts$reliability)))
+  setup <- gen_setup(generator, spec, reliability, gi, si, ri)
+  cell_seed <- opts$seed_base + gi * 1000003L + si * 300007L + ri * 90001L + n * 101L
   sampler <- batch_sampler(setup$gcal, n, opts$reps, cell_seed)
 
-  message(sprintf("[%d/%d] %s / %s / n=%d ...", ci, nrow(design), generator, spec, n))
+  message(sprintf("[%d/%d] %s / %s / rel=%.2f / n=%d ...",
+                  ci, nrow(design), generator, spec, reliability, n))
   res <- parallel::mclapply(seq_len(opts$reps), function(i)
     worker(i, sampler, setup$target, spec),
     mc.cores = opts$cores, mc.preschedule = TRUE)
   ok <- vapply(res, function(r) is.numeric(r) && length(r) == length(metric_names), logical(1))
   M <- do.call(rbind, res[ok])
   cm <- colMeans(M, na.rm = TRUE)
-  base <- list(generator = generator, spec = spec, n = n, reps = sum(ok))
+  base <- list(generator = generator, spec = spec, reliability = reliability,
+               n = n, reps = sum(ok))
 
   for (v in se_variants) for (g in group_levels)
     cov_rows <- push(cov_rows, data.frame(base, variant = v, group = g,
@@ -478,12 +508,14 @@ for (ci in seq_len(nrow(design))) {
   diag_rows <- push(diag_rows, data.frame(
     base,
     conv_guttman = cm[["conv_guttman"]], conv_ml = cm[["conv_ml"]],
+    improper_guttman = cm[["improper_guttman"]], improper_ml = cm[["improper_ml"]],
     gofT_ntml_nt = cm[["gofT_g_ntml_nt"]], gofT_uls_emp = cm[["gofT_g_uls_emp"]],
     calib_err = setup$calib_err))
 
   el <- proc.time()[["elapsed"]] - t_start
-  message(sprintf("    done (%.0fs elapsed, conv guttman=%.3f ml=%.3f)",
-                  el, cm[["conv_guttman"]], cm[["conv_ml"]]))
+  message(sprintf("    done (%.0fs, conv g=%.3f ml=%.3f, improper g=%.3f ml=%.3f)",
+                  el, cm[["conv_guttman"]], cm[["conv_ml"]],
+                  cm[["improper_guttman"]], cm[["improper_ml"]]))
 }
 
 # ---------------------------------------------------------------------------
@@ -513,7 +545,7 @@ meta <- metadata_frame(
     mode = if (opts$smoke) "smoke" else "full",
     reps = opts$reps, n = opts$n, generators = opts$generators, specs = opts$specs,
     ref_n = opts$ref_n, alpha = opts$alpha, seed_base = opts$seed_base,
-    cores = opts$cores, reliability = reliability, cross_load = cross_load),
+    cores = opts$cores, reliability = opts$reliability, cross_load = cross_load),
   packages = "magmaan")
 meta_path <- file.path(opts$results_dir, "metadata.csv")
 write_csv(meta, meta_path)
