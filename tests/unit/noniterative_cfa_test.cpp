@@ -1,0 +1,274 @@
+#include <doctest/doctest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <string_view>
+
+#include <Eigen/Core>
+
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/frontier/noniterative_cfa.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/robust/frontier/noniterative_inference.hpp"
+#include "magmaan/spec/build.hpp"
+#include "magmaan/spec/partable.hpp"
+
+using magmaan::data::SampleStats;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::MatrixRep;
+using magmaan::model::ModelEvaluator;
+using magmaan::parse::Parser;
+using magmaan::spec::LatentStructure;
+namespace ef = magmaan::estimate::frontier;
+namespace rf = magmaan::robust::frontier;
+
+// No-exceptions doctest: REQUIRE does not abort, so guard derefs. Bail out of
+// the void test body on an error-state std::expected.
+#define REQUIRE_OK(value)                                                     \
+  do {                                                                        \
+    INFO("error: " << ((value).has_value() ? "" : (value).error().detail));  \
+    REQUIRE((value).has_value());                                             \
+    if (!(value).has_value()) return;                                         \
+  } while (false)
+
+namespace {
+
+struct Built {
+  LatentStructure pt;
+  MatrixRep rep;
+};
+
+Built build(std::string_view src) {
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  return Built{std::move(*pt), std::move(*mr)};
+}
+
+// Exact 2-factor population: f1 ← x1,x2,x3 (marker x1), f2 ← x4,x5,x6 (marker x4).
+Eigen::MatrixXd two_factor_cov() {
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(6, 2);
+  L(0, 0) = 1.0; L(1, 0) = 0.8; L(2, 0) = 1.2;
+  L(3, 1) = 1.0; L(4, 1) = 0.7; L(5, 1) = 1.3;
+  Eigen::MatrixXd Psi(2, 2);
+  Psi << 1.0, 0.3, 0.3, 1.0;
+  Eigen::MatrixXd S = L * Psi * L.transpose();
+  for (Eigen::Index i = 0; i < 6; ++i) S(i, i) += 0.5;
+  return S;
+}
+
+constexpr const char* kTwoFactor =
+    "f1 =~ x1 + x2 + x3\n"
+    "f2 =~ x4 + x5 + x6\n"
+    "f1 ~~ f2\n";
+
+// The θ₀ that the exact population implies, keyed by matrix cell.
+double true_param(const magmaan::model::ParamLocation& loc) {
+  using magmaan::model::MatId;
+  switch (loc.mat) {
+    case MatId::Lambda:
+      switch (loc.row) {
+        case 1: return 0.8;
+        case 2: return 1.2;
+        case 4: return 0.7;
+        case 5: return 1.3;
+        default: return 1.0;
+      }
+    case MatId::Psi:
+      return (loc.row == loc.col) ? 1.0 : 0.3;
+    case MatId::Theta:
+      return 0.5;
+    default:
+      return 0.0;
+  }
+}
+
+}  // namespace
+
+TEST_CASE("noniterative Guttman map recovers full theta on exact population") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+
+  const auto locs = ev->param_locations();
+  REQUIRE(static_cast<Eigen::Index>(locs.size()) == th->size());
+  for (std::size_t k = 0; k < locs.size(); ++k)
+    CHECK((*th)(static_cast<Eigen::Index>(k)) ==
+          doctest::Approx(true_param(locs[k])).epsilon(1e-5));
+}
+
+TEST_CASE("noniterative map Jacobian satisfies Fisher consistency J*Delta = I") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+
+  auto D = ev->dsigma_dtheta(*th);   // Δ, p* × q
+  REQUIRE_OK(D);
+  auto J = ef::estimator_map_jacobian(b.pt, b.rep, *ev, samp);  // q × p*
+  REQUIRE_OK(J);
+
+  const Eigen::Index q = th->size();
+  const Eigen::MatrixXd JD = (*J) * (*D);
+  const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(q, q);
+  CHECK((JD - I).cwiseAbs().maxCoeff() < 1e-4);
+}
+
+TEST_CASE("noniterative GOF is ~0 at exact fit with correct df and finite SEs") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+
+  for (auto disc : {rf::Discrepancy::ULS, rf::Discrepancy::NTML}) {
+    auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
+                                             ef::NonIterativeEstimator::Guttman, disc);
+    REQUIRE_OK(inf);
+    CHECK(inf->T_gof < 1e-6);            // residual is ~0 at exact fit
+    CHECK(inf->df == 8);                 // p*=21, q=13
+    CHECK(inf->gof_eigenvalues.size() == 8);
+    CHECK(inf->se.size() == th->size());
+    for (Eigen::Index i = 0; i < inf->se.size(); ++i) {
+      CHECK(std::isfinite(inf->se(i)));
+      CHECK(inf->se(i) >= 0.0);
+    }
+  }
+}
+
+TEST_CASE("NTML GOF statistic equals the RLS chi-square (model-implied weight)") {
+  // Perturb S so the CFA cannot fit it exactly; then T_NTML must equal
+  // N·½tr((Σ̂⁻¹(S−Σ̂))²) = rls_chi2. This fails if V uses the sample GLS weight.
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 4) += 0.15; S(4, 0) += 0.15;   // a cross-factor residual the model omits
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+
+  auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
+                                           ef::NonIterativeEstimator::Guttman,
+                                           rf::Discrepancy::NTML);
+  REQUIRE_OK(inf);
+  CHECK(inf->T_gof > 0.0);
+  CHECK(std::isfinite(inf->rls_check));
+  CHECK(inf->T_gof == doctest::Approx(inf->rls_check).epsilon(1e-8));
+}
+
+TEST_CASE("ULS GOF statistic equals N*tr((S-Sigma)^2) (D'D weight, vech aligned)") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 4) += 0.15; S(4, 0) += 0.15;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto sig = ev->sigma(*th);
+  REQUIRE_OK(sig);
+  const Eigen::MatrixXd D = S - sig->sigma[0];
+  const double expected = 500.0 * D.squaredNorm();   // N·tr(D²) for symmetric D
+
+  auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
+                                           ef::NonIterativeEstimator::Guttman,
+                                           rf::Discrepancy::ULS);
+  REQUIRE_OK(inf);
+  CHECK(inf->T_gof == doctest::Approx(expected).epsilon(1e-9));
+}
+
+TEST_CASE("noniterative Wald test: exact at the truth, positive off it, df correct") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
+                                           ef::NonIterativeEstimator::Guttman,
+                                           rf::Discrepancy::NTML);
+  REQUIRE_OK(inf);
+
+  // Restriction on the x2 loading (Lambda row 1), whose truth is 0.8.
+  const auto locs = ev->param_locations();
+  Eigen::Index kidx = -1;
+  for (std::size_t k = 0; k < locs.size(); ++k)
+    if (locs[k].mat == magmaan::model::MatId::Lambda && locs[k].row == 1) kidx = static_cast<Eigen::Index>(k);
+  REQUIRE(kidx >= 0);
+
+  Eigen::MatrixXd R = Eigen::MatrixXd::Zero(1, th->size());
+  R(0, kidx) = 1.0;
+  Eigen::VectorXd qtrue(1);
+  qtrue(0) = 0.8;
+  auto w_true = rf::noniterative_wald(*th, *inf, R, qtrue);
+  REQUIRE_OK(w_true);
+  CHECK(w_true->df == 1);
+  CHECK(w_true->chi2 < 1e-4);
+
+  Eigen::VectorXd qoff(1);
+  qoff(0) = 1.3;
+  auto w_off = rf::noniterative_wald(*th, *inf, R, qoff);
+  REQUIRE_OK(w_off);
+  CHECK(w_off->chi2 > 0.0);
+  CHECK(std::isfinite(w_off->chi2));
+}
+
+TEST_CASE("noniterative difference test flags a false zero-covariance restriction") {
+  // Population has f1~~f2 = 0.3. H0 fixes it to 0 (misspecified); H1 frees it.
+  Built h1 = build(kTwoFactor);
+  Built h0 = build(
+      "f1 =~ x1 + x2 + x3\n"
+      "f2 =~ x4 + x5 + x6\n"
+      "f1 ~~ 0*f2\n");
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev1 = ModelEvaluator::build(h1.pt, h1.rep);
+  auto ev0 = ModelEvaluator::build(h0.pt, h0.rep);
+  REQUIRE_OK(ev1);
+  REQUIRE_OK(ev0);
+  auto t1 = ef::noniterative_cfa_theta(h1.pt, h1.rep, *ev1, samp);
+  auto t0 = ef::noniterative_cfa_theta(h0.pt, h0.rep, *ev0, samp);
+  REQUIRE_OK(t1);
+  REQUIRE_OK(t0);
+
+  auto inf1 = rf::noniterative_inference_nt(h1.pt, h1.rep, samp, *t1,
+                                            ef::NonIterativeEstimator::Guttman,
+                                            rf::Discrepancy::ULS);
+  auto inf0 = rf::noniterative_inference_nt(h0.pt, h0.rep, samp, *t0,
+                                            ef::NonIterativeEstimator::Guttman,
+                                            rf::Discrepancy::ULS);
+  REQUIRE_OK(inf1);
+  REQUIRE_OK(inf0);
+
+  auto diff = rf::noniterative_difference_test(*inf0, *inf1, 1);
+  REQUIRE_OK(diff);
+  CHECK(diff->df_d == 1);
+  CHECK(diff->eigenvalues.size() == 1);
+  CHECK(diff->T_d > 0.0);   // H1 fits, H0 does not
+}
