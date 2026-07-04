@@ -104,16 +104,18 @@ enum class Information { Expected, Observed };
 //                  `h1.information = "structured"`.
 //   Unstructured = M = S  (sample)        — `h1.information = "unstructured"`;
 //                  the weight `browne_residual_nt` uses.
-//   Pairwise     = use `data::gamma_nt_pairwise(raw, pw)[b]` directly as the
-//                  bread's Γ (not `Γ_NT(Σ̂_b)`). Requires raw data + a
+//   Pairwise     = use the `data::gamma_nt_pairwise(raw, pw)[b]` metric as
+//                  the bread's Γ (not `Γ_NT(Σ̂_b)`). Requires raw data + a
 //                  `PairwiseSampleStats` — the build_u_factor overload that
-//                  takes those arguments must be used. With matching
+//                  takes those arguments must be used. The Expected-bread
+//                  path applies this metric as an operator; the
+//                  Observed-bread path still materialises it. With matching
 //                  `cov = ModelImplied` meat (`reduced_gamma_nt_pairwise`)
 //                  the sandwich SE collapses to `(1/N)·A⁻¹` (the naive
 //                  expected vcov on a Γ_NT^pw weight); with `cov =
 //                  Empirical` meat (`Ψ̂'Ψ̂/n`) it becomes the pairwise +
-//                  non-normal robust SE — the principled SE for a
-//                  pairwise SEM fit.
+//                  non-normal robust SE — the principled SE for a pairwise
+//                  SEM fit.
 enum class WeightMoments { Structured, Unstructured, Pairwise };
 
 // The "meat" — the ACOV estimate of vech(S).
@@ -135,10 +137,13 @@ struct InferenceSpec {
   ScoreCovariance cov     = ScoreCovariance::ModelImplied;
 };
 
-// Stored U-factor for one (model, θ̂, spec) triple. Carries the per-block
-// Cholesky factors of the weight matrix so the meat reductions can reuse
-// them. All three Γ flavors take a `const UFactor&` and produce their own
-// M matrix; `ugamma_eigenvalues(M)` then returns the spectrum.
+// Stored U-factor for one (model, θ̂, spec) triple. Structured/Unstructured
+// breads and observed Pairwise bread carry the per-block Cholesky factors of
+// the weight matrix so the meat reductions can reuse them. Expected Pairwise
+// bread stores only the already metric-whitened residual basis `B`, because it
+// applies the pairwise NT metric as an operator and never forms `L_Gamma`.
+// All three Γ flavors take a `const UFactor&` and produce their own M matrix;
+// `ugamma_eigenvalues(M)` then returns the spectrum.
 //
 // Two shapes, per `spec.bread`:
 //   ProjectionExpected — `U = B·Bᵀ` is the rank-`df` orthogonal projector
@@ -172,8 +177,10 @@ struct UFactor {
     Eigen::Index    mu_off     = -1;       // start row of μ-segment (= row_offset − p when has_means; -1 otherwise)
     Eigen::Index    n_obs      = 0;        // sample size of this block (the natural Γ̂ divisor)
     // Cholesky factor L_Γ of the σ-moments-weight matrix Γ_NT_cov(M_b) where
-    // M_b is Σ̂_b (structured) or S_b (unstructured). `solve()` against this
-    // gives the L_Γ⁻¹ / L_Γ⁻ᵀ actions on the σ-segment.
+    // M_b is Σ̂_b (structured), S_b (unstructured), or the materialized
+    // pairwise NT metric (observed Pairwise bread). Expected Pairwise bread
+    // leaves this empty and works through an operator-reduced Gram matrix.
+    // `solve()` against this gives the L_Γ⁻¹ / L_Γ⁻ᵀ actions on the σ-segment.
     Eigen::LLT<Eigen::MatrixXd> llt_gamma_nt;
     // Cholesky factor of M_b itself — the μ-block of Γ_NT(M_b) is just M_b
     // (no factor of 2, no off-diag halving) in the stacked `[μ; vech(Σ)]`
@@ -215,12 +222,15 @@ build_u_factor(spec::LatentStructure        pt,
                const Estimates&          est,
                InferenceSpec             spec = {});
 
-// Overload for `spec.moments == Pairwise`. Builds the per-block bread Γ
-// from `data::gamma_nt_pairwise(raw, pw)[b]` instead of `gamma_nt(Σ̂_b)` /
-// `gamma_nt(S_b)`. `raw` must carry the missingness mask; `pw` must match
-// `raw`'s block layout (typically `data::pairwise_sample_stats(raw)`).
-// `spec.moments` is required to be `Pairwise` here — the other two values
-// route to the existing 5-arg overload.
+// Overload for `spec.moments == Pairwise`. The Expected-bread path avoids
+// materialising `data::gamma_nt_pairwise(raw, pw)[b]`: it builds the residual
+// subspace from the weighted model Jacobian, applies the pairwise NT metric as
+// a pattern-grouped operator, and orthonormalises in the resulting df-space.
+// Observed-bread pairwise still uses the materialised route because that
+// representation stores `A = L_Γ^-1 Delta`. `raw` must carry the missingness
+// mask; `pw` must match `raw`'s block layout (typically
+// `data::pairwise_sample_stats(raw)`). `spec.moments` is required to be
+// `Pairwise` here — the other two values route to the existing 5-arg overload.
 //
 // The μ-block of the bread (when `has_means`) keeps the existing
 // `LLT(Σ̂_b)` convention — same compromise as `fit_gls_pairwise`'s μ-block

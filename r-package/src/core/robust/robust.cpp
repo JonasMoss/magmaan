@@ -135,6 +135,142 @@ void apply_gamma_nt_block(const UFactor::Block& blk, bool has_means,
   }
 }
 
+void apply_gamma_nt_cov_columns(
+    const Eigen::Ref<const Eigen::MatrixXd>& Mmoments,
+    const Eigen::Ref<const Eigen::MatrixXd>& src,
+    Eigen::Ref<Eigen::MatrixXd> dst,
+    Eigen::MatrixXd& H_buf) {
+  const Eigen::Index p = Mmoments.rows();
+  dst.setZero();
+  H_buf.resize(p, p);
+  for (Eigen::Index c = 0; c < src.cols(); ++c) {
+    vech_unpack(src.col(c), p, H_buf);
+    for (Eigen::Index j = 0; j < p; ++j)
+      for (Eigen::Index i = 0; i < p; ++i)
+        if (i != j) H_buf(i, j) *= 0.5;
+    const Eigen::MatrixXd Z = Mmoments * H_buf * Mmoments;
+    Eigen::Index k = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j; i < p; ++i) {
+        dst(k++, c) = 2.0 * Z(i, j);
+      }
+    }
+  }
+}
+
+post_expected<Eigen::MatrixXd>
+apply_pairwise_gamma_nt_columns(const UFactor&                       uf,
+                                const RawData&                       raw,
+                                const data::PairwiseSampleStats&     pw,
+                                const Eigen::Ref<const Eigen::MatrixXd>& cols) {
+  if (uf.blocks.size() != raw.X.size() || uf.blocks.size() != pw.S.size() ||
+      cols.rows() != uf.total_rows) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "apply_pairwise_gamma_nt_columns: UFactor/raw/pw/column shape mismatch"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask && raw.mask.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "apply_pairwise_gamma_nt_columns: mask and X block counts disagree"));
+  }
+
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(cols.rows(), cols.cols());
+  Eigen::MatrixXd in_scaled;
+  Eigen::MatrixXd applied;
+  Eigen::MatrixXd H_buf;
+
+  for (std::size_t b = 0; b < uf.blocks.size(); ++b) {
+    const auto& blk = uf.blocks[b];
+    const Eigen::Index p = blk.p;
+    const Eigen::Index pstar = blk.pstar;
+    const Eigen::Index n_b = blk.n_obs;
+    if (raw.X[b].rows() != n_b || raw.X[b].cols() != p ||
+        pw.pi_hat[b].rows() != p || pw.S[b].rows() != p ||
+        pw.S[b].cols() != p ||
+        blk.S.rows() != p || blk.S.cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "apply_pairwise_gamma_nt_columns: block " + std::to_string(b) +
+          " dimension mismatch"));
+    }
+    if (uf.has_means && blk.mu_off >= 0) {
+      out.middleRows(blk.mu_off, p).noalias() =
+          blk.Sigma_hat * cols.middleRows(blk.mu_off, p);
+    }
+
+    Eigen::VectorXd pi_diag(pstar);
+    for (Eigen::Index ll = 0; ll < p; ++ll) {
+      for (Eigen::Index jj = ll; jj < p; ++jj) {
+        pi_diag(detail::vech_index(p, jj, ll)) = pw.pi_hat[b](jj, ll);
+      }
+    }
+    if (!(pi_diag.minCoeff() > 0.0)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "apply_pairwise_gamma_nt_columns: zero pairwise availability in "
+          "block " + std::to_string(b)));
+    }
+
+    const Eigen::MatrixXd X_sigma =
+        cols.middleRows(blk.row_offset, pstar);
+    if (!has_mask) {
+      applied.resize(pstar, cols.cols());
+      apply_gamma_nt_cov_columns(blk.S, X_sigma, applied, H_buf);
+      out.middleRows(blk.row_offset, pstar).noalias() += applied;
+      continue;
+    }
+    if (raw.mask[b].rows() != n_b || raw.mask[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "apply_pairwise_gamma_nt_columns: mask block " + std::to_string(b) +
+          " shape mismatch"));
+    }
+
+    auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
+      return raw.mask[b](r, c) != 0;
+    };
+
+    std::vector<std::vector<bool>> patterns;
+    std::vector<Eigen::Index> pattern_count;
+    patterns.reserve(static_cast<std::size_t>(n_b));
+    pattern_count.reserve(static_cast<std::size_t>(n_b));
+    for (Eigen::Index r = 0; r < n_b; ++r) {
+      std::vector<bool> sig(static_cast<std::size_t>(p));
+      for (Eigen::Index c = 0; c < p; ++c)
+        sig[static_cast<std::size_t>(c)] = observed(r, c);
+      auto it = patterns.end();
+      for (auto pi = patterns.begin(); pi != patterns.end(); ++pi) {
+        if (*pi == sig) { it = pi; break; }
+      }
+      if (it == patterns.end()) {
+        patterns.push_back(std::move(sig));
+        pattern_count.push_back(1);
+      } else {
+        pattern_count[static_cast<std::size_t>(it - patterns.begin())] += 1;
+      }
+    }
+
+    const double inv_n_b = 1.0 / static_cast<double>(n_b);
+    for (std::size_t kpat = 0; kpat < patterns.size(); ++kpat) {
+      const auto& sig = patterns[kpat];
+      in_scaled = X_sigma;
+      Eigen::VectorXd scale = Eigen::VectorXd::Zero(pstar);
+      for (Eigen::Index ll = 0; ll < p; ++ll) {
+        const bool ll_obs = sig[static_cast<std::size_t>(ll)];
+        for (Eigen::Index jj = ll; jj < p; ++jj) {
+          const bool jj_obs = sig[static_cast<std::size_t>(jj)];
+          const Eigen::Index a = detail::vech_index(p, jj, ll);
+          scale(a) = (jj_obs && ll_obs) ? (1.0 / pi_diag(a)) : 0.0;
+          in_scaled.row(a) *= scale(a);
+        }
+      }
+      applied.resize(pstar, cols.cols());
+      apply_gamma_nt_cov_columns(blk.S, in_scaled, applied, H_buf);
+      for (Eigen::Index a = 0; a < pstar; ++a) applied.row(a) *= scale(a);
+      const double w = static_cast<double>(pattern_count[kpat]) * inv_n_b;
+      out.middleRows(blk.row_offset, pstar).noalias() += w * applied;
+    }
+  }
+  return out;
+}
+
 // Given M̃ (p* × p*, symmetric PSD) and C (p* × p*, symmetric), return a
 // symmetric matrix whose eigenvalues are exactly those of C·M̃ — so
 // `ugamma_eigenvalues` can be applied unchanged. Via Cholesky M̃ = R·Rᵀ
@@ -677,6 +813,202 @@ finish_u_factor_expected(const UFactorShared& sh) {
   return uf;
 }
 
+post_expected<UFactor>
+build_u_factor_pairwise_expected_streaming(
+    spec::LatentStructure                pt,
+    const model::MatrixRep&              rep,
+    const SampleStats&                   samp,
+    const Estimates&                     est,
+    const RawData&                       raw,
+    const data::PairwiseSampleStats&     pw) {
+  auto ev_or = prepare_evaluator(pt, rep, samp, est);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+  auto& ev = *ev_or;
+
+  if (raw.X.size() != samp.S.size() || pw.S.size() != samp.S.size() ||
+      pw.pi_hat.size() != samp.S.size() || pw.n_obs.size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: raw/pw block count "
+        "must match SampleStats"));
+  }
+
+  auto Jmu_or = ev.dmu_dtheta(est.theta);
+  if (!Jmu_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: dmu_dtheta failed: " +
+        Jmu_or.error().detail));
+  }
+  const bool has_means = Jmu_or->size() > 0;
+  Eigen::MatrixXd Delta_mu = has_means ? std::move(*Jmu_or)
+                                       : Eigen::MatrixXd();
+
+  auto J_or = ev.dsigma_dtheta(est.theta);
+  if (!J_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: dsigma_dtheta failed: " +
+        J_or.error().detail));
+  }
+  Eigen::MatrixXd Delta_sigma = std::move(*J_or);
+
+  auto im_or = ev.sigma(est.theta);
+  if (!im_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: sigma(theta) failed: " +
+        im_or.error().detail));
+  }
+  if (im_or->sigma.size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: implied sigma block "
+        "count must match SampleStats"));
+  }
+
+  UFactor uf;
+  uf.moments = WeightMoments::Pairwise;
+  uf.has_means = has_means;
+  uf.blocks.resize(samp.S.size());
+  double N_total = 0.0;
+  for (auto n : samp.n_obs) N_total += static_cast<double>(n);
+  if (!(N_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: total N must be positive"));
+  }
+
+  Eigen::Index row_cursor = 0;
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    const Eigen::Index pstar = p * (p + 1) / 2;
+    if (samp.S[b].cols() != p || raw.X[b].rows() != samp.n_obs[b] ||
+        pw.n_obs[b] != samp.n_obs[b] || im_or->sigma[b].rows() != p ||
+        im_or->sigma[b].cols() != p || raw.X[b].cols() != p ||
+        pw.S[b].rows() != p || pw.S[b].cols() != p ||
+        pw.pi_hat[b].rows() != p || pw.pi_hat[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "build_u_factor_pairwise_expected_streaming: block " +
+          std::to_string(b) + " dimension mismatch"));
+    }
+
+    auto& blk = uf.blocks[b];
+    blk.p = p;
+    blk.pstar = pstar;
+    blk.mu_off = has_means ? row_cursor : Eigen::Index{-1};
+    if (has_means) row_cursor += p;
+    blk.row_offset = row_cursor;
+    row_cursor += pstar;
+    blk.n_obs = static_cast<Eigen::Index>(samp.n_obs[b]);
+    blk.Sigma_hat = im_or->sigma[b];
+    blk.S = pw.S[b];
+    if (has_means) {
+      blk.llt_M = Eigen::LLT<Eigen::MatrixXd>(blk.Sigma_hat);
+      if (blk.llt_M.info() != Eigen::Success) {
+        return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+            "build_u_factor_pairwise_expected_streaming: Sigma_hat "
+            "mu-block is not positive definite in block " +
+            std::to_string(b)));
+      }
+    }
+  }
+  uf.total_rows = row_cursor;
+  uf.pstar = 0;
+  for (const auto& blk : uf.blocks) uf.pstar += blk.pstar;
+
+  const Eigen::Index n_free = Delta_sigma.cols();
+  if (has_means && Delta_mu.cols() != n_free) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: Delta_mu cols " +
+        std::to_string(Delta_mu.cols()) + " != Delta_sigma cols " +
+        std::to_string(n_free)));
+  }
+
+  Eigen::MatrixXd Delta_full =
+      Eigen::MatrixXd::Zero(uf.total_rows, n_free);
+  Eigen::Index s_cursor = 0;
+  Eigen::Index m_cursor = 0;
+  for (const auto& blk : uf.blocks) {
+    if (has_means) {
+      Delta_full.block(blk.mu_off, 0, blk.p, n_free) =
+          Delta_mu.block(m_cursor, 0, blk.p, n_free);
+      m_cursor += blk.p;
+    }
+    Delta_full.block(blk.row_offset, 0, blk.pstar, n_free) =
+        Delta_sigma.block(s_cursor, 0, blk.pstar, n_free);
+    s_cursor += blk.pstar;
+  }
+  if (s_cursor != Delta_sigma.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: Delta_sigma row count "
+        "does not match stacked p*"));
+  }
+  if (has_means && m_cursor != Delta_mu.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: Delta_mu row count "
+        "does not match stacked p"));
+  }
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) {
+    return std::unexpected(make_err(con_or.error().kind,
+        "build_u_factor_pairwise_expected_streaming: " +
+        con_or.error().detail));
+  }
+  Eigen::MatrixXd Delta = std::move(Delta_full);
+  if (con_or->active()) Delta = (Delta * con_or->K()).eval();
+
+  Eigen::MatrixXd Delta_w = Delta;
+  if (uf.blocks.size() > 1) {
+    for (const auto& blk : uf.blocks) {
+      const double w_b = static_cast<double>(blk.n_obs) / N_total;
+      const double s = std::sqrt(w_b);
+      if (uf.has_means && blk.mu_off >= 0)
+        Delta_w.middleRows(blk.mu_off, blk.p) *= s;
+      Delta_w.middleRows(blk.row_offset, blk.pstar) *= s;
+    }
+  }
+
+  const Eigen::Index q = Delta_w.cols();
+  Eigen::HouseholderQR<Eigen::MatrixXd> qr(Delta_w);
+  const Eigen::Index r_dim = std::min(uf.total_rows, q);
+  Eigen::Index r_eff = 0;
+  if (r_dim > 0) {
+    const Eigen::MatrixXd R =
+        qr.matrixQR().topLeftCorner(r_dim, q).triangularView<Eigen::Upper>();
+    const double max_diag = R.diagonal().cwiseAbs().maxCoeff();
+    const double tol = std::numeric_limits<double>::epsilon() *
+        static_cast<double>(std::max(uf.total_rows, q)) * max_diag;
+    for (Eigen::Index k = 0; k < r_dim; ++k) {
+      if (std::abs(R(k, k)) > tol) ++r_eff;
+    }
+  }
+  const Eigen::Index df_global = uf.total_rows - r_eff;
+  if (df_global <= 0) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "build_u_factor_pairwise_expected_streaming: model is saturated "
+        "(df = " + std::to_string(df_global) + ")"));
+  }
+  uf.df = df_global;
+
+  Eigen::MatrixXd E = Eigen::MatrixXd::Zero(uf.total_rows, df_global);
+  E.bottomRows(df_global).setIdentity();
+  const Eigen::MatrixXd R0 = qr.householderQ() * E;
+
+  auto GR0_or = apply_pairwise_gamma_nt_columns(uf, raw, pw, R0);
+  if (!GR0_or.has_value()) return std::unexpected(GR0_or.error());
+  Eigen::MatrixXd Gram = R0.transpose() * (*GR0_or);
+  Gram = 0.5 * (Gram + Gram.transpose()).eval();
+  Eigen::LLT<Eigen::MatrixXd> llt_Gram(Gram);
+  if (llt_Gram.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "build_u_factor_pairwise_expected_streaming: reduced pairwise "
+        "Gamma_NT metric is not positive definite"));
+  }
+  uf.B = llt_Gram.matrixL().solve(R0.transpose()).transpose();
+  if (!uf.B.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor_pairwise_expected_streaming: non-finite U-factor"));
+  }
+  uf.kind = UFactor::Kind::ProjectionExpected;
+  return uf;
+}
+
 }  // namespace
 
 // Public `build_u_factor`: thin composition of `build_u_factor_shared` plus
@@ -715,6 +1047,10 @@ build_u_factor(spec::LatentStructure                pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "build_u_factor(raw, pw): spec.moments must be Pairwise; use the "
         "5-arg overload for Structured/Unstructured"));
+  }
+  if (spec.bread == Information::Expected) {
+    return build_u_factor_pairwise_expected_streaming(
+        pt, rep, samp, est, raw, pw);
   }
   auto sh_or = build_u_factor_shared(pt, rep, samp, est, spec.moments,
                                      &raw, &pw);
