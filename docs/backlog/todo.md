@@ -284,7 +284,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     model. At 1000 reps/cell, ordinary DWLS still undercovers, while
     robust-scaled and misspecification-mixture references both cover near
     nominal for the pseudo-true fitted omega except in the sparse
-    threshold-extreme `N=50` cell.
+    threshold-extreme `N=50` cell. The first CI-inversion probe
+    (`--ci`, 200 reps/cell) makes robust-scaled inversion the practical v1 CI
+    lane: 3168 attempts, 38 failures, zero target-test/CI disagreements, and
+    coverage 0.918-0.975. Misspecification-mixture CI inversion remains
+    diagnostic only: 1201/3154 attempts failed, mostly at endpoint robust
+    profile quadratics.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
