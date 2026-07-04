@@ -2343,7 +2343,13 @@ need, and no more. The current C++ core mostly follows this:
   restriction companion `C` are finite/SPD-gated; reduced meats are
   finite/PSD-gated; the FIML sandwich route allows finite nonsingular observed
   bread that is indefinite in finite samples, but still rejects singular bread
-  and degenerate `C` before any generalized eigensolver is called.
+  and degenerate `C` before any generalized eigensolver is called. Continuous
+  pairwise expected-bread U-factors also avoid materializing `Gamma_NT^pw`: the
+  raw/pairwise `build_u_factor` overload builds the residual subspace from the
+  model Jacobian, applies the pattern-grouped pairwise NT metric as an operator,
+  and whitens only the reduced `df x df` Gram matrix. Observed-bread pairwise
+  inference still materializes the pairwise NT metric because that
+  representation stores `A = L_Gamma^{-1} Delta`.
 
 The remaining pressure point is the R boundary. Several exported R wrappers
 currently accept the transparent fit list for convenience and then unpack the

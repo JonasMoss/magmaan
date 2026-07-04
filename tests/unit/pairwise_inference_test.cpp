@@ -228,6 +228,39 @@ TEST_CASE("reduced_gamma_nt_pairwise: matches materialised B'·Γ_NT^pw·B under
   CHECK((M_op_minus_mu - M_mat).cwiseAbs().maxCoeff() < 1e-10);
 }
 
+TEST_CASE("build_u_factor pairwise: streamed expected bread is Gamma-orthonormal") {
+  auto fx = build_missing_fixture(20260704);
+  magmaan::robust::InferenceSpec spec{
+      magmaan::robust::Information::Expected,
+      magmaan::robust::WeightMoments::Pairwise,
+      magmaan::robust::ScoreCovariance::ModelImplied};
+  auto uf_or = magmaan::robust::build_u_factor(fx.model.pt, fx.model.rep,
+                                               fx.samp, fx.est, fx.raw,
+                                               fx.pw, spec);
+  REQUIRE(uf_or.has_value());
+  auto gnt_pw_or = magmaan::data::gamma_nt_pairwise(fx.raw, fx.pw);
+  REQUIRE(gnt_pw_or.has_value());
+
+  Eigen::MatrixXd M_mat =
+      Eigen::MatrixXd::Zero(uf_or->df, uf_or->df);
+  for (std::size_t b = 0; b < uf_or->blocks.size(); ++b) {
+    const auto& blk = uf_or->blocks[b];
+    const Eigen::MatrixXd B_sigma =
+        uf_or->B.middleRows(blk.row_offset, blk.pstar);
+    M_mat.noalias() +=
+        B_sigma.transpose() * gnt_pw_or->at(b) * B_sigma;
+    if (uf_or->has_means && blk.mu_off >= 0) {
+      const Eigen::MatrixXd B_mu =
+          uf_or->B.middleRows(blk.mu_off, blk.p);
+      M_mat.noalias() += B_mu.transpose() * blk.Sigma_hat * B_mu;
+    }
+  }
+  M_mat = 0.5 * (M_mat + M_mat.transpose()).eval();
+  const Eigen::MatrixXd I =
+      Eigen::MatrixXd::Identity(uf_or->df, uf_or->df);
+  CHECK((M_mat - I).cwiseAbs().maxCoeff() < 1e-8);
+}
+
 TEST_CASE("Pairwise bread + Pairwise meat: U·Γ_NT^pw eigenvalues = 1") {
   auto fx = build_missing_fixture(20260623);
   magmaan::robust::InferenceSpec spec{

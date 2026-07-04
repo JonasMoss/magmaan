@@ -17,6 +17,31 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
+- **M — finish streaming the continuous pairwise NT bread for observed-bread
+  inference.** The pairwise empirical meat path is projection-first:
+  `pairwise_casewise_contributions()` builds Van-Praag influence rows and
+  `reduced_gamma_sample()` / `reduced_gamma_sample_streaming()` reduce them in
+  df-space without forming the full pairwise covariance of moments. Expected
+  pairwise bread is now also operator-first: `build_u_factor(... raw, pw,
+  Information::Expected, WeightMoments::Pairwise)` builds a residual subspace
+  from the model Jacobian, applies the `Gamma_NT^pw` metric with the existing
+  pattern-grouped operator, and orthonormalizes only the reduced `df x df` Gram
+  matrix.
+
+  The remaining non-streaming piece is observed-bread pairwise inference. That
+  path still calls `data::gamma_nt_pairwise(raw, pw)`, materializes each
+  `p* x p*` pairwise NT Gamma, then takes an LLT because `ObservedHessian`
+  stores `A = L_Gamma^{-1} Delta`. That is a separate pressure point from the
+  FIML lavaan empirical-Gamma fix: it can still be O(p^4) memory/time and can
+  fail on ill-conditioned pairwise overlap structures. Candidate routes:
+  pattern-grouped linear solves for `Gamma_NT^pw^{-1} Delta`, blockwise
+  factorization/update in pattern space, or a raw-metric observed-bread formula
+  that bypasses explicit `L_Gamma` while matching the current
+  `ObservedHessian` spectrum. Acceptance tests: complete-data collapse to the
+  unstructured observed-bread path; missing-data agreement with materialized
+  `gamma_nt_pairwise` on small fixtures; and stress cases report finite
+  diagnostics instead of dense-matrix blowups.
+
 - **M — FIML Satorra-2000 nested test: calibrate the opt-in saturated-H1
   reference regularizer under missing data (frontier).** The scaled and mixture nested difference tests
   (`nestedTest(method = "satorra.2000")`, especially direct FIML) collapse to
