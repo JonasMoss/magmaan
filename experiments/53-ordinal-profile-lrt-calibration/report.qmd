@@ -26,6 +26,18 @@ profile_ref <- summary[summary$arm != "dwls_ordinary", ]
 worst_ref <- profile_ref[which.min(profile_ref$reference_coverage_95), ]
 worst_ordinary <- ordinary[which.min(ordinary$reference_coverage_95), ]
 worst_wald <- summary[which.min(summary$omega_wald_coverage_95), ]
+has_ci <- "ci_attempted" %in% names(summary) &&
+  any(summary$ci_attempted > 0, na.rm = TRUE)
+ci_summary <- if (has_ci) {
+  summary[summary$ci_attempted > 0, ]
+} else {
+  summary[FALSE, ]
+}
+ci_success <- if (has_ci) {
+  ci_summary[ci_summary$ci_attempted > ci_summary$ci_failures, ]
+} else {
+  ci_summary
+}
 ```
 
 ## Question
@@ -66,6 +78,23 @@ cat(sprintf(
   paste(worst_wald$dgp, worst_wald$regime, sep = " / "),
   worst_wald$n, worst_wald$omega_wald_coverage_95,
   sum(summary$failures)))
+if (has_ci && nrow(ci_success)) {
+  cat(sprintf(
+    paste0(
+      " CI inversion was attempted for %s rows; CI coverage among successful ",
+      "inversions ranges from %.3f to %.3f, with %d CI failures and %d ",
+      "pointwise-LRT/CI coverage disagreements."
+    ),
+    sum(summary$ci_attempted),
+    min(ci_success$ci_coverage_95, na.rm = TRUE),
+    max(ci_success$ci_coverage_95, na.rm = TRUE),
+    sum(summary$ci_failures),
+    sum(summary$ci_lrt_disagreements, na.rm = TRUE)))
+} else if (has_ci) {
+  cat(sprintf(
+    " CI inversion was attempted for %s rows, but no CI inversions succeeded.",
+    sum(summary$ci_attempted)))
+}
 ```
 
 ## Pseudo-Targets
@@ -86,13 +115,13 @@ knitr::kable(target_shown)
 
 ```{r}
 shown <- summary[, c(
-  "dgp", "regime", "n", "arm", "failures", "mean_reference_stat",
+  "dgp", "regime", "n", "arm", "reference", "failures", "mean_reference_stat",
   "reference_coverage_95", "oracle_constant_coverage_95",
   "mean_scaling_factor", "mean_misspec_scaling_factor",
   "min_variable_category_count_p05"
 )]
 names(shown) <- c(
-  "DGP", "Regime", "N", "Arm", "Failures", "Mean Ref Stat",
+  "DGP", "Regime", "N", "Arm", "Reference", "Failures", "Mean Ref Stat",
   "Reference Coverage", "Oracle Constant Coverage",
   "Mean Robust Scale", "Mean Misspec Scale", "P05 Min Category Count"
 )
@@ -116,6 +145,28 @@ wald[] <- lapply(wald, function(x) if (is.numeric(x)) round(x, 4) else x)
 knitr::kable(wald)
 ```
 
+```{r, results='asis'}
+if (has_ci) {
+  cat("## Profile CI Inversion\n\n")
+  ci_shown <- ci_summary[, c(
+    "dgp", "regime", "n", "arm", "ci_attempted", "ci_failures",
+    "ci_coverage_95", "mean_ci_width", "median_ci_width", "mean_ci_evals",
+    "ci_bound_rate", "max_abs_ci_endpoint_gap", "ci_lrt_disagreements",
+    "ci_lrt_disagreement_rate"
+  )]
+  names(ci_shown) <- c(
+    "DGP", "Regime", "N", "Arm", "CI Attempts", "CI Failures",
+    "CI Coverage", "Mean Width", "Median Width", "Mean Evals",
+    "Bound Rate", "Max Endpoint Gap", "LRT/CI Disagreements",
+    "Disagreement Rate"
+  )
+  ci_shown[] <- lapply(ci_shown, function(x) {
+    if (is.numeric(x)) round(x, 4) else x
+  })
+  print(knitr::kable(ci_shown))
+}
+```
+
 ## Interpretation
 
 The oracle-constant column asks a narrow diagnostic question: if the
@@ -131,11 +182,22 @@ pseudo-true fitted one-factor omega, so any residual gap is reference-law or
 sparse-summary behavior around that working-model target, not bias relative to a
 generating-model reliability.
 
+When CI inversion is enabled, the LRT/CI disagreement count is the first
+connectedness diagnostic: it compares target inclusion in the inverted interval
+with the pointwise profile test at the same target. A disagreement flags either
+nonmonotone/disconnected profile behavior or numerical root trouble. The
+misspecification-mixture CI rows should be read as experimental endpoint
+diagnostics; failures usually indicate that an endpoint robust profile
+quadratic is not positive, even when the pointwise misspecification-scaled test
+at the target is well behaved.
+
 ## Reproduce
 
 ```sh
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R
 Rscript run_experiment.R --dgp local_dependence --reps 500
+Rscript run_experiment.R --smoke --ci
+Rscript run_experiment.R --ci --reps 200
 quarto render report.qmd
 ```

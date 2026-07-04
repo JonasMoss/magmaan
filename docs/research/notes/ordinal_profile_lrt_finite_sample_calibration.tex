@@ -173,6 +173,18 @@ and unstable fitted-weight scales. Thus the misspecification reference is
 behaving as intended for the working-model target, but it does not remove the
 sparse ordinal-summary problem.
 
+The first CI-inversion pass used the existing profile-CI root finder with
+200 replications per cell and the same pseudo-targets. Robust-scaled inversion
+is the stable interval lane: among 3168 attempted robust-scaled CIs, only 38
+failed, all target-test/CI inclusion decisions agreed, and cell coverage ranged
+from about 0.918 to 0.975. Misspecification-mixture inversion is not yet a
+stable CI method: among 3154 attempted mixture CIs, 1201 failed, mostly because
+the endpoint robust profile quadratic was not positive. Successful mixture CIs
+cover near nominal, but that is a selected subset. Thus the current connected-CI
+evidence supports robust-scaled inversion; the misspecification-mixture path is
+still a pointwise-reference diagnostic until endpoint reference construction is
+hardened.
+
 \section*{Working Verdict}
 
 The plausible contribution is not ``a Bartlett correction for categorical SEM''.

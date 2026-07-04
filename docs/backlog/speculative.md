@@ -995,6 +995,15 @@ report now separates profile-target coverage from the Wald/sample-polychoric
 diagnostic. The remaining weak point is still sparse threshold-extreme `N=50`,
 not model misspecification per se.
 
+CI inversion probe (200 reps/cell, `--ci`, robust-scaled + misspec-mixture):
+robust-scaled inversion is stable enough to treat as the v1 interval lane
+(3168 attempts, 38 failures, zero target-test/CI disagreements, coverage
+0.918-0.975). Misspecification-mixture inversion is not stable yet (3154
+attempts, 1201 failures, mostly non-positive endpoint robust profile
+quadratics; one target-test/CI disagreement among successful rows). Keep
+misspec-mixture as a pointwise reference-law diagnostic until endpoint
+quadratic/reference construction is hardened for CI roots.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &
