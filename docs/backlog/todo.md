@@ -2173,3 +2173,21 @@ work until a concrete downstream consumer appears.
   closed form throws more improper solutions than ML). Later slots for the enum:
   FABIN2/Bentler/James-Stein/MIIV maps
   (loadings producers already exist) and a polychoric-ADF Gamma path.
+
+  **Measurement invariance landed** (2026-07): multi-group blocks with a
+  block-diagonal `Omega`, mean structure (free intercepts, latent means fixed at
+  0), the `Omega`-metric minimum-distance projection onto linear `group.equal`
+  constraints (exact chi2_k Wald = min-distance duality, so metric / strict /
+  tau-equivalence come for free), and true (free-latent-mean) scalar invariance
+  via the reference-group mean map (linearized pseudo-inverse Wald). C++
+  `robust::frontier::noniterative_{inference_grouped,constrained_fit,scalar_
+  invariance}`; R `magmaan_core$noniterative_cfa_{grouped_inference,constrained,
+  scalar}_impl`; note `constrained_noniterative_cfa.tex`; validated by
+  `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
+  empirical Gamma restores the level under non-normality, the scalar Wald is
+  nominal and does true scalar in one step where the ML nested test cannot).
+  Remaining: a **pooled-loading** scalar refinement (test given metric, more
+  efficient than the reference-group loadings), an **ordinal** mean-structure
+  invariance path (needs threshold modeling, not treated-as-continuous moments),
+  and **nonlinear / inequality** constraints (both leave closed form: the first
+  needs linearize-and-iterate, the second an active set).

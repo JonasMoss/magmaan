@@ -186,6 +186,29 @@ golden `parTable()` fixtures.
   factor-mates via the triad-based communality step; the closed form is more
   robust than ML to uniformly weak signal but less robust to a single weak
   indicator).
+- Frontier multi-group / constrained / mean-structure non-iterative CFA
+  (2026-07) extends the closed-form estimator to measurement invariance. The map
+  fits each group's Guttman block independently and stacks them, so
+  `robust::frontier::noniterative_inference_grouped*` carry a block-diagonal
+  delta-method `Omega`, a joint residual GOF, and `block_of_param`. Mean
+  structure is supported for free intercepts with latent means fixed at 0
+  (`nu_g = m_g` saturated); by Proposition 2 of the note the mean part is inert
+  for fit, so only `Omega` gains the intercept block (via `gamma_nt_with_means`).
+  Any linear equality (metric / strict / tau-equivalence / fixed values) is
+  imposed by `noniterative_constrained_fit`, the `Omega`-metric minimum-distance
+  projection onto the partable's `group.equal` constraints, whose statistic is an
+  exact chi2_k (Wald = min-distance duality). True (free-latent-mean) scalar
+  invariance is `noniterative_scalar_invariance`, the reference-group mean map
+  `alpha_g = (Lr'Lr)^-1 Lr'(m_g - m_r)` with a linearized pseudo-inverse Wald on
+  the mean residual orthogonal to the loadings, df `(G-1)(p-#factors)`. R surface:
+  `magmaan_core$noniterative_cfa_{grouped_inference,constrained,scalar}_impl`.
+  Theory in `docs/research/notes/constrained_noniterative_cfa.tex`; validated by
+  `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT on
+  normal data with matched power; on non-normal data the NT-Gamma metric Wald
+  over-rejects and the empirical Gamma restores the level, mirroring the ML
+  NT-vs-robust split; the scalar Wald is exactly nominal on normal data, far more
+  robust to non-normality, and delivers true scalar in one closed-form step where
+  the ML nested test cannot).
 - Frontier empirical reduced-bias estimation (2026-06) implements the
   Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
   moment-quadratic family. The C++ surface covers
