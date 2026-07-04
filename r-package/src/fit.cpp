@@ -42,6 +42,8 @@
 #include "magmaan/estimate/frontier/rbm.hpp"
 #include "magmaan/estimate/frontier/sam.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
+#include "magmaan/estimate/frontier/noniterative_cfa.hpp"
+#include "magmaan/robust/frontier/noniterative_inference.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/gmm/dls_weight.hpp"
@@ -7724,4 +7726,142 @@ Rcpp::NumericVector frontier_backconvert_std_lv_to_marker_impl(
   for (std::size_t i = 0; i < n; ++i)
     r_out[static_cast<R_xlen_t>(i)] = out[static_cast<Eigen::Index>(i)];
   return r_out;
+}
+
+// ---------------------------------------------------------------------------
+// Non-iterative CFA estimators: goodness-of-fit, nested tests, standard errors.
+// Thin glue over estimate::frontier + robust::frontier (see the C++ headers and
+// docs/research/notes/noniterative_cfa_tests.tex).
+// ---------------------------------------------------------------------------
+namespace {
+
+std::string noniter_lower(std::string s) {
+  for (char& c : s)
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+  return s;
+}
+
+magmaan::estimate::frontier::NonIterativeEstimator noniter_which(const std::string& s) {
+  const std::string k = noniter_lower(s);
+  if (k == "guttman" || k == "guttman1952")
+    return magmaan::estimate::frontier::NonIterativeEstimator::Guttman;
+  Rcpp::stop("magmaan: unknown non-iterative estimator '%s' (accepted: guttman)",
+             s.c_str());
+}
+
+magmaan::robust::frontier::Discrepancy noniter_disc(const std::string& s) {
+  const std::string k = noniter_lower(s);
+  if (k == "uls") return magmaan::robust::frontier::Discrepancy::ULS;
+  if (k == "ntml" || k == "ml") return magmaan::robust::frontier::Discrepancy::NTML;
+  Rcpp::stop("magmaan: unknown discrepancy '%s' (accepted: uls, ntml)", s.c_str());
+}
+
+magmaan::post_expected<magmaan::robust::frontier::NonIterativeInference>
+noniter_inference_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
+                           magmaan::estimate::frontier::NonIterativeEstimator which,
+                           magmaan::robust::frontier::Discrepancy disc,
+                           const std::string& gamma, SEXP data) {
+  namespace rf = magmaan::robust::frontier;
+  const std::string g = noniter_lower(gamma);
+  if (g == "nt" || g == "normal" || g == "normal.theory" || g == "normaltheory")
+    return rf::noniterative_inference_nt(ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc);
+  if (g == "empirical" || g == "adf" || g == "sandwich") {
+    if (Rf_isNull(data)) Rcpp::stop("magmaan: empirical Gamma requires raw `data`");
+    magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, data);
+    return rf::noniterative_inference_empirical(ctx.pt, ctx.rep, ctx.samp, raw,
+                                                est.theta, which, disc);
+  }
+  Rcpp::stop("magmaan: unknown gamma '%s' (accepted: nt, empirical)", gamma.c_str());
+}
+
+Rcpp::List wrap_noniter_inference(const magmaan::robust::frontier::NonIterativeInference& inf) {
+  return Rcpp::List::create(
+      Rcpp::_["se"] = Rcpp::wrap(inf.se),
+      Rcpp::_["vcov"] = Rcpp::wrap(inf.Omega),
+      Rcpp::_["T"] = inf.T_gof,
+      Rcpp::_["df"] = inf.df,
+      Rcpp::_["scale_c"] = inf.scale_c,
+      Rcpp::_["p_scaled"] = inf.p_scaled,
+      Rcpp::_["p_meanvar"] = inf.p_meanvar,
+      Rcpp::_["p_scaled_shifted"] = inf.p_scaled_shifted,
+      Rcpp::_["p_mixture"] = inf.p_mixture,
+      Rcpp::_["rls_check"] = inf.rls_check,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(inf.gof_eigenvalues),
+      Rcpp::_["warnings"] = Rcpp::wrap(inf.warnings));
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
+                                     std::string estimator = "guttman") {
+  auto parsed = partable_from_arg(partable, "noniterative_cfa_fit");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  const auto which = noniter_which(estimator);
+  auto ev = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+  if (!ev.has_value()) Rcpp::stop("magmaan: model evaluator build failed");
+  auto th = magmaan::estimate::frontier::noniterative_cfa_theta(ctx.pt, ctx.rep, *ev,
+                                                                ctx.samp, which);
+  if (!th.has_value()) stop_fit(th.error());
+  magmaan::estimate::Estimates est;
+  est.theta = *th;
+  est.fmin = 0.0;
+  return fit_result(ctx, est, &starts, "noniterative");
+}
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator = "guttman",
+                                           std::string discrepancy = "uls",
+                                           std::string gamma = "nt", SEXP data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  auto inf = noniter_inference_dispatch(ctx, est, noniter_which(estimator),
+                                        noniter_disc(discrepancy), gamma, data);
+  if (!inf.has_value()) stop_post(inf.error());
+  return wrap_noniter_inference(*inf);
+}
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R,
+                                      Rcpp::NumericVector q, std::string estimator = "guttman",
+                                      std::string discrepancy = "uls",
+                                      std::string gamma = "nt", SEXP data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  auto inf = noniter_inference_dispatch(ctx, est, noniter_which(estimator),
+                                        noniter_disc(discrepancy), gamma, data);
+  if (!inf.has_value()) stop_post(inf.error());
+  const Eigen::MatrixXd Rm = Rcpp::as<Eigen::MatrixXd>(R);
+  const Eigen::VectorXd qv = Rcpp::as<Eigen::VectorXd>(q);
+  auto w = magmaan::robust::frontier::noniterative_wald(est.theta, *inf, Rm, qv);
+  if (!w.has_value()) stop_post(w.error());
+  return Rcpp::List::create(Rcpp::_["chi2"] = w->chi2, Rcpp::_["df"] = w->df);
+}
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, int df_d,
+                                            std::string estimator = "guttman",
+                                            std::string discrepancy = "uls",
+                                            std::string gamma = "nt",
+                                            SEXP data0 = R_NilValue, SEXP data1 = R_NilValue) {
+  Ctx c0 = ctx_from_fit(fit0);
+  const auto e0 = est_from_fit(fit0);
+  Ctx c1 = ctx_from_fit(fit1);
+  const auto e1 = est_from_fit(fit1);
+  const auto which = noniter_which(estimator);
+  const auto disc = noniter_disc(discrepancy);
+  auto inf0 = noniter_inference_dispatch(c0, e0, which, disc, gamma, data0);
+  if (!inf0.has_value()) stop_post(inf0.error());
+  auto inf1 = noniter_inference_dispatch(c1, e1, which, disc, gamma, data1);
+  if (!inf1.has_value()) stop_post(inf1.error());
+  auto d = magmaan::robust::frontier::noniterative_difference_test(*inf0, *inf1, df_d);
+  if (!d.has_value()) stop_post(d.error());
+  return Rcpp::List::create(
+      Rcpp::_["T_d"] = d->T_d, Rcpp::_["df_d"] = d->df_d,
+      Rcpp::_["p_scaled"] = d->p_scaled, Rcpp::_["p_adjusted"] = d->p_adjusted,
+      Rcpp::_["p_scaled_shifted"] = d->p_scaled_shifted, Rcpp::_["p_mixture"] = d->p_mixture,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(d->eigenvalues),
+      Rcpp::_["warnings"] = Rcpp::wrap(d->warnings));
 }
