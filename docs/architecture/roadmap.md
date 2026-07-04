@@ -178,9 +178,11 @@ golden `parTable()` fixtures.
   `magmaan_core$noniterative_cfa_{fit,inference,wald,difference}_impl`. Theory in
   `docs/research/notes/noniterative_cfa_tests.tex`; validated by
   `experiments/52-noniterative-cfa-tests` (empirical Gamma calibrated across
-  normal / independent-component / ordinal-as-continuous generators, NT Gamma
-  asymptotically miscalibrated on non-normal data, GOF power near 1, Guttman
-  RMSE a few percent over ML).
+  normal / independent-component / ordinal-as-continuous generators and across a
+  0.3-0.7 reliability sweep, NT Gamma asymptotically miscalibrated on non-normal
+  data, GOF power near 1; Guttman's efficiency gap vs ML is small at high
+  reliability and grows on the structural parameters as reliability drops, while
+  the closed form degrades more gracefully than ML at low reliability x small N).
 - Frontier empirical reduced-bias estimation (2026-06) implements the
   Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
   moment-quadratic family. The C++ surface covers
