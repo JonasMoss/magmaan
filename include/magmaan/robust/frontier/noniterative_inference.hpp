@@ -180,4 +180,52 @@ post_expected<ConstrainedNonIterativeFit>
 noniterative_constrained_fit(const spec::LatentStructure& pt,
                              const GroupedNonIterativeInference& inf);
 
+// ---------------------------------------------------------------------------
+// True (lavaan-compatible) scalar invariance via the reference-group mean map.
+// ---------------------------------------------------------------------------
+//
+// Scalar invariance frees the latent means (α_g) instead of fixing them at 0.
+// Given the configural mean-structure fit `inf` (Phase B: free intercepts
+// ν_g = m_g with a mean-augmented Ω) and a reference group r, the closed-form
+// map reads the common metric off the reference group:
+//
+//   ν      = m_r                         (reference intercept, α_r = 0)
+//   α_g    = (Λ_r'Λ_r)⁻¹ Λ_r'(m_g − m_r)  (latent means, LS through col(Λ_r))
+//   d_g    = (I − P_{Λ_r})(m_g − m_r)      (mean residual ⟂ col(Λ_r))
+//
+// where P_{Λ_r} projects onto the reference loadings. Scalar invariance holds
+// iff every d_g = 0. Unlike the linear-constraint projection, this map is
+// Λ-dependent (bilinear), so the test is a *linearized* Wald: to leading order
+// ∂d_g/∂Λ_r ≈ −(I − P) (dΛ_r) α_g and ∂d_g/∂m = ±(I − P), and
+//   W = d' Cov(d)⁺ d,   Cov(d) = G Ω Gᵀ,   df = (G − 1)(p − #factors),
+// with G the stacked ∂d/∂θ and Cov(d) singular of rank df (pseudo-inverse Wald,
+// asymptotically exact χ²). Cov(d) couples the non-reference groups through the
+// shared reference mean / loadings; Ω supplies that automatically. The latent
+// means α_g are shipped as free coordinates with delta-method SEs.
+//
+// The reference loadings Λ_r are the reference group's configural loadings (the
+// natural reference-group metric); a pooled-loading refinement (test given
+// metric invariance) is future work. Errors unless the model has mean structure
+// and at least two groups with p > #factors.
+struct ScalarInvarianceFit {
+  std::size_t                  ref_group = 0;
+  std::vector<std::size_t>     groups;     // non-reference group indices, in order
+  std::vector<Eigen::VectorXd> alpha;      // latent means α_g (m), per non-ref group
+  std::vector<Eigen::MatrixXd> alpha_cov;  // Cov(α_g) (m × m)
+  std::vector<Eigen::VectorXd> alpha_se;   // √diag(Cov(α_g))
+  Eigen::VectorXd              nu;         // common intercept ν = m_ref (p)
+  Eigen::VectorXd              d_stacked;  // stacked mean residuals d_g ((G−1)·p)
+  double                       W       = 0.0;  // scalar-invariance statistic
+  int                          df      = 0;    // (G−1)(p−#factors)
+  int                          rank    = 0;    // numeric rank of Cov(d)
+  double                       p_value = 0.0;
+  std::vector<std::string>     warnings;
+};
+
+post_expected<ScalarInvarianceFit>
+noniterative_scalar_invariance(const spec::LatentStructure& pt,
+                               const model::MatrixRep& rep,
+                               const GroupedNonIterativeInference& inf,
+                               std::size_t ref_group = 0);
+
 }  // namespace magmaan::robust::frontier
