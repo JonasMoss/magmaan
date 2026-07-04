@@ -128,4 +128,20 @@ empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X);
 post_expected<Eigen::MatrixXd>
 gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma);
 
+// Mean-augmented normal-theory NACOV over the stacked moment vector
+// [ m ; vech(S) ] (mean-first, matching `empirical_gamma_with_means` and
+// `dmu_dtheta` / `dsigma_dtheta` row ordering). Block-diagonal:
+//
+//   Γ_NT⁺ = ┌ Σ         0        ┐
+//           └ 0    Γ_NT(Σ)       ┘
+//
+// The mean block is Σ (the NT ACOV of the sample mean, so Ω = J Γ Jᵀ / N gives
+// Var(m̄) = Σ / N) and the mean–vech cross-block is exactly zero because
+// normal-theory third moments vanish. The counterpart to
+// `empirical_gamma_with_means`; the two converge on multivariate-normal data.
+//
+// Returns `PostError::NumericIssue` if `Sigma` is not square.
+post_expected<Eigen::MatrixXd>
+gamma_nt_with_means(const Eigen::Ref<const Eigen::MatrixXd>& Sigma);
+
 }  // namespace magmaan::data

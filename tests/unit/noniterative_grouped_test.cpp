@@ -46,10 +46,11 @@ struct Built {
 };
 
 Built build_mg(std::string_view src, std::int32_t ngroups,
-               std::vector<GroupEqual> ge = {}) {
+               std::vector<GroupEqual> ge = {}, bool means = false) {
   BuildOptions opts;
   opts.n_groups = ngroups;
   opts.group_equal = std::move(ge);
+  opts.meanstructure = means;
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   auto pt = magmaan::spec::build(*fp, opts);
@@ -57,6 +58,12 @@ Built build_mg(std::string_view src, std::int32_t ngroups,
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
   return Built{std::move(*pt), std::move(*mr)};
+}
+
+Eigen::VectorXd mk_mean(const std::array<double, 6>& v) {
+  Eigen::VectorXd m(6);
+  for (Eigen::Index i = 0; i < 6; ++i) m(i) = v[static_cast<std::size_t>(i)];
+  return m;
 }
 
 // Exact 2-factor covariance: markers x1,x4; loadings `lam` (incl. markers),
@@ -204,6 +211,147 @@ TEST_CASE("metric invariance: W > 0 when loadings differ, projection equates the
   for (Eigen::Index i = 0; i < svd.singularValues().size(); ++i)
     if (svd.singularValues()(i) > tol) ++rank;
   CHECK(rank == con->Omega_tilde.rows() - con->k);
+}
+
+TEST_CASE("mean structure: configural intercepts recover nu_g = m_g exactly") {
+  auto b = build_mg(kTwoFactor, 2, {}, /*means=*/true);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
+  samp.mean = {mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0}),
+               mk_mean({1.5, 2.5, 3.5, 4.5, 5.5, 6.5})};
+  samp.n_obs = {500, 600};
+
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+
+  using magmaan::model::MatId;
+  const auto locs = ev->param_locations();
+  int checked_nu = 0, checked_load = 0;
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& loc = locs[k];
+    if (loc.mat == MatId::Nu) {
+      const double truth = samp.mean[static_cast<std::size_t>(loc.block)](loc.row);
+      CHECK((*th)(static_cast<Eigen::Index>(k)) == doctest::Approx(truth).epsilon(1e-12));
+      ++checked_nu;
+    } else if (loc.mat == MatId::Lambda) {
+      CHECK((*th)(static_cast<Eigen::Index>(k)) ==
+            doctest::Approx(kLam[static_cast<std::size_t>(loc.row)]).epsilon(1e-9));
+      ++checked_load;
+    }
+  }
+  CHECK(checked_nu == 12);    // 6 intercepts x 2 groups
+  CHECK(checked_load == 8);   // covariance map unchanged by the mean structure
+}
+
+TEST_CASE("mean structure: intercept SE is the analytic saturated-mean SE") {
+  auto b = build_mg(kTwoFactor, 2, {}, /*means=*/true);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
+  samp.mean = {mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0}),
+               mk_mean({1.5, 2.5, 3.5, 4.5, 5.5, 6.5})};
+  samp.n_obs = {500, 600};
+
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                   ef::NonIterativeEstimator::Guttman,
+                                                   rf::Discrepancy::NTML);
+  REQUIRE_OK(inf);
+
+  // On the exact population Σ̂ = S, so SE(ν_i) = √(S_b(i,i) / N_b). The mean–vech
+  // cross-block of Γ_NT is zero, so the ν rows of Ω have no covariance leakage.
+  using magmaan::model::MatId;
+  const auto locs = ev->param_locations();
+  int checked = 0;
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& loc = locs[k];
+    if (loc.mat != MatId::Nu) continue;
+    const auto bb = static_cast<std::size_t>(loc.block);
+    const double N_b = static_cast<double>(samp.n_obs[bb]);
+    const double want = std::sqrt(samp.S[bb](loc.row, loc.row) / N_b);
+    CHECK(inf->se(static_cast<Eigen::Index>(k)) == doctest::Approx(want).epsilon(1e-6));
+    // No ν→cov cross-covariance under normal theory.
+    for (std::size_t l = 0; l < locs.size(); ++l) {
+      if (locs[l].mat == MatId::Nu) continue;
+      CHECK(std::abs(inf->Omega(static_cast<Eigen::Index>(k),
+                                static_cast<Eigen::Index>(l))) < 1e-10);
+    }
+    ++checked;
+  }
+  CHECK(checked == 12);
+  // The covariance-only GOF df is unchanged by the mean augmentation.
+  CHECK(inf->df == 2 * (21 - 13));
+}
+
+TEST_CASE("mean structure: intercept-equality projection (alpha = 0)") {
+  // Equal loadings AND equal intercepts across groups. group.equal ties both;
+  // latent means stay fixed at 0, so this is the exact-χ² intercept-equality
+  // intermediate (not lavaan's free-α scalar, which is Phase C).
+  auto b = build_mg(kTwoFactor, 2, {GroupEqual::Loadings, GroupEqual::Intercepts},
+                    /*means=*/true);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+
+  SUBCASE("W ~ 0 when means are equal across groups") {
+    SampleStats samp;
+    samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
+    const auto mu = mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+    samp.mean = {mu, mu};  // equal means -> equal saturated intercepts
+    samp.n_obs = {500, 600};
+
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+    REQUIRE_OK(th);
+    auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                     ef::NonIterativeEstimator::Guttman,
+                                                     rf::Discrepancy::NTML);
+    REQUIRE_OK(inf);
+    auto con = rf::noniterative_constrained_fit(b.pt, *inf);
+    REQUIRE_OK(con);
+    CHECK(con->k == 10);  // 4 loadings + 6 intercepts equated across 2 groups
+    CHECK(con->W < 1e-6);
+  }
+
+  SUBCASE("W > 0 when a group mean differs; projection equates the intercepts") {
+    SampleStats samp;
+    samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
+    samp.mean = {mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0}),
+                 mk_mean({1.8, 2.0, 3.0, 4.0, 5.0, 6.0})};  // x1 intercept differs
+    samp.n_obs = {500, 600};
+
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+    REQUIRE_OK(th);
+    auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                     ef::NonIterativeEstimator::Guttman,
+                                                     rf::Discrepancy::NTML);
+    REQUIRE_OK(inf);
+    auto con = rf::noniterative_constrained_fit(b.pt, *inf);
+    REQUIRE_OK(con);
+    CHECK(con->W > 1.0);
+    auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
+    REQUIRE_OK(eqc);
+    const double resid = (eqc->A_eq * con->theta_tilde - eqc->b_eq).cwiseAbs().maxCoeff();
+    CHECK(resid < 1e-9);
+  }
+}
+
+TEST_CASE("mean structure: single-block path errors, directing to the grouped path") {
+  auto b = build_mg(kTwoFactor, 1, {}, /*means=*/true);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5)};
+  samp.mean = {mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0})};
+  samp.n_obs = {500};
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
+                                           ef::NonIterativeEstimator::Guttman,
+                                           rf::Discrepancy::NTML);
+  CHECK_FALSE(inf.has_value());  // single-block SEs would omit the intercept block
 }
 
 TEST_CASE("grouped inference reduces to single-block inference at G=1") {

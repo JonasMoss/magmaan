@@ -135,12 +135,14 @@ std::vector<std::int16_t> lat_to_f_of(const CfaBlockLayout& L) {
 // reading each free cell's (mat, row, col, block) from ev.param_locations().
 // Multi-group: every free parameter carries a `block` naming which group/level
 // block's matrices to read. Latent (Ψ / Λ column) indices are mapped to that
-// block's factor ordering. Every free param must be a supported CFA cell;
-// anything else (structural, mean structure) is a v1-scope error.
+// block's factor ordering. Free intercepts ν take the saturated configural
+// value ν_g = m_g (the sample mean); free latent means α (scalar invariance) are
+// Phase C, not v1. Any other cell (structural regression) is a v1-scope error.
 fit_expected<Eigen::VectorXd>
 assemble_theta(const model::ModelEvaluator& ev,
                const std::vector<CfaBlockLayout>& layouts,
-               const std::vector<BlockGuttman>& blocks) {
+               const std::vector<BlockGuttman>& blocks,
+               const data::SampleStats& samp) {
   const std::size_t nblk = layouts.size();
   std::vector<std::vector<std::int16_t>> lat_to_f(nblk);
   for (std::size_t b = 0; b < nblk; ++b) lat_to_f[b] = lat_to_f_of(layouts[b]);
@@ -193,9 +195,26 @@ assemble_theta(const model::ModelEvaluator& ev,
         theta(kk) = g.psi(loc.row);
         break;
       }
+      case model::MatId::Nu: {
+        // Saturated configural intercept ν_g = m_g. With latent means fixed at
+        // 0 (the CFA meanstructure default), μ_g(θ) = ν_g = m_g exactly, so the
+        // mean part of the residual vanishes and the mean moments / ν params
+        // cancel in the GOF df; the mean structure only enters the SEs (Ω).
+        if (loc.row < 0 || loc.row >= nvar)
+          return num_error("Guttman map: intercept row out of range");
+        if (b >= samp.mean.size() ||
+            samp.mean[b].size() != nvar)
+          return num_error("Guttman map: mean structure requested but "
+                           "per-block sample means are missing / mis-sized");
+        theta(kk) = samp.mean[b](loc.row);
+        break;
+      }
+      case model::MatId::Alpha:
+        return num_error("Guttman map: free latent means (true scalar "
+                         "invariance) are Phase C, not v1 scope");
       default:
-        return num_error("Guttman map: structural / mean-structure parameters "
-                         "are out of v1 scope");
+        return num_error("Guttman map: structural parameters are out of v1 "
+                         "scope");
     }
   }
   return theta;
@@ -241,7 +260,7 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
         return num_error("non-iterative CFA: unknown estimator");
     }
   }
-  return assemble_theta(ev, layouts, blocks);
+  return assemble_theta(ev, layouts, blocks, samp);
 }
 
 }  // namespace
