@@ -1,0 +1,411 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Goodness-of-Fit and Nested Tests for\\ Non-Iterative CFA Estimators}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\vecop}{\operatorname{vec}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\IF}{\operatorname{IF}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\Ninv}{^{-1}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Non-iterative CFA estimators (Guttman's multiple-group method
+\cite{guttman1952} and the wider family evaluated by Dhaene and Rosseel
+\cite{dhaene2024}) are consistent, robust, convergence-free, and cheap. Their
+standard errors follow by the delta method (companion note
+\texttt{guttman\_cfa\_asymptotics}). The one remaining inferential gap is a
+\emph{goodness-of-fit} test and a \emph{nested} (difference) test. Both are
+supplied by an old and standard idea: evaluate a fixed-weight discrepancy at the
+estimates and correct its reference distribution for the fact that the estimates
+do not minimize it \cite{browne1984,shapiro1986,satorra1989}. Nothing here is
+new asymptotics; the only estimator-specific ingredient is the map's Jacobian,
+which the SE work already produces.
+
+The note develops the theory estimator-agnostically first, then specialises to
+two discrepancies: unweighted least squares (ULS, the natural and cheapest
+choice) and normal-theory maximum likelihood (NTML). We deliberately exclude
+GLS: its weight is the \emph{sample} object $\widehat S\Ninv$, and we want the
+discrepancy weight to be either fixed (ULS) or a smooth function of the fitted
+model (NTML), never a function of the data. The point estimator needs no fourth
+moments; every test does, and we take the fourth-moment matrix $\Gamma$
+empirical by default. Normality is a special case that simplifies the algebra
+but never collapses the reference distribution to a plain $\chi^2$, because these
+estimators are not efficient. That is deliberate: efficiency is not the target.
+Robustness is, and the downstream target is categorical data, where a
+non-iterative estimator on polychoric moments with a distribution-free test is
+exactly the underserved cell.
+
+\section{Setup and estimator family}\label{sec:setup}
+
+Let $y_i\in\mathbb R^p$ have covariance $\Sigma_0$ and finite fourth moments.
+Write $p^\star=p(p+1)/2$, $\hat\sigma=\vech(\widehat\Sigma)$,
+$\sigma_0=\vech(\Sigma_0)$, and the covariance influence rows
+$z_i=\vech\{(y_i-\mu_0)(y_i-\mu_0)\T-\Sigma_0\}$, so that
+\begin{equation}\label{eq:clt}
+  \sqrt N(\hat\sigma-\sigma_0)=N^{-1/2}\sum_i z_i+o_p(1)
+  \Rightarrow N(0,\Gamma),\qquad \Gamma=\Var(z_i).
+\end{equation}
+Under normality $\Gamma$ reduces to
+$\Gamma_{\mathrm N}=2\,D^{+}(\Sigma_0\otimes\Sigma_0)D^{+\T}$, with $D$ the
+$p^2\times p^\star$ duplication matrix and $D^{+}=(D\T D)\Ninv D\T$; otherwise
+$\Gamma$ is the actual fourth-moment covariance and is estimated by its sample
+analogue. A CFA model supplies $\sigma(\theta)=\vech\{\Sigma(\theta)\}$ with
+$q$ free parameters, model Jacobian $\Delta=\partial\sigma/\partial\theta\T\in
+\mathbb R^{p^\star\times q}$ of full column rank $q$, and residual degrees of
+freedom $df=p^\star-q$.
+
+A \emph{non-iterative estimator} is a fixed closed-form map
+$\hat\theta=\tau(\hat\sigma)$.
+
+\begin{assumption}\label{ass:reg}
+$\tau$ is Fisher-consistent and differentiable at $\sigma_0$: for every $\theta$
+in the model, $\tau\{\sigma(\theta)\}=\theta$, and $J=D\tau(\sigma_0)\in
+\mathbb R^{q\times p^\star}$ exists. Fisher consistency gives the identity
+\begin{equation}\label{eq:JDelta}
+  J\Delta=I_q .
+\end{equation}
+\end{assumption}
+
+Equation \eqref{eq:JDelta} is the one structural fact the test theory uses. It
+holds for the estimators below whenever their communality or instrument rule is
+exact on the model manifold; Dhaene and Rosseel's near-zero bias confirms it
+empirically.
+
+\paragraph{Members.} All are measurement-model (CFA) estimators; full SEM is out
+of scope, since the structural part needs a separate (SAM-style two-step or
+joint) treatment.
+\begin{itemize}
+\item \emph{Multiple-group / Guttman} \cite{guttman1952}. With a $0/1$
+  indicator-by-factor pattern $X$, form $C(\sigma)$ by placing communalities on
+  the diagonal, then
+  $\Lambda_G=CX(X\T CX)\Ninv D_B^{1/2}M\Ninv$,
+  $\Phi_G=M(D_B^{-1/2}X\T CXD_B^{-1/2})M$,
+  $\psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}$, with $D_B=\diag(X\T CX)$ and
+  $M$ the marker rescaling. The full map, its differential, and $J_G$ are in the
+  companion note; it returns a complete $(\Lambda,\Phi,\psi)$, not just an
+  extraction.
+\item \emph{FABIN2/FABIN3} \cite{hagglund1982}: factor analysis by instrumental
+  variables; per-indicator closed form using sibling indicators as instruments.
+\item \emph{Bentler (1982) noniterative ULS} and a \emph{James--Stein} shrinkage
+  variant, as in \cite{dhaene2024}.
+\item \emph{MIIV-2SLS} \cite{bollen1996}: model-implied instrumental variables,
+  two-stage least squares.
+\end{itemize}
+Each supplies its own $(\tau,J)$; the theory below is written for a generic
+pair. Dhaene and Rosseel's headline is that within this family the choice barely
+matters, so the natural default is the cheapest, Guttman.
+
+\section{Residual-based fit test for a general estimator}\label{sec:gof}
+
+Fix a symmetric weight $V\in\mathbb R^{p^\star\times p^\star}$, positive
+semidefinite on the relevant subspace, and define the discrepancy statistic
+\begin{equation}\label{eq:TV}
+  T_V=N\,\hat r\T V\hat r,\qquad \hat r=\hat\sigma-\sigma(\hat\theta).
+\end{equation}
+Since $\hat\theta$ need not minimise $\hat r\T V\hat r$, the classical
+projector does not apply; the estimator's own Jacobian takes its place.
+
+\begin{proposition}[Residual law]\label{prop:gof}
+Under Assumption~\ref{ass:reg}, \eqref{eq:clt}, and the model
+$\Sigma_0=\Sigma(\theta_0)$,
+\begin{equation}\label{eq:res-lin}
+  \sqrt N\,\hat r=M\,\sqrt N(\hat\sigma-\sigma_0)+o_p(1),
+  \qquad M=I-\Delta J,
+\end{equation}
+where $M$ is an oblique projector ($M\Delta=0$, $\rank M=df$). Consequently
+\begin{equation}\label{eq:weighted-chi2}
+  T_V\Rightarrow\sum_{j=1}^{df}\lambda_j\,\chi^2_{1,j},
+\end{equation}
+where the $\lambda_j$ are the $df$ nonzero eigenvalues of $U_V\Gamma$ with
+$U_V=M\T V M$, equivalently of $VM\Gamma M\T$. Its mean is
+$\E\,T_V\to\tr(U_V\Gamma)$.
+\end{proposition}
+
+\begin{proof}
+$\hat r=\hat\sigma-\sigma_0-\Delta(\hat\theta-\theta_0)+o_p(N^{-1/2})$ and
+$\hat\theta-\theta_0=J(\hat\sigma-\sigma_0)+o_p(N^{-1/2})$ give
+\eqref{eq:res-lin}. $M\Delta=\Delta-\Delta J\Delta=\Delta-\Delta=0$ by
+\eqref{eq:JDelta}, so $\Delta J$ is idempotent of rank $q$ and $M$ has rank
+$df$. Then $\sqrt N\hat r\Rightarrow M\zeta$, $\zeta\sim N(0,\Gamma)$, and
+$T_V\Rightarrow\zeta\T M\T V M\zeta$, a quadratic form in a normal vector whose
+law is \eqref{eq:weighted-chi2} with the stated eigenvalues.
+\end{proof}
+
+To turn \eqref{eq:weighted-chi2} into a usable reference, reduce the spectrum by
+any of the standard devices, all already implemented for scaled statistics in
+\texttt{robust}:
+\begin{itemize}
+\item mean scaling (Satorra--Bentler \cite{satorrabentler1994}):
+  $\bar T_V=T_V/\hat c$, $\hat c=\tr(\widehat U_V\widehat\Gamma)/df$, referred
+  to $\chi^2_{df}$;
+\item mean-and-variance (Satterthwaite): scale and set
+  $\hat d=(\sum_j\lambda_j)^2/\sum_j\lambda_j^2$;
+\item exact eigenvalue reference (the repo's pEBA/FMG reducer applied to
+  $\widehat U_V\widehat\Gamma$).
+\end{itemize}
+
+The efficient special case explains what is being given up.
+
+\begin{proposition}[Efficient collapse]\label{prop:collapse}
+If in addition $\hat\theta$ is the minimiser of $\hat r\T V\hat r$, so
+$J=(\Delta\T V\Delta)\Ninv\Delta\T V$ and $M=M_V:=I-\Delta(\Delta\T
+V\Delta)\Ninv\Delta\T V$, and if $V$ is a generalised inverse of $\Gamma$ on the
+symmetric subspace ($V\Gamma V=V$), then every $\lambda_j=1$ and
+$T_V\Rightarrow\chi^2_{df}$.
+\end{proposition}
+
+Both conditions fail for a non-iterative $\tau$: its $J$ is not the
+$V$-projector, so $M\neq M_V$, and neither ULS nor NTML uses $V=\Gamma\Ninv$
+with the matching estimator. Hence \eqref{eq:weighted-chi2} does not collapse,
+and scaling is mandatory rather than cosmetic.
+
+\section{The two discrepancies}\label{sec:disc}
+
+\paragraph{ULS.} With $F_{\mathrm U}(\theta)=\tfrac12\tr[\{\widehat\Sigma-
+\Sigma(\theta)\}^2]=\tfrac12\hat r\T V_{\mathrm U}\hat r$ and
+$V_{\mathrm U}=D\T D$ (the vech metric: unit weight on variances, weight $2$ on
+covariances), $T_{\mathrm U}=2NF_{\mathrm U}(\hat\theta)=N\hat r\T V_{\mathrm U}
+\hat r$ is exactly \eqref{eq:TV}. ULS needs $\Gamma$ only for the reference
+distribution, never to compute the estimator or the statistic; it is the
+cheapest and most robust choice, and it inherits nothing from the model's
+conditioning.
+
+\paragraph{NTML, as reweighted least squares.} With
+\[
+  F_{\mathrm M}(\theta)=\log|\Sigma(\theta)|
+    +\tr\{\widehat\Sigma\,\Sigma(\theta)\Ninv\}-\log|\widehat\Sigma|-p,
+\]
+a second-order expansion about exact fit gives
+\begin{equation}\label{eq:rls}
+  T_{\mathrm M}=2NF_{\mathrm M}(\hat\theta)
+    =N\hat r\T V_{\mathrm M}\hat r+o_p(1),\qquad
+  V_{\mathrm M}=\tfrac12 D\T(\Sigma\Ninv\otimes\Sigma\Ninv)D,
+\end{equation}
+the \emph{reweighted least squares} (RLS) quadratic form of Browne
+\cite{browne1974}: the ML statistic linearises to a residual quadratic form with
+the model-implied normal-theory weight. The weight $V_{\mathrm M}$ is evaluated
+at $\Sigma(\hat\theta)$, hence a smooth function of the fitted model, not of the
+data. This is exactly why NTML is admissible here and GLS is not: GLS would use
+$\widehat S\Ninv\otimes\widehat S\Ninv$, a sample weight.
+
+\begin{remark}
+For the \emph{statistic} a data weight is in fact asymptotically negligible
+(it multiplies two $O_p(N^{-1/2})$ residual factors), so GLS would give a valid
+test too. We drop it only to keep the weight a function of the model and to keep
+the normal-theory reductions of \S\ref{sec:normal} clean; it adds nothing this
+project needs.
+\end{remark}
+
+Both $T_{\mathrm U}$ and $T_{\mathrm M}$ are instances of \eqref{eq:TV} with
+$M=I-\Delta J_G$ (the estimator's projector), so Proposition~\ref{prop:gof}
+governs both.
+
+\section{Reductions under normality}\label{sec:normal}
+
+Substitute $\Gamma=\Gamma_{\mathrm N}$. The normal-theory weight is a
+generalised inverse of the normal-theory moment covariance on the symmetric
+subspace,
+\begin{equation}\label{eq:VM-ginv}
+  V_{\mathrm M}\,\Gamma_{\mathrm N}\,V_{\mathrm M}=V_{\mathrm M},
+\end{equation}
+so $V_{\mathrm M}$ plays the role of $\Gamma_{\mathrm N}^{+}$. This is what makes
+the NTML statistic reduce, and it isolates the efficiency loss cleanly.
+
+\begin{proposition}[Normal-theory NTML inflation]\label{prop:inflation}
+Under normality, with the NTML statistic and any Fisher-consistent $\tau$,
+\begin{equation}\label{eq:c-ge-1}
+  \E\,T_{\mathrm M}\to
+  \tr\!\big(V_{\mathrm M}M\Gamma_{\mathrm N}M\T\big)\ge df,
+\end{equation}
+with equality iff $M$ is the NTML (efficient) projector $M_{V_{\mathrm M}}$, i.e.
+iff $J_G$ coincides with the ML Jacobian. Hence the Satorra--Bentler constant
+$c=\E\,T_{\mathrm M}/df\ge 1$: the raw NTML statistic evaluated at the
+non-iterative estimates is inflated relative to $\chi^2_{df}$ and must be scaled
+\emph{down}.
+\end{proposition}
+
+\begin{proof}[Sketch]
+Using \eqref{eq:VM-ginv}, $\tr(V_{\mathrm M}M\Gamma_{\mathrm N}M\T)$ is the
+generalised residual variance of a projector $M$ onto the complement of
+$\Delta$; among all such projectors it is minimised, at value $df$, by the
+$V_{\mathrm M}$-orthogonal projector $M_{V_{\mathrm M}}$ (the Gauss--Markov /
+optimal-GLS residual argument). Any other consistent $\tau$ gives $M\neq
+M_{V_{\mathrm M}}$ and a strictly larger trace.
+\end{proof}
+
+This is the precise content of ``the statistic reduces under normality but the
+distribution does not.'' Under normality $T_{\mathrm M}$ collapses to the RLS
+form \eqref{eq:rls} and its scaling constant is the explicit
+\eqref{eq:c-ge-1}; but the reference law stays a weighted sum
+\eqref{eq:weighted-chi2} with $\lambda_j\not\equiv1$, and only an efficient
+(hence iterative) estimator would return $\chi^2_{df}$. For ULS the departure is
+even plainer: $V_{\mathrm U}\neq\Gamma_{\mathrm N}^{+}$, so even the ULS
+\emph{minimiser} is a weighted sum of $\chi^2$ under normality (the known ULS
+fact); the non-iterative $\tau$ only changes which weights.
+
+\section{Nested tests}\label{sec:nested}
+
+Let $M_0\subset M_1$ be nested by a smooth restriction $a(\theta)=0$,
+$a:\mathbb R^{q_1}\to\mathbb R^{df_d}$, $df_d=q_1-q_0$, with
+$A=\partial a/\partial\theta\T$ of full row rank at $\theta_0$.
+
+\paragraph{Wald (recommended).} Fit the larger model with its non-iterative map,
+$\hat\theta_1=\tau_1(\hat\sigma)$, covariance
+$\widehat\Omega_1=J_1\widehat\Gamma J_1\T/N$ (the delta-method object from the SE
+note). Then
+\begin{equation}\label{eq:wald}
+  W=N\,a(\hat\theta_1)\T\big(A\widehat\Omega_1 A\T\big)\Ninv a(\hat\theta_1)
+  \Rightarrow\chi^2_{df_d}
+\end{equation}
+\emph{exactly}, with no eigenvalue spread and no second $\Gamma$-quadratic. It
+reuses only machinery already built for standard errors and is the natural
+nested test for these estimators; efficiency of $\tau$ costs power, not
+validity.
+
+\paragraph{Difference (pseudo-LRT).} If an LRT-shaped statistic is wanted,
+\begin{equation}\label{eq:Td}
+  T_d=T_{V,0}-T_{V,1}
+    =2N\{F_V(\hat\theta_0)-F_V(\hat\theta_1)\}
+  \Rightarrow\sum_j\omega_j\chi^2_{1,j},
+\end{equation}
+with $\omega_j$ the nonzero eigenvalues of $U_d\Gamma$,
+$U_d=M_0\T V M_0-M_1\T V M_1$, scaled Satorra-2000 style by
+$c_d=\tr(U_d\Gamma)/df_d$ \cite{satorra2000,satorrabentler2001}. Two caveats
+distinguish this from the ML case:
+\begin{enumerate}
+\item Because $\hat\theta_0,\hat\theta_1$ do not minimise $F_V$, $U_d$ is
+  generally indefinite, so $T_d$ can be \emph{negative} in finite samples (the
+  monotonicity $T_{V,0}\ge T_{V,1}$ that holds for minimisers is not guaranteed).
+\item $\rank U_d$ need not equal $df_d$; the mean $\tr(U_d\Gamma)$ is still
+  positive and $\approx df_d\,c$, so mean scaling remains well defined.
+\end{enumerate}
+The Wald form \eqref{eq:wald} avoids both. We keep \eqref{eq:Td} for the
+ML-analogy and because, specialised to a discrepancy-minimising $\tau$, it is
+exactly the standard scaled difference test.
+
+\section{Robust default, categorical outlook, implementation}\label{sec:impl}
+
+Everything above is written for a general $\Gamma$. Taking $\widehat\Gamma$
+empirical yields distribution-free GOF, Wald, and difference tests; taking
+$\Gamma_{\mathrm N}$ gives the normal-theory specialisations of
+\S\ref{sec:normal}. The estimator itself never touches $\Gamma$; only the tests
+do. The motivating extension is categorical data: a non-iterative estimator on
+polychoric moments with $\Gamma$ the polychoric ADF covariance drops into the
+same three formulas unchanged, which is where a convergence-free estimator plus
+a robust test is most useful and least served by current tooling.
+
+The pieces already exist in \texttt{magmaan}: $\Delta$ from
+\texttt{ModelEvaluator}; $J_G$ from \texttt{src/estimate/start\_guttman.cpp}
+and the companion note (finite-difference validated to $\sim1\%$ in
+experiment~40); $\Gamma$ in both normal-theory and empirical forms; the
+Satorra--Bentler / pEBA spectrum reducer in \texttt{robust}; and the Wald
+machinery. The only new object is $M=I-\Delta J_G$ and the two weights
+$V_{\mathrm U}=D\T D$, $V_{\mathrm M}=\tfrac12 D\T(\Sigma\Ninv\otimes
+\Sigma\Ninv)D$; feed $M\T V M$ times $\Gamma$ to the existing reducer.
+Implementation is deferred.
+
+\begin{thebibliography}{9}
+
+\bibitem{bollen1996}
+Bollen, K. A. (1996).
+An alternative two stage least squares (2SLS) estimator for latent variable
+equations.
+\emph{Psychometrika}, 61, 109--121.
+\href{https://doi.org/10.1007/BF02296961}{doi:10.1007/BF02296961}.
+
+\bibitem{browne1974}
+Browne, M. W. (1974).
+Generalized least squares estimators in the analysis of covariance structures.
+\emph{South African Statistical Journal}, 8, 1--24.
+
+\bibitem{browne1984}
+Browne, M. W. (1984).
+Asymptotically distribution-free methods for the analysis of covariance
+structures.
+\emph{British Journal of Mathematical and Statistical Psychology}, 37, 62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}
+{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{dhaene2024}
+Dhaene, S., \& Rosseel, Y. (2024).
+An evaluation of non-iterative estimators in confirmatory factor analysis.
+\emph{Structural Equation Modeling}, 31(1), 1--13.
+\href{https://doi.org/10.1080/10705511.2023.2187285}
+{doi:10.1080/10705511.2023.2187285}.
+
+\bibitem{guttman1952}
+Guttman, L. (1952).
+Multiple group methods for common-factor analysis: Their basis, computation, and
+interpretation.
+\emph{Psychometrika}, 17, 209--222.
+\href{https://doi.org/10.1007/BF02288783}{doi:10.1007/BF02288783}.
+
+\bibitem{hagglund1982}
+H\"agglund, G. (1982).
+Factor analysis by instrumental variables methods.
+\emph{Psychometrika}, 47, 209--222.
+\href{https://doi.org/10.1007/BF02296273}{doi:10.1007/BF02296273}.
+
+\bibitem{satorra1989}
+Satorra, A. (1989).
+Alternative test criteria in covariance structure analysis: A unified approach.
+\emph{Psychometrika}, 54, 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{satorra2000}
+Satorra, A. (2000).
+Scaled and adjusted restricted tests in multi-sample analysis of moment
+structures.
+In R. D. H. Heijmans, D. S. G. Pollock, \& A. Satorra (Eds.),
+\emph{Innovations in multivariate statistical analysis} (pp. 233--247). Kluwer.
+
+\bibitem{satorrabentler1994}
+Satorra, A., \& Bentler, P. M. (1994).
+Corrections to test statistics and standard errors in covariance structure
+analysis.
+In A. von Eye \& C. C. Clogg (Eds.),
+\emph{Latent variables analysis} (pp. 399--419). Sage.
+
+\bibitem{satorrabentler2001}
+Satorra, A., \& Bentler, P. M. (2001).
+A scaled difference chi-square test statistic for moment structure analysis.
+\emph{Psychometrika}, 66, 507--514.
+\href{https://doi.org/10.1007/BF02296192}{doi:10.1007/BF02296192}.
+
+\bibitem{shapiro1986}
+Shapiro, A. (1986).
+Asymptotic theory of overparameterized structural models.
+\emph{Journal of the American Statistical Association}, 81, 142--149.
+\href{https://doi.org/10.1080/01621459.1986.10478250}
+{doi:10.1080/01621459.1986.10478250}.
+
+\end{thebibliography}
+
+\end{document}
