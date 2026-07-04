@@ -20,11 +20,15 @@
 // σ(θ̂) are well-defined; the theory is in docs/research/notes/
 // noniterative_cfa_tests.tex and guttman_cfa_asymptotics.tex.
 //
-// v1 scope: single group, covariance-only (no mean structure), pure CFA with
-// marker (fixed unit loading) identification, continuous data, Guttman's (1952)
-// multiple-group map. The `NonIterativeEstimator` enum is the generality seam:
-// FABIN2/Bentler-1982/James-Stein/MIIV-2SLS slot in as further maps without any
-// change to the residual-based inference bundle that consumes (τ, J).
+// Scope: multi-group (one block per group/level, fit independently and stacked),
+// covariance-only, pure CFA with marker (fixed unit loading) identification,
+// continuous data, Guttman's (1952) multiple-group map. Cross-group / general
+// linear equality constraints (measurement invariance, tau-equivalence, ...) are
+// imposed downstream by the minimum-distance projection in robust::frontier, not
+// here: the map always produces the configural (per-block unconstrained) θ̂. The
+// `NonIterativeEstimator` enum is the generality seam: FABIN2/Bentler-1982/
+// James-Stein/MIIV-2SLS slot in as further maps without any change to the
+// residual-based inference bundle that consumes (τ, J).
 
 namespace magmaan::estimate::frontier {
 
@@ -64,12 +68,24 @@ fit_noniterative_cfa(const spec::LatentStructure& pt,
                      const data::SampleStats& samp,
                      NonIterativeEstimator which = NonIterativeEstimator::Guttman);
 
-// J = ∂θ / ∂vech(S), shape q × p* (q = ev.n_free(), p* = p(p+1)/2), by central
-// finite differences of `noniterative_cfa_theta`. Column k is the derivative
-// w.r.t. the k-th lower-triangle column-major vech(S) coordinate, perturbed as a
-// symmetric dS (both (r,c) and (c,r)); this ordering matches
-// ModelEvaluator::dsigma_dtheta and data::gamma_nt so J aligns with Δ and Γ.
-// `rel_step` scales the per-coordinate step by max(|S_rc|, 1).
+// J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
+// p*_block = p_block(p_block+1)/2), by central finite differences of the
+// multi-block map w.r.t. block `block`'s covariance only. Column k is the
+// derivative w.r.t. the k-th lower-triangle column-major vech(S_block)
+// coordinate. Rows for parameters in other blocks are exactly zero (independent
+// blocks), so the inference layer slices out the rows with
+// param_location.block == block to form the per-block Jacobian. This ordering
+// matches ModelEvaluator::dsigma_dtheta and data::gamma_nt so J aligns with Δ
+// and Γ. `rel_step` scales the per-coordinate step by max(|S_rc|, 1).
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_block(const spec::LatentStructure& pt,
+                             const model::MatrixRep& rep,
+                             const model::ModelEvaluator& ev,
+                             const data::SampleStats& samp,
+                             NonIterativeEstimator which,
+                             std::size_t block, double rel_step = 1e-6);
+
+// Single-block convenience wrapper (block 0), preserving the original signature.
 fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian(const spec::LatentStructure& pt,
                        const model::MatrixRep& rep,

@@ -105,4 +105,80 @@ post_expected<NonIterativeDiffTest>
 noniterative_difference_test(const NonIterativeInference& inf0 /*restricted H0*/,
                              const NonIterativeInference& inf1 /*full H1*/, int df_d);
 
+// ---------------------------------------------------------------------------
+// Multi-group / grouped inference and linearly-constrained fits.
+// ---------------------------------------------------------------------------
+
+// Per-block (group/level) Guttman fits with a block-diagonal Ω (blocks are
+// independent samples, so Ω = Σ_b J_b Γ_b J_bᵀ / N_b is block-diagonal) and a
+// joint GOF (T = Σ_b N_b r_bᵀ V_b r_b, df = Σ_b (p*_b − q_b), reference spectrum
+// = the union of the per-block spectra). Reduces to `noniterative_inference`
+// numerically when there is a single block. Configural: no cross-block
+// constraints are imposed here; `noniterative_constrained_fit` projects onto
+// them afterwards.
+struct GroupedNonIterativeInference {
+  Eigen::VectorXd theta_hat;                 // stacked configural θ̂ (q)
+  Eigen::MatrixXd Omega;                     // q × q, block-diagonal
+  Eigen::VectorXd se;                        // √diag(Ω)
+  double          T_gof = 0.0;
+  int             df    = 0;
+  Eigen::VectorXd gof_eigenvalues;
+  double          scale_c          = 0.0;
+  double          p_scaled         = 0.0;
+  double          p_meanvar        = 0.0;
+  double          p_scaled_shifted = 0.0;
+  double          p_mixture        = 0.0;
+  double          rls_check        = 0.0;    // NTML cross-check (Σ_b), NaN for ULS
+  std::vector<std::int32_t> block_of_param;  // q; from param_locations
+  // Block-diagonal pieces retained for the (optional) multi-group difference test.
+  Eigen::MatrixXd U, Gamma;                  // Σ_b p*_b square, block-diagonal
+  std::vector<std::string> warnings;
+};
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                               const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                               estimate::frontier::NonIterativeEstimator which,
+                               Discrepancy disc,
+                               const std::vector<Eigen::MatrixXd>& gamma_per_block);
+
+// Convenience: per-block normal-theory Γ = Γ_NT(Σ_b(θ̂)).
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                                  const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                                  estimate::frontier::NonIterativeEstimator which,
+                                  Discrepancy disc);
+
+// Convenience: per-block empirical (distribution-free) Γ̂_b from raw.X[b].
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
+                                         const model::MatrixRep& rep,
+                                         const data::SampleStats& samp,
+                                         const data::RawData& raw, const Eigen::VectorXd& theta,
+                                         estimate::frontier::NonIterativeEstimator which,
+                                         Discrepancy disc);
+
+// One-step minimum-distance projection of the configural fit onto the linear
+// equality constraint surface R θ = c, where (R, c, k) = (A_eq, b_eq, rank) from
+// build_eq_constraints(pt). Closed-form:
+//   θ̃ = θ̂ − Ω R'(R Ω R')⁻¹(R θ̂ − c),  Ω̃ = Ω − Ω R'(R Ω R')⁻¹ R Ω  (rank q−k),
+// and the constraint test W = (R θ̂ − c)'(R Ω R')⁻¹(R θ̂ − c) is exact χ²_k
+// (Wald = min-distance duality; Ω is the true covariance, so W is not a mixture).
+// This is the closed-form measurement-invariance test (metric/strict) and the
+// general linear-constraint fit. Errors on inequality / nonlinear constraints
+// (via build_eq_constraints). k == 0 (no constraints) returns the configural fit.
+struct ConstrainedNonIterativeFit {
+  Eigen::VectorXd theta_hat, theta_tilde;
+  Eigen::MatrixXd Omega, Omega_tilde;        // Ω̃ has rank q − k
+  Eigen::VectorXd se_constrained;            // √diag(Ω̃)
+  double          W      = 0.0;              // χ²_k constraint statistic
+  int             k      = 0;                // # independent constraints
+  double          p_wald = 0.0;
+  std::vector<std::string> warnings;
+};
+
+post_expected<ConstrainedNonIterativeFit>
+noniterative_constrained_fit(const spec::LatentStructure& pt,
+                             const GroupedNonIterativeInference& inf);
+
 }  // namespace magmaan::robust::frontier
