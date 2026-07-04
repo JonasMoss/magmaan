@@ -1,0 +1,492 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{What the Guttman Estimator Minimizes}
+\author{}
+\date{\today}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\col}{\operatorname{col}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\Ninv}{^{-1}}
+
+\theoremstyle{plain}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The Guttman estimator used by \texttt{magmaan} is best understood as a
+covariance-summary map, not as the minimizer of the usual CFA covariance
+discrepancy. It does contain a clean minimization step, but that step is a
+regression of observed variables on fixed indicator composites. The CFA
+parameters are then read from that regression after marker rescaling.
+
+This note records the construction in enough detail to audit an implementation.
+It also states which discrepancy is natural for multi-sample constraints. The
+answer is:
+\begin{itemize}
+\item the construction itself minimizes a composite-score prediction error;
+\item NTML and ULS discrepancies evaluated at the Guttman estimate are valid
+  residual statistics, but not native likelihood-ratio statistics;
+\item the native constrained or multi-sample test is a minimum-distance or Wald
+  statistic in the estimator's own asymptotic covariance metric.
+\end{itemize}
+
+Here ``Guttman estimator'' means Guttman's historical multiple-group method for
+common-factor analysis \cite{guttman1952}. The historical phrase
+``multiple-group'' names groups of indicators used to form composites. It is not
+multi-group SEM. Multi-group SEM enters later by stacking independent sample
+blocks.
+
+\section{Single-block setup}
+
+Fix one continuous CFA block with \(p\) observed variables and \(k\) factors.
+Let \(S\) be the sample covariance and let
+\[
+  X\in\{0,1\}^{p\times k}
+\]
+be the indicator-by-factor membership matrix. In the simple-structure case used
+by the current estimator, each row of \(X\) has exactly one nonzero entry. Row
+\(i\) belongs to factor \(f(i)\), and \(m_f\) denotes the marker indicator for
+factor \(f\).
+
+The estimator is defined only at regular points. Each factor must have at least
+three indicators, the within-factor correlations used below must avoid zero
+denominators, the composite covariance must have positive diagonal, the
+standardized composite correlation must be nonsingular, and the marker
+coefficient produced by the composite regression must be nonzero.
+
+\section{Step 1: replace variances by communalities}
+
+The first step creates a covariance-like matrix \(C\) whose off-diagonal entries
+are the observed covariances and whose diagonal entries are estimated common
+variances. Write \(R\) for the correlation matrix of \(S\). For an indicator
+\(i\), let
+\[
+  P_i
+  =
+  \{(j,\ell): j<\ell,\ j\ne i,\ \ell\ne i,\ f(j)=f(\ell)=f(i)\}.
+\]
+The Spearman-Harman correlation-scale communality is
+\begin{equation}\label{eq:spearman-h}
+  \hat h_i^{\mathrm{cor}}
+  =
+  |P_i|^{-1}
+  \sum_{(j,\ell)\in P_i}
+    \frac{R_{ij}R_{i\ell}}{R_{j\ell}} .
+\end{equation}
+Convert it back to covariance scale by
+\[
+  \hat h_i = S_{ii}\hat h_i^{\mathrm{cor}},
+  \qquad
+  \hat u_i = S_{ii}-\hat h_i ,
+\]
+and define
+\begin{equation}\label{eq:C}
+  C
+  =
+  S-\diag(S)+\diag(\hat h)
+  =
+  S-\diag(\hat u).
+\end{equation}
+
+\begin{lemma}[Exact recovery of the diagonal common variance]
+\label{lem:spearman}
+Suppose \(i,j,\ell\) are indicators of the same one-dimensional factor, with
+population covariances
+\[
+  \Sigma_{ab}=\lambda_a\lambda_b\phi
+  \qquad (a\ne b).
+\]
+Then every ratio in \eqref{eq:spearman-h} equals
+\[
+  \lambda_i^2\phi / \Sigma_{ii}
+\]
+on the correlation scale, and therefore \(h_i=\lambda_i^2\phi\) on the
+covariance scale.
+\end{lemma}
+
+\begin{proof}
+On the covariance scale,
+\[
+  \frac{\Sigma_{ij}\Sigma_{i\ell}}{\Sigma_{j\ell}}
+  =
+  \frac{(\lambda_i\lambda_j\phi)(\lambda_i\lambda_\ell\phi)}
+       {\lambda_j\lambda_\ell\phi}
+  =
+  \lambda_i^2\phi .
+\]
+Dividing each covariance by the relevant standard deviations gives the
+correlation-scale identity and multiplying back by \(\Sigma_{ii}\) returns the
+same covariance-scale common variance.
+\end{proof}
+
+\begin{remark}
+The smooth asymptotic notes treat the interior map, where no numerical repair is
+active. The shared \texttt{theta\_spearman()} helper used by the current C++
+code clips the correlation-scale communality to wide bounds before converting
+to a residual variance. The frontier estimator rejects factors with fewer than
+three indicators before the helper's small-block fallback can matter. If a
+bound is active, the map is piecewise smooth rather than smooth at that point,
+and the finite-difference Jacobian is differentiating that active branch.
+\end{remark}
+
+\section{Step 2: regress variables on fixed composites}
+
+Now pretend that \(C\) is the covariance matrix. The fixed factor-score
+composites are
+\[
+  g=X\T y .
+\]
+Their covariance and their covariance with the observed variables are
+\[
+  B=\Cov(g)=X\T C X,
+  \qquad
+  A=\Cov(y,g)=C X .
+\]
+Let \(D=\diag(B)\), \(Q=D^{-1/2}\), and standardize the composites:
+\[
+  f=Q g,\qquad
+  P=\Cov(f)=Q B Q,\qquad
+  L=\Cov(y,f)=A Q .
+\]
+
+For fixed \(f\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
+minimize the total prediction error
+\begin{equation}\label{eq:composite-loss}
+  Q_{\mathrm{comp}}(K)
+  =
+  \E_C\{ \lVert y-Kf\rVert^2 \}
+  =
+  \tr(C)-2\tr(KL\T)+\tr(KPK\T).
+\end{equation}
+The subscript \(C\) emphasizes that this is the quadratic expectation under the
+communality-filled covariance \(C\).
+
+\begin{lemma}[Composite regression step]\label{lem:regression}
+If \(P\) is nonsingular, the unique minimizer of
+\eqref{eq:composite-loss} is
+\begin{equation}\label{eq:Kstar}
+  K^\star = L P^{-1}.
+\end{equation}
+Equivalently, using the unstandardized composites,
+\[
+  K^\star = C X (X\T C X)^{-1} D^{1/2}.
+\]
+The common covariance reproduced by the composites is
+\begin{equation}\label{eq:common-proj}
+  K^\star P K^{\star\T}
+  =
+  C X (X\T C X)^{-1} X\T C .
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Differentiate \eqref{eq:composite-loss} with respect to \(K\):
+\[
+  \frac{\partial Q_{\mathrm{comp}}}{\partial K}
+  =
+  -2L+2KP .
+\]
+The first-order condition is \(KP=L\), giving \(K^\star=LP^{-1}\). Since \(P\)
+is positive definite, this stationary point is the unique minimum. Substituting
+\(L=CXQ\), \(P=QX\T CXQ\), and \(Q=D^{-1/2}\) gives the unstandardized form and
+\eqref{eq:common-proj}.
+\end{proof}
+
+This is the actual least-squares part of the Guttman estimator. The variables
+being optimized are the coefficients from fixed indicator composites to the
+observed variables. The CFA covariance model parameters have not yet entered as
+optimization variables.
+
+\section{Step 3: marker rescale into CFA parameters}
+
+Let
+\[
+  M=\diag(K^\star_{m_1,1},\ldots,K^\star_{m_k,k})
+\]
+be the diagonal matrix of marker coefficients, one per factor. The
+marker-scaled Guttman matrices are
+\begin{equation}\label{eq:marker-map}
+  \Lambda_G=K^\star M^{-1},
+  \qquad
+  \Phi_G=M P M,
+  \qquad
+  \psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}.
+\end{equation}
+Then every marker loading in \(\Lambda_G\) is one, and the common covariance
+is unchanged:
+\[
+  \Lambda_G\Phi_G\Lambda_G\T
+  =
+  K^\star P K^{\star\T}.
+\]
+
+In the current \texttt{magmaan} map, the full \(K^\star\) is computed. The
+reported free loading parameters are read only from the model-allowed loading
+cells. Off-pattern entries of \(K^\star\) are auxiliary. They vanish on the
+exact simple-structure model; away from that model they are not fitted as
+cross-loadings. The residual variances in \eqref{eq:marker-map} come from the
+diagonal of the full composite common part.
+
+\begin{proposition}[Exact recovery on the simple CFA model]\label{prop:recover}
+Suppose the communality-filled population matrix is exactly
+\[
+  C_0=\Lambda_0\Phi_0\Lambda_0\T ,
+\]
+where \(\Lambda_0\) has the simple loading pattern \(X\), each marker loading is
+one, and the diagonal matrix \(T=\Lambda_0\T X\) is nonsingular. Then the
+Guttman map recovers \(\Lambda_0\) and \(\Phi_0\).
+\end{proposition}
+
+\begin{proof}
+Because every indicator loads on one factor, \(T=\Lambda_0\T X\) is diagonal.
+Thus
+\[
+  C_0X=\Lambda_0\Phi_0T,
+  \qquad
+  X\T C_0X=T\Phi_0T .
+\]
+The raw composite-regression coefficients are
+\[
+  C_0X(X\T C_0X)^{-1}
+  =
+  \Lambda_0\Phi_0T(T\Phi_0T)^{-1}
+  =
+  \Lambda_0T^{-1}.
+\]
+Standardizing the composites multiplies column \(f\) by \(D_{ff}^{1/2}\). The
+marker coefficient in column \(f\) is therefore \(D_{ff}^{1/2}/T_{ff}\), since
+the marker loading is one. Dividing the column by this marker coefficient gives
+\(\Lambda_0\). The standardized composite covariance is
+\[
+  P=D^{-1/2}T\Phi_0TD^{-1/2}.
+\]
+With \(M=\diag(D_{ff}^{1/2}/T_{ff})\),
+\[
+  MPM=\Phi_0 .
+\]
+\end{proof}
+
+\section{What is and is not minimized}
+
+The preceding lemmas give the clean answer. The Guttman construction minimizes
+the composite prediction loss \eqref{eq:composite-loss}. It does not generally
+minimize an SEM covariance discrepancy
+\[
+  F_V(\theta)
+  =
+  \{\vech(S)-\sigma(\theta)\}\T
+  V
+  \{\vech(S)-\sigma(\theta)\},
+\]
+where \(V\) is the ULS, GLS, WLS, or NTML weight. A minimizer of \(F_V\) has the
+first-order condition
+\[
+  \Delta(\theta)\T V
+  \{\vech(S)-\sigma(\theta)\}=0,
+\]
+or the equivalent NTML score condition when \(V\) is the likelihood weight. The
+Guttman estimate is obtained from \(C\), \(X\), and the marker rescaling above;
+there is no reason for it to satisfy that residual orthogonality condition
+except in special cases.
+
+Thus NTML and ULS are fine as \emph{post-estimation residual statistics}. They
+are not the discrepancies that define the point estimate.
+
+\section{Residual statistics at the Guttman estimate}
+
+Let \(s=\vech(S)\), let \(\hat\theta_G=\tau_G(s)\), and let
+\[
+  r=s-\sigma(\hat\theta_G).
+\]
+For a fixed or model-implied weight \(V\), define
+\begin{equation}\label{eq:TV}
+  T_V=N r\T V r .
+\end{equation}
+This includes ULS with the vech metric and the NTML residual quadratic form with
+the model-implied normal-theory weight evaluated at
+\(\Sigma(\hat\theta_G)\).
+
+Let
+\[
+  J_G=\frac{\partial\tau_G}{\partial s\T},
+  \qquad
+  \Delta=\frac{\partial\sigma}{\partial\theta\T}
+\]
+at the target point. Under exact fit, Fisher consistency gives
+\[
+  J_G\Delta=I .
+\]
+Therefore
+\begin{equation}\label{eq:resid-projector}
+  \sqrt N\,r
+  =
+  M_G\,\sqrt N(s-\sigma_0)+o_p(1),
+  \qquad
+  M_G=I-\Delta J_G .
+\end{equation}
+The matrix \(M_G\) is a residual projector, but it is generally an oblique
+projector. It is not the \(V\)-orthogonal residual projector of the
+\(F_V\)-minimizer.
+
+Consequently,
+\begin{equation}\label{eq:mixture}
+  T_V
+  \Rightarrow
+  \sum_j \lambda_j \chi^2_{1,j},
+\end{equation}
+where the nonzero \(\lambda_j\)'s are the eigenvalues of
+\[
+  (M_G\T V M_G)\Gamma .
+\]
+Only when \(J_G\) equals the \(V\)-least-squares Jacobian and \(V\) is the
+matching inverse moment covariance does this collapse to an ordinary
+\(\chi^2_{df}\). That is the efficient ML or GLS special case, not the Guttman
+case.
+
+For nested models, the LRT-shaped difference
+\[
+  T_d=T_{V,0}-T_{V,1}
+\]
+is therefore a pseudo-LRT. Its reference is obtained from the difference of the
+two quadratic forms. Since neither fitted value is required to minimize
+\(F_V\), \(T_d\) is not guaranteed to be nonnegative in finite samples.
+
+\section{Multi-sample blocks and the native constrained test}
+
+For independent sample groups \(b=1,\ldots,B\), apply the same Guttman map to
+each covariance block:
+\[
+  \hat\theta_b=\tau_G(s_b),
+  \qquad
+  J_b=\frac{\partial\tau_G}{\partial s_b\T}.
+\]
+Stack \(\hat\theta=(\hat\theta_1\T,\ldots,\hat\theta_B\T)\T\). If
+\(\Gamma_b\) is the fourth-moment covariance of \(s_b\), then the finite-sample
+delta covariance of the stacked estimator is
+\begin{equation}\label{eq:Omega-block}
+  \Omega
+  =
+  \bigoplus_{b=1}^B
+  \frac{1}{N_b}J_b\Gamma_bJ_b\T .
+\end{equation}
+The configural Guttman estimator imposes no cross-block equality constraints.
+It simply estimates every block independently and stacks the results.
+
+Now impose a linear invariance constraint
+\[
+  R\theta=c
+\]
+on the stacked parameter vector. The natural constrained Guttman estimator is
+the minimum-distance projection
+\begin{equation}\label{eq:projection}
+  \tilde\theta
+  =
+  \hat\theta
+  -
+  \Omega R\T(R\Omega R\T)^{-1}(R\hat\theta-c).
+\end{equation}
+It is the solution of
+\[
+  \tilde\theta
+  =
+  \argmin_{\eta:\ R\eta=c}
+  (\hat\theta-\eta)\T\Omega^{+}(\hat\theta-\eta),
+\]
+with the usual interpretation on the estimable constraint subspace.
+
+The associated statistic is
+\begin{equation}\label{eq:wald}
+  W
+  =
+  (R\hat\theta-c)\T
+  (R\Omega R\T)^{-1}
+  (R\hat\theta-c).
+\end{equation}
+Under the null, \(W\Rightarrow\chi^2_{\rank(R)}\). This is the native
+Guttman discrepancy for invariance work: distance in the estimator's own
+asymptotic parameter metric. It is monotone, closed form, and does not require
+pretending that the point estimate minimized NTML or ULS.
+
+\section{Audit checklist}
+
+For one covariance block, the implementation can be checked in this order:
+\begin{enumerate}
+\item Build the membership matrix \(X\) from the simple CFA loading pattern.
+\item For each factor block, compute the Spearman-Harman communalities
+  \eqref{eq:spearman-h}; place them on the diagonal to get \(C\).
+\item Form \(A=CX\), \(B=X\T CX\), \(D=\diag(B)\), \(Q=D^{-1/2}\),
+  \(L=AQ\), and \(P=QBQ\).
+\item Solve \(K^\star=LP^{-1}\). This is the coefficient matrix minimizing the
+  composite prediction loss.
+\item Read marker coefficients into \(M\); compute
+  \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=MPM\), and
+  \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\).
+\item Assemble the model's free parameter vector from the allowed loading cells,
+  latent covariance cells, and residual variances. Off-pattern entries of
+  \(K^\star\) are auxiliary unless the model itself allows those loadings.
+\item For standard errors or tests, finite-difference the full map to obtain
+  \(J_G\), then use \(J_G\Gamma J_G\T/N\) for parameter covariance and
+  \(M_G=I-\Delta J_G\) for residual goodness-of-fit references.
+\end{enumerate}
+
+\section*{Summary}
+
+The Guttman estimator has a real least-squares criterion, but it is not the SEM
+criterion used by ML, ULS, GLS, or WLS. It first constructs fixed indicator
+composites, regresses the observed variables on those composites under the
+communality-filled covariance \(C\), and marker-rescales the result into CFA
+parameters. Residual NTML or ULS statistics are useful diagnostics and valid
+pseudo-tests once their weighted-\(\chi^2\) reference is corrected with
+\(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
+minimum-distance/Wald statistic based on the block-diagonal Guttman delta
+covariance.
+
+\begin{thebibliography}{9}
+
+\bibitem{browne1984}
+Browne, M. W. (1984).
+Asymptotically distribution-free methods for the analysis of covariance
+structures.
+\emph{British Journal of Mathematical and Statistical Psychology}, 37, 62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{dhaene2024}
+Dhaene, S., and Rosseel, Y. (2024).
+An evaluation of non-iterative estimators in confirmatory factor analysis.
+\emph{Structural Equation Modeling}, 31(1), 1--13.
+\href{https://doi.org/10.1080/10705511.2023.2187285}{doi:10.1080/10705511.2023.2187285}.
+
+\bibitem{guttman1952}
+Guttman, L. (1952).
+Multiple group methods for common-factor analysis: Their basis, computation, and
+interpretation.
+\emph{Psychometrika}, 17, 209--222.
+\href{https://doi.org/10.1007/BF02288783}{doi:10.1007/BF02288783}.
+
+\bibitem{satorra1989}
+Satorra, A. (1989).
+Alternative test criteria in covariance structure analysis: A unified approach.
+\emph{Psychometrika}, 54, 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\end{thebibliography}
+
+\end{document}
