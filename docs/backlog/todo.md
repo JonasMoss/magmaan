@@ -277,7 +277,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     frontier helpers), using the complete IJ ordinal sandwich at each
     constrained point. Observed-score / Green-Yang-like omega profiling and
     small-sample profile-LR corrections stay in the funLR lane until the
-    calibrated-constant problem is solved.
+    calibrated-constant problem is solved. Experiment
+    `53-ordinal-profile-lrt-calibration` now includes the first fitted-model
+    misspecification stress for the no-integration profile target: a locally
+    dependent ordinal latent-response DGP fitted by the same one-factor DWLS
+    model. At 1000 reps/cell, ordinary DWLS still undercovers, while
+    robust-scaled and misspecification-mixture references both cover near
+    nominal for the pseudo-true fitted omega except in the sparse
+    threshold-extreme `N=50` cell.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
