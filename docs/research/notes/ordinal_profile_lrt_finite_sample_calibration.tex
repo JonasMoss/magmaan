@@ -28,8 +28,9 @@
 This note narrows the profile-LRT small-sample problem to all-ordinal
 limited-information SEM. The target is not a universal Bartlett correction.
 The target is a decision rule for profile-LRT confidence intervals for
-polychoric omega under DWLS/WLS, where thresholds, polychorics, NACOV, and fitted
-weights are estimated from categorical margins.
+polychoric omega under DWLS first, with WLS as a later comparison, where
+thresholds, polychorics, NACOV, and fitted weights are estimated from
+categorical margins.
 
 The companion note \cite{profilebartlettnote} records the general distinction:
 when the limiting reference is a weighted chi-square spectrum, a scalar
@@ -128,10 +129,12 @@ functional bias inside the Bartlett factor.
 \section{Experiment 53}
 
 Experiment 53 is the first taxonomy run. It uses all-ordinal one-factor probit
-data, DWLS/WLS fits, and the existing
+data, DWLS fits, and the existing
 \texttt{frontier\_profile\_lrt\_ordinal\_polychoric\_omega} surface. It records
 ordinary, robust-scaled, and misspecification-scaled profile tests at the
-population omega, plus the fit-free robust delta interval for comparison.
+population omega, plus the fit-free robust delta interval for comparison. The
+initial grid deliberately defers the WLS robust-scaled arm to spend the
+simulation budget on DWLS replications.
 
 The decision rule is:
 \begin{enumerate}
@@ -144,6 +147,18 @@ and sparse-threshold diagnostics.
 \item If robust and misspecification references diverge materially, keep the
 small-sample constant conditional on the selected reference regime.
 \end{enumerate}
+
+The first full DWLS-only grid used 1000 replications per cell over
+$N\in\{50,100,250,500\}$ and balanced versus threshold-extreme cuts. Ordinary
+DWLS profile inversion is not a viable reference here: coverage stayed around
+0.60--0.69 because the unscaled statistic has mean roughly 3.5--6.4. Endpoint
+robust scaling and the misspecification-mixture scaling both move the reference
+coverage close to nominal in most cells, roughly 0.95--0.97. The exception is
+the threshold-extreme $N=50$ cell, where empty or near-empty categories create
+profile failures and unstable fitted-weight reference scales; coverage is about
+0.93 rather than 0.95. The practical next correction target is therefore sparse
+ordinal-summary / fitted-weight stability in the small extreme-threshold cell,
+not a broad Bartlett correction for every ordinal omega interval.
 
 \section*{Working Verdict}
 

@@ -4,11 +4,11 @@ usage <- function() {
   cat(
 "Usage: Rscript run_experiment.R [--smoke] [--reps N] [--n-grid LIST] [--seed-base N]
 
-Taxonomy run for ordinal polychoric-omega profile-LRT calibration.
+DWLS-only taxonomy run for ordinal polychoric-omega profile-LRT calibration.
 
 Options:
   --smoke        Small run: reps=20, n-grid=50,100.
-  --reps N       Replications per cell (default 500).
+  --reps N       Replications per cell (default 1000).
   --n-grid LIST  Comma-separated sample sizes (default 50,100,250,500).
   --seed-base N  Base seed (default 20260704).
   --help         Show this help.
@@ -30,7 +30,7 @@ take <- function(flag, default) {
 }
 
 smoke <- has_flag("--smoke")
-reps <- as.integer(take("--reps", if (smoke) "20" else "500"))
+reps <- as.integer(take("--reps", if (smoke) "20" else "1000"))
 n_grid <- strsplit(take("--n-grid", if (smoke) "50,100" else "50,100,250,500"),
                    ",", fixed = TRUE)[[1L]]
 n_grid <- as.integer(n_grid)
@@ -172,11 +172,9 @@ fit_one <- function(regime, n, rep_id) {
 
   stats <- tryCatch(core$data_ordinal_stats_from_df(dat, spec), error = identity)
   arms <- data.frame(
-    arm = c("dwls_ordinary", "dwls_robust_scaled", "dwls_misspec_mixture",
-            "wls_robust_scaled"),
-    estimator = c("DWLS", "DWLS", "DWLS", "WLS"),
-    reference = c(NA_character_, "robust_scaled", "misspec_mixture",
-                  "robust_scaled"),
+    arm = c("dwls_ordinary", "dwls_robust_scaled", "dwls_misspec_mixture"),
+    estimator = rep("DWLS", 3L),
+    reference = c(NA_character_, "robust_scaled", "misspec_mixture"),
     stringsAsFactors = FALSE)
   if (inherits(stats, "error")) {
     return(do.call(rbind, lapply(seq_len(nrow(arms)), function(i) {
@@ -197,12 +195,10 @@ fit_one <- function(regime, n, rep_id) {
 
   fit_dwls <- tryCatch(core$fit_dwls_ordinal(spec, stats, control = fit_control),
                        error = identity)
-  fit_wls <- tryCatch(core$fit_wls_ordinal(spec, stats, control = fit_control),
-                      error = identity)
 
   rows <- vector("list", nrow(arms))
   for (i in seq_len(nrow(arms))) {
-    fit <- if (arms$estimator[[i]] == "DWLS") fit_dwls else fit_wls
+    fit <- fit_dwls
     if (inherits(fit, "error")) {
       rows[[i]] <- failure_row(
         regime, n, rep_id, arms$arm[[i]], arms$estimator[[i]], min_cat_count,

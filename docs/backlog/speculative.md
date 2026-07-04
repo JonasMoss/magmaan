@@ -969,12 +969,21 @@ reference-scale error, sparse-threshold/NACOV instability, omega point bias, and
 boundary/feasibility mass. Experiment 53
 (`experiments/53-ordinal-profile-lrt-calibration`) is the first taxonomy run:
 all-ordinal one-factor probit data, polychoric/latent-response omega target,
-DWLS ordinary / robust-scaled / misspec-mixture profile tests, WLS robust-scaled
-comparison, and the fit-free ordinal polychoric omega Wald interval as the
-baseline. The smoke is intentionally diagnostic only; the decision rule for the
-full grid is: scalar constants advance only if the reference-scaled statistic is
-the failure mode, otherwise correction effort moves to ordinal summary
-regularization or target-bias diagnostics.
+DWLS ordinary / robust-scaled / misspec-mixture profile tests, and the fit-free
+ordinal polychoric omega Wald interval as the baseline. The WLS robust-scaled
+comparison is deferred so the main grid can spend its budget on DWLS
+replications. The smoke is intentionally diagnostic only; the decision rule for
+the full grid is: scalar constants advance only if the reference-scaled
+statistic is the failure mode, otherwise correction effort moves to ordinal
+summary regularization or target-bias diagnostics.
+
+First full DWLS-only grid (1000 reps/cell, `N = 50,100,250,500`) says ordinary
+DWLS is the wrong reference for this functional (coverage about 0.60-0.69;
+mean unscaled statistic about 3.5-6.4), while endpoint robust and
+misspecification-mixture references are near nominal in all but the sparse
+threshold-extreme `N=50` cell. That cell still has profile failures and huge
+fitted-weight scale instability, so the next useful probe is sparse ordinal
+summary / weight regularization rather than a universal Bartlett factor.
 
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012

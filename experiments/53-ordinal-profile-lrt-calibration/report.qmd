@@ -28,6 +28,9 @@ For all-ordinal limited-information CFA, is small-sample miscoverage of
 polychoric-omega profile-LRT intervals mainly LR inflation, robust reference
 scaling, sparse ordinal summaries, or point-functional bias?
 
+This run intentionally keeps the grid DWLS-only; the WLS robust-scaled
+comparison is deferred so the same compute budget buys more replications.
+
 ## Short Answer
 
 ```{r, results='asis'}
