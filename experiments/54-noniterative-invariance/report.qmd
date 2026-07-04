@@ -1,0 +1,152 @@
+---
+title: "Closed-form measurement invariance: is it calibrated and powered?"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results_dir <- "results"
+csv <- file.path(results_dir, "invariance_rejection.csv")
+if (!file.exists(csv)) {
+  stop("No results. Run:\n  Rscript run_experiment.R --full --reps 1000 --generators normal,ig")
+}
+res <- read.csv(csv, check.names = FALSE, stringsAsFactors = FALSE)
+meta <- tryCatch(read.csv(file.path(results_dir, "metadata.csv"), stringsAsFactors = FALSE),
+                 error = function(e) NULL)
+alpha <- tryCatch(as.numeric(meta$value[meta$key == "alpha"]), error = function(e) 0.05)
+if (length(alpha) != 1 || is.na(alpha)) alpha <- 0.05
+fmt <- function(x) formatC(x, format = "f", digits = 3)
+pick <- function(gen, scen, n, col) {
+  r <- res[res$generator == gen & res$scenario == scen & res$n == n, ]
+  if (!nrow(r)) NA_real_ else r[[col]][1]
+}
+gens <- unique(res$generator); ns <- sort(unique(res$n))
+```
+
+## Question
+
+The closed-form Guttman CFA estimator gained two measurement-invariance tests: a
+**metric** test (an exact-$\chi^2$ Wald from the minimum-distance projection onto
+equal loadings) and a **scalar** test (a linearized Wald from the reference-group
+mean map, which frees the latent means). Are they calibrated near the nominal
+level when invariance holds, do they have power when it fails, and how do they
+compare with the maximum-likelihood likelihood-ratio test, on normal and on
+non-normal continuous data?
+
+## Short answer
+
+Both tests work, and on non-normal data the empirical fourth-moment matrix earns
+its keep. On **normal data** the metric Wald and the ML likelihood-ratio test are
+interchangeable: Type-I `r fmt(pick("normal","invariant",250,"rej_cf_metric_nt"))`
+(closed form) versus `r fmt(pick("normal","invariant",250,"rej_ml_metric_nt"))`
+(ML) at $n=250$ per group, and matched power against a broken loading
+(`r fmt(pick("normal","metric_viol",250,"rej_cf_metric_nt"))` versus
+`r fmt(pick("normal","metric_viol",250,"rej_ml_metric_nt"))`). The **scalar Wald
+is exactly nominal on normal data** (`r fmt(pick("normal","invariant",250,"rej_cf_scalar_nt"))`
+at $n=250$) with full power against an intercept shifted off the loading space
+(`r fmt(pick("normal","scalar_viol",250,"rej_cf_scalar_nt"))`), and it delivers
+true free-latent-mean scalar invariance in one closed-form step, which the ML
+nested test cannot do here at all (freeing the latent means changes the
+parameterization).
+
+On **non-normal data the metric Wald needs the empirical $\Gamma$**: the
+normal-theory version over-rejects at
+`r fmt(pick("ig","invariant",250,"rej_cf_metric_nt"))`, and the empirical version
+pulls it back to `r fmt(pick("ig","invariant",250,"rej_cf_metric_emp"))`. The ML
+test shows the identical split, `r fmt(pick("ig","invariant",250,"rej_ml_metric_nt"))`
+normal-theory versus `r fmt(pick("ig","invariant",250,"rej_ml_metric_rob"))`
+robust. The **scalar Wald is far more robust** to non-normality, sitting at
+`r fmt(pick("ig","invariant",250,"rej_cf_scalar_nt"))` (normal-theory) and
+`r fmt(pick("ig","invariant",250,"rej_cf_scalar_emp"))` (empirical). Power is
+retained throughout. The lesson matches the single-group goodness-of-fit study:
+distribution-free fourth moments are what keep the closed-form inference honest
+off normality.
+
+## Evidence
+
+### Metric invariance: the empirical $\Gamma$ under non-normality
+
+Type-I under `invariant` for the closed-form Wald (normal-theory vs empirical
+$\Gamma$) beside the ML LRT (normal-theory vs robust). On normal data every
+column sits at $\alpha = `r alpha`$. On the non-normal generator the
+normal-theory columns inflate and the distribution-free columns restore the
+level. Power (rightmost, closed form, empirical $\Gamma$) is retained.
+
+```{r metric-table}
+mk_metric <- function() {
+  rows <- list()
+  for (g in gens) for (n in ns) {
+    rows[[paste(g, n)]] <- data.frame(
+      Generator = g, `N/group` = n,
+      `CF NT` = fmt(pick(g, "invariant", n, "rej_cf_metric_nt")),
+      `CF emp` = fmt(pick(g, "invariant", n, "rej_cf_metric_emp")),
+      `ML NT` = fmt(pick(g, "invariant", n, "rej_ml_metric_nt")),
+      `ML rob` = fmt(pick(g, "invariant", n, "rej_ml_metric_rob")),
+      `CF power (emp)` = fmt(pick(g, "metric_viol", n, "rej_cf_metric_emp")),
+      check.names = FALSE)
+  }
+  do.call(rbind, rows)
+}
+knitr::kable(mk_metric(), row.names = FALSE,
+             caption = paste0("Metric-invariance Type-I (invariant population) and power. ",
+                              "Target level ", alpha, "."))
+```
+
+### Scalar invariance: the closed-form reference-group map
+
+Type-I under `invariant` (equal loadings and intercepts, group-2 latent means
+free) and power under `scalar_viol` (one group-2 intercept shifted off the
+loading space). There is no ML column: true scalar invariance frees the latent
+means, and magmaan's restriction-map nested LRT does not accept that
+parameterization change.
+
+```{r scalar-table}
+mk_scalar <- function() {
+  rows <- list()
+  for (g in gens) for (n in ns) {
+    rows[[paste(g, n)]] <- data.frame(
+      Generator = g, `N/group` = n,
+      `Type-I (NT)`  = fmt(pick(g, "invariant", n, "rej_cf_scalar_nt")),
+      `Type-I (emp)` = fmt(pick(g, "invariant", n, "rej_cf_scalar_emp")),
+      `Power (NT)`   = fmt(pick(g, "scalar_viol", n, "rej_cf_scalar_nt")),
+      `Power (emp)`  = fmt(pick(g, "scalar_viol", n, "rej_cf_scalar_emp")),
+      check.names = FALSE)
+  }
+  do.call(rbind, rows)
+}
+knitr::kable(mk_scalar(), row.names = FALSE,
+             caption = "Scalar-invariance rejection rate, normal-theory (NT) vs empirical (emp) Gamma.")
+```
+
+## Caveats
+
+- Rejection rates are Monte Carlo estimates at the reps in `results/metadata.csv`;
+  the smoke default is deliberately small and noisy. Read the full-run CSV for
+  precise levels.
+- Generators are normal and a non-normal continuous independent generator.
+  Ordinal-as-continuous is deferred: a mean-structure invariance test on ordinal
+  codes needs threshold modeling, not just treated-as-continuous moments.
+- The scalar Type-I can sit a little above nominal at the smallest $N$; the test
+  is a linearized (leading-order) Wald, and its mean statistic already sits close
+  to its degrees of freedom on the true-invariance population.
+- Under `metric_viol` the scalar test is not interpretable on its own (it assumes
+  metric invariance), so its rate there is a conflated quantity, not power.
+
+## Reproduce
+
+```sh
+# quick check (normal only, small reps)
+Rscript run_experiment.R --smoke
+
+# the full grid used here
+Rscript run_experiment.R --full --reps 1000 --n 250,500 --generators normal,ig
+
+# render this report
+quarto render report.qmd
+```
