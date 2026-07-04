@@ -8,9 +8,11 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Cholesky>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
+#include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -228,6 +230,252 @@ noniterative_difference_test(const NonIterativeInference& inf0,
                            "estimator; the pseudo-LRT is not monotone)");
   for (const auto& w : sd->warnings) out.warnings.push_back(w);
   for (const auto& w : lr->warnings) out.warnings.push_back(w);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Grouped inference + linearly-constrained fit.
+// ---------------------------------------------------------------------------
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                               const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                               estimate::frontier::NonIterativeEstimator which,
+                               Discrepancy disc,
+                               const std::vector<Eigen::MatrixXd>& gamma_per_block) {
+  if (samp.S.empty()) return perr("grouped inference: empty sample stats");
+  const std::size_t nblk = samp.S.size();
+  if (gamma_per_block.size() != nblk)
+    return perr("grouped inference: Gamma count != block count");
+  if (samp.n_obs.size() != nblk)
+    return perr("grouped inference: n_obs count != block count");
+
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("grouped inference: evaluator build failed");
+  const auto q = static_cast<Eigen::Index>(ev->n_free());
+  if (theta.size() != q) return perr("grouped inference: theta size mismatch");
+
+  // Σ(θ̂) and the stacked Δ — copy out before any buffer-overwriting call.
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("grouped inference: Sigma(theta) failed");
+  auto dS = ev->dsigma_dtheta(theta);
+  if (!dS.has_value()) return perr("grouped inference: dsigma_dtheta failed");
+  const Eigen::MatrixXd Delta_full = *dS;  // (Σ p*_b) × q
+
+  // NTML weights (model-implied, per block), computed once.
+  std::vector<Eigen::MatrixXd> Wntml;
+  if (disc == Discrepancy::NTML) {
+    auto w = estimate::gmm::expected_information_weight(*ev, samp, theta);
+    if (!w.has_value() || w->size() != nblk)
+      return perr("grouped inference: NTML weight build failed");
+    Wntml = std::move(*w);
+  }
+
+  // Per-block moment offsets in the stacked vech vector.
+  std::vector<Eigen::Index> pstar_b(nblk), offset(nblk);
+  Eigen::Index pstar_total = 0;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p_b = samp.S[b].rows();
+    pstar_b[b] = p_b * (p_b + 1) / 2;
+    offset[b] = pstar_total;
+    pstar_total += pstar_b[b];
+  }
+  if (Delta_full.rows() != pstar_total || Delta_full.cols() != q)
+    return perr("grouped inference: Delta dimension mismatch");
+
+  // Per-block free-parameter counts (from the param layout).
+  const std::vector<model::ParamLocation> locs = ev->param_locations();
+  GroupedNonIterativeInference out;
+  out.block_of_param.assign(static_cast<std::size_t>(q), -1);
+  std::vector<int> q_of_block(nblk, 0);
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto b = static_cast<std::size_t>(locs[k].block);
+    if (locs[k].block < 0 || b >= nblk)
+      return perr("grouped inference: parameter has out-of-range block");
+    out.block_of_param[k] = static_cast<std::int32_t>(b);
+    q_of_block[b]++;
+  }
+
+  out.Omega = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd U_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  Eigen::MatrixXd G_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  double T = 0.0;
+  int df = 0;
+  double rls = (disc == Discrepancy::NTML)
+                   ? 0.0 : std::numeric_limits<double>::quiet_NaN();
+
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p_b = samp.S[b].rows();
+    const Eigen::Index ps = pstar_b[b];
+    if (gamma_per_block[b].rows() != ps || gamma_per_block[b].cols() != ps)
+      return perr("grouped inference: Gamma[b] dimension mismatch");
+
+    const Eigen::MatrixXd Sigma_hat_b = sig->sigma[b];              // copy (P4)
+    const Eigen::MatrixXd Delta_b = Delta_full.middleRows(offset[b], ps);  // ps × q
+
+    auto Jf = estimate::frontier::estimator_map_jacobian_block(pt, rep, *ev, samp, which, b);
+    if (!Jf.has_value()) return perr("grouped inference: block Jacobian failed");
+    const Eigen::MatrixXd J_b = *Jf;  // q × ps (rows outside block b are exactly 0)
+
+    Eigen::MatrixXd V_b;
+    if (disc == Discrepancy::ULS) {
+      V_b = uls_weight(p_b);
+    } else {
+      const Eigen::MatrixXd& W0 = Wntml[b];
+      if (W0.rows() == ps) V_b = W0;
+      else if (W0.rows() > ps) V_b = W0.bottomRightCorner(ps, ps);
+      else return perr("grouped inference: NTML weight smaller than p*");
+    }
+
+    const Eigen::VectorXd r_b = vech_lower(samp.S[b]) - vech_lower(Sigma_hat_b);
+    const Eigen::MatrixXd M_b = Eigen::MatrixXd::Identity(ps, ps) - Delta_b * J_b;
+    const Eigen::MatrixXd U_b = M_b.transpose() * V_b * M_b;
+    const double N_b = static_cast<double>(samp.n_obs[b]);  // per-block N (P2)
+
+    T += N_b * r_b.dot(V_b * r_b);
+    // J_b has zero rows outside block b, so this accumulates a block-diagonal Ω.
+    out.Omega.noalias() += (J_b * gamma_per_block[b] * J_b.transpose()) / N_b;
+    U_big.block(offset[b], offset[b], ps, ps) = U_b;
+    G_big.block(offset[b], offset[b], ps, ps) = gamma_per_block[b];
+    df += static_cast<int>(ps) - q_of_block[b];
+
+    if (disc == Discrepancy::NTML) {
+      model::ImpliedMoments im;
+      im.sigma = {Sigma_hat_b};
+      data::SampleStats one;
+      one.S = {samp.S[b]};
+      one.n_obs = {samp.n_obs[b]};
+      if (!samp.mean.empty()) one.mean = {samp.mean[b]};
+      if (auto rc = inference::rls_chi2(one, im); rc.has_value()) rls += *rc;
+    }
+  }
+
+  out.theta_hat = theta;
+  out.se = Eigen::VectorXd(q);
+  for (Eigen::Index i = 0; i < q; ++i)
+    out.se(i) = std::sqrt(std::max(out.Omega(i, i), 0.0));
+  out.T_gof = T;
+  out.df = df;
+  out.rls_check = rls;
+
+  if (df >= 1) {
+    auto sd = compute_profile_contrast_spectrum(U_big, G_big, 1e-10);
+    if (!sd.has_value()) return perr("grouped inference: GOF spectrum failed");
+    SatorraDiffResult sd_df = *sd;
+    const Eigen::Index navail = sd_df.eigenvalues.size();
+    if (navail > df) {
+      sd_df.eigenvalues = sd_df.eigenvalues.tail(df).eval();  // largest df (ascending)
+    } else if (navail < df) {
+      out.warnings.push_back("GOF spectrum rank " + std::to_string(navail) +
+                             " < df " + std::to_string(df) +
+                             " (ill-conditioned residual projector)");
+    }
+    sd_df.trace_CinvS = sd_df.eigenvalues.sum();
+    sd_df.trace_CinvS_sq = sd_df.eigenvalues.squaredNorm();
+    for (const auto& w : sd_df.warnings) out.warnings.push_back(w);
+
+    auto lr = lr_test_satorra2000(T, sd_df);
+    if (!lr.has_value()) return perr("grouped inference: GOF p-values failed");
+    out.gof_eigenvalues = sd_df.eigenvalues;
+    out.scale_c = lr->scale_c;
+    out.p_scaled = lr->p_scaled;
+    out.p_meanvar = lr->p_adjusted;
+    out.p_scaled_shifted = lr->p_scaled_shifted;
+    out.p_mixture = lr->p_mixture;
+    for (const auto& w : lr->warnings) out.warnings.push_back(w);
+  } else {
+    out.warnings.push_back("joint df <= 0 (saturated blocks); GOF not reported");
+  }
+
+  out.U = std::move(U_big);
+  out.Gamma = std::move(G_big);
+  return out;
+}
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                                  const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                                  estimate::frontier::NonIterativeEstimator which,
+                                  Discrepancy disc) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("grouped inference: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("grouped inference: Sigma(theta) failed");
+  std::vector<Eigen::MatrixXd> gammas;
+  gammas.reserve(sig->sigma.size());
+  for (const auto& Sig : sig->sigma) {
+    auto g = data::gamma_nt(Sig);
+    if (!g.has_value()) return perr("grouped inference: gamma_nt failed");
+    gammas.push_back(std::move(*g));
+  }
+  return noniterative_inference_grouped(pt, rep, samp, theta, which, disc, gammas);
+}
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
+                                         const model::MatrixRep& rep,
+                                         const data::SampleStats& samp,
+                                         const data::RawData& raw, const Eigen::VectorXd& theta,
+                                         estimate::frontier::NonIterativeEstimator which,
+                                         Discrepancy disc) {
+  if (raw.X.size() != samp.S.size())
+    return perr("grouped inference: raw-data block count != sample-stats blocks");
+  std::vector<Eigen::MatrixXd> gammas;
+  gammas.reserve(raw.X.size());
+  for (const auto& Xb : raw.X) {
+    auto g = data::empirical_gamma(Xb);
+    if (!g.has_value()) return perr("grouped inference: empirical_gamma failed");
+    gammas.push_back(std::move(*g));
+  }
+  return noniterative_inference_grouped(pt, rep, samp, theta, which, disc, gammas);
+}
+
+post_expected<ConstrainedNonIterativeFit>
+noniterative_constrained_fit(const spec::LatentStructure& pt,
+                             const GroupedNonIterativeInference& inf) {
+  auto eqc = estimate::build_eq_constraints(pt);  // errors on inequality / nonlinear
+  if (!eqc.has_value()) return std::unexpected(eqc.error());
+
+  const Eigen::Index q = inf.theta_hat.size();
+  if (eqc->npar != static_cast<std::int32_t>(q))
+    return perr("constrained fit: constraint npar != theta size (a merged "
+                "parameterization was passed; use the configural partable)");
+
+  ConstrainedNonIterativeFit out;
+  out.theta_hat = inf.theta_hat;
+  out.Omega = inf.Omega;
+
+  if (eqc->rank == 0) {  // no constraints — configural fit is returned unchanged.
+    out.theta_tilde = inf.theta_hat;
+    out.Omega_tilde = inf.Omega;
+    out.se_constrained = inf.se;
+    out.k = 0;
+    out.W = 0.0;
+    out.p_wald = 1.0;
+    return out;
+  }
+
+  const Eigen::MatrixXd& R = eqc->A_eq;   // k × q
+  const Eigen::VectorXd& c = eqc->b_eq;   // k (0 for pure merges, != 0 general)
+  const int k = eqc->rank;
+
+  const Eigen::VectorXd g = R * inf.theta_hat - c;
+  const Eigen::MatrixXd OmRt = inf.Omega * R.transpose();  // q × k
+  const Eigen::MatrixXd RORt = R * OmRt;                   // k × k
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(RORt);
+  if (ldlt.info() != Eigen::Success)
+    return perr("constrained fit: R Omega R' is not positive definite");
+
+  const Eigen::VectorXd sol = ldlt.solve(g);               // (RΩR')⁻¹(Rθ̂−c)
+  out.theta_tilde = inf.theta_hat - OmRt * sol;            // projection
+  out.W = g.dot(sol);                                      // exact χ²_k
+  out.k = k;
+  out.p_wald = inference::chi2_pvalue(out.W, k);
+  // Ω̃ = Ω − Ω R'(RΩR')⁻¹ R Ω  (rank q − k).
+  out.Omega_tilde = inf.Omega - OmRt * ldlt.solve(OmRt.transpose());
+  out.se_constrained = Eigen::VectorXd(q);
+  for (Eigen::Index i = 0; i < q; ++i)
+    out.se_constrained(i) = std::sqrt(std::max(out.Omega_tilde(i, i), 0.0));
   return out;
 }
 
