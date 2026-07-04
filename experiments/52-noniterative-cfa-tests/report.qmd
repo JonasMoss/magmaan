@@ -1,0 +1,234 @@
+---
+title: "Delta-method inference for the closed-form Guttman CFA estimator"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results_dir <- "results"
+need <- c("coverage", "risk", "gof", "difftest", "diagnostics", "metadata")
+paths <- file.path(results_dir, paste0(need, ".csv"))
+if (!all(file.exists(paths))) {
+  stop("Missing results. Run:\n  Rscript run_experiment.R --full\n",
+       "(or --smoke for a quick slice).")
+}
+coverage <- read.csv(paths[1]); risk <- read.csv(paths[2])
+gof <- read.csv(paths[3]); difftest <- read.csv(paths[4])
+diagnostics <- read.csv(paths[5]); metadata <- read.csv(paths[6])
+
+meta <- stats::setNames(metadata$value, metadata$key)
+gens <- intersect(c("normal", "ig", "ordinal"), unique(coverage$generator))
+gen_label <- c(normal = "Normal", ig = "Independent generator",
+               ordinal = "Ordinal (5-cat, as continuous)")
+pct <- function(x) sprintf("%.1f%%", 100 * x)
+fmt <- function(x, d = 3) formatC(x, format = "f", digits = d)
+
+big_n <- max(coverage$n)
+small_n <- min(coverage$n)
+cov_all <- coverage[coverage$group == "all", ]
+
+pick_cov <- function(gen, variant, n = big_n) {
+  v <- cov_all$coverage[cov_all$generator == gen & cov_all$variant == variant & cov_all$n == n]
+  if (length(v)) v[1] else NA_real_
+}
+pick_gof <- function(gen, variant, ptype, spec, n) {
+  v <- gof$reject_rate[gof$generator == gen & gof$variant == variant &
+                       gof$ptype == ptype & gof$spec == spec & gof$n == n]
+  if (length(v)) v[1] else NA_real_
+}
+```
+
+## Question
+
+magmaan can *fit* closed-form (non-iterative) CFA estimators, but until now it
+offered no inference for them. New frontier machinery turns any smooth
+covariance map `theta_hat = tau(S)` into three post-fit outputs by the delta
+method: standard errors, a residual goodness-of-fit test, and a
+difference / pseudo-LRT test. Do those outputs hold up in finite samples, and
+what does the closed form cost relative to iterative ML? We test the Guttman
+(1952) multiple-group estimator on one 3-factor CFA population, across three
+data generators (normal, non-normal continuous, and skewed ordinal codes
+treated as continuous), all holding the model exactly.
+
+## Short answer
+
+The inference is calibrated on every generator **when the empirical
+(distribution-free) Gamma is used**; the normal-theory Gamma fails on non-normal
+data exactly as normal-theory ML does. The failure is sharpest for standard
+errors and it does not wash out with sample size: on the independent generator,
+coverage of a nominal 95% interval sits at `r pct(pick_cov("ig","g_ntml_nt"))`
+under the normal-theory Gamma at every sample size we ran, while the empirical
+Gamma converges to `r pct(pick_cov("ig","g_ntml_emp"))` at n = `r big_n`,
+matching robust ML's `r pct(pick_cov("ig","ml_rob"))`. The residual
+goodness-of-fit test is usable but small-sample sensitive: it brackets the
+nominal 5% (normal-theory Gamma over-rejects, empirical Gamma is mildly
+conservative) and both converge by n `r "≈"` `r big_n`, tracking ML's
+standard vs Satorra-Bentler tests; power against an omitted cross-loading is
+essentially 1 from n = `r small_n` up. The price of the closed form is a
+few-percent RMSE premium over ML, never the multiples a bad estimator shows.
+
+In one line: closed-form CFA plus delta-method inference is a drop-in for
+ML-plus-robust-inference, with the empirical Gamma doing the same work here that
+it does for ML.
+
+## Evidence
+
+### Standard-error coverage is the decisive result
+
+Coverage of nominal 95% Wald intervals, pooled over all 21 free parameters at
+n = `r big_n`. `g_*` is the Guttman estimator with the two discrepancies (NTML,
+ULS) crossed with the two Gamma choices; `ml_*` is magmaan's ML.
+
+```{r coverage-table}
+ord <- c(g_ntml_nt = "Guttman NTML, NT Gamma",
+         g_ntml_emp = "Guttman NTML, empirical Gamma",
+         g_uls_nt  = "Guttman ULS, NT Gamma",
+         g_uls_emp = "Guttman ULS, empirical Gamma",
+         ml_nt = "ML, NT (expected info)",
+         ml_rob = "ML, robust sandwich")
+tab <- cov_all[cov_all$n == big_n, ]
+out <- data.frame(Method = unname(ord), check.names = FALSE)
+for (g in gens) {
+  out[[gen_label[g]]] <- pct(vapply(names(ord),
+    function(v) tab$coverage[tab$variant == v & tab$generator == g][1], numeric(1)))
+}
+knitr::kable(out, align = c("l", rep("r", length(gens))),
+             caption = sprintf("95%% interval coverage at n = %d.", big_n))
+```
+
+Under normality every method is near 95%. Under non-normality the normal-theory
+Gamma undercovers and the empirical Gamma stays on target, tracking robust ML.
+The discrepancy (NTML vs ULS) barely moves coverage; the Gamma choice is what
+matters. Crucially the normal-theory undercoverage is *asymptotic*, not a
+small-sample artifact: it is flat in n.
+
+```{r coverage-plot, fig.height=3.2, fig.width=6}
+ig <- cov_all[cov_all$generator == "ig" &
+              cov_all$variant %in% c("g_ntml_nt", "g_ntml_emp", "ml_rob"), ]
+cols <- c(g_ntml_nt = "#c1272d", g_ntml_emp = "#0072b2", ml_rob = "#666666")
+labs <- c(g_ntml_nt = "Guttman, NT Gamma", g_ntml_emp = "Guttman, empirical Gamma",
+          ml_rob = "ML, robust")
+op <- par(mar = c(4, 4, 1, 1))
+plot(NA, xlim = range(ig$n), ylim = c(0.75, 0.97), log = "x",
+     xlab = "Sample size (log scale)", ylab = "Coverage of 95% interval")
+abline(h = 0.95, lty = 3, col = "grey50")
+for (v in names(cols)) {
+  s <- ig[ig$variant == v, ]; s <- s[order(s$n), ]
+  lines(s$n, s$coverage, col = cols[v], lwd = 2, type = "b", pch = 19)
+}
+legend("bottomright", legend = labs[names(cols)], col = cols, lwd = 2, pch = 19, bty = "n")
+par(op)
+```
+
+*Independent generator: normal-theory-Gamma coverage is stuck below 0.80 at all
+sample sizes; the empirical Gamma climbs to nominal, alongside robust ML.*
+
+### Goodness-of-fit: brackets nominal, full power
+
+Rejection at the 5% level, at the smallest (n = `r small_n`) and largest
+(n = `r big_n`) sample sizes. Under the correct spec this is Type-I error
+(target 0.05); the last column is power against the omitted cross-loading
+(n = `r small_n`). Guttman rows use the exact-mixture p-value; ML uses the
+standard chi-square (`nt`) and the Satorra-Bentler scaled statistic (`sb`).
+
+```{r gof-table}
+gvl <- c(g_ntml_nt = "Guttman NTML, NT Gamma",
+         g_ntml_emp = "Guttman NTML, empirical Gamma",
+         g_uls_emp = "Guttman ULS, empirical Gamma",
+         ml_nt = "ML, standard chi-square",
+         ml_sb = "ML, Satorra-Bentler")
+row_spec <- function(key) {
+  if (key == "ml_nt") list(v = "ml", p = "nt")
+  else if (key == "ml_sb") list(v = "ml", p = "sb")
+  else list(v = key, p = "mixture")
+}
+rows <- lapply(names(gvl), function(key) {
+  rs <- row_spec(key)
+  r <- data.frame(Method = gvl[[key]], check.names = FALSE)
+  for (g in gens) r[[paste0(gen_label[g], " I@", small_n)]] <-
+    fmt(pick_gof(g, rs$v, rs$p, "correct", small_n))
+  for (g in gens) r[[paste0(gen_label[g], " I@", big_n)]] <-
+    fmt(pick_gof(g, rs$v, rs$p, "correct", big_n))
+  r$`Power` <- fmt(mean(vapply(gens, function(g)
+    pick_gof(g, rs$v, rs$p, "misspec", small_n), numeric(1))))
+  r
+})
+knitr::kable(do.call(rbind, rows), row.names = FALSE,
+             caption = sprintf("GOF rejection at 5%%. I@n = Type-I; Power = mean over generators at n = %d.", small_n))
+```
+
+The empirical-Gamma and Satorra-Bentler references are mildly conservative at
+n = `r small_n` and settle near 0.05 by n = `r big_n`; the normal-theory Gamma
+over-rejects on the non-normal arms at small n and also converges. Both bracket
+nominal from opposite sides, and power is `r "≈"` 1 throughout. This is the
+residual-test analogue of the familiar ML standard-vs-scaled small-sample
+trade-off.
+
+### Efficiency cost of the closed form
+
+Root-mean-square error over all 21 free parameters, Guttman relative to ML, at
+n = `r big_n`.
+
+```{r risk-table}
+r_all <- risk[risk$group == "all" & risk$n == big_n, ]
+out <- data.frame(
+  Generator = gen_label[gens],
+  `Guttman RMSE` = fmt(vapply(gens, function(g) r_all$rmse[r_all$generator == g & r_all$estimator == "guttman"][1], numeric(1)), 4),
+  `ML RMSE` = fmt(vapply(gens, function(g) r_all$rmse[r_all$generator == g & r_all$estimator == "ml"][1], numeric(1)), 4),
+  check.names = FALSE)
+out$Ratio <- fmt(as.numeric(out$`Guttman RMSE`) / as.numeric(out$`ML RMSE`), 3)
+knitr::kable(out, row.names = FALSE, align = "lrrr",
+             caption = sprintf("RMSE over 21 parameters at n = %d.", big_n))
+```
+
+Guttman pays a single-digit-percent RMSE premium. It is a consistent,
+closed-form estimator, not an efficient one, and the inference above corrects
+for its non-minimizing character rather than assuming it away.
+
+### Difference / pseudo-LRT test
+
+The true restriction `f1 ~~ 0*f3` (the factors are uncorrelated in the
+population) rejects near the nominal 5%, exact-mixture p-value, at n = `r big_n`:
+
+```{r diff-table}
+d <- difftest[difftest$ptype == "mixture" & difftest$n == big_n, ]
+dl <- c(ntml_nt = "NTML, NT Gamma", ntml_emp = "NTML, empirical Gamma")
+out <- data.frame(Method = unname(dl), check.names = FALSE)
+for (g in gens) out[[gen_label[g]]] <-
+  fmt(vapply(names(dl), function(v) d$reject_rate[d$variant == v & d$generator == g][1], numeric(1)))
+knitr::kable(out, row.names = FALSE, align = c("l", rep("r", length(gens))),
+             caption = sprintf("Difference-test Type-I (true restriction) at n = %d.", big_n))
+```
+
+## Caveats
+
+- One population, one model (a balanced 3-factor CFA, `r fmt(0.7,1)` reliability,
+  simple structure). This validates the machinery, not a broad performance claim.
+- The ordinal arm is calibrated so the treated-as-continuous covariance is an
+  *exact* factor model (a diagonal rescaling of a factor model is one), isolating
+  the effect of discrete, skewed marginals on the fourth-moment matrix. It is not
+  a model of categorization-induced misspecification; that is a separate question.
+- Coverage and rejection are Monte Carlo estimates at `r meta[["reps"]]`
+  replications per cell; per-parameter and per-n breakdowns are in `results/`.
+- The empirical Gamma is mildly conservative for the goodness-of-fit test in
+  small samples, the price of estimating fourth moments from the same data; the
+  normal-theory Gamma errs the other way. Neither is uniformly better below
+  n `r "≈"` `r big_n`.
+
+## Reproduce
+
+```sh
+# full grid (3 generators x 2 specs x 4 sample sizes, 1000 reps): ~3 min on 10 cores
+Rscript run_experiment.R --full --reps 1000 --cores 8
+
+# quick slice
+Rscript run_experiment.R --smoke
+
+quarto render report.qmd
+```
