@@ -85,3 +85,72 @@ noniterative_cfa_difference_test <- function(fit0, fit1, df_d,
   noniterative_cfa_difference_impl(fit0, fit1, as.integer(df_d), estimator,
                                    discrepancy, gamma, data0, data1)
 }
+
+#' Grouped (multi-group / mean-structure) residual-based inference.
+#'
+#' Fits every group's Guttman block independently and stacks them: a
+#' block-diagonal delta-method covariance (`vcov`, `se`), a joint goodness-of-fit
+#' `T` on `df` degrees of freedom with the union weighted-chi-square reference,
+#' and `block_of_param` (0-based group index per free parameter). Reduces to
+#' [noniterative_cfa_inference()] for a single group with no mean structure.
+#' Required for mean-structure models (the single-group path omits the intercept
+#' block).
+#'
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_grouped_inference <- function(fit, discrepancy = c("uls", "ntml"),
+                                               gamma = c("nt", "empirical"),
+                                               data = NULL, estimator = "guttman") {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  noniterative_cfa_grouped_inference_impl(fit, estimator, discrepancy, gamma, data)
+}
+
+#' Linearly-constrained non-iterative CFA fit (measurement invariance).
+#'
+#' Minimum-distance projection of the configural (per-group) fit onto the linear
+#' equality constraints `A theta = b` carried by the partable's `group.equal`
+#' family (metric / tau-equivalence / strict invariance, fixed values, ...). The
+#' Omega-metric projection is closed-form:
+#'   theta_tilde = theta_hat - Omega A'(A Omega A')^-1 (A theta_hat - b),
+#' and the constraint statistic `W` is an exact chi-square on `k` (Wald =
+#' minimum-distance duality). Returns the projected estimate (`theta_tilde`), its
+#' rank-deficient covariance (`vcov_constrained`, `se_constrained`), and the
+#' constraint test (`W`, `k`, `p_wald`).
+#'
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_constrained <- function(fit, discrepancy = c("uls", "ntml"),
+                                         gamma = c("nt", "empirical"),
+                                         data = NULL, estimator = "guttman") {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  noniterative_cfa_constrained_impl(fit, estimator, discrepancy, gamma, data)
+}
+
+#' True (lavaan-compatible) scalar-invariance test via the reference-group map.
+#'
+#' Frees the latent means. Reads the common metric off the reference group and
+#' solves the latent means by least squares through the reference loadings:
+#' `alpha_g = (Lr'Lr)^-1 Lr'(m_g - m_r)`, `nu = m_r`. Scalar invariance is tested
+#' on the mean residual `d_g = (I - P_Lr)(m_g - m_r)` with a linearized
+#' pseudo-inverse Wald `W` on `df = (G-1)(p - #factors)` degrees of freedom. The
+#' fit must carry mean structure (fit a configural meanstructure model first) and
+#' at least two groups.
+#'
+#' Returns the latent means `alpha` (a list, one per non-reference group) with
+#' delta-method `alpha_se` / `alpha_cov`, the common intercept `nu`, the stacked
+#' residual `d`, and the test (`W`, `df`, `rank`, `p_value`).
+#'
+#' @param ref_group Reference group (1-based; latent means are 0 there).
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_scalar_invariance <- function(fit, ref_group = 1,
+                                               discrepancy = c("uls", "ntml"),
+                                               gamma = c("nt", "empirical"),
+                                               data = NULL, estimator = "guttman") {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  noniterative_cfa_scalar_impl(fit, as.integer(ref_group), estimator,
+                               discrepancy, gamma, data)
+}

@@ -1988,6 +1988,52 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// noniterative_cfa_grouped_inference_impl
+Rcpp::List noniterative_cfa_grouped_inference_impl(Rcpp::List fit, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_grouped_inference_impl(SEXP fitSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_grouped_inference_impl(fit, estimator, discrepancy, gamma, data));
+    return rcpp_result_gen;
+END_RCPP
+}
+// noniterative_cfa_constrained_impl
+Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_constrained_impl(SEXP fitSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_constrained_impl(fit, estimator, discrepancy, gamma, data));
+    return rcpp_result_gen;
+END_RCPP
+}
+// noniterative_cfa_scalar_impl
+Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_scalar_impl(SEXP fitSEXP, SEXP ref_groupSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< int >::type ref_group(ref_groupSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_scalar_impl(fit, ref_group, estimator, discrepancy, gamma, data));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_lr_test_satorra2000
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method, std::string computation);
 RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP computationSEXP) {
@@ -3574,6 +3620,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_noniterative_cfa_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_inference_impl, 5},
     {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},
     {"_magmaan_noniterative_cfa_difference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_difference_impl, 8},
+    {"_magmaan_noniterative_cfa_grouped_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_grouped_inference_impl, 5},
+    {"_magmaan_noniterative_cfa_constrained_impl", (DL_FUNC) &_magmaan_noniterative_cfa_constrained_impl, 5},
+    {"_magmaan_noniterative_cfa_scalar_impl", (DL_FUNC) &_magmaan_noniterative_cfa_scalar_impl, 6},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},
     {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 9},

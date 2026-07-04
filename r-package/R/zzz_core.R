@@ -780,7 +780,10 @@ magmaan_core <- local({
       "noniterative_cfa_fit_impl",
       "noniterative_cfa_inference_impl",
       "noniterative_cfa_wald_impl",
-      "noniterative_cfa_difference_impl"
+      "noniterative_cfa_difference_impl",
+      "noniterative_cfa_grouped_inference_impl",
+      "noniterative_cfa_constrained_impl",
+      "noniterative_cfa_scalar_impl"
   )
   core_names <- unique(c(unlist(groups, use.names = FALSE), compatibility_names))
 

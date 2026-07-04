@@ -529,6 +529,18 @@ noniterative_cfa_difference_impl <- function(fit0, fit1, df_d, estimator = "gutt
     .Call(`_magmaan_noniterative_cfa_difference_impl`, fit0, fit1, df_d, estimator, discrepancy, gamma, data0, data1)
 }
 
+noniterative_cfa_grouped_inference_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaan_noniterative_cfa_grouped_inference_impl`, fit, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_constrained_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaan_noniterative_cfa_constrained_impl`, fit, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaan_noniterative_cfa_scalar_impl`, fit, ref_group, estimator, discrepancy, gamma, data)
+}
+
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }
