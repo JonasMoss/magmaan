@@ -985,6 +985,16 @@ threshold-extreme `N=50` cell. That cell still has profile failures and huge
 fitted-weight scale instability, so the next useful probe is sparse ordinal
 summary / weight regularization rather than a universal Bartlett factor.
 
+Misspecified extension (same grid, local residual correlations in the
+latent-response DGP but the same fitted one-factor DWLS model) targets the
+large-sample pseudo-true fitted profile omega. The conclusion survives:
+ordinary DWLS covers about 0.59-0.69, robust-scaled covers about 0.94-0.97, and
+misspecification-mixture covers about 0.94-0.97. The local-dependence target is
+about 0.0023-0.0025 above the fit-free sample-polychoric omega target, so the
+report now separates profile-target coverage from the Wald/sample-polychoric
+diagnostic. The remaining weak point is still sparse threshold-extreme `N=50`,
+not model misspecification per se.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &

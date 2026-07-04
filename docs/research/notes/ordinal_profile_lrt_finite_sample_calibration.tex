@@ -160,6 +160,19 @@ profile failures and unstable fitted-weight reference scales; coverage is about
 ordinal-summary / fitted-weight stability in the small extreme-threshold cell,
 not a broad Bartlett correction for every ordinal omega interval.
 
+The misspecified extension adds a locally dependent latent-response DGP, with
+residual correlations between items 1--2 and 5--6, while fitting the same
+one-factor DWLS model. The target is the large-sample pseudo-true
+model-implied profile omega from the working one-factor fit, not the generating
+model's reliability. With 1000 replications per cell and pseudo-targets from
+100000 generated cases, ordinary DWLS again undercovers badly
+(about 0.59--0.69). Endpoint robust scaling covers about 0.94--0.97, and the
+misspecification-mixture reference covers about 0.94--0.97. The weakest
+misspecified cell remains threshold-extreme $N=50$, with many profile failures
+and unstable fitted-weight scales. Thus the misspecification reference is
+behaving as intended for the working-model target, but it does not remove the
+sparse ordinal-summary problem.
+
 \section*{Working Verdict}
 
 The plausible contribution is not ``a Bartlett correction for categorical SEM''.
