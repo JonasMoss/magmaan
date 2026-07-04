@@ -1106,7 +1106,7 @@ profile_gmm_param_space_sandwich(
       robust_options.estimated_weight
           ? continuous_ls_param_space_sandwich_ij(
                 std::move(pt), rep, samp, est, weight, raw,
-                robust_options.ij_weight_mode)
+                robust_options.ij_weight_mode, robust_options.dls_opts)
           : continuous_ls_param_space_sandwich(
                 std::move(pt), rep, samp, est, weight, raw);
   if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
@@ -1123,7 +1123,7 @@ profile_gmm_param_space_sandwich_observed(
       robust_options.estimated_weight
           ? continuous_ls_param_space_sandwich_observed_ij(
                 std::move(pt), rep, samp, est, weight, raw,
-                robust_options.ij_weight_mode)
+                robust_options.ij_weight_mode, robust_options.dls_opts)
           : continuous_ls_param_space_sandwich_observed(
                 std::move(pt), rep, samp, est, weight, raw);
   if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));

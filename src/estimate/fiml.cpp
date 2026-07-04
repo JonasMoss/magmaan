@@ -7066,58 +7066,92 @@ fiml_profile_sandwich(spec::LatentStructure pt,
                                     K, K.cols()};
 }
 
+bool ml2s_profile_weight_needs_ij(TwoStageWeight kind) noexcept {
+  return kind == TwoStageWeight::Dwls || kind == TwoStageWeight::Adf ||
+         kind == TwoStageWeight::Dls;
+}
+
 fit_expected<robust::ParamSpaceSandwich>
-ml2s_nt_profile_sandwich(spec::LatentStructure pt,
-                         const model::MatrixRep& rep,
-                         const SaturatedMoments& sm,
-                         const Estimates& constrained,
-                         bool observed_bread) {
+ml2s_profile_sandwich(spec::LatentStructure pt,
+                      const model::MatrixRep& rep,
+                      const SaturatedMoments& sm,
+                      const Estimates& constrained,
+                      TwoStageWeight kind,
+                      TwoStageDlsOptions dls,
+                      bool observed_bread,
+                      Ml2sProfileRobustOptions robust_options) {
   SampleStats samp = sample_stats_from_stage1(sm);
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(e.error());
   }
-  auto weight_or = two_stage_stage2_weight_blocks(sm, TwoStageWeight::Nt);
+  auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
   if (!weight_or.has_value()) return std::unexpected(post_to_fit(weight_or.error()));
-  auto gamma_full_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
-  if (!gamma_full_or.has_value()) {
-    return std::unexpected(post_to_fit(gamma_full_or.error()));
-  }
-
-  std::vector<Eigen::MatrixXd> gamma;
-  gamma.reserve(sm.cov.size());
-  Eigen::Index goff = 0;
-  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
-    const Eigen::Index p = sm.cov[b].rows();
-    const Eigen::Index q = p + detail::vech_len(p);
-    gamma.push_back(gamma_full_or->block(goff, goff, q, q));
-    goff += q;
-  }
-
-  auto sw = continuous_ls_param_space_sandwich(
-      spec::LatentStructure(pt), rep, samp, constrained, *weight_or, gamma);
-  if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
 
   auto con_or = build_eq_constraints(pt, true);
   if (!con_or.has_value()) return std::unexpected(post_to_fit(con_or.error()));
-  const Eigen::MatrixXd& K = con_or->K();
-  if (K.rows() != sw->A1.rows()) {
+  Eigen::MatrixXd K = con_or->K();
+  const bool use_ij = robust_options.estimated_weight &&
+                      ml2s_profile_weight_needs_ij(kind);
+  robust::ParamSpaceSandwich sw;
+  Eigen::MatrixXd observed_A;
+
+  if (use_ij) {
+    if (robust_options.raw == nullptr || robust_options.pack == nullptr ||
+        robust_options.h1 == nullptr) {
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "ml2s_profile_sandwich: estimated-weight ML2S profile scaling "
+          "requires raw data, FIML pack, and H1 moments"));
+    }
+    auto asm_or = build_ml2s_ij_blocks(
+        spec::LatentStructure(pt), rep, *robust_options.raw, constrained,
+        *robust_options.pack, *robust_options.h1, sm, kind, dls);
+    if (!asm_or.has_value()) return std::unexpected(post_to_fit(asm_or.error()));
+    auto sw_or = weighted_param_space_sandwich_ij(asm_or->blocks);
+    if (!sw_or.has_value()) return std::unexpected(post_to_fit(sw_or.error()));
+    sw = std::move(*sw_or);
+    K = std::move(asm_or->K);
+    observed_A = std::move(asm_or->observed_bread);
+  } else {
+    auto gamma_full_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+    if (!gamma_full_or.has_value()) {
+      return std::unexpected(post_to_fit(gamma_full_or.error()));
+    }
+
+    std::vector<Eigen::MatrixXd> gamma;
+    gamma.reserve(sm.cov.size());
+    Eigen::Index goff = 0;
+    for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+      const Eigen::Index p = sm.cov[b].rows();
+      const Eigen::Index q = p + detail::vech_len(p);
+      gamma.push_back(gamma_full_or->block(goff, goff, q, q));
+      goff += q;
+    }
+
+    auto sw_or = continuous_ls_param_space_sandwich(
+        spec::LatentStructure(pt), rep, samp, constrained, *weight_or, gamma);
+    if (!sw_or.has_value()) return std::unexpected(post_to_fit(sw_or.error()));
+    sw = std::move(*sw_or);
+  }
+
+  if (K.rows() != sw.A1.rows()) {
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
-        "ml2s_nt_profile_sandwich: constraint reparameterization has "
+        "ml2s_profile_sandwich: constraint reparameterization has "
         "incompatible shape"));
   }
+  Eigen::MatrixXd A = (K.transpose() * sw.A1 * K).eval();
+  Eigen::MatrixXd B = (K.transpose() * sw.B1 * K).eval();
+  A = 0.5 * (A + A.transpose()).eval();
+  B = 0.5 * (B + B.transpose()).eval();
   if (!observed_bread) {
-    Eigen::MatrixXd A = (K.transpose() * sw->A1 * K).eval();
-    Eigen::MatrixXd B = (K.transpose() * sw->B1 * K).eval();
-    A = 0.5 * (A + A.transpose()).eval();
-    B = 0.5 * (B + B.transpose()).eval();
     return robust::ParamSpaceSandwich{std::move(A), std::move(B), K,
                                       K.cols()};
   }
-  auto ob = ml2s_observed_bread(pt, rep, samp, constrained, *weight_or, K);
-  if (!ob.has_value()) return std::unexpected(post_to_fit(ob.error()));
-  Eigen::MatrixXd B = (K.transpose() * sw->B1 * K).eval();
-  B = 0.5 * (B + B.transpose()).eval();
-  return robust::ParamSpaceSandwich{std::move(*ob), std::move(B), K,
+  if (!use_ij) {
+    auto ob = ml2s_observed_bread(pt, rep, samp, constrained, *weight_or, K);
+    if (!ob.has_value()) return std::unexpected(post_to_fit(ob.error()));
+    observed_A = std::move(*ob);
+  }
+  return robust::ParamSpaceSandwich{std::move(observed_A), std::move(B), K,
                                     K.cols()};
 }
 
@@ -7529,32 +7563,57 @@ profile_lrt_ci_parameter_fiml(
 }
 
 fit_expected<ScalarProfileLrtResult>
-profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
-                           const model::MatrixRep& rep,
-                           const Estimates& unrestricted,
-                           const SaturatedMoments& sm,
-                           ScalarFunctional functional,
-                           double target,
-                           Backend backend,
-                           optim::OptimOptions opts,
-                           double constraint_tol,
-                           ScalarProfileReference reference) {
-  constexpr const char* who = "profile_lrt_scalar_ml2s_nt";
+profile_lrt_scalar_ml2s(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const Estimates& unrestricted,
+                        const SaturatedMoments& sm,
+                        ScalarFunctional functional,
+                        double target,
+                        TwoStageWeight kind,
+                        TwoStageDlsOptions dls,
+                        Backend backend,
+                        optim::OptimOptions opts,
+                        double constraint_tol,
+                        ScalarProfileReference reference,
+                        Ml2sProfileRobustOptions robust_options) {
+  constexpr const char* who = "profile_lrt_scalar_ml2s";
+  if (auto ok = validate_scalar_profile_input(
+          functional, target, constraint_tol, unrestricted,
+          static_cast<std::size_t>(pt.n_free()), who);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
   SampleStats samp = sample_stats_from_stage1(sm);
   auto n_or = total_n_from_stage1(sm, who);
   if (!n_or.has_value()) return std::unexpected(n_or.error());
-  auto out = estimate::frontier::profile_lrt_scalar_ml(
-      spec::LatentStructure(pt), rep, samp, unrestricted,
-      ScalarFunctional(functional), target,
-      Bounds{}, backend, std::move(opts), constraint_tol, nullptr,
-      ScalarProfileReference::Ordinary);
+  fit_expected<ScalarProfileLrtResult> out =
+      std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": unsupported Stage-2 weight"));
+  if (kind == TwoStageWeight::Nt) {
+    out = estimate::frontier::profile_lrt_scalar_ml(
+        spec::LatentStructure(pt), rep, samp, unrestricted,
+        ScalarFunctional(functional), target,
+        Bounds{}, backend, opts, constraint_tol, nullptr,
+        ScalarProfileReference::Ordinary);
+  } else {
+    auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+    if (!weight_or.has_value()) {
+      return std::unexpected(post_to_fit(weight_or.error()));
+    }
+    out = estimate::frontier::profile_lrt_scalar_gmm(
+        spec::LatentStructure(pt), rep, samp, unrestricted,
+        std::move(*weight_or), ScalarFunctional(functional), target,
+        Bounds{}, backend, opts, constraint_tol, nullptr,
+        estimate::frontier::GmmProfileRobustOptions{},
+        ScalarProfileReference::Ordinary);
+  }
   if (!out.has_value()) return out;
   out->n_obs = *n_or;
   if (reference_needs_sandwich(reference)) {
     if (reference_wants_robust_scaled(reference)) {
-      auto sw = ml2s_nt_profile_sandwich(
-          spec::LatentStructure(pt), rep, sm, out->constrained,
-          /*observed_bread=*/false);
+      auto sw = ml2s_profile_sandwich(
+          spec::LatentStructure(pt), rep, sm, out->constrained, kind, dls,
+          /*observed_bread=*/false, robust_options);
       if (!sw.has_value()) return std::unexpected(sw.error());
       auto scale = scalar_profile_scaling_factor(
           pt, *sw, out->constrained, functional, who);
@@ -7562,9 +7621,9 @@ profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
       fill_scaled_profile(*out, *scale);
     }
     if (reference_wants_misspec(reference)) {
-      auto sw = ml2s_nt_profile_sandwich(
-          spec::LatentStructure(pt), rep, sm, out->constrained,
-          /*observed_bread=*/true);
+      auto sw = ml2s_profile_sandwich(
+          spec::LatentStructure(pt), rep, sm, out->constrained, kind, dls,
+          /*observed_bread=*/true, robust_options);
       if (!sw.has_value()) return std::unexpected(sw.error());
       auto scale = scalar_profile_scaling_factor(
           pt, *sw, out->constrained, functional, who);
@@ -7576,17 +7635,20 @@ profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
 }
 
 fit_expected<ScalarProfileLrtResult>
-profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
-                              const model::MatrixRep& rep,
-                              const Estimates& unrestricted,
-                              const SaturatedMoments& sm,
-                              Eigen::Index parameter,
-                              double target,
-                              Backend backend,
-                              optim::OptimOptions opts,
-                              double constraint_tol,
-                              ScalarProfileReference reference) {
-  constexpr const char* who = "profile_lrt_parameter_ml2s_nt";
+profile_lrt_parameter_ml2s(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& unrestricted,
+                           const SaturatedMoments& sm,
+                           Eigen::Index parameter,
+                           double target,
+                           TwoStageWeight kind,
+                           TwoStageDlsOptions dls,
+                           Backend backend,
+                           optim::OptimOptions opts,
+                           double constraint_tol,
+                           ScalarProfileReference reference,
+                           Ml2sProfileRobustOptions robust_options) {
+  constexpr const char* who = "profile_lrt_parameter_ml2s";
   if (parameter < 0 || parameter >= static_cast<Eigen::Index>(pt.n_free())) {
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": parameter index out of range"));
@@ -7600,9 +7662,77 @@ profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
     grad(parameter) = 1.0;
     return grad;
   };
-  return profile_lrt_scalar_ml2s_nt(
+  return profile_lrt_scalar_ml2s(
       std::move(pt), rep, unrestricted, sm, std::move(functional), target,
-      backend, std::move(opts), constraint_tol, reference);
+      kind, dls, backend, std::move(opts), constraint_tol, reference,
+      robust_options);
+}
+
+fit_expected<ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml2s(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const Estimates& unrestricted,
+    const SaturatedMoments& sm,
+    Eigen::Index parameter,
+    ScalarProfileCiOptions ci_options,
+    TwoStageWeight kind,
+    TwoStageDlsOptions dls,
+    Backend backend,
+    optim::OptimOptions opts,
+    double constraint_tol,
+    Ml2sProfileRobustOptions robust_options) {
+  constexpr const char* who = "profile_lrt_ci_parameter_ml2s";
+  if (parameter < 0 || parameter >= unrestricted.theta.size()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter index out of range"));
+  }
+  const double estimate = unrestricted.theta(parameter);
+  ProfileEvaluator eval =
+      [pt, &rep, unrestricted, &sm, parameter, kind, dls, backend, opts,
+       constraint_tol, reference = ci_options.reference,
+       robust_options](double target) mutable {
+        spec::LatentStructure pt_eval = pt;
+        return profile_lrt_parameter_ml2s(
+            std::move(pt_eval), rep, unrestricted, sm, parameter, target,
+            kind, dls, backend, opts, constraint_tol, reference,
+            robust_options);
+      };
+  return profile_ci_from_evaluator(estimate, ci_options, eval, who);
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& unrestricted,
+                           const SaturatedMoments& sm,
+                           ScalarFunctional functional,
+                           double target,
+                           Backend backend,
+                           optim::OptimOptions opts,
+                           double constraint_tol,
+                           ScalarProfileReference reference) {
+  return profile_lrt_scalar_ml2s(
+      std::move(pt), rep, unrestricted, sm, std::move(functional), target,
+      TwoStageWeight::Nt, {}, backend, std::move(opts), constraint_tol,
+      reference, {});
+}
+
+fit_expected<ScalarProfileLrtResult>
+profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const Estimates& unrestricted,
+                              const SaturatedMoments& sm,
+                              Eigen::Index parameter,
+                              double target,
+                              Backend backend,
+                              optim::OptimOptions opts,
+                              double constraint_tol,
+                              ScalarProfileReference reference) {
+  return profile_lrt_parameter_ml2s(
+      std::move(pt), rep, unrestricted, sm, parameter, target,
+      TwoStageWeight::Nt, {}, backend, std::move(opts), constraint_tol,
+      reference, {});
 }
 
 fit_expected<ScalarProfileCiResult>
@@ -7616,21 +7746,9 @@ profile_lrt_ci_parameter_ml2s_nt(
     Backend backend,
     optim::OptimOptions opts,
     double constraint_tol) {
-  constexpr const char* who = "profile_lrt_ci_parameter_ml2s_nt";
-  if (parameter < 0 || parameter >= unrestricted.theta.size()) {
-    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
-        std::string(who) + ": parameter index out of range"));
-  }
-  const double estimate = unrestricted.theta(parameter);
-  ProfileEvaluator eval =
-      [pt, &rep, unrestricted, &sm, parameter, backend, opts,
-       constraint_tol, reference = ci_options.reference](double target) mutable {
-        spec::LatentStructure pt_eval = pt;
-        return profile_lrt_parameter_ml2s_nt(
-            std::move(pt_eval), rep, unrestricted, sm, parameter, target,
-            backend, opts, constraint_tol, reference);
-      };
-  return profile_ci_from_evaluator(estimate, ci_options, eval, who);
+  return profile_lrt_ci_parameter_ml2s(
+      std::move(pt), rep, unrestricted, sm, parameter, ci_options,
+      TwoStageWeight::Nt, {}, backend, std::move(opts), constraint_tol, {});
 }
 
 }  // namespace frontier

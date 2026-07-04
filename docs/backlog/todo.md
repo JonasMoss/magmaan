@@ -858,6 +858,23 @@ Remaining work:
       Still open: model-level small-sample/Bartlett/calibrated constants,
       richer functional R callbacks, observed-score / Green-Yang-like omega
       targets, and validation beyond the current focused smokes.
+    - **Done 2026-07-04 (pre-Bartlett weight-family completion).**
+      Caller-fixed continuous GMM parameter profile LRT/CI now exposes the full
+      supported estimated-weight IJ family for profile references: GLS/NT,
+      empirical WLS/ADF, empirical DWLS, and fixed-`a` DLS
+      (`GmmProfileRobustOptions::dls_opts`; R `ij_weight=` / `dls_a=`). The R
+      frontier also has `frontier_dls_weight()` so DLS profile experiments can
+      build the explicit second-stage weight without duplicating C++ logic.
+      ML2S parameter profile LRT/CI is generalized from the NT-only wrapper to
+      `profile_lrt_parameter_ml2s` / `profile_lrt_ci_parameter_ml2s`, covering
+      Stage-2 `nt`, `uls`, `dwls`, `adf`/`wls`, and fixed-`a` `dls`; the old
+      `*_ml2s_nt` names remain compatibility wrappers. Robust/misspec profile
+      references use the Stage-1 saturated-moment sandwich and, for
+      data-dependent non-NT Stage-2 weights, the existing ML2S IJ estimated-
+      weight blocks when raw/FIML internals are available. The GMM and mainline
+      profile examples smoke DLS/DWLS and ML2S-DLS. Still open: Bartlett /
+      calibrated small-sample constants, generic functional R callbacks, and
+      optional future uncertainty for data-adaptive DLS `a` selection.
     - **Done 2026-07-03 (ordinary mainline estimator parameter profiles).**
       The ordinary df-1 scalar/profile-LRT parameter path now covers the
       remaining mainline estimators needed before robust extensions:

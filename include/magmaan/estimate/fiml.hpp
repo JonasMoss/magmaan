@@ -754,6 +754,60 @@ profile_lrt_ci_parameter_fiml(
     optim::OptimOptions opts = {},
     double constraint_tol = 1e-6);
 
+struct Ml2sProfileRobustOptions {
+  bool estimated_weight = false;
+  const RawData* raw = nullptr;
+  const FIMLPack* pack = nullptr;
+  const FIMLH1* h1 = nullptr;
+};
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_scalar_ml2s(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const Estimates& unrestricted,
+                        const SaturatedMoments& sm,
+                        estimate::frontier::ScalarFunctional functional,
+                        double target,
+                        TwoStageWeight kind = TwoStageWeight::Nt,
+                        TwoStageDlsOptions dls = {},
+                        Backend backend = Backend::NloptSlsqp,
+                        optim::OptimOptions opts = {},
+                        double constraint_tol = 1e-6,
+                        estimate::frontier::ScalarProfileReference reference =
+                            estimate::frontier::ScalarProfileReference::Ordinary,
+                        Ml2sProfileRobustOptions robust_options = {});
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_parameter_ml2s(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& unrestricted,
+                           const SaturatedMoments& sm,
+                           Eigen::Index parameter,
+                           double target,
+                           TwoStageWeight kind = TwoStageWeight::Nt,
+                           TwoStageDlsOptions dls = {},
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           double constraint_tol = 1e-6,
+                           estimate::frontier::ScalarProfileReference reference =
+                               estimate::frontier::ScalarProfileReference::Ordinary,
+                           Ml2sProfileRobustOptions robust_options = {});
+
+fit_expected<estimate::frontier::ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml2s(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const Estimates& unrestricted,
+    const SaturatedMoments& sm,
+    Eigen::Index parameter,
+    estimate::frontier::ScalarProfileCiOptions ci_options = {},
+    TwoStageWeight kind = TwoStageWeight::Nt,
+    TwoStageDlsOptions dls = {},
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    double constraint_tol = 1e-6,
+    Ml2sProfileRobustOptions robust_options = {});
+
 fit_expected<estimate::frontier::ScalarProfileLrtResult>
 profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
