@@ -102,6 +102,32 @@ check_misspec(lrt_ml2s_misspec)
 check_ci(ci_ml2s)
 stopifnot(identical(lrt_ml2s$constrained$stage2_weight, "nt"))
 
+fit_ml2s_dls <- magmaan(
+  model, dat, estimator = "ML2S", control = control,
+  stage2_weight = "dls", dls_a = 0.35
+)
+free_ml2s_dls <- loading_free_id(fit_ml2s_dls, "x2")
+target_ml2s_dls <- 0.97 * fit_ml2s_dls$theta[free_ml2s_dls]
+lrt_ml2s_dls <- core$frontier_profile_lrt_parameter_ml2s(
+  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls)
+lrt_ml2s_dls_robust <- core$frontier_profile_lrt_parameter_ml2s(
+  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls,
+  reference = "robust_scaled")
+lrt_ml2s_dls_misspec <- core$frontier_profile_lrt_parameter_ml2s(
+  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls,
+  reference = "misspec_mixture")
+ci_ml2s_dls <- core$frontier_profile_lrt_ci_parameter_ml2s(
+  fit_ml2s_dls, free_ml2s_dls,
+  initial_step = 0.05 * abs(fit_ml2s_dls$theta[free_ml2s_dls]),
+  root_tol = 1e-4,
+  statistic_tol = 1e-4
+)
+check_profile(lrt_ml2s_dls, target_ml2s_dls)
+check_robust(lrt_ml2s_dls_robust)
+check_misspec(lrt_ml2s_dls_misspec)
+check_ci(ci_ml2s_dls)
+stopifnot(identical(lrt_ml2s_dls$constrained$stage2_weight, "dls"))
+
 dat_mixed <- data.frame(
   x1 = ordered(cut(x1, c(-Inf, -0.55, 0.40, Inf), labels = FALSE)),
   x2 = ordered(cut(x2, c(-Inf, 0.10, Inf), labels = FALSE)),
@@ -135,5 +161,7 @@ print(lrt_fiml[c("parameter", "target", "T", "p_value")])
 print(ci_fiml[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(lrt_ml2s[c("parameter", "target", "T", "p_value")])
 print(ci_ml2s[c("parameter", "estimate", "lower", "upper", "cutoff")])
+print(lrt_ml2s_dls[c("parameter", "target", "T", "p_value")])
+print(ci_ml2s_dls[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(lrt_mixed[c("parameter", "target", "T", "p_value")])
 print(ci_mixed[c("parameter", "estimate", "lower", "upper", "cutoff")])

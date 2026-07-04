@@ -84,6 +84,27 @@ lrt_wls_estw <- core$frontier_profile_lrt_parameter_gmm(
   fit_wls, free_wls, target_wls, weight = W_adf, raw_data = X, robust = TRUE,
   estimated_weight = TRUE
 )
+
+Gamma_adf <- core$robust_empirical_gamma(X)
+W_dwls <- diag(1 / diag(Gamma_adf), nrow = nrow(Gamma_adf))
+fit_dwls <- magmaan(model, dat, estimator = "WLS", W = W_dwls)
+free_dwls <- fit_dwls$partable$free[loading_row]
+target_dwls <- 0.95 * fit_dwls$theta[free_dwls]
+lrt_dwls_estw <- core$frontier_profile_lrt_parameter_gmm(
+  fit_dwls, free_dwls, target_dwls, weight = W_dwls, raw_data = X,
+  reference = "misspec_mixture", estimated_weight = TRUE, ij_weight = "dwls"
+)
+
+dls_a <- 0.35
+W_dls <- core$frontier_dls_weight(fit, X, dls_a = dls_a)
+fit_dls <- magmaan(model, dat, estimator = "WLS", W = W_dls)
+free_dls <- fit_dls$partable$free[loading_row]
+target_dls <- 0.95 * fit_dls$theta[free_dls]
+lrt_dls_estw <- core$frontier_profile_lrt_parameter_gmm(
+  fit_dls, free_dls, target_dls, weight = W_dls, raw_data = X,
+  reference = "misspec_mixture", estimated_weight = TRUE, ij_weight = "dls",
+  dls_a = dls_a
+)
 err_estw_without_robust <- tryCatch(
   core$frontier_profile_lrt_parameter_gmm(
     fit_gls, free_gls, target_gls, raw_data = X, estimated_weight = TRUE),
@@ -146,6 +167,12 @@ stopifnot(
   abs(lrt_wls_estw$T - lrt_wls_robust$T) < 1e-8,
   is.finite(lrt_wls_estw$scaling_factor),
   lrt_wls_estw$scaling_factor > 0,
+  is.finite(lrt_dwls_estw$misspec_scaling_factor),
+  lrt_dwls_estw$misspec_scaling_factor > 0,
+  length(lrt_dwls_estw$misspec_eigvals) == 1L,
+  is.finite(lrt_dls_estw$misspec_scaling_factor),
+  lrt_dls_estw$misspec_scaling_factor > 0,
+  length(lrt_dls_estw$misspec_eigvals) == 1L,
   is.character(err_estw_without_robust),
   grepl("estimated_weight", err_estw_without_robust, fixed = TRUE)
 )
@@ -167,3 +194,7 @@ print(lrt_gls_estw[c("parameter", "target", "T_scaled", "p_value_scaled",
 print(ci_gls_estw[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(lrt_wls_estw[c("parameter", "target", "T_scaled", "p_value_scaled",
                      "scaling_factor")])
+print(lrt_dwls_estw[c("parameter", "target", "p_value_misspec_mixture",
+                      "misspec_scaling_factor")])
+print(lrt_dls_estw[c("parameter", "target", "p_value_misspec_mixture",
+                     "misspec_scaling_factor")])

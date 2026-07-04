@@ -10,6 +10,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/frontier/dls_weight.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/optim/problem.hpp"
@@ -192,6 +193,7 @@ struct GmmFittedWeightOptions {
 struct GmmProfileRobustOptions {
   bool estimated_weight = false;
   ContinuousLsIJWeightMode ij_weight_mode = ContinuousLsIJWeightMode::Fixed;
+  frontier::DlsWeightOptions dls_opts{};
 };
 
 struct ScalarProfileCiOptions {

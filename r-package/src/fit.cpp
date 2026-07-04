@@ -44,6 +44,7 @@
 #include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/dls_weight.hpp"
 #include "magmaan/estimate/gmm/structured_gamma_weight.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/inference/score.hpp"
@@ -64,7 +65,8 @@ magmaan::estimate::gmm::Weight continuous_ls_weight(
     const Ctx& ctx, const magmaan::estimate::Estimates& est,
     const std::string& estimator, SEXP weight, const char* call);
 magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
-    const std::string& estimator);
+    const std::string& estimator,
+    Rcpp::Nullable<Rcpp::String> ij_weight = R_NilValue);
 
 std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
                                 const char* caller,
@@ -1759,7 +1761,14 @@ Rcpp::List ml2s_profile_fit_result(
   if (source_fit.containsElementNamed("raw_data")) {
     out["raw_data"] = source_fit["raw_data"];
   }
-  out["stage2_weight"] = "nt";
+  if (source_fit.containsElementNamed("stage2_weight")) {
+    out["stage2_weight"] = source_fit["stage2_weight"];
+  } else {
+    out["stage2_weight"] = "nt";
+  }
+  if (source_fit.containsElementNamed("stage2_dls_a")) {
+    out["stage2_dls_a"] = source_fit["stage2_dls_a"];
+  }
   return out;
 }
 
@@ -2649,6 +2658,8 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     bool estimated_weight = false,
+    Rcpp::Nullable<Rcpp::String> ij_weight = R_NilValue,
+    double dls_a = 0.5,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -2679,7 +2690,14 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
                  "requires a robust/misspec reference");
     }
     robust_opts.estimated_weight = true;
-    robust_opts.ij_weight_mode = continuous_ij_mode(estimator);
+    robust_opts.ij_weight_mode = continuous_ij_mode(estimator, ij_weight);
+    if (robust_opts.ij_weight_mode ==
+            magmaan::estimate::ContinuousLsIJWeightMode::SampleDls &&
+        !(dls_a >= 0.0 && dls_a <= 1.0)) {
+      Rcpp::stop("frontier_profile_lrt_parameter_gmm() dls_a must lie in "
+                 "[0, 1]");
+    }
+    robust_opts.dls_opts.a = dls_a;
   }
   if (scalar_reference_needs_sandwich(reference_mode)) {
     if (Rf_isNull(raw_data)) {
@@ -2890,6 +2908,8 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     bool estimated_weight = false,
+    Rcpp::Nullable<Rcpp::String> ij_weight = R_NilValue,
+    double dls_a = 0.5,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -2922,7 +2942,14 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
                  "estimated_weight=TRUE requires a robust/misspec reference");
     }
     robust_opts.estimated_weight = true;
-    robust_opts.ij_weight_mode = continuous_ij_mode(estimator);
+    robust_opts.ij_weight_mode = continuous_ij_mode(estimator, ij_weight);
+    if (robust_opts.ij_weight_mode ==
+            magmaan::estimate::ContinuousLsIJWeightMode::SampleDls &&
+        !(dls_a >= 0.0 && dls_a <= 1.0)) {
+      Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm() dls_a must lie in "
+                 "[0, 1]");
+    }
+    robust_opts.dls_opts.a = dls_a;
   }
   if (scalar_reference_needs_sandwich(ci_opts.reference)) {
     if (Rf_isNull(raw_data)) {
@@ -3119,6 +3146,97 @@ Rcpp::List frontier_profile_lrt_parameter_fiml_impl(
   return scalar_profile_lrt_to_list_fiml(ctx, raw, fit, *r_or, parameter);
 }
 
+bool is_ml2s_estimator_label(const std::string& estimator) {
+  return estimator == "ML2S" || estimator.rfind("ML2S_", 0) == 0;
+}
+
+bool ml2s_weight_needs_raw_ij(magmaan::estimate::fiml::TwoStageWeight kind) {
+  using magmaan::estimate::fiml::TwoStageWeight;
+  return kind == TwoStageWeight::Dwls || kind == TwoStageWeight::Adf ||
+         kind == TwoStageWeight::Dls;
+}
+
+magmaan::estimate::fiml::TwoStageDlsOptions ml2s_dls_options_from_fit(
+    Rcpp::List fit) {
+  magmaan::estimate::fiml::TwoStageDlsOptions dls;
+  if (fit.containsElementNamed("stage2_dls_a")) {
+    dls.a = Rcpp::as<double>(fit["stage2_dls_a"]);
+  }
+  return dls;
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_parameter_ml2s_impl(
+    Rcpp::List fit,
+    int parameter,
+    double target,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    double constraint_tol = 1e-6,
+    SEXP raw_data = R_NilValue,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue,
+    bool estimated_weight = true) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!is_ml2s_estimator_label(estimator)) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ml2s() requires an ML2S fit");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ml2s(): parameter index %d is "
+               "outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    Rcpp::stop("frontier_profile_lrt_parameter_ml2s() requires fit$stage1");
+  }
+  const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+      ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  const auto dls = ml2s_dls_options_from_fit(fit);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  const auto reference_mode = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_parameter_ml2s()");
+
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  std::unique_ptr<FimlPack> owned_pack;
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlPack* pack_ptr = nullptr;
+  const FimlH1* h1_ptr = nullptr;
+  if (estimated_weight && scalar_reference_needs_sandwich(reference_mode) &&
+      ml2s_weight_needs_raw_ij(kind)) {
+    SEXP rd = raw_data;
+    if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) {
+      rd = fit["raw_data"];
+    }
+    if (Rf_isNull(rd)) {
+      Rcpp::stop("frontier_profile_lrt_parameter_ml2s() estimated_weight=TRUE "
+                 "requires raw_data or an ML2S fit carrying $raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        fiml_raw_from_arg(ctx.rep, rd));
+    pack_ptr = &fiml_pack_for_fit(fit, *raw_holder, owned_pack);
+    h1_ptr = &fiml_h1_for_fit(fit, *raw_holder, *pack_ptr, owned_h1);
+  }
+
+  magmaan::estimate::fiml::frontier::Ml2sProfileRobustOptions robust_opts;
+  robust_opts.estimated_weight = estimated_weight;
+  robust_opts.raw = raw_holder.get();
+  robust_opts.pack = pack_ptr;
+  robust_opts.h1 = h1_ptr;
+  auto r_or = magmaan::estimate::fiml::frontier::profile_lrt_parameter_ml2s(
+      ctx.pt, ctx.rep, est, sm, static_cast<Eigen::Index>(parameter - 1),
+      target, kind, dls, backend, optim_opts_from(control), constraint_tol,
+      reference_mode, robust_opts);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_lrt_to_list_ml2s(ctx, fit, *r_or, parameter);
+}
+
 // [[Rcpp::export]]
 Rcpp::List frontier_profile_lrt_parameter_ml2s_nt_impl(
     Rcpp::List fit,
@@ -3269,6 +3387,87 @@ Rcpp::List frontier_profile_lrt_ci_parameter_fiml_impl(
           optim_opts_from(control), constraint_tol);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list_fiml(ctx, raw, fit, *r_or, parameter);
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_impl(
+    Rcpp::List fit,
+    int parameter,
+    double level = 0.95,
+    double lower = NA_REAL,
+    double upper = NA_REAL,
+    double initial_step = NA_REAL,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    double constraint_tol = 1e-6,
+    double root_tol = 1e-5,
+    double statistic_tol = 1e-6,
+    SEXP raw_data = R_NilValue,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue,
+    bool estimated_weight = true) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "";
+  if (!is_ml2s_estimator_label(estimator)) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s() requires an ML2S fit");
+  }
+  if (parameter <= 0 || parameter > static_cast<int>(est.theta.size())) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s(): parameter index %d "
+               "is outside 1..%d", parameter,
+               static_cast<int>(est.theta.size()));
+  }
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s() requires fit$stage1");
+  }
+  const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+      ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  const auto dls = ml2s_dls_options_from_fit(fit);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                         : backend_from_optimizer_arg(optimizer);
+  auto ci_opts = profile_ci_options_from_args(
+      level, lower, upper, initial_step, root_tol, statistic_tol);
+  ci_opts.reference = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_ci_parameter_ml2s()");
+
+  std::unique_ptr<magmaan::data::RawData> raw_holder;
+  std::unique_ptr<FimlPack> owned_pack;
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlPack* pack_ptr = nullptr;
+  const FimlH1* h1_ptr = nullptr;
+  if (estimated_weight && scalar_reference_needs_sandwich(ci_opts.reference) &&
+      ml2s_weight_needs_raw_ij(kind)) {
+    SEXP rd = raw_data;
+    if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) {
+      rd = fit["raw_data"];
+    }
+    if (Rf_isNull(rd)) {
+      Rcpp::stop("frontier_profile_lrt_ci_parameter_ml2s() "
+                 "estimated_weight=TRUE requires raw_data or an ML2S fit "
+                 "carrying $raw_data");
+    }
+    raw_holder = std::make_unique<magmaan::data::RawData>(
+        fiml_raw_from_arg(ctx.rep, rd));
+    pack_ptr = &fiml_pack_for_fit(fit, *raw_holder, owned_pack);
+    h1_ptr = &fiml_h1_for_fit(fit, *raw_holder, *pack_ptr, owned_h1);
+  }
+
+  magmaan::estimate::fiml::frontier::Ml2sProfileRobustOptions robust_opts;
+  robust_opts.estimated_weight = estimated_weight;
+  robust_opts.raw = raw_holder.get();
+  robust_opts.pack = pack_ptr;
+  robust_opts.h1 = h1_ptr;
+  auto r_or =
+      magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_ml2s(
+          ctx.pt, ctx.rep, est, sm, static_cast<Eigen::Index>(parameter - 1),
+          ci_opts, kind, dls, backend, optim_opts_from(control),
+          constraint_tol, robust_opts);
+  if (!r_or.has_value()) stop_fit(r_or.error());
+  return scalar_profile_ci_to_list_ml2s(ctx, fit, *r_or, parameter);
 }
 
 // [[Rcpp::export]]
@@ -4759,6 +4958,22 @@ Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "WLS");
+}
+
+// [[Rcpp::export]]
+SEXP frontier_dls_weight_impl(Rcpp::List fit, SEXP raw_data,
+                              double dls_a = 0.5) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  auto ev_or = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+  if (!ev_or.has_value()) stop_model(ev_or.error());
+  magmaan::estimate::frontier::DlsWeightOptions opts;
+  opts.a = dls_a;
+  auto w_or = magmaan::estimate::frontier::dls_weight(
+      *ev_or, ctx.samp, raw, est.theta, opts);
+  if (!w_or.has_value()) stop_fit(w_or.error());
+  return weight_to_r(*w_or);
 }
 
 // evaluate_at() — no-optimizer companion to fit_uls/gls/wls/ml. Runs the
@@ -6811,7 +7026,27 @@ magmaan::estimate::gmm::Weight continuous_ls_weight(
 // Which second-stage weight's data influence the estimated-weight continuous-LS
 // IJ meat should carry, from the fit's estimator label (ULS has a fixed weight).
 magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
-    const std::string& estimator) {
+    const std::string& estimator,
+    Rcpp::Nullable<Rcpp::String> ij_weight) {
+  if (!ij_weight.isNull()) {
+    std::string key = Rcpp::as<std::string>(ij_weight.get());
+    for (char& ch : key) {
+      if (ch == '-' || ch == '.') ch = '_';
+      else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    if (key == "fixed" || key == "uls")
+      return magmaan::estimate::ContinuousLsIJWeightMode::Fixed;
+    if (key == "gls" || key == "nt" || key == "normal_theory")
+      return magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory;
+    if (key == "wls" || key == "adf" || key == "empirical_wls")
+      return magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalWls;
+    if (key == "dwls" || key == "empirical_dwls")
+      return magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls;
+    if (key == "dls")
+      return magmaan::estimate::ContinuousLsIJWeightMode::SampleDls;
+    Rcpp::stop("magmaan: ij_weight must be one of fixed, nt, wls, dwls, "
+               "or dls");
+  }
   if (estimator == "GLS")
     return magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory;
   if (estimator == "WLS")

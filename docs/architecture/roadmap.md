@@ -90,7 +90,7 @@ golden `parTable()` fixtures.
   `2N(fmin_constrained - fmin_unrestricted)`. The moment-quadratic sibling,
   `fit_gmm_constrained()` plus `profile_lrt_scalar_gmm()` /
   `profile_lrt_parameter_gmm()`, applies the same programmatic constraint path
-  to a caller-fixed ULS/GLS/WLS weight. The fitted-weight companion
+  to a caller-fixed ULS/GLS/WLS/DWLS/DLS weight. The fitted-weight companion
   `fit_gmm_fitted_weight()` / `fit_gmm_fitted_weight_constrained()` refreshes
   the expected-information weight `W(θ)` in an outer fixed-point loop and the
   fitted-weight profile helper compares the unrestricted and constrained fits
@@ -105,7 +105,9 @@ golden `parTable()` fixtures.
   mixture p-value, and endpoint cutoffs for CI inversion). ML routes the
   misspecification reference through observed Hessian bread plus empirical
   score meat; caller-fixed GMM routes it through the continuous-LS observed
-  bread plus fixed-weight or IJ estimated-weight meat. The fitted-weight GMM
+  bread plus fixed-weight or IJ estimated-weight meat, including the supported
+  sample-normal-theory, empirical-WLS, empirical-DWLS, and fixed-`a` DLS IJ
+  weight families. The fitted-weight GMM
   parameter helpers rebuild the final expected-information weight `W(theta)` at
   each constrained endpoint and treat that as the profile metric for both
   robust and misspecification references; complete derivative-of-weight
@@ -136,19 +138,23 @@ golden `parTable()` fixtures.
   mixed-categorical estimators: `estimate::fiml::frontier::fit_fiml_constrained`
   plus `profile_lrt_parameter_fiml()` / `profile_lrt_ci_parameter_fiml()` refit
   direct FIML against `theta_k = theta0` using the retained `FIMLPack`;
-  `profile_lrt_parameter_ml2s_nt()` / `profile_lrt_ci_parameter_ml2s_nt()`
-  delegate ML2S-NT Stage-2 EM moments to the ML scalar profile path; and
+  `profile_lrt_parameter_ml2s()` / `profile_lrt_ci_parameter_ml2s()` cover
+  ML2S Stage-2 `nt`, `uls`, `dwls`, `adf`/`wls`, and fixed-`a` `dls`
+  weights (`*_ml2s_nt` remains the NT compatibility wrapper); and
   `profile_lrt_parameter_mixed_ordinal()` /
   `profile_lrt_ci_parameter_mixed_ordinal()` apply the same df-1 inversion to
   mixed continuous/ordinal ULS/DWLS/WLS fits. These helpers support ordinary,
   robust-scaled, misspec-scaled, and misspec-mixture references. Direct FIML
   builds the scalar profile scale from observed-pattern score meat and observed
-  FIML bread; ML2S-NT uses the Stage-2 NT moment sandwich, switching to analytic
-  observed Stage-2 bread for misspec references; mixed ordinal uses the same
+  FIML bread; ML2S uses the Stage-1 saturated-moment sandwich and switches to
+  analytic observed Stage-2 bread for misspec references, with estimated-weight
+  IJ meat for data-dependent non-NT Stage-2 weights when raw/FIML internals are
+  available; mixed ordinal uses the same
   IJ meat as robust mixed-ordinal SE/MI, including DWLS/WLS fitted-weight
   influence, and analytic observed mixed bread for misspec references. R exposes
   these as
   `frontier_profile_lrt_{parameter,ci}_fiml`,
+  `frontier_profile_lrt_{parameter,ci}_ml2s` /
   `frontier_profile_lrt_{parameter,ci}_ml2s_nt`, and
   `frontier_profile_lrt_{parameter,ci}_mixed_ordinal`, with `reference=`
   selecting the endpoint statistic used by CI inversion.
