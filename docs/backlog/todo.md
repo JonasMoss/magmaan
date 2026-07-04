@@ -2079,7 +2079,9 @@ work until a concrete downstream consumer appears.
   (one-level or double) is anti-correlated with need (caps ~0.85, and is `B`-invariant).
   Analytic functional gradients landed (11x faster constrained fits), and the
   C++/R seed now covers ordinary, robust-scaled, misspec-scaled, and
-  misspec-mixture parameter profiles plus ordinal polychoric-omega profiles.
+  misspec-mixture parameter profiles for complete-data ML, continuous GMM /
+  fitted-weight GMM, direct FIML, ML2S-NT, ordinal, and mixed ordinal, plus
+  ordinal polychoric-omega profiles.
   Next: calibrated-constant recipe from one dataset; non-normal stress run;
   reliability-difference regions; richer functional callbacks / observed-score
   categorical omega only when an experiment consumes them. See speculative.md

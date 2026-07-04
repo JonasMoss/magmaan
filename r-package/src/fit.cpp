@@ -3081,7 +3081,9 @@ Rcpp::List frontier_profile_lrt_parameter_fiml_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     double constraint_tol = 1e-6,
-    SEXP raw_data = R_NilValue) {
+    SEXP raw_data = R_NilValue,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -3107,10 +3109,12 @@ Rcpp::List frontier_profile_lrt_parameter_fiml_impl(
   const magmaan::estimate::Backend backend =
       optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                          : fiml_backend_from_optimizer_arg(optimizer);
+  const auto reference_mode = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_parameter_fiml()");
   auto r_or = magmaan::estimate::fiml::frontier::profile_lrt_parameter_fiml(
       ctx.pt, ctx.rep, raw, est, pack,
       static_cast<Eigen::Index>(parameter - 1), target, backend,
-      optim_opts_from(control), constraint_tol);
+      optim_opts_from(control), constraint_tol, reference_mode);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list_fiml(ctx, raw, fit, *r_or, parameter);
 }
@@ -3122,7 +3126,9 @@ Rcpp::List frontier_profile_lrt_parameter_ml2s_nt_impl(
     double target,
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
-    double constraint_tol = 1e-6) {
+    double constraint_tol = 1e-6,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -3145,11 +3151,13 @@ Rcpp::List frontier_profile_lrt_parameter_ml2s_nt_impl(
   const magmaan::estimate::Backend backend =
       optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                          : backend_from_optimizer_arg(optimizer);
+  const auto reference_mode = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_parameter_ml2s_nt()");
   auto r_or =
       magmaan::estimate::fiml::frontier::profile_lrt_parameter_ml2s_nt(
           ctx.pt, ctx.rep, est, sm,
           static_cast<Eigen::Index>(parameter - 1), target, backend,
-          optim_opts_from(control), constraint_tol);
+          optim_opts_from(control), constraint_tol, reference_mode);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list_ml2s(ctx, fit, *r_or, parameter);
 }
@@ -3164,7 +3172,9 @@ Rcpp::List frontier_profile_lrt_parameter_mixed_ordinal_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6) {
+    double constraint_tol = 1e-6,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -3193,12 +3203,15 @@ Rcpp::List frontier_profile_lrt_parameter_mixed_ordinal_impl(
   const magmaan::estimate::Backend backend =
       optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                          : backend_from_optimizer_arg(optimizer);
+  const auto reference_mode = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_parameter_mixed_ordinal()");
+  const bool need_sandwich = scalar_reference_needs_sandwich(reference_mode);
   auto r_or = magmaan::estimate::frontier::profile_lrt_parameter_mixed_ordinal(
       ctx.pt, ctx.rep, stats, est,
       static_cast<Eigen::Index>(parameter - 1), target,
       bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
       ordinal_parameterization_from_string(parameterization_name),
-      constraint_tol);
+      constraint_tol, need_sandwich, reference_mode);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_lrt_to_list_mixed_ordinal(
       ctx, stats, *r_or, parameter, weight_key.c_str(),
@@ -3218,7 +3231,9 @@ Rcpp::List frontier_profile_lrt_ci_parameter_fiml_impl(
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
     double statistic_tol = 1e-6,
-    SEXP raw_data = R_NilValue) {
+    SEXP raw_data = R_NilValue,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const bool is_fiml = fit.containsElementNamed("fiml") &&
@@ -3245,8 +3260,8 @@ Rcpp::List frontier_profile_lrt_ci_parameter_fiml_impl(
                          : fiml_backend_from_optimizer_arg(optimizer);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
-  ci_opts.reference =
-      magmaan::estimate::frontier::ScalarProfileReference::Ordinary;
+  ci_opts.reference = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_ci_parameter_fiml()");
   auto r_or =
       magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_fiml(
           ctx.pt, ctx.rep, raw, est, pack,
@@ -3268,7 +3283,9 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_nt_impl(
     Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
-    double statistic_tol = 1e-6) {
+    double statistic_tol = 1e-6,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -3293,8 +3310,8 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_nt_impl(
                          : backend_from_optimizer_arg(optimizer);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
-  ci_opts.reference =
-      magmaan::estimate::frontier::ScalarProfileReference::Ordinary;
+  ci_opts.reference = scalar_reference_from_nullable(
+      reference, robust, "frontier_profile_lrt_ci_parameter_ml2s_nt()");
   auto r_or =
       magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_ml2s_nt(
           ctx.pt, ctx.rep, est, sm,
@@ -3319,7 +3336,9 @@ Rcpp::List frontier_profile_lrt_ci_parameter_mixed_ordinal_impl(
     Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
     double constraint_tol = 1e-6,
     double root_tol = 1e-5,
-    double statistic_tol = 1e-6) {
+    double statistic_tol = 1e-6,
+    bool robust = false,
+    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -3350,15 +3369,18 @@ Rcpp::List frontier_profile_lrt_ci_parameter_mixed_ordinal_impl(
                          : backend_from_optimizer_arg(optimizer);
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
-  ci_opts.reference =
-      magmaan::estimate::frontier::ScalarProfileReference::Ordinary;
+  ci_opts.reference = scalar_reference_from_nullable(
+      reference, robust,
+      "frontier_profile_lrt_ci_parameter_mixed_ordinal()");
+  const bool need_sandwich =
+      scalar_reference_needs_sandwich(ci_opts.reference);
   auto r_or =
       magmaan::estimate::frontier::profile_lrt_ci_parameter_mixed_ordinal(
           ctx.pt, ctx.rep, stats, est,
           static_cast<Eigen::Index>(parameter - 1), ci_opts,
           bounds_from_nullable(bounds), ow, backend, optim_opts_from(control),
           ordinal_parameterization_from_string(parameterization_name),
-          constraint_tol);
+          constraint_tol, need_sandwich);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list_mixed_ordinal(
       ctx, stats, *r_or, parameter, weight_key.c_str(),

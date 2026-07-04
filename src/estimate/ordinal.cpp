@@ -9951,6 +9951,96 @@ bool reference_wants_misspec_ordinal(
          reference == frontier::ScalarProfileReference::MisspecMixture;
 }
 
+fit_expected<double>
+mixed_ordinal_scalar_profile_scaling_factor(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& constrained,
+    const frontier::ScalarFunctional& functional,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization,
+    bool observed_bread,
+    const char* who) {
+  auto parts = mixed_ordinal_rbm_parts(
+      spec::LatentStructure(pt), rep, stats, constrained, weights,
+      parameterization);
+  if (!parts.has_value()) return std::unexpected(post_to_fit(parts.error()));
+  const Eigen::MatrixXd& K = parts->K;
+  if (K.rows() != constrained.theta.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": mixed-ordinal profile sandwich K has "
+            "incompatible shape"));
+  }
+
+  Eigen::MatrixXd A;
+  if (observed_bread) {
+    A = parts->information;
+  } else {
+    if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+      return std::unexpected(v.error());
+    }
+    if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+        !p.has_value()) {
+      return std::unexpected(p.error());
+    }
+    if (constrained.theta.size() != pt.n_free()) {
+      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+          std::string(who) + ": constrained theta size does not match mixed "
+              "delta partable"));
+    }
+    auto layout_or = make_threshold_layout(pt, rep, stats);
+    if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+    auto ev_or = model::ModelEvaluator::build(pt, rep);
+    if (!ev_or.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+          std::string(who) + ": ModelEvaluator::build failed: " +
+              ev_or.error().detail));
+    }
+    auto eval = ev_or->evaluate(constrained.theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": constrained evaluation failed: " +
+              eval.error().detail));
+    }
+    const Eigen::MatrixXd Delta_full =
+        mixed_moment_jacobian(stats, *layout_or, eval->moments,
+                              eval->J_sigma, eval->J_mu,
+                              constrained.theta, parameterization);
+    if (Delta_full.cols() != K.rows()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": mixed-ordinal moment Jacobian/K shape "
+              "mismatch"));
+    }
+    std::vector<Eigen::MatrixXd> uls_identity;
+    const std::vector<Eigen::MatrixXd>* Ws = nullptr;
+    if (weights == OrdinalWeightKind::ULS) {
+      uls_identity.reserve(stats.NACOV.size());
+      for (const auto& G : stats.NACOV) {
+        uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+      }
+      Ws = &uls_identity;
+    } else {
+      auto Ws_or = ordinal_sandwich_weights(stats, weights);
+      if (!Ws_or.has_value()) return std::unexpected(post_to_fit(Ws_or.error()));
+      uls_identity = std::move(*Ws_or);
+      Ws = &uls_identity;
+    }
+    auto sw = ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+    if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
+    const double N = static_cast<double>(parts->n_obs);
+    A = N * (K.transpose() * sw->A1 * K).eval();
+    A = 0.5 * (A + A.transpose()).eval();
+  }
+
+  Eigen::MatrixXd B = 0.5 * (parts->meat + parts->meat.transpose()).eval();
+  auto grad = scalar_gradient_ordinal(functional, constrained.theta,
+                                      constrained.theta.size(), who);
+  if (!grad.has_value()) return std::unexpected(grad.error());
+  const Eigen::VectorXd r = K.transpose() * *grad;
+  return scalar_profile_scale_from_reduced_ordinal(A, B, r, who);
+}
+
 }  // namespace
 
 namespace frontier {
@@ -10312,7 +10402,9 @@ profile_lrt_scalar_mixed_ordinal(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled,
+    ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_scalar_mixed_ordinal";
   if (!functional.value) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -10391,6 +10483,22 @@ profile_lrt_scalar_mixed_ordinal(
   out.p_value = chi2_pvalue(out.T, 1);
   out.n_obs = n;
   out.df = 1;
+  if (robust_scaled && reference_wants_robust_scaled_ordinal(reference)) {
+    auto scale = mixed_ordinal_scalar_profile_scaling_factor(
+        spec::LatentStructure(pt), rep, stats, out.constrained, functional,
+        weights, parameterization, /*observed_bread=*/false, who);
+    if (!scale.has_value()) return std::unexpected(scale.error());
+    out.scaling_factor = *scale;
+    out.T_scaled = out.T / *scale;
+    out.p_value_scaled = chi2_pvalue(out.T_scaled, 1);
+  }
+  if (robust_scaled && reference_wants_misspec_ordinal(reference)) {
+    auto scale = mixed_ordinal_scalar_profile_scaling_factor(
+        std::move(pt), rep, stats, out.constrained, functional, weights,
+        parameterization, /*observed_bread=*/true, who);
+    if (!scale.has_value()) return std::unexpected(scale.error());
+    fill_misspec_profile_ordinal(out, *scale);
+  }
   return out;
 }
 
@@ -10407,7 +10515,9 @@ profile_lrt_parameter_mixed_ordinal(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled,
+    ScalarProfileReference reference) {
   constexpr const char* who = "profile_lrt_parameter_mixed_ordinal";
   if (parameter < 0 || parameter >= unrestricted.theta.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -10425,7 +10535,7 @@ profile_lrt_parameter_mixed_ordinal(
   return profile_lrt_scalar_mixed_ordinal(
       std::move(pt), rep, stats, unrestricted, std::move(functional), target,
       std::move(bounds), weights, backend, opts, parameterization,
-      constraint_tol);
+      constraint_tol, robust_scaled, reference);
 }
 
 fit_expected<ScalarProfileCiResult>
@@ -10441,12 +10551,9 @@ profile_lrt_ci_parameter_mixed_ordinal(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization,
-    double constraint_tol) {
+    double constraint_tol,
+    bool robust_scaled) {
   constexpr const char* who = "profile_lrt_ci_parameter_mixed_ordinal";
-  if (ci_options.reference != ScalarProfileReference::Ordinary) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        std::string(who) + ": only ordinary profile CI reference is supported"));
-  }
   if (parameter < 0 || parameter >= unrestricted.theta.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         std::string(who) + ": parameter index out of range"));
@@ -10454,13 +10561,16 @@ profile_lrt_ci_parameter_mixed_ordinal(
   const double estimate = unrestricted.theta(parameter);
   OrdinalProfileEvaluator eval =
       [pt, &rep, &stats, unrestricted, parameter, bounds, weights, backend,
-       opts, parameterization, constraint_tol](double target) mutable {
+       opts, parameterization, constraint_tol, robust_scaled,
+       reference = ci_options.reference](double target) mutable {
         spec::LatentStructure pt_eval = pt;
         Bounds bounds_eval = bounds;
         return profile_lrt_parameter_mixed_ordinal(
             std::move(pt_eval), rep, stats, unrestricted, parameter, target,
             std::move(bounds_eval), weights, backend, opts, parameterization,
-            constraint_tol);
+            constraint_tol,
+            robust_scaled || reference_needs_sandwich_ordinal(reference),
+            reference);
       };
   return ordinal_profile_ci_from_evaluator(estimate, ci_options, eval, who);
 }

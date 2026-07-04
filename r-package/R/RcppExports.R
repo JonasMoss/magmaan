@@ -73,28 +73,28 @@ frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weigh
     .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
 }
 
-frontier_profile_lrt_parameter_fiml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_fiml_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data)
+frontier_profile_lrt_parameter_fiml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_fiml_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data, robust, reference)
 }
 
-frontier_profile_lrt_parameter_ml2s_nt_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl`, fit, parameter, target, optimizer, control, constraint_tol)
+frontier_profile_lrt_parameter_ml2s_nt_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_ml2s_nt_impl`, fit, parameter, target, optimizer, control, constraint_tol, robust, reference)
 }
 
-frontier_profile_lrt_parameter_mixed_ordinal_impl <- function(fit, parameter, target, weight = "fit", mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl`, fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol)
+frontier_profile_lrt_parameter_mixed_ordinal_impl <- function(fit, parameter, target, weight = "fit", mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_parameter_mixed_ordinal_impl`, fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
 }
 
-frontier_profile_lrt_ci_parameter_fiml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL) {
-    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_fiml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data)
+frontier_profile_lrt_ci_parameter_fiml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_fiml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
 }
 
-frontier_profile_lrt_ci_parameter_ml2s_nt_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ml2s_nt_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol)
+frontier_profile_lrt_ci_parameter_ml2s_nt_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_ml2s_nt_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, robust, reference)
 }
 
-frontier_profile_lrt_ci_parameter_mixed_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6) {
-    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol)
+frontier_profile_lrt_ci_parameter_mixed_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaan_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
 }
 
 frontier_profile_lrt_ordinal_polychoric_omega_impl <- function(fit, block, omega0, target = "total", weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
