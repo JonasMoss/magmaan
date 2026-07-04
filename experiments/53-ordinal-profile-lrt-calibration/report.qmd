@@ -1,0 +1,98 @@
+---
+title: "Experiment 53: Ordinal Profile-LRT Finite-Sample Calibration"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- "results/simulation_summary.csv"
+metadata_path <- "results/metadata.csv"
+if (!file.exists(summary_path) || !file.exists(metadata_path)) {
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+}
+summary <- read.csv(summary_path)
+metadata <- read.csv(metadata_path)
+worst_ref <- summary[which.min(summary$reference_coverage_95), ]
+worst_wald <- summary[which.min(summary$omega_wald_coverage_95), ]
+```
+
+## Question
+
+For all-ordinal limited-information CFA, is small-sample miscoverage of
+polychoric-omega profile-LRT intervals mainly LR inflation, robust reference
+scaling, sparse ordinal summaries, or point-functional bias?
+
+## Short Answer
+
+```{r, results='asis'}
+cat(sprintf(
+  paste0(
+    "At %s reps per cell and target omega %.3f, profile-reference coverage ",
+    "ranges from %.3f to %.3f. The weakest profile cell is %s / %s at N = %d. ",
+    "The weakest Wald delta cell is %s at N = %d with coverage %.3f. ",
+    "The grid recorded %d profile construction failures."
+  ),
+  metadata$reps, metadata$target, min(summary$reference_coverage_95, na.rm = TRUE),
+  max(summary$reference_coverage_95, na.rm = TRUE),
+  worst_ref$regime, worst_ref$arm, worst_ref$n,
+  worst_wald$regime, worst_wald$n, worst_wald$omega_wald_coverage_95,
+  sum(summary$failures)))
+```
+
+## Profile References
+
+```{r}
+shown <- summary[, c(
+  "regime", "n", "arm", "failures", "mean_reference_stat",
+  "reference_coverage_95", "oracle_constant_coverage_95",
+  "mean_scaling_factor", "mean_misspec_scaling_factor",
+  "min_variable_category_count_p05"
+)]
+names(shown) <- c(
+  "Regime", "N", "Arm", "Failures", "Mean Ref Stat",
+  "Reference Coverage", "Oracle Constant Coverage",
+  "Mean Robust Scale", "Mean Misspec Scale", "P05 Min Category Count"
+)
+shown[] <- lapply(shown, function(x) if (is.numeric(x)) round(x, 4) else x)
+knitr::kable(shown)
+```
+
+## Omega Point And Wald Baseline
+
+```{r}
+wald <- unique(summary[, c(
+  "regime", "n", "target", "mean_omega_wald", "omega_bias",
+  "omega_wald_coverage_95"
+)])
+names(wald) <- c("Regime", "N", "Target", "Mean Omega", "Bias", "Wald Coverage")
+wald[] <- lapply(wald, function(x) if (is.numeric(x)) round(x, 4) else x)
+knitr::kable(wald)
+```
+
+## Interpretation
+
+The oracle-constant column asks a narrow diagnostic question: if the
+reference-scaled statistic were divided by its cell mean, would coverage move
+toward nominal? A large gap between reference coverage and oracle-constant
+coverage points to LR inflation as a scalar-calibration problem. Poor Wald
+coverage with near-nominal profile-reference coverage points instead to
+point-functional bias or delta-method SE bias.
+
+The misspecification-mixture arm is included for the reference-law taxonomy, not
+because this correctly specified ordinal-probit grid needs a misspecification
+target. Its value is to check whether the observed-bread reference differs
+materially from the robust-scaled one in sparse ordinal cells.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R
+quarto render report.qmd
+```

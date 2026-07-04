@@ -961,6 +961,21 @@ fits, robust/misspec scaling, and small-sample constants remain open.
    ordinal polychoric omega; R parameter/omega wrappers + experiment-47
    interior-parameter calibration probe.
 
+**Progress (2026-07-04): ordinal finite-sample calibration lane scoped.** The
+general Bartlett problem is now split from a specific categorical-limited-information
+taxonomy. Working note `docs/research/notes/ordinal_profile_lrt_finite_sample_calibration.tex`
+defines the ordinal DWLS/WLS problem as a decomposition into LR inflation,
+reference-scale error, sparse-threshold/NACOV instability, omega point bias, and
+boundary/feasibility mass. Experiment 53
+(`experiments/53-ordinal-profile-lrt-calibration`) is the first taxonomy run:
+all-ordinal one-factor probit data, polychoric/latent-response omega target,
+DWLS ordinary / robust-scaled / misspec-mixture profile tests, WLS robust-scaled
+comparison, and the fit-free ordinal polychoric omega Wald interval as the
+baseline. The smoke is intentionally diagnostic only; the decision rule for the
+full grid is: scalar constants advance only if the reference-scaled statistic is
+the failure mode, otherwise correction effort moves to ordinal summary
+regularization or target-bias diagnostics.
+
 Reference set (PDFs collected in `papers/closed-form-omega/extern/`, several mirrored
 in `external/refs/`): Pek & Wu 2015 (`10.1007/s11336-015-9461-1`), Wu & Neale 2012
 (`10.1007/s10519-012-9560-z`), Cheung 2009 (`10.1080/10705510902751291`), Cheung &

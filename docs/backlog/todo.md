@@ -2124,10 +2124,13 @@ work until a concrete downstream consumer appears.
   misspec-mixture parameter profiles for complete-data ML, continuous GMM /
   fitted-weight GMM, direct FIML, ML2S-NT, ordinal, and mixed ordinal, plus
   ordinal polychoric-omega profiles.
-  Next: calibrated-constant recipe from one dataset; non-normal stress run;
-  reliability-difference regions; richer functional callbacks / observed-score
-  categorical omega only when an experiment consumes them. See speculative.md
-  for the full list.
+  The ordinal-specific calibration lane now has a working note
+  (`ordinal_profile_lrt_finite_sample_calibration.tex`) and experiment 53
+  (`ordinal-profile-lrt-calibration`) to separate LR inflation, robust/misspec
+  reference scaling, sparse ordinal summaries, and omega point bias before
+  choosing a correction. Next: run the full experiment-53 grid, then decide
+  whether a cell/model-level constant is worth pursuing. See speculative.md for
+  the full list.
 - **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
   variance-of-variance `t`-on-effective-df correction for covariance functionals. See
   speculative.md.
