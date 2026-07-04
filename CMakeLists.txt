@@ -119,6 +119,7 @@ add_library(magmaan STATIC
   src/estimate/start_guttman.cpp
   src/estimate/start_bentler.cpp
   src/estimate/start_jamesstein.cpp
+  src/estimate/frontier/noniterative_cfa.cpp
   src/estimate/cfa_utils.cpp
   src/estimate/resolve_fixed_x.cpp
   src/estimate/constraints.cpp
@@ -136,6 +137,7 @@ add_library(magmaan STATIC
   src/robust/fmg.cpp
   src/robust/restriction.cpp
   src/robust/satorra2000.cpp
+  src/robust/frontier/noniterative_inference.cpp
   src/robust/lr_test_satorra.cpp
   src/robust/weighted_chisq.cpp
   src/robust/weighted_inference.cpp
