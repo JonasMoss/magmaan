@@ -22,204 +22,190 @@ coverage <- read.csv(paths[1]); risk <- read.csv(paths[2])
 gof <- read.csv(paths[3]); difftest <- read.csv(paths[4])
 diagnostics <- read.csv(paths[5]); metadata <- read.csv(paths[6])
 
-meta <- stats::setNames(metadata$value, metadata$key)
 gens <- intersect(c("normal", "ig", "ordinal"), unique(coverage$generator))
 gen_label <- c(normal = "Normal", ig = "Independent generator",
                ordinal = "Ordinal (as continuous)")
-rels <- sort(unique(coverage$reliability))
+regime_order <- c("bal.3", "bal.5", "bal.7", "het.mod", "het.str")
+regimes <- intersect(regime_order, unique(coverage$regime))
+regime_label <- c(bal.3 = "Uniform 0.3", bal.5 = "Uniform 0.5", bal.7 = "Uniform 0.7",
+                  het.mod = "Het .65/.5/.35", het.str = "Het .8/.5/.2")
 big_n <- max(coverage$n); small_n <- min(coverage$n)
-lo_rel <- min(rels); hi_rel <- max(rels)
 pct <- function(x) sprintf("%.1f%%", 100 * x)
 fmt <- function(x, d = 3) formatC(x, format = "f", digits = d)
 
-rr <- function(gen, rel, group = "loadings", n = big_n) {
-  s <- risk[risk$generator == gen & risk$reliability == rel & risk$group == group &
+rr <- function(gen, regime, group = "loadings", n = big_n) {
+  s <- risk[risk$generator == gen & risk$regime == regime & risk$group == group &
             risk$n == n & risk$spec == "correct", ]
   g <- s$rmse[s$estimator == "guttman"]; m <- s$rmse[s$estimator == "ml"]
   if (length(g) && length(m) && m > 0) g / m else NA_real_
 }
-cov_at <- function(gen, variant, rel, n = big_n) {
-  v <- coverage$coverage[coverage$group == "all" & coverage$generator == gen &
-                         coverage$variant == variant & coverage$reliability == rel &
+cov_at <- function(gen, variant, regime, group = "all", n = big_n) {
+  v <- coverage$coverage[coverage$group == group & coverage$generator == gen &
+                         coverage$variant == variant & coverage$regime == regime &
                          coverage$n == n]
   if (length(v)) v[1] else NA_real_
+}
+imp <- function(col, regime, n) {
+  d <- diagnostics[diagnostics$spec == "correct" & diagnostics$regime == regime &
+                   diagnostics$n == n, ]
+  mean(d[[col]])
 }
 ```
 
 ## Question
 
-magmaan's closed-form (non-iterative) CFA estimators now carry delta-method
-inference: standard errors, a residual goodness-of-fit test, and a
-difference / pseudo-LRT test. A first study established these are calibrated on
-normal, non-normal, and ordinal data at 0.7 reliability, at a small efficiency
-cost vs ML. This extension pushes into the hard regime, sweeping indicator
-reliability down to `r fmt(lo_rel, 1)`, where the observed correlations shrink,
-ML's optimal weighting should matter most, and the clamp-free Guttman map nears
-its assumptions. Three questions: does the loadings efficiency gap widen, does
-the inference stay calibrated, and how gracefully do the estimators degrade?
+magmaan's closed-form (non-iterative) CFA estimators carry delta-method
+inference; earlier runs showed it is calibrated across data types and down a
+uniform-reliability sweep, at a small efficiency cost vs ML. This extension asks
+whether **weak loadings** are a distinct stress. They are not, on their own: at
+matched reliability a weak loading with a small residual and a strong loading
+with a large residual produce the same correlation matrix, and both estimators
+are scale-equivariant, so "uniform weak loadings" is just the low end of the
+reliability sweep. The manipulation that *is* distinct is **heterogeneity** -- a
+weak indicator sitting next to strong ones at the same average reliability. We
+run three balanced regimes (the reliability sweep) and two heterogeneous ones
+(average reliability 0.5, one weak indicator per factor), tracking loadings by
+within-factor position.
 
 ## Short answer
 
-The efficiency gap **widens as reliability falls, spreading from the loadings to
-the structural parameters generally, while residual variances stay at parity**.
-On the independent generator the Guttman-to-ML RMSE ratio for loadings goes from
-`r fmt(rr("ig", hi_rel), 2)` at reliability `r fmt(hi_rel,1)` to
-`r fmt(rr("ig", lo_rel), 2)` at `r fmt(lo_rel,1)`; factor covariances follow the
-same shape (`r fmt(rr("ig", hi_rel, "factor_cov"), 2)` to
-`r fmt(rr("ig", lo_rel, "factor_cov"), 2)`); residual variances barely move off 1.
-So ML's optimal weighting buys the most exactly where theory says it should, on
-the parameters that carry the covariance structure under weak signal, and almost
-nothing on the residual diagonal.
+A single weak indicator per factor **inflates the closed form's efficiency gap
+as much as making every indicator weak does**, at the same average reliability:
+on the ordinal arm the all-parameter Guttman-to-ML RMSE ratio goes from
+`r fmt(rr("ordinal","bal.5","all"),2)` (uniform 0.5) to
+`r fmt(rr("ordinal","het.str","all"),2)` (one weak indicator, average still 0.5),
+matching the uniform-0.3 regime.
 
-The inference **holds across the whole reliability range**: empirical-Gamma
-coverage stays near 95% at every reliability (independent generator, n =
-`r big_n`: `r pct(cov_at("ig","g_ntml_emp",lo_rel))` at reliability
-`r fmt(lo_rel,1)` vs `r pct(cov_at("ig","g_ntml_emp",hi_rel))` at
-`r fmt(hi_rel,1)`). The normal-theory Gamma undercovers on non-normal data at
-every reliability, though, interestingly, *least* at low reliability
-(`r pct(cov_at("ig","g_ntml_nt",lo_rel))` at `r fmt(lo_rel,1)` vs
-`r pct(cov_at("ig","g_ntml_nt",hi_rel))` at `r fmt(hi_rel,1)`): weak loadings
-dilute the non-normal common factor with normal residual noise, so the data look
-more Gaussian. Low reliability does not break the delta method; non-normality
-plus NT-Gamma does, as before.
+The twist is **where the loss lands: on the weak indicator's factor-mates, not
+on the weak indicator itself**. In the strongest heterogeneous regime the
+loadings RMSE ratio for the *middle* indicator is
+`r fmt(rr("ig","het.str","loadings_p2"),2)`-`r fmt(rr("ordinal","het.str","loadings_p2"),2)`,
+but for the *weak* indicator only
+`r fmt(rr("ig","het.str","loadings_p3"),2)`-`r fmt(rr("ordinal","het.str","loadings_p3"),2)`.
+Guttman's communality for an indicator divides by the correlation between the
+*other two* indicators; for the middle indicator that pair includes the weak one
+(a small, noisy denominator), while the weak indicator's own denominator is the
+strong marker-middle pair. ML pools optimally and has no such asymmetry.
 
-The estimators **degrade gracefully, and the closed form has the edge**. At the
-stress corner (reliability `r fmt(lo_rel,1)`, n = `r small_n`) *both* throw
-Heywood cases, but ML produces more of them than Guttman and also occasionally
-fails to converge, whereas the closed form is a formula that always returns a
-finite, inspection-free answer. Guttman trades a few percent of structural-
-parameter precision for that robustness.
+The **inference stays calibrated throughout** -- empirical-Gamma coverage is near
+95% in every regime, including for the weak indicator's own loading
+(`r pct(cov_at("ig","g_ntml_emp","het.str","loadings_p3"))`-`r pct(cov_at("ordinal","g_ntml_emp","het.str","loadings_p3"))`).
+And the **graceful-degradation story reverses**: under uniform low reliability
+the closed form throws *fewer* Heywood cases than ML, but under heterogeneity the
+weak indicator makes it throw *more* (n = `r small_n*2`:
+`r pct(imp("improper_guttman","het.str",small_n*2))` vs ML's
+`r pct(imp("improper_ml","het.str",small_n*2))`).
 
 ## Evidence
 
-### The efficiency gap is a loadings-only, low-reliability phenomenon
+### The gap falls on the factor-mates, not the weak indicator
 
-Guttman-to-ML RMSE ratio at n = `r big_n`, by reliability. A ratio of 1 means
-parity with ML; above 1 is Guttman's efficiency loss.
+Guttman-to-ML loadings RMSE ratio at n = `r big_n`, at matched average
+reliability 0.5, as the spread increases from balanced to strongly
+heterogeneous. Separate lines for the middle indicator (position 2) and the weak
+indicator (position 3).
 
-```{r frontier-plot, fig.height=3.4, fig.width=7}
-op <- par(mfrow = c(1, 3), mar = c(4, 4, 2.2, 0.6), oma = c(0, 0, 0, 0))
-groups <- c(loadings = "Loadings", factor_cov = "Factor (co)variances",
-            residual = "Residual variances")
-cols <- c(normal = "#333333", ig = "#0072b2", ordinal = "#c1272d")
-for (grp in names(groups)) {
-  plot(NA, xlim = range(rels), ylim = c(0.98, 1.28),
-       xlab = "Reliability", ylab = if (grp == "loadings") "RMSE ratio Guttman / ML" else "",
-       main = groups[[grp]])
+```{r position-plot, fig.height=3.4, fig.width=7}
+matched <- c("bal.5", "het.mod", "het.str")
+matched <- intersect(matched, regimes)
+xlab_at <- seq_along(matched)
+op <- par(mfrow = c(1, 3), mar = c(5.5, 4, 2.2, 0.6))
+for (g in gens) {
+  plot(NA, xlim = c(0.8, length(matched) + 0.2), ylim = c(1.0, 1.42),
+       xaxt = "n", xlab = "", ylab = if (g == gens[1]) "RMSE ratio Guttman / ML" else "",
+       main = gen_label[g])
+  axis(1, at = xlab_at, labels = regime_label[matched], las = 2, cex.axis = 0.8)
   abline(h = 1, lty = 3, col = "grey55")
-  for (g in gens) {
-    y <- vapply(rels, function(r) rr(g, r, grp), numeric(1))
-    lines(rels, y, col = cols[g], lwd = 2, type = "b", pch = 19)
-  }
-  if (grp == "loadings")
-    legend("topright", legend = gen_label[gens], col = cols[gens], lwd = 2, pch = 19,
-           bty = "n", cex = 0.85)
+  y2 <- vapply(matched, function(rg) rr(g, rg, "loadings_p2"), numeric(1))
+  y3 <- vapply(matched, function(rg) rr(g, rg, "loadings_p3"), numeric(1))
+  lines(xlab_at, y2, col = "#c1272d", lwd = 2, type = "b", pch = 19)
+  lines(xlab_at, y3, col = "#0072b2", lwd = 2, type = "b", pch = 17)
+  if (g == gens[1])
+    legend("topleft", legend = c("Middle indicator (r=0.5)", "Weak indicator (r->0.2)"),
+           col = c("#c1272d", "#0072b2"), lwd = 2, pch = c(19, 17), bty = "n", cex = 0.85)
 }
 par(op)
 ```
 
-*Loadings and factor (co)variances: the gap grows as reliability drops (worst on
-the ordinal arm), reaching ~20-25% on the loadings at reliability
-`r fmt(lo_rel,1)`. Residual variances: essentially at parity with ML across the
-whole range.*
+*Average reliability is 0.5 in all three regimes. As one indicator is made weak,
+the closed form loses ground fastest on the middle indicator (whose triad
+denominator is the marker-weak correlation), while the weak indicator's own
+loading is comparatively spared. Uniform-reliability regimes (not shown here) sit
+in `results/risk.csv`; the balanced sweep reproduces the earlier finding that the
+gap widens as reliability drops.*
 
-### Inference stays calibrated across reliability
+### Inference stays calibrated across every regime
 
-95% interval coverage (all 21 parameters) at n = `r big_n`, empirical Gamma vs
-normal-theory Gamma, by reliability.
+95% interval coverage at n = `r big_n`, empirical Gamma, for all parameters and
+for the weak indicator's loading alone.
 
 ```{r coverage-table}
-variants <- c(g_ntml_emp = "Guttman, empirical Gamma",
-              g_ntml_nt  = "Guttman, NT Gamma",
-              ml_rob     = "ML, robust")
 rows <- list()
-for (g in gens) for (v in names(variants)) {
-  r <- data.frame(Generator = gen_label[g], Method = variants[[v]], check.names = FALSE)
-  for (rl in rels) r[[paste0("rel ", fmt(rl, 1))]] <- pct(cov_at(g, v, rl))
-  rows[[paste(g, v)]] <- r
+for (g in gens) {
+  r_all <- data.frame(Generator = gen_label[g], Parameters = "All 21", check.names = FALSE)
+  r_wk  <- data.frame(Generator = gen_label[g], Parameters = "Weak loading", check.names = FALSE)
+  for (rg in regimes) {
+    r_all[[regime_label[rg]]] <- pct(cov_at(g, "g_ntml_emp", rg, "all"))
+    r_wk[[regime_label[rg]]]  <- pct(cov_at(g, "g_ntml_emp", rg, "loadings_p3"))
+  }
+  rows[[paste(g, "all")]] <- r_all; rows[[paste(g, "wk")]] <- r_wk
 }
-knitr::kable(do.call(rbind, rows), row.names = FALSE, align = "llccc",
-             caption = sprintf("Coverage of 95%% intervals at n = %d.", big_n))
+knitr::kable(do.call(rbind, rows), row.names = FALSE,
+             caption = sprintf("Empirical-Gamma coverage at n = %d.", big_n))
 ```
 
-Empirical-Gamma coverage sits near nominal at every reliability and generator;
-the normal-theory Gamma undercovers on the non-normal arms independently of
-reliability. The goodness-of-fit test tells the same story it did at 0.7 (near
-nominal under the empirical/Satorra-Bentler reference, over-rejecting under
-NT-Gamma at small n), unchanged by the reliability sweep; the per-cell rates are
-in `results/gof.csv`.
+Heterogeneity does not break the delta method. Even the weak indicator's loading,
+which the closed form estimates least efficiently, has near-nominal coverage.
 
-### Graceful degradation: Heywood cases and convergence
+### Degradation reverses under heterogeneity
 
-Improper-solution rate (any negative residual-variance estimate) and
-convergence, pooled over generators, by reliability and n. Reliability
-`r fmt(lo_rel,1)` at small n is the stress corner.
+Improper-solution rate (any negative residual-variance estimate), pooled over
+generators, at the two smallest sample sizes. Guttman convergence is 1.000
+everywhere by construction.
 
 ```{r degradation-table}
-dcorr <- diagnostics[diagnostics$spec == "correct", ]
-agg <- function(col) {
-  a <- aggregate(dcorr[[col]], list(reliability = dcorr$reliability, n = dcorr$n), mean)
-  names(a)[3] <- col; a
-}
-imp_g <- agg("improper_guttman"); imp_m <- agg("improper_ml"); cvm <- agg("conv_ml")
-show_ns <- sort(unique(dcorr$n))
-mk <- function(df, val, lab) {
-  w <- reshape(df, idvar = "reliability", timevar = "n", direction = "wide")
-  out <- data.frame(Reliability = fmt(w$reliability, 1), Quantity = lab, check.names = FALSE)
-  for (nn in show_ns) out[[paste0("n=", nn)]] <- fmt(w[[paste0(val, ".", nn)]], 3)
-  out
-}
-tbl <- rbind(mk(imp_g, "improper_guttman", "Guttman improper"),
-             mk(imp_m, "improper_ml", "ML improper"),
-             mk(cvm, "conv_ml", "ML converged"))
-tbl <- tbl[order(tbl$Reliability, tbl$Quantity), ]
-knitr::kable(tbl, row.names = FALSE, caption = "Improper-solution and ML convergence rates (Guttman convergence is 1.000 everywhere by construction).")
-```
-
-Both estimators throw Heywood cases at low reliability and small n, but ML throws
-more of them than the closed form and, unlike the closed form, occasionally fails
-to converge (Guttman convergence is 1.000 by construction). At the stress corner
-the closed form is the better-behaved of the two, which is a structural advantage
-on top of its inference being interchangeable with ML's.
-
-### Efficiency and difference test at a glance
-
-RMSE over all 21 parameters and the difference-test Type-I (true restriction
-`f1 ~~ 0*f3`) at n = `r big_n`, lowest and highest reliability.
-
-```{r summary-table}
-d <- difftest[difftest$ptype == "mixture" & difftest$variant == "ntml_emp" &
-              difftest$n == big_n, ]
+show_ns <- sort(unique(diagnostics$n))[1:2]
 rows <- list()
-for (g in gens) for (rl in c(lo_rel, hi_rel)) {
-  rows[[paste(g, rl)]] <- data.frame(
-    Generator = gen_label[g], Reliability = fmt(rl, 1),
-    `RMSE ratio (all)` = fmt(rr(g, rl, "all"), 3),
-    `Diff-test Type-I` = fmt(d$reject_rate[d$generator == g & d$reliability == rl][1], 3),
-    check.names = FALSE)
+for (rg in regimes) {
+  for (est in c("improper_guttman", "improper_ml")) {
+    r <- data.frame(Regime = regime_label[rg],
+                    Estimator = if (est == "improper_guttman") "Guttman" else "ML",
+                    check.names = FALSE)
+    for (nn in show_ns) r[[paste0("n=", nn)]] <- pct(imp(est, rg, nn))
+    rows[[paste(rg, est)]] <- r
+  }
 }
-knitr::kable(do.call(rbind, rows), row.names = FALSE, align = "llrr",
-             caption = sprintf("Overall efficiency and difference-test calibration at n = %d.", big_n))
+knitr::kable(do.call(rbind, rows), row.names = FALSE,
+             caption = "Improper-solution rate (Heywood cases).")
 ```
+
+Under uniformly weak signal (`r regime_label[["bal.3"]]`) the closed form is the
+steadier of the two: fewer Heywood cases than ML, and it cannot fail to converge.
+Under a single weak indicator (`r regime_label[["het.str"]]`) that advantage
+flips -- the weak indicator's triad communality overshoots into negative residual
+variances more often than ML's, and the excess persists to larger n. The closed
+form is more robust to weak *signal* and less robust to weak *balance*.
 
 ## Caveats
 
-- One population and model (balanced 3-factor CFA, simple structure); reliability
-  is swept by scaling residual variances, holding the loading pattern and factor
-  correlations fixed. This maps the machinery's behaviour, not a performance claim.
-- The ordinal arm is Pearson-codes calibrated so the treated-as-continuous
-  covariance is an *exact* factor model, isolating discrete skewed marginals'
-  effect on the fourth-moment matrix; it is not categorization-induced
-  misspecification.
-- Rates are Monte Carlo estimates at `r meta[["reps"]]` replications per cell;
-  full per-generator / per-n / per-parameter breakdowns are in `results/`.
-- The empirical Gamma is mildly conservative for the goodness-of-fit test in
-  small samples; the normal-theory Gamma errs the other way.
+- One population and model (balanced 3-factor CFA, simple structure, three
+  indicators per factor, factor pair f1-f3 uncorrelated). The three-indicator
+  case is the most fragile for a triad-based communality; more indicators would
+  average over triads and soften the heterogeneity effect.
+- Regimes vary the within-factor reliability pattern with residual variances
+  fixed at 1, so a low-reliability position is literally a weak loading; results
+  are on the RMSE-ratio scale, which is invariant to that choice.
+- The ordinal arm is Pearson-codes calibrated to an exact factor covariance;
+  rates are Monte Carlo estimates at `r metadata$value[metadata$key=="reps"]`
+  replications per cell. Full breakdowns are in `results/`.
+- Goodness-of-fit and difference-test calibration track the earlier runs and are
+  unchanged by the regime (per-cell rates in `results/gof.csv`,
+  `results/difftest.csv`).
 
 ## Reproduce
 
 ```sh
-# full grid: 3 generators x 2 specs x 3 reliabilities x 5 sample sizes, 1000 reps
+# full grid: 3 generators x 2 specs x 5 regimes x 5 sample sizes, 1000 reps
 Rscript run_experiment.R --full --reps 1000 --cores 10
 
 # quick slice

@@ -181,8 +181,11 @@ golden `parTable()` fixtures.
   normal / independent-component / ordinal-as-continuous generators and across a
   0.3-0.7 reliability sweep, NT Gamma asymptotically miscalibrated on non-normal
   data, GOF power near 1; Guttman's efficiency gap vs ML is small at high
-  reliability and grows on the structural parameters as reliability drops, while
-  the closed form degrades more gracefully than ML at low reliability x small N).
+  reliability and grows on the structural parameters as reliability drops and,
+  under a heterogeneous loading pattern, lands on the weak indicator's
+  factor-mates via the triad-based communality step; the closed form is more
+  robust than ML to uniformly weak signal but less robust to a single weak
+  indicator).
 - Frontier empirical reduced-bias estimation (2026-06) implements the
   Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
   moment-quadratic family. The C++ surface covers
