@@ -164,6 +164,20 @@ golden `parTable()` fixtures.
   ending at `alpha = 0` by default. The C++ primitive is
   `estimate::frontier::fit_ml_ridge_continuation()` and the R research surface
   is `magmaan_core$frontier_fit_ml_ridge_continuation()`.
+- Frontier non-iterative CFA inference (2026-07) turns closed-form CFA
+  estimators into delta-method-inferable ones. `estimate::frontier::
+  noniterative_cfa_theta` is a clean, clamp-free `sigma -> theta` map (Guttman
+  1952 multiple-group, returning a complete `(Lambda, Phi, psi)`);
+  `estimator_map_jacobian` is its central-difference `J = dtheta/dvech(S)` (the
+  generality seam so FABIN2/Bentler/JS/MIIV slot in later). `robust::frontier::
+  noniterative_inference` builds the residual projector `M = I - Delta J` and
+  reuses the existing weighted-chi2 spectrum reducer for a residual-based
+  goodness-of-fit test (ULS or model-implied NTML weight; normal-theory or
+  empirical Gamma), plus delta-method SEs `Omega = J Gamma J'/N`; `noniterative_
+  wald` and `noniterative_difference_test` are the nested tests. R surface:
+  `magmaan_core$noniterative_cfa_{fit,inference,wald,difference}_impl`. Theory in
+  `docs/research/notes/noniterative_cfa_tests.tex`; validation experiment (52)
+  is pending.
 - Frontier empirical reduced-bias estimation (2026-06) implements the
   Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
   moment-quadratic family. The C++ surface covers

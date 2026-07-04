@@ -2131,3 +2131,13 @@ work until a concrete downstream consumer appears.
 - **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
   variance-of-variance `t`-on-effective-df correction for covariance functionals. See
   speculative.md.
+- **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
+  GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
+  1952, delta-method via the FD map Jacobian; notes
+  `noniterative_cfa_tests.tex` + `guttman_cfa_asymptotics.tex`). **Remaining:**
+  the validation sim (**experiment 52**, not yet built) — SE coverage + GOF/LRT
+  Type-I vs magmaan ML across normal / independent-component / categorical
+  (ordinal-as-continuous) generators, roughly the Dhaene-Rosseel 2024 design,
+  reusing experiment 40's population + risk decomposition. Later slots for the
+  enum: FABIN2/Bentler/James-Stein/MIIV maps (loadings producers already exist)
+  and a polychoric-ADF Gamma path.
