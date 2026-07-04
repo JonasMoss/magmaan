@@ -10,6 +10,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
@@ -65,6 +66,30 @@ bool has_mean_params(const model::ModelEvaluator& ev) {
     if (loc.mat == model::MatId::Nu || loc.mat == model::MatId::Alpha)
       return true;
   return false;
+}
+
+// Pseudo-inverse quadratic form d' C⁺ d for a symmetric PSD (possibly singular)
+// C, plus the numeric rank of C. Directions with eigenvalue ≤ rtol·λ_max are
+// dropped (they carry the deterministic-zero components of a degenerate Wald
+// statistic). Returns {W, rank}.
+struct PinvQuad { double W; int rank; };
+PinvQuad psd_pinv_quadform(const Eigen::MatrixXd& C, const Eigen::VectorXd& d,
+                           double rtol) {
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(C);
+  const Eigen::VectorXd& lam = es.eigenvalues();       // ascending
+  const Eigen::MatrixXd& Vv = es.eigenvectors();
+  const double lam_max = lam.size() ? std::max(lam(lam.size() - 1), 0.0) : 0.0;
+  const double tol = rtol * lam_max;
+  const Eigen::VectorXd proj = Vv.transpose() * d;
+  double W = 0.0;
+  int rank = 0;
+  for (Eigen::Index i = 0; i < lam.size(); ++i) {
+    if (lam(i) > tol && lam(i) > 0.0) {
+      W += proj(i) * proj(i) / lam(i);
+      ++rank;
+    }
+  }
+  return {W, rank};
 }
 
 }  // namespace
@@ -543,6 +568,115 @@ noniterative_constrained_fit(const spec::LatentStructure& pt,
   out.se_constrained = Eigen::VectorXd(q);
   for (Eigen::Index i = 0; i < q; ++i)
     out.se_constrained(i) = std::sqrt(std::max(out.Omega_tilde(i, i), 0.0));
+  return out;
+}
+
+post_expected<ScalarInvarianceFit>
+noniterative_scalar_invariance(const spec::LatentStructure& pt,
+                               const model::MatrixRep& rep,
+                               const GroupedNonIterativeInference& inf,
+                               std::size_t ref_group) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("scalar invariance: evaluator build failed");
+  if (!has_mean_params(*ev))
+    return perr("scalar invariance: the model has no mean structure (fit a "
+                "configural meanstructure model first)");
+  const auto q = static_cast<Eigen::Index>(ev->n_free());
+  if (inf.theta_hat.size() != q || inf.Omega.rows() != q || inf.Omega.cols() != q)
+    return perr("scalar invariance: inference bundle does not match the model");
+
+  auto asm_ = ev->assembled(inf.theta_hat);
+  if (!asm_.has_value()) return perr("scalar invariance: assemble failed");
+  const std::size_t nblk = asm_->blocks.size();
+  if (nblk < 2) return perr("scalar invariance: need >= 2 groups");
+  if (ref_group >= nblk) return perr("scalar invariance: ref_group out of range");
+
+  // Reference-group metric: ν = m_r, projector P onto col(Λ_r).
+  const Eigen::MatrixXd Lam  = asm_->blocks[ref_group].Lambda;  // p × m
+  const Eigen::VectorXd m_ref = asm_->blocks[ref_group].Nu;     // p (= sample mean_r)
+  const Eigen::Index p = Lam.rows();
+  const Eigen::Index m = Lam.cols();
+  if (m_ref.size() != p) return perr("scalar invariance: reference intercepts missing");
+  if (p <= m) return perr("scalar invariance: p must exceed the number of factors");
+
+  const Eigen::MatrixXd LtL = Lam.transpose() * Lam;
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(LtL);
+  if (ldlt.info() != Eigen::Success)
+    return perr("scalar invariance: reference loadings are rank-deficient (Λ'Λ)");
+  const Eigen::MatrixXd Lpinv = ldlt.solve(Lam.transpose());     // m × p, (Λ'Λ)⁻¹Λ'
+  const Eigen::MatrixXd P     = Lam * Lpinv;                     // p × p
+  const Eigen::MatrixXd Mperp = Eigen::MatrixXd::Identity(p, p) - P;
+
+  std::vector<std::size_t> gs;
+  for (std::size_t b = 0; b < nblk; ++b)
+    if (b != ref_group) gs.push_back(b);
+  const Eigen::Index G1 = static_cast<Eigen::Index>(gs.size());
+
+  const std::vector<model::ParamLocation> locs = ev->param_locations();
+  ScalarInvarianceFit out;
+  out.ref_group = ref_group;
+  out.groups = gs;
+  out.nu = m_ref;
+  out.d_stacked = Eigen::VectorXd::Zero(G1 * p);
+  Eigen::MatrixXd Gstack = Eigen::MatrixXd::Zero(G1 * p, q);
+
+  for (Eigen::Index gi = 0; gi < G1; ++gi) {
+    const std::size_t b = gs[static_cast<std::size_t>(gi)];
+    const auto& blk = asm_->blocks[b];
+    if (blk.Lambda.rows() != p || blk.Lambda.cols() != m || blk.Nu.size() != p)
+      return perr("scalar invariance: groups do not share a common CFA layout");
+
+    const Eigen::VectorXd delta = blk.Nu - m_ref;   // m_g − m_r
+    const Eigen::VectorXd alpha = Lpinv * delta;     // α_g = (Λ'Λ)⁻¹Λ'δ
+    const Eigen::VectorXd d_g   = Mperp * delta;     // (I − P)δ
+    out.d_stacked.segment(gi * p, p) = d_g;
+
+    // Leading-order Jacobians (valid to O(d_g) under H0):
+    //   ∂d_g/∂m_g[i]   =  (I−P) e_i      ∂d_g/∂m_r[i]   = −(I−P) e_i
+    //   ∂d_g/∂Λ_r[i,j] = −α_j (I−P) e_i
+    //   ∂α_g/∂m_g[i]   =  Λ⁺ e_i         ∂α_g/∂m_r[i]   = −Λ⁺ e_i
+    //   ∂α_g/∂Λ_r[i,j] = −α_j Λ⁺ e_i
+    Eigen::MatrixXd Gg = Eigen::MatrixXd::Zero(p, q);   // ∂d_g/∂θ
+    Eigen::MatrixXd Ag = Eigen::MatrixXd::Zero(m, q);   // ∂α_g/∂θ
+    for (std::size_t k = 0; k < locs.size(); ++k) {
+      const auto& loc = locs[k];
+      const auto kk = static_cast<Eigen::Index>(k);
+      const auto lb = static_cast<std::size_t>(loc.block);
+      if (loc.mat == model::MatId::Nu && lb == b) {
+        if (loc.row < 0 || loc.row >= p) continue;
+        Gg.col(kk) =  Mperp.col(loc.row);
+        Ag.col(kk) =  Lpinv.col(loc.row);
+      } else if (loc.mat == model::MatId::Nu && lb == ref_group) {
+        if (loc.row < 0 || loc.row >= p) continue;
+        Gg.col(kk) = -Mperp.col(loc.row);
+        Ag.col(kk) = -Lpinv.col(loc.row);
+      } else if (loc.mat == model::MatId::Lambda && lb == ref_group) {
+        if (loc.row < 0 || loc.row >= p || loc.col < 0 || loc.col >= m) continue;
+        const double a_j = alpha(loc.col);
+        Gg.col(kk) = -a_j * Mperp.col(loc.row);
+        Ag.col(kk) = -a_j * Lpinv.col(loc.row);
+      }
+    }
+    Gstack.middleRows(gi * p, p) = Gg;
+
+    const Eigen::MatrixXd acov = Ag * inf.Omega * Ag.transpose();
+    Eigen::VectorXd ase(m);
+    for (Eigen::Index i = 0; i < m; ++i) ase(i) = std::sqrt(std::max(acov(i, i), 0.0));
+    out.alpha.push_back(alpha);
+    out.alpha_cov.push_back(acov);
+    out.alpha_se.push_back(std::move(ase));
+  }
+
+  const Eigen::MatrixXd Cov = Gstack * inf.Omega * Gstack.transpose();
+  auto pq = psd_pinv_quadform(Cov, out.d_stacked, 1e-9);
+  out.W = pq.W;
+  out.rank = pq.rank;
+  out.df = static_cast<int>(G1 * (p - m));
+  if (pq.rank != out.df)
+    out.warnings.push_back("Cov(d) numeric rank " + std::to_string(pq.rank) +
+                           " != expected df " + std::to_string(out.df) +
+                           " (near-degenerate reference metric)");
+  out.p_value = inference::chi2_pvalue(out.W, out.df);
   return out;
 }
 

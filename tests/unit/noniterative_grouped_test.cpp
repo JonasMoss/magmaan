@@ -66,13 +66,20 @@ Eigen::VectorXd mk_mean(const std::array<double, 6>& v) {
   return m;
 }
 
+// The 6×2 loading matrix (markers x1,x4) used by both tf_cov and the scalar
+// mean-shift construction.
+Eigen::MatrixXd tf_loadings(const std::array<double, 6>& lam) {
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(6, 2);
+  L(0, 0) = lam[0]; L(1, 0) = lam[1]; L(2, 0) = lam[2];
+  L(3, 1) = lam[3]; L(4, 1) = lam[4]; L(5, 1) = lam[5];
+  return L;
+}
+
 // Exact 2-factor covariance: markers x1,x4; loadings `lam` (incl. markers),
 // factor variance `pd`, factor covariance `po`, common residual `th`.
 Eigen::MatrixXd tf_cov(const std::array<double, 6>& lam, double pd, double po,
                        double th) {
-  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(6, 2);
-  L(0, 0) = lam[0]; L(1, 0) = lam[1]; L(2, 0) = lam[2];
-  L(3, 1) = lam[3]; L(4, 1) = lam[4]; L(5, 1) = lam[5];
+  Eigen::MatrixXd L = tf_loadings(lam);
   Eigen::MatrixXd Psi(2, 2);
   Psi << pd, po, po, pd;
   Eigen::MatrixXd S = L * Psi * L.transpose();
@@ -352,6 +359,95 @@ TEST_CASE("mean structure: single-block path errors, directing to the grouped pa
                                            ef::NonIterativeEstimator::Guttman,
                                            rf::Discrepancy::NTML);
   CHECK_FALSE(inf.has_value());  // single-block SEs would omit the intercept block
+}
+
+TEST_CASE("scalar invariance: recovers latent means and W ~ 0 under true scalar") {
+  // Equal loadings, equal intercepts ν; group-2 differs only in its latent mean
+  // α_2, so m_2 = ν + Λ α_2 lies in ν + col(Λ) and the mean residual d_2 = 0.
+  auto b = build_mg(kTwoFactor, 2, {}, /*means=*/true);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+
+  const Eigen::MatrixXd L = tf_loadings(kLam);
+  Eigen::VectorXd alpha2(2);
+  alpha2 << 0.5, -0.3;
+  const Eigen::VectorXd nu = mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.2, 0.25, 0.6)};
+  samp.mean = {nu, nu + L * alpha2};  // m_1 = ν (α_1=0), m_2 = ν + Λ α_2
+  samp.n_obs = {500, 600};
+
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                   ef::NonIterativeEstimator::Guttman,
+                                                   rf::Discrepancy::NTML);
+  REQUIRE_OK(inf);
+  auto sc = rf::noniterative_scalar_invariance(b.pt, b.rep, *inf);
+  REQUIRE_OK(sc);
+
+  CHECK(sc->df == 1 * (6 - 2));               // (G-1)(p - #factors) = 4
+  CHECK(sc->rank == sc->df);
+  CHECK(sc->W < 1e-8);                        // d_2 = 0 exactly on the population
+  CHECK(sc->groups.size() == 1);
+  CHECK(sc->alpha.size() == 1);
+  // Recovered α_2 = (Λ'Λ)⁻¹Λ'(m_2 − m_1) = α_2 exactly.
+  CHECK((sc->alpha[0] - alpha2).cwiseAbs().maxCoeff() < 1e-9);
+  // Common intercept ν = m_1 (reference).
+  CHECK((sc->nu - nu).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK(sc->alpha_se[0].minCoeff() > 0.0);    // finite delta-method SEs
+  CHECK(sc->p_value == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+TEST_CASE("scalar invariance: W > 0 when an intercept deviates off col(Lambda)") {
+  auto b = build_mg(kTwoFactor, 2, {}, /*means=*/true);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+
+  const Eigen::MatrixXd L = tf_loadings(kLam);
+  Eigen::VectorXd alpha2(2);
+  alpha2 << 0.5, -0.3;
+  const Eigen::VectorXd nu = mk_mean({1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+  // eps ⟂ col(Λ): dot with each loading column is 0, so d_2 = (I−P) eps = eps.
+  Eigen::VectorXd eps(6);
+  eps << 0.6, 0.0, -0.5, 0.0, 0.0, 0.0;  // 1*0.6 + 1.2*(-0.5) = 0 against col f1
+  REQUIRE(std::abs((L.transpose() * eps).cwiseAbs().maxCoeff()) < 1e-12);
+
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.2, 0.25, 0.6)};
+  samp.mean = {nu, nu + L * alpha2 + eps};  // scalar violated in the ⟂ direction
+  samp.n_obs = {500, 600};
+
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                   ef::NonIterativeEstimator::Guttman,
+                                                   rf::Discrepancy::NTML);
+  REQUIRE_OK(inf);
+  auto sc = rf::noniterative_scalar_invariance(b.pt, b.rep, *inf);
+  REQUIRE_OK(sc);
+
+  CHECK(sc->W > 20.0);  // a clear violation at N = 500/600
+  CHECK((sc->d_stacked - eps).cwiseAbs().maxCoeff() < 1e-9);  // d_2 = eps
+  CHECK(sc->p_value < 1e-3);
+}
+
+TEST_CASE("scalar invariance: errors on a covariance-only model") {
+  auto b = build_mg(kTwoFactor, 2);  // no mean structure
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
+  samp.n_obs = {500, 600};
+  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                   ef::NonIterativeEstimator::Guttman,
+                                                   rf::Discrepancy::NTML);
+  REQUIRE_OK(inf);
+  auto sc = rf::noniterative_scalar_invariance(b.pt, b.rep, *inf);
+  CHECK_FALSE(sc.has_value());
 }
 
 TEST_CASE("grouped inference reduces to single-block inference at G=1") {
