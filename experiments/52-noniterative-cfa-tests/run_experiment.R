@@ -1,0 +1,521 @@
+#!/usr/bin/env Rscript
+
+# Finite-sample validation of residual-based delta-method inference for the
+# closed-form (non-iterative) Guttman CFA estimator, against magmaan's own ML.
+#
+# The machinery under test (estimate::frontier / robust::frontier, exposed as
+# magmaan_core$noniterative_cfa_{fit,inference,wald,difference}_impl) gives any
+# closed-form sigma -> theta CFA estimator three post-fit outputs: delta-method
+# standard errors, a residual goodness-of-fit test, and a difference / pseudo-LRT
+# test. This experiment asks whether those outputs are calibrated in finite
+# samples, and at what efficiency cost relative to ML, across three data
+# generators sharing one 3-factor CFA population:
+#
+#   normal   -- multivariate normal (NT Gamma is correct).
+#   ig       -- Foldnes-Olsson independent generator, non-normal continuous with
+#               the covariance held exactly at the model-implied Sigma.
+#   ordinal  -- five-category ordinal codes, Pearson-calibrated so the observed
+#               covariance is an exact 3-factor model (a diagonal rescaling of a
+#               factor model is a factor model), then treated as continuous.
+#
+# Because every generator holds the CFA exactly (correct spec), goodness-of-fit
+# and coverage measure Type-I / nominal calibration; a second misspecified arm
+# (one omitted cross-loading in the population) measures GOF power.
+#
+# The message the design is built to expose: the delta-method inference is
+# calibrated on all three generators *when the empirical Gamma is used*; the
+# normal-theory Gamma is calibrated only under normality. This is the ULS/NTML,
+# residual-GOF analogue of the well-known Satorra-Bentler robustness story, and
+# it mirrors the Dhaene-Rosseel (2024) continuous closed-form CFA setup.
+
+suppressWarnings(suppressMessages(library(magmaan)))
+source(file.path(
+  dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
+  "..", "_support", "R", "helpers.R"
+))
+
+core <- magmaan::magmaan_core
+
+# ---------------------------------------------------------------------------
+# Arguments
+# ---------------------------------------------------------------------------
+
+usage <- function() {
+  cat(
+    "Usage: Rscript run_experiment.R [options]\n\n",
+    "Validate delta-method SE / GOF / difference-test calibration for the\n",
+    "closed-form Guttman CFA estimator against magmaan ML.\n\n",
+    "Options:\n",
+    "  --smoke            One quick slice (n=250, reps=40, normal+ordinal). Default.\n",
+    "  --full             Full generator x n grid at --reps replications.\n",
+    "  --reps N           Replications per cell (full). Default: 1000.\n",
+    "  --n LIST           Comma-separated sample sizes. Default: 100,250,500,1000.\n",
+    "  --generators LIST  Subset of normal,ig,ordinal. Default: all.\n",
+    "  --specs LIST       Subset of correct,misspec. Default: both.\n",
+    "  --ref-n N          Reference draw for the ordinal population target. Default: 200000.\n",
+    "  --alpha X          Test level for rejection / coverage. Default: 0.05.\n",
+    "  --cores N          mclapply cores. Default: detectCores()-1.\n",
+    "  --seed-base N      Base seed. Default: 20260704.\n",
+    "  --results-dir PATH Output directory. Default: results.\n",
+    "  --help             Show this help.\n",
+    sep = ""
+  )
+}
+
+parse_args <- function(args) {
+  opts <- list(
+    smoke = TRUE, full = FALSE,
+    reps = 1000L,
+    n = c(100L, 250L, 500L, 1000L),
+    generators = c("normal", "ig", "ordinal"),
+    specs = c("correct", "misspec"),
+    ref_n = 200000L,
+    alpha = 0.05,
+    cores = max(1L, parallel::detectCores() - 1L),
+    seed_base = 20260704L,
+    results_dir = experiment_path("results")
+  )
+  i <- 1L
+  explicit <- character(0)
+  take <- function() {
+    i <<- i + 1L
+    if (i > length(args)) stop("missing value for ", args[[i - 1L]], call. = FALSE)
+    args[[i]]
+  }
+  while (i <= length(args)) {
+    a <- args[[i]]
+    if (a == "--help") { usage(); quit(status = 0) }
+    else if (a == "--smoke") { opts$smoke <- TRUE; opts$full <- FALSE }
+    else if (a == "--full") { opts$full <- TRUE; opts$smoke <- FALSE }
+    else if (a == "--reps") { opts$reps <- as.integer(take()); explicit <- c(explicit, "reps") }
+    else if (a == "--n") { opts$n <- as.integer(parse_csv_arg(take())); explicit <- c(explicit, "n") }
+    else if (a == "--generators") { opts$generators <- parse_csv_arg(take()); explicit <- c(explicit, "generators") }
+    else if (a == "--specs") { opts$specs <- parse_csv_arg(take()); explicit <- c(explicit, "specs") }
+    else if (a == "--ref-n") { opts$ref_n <- as.integer(take()); explicit <- c(explicit, "ref_n") }
+    else if (a == "--alpha") opts$alpha <- as.numeric(take())
+    else if (a == "--cores") opts$cores <- as.integer(take())
+    else if (a == "--seed-base") opts$seed_base <- as.integer(take())
+    else if (a == "--results-dir") opts$results_dir <- take()
+    else stop("unknown option: ", a, call. = FALSE)
+    i <- i + 1L
+  }
+  opts$explicit <- explicit
+  bad <- setdiff(opts$generators, c("normal", "ig", "ordinal"))
+  if (length(bad)) stop("unknown generators: ", paste(bad, collapse = ","), call. = FALSE)
+  bad <- setdiff(opts$specs, c("correct", "misspec"))
+  if (length(bad)) stop("unknown specs: ", paste(bad, collapse = ","), call. = FALSE)
+  opts
+}
+
+opts <- parse_args(commandArgs(TRUE))
+set_single_threaded_math()
+
+# Smoke mode fills only the fields the user did not set explicitly, so an
+# individual override (e.g. --generators ig) still exercises that path quickly.
+if (isTRUE(opts$smoke)) {
+  if (!"reps" %in% opts$explicit) opts$reps <- 40L
+  if (!"n" %in% opts$explicit) opts$n <- 250L
+  if (!"generators" %in% opts$explicit) opts$generators <- c("normal", "ordinal")
+  if (!"ref_n" %in% opts$explicit) opts$ref_n <- 40000L
+}
+dir.create(opts$results_dir, recursive = TRUE, showWarnings = FALSE)
+z_crit <- stats::qnorm(1 - opts$alpha / 2)
+
+# ---------------------------------------------------------------------------
+# Population: three correlated factors, simple structure, one factor pair
+# (f1,f3) uncorrelated so `f1 ~~ 0*f3` is a true restriction for the difference
+# test. Misspec adds an omitted cross-loading x4 ~ f1 to the DGP only.
+# ---------------------------------------------------------------------------
+
+factors <- c("f1", "f2", "f3")
+ov <- paste0("x", 1:9)
+factor_of <- rep(1:3, each = 3)          # indicator -> factor
+lambda_free <- c(0.9, 0.8)               # non-marker loadings per factor
+lambda_all <- rep(c(1.0, 0.9, 0.8), 3)   # incl markers, indicator order
+reliability <- 0.7
+cross_load <- 0.35                        # misspec: x4 also loads on f1
+
+model_h1 <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9\n"
+model_h0 <- paste0(model_h1, "f1 ~~ 0*f3\n")
+
+make_population <- function(spec) {
+  L <- matrix(0, 9, 3)
+  L[cbind(1:9, factor_of)] <- lambda_all
+  Phi <- matrix(c(1, .3, 0,
+                  .3, 1, .3,
+                  0, .3, 1), 3, 3, byrow = TRUE)
+  theta <- lambda_all^2 * (1 - reliability) / reliability
+  Ldgp <- L
+  if (identical(spec, "misspec")) Ldgp[4, 1] <- cross_load
+  Sigma <- Ldgp %*% Phi %*% t(Ldgp) + diag(theta, 9)
+  if (min(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8) {
+    stop("population covariance not PD for spec=", spec, call. = FALSE)
+  }
+  dimnames(Sigma) <- list(ov, ov)
+  list(Sigma = Sigma, Lambda = L, Phi = Phi, theta = theta, spec = spec)
+}
+
+# ---------------------------------------------------------------------------
+# Parameter bookkeeping: map each free partable row to its analysis target and
+# a reporting group. Guttman and ML both lavaanify `model_h1`, so they share the
+# free-index layout captured here.
+# ---------------------------------------------------------------------------
+
+pt_h1 <- core$lavaan_lavaanify(model_h1)
+pt_h0 <- core$lavaan_lavaanify(model_h0)
+free_rows <- which(pt_h1$free > 0)
+free_idx <- pt_h1$free[free_rows]
+stopifnot(identical(sort(free_idx), seq_along(free_idx)))
+
+param_group <- vapply(free_rows, function(r) {
+  op <- pt_h1$op[r]; lhs <- pt_h1$lhs[r]; rhs <- pt_h1$rhs[r]
+  if (op == "=~") "loadings"
+  else if (op == "~~" && lhs %in% factors && rhs %in% factors) "factor_cov"
+  else "residual"
+}, character(1))
+
+group_levels <- c("loadings", "factor_cov", "residual", "all")
+
+# analysis target theta for the on-model (correct) population, keyed by free row.
+target_correct <- (function() {
+  pop <- make_population("correct")
+  vapply(free_rows, function(r) {
+    op <- pt_h1$op[r]; lhs <- pt_h1$lhs[r]; rhs <- pt_h1$rhs[r]
+    if (op == "=~") {
+      pop$Lambda[as.integer(sub("x", "", rhs)), match(lhs, factors)]
+    } else if (lhs %in% factors && rhs %in% factors) {
+      pop$Phi[match(lhs, factors), match(rhs, factors)]
+    } else {
+      pop$theta[as.integer(sub("x", "", lhs))]
+    }
+  }, numeric(1))
+})()
+
+# ---------------------------------------------------------------------------
+# Generators. Each (generator, spec) is calibrated once; per-cell draws are
+# batched for ig/ordinal and drawn per-replicate for normal. The population
+# target theta for coverage/risk is the Guttman map of the population covariance
+# (= ML on-model): Sigma for normal/ig, the reference-draw covariance for the
+# rescaled ordinal covariance.
+# ---------------------------------------------------------------------------
+
+# Asymmetric five-category thresholds: the codes are right-skewed with a floor,
+# so the treated-as-continuous fourth moments are genuinely non-normal. This is
+# what makes the empirical Gamma matter on the ordinal arm (symmetric categories
+# are too near-normal to stress the normal-theory Gamma).
+ordinal_probs <- {
+  tau <- c(-0.5, 0.2, 0.8, 1.5)
+  diff(c(0, stats::pnorm(tau), 1))
+}
+
+calibrate_generator <- function(generator, spec) {
+  pop <- make_population(spec)
+  Sigma <- pop$Sigma
+  if (generator == "normal") {
+    return(list(pop = pop, kind = "normal", chol = chol(Sigma)))
+  }
+  if (generator == "ig") {
+    cal <- core$sim_ig_calibrate(
+      Sigma,
+      target_skewness = rep(2, 9),
+      target_excess_kurtosis = rep(7, 9),
+      root = "symmetric", generator_family = "pearson")
+    return(list(pop = pop, kind = "ig", cal = cal))
+  }
+  # ordinal: Pearson-calibrate the latent so observed code correlation = cov2cor(Sigma)
+  marginals <- stats::setNames(rep(list(ordinal_probs), 9), ov)
+  cal <- core$sim_ordcorr_calibrate(
+    stats::cov2cor(Sigma), marginals, metric = "pearson_codes")
+  err <- max(abs(cal$achieved_corr - stats::cov2cor(Sigma)))
+  if (err > 5e-3) {
+    warning(sprintf("ordinal calibration (%s): max achieved-corr error %.4g", spec, err))
+  }
+  list(pop = pop, kind = "ordinal", cal = cal, calib_err = err)
+}
+
+# Draw a batch of `reps` datasets for one cell; returns a function idx -> matrix.
+batch_sampler <- function(gcal, n, reps, seed) {
+  if (gcal$kind == "normal") {
+    return(function(i) {
+      set.seed(seed + i)
+      X <- matrix(stats::rnorm(n * 9), n, 9) %*% gcal$chol
+      colnames(X) <- ov; X
+    })
+  }
+  if (gcal$kind == "ig") {
+    batch <- core$sim_ig_draw(gcal$cal, n = n, reps = reps, seed_base = seed)
+    return(function(i) { X <- batch$draws[[i]]; colnames(X) <- ov; X })
+  }
+  batch <- core$sim_ordcorr_draw(gcal$cal, n = n, reps = reps, seed_base = seed)
+  function(i) {
+    X <- matrix(as.numeric(batch$draws[[i]]$X), nrow = n)
+    colnames(X) <- ov; X
+  }
+}
+
+# Population target theta for a (generator, spec): Guttman map of the population
+# covariance (= ML on-model). For normal/ig this is Sigma exactly; for ordinal
+# we take a large reference draw's covariance (the rescaled-but-exact factor
+# covariance of the treated-as-continuous codes).
+population_target <- function(gcal, seed) {
+  if (gcal$kind %in% c("normal", "ig")) {
+    Spop <- gcal$pop$Sigma
+  } else {
+    draw <- batch_sampler(gcal, opts$ref_n, 1L, seed)(1L)
+    Spop <- stats::cov(draw)
+    dimnames(Spop) <- list(ov, ov)
+  }
+  gfit <- tryCatch(
+    core$noniterative_cfa_fit_impl(pt_h1, list(S = Spop, nobs = opts$ref_n), "guttman"),
+    error = function(e) NULL)
+  theta <- if (is.null(gfit)) rep(NA_real_, length(free_idx)) else gfit$theta[free_idx]
+  list(Spop = Spop, theta = theta)
+}
+
+# ---------------------------------------------------------------------------
+# Metric layout. Each replicate returns a fixed-name numeric vector so a cell is
+# aggregated with colMeans(na.rm). Coverage / risk / difference metrics are only
+# defined under the correct spec (where the analysis target is the estimand);
+# GOF rejection is recorded under both (Type-I under correct, power under misspec).
+# ---------------------------------------------------------------------------
+
+se_variants   <- c("g_ntml_nt", "g_ntml_emp", "g_uls_nt", "g_uls_emp", "ml_nt", "ml_rob")
+gof_variants  <- c("g_ntml_nt", "g_ntml_emp", "g_uls_nt", "g_uls_emp")
+gof_ptypes    <- c("scaled", "meanvar", "scaled_shifted", "mixture")
+ml_gof_ptypes <- c("nt", "sb", "mv", "ss")
+diff_variants <- c("ntml_nt", "ntml_emp")
+diff_ptypes   <- c("scaled", "mixture")
+estimators    <- c("guttman", "ml")
+
+metric_names <- c(
+  as.vector(outer(se_variants, group_levels, function(v, g) paste0("cov_", v, "_", g))),
+  as.vector(outer(estimators, group_levels, function(e, g) paste0("mse_", e, "_", g))),
+  as.vector(outer(gof_variants, gof_ptypes, function(v, p) paste0("rej_", v, "_", p))),
+  paste0("rej_ml_", ml_gof_ptypes),
+  as.vector(outer(diff_variants, diff_ptypes, function(v, p) paste0("rej_diff_", v, "_", p))),
+  paste0("gofT_", gof_variants),
+  "conv_guttman", "conv_ml"
+)
+
+group_reduce <- function(vals) {
+  c(loadings   = mean(vals[param_group == "loadings"]),
+    factor_cov = mean(vals[param_group == "factor_cov"]),
+    residual   = mean(vals[param_group == "residual"]),
+    all        = mean(vals))
+}
+
+worker <- function(i, sampler, target, spec) {
+  out <- stats::setNames(rep(NA_real_, length(metric_names)), metric_names)
+  X <- tryCatch(sampler(i), error = function(e) NULL)
+  if (is.null(X)) return(out)
+  Xdf <- as.data.frame(X)
+  ss <- tryCatch(core$data_sample_stats_from_raw(list(X)), error = function(e) NULL)
+  if (is.null(ss)) return(out)
+
+  ## Guttman closed-form fit
+  gfit <- tryCatch(core$noniterative_cfa_fit_impl(pt_h1, ss, "guttman"),
+                   error = function(e) NULL)
+  out["conv_guttman"] <- as.numeric(!is.null(gfit))
+  if (!is.null(gfit)) {
+    est_g <- gfit$theta[free_idx]
+    infs <- list(
+      g_ntml_nt  = tryCatch(core$noniterative_cfa_inference_impl(gfit, "guttman", "ntml", "nt", NULL), error = function(e) NULL),
+      g_ntml_emp = tryCatch(core$noniterative_cfa_inference_impl(gfit, "guttman", "ntml", "empirical", X), error = function(e) NULL),
+      g_uls_nt   = tryCatch(core$noniterative_cfa_inference_impl(gfit, "guttman", "uls", "nt", NULL), error = function(e) NULL),
+      g_uls_emp  = tryCatch(core$noniterative_cfa_inference_impl(gfit, "guttman", "uls", "empirical", X), error = function(e) NULL))
+    for (v in names(infs)) {
+      inf <- infs[[v]]
+      if (is.null(inf)) next
+      out[paste0("gofT_", v)] <- inf$T
+      pv <- c(scaled = inf$p_scaled, meanvar = inf$p_meanvar,
+              scaled_shifted = inf$p_scaled_shifted, mixture = inf$p_mixture)
+      for (p in gof_ptypes) out[paste0("rej_", v, "_", p)] <- as.numeric(pv[[p]] < opts$alpha)
+      if (identical(spec, "correct")) {
+        ci <- as.numeric(abs(est_g - target) <= z_crit * inf$se[free_idx])
+        gr <- group_reduce(ci)
+        for (g in group_levels) out[paste0("cov_", v, "_", g)] <- gr[[g]]
+      }
+    }
+    if (identical(spec, "correct")) {
+      gr <- group_reduce((est_g - target)^2)
+      for (g in group_levels) out[paste0("mse_guttman_", g)] <- gr[[g]]
+      g0 <- tryCatch(core$noniterative_cfa_fit_impl(pt_h0, ss, "guttman"), error = function(e) NULL)
+      if (!is.null(g0)) {
+        dtests <- list(
+          ntml_nt  = tryCatch(core$noniterative_cfa_difference_impl(g0, gfit, 1L, "guttman", "ntml", "nt", NULL, NULL), error = function(e) NULL),
+          ntml_emp = tryCatch(core$noniterative_cfa_difference_impl(g0, gfit, 1L, "guttman", "ntml", "empirical", X, X), error = function(e) NULL))
+        for (dv in names(dtests)) {
+          d <- dtests[[dv]]
+          if (is.null(d)) next
+          out[paste0("rej_diff_", dv, "_scaled")]  <- as.numeric(d$p_scaled < opts$alpha)
+          out[paste0("rej_diff_", dv, "_mixture")] <- as.numeric(d$p_mixture < opts$alpha)
+        }
+      }
+    }
+  }
+
+  ## ML reference (magmaan's own iterative fit)
+  mlfit <- tryCatch(suppressMessages(magmaan::magmaan(model_h1, Xdf, estimator = "ML")),
+                    error = function(e) NULL)
+  ok_ml <- !is.null(mlfit) && isTRUE(mlfit$converged)
+  out["conv_ml"] <- as.numeric(ok_ml)
+  if (ok_ml) {
+    est_m <- mlfit$partable$est[free_rows]
+    if (identical(spec, "correct")) {
+      se_nt <- tryCatch(sqrt(diag(stats::vcov(mlfit, regime = "model", data = Xdf)))[free_idx],
+                        error = function(e) rep(NA_real_, length(free_idx)))
+      se_rb <- tryCatch(sqrt(diag(stats::vcov(mlfit, regime = "robust", data = Xdf)))[free_idx],
+                        error = function(e) rep(NA_real_, length(free_idx)))
+      for (vv in c("ml_nt", "ml_rob")) {
+        se <- if (vv == "ml_nt") se_nt else se_rb
+        gr <- group_reduce(as.numeric(abs(est_m - target) <= z_crit * se))
+        for (g in group_levels) out[paste0("cov_", vv, "_", g)] <- gr[[g]]
+      }
+      gr <- group_reduce((est_m - target)^2)
+      for (g in group_levels) out[paste0("mse_ml_", g)] <- gr[[g]]
+    }
+    fm <- tryCatch(magmaan::fit_measures(mlfit), error = function(e) NULL)
+    if (!is.null(fm)) out["rej_ml_nt"] <- as.numeric(fm[["pvalue"]] < opts$alpha)
+    ft <- tryCatch(magmaan::fmg_tests(mlfit, data = Xdf, tests = c("sb", "mv", "ss")),
+                   error = function(e) NULL)
+    if (!is.null(ft)) {
+      pget <- function(pre) {
+        idx <- grep(paste0("^", pre), ft$label)
+        if (length(idx)) ft$p_value[idx[1]] else NA_real_
+      }
+      out["rej_ml_sb"] <- as.numeric(pget("sb") < opts$alpha)
+      out["rej_ml_mv"] <- as.numeric(pget("mv") < opts$alpha)
+      out["rej_ml_ss"] <- as.numeric(pget("ss") < opts$alpha)
+    }
+  }
+  out
+}
+
+# ---------------------------------------------------------------------------
+# Startup validation: Guttman and ML share the free-index layout, and the
+# Guttman map of Sigma reproduces the analysis target on-model.
+# ---------------------------------------------------------------------------
+
+local({
+  pop <- make_population("correct")
+  gt <- core$noniterative_cfa_fit_impl(pt_h1, list(S = pop$Sigma, nobs = 1000L), "guttman")$theta[free_idx]
+  if (max(abs(gt - target_correct)) > 1e-6) {
+    stop("Guttman(Sigma) does not reproduce the analysis target (max err ",
+         signif(max(abs(gt - target_correct)), 3), ")", call. = FALSE)
+  }
+  X <- matrix(stats::rnorm(500 * 9), 500, 9) %*% chol(pop$Sigma); colnames(X) <- ov
+  ml <- suppressMessages(magmaan::magmaan(model_h1, as.data.frame(X), estimator = "ML"))
+  if (!identical(as.integer(ml$partable$free), as.integer(pt_h1$free))) {
+    stop("ML partable free-index layout differs from lavaanify(model_h1)", call. = FALSE)
+  }
+})
+
+# ---------------------------------------------------------------------------
+# Run the grid.
+# ---------------------------------------------------------------------------
+
+design <- expand.grid(generator = opts$generators, spec = opts$specs, n = opts$n,
+                      stringsAsFactors = FALSE)
+design <- design[order(design$generator, design$spec, design$n), ]
+
+message(sprintf("Grid: %d cells (%s) x n(%s) x spec(%s); reps=%d cores=%d",
+                nrow(design), paste(opts$generators, collapse = ","),
+                paste(opts$n, collapse = ","), paste(opts$specs, collapse = ","),
+                opts$reps, opts$cores))
+
+gen_cache <- new.env(parent = emptyenv())
+gen_setup <- function(generator, spec, gi, si) {
+  key <- paste(generator, spec, sep = "|")
+  if (!is.null(gen_cache[[key]])) return(gen_cache[[key]])
+  message(sprintf("  calibrating %s / %s ...", generator, spec))
+  gcal <- calibrate_generator(generator, spec)
+  tgt <- population_target(gcal, opts$seed_base + gi * 1000003L + si * 300007L + 777L)
+  setup <- list(gcal = gcal, target = tgt$theta,
+                calib_err = if (is.null(gcal$calib_err)) NA_real_ else gcal$calib_err)
+  gen_cache[[key]] <- setup
+  setup
+}
+
+cov_rows <- list(); mse_rows <- list(); gof_rows <- list()
+diff_rows <- list(); diag_rows <- list()
+push <- function(lst, row) { lst[[length(lst) + 1L]] <- row; lst }
+
+t_start <- proc.time()[["elapsed"]]
+for (ci in seq_len(nrow(design))) {
+  generator <- design$generator[ci]; spec <- design$spec[ci]; n <- design$n[ci]
+  gi <- match(generator, c("normal", "ig", "ordinal"))
+  si <- match(spec, c("correct", "misspec"))
+  setup <- gen_setup(generator, spec, gi, si)
+  cell_seed <- opts$seed_base + gi * 1000003L + si * 300007L + n * 101L
+  sampler <- batch_sampler(setup$gcal, n, opts$reps, cell_seed)
+
+  message(sprintf("[%d/%d] %s / %s / n=%d ...", ci, nrow(design), generator, spec, n))
+  res <- parallel::mclapply(seq_len(opts$reps), function(i)
+    worker(i, sampler, setup$target, spec),
+    mc.cores = opts$cores, mc.preschedule = TRUE)
+  ok <- vapply(res, function(r) is.numeric(r) && length(r) == length(metric_names), logical(1))
+  M <- do.call(rbind, res[ok])
+  cm <- colMeans(M, na.rm = TRUE)
+  base <- list(generator = generator, spec = spec, n = n, reps = sum(ok))
+
+  for (v in se_variants) for (g in group_levels)
+    cov_rows <- push(cov_rows, data.frame(base, variant = v, group = g,
+                                          coverage = cm[[paste0("cov_", v, "_", g)]]))
+  for (e in estimators) for (g in group_levels) {
+    mse <- cm[[paste0("mse_", e, "_", g)]]
+    mse_rows <- push(mse_rows, data.frame(base, estimator = e, group = g,
+                                          mse = mse, rmse = sqrt(mse)))
+  }
+  for (v in gof_variants) for (p in gof_ptypes)
+    gof_rows <- push(gof_rows, data.frame(base, variant = v, ptype = p,
+                                          reject_rate = cm[[paste0("rej_", v, "_", p)]]))
+  for (p in ml_gof_ptypes)
+    gof_rows <- push(gof_rows, data.frame(base, variant = "ml", ptype = p,
+                                          reject_rate = cm[[paste0("rej_ml_", p)]]))
+  for (dv in diff_variants) for (p in diff_ptypes)
+    diff_rows <- push(diff_rows, data.frame(base, variant = dv, ptype = p,
+                                            reject_rate = cm[[paste0("rej_diff_", dv, "_", p)]]))
+  diag_rows <- push(diag_rows, data.frame(
+    base,
+    conv_guttman = cm[["conv_guttman"]], conv_ml = cm[["conv_ml"]],
+    gofT_ntml_nt = cm[["gofT_g_ntml_nt"]], gofT_uls_emp = cm[["gofT_g_uls_emp"]],
+    calib_err = setup$calib_err))
+
+  el <- proc.time()[["elapsed"]] - t_start
+  message(sprintf("    done (%.0fs elapsed, conv guttman=%.3f ml=%.3f)",
+                  el, cm[["conv_guttman"]], cm[["conv_ml"]]))
+}
+
+# ---------------------------------------------------------------------------
+# Write outputs.
+# ---------------------------------------------------------------------------
+
+coverage   <- do.call(rbind, cov_rows)
+risk       <- do.call(rbind, mse_rows)
+gof        <- do.call(rbind, gof_rows)
+difftest   <- do.call(rbind, diff_rows)
+diagnostics <- do.call(rbind, diag_rows)
+
+paths <- c(
+  coverage   = file.path(opts$results_dir, "coverage.csv"),
+  risk       = file.path(opts$results_dir, "risk.csv"),
+  gof        = file.path(opts$results_dir, "gof.csv"),
+  difftest   = file.path(opts$results_dir, "difftest.csv"),
+  diagnostics = file.path(opts$results_dir, "diagnostics.csv"))
+write_csv(coverage, paths[["coverage"]])
+write_csv(risk, paths[["risk"]])
+write_csv(gof, paths[["gof"]])
+write_csv(difftest, paths[["difftest"]])
+write_csv(diagnostics, paths[["diagnostics"]])
+
+meta <- metadata_frame(
+  values = list(
+    mode = if (opts$smoke) "smoke" else "full",
+    reps = opts$reps, n = opts$n, generators = opts$generators, specs = opts$specs,
+    ref_n = opts$ref_n, alpha = opts$alpha, seed_base = opts$seed_base,
+    cores = opts$cores, reliability = reliability, cross_load = cross_load),
+  packages = "magmaan")
+meta_path <- file.path(opts$results_dir, "metadata.csv")
+write_csv(meta, meta_path)
+
+cat("Wrote:\n"); for (p in c(paths, metadata = meta_path)) cat("  ", p, "\n", sep = "")

@@ -176,8 +176,11 @@ golden `parTable()` fixtures.
   empirical Gamma), plus delta-method SEs `Omega = J Gamma J'/N`; `noniterative_
   wald` and `noniterative_difference_test` are the nested tests. R surface:
   `magmaan_core$noniterative_cfa_{fit,inference,wald,difference}_impl`. Theory in
-  `docs/research/notes/noniterative_cfa_tests.tex`; validation experiment (52)
-  is pending.
+  `docs/research/notes/noniterative_cfa_tests.tex`; validated by
+  `experiments/52-noniterative-cfa-tests` (empirical Gamma calibrated across
+  normal / independent-component / ordinal-as-continuous generators, NT Gamma
+  asymptotically miscalibrated on non-normal data, GOF power near 1, Guttman
+  RMSE a few percent over ML).
 - Frontier empirical reduced-bias estimation (2026-06) implements the
   Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
   moment-quadratic family. The C++ surface covers

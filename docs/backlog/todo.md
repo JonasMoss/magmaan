@@ -2137,10 +2137,14 @@ work until a concrete downstream consumer appears.
 - **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
   GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
   1952, delta-method via the FD map Jacobian; notes
-  `noniterative_cfa_tests.tex` + `guttman_cfa_asymptotics.tex`). **Remaining:**
-  the validation sim (**experiment 52**, not yet built) — SE coverage + GOF/LRT
-  Type-I vs magmaan ML across normal / independent-component / categorical
-  (ordinal-as-continuous) generators, roughly the Dhaene-Rosseel 2024 design,
-  reusing experiment 40's population + risk decomposition. Later slots for the
-  enum: FABIN2/Bentler/James-Stein/MIIV maps (loadings producers already exist)
-  and a polychoric-ADF Gamma path.
+  `noniterative_cfa_tests.tex` + `guttman_cfa_asymptotics.tex`).
+  **Validated** by `experiments/52-noniterative-cfa-tests` (SE coverage + GOF /
+  difference-test Type-I / power vs magmaan ML across normal / independent-
+  component / ordinal-as-continuous generators, Dhaene-Rosseel 2024 style): the
+  headline is that the empirical Gamma is calibrated everywhere while the
+  normal-theory Gamma gives *asymptotically* wrong SEs on non-normal data
+  (coverage flat at ~0.79 on the independent generator), tracking robust ML;
+  the residual GOF brackets nominal (NT over-rejects, empirical conservative at
+  small N) with near-full power; Guttman's RMSE runs a few percent over ML.
+  Later slots for the enum: FABIN2/Bentler/James-Stein/MIIV maps (loadings
+  producers already exist) and a polychoric-ADF Gamma path.

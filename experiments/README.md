@@ -67,6 +67,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 49 | [ordinal-polychoric-omega-coverage](49-ordinal-polychoric-omega-coverage/report.qmd) | probe | active | Does the robust delta interval for no-integration ordinal polychoric omega cover its latent-response target across small-N balanced and threshold-extreme ordinal cells? |
 | 50 | [ordinal-polychoric-omega-stress](50-ordinal-polychoric-omega-stress/report.qmd) | probe | active | Under nonnormal or locally dependent ordinal data, does the robust delta interval for no-integration ordinal polychoric omega cover the pseudo-true polychoric target? |
 | 51 | [sam-efficiency-stability](51-sam-efficiency-stability/report.qmd) | benchmark | active | Under normal, native independent-generator, and pseudo-continuous ordinal stress data, how do local SAM and joint ML compare on SE calibration, failures, and runtime at small N? |
+| 52 | [noniterative-cfa-tests](52-noniterative-cfa-tests/report.qmd) | benchmark | active | Are delta-method SEs, residual goodness-of-fit, and difference tests for the closed-form Guttman CFA estimator calibrated in finite samples, and at what efficiency cost vs ML, across normal / independent-generator / ordinal-as-continuous data? |
 
 ## Archived
 
