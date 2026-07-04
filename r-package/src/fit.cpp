@@ -7865,3 +7865,126 @@ Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, in
       Rcpp::_["eigenvalues"] = Rcpp::wrap(d->eigenvalues),
       Rcpp::_["warnings"] = Rcpp::wrap(d->warnings));
 }
+
+// ---------------------------------------------------------------------------
+// Grouped (multi-group / mean-structure) inference, linearly-constrained fits
+// (measurement invariance), and the reference-group scalar-invariance map.
+// ---------------------------------------------------------------------------
+namespace {
+
+magmaan::post_expected<magmaan::robust::frontier::GroupedNonIterativeInference>
+noniter_grouped_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
+                         magmaan::estimate::frontier::NonIterativeEstimator which,
+                         magmaan::robust::frontier::Discrepancy disc,
+                         const std::string& gamma, SEXP data) {
+  namespace rf = magmaan::robust::frontier;
+  const std::string g = noniter_lower(gamma);
+  if (g == "nt" || g == "normal" || g == "normal.theory" || g == "normaltheory")
+    return rf::noniterative_inference_grouped_nt(ctx.pt, ctx.rep, ctx.samp, est.theta,
+                                                 which, disc);
+  if (g == "empirical" || g == "adf" || g == "sandwich") {
+    if (Rf_isNull(data)) Rcpp::stop("magmaan: empirical Gamma requires raw `data`");
+    magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, data);
+    return rf::noniterative_inference_grouped_empirical(ctx.pt, ctx.rep, ctx.samp, raw,
+                                                        est.theta, which, disc);
+  }
+  Rcpp::stop("magmaan: unknown gamma '%s' (accepted: nt, empirical)", gamma.c_str());
+}
+
+Rcpp::List
+wrap_noniter_grouped(const magmaan::robust::frontier::GroupedNonIterativeInference& inf) {
+  return Rcpp::List::create(
+      Rcpp::_["se"] = Rcpp::wrap(inf.se),
+      Rcpp::_["vcov"] = Rcpp::wrap(inf.Omega),
+      Rcpp::_["T"] = inf.T_gof,
+      Rcpp::_["df"] = inf.df,
+      Rcpp::_["scale_c"] = inf.scale_c,
+      Rcpp::_["p_scaled"] = inf.p_scaled,
+      Rcpp::_["p_meanvar"] = inf.p_meanvar,
+      Rcpp::_["p_scaled_shifted"] = inf.p_scaled_shifted,
+      Rcpp::_["p_mixture"] = inf.p_mixture,
+      Rcpp::_["rls_check"] = inf.rls_check,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(inf.gof_eigenvalues),
+      Rcpp::_["block_of_param"] = Rcpp::wrap(inf.block_of_param),
+      Rcpp::_["warnings"] = Rcpp::wrap(inf.warnings));
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_grouped_inference_impl(Rcpp::List fit,
+                                                   std::string estimator = "guttman",
+                                                   std::string discrepancy = "uls",
+                                                   std::string gamma = "nt",
+                                                   SEXP data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which(estimator),
+                                      noniter_disc(discrepancy), gamma, data);
+  if (!inf.has_value()) stop_post(inf.error());
+  return wrap_noniter_grouped(*inf);
+}
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit,
+                                             std::string estimator = "guttman",
+                                             std::string discrepancy = "uls",
+                                             std::string gamma = "nt",
+                                             SEXP data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which(estimator),
+                                      noniter_disc(discrepancy), gamma, data);
+  if (!inf.has_value()) stop_post(inf.error());
+  auto con = magmaan::robust::frontier::noniterative_constrained_fit(ctx.pt, *inf);
+  if (!con.has_value()) stop_post(con.error());
+  return Rcpp::List::create(
+      Rcpp::_["theta_hat"] = Rcpp::wrap(con->theta_hat),
+      Rcpp::_["theta_tilde"] = Rcpp::wrap(con->theta_tilde),
+      Rcpp::_["vcov"] = Rcpp::wrap(con->Omega),
+      Rcpp::_["vcov_constrained"] = Rcpp::wrap(con->Omega_tilde),
+      Rcpp::_["se_constrained"] = Rcpp::wrap(con->se_constrained),
+      Rcpp::_["W"] = con->W,
+      Rcpp::_["k"] = con->k,
+      Rcpp::_["p_wald"] = con->p_wald,
+      Rcpp::_["warnings"] = Rcpp::wrap(con->warnings));
+}
+
+// [[Rcpp::export]]
+Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
+                                        std::string estimator = "guttman",
+                                        std::string discrepancy = "uls",
+                                        std::string gamma = "nt",
+                                        SEXP data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which(estimator),
+                                      noniter_disc(discrepancy), gamma, data);
+  if (!inf.has_value()) stop_post(inf.error());
+  if (ref_group < 1) Rcpp::stop("magmaan: ref_group is 1-based (>= 1)");
+  auto sc = magmaan::robust::frontier::noniterative_scalar_invariance(
+      ctx.pt, ctx.rep, *inf, static_cast<std::size_t>(ref_group - 1));
+  if (!sc.has_value()) stop_post(sc.error());
+  const std::size_t ng = sc->alpha.size();
+  Rcpp::List alpha(ng), alpha_se(ng), alpha_cov(ng);
+  Rcpp::IntegerVector groups(ng);
+  for (std::size_t i = 0; i < ng; ++i) {
+    alpha[static_cast<R_xlen_t>(i)] = Rcpp::wrap(sc->alpha[i]);
+    alpha_se[static_cast<R_xlen_t>(i)] = Rcpp::wrap(sc->alpha_se[i]);
+    alpha_cov[static_cast<R_xlen_t>(i)] = Rcpp::wrap(sc->alpha_cov[i]);
+    groups[static_cast<R_xlen_t>(i)] = static_cast<int>(sc->groups[i]) + 1;  // 1-based
+  }
+  return Rcpp::List::create(
+      Rcpp::_["ref_group"] = static_cast<int>(sc->ref_group) + 1,
+      Rcpp::_["groups"] = groups,
+      Rcpp::_["nu"] = Rcpp::wrap(sc->nu),
+      Rcpp::_["alpha"] = alpha,
+      Rcpp::_["alpha_se"] = alpha_se,
+      Rcpp::_["alpha_cov"] = alpha_cov,
+      Rcpp::_["d"] = Rcpp::wrap(sc->d_stacked),
+      Rcpp::_["W"] = sc->W,
+      Rcpp::_["df"] = sc->df,
+      Rcpp::_["rank"] = sc->rank,
+      Rcpp::_["p_value"] = sc->p_value,
+      Rcpp::_["warnings"] = Rcpp::wrap(sc->warnings));
+}
