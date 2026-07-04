@@ -2158,5 +2158,13 @@ work until a concrete downstream consumer appears.
   factor covariances similar; residual variances stay at parity), while the
   empirical-Gamma inference stays calibrated throughout; at low reliability x
   small N the closed form throws fewer Heywood cases than ML and never fails to
-  converge. Later slots for the enum: FABIN2/Bentler/James-Stein/MIIV maps
+  converge. A **heterogeneity sweep** (one weak indicator per factor at matched
+  average reliability 0.5) shows that a single weak indicator inflates the gap as
+  much as making all indicators weak, and -- counterintuitively -- the loss lands
+  on the weak indicator's factor-mates, not the weak indicator itself (Guttman's
+  triad communality divides by the *other* indicators' correlation, which the
+  weak one makes small and noisy); inference stays calibrated even for the weak
+  loading, and the Heywood-robustness advantage reverses (under heterogeneity the
+  closed form throws more improper solutions than ML). Later slots for the enum:
+  FABIN2/Bentler/James-Stein/MIIV maps
   (loadings producers already exist) and a polychoric-ADF Gamma path.

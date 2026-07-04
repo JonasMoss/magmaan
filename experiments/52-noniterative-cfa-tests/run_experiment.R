@@ -27,14 +27,18 @@
 # calibrated only under normality (the ULS/NTML residual-GOF analogue of the
 # Satorra-Bentler robustness story, mirroring Dhaene-Rosseel 2024).
 #
-# The extension sweeps indicator reliability (default 0.3 / 0.5 / 0.7) down to
-# where the closed form is stressed: low reliability shrinks the observed
-# correlations, so (a) ML's optimal weighting should pull ahead on the loadings,
-# and (b) the clamp-free Guttman map approaches its interior-point assumptions.
-# We track the loadings efficiency gap vs reliability, whether inference stays
-# calibrated in the hard regime, and how gracefully the estimators degrade
-# (Heywood / improper rate, and convergence: the closed form cannot fail to
-# converge, unlike iterative ML).
+# The study sweeps named reliability `regimes` (see regime_reliabilities). The
+# `bal.*` regimes hold all three indicators at a common reliability (0.3/0.5/0.7)
+# and reproduce the uniform reliability sweep. The `het.*` regimes hold the
+# average reliability at 0.5 but spread it across the three positions, placing a
+# weak indicator (position 3) next to a strong marker: at matched reliability,
+# weak loadings and noisy residuals are the same experiment (both estimators are
+# scale-equivariant), so heterogeneity is the only "weak loadings" manipulation
+# that is not already the reliability sweep. It stresses the closed form's
+# per-variable communality step, which should pull ML ahead specifically on the
+# weak indicator's loading. We track loadings split by position (p2 / p3), whether
+# the inference stays calibrated, and graceful degradation (Heywood / improper
+# rate and convergence: the closed form cannot fail to converge, unlike ML).
 
 suppressWarnings(suppressMessages(library(magmaan)))
 source(file.path(
@@ -58,7 +62,8 @@ usage <- function() {
     "  --full             Full generator x reliability x n grid at --reps reps.\n",
     "  --reps N           Replications per cell (full). Default: 1000.\n",
     "  --n LIST           Comma-separated sample sizes. Default: 50,100,250,500,1000.\n",
-    "  --reliability LIST Indicator reliabilities to sweep. Default: 0.3,0.5,0.7.\n",
+    "  --regimes LIST     Reliability regimes (see regime_reliabilities).\n",
+    "                     Default: bal.3,bal.5,bal.7,het.mod,het.str.\n",
     "  --generators LIST  Subset of normal,ig,ordinal. Default: all.\n",
     "  --specs LIST       Subset of correct,misspec. Default: both.\n",
     "  --ref-n N          Reference draw for the ordinal population target. Default: 200000.\n",
@@ -76,7 +81,7 @@ parse_args <- function(args) {
     smoke = TRUE, full = FALSE,
     reps = 1000L,
     n = c(50L, 100L, 250L, 500L, 1000L),
-    reliability = c(0.3, 0.5, 0.7),
+    regimes = c("bal.3", "bal.5", "bal.7", "het.mod", "het.str"),
     generators = c("normal", "ig", "ordinal"),
     specs = c("correct", "misspec"),
     ref_n = 200000L,
@@ -99,7 +104,7 @@ parse_args <- function(args) {
     else if (a == "--full") { opts$full <- TRUE; opts$smoke <- FALSE }
     else if (a == "--reps") { opts$reps <- as.integer(take()); explicit <- c(explicit, "reps") }
     else if (a == "--n") { opts$n <- as.integer(parse_csv_arg(take())); explicit <- c(explicit, "n") }
-    else if (a == "--reliability") { opts$reliability <- parse_csv_numeric(take()); explicit <- c(explicit, "reliability") }
+    else if (a == "--regimes") { opts$regimes <- parse_csv_arg(take()); explicit <- c(explicit, "regimes") }
     else if (a == "--generators") { opts$generators <- parse_csv_arg(take()); explicit <- c(explicit, "generators") }
     else if (a == "--specs") { opts$specs <- parse_csv_arg(take()); explicit <- c(explicit, "specs") }
     else if (a == "--ref-n") { opts$ref_n <- as.integer(take()); explicit <- c(explicit, "ref_n") }
@@ -115,9 +120,6 @@ parse_args <- function(args) {
   if (length(bad)) stop("unknown generators: ", paste(bad, collapse = ","), call. = FALSE)
   bad <- setdiff(opts$specs, c("correct", "misspec"))
   if (length(bad)) stop("unknown specs: ", paste(bad, collapse = ","), call. = FALSE)
-  if (any(!is.finite(opts$reliability) | opts$reliability <= 0 | opts$reliability >= 1)) {
-    stop("--reliability values must lie in (0, 1)", call. = FALSE)
-  }
   opts
 }
 
@@ -129,7 +131,7 @@ set_single_threaded_math()
 if (isTRUE(opts$smoke)) {
   if (!"reps" %in% opts$explicit) opts$reps <- 40L
   if (!"n" %in% opts$explicit) opts$n <- 250L
-  if (!"reliability" %in% opts$explicit) opts$reliability <- c(0.3, 0.7)
+  if (!"regimes" %in% opts$explicit) opts$regimes <- c("bal.5", "het.str")
   if (!"generators" %in% opts$explicit) opts$generators <- c("normal", "ordinal")
   if (!"ref_n" %in% opts$explicit) opts$ref_n <- 40000L
 }
@@ -140,38 +142,61 @@ z_crit <- stats::qnorm(1 - opts$alpha / 2)
 # Population: three correlated factors, simple structure, one factor pair
 # (f1,f3) uncorrelated so `f1 ~~ 0*f3` is a true restriction for the difference
 # test. Misspec adds an omitted cross-loading x4 ~ f1 to the DGP only.
+#
+# A `regime` is a per-position reliability triple applied to every factor's three
+# indicators (position 1 = marker, 2, 3). At matched reliability, weak loadings
+# and noisy residuals give the same correlation matrix (both estimators are
+# scale-equivariant), so the only manipulation that is *not* redundant with the
+# reliability sweep is heterogeneity: a weak indicator among strong ones. The
+# `bal.*` regimes reproduce the (uniform) reliability sweep; the `het.*` regimes
+# hold the average reliability at 0.5 and spread it, putting a weak indicator
+# (position 3) next to a strong marker (position 1). Residual variances are held
+# at 1 and the DGP loading realizes the target reliability lambda = sqrt(r/(1-r)),
+# so a low-reliability position is literally a weak loading.
 # ---------------------------------------------------------------------------
 
 factors <- c("f1", "f2", "f3")
 ov <- paste0("x", 1:9)
-factor_of <- rep(1:3, each = 3)          # indicator -> factor
-lambda_free <- c(0.9, 0.8)               # non-marker loadings per factor
-lambda_all <- rep(c(1.0, 0.9, 0.8), 3)   # incl markers, indicator order
-cross_load <- 0.35                        # misspec: x4 also loads on f1
+factor_of <- rep(1:3, each = 3)                 # indicator -> factor
+pos_of <- ((seq_len(9) - 1L) %% 3L) + 1L        # indicator -> within-factor position
+cross_frac <- 0.35                               # misspec cross-loading, x4 ~ f1
+
+regime_reliabilities <- list(
+  "bal.3"   = c(0.3, 0.3, 0.3),   # uniform low   (reliability sweep)
+  "bal.5"   = c(0.5, 0.5, 0.5),   # uniform mid
+  "bal.7"   = c(0.7, 0.7, 0.7),   # uniform high
+  "het.mod" = c(0.65, 0.5, 0.35), # moderate spread, average 0.5
+  "het.str" = c(0.80, 0.5, 0.20)) # strong spread,   average 0.5
 
 model_h1 <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9\n"
 model_h0 <- paste0(model_h1, "f1 ~~ 0*f3\n")
 
-# `reliability` is the target per-indicator reliability lambda^2 / (lambda^2 + theta);
-# residual variances scale to hit it. Lower reliability shrinks the observed
-# correlations, which is where the closed-form communality step is stressed and
-# where optimal weighting (ML) should pull ahead on the loadings.
-make_population <- function(spec, reliability) {
+make_population <- function(spec, regime) {
+  r <- regime_reliabilities[[regime]]
+  if (is.null(r)) stop("unknown regime: ", regime, call. = FALSE)
+  lam_pos <- sqrt(r / (1 - r))                   # DGP loading per position
+  lambda_all <- lam_pos[pos_of]
   L <- matrix(0, 9, 3)
   L[cbind(1:9, factor_of)] <- lambda_all
   Phi <- matrix(c(1, .3, 0,
                   .3, 1, .3,
                   0, .3, 1), 3, 3, byrow = TRUE)
-  theta <- lambda_all^2 * (1 - reliability) / reliability
+  theta <- rep(1, 9)
   Ldgp <- L
-  if (identical(spec, "misspec")) Ldgp[4, 1] <- cross_load
+  if (identical(spec, "misspec")) Ldgp[4, 1] <- cross_frac * mean(lam_pos)
   Sigma <- Ldgp %*% Phi %*% t(Ldgp) + diag(theta, 9)
   if (min(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8) {
     stop("population covariance not PD for spec=", spec, call. = FALSE)
   }
   dimnames(Sigma) <- list(ov, ov)
   list(Sigma = Sigma, Lambda = L, Phi = Phi, theta = theta,
-       spec = spec, reliability = reliability)
+       spec = spec, regime = regime, avg_reliability = mean(r))
+}
+
+# Validate requested regimes now that the table exists.
+{
+  bad <- setdiff(opts$regimes, names(regime_reliabilities))
+  if (length(bad)) stop("unknown regimes: ", paste(bad, collapse = ","), call. = FALSE)
 }
 
 # ---------------------------------------------------------------------------
@@ -193,25 +218,30 @@ param_group <- vapply(free_rows, function(r) {
   else "residual"
 }, character(1))
 
-group_levels <- c("loadings", "factor_cov", "residual", "all")
+# Within-factor position of each free loading (2 = middle indicator, 3 = last;
+# markers at position 1 are fixed). Under het regimes position 3 is the weak
+# indicator, so loadings_p3 isolates the weak-loading estimate.
+param_pos <- vapply(free_rows, function(r) {
+  if (pt_h1$op[r] == "=~") pos_of[as.integer(sub("x", "", pt_h1$rhs[r]))] else 0L
+}, integer(1))
 
-# Analysis target theta for an on-model (correct) population, keyed by free row.
-# Per-cell targets come from population_target() (the Guttman map of the actual
-# population covariance); this closed form is only used for the startup sanity
-# check that Guttman(Sigma) reproduces the truth.
-analytic_target <- function(reliability) {
-  pop <- make_population("correct", reliability)
-  vapply(free_rows, function(r) {
-    op <- pt_h1$op[r]; lhs <- pt_h1$lhs[r]; rhs <- pt_h1$rhs[r]
-    if (op == "=~") {
-      pop$Lambda[as.integer(sub("x", "", rhs)), match(lhs, factors)]
-    } else if (lhs %in% factors && rhs %in% factors) {
-      pop$Phi[match(lhs, factors), match(rhs, factors)]
-    } else {
-      pop$theta[as.integer(sub("x", "", lhs))]
-    }
-  }, numeric(1))
+# A reporting group is a logical mask over the free parameters.
+group_defs <- list(
+  loadings    = param_group == "loadings",
+  loadings_p2 = param_group == "loadings" & param_pos == 2L,
+  loadings_p3 = param_group == "loadings" & param_pos == 3L,
+  factor_cov  = param_group == "factor_cov",
+  residual    = param_group == "residual",
+  all         = rep(TRUE, length(free_rows)))
+group_levels <- names(group_defs)
+
+group_reduce <- function(vals) {
+  vapply(group_defs, function(m) mean(vals[m]), numeric(1))
 }
+
+# Per-cell analysis targets come from population_target() (the Guttman map of the
+# actual population covariance, which equals ML on-model); the startup block
+# checks that closed form against ML on Sigma directly.
 
 # ---------------------------------------------------------------------------
 # Generators. Each (generator, spec) is calibrated once; per-cell draws are
@@ -230,8 +260,8 @@ ordinal_probs <- {
   diff(c(0, stats::pnorm(tau), 1))
 }
 
-calibrate_generator <- function(generator, spec, reliability) {
-  pop <- make_population(spec, reliability)
+calibrate_generator <- function(generator, spec, regime) {
+  pop <- make_population(spec, regime)
   Sigma <- pop$Sigma
   if (generator == "normal") {
     return(list(pop = pop, kind = "normal", chol = chol(Sigma)))
@@ -318,13 +348,6 @@ metric_names <- c(
   paste0("gofT_", gof_variants),
   "conv_guttman", "conv_ml", "improper_guttman", "improper_ml"
 )
-
-group_reduce <- function(vals) {
-  c(loadings   = mean(vals[param_group == "loadings"]),
-    factor_cov = mean(vals[param_group == "factor_cov"]),
-    residual   = mean(vals[param_group == "residual"]),
-    all        = mean(vals))
-}
 
 worker <- function(i, sampler, target, spec) {
   out <- stats::setNames(rep(NA_real_, length(metric_names)), metric_names)
@@ -421,15 +444,20 @@ worker <- function(i, sampler, target, spec) {
 # ---------------------------------------------------------------------------
 
 local({
-  pop <- make_population("correct", 0.7)
-  gt <- core$noniterative_cfa_fit_impl(pt_h1, list(S = pop$Sigma, nobs = 1000L), "guttman")$theta[free_idx]
-  if (max(abs(gt - analytic_target(0.7))) > 1e-6) {
-    stop("Guttman(Sigma) does not reproduce the analysis target (max err ",
-         signif(max(abs(gt - analytic_target(0.7))), 3), ")", call. = FALSE)
+  # On-model, Guttman(Sigma) and ML(Sigma) recover the same exact parameters;
+  # check on the most heterogeneous regime (the hardest case for the closed form).
+  pop <- make_population("correct", "het.str")
+  ss <- list(S = pop$Sigma, nobs = 100000L)
+  gt <- core$noniterative_cfa_fit_impl(pt_h1, ss, "guttman")$theta[free_idx]
+  ml <- core$fit_fit(pt_h1, ss)$theta[free_idx]
+  if (max(abs(gt - ml)) > 1e-4) {
+    stop("Guttman(Sigma) != ML(Sigma) on-model (max err ",
+         signif(max(abs(gt - ml)), 3), "); population may not be an exact factor model",
+         call. = FALSE)
   }
   X <- matrix(stats::rnorm(500 * 9), 500, 9) %*% chol(pop$Sigma); colnames(X) <- ov
-  ml <- suppressMessages(magmaan::magmaan(model_h1, as.data.frame(X), estimator = "ML"))
-  if (!identical(as.integer(ml$partable$free), as.integer(pt_h1$free))) {
+  mlfit <- suppressMessages(magmaan::magmaan(model_h1, as.data.frame(X), estimator = "ML"))
+  if (!identical(as.integer(mlfit$partable$free), as.integer(pt_h1$free))) {
     stop("ML partable free-index layout differs from lavaanify(model_h1)", call. = FALSE)
   }
 })
@@ -439,24 +467,25 @@ local({
 # ---------------------------------------------------------------------------
 
 design <- expand.grid(generator = opts$generators, spec = opts$specs,
-                      reliability = opts$reliability, n = opts$n,
+                      regime = opts$regimes, n = opts$n,
                       stringsAsFactors = FALSE)
-design <- design[order(design$generator, design$spec, design$reliability, design$n), ]
+design <- design[order(design$generator, design$spec, design$regime, design$n), ]
 
-message(sprintf("Grid: %d cells (%s) x rel(%s) x n(%s) x spec(%s); reps=%d cores=%d",
+message(sprintf("Grid: %d cells (%s) x regime(%s) x n(%s) x spec(%s); reps=%d cores=%d",
                 nrow(design), paste(opts$generators, collapse = ","),
-                paste(opts$reliability, collapse = ","),
+                paste(opts$regimes, collapse = ","),
                 paste(opts$n, collapse = ","), paste(opts$specs, collapse = ","),
                 opts$reps, opts$cores))
 
 gen_cache <- new.env(parent = emptyenv())
-gen_setup <- function(generator, spec, reliability, gi, si, ri) {
-  key <- paste(generator, spec, reliability, sep = "|")
+gen_setup <- function(generator, spec, regime, gi, si, ri) {
+  key <- paste(generator, spec, regime, sep = "|")
   if (!is.null(gen_cache[[key]])) return(gen_cache[[key]])
-  message(sprintf("  calibrating %s / %s / rel=%.2f ...", generator, spec, reliability))
-  gcal <- calibrate_generator(generator, spec, reliability)
+  message(sprintf("  calibrating %s / %s / %s ...", generator, spec, regime))
+  gcal <- calibrate_generator(generator, spec, regime)
   tgt <- population_target(gcal, opts$seed_base + gi * 1000003L + si * 300007L + ri * 90001L + 777L)
   setup <- list(gcal = gcal, target = tgt$theta,
+                avg_reliability = gcal$pop$avg_reliability,
                 calib_err = if (is.null(gcal$calib_err)) NA_real_ else gcal$calib_err)
   gen_cache[[key]] <- setup
   setup
@@ -469,24 +498,24 @@ push <- function(lst, row) { lst[[length(lst) + 1L]] <- row; lst }
 t_start <- proc.time()[["elapsed"]]
 for (ci in seq_len(nrow(design))) {
   generator <- design$generator[ci]; spec <- design$spec[ci]
-  reliability <- design$reliability[ci]; n <- design$n[ci]
+  regime <- design$regime[ci]; n <- design$n[ci]
   gi <- match(generator, c("normal", "ig", "ordinal"))
   si <- match(spec, c("correct", "misspec"))
-  ri <- match(reliability, sort(unique(opts$reliability)))
-  setup <- gen_setup(generator, spec, reliability, gi, si, ri)
+  ri <- match(regime, names(regime_reliabilities))
+  setup <- gen_setup(generator, spec, regime, gi, si, ri)
   cell_seed <- opts$seed_base + gi * 1000003L + si * 300007L + ri * 90001L + n * 101L
   sampler <- batch_sampler(setup$gcal, n, opts$reps, cell_seed)
 
-  message(sprintf("[%d/%d] %s / %s / rel=%.2f / n=%d ...",
-                  ci, nrow(design), generator, spec, reliability, n))
+  message(sprintf("[%d/%d] %s / %s / %s / n=%d ...",
+                  ci, nrow(design), generator, spec, regime, n))
   res <- parallel::mclapply(seq_len(opts$reps), function(i)
     worker(i, sampler, setup$target, spec),
     mc.cores = opts$cores, mc.preschedule = TRUE)
   ok <- vapply(res, function(r) is.numeric(r) && length(r) == length(metric_names), logical(1))
   M <- do.call(rbind, res[ok])
   cm <- colMeans(M, na.rm = TRUE)
-  base <- list(generator = generator, spec = spec, reliability = reliability,
-               n = n, reps = sum(ok))
+  base <- list(generator = generator, spec = spec, regime = regime,
+               avg_reliability = setup$avg_reliability, n = n, reps = sum(ok))
 
   for (v in se_variants) for (g in group_levels)
     cov_rows <- push(cov_rows, data.frame(base, variant = v, group = g,
@@ -545,7 +574,7 @@ meta <- metadata_frame(
     mode = if (opts$smoke) "smoke" else "full",
     reps = opts$reps, n = opts$n, generators = opts$generators, specs = opts$specs,
     ref_n = opts$ref_n, alpha = opts$alpha, seed_base = opts$seed_base,
-    cores = opts$cores, reliability = opts$reliability, cross_load = cross_load),
+    cores = opts$cores, regimes = opts$regimes, cross_frac = cross_frac),
   packages = "magmaan")
 meta_path <- file.path(opts$results_dir, "metadata.csv")
 write_csv(meta, meta_path)
