@@ -617,7 +617,9 @@ profile_lrt_scalar_mixed_ordinal(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false,
+    ScalarProfileReference reference = ScalarProfileReference::Ordinary);
 
 fit_expected<ScalarProfileLrtResult>
 profile_lrt_parameter_mixed_ordinal(
@@ -632,7 +634,9 @@ profile_lrt_parameter_mixed_ordinal(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false,
+    ScalarProfileReference reference = ScalarProfileReference::Ordinary);
 
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_mixed_ordinal(
@@ -647,7 +651,8 @@ profile_lrt_ci_parameter_mixed_ordinal(
     Backend backend = Backend::NloptSlsqp,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    double constraint_tol = 1e-6);
+    double constraint_tol = 1e-6,
+    bool robust_scaled = false);
 
 // Experimental all-ordinal second-stage weights over an already-built
 // threshold + polychoric `OrdinalStats` object. This is intended for research

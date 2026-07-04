@@ -132,19 +132,26 @@ golden `parTable()` fixtures.
   small-sample correction, observed-score / Green-Yang-like ordinal omega
   targets, and functional R callbacks remain research layers above this seed
   surface.
-  Mainline ordinary parameter-profile coverage also spans the missing-data and
+  The same parameter-profile reference family also spans the missing-data and
   mixed-categorical estimators: `estimate::fiml::frontier::fit_fiml_constrained`
   plus `profile_lrt_parameter_fiml()` / `profile_lrt_ci_parameter_fiml()` refit
   direct FIML against `theta_k = theta0` using the retained `FIMLPack`;
   `profile_lrt_parameter_ml2s_nt()` / `profile_lrt_ci_parameter_ml2s_nt()`
   delegate ML2S-NT Stage-2 EM moments to the ML scalar profile path; and
   `profile_lrt_parameter_mixed_ordinal()` /
-  `profile_lrt_ci_parameter_mixed_ordinal()` apply the same df-1 ordinary
-  inversion to mixed continuous/ordinal ULS/DWLS/WLS fits. R exposes these as
+  `profile_lrt_ci_parameter_mixed_ordinal()` apply the same df-1 inversion to
+  mixed continuous/ordinal ULS/DWLS/WLS fits. These helpers support ordinary,
+  robust-scaled, misspec-scaled, and misspec-mixture references. Direct FIML
+  builds the scalar profile scale from observed-pattern score meat and observed
+  FIML bread; ML2S-NT uses the Stage-2 NT moment sandwich, switching to analytic
+  observed Stage-2 bread for misspec references; mixed ordinal uses the same
+  IJ meat as robust mixed-ordinal SE/MI, including DWLS/WLS fitted-weight
+  influence, and analytic observed mixed bread for misspec references. R exposes
+  these as
   `frontier_profile_lrt_{parameter,ci}_fiml`,
   `frontier_profile_lrt_{parameter,ci}_ml2s_nt`, and
-  `frontier_profile_lrt_{parameter,ci}_mixed_ordinal`; robust references for
-  these three surfaces remain outside this ordinary mainline slice.
+  `frontier_profile_lrt_{parameter,ci}_mixed_ordinal`, with `reference=`
+  selecting the endpoint statistic used by CI inversion.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
   identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and

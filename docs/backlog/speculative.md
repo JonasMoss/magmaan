@@ -902,14 +902,17 @@ LRT/CI surface now has explicit reference modes rather than overloading
 misspec mixture. Results expose both ordinary and reference-specific fields,
 including observed-bread misspec scale, the singleton mixture eigenvalue, and
 endpoint-specific mixture cutoffs for CI inversion. The implementation covers
-ML, caller-fixed continuous GMM, fitted-weight continuous GMM, ordinal parameter
-profiles, and the no-integration ordinal polychoric-omega functional. Continuous
-fixed GLS/WLS can route misspec meat through the IJ estimated-weight correction;
-ordinal uses the complete ordinal IJ meat, including fitted DWLS/WLS weight
-influence. The fitted-weight continuous path is explicitly profile-metric only:
-it rebuilds endpoint `W(theta)` and treats it as fixed, so derivative-of-weight
-misspec corrections remain a research extension. R exposes the choice as
-`reference=` and examples smoke the GMM and ordinal omega paths. This closes the
+ML, caller-fixed continuous GMM, fitted-weight continuous GMM, direct FIML,
+ML2S-NT, ordinal and mixed-ordinal parameter profiles, and the no-integration
+ordinal polychoric-omega functional. Continuous fixed GLS/WLS can route misspec
+meat through the IJ estimated-weight correction; ordinal and mixed ordinal use
+the complete IJ meat, including fitted DWLS/WLS weight influence. FIML uses
+observed-pattern score meat, ML2S-NT uses the saturated EM moment sandwich, and
+both switch to observed bread for misspec references. The fitted-weight
+continuous path is explicitly profile-metric only: it rebuilds endpoint
+`W(theta)` and treats it as fixed, so derivative-of-weight misspec corrections
+remain a research extension. R exposes the choice as `reference=` and examples
+smoke the GMM, FIML/ML2S/mixed ordinal, and ordinal omega paths. This closes the
 model-misspec asymptotic reference slice, but still not the hard funLR gate:
 model-level small-sample/Bartlett/calibrated constants and richer functional
 targets remain open.

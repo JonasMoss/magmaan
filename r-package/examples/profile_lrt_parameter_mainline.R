@@ -28,6 +28,24 @@ check_ci <- function(ci) {
   )
 }
 
+check_robust <- function(lrt) {
+  stopifnot(
+    is.finite(lrt$scaling_factor),
+    lrt$scaling_factor > 0,
+    is.finite(lrt$T_scaled),
+    abs(lrt$T_scaled - lrt$T / lrt$scaling_factor) < 1e-8
+  )
+}
+
+check_misspec <- function(lrt) {
+  stopifnot(
+    is.finite(lrt$misspec_scaling_factor),
+    lrt$misspec_scaling_factor > 0,
+    length(lrt$misspec_eigvals) == 1L,
+    is.finite(lrt$p_value_misspec_mixture)
+  )
+}
+
 set.seed(20260703)
 n <- 240L
 eta <- rnorm(n)
@@ -47,6 +65,10 @@ free_fiml <- loading_free_id(fit_fiml, "x2")
 target_fiml <- 0.97 * fit_fiml$theta[free_fiml]
 lrt_fiml <- core$frontier_profile_lrt_parameter_fiml(
   fit_fiml, free_fiml, target_fiml)
+lrt_fiml_robust <- core$frontier_profile_lrt_parameter_fiml(
+  fit_fiml, free_fiml, target_fiml, reference = "robust_scaled")
+lrt_fiml_misspec <- core$frontier_profile_lrt_parameter_fiml(
+  fit_fiml, free_fiml, target_fiml, reference = "misspec_mixture")
 ci_fiml <- core$frontier_profile_lrt_ci_parameter_fiml(
   fit_fiml, free_fiml,
   initial_step = 0.05 * abs(fit_fiml$theta[free_fiml]),
@@ -54,6 +76,8 @@ ci_fiml <- core$frontier_profile_lrt_ci_parameter_fiml(
   statistic_tol = 1e-4
 )
 check_profile(lrt_fiml, target_fiml)
+check_robust(lrt_fiml_robust)
+check_misspec(lrt_fiml_misspec)
 check_ci(ci_fiml)
 stopifnot(isTRUE(lrt_fiml$constrained$fiml))
 
@@ -62,6 +86,10 @@ free_ml2s <- loading_free_id(fit_ml2s, "x2")
 target_ml2s <- 0.97 * fit_ml2s$theta[free_ml2s]
 lrt_ml2s <- core$frontier_profile_lrt_parameter_ml2s_nt(
   fit_ml2s, free_ml2s, target_ml2s)
+lrt_ml2s_robust <- core$frontier_profile_lrt_parameter_ml2s_nt(
+  fit_ml2s, free_ml2s, target_ml2s, reference = "robust_scaled")
+lrt_ml2s_misspec <- core$frontier_profile_lrt_parameter_ml2s_nt(
+  fit_ml2s, free_ml2s, target_ml2s, reference = "misspec_mixture")
 ci_ml2s <- core$frontier_profile_lrt_ci_parameter_ml2s_nt(
   fit_ml2s, free_ml2s,
   initial_step = 0.05 * abs(fit_ml2s$theta[free_ml2s]),
@@ -69,6 +97,8 @@ ci_ml2s <- core$frontier_profile_lrt_ci_parameter_ml2s_nt(
   statistic_tol = 1e-4
 )
 check_profile(lrt_ml2s, target_ml2s)
+check_robust(lrt_ml2s_robust)
+check_misspec(lrt_ml2s_misspec)
 check_ci(ci_ml2s)
 stopifnot(identical(lrt_ml2s$constrained$stage2_weight, "nt"))
 
@@ -85,6 +115,10 @@ free_mixed <- loading_free_id(fit_mixed, "x2")
 target_mixed <- 0.97 * fit_mixed$theta[free_mixed]
 lrt_mixed <- core$frontier_profile_lrt_parameter_mixed_ordinal(
   fit_mixed, free_mixed, target_mixed)
+lrt_mixed_robust <- core$frontier_profile_lrt_parameter_mixed_ordinal(
+  fit_mixed, free_mixed, target_mixed, reference = "robust_scaled")
+lrt_mixed_misspec <- core$frontier_profile_lrt_parameter_mixed_ordinal(
+  fit_mixed, free_mixed, target_mixed, reference = "misspec_mixture")
 ci_mixed <- core$frontier_profile_lrt_ci_parameter_mixed_ordinal(
   fit_mixed, free_mixed,
   initial_step = 0.05 * abs(fit_mixed$theta[free_mixed]),
@@ -92,6 +126,8 @@ ci_mixed <- core$frontier_profile_lrt_ci_parameter_mixed_ordinal(
   statistic_tol = 1e-4
 )
 check_profile(lrt_mixed, target_mixed)
+check_robust(lrt_mixed_robust)
+check_misspec(lrt_mixed_misspec)
 check_ci(ci_mixed)
 stopifnot(isTRUE(lrt_mixed$constrained$mixed_ordinal))
 

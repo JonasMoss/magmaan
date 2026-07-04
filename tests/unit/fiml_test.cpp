@@ -2671,6 +2671,32 @@ TEST_CASE("frontier FIML and ML2S NT parameter profile LRTs invert ordinary CIs"
       magmaan::inference::chi2_pvalue(fiml_lrt->T, 1)));
   CHECK(fiml_lrt->df == 1);
 
+  auto fiml_robust =
+      magmaan::estimate::fiml::frontier::profile_lrt_parameter_fiml(
+          *built.pt, *built.rep, raw, *fiml, *pack, k_loading, target,
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6,
+          magmaan::estimate::frontier::ScalarProfileReference::RobustScaled);
+  REQUIRE_MESSAGE(fiml_robust.has_value(),
+      "FIML robust profile LRT failed: "
+          << (fiml_robust.has_value() ? "" : fiml_robust.error().detail));
+  CHECK(fiml_robust->T == doctest::Approx(fiml_lrt->T).epsilon(1e-10));
+  CHECK(fiml_robust->scaling_factor > 0.0);
+  CHECK(std::isfinite(fiml_robust->T_scaled));
+  CHECK(fiml_robust->T_scaled == doctest::Approx(
+      fiml_robust->T / fiml_robust->scaling_factor));
+
+  auto fiml_misspec =
+      magmaan::estimate::fiml::frontier::profile_lrt_parameter_fiml(
+          *built.pt, *built.rep, raw, *fiml, *pack, k_loading, target,
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6,
+          magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(fiml_misspec.has_value(),
+      "FIML misspec profile LRT failed: "
+          << (fiml_misspec.has_value() ? "" : fiml_misspec.error().detail));
+  CHECK(fiml_misspec->misspec_scaling_factor > 0.0);
+  CHECK(fiml_misspec->misspec_eigvals.size() == 1);
+  CHECK(std::isfinite(fiml_misspec->p_value_misspec_mixture));
+
   magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
   ci_opts.cutoff = 0.25;
   ci_opts.initial_step = 0.03 * std::abs(fiml->theta(k_loading));
@@ -2719,6 +2745,30 @@ TEST_CASE("frontier FIML and ML2S NT parameter profile LRTs invert ordinary CIs"
   CHECK(ml2s_lrt->T == doctest::Approx(ml_ref->T).epsilon(1e-10));
   CHECK(ml2s_lrt->constrained.theta.isApprox(ml_ref->constrained.theta, 1e-9));
   CHECK(ml2s_lrt->n_obs == doctest::Approx(180.0));
+
+  auto ml2s_robust =
+      magmaan::estimate::fiml::frontier::profile_lrt_parameter_ml2s_nt(
+          *built.pt, *built.rep, *ml2s, *sm, k_loading, target_ml2s,
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6,
+          magmaan::estimate::frontier::ScalarProfileReference::RobustScaled);
+  REQUIRE_MESSAGE(ml2s_robust.has_value(),
+      "ML2S NT robust profile LRT failed: "
+          << (ml2s_robust.has_value() ? "" : ml2s_robust.error().detail));
+  CHECK(ml2s_robust->T == doctest::Approx(ml2s_lrt->T).epsilon(1e-10));
+  CHECK(ml2s_robust->scaling_factor > 0.0);
+  CHECK(std::isfinite(ml2s_robust->T_scaled));
+
+  auto ml2s_misspec =
+      magmaan::estimate::fiml::frontier::profile_lrt_parameter_ml2s_nt(
+          *built.pt, *built.rep, *ml2s, *sm, k_loading, target_ml2s,
+          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6,
+          magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(ml2s_misspec.has_value(),
+      "ML2S NT misspec profile LRT failed: "
+          << (ml2s_misspec.has_value() ? "" : ml2s_misspec.error().detail));
+  CHECK(ml2s_misspec->misspec_scaling_factor > 0.0);
+  CHECK(ml2s_misspec->misspec_eigvals.size() == 1);
+  CHECK(std::isfinite(ml2s_misspec->p_value_misspec_mixture));
 
   auto ml2s_ci =
       magmaan::estimate::fiml::frontier::profile_lrt_ci_parameter_ml2s_nt(

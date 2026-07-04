@@ -723,7 +723,9 @@ profile_lrt_scalar_fiml(spec::LatentStructure pt,
                         double target,
                         Backend backend = Backend::NloptSlsqp,
                         optim::OptimOptions opts = {},
-                        double constraint_tol = 1e-6);
+                        double constraint_tol = 1e-6,
+                        estimate::frontier::ScalarProfileReference reference =
+                            estimate::frontier::ScalarProfileReference::Ordinary);
 
 fit_expected<estimate::frontier::ScalarProfileLrtResult>
 profile_lrt_parameter_fiml(spec::LatentStructure pt,
@@ -735,7 +737,9 @@ profile_lrt_parameter_fiml(spec::LatentStructure pt,
                            double target,
                            Backend backend = Backend::NloptSlsqp,
                            optim::OptimOptions opts = {},
-                           double constraint_tol = 1e-6);
+                           double constraint_tol = 1e-6,
+                           estimate::frontier::ScalarProfileReference reference =
+                               estimate::frontier::ScalarProfileReference::Ordinary);
 
 fit_expected<estimate::frontier::ScalarProfileCiResult>
 profile_lrt_ci_parameter_fiml(
@@ -759,7 +763,9 @@ profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
                            double target,
                            Backend backend = Backend::NloptSlsqp,
                            optim::OptimOptions opts = {},
-                           double constraint_tol = 1e-6);
+                           double constraint_tol = 1e-6,
+                           estimate::frontier::ScalarProfileReference reference =
+                               estimate::frontier::ScalarProfileReference::Ordinary);
 
 fit_expected<estimate::frontier::ScalarProfileLrtResult>
 profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
@@ -770,7 +776,9 @@ profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
                               double target,
                               Backend backend = Backend::NloptSlsqp,
                               optim::OptimOptions opts = {},
-                              double constraint_tol = 1e-6);
+                              double constraint_tol = 1e-6,
+                              estimate::frontier::ScalarProfileReference reference =
+                                  estimate::frontier::ScalarProfileReference::Ordinary);
 
 fit_expected<estimate::frontier::ScalarProfileCiResult>
 profile_lrt_ci_parameter_ml2s_nt(

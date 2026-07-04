@@ -4348,6 +4348,36 @@ TEST_CASE("mixed_ordinal_dwls_profile_lrt compares nested mixed DWLS models") {
       magmaan::inference::chi2_pvalue(param_lrt->T, 1)));
   CHECK(param_lrt->df == 1);
 
+  auto robust_param_lrt =
+      magmaan::estimate::frontier::profile_lrt_parameter_mixed_ordinal(
+          pt1, mr1, *stats, fit1, k_loading, target, {},
+          magmaan::estimate::OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, prof_opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true,
+          magmaan::estimate::frontier::ScalarProfileReference::RobustScaled);
+  REQUIRE_MESSAGE(robust_param_lrt.has_value(),
+      "mixed ordinal robust parameter profile LRT failed: "
+          << (robust_param_lrt.has_value()
+                  ? "" : robust_param_lrt.error().detail));
+  CHECK(robust_param_lrt->T == doctest::Approx(param_lrt->T).epsilon(1e-10));
+  CHECK(robust_param_lrt->scaling_factor > 0.0);
+  CHECK(std::isfinite(robust_param_lrt->T_scaled));
+
+  auto misspec_param_lrt =
+      magmaan::estimate::frontier::profile_lrt_parameter_mixed_ordinal(
+          pt1, mr1, *stats, fit1, k_loading, target, {},
+          magmaan::estimate::OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptSlsqp, prof_opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true,
+          magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
+  REQUIRE_MESSAGE(misspec_param_lrt.has_value(),
+      "mixed ordinal misspec parameter profile LRT failed: "
+          << (misspec_param_lrt.has_value()
+                  ? "" : misspec_param_lrt.error().detail));
+  CHECK(misspec_param_lrt->misspec_scaling_factor > 0.0);
+  CHECK(misspec_param_lrt->misspec_eigvals.size() == 1);
+  CHECK(std::isfinite(misspec_param_lrt->p_value_misspec_mixture));
+
   magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
   ci_opts.cutoff = 0.25;
   ci_opts.initial_step = 0.03 * std::abs(fit1.theta(k_loading));
@@ -7350,6 +7380,36 @@ TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS DWLS and WLS") {
   CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
   CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
+
+  auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr);
+  REQUIRE(ev.has_value());
+  Eigen::Index k_loading = -1;
+  const auto locs = ev->param_locations();
+  for (Eigen::Index k = 0; k < static_cast<Eigen::Index>(locs.size()); ++k) {
+    const auto& loc = locs[static_cast<std::size_t>(k)];
+    if (loc.mat == magmaan::model::MatId::Lambda &&
+        loc.row == 1 && loc.col == 0) {
+      k_loading = k;
+      break;
+    }
+  }
+  REQUIRE(k_loading >= 0);
+  magmaan::optim::OptimOptions prof_opts;
+  prof_opts.max_iter = 350;
+  prof_opts.ftol = 1e-9;
+  prof_opts.gtol = 1e-7;
+  auto uls_profile =
+      magmaan::estimate::frontier::profile_lrt_parameter_mixed_ordinal(
+          *pt, *mr, *stats, *fit, k_loading, 0.97 * fit->theta(k_loading),
+          {}, magmaan::estimate::OrdinalWeightKind::ULS,
+          magmaan::estimate::Backend::NloptSlsqp, prof_opts,
+          magmaan::estimate::OrdinalParameterization::Delta, 1e-6, true,
+          magmaan::estimate::frontier::ScalarProfileReference::RobustScaled);
+  REQUIRE_MESSAGE(uls_profile.has_value(),
+      "mixed ULS robust profile LRT failed: "
+          << (uls_profile.has_value() ? "" : uls_profile.error().detail));
+  CHECK(uls_profile->scaling_factor > 0.0);
+  CHECK(std::isfinite(uls_profile->T_scaled));
 
   auto dwls_fit = magmaan::test::fit_mixed_ordinal_bounded(
       *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
