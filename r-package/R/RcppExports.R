@@ -513,6 +513,22 @@ frontier_backconvert_std_lv_to_marker_impl <- function(marker_partable, std_lv_e
     .Call(`_magmaan_frontier_backconvert_std_lv_to_marker_impl`, marker_partable, std_lv_est)
 }
 
+noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman") {
+    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator)
+}
+
+noniterative_cfa_inference_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaan_noniterative_cfa_inference_impl`, fit, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_wald_impl <- function(fit, R, q, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaan_noniterative_cfa_wald_impl`, fit, R, q, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_difference_impl <- function(fit0, fit1, df_d, estimator = "guttman", discrepancy = "uls", gamma = "nt", data0 = NULL, data1 = NULL) {
+    .Call(`_magmaan_noniterative_cfa_difference_impl`, fit0, fit1, df_d, estimator, discrepancy, gamma, data0, data1)
+}
+
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }
@@ -880,3 +896,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+

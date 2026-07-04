@@ -1,0 +1,87 @@
+# Non-iterative CFA estimators: fit + residual-based inference.
+#
+# Closed-form CFA estimation (Guttman's 1952 multiple-group method) as a
+# covariance map, exposing a complete parameter vector so goodness-of-fit,
+# nested tests, and delta-method standard errors follow as explicit post-fit
+# calls. Thin wrappers over the C++ estimate::frontier / robust::frontier
+# entry points. See docs/research/notes/noniterative_cfa_tests.tex.
+
+#' Fit a non-iterative CFA estimator.
+#'
+#' @param partable A magmaan/lavaan partable (as consumed by [fit_fit()]).
+#' @param sample_stats A magmaan sample-statistics list (S, nobs, ...).
+#' @param estimator Non-iterative estimator; currently `"guttman"`.
+#' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
+#'   inference helpers below and by partable inspection.
+#' @export
+fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman") {
+  noniterative_cfa_fit_impl(partable, sample_stats, estimator)
+}
+
+#' Residual-based inference for a non-iterative CFA fit.
+#'
+#' Returns delta-method standard errors (`se`, `vcov`), the goodness-of-fit
+#' statistic `T` on `df` degrees of freedom, its weighted-chi-square p-value
+#' family (`p_scaled` Satorra-Bentler, `p_meanvar`, `p_scaled_shifted`,
+#' `p_mixture`), the reference eigenvalues, and the Satorra-Bentler `scale_c`.
+#' For `discrepancy = "ntml"`, `rls_check` is the reweighted-least-squares
+#' cross-check of `T`.
+#'
+#' @param fit A fit from [fit_noniterative_cfa()].
+#' @param discrepancy `"uls"` (unweighted least squares) or `"ntml"`
+#'   (model-implied normal-theory / reweighted least squares).
+#' @param gamma Fourth-moment matrix: `"nt"` (normal-theory, from the fitted
+#'   Sigma) or `"empirical"` (distribution-free; requires `data`).
+#' @param data Raw data matrix (rows = observations), required when
+#'   `gamma = "empirical"`.
+#' @param estimator Non-iterative estimator; currently `"guttman"`.
+#' @export
+noniterative_cfa_inference <- function(fit, discrepancy = c("uls", "ntml"),
+                                       gamma = c("nt", "empirical"),
+                                       data = NULL, estimator = "guttman") {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  noniterative_cfa_inference_impl(fit, estimator, discrepancy, gamma, data)
+}
+
+#' Wald test of a linear restriction R theta = q for a non-iterative CFA fit.
+#'
+#' Exact chi-square on `nrow(R)` degrees of freedom, using the delta-method
+#' covariance. The primary nested test for these estimators.
+#'
+#' @param fit A fit from [fit_noniterative_cfa()].
+#' @param R Restriction matrix (`k x n_free`).
+#' @param q Right-hand side (length `k`).
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_wald <- function(fit, R, q, discrepancy = c("uls", "ntml"),
+                                  gamma = c("nt", "empirical"), data = NULL,
+                                  estimator = "guttman") {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  R <- as.matrix(R)
+  noniterative_cfa_wald_impl(fit, R, as.numeric(q), estimator, discrepancy, gamma, data)
+}
+
+#' Difference / pseudo-LRT test between two nested non-iterative CFA fits.
+#'
+#' `T_d = T(H0) - T(H1)` with a weighted-chi-square reference (H1-anchored).
+#' Secondary to the Wald test: `T_d` can be negative for a non-minimizing
+#' estimator (flagged in `warnings`).
+#'
+#' @param fit0 The more-restricted (H0) fit.
+#' @param fit1 The less-restricted (H1) fit.
+#' @param df_d Degrees of freedom of the restriction (q_H1 - q_H0).
+#' @param data0,data1 Raw data for each fit when `gamma = "empirical"`.
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_difference_test <- function(fit0, fit1, df_d,
+                                             discrepancy = c("uls", "ntml"),
+                                             gamma = c("nt", "empirical"),
+                                             data0 = NULL, data1 = NULL,
+                                             estimator = "guttman") {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  noniterative_cfa_difference_impl(fit0, fit1, as.integer(df_d), estimator,
+                                   discrepancy, gamma, data0, data1)
+}

@@ -1925,6 +1925,69 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// noniterative_cfa_fit_impl
+Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator);
+RcppExport SEXP _magmaan_noniterative_cfa_fit_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_fit_impl(partable, sample_stats, estimator));
+    return rcpp_result_gen;
+END_RCPP
+}
+// noniterative_cfa_inference_impl
+Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_inference_impl(SEXP fitSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_inference_impl(fit, estimator, discrepancy, gamma, data));
+    return rcpp_result_gen;
+END_RCPP
+}
+// noniterative_cfa_wald_impl
+Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R, Rcpp::NumericVector q, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_wald_impl(SEXP fitSEXP, SEXP RSEXP, SEXP qSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type R(RSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type q(qSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_wald_impl(fit, R, q, estimator, discrepancy, gamma, data));
+    return rcpp_result_gen;
+END_RCPP
+}
+// noniterative_cfa_difference_impl
+Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, int df_d, std::string estimator, std::string discrepancy, std::string gamma, SEXP data0, SEXP data1);
+RcppExport SEXP _magmaan_noniterative_cfa_difference_impl(SEXP fit0SEXP, SEXP fit1SEXP, SEXP df_dSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP data0SEXP, SEXP data1SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit0(fit0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit1(fit1SEXP);
+    Rcpp::traits::input_parameter< int >::type df_d(df_dSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data0(data0SEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data1(data1SEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_difference_impl(fit0, fit1, df_d, estimator, discrepancy, gamma, data0, data1));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_lr_test_satorra2000
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method, std::string computation);
 RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP computationSEXP) {
@@ -3507,6 +3570,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_is_std_lv_admissible_impl", (DL_FUNC) &_magmaan_frontier_is_std_lv_admissible_impl, 2},
     {"_magmaan_frontier_partable_marker_to_std_lv_impl", (DL_FUNC) &_magmaan_frontier_partable_marker_to_std_lv_impl, 1},
     {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},
+    {"_magmaan_noniterative_cfa_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_fit_impl, 3},
+    {"_magmaan_noniterative_cfa_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_inference_impl, 5},
+    {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},
+    {"_magmaan_noniterative_cfa_difference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_difference_impl, 8},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},
     {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 9},
