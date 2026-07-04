@@ -1,0 +1,200 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Ordinal Profile-LRT Finite-Sample Calibration}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\plim}{\operatorname*{plim}}
+
+\theoremstyle{plain}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note narrows the profile-LRT small-sample problem to all-ordinal
+limited-information SEM. The target is not a universal Bartlett correction.
+The target is a decision rule for profile-LRT confidence intervals for
+polychoric omega under DWLS/WLS, where thresholds, polychorics, NACOV, and fitted
+weights are estimated from categorical margins.
+
+The companion note \cite{profilebartlettnote} records the general distinction:
+when the limiting reference is a weighted chi-square spectrum, a scalar
+Bartlett factor is only a first-moment correction. Here the focal profile
+restriction has one degree of freedom. After robust or misspecification scaling,
+the leading reference again has the form $\chi^2_1$, so a finite-sample scalar is
+at least meaningful. The question is whether it is useful, stable, and
+diagnostically separable from ordinal point-estimate bias.
+
+\section{Object}
+
+Let $s$ collect ordinal sample thresholds and polychoric correlations, and let
+$F(\theta;s,W)$ be the limited-information DWLS or WLS criterion. For a scalar
+functional $g(\theta)$, here polychoric/latent-response omega, define
+\[
+T(g_0) =
+  N\{F(\tilde\theta(g_0);s,W) - F(\hat\theta;s,W)\},
+\qquad
+\tilde\theta(g_0)=\argmin_{\theta:g(\theta)=g_0} F(\theta;s,W).
+\]
+The current magmaan profile helpers also compute one-degree-of-freedom reference
+scalings at the constrained endpoint. Write the reference-scaled statistic as
+\[
+Z(g_0) =
+\begin{cases}
+T(g_0), & \text{ordinary},\\
+T(g_0)/\lambda_{\mathrm{rob}}, & \text{robust scaled},\\
+T(g_0)/\lambda_{\mathrm{mis}}, & \text{misspecification scaled}.
+\end{cases}
+\]
+The asymptotic reference for $Z(g_0)$ is $\chi^2_1$. The finite-sample question
+is whether
+\[
+  Z(g_0) \le c\,\chi^2_{1,1-\alpha}
+\]
+with a stable $c$ improves coverage in the small ordinal cells.
+
+\section{Bias Decomposition}
+
+The ordinal problem has four separable failure modes.
+
+\begin{enumerate}
+\item \emph{LR inflation.} Even after the robust endpoint scaling, $\E Z$ may
+exceed one at small $N$. This is the only component a Bartlett-type threshold
+factor directly targets.
+\item \emph{Reference-scale error.} The endpoint $\lambda$ is itself estimated
+from thresholds, polychorics, NACOV, and sometimes fitted weights. Sparse cells
+can move the robust or misspecification reference before any Bartlett factor is
+considered.
+\item \emph{Functional point bias.} The unrestricted omega estimate may be
+biased because the polychoric stage and the fitted CFA surface are biased at
+small $N$. A threshold correction can cover the population value at $g_0$, but
+it cannot make a biased point estimate a good center for width summaries.
+\item \emph{Boundary and feasibility mass.} For bounded reliability coefficients,
+some samples may put the profile surface near a boundary or make $g_0$ hard to
+attain. In the maximal-reliability experiments this mass dominated the mean
+inflation and defeated analytic Lawley and per-sample bootstrap factors.
+\end{enumerate}
+
+\section{Candidate Corrections}
+
+\paragraph{Oracle cell constant.}
+For a design cell, estimate $c_{\mathrm{oracle}}=\E Z(g_{\mathrm{pop}})$ by
+Monte Carlo and report coverage under
+$Z(g_{\mathrm{pop}})\le c_{\mathrm{oracle}}\chi^2_{1,1-\alpha}$. This is not a
+method, but it identifies whether the statistic is repairable by a scalar.
+
+\paragraph{Ordinal null-bootstrap constant.}
+For a design class, simulate ordinal data from the constrained fitted model
+imposing $g=g_0$, refit the unrestricted and constrained models, and average the
+reference-scaled $Z$. The value is used as a cell-level constant, not as a
+per-sample random factor. The earlier maximal-reliability result rules out
+per-sample use: the bootstrap factor was anti-correlated with the samples that
+needed correction most.
+
+\paragraph{Shrinkage constant.}
+If the null-bootstrap constant is noisy but directionally useful, shrink it to a
+grid prior:
+\[
+  c_{\mathrm{shrink}} = w c_{\mathrm{boot}} + (1-w)c_{\mathrm{grid}}.
+\]
+The weight $w$ should be chosen by coverage and anti-correlation diagnostics, not
+by mean recovery alone.
+
+\paragraph{Weight and NACOV regularization.}
+If reference-scale error dominates, the correction target is not $c$ but the
+estimated ordinal $\Gamma$ and $W$. DLS, EBA/pEBA-style spectrum shrinkage, or
+regularized NACOV can be tested as inputs to the profile reference. These are
+finite-sample reference corrections, not Bartlett factors.
+
+\paragraph{Bias-aware reporting.}
+If point-functional bias dominates, report the profile interval as calibrated for
+test inversion but keep a separate bias diagnostic for omega. Do not hide
+functional bias inside the Bartlett factor.
+
+\section{Experiment 53}
+
+Experiment 53 is the first taxonomy run. It uses all-ordinal one-factor probit
+data, DWLS/WLS fits, and the existing
+\texttt{frontier\_profile\_lrt\_ordinal\_polychoric\_omega} surface. It records
+ordinary, robust-scaled, and misspecification-scaled profile tests at the
+population omega, plus the fit-free robust delta interval for comparison.
+
+The decision rule is:
+\begin{enumerate}
+\item If uncorrected $Z$ is near $\chi^2_1$ and delta coverage is acceptable,
+there is no ordinal Bartlett problem in that cell.
+\item If $Z$ is inflated and the oracle constant fixes coverage, advance to an
+ordinal null-bootstrap constant.
+\item If $Z$ is not inflated but coverage is poor, prioritize omega point-bias
+and sparse-threshold diagnostics.
+\item If robust and misspecification references diverge materially, keep the
+small-sample constant conditional on the selected reference regime.
+\end{enumerate}
+
+\section*{Working Verdict}
+
+The plausible contribution is not ``a Bartlett correction for categorical SEM''.
+The plausible contribution is a finite-sample calibration taxonomy for ordinal
+profile-LRT reliability intervals. A scalar constant remains on the table only
+when the reference-scaled one-degree-of-freedom statistic is the source of
+miscoverage. Otherwise the correction belongs to the ordinal summary stage or to
+the reliability target itself.
+
+\begin{thebibliography}{99}
+
+\bibitem{profilebartlettnote}
+Magmaan note. Profile likelihood-ratio intervals, the Bartlett correction, and
+the eigenvalue-spectrum reference law.
+\texttt{docs/research/notes/profile\_lrt\_bartlett\_spectral.tex}.
+
+\bibitem{wilks1938}
+Wilks, S. S. (1938). The large-sample distribution of the likelihood ratio for
+testing composite hypotheses. \emph{Annals of Mathematical Statistics}, 9(1),
+60--62.
+\href{https://doi.org/10.1214/aoms/1177732360}{doi:10.1214/aoms/1177732360}.
+
+\bibitem{bartlett1937}
+Bartlett, M. S. (1937). Properties of sufficiency and statistical tests.
+\emph{Proceedings of the Royal Society of London A}, 160(901), 268--282.
+\href{https://doi.org/10.1098/rspa.1937.0109}{doi:10.1098/rspa.1937.0109}.
+
+\bibitem{satorra1989}
+Satorra, A. (1989). Alternative test criteria in covariance structure analysis:
+a unified approach. \emph{Psychometrika}, 54(1), 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{hallinoue2003}
+Hall, A. R., and Inoue, A. (2003). The large sample behaviour of the generalized
+method of moments estimator in misspecified models. \emph{Journal of
+Econometrics}, 114(2), 361--394.
+\href{https://doi.org/10.1016/S0304-4076(03)00089-7}{doi:10.1016/S0304-4076(03)00089-7}.
+
+\bibitem{lee2014}
+Lee, S. (2014). Asymptotic refinements of a misspecification-robust bootstrap
+for generalized method of moments estimators. \emph{Journal of Econometrics},
+178, 398--413.
+\href{https://doi.org/10.1016/j.jeconom.2013.05.008}{doi:10.1016/j.jeconom.2013.05.008}.
+
+\bibitem{yuantianyanagihara2015}
+Yuan, K.-H., Tian, Y., and Yanagihara, H. (2015). Empirical correction to the
+likelihood ratio statistic for structural equation modeling with many variables.
+\emph{Psychometrika}, 80(2), 379--405.
+\href{https://doi.org/10.1007/s11336-013-9386-5}{doi:10.1007/s11336-013-9386-5}.
+
+\end{thebibliography}
+
+\end{document}
