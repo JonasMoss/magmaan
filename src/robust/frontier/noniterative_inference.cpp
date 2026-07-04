@@ -54,6 +54,18 @@ double total_n(const data::SampleStats& samp) {
   return n;
 }
 
+// True when the model carries free intercepts / latent means. In that case the
+// moment vector is mean-augmented [m_b ; vech(S_b)] (mean-first), the estimator
+// Jacobian gains an analytic mean block (∂ν/∂m = I), and Γ is the mean-augmented
+// NACOV. The GOF spectrum is unchanged (the saturated mean part contributes zero
+// eigenvalues); only Ω picks up the mean block.
+bool has_mean_params(const model::ModelEvaluator& ev) {
+  for (const auto& loc : ev.param_locations())
+    if (loc.mat == model::MatId::Nu || loc.mat == model::MatId::Alpha)
+      return true;
+  return false;
+}
+
 }  // namespace
 
 post_expected<NonIterativeInference>
@@ -72,6 +84,10 @@ noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& 
   if (!ev.has_value()) return perr("non-iterative inference: evaluator build failed");
   const auto q = static_cast<Eigen::Index>(ev->n_free());
   if (theta.size() != q) return perr("non-iterative inference: theta size mismatch");
+  if (has_mean_params(*ev))
+    return perr("non-iterative inference: mean structure requires the grouped "
+                "path (noniterative_inference_grouped*); the single-block SEs "
+                "omit the intercept block");
 
   // Σ(θ̂) — copy out before any call that overwrites the evaluator buffers.
   auto sig = ev->sigma(theta);
@@ -255,12 +271,22 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
   const auto q = static_cast<Eigen::Index>(ev->n_free());
   if (theta.size() != q) return perr("grouped inference: theta size mismatch");
 
+  // Mean structure: the moment vector per block is [m_b ; vech(S_b)] (mean-first)
+  // and `gamma_per_block[b]` is the (p_b + p*_b)-square mean-augmented NACOV. The
+  // estimator Jacobian gains an analytic mean block (∂ν/∂m = I) so Ω picks up the
+  // intercept variances; the GOF stays covariance-only (the saturated mean part
+  // contributes exactly zero, since ν_g = m_g).
+  const bool has_means = has_mean_params(*ev);
+  if (has_means && samp.mean.size() != nblk)
+    return perr("grouped inference: mean structure requires per-block sample "
+                "means");
+
   // Σ(θ̂) and the stacked Δ — copy out before any buffer-overwriting call.
   auto sig = ev->sigma(theta);
   if (!sig.has_value()) return perr("grouped inference: Sigma(theta) failed");
   auto dS = ev->dsigma_dtheta(theta);
   if (!dS.has_value()) return perr("grouped inference: dsigma_dtheta failed");
-  const Eigen::MatrixXd Delta_full = *dS;  // (Σ p*_b) × q
+  const Eigen::MatrixXd Delta_full = *dS;  // (Σ p*_b) × q, covariance-only
 
   // NTML weights (model-implied, per block), computed once.
   std::vector<Eigen::MatrixXd> Wntml;
@@ -283,17 +309,22 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
   if (Delta_full.rows() != pstar_total || Delta_full.cols() != q)
     return perr("grouped inference: Delta dimension mismatch");
 
-  // Per-block free-parameter counts (from the param layout).
+  // Per-block free-parameter counts (from the param layout). `q_cov_of_block`
+  // excludes intercept / latent-mean params: the mean moments and the ν params
+  // cancel one-for-one in the GOF df (saturated ν_g = m_g), so the covariance-only
+  // GOF df is Σ_b (p*_b − q_cov_of_block[b]).
   const std::vector<model::ParamLocation> locs = ev->param_locations();
   GroupedNonIterativeInference out;
   out.block_of_param.assign(static_cast<std::size_t>(q), -1);
-  std::vector<int> q_of_block(nblk, 0);
+  std::vector<int> q_of_block(nblk, 0), q_cov_of_block(nblk, 0);
   for (std::size_t k = 0; k < locs.size(); ++k) {
     const auto b = static_cast<std::size_t>(locs[k].block);
     if (locs[k].block < 0 || b >= nblk)
       return perr("grouped inference: parameter has out-of-range block");
     out.block_of_param[k] = static_cast<std::int32_t>(b);
     q_of_block[b]++;
+    if (locs[k].mat != model::MatId::Nu && locs[k].mat != model::MatId::Alpha)
+      q_cov_of_block[b]++;
   }
 
   out.Omega = Eigen::MatrixXd::Zero(q, q);
@@ -307,7 +338,11 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
   for (std::size_t b = 0; b < nblk; ++b) {
     const Eigen::Index p_b = samp.S[b].rows();
     const Eigen::Index ps = pstar_b[b];
-    if (gamma_per_block[b].rows() != ps || gamma_per_block[b].cols() != ps)
+    // Augmented moment count for this block: mean-first [m_b ; vech(S_b)] when
+    // the model has mean structure, else vech(S_b) alone.
+    const Eigen::Index pm = has_means ? p_b : 0;
+    const Eigen::Index maug = pm + ps;
+    if (gamma_per_block[b].rows() != maug || gamma_per_block[b].cols() != maug)
       return perr("grouped inference: Gamma[b] dimension mismatch");
 
     const Eigen::MatrixXd Sigma_hat_b = sig->sigma[b];              // copy (P4)
@@ -327,17 +362,41 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
       else return perr("grouped inference: NTML weight smaller than p*");
     }
 
+    // Covariance-only GOF: r_b, M_b = I − Δ_b J_b, U_b = M_b'V_b M_b, and the
+    // vech-block of Γ. Δ_b and J_b already carry zero ν rows/cols, so this is
+    // identical whether or not the model has means (P5).
+    const Eigen::MatrixXd Gamma_cov_b =
+        has_means ? gamma_per_block[b].bottomRightCorner(ps, ps).eval()
+                  : gamma_per_block[b];
     const Eigen::VectorXd r_b = vech_lower(samp.S[b]) - vech_lower(Sigma_hat_b);
     const Eigen::MatrixXd M_b = Eigen::MatrixXd::Identity(ps, ps) - Delta_b * J_b;
     const Eigen::MatrixXd U_b = M_b.transpose() * V_b * M_b;
     const double N_b = static_cast<double>(samp.n_obs[b]);  // per-block N (P2)
 
     T += N_b * r_b.dot(V_b * r_b);
-    // J_b has zero rows outside block b, so this accumulates a block-diagonal Ω.
-    out.Omega.noalias() += (J_b * gamma_per_block[b] * J_b.transpose()) / N_b;
+    // Ω = J_aug Γ_aug J_augᵀ / N. Without means J_aug = J_b (q × p*). With means
+    // the analytic mean columns select ∂ν_i/∂m_i = 1; J_b (cov FD) has zero ν
+    // rows, so the two column groups don't overlap. J_aug has zero rows outside
+    // block b either way, so Ω accumulates block-diagonal across groups.
+    if (has_means) {
+      Eigen::MatrixXd Jaug = Eigen::MatrixXd::Zero(q, maug);
+      Jaug.rightCols(ps) = J_b;                                 // vech columns
+      for (std::size_t k = 0; k < locs.size(); ++k) {
+        const auto& loc = locs[k];
+        if (loc.mat == model::MatId::Nu &&
+            static_cast<std::size_t>(loc.block) == b) {
+          if (loc.row < 0 || loc.row >= p_b)
+            return perr("grouped inference: intercept row out of range");
+          Jaug(static_cast<Eigen::Index>(k), loc.row) = 1.0;    // ∂ν_i/∂m_i = 1
+        }
+      }
+      out.Omega.noalias() += (Jaug * gamma_per_block[b] * Jaug.transpose()) / N_b;
+    } else {
+      out.Omega.noalias() += (J_b * gamma_per_block[b] * J_b.transpose()) / N_b;
+    }
     U_big.block(offset[b], offset[b], ps, ps) = U_b;
-    G_big.block(offset[b], offset[b], ps, ps) = gamma_per_block[b];
-    df += static_cast<int>(ps) - q_of_block[b];
+    G_big.block(offset[b], offset[b], ps, ps) = Gamma_cov_b;
+    df += static_cast<int>(ps) - q_cov_of_block[b];
 
     if (disc == Discrepancy::NTML) {
       model::ImpliedMoments im;
@@ -345,7 +404,9 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
       data::SampleStats one;
       one.S = {samp.S[b]};
       one.n_obs = {samp.n_obs[b]};
-      if (!samp.mean.empty()) one.mean = {samp.mean[b]};
+      // Covariance-only cross-check: ν_g = m_g saturates the mean, so drop the
+      // mean from the RLS χ² comparator (its ImpliedMoments carries no μ).
+      if (!has_means && !samp.mean.empty()) one.mean = {samp.mean[b]};
       if (auto rc = inference::rls_chi2(one, im); rc.has_value()) rls += *rc;
     }
   }
@@ -401,10 +462,11 @@ noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::
   if (!ev.has_value()) return perr("grouped inference: evaluator build failed");
   auto sig = ev->sigma(theta);
   if (!sig.has_value()) return perr("grouped inference: Sigma(theta) failed");
+  const bool has_means = has_mean_params(*ev);
   std::vector<Eigen::MatrixXd> gammas;
   gammas.reserve(sig->sigma.size());
   for (const auto& Sig : sig->sigma) {
-    auto g = data::gamma_nt(Sig);
+    auto g = has_means ? data::gamma_nt_with_means(Sig) : data::gamma_nt(Sig);
     if (!g.has_value()) return perr("grouped inference: gamma_nt failed");
     gammas.push_back(std::move(*g));
   }
@@ -420,10 +482,14 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
                                          Discrepancy disc) {
   if (raw.X.size() != samp.S.size())
     return perr("grouped inference: raw-data block count != sample-stats blocks");
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("grouped inference: evaluator build failed");
+  const bool has_means = has_mean_params(*ev);
   std::vector<Eigen::MatrixXd> gammas;
   gammas.reserve(raw.X.size());
   for (const auto& Xb : raw.X) {
-    auto g = data::empirical_gamma(Xb);
+    auto g = has_means ? data::empirical_gamma_with_means(Xb)
+                       : data::empirical_gamma(Xb);
     if (!g.has_value()) return perr("grouped inference: empirical_gamma failed");
     gammas.push_back(std::move(*g));
   }

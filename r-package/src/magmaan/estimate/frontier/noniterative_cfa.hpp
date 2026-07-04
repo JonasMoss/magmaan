@@ -21,11 +21,14 @@
 // noniterative_cfa_tests.tex and guttman_cfa_asymptotics.tex.
 //
 // Scope: multi-group (one block per group/level, fit independently and stacked),
-// covariance-only, pure CFA with marker (fixed unit loading) identification,
-// continuous data, Guttman's (1952) multiple-group map. Cross-group / general
-// linear equality constraints (measurement invariance, tau-equivalence, ...) are
-// imposed downstream by the minimum-distance projection in robust::frontier, not
-// here: the map always produces the configural (per-block unconstrained) θ̂. The
+// pure CFA with marker (fixed unit loading) identification, continuous data,
+// Guttman's (1952) multiple-group map. Mean structure is supported for free
+// intercepts with latent means fixed at 0 (ν_g = m_g saturated); free latent
+// means (true scalar invariance) are handled by the reference-group mean map
+// downstream, not here. Cross-group / general linear equality constraints
+// (measurement invariance, tau-equivalence, ...) are imposed downstream by the
+// minimum-distance projection in robust::frontier, not here: the map always
+// produces the configural (per-block unconstrained) θ̂. The
 // `NonIterativeEstimator` enum is the generality seam: FABIN2/Bentler-1982/
 // James-Stein/MIIV-2SLS slot in as further maps without any change to the
 // residual-based inference bundle that consumes (τ, J).

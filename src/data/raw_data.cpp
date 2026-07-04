@@ -175,4 +175,22 @@ gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma) {
   return Gamma;
 }
 
+post_expected<Eigen::MatrixXd>
+gamma_nt_with_means(const Eigen::Ref<const Eigen::MatrixXd>& Sigma) {
+  const Eigen::Index p = Sigma.rows();
+  if (Sigma.cols() != p) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "gamma_nt_with_means: Σ is not square"));
+  }
+  auto g = gamma_nt(Sigma);
+  if (!g) return std::unexpected(g.error());
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  // Mean-first block-diagonal: mean block = Σ, vech block = Γ_NT(Σ), and the
+  // cross-block is zero (normal-theory third moments vanish).
+  Eigen::MatrixXd Gamma = Eigen::MatrixXd::Zero(p + pstar, p + pstar);
+  Gamma.topLeftCorner(p, p)             = Sigma;
+  Gamma.bottomRightCorner(pstar, pstar) = *g;
+  return Gamma;
+}
+
 }  // namespace magmaan::data
