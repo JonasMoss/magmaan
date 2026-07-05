@@ -1,0 +1,329 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Consistent Communality Rules for the Guttman Estimator}
+\author{}
+\date{\today}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Dhaene and Rosseel \cite{dhaene2024} define their multiple-group estimator by
+replacing the diagonal of the sample covariance matrix with estimated
+communalities. They use Spearman's rule as described by Harman
+\cite{harman1976}, and note that other communality or uniqueness estimators
+exist, including the uniqueness estimator of Ihara and Kano \cite{iharakano1986}
+and Cudeck \cite{cudeck1991}. This note records the population requirement a
+communality rule must satisfy before it can be used as part of the Guttman
+estimator rather than merely as a start-value heuristic.
+
+The required target is the diagonal of the common covariance,
+\[
+  c_i(\Sigma_0)
+  =
+  e_i\T \Lambda\Phi\Lambda\T e_i,
+\]
+not an arbitrary lower bound, reliability coefficient, or squared multiple
+correlation. In a simple-structure CFA block, where indicator \(i\) loads only
+on factor \(f(i)\),
+\[
+  c_i=\lambda_i^2\Phi_{f(i)f(i)}.
+\]
+
+\section{Population setup}
+
+Consider one factor block \(I_f\) with at least three indicators and diagonal
+residual covariance within the block:
+\begin{equation}\label{eq:block-model}
+  y_i=\lambda_i\eta_f+\epsilon_i,\qquad
+  \Var(\eta_f)=\phi_f,\qquad
+  \Cov(\epsilon_i,\epsilon_j)=0\quad(i\ne j).
+\end{equation}
+For \(i\ne j\) in the same block,
+\[
+  \sigma_{ij}=\lambda_i\lambda_j\phi_f.
+\]
+The common diagonal entry for item \(i\) is
+\[
+  c_i=\lambda_i^2\phi_f,
+  \qquad
+  \theta_i=\sigma_{ii}-c_i.
+\]
+The Guttman matrix \(C\) is obtained by replacing \(\sigma_{ii}\) by \(c_i\), or
+equivalently by subtracting \(\theta_i\) from the diagonal.
+
+\begin{remark}
+For a multi-factor simple CFA, the same within-factor formulas hold factor by
+factor. Cross-factor covariances involve \(\Phi_{fg}\) and should not be used in
+the communality triads below. The target remains
+\(\diag(\Lambda\Phi\Lambda\T)\).
+\end{remark}
+
+\section{Spearman triad identities}
+
+\begin{proposition}[Single triad]\label{prop:triad}
+Let \(i,j,k\in I_f\) be distinct indicators with
+\(\lambda_j\lambda_k\phi_f\ne0\). Under \eqref{eq:block-model},
+\begin{equation}\label{eq:single-triad}
+  h_{i;jk}(\Sigma)
+  =
+  \frac{\sigma_{ij}\sigma_{ik}}{\sigma_{jk}}
+  =
+  c_i .
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Substitute the within-factor covariances:
+\[
+  \frac{\sigma_{ij}\sigma_{ik}}{\sigma_{jk}}
+  =
+  \frac{(\lambda_i\lambda_j\phi_f)(\lambda_i\lambda_k\phi_f)}
+       {\lambda_j\lambda_k\phi_f}
+  =
+  \lambda_i^2\phi_f
+  =
+  c_i .
+\]
+\end{proof}
+
+Thus every admissible pair \((j,k)\) gives a population-consistent estimator of
+the same diagonal common variance. Pooling pairs changes finite-sample behavior,
+not the population target.
+
+\section{Two consistent Spearman poolings}
+
+Let
+\[
+  \mathcal P_i=\{(j,k): j<k,\ j,k\in I_{f(i)},\ j\ne i,\ k\ne i\}.
+\]
+Assume all required denominators are nonzero.
+
+\paragraph{Average of ratios.}
+The lavaan helper used by \texttt{lav\_cfa\_theta\_spearman()} and the current
+\texttt{magmaan} helper averages the triad ratios on the correlation scale. On
+the covariance scale the unclamped population functional is
+\begin{equation}\label{eq:avg-ratio}
+  h_i^{\mathrm{AR}}(\Sigma)
+  =
+  \frac{1}{|\mathcal P_i|}
+  \sum_{(j,k)\in\mathcal P_i}
+  \frac{\sigma_{ij}\sigma_{ik}}{\sigma_{jk}} .
+\end{equation}
+By Proposition~\ref{prop:triad}, \(h_i^{\mathrm{AR}}(\Sigma_0)=c_i\).
+
+\paragraph{Ratio of sums.}
+Dhaene and Rosseel's printed formula is the Harman/Spearman ratio-of-sums
+pooling:
+\begin{equation}\label{eq:ratio-sums}
+  h_i^{\mathrm{RS}}(\Sigma)
+  =
+  \frac{\sum_{(j,k)\in\mathcal P_i}\sigma_{ij}\sigma_{ik}}
+       {\sum_{(j,k)\in\mathcal P_i}\sigma_{jk}} .
+\end{equation}
+Under \eqref{eq:block-model},
+\[
+  \sum_{(j,k)}\sigma_{ij}\sigma_{ik}
+  =
+  \lambda_i^2\phi_f
+  \sum_{(j,k)}\sigma_{jk},
+\]
+so \(h_i^{\mathrm{RS}}(\Sigma_0)=c_i\) whenever the denominator does not vanish.
+
+\begin{remark}
+The two poolings are equivalent on the exact model but differ off model and in
+finite samples. The ratio of sums is often numerically calmer when individual
+\(\sigma_{jk}\)'s are small. The average of ratios avoids cancellation in the
+pooled denominator but can be sensitive to a single weak pair. Both are genuine
+population-consistent communality rules under the simple block model.
+\end{remark}
+
+\section{Weighted triad family}
+
+The preceding two estimators are members of a larger family. For fixed weights
+\(w_{jk}\), define
+\[
+  h_i^{\mathrm{WAR}}
+  =
+  \frac{\sum_{(j,k)} w_{jk}\sigma_{ij}\sigma_{ik}/\sigma_{jk}}
+       {\sum_{(j,k)} w_{jk}},
+\]
+or
+\[
+  h_i^{\mathrm{WRS}}
+  =
+  \frac{\sum_{(j,k)} w_{jk}\sigma_{ij}\sigma_{ik}}
+       {\sum_{(j,k)} w_{jk}\sigma_{jk}} .
+\]
+If the denominators are nonzero and the weights do not depend on the target
+item through an inconsistent population quantity, both recover \(c_i\). This is
+useful for stabilized implementations: weights may downweight pairs with
+near-zero covariance or known weak indicators without changing the on-model
+target.
+
+\section{Uniqueness-first rules}
+
+The paper also points to uniqueness estimators \cite{iharakano1986,cudeck1991}.
+For the Guttman estimator, the relevant population object is not the uniqueness
+itself but
+\[
+  h_i=\sigma_{ii}-u_i .
+\]
+A uniqueness-first rule is acceptable only if it is exact on the population
+factor model.
+
+\begin{proposition}[Exact uniqueness implies exact communality]
+\label{prop:uniqueness}
+Suppose a population functional \(u(\Sigma)\in\mathbb R^p\) is defined on a
+class of identified factor models and satisfies
+\[
+  u(\Sigma_0)=\diag(\Theta_0)
+\]
+whenever
+\[
+  \Sigma_0=\Lambda_0\Phi_0\Lambda_0\T+\Theta_0
+\]
+with diagonal \(\Theta_0\). Then
+\[
+  h_i^u(\Sigma)=\sigma_{ii}-u_i(\Sigma)
+\]
+satisfies \(h_i^u(\Sigma_0)=e_i\T\Lambda_0\Phi_0\Lambda_0\T e_i\).
+\end{proposition}
+
+\begin{proof}
+At \(\Sigma_0\),
+\[
+  \sigma_{0,ii}
+  =
+  e_i\T\Lambda_0\Phi_0\Lambda_0\T e_i+\Theta_{0,ii}.
+\]
+Subtracting \(u_i(\Sigma_0)=\Theta_{0,ii}\) gives the claim.
+\end{proof}
+
+One exact population reading is the rank-\(k\) uniqueness problem: find a
+diagonal \(\Theta\) such that \(\Sigma-\Theta\) is positive semidefinite, has
+rank \(k\), and satisfies the required loading-pattern restrictions. If the
+solution is unique at \(\Sigma_0\), then Proposition~\ref{prop:uniqueness}
+applies. This is the standard needed for treating a uniqueness estimator as a
+Guttman communality rule. A numerical algorithm may approximate this target, but
+the target itself must be exact on the model manifold.
+
+\section{What not to certify}
+
+Several common initial communality guesses are useful starts but are not
+consistent estimators of \(c_i\) for a finite congeneric factor block.
+
+\paragraph{Squared multiple correlation.}
+For a covariance matrix \(\Sigma\), the SMC communality is
+\[
+  h_i^{\mathrm{SMC}}
+  =
+  \sigma_{ii}-\{(\Sigma^{-1})_{ii}\}^{-1}.
+\]
+In a one-factor block, write
+\[
+  \Sigma=\Theta+\phi\lambda\lambda\T,\qquad
+  t_i=\frac{\phi\lambda_i^2}{\theta_i},\qquad
+  \delta=\phi\sum_m\frac{\lambda_m^2}{\theta_m}.
+\]
+The Sherman-Morrison formula gives
+\[
+  \{(\Sigma^{-1})_{ii}\}^{-1}
+  =
+  \theta_i\frac{1+\delta}{1+\delta-t_i},
+\]
+and hence
+\[
+  h_i^{\mathrm{SMC}}
+  =
+  c_i\frac{\delta-t_i}{1+\delta-t_i}.
+\]
+This is strictly below \(c_i\) at finite block size when \(c_i>0\) and the
+other indicators carry finite information. It approaches \(c_i\) only in a
+large-block or near-perfect-measurement limit. Therefore SMC is not an exact
+population communality rule for the Guttman estimator.
+
+\paragraph{Bounds and repairs.}
+Clamps to \([0,\sigma_{ii}]\), wide lavaan bounds, positive-definite repairs, and
+ridge corrections can make a finite-sample procedure safer. They are not
+population communality estimators unless the repair is inactive at the target.
+If a repair is active at \(\Sigma_0\), the estimator has changed target.
+
+\section{Implementation implications}
+
+For a pure Guttman estimator, \texttt{magmaan} should distinguish
+communality rules by their population contract:
+\begin{itemize}
+\item certified rules: single triads, average-of-ratios Spearman, ratio-of-sums
+  Spearman, weighted variants with nonzero denominators, and exact
+  uniqueness-first rules;
+\item start-value rules only: SMC, arbitrary lower bounds, and repairs that can
+  be active at the population target;
+\item regularized variants: any rule that replaces a failed denominator or
+  singular uniqueness problem by a ridge or projection should be labeled as a
+  regularized Guttman variant.
+\end{itemize}
+
+The current frontier Guttman estimator uses the average-of-ratios
+Spearman-Harman rule through the shared \texttt{theta\_spearman()} helper, and
+then subtracts the resulting residual variance from the diagonal. On an exact
+simple CFA block this is population-consistent for
+\(\diag(\Lambda\Phi\Lambda\T)\). If we add alternatives, the test for admission
+should be the propositions above, not historical popularity as a starting value.
+
+\begin{thebibliography}{9}
+
+\bibitem{cudeck1991}
+Cudeck, R. (1991).
+Noniterative factor analysis estimators, with algorithms for subset and
+instrumental variable selection.
+\emph{Journal of Educational Statistics}, 16, 35--52.
+\href{https://doi.org/10.3102/10769986016001035}{doi:10.3102/10769986016001035}.
+
+\bibitem{dhaene2024}
+Dhaene, S., and Rosseel, Y. (2024).
+An evaluation of non-iterative estimators in confirmatory factor analysis.
+\emph{Structural Equation Modeling}, 31(1), 1--13.
+\href{https://doi.org/10.1080/10705511.2023.2187285}{doi:10.1080/10705511.2023.2187285}.
+
+\bibitem{harman1976}
+Harman, H. H. (1976).
+\emph{Modern factor analysis} (3rd ed.).
+University of Chicago Press.
+
+\bibitem{iharakano1986}
+Ihara, M., and Kano, Y. (1986).
+A new estimator of the uniqueness in factor analysis.
+\emph{Psychometrika}, 51, 563--566.
+\href{https://doi.org/10.1007/BF02295595}{doi:10.1007/BF02295595}.
+
+\bibitem{spearman1904}
+Spearman, C. (1904).
+``General intelligence,'' objectively determined and measured.
+\emph{The American Journal of Psychology}, 15, 201--293.
+\href{https://doi.org/10.2307/1412107}{doi:10.2307/1412107}.
+
+\end{thebibliography}
+
+\end{document}
