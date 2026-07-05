@@ -318,6 +318,113 @@ The regression loading matrix is
 \]
 \end{proof}
 
+\section{Population loading constraints}
+
+The standardized-composite construction also gives a direct population version
+of loading constraints. The important point is that the composites are still
+formed first. Thus \(D\), \(F\), and \(\Phi_G\) are fixed by \(H\) and \(Z\).
+Only the loading regression is constrained.
+
+Let \(\mathcal L\subset\mathbb R^{p\times k}\) be the loading space allowed by
+the population model. This space can encode simple-structure zeros, equality
+constraints, or both. The constrained Guttman loading matrix is
+\begin{equation}\label{eq:constrained-loading-space}
+  \Lambda_{\mathcal L}
+  =
+  \argmin_{\Lambda\in\mathcal L}
+  \E_H\{\lVert Y_H-\Lambda F\rVert^2\}.
+\end{equation}
+Equivalently,
+\[
+  \Lambda_{\mathcal L}
+  =
+  \argmin_{\Lambda\in\mathcal L}
+  \left[
+    \tr(H)-2\tr\{\Lambda D^{-1/2}Z\T H\}
+    +\tr(\Lambda\Phi_G\Lambda\T)
+  \right].
+\]
+After this constrained regression, keep the same standardized-composite
+covariance \(\Phi_G\) and set
+\[
+  \psi_{\mathcal L}
+  =
+  \diag\{S-\Lambda_{\mathcal L}\Phi_G\Lambda_{\mathcal L}\T\}.
+\]
+This defines the constrained population map.
+
+For linear equality constraints, vectorize the loading matrix. Let
+\[
+  \ell=\operatorname{vec}(\Lambda),
+  \qquad
+  c=\operatorname{vec}(HZD^{-1/2}),
+  \qquad
+  W=\Phi_G\otimes I_p .
+\]
+The loading part of the criterion is
+\[
+  \ell\T W\ell-2c\T\ell
+\]
+up to constants. The unconstrained solution is
+\[
+  \ell_G=\operatorname{vec}(\Lambda_G)=W^{-1}c .
+\]
+For affine equality constraints
+\[
+  R\ell=r,
+\]
+the constrained population loading vector is the \(W\)-metric projection
+\begin{equation}\label{eq:linear-loading-projection}
+  \ell_R
+  =
+  \ell_G
+  -
+  W^{-1}R\T(RW^{-1}R\T)^{-1}(R\ell_G-r),
+\end{equation}
+provided the displayed inverses exist. On a boundary, the same formula can be
+read on the estimable subspace with Moore-Penrose inverses, but then the output
+should be reported as a boundary convention.
+
+A tau-equivalent block is the simplest example. For one factor with indicator
+set \(I\), the constraint is
+\[
+  \lambda_i=\alpha\qquad(i\in I).
+\]
+Since \(\Phi_G=1\) in the one-factor unit-variance case,
+\eqref{eq:constrained-loading-space} gives
+\[
+  \alpha
+  =
+  |I|^{-1}\sum_{i\in I}\Cov_H(Y_{H,i},F).
+\]
+For multiple correlated factors, or for tau-equivalence combined with
+simple-structure zeros, use the vector formula above. If the allowed loading
+space is written as
+\[
+  \ell=E\beta ,
+\]
+where \(E\) inserts fixed zeros and repeats equal loadings, then
+\[
+  \beta_{\mathcal L}
+  =
+  (E\T W E)^{-1}E\T c,
+  \qquad
+  \ell_{\mathcal L}=E\beta_{\mathcal L}.
+\]
+
+These constraints are scale-dependent. The formulas above define equality in
+the unit-variance, standardized-composite orientation. Converting the result to
+first-loading-equals-one units is still allowed, but equality of loadings need
+not mean the same thing after that diagonal reparameterization. Constraints on
+\(\Phi\) or on residual variances are different objects; this section only
+constrains the loading regression while keeping \(\Phi_G\) fixed as the
+standardized composite covariance.
+
+At an exact population point whose unit-variance loading matrix already lies in
+\(\mathcal L\), the constrained map returns the same oriented loading matrix as
+the unconstrained map. Away from that constrained population model, it returns
+the closest allowed loading matrix in the composite-regression criterion.
+
 \section{What is and is not minimized}
 
 The preceding lemmas give the clean answer. The Guttman construction minimizes
@@ -528,12 +635,18 @@ For one covariance block, the implementation can be checked in this order:
 \item Solve \(\Lambda_G=HZD^{-1/2}\Phi_G^{-1}\). This is the loading matrix
   minimizing the composite prediction loss when \(\Phi_G\) is positive
   definite.
-\item Compute \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\).
+\item If the population model imposes loading constraints, replace the previous
+  solve by the constrained regression in
+  \eqref{eq:constrained-loading-space}.
+\item Compute \(\psi=\diag(S-\Lambda\Phi_G\Lambda\T)\), using either the
+  unconstrained \(\Lambda_G\) or the constrained
+  \(\Lambda_{\mathcal L}\).
 \item If first-loading-equals-one output is desired, convert the
   unit-variance matrices by the marker loading matrix \(M_{\mathrm{fl}}\).
 \item Assemble the model's free parameter vector from the allowed loading cells,
-  latent covariance cells, and residual variances. Off-pattern entries of
-  \(\Lambda_G\) are auxiliary unless the model itself allows those loadings.
+  latent covariance cells, and residual variances. In the unconstrained
+  regression, off-pattern entries of \(\Lambda_G\) are auxiliary unless the
+  model itself allows those loadings.
 \item For standard errors or tests, finite-difference the full map to obtain
   \(J_G\), then use \(J_G\Gamma J_G\T/N\) for parameter covariance and
   \(M_G=I-\Delta J_G\) for residual goodness-of-fit references.
@@ -546,9 +659,11 @@ criterion used by ML, ULS, GLS, or WLS. It first constructs fixed indicator
 composites, regresses the observed variables on those composites under the
 communality-filled covariance \(H\), and reads the unit-variance latent
 covariance as the correlation matrix of the standardized composites.
-First-loading-equals-one output is a diagonal reparameterization of the same
-fitted common part. Residual NTML or ULS statistics are useful diagnostics and
-valid pseudo-tests once their weighted-\(\chi^2\) reference is corrected with
+Loading equalities, including tau-equivalence, can be imposed directly as
+constraints on that population regression. First-loading-equals-one output is a
+diagonal reparameterization of the same fitted common part. Residual NTML or
+ULS statistics are useful diagnostics and valid pseudo-tests once their
+weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
 minimum-distance/Wald statistic based on the block-diagonal Guttman delta
 covariance.
