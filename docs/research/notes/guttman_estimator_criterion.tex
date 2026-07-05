@@ -164,11 +164,12 @@ The fixed indicator composites are
 \[
   U=Z\T Y_H .
 \]
-Their covariance and their covariance with the variables are
+Their covariance is \(Z\T HZ\), and their covariance with the variables is
+\(HZ\):
 \[
-  B=\Cov(U)=Z\T H Z,
+  \Cov(U)=Z\T H Z,
   \qquad
-  A=\Cov(Y_H,U)=HZ .
+  \Cov(Y_H,U)=HZ .
 \]
 
 For fixed \(U\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
@@ -183,7 +184,7 @@ Equivalently, the objective is
 \begin{equation}\label{eq:composite-objective}
   Q_{\mathrm{comp}}(K)
   =
-  \tr(H)-2\tr(KA\T)+\tr(KBK\T).
+  \tr(H)-2\tr(KZ\T H)+\tr\{K(Z\T HZ)K\T\}.
 \end{equation}
 The subscript \(H\) emphasizes that the expectation uses only the
 communality-filled second moments. Row \(i\) of \(K\) is the population least
@@ -192,14 +193,14 @@ composites \(U\). The stacked problem in \eqref{eq:composite-loss} is just
 the sum of those \(p\) regressions.
 
 \begin{lemma}[Composite regression step]\label{lem:regression}
-If \(B\) is positive definite, the unique minimizer of
+If \(Z\T HZ\) is positive definite, the unique minimizer of
 \eqref{eq:composite-loss} is
 \begin{equation}\label{eq:Kstar}
-  K^\star = A B^{-1}=HZ(Z\T HZ)^{-1}.
+  K^\star = HZ(Z\T HZ)^{-1}.
 \end{equation}
 The common covariance reproduced by the composites is
 \begin{equation}\label{eq:common-proj}
-  K^\star B K^{\star\T}
+  K^\star (Z\T HZ) K^{\star\T}
   =
   H Z (Z\T H Z)^{-1} Z\T H .
 \end{equation}
@@ -210,11 +211,12 @@ Differentiate \eqref{eq:composite-objective} with respect to \(K\):
 \[
   \frac{\partial Q_{\mathrm{comp}}}{\partial K}
   =
-  -2A+2KB .
+  -2HZ+2K(Z\T HZ) .
 \]
-The first-order condition is \(KB=A\), giving \(K^\star=AB^{-1}\). Since \(B\)
-is positive definite, this stationary point is the unique minimum. Substituting
-\(A=HZ\) and \(B=Z\T HZ\) gives \eqref{eq:common-proj}.
+The first-order condition is \(K(Z\T HZ)=HZ\), giving
+\(K^\star=HZ(Z\T HZ)^{-1}\). Since \(Z\T HZ\) is positive definite, this
+stationary point is the unique minimum. Substitution gives
+\eqref{eq:common-proj}.
 \end{proof}
 
 This is the actual least-squares part of the Guttman estimator. The variables
@@ -222,18 +224,58 @@ being optimized are the coefficients from fixed indicator composites to the
 observed variables. The CFA covariance model parameters have not yet entered as
 optimization variables.
 
-\section{Step 3: marker rescale into CFA parameters}
+\section{Step 3: choose CFA coordinates for the common part}
 
-Let
+The regression step already gives a rank-\(k\) common covariance:
+\[
+  \widehat H_{\mathrm{com}}
+  =
+  K^\star (Z\T HZ) K^{\star\T}.
+\]
+This can be read as a factor model in the composite coordinate system. If the
+surrogate factor vector is just \(U\), then its covariance is \(Z\T HZ\), its
+loadings are \(K^\star\), and
+\[
+  K^\star U
+\]
+is the fitted common part of \(Y_H\). At this point there has been no attempt
+to put the factors in the usual CFA scale. The columns are still measured in
+the units of the indicator composites.
+
+More generally, any nonsingular coordinate transform \(C\) gives the same
+common covariance. Define
+\[
+  \eta_C=C U,\qquad
+  \Lambda_C=K^\star C^{-1},\qquad
+  \Phi_C=C(Z\T HZ)C\T .
+\]
+Then \(K^\star U=\Lambda_C\eta_C\), \(\Cov(\eta_C)=\Phi_C\), and
+\[
+  \Lambda_C\Phi_C\Lambda_C\T
+  =
+  K^\star (Z\T HZ) K^{\star\T}.
+\]
+Thus the \((\Lambda,\Phi)\) reconstruction is not a second optimization
+problem. It is a choice of coordinates for the common covariance already fitted
+by the composite regression.
+
+The incidence matrix \(Z\) gives labelled composite axes, so the Guttman map
+does not use an arbitrary rotation \(C\). It keeps those axes and only changes
+the scale of each column. The CFA marker convention then determines the scale:
+the marker loading for factor \(f\) should be one. Let
 \[
   M=\diag(K^\star_{m_1,1},\ldots,K^\star_{m_k,k})
 \]
-be the diagonal matrix of marker coefficients, one per factor. The
-marker-scaled Guttman matrices are
+be the diagonal matrix of the current marker coefficients. Equivalently, define
+the marker-scaled surrogate factor vector
+\[
+  \eta_G=M U .
+\]
+Then \(U=M^{-1}\eta_G\), so the marker-scaled Guttman matrices are
 \begin{equation}\label{eq:marker-map}
   \Lambda_G=K^\star M^{-1},
   \qquad
-  \Phi_G=M B M,
+  \Phi_G=M(Z\T HZ)M,
   \qquad
   \psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}.
 \end{equation}
@@ -242,8 +284,11 @@ is unchanged:
 \[
   \Lambda_G\Phi_G\Lambda_G\T
   =
-  K^\star B K^{\star\T}.
+  K^\star (Z\T HZ) K^{\star\T}.
 \]
+Among diagonal rescalings that preserve the factor labels supplied by \(Z\),
+this is the unique rescaling that satisfies the marker convention, provided all
+marker coefficients are nonzero.
 
 In the current \texttt{magmaan} map, the full \(K^\star\) is computed. The
 reported free loading parameters are read only from the model-allowed loading
@@ -314,52 +359,53 @@ are not the discrepancies that define the point estimate.
 
 \section{Boundary-complete extension}
 
-Equations \eqref{eq:Kstar} and \eqref{eq:common-proj} use inverses, so the
-interior construction is not automatically total. A boundary-complete version
-should distinguish three cases.
+Equations \eqref{eq:Kstar} and \eqref{eq:common-proj} use the inverse of the
+composite covariance \(Z\T HZ\), so the interior construction is not
+automatically total. A boundary-complete version should distinguish three
+cases.
 
-First, if \(B\) is positive definite, use the ordinary Guttman map above.
-Second, if \(B\) is positive semidefinite and singular, use the
+First, if \(Z\T HZ\) is positive definite, use the ordinary Guttman map above.
+Second, if \(Z\T HZ\) is positive semidefinite and singular, use the
 Moore-Penrose inverse when the covariance equations are compatible:
 \begin{equation}\label{eq:compat}
-  A=A B^{+}B .
+  HZ=HZ(Z\T HZ)^{+}(Z\T HZ) .
 \end{equation}
 Then
 \[
-  K_{\mathrm{MP}}=AB^{+}
+  K_{\mathrm{MP}}=HZ(Z\T HZ)^{+}
 \]
 is the unique minimum-Frobenius-norm minimizer of
 \eqref{eq:composite-objective}. It is also the ridge limit
 \[
-  \lim_{\lambda\downarrow0}A(B+\lambda I)^{-1}.
+  \lim_{\lambda\downarrow0}HZ(Z\T HZ+\lambda I)^{-1}.
 \]
 All minimizers give the same fitted common covariance,
 \[
-  KBK\T=AB^{+}A\T ,
+  K(Z\T HZ)K\T=HZ(Z\T HZ)^{+}Z\T H ,
 \]
 so the common covariance is identified even though the coordinate
 representation of the factors is not.
 
-The parameter split is the difficult part. A singular \(B\) means that the
-fixed composite space has rank below \(k\). The common covariance still has a
-canonical Moore-Penrose fitted value, but the marker-scaled
+The parameter split is the difficult part. A singular \(Z\T HZ\) means that
+the fixed composite space has rank below \(k\). The common covariance still has
+a canonical Moore-Penrose fitted value, but the marker-scaled
 \((\Lambda_G,\Phi_G)\) representative is a convention. Marker rescaling can
 also fail if \(K_{\mathrm{MP},m_f f}=0\) for some marker. A boundary-complete
 implementation should therefore return the common covariance and the
 Moore-Penrose representative with an explicit boundary warning, and should not
 present the individual factor parameters as regularly identified.
 
-Third, if \(B\) is indefinite or \eqref{eq:compat} fails, the quadratic
+Third, if \(Z\T HZ\) is indefinite or \eqref{eq:compat} fails, the quadratic
 \eqref{eq:composite-objective} has no pure Guttman least-squares solution. An
 always-returning estimator can still be defined by a named regularized mode,
 for example
 \[
-  K_{\lambda}=A(B+\lambda I)^{-1},
+  K_{\lambda}=HZ(Z\T HZ+\lambda I)^{-1},
 \]
 with \(\lambda\) chosen to make the system positive definite, or by first
-projecting \(B\) to a positive semidefinite matrix. This is useful engineering,
-but it should be reported as a regularized Guttman variant, not as the clean
-population map.
+projecting \(Z\T HZ\) to a positive semidefinite matrix. This is useful
+engineering, but it should be reported as a regularized Guttman variant, not as
+the clean population map.
 
 \section{Residual statistics at the Guttman estimate}
 
@@ -422,21 +468,21 @@ two quadratic forms. Since neither fitted value is required to minimize
 
 \section{Multi-sample blocks and the native constrained test}
 
-For independent sample groups \(b=1,\ldots,B\), apply the same Guttman map to
+For independent sample groups \(g=1,\ldots,G\), apply the same Guttman map to
 each covariance block:
 \[
-  \hat\theta_b=\tau_G(s_b),
+  \hat\theta_g=\tau_G(s_g),
   \qquad
-  J_b=\frac{\partial\tau_G}{\partial s_b\T}.
+  J_g=\frac{\partial\tau_G}{\partial s_g\T}.
 \]
-Stack \(\hat\theta=(\hat\theta_1\T,\ldots,\hat\theta_B\T)\T\). If
-\(\Gamma_b\) is the fourth-moment covariance of \(s_b\), then the finite-sample
+Stack \(\hat\theta=(\hat\theta_1\T,\ldots,\hat\theta_G\T)\T\). If
+\(\Gamma_g\) is the fourth-moment covariance of \(s_g\), then the finite-sample
 delta covariance of the stacked estimator is
 \begin{equation}\label{eq:Omega-block}
   \Omega
   =
-  \bigoplus_{b=1}^B
-  \frac{1}{N_b}J_b\Gamma_bJ_b\T .
+  \bigoplus_{g=1}^G
+  \frac{1}{N_g}J_g\Gamma_gJ_g\T .
 \end{equation}
 The configural Guttman estimator imposes no cross-block equality constraints.
 It simply estimates every block independently and stacks the results.
@@ -483,11 +529,13 @@ For one covariance block, the implementation can be checked in this order:
 \item Build the incidence matrix \(Z\) from the simple CFA loading pattern.
 \item For each factor block, compute the Spearman-Harman communalities
   \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
-\item Form \(A=HZ\) and \(B=Z\T HZ\).
-\item Solve \(K^\star=AB^{-1}\). This is the coefficient matrix minimizing the
-  composite prediction loss when \(B\) is positive definite.
+\item Compute the variable-composite covariance \(HZ\) and the composite
+  covariance \(Z\T HZ\).
+\item Solve \(K^\star=HZ(Z\T HZ)^{-1}\). This is the coefficient matrix
+  minimizing the composite prediction loss when \(Z\T HZ\) is positive
+  definite.
 \item Read marker coefficients into \(M\); compute
-  \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=MBM\), and
+  \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=M(Z\T HZ)M\), and
   \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\).
 \item Assemble the model's free parameter vector from the allowed loading cells,
   latent covariance cells, and residual variances. Off-pattern entries of
