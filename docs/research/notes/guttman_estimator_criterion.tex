@@ -35,7 +35,8 @@ The Guttman estimator used by \texttt{magmaan} is best understood as a
 covariance-summary map, not as the minimizer of the usual CFA covariance
 discrepancy. It does contain a clean minimization step, but that step is a
 regression of observed variables on fixed indicator composites. The CFA
-parameters are then read from that regression after choosing a latent scale.
+parameters are then read directly from the regression on standardized
+composites.
 
 This note records the construction in enough detail to audit an implementation.
 It also states which discrepancy is natural for multi-sample constraints. The
@@ -69,8 +70,9 @@ indicator for factor \(f\).
 
 The estimator is defined only at regular points. Each factor must have at least
 three indicators, the within-factor correlations used below must avoid zero
-denominators, the composite covariance must be positive definite, and the
-marker coefficient produced by the composite regression must be nonzero.
+denominators, the composite variances must be positive, and the standardized
+composite covariance must be positive definite. A first-loading-equals-one
+conversion additionally requires nonzero marker loadings.
 
 \section{Step 1: replace variances by communalities}
 
@@ -147,7 +149,7 @@ bound is active, the map is piecewise smooth rather than smooth at that point,
 and the finite-difference Jacobian is differentiating that active branch.
 \end{remark}
 
-\section{Step 2: regress variables on fixed composites}
+\section{Step 2: regress variables on standardized composites}
 
 This step is a population regression problem. Let \(Y_H\) be a centered
 auxiliary \(p\)-vector with covariance
@@ -160,203 +162,128 @@ are the communality-filled matrix \(H\). If \(H\) is not positive semidefinite,
 the same formulas still define a quadratic algebraic map, but the literal
 random-vector interpretation is lost.
 
-The fixed indicator composites are
+The raw indicator composites are
 \[
   U=Z\T Y_H .
 \]
-Their covariance is \(Z\T HZ\), and their covariance with the variables is
-\(HZ\):
+Let
 \[
-  \Cov(U)=Z\T H Z,
-  \qquad
-  \Cov(Y_H,U)=HZ .
+  D=\diag(Z\T HZ),
 \]
+and assume the diagonal entries of \(D\) are positive. The standardized
+indicator composites are
+\[
+  F=D^{-1/2}U=D^{-1/2}Z\T Y_H .
+\]
+Their covariance is the composite correlation matrix
+\begin{equation}\label{eq:PhiG}
+  \Phi_G
+  =
+  \Cov(F)
+  =
+  D^{-1/2}(Z\T HZ)D^{-1/2}.
+\end{equation}
+Thus \(\diag(\Phi_G)=I\). In this parameterization, \(\Phi_G\) is the
+unit-variance latent covariance. It is not introduced after the regression; it
+is the covariance of the standardized fixed composites used in the regression.
 
-For fixed \(U\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
+For fixed \(F\), choose a loading matrix \(\Lambda\in\mathbb R^{p\times k}\) to
 minimize the population prediction error
 \begin{equation}\label{eq:composite-loss}
-  K^\star
+  \Lambda_G
   =
-  \argmin_{K\in\mathbb R^{p\times k}}
-  \E_H\{ \lVert Y_H-KU\rVert^2 \}.
+  \argmin_{\Lambda\in\mathbb R^{p\times k}}
+  \E_H\{ \lVert Y_H-\Lambda F\rVert^2 \}.
 \end{equation}
 Equivalently, the objective is
 \begin{equation}\label{eq:composite-objective}
-  Q_{\mathrm{comp}}(K)
+  Q_{\mathrm{comp}}(\Lambda)
   =
-  \tr(H)-2\tr(KZ\T H)+\tr\{K(Z\T HZ)K\T\}.
+  \tr(H)-2\tr\{\Lambda D^{-1/2}Z\T H\}
+  +\tr(\Lambda\Phi_G\Lambda\T).
 \end{equation}
 The subscript \(H\) emphasizes that the expectation uses only the
-communality-filled second moments. Row \(i\) of \(K\) is the population least
+communality-filled second moments. Row \(i\) of \(\Lambda_G\) is the population least
 squares coefficient vector in the regression of \(Y_{H,i}\) on the fixed
-composites \(U\). The stacked problem in \eqref{eq:composite-loss} is just
+standardized composites \(F\). The stacked problem in \eqref{eq:composite-loss} is just
 the sum of those \(p\) regressions.
 
 \begin{lemma}[Composite regression step]\label{lem:regression}
-If \(Z\T HZ\) is positive definite, the unique minimizer of
+If \(\Phi_G\) is positive definite, the unique minimizer of
 \eqref{eq:composite-loss} is
-\begin{equation}\label{eq:Kstar}
-  K^\star = HZ(Z\T HZ)^{-1}.
+\begin{equation}\label{eq:LambdaG}
+  \Lambda_G = HZD^{-1/2}\Phi_G^{-1}.
 \end{equation}
 The common covariance reproduced by the composites is
 \begin{equation}\label{eq:common-proj}
-  K^\star (Z\T HZ) K^{\star\T}
+  \Lambda_G\Phi_G\Lambda_G\T
   =
   H Z (Z\T H Z)^{-1} Z\T H .
 \end{equation}
 \end{lemma}
 
 \begin{proof}
-Differentiate \eqref{eq:composite-objective} with respect to \(K\):
+Differentiate \eqref{eq:composite-objective} with respect to \(\Lambda\):
 \[
-  \frac{\partial Q_{\mathrm{comp}}}{\partial K}
+  \frac{\partial Q_{\mathrm{comp}}}{\partial \Lambda}
   =
-  -2HZ+2K(Z\T HZ) .
+  -2HZD^{-1/2}+2\Lambda\Phi_G .
 \]
-The first-order condition is \(K(Z\T HZ)=HZ\), giving
-\(K^\star=HZ(Z\T HZ)^{-1}\). Since \(Z\T HZ\) is positive definite, this
-stationary point is the unique minimum. Substitution gives
-\eqref{eq:common-proj}.
+The first-order condition is \(\Lambda\Phi_G=HZD^{-1/2}\), giving
+\(\Lambda_G=HZD^{-1/2}\Phi_G^{-1}\). Since \(\Phi_G\) is positive definite,
+this stationary point is the unique minimum. Substituting
+\(\Phi_G=D^{-1/2}(Z\T HZ)D^{-1/2}\) gives \eqref{eq:common-proj}.
 \end{proof}
 
 This is the actual least-squares part of the Guttman estimator. The variables
-being optimized are the coefficients from fixed indicator composites to the
-observed variables. The CFA covariance model parameters have not yet entered as
-optimization variables.
+being optimized are the loadings from standardized fixed indicator composites
+to the observed variables. The unit-variance latent covariance is simply the
+correlation matrix of those composites.
 
-\section{Step 3: choose a latent scale for the common part}
-
-The regression step already gives a rank-\(k\) common covariance:
-\[
-  \widehat H_{\mathrm{com}}
-  =
-  K^\star (Z\T HZ) K^{\star\T}.
-\]
-This can be read as a factor model in the composite coordinate system. If the
-surrogate factor vector is just \(U\), then its covariance is \(Z\T HZ\), its
-loadings are \(K^\star\), and
-\[
-  K^\star U
-\]
-is the fitted common part of \(Y_H\). At this point there has been no attempt
-to put the factors in the usual CFA scale. The columns are still measured in
-the units of the indicator composites.
-
-More generally, any nonsingular coordinate transform \(C\) gives the same
-common covariance. Define
-\[
-  \eta_C=C U,\qquad
-  \Lambda_C=K^\star C^{-1},\qquad
-  \Phi_C=C(Z\T HZ)C\T .
-\]
-Then \(K^\star U=\Lambda_C\eta_C\), \(\Cov(\eta_C)=\Phi_C\), and
-\[
-  \Lambda_C\Phi_C\Lambda_C\T
-  =
-  K^\star (Z\T HZ) K^{\star\T}.
-\]
-Thus the \((\Lambda,\Phi)\) reconstruction is not a second optimization
-problem. It is a choice of coordinates for the common covariance already fitted
-by the composite regression. The incidence matrix \(Z\) gives labelled
-composite axes, so the usual Guttman choices do not use an arbitrary rotation
-\(C\). They keep those axes and only change the scale of each column.
-
-The unit-variance scale is the tidiest diagonal choice. Let
-\[
-  C_{\mathrm{uv}}
-  =
-  \diag\{(Z\T HZ)_{11}^{-1/2},\ldots,(Z\T HZ)_{kk}^{-1/2}\},
-\]
-assuming the composite variances are positive, and define
-\[
-  \eta_{\mathrm{uv}}=C_{\mathrm{uv}}U .
-\]
-Then \(U=C_{\mathrm{uv}}^{-1}\eta_{\mathrm{uv}}\), so
-\begin{equation}\label{eq:unit-variance-map}
-  \Lambda_{\mathrm{uv}}=K^\star C_{\mathrm{uv}}^{-1},
-  \qquad
-  \Phi_{\mathrm{uv}}=C_{\mathrm{uv}}(Z\T HZ)C_{\mathrm{uv}},
-  \qquad
-  \psi_{\mathrm{uv}}
-  =
-  \diag\{S-\Lambda_{\mathrm{uv}}\Phi_{\mathrm{uv}}
-  \Lambda_{\mathrm{uv}}\T\}.
-\end{equation}
-By construction, \(\diag(\Phi_{\mathrm{uv}})=I\), and the common covariance is
-unchanged:
-\[
-  \Lambda_{\mathrm{uv}}\Phi_{\mathrm{uv}}\Lambda_{\mathrm{uv}}\T
-  =
-  K^\star (Z\T HZ) K^{\star\T}.
-\]
-The entries of \(\Phi_{\mathrm{uv}}\) are the correlations among the fixed
-indicator composites under \(H\), and the loadings are the regression
-coefficients expressed in those unit-variance latent coordinates.
-
-The first-loading-equals-one scale is another diagonal reparameterization. Let
-\[
-  M=\diag(K^\star_{m_1,1},\ldots,K^\star_{m_k,k})
-\]
-be the diagonal matrix of the marker coefficients in the raw composite
-coordinates. Equivalently, define the first-loading-scaled surrogate factor
-vector
-\[
-  \eta_G=M U .
-\]
-Then \(U=M^{-1}\eta_G\), so the first-loading-scaled Guttman matrices are
-\begin{equation}\label{eq:marker-map}
-  \Lambda_G=K^\star M^{-1},
-  \qquad
-  \Phi_G=M(Z\T HZ)M,
-  \qquad
+The residual variances are read from the diagonal residual covariance:
+\begin{equation}\label{eq:psiG}
   \psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}.
 \end{equation}
-Every marker loading in \(\Lambda_G\) is one, and the common covariance is
-unchanged:
-\[
-  \Lambda_G\Phi_G\Lambda_G\T
-  =
-  K^\star (Z\T HZ) K^{\star\T}.
-\]
-Among diagonal rescalings that preserve the factor labels supplied by \(Z\),
-this is the unique rescaling that makes the chosen marker loadings equal to
-one, provided all marker coefficients are nonzero.
+The full \(\Lambda_G\) is computed by the regression. The reported free loading
+parameters are read only from the model-allowed loading cells. Off-pattern
+entries of \(\Lambda_G\) are auxiliary. They vanish on the exact
+simple-structure model; away from that model they are not fitted as
+cross-loadings.
 
-The two displays are the same estimator written in different latent scales.
-Starting from the unit-variance matrices, define
+If first-loading-equals-one output is desired, it is only a diagonal
+reparameterization of the unit-variance result. Let
 \[
-  M_{\mathrm{uv}}
+  M_{\mathrm{fl}}
   =
-  \diag\{(\Lambda_{\mathrm{uv}})_{m_1,1},\ldots,
-          (\Lambda_{\mathrm{uv}})_{m_k,k}\}.
+  \diag\{(\Lambda_G)_{m_1,1},\ldots,(\Lambda_G)_{m_k,k}\}.
 \]
 Then
 \[
-  \Lambda_G=\Lambda_{\mathrm{uv}}M_{\mathrm{uv}}^{-1},
+  \Lambda_{\mathrm{fl}}=\Lambda_GM_{\mathrm{fl}}^{-1},
   \qquad
-  \Phi_G=M_{\mathrm{uv}}\Phi_{\mathrm{uv}}M_{\mathrm{uv}} .
+  \Phi_{\mathrm{fl}}=M_{\mathrm{fl}}\Phi_GM_{\mathrm{fl}},
+  \qquad
+  \psi_{\mathrm{fl}}=\psi_G .
 \]
-This conversion is estimator-independent. It is the usual change of latent
-factor units from unit variances to first-loading-equals-one units.
+This conversion is estimator-independent and requires the chosen marker
+loadings to be nonzero.
 
-In the current \texttt{magmaan} map, the full \(K^\star\) is computed. The
-reported free loading parameters are read only from the model-allowed loading
-cells. Off-pattern entries of \(K^\star\) are auxiliary. They vanish on the
-exact simple-structure model; away from that model they are not fitted as
-cross-loadings. The residual variances in \eqref{eq:unit-variance-map} and
-\eqref{eq:marker-map} are identical because they come from the diagonal of the
-same composite common part.
-
-\begin{proposition}[Exact recovery on the simple CFA model]\label{prop:recover}
+\begin{proposition}[Exact recovery on the unit-variance simple CFA model]\label{prop:recover}
 Suppose the communality-filled population matrix is exactly
 \[
   H_0=\Lambda_0\Phi_0\Lambda_0\T ,
 \]
-where \(\Lambda_0\) has the simple loading pattern encoded by \(Z\), each marker
-loading is one, and the diagonal matrix \(T=\Lambda_0\T Z\) is nonsingular.
-Then the first-loading-scaled Guttman map recovers \(\Lambda_0\) and
-\(\Phi_0\). The unit-variance map gives the corresponding unit-variance
-parameterization of the same common covariance.
+where \(\Lambda_0\) has the simple loading pattern encoded by \(Z\),
+\(\diag(\Phi_0)=I\), and the diagonal matrix \(T=\Lambda_0\T Z\) is
+nonsingular. Let \(S_T=\diag\{\operatorname{sign}(T_{11}),\ldots,
+\operatorname{sign}(T_{kk})\}\). Then the unit-variance Guttman map gives
+\[
+  \Lambda_G=\Lambda_0S_T,
+  \qquad
+  \Phi_G=S_T\Phi_0S_T .
+\]
+After orienting each latent factor so \(T_{ff}>0\), it recovers
+\(\Lambda_0\) and \(\Phi_0\).
 \end{proposition}
 
 \begin{proof}
@@ -367,24 +294,28 @@ Thus
   \qquad
   Z\T H_0Z=T\Phi_0T .
 \]
-The raw composite-regression coefficients are
+Since \(\diag(\Phi_0)=I\), the composite variance matrix is
 \[
-  H_0Z(Z\T H_0Z)^{-1}
-  =
-  \Lambda_0\Phi_0T(T\Phi_0T)^{-1}
-  =
-  \Lambda_0T^{-1}.
+  D=\diag(Z\T H_0Z)=T^2 .
 \]
-The marker coefficient in column \(f\) is therefore \(1/T_{ff}\), since the
-marker loading is one. Dividing the column by this marker coefficient gives
-\(\Lambda_0\). With \(M=T^{-1}\),
+Therefore
 \[
-  M(Z\T H_0Z)M=\Phi_0 .
+  D^{-1/2}T=S_T,
+  \qquad
+  \Phi_G=D^{-1/2}(Z\T H_0Z)D^{-1/2}=S_T\Phi_0S_T .
 \]
-The unit-variance display \eqref{eq:unit-variance-map} has the same common
-covariance and \(\diag(\Phi_{\mathrm{uv}})=I\). It is therefore the
-unit-variance reparameterization of the recovered first-loading-scale model, up
-to the arbitrary signs of the latent axes.
+The variable-composite covariance on the standardized scale is
+\[
+  H_0ZD^{-1/2}=\Lambda_0\Phi_0S_T .
+\]
+The regression loading matrix is
+\[
+  H_0ZD^{-1/2}\Phi_G^{-1}
+  =
+  \Lambda_0\Phi_0S_T(S_T\Phi_0S_T)^{-1}
+  =
+  \Lambda_0S_T .
+\]
 \end{proof}
 
 \section{What is and is not minimized}
@@ -406,60 +337,67 @@ first-order condition
   \{\vech(S)-\sigma(\theta)\}=0,
 \]
 or the equivalent NTML score condition when \(V\) is the likelihood weight. The
-Guttman estimate is obtained from \(H\), \(Z\), and the latent-scale choice
-above; there is no reason for it to satisfy that residual orthogonality
-condition except in special cases.
+Guttman estimate is obtained from \(H\), \(Z\), and the standardized composite
+regression above; there is no reason for it to satisfy that residual
+orthogonality condition except in special cases.
 
 Thus NTML and ULS are fine as \emph{post-estimation residual statistics}. They
 are not the discrepancies that define the point estimate.
 
 \section{Boundary-complete extension}
 
-Equations \eqref{eq:Kstar} and \eqref{eq:common-proj} use the inverse of the
-composite covariance \(Z\T HZ\), so the interior construction is not
-automatically total. A boundary-complete version should distinguish three
-cases.
+Equations \eqref{eq:LambdaG} and \eqref{eq:common-proj} use \(D^{-1/2}\) and
+the inverse of the standardized composite covariance \(\Phi_G\), so the
+interior construction is not automatically total. A boundary-complete version
+should distinguish three cases.
 
-First, if \(Z\T HZ\) is positive definite, use the ordinary Guttman map above.
-Second, if \(Z\T HZ\) is positive semidefinite and singular, use the
-Moore-Penrose inverse when the covariance equations are compatible:
+First, if the diagonal entries of \(D\) are positive and \(\Phi_G\) is positive
+definite, use the ordinary Guttman map above.
+
+Second, if the diagonal entries of \(D\) are positive and \(\Phi_G\) is
+positive semidefinite but singular, use the Moore-Penrose inverse when the
+covariance equations are compatible:
 \begin{equation}\label{eq:compat}
-  HZ=HZ(Z\T HZ)^{+}(Z\T HZ) .
+  HZD^{-1/2}=HZD^{-1/2}\Phi_G^{+}\Phi_G .
 \end{equation}
 Then
 \[
-  K_{\mathrm{MP}}=HZ(Z\T HZ)^{+}
+  \Lambda_{\mathrm{MP}}=HZD^{-1/2}\Phi_G^{+}
 \]
 is the unique minimum-Frobenius-norm minimizer of
 \eqref{eq:composite-objective}. It is also the ridge limit
 \[
-  \lim_{\lambda\downarrow0}HZ(Z\T HZ+\lambda I)^{-1}.
+  \lim_{\lambda\downarrow0}HZD^{-1/2}(\Phi_G+\lambda I)^{-1}.
 \]
 All minimizers give the same fitted common covariance,
 \[
-  K(Z\T HZ)K\T=HZ(Z\T HZ)^{+}Z\T H ,
+  \Lambda\Phi_G\Lambda\T
+  =
+  HZD^{-1/2}\Phi_G^{+}D^{-1/2}Z\T H ,
 \]
 so the common covariance is identified even though the coordinate
 representation of the factors is not.
 
-The parameter split is the difficult part. A singular \(Z\T HZ\) means that
-the fixed composite space has rank below \(k\). The common covariance still has
-a canonical Moore-Penrose fitted value, but the marker-scaled
-\((\Lambda_G,\Phi_G)\) representative is a convention. Marker rescaling can
-also fail if \(K_{\mathrm{MP},m_f f}=0\) for some marker. A boundary-complete
-implementation should therefore return the common covariance and the
-Moore-Penrose representative with an explicit boundary warning, and should not
-present the individual factor parameters as regularly identified.
+The parameter split is the difficult part. A singular \(\Phi_G\) means that the
+standardized composite space has rank below \(k\). The common covariance still
+has a canonical Moore-Penrose fitted value, but the \(k\)-factor unit-variance
+representative is on the boundary because \(\Phi_G\) is singular. A
+boundary-complete implementation should therefore return the common covariance
+and the Moore-Penrose representative with an explicit boundary warning, and
+should not present the individual factor parameters as regularly identified.
 
-Third, if \(Z\T HZ\) is indefinite or \eqref{eq:compat} fails, the quadratic
-\eqref{eq:composite-objective} has no pure Guttman least-squares solution. An
-always-returning estimator can still be defined by a named regularized mode,
-for example
+Third, if some diagonal entry of \(D\) is nonpositive, if \(\Phi_G\) is
+indefinite, or if \eqref{eq:compat} fails, the quadratic
+\eqref{eq:composite-objective} has no pure standardized-composite
+least-squares solution. An always-returning estimator can still be defined by a
+named regularized mode, for example
 \[
-  K_{\lambda}=HZ(Z\T HZ+\lambda I)^{-1},
+  \Lambda_{\lambda}=HZD^{-1/2}(\Phi_G+\lambda I)^{-1},
 \]
 with \(\lambda\) chosen to make the system positive definite, or by first
-projecting \(Z\T HZ\) to a positive semidefinite matrix. This is useful
+projecting the standardized composite covariance to a positive semidefinite
+matrix. If \(D^{-1/2}\) itself is the failure point, the regularized variant
+must also name how composite variances are floored or repaired. This is useful
 engineering, but it should be reported as a regularized Guttman variant, not as
 the clean population map.
 
@@ -585,25 +523,17 @@ For one covariance block, the implementation can be checked in this order:
 \item Build the incidence matrix \(Z\) from the simple CFA loading pattern.
 \item For each factor block, compute the Spearman-Harman communalities
   \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
-\item Compute the variable-composite covariance \(HZ\) and the composite
-  covariance \(Z\T HZ\).
-\item Solve \(K^\star=HZ(Z\T HZ)^{-1}\). This is the coefficient matrix
-  minimizing the composite prediction loss when \(Z\T HZ\) is positive
+\item Form \(D=\diag(Z\T HZ)\) and the standardized composite covariance
+  \(\Phi_G=D^{-1/2}(Z\T HZ)D^{-1/2}\).
+\item Solve \(\Lambda_G=HZD^{-1/2}\Phi_G^{-1}\). This is the loading matrix
+  minimizing the composite prediction loss when \(\Phi_G\) is positive
   definite.
-\item Choose a latent scale. For unit variances, form
-  \(C_{\mathrm{uv}}\) from the inverse square roots of the diagonal entries of
-  \(Z\T HZ\), then compute
-  \(\Lambda_{\mathrm{uv}}=K^\star C_{\mathrm{uv}}^{-1}\),
-  \(\Phi_{\mathrm{uv}}=C_{\mathrm{uv}}(Z\T HZ)C_{\mathrm{uv}}\), and
-  \(\psi_{\mathrm{uv}}=\diag(S-\Lambda_{\mathrm{uv}}\Phi_{\mathrm{uv}}
-  \Lambda_{\mathrm{uv}}\T)\).
+\item Compute \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\).
 \item If first-loading-equals-one output is desired, convert the
-  unit-variance matrices by the marker loadings or compute
-  \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=M(Z\T HZ)M\), and
-  \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\) directly.
+  unit-variance matrices by the marker loading matrix \(M_{\mathrm{fl}}\).
 \item Assemble the model's free parameter vector from the allowed loading cells,
   latent covariance cells, and residual variances. Off-pattern entries of
-  \(K^\star\) are auxiliary unless the model itself allows those loadings.
+  \(\Lambda_G\) are auxiliary unless the model itself allows those loadings.
 \item For standard errors or tests, finite-difference the full map to obtain
   \(J_G\), then use \(J_G\Gamma J_G\T/N\) for parameter covariance and
   \(M_G=I-\Delta J_G\) for residual goodness-of-fit references.
@@ -614,11 +544,11 @@ For one covariance block, the implementation can be checked in this order:
 The Guttman estimator has a real least-squares criterion, but it is not the SEM
 criterion used by ML, ULS, GLS, or WLS. It first constructs fixed indicator
 composites, regresses the observed variables on those composites under the
-communality-filled covariance \(H\), and then chooses a latent scale for the
-resulting common covariance. Unit-variance and first-loading-equals-one output
-are diagonal reparameterizations of the same fitted common part. Residual NTML
-or ULS statistics are useful diagnostics and valid pseudo-tests once their
-weighted-\(\chi^2\) reference is corrected with
+communality-filled covariance \(H\), and reads the unit-variance latent
+covariance as the correlation matrix of the standardized composites.
+First-loading-equals-one output is a diagonal reparameterization of the same
+fitted common part. Residual NTML or ULS statistics are useful diagnostics and
+valid pseudo-tests once their weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
 minimum-distance/Wald statistic based on the block-diagonal Guttman delta
 covariance.
