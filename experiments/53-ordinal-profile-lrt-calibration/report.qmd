@@ -21,6 +21,7 @@ if (!file.exists(summary_path) || !file.exists(metadata_path) ||
 summary <- read.csv(summary_path)
 metadata <- read.csv(metadata_path)
 targets <- read.csv(targets_path)
+if (!"stress" %in% names(metadata)) metadata$stress <- FALSE
 ordinary <- summary[summary$arm == "dwls_ordinary", ]
 profile_ref <- summary[summary$arm != "dwls_ordinary", ]
 worst_ref <- profile_ref[which.min(profile_ref$reference_coverage_95), ]
@@ -49,24 +50,27 @@ misspecification?
 
 This run intentionally keeps the grid DWLS-only; the WLS robust-scaled
 comparison is deferred so the same compute budget buys more replications.
-The DGP grid includes the correctly specified one-factor ordinal probit model
-and a locally dependent ordinal model fitted by the same one-factor CFA. Targets
-are large-sample pseudo-true fitted-profile omega values for each DGP and cut
-regime.
+The baseline DGP grid includes the correctly specified one-factor ordinal
+probit model and a locally dependent ordinal model fitted by the same one-factor
+CFA. The stress grid replaces that with stronger residual local dependence and
+a two-factor population fitted by the same one-factor CFA, with smaller sample
+sizes and sparse thresholds. Targets are large-sample pseudo-true fitted-profile
+omega values for each DGP and cut regime.
 
 ## Short Answer
 
 ```{r, results='asis'}
 cat(sprintf(
   paste0(
-    "At %s reps per cell, ordinary DWLS reference coverage ranges from %.3f ",
+    "At %s reps per cell%s, ordinary DWLS reference coverage ranges from %.3f ",
     "to %.3f; the weakest ordinary cell is %s / %s at N = %d. ",
-    "Robust-scaled and misspec-mixture reference coverage ranges from %.3f ",
+    "Robust-scaled and misspec-scaled reference coverage ranges from %.3f ",
     "to %.3f; the weakest robust/misspec cell is %s / %s at N = %d. ",
     "The weakest Wald delta cell is %s at N = %d with coverage %.3f. ",
     "The grid recorded %d profile construction failures."
   ),
   metadata$reps,
+  if (isTRUE(metadata$stress[[1]])) " in the stress grid" else "",
   min(ordinary$reference_coverage_95, na.rm = TRUE),
   max(ordinary$reference_coverage_95, na.rm = TRUE),
   paste(worst_ordinary$dgp, worst_ordinary$regime, sep = " / "),
@@ -176,20 +180,22 @@ coverage points to LR inflation as a scalar-calibration problem. Poor Wald
 coverage with near-nominal profile-reference coverage points instead to
 point-functional bias or delta-method SE bias.
 
-The misspecification-mixture arm is included for the reference-law taxonomy, not
-as a point-bias correction. In the local-dependence DGP the target is the
-pseudo-true fitted one-factor omega, so any residual gap is reference-law or
-sparse-summary behavior around that working-model target, not bias relative to a
-generating-model reliability.
+The scalar misspecification arm is reported as misspec-scaled. The underlying
+weighted-$\chi^2$ reference has one eigenvalue for this one-degree-of-freedom
+profile test, so the older misspecification-mixture label is only a legacy alias
+for the same scaled reference in this experiment. In the misspecified DGPs the
+target is the pseudo-true fitted one-factor omega, so any residual gap is
+reference-law or sparse-summary behavior around that working-model target, not
+bias relative to a generating-model reliability.
 
 When CI inversion is enabled, the LRT/CI disagreement count is the first
 connectedness diagnostic: it compares target inclusion in the inverted interval
 with the pointwise profile test at the same target. A disagreement flags either
 nonmonotone/disconnected profile behavior or numerical root trouble. The
-misspecification-mixture CI rows should be read as experimental endpoint
-diagnostics; failures usually indicate that an endpoint robust profile
-quadratic is not positive, even when the pointwise misspecification-scaled test
-at the target is well behaved.
+misspec-scaled CI rows should be read as experimental endpoint diagnostics;
+failures usually indicate that an endpoint robust profile quadratic is not
+positive, even when the pointwise misspec-scaled test at the target is well
+behaved.
 
 ## Reproduce
 
@@ -197,6 +203,7 @@ at the target is well behaved.
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R
 Rscript run_experiment.R --dgp local_dependence --reps 500
+Rscript run_experiment.R --stress --reps 300
 Rscript run_experiment.R --smoke --ci
 Rscript run_experiment.R --ci --reps 200
 quarto render report.qmd

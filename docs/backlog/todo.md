@@ -282,14 +282,26 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     misspecification stress for the no-integration profile target: a locally
     dependent ordinal latent-response DGP fitted by the same one-factor DWLS
     model. At 1000 reps/cell, ordinary DWLS still undercovers, while
-    robust-scaled and misspecification-mixture references both cover near
-    nominal for the pseudo-true fitted omega except in the sparse
-    threshold-extreme `N=50` cell. The first CI-inversion probe
+    robust-scaled and misspecification-scaled references both cover near nominal
+    for the pseudo-true fitted omega except in the sparse threshold-extreme
+    `N=50` cell. The scalar misspecification arm is now reported as scaled; the
+    previous mixture wording was only the singleton weighted-chi-square
+    representation of the same one-df law. The first CI-inversion probe
     (`--ci`, 200 reps/cell) makes robust-scaled inversion the practical v1 CI
     lane: 3168 attempts, 38 failures, zero target-test/CI disagreements, and
-    coverage 0.918-0.975. Misspecification-mixture CI inversion remains
+    coverage 0.918-0.975. Misspecification-scaled CI inversion remains
     diagnostic only: 1201/3154 attempts failed, mostly at endpoint robust
-    profile quadratics.
+    profile quadratics. A harder `--stress` mode now uses stronger local
+    dependence and a two-factor DGP, smaller `N in {25,35,50,75}`, and sparse
+    cuts. In the 300-rep pointwise stress run, sparse-threshold failures are
+    mostly ordinal-stat construction failures, but the usable hard cells are
+    threshold-extreme `N=50`: robust-scaled coverage was 0.932
+    (strong-local) / 0.926 (two-factor), and the oracle-constant diagnostic
+    moved those to 0.964 / 0.961. A 100-rep targeted CI pass on those two cells
+    kept robust-scaled CI decisions connected (0 disagreements; coverage
+    0.929 / 0.934 among successful inversions) while misspecification-scaled CIs
+    failed 178/179 attempts. Next useful work: test candidate scalar
+    finite-sample constants on the robust-scaled `N=50` stress cells.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:

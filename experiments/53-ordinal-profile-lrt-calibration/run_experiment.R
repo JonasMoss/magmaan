@@ -2,19 +2,26 @@
 
 usage <- function() {
   cat(
-"Usage: Rscript run_experiment.R [--smoke] [--ci] [--reps N] [--n-grid LIST] [--dgp LIST] [--pseudo-n N] [--ci-references LIST] [--seed-base N]
+"Usage: Rscript run_experiment.R [--smoke] [--stress] [--ci] [--reps N] [--n-grid LIST] [--dgp LIST] [--cut-regimes LIST] [--pseudo-n N] [--ci-references LIST] [--seed-base N]
 
 DWLS-only taxonomy run for ordinal polychoric-omega profile-LRT calibration.
 
 Options:
   --smoke       Small run: reps=20, n-grid=50,100, pseudo-n=10000.
+  --stress      Hard pointwise grid: reps=300, n-grid=25,35,50,75,
+                DGPs=strong_local_dependence,two_factor,
+                cut-regimes=threshold_extreme,threshold_sparse.
   --reps N      Replications per cell (default 1000).
   --n-grid LIST Comma-separated sample sizes (default 50,100,250,500).
-  --dgp LIST    Comma-separated DGPs: one_factor,local_dependence (default both).
+  --dgp LIST    Comma-separated DGPs: one_factor,local_dependence,
+                strong_local_dependence,two_factor (default baseline pair).
+  --cut-regimes LIST
+               Comma-separated cut regimes: balanced,threshold_extreme,
+               threshold_sparse (default balanced,threshold_extreme).
   --pseudo-n N  Large-sample size for pseudo-targets (default 100000).
   --ci          Also compute profile-LRT CI inversion for selected references.
   --ci-references LIST
-               CI references (default robust_scaled,misspec_mixture).
+               CI references (default robust_scaled,misspec_scaled).
   --seed-base N Base seed (default 20260704).
   --help        Show this help.
 ")
@@ -44,27 +51,43 @@ normalize_reference_key <- function(x) {
   if (x %in% c("chisq", "chi_square")) return("ordinary")
   if (x %in% c("satorra_scaled", "scaled")) return("robust_scaled")
   if (x == "misspecification_scaled") return("misspec_scaled")
-  if (x %in% c("misspecification_mixture", "mixture")) return("misspec_mixture")
+  if (x %in% c("misspecification_mixture", "mixture",
+               "misspec_mixture")) return("misspec_scaled")
   x
 }
 
 smoke <- has_flag("--smoke")
+stress <- has_flag("--stress")
 ci_enabled <- has_flag("--ci")
-reps <- as.integer(take("--reps", if (smoke) "20" else "1000"))
-n_grid <- split_list(take("--n-grid", if (smoke) "50,100" else "50,100,250,500"))
+reps <- as.integer(take("--reps", if (smoke) {
+  "20"
+} else if (stress) {
+  "300"
+} else {
+  "1000"
+}))
+n_grid <- split_list(take("--n-grid", if (smoke) {
+  "50,100"
+} else if (stress) {
+  "25,35,50,75"
+} else {
+  "50,100,250,500"
+}))
 n_grid <- as.integer(n_grid)
 pseudo_n <- as.integer(take("--pseudo-n", if (smoke) "10000" else "100000"))
 seed_base <- as.integer(take("--seed-base", "20260704"))
-all_dgps <- c("one_factor", "local_dependence")
-dgp_grid <- split_list(take("--dgp", paste(all_dgps, collapse = ",")))
-reference_levels <- c("ordinary", "robust_scaled", "misspec_scaled",
-                      "misspec_mixture")
+all_dgps <- c("one_factor", "local_dependence", "strong_local_dependence",
+              "two_factor")
+dgp_default <- if (stress) {
+  "strong_local_dependence,two_factor"
+} else {
+  "one_factor,local_dependence"
+}
+dgp_grid <- split_list(take("--dgp", dgp_default))
+reference_levels <- c("ordinary", "robust_scaled", "misspec_scaled")
 ci_references <- vapply(
-  split_list(take("--ci-references", "robust_scaled,misspec_mixture")),
+  split_list(take("--ci-references", "robust_scaled,misspec_scaled")),
   normalize_reference_key, character(1L), USE.NAMES = FALSE)
-stopifnot(reps > 0L, all(n_grid > 2L), pseudo_n > 1000L,
-          is.finite(seed_base), all(dgp_grid %in% all_dgps),
-          all(ci_references %in% reference_levels))
 
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
 
@@ -84,8 +107,20 @@ ci_statistic_tol <- 1e-5
 
 cut_regimes <- list(
   balanced = rep(list(c(-0.65, 0.45)), length(loadings)),
-  threshold_extreme = rep(list(c(-1.35, 0.95)), length(loadings))
+  threshold_extreme = rep(list(c(-1.35, 0.95)), length(loadings)),
+  threshold_sparse = rep(list(c(-1.85, 1.15)), length(loadings))
 )
+cut_default <- if (stress) {
+  "threshold_extreme,threshold_sparse"
+} else {
+  "balanced,threshold_extreme"
+}
+cut_grid <- split_list(take("--cut-regimes", cut_default))
+
+stopifnot(reps > 0L, all(n_grid > 2L), pseudo_n > 1000L,
+          is.finite(seed_base), all(dgp_grid %in% all_dgps),
+          all(cut_grid %in% names(cut_regimes)),
+          all(ci_references %in% reference_levels))
 
 latent_response <- function(n, dgp, seed) {
   set.seed(seed)
@@ -96,6 +131,17 @@ latent_response <- function(n, dgp, seed) {
   if (dgp == "local_dependence") {
     residual_R[1L, 2L] <- residual_R[2L, 1L] <- 0.35
     residual_R[5L, 6L] <- residual_R[6L, 5L] <- 0.25
+  } else if (dgp == "strong_local_dependence") {
+    residual_R[1L, 2L] <- residual_R[2L, 1L] <- 0.55
+    residual_R[5L, 6L] <- residual_R[6L, 5L] <- 0.45
+  } else if (dgp == "two_factor") {
+    Phi <- matrix(c(1.0, 0.55, 0.55, 1.0), nrow = 2L)
+    eta2 <- matrix(stats::rnorm(n * 2L), nrow = n) %*% chol(Phi)
+    eps <- matrix(stats::rnorm(n * length(loadings)), nrow = n)
+    Y <- sweep(eps, 2L, theta_sqrt, `*`)
+    Y[, 1L:3L] <- Y[, 1L:3L] + tcrossprod(eta2[, 1L], loadings[1L:3L])
+    Y[, 4L:6L] <- Y[, 4L:6L] + tcrossprod(eta2[, 2L], loadings[4L:6L])
+    return(Y)
   } else if (dgp != "one_factor") {
     stop("unknown dgp: ", dgp, call. = FALSE)
   }
@@ -143,7 +189,6 @@ arm_name <- function(reference_key) {
          ordinary = "dwls_ordinary",
          robust_scaled = "dwls_robust_scaled",
          misspec_scaled = "dwls_misspec_scaled",
-         misspec_mixture = "dwls_misspec_mixture",
          stop("unknown reference key: ", reference_key, call. = FALSE))
 }
 
@@ -162,7 +207,7 @@ make_arms <- function(reference_keys) {
     stringsAsFactors = FALSE)
 }
 
-base_references <- c("ordinary", "robust_scaled", "misspec_mixture")
+base_references <- c("ordinary", "robust_scaled", "misspec_scaled")
 arms <- make_arms(c(base_references, if (ci_enabled) ci_references))
 
 profile_omega_unrestricted <- function(fit, stats, omega0) {
@@ -194,7 +239,7 @@ estimate_pseudo_target <- function(dgp, regime) {
 
 message("estimating pseudo-targets")
 targets <- do.call(rbind, lapply(dgp_grid, function(dgp) {
-  do.call(rbind, lapply(names(cut_regimes), function(regime) {
+  do.call(rbind, lapply(cut_grid, function(regime) {
     message(sprintf("target dgp=%s regime=%s", dgp, regime))
     estimate_pseudo_target(dgp, regime)
   }))
@@ -426,11 +471,11 @@ fit_one <- function(dgp, regime, n, rep_id) {
   do.call(rbind, rows)
 }
 
-rows <- vector("list", length(dgp_grid) * length(cut_regimes) *
+rows <- vector("list", length(dgp_grid) * length(cut_grid) *
                  length(n_grid) * reps)
 k <- 1L
 for (dgp in dgp_grid) {
-  for (regime in names(cut_regimes)) {
+  for (regime in cut_grid) {
     for (n in n_grid) {
       for (r in seq_len(reps)) {
         if (r %% max(1L, reps %/% 10L) == 0L) {
@@ -513,6 +558,7 @@ write.csv(targets, "results/pseudo_targets.csv", row.names = FALSE)
 write.csv(cell_summary, "results/simulation_summary.csv", row.names = FALSE)
 write.csv(data.frame(
   smoke = smoke,
+  stress = stress,
   reps = reps,
   n_grid = paste(n_grid, collapse = ","),
   pseudo_n = pseudo_n,
@@ -525,7 +571,7 @@ write.csv(data.frame(
   ci_statistic_tol = ci_statistic_tol,
   loadings = paste(loadings, collapse = ","),
   dgps = paste(dgp_grid, collapse = ","),
-  cut_regimes = paste(names(cut_regimes), collapse = ","),
+  cut_regimes = paste(cut_grid, collapse = ","),
   arms = paste(unique(raw$arm), collapse = ","),
   magmaan_version = as.character(utils::packageVersion("magmaan")),
   stringsAsFactors = FALSE
