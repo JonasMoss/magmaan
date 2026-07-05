@@ -2173,6 +2173,16 @@ work until a concrete downstream consumer appears.
   closed form throws more improper solutions than ML). Later slots for the enum:
   FABIN2/Bentler/James-Stein/MIIV maps
   (loadings producers already exist) and a polychoric-ADF Gamma path.
+  Future point-estimator lane: a **boundary-complete Guttman map** (not
+  "robust") that always returns a well-labeled object when the composite
+  correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
+  inverse in the interior; Moore-Penrose inverse for compatible PSD-singular
+  cases \(L = LP^+P\), with uniqueness claimed only for the fitted common
+  covariance \(LP^+L'\) and an explicit boundary warning for the
+  marker-scaled parameter representative; separate, named regularized fallback
+  (ridge / PSD repair) for indefinite or incompatible systems, because that is
+  no longer the pure Guttman map. Record the derivation in
+  `guttman_estimator_criterion.tex` before implementation.
 
   **Measurement invariance landed** (2026-07): multi-group blocks with a
   block-diagonal `Omega`, mean structure (free intercepts, latent means fixed at

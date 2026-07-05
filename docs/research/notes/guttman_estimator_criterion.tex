@@ -310,6 +310,55 @@ except in special cases.
 Thus NTML and ULS are fine as \emph{post-estimation residual statistics}. They
 are not the discrepancies that define the point estimate.
 
+\section{Boundary-complete extension}
+
+Equations \eqref{eq:Kstar} and \eqref{eq:common-proj} use inverses, so the
+interior construction is not automatically total. A boundary-complete version
+should distinguish three cases.
+
+First, if \(P\) is positive definite, use the ordinary Guttman map above.
+Second, if \(P\) is positive semidefinite and singular, use the
+Moore-Penrose inverse when the covariance equations are compatible:
+\begin{equation}\label{eq:compat}
+  L=L P^{+}P .
+\end{equation}
+Then
+\[
+  K_{\mathrm{MP}}=LP^{+}
+\]
+is the unique minimum-Frobenius-norm minimizer of
+\eqref{eq:composite-loss}. It is also the ridge limit
+\[
+  \lim_{\lambda\downarrow0}L(P+\lambda I)^{-1}.
+\]
+All minimizers give the same fitted common covariance,
+\[
+  KPK\T=LP^{+}L\T ,
+\]
+so the common covariance is identified even though the coordinate
+representation of the factors is not.
+
+The parameter split is the difficult part. A singular \(P\) means that the
+fixed composite space has rank below \(k\). The common covariance still has a
+canonical Moore-Penrose fitted value, but the marker-scaled
+\((\Lambda_G,\Phi_G)\) representative is a convention. Marker rescaling can
+also fail if \(K_{\mathrm{MP},m_f f}=0\) for some marker. A boundary-complete
+implementation should therefore return the common covariance and the
+Moore-Penrose representative with an explicit boundary warning, and should not
+present the individual factor parameters as regularly identified.
+
+Third, if \(P\) is indefinite or \eqref{eq:compat} fails, the quadratic
+\eqref{eq:composite-loss} has no pure Guttman least-squares solution. An
+always-returning estimator can still be defined by a named regularized mode,
+for example
+\[
+  K_{\lambda}=L(P+\lambda I)^{-1},
+\]
+with \(\lambda\) chosen to make the system positive definite, or by first
+projecting \(P\) to a positive semidefinite matrix. This is useful engineering,
+but it should be reported as a regularized Guttman variant, not as the clean
+population map.
+
 \section{Residual statistics at the Guttman estimate}
 
 Let \(s=\vech(S)\), let \(\hat\theta_G=\tau_G(s)\), and let
