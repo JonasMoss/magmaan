@@ -35,7 +35,7 @@ The Guttman estimator used by \texttt{magmaan} is best understood as a
 covariance-summary map, not as the minimizer of the usual CFA covariance
 discrepancy. It does contain a clean minimization step, but that step is a
 regression of observed variables on fixed indicator composites. The CFA
-parameters are then read from that regression after marker rescaling.
+parameters are then read from that regression after choosing a latent scale.
 
 This note records the construction in enough detail to audit an implementation.
 It also states which discrepancy is natural for multi-sample constraints. The
@@ -224,7 +224,7 @@ being optimized are the coefficients from fixed indicator composites to the
 observed variables. The CFA covariance model parameters have not yet entered as
 optimization variables.
 
-\section{Step 3: choose CFA coordinates for the common part}
+\section{Step 3: choose a latent scale for the common part}
 
 The regression step already gives a rank-\(k\) common covariance:
 \[
@@ -257,21 +257,53 @@ Then \(K^\star U=\Lambda_C\eta_C\), \(\Cov(\eta_C)=\Phi_C\), and
 \]
 Thus the \((\Lambda,\Phi)\) reconstruction is not a second optimization
 problem. It is a choice of coordinates for the common covariance already fitted
-by the composite regression.
+by the composite regression. The incidence matrix \(Z\) gives labelled
+composite axes, so the usual Guttman choices do not use an arbitrary rotation
+\(C\). They keep those axes and only change the scale of each column.
 
-The incidence matrix \(Z\) gives labelled composite axes, so the Guttman map
-does not use an arbitrary rotation \(C\). It keeps those axes and only changes
-the scale of each column. The CFA marker convention then determines the scale:
-the marker loading for factor \(f\) should be one. Let
+The unit-variance scale is the tidiest diagonal choice. Let
+\[
+  C_{\mathrm{uv}}
+  =
+  \diag\{(Z\T HZ)_{11}^{-1/2},\ldots,(Z\T HZ)_{kk}^{-1/2}\},
+\]
+assuming the composite variances are positive, and define
+\[
+  \eta_{\mathrm{uv}}=C_{\mathrm{uv}}U .
+\]
+Then \(U=C_{\mathrm{uv}}^{-1}\eta_{\mathrm{uv}}\), so
+\begin{equation}\label{eq:unit-variance-map}
+  \Lambda_{\mathrm{uv}}=K^\star C_{\mathrm{uv}}^{-1},
+  \qquad
+  \Phi_{\mathrm{uv}}=C_{\mathrm{uv}}(Z\T HZ)C_{\mathrm{uv}},
+  \qquad
+  \psi_{\mathrm{uv}}
+  =
+  \diag\{S-\Lambda_{\mathrm{uv}}\Phi_{\mathrm{uv}}
+  \Lambda_{\mathrm{uv}}\T\}.
+\end{equation}
+By construction, \(\diag(\Phi_{\mathrm{uv}})=I\), and the common covariance is
+unchanged:
+\[
+  \Lambda_{\mathrm{uv}}\Phi_{\mathrm{uv}}\Lambda_{\mathrm{uv}}\T
+  =
+  K^\star (Z\T HZ) K^{\star\T}.
+\]
+The entries of \(\Phi_{\mathrm{uv}}\) are the correlations among the fixed
+indicator composites under \(H\), and the loadings are the regression
+coefficients expressed in those unit-variance latent coordinates.
+
+The first-loading-equals-one scale is another diagonal reparameterization. Let
 \[
   M=\diag(K^\star_{m_1,1},\ldots,K^\star_{m_k,k})
 \]
-be the diagonal matrix of the current marker coefficients. Equivalently, define
-the marker-scaled surrogate factor vector
+be the diagonal matrix of the marker coefficients in the raw composite
+coordinates. Equivalently, define the first-loading-scaled surrogate factor
+vector
 \[
   \eta_G=M U .
 \]
-Then \(U=M^{-1}\eta_G\), so the marker-scaled Guttman matrices are
+Then \(U=M^{-1}\eta_G\), so the first-loading-scaled Guttman matrices are
 \begin{equation}\label{eq:marker-map}
   \Lambda_G=K^\star M^{-1},
   \qquad
@@ -279,23 +311,41 @@ Then \(U=M^{-1}\eta_G\), so the marker-scaled Guttman matrices are
   \qquad
   \psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}.
 \end{equation}
-Then every marker loading in \(\Lambda_G\) is one, and the common covariance
-is unchanged:
+Every marker loading in \(\Lambda_G\) is one, and the common covariance is
+unchanged:
 \[
   \Lambda_G\Phi_G\Lambda_G\T
   =
   K^\star (Z\T HZ) K^{\star\T}.
 \]
 Among diagonal rescalings that preserve the factor labels supplied by \(Z\),
-this is the unique rescaling that satisfies the marker convention, provided all
-marker coefficients are nonzero.
+this is the unique rescaling that makes the chosen marker loadings equal to
+one, provided all marker coefficients are nonzero.
+
+The two displays are the same estimator written in different latent scales.
+Starting from the unit-variance matrices, define
+\[
+  M_{\mathrm{uv}}
+  =
+  \diag\{(\Lambda_{\mathrm{uv}})_{m_1,1},\ldots,
+          (\Lambda_{\mathrm{uv}})_{m_k,k}\}.
+\]
+Then
+\[
+  \Lambda_G=\Lambda_{\mathrm{uv}}M_{\mathrm{uv}}^{-1},
+  \qquad
+  \Phi_G=M_{\mathrm{uv}}\Phi_{\mathrm{uv}}M_{\mathrm{uv}} .
+\]
+This conversion is estimator-independent. It is the usual change of latent
+factor units from unit variances to first-loading-equals-one units.
 
 In the current \texttt{magmaan} map, the full \(K^\star\) is computed. The
 reported free loading parameters are read only from the model-allowed loading
 cells. Off-pattern entries of \(K^\star\) are auxiliary. They vanish on the
 exact simple-structure model; away from that model they are not fitted as
-cross-loadings. The residual variances in \eqref{eq:marker-map} come from the
-diagonal of the full composite common part.
+cross-loadings. The residual variances in \eqref{eq:unit-variance-map} and
+\eqref{eq:marker-map} are identical because they come from the diagonal of the
+same composite common part.
 
 \begin{proposition}[Exact recovery on the simple CFA model]\label{prop:recover}
 Suppose the communality-filled population matrix is exactly
@@ -303,8 +353,10 @@ Suppose the communality-filled population matrix is exactly
   H_0=\Lambda_0\Phi_0\Lambda_0\T ,
 \]
 where \(\Lambda_0\) has the simple loading pattern encoded by \(Z\), each marker
-loading is one, and the diagonal matrix \(T=\Lambda_0\T Z\) is nonsingular. Then the
-Guttman map recovers \(\Lambda_0\) and \(\Phi_0\).
+loading is one, and the diagonal matrix \(T=\Lambda_0\T Z\) is nonsingular.
+Then the first-loading-scaled Guttman map recovers \(\Lambda_0\) and
+\(\Phi_0\). The unit-variance map gives the corresponding unit-variance
+parameterization of the same common covariance.
 \end{proposition}
 
 \begin{proof}
@@ -329,6 +381,10 @@ marker loading is one. Dividing the column by this marker coefficient gives
 \[
   M(Z\T H_0Z)M=\Phi_0 .
 \]
+The unit-variance display \eqref{eq:unit-variance-map} has the same common
+covariance and \(\diag(\Phi_{\mathrm{uv}})=I\). It is therefore the
+unit-variance reparameterization of the recovered first-loading-scale model, up
+to the arbitrary signs of the latent axes.
 \end{proof}
 
 \section{What is and is not minimized}
@@ -350,9 +406,9 @@ first-order condition
   \{\vech(S)-\sigma(\theta)\}=0,
 \]
 or the equivalent NTML score condition when \(V\) is the likelihood weight. The
-Guttman estimate is obtained from \(H\), \(Z\), and the marker rescaling above;
-there is no reason for it to satisfy that residual orthogonality condition
-except in special cases.
+Guttman estimate is obtained from \(H\), \(Z\), and the latent-scale choice
+above; there is no reason for it to satisfy that residual orthogonality
+condition except in special cases.
 
 Thus NTML and ULS are fine as \emph{post-estimation residual statistics}. They
 are not the discrepancies that define the point estimate.
@@ -534,9 +590,17 @@ For one covariance block, the implementation can be checked in this order:
 \item Solve \(K^\star=HZ(Z\T HZ)^{-1}\). This is the coefficient matrix
   minimizing the composite prediction loss when \(Z\T HZ\) is positive
   definite.
-\item Read marker coefficients into \(M\); compute
+\item Choose a latent scale. For unit variances, form
+  \(C_{\mathrm{uv}}\) from the inverse square roots of the diagonal entries of
+  \(Z\T HZ\), then compute
+  \(\Lambda_{\mathrm{uv}}=K^\star C_{\mathrm{uv}}^{-1}\),
+  \(\Phi_{\mathrm{uv}}=C_{\mathrm{uv}}(Z\T HZ)C_{\mathrm{uv}}\), and
+  \(\psi_{\mathrm{uv}}=\diag(S-\Lambda_{\mathrm{uv}}\Phi_{\mathrm{uv}}
+  \Lambda_{\mathrm{uv}}\T)\).
+\item If first-loading-equals-one output is desired, convert the
+  unit-variance matrices by the marker loadings or compute
   \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=M(Z\T HZ)M\), and
-  \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\).
+  \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\) directly.
 \item Assemble the model's free parameter vector from the allowed loading cells,
   latent covariance cells, and residual variances. Off-pattern entries of
   \(K^\star\) are auxiliary unless the model itself allows those loadings.
@@ -550,9 +614,11 @@ For one covariance block, the implementation can be checked in this order:
 The Guttman estimator has a real least-squares criterion, but it is not the SEM
 criterion used by ML, ULS, GLS, or WLS. It first constructs fixed indicator
 composites, regresses the observed variables on those composites under the
-communality-filled covariance \(H\), and marker-rescales the result into CFA
-parameters. Residual NTML or ULS statistics are useful diagnostics and valid
-pseudo-tests once their weighted-\(\chi^2\) reference is corrected with
+communality-filled covariance \(H\), and then chooses a latent scale for the
+resulting common covariance. Unit-variance and first-loading-equals-one output
+are diagonal reparameterizations of the same fitted common part. Residual NTML
+or ULS statistics are useful diagnostics and valid pseudo-tests once their
+weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
 minimum-distance/Wald statistic based on the block-diagonal Guttman delta
 covariance.
