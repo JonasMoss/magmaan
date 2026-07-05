@@ -318,6 +318,104 @@ The regression loading matrix is
 \]
 \end{proof}
 
+\section{General composite matrices and equivariance}
+
+The incidence matrix \(Z\) can be replaced by a fixed composite matrix
+\[
+  A\in\mathbb R^{p\times k}.
+\]
+This is a useful factor-score-shaped construction, but it is not an ordinary
+factor score estimate from the raw data covariance. The scores below are
+composites of the auxiliary vector \(Y_H\), whose covariance is \(H\). Thus
+\(A\T Y_H\) should be read as fixed score proxies in the communality-filled
+population problem.
+
+For a fixed \(A\), define
+\[
+  U_A=A\T Y_H,
+  \qquad
+  D_A=\diag(A\T H A),
+  \qquad
+  F_A=D_A^{-1/2}A\T Y_H .
+\]
+Assuming the diagonal of \(D_A\) is positive, set
+\begin{equation}\label{eq:general-composite-map}
+  \Phi_A=D_A^{-1/2}(A\T H A)D_A^{-1/2},
+  \qquad
+  \Lambda_A=HAD_A^{-1/2}\Phi_A^{-1}.
+\end{equation}
+The original Guttman map is the special case \(A=Z\). The matrix
+\(AD_A^{-1/2}\) plays the role of a fixed score-coefficient matrix in the
+auxiliary \(H\)-world, and \(\Lambda_A\) is the population regression of
+\(Y_H\) on those standardized score proxies.
+
+The exact-recovery condition becomes a condition on the score proxies. Suppose
+\[
+  H_0=\Lambda_0\Phi_0\Lambda_0\T,
+  \qquad
+  \diag(\Phi_0)=I,
+\]
+and let \(T_A=\Lambda_0\T A\). If \(T_A\) is diagonal and nonsingular, then
+the columns of \(A\T Y_H\) are factor-pure proxies. With
+\[
+  S_A=\diag\{\operatorname{sign}((T_A)_{11}),\ldots,
+              \operatorname{sign}((T_A)_{kk})\},
+\]
+the same calculation as in Proposition \ref{prop:recover} gives
+\[
+  \Phi_A=S_A\Phi_0S_A,
+  \qquad
+  \Lambda_A=\Lambda_0S_A .
+\]
+Thus \(A\) need not be a 0/1 incidence matrix. What matters for exact recovery
+is that its score proxies isolate the latent axes.
+
+This general form has a clean coordinate-equivariance property. Let \(L\) be a
+nonsingular change of observed coordinates,
+\[
+  Y_H^\ast=L Y_H,
+  \qquad
+  H^\ast=LHL\T,
+\]
+and transform the composite matrix contravariantly:
+\[
+  A^\ast=L^{-\mathsf T}A .
+\]
+Then the raw composites are identical:
+\[
+  {A^\ast}\T Y_H^\ast=A\T Y_H,
+\]
+and the composite covariance is identical:
+\[
+  {A^\ast}\T H^\ast A^\ast=A\T H A .
+\]
+Therefore \(D_{A^\ast}^\ast=D_A\), \(F_{A^\ast}^\ast=F_A\), and
+\[
+  \Phi_{A^\ast}^\ast=\Phi_A .
+\]
+The loading matrix is equivariant:
+\[
+  \Lambda_{A^\ast}^\ast
+  =
+  H^\ast A^\ast D_A^{-1/2}\Phi_A^{-1}
+  =
+  L H A D_A^{-1/2}\Phi_A^{-1}
+  =
+  L\Lambda_A .
+\]
+Consequently the fitted common covariance transforms as it should:
+\[
+  \Lambda_{A^\ast}^\ast\Phi_{A^\ast}^\ast
+  {\Lambda_{A^\ast}^\ast}\T
+  =
+  L\Lambda_A\Phi_A\Lambda_A\T L\T .
+\]
+This is an equivariance statement for the common part. The diagonal residual
+variance vector is still coordinate-specific; arbitrary mixing of observed
+variables does not preserve the usual CFA requirement that residual covariance
+be diagonal. For diagonal rescalings or permutations, the residual diagonal
+transforms in the expected coordinate-wise way.
+
 \section{Population loading constraints}
 
 The standardized-composite construction also gives a direct population version
@@ -386,28 +484,28 @@ read on the estimable subspace with Moore-Penrose inverses, but then the output
 should be reported as a boundary convention.
 
 The same construction admits a row-weighted loading regression. Let
-\(A_Y\) be a symmetric positive definite metric on the observed variables, and
+\(V_Y\) be a symmetric positive definite metric on the observed variables, and
 let \(C_G=HZD^{-1/2}\). Define
 \begin{equation}\label{eq:weighted-loading-space}
-  \Lambda_{\mathcal L,A_Y}
+  \Lambda_{\mathcal L,V_Y}
   =
   \argmin_{\Lambda\in\mathcal L}
-  \E_H\{(Y_H-\Lambda F)\T A_Y(Y_H-\Lambda F)\}.
+  \E_H\{(Y_H-\Lambda F)\T V_Y(Y_H-\Lambda F)\}.
 \end{equation}
 Equivalently, up to constants,
 \[
-  \Lambda_{\mathcal L,A_Y}
+  \Lambda_{\mathcal L,V_Y}
   =
   \argmin_{\Lambda\in\mathcal L}
   \left[
-    \tr(A_Y\Lambda\Phi_G\Lambda\T)
-    -2\tr(A_Y\Lambda C_G\T)
+    \tr(V_Y\Lambda\Phi_G\Lambda\T)
+    -2\tr(V_Y\Lambda C_G\T)
   \right].
 \]
 If \(\mathcal L=\mathbb R^{p\times k}\), the row weight does not change the
 solution:
 \[
-  A_Y(\Lambda\Phi_G-C_G)=0
+  V_Y(\Lambda\Phi_G-C_G)=0
   \quad\Rightarrow\quad
   \Lambda=C_G\Phi_G^{-1}.
 \]
@@ -416,29 +514,29 @@ chooses an off-model population target within a restricted loading space.
 
 In vector form, the weighted criterion uses
 \[
-  W_{A_Y}=\Phi_G\otimes A_Y,
+  W_{V_Y}=\Phi_G\otimes V_Y,
   \qquad
-  c_{A_Y}=\operatorname{vec}(A_YC_G).
+  c_{V_Y}=\operatorname{vec}(V_YC_G).
 \]
 For affine constraints \(R\ell=r\),
 \[
-  \ell_{R,A_Y}
+  \ell_{R,V_Y}
   =
   \ell_G
   -
-  W_{A_Y}^{-1}R\T(RW_{A_Y}^{-1}R\T)^{-1}(R\ell_G-r).
+  W_{V_Y}^{-1}R\T(RW_{V_Y}^{-1}R\T)^{-1}(R\ell_G-r).
 \]
 If the loading space is written as \(\ell=E\beta\), then
 \[
-  \beta_{\mathcal L,A_Y}
+  \beta_{\mathcal L,V_Y}
   =
-  (E\T W_{A_Y}E)^{-1}E\T c_{A_Y},
+  (E\T W_{V_Y}E)^{-1}E\T c_{V_Y},
   \qquad
-  \ell_{\mathcal L,A_Y}=E\beta_{\mathcal L,A_Y}.
+  \ell_{\mathcal L,V_Y}=E\beta_{\mathcal L,V_Y}.
 \]
 At an exact population point with \(\Lambda_0\in\mathcal L\), every positive
-definite \(A_Y\) gives the same oriented loading matrix. Away from that
-constrained population model, \(A_Y\) selects which weighted projection of the
+definite \(V_Y\) gives the same oriented loading matrix. Away from that
+constrained population model, \(V_Y\) selects which weighted projection of the
 unconstrained loading regression is called the constrained target.
 
 A tau-equivalent block is the simplest example. For one factor with indicator
@@ -469,14 +567,14 @@ where \(E\) inserts fixed zeros and repeats equal loadings, then
 \]
 
 With row weights, the one-factor tau-equivalent average becomes the
-\(A_Y\)-weighted projection of \(C_G\) onto the constant-loading vector. If
-\(\mathbf 1_I\) is the indicator vector for the block and \(A_{Y,I}\) is the
+\(V_Y\)-weighted projection of \(C_G\) onto the constant-loading vector. If
+\(\mathbf 1_I\) is the indicator vector for the block and \(V_{Y,I}\) is the
 corresponding principal submatrix, then
 \[
-  \alpha_{A_Y}
+  \alpha_{V_Y}
   =
-  (\mathbf 1_I\T A_{Y,I}\mathbf 1_I)^{-1}
-  \mathbf 1_I\T A_{Y,I}C_{G,I}.
+  (\mathbf 1_I\T V_{Y,I}\mathbf 1_I)^{-1}
+  \mathbf 1_I\T V_{Y,I}C_{G,I}.
 \]
 
 These constraints are scale-dependent. The formulas above define equality in
@@ -493,7 +591,7 @@ the unconstrained map. Away from that constrained population model, it returns
 the closest allowed loading matrix in the composite-regression criterion.
 
 There is no universally best row weight as a population map under
-misspecification; different \(A_Y\)'s define different off-model targets. For
+misspecification; different \(V_Y\)'s define different off-model targets. For
 estimation, the efficiency-optimal weight is instead a sampling statement. If
 \(\hat\ell_G\) has asymptotic covariance \(\Omega_\ell\), the optimal
 minimum-distance estimator under \(\ell=E\beta\) uses
@@ -508,7 +606,7 @@ to \(H\), \(D\), \(\Phi_G\), and \(\Lambda_G\). In particular, it depends on the
 chosen communality estimator and on the fourth-moment behavior of the data.
 The optimal minimum-distance weight therefore cannot be determined from the
 population pair \((H,Z)\) alone, and it is not generally restricted to the
-Kronecker row-weight form \(\Phi_G\otimes A_Y\).
+Kronecker row-weight form \(\Phi_G\otimes V_Y\).
 
 \section{What is and is not minimized}
 
@@ -713,6 +811,10 @@ pretending that the point estimate minimized NTML or ULS.
 For one covariance block, the implementation can be checked in this order:
 \begin{enumerate}
 \item Build the incidence matrix \(Z\) from the simple CFA loading pattern.
+\item If using the generalized score-proxy version, replace \(Z\) by a fixed
+  composite matrix \(A\). Under a coordinate change \(Y^\ast=LY\), use
+  \(A^\ast=L^{-\mathsf T}A\) to preserve the same auxiliary composites. Read
+  the remaining \(Z\)-formulas with \(A\) substituted.
 \item For each factor block, compute the Spearman-Harman communalities
   \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
 \item Form \(D=\diag(Z\T HZ)\) and the standardized composite covariance
@@ -723,7 +825,7 @@ For one covariance block, the implementation can be checked in this order:
 \item If the population model imposes loading constraints, replace the previous
   solve by the constrained regression in
   \eqref{eq:constrained-loading-space}, or by the weighted version
-  \eqref{eq:weighted-loading-space} if a row metric \(A_Y\) is part of the
+  \eqref{eq:weighted-loading-space} if a row metric \(V_Y\) is part of the
   estimator definition.
 \item Compute \(\psi=\diag(S-\Lambda\Phi_G\Lambda\T)\), using either the
   unconstrained \(\Lambda_G\) or the constrained
@@ -746,6 +848,9 @@ criterion used by ML, ULS, GLS, or WLS. It first constructs fixed indicator
 composites, regresses the observed variables on those composites under the
 communality-filled covariance \(H\), and reads the unit-variance latent
 covariance as the correlation matrix of the standardized composites.
+Replacing \(Z\) by a general composite matrix \(A\) gives fixed score proxies
+in the \(H\)-world and makes the common part equivariant when \(A\) is
+transformed contravariantly with the observed coordinates.
 Loading equalities, including tau-equivalence, can be imposed directly as
 constraints on that population regression; row weights define different
 off-model constrained targets. First-loading-equals-one output is a diagonal
