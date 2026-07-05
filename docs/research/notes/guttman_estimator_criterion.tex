@@ -370,6 +370,65 @@ the same calculation as in Proposition \ref{prop:recover} gives
 Thus \(A\) need not be a 0/1 incidence matrix. What matters for exact recovery
 is that its score proxies isolate the latent axes.
 
+There are two useful ways to construct such matrices.
+
+First, if the population loading matrix were known and had full column rank, an
+oracle choice is
+\[
+  A_{\mathrm{or}}
+  =
+  \Lambda_0(\Lambda_0\T\Lambda_0)^{-1}.
+\]
+Then \(\Lambda_0\T A_{\mathrm{or}}=I\). This shows that many exact-recovery
+composite matrices exist, but it is not an estimator because it uses the
+unknown \(\Lambda_0\).
+
+Second, the pattern-only construction uses factor-pure anchors. Let
+\[
+  \mathcal P_f
+  =
+  \{i:\hbox{ indicator } i \hbox{ is allowed to load on factor } f
+      \hbox{ and on no other factor}\}.
+\]
+Choose a nonzero vector \(a_f\in\mathbb R^p\) supported only on
+\(\mathcal P_f\), and set
+\[
+  A=(a_1,\ldots,a_k).
+\]
+For any population loading matrix compatible with that zero pattern,
+\[
+  \lambda_{0,g}\T a_f=0\qquad(g\ne f),
+\]
+so \(T_A=\Lambda_0\T A\) is diagonal. It is nonsingular if
+\[
+  \lambda_{0,f}\T a_f\ne 0
+  \qquad(f=1,\ldots,k).
+\]
+The original \(A=Z\) is the special case \(a_f\) equal to the indicator vector
+of \(\mathcal P_f\), when all assigned indicators are factor-pure. Other
+choices include a single marker anchor, equal weights within \(\mathcal P_f\),
+or externally fixed reliability weights. Without factor-pure anchors, or
+without an oracle loading matrix, a fixed pattern-only \(A\) cannot generally
+guarantee \(T_A\) diagonal.
+
+The scale of the raw \(a_f\)'s is immaterial because the actual score
+coefficients are standardized:
+\begin{equation}\label{eq:standardized-score-coefs}
+  \widetilde A(H)
+  =
+  A\{\diag(A\T H A)\}^{-1/2},
+  \qquad
+  F_A=\widetilde A(H)\T Y_H .
+\end{equation}
+Thus the score proxies have unit variance under \(H\). To remove the remaining
+sign ambiguity, choose a marker \(m_f\) and orient column \(f\) so that
+\[
+  \Cov_H(Y_{H,m_f},F_{A,f})\ge 0 .
+\]
+Equivalently, multiply \(a_f\) by \(-1\) when that covariance is negative.
+After this convention, the phrase ``the score defined by \(A\)'' means the
+oriented, \(H\)-standardized coefficient matrix \(\widetilde A(H)\).
+
 This general form has a clean coordinate-equivariance property. Let \(L\) be a
 nonsingular change of observed coordinates,
 \[
@@ -812,9 +871,12 @@ For one covariance block, the implementation can be checked in this order:
 \begin{enumerate}
 \item Build the incidence matrix \(Z\) from the simple CFA loading pattern.
 \item If using the generalized score-proxy version, replace \(Z\) by a fixed
-  composite matrix \(A\). Under a coordinate change \(Y^\ast=LY\), use
-  \(A^\ast=L^{-\mathsf T}A\) to preserve the same auxiliary composites. Read
-  the remaining \(Z\)-formulas with \(A\) substituted.
+  composite matrix \(A\), either from factor-pure anchor sets or from another
+  declared score rule. Use the oriented standardized coefficient matrix
+  \(\widetilde A(H)=A\{\diag(A\T H A)\}^{-1/2}\) as the actual score. Under a
+  coordinate change \(Y^\ast=LY\), use \(A^\ast=L^{-\mathsf T}A\) to preserve
+  the same auxiliary composites. Read the remaining \(Z\)-formulas with \(A\)
+  substituted.
 \item For each factor block, compute the Spearman-Harman communalities
   \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
 \item Form \(D=\diag(Z\T HZ)\) and the standardized composite covariance
@@ -849,8 +911,10 @@ composites, regresses the observed variables on those composites under the
 communality-filled covariance \(H\), and reads the unit-variance latent
 covariance as the correlation matrix of the standardized composites.
 Replacing \(Z\) by a general composite matrix \(A\) gives fixed score proxies
-in the \(H\)-world and makes the common part equivariant when \(A\) is
-transformed contravariantly with the observed coordinates.
+in the \(H\)-world. Factor-pure anchor sets give pattern-only choices of \(A\),
+and the standardized coefficient matrix \(\widetilde A(H)\) defines the actual
+score scale. The common part is equivariant when \(A\) is transformed
+contravariantly with the observed coordinates.
 Loading equalities, including tau-equivalence, can be imposed directly as
 constraints on that population regression; row weights define different
 off-model constrained targets. First-loading-equals-one output is a diagonal
