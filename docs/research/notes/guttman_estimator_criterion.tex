@@ -69,9 +69,8 @@ indicator for factor \(f\).
 
 The estimator is defined only at regular points. Each factor must have at least
 three indicators, the within-factor correlations used below must avoid zero
-denominators, the composite covariance must have positive diagonal, the
-standardized composite correlation must be nonsingular, and the marker
-coefficient produced by the composite regression must be nonzero.
+denominators, the composite covariance must be positive definite, and the
+marker coefficient produced by the composite regression must be nonzero.
 
 \section{Step 1: replace variances by communalities}
 
@@ -165,50 +164,42 @@ The fixed indicator composites are
 \[
   U=Z\T Y_H .
 \]
-Their covariance is
+Their covariance and their covariance with the variables are
 \[
-  B=\Cov(U)=Z\T H Z .
-\]
-Let \(D=\diag(B)\), \(Q=D^{-1/2}\), and standardize the composites:
-\[
-  F=Q U,\qquad
-  P=\Cov(F)=Q B Q,\qquad
-  L=\Cov(Y_H,F)=H Z Q .
+  B=\Cov(U)=Z\T H Z,
+  \qquad
+  A=\Cov(Y_H,U)=HZ .
 \]
 
-For fixed \(F\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
+For fixed \(U\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
 minimize the population prediction error
 \begin{equation}\label{eq:composite-loss}
   K^\star
   =
   \argmin_{K\in\mathbb R^{p\times k}}
-  \E_H\{ \lVert Y_H-KF\rVert^2 \}.
+  \E_H\{ \lVert Y_H-KU\rVert^2 \}.
 \end{equation}
 Equivalently, the objective is
 \begin{equation}\label{eq:composite-objective}
   Q_{\mathrm{comp}}(K)
   =
-  \tr(H)-2\tr(KL\T)+\tr(KPK\T).
+  \tr(H)-2\tr(KA\T)+\tr(KBK\T).
 \end{equation}
 The subscript \(H\) emphasizes that the expectation uses only the
 communality-filled second moments. Row \(i\) of \(K\) is the population least
-squares coefficient vector in the regression of \(Y_{H,i}\) on the standardized
-fixed composites \(F\). The stacked problem in \eqref{eq:composite-loss} is just
+squares coefficient vector in the regression of \(Y_{H,i}\) on the fixed
+composites \(U\). The stacked problem in \eqref{eq:composite-loss} is just
 the sum of those \(p\) regressions.
 
 \begin{lemma}[Composite regression step]\label{lem:regression}
-If \(P\) is nonsingular, the unique minimizer of
+If \(B\) is positive definite, the unique minimizer of
 \eqref{eq:composite-loss} is
 \begin{equation}\label{eq:Kstar}
-  K^\star = L P^{-1}.
+  K^\star = A B^{-1}=HZ(Z\T HZ)^{-1}.
 \end{equation}
-Equivalently, using the unstandardized composites,
-\[
-  K^\star = H Z (Z\T H Z)^{-1} D^{1/2}.
-\]
 The common covariance reproduced by the composites is
 \begin{equation}\label{eq:common-proj}
-  K^\star P K^{\star\T}
+  K^\star B K^{\star\T}
   =
   H Z (Z\T H Z)^{-1} Z\T H .
 \end{equation}
@@ -219,12 +210,11 @@ Differentiate \eqref{eq:composite-objective} with respect to \(K\):
 \[
   \frac{\partial Q_{\mathrm{comp}}}{\partial K}
   =
-  -2L+2KP .
+  -2A+2KB .
 \]
-The first-order condition is \(KP=L\), giving \(K^\star=LP^{-1}\). Since \(P\)
+The first-order condition is \(KB=A\), giving \(K^\star=AB^{-1}\). Since \(B\)
 is positive definite, this stationary point is the unique minimum. Substituting
-\(L=HZQ\), \(P=QZ\T HZQ\), and \(Q=D^{-1/2}\) gives the unstandardized form and
-\eqref{eq:common-proj}.
+\(A=HZ\) and \(B=Z\T HZ\) gives \eqref{eq:common-proj}.
 \end{proof}
 
 This is the actual least-squares part of the Guttman estimator. The variables
@@ -243,7 +233,7 @@ marker-scaled Guttman matrices are
 \begin{equation}\label{eq:marker-map}
   \Lambda_G=K^\star M^{-1},
   \qquad
-  \Phi_G=M P M,
+  \Phi_G=M B M,
   \qquad
   \psi_G=\diag\{S-\Lambda_G\Phi_G\Lambda_G\T\}.
 \end{equation}
@@ -252,7 +242,7 @@ is unchanged:
 \[
   \Lambda_G\Phi_G\Lambda_G\T
   =
-  K^\star P K^{\star\T}.
+  K^\star B K^{\star\T}.
 \]
 
 In the current \texttt{magmaan} map, the full \(K^\star\) is computed. The
@@ -288,16 +278,11 @@ The raw composite-regression coefficients are
   =
   \Lambda_0T^{-1}.
 \]
-Standardizing the composites multiplies column \(f\) by \(D_{ff}^{1/2}\). The
-marker coefficient in column \(f\) is therefore \(D_{ff}^{1/2}/T_{ff}\), since
-the marker loading is one. Dividing the column by this marker coefficient gives
-\(\Lambda_0\). The standardized composite covariance is
+The marker coefficient in column \(f\) is therefore \(1/T_{ff}\), since the
+marker loading is one. Dividing the column by this marker coefficient gives
+\(\Lambda_0\). With \(M=T^{-1}\),
 \[
-  P=D^{-1/2}T\Phi_0TD^{-1/2}.
-\]
-With \(M=\diag(D_{ff}^{1/2}/T_{ff})\),
-\[
-  MPM=\Phi_0 .
+  M(Z\T H_0Z)M=\Phi_0 .
 \]
 \end{proof}
 
@@ -333,29 +318,29 @@ Equations \eqref{eq:Kstar} and \eqref{eq:common-proj} use inverses, so the
 interior construction is not automatically total. A boundary-complete version
 should distinguish three cases.
 
-First, if \(P\) is positive definite, use the ordinary Guttman map above.
-Second, if \(P\) is positive semidefinite and singular, use the
+First, if \(B\) is positive definite, use the ordinary Guttman map above.
+Second, if \(B\) is positive semidefinite and singular, use the
 Moore-Penrose inverse when the covariance equations are compatible:
 \begin{equation}\label{eq:compat}
-  L=L P^{+}P .
+  A=A B^{+}B .
 \end{equation}
 Then
 \[
-  K_{\mathrm{MP}}=LP^{+}
+  K_{\mathrm{MP}}=AB^{+}
 \]
 is the unique minimum-Frobenius-norm minimizer of
 \eqref{eq:composite-objective}. It is also the ridge limit
 \[
-  \lim_{\lambda\downarrow0}L(P+\lambda I)^{-1}.
+  \lim_{\lambda\downarrow0}A(B+\lambda I)^{-1}.
 \]
 All minimizers give the same fitted common covariance,
 \[
-  KPK\T=LP^{+}L\T ,
+  KBK\T=AB^{+}A\T ,
 \]
 so the common covariance is identified even though the coordinate
 representation of the factors is not.
 
-The parameter split is the difficult part. A singular \(P\) means that the
+The parameter split is the difficult part. A singular \(B\) means that the
 fixed composite space has rank below \(k\). The common covariance still has a
 canonical Moore-Penrose fitted value, but the marker-scaled
 \((\Lambda_G,\Phi_G)\) representative is a convention. Marker rescaling can
@@ -364,15 +349,15 @@ implementation should therefore return the common covariance and the
 Moore-Penrose representative with an explicit boundary warning, and should not
 present the individual factor parameters as regularly identified.
 
-Third, if \(P\) is indefinite or \eqref{eq:compat} fails, the quadratic
+Third, if \(B\) is indefinite or \eqref{eq:compat} fails, the quadratic
 \eqref{eq:composite-objective} has no pure Guttman least-squares solution. An
 always-returning estimator can still be defined by a named regularized mode,
 for example
 \[
-  K_{\lambda}=L(P+\lambda I)^{-1},
+  K_{\lambda}=A(B+\lambda I)^{-1},
 \]
 with \(\lambda\) chosen to make the system positive definite, or by first
-projecting \(P\) to a positive semidefinite matrix. This is useful engineering,
+projecting \(B\) to a positive semidefinite matrix. This is useful engineering,
 but it should be reported as a regularized Guttman variant, not as the clean
 population map.
 
@@ -498,12 +483,11 @@ For one covariance block, the implementation can be checked in this order:
 \item Build the incidence matrix \(Z\) from the simple CFA loading pattern.
 \item For each factor block, compute the Spearman-Harman communalities
   \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
-\item Form \(B=Z\T HZ\), \(D=\diag(B)\), \(Q=D^{-1/2}\),
-  \(L=HZQ\), and \(P=QBQ\).
-\item Solve \(K^\star=LP^{-1}\). This is the coefficient matrix minimizing the
-  composite prediction loss.
+\item Form \(A=HZ\) and \(B=Z\T HZ\).
+\item Solve \(K^\star=AB^{-1}\). This is the coefficient matrix minimizing the
+  composite prediction loss when \(B\) is positive definite.
 \item Read marker coefficients into \(M\); compute
-  \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=MPM\), and
+  \(\Lambda_G=K^\star M^{-1}\), \(\Phi_G=MBM\), and
   \(\psi_G=\diag(S-\Lambda_G\Phi_G\Lambda_G\T)\).
 \item Assemble the model's free parameter vector from the allowed loading cells,
   latent covariance cells, and residual variances. Off-pattern entries of
