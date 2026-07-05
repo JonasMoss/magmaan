@@ -152,7 +152,7 @@ The first full DWLS-only grid used 1000 replications per cell over
 $N\in\{50,100,250,500\}$ and balanced versus threshold-extreme cuts. Ordinary
 DWLS profile inversion is not a viable reference here: coverage stayed around
 0.60--0.69 because the unscaled statistic has mean roughly 3.5--6.4. Endpoint
-robust scaling and the misspecification-mixture scaling both move the reference
+robust scaling and the misspecification-scaled reference both move the reference
 coverage close to nominal in most cells, roughly 0.95--0.97. The exception is
 the threshold-extreme $N=50$ cell, where empty or near-empty categories create
 profile failures and unstable fitted-weight reference scales; coverage is about
@@ -167,23 +167,56 @@ model-implied profile omega from the working one-factor fit, not the generating
 model's reliability. With 1000 replications per cell and pseudo-targets from
 100000 generated cases, ordinary DWLS again undercovers badly
 (about 0.59--0.69). Endpoint robust scaling covers about 0.94--0.97, and the
-misspecification-mixture reference covers about 0.94--0.97. The weakest
+misspecification-scaled reference covers about 0.94--0.97. The weakest
 misspecified cell remains threshold-extreme $N=50$, with many profile failures
 and unstable fitted-weight scales. Thus the misspecification reference is
 behaving as intended for the working-model target, but it does not remove the
 sparse ordinal-summary problem.
 
+The scalar misspecification reference should be read as scaled, not as a
+substantive mixture distinction. For a one-degree-of-freedom profile test the
+weighted-\(\chi^2\) law has a single eigenvalue \(\lambda\), so comparing
+\(T\) to \(\lambda\chi^2_1\) is equivalent to comparing \(T/\lambda\) to
+\(\chi^2_1\). The experiment keeps any older ``mixture'' spelling only as a
+legacy alias for this scalar reference.
+
+The stress extension adds two harder working-model-misspecification cells:
+stronger residual local dependence and a two-factor population, both still fit
+by the same one-factor DWLS model. The stress default uses
+\(N\in\{25,35,50,75\}\) and threshold-extreme / threshold-sparse cuts. The
+sparse-threshold cells mostly diagnose ordinal summary construction rather than
+reference-law calibration: empty categories dominate the failures. Among cells
+with at least 200 successful profile fits in the 300-replication pointwise run,
+the useful hard cases are threshold-extreme \(N=50\). Robust-scaled coverage was
+0.932 under strong local dependence and 0.926 under the two-factor DGP; the
+oracle-constant diagnostic moved these to 0.964 and 0.961, respectively. The
+misspecification-scaled arm showed the same scalar-calibration signal in the
+strong local-dependence cell (0.935 to 0.960) and a smaller one in the two-factor
+cell (0.948 to 0.967). These are the first cells where a finite-sample scalar
+constant is plausibly worth testing.
+
 The first CI-inversion pass used the existing profile-CI root finder with
 200 replications per cell and the same pseudo-targets. Robust-scaled inversion
 is the stable interval lane: among 3168 attempted robust-scaled CIs, only 38
 failed, all target-test/CI inclusion decisions agreed, and cell coverage ranged
-from about 0.918 to 0.975. Misspecification-mixture inversion is not yet a
-stable CI method: among 3154 attempted mixture CIs, 1201 failed, mostly because
-the endpoint robust profile quadratic was not positive. Successful mixture CIs
-cover near nominal, but that is a selected subset. Thus the current connected-CI
-evidence supports robust-scaled inversion; the misspecification-mixture path is
-still a pointwise-reference diagnostic until endpoint reference construction is
-hardened.
+from about 0.918 to 0.975. Misspecification-scaled inversion is not yet a
+stable CI method: among 3154 attempted CIs under the legacy singleton-mixture
+spelling, 1201 failed, mostly because the endpoint robust profile quadratic was
+not positive. Successful misspecification-scaled CIs cover near nominal, but
+that is a selected subset. Thus the current connected-CI evidence supports
+robust-scaled inversion; the misspecification-scaled path is still a pointwise
+reference diagnostic until endpoint reference construction is hardened.
+
+A targeted stress CI pass on threshold-extreme \(N=50\), with 100 replications
+per hard DGP, preserves the same split. Robust-scaled CIs remain connected: 7 of
+92 strong-local attempts and 18 of 94 two-factor attempts failed, successful
+coverage was 0.929 and 0.934, and the pointwise-test / CI inclusion decisions
+never disagreed. Misspecification-scaled endpoint inversion is still not a
+usable interval lane in these sparse hard cells: 178 of 179 attempted CIs failed,
+primarily because the endpoint robust profile sandwich quadratic was not
+positive. The immediate CI target is therefore robust-scaled inversion plus a
+candidate scalar finite-sample constant in the \(N=50\) threshold-extreme stress
+cells.
 
 \section*{Working Verdict}
 
