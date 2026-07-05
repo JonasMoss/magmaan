@@ -59,12 +59,13 @@ blocks.
 Fix one continuous CFA block with \(p\) observed variables and \(k\) factors.
 Let \(S\) be the sample covariance and let
 \[
-  X\in\{0,1\}^{p\times k}
+  Z\in\{0,1\}^{p\times k}
 \]
-be the indicator-by-factor membership matrix. In the simple-structure case used
-by the current estimator, each row of \(X\) has exactly one nonzero entry. Row
-\(i\) belongs to factor \(f(i)\), and \(m_f\) denotes the marker indicator for
-factor \(f\).
+be the indicator-by-factor incidence matrix. In the simple-structure case used
+by the current estimator, each row of \(Z\) has exactly one nonzero entry:
+\(Z_{if}=1\) means that observed variable \(i\) is assigned to factor \(f\).
+Write \(f(i)\) for that assigned factor, and let \(m_f\) denote the marker
+indicator for factor \(f\).
 
 The estimator is defined only at regular points. Each factor must have at least
 three indicators, the within-factor correlations used below must avoid zero
@@ -74,7 +75,7 @@ coefficient produced by the composite regression must be nonzero.
 
 \section{Step 1: replace variances by communalities}
 
-The first step creates a covariance-like matrix \(C\) whose off-diagonal entries
+The first step creates a covariance-like matrix \(H\) whose off-diagonal entries
 are the observed covariances and whose diagonal entries are estimated common
 variances. Write \(R\) for the correlation matrix of \(S\). For an indicator
 \(i\), let
@@ -98,8 +99,8 @@ Convert it back to covariance scale by
   \hat u_i = S_{ii}-\hat h_i ,
 \]
 and define
-\begin{equation}\label{eq:C}
-  C
+\begin{equation}\label{eq:H}
+  H
   =
   S-\diag(S)+\diag(\hat h)
   =
@@ -149,35 +150,51 @@ and the finite-difference Jacobian is differentiating that active branch.
 
 \section{Step 2: regress variables on fixed composites}
 
-Now pretend that \(C\) is the covariance matrix. The fixed factor-score
-composites are
+This step is a population regression problem. Let \(Y_H\) be a centered
+auxiliary \(p\)-vector with covariance
 \[
-  g=X\T y .
+  \Cov(Y_H)=H .
 \]
-Their covariance and their covariance with the observed variables are
+The subscript is only a reminder: \(Y_H\) is not new observed data, but a
+population device for writing the least-squares problem whose second moments
+are the communality-filled matrix \(H\). If \(H\) is not positive semidefinite,
+the same formulas still define a quadratic algebraic map, but the literal
+random-vector interpretation is lost.
+
+The fixed indicator composites are
 \[
-  B=\Cov(g)=X\T C X,
-  \qquad
-  A=\Cov(y,g)=C X .
+  U=Z\T Y_H .
+\]
+Their covariance is
+\[
+  B=\Cov(U)=Z\T H Z .
 \]
 Let \(D=\diag(B)\), \(Q=D^{-1/2}\), and standardize the composites:
 \[
-  f=Q g,\qquad
-  P=\Cov(f)=Q B Q,\qquad
-  L=\Cov(y,f)=A Q .
+  F=Q U,\qquad
+  P=\Cov(F)=Q B Q,\qquad
+  L=\Cov(Y_H,F)=H Z Q .
 \]
 
-For fixed \(f\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
-minimize the total prediction error
+For fixed \(F\), choose a coefficient matrix \(K\in\mathbb R^{p\times k}\) to
+minimize the population prediction error
 \begin{equation}\label{eq:composite-loss}
+  K^\star
+  =
+  \argmin_{K\in\mathbb R^{p\times k}}
+  \E_H\{ \lVert Y_H-KF\rVert^2 \}.
+\end{equation}
+Equivalently, the objective is
+\begin{equation}\label{eq:composite-objective}
   Q_{\mathrm{comp}}(K)
   =
-  \E_C\{ \lVert y-Kf\rVert^2 \}
-  =
-  \tr(C)-2\tr(KL\T)+\tr(KPK\T).
+  \tr(H)-2\tr(KL\T)+\tr(KPK\T).
 \end{equation}
-The subscript \(C\) emphasizes that this is the quadratic expectation under the
-communality-filled covariance \(C\).
+The subscript \(H\) emphasizes that the expectation uses only the
+communality-filled second moments. Row \(i\) of \(K\) is the population least
+squares coefficient vector in the regression of \(Y_{H,i}\) on the standardized
+fixed composites \(F\). The stacked problem in \eqref{eq:composite-loss} is just
+the sum of those \(p\) regressions.
 
 \begin{lemma}[Composite regression step]\label{lem:regression}
 If \(P\) is nonsingular, the unique minimizer of
@@ -187,18 +204,18 @@ If \(P\) is nonsingular, the unique minimizer of
 \end{equation}
 Equivalently, using the unstandardized composites,
 \[
-  K^\star = C X (X\T C X)^{-1} D^{1/2}.
+  K^\star = H Z (Z\T H Z)^{-1} D^{1/2}.
 \]
 The common covariance reproduced by the composites is
 \begin{equation}\label{eq:common-proj}
   K^\star P K^{\star\T}
   =
-  C X (X\T C X)^{-1} X\T C .
+  H Z (Z\T H Z)^{-1} Z\T H .
 \end{equation}
 \end{lemma}
 
 \begin{proof}
-Differentiate \eqref{eq:composite-loss} with respect to \(K\):
+Differentiate \eqref{eq:composite-objective} with respect to \(K\):
 \[
   \frac{\partial Q_{\mathrm{comp}}}{\partial K}
   =
@@ -206,7 +223,7 @@ Differentiate \eqref{eq:composite-loss} with respect to \(K\):
 \]
 The first-order condition is \(KP=L\), giving \(K^\star=LP^{-1}\). Since \(P\)
 is positive definite, this stationary point is the unique minimum. Substituting
-\(L=CXQ\), \(P=QX\T CXQ\), and \(Q=D^{-1/2}\) gives the unstandardized form and
+\(L=HZQ\), \(P=QZ\T HZQ\), and \(Q=D^{-1/2}\) gives the unstandardized form and
 \eqref{eq:common-proj}.
 \end{proof}
 
@@ -248,24 +265,24 @@ diagonal of the full composite common part.
 \begin{proposition}[Exact recovery on the simple CFA model]\label{prop:recover}
 Suppose the communality-filled population matrix is exactly
 \[
-  C_0=\Lambda_0\Phi_0\Lambda_0\T ,
+  H_0=\Lambda_0\Phi_0\Lambda_0\T ,
 \]
-where \(\Lambda_0\) has the simple loading pattern \(X\), each marker loading is
-one, and the diagonal matrix \(T=\Lambda_0\T X\) is nonsingular. Then the
+where \(\Lambda_0\) has the simple loading pattern encoded by \(Z\), each marker
+loading is one, and the diagonal matrix \(T=\Lambda_0\T Z\) is nonsingular. Then the
 Guttman map recovers \(\Lambda_0\) and \(\Phi_0\).
 \end{proposition}
 
 \begin{proof}
-Because every indicator loads on one factor, \(T=\Lambda_0\T X\) is diagonal.
+Because every indicator loads on one factor, \(T=\Lambda_0\T Z\) is diagonal.
 Thus
 \[
-  C_0X=\Lambda_0\Phi_0T,
+  H_0Z=\Lambda_0\Phi_0T,
   \qquad
-  X\T C_0X=T\Phi_0T .
+  Z\T H_0Z=T\Phi_0T .
 \]
 The raw composite-regression coefficients are
 \[
-  C_0X(X\T C_0X)^{-1}
+  H_0Z(Z\T H_0Z)^{-1}
   =
   \Lambda_0\Phi_0T(T\Phi_0T)^{-1}
   =
@@ -287,7 +304,7 @@ With \(M=\diag(D_{ff}^{1/2}/T_{ff})\),
 \section{What is and is not minimized}
 
 The preceding lemmas give the clean answer. The Guttman construction minimizes
-the composite prediction loss \eqref{eq:composite-loss}. It does not generally
+the composite prediction loss \eqref{eq:composite-objective}. It does not generally
 minimize an SEM covariance discrepancy
 \[
   F_V(\theta)
@@ -303,7 +320,7 @@ first-order condition
   \{\vech(S)-\sigma(\theta)\}=0,
 \]
 or the equivalent NTML score condition when \(V\) is the likelihood weight. The
-Guttman estimate is obtained from \(C\), \(X\), and the marker rescaling above;
+Guttman estimate is obtained from \(H\), \(Z\), and the marker rescaling above;
 there is no reason for it to satisfy that residual orthogonality condition
 except in special cases.
 
@@ -327,7 +344,7 @@ Then
   K_{\mathrm{MP}}=LP^{+}
 \]
 is the unique minimum-Frobenius-norm minimizer of
-\eqref{eq:composite-loss}. It is also the ridge limit
+\eqref{eq:composite-objective}. It is also the ridge limit
 \[
   \lim_{\lambda\downarrow0}L(P+\lambda I)^{-1}.
 \]
@@ -348,7 +365,7 @@ Moore-Penrose representative with an explicit boundary warning, and should not
 present the individual factor parameters as regularly identified.
 
 Third, if \(P\) is indefinite or \eqref{eq:compat} fails, the quadratic
-\eqref{eq:composite-loss} has no pure Guttman least-squares solution. An
+\eqref{eq:composite-objective} has no pure Guttman least-squares solution. An
 always-returning estimator can still be defined by a named regularized mode,
 for example
 \[
@@ -478,11 +495,11 @@ pretending that the point estimate minimized NTML or ULS.
 
 For one covariance block, the implementation can be checked in this order:
 \begin{enumerate}
-\item Build the membership matrix \(X\) from the simple CFA loading pattern.
+\item Build the incidence matrix \(Z\) from the simple CFA loading pattern.
 \item For each factor block, compute the Spearman-Harman communalities
-  \eqref{eq:spearman-h}; place them on the diagonal to get \(C\).
-\item Form \(A=CX\), \(B=X\T CX\), \(D=\diag(B)\), \(Q=D^{-1/2}\),
-  \(L=AQ\), and \(P=QBQ\).
+  \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
+\item Form \(B=Z\T HZ\), \(D=\diag(B)\), \(Q=D^{-1/2}\),
+  \(L=HZQ\), and \(P=QBQ\).
 \item Solve \(K^\star=LP^{-1}\). This is the coefficient matrix minimizing the
   composite prediction loss.
 \item Read marker coefficients into \(M\); compute
@@ -501,7 +518,7 @@ For one covariance block, the implementation can be checked in this order:
 The Guttman estimator has a real least-squares criterion, but it is not the SEM
 criterion used by ML, ULS, GLS, or WLS. It first constructs fixed indicator
 composites, regresses the observed variables on those composites under the
-communality-filled covariance \(C\), and marker-rescales the result into CFA
+communality-filled covariance \(H\), and marker-rescales the result into CFA
 parameters. Residual NTML or ULS statistics are useful diagnostics and valid
 pseudo-tests once their weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
