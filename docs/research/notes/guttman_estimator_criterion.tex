@@ -385,6 +385,62 @@ provided the displayed inverses exist. On a boundary, the same formula can be
 read on the estimable subspace with Moore-Penrose inverses, but then the output
 should be reported as a boundary convention.
 
+The same construction admits a row-weighted loading regression. Let
+\(A_Y\) be a symmetric positive definite metric on the observed variables, and
+let \(C_G=HZD^{-1/2}\). Define
+\begin{equation}\label{eq:weighted-loading-space}
+  \Lambda_{\mathcal L,A_Y}
+  =
+  \argmin_{\Lambda\in\mathcal L}
+  \E_H\{(Y_H-\Lambda F)\T A_Y(Y_H-\Lambda F)\}.
+\end{equation}
+Equivalently, up to constants,
+\[
+  \Lambda_{\mathcal L,A_Y}
+  =
+  \argmin_{\Lambda\in\mathcal L}
+  \left[
+    \tr(A_Y\Lambda\Phi_G\Lambda\T)
+    -2\tr(A_Y\Lambda C_G\T)
+  \right].
+\]
+If \(\mathcal L=\mathbb R^{p\times k}\), the row weight does not change the
+solution:
+\[
+  A_Y(\Lambda\Phi_G-C_G)=0
+  \quad\Rightarrow\quad
+  \Lambda=C_G\Phi_G^{-1}.
+\]
+Thus row weights matter only once the loading space is restricted, or once one
+chooses an off-model population target within a restricted loading space.
+
+In vector form, the weighted criterion uses
+\[
+  W_{A_Y}=\Phi_G\otimes A_Y,
+  \qquad
+  c_{A_Y}=\operatorname{vec}(A_YC_G).
+\]
+For affine constraints \(R\ell=r\),
+\[
+  \ell_{R,A_Y}
+  =
+  \ell_G
+  -
+  W_{A_Y}^{-1}R\T(RW_{A_Y}^{-1}R\T)^{-1}(R\ell_G-r).
+\]
+If the loading space is written as \(\ell=E\beta\), then
+\[
+  \beta_{\mathcal L,A_Y}
+  =
+  (E\T W_{A_Y}E)^{-1}E\T c_{A_Y},
+  \qquad
+  \ell_{\mathcal L,A_Y}=E\beta_{\mathcal L,A_Y}.
+\]
+At an exact population point with \(\Lambda_0\in\mathcal L\), every positive
+definite \(A_Y\) gives the same oriented loading matrix. Away from that
+constrained population model, \(A_Y\) selects which weighted projection of the
+unconstrained loading regression is called the constrained target.
+
 A tau-equivalent block is the simplest example. For one factor with indicator
 set \(I\), the constraint is
 \[
@@ -412,6 +468,17 @@ where \(E\) inserts fixed zeros and repeats equal loadings, then
   \ell_{\mathcal L}=E\beta_{\mathcal L}.
 \]
 
+With row weights, the one-factor tau-equivalent average becomes the
+\(A_Y\)-weighted projection of \(C_G\) onto the constant-loading vector. If
+\(\mathbf 1_I\) is the indicator vector for the block and \(A_{Y,I}\) is the
+corresponding principal submatrix, then
+\[
+  \alpha_{A_Y}
+  =
+  (\mathbf 1_I\T A_{Y,I}\mathbf 1_I)^{-1}
+  \mathbf 1_I\T A_{Y,I}C_{G,I}.
+\]
+
 These constraints are scale-dependent. The formulas above define equality in
 the unit-variance, standardized-composite orientation. Converting the result to
 first-loading-equals-one units is still allowed, but equality of loadings need
@@ -424,6 +491,24 @@ At an exact population point whose unit-variance loading matrix already lies in
 \(\mathcal L\), the constrained map returns the same oriented loading matrix as
 the unconstrained map. Away from that constrained population model, it returns
 the closest allowed loading matrix in the composite-regression criterion.
+
+There is no universally best row weight as a population map under
+misspecification; different \(A_Y\)'s define different off-model targets. For
+estimation, the efficiency-optimal weight is instead a sampling statement. If
+\(\hat\ell_G\) has asymptotic covariance \(\Omega_\ell\), the optimal
+minimum-distance estimator under \(\ell=E\beta\) uses
+\(\Omega_\ell^{+}\), giving
+\[
+  \hat\beta_{\mathrm{MD}}
+  =
+  (E\T\Omega_\ell^{+}E)^{-1}E\T\Omega_\ell^{+}\hat\ell_G .
+\]
+The matrix \(\Omega_\ell\) depends on the full map from the sample covariance
+to \(H\), \(D\), \(\Phi_G\), and \(\Lambda_G\). In particular, it depends on the
+chosen communality estimator and on the fourth-moment behavior of the data.
+The optimal minimum-distance weight therefore cannot be determined from the
+population pair \((H,Z)\) alone, and it is not generally restricted to the
+Kronecker row-weight form \(\Phi_G\otimes A_Y\).
 
 \section{What is and is not minimized}
 
@@ -637,7 +722,9 @@ For one covariance block, the implementation can be checked in this order:
   definite.
 \item If the population model imposes loading constraints, replace the previous
   solve by the constrained regression in
-  \eqref{eq:constrained-loading-space}.
+  \eqref{eq:constrained-loading-space}, or by the weighted version
+  \eqref{eq:weighted-loading-space} if a row metric \(A_Y\) is part of the
+  estimator definition.
 \item Compute \(\psi=\diag(S-\Lambda\Phi_G\Lambda\T)\), using either the
   unconstrained \(\Lambda_G\) or the constrained
   \(\Lambda_{\mathcal L}\).
@@ -660,9 +747,10 @@ composites, regresses the observed variables on those composites under the
 communality-filled covariance \(H\), and reads the unit-variance latent
 covariance as the correlation matrix of the standardized composites.
 Loading equalities, including tau-equivalence, can be imposed directly as
-constraints on that population regression. First-loading-equals-one output is a
-diagonal reparameterization of the same fitted common part. Residual NTML or
-ULS statistics are useful diagnostics and valid pseudo-tests once their
+constraints on that population regression; row weights define different
+off-model constrained targets. First-loading-equals-one output is a diagonal
+reparameterization of the same fitted common part. Residual NTML or ULS
+statistics are useful diagnostics and valid pseudo-tests once their
 weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
 minimum-distance/Wald statistic based on the block-diagonal Guttman delta
