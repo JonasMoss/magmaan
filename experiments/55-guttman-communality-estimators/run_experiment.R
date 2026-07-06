@@ -189,6 +189,20 @@ estimate_gamma <- function(s, blocks, method) {
   magmaan::guttman_h(s, blocks, method = method)$h2
 }
 
+sample_cov_n <- function(x, vars = NULL) {
+  xc <- sweep(x, 2L, colMeans(x), check.margin = FALSE)
+  s <- crossprod(xc) / nrow(x)
+  if (!is.null(vars)) dimnames(s) <- list(vars, vars)
+  s
+}
+
+sample_stats_n <- function(x, vars) {
+  s <- sample_cov_n(x, vars)
+  mu <- colMeans(x)
+  names(mu) <- vars
+  list(S = list(s), mean = list(mu), nobs = as.integer(nrow(x)))
+}
+
 fill_h <- function(s, gamma) {
   hmat <- s
   diag(hmat) <- diag(s) * gamma
@@ -198,23 +212,17 @@ fill_h <- function(s, gamma) {
 guttman_common <- function(hmat, blocks) {
   p <- nrow(hmat)
   q <- length(unique(blocks))
-  A <- matrix(0, p, q)
-  hdiag <- pmax(diag(hmat), 0)
+  Z <- matrix(0, p, q)
   for (f in seq_len(q)) {
-    idx <- which(blocks == f)
-    lam <- sqrt(hdiag[idx])
-    denom <- sum(lam^2)
-    if (!is.finite(denom) || denom <= 1e-12) return(NULL)
-    A[idx, f] <- lam / denom
+    Z[blocks == f, f] <- 1
   }
-  d <- diag(t(A) %*% hmat %*% A)
-  if (any(!is.finite(d)) || any(d <= 1e-10)) return(NULL)
-  Dm <- diag(1 / sqrt(d), q)
-  phi <- Dm %*% t(A) %*% hmat %*% A %*% Dm
-  inv_phi <- tryCatch(solve(phi), error = function(e) NULL)
-  if (is.null(inv_phi)) return(NULL)
-  lambda <- hmat %*% A %*% Dm %*% inv_phi
-  lambda %*% phi %*% t(lambda)
+  score_cov <- crossprod(Z, hmat %*% Z)
+  inv_score_cov <- tryCatch(solve(score_cov), error = function(e) NULL)
+  if (is.null(inv_score_cov)) return(NULL)
+  hz <- hmat %*% Z
+  common <- hz %*% inv_score_cov %*% t(hz)
+  dimnames(common) <- dimnames(hmat)
+  common
 }
 
 pt_value <- function(pt, row) {
@@ -245,16 +253,14 @@ ml_common_from_fit <- function(fit, vars, q) {
       resid[match(lhs, vars)] <- val
     }
   }
-  list(common = Lambda %*% Phi %*% t(Lambda),
-       improper = any(is.finite(resid) & resid < 0))
+  common <- Lambda %*% Phi %*% t(Lambda)
+  dimnames(common) <- list(vars, vars)
+  list(common = common, improper = any(is.finite(resid) & resid < 0))
 }
 
-fit_nt_ml <- function(x, design, control) {
-  df <- as.data.frame(x)
-  names(df) <- design$vars
-  syntax <- model_syntax(design$q, design$m)
-  fit <- magmaan::magmaan(syntax, df, estimator = "ML", se = "none", test = "none",
-                          control = control)
+fit_nt_ml <- function(sample_stats, spec, design, control) {
+  fit <- core$estimate_ml(spec$partable, sample_stats, optimizer = "nlopt-lbfgs",
+                          control = control, bounds = NULL)
   if (!isTRUE(fit$converged)) stop("magmaan ML did not converge", call. = FALSE)
   ml_common_from_fit(fit, design$vars, design$q)
 }
@@ -269,24 +275,27 @@ time_call <- function(expr) {
   value
 }
 
-one_method <- function(x, design, target_common, method, ml_control) {
+one_method <- function(x, design, spec, target_common, method, ml_control) {
   if (method == "nt_ml") {
-    timed <- time_call(fit_nt_ml(x, design, ml_control))
+    timed <- time_call({
+      sample_stats <- sample_stats_n(x, design$vars)
+      fit_nt_ml(sample_stats, spec, design, ml_control)
+    })
     failed <- !timed$ok || is.null(timed$value)
     common <- if (failed) NULL else timed$value$common
     improper <- if (failed) NA else isTRUE(timed$value$improper)
   } else {
     timed <- time_call({
-      s <- stats::cov(x)
+      s <- sample_cov_n(x, design$vars)
       gamma <- estimate_gamma(s, design$blocks, method)
       if (any(!is.finite(gamma))) stop("non-finite communality", call. = FALSE)
       common <- guttman_common(fill_h(s, gamma), design$blocks)
       if (is.null(common)) stop("Guttman reconstruction failed", call. = FALSE)
-      common
+      list(common = common, improper = any(diag(s - common) < 0))
     })
     failed <- !timed$ok || is.null(timed$value)
-    common <- if (failed) NULL else timed$value
-    improper <- if (failed) NA else any(diag(stats::cov(x) - common) < 0)
+    common <- if (failed) NULL else timed$value$common
+    improper <- if (failed) NA else isTRUE(timed$value$improper)
   }
   common_mise <- if (failed) NA_real_ else mean((common - target_common)^2)
   diag_mise <- if (failed) NA_real_ else {
@@ -442,6 +451,7 @@ row_i <- 0L
 for (cc in seq_len(nrow(grid))) {
   g <- grid[cc, ]
   design <- make_design(g$factors, g$indicators, g$rho, g$loading)
+  spec <- magmaan::model_spec(model_syntax(design$q, design$m))
   target <- target_for_generator(design, g$generator)
   seed <- opts$seed_base + cc * 100000L
   draws <- draws_for_condition(design, g$generator, g$n, opts$reps, seed)
@@ -449,7 +459,7 @@ for (cc in seq_len(nrow(grid))) {
     x <- draws[[rr]]
     for (method in opts$methods) {
       row_i <- row_i + 1L
-      out <- one_method(x, design, target$common, method, ml_control)
+      out <- one_method(x, design, spec, target$common, method, ml_control)
       out$generator <- g$generator
       out$factors <- g$factors
       out$indicators <- g$indicators
@@ -478,7 +488,14 @@ metadata <- metadata_frame(
     seed_base = opts$seed_base,
     ml_max_iter = opts$ml_max_iter,
     ordinal_prob = ordinal_prob,
-    smoke = opts$smoke
+    smoke = opts$smoke,
+    covariance_scaling = "n",
+    timing_scope = paste(
+      "per-rep clocks include ML-scale covariance/sample-stat construction,",
+      "the estimator, and common-covariance reconstruction;",
+      "model syntax/lavaanification is precomputed per condition"
+    ),
+    guttman_reconstruction = "traditional incidence-composite map H Z (Z' H Z)^-1 Z' H"
   ),
   packages = c("magmaan")
 )

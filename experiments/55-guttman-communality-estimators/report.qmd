@@ -98,8 +98,9 @@ cx <- complexity[which.max(complexity$p), ]
 
 Which closed-form communality estimator should the Guttman CFA paper recommend,
 once the obvious Spearman variants are compared with normal-theory ML and with a
-categorical data arm? The comparison uses the loading-aligned Guttman
-reconstruction throughout, so the estimand is the common covariance matrix, not
+categorical data arm? The comparison uses the traditional incidence-composite
+Guttman reconstruction throughout,
+`H Z (Z' H Z)^-1 Z' H`, so the estimand is the common covariance matrix, not
 only the diagonal communalities.
 
 ## Short answer
@@ -122,7 +123,7 @@ off-diagonal correlations for full SEM ADF.
 Runtime is consistent with the intended niche: NT ML is about
 `r fmt(runtime_factor, 1)` times slower than ILM on this grid. Treat the exact
 factor cautiously; the smoke grid is small and ML timing depends on optimizer
-convergence.
+convergence. The timing scope is `r meta("timing_scope")`.
 
 ## Evidence
 
@@ -152,6 +153,9 @@ knitr::kable(rt, row.names = FALSE)
 
 The GMM rows include construction and pseudo-inversion of their estimated
 triad-moment covariance. The NT ML row is magmaan's iterative normal-theory fit.
+Model syntax parsing and lavaanification are outside the per-replication clock;
+the NT row still pays magmaan's current R-to-C++ partable conversion inside the
+ML entry point.
 
 ### Complexity
 
@@ -182,6 +186,8 @@ triads across factors.
 - The H-diagonal rules are computed by `magmaan::guttman_h()`. The full package
   frontier CFA estimator still uses the existing Guttman map; this experiment is
   evidence for which communality rule to promote into that map.
+- Per-replication covariance/sample-statistics construction uses ML scaling
+  (`1/n`) for both NT ML and the Guttman variants.
 
 ## Reproduce
 
