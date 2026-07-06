@@ -25,6 +25,7 @@
 \newtheorem{proposition}{Proposition}
 \theoremstyle{remark}
 \newtheorem*{remark}{Remark}
+\newtheorem*{example}{Example}
 
 \begin{document}
 \maketitle
@@ -667,6 +668,191 @@ The optimal minimum-distance weight therefore cannot be determined from the
 population pair \((H,Z)\) alone, and it is not generally restricted to the
 Kronecker row-weight form \(\Phi_G\otimes V_Y\).
 
+\section{Identification charts and moving composites}
+
+The previous section writes constraints in the unit-variance chart, where the
+standardized composites \(F\) have covariance \(\Phi_G\) with unit diagonal.
+This is only a chart choice. The composite scores need not be fixed across
+charts; what should be fixed is the prediction \( \Lambda F \), or equivalently
+the fitted common covariance.
+
+Let \(F_0\) be any \(k\)-vector of auxiliary score proxies, with covariance
+\(\Phi_0=\Cov(F_0)\), and define
+\[
+  Q_{V_Y}(\Lambda;F_0)
+  =
+  \E_H\{(Y_H-\Lambda F_0)\T V_Y(Y_H-\Lambda F_0)\}.
+\]
+For a nonsingular latent-coordinate change \(T\), set
+\[
+  F_T=T^{-1}F_0,
+  \qquad
+  \Gamma=\Lambda T .
+\]
+Then \(\Gamma F_T=\Lambda F_0\), and
+\[
+  \Phi_T=\Cov(F_T)=T^{-1}\Phi_0T^{-\mathsf T},
+  \qquad
+  \Gamma\Phi_T\Gamma\T=\Lambda\Phi_0\Lambda\T .
+\]
+Thus the score basis may move with the loading coordinates without changing
+the \(Y_H\)-space object being fitted.
+
+\begin{proposition}[Chart equivariance of the constrained regression]
+\label{prop:chart-equivariance}
+Let \(V_Y\) be positive definite, let \(F_0\) have finite second moments, and
+let \(T\) be nonsingular. For any loading space
+\(\mathcal L\subset\mathbb R^{p\times k}\), define
+\[
+  \mathcal L_T=\{\Lambda T:\Lambda\in\mathcal L\}.
+\]
+Then
+\[
+  Q_{V_Y}(\Lambda T;T^{-1}F_0)
+  =
+  Q_{V_Y}(\Lambda;F_0)
+  \qquad(\Lambda\in\mathcal L).
+\]
+Consequently the minimizer set for the transformed problem is the transformed
+minimizer set:
+\[
+  \argmin_{\Gamma\in\mathcal L_T}
+    Q_{V_Y}(\Gamma;T^{-1}F_0)
+  =
+  \left\{\Lambda T:
+    \Lambda\in\argmin_{\Lambda\in\mathcal L}Q_{V_Y}(\Lambda;F_0)
+  \right\}.
+\]
+If the minimizer is unique, \(\Gamma^\star=\Lambda^\star T\). The fitted
+prediction and fitted common covariance are unchanged.
+\end{proposition}
+
+\begin{proof}
+For \(\Gamma=\Lambda T\) and \(F_T=T^{-1}F_0\),
+\[
+  Y_H-\Gamma F_T=Y_H-\Lambda T T^{-1}F_0=Y_H-\Lambda F_0 .
+\]
+The objective values are therefore identical point by point. The displayed
+identity for the argmin sets follows from the bijection
+\(\Lambda\mapsto\Lambda T\) between \(\mathcal L\) and \(\mathcal L_T\). The
+common-covariance statement follows from
+\[
+  \Gamma\Cov(F_T)\Gamma\T
+  =
+  \Lambda T(T^{-1}\Phi_0T^{-\mathsf T})T\T\Lambda\T
+  =
+  \Lambda\Phi_0\Lambda\T .
+\]
+\end{proof}
+
+If \(T\) is fixed, affine loading constraints remain affine. For example, if
+\(\ell=\operatorname{vec}(\Lambda)\) and the original chart has
+\[
+  R\ell=r,
+\]
+then \(\ell_T=\operatorname{vec}(\Lambda T)=(T\T\otimes I_p)\ell\), and the
+same feasible set in the transformed chart is
+\[
+  R(T^{-\mathsf T}\otimes I_p)\ell_T=r .
+\]
+Thus a fixed scale conversion never explains nonlinearity. The nonlinearity
+appears when the scale conversion itself is determined by the loading matrix.
+
+A more invariant way to write a chart-specific constraint is to optimize over
+the chart and the latent-coordinate change together. Let
+\(\mathcal C\subset\mathbb R^{p\times k}\) be the loading space in the chosen
+chart, and let \(\mathcal T\) be a set of nonsingular coordinate changes. Then
+\[
+  \min_{\Gamma\in\mathcal C,\ T\in\mathcal T}
+    Q_{V_Y}(\Gamma;T^{-1}F_0)
+\]
+is exactly the same prediction problem as
+\[
+  \min_{\Lambda\in\mathcal L_0(\mathcal C,\mathcal T)}
+    Q_{V_Y}(\Lambda;F_0),
+  \qquad
+  \mathcal L_0(\mathcal C,\mathcal T)
+  =
+  \{\Gamma T^{-1}:\Gamma\in\mathcal C,\ T\in\mathcal T\}.
+\]
+The set \(\mathcal C\) can be linear while
+\(\mathcal L_0(\mathcal C,\mathcal T)\) is nonlinear. This is not a defect of
+the weight \(V_Y\); it is the algebra of the identification chart.
+
+\begin{example}[Marker and unit-variance charts]
+Let \(F_u\) be the unit-variance score basis, so
+\(\diag\{\Cov(F_u)\}=I\). A marker chart with marker \(m_f\) for factor \(f\)
+can be written as
+\[
+  \Gamma=\Lambda_u M^{-1},
+  \qquad
+  F_m=MF_u,
+  \qquad
+  \Phi_m=M\Phi_uM,
+\]
+where
+\[
+  M=\diag\{(\Lambda_u)_{m_1,1},\ldots,(\Lambda_u)_{m_k,k}\}.
+\]
+Then \(\Gamma F_m=\Lambda_uF_u\), and the marker loadings satisfy
+\(\Gamma_{m_f f}=1\).
+
+If \(M\) is a fixed diagonal matrix, Proposition
+\ref{prop:chart-equivariance} applies directly and all affine constraints stay
+affine after transformation. In the usual marker convention, however, \(M\)
+depends on the loading matrix being represented. Pulling marker-linear
+constraints back to unit-variance coordinates can therefore change their
+algebra.
+
+For indicators on the same factor,
+\[
+  \Gamma_{if}=\Gamma_{jf}
+  \quad\Longleftrightarrow\quad
+  (\Lambda_u)_{if}=(\Lambda_u)_{jf},
+\]
+so within-factor equality is linear in both charts. A fixed marker-scale
+loading value is also linear after pullback:
+\[
+  \Gamma_{if}=c
+  \quad\Longleftrightarrow\quad
+  (\Lambda_u)_{if}=c(\Lambda_u)_{m_f f}.
+\]
+By contrast, an equality across two differently scaled factors gives
+\[
+  \Gamma_{if}=\Gamma_{jg}
+  \quad\Longleftrightarrow\quad
+  \frac{(\Lambda_u)_{if}}{(\Lambda_u)_{m_f f}}
+  =
+  \frac{(\Lambda_u)_{jg}}{(\Lambda_u)_{m_g g}},
+\]
+or equivalently
+\[
+  (\Lambda_u)_{if}(\Lambda_u)_{m_g g}
+  =
+  (\Lambda_u)_{jg}(\Lambda_u)_{m_f f}.
+\]
+This is bilinear in the unit-variance loadings. A row metric \(V_Y\) can change
+which off-model projection is preferred, but it cannot make this pullback
+linear.
+
+For a marker-linear space \(\mathcal C_m\), the corresponding moving-score
+formulation is
+\[
+  \min_{\Gamma\in\mathcal C_m,\ M}
+    \E_H\{(Y_H-\Gamma M F_u)\T V_Y(Y_H-\Gamma M F_u)\},
+\]
+with \(M\) restricted to nonsingular diagonal matrices satisfying the desired
+orientation convention. In unit-variance coordinates this is the same as
+minimizing over the generally nonlinear set
+\[
+  \{\Gamma M:\Gamma\in\mathcal C_m,\ M
+    \hbox{ nonsingular diagonal}\}.
+\]
+Thus the same population target can be written as a linear constraint in the
+marker chart, or as a nonlinear constraint in the unit-variance chart, provided
+the score basis is transformed with the chart.
+\end{example}
+
 \section{What is and is not minimized}
 
 The preceding lemmas give the clean answer. The Guttman construction minimizes
@@ -889,6 +1075,13 @@ For one covariance block, the implementation can be checked in this order:
   \eqref{eq:constrained-loading-space}, or by the weighted version
   \eqref{eq:weighted-loading-space} if a row metric \(V_Y\) is part of the
   estimator definition.
+\item If the constraints are stated in another identification chart, transform
+  the score basis with that chart as in Proposition
+  \ref{prop:chart-equivariance}. For marker-linear constraints, decide whether
+  the marker scaling is fixed after an unconstrained solve or is a nuisance
+  scale in the constrained problem. The latter gives the moving-score
+  formulation in the marker example and may be nonlinear in unit-variance
+  loading coordinates.
 \item Compute \(\psi=\diag(S-\Lambda\Phi_G\Lambda\T)\), using either the
   unconstrained \(\Lambda_G\) or the constrained
   \(\Lambda_{\mathcal L}\).
@@ -917,8 +1110,12 @@ score scale. The common part is equivariant when \(A\) is transformed
 contravariantly with the observed coordinates.
 Loading equalities, including tau-equivalence, can be imposed directly as
 constraints on that population regression; row weights define different
-off-model constrained targets. First-loading-equals-one output is a diagonal
-reparameterization of the same fitted common part. Residual NTML or ULS
+off-model constrained targets. Identification changes are handled by moving
+the score basis with the loading chart. A fixed latent-coordinate change
+preserves affine constraints, while marker-style scalings that depend on the
+loading matrix can make the same constraint linear in one chart and nonlinear
+in another. First-loading-equals-one output is a diagonal reparameterization
+of the same fitted common part. Residual NTML or ULS
 statistics are useful diagnostics and valid pseudo-tests once their
 weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
