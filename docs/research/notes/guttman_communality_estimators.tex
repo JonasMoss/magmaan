@@ -159,28 +159,187 @@ pooled denominator but can be sensitive to a single weak pair. Both are genuine
 population-consistent communality rules under the simple block model.
 \end{remark}
 
-\section{Weighted triad family}
+\section{Linear method-of-moments triad family}
 
-The preceding two estimators are members of a larger family. For fixed weights
-\(w_{jk}\), define
+The ratio identity can be written without ratios. Work on the correlation
+scale within one factor block. Under \eqref{eq:block-model},
 \[
-  h_i^{\mathrm{WAR}}
-  =
-  \frac{\sum_{(j,k)} w_{jk}\sigma_{ij}\sigma_{ik}/\sigma_{jk}}
-       {\sum_{(j,k)} w_{jk}},
+  \rho_{ij}=\alpha_i\alpha_j\qquad(i\ne j),
 \]
-or
+where
 \[
-  h_i^{\mathrm{WRS}}
-  =
-  \frac{\sum_{(j,k)} w_{jk}\sigma_{ij}\sigma_{ik}}
-       {\sum_{(j,k)} w_{jk}\sigma_{jk}} .
+  \alpha_i=\lambda_i\sqrt{\phi_f/\sigma_{ii}} .
 \]
-If the denominators are nonzero and the weights do not depend on the target
-item through an inconsistent population quantity, both recover \(c_i\). This is
-useful for stabilized implementations: weights may downweight pairs with
-near-zero covariance or known weak indicators without changing the on-model
-target.
+The correlation-scale communality proportion is
+\[
+  \gamma_i=\alpha_i^2,
+  \qquad
+  c_i=\sigma_{ii}\gamma_i .
+\]
+For each pair \((j,k)\in\mathcal P_i\), the Spearman identity is equivalent to
+the linear moment
+\begin{equation}\label{eq:linear-triad-moment}
+  \gamma_i\rho_{jk}-\rho_{ij}\rho_{ik}=0 .
+\end{equation}
+Thus Spearman's rule is not an ad hoc population identity. It is one way of
+pooling exact rank-one triad moments. The estimator-design question is which
+finite-sample pooling of \eqref{eq:linear-triad-moment} to use.
+
+For a sample correlation matrix \(R\), define for item \(i\)
+\[
+  a_{i,jk}=R_{jk},
+  \qquad
+  b_{i,jk}=R_{ij}R_{ik},
+  \qquad
+  (j,k)\in\mathcal P_i .
+\]
+Stack these into vectors \(a_i\) and \(b_i\). For any symmetric positive
+semidefinite weight \(W_i\) satisfying \(a_i\T W_i a_i>0\), define
+\begin{equation}\label{eq:item-linear-mom}
+  \hat\gamma_i(W_i)
+  =
+  (a_i\T W_i a_i)^{-1}a_i\T W_i b_i,
+  \qquad
+  \hat c_i(W_i)=S_{ii}\hat\gamma_i(W_i).
+\end{equation}
+This is the closed-form weighted least-squares estimator of \(\gamma_i\) in
+the linear moments
+\[
+  a_i\gamma_i-b_i=0 .
+\]
+
+\begin{proposition}[Linear triad moments are exact]\label{prop:linear-mom}
+Let \(\Sigma_0\) satisfy the one-factor block model
+\eqref{eq:block-model}. Let \(R_0\) be its correlation matrix, and suppose
+\(W_i(R_0)\) is finite with
+\[
+  a_i(R_0)\T W_i(R_0)a_i(R_0)>0 .
+\]
+Then the population version of \eqref{eq:item-linear-mom} satisfies
+\[
+  \gamma_i\{W_i(R_0)\}=\alpha_i^2,
+  \qquad
+  c_i\{W_i(R_0)\}=\lambda_i^2\phi_f .
+\]
+\end{proposition}
+
+\begin{proof}
+At the population model,
+\[
+  b_{i,jk}(R_0)
+  =
+  \rho_{ij}\rho_{ik}
+  =
+  \alpha_i^2\rho_{jk}
+  =
+  \gamma_i a_{i,jk}(R_0)
+\]
+for every \((j,k)\in\mathcal P_i\). Hence \(b_i(R_0)=a_i(R_0)\gamma_i\), and
+\[
+  (a_i\T W_i a_i)^{-1}a_i\T W_i b_i
+  =
+  (a_i\T W_i a_i)^{-1}a_i\T W_i a_i\,\gamma_i
+  =
+  \gamma_i .
+\]
+Multiplying by \(\sigma_{ii}\) returns \(c_i=\lambda_i^2\phi_f\).
+\end{proof}
+
+Several familiar and useful rules are special cases.
+
+\paragraph{Identity linear moments.}
+With \(W_i=I\),
+\begin{equation}\label{eq:identity-linear-mom}
+  \hat\gamma_i^{\mathrm{ILM}}
+  =
+  \frac{\sum_{(j,k)\in\mathcal P_i}R_{jk}R_{ij}R_{ik}}
+       {\sum_{(j,k)\in\mathcal P_i}R_{jk}^2}.
+\end{equation}
+This is the simplest closed-form method-of-moments version. It avoids division
+by each individual \(R_{jk}\), so it is less sensitive than the average of
+ratios to a single weak denominator.
+
+\paragraph{Average-of-ratios Spearman.}
+If all denominators are nonzero, the average-of-ratios rule
+\eqref{eq:avg-ratio} is obtained from \eqref{eq:item-linear-mom} by the
+data-dependent weight
+\[
+  W_i=\diag\{R_{jk}^{-2}:(j,k)\in\mathcal P_i\}.
+\]
+Then \(a_i\T W_i a_i=|\mathcal P_i|\) and
+\[
+  \hat\gamma_i(W_i)
+  =
+  |\mathcal P_i|^{-1}
+  \sum_{(j,k)\in\mathcal P_i}
+  \frac{R_{ij}R_{ik}}{R_{jk}} .
+\]
+
+\paragraph{Ratio-of-sums Spearman.}
+When the relevant \(R_{jk}\)'s have compatible sign, the ratio-of-sums rule
+\eqref{eq:ratio-sums} is the same linear estimating equation with row weights
+proportional to \(R_{jk}^{-1}\):
+\[
+  \hat\gamma_i^{\mathrm{RS}}
+  =
+  \frac{\sum_{(j,k)\in\mathcal P_i}R_{ij}R_{ik}}
+       {\sum_{(j,k)\in\mathcal P_i}R_{jk}} .
+\]
+This form is consistent whenever the pooled denominator has a nonzero
+population limit, but it is not always a positive least-squares metric if the
+within-block covariances have mixed signs.
+
+\section{One-step GMM weights for the triad moments}
+
+The itemwise construction can be stacked. Let \(\gamma\) collect the
+correlation-scale communality proportions for all indicators. For every
+admissible row \((i;j,k)\), write
+\[
+  g_{i;jk}(\gamma;R)
+  =
+  \gamma_iR_{jk}-R_{ij}R_{ik}.
+\]
+Stacking rows gives
+\[
+  g(\gamma;R)=A(R)\gamma-b(R),
+\]
+where each row of \(A(R)\) has a single nonzero entry \(R_{jk}\) in column
+\(i\), and the corresponding row of \(b(R)\) is \(R_{ij}R_{ik}\). For any
+positive semidefinite weight \(W\),
+\begin{equation}\label{eq:stacked-gmm}
+  \hat\gamma_W
+  =
+  \{A(R)\T W A(R)\}^{+}
+  A(R)\T W b(R).
+\end{equation}
+This is a closed-form GMM estimator for the overidentified linear triad
+moments. The identity choice \(W=I\) gives a stable baseline. A one-step
+efficient version uses a preliminary consistent \(\tilde\gamma\), forms
+\[
+  \widehat\Omega_g
+  =
+  \widehat{\operatorname{AVar}}\{
+    \sqrt n\,g(\tilde\gamma;R)
+  \},
+\]
+and sets \(W=\widehat\Omega_g^{+}\) in \eqref{eq:stacked-gmm}. The covariance
+\(\widehat\Omega_g\) is obtained by delta method from the asymptotic covariance
+of the sample correlations; under normality this has a closed form, and under
+nonnormality it can be estimated by a sandwich covariance of the correlation
+vector.
+
+\begin{remark}
+The one-step estimator is efficient only within the declared triad-moment GMM
+family. It is not a claim that the resulting full Guttman estimator is globally
+efficient for CFA. The weight also affects finite-sample behavior and the
+off-model diagonal-completion target.
+\end{remark}
+
+This gives a recommendable hierarchy. The average-of-ratios and ratio-of-sums
+rules are historically recognizable certified rules. The identity linear-moment
+rule is the simplest non-ratio method-of-moments default. The one-step GMM rule
+is the natural efficiency-oriented member of the same closed-form family,
+conditional on a chosen covariance model for the sample correlations.
 
 \section{Uniqueness-first rules}
 
@@ -276,8 +435,9 @@ For a pure Guttman estimator, \texttt{magmaan} should distinguish
 communality rules by their population contract:
 \begin{itemize}
 \item certified rules: single triads, average-of-ratios Spearman, ratio-of-sums
-  Spearman, weighted variants with nonzero denominators, and exact
-  uniqueness-first rules;
+  Spearman, identity linear moments, weighted linear-moment variants with
+  nonzero denominators, one-step triad GMM with a declared correlation
+  covariance model, and exact uniqueness-first rules;
 \item start-value rules only: SMC, arbitrary lower bounds, and repairs that can
   be active at the population target;
 \item regularized variants: any rule that replaces a failed denominator or
@@ -291,6 +451,11 @@ then subtracts the resulting residual variance from the diagonal. On an exact
 simple CFA block this is population-consistent for
 \(\diag(\Lambda\Phi\Lambda\T)\). If we add alternatives, the test for admission
 should be the propositions above, not historical popularity as a starting value.
+For a recommendable closed-form default, the identity linear-moment rule
+\eqref{eq:identity-linear-mom} is the least ratio-sensitive member of the
+certified family. For an efficiency-oriented variant, use the one-step GMM
+rule \eqref{eq:stacked-gmm} with the weight construction documented in the
+estimator output.
 
 \begin{thebibliography}{9}
 
