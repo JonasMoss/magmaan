@@ -28,6 +28,9 @@ relevant categorical estimators are implemented and hardened.
   milestone covers the Welz-style bivariate corner-contamination design and
   five-variable robust polychoric matrix design, writing tidy CSV rows for ML,
   WMA hard-cap h, smooth h, and Huberized residual moment builders.
+- `r/guttman_triad_gmm_probe.R` informal continuous CFA probe comparing
+  Spearman communality poolings, identity linear moments, and one-step/oracle
+  triad GMM weights before a Guttman common-covariance reconstruction.
 
 ## Example
 
