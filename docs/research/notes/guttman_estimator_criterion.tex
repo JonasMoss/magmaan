@@ -853,6 +853,152 @@ marker chart, or as a nonlinear constraint in the unit-variance chart, provided
 the score basis is transformed with the chart.
 \end{example}
 
+The lavaanified partable gives an algorithmic version of this chart choice.
+Raw syntax is not enough, because defaults such as marker selection,
+\texttt{std.lv}, effect coding, group options, and user labels determine the
+actual fixed rows and equality rows.
+Let \(\vartheta\) denote the lavaan parameter vector extracted from
+\(\Lambda\), \(\Phi\), and \(\psi\); this is not the residual covariance
+matrix. Suppose the partable supplies linear equality constraints
+\[
+  R\vartheta=r .
+\]
+Start from an oriented base representative
+\((\Lambda_0,\Phi_0,\psi_0)\), and suppose the score proxies are written
+\[
+  F_0=B_0\T Y_H .
+\]
+For a simple CFA loading pattern with named factors, the admissible
+latent-coordinate changes are diagonal after signs have been oriented. Write
+\[
+  T(x)=\diag(e^{x_1},\ldots,e^{x_k}).
+\]
+The diagonal orbit is
+\[
+  \Lambda(x)=\Lambda_0T(x),
+  \qquad
+  \Phi(x)=T(x)^{-1}\Phi_0T(x)^{-\mathsf T},
+  \qquad
+  B(x)=B_0T(x)^{-\mathsf T}.
+\]
+Then \(B(x)\T Y_H=T(x)^{-1}F_0\), so this is exactly the moving-score
+transformation in Proposition \ref{prop:chart-equivariance}. Let
+\[
+  \vartheta(x)=q\{\Lambda(x),\Phi(x),\psi_0\},
+  \qquad
+  g(x)=R\vartheta(x)-r,
+\]
+where \(q\) is the partable extraction map. Constructing the lavaan chart from
+first principles means solving selected rows of \(g(x)=0\) for the scale
+coordinates \(x\).
+
+\begin{proposition}[Diagonal chart solve from linear partable constraints]
+\label{prop:lavaan-chart-solve}
+Let \(C\) select \(k\) rows of \(R\), and write
+\[
+  g_C(x)=C\{R\vartheta(x)-r\}.
+\]
+If there is a solution \(x^\star\) with
+\[
+  g_C(x^\star)=0,
+  \qquad
+  \rank\left\{
+    \frac{\partial g_C}{\partial x\T}(x^\star)
+  \right\}=k,
+\]
+then \(T(x^\star)\) is the locally unique diagonal representative in the
+orbit satisfying those chart equations. The corresponding lavaan-chart
+representative is
+\[
+  \Lambda_{\mathrm{lav}}=\Lambda_0T(x^\star),
+  \qquad
+  \Phi_{\mathrm{lav}}=T(x^\star)^{-1}\Phi_0T(x^\star)^{-\mathsf T},
+  \qquad
+  B_{\mathrm{lav}}=B_0T(x^\star)^{-\mathsf T}.
+\]
+The remaining rows of \(R\vartheta=r\) are then checked or imposed in that
+chart; they are not automatically chart equations.
+\end{proposition}
+
+\begin{proof}
+The map \(x\mapsto T(x)\) parameterizes the oriented diagonal coordinate
+orbit. The rank condition and the implicit function theorem give a locally
+isolated solution \(x^\star\) to the selected equations on that orbit. The
+matrix formulas are exactly the latent-coordinate action above, and
+Proposition \ref{prop:chart-equivariance} gives the corresponding moving-score
+interpretation.
+\end{proof}
+
+This proposition is deliberately local. If no \(k\)-row selection has full
+rank, the linear partable constraints do not fully fix the factor scales. If
+the selected equations have no solution on the orbit, they are inconsistent
+with that base representative. If additional rows fail after the chart solve,
+those rows are substantive constraints on the model target, not scale
+normalizations to be absorbed into \(T\).
+
+\begin{example}[Common lavaan chart equations]
+For a loading on factor \(f\),
+\[
+  \lambda_{if}(x)=(\Lambda_0)_{if}e^{x_f}.
+\]
+For a latent covariance,
+\[
+  \phi_{fg}(x)=
+  e^{-x_f}(\Phi_0)_{fg}e^{-x_g}.
+\]
+Thus the common chart equations are obtained directly from the partable rows:
+\[
+  \lambda_{m_f f}(x)=1
+  \quad\Longleftrightarrow\quad
+  e^{x_f}=1/(\Lambda_0)_{m_f f},
+\]
+\[
+  \phi_{ff}(x)=1
+  \quad\Longleftrightarrow\quad
+  e^{x_f}=\{(\Phi_0)_{ff}\}^{1/2},
+\]
+and, for effect coding within factor \(f\),
+\[
+  \sum_i a_i\lambda_{if}(x)=c
+  \quad\Longleftrightarrow\quad
+  e^{x_f}=
+  \frac{c}{\sum_i a_i(\Lambda_0)_{if}} .
+\]
+Each row fixes one scale direction when the displayed denominator is nonzero
+and the sign convention is compatible.
+
+A same-factor equality does not fix scale:
+\[
+  \lambda_{if}(x)=\lambda_{jf}(x)
+  \quad\Longleftrightarrow\quad
+  (\Lambda_0)_{if}=(\Lambda_0)_{jf}.
+\]
+If the equality is true, the whole diagonal orbit satisfies it; if it is false,
+no diagonal scaling can make it true. It is therefore a substantive loading
+constraint, not a chart equation.
+
+A cross-factor equality can fix relative scale:
+\[
+  \lambda_{if}(x)=\lambda_{jg}(x)
+  \quad\Longleftrightarrow\quad
+  (\Lambda_0)_{if}e^{x_f}
+  =
+  (\Lambda_0)_{jg}e^{x_g}.
+\]
+When the two base loadings have compatible signs, this gives
+\[
+  x_f-x_g
+  =
+  \log |(\Lambda_0)_{jg}|
+  -
+  \log |(\Lambda_0)_{if}|.
+\]
+Such rows can help connect factor scales, but they do not by themselves fix
+the absolute scale of every factor. Extra cross-factor equalities may also
+overdetermine the orbit. The rank test in Proposition
+\ref{prop:lavaan-chart-solve} is the implementation check.
+\end{example}
+
 \section{What is and is not minimized}
 
 The preceding lemmas give the clean answer. The Guttman construction minimizes
@@ -1082,6 +1228,11 @@ For one covariance block, the implementation can be checked in this order:
   scale in the constrained problem. The latter gives the moving-score
   formulation in the marker example and may be nonlinear in unit-variance
   loading coordinates.
+\item For lavaanified linear constraints \(R\vartheta=r\), construct the chart
+  scale by the orbit solve in Proposition \ref{prop:lavaan-chart-solve}: form
+  \(\vartheta(x)=q\{\Lambda T(x),T(x)^{-1}\Phi T(x)^{-\mathsf T},\psi\}\),
+  choose scale-fixing rows with rank \(k\), and check the remaining rows as
+  substantive constraints in the selected chart.
 \item Compute \(\psi=\diag(S-\Lambda\Phi_G\Lambda\T)\), using either the
   unconstrained \(\Lambda_G\) or the constrained
   \(\Lambda_{\mathcal L}\).
@@ -1114,8 +1265,11 @@ off-model constrained targets. Identification changes are handled by moving
 the score basis with the loading chart. A fixed latent-coordinate change
 preserves affine constraints, while marker-style scalings that depend on the
 loading matrix can make the same constraint linear in one chart and nonlinear
-in another. First-loading-equals-one output is a diagonal reparameterization
-of the same fitted common part. Residual NTML or ULS
+in another. For lavaanified linear constraints, the diagonal chart is obtained
+by solving the scale orbit equations \(R\vartheta(x)=r\) and requiring a
+rank-\(k\) chart Jacobian; remaining rows are substantive constraints in that
+chart. First-loading-equals-one output is a diagonal reparameterization of the
+same fitted common part. Residual NTML or ULS
 statistics are useful diagnostics and valid pseudo-tests once their
 weighted-\(\chi^2\) reference is corrected with
 \(M_G=I-\Delta J_G\). For multi-sample invariance, the more natural test is the
