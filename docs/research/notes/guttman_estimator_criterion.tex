@@ -999,6 +999,198 @@ overdetermine the orbit. The rank test in Proposition
 \ref{prop:lavaan-chart-solve} is the implementation check.
 \end{example}
 
+\section{Observed input canonicalization}
+
+The row metric \(V_Y\) can also be read as an input standardization. This is
+often the better interpretation. The question is not only how residuals are
+weighted after the fact, but which observed coordinates are used before the
+composite regression is defined.
+
+Let \(G\succ0\) be a declared observed-coordinate scale matrix, and write
+\[
+  W_G=G^{-1/2},
+  \qquad
+  X_G=W_GY_H,
+  \qquad
+  H_G=\Cov(X_G)=W_GHW_G .
+\]
+For score coefficients \(B_G\in\mathbb R^{p\times k}\), define
+\[
+  F_G=B_G\T X_G,
+  \qquad
+  \Phi_G^B=B_G\T H_GB_G .
+\]
+The Euclidean input-space regression is
+\begin{equation}\label{eq:input-space-regression}
+  \Gamma_G
+  =
+  \argmin_{\Gamma}
+  \E_H\{\lVert X_G-\Gamma F_G\rVert^2\}.
+\end{equation}
+When \(\Phi_G^B\) is nonsingular,
+\[
+  \Gamma_G=H_GB_G(\Phi_G^B)^{-1}.
+\]
+Returning to the original \(Y_H\)-coordinates gives
+\[
+  \Lambda_G^{(Y)}=G^{1/2}\Gamma_G .
+\]
+Thus \eqref{eq:input-space-regression} is exactly the weighted regression
+\[
+  \E_H\{(Y_H-\Lambda_G^{(Y)}F_G)\T
+        G^{-1}
+        (Y_H-\Lambda_G^{(Y)}F_G)\}.
+\]
+So choosing \(V_Y=G^{-1}\) and choosing inputs \(X_G=G^{-1/2}Y_H\) are the same
+population target. The input formulation is preferable when \(G\) is intended
+as a canonicalization of the observed variables.
+
+The conservative choice is diagonal standardization. Let \(\Sigma_Y\) denote
+the population covariance of the observed variables before the communality
+replacement, and set
+\[
+  G_{\mathrm{diag}}=\diag(\Sigma_Y).
+\]
+Then
+\[
+  X_{\mathrm{diag}}=G_{\mathrm{diag}}^{-1/2}Y_H
+\]
+gives the standardized-residual criterion
+\[
+  \E_H\left[
+    \sum_{i=1}^p
+    \frac{(Y_{H,i}-(\Lambda F)_i)^2}{(\Sigma_Y)_{ii}}
+  \right].
+\]
+This is invariant to changing the measurement units of named indicators, as
+long as \(G_{\mathrm{diag}}\) is recomputed after the unit change. It is the
+most lavaan-compatible canonicalization because it keeps the named indicator
+coordinates and all partable constraints in their usual coordinates.
+
+The stronger choice is block whitening. Suppose the simple CFA pattern
+partitions the indicators into blocks
+\[
+  P_1,\ldots,P_k,
+\]
+where \(P_f\) contains the indicators assigned to factor \(f\). Define
+\[
+  G_{\mathrm{blk}}
+  =
+  \bigoplus_{f=1}^k
+  (\Sigma_Y)_{P_fP_f}.
+\]
+Then \(X_{\mathrm{blk}}=G_{\mathrm{blk}}^{-1/2}Y_H\) whitens each indicator
+block with respect to the observed covariance scale. This is the natural
+canonicalization for transformations that only mix indicators assigned to the
+same factor.
+
+\begin{proposition}[Block whitening leaves only orthogonal block freedom]
+\label{prop:block-whitening}
+Let
+\[
+  L=\bigoplus_{f=1}^k L_f
+\]
+be nonsingular, with each \(L_f\) acting only inside block \(P_f\). Let
+\[
+  Y_H^\ast=LY_H,
+  \qquad
+  H^\ast=LHL\T,
+  \qquad
+  G_{\mathrm{blk}}^\ast=LG_{\mathrm{blk}}L\T .
+\]
+With \(X=G_{\mathrm{blk}}^{-1/2}Y_H\) and
+\[
+  X^\ast=(G_{\mathrm{blk}}^\ast)^{-1/2}Y_H^\ast,
+\]
+there is a block-orthogonal matrix \(O\) such that
+\[
+  X^\ast=OX .
+\]
+One such matrix is
+\[
+  O=(G_{\mathrm{blk}}^\ast)^{-1/2}LG_{\mathrm{blk}}^{1/2}.
+\]
+\end{proposition}
+
+\begin{proof}
+The displayed \(O\) satisfies
+\[
+  O O\T
+  =
+  (G_{\mathrm{blk}}^\ast)^{-1/2}
+  LG_{\mathrm{blk}}L\T
+  (G_{\mathrm{blk}}^\ast)^{-1/2}
+  =
+  I .
+\]
+Also
+\[
+  OX
+  =
+  (G_{\mathrm{blk}}^\ast)^{-1/2}LG_{\mathrm{blk}}^{1/2}
+  G_{\mathrm{blk}}^{-1/2}Y_H
+  =
+  (G_{\mathrm{blk}}^\ast)^{-1/2}LY_H
+  =
+  X^\ast .
+\]
+\end{proof}
+
+Block whitening makes Euclidean loss invariant to the remaining
+block-orthogonal freedom, provided the score rule moves with that freedom. A
+score rule \(B(H_G)\) is block-orthogonally equivariant if
+\[
+  B(O H_G O\T)=O B(H_G)
+\]
+for every block-orthogonal \(O\) in the allowed class. Then the scores are
+unchanged:
+\[
+  B(O H_G O\T)\T OX=B(H_G)\T X .
+\]
+Consequently the unconstrained regression satisfies
+\[
+  \Gamma^\ast=O\Gamma,
+  \qquad
+  \Phi^{B,\ast}=\Phi^B,
+\]
+and the fitted common covariance in the original observed coordinates
+transforms as \(L(\Lambda\Phi^B\Lambda\T)L\T\). The same statement holds for
+constrained regressions when the loading space is transformed as
+\(\mathcal C^\ast=\{O\Gamma:\Gamma\in\mathcal C\}\), with latent chart changes
+handled by Proposition \ref{prop:chart-equivariance}.
+
+The fixed incidence score \(Z\) is not block-orthogonally equivariant in
+general. It is tied to named indicators. A loading-aligned score rule is
+equivariant. If an input-space loading matrix \(\Gamma\) has full column rank,
+the oracle score coefficient
+\[
+  B_\Gamma=\Gamma(\Gamma\T\Gamma)^{-1}
+\]
+satisfies
+\[
+  B_{O\Gamma}
+  =
+  O\Gamma\{(O\Gamma)\T(O\Gamma)\}^{-1}
+  =
+  OB_\Gamma .
+\]
+This is not directly an estimator because \(\Gamma\) is unknown, but it
+describes the canonical class: block-whiten the inputs, construct scores by a
+loading-aligned equivariant rule, and then run the Euclidean composite
+regression in the canonical coordinates. A practical version can use a
+two-step rule, first obtaining a named-coordinate Guttman loading matrix and
+then constructing \(B_\Gamma\) from that preliminary representative.
+
+These two canonicalizations have different status. The diagonal version is a
+safe default for a lavaan-like named-indicator estimator. It solves the
+high-variance-variable problem while keeping ordinary partable constraints
+intact. The block-whitened version is the more ambitious invariant target for
+a recommended Guttman class, but it requires the full map \(S\mapsto H\mapsto
+B\) to be designed for block equivariance. The current Spearman-Harman
+communality step and the fixed \(Z\) scores are named-coordinate constructions,
+so they should not be advertised as invariant to arbitrary within-block
+linear mixing.
+
 \section{What is and is not minimized}
 
 The preceding lemmas give the clean answer. The Guttman construction minimizes
@@ -1211,6 +1403,15 @@ For one covariance block, the implementation can be checked in this order:
   substituted.
 \item For each factor block, compute the Spearman-Harman communalities
   \eqref{eq:spearman-h}; place them on the diagonal to get \(H\).
+\item If using an observed-input canonicalization, choose \(G\) and work with
+  \(X_G=G^{-1/2}Y_H\) and \(H_G=G^{-1/2}HG^{-1/2}\). The conservative choice is
+  \(G_{\mathrm{diag}}=\diag(\Sigma_Y)\). The stronger block-aligned choice is
+  \(G_{\mathrm{blk}}=\bigoplus_f(\Sigma_Y)_{P_fP_f}\), but then the score rule
+  \(B\) should be block-orthogonally equivariant. Convert input-space loadings
+  back by \(\Lambda^{(Y)}=G^{1/2}\Gamma\). In this branch, replace the next
+  two \(Z,H\)-formulas by
+  \(\Phi^B=B\T H_GB\) and \(\Gamma=H_GB(\Phi^B)^{-1}\), with optional score
+  standardization if unit-variance score coordinates are desired.
 \item Form \(D=\diag(Z\T HZ)\) and the standardized composite covariance
   \(\Phi_G=D^{-1/2}(Z\T HZ)D^{-1/2}\).
 \item Solve \(\Lambda_G=HZD^{-1/2}\Phi_G^{-1}\). This is the loading matrix
@@ -1259,6 +1460,13 @@ in the \(H\)-world. Factor-pure anchor sets give pattern-only choices of \(A\),
 and the standardized coefficient matrix \(\widetilde A(H)\) defines the actual
 score scale. The common part is equivariant when \(A\) is transformed
 contravariantly with the observed coordinates.
+Observed-row weights are equivalently input canonicalizations:
+\(V_Y=G^{-1}\) means running ordinary Euclidean regression after
+\(X_G=G^{-1/2}Y_H\). Diagonal standardization gives a safe named-indicator
+default. Block whitening gives a stronger invariant target under
+within-factor block transformations, provided the score rule is also
+block-orthogonally equivariant; fixed \(Z\) is not enough for that stronger
+property.
 Loading equalities, including tau-equivalence, can be imposed directly as
 constraints on that population regression; row weights define different
 off-model constrained targets. Identification changes are handled by moving
