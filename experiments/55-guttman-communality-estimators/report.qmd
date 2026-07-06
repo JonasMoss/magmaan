@@ -91,6 +91,29 @@ runtime_factor <- {
   nt / ilm
 }
 
+small_n <- min(summary$n)
+hey_small <- aggregate(improper_rate ~ method,
+                       subset(summary, n == small_n),
+                       median, na.rm = TRUE, na.action = na.pass)
+hey_small <- stats::setNames(hey_small$improper_rate, hey_small$method)
+
+bad_cols <- c("fail_rate", "improper_rate", "sample_singular_rate",
+              "h_diag_bad_rate", "h_indef_rate", "score_nonpos_rate",
+              "common_indef_rate")
+bad <- aggregate(summary[bad_cols],
+                 list(n = summary$n, method = summary$method),
+                 median, na.rm = TRUE, na.action = na.pass)
+bad <- subset(bad, n %in% head(sort(unique(summary$n)), 3))
+bad$Method <- method_label[bad$method]
+bad <- bad[order(bad$n, match(bad$method,
+                              c("ar", "rs", "ilm", "gmm_block",
+                                "gmm_full", "nt_ml"))), ]
+bad_show <- bad[c("n", "Method", bad_cols)]
+names(bad_show) <- c("N", "Method", "Fail", "Heywood", "S Singular",
+                     "Bad H Diag", "H Indef.", "Score Nonpos.",
+                     "Common Indef.")
+for (j in 3:ncol(bad_show)) bad_show[[j]] <- pct(bad_show[[j]])
+
 cx <- complexity[which.max(complexity$p), ]
 ```
 
@@ -125,6 +148,11 @@ Runtime is consistent with the intended niche: NT ML is about
 factor cautiously; the smoke grid is small and ML timing depends on optimizer
 convergence. The timing scope is `r meta("timing_scope")`.
 
+The small-N arm is now deliberately rough. At `N = ` `r small_n`, the median
+Heywood-like rate is `r pct(hey_small[["ilm"]])` for ILM,
+`r pct(hey_small[["rs"]])` for RS, and `r pct(hey_small[["nt_ml"]])` for NT ML,
+pooling over the displayed cells.
+
 ## Evidence
 
 ### Accuracy
@@ -156,6 +184,20 @@ triad-moment covariance. The NT ML row is magmaan's iterative normal-theory fit.
 Model syntax parsing and lavaanification are outside the per-replication clock;
 the NT row still pays magmaan's current R-to-C++ partable conversion inside the
 ML entry point.
+
+### Improper Solutions
+
+Heywood means at least one negative residual variance. For the Guttman variants,
+that residual is `diag(S - H Z (Z' H Z)^-1 Z' H)`. `Bad H Diag` means the
+estimated communality diagonal fell outside `[0, S_ii]`. `H Indef.` records when
+the communality-filled matrix is indefinite; this is not automatically a
+failed estimator, because the traditional map only needs the composite score
+covariance to be invertible, but it marks cases where the literal covariance
+interpretation of `H` is gone.
+
+```{r}
+knitr::kable(bad_show, row.names = FALSE)
+```
 
 ### Complexity
 

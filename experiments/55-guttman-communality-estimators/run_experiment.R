@@ -19,7 +19,7 @@ usage <- function() {
     "  --smoke              Quick normal + ordinal slice. Default.\n",
     "  --full               Larger default grid.\n",
     "  --reps N             Replications per cell. Full default: 200.\n",
-    "  --n LIST             Sample sizes. Full default: 100,250,500.\n",
+    "  --n LIST             Sample sizes. Full default: 12,20,50,100,250,500.\n",
     "  --factors LIST       Factor counts. Full default: 1,2,4.\n",
     "  --indicators LIST    Indicators per factor. Full default: 3,5.\n",
     "  --rho LIST           Exchangeable latent correlations. Full default: 0,.4.\n",
@@ -39,7 +39,7 @@ parse_args <- function(args) {
     smoke = TRUE,
     full = FALSE,
     reps = 200L,
-    n = c(100L, 250L, 500L),
+    n = c(12L, 20L, 50L, 100L, 250L, 500L),
     factors = c(1L, 2L, 4L),
     indicators = c(3L, 5L),
     rho = c(0, .4),
@@ -119,7 +119,7 @@ parse_args <- function(args) {
   }
   if (isTRUE(opts$smoke)) {
     if (!"reps" %in% explicit) opts$reps <- 8L
-    if (!"n" %in% explicit) opts$n <- c(100L, 250L)
+    if (!"n" %in% explicit) opts$n <- c(12L, 20L, 50L, 100L)
     if (!"factors" %in% explicit) opts$factors <- 2L
     if (!"indicators" %in% explicit) opts$indicators <- 5L
     if (!"rho" %in% explicit) opts$rho <- .4
@@ -176,19 +176,6 @@ model_syntax <- function(q, m) {
   paste(lines, collapse = "\n")
 }
 
-within_off_pairs <- function(blocks) {
-  rows <- list()
-  for (f in sort(unique(blocks))) {
-    idx <- which(blocks == f)
-    rows[[length(rows) + 1L]] <- t(utils::combn(idx, 2L))
-  }
-  do.call(rbind, rows)
-}
-
-estimate_gamma <- function(s, blocks, method) {
-  magmaan::guttman_h(s, blocks, method = method)$h2
-}
-
 sample_cov_n <- function(x, vars = NULL) {
   xc <- sweep(x, 2L, colMeans(x), check.margin = FALSE)
   s <- crossprod(xc) / nrow(x)
@@ -203,10 +190,13 @@ sample_stats_n <- function(x, vars) {
   list(S = list(s), mean = list(mu), nobs = as.integer(nrow(x)))
 }
 
-fill_h <- function(s, gamma) {
-  hmat <- s
-  diag(hmat) <- diag(s) * gamma
-  hmat
+min_eigen_sym <- function(x) {
+  if (is.null(x) || !all(is.finite(x))) return(NA_real_)
+  out <- tryCatch(
+    eigen((x + t(x)) / 2, symmetric = TRUE, only.values = TRUE)$values,
+    error = function(e) NA_real_
+  )
+  if (all(is.na(out))) NA_real_ else min(out)
 }
 
 guttman_common <- function(hmat, blocks) {
@@ -218,11 +208,11 @@ guttman_common <- function(hmat, blocks) {
   }
   score_cov <- crossprod(Z, hmat %*% Z)
   inv_score_cov <- tryCatch(solve(score_cov), error = function(e) NULL)
-  if (is.null(inv_score_cov)) return(NULL)
+  if (is.null(inv_score_cov)) return(list(common = NULL, score_cov = score_cov))
   hz <- hmat %*% Z
   common <- hz %*% inv_score_cov %*% t(hz)
   dimnames(common) <- dimnames(hmat)
-  common
+  list(common = common, score_cov = score_cov)
 }
 
 pt_value <- function(pt, row) {
@@ -255,7 +245,9 @@ ml_common_from_fit <- function(fit, vars, q) {
   }
   common <- Lambda %*% Phi %*% t(Lambda)
   dimnames(common) <- list(vars, vars)
-  list(common = common, improper = any(is.finite(resid) & resid < 0))
+  list(common = common,
+       resid = resid,
+       improper = any(is.finite(resid) & resid < 0))
 }
 
 fit_nt_ml <- function(sample_stats, spec, design, control) {
@@ -279,23 +271,58 @@ one_method <- function(x, design, spec, target_common, method, ml_control) {
   if (method == "nt_ml") {
     timed <- time_call({
       sample_stats <- sample_stats_n(x, design$vars)
-      fit_nt_ml(sample_stats, spec, design, ml_control)
+      out <- fit_nt_ml(sample_stats, spec, design, ml_control)
+      out$s <- sample_stats$S[[1]]
+      out$failed <- FALSE
+      out$message <- ""
+      out
     })
-    failed <- !timed$ok || is.null(timed$value)
-    common <- if (failed) NULL else timed$value$common
-    improper <- if (failed) NA else isTRUE(timed$value$improper)
   } else {
     timed <- time_call({
       s <- sample_cov_n(x, design$vars)
-      gamma <- estimate_gamma(s, design$blocks, method)
-      if (any(!is.finite(gamma))) stop("non-finite communality", call. = FALSE)
-      common <- guttman_common(fill_h(s, gamma), design$blocks)
-      if (is.null(common)) stop("Guttman reconstruction failed", call. = FALSE)
-      list(common = common, improper = any(diag(s - common) < 0))
+      h <- tryCatch(
+        magmaan::guttman_h(s, design$blocks, method = method),
+        error = function(e) e
+      )
+      if (inherits(h, "error")) {
+        list(common = NULL, resid = NULL, s = s, hmat = NULL,
+             score_cov = NULL, failed = TRUE, message = conditionMessage(h))
+      } else if (any(!is.finite(h$h2))) {
+        list(common = NULL, resid = NULL, s = s, hmat = h$H,
+             score_cov = NULL, failed = TRUE,
+             message = "non-finite communality")
+      } else {
+        recon <- guttman_common(h$H, design$blocks)
+        if (is.null(recon$common)) {
+          list(common = NULL, resid = NULL, s = s, hmat = h$H,
+               score_cov = recon$score_cov, failed = TRUE,
+               message = "Guttman reconstruction failed")
+        } else {
+          resid <- diag(s - recon$common)
+          list(common = recon$common, resid = resid, s = s, hmat = h$H,
+               score_cov = recon$score_cov, failed = FALSE, message = "",
+               improper = any(resid < 0))
+        }
+      }
     })
-    failed <- !timed$ok || is.null(timed$value)
-    common <- if (failed) NULL else timed$value$common
-    improper <- if (failed) NA else isTRUE(timed$value$improper)
+  }
+  failed <- !timed$ok || is.null(timed$value) || isTRUE(timed$value$failed)
+  common <- if (failed) NULL else timed$value$common
+  resid <- if (is.null(timed$value$resid)) NA_real_ else timed$value$resid
+  s <- if (is.null(timed$value$s)) NULL else timed$value$s
+  hmat <- if (is.null(timed$value$hmat)) NULL else timed$value$hmat
+  score_cov <- if (is.null(timed$value$score_cov)) NULL else timed$value$score_cov
+  improper <- if (failed && all(is.na(resid))) NA else any(is.finite(resid) & resid < 0)
+  sample_min_eig <- min_eigen_sym(s)
+  h_min_eig <- min_eigen_sym(hmat)
+  score_min_eig <- min_eigen_sym(score_cov)
+  common_min_eig <- min_eigen_sym(common)
+  min_resid <- if (all(is.na(resid))) NA_real_ else min(resid, na.rm = TRUE)
+  h_diag_bad <- if (is.null(hmat) || is.null(s)) {
+    NA
+  } else {
+    any(!is.finite(diag(hmat)) | diag(hmat) < -1e-8 |
+          diag(hmat) - diag(s) > 1e-8)
   }
   common_mise <- if (failed) NA_real_ else mean((common - target_common)^2)
   diag_mise <- if (failed) NA_real_ else {
@@ -308,7 +335,19 @@ one_method <- function(x, design, spec, target_common, method, ml_control) {
     elapsed_ms = timed$elapsed_ms,
     failed = failed,
     improper = improper,
-    message = if (failed) timed$message else "",
+    min_resid = min_resid,
+    sample_min_eig = sample_min_eig,
+    h_min_eig = h_min_eig,
+    score_min_eig = score_min_eig,
+    common_min_eig = common_min_eig,
+    sample_singular = if (is.finite(sample_min_eig)) sample_min_eig <= 1e-8 else NA,
+    h_diag_bad = h_diag_bad,
+    h_indef = if (is.finite(h_min_eig)) h_min_eig < -1e-8 else NA,
+    score_nonpos = if (is.finite(score_min_eig)) score_min_eig <= 1e-8 else NA,
+    common_indef = if (is.finite(common_min_eig)) common_min_eig < -1e-8 else NA,
+    message = if (failed) {
+      if (!is.null(timed$value$message)) timed$value$message else timed$message
+    } else "",
     stringsAsFactors = FALSE
   )
 }
@@ -387,14 +426,28 @@ complexity_row <- function(q, m) {
 }
 
 summarise_results <- function(rows) {
+  summarise_vec <- function(x) {
+    x <- as.numeric(x[is.finite(x)])
+    if (!length(x)) {
+      return(c(mean = NA_real_, se = NA_real_, median = NA_real_,
+               p10 = NA_real_, p90 = NA_real_, min = NA_real_))
+    }
+    c(mean = mean(x),
+      se = stats::sd(x) / sqrt(length(x)),
+      median = stats::median(x),
+      p10 = stats::quantile(x, .1, names = FALSE),
+      p90 = stats::quantile(x, .9, names = FALSE),
+      min = min(x))
+  }
   agg <- aggregate(
-    cbind(diag_mise, common_mise, elapsed_ms, failed, improper) ~
+    cbind(diag_mise, common_mise, elapsed_ms, failed, improper,
+          min_resid, sample_min_eig, h_min_eig, score_min_eig,
+          common_min_eig, sample_singular, h_diag_bad, h_indef,
+          score_nonpos, common_indef) ~
       generator + factors + indicators + loading + rho + n + method,
     rows,
-    function(x) c(mean = mean(x, na.rm = TRUE),
-                  se = stats::sd(x, na.rm = TRUE) / sqrt(length(x)),
-                  median = stats::median(x, na.rm = TRUE),
-                  p90 = stats::quantile(x, .9, na.rm = TRUE, names = FALSE))
+    summarise_vec,
+    na.action = stats::na.pass
   )
   out <- data.frame(
     generator = agg$generator,
@@ -413,6 +466,22 @@ summarise_results <- function(rows) {
     elapsed_p90_ms = agg$elapsed_ms[, "p90"],
     fail_rate = agg$failed[, "mean"],
     improper_rate = agg$improper[, "mean"],
+    min_resid_median = agg$min_resid[, "median"],
+    min_resid_p10 = agg$min_resid[, "p10"],
+    min_resid_min = agg$min_resid[, "min"],
+    sample_min_eig_median = agg$sample_min_eig[, "median"],
+    sample_min_eig_min = agg$sample_min_eig[, "min"],
+    h_min_eig_median = agg$h_min_eig[, "median"],
+    h_min_eig_min = agg$h_min_eig[, "min"],
+    score_min_eig_median = agg$score_min_eig[, "median"],
+    score_min_eig_min = agg$score_min_eig[, "min"],
+    common_min_eig_median = agg$common_min_eig[, "median"],
+    common_min_eig_min = agg$common_min_eig[, "min"],
+    sample_singular_rate = agg$sample_singular[, "mean"],
+    h_diag_bad_rate = agg$h_diag_bad[, "mean"],
+    h_indef_rate = agg$h_indef[, "mean"],
+    score_nonpos_rate = agg$score_nonpos[, "mean"],
+    common_indef_rate = agg$common_indef[, "mean"],
     stringsAsFactors = FALSE
   )
   key <- c("generator", "factors", "indicators", "loading", "rho", "n")
