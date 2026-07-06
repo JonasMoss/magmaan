@@ -1925,6 +1925,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_guttman_h_impl
+Rcpp::List frontier_guttman_h_impl(Rcpp::NumericMatrix S, Rcpp::IntegerVector blocks, std::string method);
+RcppExport SEXP _magmaan_frontier_guttman_h_impl(SEXP SSEXP, SEXP blocksSEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type S(SSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type blocks(blocksSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_guttman_h_impl(S, blocks, method));
+    return rcpp_result_gen;
+END_RCPP
+}
 // noniterative_cfa_fit_impl
 Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator);
 RcppExport SEXP _magmaan_noniterative_cfa_fit_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP) {
@@ -3616,6 +3629,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_is_std_lv_admissible_impl", (DL_FUNC) &_magmaan_frontier_is_std_lv_admissible_impl, 2},
     {"_magmaan_frontier_partable_marker_to_std_lv_impl", (DL_FUNC) &_magmaan_frontier_partable_marker_to_std_lv_impl, 1},
     {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},
+    {"_magmaan_frontier_guttman_h_impl", (DL_FUNC) &_magmaan_frontier_guttman_h_impl, 3},
     {"_magmaan_noniterative_cfa_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_fit_impl, 3},
     {"_magmaan_noniterative_cfa_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_inference_impl, 5},
     {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},

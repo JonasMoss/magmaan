@@ -119,6 +119,7 @@ add_library(magmaan STATIC
   src/estimate/start_guttman.cpp
   src/estimate/start_bentler.cpp
   src/estimate/start_jamesstein.cpp
+  src/estimate/frontier/communality.cpp
   src/estimate/frontier/noniterative_cfa.cpp
   src/estimate/cfa_utils.cpp
   src/estimate/resolve_fixed_x.cpp

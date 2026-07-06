@@ -42,6 +42,7 @@
 #include "magmaan/estimate/frontier/rbm.hpp"
 #include "magmaan/estimate/frontier/sam.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
+#include "magmaan/estimate/frontier/communality.hpp"
 #include "magmaan/estimate/frontier/noniterative_cfa.hpp"
 #include "magmaan/robust/frontier/noniterative_inference.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
@@ -7749,6 +7750,24 @@ magmaan::estimate::frontier::NonIterativeEstimator noniter_which(const std::stri
              s.c_str());
 }
 
+magmaan::estimate::frontier::CommunalityMethod communality_which(const std::string& s) {
+  const std::string k = noniter_lower(s);
+  namespace ef = magmaan::estimate::frontier;
+  if (k == "ar" || k == "average_ratio" || k == "average-ratio")
+    return ef::CommunalityMethod::AverageRatio;
+  if (k == "rs" || k == "ratio_of_sums" || k == "ratio-of-sums")
+    return ef::CommunalityMethod::RatioOfSums;
+  if (k == "ilm" || k == "instrumental_least_squares" ||
+      k == "instrumental-least-squares")
+    return ef::CommunalityMethod::InstrumentalLeastSquares;
+  if (k == "gmm_block" || k == "gmm-block")
+    return ef::CommunalityMethod::GmmBlock;
+  if (k == "gmm_full" || k == "gmm-full")
+    return ef::CommunalityMethod::GmmFull;
+  Rcpp::stop("magmaan: unknown Guttman H method '%s' "
+             "(accepted: ar, rs, ilm, gmm_block, gmm_full)", s.c_str());
+}
+
 magmaan::robust::frontier::Discrepancy noniter_disc(const std::string& s) {
   const std::string k = noniter_lower(s);
   if (k == "uls") return magmaan::robust::frontier::Discrepancy::ULS;
@@ -7791,6 +7810,37 @@ Rcpp::List wrap_noniter_inference(const magmaan::robust::frontier::NonIterativeI
 }
 
 }  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List frontier_guttman_h_impl(Rcpp::NumericMatrix S,
+                                   Rcpp::IntegerVector blocks,
+                                   std::string method = "ilm") {
+  if (S.nrow() != S.ncol())
+    Rcpp::stop("magmaan: frontier_guttman_h() requires a square covariance matrix");
+  if (blocks.size() != S.nrow())
+    Rcpp::stop("magmaan: frontier_guttman_h() block vector length must match S");
+
+  std::vector<std::int32_t> block_of;
+  block_of.reserve(static_cast<std::size_t>(blocks.size()));
+  for (R_xlen_t i = 0; i < blocks.size(); ++i) {
+    const int b = blocks[i];
+    if (b == NA_INTEGER || b < 1)
+      Rcpp::stop("magmaan: frontier_guttman_h() blocks must be positive integers");
+    block_of.push_back(static_cast<std::int32_t>(b - 1));
+  }
+
+  const Eigen::MatrixXd Smat = Rcpp::as<Eigen::MatrixXd>(S);
+  const auto which = communality_which(method);
+  auto out = magmaan::estimate::frontier::estimate_h_communalities(
+      Smat, block_of, which);
+  if (!out.has_value()) stop_fit(out.error());
+
+  return Rcpp::List::create(
+      Rcpp::_["method"] = magmaan::estimate::frontier::communality_method_name(which),
+      Rcpp::_["h2"] = Rcpp::wrap(out->h2),
+      Rcpp::_["h_diag"] = Rcpp::wrap(out->h_diag),
+      Rcpp::_["H"] = Rcpp::wrap(out->H));
+}
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,

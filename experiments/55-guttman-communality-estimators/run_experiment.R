@@ -139,16 +139,6 @@ opts <- parse_args(commandArgs(TRUE))
 set_single_threaded_math()
 dir.create(opts$results_dir, recursive = TRUE, showWarnings = FALSE)
 
-pinv <- function(x, tol = sqrt(.Machine$double.eps)) {
-  if (!all(is.finite(x))) return(matrix(NA_real_, ncol(x), nrow(x)))
-  ee <- eigen((x + t(x)) / 2, symmetric = TRUE)
-  keep <- ee$values > tol * max(1, max(abs(ee$values)))
-  if (!any(keep)) return(matrix(0, ncol(x), nrow(x)))
-  ee$vectors[, keep, drop = FALSE] %*%
-    (diag(1 / ee$values[keep], nrow = sum(keep)) %*%
-       t(ee$vectors[, keep, drop = FALSE]))
-}
-
 sim_mvn <- function(n, sigma) {
   matrix(stats::rnorm(n * ncol(sigma)), n, ncol(sigma)) %*% chol(sigma)
 }
@@ -186,35 +176,6 @@ model_syntax <- function(q, m) {
   paste(lines, collapse = "\n")
 }
 
-normal_cor_gamma_pairs <- function(r, off) {
-  n_pairs <- nrow(off)
-  out <- matrix(0, n_pairs, n_pairs)
-  deriv_terms <- function(i, j) {
-    rho <- r[i, j]
-    data.frame(a = c(i, i, j), b = c(j, i, j), d = c(1, -.5 * rho, -.5 * rho))
-  }
-  terms <- vector("list", n_pairs)
-  for (a in seq_len(n_pairs)) terms[[a]] <- deriv_terms(off[a, 1L], off[a, 2L])
-  for (a in seq_len(n_pairs)) {
-    ta <- terms[[a]]
-    for (b in seq_len(a)) {
-      tb <- terms[[b]]
-      val <- 0
-      for (u in seq_len(nrow(ta))) {
-        for (v in seq_len(nrow(tb))) {
-          i <- ta$a[u]; j <- ta$b[u]
-          k <- tb$a[v]; l <- tb$b[v]
-          cov_s <- r[i, k] * r[j, l] + r[i, l] * r[j, k]
-          val <- val + ta$d[u] * tb$d[v] * cov_s
-        }
-      }
-      out[a, b] <- val
-      out[b, a] <- val
-    }
-  }
-  out
-}
-
 within_off_pairs <- function(blocks) {
   rows <- list()
   for (f in sort(unique(blocks))) {
@@ -224,102 +185,8 @@ within_off_pairs <- function(blocks) {
   do.call(rbind, rows)
 }
 
-triad_system <- function(r, blocks, gamma_for_jac = NULL, selected_off = NULL) {
-  if (is.null(selected_off)) selected_off <- within_off_pairs(blocks)
-  off_key <- paste(pmin(selected_off[, 1L], selected_off[, 2L]),
-                   pmax(selected_off[, 1L], selected_off[, 2L]))
-  row_list <- list()
-  for (f in sort(unique(blocks))) {
-    idx <- which(blocks == f)
-    for (i in idx) {
-      others <- setdiff(idx, i)
-      if (length(others) < 2L) next
-      cmb <- utils::combn(others, 2L)
-      for (cc in seq_len(ncol(cmb))) {
-        row_list[[length(row_list) + 1L]] <- c(i, cmb[, cc])
-      }
-    }
-  }
-  rows <- do.call(rbind, row_list)
-  A <- matrix(0, nrow(rows), nrow(r))
-  b <- numeric(nrow(rows))
-  M <- matrix(0, nrow(rows), nrow(selected_off))
-  for (rr in seq_len(nrow(rows))) {
-    i <- rows[rr, 1L]
-    j <- rows[rr, 2L]
-    k <- rows[rr, 3L]
-    A[rr, i] <- r[j, k]
-    b[rr] <- r[i, j] * r[i, k]
-    if (!is.null(gamma_for_jac)) {
-      M[rr, match(paste(min(j, k), max(j, k)), off_key)] <-
-        M[rr, match(paste(min(j, k), max(j, k)), off_key)] + gamma_for_jac[i]
-      M[rr, match(paste(min(i, j), max(i, j)), off_key)] <-
-        M[rr, match(paste(min(i, j), max(i, j)), off_key)] - r[i, k]
-      M[rr, match(paste(min(i, k), max(i, k)), off_key)] <-
-        M[rr, match(paste(min(i, k), max(i, k)), off_key)] - r[i, j]
-    }
-  }
-  list(rows = rows, A = A, b = b, M = M, off = selected_off)
-}
-
-solve_gmm <- function(A, b, W) {
-  if (nrow(A) == ncol(A)) {
-    direct <- tryCatch(solve(A, b), error = function(e) NULL)
-    if (!is.null(direct) && all(is.finite(direct))) return(drop(direct))
-  }
-  lhs <- t(A) %*% W %*% A
-  rhs <- t(A) %*% W %*% b
-  drop(pinv(lhs) %*% rhs)
-}
-
-estimate_itemwise <- function(r, blocks, method) {
-  p <- nrow(r)
-  gamma <- rep(NA_real_, p)
-  for (i in seq_len(p)) {
-    idx <- which(blocks == blocks[i] & seq_len(p) != i)
-    cmb <- utils::combn(idx, 2L)
-    rij <- r[i, cmb[1L, ]]
-    rik <- r[i, cmb[2L, ]]
-    rjk <- r[cbind(cmb[1L, ], cmb[2L, ])]
-    gamma[i] <- switch(method,
-      ar = mean(rij * rik / rjk),
-      rs = sum(rij * rik) / sum(rjk),
-      ilm = sum(rjk * rij * rik) / sum(rjk^2)
-    )
-  }
-  gamma
-}
-
-estimate_gmm_block <- function(r, blocks) {
-  gamma <- rep(NA_real_, nrow(r))
-  for (f in sort(unique(blocks))) {
-    idx <- which(blocks == f)
-    rb <- r[idx, idx, drop = FALSE]
-    local_blocks <- rep(1L, length(idx))
-    gamma0 <- estimate_itemwise(rb, local_blocks, "ilm")
-    sys <- triad_system(rb, local_blocks)
-    sys_w <- triad_system(rb, local_blocks, gamma0)
-    omega <- sys_w$M %*% normal_cor_gamma_pairs(rb, sys_w$off) %*% t(sys_w$M)
-    gamma[idx] <- solve_gmm(sys$A, sys$b, pinv(omega))
-  }
-  gamma
-}
-
-estimate_gmm_full <- function(r, blocks) {
-  gamma0 <- estimate_itemwise(r, blocks, "ilm")
-  off <- within_off_pairs(blocks)
-  sys <- triad_system(r, blocks, selected_off = off)
-  sys_w <- triad_system(r, blocks, gamma0, selected_off = off)
-  omega <- sys_w$M %*% normal_cor_gamma_pairs(r, off) %*% t(sys_w$M)
-  solve_gmm(sys$A, sys$b, pinv(omega))
-}
-
 estimate_gamma <- function(s, blocks, method) {
-  r <- stats::cov2cor(s)
-  if (method %in% c("ar", "rs", "ilm")) return(estimate_itemwise(r, blocks, method))
-  if (method == "gmm_block") return(estimate_gmm_block(r, blocks))
-  if (method == "gmm_full") return(estimate_gmm_full(r, blocks))
-  stop("unknown communality method: ", method, call. = FALSE)
+  magmaan::guttman_h(s, blocks, method = method)$h2
 }
 
 fill_h <- function(s, gamma) {

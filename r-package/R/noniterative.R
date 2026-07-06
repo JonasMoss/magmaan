@@ -6,6 +6,44 @@
 # calls. Thin wrappers over the C++ estimate::frontier / robust::frontier
 # entry points. See docs/research/notes/noniterative_cfa_tests.tex.
 
+#' Estimate the diagonal of the Guttman H matrix.
+#'
+#' @param S Observed covariance or correlation matrix.
+#' @param blocks One simple-structure factor/block label per observed variable.
+#' @param method Communality rule: `"ilm"` (instrumental least squares),
+#'   `"rs"` (ratio of sums), `"ar"` (average ratio), `"gmm_block"` (blockwise
+#'   triad GMM), or `"gmm_full"` (joint selected triad GMM).
+#' @return A list with correlation-scale communalities `h2`, covariance-scale
+#'   diagonal `h_diag`, and `H`, equal to `S` with the diagonal replaced by
+#'   `h_diag`.
+#' @export
+guttman_h <- function(S, blocks,
+                      method = c("ilm", "rs", "ar", "gmm_block", "gmm_full")) {
+  method <- match.arg(method)
+  S <- as.matrix(S)
+  if (nrow(S) != ncol(S)) {
+    stop("guttman_h(): `S` must be square", call. = FALSE)
+  }
+  if (length(blocks) != nrow(S)) {
+    stop("guttman_h(): `blocks` length must match nrow(S)", call. = FALSE)
+  }
+  block_id <- as.integer(factor(blocks, levels = unique(blocks)))
+  if (anyNA(block_id)) {
+    stop("guttman_h(): `blocks` must not contain missing values", call. = FALSE)
+  }
+
+  out <- frontier_guttman_h_impl(S, block_id, method)
+  nm <- rownames(S)
+  if (is.null(nm)) nm <- colnames(S)
+  if (!is.null(nm)) {
+    names(out$h2) <- nm
+    names(out$h_diag) <- nm
+    dimnames(out$H) <- list(nm, nm)
+  }
+  out$blocks <- blocks
+  out
+}
+
 #' Fit a non-iterative CFA estimator.
 #'
 #' @param partable A magmaan/lavaan partable (as consumed by [fit_fit()]).
