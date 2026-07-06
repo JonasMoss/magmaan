@@ -17,6 +17,7 @@
 \newcommand{\rank}{\operatorname{rank}}
 \newcommand{\vech}{\operatorname{vech}}
 \newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\col}{\operatorname{col}}
 
 \theoremstyle{plain}
 \newtheorem{proposition}{Proposition}
@@ -340,6 +341,202 @@ rules are historically recognizable certified rules. The identity linear-moment
 rule is the simplest non-ratio method-of-moments default. The one-step GMM rule
 is the natural efficiency-oriented member of the same closed-form family,
 conditional on a chosen covariance model for the sample correlations.
+
+\section{Relation to ADF efficiency on the correlation scale}
+
+``Correlation scale'' means that the observed variables have first been
+standardized. If
+\[
+  D_\Sigma=\diag(\Sigma),
+  \qquad
+  R=D_\Sigma^{-1/2}\Sigma D_\Sigma^{-1/2},
+\]
+then \(R\) is the population correlation matrix, with entries
+\(\rho_{ij}\). The communality target on this scale is the communality
+proportion
+\[
+  \gamma_i=\frac{c_i}{\sigma_{ii}}.
+\]
+The covariance-scale target is recovered by \(c_i=\sigma_{ii}\gamma_i\).
+Working on the correlation scale removes arbitrary measurement units before
+forming the triad equations.
+
+Let \(r\) collect the off-diagonal entries of \(R\), and let
+\[
+  \Gamma_r
+  =
+  \operatorname{AVar}\{\sqrt n(\hat r-r_0)\}
+\]
+be the ADF covariance matrix for the sample correlations. If starting from the
+usual covariance ADF matrix
+\[
+  \Gamma_s=\operatorname{AVar}\{\sqrt n(\hat s-s_0)\},
+\]
+then
+\[
+  \Gamma_r=J_r\Gamma_sJ_r\T,
+  \qquad
+  J_r=\frac{\partial r}{\partial s\T}.
+\]
+Thus the GMM weight for triad moments is a reduced ADF weight, but it is not
+generally a principal submatrix. It is the covariance matrix of the nonlinear
+triad moments:
+\[
+  \Omega_g
+  =
+  \operatorname{AVar}\{\sqrt n\,g(\gamma_0;\hat r)\}
+  =
+  M\Gamma_rM\T,
+  \qquad
+  M=\frac{\partial g(\gamma_0;r_0)}{\partial r\T}.
+\]
+
+For a one-factor correlation block, assume an orientation has been chosen and
+write
+\[
+  \rho_{ij}=\alpha_i\alpha_j,
+  \qquad
+  \gamma_i=\alpha_i^2 .
+\]
+Let \(\mu(\gamma)\) be the oriented off-diagonal correlation model
+\[
+  \mu_{ij}(\gamma)=s_is_j\sqrt{\gamma_i\gamma_j},
+  \qquad
+  s_i=\operatorname{sign}(\alpha_i),
+\]
+and let
+\[
+  D=\frac{\partial \mu(\gamma_0)}{\partial \gamma\T}.
+\]
+The full off-diagonal ADF covariance for \(\gamma\) is
+\[
+  V_{\mathrm{ADF}}
+  =
+  (D\T\Gamma_r^{-1}D)^{-1}.
+\]
+The optimally weighted triad GMM covariance is
+\[
+  V_{\mathrm{triad}}
+  =
+  (G\T\Omega_g^{+}G)^{-1},
+  \qquad
+  G=\frac{\partial g(\gamma_0;r_0)}{\partial \gamma\T}.
+\]
+
+\begin{proposition}[Optimal triad GMM and off-diagonal ADF]
+\label{prop:triad-adf}
+In a regular one-factor correlation block, suppose \(\Gamma_r\) is positive
+definite, \(D\) has full column rank, and the triad Jacobian \(M\) has full
+column rank as a map from the off-diagonal correlations to the stacked triad
+moments. Then
+\[
+  V_{\mathrm{triad}}=V_{\mathrm{ADF}} .
+\]
+\end{proposition}
+
+\begin{proof}
+On the model, \(g\{\gamma,\mu(\gamma)\}=0\). Differentiating with respect to
+\(\gamma\) gives
+\[
+  G+MD=0,
+  \qquad
+  G=-MD .
+\]
+Since \(M\) has full column rank and \(\Gamma_r\) is positive definite,
+\[
+  M\T(M\Gamma_rM\T)^{+}M=\Gamma_r^{-1}.
+\]
+Therefore
+\[
+  G\T\Omega_g^{+}G
+  =
+  D\T M\T(M\Gamma_rM\T)^{+}M D
+  =
+  D\T\Gamma_r^{-1}D .
+\]
+Taking inverses gives the result.
+\end{proof}
+
+Thus the conservative phrase ``efficient within the triad-moment GMM family''
+can be sharpened in this simple case. For a regular one-factor block, optimal
+triad GMM is first-order equivalent to the full ADF estimator that fits the
+off-diagonal correlation model. The triad weight is the ADF correlation weight
+transported through the triad-moment map.
+
+This statement is still weaker than full CFA efficiency. It uses only the
+off-diagonal correlation model for the block. It does not use the covariance
+diagonal, the residual variances as model parameters, cross-factor covariance
+structure, positivity constraints, or normal-theory likelihood structure.
+
+\section{Two-factor correlation model}
+
+For two correlated factors, the correlation-scale notation separates the
+within-block and cross-block information. Let \(I_1\) and \(I_2\) be the two
+indicator blocks. For \(i,j\in I_1\), \(a,b\in I_2\), write
+\[
+  \rho_{ij}=\alpha_i\alpha_j,
+  \qquad
+  \rho_{ab}=\beta_a\beta_b,
+  \qquad
+  \rho_{ia}=\kappa\alpha_i\beta_a ,
+\]
+where \(\kappa\) is the latent correlation. The communality proportions are
+\[
+  \gamma_i=\alpha_i^2,
+  \qquad
+  \delta_a=\beta_a^2 .
+\]
+
+The within-block triad moments remain exact:
+\[
+  \gamma_i\rho_{jk}-\rho_{ij}\rho_{ik}=0
+  \qquad(i,j,k\in I_1),
+\]
+and
+\[
+  \delta_a\rho_{bc}-\rho_{ab}\rho_{ac}=0
+  \qquad(a,b,c\in I_2).
+\]
+These are enough to recover the diagonal common variances block by block. They
+ignore the cross-block correlations.
+
+The full two-factor off-diagonal ADF model also uses
+\[
+  \rho_{ia}=\kappa\alpha_i\beta_a .
+\]
+Those cross-block entries contain information about \(\alpha\), \(\beta\), and
+\(\kappa\) jointly. Consequently, the blockwise triad estimator is generally
+ADF-equivalent only to the blockwise one-factor off-diagonal submodels, not to
+the full two-factor off-diagonal model. Full ADF can be more efficient for the
+communalities when \(\kappa\ne0\), because cross-block correlations provide
+additional noisy measurements involving the same loadings.
+
+Cross-block rank-one restrictions can be written as additional moment
+equations. For example,
+\[
+  \rho_{ia}\rho_{jb}
+  =
+  \kappa^2\rho_{ij}\rho_{ab}
+  \qquad
+  (i,j\in I_1,\ a,b\in I_2),
+\]
+so
+\[
+  \kappa^2\rho_{ij}\rho_{ab}-\rho_{ia}\rho_{jb}=0 .
+\]
+Also,
+\[
+  \rho_{ia}\rho_{ib}
+  =
+  \kappa^2\gamma_i\rho_{ab}.
+\]
+These equations show why the two-factor case is richer. The cross-block
+moments are exact, but they introduce \(\kappa\) and products such as
+\(\kappa^2\gamma_i\). A closed-form blockwise Guttman communality rule can
+ignore them and remain consistent. A more efficient two-factor GMM rule would
+include them and jointly estimate \(\gamma\), \(\delta\), and \(\kappa\), but
+that is no longer the same simple itemwise linear solve unless an additional
+parameterization or one-step linearization is chosen.
 
 \section{Uniqueness-first rules}
 
