@@ -31,6 +31,10 @@ relevant categorical estimators are implemented and hardened.
 - `r/guttman_triad_gmm_probe.R` informal continuous CFA probe comparing
   Spearman communality poolings, identity linear moments, and one-step/oracle
   triad GMM weights before a Guttman common-covariance reconstruction.
+- `r/guttman_triad_gmm_experiment.R` larger continuous CFA factorial experiment
+  for the same communality rules, varying factors, indicators per factor,
+  loading spread, latent correlations, sample size, and incidence versus
+  loading-aligned Guttman composites.
 
 ## Example
 
