@@ -538,6 +538,131 @@ include them and jointly estimate \(\gamma\), \(\delta\), and \(\kappa\), but
 that is no longer the same simple itemwise linear solve unless an additional
 parameterization or one-step linearization is chosen.
 
+\section{Many-factor consistency and orthogonal-block efficiency}
+
+Let the indicators be partitioned into simple-structure blocks
+\[
+  I_1,\ldots,I_q .
+\]
+On the correlation scale, write
+\[
+  \rho_{ij}=\alpha_i\alpha_j
+  \qquad(i,j\in I_f,\ i\ne j),
+\]
+and let
+\[
+  \gamma_i=\alpha_i^2 .
+\]
+For each block \(I_f\), stack the within-block triad moments
+\[
+  g_{f,i;jk}(\gamma;R)
+  =
+  \gamma_iR_{jk}-R_{ij}R_{ik},
+  \qquad
+  i,j,k\in I_f,\quad i,j,k\hbox{ distinct}.
+\]
+Let \(g_{\mathrm{blk}}\) be the stack of these moments over all factors. Let
+\[
+  r_{\mathrm{blk}}
+\]
+collect the within-block off-diagonal correlations, and let
+\[
+  r_{\mathrm{cross}}
+\]
+collect the cross-block correlations. The full off-diagonal correlation vector
+is \(r=(r_{\mathrm{blk}}\T,r_{\mathrm{cross}}\T)\T\).
+
+\begin{proposition}[Blockwise triad consistency and efficiency]
+\label{prop:blockwise-triad-efficiency}
+Assume a regular simple-structure CFA correlation model with diagonal residual
+covariance, at least three indicators per factor, and nonzero within-block
+loadings. Then:
+\begin{enumerate}
+\item The within-block triad moments are exact at the population model.
+  Hence any regular blockwise weighted triad estimator is consistent for
+  \(\gamma_i=c_i/\sigma_{ii}\), even when the latent factors are correlated.
+\item Suppose, in addition, that the latent factors are orthogonal, so the
+  population cross-block correlations are zero, and that the ADF covariance of
+  sample correlations separates the within-block and cross-block parts:
+  \[
+    \Gamma_r
+    =
+    \begin{bmatrix}
+      \Gamma_{\mathrm{blk}} & 0\\
+      0 & \Gamma_{\mathrm{cross}}
+    \end{bmatrix}.
+  \]
+  Then the optimally weighted blockwise triad GMM estimator, with
+  \[
+    W=\Omega_{\mathrm{blk}}^{+},
+    \qquad
+    \Omega_{\mathrm{blk}}
+    =
+    M_{\mathrm{blk}}\Gamma_{\mathrm{blk}}M_{\mathrm{blk}}\T,
+  \]
+  is first-order equivalent to the full off-diagonal ADF estimator for
+  \(\gamma\). In particular,
+  \[
+    V_{\mathrm{triad}}(\gamma)=V_{\mathrm{ADF}}(\gamma).
+  \]
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+For item \(i\in I_f\), the within-block correlation model gives
+\[
+  \rho_{ij}\rho_{ik}
+  =
+  \alpha_i^2 \rho_{jk}
+  =
+  \gamma_i\rho_{jk}
+\]
+at the population point, for every distinct \(j,k\in I_f\). This proves exact
+moments and consistency by the same argument as Proposition
+\ref{prop:linear-mom}.
+
+For the efficiency statement, orthogonal factors imply that
+\[
+  \rho_{ia}=0\qquad(i\in I_f,\ a\in I_g,\ f\ne g).
+\]
+The first derivative of these cross-block correlations with respect to
+\(\gamma\) is zero at the orthogonal point; cross-block correlations only
+identify latent correlations to first order. Therefore the ADF Jacobian for
+\(\gamma\) lives entirely in the within-block part,
+\[
+  D=
+  \begin{bmatrix}
+    D_{\mathrm{blk}}\\
+    0
+  \end{bmatrix}.
+\]
+With the displayed block-separating \(\Gamma_r\),
+\[
+  D\T\Gamma_r^{-1}D
+  =
+  D_{\mathrm{blk}}\T\Gamma_{\mathrm{blk}}^{-1}D_{\mathrm{blk}} .
+\]
+Within each factor block, Proposition \ref{prop:triad-adf} applies. Stacking
+the blocks gives
+\[
+  G_{\mathrm{blk}}\T\Omega_{\mathrm{blk}}^{+}G_{\mathrm{blk}}
+  =
+  D_{\mathrm{blk}}\T\Gamma_{\mathrm{blk}}^{-1}D_{\mathrm{blk}} .
+\]
+The inverse of this common information matrix is both
+\(V_{\mathrm{triad}}(\gamma)\) and \(V_{\mathrm{ADF}}(\gamma)\).
+\end{proof}
+
+\begin{remark}
+The block-separating ADF covariance condition is automatic under multivariate
+normality when the factor covariance matrix is diagonal: the observed factor
+blocks are then independent. Under arbitrary nonnormality, zero latent
+covariance does not by itself rule out fourth-moment dependence across blocks.
+Full ADF may then use cross-block sample correlations as control-variate
+information. The blockwise triad estimator remains consistent, but the
+efficiency equality above need not hold.
+\end{remark}
+
 \section{Uniqueness-first rules}
 
 The paper also points to uniqueness estimators \cite{iharakano1986,cudeck1991}.
