@@ -83,6 +83,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/fiml_test.cpp
   unit/saturated_em_moments_test.cpp
   unit/pairwise_gls_test.cpp
+  unit/communality_test.cpp
   unit/start_fabin_test.cpp
   unit/start_cfa_noniter_test.cpp
   unit/snlls_test.cpp

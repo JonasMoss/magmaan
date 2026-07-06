@@ -513,6 +513,10 @@ frontier_backconvert_std_lv_to_marker_impl <- function(marker_partable, std_lv_e
     .Call(`_magmaan_frontier_backconvert_std_lv_to_marker_impl`, marker_partable, std_lv_est)
 }
 
+frontier_guttman_h_impl <- function(S, blocks, method = "ilm") {
+    .Call(`_magmaan_frontier_guttman_h_impl`, S, blocks, method)
+}
+
 noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman") {
     .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator)
 }

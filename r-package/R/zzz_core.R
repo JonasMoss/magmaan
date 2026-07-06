@@ -98,6 +98,7 @@ frontier_is_std_lv_admissible <- is_std_lv_admissible_impl
 frontier_backconvert_std_lv_to_marker <- backconvert_std_lv_to_marker_impl
 frontier_fit_ml_auto_identification <- fit_ml_auto_identification_impl
 frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composite_nested_impl
+frontier_guttman_h <- frontier_guttman_h_impl
 frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
                          stage2_weight = "nt", dls_a = 0.5,
                          method = c("explicit", "implicit"),
@@ -552,6 +553,7 @@ magmaan_core <- local({
       "frontier_rbm",
       "frontier_sam",
       "frontier_dls_weight",
+      "frontier_guttman_h",
       "frontier_profile_lrt_parameter_ml",
       "frontier_profile_lrt_parameter_gmm",
       "frontier_profile_lrt_parameter_gmm_fitted_weight",

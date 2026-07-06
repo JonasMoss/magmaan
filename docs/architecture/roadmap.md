@@ -186,6 +186,15 @@ golden `parTable()` fixtures.
   factor-mates via the triad-based communality step; the closed form is more
   robust than ML to uniformly weak signal but less robust to a single weak
   indicator).
+  The H-diagonal communality rules from the follow-up Guttman work are now a
+  separate frontier primitive:
+  `estimate::frontier::estimate_h_communalities()` / R `guttman_h()` compute
+  AR, RS, ILM, blockwise triad-GMM, and full selected-triad-GMM diagonals for a
+  fixed simple-structure indicator block vector. They return `h2`, `diag(H)`,
+  and `H = S` with only the diagonal replaced; the full non-iterative CFA map
+  still uses its existing Guttman diagonal until the point-estimator lane chooses
+  the promoted rule. `experiments/55-guttman-communality-estimators` now times
+  the package implementation directly.
 - Frontier multi-group / constrained / mean-structure non-iterative CFA
   (2026-07) extends the closed-form estimator to measurement invariance. The map
   fits each group's Guttman block independently and stacks them, so

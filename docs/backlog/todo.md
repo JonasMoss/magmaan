@@ -2185,6 +2185,13 @@ work until a concrete downstream consumer appears.
   closed form throws more improper solutions than ML). Later slots for the enum:
   FABIN2/Bentler/James-Stein/MIIV maps
   (loadings producers already exist) and a polychoric-ADF Gamma path.
+  **H-diagonal communality rules landed** (2026-07):
+  `estimate::frontier::estimate_h_communalities` and R `guttman_h()` expose AR,
+  RS, ILM, blockwise triad-GMM, and full selected-triad-GMM for a fixed
+  simple-structure indicator block vector, returning `h2`, `diag(H)`, and the
+  filled `H`. `experiments/55-guttman-communality-estimators` now benchmarks the
+  package implementation directly; remaining point-estimator work is to choose
+  and plug a promoted rule into the full `(H, A) -> (Lambda, Phi, psi)` map.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary

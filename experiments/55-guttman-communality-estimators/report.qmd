@@ -179,9 +179,9 @@ triads across factors.
   `magmaan::sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` and then treated as
   continuous. It is a stress arm for the covariance estimator, not an ordinal
   latent-response estimator.
-- The Guttman variants are local to this experiment. The current package
-  frontier estimator still exposes the existing Guttman map; this experiment is
-  evidence for which communality rule to promote into that implementation.
+- The H-diagonal rules are computed by `magmaan::guttman_h()`. The full package
+  frontier CFA estimator still uses the existing Guttman map; this experiment is
+  evidence for which communality rule to promote into that map.
 
 ## Reproduce
 
