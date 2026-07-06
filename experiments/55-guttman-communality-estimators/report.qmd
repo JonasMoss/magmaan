@@ -21,6 +21,9 @@ if (!all(file.exists(paths))) {
 summary <- read.csv(paths[1])
 complexity <- read.csv(paths[2])
 metadata <- read.csv(paths[3])
+timing_path <- file.path(results_dir, "timing_summary.csv")
+timing <- if (file.exists(timing_path)) read.csv(timing_path) else data.frame()
+has_timing <- nrow(timing) > 0
 
 method_label <- c(
   ar = "AR",
@@ -38,6 +41,7 @@ meta <- function(key) {
   v <- metadata$value[metadata$key == key]
   if (length(v)) v[[1]] else ""
 }
+pick1 <- function(x) if (length(x)) x[[1]] else NA_real_
 
 non_nt <- subset(summary, method != "nt_ml")
 normal <- subset(summary, generator == "normal")
@@ -114,6 +118,70 @@ names(bad_show) <- c("N", "Method", "Fail", "Heywood", "S Singular",
                      "Common Indef.")
 for (j in 3:ncol(bad_show)) bad_show[[j]] <- pct(bad_show[[j]])
 
+if (has_timing) {
+  timing_total <- subset(timing, component == "total")
+  timing_by_n <- aggregate(cbind(elapsed_median_ms, fail_rate) ~ n + method,
+                           timing_total, median, na.rm = TRUE,
+                           na.action = na.pass)
+  nt_by_n <- timing_by_n[timing_by_n$method == "nt_ml",
+                         c("n", "elapsed_median_ms")]
+  names(nt_by_n)[2] <- "nt_median_ms"
+  timing_by_n <- merge(timing_by_n, nt_by_n, by = "n", all.x = TRUE)
+  timing_by_n$nt_over_method <- timing_by_n$nt_median_ms /
+    timing_by_n$elapsed_median_ms
+  timing_by_n$Method <- method_label[timing_by_n$method]
+  timing_by_n <- timing_by_n[order(timing_by_n$n,
+                                   match(timing_by_n$method,
+                                         c("ar", "rs", "ilm", "gmm_block",
+                                           "gmm_full", "nt_ml"))), ]
+  timing_n_show <- timing_by_n[c("n", "Method", "elapsed_median_ms",
+                                 "nt_over_method", "fail_rate")]
+  names(timing_n_show) <- c("N", "Method", "Median Time (ms)",
+                            "NT / Method", "Failure Rate")
+  timing_n_show$`Median Time (ms)` <- fmt(timing_n_show$`Median Time (ms)`, 3)
+  timing_n_show$`NT / Method` <- fmt(timing_n_show$`NT / Method`, 2)
+  timing_n_show$`Failure Rate` <- pct(timing_n_show$`Failure Rate`)
+
+  timing_small_n <- min(timing_by_n$n)
+  timing_factor <- median(timing_by_n$nt_over_method[
+    timing_by_n$method == "ilm"], na.rm = TRUE)
+  timing_small_factor <- pick1(timing_by_n$nt_over_method[
+    timing_by_n$method == "ilm" & timing_by_n$n == timing_small_n])
+
+  component_label <- c(
+    sample_cov = "Covariance",
+    guttman_h = "H diagonal",
+    guttman_map = "Guttman map",
+    sample_stats = "Sample stats",
+    estimate_ml = "NT ML fit",
+    extract_common = "Extract common"
+  )
+  component_order <- names(component_label)
+  timing_comp <- subset(timing, component != "total" &
+                          method %in% c("ilm", "gmm_block",
+                                        "gmm_full", "nt_ml"))
+  timing_comp <- aggregate(elapsed_median_ms ~ method + component,
+                           timing_comp, median, na.rm = TRUE,
+                           na.action = na.pass)
+  timing_comp$Method <- method_label[timing_comp$method]
+  timing_comp$Component <- component_label[timing_comp$component]
+  timing_comp <- timing_comp[order(match(timing_comp$method,
+                                         c("ilm", "gmm_block",
+                                           "gmm_full", "nt_ml")),
+                                   match(timing_comp$component,
+                                         component_order)), ]
+  timing_comp_show <- timing_comp[c("Method", "Component",
+                                    "elapsed_median_ms")]
+  names(timing_comp_show)[3] <- "Median Time (ms)"
+  timing_comp_show$`Median Time (ms)` <- fmt(timing_comp_show$`Median Time (ms)`, 3)
+} else {
+  timing_n_show <- data.frame()
+  timing_comp_show <- data.frame()
+  timing_small_n <- NA_integer_
+  timing_factor <- NA_real_
+  timing_small_factor <- NA_real_
+}
+
 cx <- complexity[which.max(complexity$p), ]
 ```
 
@@ -147,6 +215,9 @@ Runtime is consistent with the intended niche: NT ML is about
 `r fmt(runtime_factor, 1)` times slower than ILM on this grid. Treat the exact
 factor cautiously; the smoke grid is small and ML timing depends on optimizer
 convergence. The timing scope is `r meta("timing_scope")`.
+The dedicated timing pass gives NT ML / ILM median speedup
+`r fmt(timing_factor, 1)` overall and `r fmt(timing_small_factor, 1)` at
+`N = ` `r timing_small_n`.
 
 The small-N arm is now deliberately rough. At `N = ` `r small_n`, the median
 Heywood-like rate is `r pct(hey_small[["ilm"]])` for ILM,
@@ -184,6 +255,34 @@ triad-moment covariance. The NT ML row is magmaan's iterative normal-theory fit.
 Model syntax parsing and lavaanification are outside the per-replication clock;
 the NT row still pays magmaan's current R-to-C++ partable conversion inside the
 ML entry point.
+
+### Detailed Timing
+
+The dedicated timing pass uses `r meta("timing_reps")` recorded repetitions per
+cell after `r meta("timing_warmup")` warmups. Each component timing is averaged
+over `r meta("timing_inner")` repeated calls before taking medians, so sub-ms
+Guttman steps are not rounded to zero by the elapsed-time clock. The timing pass
+reuses the same model grid as the accuracy run, including the small-N cells,
+but draws fresh data so that timing is not coupled to the MISE/improper
+diagnostics.
+
+```{r}
+if (has_timing) {
+  knitr::kable(timing_n_show, row.names = FALSE)
+} else {
+  cat("No dedicated timing pass was recorded.")
+}
+```
+
+Median component timings, pooled over cells. For Guttman variants, `H diagonal`
+is the communality estimator in `magmaan::guttman_h()` and `Guttman map` is the
+traditional incidence-composite reconstruction.
+
+```{r}
+if (has_timing) {
+  knitr::kable(timing_comp_show, row.names = FALSE)
+}
+```
 
 ### Improper Solutions
 
@@ -236,6 +335,6 @@ triads across factors.
 ```sh
 cd experiments/55-guttman-communality-estimators
 Rscript run_experiment.R --smoke
-Rscript run_experiment.R --full --reps 200
+Rscript run_experiment.R --full --reps 200 --timing-reps 20
 quarto render report.qmd
 ```

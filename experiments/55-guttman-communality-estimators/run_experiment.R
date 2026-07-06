@@ -26,6 +26,9 @@ usage <- function() {
     "  --loading LIST       Loading patterns: mild,wide. Full default: mild,wide.\n",
     "  --generators LIST    Data generators: normal,ordinal. Default: both.\n",
     "  --methods LIST       Methods: ar,rs,ilm,gmm_block,gmm_full,nt_ml.\n",
+    "  --timing-reps N      Dedicated timing reps per cell. Full default: 20.\n",
+    "  --timing-warmup N    Unrecorded timing warmups per cell. Default: 2.\n",
+    "  --timing-inner N     Repeated calls per timing component. Full default: 10.\n",
     "  --seed-base N        Base RNG seed. Default: 20260706.\n",
     "  --ml-max-iter N      magmaan ML max iterations. Default: 2000.\n",
     "  --results-dir PATH   Output directory. Default: results.\n",
@@ -46,6 +49,9 @@ parse_args <- function(args) {
     loading = c("mild", "wide"),
     generators = c("normal", "ordinal"),
     methods = c("ar", "rs", "ilm", "gmm_block", "gmm_full", "nt_ml"),
+    timing_reps = 20L,
+    timing_warmup = 2L,
+    timing_inner = 10L,
     seed_base = 20260706L,
     ml_max_iter = 2000L,
     results_dir = experiment_path("results")
@@ -100,6 +106,21 @@ parse_args <- function(args) {
       opts$methods <- parse_csv_arg(take(a)); explicit <- c(explicit, "methods")
     } else if (grepl("^--methods=", a)) {
       opts$methods <- parse_csv_arg(sub("^--methods=", "", a)); explicit <- c(explicit, "methods")
+    } else if (a == "--timing-reps") {
+      opts$timing_reps <- as.integer(take(a)); explicit <- c(explicit, "timing_reps")
+    } else if (grepl("^--timing-reps=", a)) {
+      opts$timing_reps <- as.integer(sub("^--timing-reps=", "", a))
+      explicit <- c(explicit, "timing_reps")
+    } else if (a == "--timing-warmup") {
+      opts$timing_warmup <- as.integer(take(a)); explicit <- c(explicit, "timing_warmup")
+    } else if (grepl("^--timing-warmup=", a)) {
+      opts$timing_warmup <- as.integer(sub("^--timing-warmup=", "", a))
+      explicit <- c(explicit, "timing_warmup")
+    } else if (a == "--timing-inner") {
+      opts$timing_inner <- as.integer(take(a)); explicit <- c(explicit, "timing_inner")
+    } else if (grepl("^--timing-inner=", a)) {
+      opts$timing_inner <- as.integer(sub("^--timing-inner=", "", a))
+      explicit <- c(explicit, "timing_inner")
     } else if (a == "--seed-base") {
       opts$seed_base <- as.integer(take(a))
     } else if (grepl("^--seed-base=", a)) {
@@ -125,6 +146,8 @@ parse_args <- function(args) {
     if (!"rho" %in% explicit) opts$rho <- .4
     if (!"loading" %in% explicit) opts$loading <- c("mild", "wide")
     if (!"generators" %in% explicit) opts$generators <- c("normal", "ordinal")
+    if (!"timing_reps" %in% explicit) opts$timing_reps <- 6L
+    if (!"timing_inner" %in% explicit) opts$timing_inner <- 25L
   }
   bad <- setdiff(opts$loading, c("mild", "wide"))
   if (length(bad)) stop("unknown loading patterns: ", paste(bad, collapse = ","), call. = FALSE)
@@ -132,6 +155,15 @@ parse_args <- function(args) {
   if (length(bad)) stop("unknown generators: ", paste(bad, collapse = ","), call. = FALSE)
   bad <- setdiff(opts$methods, c("ar", "rs", "ilm", "gmm_block", "gmm_full", "nt_ml"))
   if (length(bad)) stop("unknown methods: ", paste(bad, collapse = ","), call. = FALSE)
+  if (!is.finite(opts$timing_reps) || opts$timing_reps < 0) {
+    stop("--timing-reps must be non-negative", call. = FALSE)
+  }
+  if (!is.finite(opts$timing_warmup) || opts$timing_warmup < 0) {
+    stop("--timing-warmup must be non-negative", call. = FALSE)
+  }
+  if (!is.finite(opts$timing_inner) || opts$timing_inner < 1) {
+    stop("--timing-inner must be at least 1", call. = FALSE)
+  }
   opts
 }
 
@@ -258,12 +290,12 @@ fit_nt_ml <- function(sample_stats, spec, design, control) {
 }
 
 time_call <- function(expr) {
-  start <- Sys.time()
+  start <- proc.time()[["elapsed"]]
   value <- tryCatch(
     list(ok = TRUE, value = force(expr), message = ""),
     error = function(e) list(ok = FALSE, value = NULL, message = conditionMessage(e))
   )
-  value$elapsed_ms <- 1000 * as.numeric(difftime(Sys.time(), start, units = "secs"))
+  value$elapsed_ms <- 1000 * (proc.time()[["elapsed"]] - start)
   value
 }
 
@@ -352,6 +384,118 @@ one_method <- function(x, design, spec, target_common, method, ml_control) {
   )
 }
 
+timing_record <- function(method, component, elapsed_ms, failed, message) {
+  data.frame(
+    method = method,
+    component = component,
+    elapsed_ms = elapsed_ms,
+    failed = failed,
+    message = message,
+    stringsAsFactors = FALSE
+  )
+}
+
+time_repeat <- function(times, fn) {
+  start <- proc.time()[["elapsed"]]
+  value <- NULL
+  ok <- TRUE
+  message <- ""
+  completed <- 0L
+  for (ii in seq_len(times)) {
+    result <- tryCatch(
+      list(ok = TRUE, value = fn(), message = ""),
+      error = function(e) list(ok = FALSE, value = NULL,
+                               message = conditionMessage(e))
+    )
+    completed <- ii
+    if (!result$ok) {
+      ok <- FALSE
+      message <- result$message
+      value <- NULL
+      break
+    }
+    value <- result$value
+  }
+  elapsed_ms <- 1000 * (proc.time()[["elapsed"]] - start) / max(completed, 1L)
+  list(ok = ok, value = value, message = message, elapsed_ms = elapsed_ms)
+}
+
+time_one_method_detail <- function(x, design, spec, method, ml_control,
+                                   timing_inner) {
+  rows <- list()
+  add_row <- function(component, timed, failed = !timed$ok,
+                      message = timed$message) {
+    rows[[length(rows) + 1L]] <<- timing_record(
+      method, component, timed$elapsed_ms, failed, if (failed) message else "")
+  }
+
+  if (method == "nt_ml") {
+    stats_t <- time_repeat(timing_inner, function() sample_stats_n(x, design$vars))
+    add_row("sample_stats", stats_t)
+    fit_failed <- TRUE
+    fit_t <- NULL
+    if (stats_t$ok) {
+      fit_t <- time_repeat(timing_inner, function() core$estimate_ml(
+        spec$partable, stats_t$value, optimizer = "nlopt-lbfgs",
+        control = ml_control, bounds = NULL))
+      fit_failed <- !fit_t$ok || !isTRUE(fit_t$value$converged)
+      fit_message <- if (!fit_t$ok) {
+        fit_t$message
+      } else if (!isTRUE(fit_t$value$converged)) {
+        "magmaan ML did not converge"
+      } else {
+        ""
+      }
+      add_row("estimate_ml", fit_t, fit_failed, fit_message)
+    }
+    if (!fit_failed) {
+      extract_t <- time_repeat(
+        timing_inner,
+        function() ml_common_from_fit(fit_t$value, design$vars, design$q))
+      add_row("extract_common", extract_t)
+    }
+  } else {
+    cov_t <- time_repeat(timing_inner, function() sample_cov_n(x, design$vars))
+    add_row("sample_cov", cov_t)
+    h_failed <- TRUE
+    h_t <- NULL
+    if (cov_t$ok) {
+      h_t <- time_repeat(
+        timing_inner,
+        function() magmaan::guttman_h(cov_t$value, design$blocks, method = method))
+      h_failed <- !h_t$ok || any(!is.finite(h_t$value$h2))
+      h_message <- if (!h_t$ok) {
+        h_t$message
+      } else if (any(!is.finite(h_t$value$h2))) {
+        "non-finite communality"
+      } else {
+        ""
+      }
+      add_row("guttman_h", h_t, h_failed, h_message)
+    }
+    if (!h_failed) {
+      map_t <- time_repeat(
+        timing_inner,
+        function() guttman_common(h_t$value$H, design$blocks))
+      map_failed <- !map_t$ok || is.null(map_t$value$common)
+      map_message <- if (!map_t$ok) {
+        map_t$message
+      } else if (is.null(map_t$value$common)) {
+        "Guttman reconstruction failed"
+      } else {
+        ""
+      }
+      add_row("guttman_map", map_t, map_failed, map_message)
+    }
+  }
+
+  out <- do.call(rbind, rows)
+  total_failed <- any(out$failed)
+  total_message <- paste(out$message[out$failed & nzchar(out$message)], collapse = "; ")
+  rbind(out, timing_record(method, "total", sum(out$elapsed_ms), total_failed,
+                           total_message))
+}
+
 code_variance <- function(prob) {
   x <- seq_along(prob)
   mu <- sum(prob * x)
@@ -425,20 +569,21 @@ complexity_row <- function(q, m) {
   )
 }
 
-summarise_results <- function(rows) {
-  summarise_vec <- function(x) {
-    x <- as.numeric(x[is.finite(x)])
-    if (!length(x)) {
-      return(c(mean = NA_real_, se = NA_real_, median = NA_real_,
-               p10 = NA_real_, p90 = NA_real_, min = NA_real_))
-    }
-    c(mean = mean(x),
-      se = stats::sd(x) / sqrt(length(x)),
-      median = stats::median(x),
-      p10 = stats::quantile(x, .1, names = FALSE),
-      p90 = stats::quantile(x, .9, names = FALSE),
-      min = min(x))
+summarise_vec <- function(x) {
+  x <- as.numeric(x[is.finite(x)])
+  if (!length(x)) {
+    return(c(mean = NA_real_, se = NA_real_, median = NA_real_,
+             p10 = NA_real_, p90 = NA_real_, min = NA_real_))
   }
+  c(mean = mean(x),
+    se = stats::sd(x) / sqrt(length(x)),
+    median = stats::median(x),
+    p10 = stats::quantile(x, .1, names = FALSE),
+    p90 = stats::quantile(x, .9, names = FALSE),
+    min = min(x))
+}
+
+summarise_results <- function(rows) {
   agg <- aggregate(
     cbind(diag_mise, common_mise, elapsed_ms, failed, improper,
           min_resid, sample_min_eig, h_min_eig, score_min_eig,
@@ -499,11 +644,78 @@ summarise_results <- function(rows) {
             out$n, out$method), ]
 }
 
-write_all <- function(reps, summary, complexity, metadata) {
+summarise_timing <- function(rows) {
+  if (!nrow(rows)) return(data.frame())
+  agg <- aggregate(
+    cbind(elapsed_ms, failed) ~
+      generator + factors + indicators + loading + rho + n + method + component,
+    rows,
+    summarise_vec,
+    na.action = stats::na.pass
+  )
+  out <- data.frame(
+    generator = agg$generator,
+    factors = agg$factors,
+    indicators = agg$indicators,
+    loading = agg$loading,
+    rho = agg$rho,
+    n = agg$n,
+    method = agg$method,
+    component = agg$component,
+    elapsed_mean_ms = agg$elapsed_ms[, "mean"],
+    elapsed_median_ms = agg$elapsed_ms[, "median"],
+    elapsed_p10_ms = agg$elapsed_ms[, "p10"],
+    elapsed_p90_ms = agg$elapsed_ms[, "p90"],
+    fail_rate = agg$failed[, "mean"],
+    stringsAsFactors = FALSE
+  )
+  out[order(out$generator, out$factors, out$indicators, out$loading, out$rho,
+            out$n, out$method, out$component), ]
+}
+
+run_timing_study <- function(grid, opts, ml_control) {
+  if (opts$timing_reps == 0L) return(data.frame())
+  rows <- list()
+  row_i <- 0L
+  for (cc in seq_len(nrow(grid))) {
+    g <- grid[cc, ]
+    design <- make_design(g$factors, g$indicators, g$rho, g$loading)
+    spec <- magmaan::model_spec(model_syntax(design$q, design$m))
+    n_draws <- opts$timing_warmup + opts$timing_reps
+    seed <- opts$seed_base + 700000000L + cc * 100000L
+    draws <- draws_for_condition(design, g$generator, g$n, n_draws, seed)
+    for (rr in seq_along(draws)) {
+      x <- draws[[rr]]
+      for (method in opts$methods) {
+        out <- time_one_method_detail(
+          x, design, spec, method, ml_control, opts$timing_inner)
+        if (rr > opts$timing_warmup) {
+          out$generator <- g$generator
+          out$factors <- g$factors
+          out$indicators <- g$indicators
+          out$loading <- g$loading
+          out$rho <- g$rho
+          out$n <- g$n
+          out$timing_rep <- rr - opts$timing_warmup
+          row_i <- row_i + 1L
+          rows[[row_i]] <- out
+        }
+      }
+    }
+    message("timed condition ", cc, "/", nrow(grid))
+  }
+  if (!length(rows)) return(data.frame())
+  do.call(rbind, rows)
+}
+
+write_all <- function(reps, summary, complexity, metadata,
+                      timing_reps, timing_summary) {
   write_csv(reps, file.path(opts$results_dir, "replicates.csv"))
   write_csv(summary, file.path(opts$results_dir, "summary.csv"))
   write_csv(complexity, file.path(opts$results_dir, "complexity.csv"))
   write_csv(metadata, file.path(opts$results_dir, "metadata.csv"))
+  write_csv(timing_reps, file.path(opts$results_dir, "timing_replicates.csv"))
+  write_csv(timing_summary, file.path(opts$results_dir, "timing_summary.csv"))
 }
 
 grid <- condition_grid(opts)
@@ -544,9 +756,17 @@ for (cc in seq_len(nrow(grid))) {
 
 replicates <- do.call(rbind, rows)
 summary <- summarise_results(replicates)
+message("running dedicated timing pass: reps=", opts$timing_reps,
+        "; warmup=", opts$timing_warmup,
+        "; inner=", opts$timing_inner)
+timing_replicates <- run_timing_study(grid, opts, ml_control)
+timing_summary <- summarise_timing(timing_replicates)
 metadata <- metadata_frame(
   list(
     reps = opts$reps,
+    timing_reps = opts$timing_reps,
+    timing_warmup = opts$timing_warmup,
+    timing_inner = opts$timing_inner,
     n = opts$n,
     factors = opts$factors,
     indicators = opts$indicators,
@@ -569,5 +789,6 @@ metadata <- metadata_frame(
   packages = c("magmaan")
 )
 
-write_all(replicates, summary, complexity, metadata)
+write_all(replicates, summary, complexity, metadata,
+          timing_replicates, timing_summary)
 message("wrote ", normalizePath(opts$results_dir, mustWork = FALSE))
