@@ -1,0 +1,193 @@
+---
+title: "Guttman Communality Estimators"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results_dir <- "results"
+need <- c("summary", "complexity", "metadata")
+paths <- file.path(results_dir, paste0(need, ".csv"))
+if (!all(file.exists(paths))) {
+  stop("Missing results. Run:\n  Rscript run_experiment.R --smoke\n",
+       "or:\n  Rscript run_experiment.R --full")
+}
+summary <- read.csv(paths[1])
+complexity <- read.csv(paths[2])
+metadata <- read.csv(paths[3])
+
+method_label <- c(
+  ar = "AR",
+  rs = "RS",
+  ilm = "ILM",
+  gmm_block = "GMM block",
+  gmm_full = "GMM full",
+  nt_ml = "NT ML"
+)
+fmt <- function(x, digits = 2) {
+  ifelse(is.na(x), "", formatC(x, format = "f", digits = digits))
+}
+pct <- function(x) paste0(fmt(100 * x, 1), "%")
+meta <- function(key) {
+  v <- metadata$value[metadata$key == key]
+  if (length(v)) v[[1]] else ""
+}
+
+non_nt <- subset(summary, method != "nt_ml")
+normal <- subset(summary, generator == "normal")
+ordinal <- subset(summary, generator == "ordinal")
+
+median_by_method <- function(data, value) {
+  if (!nrow(data)) return(data.frame(method = character(), value = numeric()))
+  out <- aggregate(data[[value]], list(method = data$method), median, na.rm = TRUE)
+  names(out)[2] <- "value"
+  out
+}
+
+normal_nt <- median_by_method(subset(normal, method != "nt_ml"), "common_rel_nt")
+normal_rs <- median_by_method(subset(normal, method != "nt_ml"), "common_rel_rs")
+ordinal_rs <- median_by_method(subset(ordinal, method != "nt_ml"), "common_rel_rs")
+acc <- Reduce(function(x, y) merge(x, y, by = "method", all = TRUE),
+              list(
+                transform(normal_nt, normal_rel_nt = value)[c("method", "normal_rel_nt")],
+                transform(normal_rs, normal_rel_rs = value)[c("method", "normal_rel_rs")],
+                transform(ordinal_rs, ordinal_rel_rs = value)[c("method", "ordinal_rel_rs")]
+              ))
+acc$Method <- method_label[acc$method]
+acc <- acc[match(c("ar", "rs", "ilm", "gmm_block", "gmm_full"), acc$method),
+           c("Method", "normal_rel_nt", "normal_rel_rs", "ordinal_rel_rs")]
+names(acc) <- c("Method", "Normal / NT", "Normal / RS", "Ordinal / RS")
+for (j in 2:ncol(acc)) acc[[j]] <- fmt(acc[[j]], 3)
+
+rank_data <- subset(normal, method %in% c("rs", "ilm", "gmm_block", "gmm_full"))
+best <- median_by_method(rank_data, "common_rel_nt")
+best <- best[which.min(best$value), , drop = FALSE]
+best_method <- method_label[best$method]
+best_ratio <- best$value
+
+ar_rel <- median(non_nt$common_rel_rs[non_nt$method == "ar"], na.rm = TRUE)
+ilm_rel_rs <- median(non_nt$common_rel_rs[non_nt$method == "ilm"], na.rm = TRUE)
+
+rt <- aggregate(cbind(elapsed_median_ms, elapsed_p90_ms, fail_rate) ~ method,
+                summary,
+                function(x) median(x, na.rm = TRUE))
+rt$Method <- method_label[rt$method]
+rt <- rt[match(c("ar", "rs", "ilm", "gmm_block", "gmm_full", "nt_ml"), rt$method),
+         c("Method", "elapsed_median_ms", "elapsed_p90_ms", "fail_rate")]
+names(rt) <- c("Method", "Median Time (ms)", "P90 Time (ms)", "Failure Rate")
+rt$`Median Time (ms)` <- fmt(rt$`Median Time (ms)`, 3)
+rt$`P90 Time (ms)` <- fmt(rt$`P90 Time (ms)`, 3)
+rt$`Failure Rate` <- pct(rt$`Failure Rate`)
+
+runtime_factor <- {
+  nt <- median(summary$elapsed_median_ms[summary$method == "nt_ml"], na.rm = TRUE)
+  ilm <- median(summary$elapsed_median_ms[summary$method == "ilm"], na.rm = TRUE)
+  nt / ilm
+}
+
+cx <- complexity[which.max(complexity$p), ]
+```
+
+## Question
+
+Which closed-form communality estimator should the Guttman CFA paper recommend,
+once the obvious Spearman variants are compared with normal-theory ML and with a
+categorical data arm? The comparison uses the loading-aligned Guttman
+reconstruction throughout, so the estimand is the common covariance matrix, not
+only the diagonal communalities.
+
+## Short answer
+
+The current recommendation candidate is **ILM**: the identity-weighted linear
+moment estimator. In this run its median common-covariance MISE is
+`r fmt(ilm_rel_rs, 3)` times RS over the Guttman cells, while avoiding the Gamma
+estimation and inverse used by the plug-in GMM variants. Under normal data the
+best closed-form method versus magmaan NT ML is `r best_method`, with median
+common-covariance MISE ratio `r fmt(best_ratio, 2)`.
+
+The GMM variants do not buy much here. `gmm_block` needs only within-factor
+correlation blocks, while `gmm_full` uses all within-factor correlation pairs
+across factors, but neither uses the whole SEM Gamma. At the largest displayed
+design (`r cx$factors` factors, `r cx$indicators` indicators each), that means
+`r cx$within_corr_pairs_total` within-block correlations and
+`r cx$triad_rows_total` triad moments, versus `r cx$full_sem_corr_pairs`
+off-diagonal correlations for full SEM ADF.
+
+Runtime is consistent with the intended niche: NT ML is about
+`r fmt(runtime_factor, 1)` times slower than ILM on this grid. Treat the exact
+factor cautiously; the smoke grid is small and ML timing depends on optimizer
+convergence.
+
+## Evidence
+
+### Accuracy
+
+Median common-covariance MISE ratios across the simulated cells. Lower is
+better. The normal/NT column compares against magmaan normal-theory ML; the RS
+columns compare against the ratio-of-sums Spearman rule.
+
+```{r}
+knitr::kable(acc, row.names = FALSE)
+```
+
+The point is not that AR is a serious baseline. It is useful as a warning:
+individual ratio averaging is unstable when one of the other-indicator
+correlations is small. RS already removes most of that pathology. ILM and the
+GMM variants then replace the ratio with a linear moment pooling; in this grid,
+the simple ILM pooling is as good as the heavier plug-in weights.
+
+### Runtime
+
+Median per-replication wall time by method, pooled across cells.
+
+```{r}
+knitr::kable(rt, row.names = FALSE)
+```
+
+The GMM rows include construction and pseudo-inversion of their estimated
+triad-moment covariance. The NT ML row is magmaan's iterative normal-theory fit.
+
+### Complexity
+
+The reduced GMM covariance is block-local in the recommended form. It does not
+need the full SEM Gamma matrix.
+
+```{r}
+cx_show <- complexity
+names(cx_show) <- c("Factors", "Indicators", "p", "Pairs / Block",
+                    "Triads / Block", "Within Pairs", "Triads Total",
+                    "Full SEM Pairs", "Block Weight Dim", "Full Weight Dim")
+knitr::kable(cx_show, row.names = FALSE)
+```
+
+For a factor with `m` indicators, block GMM uses `choose(m, 2)` within-block
+correlations and `m * choose(m - 1, 2)` triad equations. Full GMM still ignores
+cross-block correlations as moments, but its weight can couple the within-block
+triads across factors.
+
+## Caveats
+
+- Results here are generated from `reps = ` `r meta("reps")`; use the full run
+  before quoting numbers.
+- The categorical arm is Pearson-code ordinal data generated by
+  `magmaan::sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` and then treated as
+  continuous. It is a stress arm for the covariance estimator, not an ordinal
+  latent-response estimator.
+- The Guttman variants are local to this experiment. The current package
+  frontier estimator still exposes the existing Guttman map; this experiment is
+  evidence for which communality rule to promote into that implementation.
+
+## Reproduce
+
+```sh
+cd experiments/55-guttman-communality-estimators
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --full --reps 200
+quarto render report.qmd
+```
