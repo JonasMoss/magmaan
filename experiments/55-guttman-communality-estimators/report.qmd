@@ -35,6 +35,13 @@ method_label <- c(
   gmm_full = "NT-GLS full",
   nt_ml = "NT ML"
 )
+map_label <- c(
+  incidence = "incidence",
+  aligned = "aligned",
+  diag_aligned = "diag-aligned",
+  block_aligned = "block-aligned",
+  ml = "ML"
+)
 canonical_method <- function(x) {
   x[x == "gmm_block"] <- "nt_gls_block"
   x[x == "gmm_full"] <- "nt_gls_full"
@@ -42,8 +49,29 @@ canonical_method <- function(x) {
 }
 summary$method <- canonical_method(summary$method)
 if (has_timing) timing$method <- canonical_method(timing$method)
+if (!"map" %in% names(summary)) {
+  summary$map <- ifelse(summary$method == "nt_ml", "ml", "incidence")
+}
+if (has_timing && !"map" %in% names(timing)) {
+  timing$map <- ifelse(timing$method == "nt_ml", "ml", "incidence")
+}
 method_order <- c("ar", "rs", "ilm", "nt_gls_block", "nt_gls_full", "nt_ml")
 guttman_order <- setdiff(method_order, "nt_ml")
+map_order <- c("incidence", "aligned", "block_aligned", "diag_aligned")
+maps_present <- intersect(map_order, unique(summary$map))
+guttman_estimator_order <- unlist(lapply(
+  guttman_order, function(m) paste(m, maps_present, sep = "|")))
+estimator_order <- c(guttman_estimator_order, "nt_ml|ml")
+estimator_label <- function(method, map) {
+  ifelse(method == "nt_ml", "NT ML",
+         paste(method_label[method], map_label[map], sep = " / "))
+}
+summary$estimator_key <- paste(summary$method, summary$map, sep = "|")
+summary$Estimator <- estimator_label(summary$method, summary$map)
+if (has_timing) {
+  timing$estimator_key <- paste(timing$method, timing$map, sep = "|")
+  timing$Estimator <- estimator_label(timing$method, timing$map)
+}
 fmt <- function(x, digits = 2) {
   ifelse(is.na(x), "", formatC(x, format = "f", digits = digits))
 }
@@ -61,79 +89,93 @@ non_nt <- subset(summary, method != "nt_ml")
 normal <- subset(summary, generator == "normal")
 ordinal <- subset(summary, generator == "ordinal")
 
-median_by_method <- function(data, value) {
-  if (!nrow(data)) return(data.frame(method = character(), value = numeric()))
-  out <- aggregate(data[[value]], list(method = data$method), median, na.rm = TRUE)
-  names(out)[2] <- "value"
+median_by_estimator <- function(data, value) {
+  if (!nrow(data)) {
+    return(data.frame(method = character(), map = character(),
+                      estimator_key = character(), value = numeric()))
+  }
+  out <- aggregate(data[[value]],
+                   list(method = data$method, map = data$map,
+                        estimator_key = data$estimator_key),
+                   median, na.rm = TRUE)
+  names(out)[ncol(out)] <- "value"
   out
 }
 
-normal_nt <- median_by_method(subset(normal, method != "nt_ml"), "common_rel_nt")
-normal_rs <- median_by_method(subset(normal, method != "nt_ml"), "common_rel_rs")
-ordinal_rs <- median_by_method(subset(ordinal, method != "nt_ml"), "common_rel_rs")
-acc <- Reduce(function(x, y) merge(x, y, by = "method", all = TRUE),
+normal_nt <- median_by_estimator(subset(normal, method != "nt_ml"), "common_rel_nt")
+normal_rs <- median_by_estimator(subset(normal, method != "nt_ml"), "common_rel_rs")
+ordinal_rs <- median_by_estimator(subset(ordinal, method != "nt_ml"), "common_rel_rs")
+acc <- Reduce(function(x, y) merge(x, y, by = c("method", "map", "estimator_key"), all = TRUE),
               list(
-                transform(normal_nt, normal_rel_nt = value)[c("method", "normal_rel_nt")],
-                transform(normal_rs, normal_rel_rs = value)[c("method", "normal_rel_rs")],
-                transform(ordinal_rs, ordinal_rel_rs = value)[c("method", "ordinal_rel_rs")]
+                transform(normal_nt, normal_rel_nt = value)[c("method", "map", "estimator_key", "normal_rel_nt")],
+                transform(normal_rs, normal_rel_rs = value)[c("method", "map", "estimator_key", "normal_rel_rs")],
+                transform(ordinal_rs, ordinal_rel_rs = value)[c("method", "map", "estimator_key", "ordinal_rel_rs")]
               ))
-acc$Method <- method_label[acc$method]
-acc <- acc[match(guttman_order, acc$method),
-           c("Method", "normal_rel_nt", "normal_rel_rs", "ordinal_rel_rs")]
-names(acc) <- c("Method", "Normal / NT", "Normal / RS", "Ordinal / RS")
+acc$Estimator <- estimator_label(acc$method, acc$map)
+acc <- acc[match(guttman_estimator_order, acc$estimator_key),
+           c("Estimator", "normal_rel_nt", "normal_rel_rs", "ordinal_rel_rs")]
+names(acc) <- c("Estimator", "Normal / NT", "Normal / RS", "Ordinal / RS")
 for (j in 2:ncol(acc)) acc[[j]] <- fmt(acc[[j]], 3)
 
 rank_data <- subset(normal, method %in% c("rs", "ilm", "nt_gls_block", "nt_gls_full"))
-best <- median_by_method(rank_data, "common_rel_nt")
+best <- median_by_estimator(rank_data, "common_rel_nt")
 best <- best[which.min(best$value), , drop = FALSE]
-best_method <- method_label[best$method]
+best_method <- estimator_label(best$method, best$map)
 best_ratio <- best$value
 
-ar_rel <- median(non_nt$common_rel_rs[non_nt$method == "ar"], na.rm = TRUE)
-ilm_rel_rs <- median(non_nt$common_rel_rs[non_nt$method == "ilm"], na.rm = TRUE)
+ar_rel <- median(non_nt$common_rel_rs[non_nt$method == "ar" &
+                                        non_nt$map == "incidence"], na.rm = TRUE)
+ilm_rel_rs <- median(non_nt$common_rel_rs[non_nt$method == "ilm" &
+                                            non_nt$map == "incidence"], na.rm = TRUE)
 
-rt <- aggregate(cbind(elapsed_median_ms, elapsed_p90_ms, fail_rate) ~ method,
+rt <- aggregate(cbind(elapsed_median_ms, elapsed_p90_ms, fail_rate) ~
+                  method + map + estimator_key + Estimator,
                 summary,
                 function(x) median(x, na.rm = TRUE))
-rt$Method <- method_label[rt$method]
-rt <- rt[match(method_order, rt$method),
-         c("Method", "elapsed_median_ms", "elapsed_p90_ms", "fail_rate")]
-names(rt) <- c("Method", "Median Time (ms)", "P90 Time (ms)", "Failure Rate")
+rt <- rt[match(estimator_order, rt$estimator_key),
+         c("Estimator", "elapsed_median_ms", "elapsed_p90_ms", "fail_rate")]
+names(rt) <- c("Estimator", "Median Time (ms)", "P90 Time (ms)",
+               "Failure Rate")
 rt$`Median Time (ms)` <- fmt(rt$`Median Time (ms)`, 3)
 rt$`P90 Time (ms)` <- fmt(rt$`P90 Time (ms)`, 3)
 rt$`Failure Rate` <- pct(rt$`Failure Rate`)
 
 runtime_factor <- {
   nt <- median(summary$elapsed_median_ms[summary$method == "nt_ml"], na.rm = TRUE)
-  ilm <- median(summary$elapsed_median_ms[summary$method == "ilm"], na.rm = TRUE)
+  ilm <- median(summary$elapsed_median_ms[summary$method == "ilm" &
+                                            summary$map == "incidence"],
+                na.rm = TRUE)
   nt / ilm
 }
 
 small_n <- min(summary$n)
-hey_small <- aggregate(improper_rate ~ method,
+hey_small <- aggregate(improper_rate ~ estimator_key,
                        subset(summary, n == small_n),
                        median, na.rm = TRUE, na.action = na.pass)
-hey_small <- stats::setNames(hey_small$improper_rate, hey_small$method)
+hey_small <- stats::setNames(hey_small$improper_rate, hey_small$estimator_key)
 
 bad_cols <- c("fail_rate", "improper_rate", "sample_singular_rate",
               "h_diag_bad_rate", "h_indef_rate", "score_nonpos_rate",
               "common_indef_rate")
 bad <- aggregate(summary[bad_cols],
-                 list(n = summary$n, method = summary$method),
+                 list(n = summary$n, method = summary$method,
+                      map = summary$map, estimator_key = summary$estimator_key,
+                      Estimator = summary$Estimator),
                  median, na.rm = TRUE, na.action = na.pass)
 bad <- subset(bad, n %in% head(sort(unique(summary$n)), 3))
-bad$Method <- method_label[bad$method]
 bad <- bad[order(bad$n, match(bad$method,
-                              method_order)), ]
-bad_show <- bad[c("n", "Method", bad_cols)]
-names(bad_show) <- c("N", "Method", "Fail", "Heywood", "S Singular",
+                              method_order),
+                 match(bad$map, c(map_order, "ml"))), ]
+bad_show <- bad[c("n", "Estimator", bad_cols)]
+names(bad_show) <- c("N", "Estimator", "Fail", "Heywood", "S Singular",
                      "Bad H Diag", "H Indef.", "Score Nonpos.",
                      "Common Indef.")
 for (j in 3:ncol(bad_show)) bad_show[[j]] <- pct(bad_show[[j]])
 
 if (has_timing) {
   timing_total <- subset(timing, component == "total")
-  timing_by_n <- aggregate(cbind(elapsed_median_ms, fail_rate) ~ n + method,
+  timing_by_n <- aggregate(cbind(elapsed_median_ms, fail_rate) ~
+                             n + method + map + estimator_key + Estimator,
                            timing_total, median, na.rm = TRUE,
                            na.action = na.pass)
   nt_by_n <- timing_by_n[timing_by_n$method == "nt_ml",
@@ -142,22 +184,24 @@ if (has_timing) {
   timing_by_n <- merge(timing_by_n, nt_by_n, by = "n", all.x = TRUE)
   timing_by_n$nt_over_method <- timing_by_n$nt_median_ms /
     timing_by_n$elapsed_median_ms
-  timing_by_n$Method <- method_label[timing_by_n$method]
   timing_by_n <- timing_by_n[order(timing_by_n$n,
-                                   match(timing_by_n$method, method_order)), ]
-  timing_n_show <- timing_by_n[c("n", "Method", "elapsed_median_ms",
+                                   match(timing_by_n$estimator_key,
+                                         estimator_order)), ]
+  timing_n_show <- timing_by_n[c("n", "Estimator", "elapsed_median_ms",
                                  "nt_over_method", "fail_rate")]
-  names(timing_n_show) <- c("N", "Method", "Median Time (ms)",
-                            "NT / Method", "Failure Rate")
+  names(timing_n_show) <- c("N", "Estimator", "Median Time (ms)",
+                            "NT / Estimator", "Failure Rate")
   timing_n_show$`Median Time (ms)` <- fmt(timing_n_show$`Median Time (ms)`, 3)
-  timing_n_show$`NT / Method` <- fmt(timing_n_show$`NT / Method`, 2)
+  timing_n_show$`NT / Estimator` <- fmt(timing_n_show$`NT / Estimator`, 2)
   timing_n_show$`Failure Rate` <- pct(timing_n_show$`Failure Rate`)
 
   timing_small_n <- min(timing_by_n$n)
   timing_factor <- median(timing_by_n$nt_over_method[
-    timing_by_n$method == "ilm"], na.rm = TRUE)
+    timing_by_n$method == "ilm" & timing_by_n$map == "incidence"],
+    na.rm = TRUE)
   timing_small_factor <- pick1(timing_by_n$nt_over_method[
-    timing_by_n$method == "ilm" & timing_by_n$n == timing_small_n])
+    timing_by_n$method == "ilm" & timing_by_n$map == "incidence" &
+      timing_by_n$n == timing_small_n])
 
   component_label <- c(
     sample_cov = "Covariance",
@@ -170,18 +214,19 @@ if (has_timing) {
   component_order <- names(component_label)
   timing_comp <- subset(timing, component != "total" &
                           method %in% c("ilm", "nt_gls_block",
-                                        "nt_gls_full", "nt_ml"))
-  timing_comp <- aggregate(elapsed_median_ms ~ method + component,
+                                        "nt_gls_full", "nt_ml") &
+                          map %in% c("incidence", "block_aligned", "ml"))
+  timing_comp <- aggregate(elapsed_median_ms ~
+                             method + map + estimator_key + Estimator +
+                             component,
                            timing_comp, median, na.rm = TRUE,
                            na.action = na.pass)
-  timing_comp$Method <- method_label[timing_comp$method]
   timing_comp$Component <- component_label[timing_comp$component]
-  timing_comp <- timing_comp[order(match(timing_comp$method,
-                                         c("ilm", "nt_gls_block",
-                                           "nt_gls_full", "nt_ml")),
+  timing_comp <- timing_comp[order(match(timing_comp$estimator_key,
+                                         estimator_order),
                                    match(timing_comp$component,
                                          component_order)), ]
-  timing_comp_show <- timing_comp[c("Method", "Component",
+  timing_comp_show <- timing_comp[c("Estimator", "Component",
                                     "elapsed_median_ms")]
   names(timing_comp_show)[3] <- "Median Time (ms)"
   timing_comp_show$`Median Time (ms)` <- fmt(timing_comp_show$`Median Time (ms)`, 3)
@@ -199,36 +244,38 @@ accuracy_methods <- subset(summary, method %in% method_order)
 
 group_accuracy <- function(by) {
   cols <- c("common_mise", "diag_mise", "common_rel_rs", "common_rel_nt",
-            "fail_rate", "improper_rate")
+            "nt_joint_success_rate", "fail_rate", "improper_rate")
   out <- aggregate(accuracy_methods[cols],
-                   accuracy_methods[by],
+                   accuracy_methods[c(by, "method", "map", "estimator_key",
+                                      "Estimator")],
                    median, na.rm = TRUE, na.action = na.pass)
-  out$Method <- method_label[out$method]
-  ord <- do.call(order, c(out[setdiff(by, "method")],
-                          list(match(out$method, method_order))))
+  ord <- do.call(order, c(out[by],
+                          list(match(out$estimator_key, estimator_order))))
   out <- out[ord, , drop = FALSE]
-  show <- out[c(setdiff(by, "method"), "Method", cols)]
-  names(show) <- c(setdiff(by, "method"), "Method", "Common MISE",
+  show <- out[c(by, "Estimator", cols)]
+  names(show) <- c(by, "Estimator", "Common MISE",
                    "Diag MISE", "Common / RS", "Common / NT",
+                   "NT Joint",
                    "Fail", "Heywood")
   show$`Common MISE` <- fmt_g(show$`Common MISE`)
   show$`Diag MISE` <- fmt_g(show$`Diag MISE`)
   show$`Common / RS` <- fmt(show$`Common / RS`, 3)
   show$`Common / NT` <- fmt(show$`Common / NT`, 3)
+  show$`NT Joint` <- pct(show$`NT Joint`)
   show$Fail <- pct(show$Fail)
   show$Heywood <- pct(show$Heywood)
   show
 }
 
-factor_accuracy_show <- group_accuracy(c("generator", "factors", "method"))
-n_accuracy_show <- group_accuracy(c("generator", "n", "method"))
+factor_accuracy_show <- group_accuracy(c("generator", "factors"))
+n_accuracy_show <- group_accuracy(c("generator", "n"))
 
 hs_accuracy_methods <- subset(summary, factors == 3 & indicators == 3 &
                                 method %in% method_order)
 if (nrow(hs_accuracy_methods)) {
   saved_accuracy_methods <- accuracy_methods
   accuracy_methods <- hs_accuracy_methods
-  hs_accuracy_show <- group_accuracy(c("generator", "n", "method"))
+  hs_accuracy_show <- group_accuracy(c("generator", "n"))
   accuracy_methods <- saved_accuracy_methods
 } else {
   hs_accuracy_show <- data.frame()
@@ -247,9 +294,10 @@ if (nrow(winner_source)) {
   }, integer(1))
   winners <- winner_source[best_rows, , drop = FALSE]
   winner_counts <- aggregate(rep(1L, nrow(winners)),
-                             winners[c("generator", "factors", "method")],
+                             winners[c("generator", "factors", "method", "map",
+                                       "estimator_key", "Estimator")],
                              sum)
-  names(winner_counts)[4] <- "wins"
+  names(winner_counts)[7] <- "wins"
   condition_counts <- unique(winner_source[c("condition_id", "generator",
                                              "factors")])
   condition_counts <- aggregate(condition_id ~ generator + factors,
@@ -258,14 +306,13 @@ if (nrow(winner_source)) {
   winner_counts <- merge(winner_counts, condition_counts,
                          by = c("generator", "factors"), all.x = TRUE)
   winner_counts$share <- winner_counts$wins / winner_counts$conditions
-  winner_counts$Method <- method_label[winner_counts$method]
   winner_counts <- winner_counts[order(winner_counts$generator,
                                        winner_counts$factors,
-                                       match(winner_counts$method,
-                                             guttman_order)), ]
-  winner_show <- winner_counts[c("generator", "factors", "Method", "wins",
+                                       match(winner_counts$estimator_key,
+                                             estimator_order)), ]
+  winner_show <- winner_counts[c("generator", "factors", "Estimator", "wins",
                                  "conditions", "share")]
-  names(winner_show) <- c("Generator", "Factors", "Method", "Wins",
+  names(winner_show) <- c("Generator", "Factors", "Estimator", "Wins",
                           "Conditions", "Share")
   winner_show$Share <- pct(winner_show$Share)
 } else {
@@ -277,20 +324,24 @@ if (nrow(winner_source)) {
 
 Which closed-form communality estimator should the Guttman CFA paper recommend,
 once the obvious Spearman variants are compared with normal-theory ML and with a
-categorical data arm? The comparison uses the traditional incidence-composite
-Guttman reconstruction throughout,
-`H Z (Z' H Z)^-1 Z' H`, so the estimand is the common covariance matrix, not
+categorical data arm? The comparison now crosses the communality rule with
+several closed-form Guttman reconstruction maps. The baseline is the traditional
+incidence-composite reconstruction,
+`H Z (Z' H Z)^-1 Z' H`. The added maps use a preliminary loading representative
+to construct loading-aligned score coefficients, with an optional block
+whitening step. The estimand is the reconstructed common covariance matrix, not
 only the diagonal communalities.
 
 ## Short answer
 
-The current recommendation candidate is **ILM**: the identity-weighted linear
-moment estimator. In this run its median common-covariance MISE is
-`r fmt(ilm_rel_rs, 3)` times RS over the Guttman cells, while avoiding the
-normal-theory triad covariance and inverse used by the NT-GLS variants. Under
-normal data the best closed-form method versus magmaan NT ML is
-`r best_method`, with median common-covariance MISE ratio
-`r fmt(best_ratio, 2)`.
+The traditional recommendation candidate remains **ILM / incidence**: the
+identity-weighted linear moment communality rule with the historical incidence
+map. In this run its median common-covariance MISE is
+`r fmt(ilm_rel_rs, 3)` times RS / incidence over the Guttman cells, while
+avoiding the normal-theory triad covariance and inverse used by the NT-GLS
+variants. Under normal data the best closed-form estimator versus magmaan NT ML
+on joint-success replications is `r best_method`, with median common-covariance
+MISE ratio `r fmt(best_ratio, 2)`.
 
 The NT-GLS variants do not buy much here. `nt_gls_block` needs only
 within-factor correlation blocks, while `nt_gls_full` uses all within-factor
@@ -302,25 +353,27 @@ each), that means
 off-diagonal correlations for full SEM ADF.
 
 Runtime is consistent with the intended niche: NT ML is about
-`r fmt(runtime_factor, 1)` times slower than ILM on this grid. Treat the exact
-factor cautiously; the smoke grid is small and ML timing depends on optimizer
-convergence. The timing scope is `r meta("timing_scope")`.
-The dedicated timing pass gives NT ML / ILM median speedup
+`r fmt(runtime_factor, 1)` times slower than ILM / incidence on this grid.
+Treat the exact factor cautiously; the smoke grid is small and ML timing
+depends on optimizer convergence. The timing scope is `r meta("timing_scope")`.
+The dedicated timing pass gives NT ML / ILM-incidence median speedup
 `r fmt(timing_factor, 1)` overall and `r fmt(timing_small_factor, 1)` at
 `N = ` `r timing_small_n`.
 
 The small-N arm is now deliberately rough. At `N = ` `r small_n`, the median
-Heywood-like rate is `r pct(hey_small[["ilm"]])` for ILM,
-`r pct(hey_small[["rs"]])` for RS, and `r pct(hey_small[["nt_ml"]])` for NT ML,
-pooling over the displayed cells.
+Heywood-like rate is `r pct(hey_small[["ilm|incidence"]])` for ILM / incidence,
+`r pct(hey_small[["rs|incidence"]])` for RS / incidence, and
+`r pct(hey_small[["nt_ml|ml"]])` for NT ML, pooling over the displayed cells.
 
 ## Evidence
 
 ### Accuracy
 
 Median common-covariance MISE ratios across the simulated cells. Lower is
-better. The normal/NT column compares against magmaan normal-theory ML; the RS
-columns compare against the ratio-of-sums Spearman rule.
+better. The normal/NT column compares against magmaan normal-theory ML on the
+replications where both the displayed estimator and NT ML succeeded. The RS
+columns compare against the ratio-of-sums Spearman rule using the same
+reconstruction map.
 
 ```{r}
 knitr::kable(acc, row.names = FALSE)
@@ -332,12 +385,21 @@ correlations is small. RS already removes most of that pathology. ILM and the
 NT-GLS variants then replace the ratio with a weighted linear moment pooling;
 in this grid, the simple ILM pooling is as good as the heavier plug-in weights.
 
+The reconstruction maps are separate from the communality rule. `incidence` is
+the historical \(Z\)-score map. `aligned` replaces \(Z\) by
+\(B=\Gamma(\Gamma^\top\Gamma)^{-1}\), where \(\Gamma\) is the preliminary
+incidence Guttman loading representative. `block-aligned` first whitens each
+indicator block by its observed covariance and then applies the aligned score
+rule in those canonical coordinates.
+
 ### Condition Breakdown
 
-The pooled table above hides where a method is winning or failing. The next
+The pooled table above hides where an estimator is winning or failing. The next
 tables keep the same common-covariance MISE target but aggregate over fewer
-design dimensions. Ratios below one mean the method improved on the comparison
-row; `Common / NT` uses the iterative normal-theory fit as the reference.
+design dimensions. Ratios below one mean the estimator improved on the comparison
+row; `Common / NT` uses the iterative normal-theory fit as the reference on
+joint-success replications. `NT Joint` is the fraction of replications entering
+that paired comparison.
 
 By generator and number of factors:
 
@@ -365,8 +427,9 @@ if (nrow(hs_accuracy_show)) {
 }
 ```
 
-Winner counts by condition, among the closed-form Guttman communality rules.
-A condition is one generator/factor/indicator/loading/rho/N cell.
+Winner counts by condition, among the closed-form Guttman estimators. A
+condition is one generator/factor/indicator/loading/rho/N cell, and the winner
+is chosen over communality-rule/reconstruction-map combinations.
 
 ```{r}
 if (nrow(winner_show)) {
@@ -376,7 +439,7 @@ if (nrow(winner_show)) {
 
 ### Runtime
 
-Median per-replication wall time by method, pooled across cells.
+Median per-replication wall time by estimator, pooled across cells.
 
 ```{r}
 knitr::kable(rt, row.names = FALSE)
@@ -408,7 +471,7 @@ if (has_timing) {
 
 Median component timings, pooled over cells. For Guttman variants, `H diagonal`
 is the communality estimator in `magmaan::guttman_h()` and `Guttman map` is the
-traditional incidence-composite reconstruction.
+chosen reconstruction map.
 
 ```{r}
 if (has_timing) {
@@ -419,10 +482,11 @@ if (has_timing) {
 ### Improper Solutions
 
 Heywood means at least one negative residual variance. For the Guttman variants,
-that residual is `diag(S - H Z (Z' H Z)^-1 Z' H)`. `Bad H Diag` means the
+that residual is `diag(S - common_hat)`, where `common_hat` is the selected
+Guttman reconstruction map. `Bad H Diag` means the
 estimated communality diagonal fell outside `[0, S_ii]`. `H Indef.` records when
 the communality-filled matrix is indefinite; this is not automatically a
-failed estimator, because the traditional map only needs the composite score
+failed estimator, because the selected map only needs the composite score
 covariance to be invertible, but it marks cases where the literal covariance
 interpretation of `H` is gone.
 
@@ -452,6 +516,9 @@ within-block triads across factors.
 
 - Results here are generated from `reps = ` `r meta("reps")`; use the full run
   before quoting numbers.
+- Ratios against NT ML are paired by replication and use only replications where
+  both estimators succeeded. The raw marginal NT ratio is still written to
+  `summary.csv` as `common_rel_nt_marginal` for auditing selective NT failure.
 - The categorical arm is Pearson-code ordinal data generated by
   `magmaan::sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` and then treated as
   continuous. It is a stress arm for the covariance estimator, not an ordinal
@@ -459,9 +526,10 @@ within-block triads across factors.
 - The H-diagonal rules are computed by `magmaan::guttman_h()`. In the current
   C++ API, `nt_gls_block` and `nt_gls_full` are the experiment names for the
   existing `gmm_block` and `gmm_full` methods, which use the normal-theory
-  covariance of sample correlations as the plug-in GLS weight. The full package
-  frontier CFA estimator still uses the existing Guttman map; this experiment is
-  evidence for which communality rule to promote into that map.
+  covariance of sample correlations as the plug-in GLS weight. The
+  reconstruction-map variants are experiment-local R code for now. The full
+  package frontier CFA estimator still uses the existing Guttman map; this
+  experiment is evidence for which communality rule and map to promote.
 - Per-replication covariance/sample-statistics construction uses ML scaling
   (`1/n`) for both NT ML and the Guttman variants.
 

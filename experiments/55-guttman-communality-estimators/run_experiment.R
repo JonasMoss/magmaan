@@ -27,6 +27,8 @@ accepted_methods <- c(
   "gmm_block", "gmm_full", "nt_ml"
 )
 
+accepted_maps <- c("incidence", "aligned", "diag_aligned", "block_aligned")
+
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
@@ -45,6 +47,8 @@ usage <- function() {
     "  --generators LIST    Data generators: normal,ordinal. Default: both.\n",
     "  --methods LIST       Methods: ar,rs,ilm,nt_gls_block,nt_gls_full,nt_ml.\n",
     "                       gmm_block/gmm_full are accepted aliases.\n",
+    "  --maps LIST          Guttman maps: incidence,aligned,block_aligned.\n",
+    "                       Optional: diag_aligned. Default: first three.\n",
     "  --timing-reps N      Dedicated timing reps per cell. Full default: 20.\n",
     "  --timing-warmup N    Unrecorded timing warmups per cell. Default: 2.\n",
     "  --timing-inner N     Repeated calls per timing component. Full default: 10.\n",
@@ -68,6 +72,7 @@ parse_args <- function(args) {
     loading = c("mild", "wide"),
     generators = c("normal", "ordinal"),
     methods = c("ar", "rs", "ilm", "nt_gls_block", "nt_gls_full", "nt_ml"),
+    maps = c("incidence", "aligned", "block_aligned"),
     timing_reps = 20L,
     timing_warmup = 2L,
     timing_inner = 10L,
@@ -125,6 +130,10 @@ parse_args <- function(args) {
       opts$methods <- parse_csv_arg(take(a)); explicit <- c(explicit, "methods")
     } else if (grepl("^--methods=", a)) {
       opts$methods <- parse_csv_arg(sub("^--methods=", "", a)); explicit <- c(explicit, "methods")
+    } else if (a == "--maps") {
+      opts$maps <- parse_csv_arg(take(a)); explicit <- c(explicit, "maps")
+    } else if (grepl("^--maps=", a)) {
+      opts$maps <- parse_csv_arg(sub("^--maps=", "", a)); explicit <- c(explicit, "maps")
     } else if (a == "--timing-reps") {
       opts$timing_reps <- as.integer(take(a)); explicit <- c(explicit, "timing_reps")
     } else if (grepl("^--timing-reps=", a)) {
@@ -175,6 +184,9 @@ parse_args <- function(args) {
   bad <- setdiff(opts$methods, accepted_methods)
   if (length(bad)) stop("unknown methods: ", paste(bad, collapse = ","), call. = FALSE)
   opts$methods <- unique(canonical_method(opts$methods))
+  bad <- setdiff(opts$maps, accepted_maps)
+  if (length(bad)) stop("unknown maps: ", paste(bad, collapse = ","), call. = FALSE)
+  opts$maps <- unique(opts$maps)
   if (!is.finite(opts$timing_reps) || opts$timing_reps < 0) {
     stop("--timing-reps must be non-negative", call. = FALSE)
   }
@@ -251,20 +263,97 @@ min_eigen_sym <- function(x) {
   if (all(is.na(out))) NA_real_ else min(out)
 }
 
-guttman_common <- function(hmat, blocks) {
-  p <- nrow(hmat)
+make_Z <- function(blocks) {
+  p <- length(blocks)
   q <- length(unique(blocks))
   Z <- matrix(0, p, q)
   for (f in seq_len(q)) {
     Z[blocks == f, f] <- 1
   }
-  score_cov <- crossprod(Z, hmat %*% Z)
+  Z
+}
+
+sym_power <- function(x, power, label, tol = 1e-10) {
+  x <- (x + t(x)) / 2
+  es <- tryCatch(eigen(x, symmetric = TRUE), error = function(e) NULL)
+  if (is.null(es) || any(!is.finite(es$values))) {
+    stop(label, ": eigendecomposition failed", call. = FALSE)
+  }
+  scale <- max(1, max(abs(es$values)))
+  if (min(es$values) <= tol * scale) {
+    stop(label, ": covariance block is not positive definite", call. = FALSE)
+  }
+  es$vectors %*% diag(es$values^power, nrow = length(es$values)) %*%
+    t(es$vectors)
+}
+
+canonical_transform <- function(s, blocks, map) {
+  p <- nrow(s)
+  W <- diag(1, p)
+  Ghalf <- diag(1, p)
+  if (map %in% c("incidence", "aligned")) {
+    return(list(W = W, Ghalf = Ghalf))
+  }
+  if (map == "diag_aligned") {
+    d <- diag(s)
+    if (any(!is.finite(d) | d <= 0)) {
+      stop("diag_aligned map: covariance diagonal must be positive",
+           call. = FALSE)
+    }
+    W <- diag(1 / sqrt(d), p)
+    Ghalf <- diag(sqrt(d), p)
+    return(list(W = W, Ghalf = Ghalf))
+  }
+  if (map == "block_aligned") {
+    for (b in sort(unique(blocks))) {
+      idx <- which(blocks == b)
+      sb <- s[idx, idx, drop = FALSE]
+      W[idx, idx] <- sym_power(sb, -0.5, "block_aligned map")
+      Ghalf[idx, idx] <- sym_power(sb, 0.5, "block_aligned map")
+    }
+    return(list(W = W, Ghalf = Ghalf))
+  }
+  stop("unknown Guttman map: ", map, call. = FALSE)
+}
+
+common_from_scores <- function(hmat, B) {
+  score_cov <- crossprod(B, hmat %*% B)
   inv_score_cov <- tryCatch(solve(score_cov), error = function(e) NULL)
   if (is.null(inv_score_cov)) return(list(common = NULL, score_cov = score_cov))
-  hz <- hmat %*% Z
+  hz <- hmat %*% B
   common <- hz %*% inv_score_cov %*% t(hz)
   dimnames(common) <- dimnames(hmat)
   list(common = common, score_cov = score_cov)
+}
+
+aligned_scores <- function(hmat, Z) {
+  pre <- common_from_scores(hmat, Z)
+  if (is.null(pre$common)) {
+    stop("aligned map: preliminary incidence regression failed", call. = FALSE)
+  }
+  Gamma <- hmat %*% Z %*% solve(pre$score_cov)
+  gram <- crossprod(Gamma)
+  inv_gram <- tryCatch(solve(gram), error = function(e) NULL)
+  if (is.null(inv_gram)) {
+    stop("aligned map: preliminary loading matrix is rank deficient",
+         call. = FALSE)
+  }
+  Gamma %*% inv_gram
+}
+
+guttman_common <- function(hmat, blocks, s, map) {
+  trans <- canonical_transform(s, blocks, map)
+  h_work <- trans$W %*% hmat %*% trans$W
+  h_work <- (h_work + t(h_work)) / 2
+  dimnames(h_work) <- dimnames(hmat)
+  Z <- make_Z(blocks)
+  B <- if (map == "incidence") Z else aligned_scores(h_work, Z)
+  fit <- common_from_scores(h_work, B)
+  if (is.null(fit$common)) return(fit)
+  common <- trans$Ghalf %*% fit$common %*% trans$Ghalf
+  common <- (common + t(common)) / 2
+  dimnames(common) <- dimnames(hmat)
+  list(common = common, score_cov = fit$score_cov)
 }
 
 pt_value <- function(pt, row) {
@@ -319,7 +408,7 @@ time_call <- function(expr) {
   value
 }
 
-one_method <- function(x, design, spec, target_common, method, ml_control) {
+one_method <- function(x, design, spec, target_common, method, map, ml_control) {
   if (method == "nt_ml") {
     timed <- time_call({
       sample_stats <- sample_stats_n(x, design$vars)
@@ -345,7 +434,7 @@ one_method <- function(x, design, spec, target_common, method, ml_control) {
              score_cov = NULL, failed = TRUE,
              message = "non-finite communality")
       } else {
-        recon <- guttman_common(h$H, design$blocks)
+        recon <- guttman_common(h$H, design$blocks, s, map)
         if (is.null(recon$common)) {
           list(common = NULL, resid = NULL, s = s, hmat = h$H,
                score_cov = recon$score_cov, failed = TRUE,
@@ -441,7 +530,7 @@ time_repeat <- function(times, fn) {
   list(ok = ok, value = value, message = message, elapsed_ms = elapsed_ms)
 }
 
-time_one_method_detail <- function(x, design, spec, method, ml_control,
+time_one_method_detail <- function(x, design, spec, method, map, ml_control,
                                    timing_inner) {
   rows <- list()
   add_row <- function(component, timed, failed = !timed$ok,
@@ -498,7 +587,7 @@ time_one_method_detail <- function(x, design, spec, method, ml_control,
     if (!h_failed) {
       map_t <- time_repeat(
         timing_inner,
-        function() guttman_common(h_t$value$H, design$blocks))
+        function() guttman_common(h_t$value$H, design$blocks, cov_t$value, map))
       map_failed <- !map_t$ok || is.null(map_t$value$common)
       map_message <- if (!map_t$ok) {
         map_t$message
@@ -611,7 +700,7 @@ summarise_results <- function(rows) {
           min_resid, sample_min_eig, h_min_eig, score_min_eig,
           common_min_eig, sample_singular, h_diag_bad, h_indef,
           score_nonpos, common_indef) ~
-      generator + factors + indicators + loading + rho + n + method,
+      generator + factors + indicators + loading + rho + n + method + map,
     rows,
     summarise_vec,
     na.action = stats::na.pass
@@ -624,6 +713,7 @@ summarise_results <- function(rows) {
     rho = agg$rho,
     n = agg$n,
     method = agg$method,
+    map = agg$map,
     diag_mise = agg$diag_mise[, "mean"],
     diag_se = agg$diag_mise[, "se"],
     common_mise = agg$common_mise[, "mean"],
@@ -652,25 +742,66 @@ summarise_results <- function(rows) {
     stringsAsFactors = FALSE
   )
   key <- c("generator", "factors", "indicators", "loading", "rho", "n")
-  rs <- out[out$method == "rs", c(key, "common_mise", "diag_mise")]
-  names(rs)[(length(key) + 1L):(length(key) + 2L)] <- c("common_rs", "diag_rs")
+  key_map <- c(key, "map")
+  rs <- out[out$method == "rs", c(key_map, "common_mise", "diag_mise")]
+  names(rs)[(length(key_map) + 1L):(length(key_map) + 2L)] <- c("common_rs", "diag_rs")
   nt <- out[out$method == "nt_ml", c(key, "common_mise", "diag_mise")]
   names(nt)[(length(key) + 1L):(length(key) + 2L)] <- c("common_nt", "diag_nt")
-  out <- merge(out, rs, by = key, all.x = TRUE)
+  out <- merge(out, rs, by = key_map, all.x = TRUE)
   out <- merge(out, nt, by = key, all.x = TRUE)
   out$common_rel_rs <- out$common_mise / out$common_rs
   out$diag_rel_rs <- out$diag_mise / out$diag_rs
-  out$common_rel_nt <- out$common_mise / out$common_nt
-  out$diag_rel_nt <- out$diag_mise / out$diag_nt
+  out$common_rel_nt_marginal <- out$common_mise / out$common_nt
+  out$diag_rel_nt_marginal <- out$diag_mise / out$diag_nt
+
+  nt_rep <- rows[rows$method == "nt_ml",
+                 c(key, "rep", "common_mise", "diag_mise", "failed")]
+  names(nt_rep)[(length(key) + 2L):ncol(nt_rep)] <-
+    c("common_mise_nt_rep", "diag_mise_nt_rep", "failed_nt_rep")
+  joint <- merge(rows, nt_rep, by = c(key, "rep"), all.x = TRUE)
+  joint$joint_success <- !joint$failed & !joint$failed_nt_rep
+  joint$common_mise_joint <- ifelse(joint$joint_success,
+                                    joint$common_mise, NA_real_)
+  joint$diag_mise_joint <- ifelse(joint$joint_success,
+                                  joint$diag_mise, NA_real_)
+  joint$common_nt_joint <- ifelse(joint$joint_success,
+                                  joint$common_mise_nt_rep, NA_real_)
+  joint$diag_nt_joint <- ifelse(joint$joint_success,
+                                joint$diag_mise_nt_rep, NA_real_)
+  joint_agg <- aggregate(
+    cbind(common_mise_joint, diag_mise_joint, common_nt_joint, diag_nt_joint,
+          joint_success) ~
+      generator + factors + indicators + loading + rho + n + method + map,
+    joint,
+    function(x) mean(x, na.rm = TRUE),
+    na.action = stats::na.pass
+  )
+  names(joint_agg)[(ncol(joint_agg) - 4L):ncol(joint_agg)] <-
+    c("common_mise_nt_joint", "diag_mise_nt_joint", "common_nt_joint",
+      "diag_nt_joint", "nt_joint_success_rate")
+  joint_n <- aggregate(
+    joint_success ~ generator + factors + indicators + loading + rho + n +
+      method + map,
+    joint,
+    sum,
+    na.action = stats::na.pass
+  )
+  names(joint_n)[ncol(joint_n)] <- "nt_joint_success_n"
+  joint_agg <- merge(joint_agg, joint_n,
+                     by = c(key, "method", "map"), all.x = TRUE)
+  out <- merge(out, joint_agg, by = c(key, "method", "map"), all.x = TRUE)
+  out$common_rel_nt <- out$common_mise_nt_joint / out$common_nt_joint
+  out$diag_rel_nt <- out$diag_mise_nt_joint / out$diag_nt_joint
   out[order(out$generator, out$factors, out$indicators, out$loading, out$rho,
-            out$n, out$method), ]
+            out$n, out$map, out$method), ]
 }
 
 summarise_timing <- function(rows) {
   if (!nrow(rows)) return(data.frame())
   agg <- aggregate(
     cbind(elapsed_ms, failed) ~
-      generator + factors + indicators + loading + rho + n + method + component,
+      generator + factors + indicators + loading + rho + n + method + map +
+        component,
     rows,
     summarise_vec,
     na.action = stats::na.pass
@@ -683,6 +814,7 @@ summarise_timing <- function(rows) {
     rho = agg$rho,
     n = agg$n,
     method = agg$method,
+    map = agg$map,
     component = agg$component,
     elapsed_mean_ms = agg$elapsed_ms[, "mean"],
     elapsed_median_ms = agg$elapsed_ms[, "median"],
@@ -692,7 +824,7 @@ summarise_timing <- function(rows) {
     stringsAsFactors = FALSE
   )
   out[order(out$generator, out$factors, out$indicators, out$loading, out$rho,
-            out$n, out$method, out$component), ]
+            out$n, out$map, out$method, out$component), ]
 }
 
 run_timing_study <- function(grid, opts, ml_control) {
@@ -709,18 +841,22 @@ run_timing_study <- function(grid, opts, ml_control) {
     for (rr in seq_along(draws)) {
       x <- draws[[rr]]
       for (method in opts$methods) {
-        out <- time_one_method_detail(
-          x, design, spec, method, ml_control, opts$timing_inner)
-        if (rr > opts$timing_warmup) {
-          out$generator <- g$generator
-          out$factors <- g$factors
-          out$indicators <- g$indicators
-          out$loading <- g$loading
-          out$rho <- g$rho
-          out$n <- g$n
-          out$timing_rep <- rr - opts$timing_warmup
-          row_i <- row_i + 1L
-          rows[[row_i]] <- out
+        maps <- if (method == "nt_ml") "ml" else opts$maps
+        for (map in maps) {
+          out <- time_one_method_detail(
+            x, design, spec, method, map, ml_control, opts$timing_inner)
+          if (rr > opts$timing_warmup) {
+            out$generator <- g$generator
+            out$factors <- g$factors
+            out$indicators <- g$indicators
+            out$loading <- g$loading
+            out$rho <- g$rho
+            out$n <- g$n
+            out$map <- map
+            out$timing_rep <- rr - opts$timing_warmup
+            row_i <- row_i + 1L
+            rows[[row_i]] <- out
+          }
         }
       }
     }
@@ -746,6 +882,7 @@ complexity <- complexity[order(complexity$factors, complexity$indicators), ]
 
 message("conditions: ", nrow(grid), "; reps per condition: ", opts$reps)
 message("methods: ", paste(opts$methods, collapse = ","))
+message("maps: ", paste(opts$maps, collapse = ","))
 print(complexity, row.names = FALSE)
 
 ml_control <- list(max_iter = opts$ml_max_iter, ftol = 1e-10, gtol = 1e-8)
@@ -761,16 +898,21 @@ for (cc in seq_len(nrow(grid))) {
   for (rr in seq_along(draws)) {
     x <- draws[[rr]]
     for (method in opts$methods) {
-      row_i <- row_i + 1L
-      out <- one_method(x, design, spec, target$common, method, ml_control)
-      out$generator <- g$generator
-      out$factors <- g$factors
-      out$indicators <- g$indicators
-      out$loading <- g$loading
-      out$rho <- g$rho
-      out$n <- g$n
-      out$rep <- rr
-      rows[[row_i]] <- out
+      maps <- if (method == "nt_ml") "ml" else opts$maps
+      for (map in maps) {
+        row_i <- row_i + 1L
+        out <- one_method(x, design, spec, target$common, method, map,
+                          ml_control)
+        out$generator <- g$generator
+        out$factors <- g$factors
+        out$indicators <- g$indicators
+        out$loading <- g$loading
+        out$rho <- g$rho
+        out$n <- g$n
+        out$map <- map
+        out$rep <- rr
+        rows[[row_i]] <- out
+      }
     }
   }
   message("finished condition ", cc, "/", nrow(grid))
@@ -796,6 +938,7 @@ metadata <- metadata_frame(
     loading = opts$loading,
     generators = opts$generators,
     methods = opts$methods,
+    maps = opts$maps,
     seed_base = opts$seed_base,
     ml_max_iter = opts$ml_max_iter,
     ordinal_prob = ordinal_prob,
