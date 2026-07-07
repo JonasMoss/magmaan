@@ -207,6 +207,64 @@ itemwise_h2(const Eigen::MatrixXd& R,
   return h2;
 }
 
+fit_expected<Eigen::VectorXd>
+anchor_ilm_h2(const Eigen::MatrixXd& R,
+              const std::vector<std::vector<Eigen::Index>>& blocks,
+              const std::vector<Eigen::Index>& block_of) {
+  const Eigen::Index p = R.rows();
+  Eigen::VectorXd h2(p);
+
+  for (Eigen::Index i = 0; i < p; ++i) {
+    const auto& same = blocks[static_cast<std::size_t>(
+        block_of[static_cast<std::size_t>(i)])];
+    double num = 0.0;
+    double den = 0.0;
+    Eigen::Index count = 0;
+
+    for (std::size_t a_pos = 0; a_pos < same.size(); ++a_pos) {
+      const Eigen::Index j = same[a_pos];
+      if (j == i) continue;
+
+      for (std::size_t b_pos = a_pos + 1; b_pos < same.size(); ++b_pos) {
+        const Eigen::Index k = same[b_pos];
+        if (k == i) continue;
+        const double rij = R(i, j);
+        const double rik = R(i, k);
+        const double rjk = R(j, k);
+        if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
+          return num_error("communality anchor ILM: non-finite correlation");
+        num += rjk * rij * rik;
+        den += rjk * rjk;
+        ++count;
+      }
+
+      for (Eigen::Index k = 0; k < p; ++k) {
+        if (k == i || k == j) continue;
+        if (block_of[static_cast<std::size_t>(k)] ==
+            block_of[static_cast<std::size_t>(i)])
+          continue;
+        const double rij = R(i, j);
+        const double rik = R(i, k);
+        const double rjk = R(j, k);
+        if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
+          return num_error("communality anchor ILM: non-finite correlation");
+        num += rjk * rij * rik;
+        den += rjk * rjk;
+        ++count;
+      }
+    }
+
+    if (count == 0)
+      return num_error("communality anchor ILM: no anchor rows for an indicator");
+    if (den <= kZeroTol)
+      return num_error("communality anchor ILM: zero anchor denominator");
+    h2(i) = num / den;
+  }
+  if (!h2.allFinite())
+    return num_error("communality anchor ILM: non-finite output");
+  return h2;
+}
+
 std::vector<Pair>
 within_off_pairs(const std::vector<std::vector<Eigen::Index>>& blocks) {
   std::vector<Pair> out;
@@ -421,6 +479,8 @@ const char* communality_method_name(CommunalityMethod method) {
       return "rs";
     case CommunalityMethod::InstrumentalLeastSquares:
       return "ilm";
+    case CommunalityMethod::AnchorInstrumentalLeastSquares:
+      return "anchor_ilm";
     case CommunalityMethod::GmmBlock:
       return "gmm_block";
     case CommunalityMethod::GmmFull:
@@ -441,6 +501,8 @@ estimate_h2_communalities(const Eigen::MatrixXd& S,
     case CommunalityMethod::RatioOfSums:
     case CommunalityMethod::InstrumentalLeastSquares:
       return itemwise_h2(vin->R, vin->blocks, vin->block_of, method);
+    case CommunalityMethod::AnchorInstrumentalLeastSquares:
+      return anchor_ilm_h2(vin->R, vin->blocks, vin->block_of);
     case CommunalityMethod::GmmBlock:
       return gmm_block_h2(vin->R, vin->blocks);
     case CommunalityMethod::GmmFull:

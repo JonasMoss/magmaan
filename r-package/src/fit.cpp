@@ -7760,12 +7760,17 @@ magmaan::estimate::frontier::CommunalityMethod communality_which(const std::stri
   if (k == "ilm" || k == "instrumental_least_squares" ||
       k == "instrumental-least-squares")
     return ef::CommunalityMethod::InstrumentalLeastSquares;
+  if (k == "anchor_ilm" || k == "anchor-ilm" ||
+      k == "anchor_instrumental_least_squares" ||
+      k == "anchor-instrumental-least-squares")
+    return ef::CommunalityMethod::AnchorInstrumentalLeastSquares;
   if (k == "gmm_block" || k == "gmm-block")
     return ef::CommunalityMethod::GmmBlock;
   if (k == "gmm_full" || k == "gmm-full")
     return ef::CommunalityMethod::GmmFull;
   Rcpp::stop("magmaan: unknown Guttman H method '%s' "
-             "(accepted: ar, rs, ilm, gmm_block, gmm_full)", s.c_str());
+             "(accepted: ar, rs, ilm, anchor_ilm, gmm_block, gmm_full)",
+             s.c_str());
 }
 
 magmaan::robust::frontier::Discrepancy noniter_disc(const std::string& s) {

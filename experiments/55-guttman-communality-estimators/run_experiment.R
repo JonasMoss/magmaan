@@ -273,78 +273,7 @@ make_Z <- function(blocks) {
   Z
 }
 
-correlation_from_cov <- function(s) {
-  d <- diag(s)
-  if (any(!is.finite(d) | d <= 0)) {
-    stop("covariance diagonal must be positive", call. = FALSE)
-  }
-  r <- s / sqrt(outer(d, d))
-  diag(r) <- 1
-  dimnames(r) <- dimnames(s)
-  r
-}
-
-anchor_row_cache <- new.env(parent = emptyenv())
-
-anchor_triad_rows <- function(blocks, include_cross = TRUE) {
-  key <- paste(include_cross, paste(blocks, collapse = ","), sep = "|")
-  if (exists(key, envir = anchor_row_cache, inherits = FALSE)) {
-    return(get(key, envir = anchor_row_cache, inherits = FALSE))
-  }
-  p <- length(blocks)
-  target <- integer()
-  own_anchor <- integer()
-  other_anchor <- integer()
-  for (i in seq_len(p)) {
-    same <- setdiff(which(blocks == blocks[[i]]), i)
-    if (length(same) >= 2L) {
-      cmb <- utils::combn(same, 2L)
-      target <- c(target, rep(i, ncol(cmb)))
-      own_anchor <- c(own_anchor, cmb[1L, ])
-      other_anchor <- c(other_anchor, cmb[2L, ])
-    }
-    if (include_cross && length(same)) {
-      cross <- which(blocks != blocks[[i]])
-      if (length(cross)) {
-        grid <- expand.grid(j = same, k = cross)
-        target <- c(target, rep(i, nrow(grid)))
-        own_anchor <- c(own_anchor, grid$j)
-        other_anchor <- c(other_anchor, grid$k)
-      }
-    }
-  }
-  out <- list(i = target, j = own_anchor, k = other_anchor,
-              n = length(target))
-  assign(key, out, envir = anchor_row_cache)
-  out
-}
-
-anchor_gamma_identity <- function(r, blocks, include_cross = TRUE,
-                                  tol = sqrt(.Machine$double.eps)) {
-  rows <- anchor_triad_rows(blocks, include_cross = include_cross)
-  p <- nrow(r)
-  a <- r[cbind(rows$j, rows$k)]
-  b <- r[cbind(rows$i, rows$j)] * r[cbind(rows$i, rows$k)]
-  num <- as.numeric(rowsum(a * b, rows$i, reorder = FALSE))
-  den <- as.numeric(rowsum(a * a, rows$i, reorder = FALSE))
-  gamma <- rep(NA_real_, p)
-  ok <- is.finite(den) & den > tol
-  gamma[ok] <- num[ok] / den[ok]
-  list(gamma = gamma, rows = rows$n)
-}
-
-anchor_guttman_h <- function(s, blocks) {
-  r <- correlation_from_cov(s)
-  fit <- anchor_gamma_identity(r, blocks, include_cross = TRUE)
-  h2 <- diag(s) * fit$gamma
-  H <- s
-  diag(H) <- h2
-  dimnames(H) <- dimnames(s)
-  list(h2 = h2, H = H, gamma = fit$gamma, rows = fit$rows)
-}
-
 estimate_guttman_h <- function(s, blocks, method) {
-  if (method == "anchor_ilm") return(anchor_guttman_h(s, blocks))
   magmaan::guttman_h(s, blocks, method = guttman_backend_method(method))
 }
 
