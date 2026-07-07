@@ -72,6 +72,24 @@ if (has_timing) {
   timing$estimator_key <- paste(timing$method, timing$map, sep = "|")
   timing$Estimator <- estimator_label(timing$method, timing$map)
 }
+focus_keys <- intersect(
+  c("rs|incidence", "ilm|incidence", "ilm|aligned",
+    "nt_gls_block|aligned", "nt_ml|ml"),
+  unique(summary$estimator_key)
+)
+guttman_focus_keys <- setdiff(focus_keys, "nt_ml|ml")
+report_summary <- subset(summary, estimator_key %in% focus_keys)
+report_timing <- if (has_timing) {
+  subset(timing, estimator_key %in% focus_keys)
+} else {
+  data.frame()
+}
+probe_keys <- intersect(
+  c("ilm|incidence", "ilm|aligned", "ilm|block_aligned",
+    "nt_gls_block|incidence", "nt_gls_block|aligned",
+    "nt_gls_block|block_aligned"),
+  unique(summary$estimator_key)
+)
 fmt <- function(x, digits = 2) {
   ifelse(is.na(x), "", formatC(x, format = "f", digits = digits))
 }
@@ -85,9 +103,9 @@ meta <- function(key) {
 }
 pick1 <- function(x) if (length(x)) x[[1]] else NA_real_
 
-non_nt <- subset(summary, method != "nt_ml")
-normal <- subset(summary, generator == "normal")
-ordinal <- subset(summary, generator == "ordinal")
+non_nt <- subset(report_summary, method != "nt_ml")
+normal <- subset(report_summary, generator == "normal")
+ordinal <- subset(report_summary, generator == "ordinal")
 
 median_by_estimator <- function(data, value) {
   if (!nrow(data)) {
@@ -112,12 +130,12 @@ acc <- Reduce(function(x, y) merge(x, y, by = c("method", "map", "estimator_key"
                 transform(ordinal_rs, ordinal_rel_rs = value)[c("method", "map", "estimator_key", "ordinal_rel_rs")]
               ))
 acc$Estimator <- estimator_label(acc$method, acc$map)
-acc <- acc[match(guttman_estimator_order, acc$estimator_key),
+acc <- acc[match(guttman_focus_keys, acc$estimator_key),
            c("Estimator", "normal_rel_nt", "normal_rel_rs", "ordinal_rel_rs")]
 names(acc) <- c("Estimator", "Normal / NT", "Normal / RS", "Ordinal / RS")
 for (j in 2:ncol(acc)) acc[[j]] <- fmt(acc[[j]], 3)
 
-rank_data <- subset(normal, method %in% c("rs", "ilm", "nt_gls_block", "nt_gls_full"))
+rank_data <- subset(normal, method %in% c("rs", "ilm", "nt_gls_block"))
 best <- median_by_estimator(rank_data, "common_rel_nt")
 best <- best[which.min(best$value), , drop = FALSE]
 best_method <- estimator_label(best$method, best$map)
@@ -130,9 +148,9 @@ ilm_rel_rs <- median(non_nt$common_rel_rs[non_nt$method == "ilm" &
 
 rt <- aggregate(cbind(elapsed_median_ms, elapsed_p90_ms, fail_rate) ~
                   method + map + estimator_key + Estimator,
-                summary,
+                report_summary,
                 function(x) median(x, na.rm = TRUE))
-rt <- rt[match(estimator_order, rt$estimator_key),
+rt <- rt[match(focus_keys, rt$estimator_key),
          c("Estimator", "elapsed_median_ms", "elapsed_p90_ms", "fail_rate")]
 names(rt) <- c("Estimator", "Median Time (ms)", "P90 Time (ms)",
                "Failure Rate")
@@ -150,17 +168,18 @@ runtime_factor <- {
 
 small_n <- min(summary$n)
 hey_small <- aggregate(improper_rate ~ estimator_key,
-                       subset(summary, n == small_n),
+                       subset(report_summary, n == small_n),
                        median, na.rm = TRUE, na.action = na.pass)
 hey_small <- stats::setNames(hey_small$improper_rate, hey_small$estimator_key)
 
 bad_cols <- c("fail_rate", "improper_rate", "sample_singular_rate",
               "h_diag_bad_rate", "h_indef_rate", "score_nonpos_rate",
               "common_indef_rate")
-bad <- aggregate(summary[bad_cols],
-                 list(n = summary$n, method = summary$method,
-                      map = summary$map, estimator_key = summary$estimator_key,
-                      Estimator = summary$Estimator),
+bad <- aggregate(report_summary[bad_cols],
+                 list(n = report_summary$n, method = report_summary$method,
+                      map = report_summary$map,
+                      estimator_key = report_summary$estimator_key,
+                      Estimator = report_summary$Estimator),
                  median, na.rm = TRUE, na.action = na.pass)
 bad <- subset(bad, n %in% head(sort(unique(summary$n)), 3))
 bad <- bad[order(bad$n, match(bad$method,
@@ -173,7 +192,7 @@ names(bad_show) <- c("N", "Estimator", "Fail", "Heywood", "S Singular",
 for (j in 3:ncol(bad_show)) bad_show[[j]] <- pct(bad_show[[j]])
 
 if (has_timing) {
-  timing_total <- subset(timing, component == "total")
+  timing_total <- subset(report_timing, component == "total")
   timing_by_n <- aggregate(cbind(elapsed_median_ms, fail_rate) ~
                              n + method + map + estimator_key + Estimator,
                            timing_total, median, na.rm = TRUE,
@@ -186,7 +205,7 @@ if (has_timing) {
     timing_by_n$elapsed_median_ms
   timing_by_n <- timing_by_n[order(timing_by_n$n,
                                    match(timing_by_n$estimator_key,
-                                         estimator_order)), ]
+                                         focus_keys)), ]
   timing_n_show <- timing_by_n[c("n", "Estimator", "elapsed_median_ms",
                                  "nt_over_method", "fail_rate")]
   names(timing_n_show) <- c("N", "Estimator", "Median Time (ms)",
@@ -212,10 +231,9 @@ if (has_timing) {
     extract_common = "Extract common"
   )
   component_order <- names(component_label)
-  timing_comp <- subset(timing, component != "total" &
+  timing_comp <- subset(report_timing, component != "total" &
                           method %in% c("ilm", "nt_gls_block",
-                                        "nt_gls_full", "nt_ml") &
-                          map %in% c("incidence", "block_aligned", "ml"))
+                                        "nt_ml"))
   timing_comp <- aggregate(elapsed_median_ms ~
                              method + map + estimator_key + Estimator +
                              component,
@@ -223,7 +241,7 @@ if (has_timing) {
                            na.action = na.pass)
   timing_comp$Component <- component_label[timing_comp$component]
   timing_comp <- timing_comp[order(match(timing_comp$estimator_key,
-                                         estimator_order),
+                                         focus_keys),
                                    match(timing_comp$component,
                                          component_order)), ]
   timing_comp_show <- timing_comp[c("Estimator", "Component",
@@ -240,7 +258,7 @@ if (has_timing) {
 
 cx <- complexity[which.max(complexity$p), ]
 
-accuracy_methods <- subset(summary, method %in% method_order)
+accuracy_methods <- subset(report_summary, method %in% method_order)
 
 group_accuracy <- function(by) {
   cols <- c("common_mise", "diag_mise", "common_rel_rs", "common_rel_nt",
@@ -250,7 +268,7 @@ group_accuracy <- function(by) {
                                       "Estimator")],
                    median, na.rm = TRUE, na.action = na.pass)
   ord <- do.call(order, c(out[by],
-                          list(match(out$estimator_key, estimator_order))))
+                          list(match(out$estimator_key, focus_keys))))
   out <- out[ord, , drop = FALSE]
   show <- out[c(by, "Estimator", cols)]
   names(show) <- c(by, "Estimator", "Common MISE",
@@ -270,7 +288,7 @@ group_accuracy <- function(by) {
 factor_accuracy_show <- group_accuracy(c("generator", "factors"))
 n_accuracy_show <- group_accuracy(c("generator", "n"))
 
-hs_accuracy_methods <- subset(summary, factors == 3 & indicators == 3 &
+hs_accuracy_methods <- subset(report_summary, factors == 3 & indicators == 3 &
                                 method %in% method_order)
 if (nrow(hs_accuracy_methods)) {
   saved_accuracy_methods <- accuracy_methods
@@ -281,7 +299,7 @@ if (nrow(hs_accuracy_methods)) {
   hs_accuracy_show <- data.frame()
 }
 
-winner_source <- subset(summary, method %in% guttman_order &
+winner_source <- subset(report_summary, method %in% guttman_order &
                           is.finite(common_mise))
 if (nrow(winner_source)) {
   key_cols <- c("generator", "factors", "indicators", "loading", "rho", "n")
@@ -309,7 +327,7 @@ if (nrow(winner_source)) {
   winner_counts <- winner_counts[order(winner_counts$generator,
                                        winner_counts$factors,
                                        match(winner_counts$estimator_key,
-                                             estimator_order)), ]
+                                             focus_keys)), ]
   winner_show <- winner_counts[c("generator", "factors", "Estimator", "wins",
                                  "conditions", "share")]
   names(winner_show) <- c("Generator", "Factors", "Estimator", "Wins",
@@ -318,6 +336,30 @@ if (nrow(winner_source)) {
 } else {
   winner_show <- data.frame()
 }
+
+map_probe_source <- subset(summary, estimator_key %in% probe_keys)
+if (nrow(map_probe_source)) {
+  map_probe <- aggregate(cbind(common_mise, common_rel_nt, common_rel_rs,
+                               nt_joint_success_rate, fail_rate,
+                               improper_rate) ~
+                           method + map + estimator_key + Estimator,
+                         map_probe_source, median, na.rm = TRUE,
+                         na.action = na.pass)
+  map_probe <- map_probe[order(match(map_probe$estimator_key, probe_keys)), ]
+  map_probe_show <- map_probe[c("Estimator", "common_mise", "common_rel_nt",
+                                "common_rel_rs", "nt_joint_success_rate",
+                                "fail_rate", "improper_rate")]
+  names(map_probe_show) <- c("Estimator", "Common MISE", "Common / NT",
+                             "Common / RS", "NT Joint", "Fail", "Heywood")
+  map_probe_show$`Common MISE` <- fmt_g(map_probe_show$`Common MISE`)
+  map_probe_show$`Common / NT` <- fmt(map_probe_show$`Common / NT`, 3)
+  map_probe_show$`Common / RS` <- fmt(map_probe_show$`Common / RS`, 3)
+  map_probe_show$`NT Joint` <- pct(map_probe_show$`NT Joint`)
+  map_probe_show$Fail <- pct(map_probe_show$Fail)
+  map_probe_show$Heywood <- pct(map_probe_show$Heywood)
+} else {
+  map_probe_show <- data.frame()
+}
 ```
 
 ## Question
@@ -325,12 +367,11 @@ if (nrow(winner_source)) {
 Which closed-form communality estimator should the Guttman CFA paper recommend,
 once the obvious Spearman variants are compared with normal-theory ML and with a
 categorical data arm? The comparison now crosses the communality rule with
-several closed-form Guttman reconstruction maps. The baseline is the traditional
-incidence-composite reconstruction,
-`H Z (Z' H Z)^-1 Z' H`. The added maps use a preliminary loading representative
-to construct loading-aligned score coefficients, with an optional block
-whitening step. The estimand is the reconstructed common covariance matrix, not
-only the diagonal communalities.
+several closed-form Guttman reconstruction maps, but the displayed report is
+focused on a small candidate set. The baseline is the traditional
+incidence-composite reconstruction, `H Z (Z' H Z)^-1 Z' H`. The main new map is
+the loading-aligned score rule. The estimand is the reconstructed common
+covariance matrix, not only the diagonal communalities.
 
 ## Short answer
 
@@ -365,6 +406,13 @@ Heywood-like rate is `r pct(hey_small[["ilm|incidence"]])` for ILM / incidence,
 `r pct(hey_small[["rs|incidence"]])` for RS / incidence, and
 `r pct(hey_small[["nt_ml|ml"]])` for NT ML, pooling over the displayed cells.
 
+The invariance story is not solved yet. `aligned` means loading-aligned scores,
+not diagonal standardization. It is a cleaner map once \(H\) has been supplied,
+but the current triad \(H\)-estimators are still named-coordinate constructions.
+They are invariant to ordinary rescaling through the correlation scale, not to
+arbitrary within-block linear transforms. A genuinely block-invariant Guttman
+class would need a block-equivariant \(H\) rule and a block-equivariant map.
+
 ## Evidence
 
 ### Accuracy
@@ -391,6 +439,32 @@ the historical \(Z\)-score map. `aligned` replaces \(Z\) by
 incidence Guttman loading representative. `block-aligned` first whitens each
 indicator block by its observed covariance and then applies the aligned score
 rule in those canonical coordinates.
+
+The next table is a compact map probe rather than part of the main candidate
+set. It checks whether the more ambitious block-aligned map helps after the same
+communality rule has been chosen.
+
+```{r}
+if (nrow(map_probe_show)) {
+  knitr::kable(map_probe_show, row.names = FALSE)
+}
+```
+
+### Invariance Target
+
+The report is focused because the statistical target is now clearer. The cheap
+candidate is ILM for the \(H\)-diagonal and loading-aligned scores for the
+Guttman map. The efficiency-oriented candidate is NT-GLS block for the
+\(H\)-diagonal and the same loading-aligned map.
+
+The block-invariance target is stricter. The loading-aligned map is equivariant
+if \(H\) and the preliminary loading representative are transformed together.
+The present \(H\)-diagonal rules do not have that property under arbitrary
+within-block transforms: triad identities rely on named pure indicators with
+diagonal residual covariance, and a general block transform destroys that
+diagonal residual structure. So the current experiment should be read as
+evidence for the map-side improvement and for cheap/NT-weighted triad rules,
+not as evidence that the full estimator is block invariant.
 
 ### Condition Breakdown
 
@@ -516,6 +590,9 @@ within-block triads across factors.
 
 - Results here are generated from `reps = ` `r meta("reps")`; use the full run
   before quoting numbers.
+- The default run is intentionally focused. The runner still accepts AR,
+  NT-GLS-full, and `diag_aligned`, but the report centers on the small candidate
+  set plus a compact block-aligned map probe.
 - Ratios against NT ML are paired by replication and use only replications where
   both estimators succeeded. The raw marginal NT ratio is still written to
   `summary.csv` as `common_rel_nt_marginal` for auditing selective NT failure.
