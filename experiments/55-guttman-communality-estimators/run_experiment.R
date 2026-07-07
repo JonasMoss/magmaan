@@ -9,6 +9,24 @@ source(file.path(
 
 core <- magmaan::magmaan_core
 
+canonical_method <- function(method) {
+  out <- method
+  out[out == "gmm_block"] <- "nt_gls_block"
+  out[out == "gmm_full"] <- "nt_gls_full"
+  out
+}
+
+guttman_backend_method <- function(method) {
+  if (method == "nt_gls_block") return("gmm_block")
+  if (method == "nt_gls_full") return("gmm_full")
+  method
+}
+
+accepted_methods <- c(
+  "ar", "rs", "ilm", "nt_gls_block", "nt_gls_full",
+  "gmm_block", "gmm_full", "nt_ml"
+)
+
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
@@ -25,7 +43,8 @@ usage <- function() {
     "  --rho LIST           Exchangeable latent correlations. Full default: 0,.4.\n",
     "  --loading LIST       Loading patterns: mild,wide. Full default: mild,wide.\n",
     "  --generators LIST    Data generators: normal,ordinal. Default: both.\n",
-    "  --methods LIST       Methods: ar,rs,ilm,gmm_block,gmm_full,nt_ml.\n",
+    "  --methods LIST       Methods: ar,rs,ilm,nt_gls_block,nt_gls_full,nt_ml.\n",
+    "                       gmm_block/gmm_full are accepted aliases.\n",
     "  --timing-reps N      Dedicated timing reps per cell. Full default: 20.\n",
     "  --timing-warmup N    Unrecorded timing warmups per cell. Default: 2.\n",
     "  --timing-inner N     Repeated calls per timing component. Full default: 10.\n",
@@ -48,7 +67,7 @@ parse_args <- function(args) {
     rho = c(0, .4),
     loading = c("mild", "wide"),
     generators = c("normal", "ordinal"),
-    methods = c("ar", "rs", "ilm", "gmm_block", "gmm_full", "nt_ml"),
+    methods = c("ar", "rs", "ilm", "nt_gls_block", "nt_gls_full", "nt_ml"),
     timing_reps = 20L,
     timing_warmup = 2L,
     timing_inner = 10L,
@@ -153,8 +172,9 @@ parse_args <- function(args) {
   if (length(bad)) stop("unknown loading patterns: ", paste(bad, collapse = ","), call. = FALSE)
   bad <- setdiff(opts$generators, c("normal", "ordinal"))
   if (length(bad)) stop("unknown generators: ", paste(bad, collapse = ","), call. = FALSE)
-  bad <- setdiff(opts$methods, c("ar", "rs", "ilm", "gmm_block", "gmm_full", "nt_ml"))
+  bad <- setdiff(opts$methods, accepted_methods)
   if (length(bad)) stop("unknown methods: ", paste(bad, collapse = ","), call. = FALSE)
+  opts$methods <- unique(canonical_method(opts$methods))
   if (!is.finite(opts$timing_reps) || opts$timing_reps < 0) {
     stop("--timing-reps must be non-negative", call. = FALSE)
   }
@@ -313,7 +333,8 @@ one_method <- function(x, design, spec, target_common, method, ml_control) {
     timed <- time_call({
       s <- sample_cov_n(x, design$vars)
       h <- tryCatch(
-        magmaan::guttman_h(s, design$blocks, method = method),
+        magmaan::guttman_h(s, design$blocks,
+                           method = guttman_backend_method(method)),
         error = function(e) e
       )
       if (inherits(h, "error")) {
@@ -462,7 +483,8 @@ time_one_method_detail <- function(x, design, spec, method, ml_control,
     if (cov_t$ok) {
       h_t <- time_repeat(
         timing_inner,
-        function() magmaan::guttman_h(cov_t$value, design$blocks, method = method))
+        function() magmaan::guttman_h(
+          cov_t$value, design$blocks, method = guttman_backend_method(method)))
       h_failed <- !h_t$ok || any(!is.finite(h_t$value$h2))
       h_message <- if (!h_t$ok) {
         h_t$message
