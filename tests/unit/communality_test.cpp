@@ -44,9 +44,43 @@ TEST_CASE("communality rules recover exact one-factor h2") {
        {CommunalityMethod::AverageRatio,
         CommunalityMethod::RatioOfSums,
         CommunalityMethod::InstrumentalLeastSquares,
+        CommunalityMethod::AnchorInstrumentalLeastSquares,
         CommunalityMethod::GmmBlock,
         CommunalityMethod::GmmFull}) {
     auto h2 = estimate_h2_communalities(R, blocks, method);
+    REQUIRE(h2.has_value());
+    CHECK((*h2 - expected).cwiseAbs().maxCoeff() < 1e-10);
+  }
+}
+
+TEST_CASE("anchor communality recovers exact two-factor h2") {
+  const std::vector<double> lambda = {0.5, 0.7, 0.9, 0.6, 0.8, 0.55};
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 1, 1, 1};
+
+  for (const double rho : {0.0, 0.4}) {
+    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(
+        static_cast<Eigen::Index>(lambda.size()),
+        static_cast<Eigen::Index>(lambda.size()));
+    for (Eigen::Index i = 0; i < R.rows(); ++i) {
+      for (Eigen::Index j = i + 1; j < R.cols(); ++j) {
+        const double phi = blocks[static_cast<std::size_t>(i)] ==
+                                   blocks[static_cast<std::size_t>(j)]
+                               ? 1.0
+                               : rho;
+        R(i, j) = lambda[static_cast<std::size_t>(i)] *
+                  lambda[static_cast<std::size_t>(j)] * phi;
+        R(j, i) = R(i, j);
+      }
+    }
+
+    Eigen::VectorXd expected(static_cast<Eigen::Index>(lambda.size()));
+    for (Eigen::Index i = 0; i < expected.size(); ++i) {
+      expected(i) = lambda[static_cast<std::size_t>(i)] *
+                    lambda[static_cast<std::size_t>(i)];
+    }
+
+    auto h2 = estimate_h2_communalities(
+        R, blocks, CommunalityMethod::AnchorInstrumentalLeastSquares);
     REQUIRE(h2.has_value());
     CHECK((*h2 - expected).cwiseAbs().maxCoeff() < 1e-10);
   }

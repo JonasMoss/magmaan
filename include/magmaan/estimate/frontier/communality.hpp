@@ -17,6 +17,7 @@ enum class CommunalityMethod : std::uint8_t {
   AverageRatio,                // mean_jk r_ij r_ik / r_jk
   RatioOfSums,                 // sum_jk r_ij r_ik / sum_jk r_jk
   InstrumentalLeastSquares,    // sum_jk r_jk r_ij r_ik / sum_jk r_jk^2
+  AnchorInstrumentalLeastSquares,  // same, adding cross-block anchor rows
   GmmBlock,                    // triad-moment GMM, independent block weights
   GmmFull,                     // triad-moment GMM, one joint selected weight
 };

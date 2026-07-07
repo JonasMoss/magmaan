@@ -11,14 +11,16 @@
 #' @param S Observed covariance or correlation matrix.
 #' @param blocks One simple-structure factor/block label per observed variable.
 #' @param method Communality rule: `"ilm"` (instrumental least squares),
-#'   `"rs"` (ratio of sums), `"ar"` (average ratio), `"gmm_block"` (blockwise
-#'   triad GMM), or `"gmm_full"` (joint selected triad GMM).
+#'   `"anchor_ilm"` (identity-weighted anchor triads), `"rs"` (ratio of sums),
+#'   `"ar"` (average ratio), `"gmm_block"` (blockwise triad GMM), or
+#'   `"gmm_full"` (joint selected triad GMM).
 #' @return A list with correlation-scale communalities `h2`, covariance-scale
 #'   diagonal `h_diag`, and `H`, equal to `S` with the diagonal replaced by
 #'   `h_diag`.
 #' @export
 guttman_h <- function(S, blocks,
-                      method = c("ilm", "rs", "ar", "gmm_block", "gmm_full")) {
+                      method = c("ilm", "anchor_ilm", "rs", "ar",
+                                 "gmm_block", "gmm_full")) {
   method <- match.arg(method)
   S <- as.matrix(S)
   if (nrow(S) != ncol(S)) {

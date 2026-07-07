@@ -627,11 +627,11 @@ same-block anchor with either another same-block anchor or a cross-block anchor.
   `magmaan::sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` and then treated as
   continuous. It is a stress arm for the covariance estimator, not an ordinal
   latent-response estimator.
-- Most H-diagonal rules are computed by `magmaan::guttman_h()`. In the current
+- The H-diagonal rules are computed by `magmaan::guttman_h()`. In the current
   C++ API, `nt_gls_block` and `nt_gls_full` are the experiment names for the
   existing `gmm_block` and `gmm_full` methods, which use the normal-theory
-  covariance of sample correlations as the plug-in GLS weight. `anchor_ilm` and
-  the reconstruction-map variants are experiment-local R code for now. The full
+  covariance of sample correlations as the plug-in GLS weight. The
+  reconstruction-map variants are experiment-local R code for now. The full
   package frontier CFA estimator still uses the existing Guttman map; this
   experiment is evidence for which communality rule and map to promote.
 - Per-replication covariance/sample-statistics construction uses ML scaling
