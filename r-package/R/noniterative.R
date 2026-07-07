@@ -10,18 +10,22 @@
 #'
 #' @param S Observed covariance or correlation matrix.
 #' @param blocks One simple-structure factor/block label per observed variable.
-#' @param method Communality rule: `"ilm"` (instrumental least squares),
-#'   `"anchor_ilm"` (identity-weighted anchor triads), `"rs"` (ratio of sums),
-#'   `"ar"` (average ratio), `"gmm_block"` (blockwise triad GMM), or
-#'   `"gmm_full"` (joint selected triad GMM).
+#' @param method Communality rule: `"triad_ls"` (identity-weighted triad least
+#'   squares), `"anchor_triad_ls"` (same with cross-block anchor rows), `"rs"`
+#'   (ratio of sums), `"ar"` (average ratio), `"gmm_block"` (blockwise triad
+#'   GMM), or `"gmm_full"` (joint selected triad GMM). Historical aliases
+#'   `"ilm"` and `"anchor_ilm"` are accepted.
 #' @return A list with correlation-scale communalities `h2`, covariance-scale
 #'   diagonal `h_diag`, and `H`, equal to `S` with the diagonal replaced by
 #'   `h_diag`.
 #' @export
 guttman_h <- function(S, blocks,
-                      method = c("ilm", "anchor_ilm", "rs", "ar",
-                                 "gmm_block", "gmm_full")) {
+                      method = c("triad_ls", "anchor_triad_ls", "rs", "ar",
+                                 "gmm_block", "gmm_full", "ilm",
+                                 "anchor_ilm")) {
   method <- match.arg(method)
+  if (method == "ilm") method <- "triad_ls"
+  if (method == "anchor_ilm") method <- "anchor_triad_ls"
   S <- as.matrix(S)
   if (nrow(S) != ncol(S)) {
     stop("guttman_h(): `S` must be square", call. = FALSE)

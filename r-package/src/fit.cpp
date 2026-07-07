@@ -7757,19 +7757,18 @@ magmaan::estimate::frontier::CommunalityMethod communality_which(const std::stri
     return ef::CommunalityMethod::AverageRatio;
   if (k == "rs" || k == "ratio_of_sums" || k == "ratio-of-sums")
     return ef::CommunalityMethod::RatioOfSums;
-  if (k == "ilm" || k == "instrumental_least_squares" ||
-      k == "instrumental-least-squares")
-    return ef::CommunalityMethod::InstrumentalLeastSquares;
-  if (k == "anchor_ilm" || k == "anchor-ilm" ||
-      k == "anchor_instrumental_least_squares" ||
-      k == "anchor-instrumental-least-squares")
-    return ef::CommunalityMethod::AnchorInstrumentalLeastSquares;
+  if (k == "triad_ls" || k == "triad-ls" || k == "ilm")
+    return ef::CommunalityMethod::TriadLeastSquares;
+  if (k == "anchor_triad_ls" || k == "anchor-triad-ls" ||
+      k == "anchor_ilm" || k == "anchor-ilm")
+    return ef::CommunalityMethod::AnchorTriadLeastSquares;
   if (k == "gmm_block" || k == "gmm-block")
     return ef::CommunalityMethod::GmmBlock;
   if (k == "gmm_full" || k == "gmm-full")
     return ef::CommunalityMethod::GmmFull;
   Rcpp::stop("magmaan: unknown Guttman H method '%s' "
-             "(accepted: ar, rs, ilm, anchor_ilm, gmm_block, gmm_full)",
+             "(accepted: ar, rs, triad_ls, anchor_triad_ls, gmm_block, "
+             "gmm_full)",
              s.c_str());
 }
 
@@ -7819,7 +7818,7 @@ Rcpp::List wrap_noniter_inference(const magmaan::robust::frontier::NonIterativeI
 // [[Rcpp::export]]
 Rcpp::List frontier_guttman_h_impl(Rcpp::NumericMatrix S,
                                    Rcpp::IntegerVector blocks,
-                                   std::string method = "ilm") {
+                                   std::string method = "triad_ls") {
   if (S.nrow() != S.ncol())
     Rcpp::stop("magmaan: frontier_guttman_h() requires a square covariance matrix");
   if (blocks.size() != S.nrow())

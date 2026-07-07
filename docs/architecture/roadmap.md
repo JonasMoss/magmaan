@@ -189,9 +189,10 @@ golden `parTable()` fixtures.
   The H-diagonal communality rules from the follow-up Guttman work are now a
   separate frontier primitive:
   `estimate::frontier::estimate_h_communalities()` / R `guttman_h()` compute
-  AR, RS, ILM, anchor-ILM (identity-weighted one-same-block anchor triads),
-  blockwise triad-GMM, and full selected-triad-GMM diagonals for a fixed
-  simple-structure indicator block vector. They return `h2`, `diag(H)`, and
+  AR, RS, triad least squares, anchor triad least squares
+  (identity-weighted one-same-block anchor triads), blockwise triad-GMM, and
+  full selected-triad-GMM diagonals for a fixed simple-structure indicator
+  block vector. They return `h2`, `diag(H)`, and
   `H = S` with only the diagonal replaced; the full non-iterative CFA map still
   uses its existing Guttman diagonal until the point-estimator lane chooses the
   promoted rule. `experiments/55-guttman-communality-estimators` now times the

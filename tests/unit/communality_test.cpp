@@ -43,8 +43,8 @@ TEST_CASE("communality rules recover exact one-factor h2") {
   for (CommunalityMethod method :
        {CommunalityMethod::AverageRatio,
         CommunalityMethod::RatioOfSums,
-        CommunalityMethod::InstrumentalLeastSquares,
-        CommunalityMethod::AnchorInstrumentalLeastSquares,
+        CommunalityMethod::TriadLeastSquares,
+        CommunalityMethod::AnchorTriadLeastSquares,
         CommunalityMethod::GmmBlock,
         CommunalityMethod::GmmFull}) {
     auto h2 = estimate_h2_communalities(R, blocks, method);
@@ -80,7 +80,7 @@ TEST_CASE("anchor communality recovers exact two-factor h2") {
     }
 
     auto h2 = estimate_h2_communalities(
-        R, blocks, CommunalityMethod::AnchorInstrumentalLeastSquares);
+        R, blocks, CommunalityMethod::AnchorTriadLeastSquares);
     REQUIRE(h2.has_value());
     CHECK((*h2 - expected).cwiseAbs().maxCoeff() < 1e-10);
   }
@@ -130,6 +130,6 @@ TEST_CASE("communality estimator rejects under-sized factor blocks") {
   const std::vector<std::int32_t> blocks = {0, 0, 1, 1};
 
   auto h2 = estimate_h2_communalities(
-      R, blocks, CommunalityMethod::InstrumentalLeastSquares);
+      R, blocks, CommunalityMethod::TriadLeastSquares);
   CHECK_FALSE(h2.has_value());
 }
