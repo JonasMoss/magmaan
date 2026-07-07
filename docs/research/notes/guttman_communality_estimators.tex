@@ -740,17 +740,9 @@ For fixed \(W\),
 Thus adding the rank restrictions changes the rows and the weight, not the
 closed-form character of the communality solve.
 
-The efficiency statement is the usual GMM one. If \(W\) converges to the
-generalized inverse of the asymptotic covariance of the stacked moments, then
-\eqref{eq:affine-gmm-solve} is efficient within the declared affine moment
-family. If the chosen anchor triads and pure tetrads form a locally complete set
-of off-diagonal independent-clusters restrictions, their optimally weighted GMM
-estimator is first-order equivalent to the corresponding off-diagonal
-minimum-distance estimator for \(c\). Under normality, the convenient plug-in
-choice is the normal-theory covariance of the sample covariance or correlation
-matrix pushed through the Jacobian of \(m(c;S)\), with \(c\) replaced by any
-regular preliminary estimate. This gives a one-step efficient version while
-keeping the final update linear.
+The efficiency statement is the usual GMM one, but there are two distinct
+efficiency targets. The next section separates efficiency within the affine
+anchor-moment family from efficiency for the full CFA estimator.
 
 There is still a boundary. If both anchors lie outside the target block, then
 \[
@@ -765,6 +757,221 @@ when the displayed factor covariances are nonzero. Such rows are exact, but
 they introduce latent-correlation nuisance parameters. They belong to a larger
 nonlinear or one-step-linearized GMM system, not to the purely affine
 communality solve above.
+
+\section{Efficiency of the extended anchor rule}
+
+It is helpful to state the asymptotic problem on the correlation scale. In this
+section \(c\) denotes the correlation-scale communality vector \(\gamma\); the
+covariance-scale target is recovered by multiplying by the observed variances.
+Let \(r_n\) collect the off-diagonal sample correlations, and suppose
+\[
+  \sqrt n(r_n-r_0)\rightsquigarrow N(0,\Gamma_r).
+\]
+Let \(m(c;r)\) be the stacked affine anchor system, possibly augmented by pure
+tetrads:
+\[
+  m(c;r)=M(r)c+e(r).
+\]
+At the population point \((c_0,r_0)\), write
+\[
+  G_c=\left.\frac{\partial m(c;r)}{\partial c}\right|_{c_0,r_0},
+  \qquad
+  G_r=\left.\frac{\partial m(c;r)}{\partial r}\right|_{c_0,r_0},
+  \qquad
+  \Omega_m=G_r\Gamma_rG_r\T .
+\]
+Assume the moments are regular and \(G_c\) has full column rank after redundant
+rows are removed.
+
+\begin{proposition}[Optimal affine anchor GMM]
+\label{prop:optimal-anchor-gmm}
+If \(W_n\to W\), then the estimator obtained from
+\eqref{eq:affine-gmm-solve} has first-order covariance
+\[
+  V(W)
+  =
+  (G_c\T W G_c)^{+}
+  G_c\T W\Omega_m W G_c
+  (G_c\T W G_c)^{+},
+\]
+whenever the displayed products have the required rank. The minimum covariance
+within this declared moment family is obtained by
+\[
+  W=\Omega_m^{+},
+  \qquad
+  V_{\mathrm{anchor}}
+  =
+  (G_c\T\Omega_m^{+}G_c)^{+}.
+\]
+\end{proposition}
+
+\begin{proof}
+This is the standard linearization of a just-identified or overidentified GMM
+estimator. At the population point \(m(c_0;r_0)=0\), so
+\[
+  0
+  =
+  m(\hat c;r_n)
+  =
+  G_c(\hat c-c_0)+G_r(r_n-r_0)+o_p(n^{-1/2})
+\]
+after premultiplication by the weighted normal-equation operator. Substituting
+the limiting covariance of \(G_r(r_n-r_0)\) gives the displayed sandwich. The
+usual GMM projection argument gives the minimizing weight
+\(\Omega_m^{+}\).
+\end{proof}
+
+Thus the identity-weighted estimator used in the first experiment,
+\texttt{anchor\_ilm}, should be read as a cheap member of the family, not as an
+efficient estimator in general. It is first-order efficient only in special
+balanced cases where the identity weight is equivalent to \(\Omega_m^{+}\) on
+the column space that estimates \(c\).
+
+The relation to a full off-diagonal minimum-distance estimator is also
+standard. Let the off-diagonal independent-clusters correlation model have a
+local parameterization
+\[
+  r=\rho(c,\nu),
+\]
+where \(c\) is the communality target and \(\nu\) contains nuisance coordinates
+such as latent correlations and loading signs or scales not represented by
+\(c\). Let
+\[
+  D_c=\frac{\partial \rho(c,\nu)}{\partial c},
+  \qquad
+  D_\nu=\frac{\partial \rho(c,\nu)}{\partial \nu}.
+\]
+The ADF information for \(c\), after profiling out \(\nu\), is
+\[
+  I_{c\mid\nu}
+  =
+  D_c\T P_\nu D_c,
+\]
+where
+\[
+  P_\nu
+  =
+  \Gamma_r^{-1}
+  -
+  \Gamma_r^{-1}D_\nu
+  (D_\nu\T\Gamma_r^{-1}D_\nu)^{+}
+  D_\nu\T\Gamma_r^{-1}
+\]
+when \(\Gamma_r\) is nonsingular, with generalized inverses used otherwise.
+
+\begin{proposition}[When anchor GMM matches off-diagonal ADF]
+\label{prop:anchor-adf}
+Suppose \(m(c;\rho(c,\nu))=0\) in a neighborhood of the population point. Then
+\[
+  G_rD_\nu=0,
+  \qquad
+  G_c=-G_rD_c .
+\]
+The optimally weighted affine anchor estimator is first-order equivalent to the
+full off-diagonal ADF estimator for \(c\) if
+\begin{equation}\label{eq:anchor-completeness}
+  G_r\T(G_r\Gamma_rG_r\T)^{+}G_rD_c
+  =
+  P_\nu D_c .
+\end{equation}
+A sufficient condition is that the rows of \(G_r\) span the complete left
+nullspace of \(D_\nu\), after removing redundant rows.
+\end{proposition}
+
+\begin{proof}
+Differentiating \(m(c;\rho(c,\nu))=0\) with respect to \(\nu\) and \(c\) gives
+the two displayed identities. Proposition~\ref{prop:optimal-anchor-gmm} gives
+the anchor information
+\[
+  I_{\mathrm{anchor}}
+  =
+  D_c\T G_r\T(G_r\Gamma_rG_r\T)^{+}G_rD_c .
+\]
+The full off-diagonal ADF information is \(I_{c\mid\nu}=D_c\T P_\nu D_c\).
+Condition \eqref{eq:anchor-completeness} makes these information matrices
+equal. If the row space of \(G_r\) is the complete left nullspace of \(D_\nu\),
+then the matrix
+\[
+  G_r\T(G_r\Gamma_rG_r\T)^{+}G_r
+\]
+is the \(\Gamma_r^{-1}\)-orthogonal residual-maker after projecting out the
+nuisance tangent \(\col(D_\nu)\), namely \(P_\nu\).
+\end{proof}
+
+This proposition is the precise version of the informal phrase ``locally
+complete moment set.'' Anchor triads that keep one anchor in the target block
+eliminate the latent-correlation nuisance while staying affine in \(c\). Pure
+tetrads contain no \(c\), but they can be needed for completeness because they
+span restrictions among off-diagonal correlations that are correlated with the
+anchor rows. With the optimal full moment weight, such zero-\(c\) restrictions
+act as control variates.
+
+For correlated factors, cross-block anchor rows have nonzero first derivative
+with respect to \(c\), so they can improve the first-order covariance relative
+to within-block triads. For orthogonal factors, their population coefficient is
+zero. Under multivariate normality the observed factor blocks are independent,
+so those rows add no first-order information and the blockwise result in
+Proposition~\ref{prop:blockwise-triad-efficiency} is the relevant efficiency
+statement. Under nonnormality, even zero population cross-block correlations
+can have fourth-moment dependence with within-block correlations; then pure
+cross-block restrictions may still help as control variates under the full
+optimal weight, but not under the identity-weighted itemwise solve.
+
+\section{What full CFA efficiency would require}
+
+The preceding propositions concern a reduced off-diagonal problem. Full CFA
+efficiency is stronger. Let \(s_n=\vech(S_n)\) collect the full sample
+covariance matrix, including the diagonal, and let
+\[
+  \sigma(\theta)=\vech\{\Lambda(\theta)\Phi(\theta)\Lambda(\theta)\T
+    +\Theta(\theta)\}
+\]
+be the complete CFA covariance model. For a target
+\(\tau(\theta)\), such as \(\diag(\Lambda\Phi\Lambda\T)\) or the full common
+covariance, the ADF efficient covariance is
+\[
+  V_{\mathrm{full}}
+  =
+  \dot\tau
+  \{D_\theta\T\Gamma_s^{-1}D_\theta\}^{+}
+  \dot\tau\T ,
+\]
+where \(D_\theta=\partial\sigma(\theta)/\partial\theta\),
+\(\dot\tau=\partial\tau(\theta)/\partial\theta\), and \(\Gamma_s\) is the
+asymptotic covariance of \(s_n\). Under normal theory, \(\Gamma_s\) is replaced
+by the model-implied normal covariance, giving the ML/GLS efficiency bound.
+
+The anchor estimator does not generally attain this bound, even with optimal
+anchor weights, for three reasons:
+\begin{enumerate}
+\item it uses identities among off-diagonal correlations rather than the full
+  covariance model;
+\item it treats the diagonal/residual part only through the final conversion
+  from communality proportions to covariance-scale communalities; and
+\item the subsequent Guttman reconstruction map is a closed-form projection,
+  not the minimum-distance or likelihood projection for
+  \((\Lambda,\Phi,\Theta)\).
+\end{enumerate}
+
+There is a closed-form-feeling route to full first-order efficiency, but it is a
+one-step CFA estimator rather than a pure communality rule. Use a regular
+Guttman or anchor estimate to construct a root-\(n\) consistent starting value
+\(\theta_0\). Then take one ADF or normal-theory scoring step:
+\begin{equation}\label{eq:one-step-full}
+  \theta_1
+  =
+  \theta_0
+  +
+  (D_0\T\Gamma_0^{-1}D_0)^{+}
+  D_0\T\Gamma_0^{-1}\{s_n-\sigma(\theta_0)\},
+\end{equation}
+with \(D_0=D_\theta(\theta_0)\) and \(\Gamma_0\) evaluated at the start or at a
+consistent plug-in estimate. For linear equality constraints, the same formula
+is applied in a basis for the constrained tangent space, or equivalently with
+the constrained normal equations. Under regularity, \(\tau(\theta_1)\) has the
+same first-order distribution as the fully iterated ADF or normal-theory
+estimator. This is the price of full efficiency: one must use the full moment
+vector, the full weight, and the full CFA Jacobian.
 
 \section{Many-factor consistency and orthogonal-block efficiency}
 
@@ -1111,14 +1318,17 @@ then subtracts the resulting residual variance from the diagonal. On an exact
 simple CFA block this is population-consistent for
 \(\diag(\Lambda\Phi\Lambda\T)\). If we add alternatives, the test for admission
 should be the propositions above, not historical popularity as a starting value.
-For a recommendable closed-form default, the identity linear-moment rule
-\eqref{eq:identity-linear-mom} is the least ratio-sensitive member of the
-certified family. For an efficiency-oriented normal-theory variant, use the
-blockwise NT-GLS rule \eqref{eq:nt-gls-triad}, or the extended anchor-triad
-version \eqref{eq:extended-anchor-solve} when correlated factors make
-cross-block anchor rows informative. More general one-step GMM rules
-\eqref{eq:stacked-gmm} should declare the covariance model used to construct
-the weight and the moment rows included.
+For a cheap closed-form default, the identity linear-moment rule
+\eqref{eq:identity-linear-mom} is the least ratio-sensitive within-block member
+of the certified family, and the identity-weighted anchor extension
+\eqref{eq:extended-anchor-solve} is the natural next candidate when multiple
+factors are present. For an efficiency-oriented variant, use the optimal
+triad-GMM weight \eqref{eq:nt-gls-triad}, or the optimal extended-anchor weight
+from Proposition~\ref{prop:optimal-anchor-gmm} when correlated factors make
+cross-block anchor rows informative. Full CFA efficiency requires the full
+one-step update \eqref{eq:one-step-full} or a fully iterated ML/ADF estimator.
+More general one-step GMM rules \eqref{eq:stacked-gmm} should declare the
+covariance model used to construct the weight and the moment rows included.
 
 \begin{thebibliography}{9}
 
