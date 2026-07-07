@@ -11,6 +11,8 @@ core <- magmaan::magmaan_core
 
 canonical_method <- function(method) {
   out <- method
+  out[out == "ilm"] <- "triad_ls"
+  out[out == "anchor_ilm"] <- "anchor_triad_ls"
   out[out == "gmm_block"] <- "nt_gls_block"
   out[out == "gmm_full"] <- "nt_gls_full"
   out
@@ -23,7 +25,8 @@ guttman_backend_method <- function(method) {
 }
 
 accepted_methods <- c(
-  "ar", "rs", "ilm", "anchor_ilm", "nt_gls_block", "nt_gls_full",
+  "ar", "rs", "triad_ls", "anchor_triad_ls", "ilm", "anchor_ilm",
+  "nt_gls_block", "nt_gls_full",
   "gmm_block", "gmm_full", "nt_ml"
 )
 
@@ -45,8 +48,9 @@ usage <- function() {
     "  --rho LIST           Exchangeable latent correlations. Default: 0,.4.\n",
     "  --loading LIST       Loading patterns: mild,wide. Full default: mild,wide.\n",
     "  --generators LIST    Data generators: normal,ordinal. Default: both.\n",
-    "  --methods LIST       Methods. Default: rs,ilm,anchor_ilm,nt_gls_block,nt_ml.\n",
+    "  --methods LIST       Methods. Default: rs,triad_ls,anchor_triad_ls,nt_gls_block,nt_ml.\n",
     "                       Also accepted: ar,nt_gls_full,gmm_block,gmm_full.\n",
+    "                       Historical aliases: ilm,anchor_ilm.\n",
     "  --maps LIST          Guttman maps: incidence,aligned,block_aligned.\n",
     "                       Optional: diag_aligned. Default: first three.\n",
     "  --timing-reps N      Dedicated timing reps per cell. Full default: 20.\n",
@@ -71,7 +75,7 @@ parse_args <- function(args) {
     rho = c(0, .4),
     loading = c("mild", "wide"),
     generators = c("normal", "ordinal"),
-    methods = c("rs", "ilm", "anchor_ilm", "nt_gls_block", "nt_ml"),
+    methods = c("rs", "triad_ls", "anchor_triad_ls", "nt_gls_block", "nt_ml"),
     maps = c("incidence", "aligned", "block_aligned"),
     timing_reps = 20L,
     timing_warmup = 2L,

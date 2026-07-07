@@ -193,9 +193,9 @@ itemwise_h2(const Eigen::MatrixXd& R,
           return num_error("communality RS: zero triad denominator");
         h2(i) = rs_num / rs_den;
         break;
-      case CommunalityMethod::InstrumentalLeastSquares:
+      case CommunalityMethod::TriadLeastSquares:
         if (ilm_den <= kZeroTol)
-          return num_error("communality ILM: zero triad denominator");
+          return num_error("communality triad LS: zero triad denominator");
         h2(i) = ilm_num / ilm_den;
         break;
       default:
@@ -208,9 +208,9 @@ itemwise_h2(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::VectorXd>
-anchor_ilm_h2(const Eigen::MatrixXd& R,
-              const std::vector<std::vector<Eigen::Index>>& blocks,
-              const std::vector<Eigen::Index>& block_of) {
+anchor_triad_ls_h2(const Eigen::MatrixXd& R,
+                   const std::vector<std::vector<Eigen::Index>>& blocks,
+                   const std::vector<Eigen::Index>& block_of) {
   const Eigen::Index p = R.rows();
   Eigen::VectorXd h2(p);
 
@@ -232,7 +232,7 @@ anchor_ilm_h2(const Eigen::MatrixXd& R,
         const double rik = R(i, k);
         const double rjk = R(j, k);
         if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
-          return num_error("communality anchor ILM: non-finite correlation");
+          return num_error("communality anchor triad LS: non-finite correlation");
         num += rjk * rij * rik;
         den += rjk * rjk;
         ++count;
@@ -247,7 +247,7 @@ anchor_ilm_h2(const Eigen::MatrixXd& R,
         const double rik = R(i, k);
         const double rjk = R(j, k);
         if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
-          return num_error("communality anchor ILM: non-finite correlation");
+          return num_error("communality anchor triad LS: non-finite correlation");
         num += rjk * rij * rik;
         den += rjk * rjk;
         ++count;
@@ -255,13 +255,14 @@ anchor_ilm_h2(const Eigen::MatrixXd& R,
     }
 
     if (count == 0)
-      return num_error("communality anchor ILM: no anchor rows for an indicator");
+      return num_error(
+          "communality anchor triad LS: no anchor rows for an indicator");
     if (den <= kZeroTol)
-      return num_error("communality anchor ILM: zero anchor denominator");
+      return num_error("communality anchor triad LS: zero anchor denominator");
     h2(i) = num / den;
   }
   if (!h2.allFinite())
-    return num_error("communality anchor ILM: non-finite output");
+    return num_error("communality anchor triad LS: non-finite output");
   return h2;
 }
 
@@ -425,8 +426,9 @@ gmm_block_h2(const Eigen::MatrixXd& R,
       local_blocks[0][static_cast<std::size_t>(i)] = i;
     std::vector<Eigen::Index> local_block_of(static_cast<std::size_t>(m), 0);
 
-    auto h20 = itemwise_h2(Rb, local_blocks, local_block_of,
-                           CommunalityMethod::InstrumentalLeastSquares);
+    auto h20 =
+        itemwise_h2(Rb, local_blocks, local_block_of,
+                    CommunalityMethod::TriadLeastSquares);
     if (!h20.has_value()) return std::unexpected(h20.error());
 
     const std::vector<Pair> off = within_off_pairs(local_blocks);
@@ -453,8 +455,8 @@ fit_expected<Eigen::VectorXd>
 gmm_full_h2(const Eigen::MatrixXd& R,
             const std::vector<std::vector<Eigen::Index>>& blocks,
             const std::vector<Eigen::Index>& block_of) {
-  auto h20 = itemwise_h2(R, blocks, block_of,
-                         CommunalityMethod::InstrumentalLeastSquares);
+  auto h20 =
+      itemwise_h2(R, blocks, block_of, CommunalityMethod::TriadLeastSquares);
   if (!h20.has_value()) return std::unexpected(h20.error());
 
   const std::vector<Pair> off = within_off_pairs(blocks);
@@ -477,10 +479,10 @@ const char* communality_method_name(CommunalityMethod method) {
       return "ar";
     case CommunalityMethod::RatioOfSums:
       return "rs";
-    case CommunalityMethod::InstrumentalLeastSquares:
-      return "ilm";
-    case CommunalityMethod::AnchorInstrumentalLeastSquares:
-      return "anchor_ilm";
+    case CommunalityMethod::TriadLeastSquares:
+      return "triad_ls";
+    case CommunalityMethod::AnchorTriadLeastSquares:
+      return "anchor_triad_ls";
     case CommunalityMethod::GmmBlock:
       return "gmm_block";
     case CommunalityMethod::GmmFull:
@@ -499,10 +501,10 @@ estimate_h2_communalities(const Eigen::MatrixXd& S,
   switch (method) {
     case CommunalityMethod::AverageRatio:
     case CommunalityMethod::RatioOfSums:
-    case CommunalityMethod::InstrumentalLeastSquares:
+    case CommunalityMethod::TriadLeastSquares:
       return itemwise_h2(vin->R, vin->blocks, vin->block_of, method);
-    case CommunalityMethod::AnchorInstrumentalLeastSquares:
-      return anchor_ilm_h2(vin->R, vin->blocks, vin->block_of);
+    case CommunalityMethod::AnchorTriadLeastSquares:
+      return anchor_triad_ls_h2(vin->R, vin->blocks, vin->block_of);
     case CommunalityMethod::GmmBlock:
       return gmm_block_h2(vin->R, vin->blocks);
     case CommunalityMethod::GmmFull:

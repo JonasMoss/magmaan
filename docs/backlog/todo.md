@@ -2187,12 +2187,13 @@ work until a concrete downstream consumer appears.
   (loadings producers already exist) and a polychoric-ADF Gamma path.
   **H-diagonal communality rules landed** (2026-07):
   `estimate::frontier::estimate_h_communalities` and R `guttman_h()` expose AR,
-  RS, ILM, anchor-ILM, blockwise triad-GMM, and full selected-triad-GMM for a
-  fixed simple-structure indicator block vector, returning `h2`, `diag(H)`, and
-  the filled `H`. `anchor_ilm` is the identity-weighted extended anchor-triad
-  rule: one anchor stays in the target indicator's block, while the other may be
-  cross-block. `experiments/55-guttman-communality-estimators` now benchmarks
-  the package implementation directly; remaining point-estimator work is to
+  RS, triad least squares, anchor triad least squares, blockwise triad-GMM, and
+  full selected-triad-GMM for a fixed simple-structure indicator block vector,
+  returning `h2`, `diag(H)`, and the filled `H`. `anchor_triad_ls` is the
+  identity-weighted extended anchor-triad rule: one anchor stays in the target
+  indicator's block, while the other may be cross-block.
+  `experiments/55-guttman-communality-estimators` now benchmarks the package
+  implementation directly; remaining point-estimator work is to
   choose and plug a promoted rule into the full
   `(H, A) -> (Lambda, Phi, psi)` map.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
