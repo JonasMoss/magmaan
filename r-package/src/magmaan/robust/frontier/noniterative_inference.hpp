@@ -25,8 +25,9 @@
 //   • nested tests      Wald (exact χ²) and a difference / pseudo-LRT.
 // Theory: docs/research/notes/noniterative_cfa_tests.tex. The reducer, Γ, and
 // Wald machinery are reused; only M (built from the estimator's own J, not the
-// minimizer's Γ-orthogonal projector) is new. v1 scope matches the estimator
-// map: single group, covariance-only, continuous, marker-identified CFA.
+// minimizer's Γ-orthogonal projector) is new. Scope matches the estimator map:
+// continuous, marker-identified, simple-structure CFA, with grouped and
+// mean-structure paths below.
 
 namespace magmaan::robust::frontier {
 

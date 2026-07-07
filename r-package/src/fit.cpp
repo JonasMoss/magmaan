@@ -7746,7 +7746,11 @@ magmaan::estimate::frontier::NonIterativeEstimator noniter_which(const std::stri
   const std::string k = noniter_lower(s);
   if (k == "guttman" || k == "guttman1952")
     return magmaan::estimate::frontier::NonIterativeEstimator::Guttman;
-  Rcpp::stop("magmaan: unknown non-iterative estimator '%s' (accepted: guttman)",
+  if (k == "guttman_gls_aligned" || k == "guttman-gls-aligned" ||
+      k == "guttman_aligned" || k == "guttman-aligned")
+    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanGlsAligned;
+  Rcpp::stop("magmaan: unknown non-iterative estimator '%s' "
+             "(accepted: guttman, guttman_gls_aligned)",
              s.c_str());
 }
 

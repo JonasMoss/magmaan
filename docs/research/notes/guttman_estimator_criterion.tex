@@ -56,6 +56,17 @@ common-factor analysis \cite{guttman1952}. The historical phrase
 multi-group SEM. Multi-group SEM enters later by stacking independent sample
 blocks.
 
+The current \texttt{magmaan} frontier surface deliberately keeps two named
+versions. The selector \texttt{guttman} is the legacy, lavaan-like
+Spearman/incidence version: it uses the average-ratio Spearman diagonal with the
+wide communality bounds inherited from the start-value path, and then uses the
+incidence composites \(Z\). The promoted research selector
+\texttt{guttman\_gls\_aligned} uses the blockwise triad-GMM diagonal estimator
+for \(H\) and replaces the fixed incidence scores by the aligned score
+reconstruction described below. Both are still maps
+\(S\mapsto H\mapsto(\Lambda,\Phi,\psi)\), and both use the same
+finite-difference \(J\) for delta-method standard errors and residual tests.
+
 \section{Single-block setup}
 
 Fix one continuous CFA block with \(p\) observed variables and \(k\) factors.

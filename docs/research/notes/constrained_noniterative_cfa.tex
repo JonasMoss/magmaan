@@ -45,6 +45,14 @@ reference-group mean map. The projection gives an exact $\chi^2$ constraint
 test. The scalar map is the one piece that is not a pure projection, because it
 depends on the loadings, so its test is a linearized Wald.
 
+Implementation note. In \texttt{magmaan}, this constraint machinery is applied
+after a configural non-iterative map has produced \(\hat\theta\) and
+\(\Om\). Thus the constrained estimator in this note is the
+\(\Om\)-metric projection of the selected configural map. It is not the
+alternative population target that would impose loading equalities inside the
+\(H\)-based reconstruction regression itself; that regression-constrained map is
+a different off-model estimator.
+
 \section{Multiple groups}
 
 For groups $b = 1,\dots,G$ with independent samples, fit each block by the

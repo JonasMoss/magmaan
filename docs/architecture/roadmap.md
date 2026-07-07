@@ -166,8 +166,11 @@ golden `parTable()` fixtures.
   is `magmaan_core$frontier_fit_ml_ridge_continuation()`.
 - Frontier non-iterative CFA inference (2026-07) turns closed-form CFA
   estimators into delta-method-inferable ones. `estimate::frontier::
-  noniterative_cfa_theta` is a clean, clamp-free `sigma -> theta` map (Guttman
-  1952 multiple-group, returning a complete `(Lambda, Phi, psi)`);
+  noniterative_cfa_theta` maps `sigma -> theta` and returns a complete
+  `(Lambda, Phi, psi)`. The legacy `guttman` selector preserves the existing
+  lavaan-like Spearman/incidence Guttman map; `guttman_gls_aligned` is the
+  promoted research selector, using the blockwise triad-GMM H diagonal and the
+  aligned score reconstruction from the communality experiment.
   `estimator_map_jacobian` is its central-difference `J = dtheta/dvech(S)` (the
   generality seam so FABIN2/Bentler/JS/MIIV slot in later). `robust::frontier::
   noniterative_inference` builds the residual projector `M = I - Delta J` and
@@ -193,10 +196,10 @@ golden `parTable()` fixtures.
   (identity-weighted one-same-block anchor triads), blockwise triad-GMM, and
   full selected-triad-GMM diagonals for a fixed simple-structure indicator
   block vector. They return `h2`, `diag(H)`, and
-  `H = S` with only the diagonal replaced; the full non-iterative CFA map still
-  uses its existing Guttman diagonal until the point-estimator lane chooses the
-  promoted rule. `experiments/55-guttman-communality-estimators` now times the
-  package implementation directly.
+  `H = S` with only the diagonal replaced. `guttman_gls_aligned` consumes the
+  blockwise triad-GMM rule; the other H-diagonal rules remain available through
+  the low-level frontier primitive. `experiments/55-guttman-communality-
+  estimators` times the package implementation directly.
 - Frontier multi-group / constrained / mean-structure non-iterative CFA
   (2026-07) extends the closed-form estimator to measurement invariance. The map
   fits each group's Guttman block independently and stacks them, so

@@ -98,14 +98,18 @@ TEST_CASE("noniterative Guttman map recovers full theta on exact population") {
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
 
-  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
-  REQUIRE_OK(th);
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
+    REQUIRE_OK(th);
 
-  const auto locs = ev->param_locations();
-  REQUIRE(static_cast<Eigen::Index>(locs.size()) == th->size());
-  for (std::size_t k = 0; k < locs.size(); ++k)
-    CHECK((*th)(static_cast<Eigen::Index>(k)) ==
-          doctest::Approx(true_param(locs[k])).epsilon(1e-5));
+    const auto locs = ev->param_locations();
+    REQUIRE(static_cast<Eigen::Index>(locs.size()) == th->size());
+    for (std::size_t k = 0; k < locs.size(); ++k)
+      CHECK((*th)(static_cast<Eigen::Index>(k)) ==
+            doctest::Approx(true_param(locs[k])).epsilon(1e-5));
+  }
 }
 
 TEST_CASE("noniterative map Jacobian satisfies Fisher consistency J*Delta = I") {
@@ -115,18 +119,22 @@ TEST_CASE("noniterative map Jacobian satisfies Fisher consistency J*Delta = I") 
   samp.n_obs = {400};
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
-  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
-  REQUIRE_OK(th);
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
+    REQUIRE_OK(th);
 
-  auto D = ev->dsigma_dtheta(*th);   // Δ, p* × q
-  REQUIRE_OK(D);
-  auto J = ef::estimator_map_jacobian(b.pt, b.rep, *ev, samp);  // q × p*
-  REQUIRE_OK(J);
+    auto D = ev->dsigma_dtheta(*th);   // Δ, p* × q
+    REQUIRE_OK(D);
+    auto J = ef::estimator_map_jacobian(b.pt, b.rep, *ev, samp, which);  // q × p*
+    REQUIRE_OK(J);
 
-  const Eigen::Index q = th->size();
-  const Eigen::MatrixXd JD = (*J) * (*D);
-  const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(q, q);
-  CHECK((JD - I).cwiseAbs().maxCoeff() < 1e-4);
+    const Eigen::Index q = th->size();
+    const Eigen::MatrixXd JD = (*J) * (*D);
+    const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(q, q);
+    CHECK((JD - I).cwiseAbs().maxCoeff() < 1e-4);
+  }
 }
 
 TEST_CASE("noniterative GOF is ~0 at exact fit with correct df and finite SEs") {
@@ -136,20 +144,23 @@ TEST_CASE("noniterative GOF is ~0 at exact fit with correct df and finite SEs") 
   samp.n_obs = {400};
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
-  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
-  REQUIRE_OK(th);
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
+    REQUIRE_OK(th);
 
-  for (auto disc : {rf::Discrepancy::ULS, rf::Discrepancy::NTML}) {
-    auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
-                                             ef::NonIterativeEstimator::Guttman, disc);
-    REQUIRE_OK(inf);
-    CHECK(inf->T_gof < 1e-6);            // residual is ~0 at exact fit
-    CHECK(inf->df == 8);                 // p*=21, q=13
-    CHECK(inf->gof_eigenvalues.size() == 8);
-    CHECK(inf->se.size() == th->size());
-    for (Eigen::Index i = 0; i < inf->se.size(); ++i) {
-      CHECK(std::isfinite(inf->se(i)));
-      CHECK(inf->se(i) >= 0.0);
+    for (auto disc : {rf::Discrepancy::ULS, rf::Discrepancy::NTML}) {
+      auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th, which, disc);
+      REQUIRE_OK(inf);
+      CHECK(inf->T_gof < 1e-6);            // residual is ~0 at exact fit
+      CHECK(inf->df == 8);                 // p*=21, q=13
+      CHECK(inf->gof_eigenvalues.size() == 8);
+      CHECK(inf->se.size() == th->size());
+      for (Eigen::Index i = 0; i < inf->se.size(); ++i) {
+        CHECK(std::isfinite(inf->se(i)));
+        CHECK(inf->se(i) >= 0.0);
+      }
     }
   }
 }

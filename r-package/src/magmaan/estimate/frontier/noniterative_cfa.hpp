@@ -12,7 +12,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/spec/partable.hpp"
 
-// Non-iterative CFA estimators as clean covariance maps τ: vech(S) ↦ θ, plus the
+// Non-iterative CFA estimators as covariance maps τ: vech(S) ↦ θ, plus the
 // finite-difference Jacobian J = ∂τ/∂vech(S) that turns any such map into a
 // delta-method-inferable estimator. Unlike the start-value producers in
 // start_values.hpp (which only fill free loadings and clamp), these return a
@@ -21,12 +21,12 @@
 // noniterative_cfa_tests.tex and guttman_cfa_asymptotics.tex.
 //
 // Scope: multi-group (one block per group/level, fit independently and stacked),
-// pure CFA with marker (fixed unit loading) identification, continuous data,
-// Guttman's (1952) multiple-group map. Mean structure is supported for free
-// intercepts with latent means fixed at 0 (ν_g = m_g saturated); free latent
-// means (true scalar invariance) are handled by the reference-group mean map
-// downstream, not here. Cross-group / general linear equality constraints
-// (measurement invariance, tau-equivalence, ...) are imposed downstream by the
+// pure CFA with marker (fixed unit loading) identification, continuous data, and
+// simple-structure indicators. Mean structure is supported for free intercepts
+// with latent means fixed at 0 (ν_g = m_g saturated); free latent means (true
+// scalar invariance) are handled by the reference-group mean map downstream, not
+// here. Cross-group / general linear equality constraints (measurement
+// invariance, tau-equivalence, ...) are imposed downstream by the
 // minimum-distance projection in robust::frontier, not here: the map always
 // produces the configural (per-block unconstrained) θ̂. The
 // `NonIterativeEstimator` enum is the generality seam: FABIN2/Bentler-1982/
@@ -36,18 +36,18 @@
 namespace magmaan::estimate::frontier {
 
 enum class NonIterativeEstimator : std::uint8_t {
-  Guttman,  // v1 — Guttman (1952) multiple-group method
+  Guttman,            // legacy lavaan-like Spearman / incidence Guttman map
+  GuttmanGlsAligned,  // block-GLS H diagonal plus aligned score reconstruction
 };
 
 // The pure map τ: vech(samp.S) ↦ full θ̂ (size ev.n_free()). Deterministic given
 // (pt, rep, ev); reads only `samp.S`. `ev` supplies the free-parameter layout
 // (structural, S-independent) and is reused verbatim across the FD perturbations
 // of `estimator_map_jacobian`. Returns an error (never clamps) when the
-// interior-point assumptions fail (a factor with < 3 indicators, a non-positive
-// latent variance, a singular factor correlation, a zero marker loading) or the
-// model is out of v1 scope (a structural part, mean structure, > 1 block, a
-// cross-loading, a markerless factor, a residual covariance, or std.lv
-// identification).
+// interior-point assumptions fail (a factor with < 3 indicators, a singular
+// score covariance, a zero marker loading) or the model is out of scope (a
+// structural part, a cross-loading, a markerless factor, a residual covariance,
+// free latent means, or std.lv identification).
 fit_expected<Eigen::VectorXd>
 noniterative_cfa_theta(const spec::LatentStructure& pt,
                        const model::MatrixRep& rep,
