@@ -38,7 +38,7 @@ usage <- function() {
     "  --full               Larger default grid.\n",
     "  --reps N             Replications per cell. Full default: 200.\n",
     "  --n LIST             Sample sizes. Full default: 12,20,50,100,250,500.\n",
-    "  --factors LIST       Factor counts. Full default: 1,2,4.\n",
+    "  --factors LIST       Factor counts. Full default: 1,2,3,4.\n",
     "  --indicators LIST    Indicators per factor. Full default: 3,5.\n",
     "  --rho LIST           Exchangeable latent correlations. Full default: 0,.4.\n",
     "  --loading LIST       Loading patterns: mild,wide. Full default: mild,wide.\n",
@@ -62,7 +62,7 @@ parse_args <- function(args) {
     full = FALSE,
     reps = 200L,
     n = c(12L, 20L, 50L, 100L, 250L, 500L),
-    factors = c(1L, 2L, 4L),
+    factors = c(1L, 2L, 3L, 4L),
     indicators = c(3L, 5L),
     rho = c(0, .4),
     loading = c("mild", "wide"),
@@ -160,8 +160,8 @@ parse_args <- function(args) {
   if (isTRUE(opts$smoke)) {
     if (!"reps" %in% explicit) opts$reps <- 8L
     if (!"n" %in% explicit) opts$n <- c(12L, 20L, 50L, 100L)
-    if (!"factors" %in% explicit) opts$factors <- 2L
-    if (!"indicators" %in% explicit) opts$indicators <- 5L
+    if (!"factors" %in% explicit) opts$factors <- 3L
+    if (!"indicators" %in% explicit) opts$indicators <- c(3L, 5L)
     if (!"rho" %in% explicit) opts$rho <- .4
     if (!"loading" %in% explicit) opts$loading <- c("mild", "wide")
     if (!"generators" %in% explicit) opts$generators <- c("normal", "ordinal")

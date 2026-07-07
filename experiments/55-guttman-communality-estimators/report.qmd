@@ -47,6 +47,9 @@ guttman_order <- setdiff(method_order, "nt_ml")
 fmt <- function(x, digits = 2) {
   ifelse(is.na(x), "", formatC(x, format = "f", digits = digits))
 }
+fmt_g <- function(x, digits = 4) {
+  ifelse(is.na(x), "", formatC(x, format = "fg", digits = digits))
+}
 pct <- function(x) paste0(fmt(100 * x, 1), "%")
 meta <- function(key) {
   v <- metadata$value[metadata$key == key]
@@ -191,6 +194,83 @@ if (has_timing) {
 }
 
 cx <- complexity[which.max(complexity$p), ]
+
+accuracy_methods <- subset(summary, method %in% method_order)
+
+group_accuracy <- function(by) {
+  cols <- c("common_mise", "diag_mise", "common_rel_rs", "common_rel_nt",
+            "fail_rate", "improper_rate")
+  out <- aggregate(accuracy_methods[cols],
+                   accuracy_methods[by],
+                   median, na.rm = TRUE, na.action = na.pass)
+  out$Method <- method_label[out$method]
+  ord <- do.call(order, c(out[setdiff(by, "method")],
+                          list(match(out$method, method_order))))
+  out <- out[ord, , drop = FALSE]
+  show <- out[c(setdiff(by, "method"), "Method", cols)]
+  names(show) <- c(setdiff(by, "method"), "Method", "Common MISE",
+                   "Diag MISE", "Common / RS", "Common / NT",
+                   "Fail", "Heywood")
+  show$`Common MISE` <- fmt_g(show$`Common MISE`)
+  show$`Diag MISE` <- fmt_g(show$`Diag MISE`)
+  show$`Common / RS` <- fmt(show$`Common / RS`, 3)
+  show$`Common / NT` <- fmt(show$`Common / NT`, 3)
+  show$Fail <- pct(show$Fail)
+  show$Heywood <- pct(show$Heywood)
+  show
+}
+
+factor_accuracy_show <- group_accuracy(c("generator", "factors", "method"))
+n_accuracy_show <- group_accuracy(c("generator", "n", "method"))
+
+hs_accuracy_methods <- subset(summary, factors == 3 & indicators == 3 &
+                                method %in% method_order)
+if (nrow(hs_accuracy_methods)) {
+  saved_accuracy_methods <- accuracy_methods
+  accuracy_methods <- hs_accuracy_methods
+  hs_accuracy_show <- group_accuracy(c("generator", "n", "method"))
+  accuracy_methods <- saved_accuracy_methods
+} else {
+  hs_accuracy_show <- data.frame()
+}
+
+winner_source <- subset(summary, method %in% guttman_order &
+                          is.finite(common_mise))
+if (nrow(winner_source)) {
+  key_cols <- c("generator", "factors", "indicators", "loading", "rho", "n")
+  winner_source$condition_id <- do.call(
+    paste, c(winner_source[key_cols], sep = "|"))
+  split_rows <- split(seq_len(nrow(winner_source)),
+                      winner_source$condition_id)
+  best_rows <- vapply(split_rows, function(ii) {
+    ii[which.min(winner_source$common_mise[ii])]
+  }, integer(1))
+  winners <- winner_source[best_rows, , drop = FALSE]
+  winner_counts <- aggregate(rep(1L, nrow(winners)),
+                             winners[c("generator", "factors", "method")],
+                             sum)
+  names(winner_counts)[4] <- "wins"
+  condition_counts <- unique(winner_source[c("condition_id", "generator",
+                                             "factors")])
+  condition_counts <- aggregate(condition_id ~ generator + factors,
+                                condition_counts, length)
+  names(condition_counts)[3] <- "conditions"
+  winner_counts <- merge(winner_counts, condition_counts,
+                         by = c("generator", "factors"), all.x = TRUE)
+  winner_counts$share <- winner_counts$wins / winner_counts$conditions
+  winner_counts$Method <- method_label[winner_counts$method]
+  winner_counts <- winner_counts[order(winner_counts$generator,
+                                       winner_counts$factors,
+                                       match(winner_counts$method,
+                                             guttman_order)), ]
+  winner_show <- winner_counts[c("generator", "factors", "Method", "wins",
+                                 "conditions", "share")]
+  names(winner_show) <- c("Generator", "Factors", "Method", "Wins",
+                          "Conditions", "Share")
+  winner_show$Share <- pct(winner_show$Share)
+} else {
+  winner_show <- data.frame()
+}
 ```
 
 ## Question
@@ -251,6 +331,48 @@ individual ratio averaging is unstable when one of the other-indicator
 correlations is small. RS already removes most of that pathology. ILM and the
 NT-GLS variants then replace the ratio with a weighted linear moment pooling;
 in this grid, the simple ILM pooling is as good as the heavier plug-in weights.
+
+### Condition Breakdown
+
+The pooled table above hides where a method is winning or failing. The next
+tables keep the same common-covariance MISE target but aggregate over fewer
+design dimensions. Ratios below one mean the method improved on the comparison
+row; `Common / NT` uses the iterative normal-theory fit as the reference.
+
+By generator and number of factors:
+
+```{r}
+knitr::kable(factor_accuracy_show, row.names = FALSE)
+```
+
+By generator and sample size:
+
+```{r}
+knitr::kable(n_accuracy_show, row.names = FALSE)
+```
+
+HS-style three-factor slice: `factors = 3` and `indicators = 3`, aggregated
+over loading pattern and latent correlation. This is the smallest classical
+simple-structure CFA layout with three indicators per factor, so the triad
+systems have little redundancy; differences between weighting rules should be
+read with that in mind.
+
+```{r}
+if (nrow(hs_accuracy_show)) {
+  knitr::kable(hs_accuracy_show, row.names = FALSE)
+} else {
+  cat("No factors = 3, indicators = 3 cells were present in this run.")
+}
+```
+
+Winner counts by condition, among the closed-form Guttman communality rules.
+A condition is one generator/factor/indicator/loading/rho/N cell.
+
+```{r}
+if (nrow(winner_show)) {
+  knitr::kable(winner_show, row.names = FALSE)
+}
+```
 
 ### Runtime
 
