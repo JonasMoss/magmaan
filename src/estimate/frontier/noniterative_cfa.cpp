@@ -12,6 +12,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/cfa_utils.hpp"
+#include "magmaan/estimate/frontier/communality.hpp"
 
 namespace magmaan::estimate::frontier {
 
@@ -23,11 +24,11 @@ fit_expected<Eigen::VectorXd> num_error(std::string detail) {
   return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail)});
 }
 
-// Clean per-block Guttman (1952) map: covariances → (Λ_G, Φ_G, ψ_G). No clamps,
-// no floors; ψ_G = diag(S − Λ_G Φ_G Λ_Gᵀ). Errors out on the interior-point
-// assumption failures rather than repairing them (start_guttman.cpp keeps the
-// clamps because it is only a start-value producer). See
-// guttman_cfa_asymptotics.tex:104-127.
+// Legacy per-block Guttman (1952) map: covariances → (Λ_G, Φ_G, ψ_G). This
+// preserves the existing lavaan-like Spearman diagonal (including its wide h²
+// bounds) and the incidence-score reconstruction. The promoted
+// GuttmanGlsAligned variant below uses the frontier H-diagonal estimators
+// instead.
 struct BlockGuttman {
   Eigen::MatrixXd Lambda;  // nvar × nfac, marker-scaled
   Eigen::MatrixXd Phi;     // nfac × nfac, latent covariance = M P M
@@ -118,6 +119,130 @@ guttman_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
   for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
 
   return BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)};
+}
+
+fit_expected<Eigen::MatrixXd> invert_full_rank(const Eigen::MatrixXd& A,
+                                               const char* what) {
+  if (A.rows() != A.cols() || !A.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(what) + ": invalid matrix"});
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
+  lu.setThreshold(1e-12);
+  if (lu.rank() != A.cols())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(what) + ": matrix is singular"});
+  return lu.inverse();
+}
+
+fit_expected<std::vector<std::int32_t>>
+block_ids_from_layout(const CfaBlockLayout& L) {
+  std::vector<std::int32_t> block_of(static_cast<std::size_t>(L.n_observed), -1);
+  for (const auto& load : L.loads) {
+    if (load.ov_row < 0 || load.ov_row >= L.n_observed || load.factor < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman GLS-aligned map: loading layout is out of range"});
+    const auto row = static_cast<std::size_t>(load.ov_row);
+    if (block_of[row] >= 0 && block_of[row] != load.factor)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman GLS-aligned map: cross-loadings are out of scope"});
+    block_of[row] = load.factor;
+  }
+  for (std::size_t i = 0; i < block_of.size(); ++i) {
+    if (block_of[i] < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman GLS-aligned map: every observed variable must load on one "
+          "factor"});
+  }
+  return block_of;
+}
+
+Eigen::MatrixXd incidence_matrix(const CfaBlockLayout& L) {
+  Eigen::MatrixXd Z = Eigen::MatrixXd::Zero(L.n_observed, L.n_factor());
+  for (const auto& load : L.loads) Z(load.ov_row, load.factor) = 1.0;
+  return Z;
+}
+
+std::expected<BlockGuttman, FitError>
+regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
+                 const Eigen::MatrixXd& H, const Eigen::MatrixXd& B,
+                 const char* label) {
+  const Eigen::Index nvar = L.n_observed;
+  const Eigen::Index nfac = L.n_factor();
+  if (B.rows() != nvar || B.cols() != nfac)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": score matrix dimension mismatch"});
+
+  const Eigen::MatrixXd score_cov = B.transpose() * H * B;
+  auto score_cov_inv = invert_full_rank(score_cov, label);
+  if (!score_cov_inv.has_value()) return std::unexpected(score_cov_inv.error());
+
+  Eigen::MatrixXd Kstar = H * B * (*score_cov_inv);
+  Eigen::MatrixXd Lambda = Kstar;
+  Eigen::VectorXd marker(nfac);
+  for (Eigen::Index f = 0; f < nfac; ++f) {
+    const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
+    if (mk < 0 || mk >= nvar)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": factor without a marker indicator"});
+    marker(f) = Kstar(mk, f);
+    if (std::abs(marker(f)) < 1e-10)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": near-zero marker loading"});
+    Lambda.col(f) /= marker(f);
+  }
+
+  Eigen::MatrixXd Phi(nfac, nfac);
+  for (Eigen::Index f = 0; f < nfac; ++f)
+    for (Eigen::Index g = 0; g < nfac; ++g)
+      Phi(f, g) = marker(f) * score_cov(f, g) * marker(g);
+
+  const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
+  Eigen::VectorXd psi(nvar);
+  for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
+
+  return BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)};
+}
+
+std::expected<BlockGuttman, FitError>
+guttman_gls_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
+  const Eigen::Index nfac = L.n_factor();
+  auto block_of = block_ids_from_layout(L);
+  if (!block_of.has_value()) return std::unexpected(block_of.error());
+
+  auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
+  if (!h.has_value()) return std::unexpected(h.error());
+
+  const Eigen::MatrixXd Z = incidence_matrix(L);
+  const Eigen::MatrixXd incidence_score_cov = Z.transpose() * h->H * Z;
+  auto incidence_inv =
+      invert_full_rank(incidence_score_cov, "Guttman GLS-aligned map");
+  if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
+
+  const Eigen::MatrixXd prelim_loading = h->H * Z * (*incidence_inv);
+  const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
+  auto gram_inv = invert_full_rank(gram, "Guttman GLS-aligned map");
+  if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
+
+  const Eigen::MatrixXd B = prelim_loading * (*gram_inv);
+  auto out = regression_block(L, S, h->H, B, "Guttman GLS-aligned map");
+  if (!out.has_value()) return std::unexpected(out.error());
+  if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Guttman GLS-aligned map: output factor dimension mismatch"});
+  return out;
+}
+
+std::expected<BlockGuttman, FitError>
+fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
+          NonIterativeEstimator which) {
+  switch (which) {
+    case NonIterativeEstimator::Guttman:
+      return guttman_block(L, S);
+    case NonIterativeEstimator::GuttmanGlsAligned:
+      return guttman_gls_aligned_block(L, S);
+  }
+  return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      "non-iterative CFA: unknown estimator"});
 }
 
 // latent column index → block layout's factor ordinal, precomputed per block.
@@ -250,14 +375,13 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
       return num_error("non-iterative CFA: sample covariance dimension mismatch");
 
     switch (which) {
-      case NonIterativeEstimator::Guttman: {
-        auto gb = guttman_block(L, samp.S[b]);
+      case NonIterativeEstimator::Guttman:
+      case NonIterativeEstimator::GuttmanGlsAligned: {
+        auto gb = fit_block(L, samp.S[b], which);
         if (!gb.has_value()) return std::unexpected(gb.error());
         blocks.push_back(std::move(*gb));
         break;
       }
-      default:
-        return num_error("non-iterative CFA: unknown estimator");
     }
   }
   return assemble_theta(ev, layouts, blocks, samp);
@@ -293,7 +417,7 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
   NonIterativeFit out;
   out.theta = std::move(*theta);
   for (std::size_t b = 0; b < layouts.size() && b < samp.S.size(); ++b) {
-    auto gb = guttman_block(layouts[b], samp.S[b]);
+    auto gb = fit_block(layouts[b], samp.S[b], which);
     if (!gb.has_value()) return std::unexpected(gb.error());
     out.Lambda.push_back(std::move(gb->Lambda));
     out.Phi.push_back(std::move(gb->Phi));

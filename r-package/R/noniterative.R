@@ -1,10 +1,10 @@
 # Non-iterative CFA estimators: fit + residual-based inference.
 #
-# Closed-form CFA estimation (Guttman's 1952 multiple-group method) as a
-# covariance map, exposing a complete parameter vector so goodness-of-fit,
-# nested tests, and delta-method standard errors follow as explicit post-fit
-# calls. Thin wrappers over the C++ estimate::frontier / robust::frontier
-# entry points. See docs/research/notes/noniterative_cfa_tests.tex.
+# Closed-form CFA estimation as covariance maps, exposing a complete parameter
+# vector so goodness-of-fit, nested tests, and delta-method standard errors
+# follow as explicit post-fit calls. Thin wrappers over the C++
+# estimate::frontier / robust::frontier entry points. See
+# docs/research/notes/noniterative_cfa_tests.tex.
 
 #' Estimate the diagonal of the Guttman H matrix.
 #'
@@ -54,7 +54,9 @@ guttman_h <- function(S, blocks,
 #'
 #' @param partable A magmaan/lavaan partable (as consumed by [fit_fit()]).
 #' @param sample_stats A magmaan sample-statistics list (S, nobs, ...).
-#' @param estimator Non-iterative estimator; currently `"guttman"`.
+#' @param estimator Non-iterative estimator. `"guttman"` keeps the legacy
+#'   lavaan-like Spearman/incidence Guttman map; `"guttman_gls_aligned"` uses the
+#'   block-GLS H diagonal and aligned score reconstruction.
 #' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
@@ -78,7 +80,7 @@ fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman") 
 #'   Sigma) or `"empirical"` (distribution-free; requires `data`).
 #' @param data Raw data matrix (rows = observations), required when
 #'   `gamma = "empirical"`.
-#' @param estimator Non-iterative estimator; currently `"guttman"`.
+#' @param estimator Non-iterative estimator; see [fit_noniterative_cfa()].
 #' @export
 noniterative_cfa_inference <- function(fit, discrepancy = c("uls", "ntml"),
                                        gamma = c("nt", "empirical"),

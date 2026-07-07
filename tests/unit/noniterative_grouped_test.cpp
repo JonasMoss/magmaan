@@ -163,19 +163,22 @@ TEST_CASE("metric invariance: W ~ 0 when loadings are equal, projection is a no-
   samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};  // equal loadings
   samp.n_obs = {500, 600};
 
-  auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
-  REQUIRE_OK(th);
-  auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
-                                                   rf::Discrepancy::NTML);
-  REQUIRE_OK(inf);
-  auto con = rf::noniterative_constrained_fit(b.pt, *inf);
-  REQUIRE_OK(con);
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
+    REQUIRE_OK(th);
+    auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
+                                                     which, rf::Discrepancy::NTML);
+    REQUIRE_OK(inf);
+    auto con = rf::noniterative_constrained_fit(b.pt, *inf);
+    REQUIRE_OK(con);
 
-  CHECK(con->k == 4);  // 4 free loadings equated across 2 groups
-  CHECK(con->W < 1e-8);
-  CHECK((con->theta_tilde - con->theta_hat).cwiseAbs().maxCoeff() < 1e-8);
-  CHECK(con->p_wald == doctest::Approx(1.0).epsilon(1e-6));
+    CHECK(con->k == 4);  // 4 free loadings equated across 2 groups
+    CHECK(con->W < 1e-8);
+    CHECK((con->theta_tilde - con->theta_hat).cwiseAbs().maxCoeff() < 1e-8);
+    CHECK(con->p_wald == doctest::Approx(1.0).epsilon(1e-6));
+  }
 }
 
 TEST_CASE("metric invariance: W > 0 when loadings differ, projection equates them") {

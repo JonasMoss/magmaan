@@ -2193,9 +2193,11 @@ work until a concrete downstream consumer appears.
   identity-weighted extended anchor-triad rule: one anchor stays in the target
   indicator's block, while the other may be cross-block.
   `experiments/55-guttman-communality-estimators` now benchmarks the package
-  implementation directly; remaining point-estimator work is to
-  choose and plug a promoted rule into the full
-  `(H, A) -> (Lambda, Phi, psi)` map.
+  implementation directly. The promoted point-estimator lane landed as
+  `guttman_gls_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
+  score reconstruction, exposed through the non-iterative CFA C++ and R paths.
+  The old `guttman` selector is retained as the legacy lavaan-like
+  Spearman/incidence map.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
