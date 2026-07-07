@@ -342,6 +342,90 @@ rule is the simplest non-ratio method-of-moments default. The one-step GMM rule
 is the natural efficiency-oriented member of the same closed-form family,
 conditional on a chosen covariance model for the sample correlations.
 
+\section{Normal-theory plug-in GLS weights}
+
+The most convenient covariance model is the normal-theory covariance of the
+sample correlations. This gives the direct analogue of SEM GLS for the triad
+equations: keep the triad moments linear in \(\gamma\), but weight them by the
+normal-theory sampling covariance implied by the current correlation matrix.
+
+Let \(r\) collect the distinct off-diagonal entries of \(R\). Under
+multivariate normality,
+\[
+  \Gamma_r^{\mathrm{NT}}(R)
+  =
+  \operatorname{AVar}\{\sqrt n(\hat r-r)\}
+\]
+has entries, for pairs \(u<v\) and \(w<z\),
+\begin{align}\label{eq:nt-correlation-gamma}
+  \Gamma^{\mathrm{NT}}_{uv,wz}(R)
+  ={}&
+  \rho_{uw}\rho_{vz}+\rho_{uz}\rho_{vw} \notag\\
+  &-\rho_{uv}\{\rho_{uw}\rho_{uz}+\rho_{vw}\rho_{vz}\}
+   -\rho_{wz}\{\rho_{uw}\rho_{vw}+\rho_{uz}\rho_{vz}\} \notag\\
+  &+\frac{1}{2}\rho_{uv}\rho_{wz}
+    \{\rho_{uw}^2+\rho_{uz}^2+\rho_{vw}^2+\rho_{vz}^2\},
+\end{align}
+with \(\rho_{aa}=1\). In particular,
+\(\Gamma^{\mathrm{NT}}_{uv,uv}=(1-\rho_{uv}^2)^2\).
+
+For a triad row \(g_{i;jk}(\gamma;R)=\gamma_iR_{jk}-R_{ij}R_{ik}\), the
+Jacobian with respect to \(r\) has only three nonzero entries:
+\[
+  \frac{\partial g_{i;jk}}{\partial R_{jk}}=\gamma_i,
+  \qquad
+  \frac{\partial g_{i;jk}}{\partial R_{ij}}=-R_{ik},
+  \qquad
+  \frac{\partial g_{i;jk}}{\partial R_{ik}}=-R_{ij}.
+\]
+Let this sparse Jacobian be \(M(\gamma;R)\). Given a preliminary consistent
+\(\tilde\gamma\), usually ILM, define
+\[
+  \widehat\Omega_{\mathrm{NT}}
+  =
+  M(\tilde\gamma;\hat R)
+  \Gamma_r^{\mathrm{NT}}(\hat R)
+  M(\tilde\gamma;\hat R)\T .
+\]
+The normal-theory GLS triad estimator is then
+\begin{equation}\label{eq:nt-gls-triad}
+  \hat\gamma_{\mathrm{NT\text{-}GLS}}
+  =
+  \{A(\hat R)\T\widehat\Omega_{\mathrm{NT}}^{+}A(\hat R)\}^{+}
+  A(\hat R)\T\widehat\Omega_{\mathrm{NT}}^{+}b(\hat R).
+\end{equation}
+The covariance-scale communality estimate is
+\(\hat c_i=S_{ii}\hat\gamma_{\mathrm{NT\text{-}GLS},i}\).
+
+If the observations are normal and the block model is correctly specified, this
+plug-in weight converges to the optimal one-step triad-GMM weight. If the data
+are nonnormal, or if the normal covariance is only used as a working model, the
+same estimator remains a certified weighted triad rule as long as the limiting
+weight is finite and nondegenerate, but the efficiency interpretation changes.
+
+This is ``free'' in the statistical sense that no empirical fourth-moment
+matrix, bootstrap, or CFA iteration is needed once \(S\) has been computed.
+It is not computationally identical to ILM: one must build
+\(\Gamma_r^{\mathrm{NT}}\), push it through the sparse triad Jacobian, and take
+a generalized inverse or solve the corresponding GLS system. For a block with
+\(m\) indicators this involves \(d=m(m-1)/2\) correlations and
+\(t=m(m-1)(m-2)/2\) triad rows. In ordinary CFA block sizes this is small
+relative to iterative NTML, but for large blocks it can dominate the
+communality step.
+
+There are two natural scopes. The blockwise version computes
+\(\widehat\Omega_{\mathrm{NT}}\) separately inside each factor block. It is
+simple, preserves the blockwise Guttman construction, and avoids using
+cross-factor correlations to choose within-factor communalities. A full stacked
+version forms one covariance matrix for all within-block triad rows. Under
+correlated factors, the normal-theory covariance between sample correlations in
+different blocks is generally nonzero, so the full weight can couple the
+finite-sample estimates across blocks. This remains consistent because all
+within-block triad moments are exact on the model, but under misspecification it
+defines a different off-model diagonal-completion target. For that reason the
+blockwise NT-GLS rule is the cleaner closed-form default, while the full stacked
+rule should be reported as a distinct weighted variant.
+
 \section{Relation to ADF efficiency on the correlation scale}
 
 ``Correlation scale'' means that the observed variables have first been
@@ -759,7 +843,8 @@ communality rules by their population contract:
 \item certified rules: single triads, average-of-ratios Spearman, ratio-of-sums
   Spearman, identity linear moments, weighted linear-moment variants with
   nonzero denominators, one-step triad GMM with a declared correlation
-  covariance model, and exact uniqueness-first rules;
+  covariance model, the normal-theory plug-in GLS weight
+  \eqref{eq:nt-gls-triad}, and exact uniqueness-first rules;
 \item start-value rules only: SMC, arbitrary lower bounds, and repairs that can
   be active at the population target;
 \item regularized variants: any rule that replaces a failed denominator or
@@ -775,9 +860,10 @@ simple CFA block this is population-consistent for
 should be the propositions above, not historical popularity as a starting value.
 For a recommendable closed-form default, the identity linear-moment rule
 \eqref{eq:identity-linear-mom} is the least ratio-sensitive member of the
-certified family. For an efficiency-oriented variant, use the one-step GMM
-rule \eqref{eq:stacked-gmm} with the weight construction documented in the
-estimator output.
+certified family. For an efficiency-oriented normal-theory variant, use the
+blockwise NT-GLS rule \eqref{eq:nt-gls-triad}. More general one-step GMM rules
+\eqref{eq:stacked-gmm} should declare the covariance model used to construct
+the weight.
 
 \begin{thebibliography}{9}
 
