@@ -71,7 +71,7 @@ The common diagonal entry for item \(i\) is
   \qquad
   \theta_i=\sigma_{ii}-c_i.
 \]
-The Guttman matrix \(C\) is obtained by replacing \(\sigma_{ii}\) by \(c_i\), or
+The Guttman matrix \(H\) is obtained by replacing \(\sigma_{ii}\) by \(c_i\), or
 equivalently by subtracting \(\theta_i\) from the diagonal.
 
 \begin{remark}
@@ -746,6 +746,114 @@ Full ADF may then use cross-block sample correlations as control-variate
 information. The blockwise triad estimator remains consistent, but the
 efficiency equality above need not hold.
 \end{remark}
+
+\section{Can the \(H\) step be block-equivariant?}
+
+Let \(L=\bigoplus_f L_f\) be a nonsingular linear transformation that acts
+inside the declared indicator blocks. A fully block-equivariant \(H\)-functional
+would satisfy
+\begin{equation}\label{eq:block-equiv-H}
+  \mathcal H(L\Sigma L\T)=L\,\mathcal H(\Sigma)\,L\T .
+\end{equation}
+This is the right algebraic target if the observed variables inside a factor
+block are treated as coordinates rather than named indicators. It is stronger
+than the invariance used by the triad rules above.
+
+The difficulty is structural. The simple CFA model used by the triad identities
+is not closed under general \(L_f\)'s. If
+\[
+  \Sigma=\Lambda\Phi\Lambda\T+\Theta,
+  \qquad \Theta \hbox{ diagonal},
+\]
+then
+\[
+  L\Sigma L\T
+  =
+  (L\Lambda)\Phi(L\Lambda)\T+L\Theta L\T,
+\]
+and \(L\Theta L\T\) is generally dense within each indicator block. Hence the
+transformed covariance no longer has the property that within-block
+off-diagonal covariances are pure common covariances. The Spearman triads and
+their weighted GMM variants are therefore tied to the named-indicator
+coordinates in which the uniqueness matrix is diagonal.
+
+\begin{proposition}[No universal block-equivariant \(H\) rule]
+\label{prop:no-block-equiv-H}
+For a single factor block with \(m\ge3\), there is no covariance functional
+\(\mathcal H\) that is both
+\begin{enumerate}
+\item exact on every regular one-factor diagonal-uniqueness population
+  \[
+    \Sigma=\lambda\lambda\T+\Theta,
+    \qquad \Theta \hbox{ positive diagonal},
+  \]
+  in the sense that \(\mathcal H(\Sigma)=\lambda\lambda\T\), and
+\item equivariant under all nonsingular within-block transformations, in the
+  sense of \eqref{eq:block-equiv-H}.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+Let \(u=m^{-1/2}\mathbf 1\), and for any \(a>0\) consider the regular
+one-factor population
+\[
+  \Sigma_a=I+a^2uu\T,
+  \qquad
+  H_a=a^2uu\T .
+\]
+This is a diagonal-uniqueness model with \(\Theta=I\) and \(\lambda=au\).
+If \(\mathcal H\) were exact and block-equivariant, applying
+\(L_a=\Sigma_a^{-1/2}\) would give
+\[
+  \mathcal H(I)
+  =
+  L_aH_aL_a\T
+  =
+  \frac{a^2}{1+a^2}uu\T .
+\]
+The right-hand side depends on \(a\). The same covariance input \(I\) would
+therefore require different outputs for different diagonal-uniqueness
+populations. This contradicts that \(\mathcal H\) is a single-valued
+covariance functional.
+\end{proof}
+
+The proposition is deliberately about the \(H\) step, not the later Guttman
+reconstruction map. It says that no reweighting of the within-block triad
+moments can produce a generally valid block-equivariant estimator for the same
+diagonal-residual CFA target. The obstruction already appears in one block, and
+therefore also appears in many-factor models whenever a factor block has no
+usable cross-block information, as with orthogonal latent factors.
+
+\paragraph{What remains possible.}
+Several weaker or more conditional equivariance statements are still useful.
+First, the triad family is compatible with transformations that preserve
+diagonal uniqueness, such as relabeling, sign changes, and diagonal rescaling
+of named indicators. The correlation-scale implementation mainly packages this
+ordinary scale equivariance.
+
+Second, after a candidate \(H\) has been supplied, the Guttman reconstruction
+map can be made equivariant by moving the composite-score rule with the loading
+coordinates. This is the loading-aligned construction in the criterion note.
+That property is conditional on having an \(H\) that already transforms as in
+\eqref{eq:block-equiv-H}.
+
+Third, one can define a different, cross-block construction under stronger
+assumptions. If residual covariances are allowed to be unrestricted inside each
+indicator block, then the model class is closed under block transformations:
+\[
+  \Sigma_{ff}=H_{ff}+\Psi_{ff},\qquad
+  \Sigma_{fg}=H_{fg}\quad(f\ne g),
+\]
+with unrestricted positive definite \(\Psi_{ff}\). The cross-block matrices
+\(\Sigma_{fg}\) are then residual-free and transform equivariantly. After
+block whitening, their leading singular vectors can identify loading
+directions when the factor-correlation graph is connected and the relevant
+rank-one singular values are separated. But the norms of the block loading
+vectors and the latent correlations remain confounded without an additional
+normalization or structural assumption; when factors are orthogonal, the
+cross-block matrices are zero and provide no information at all. This is a
+different estimator family, not a block-equivariant version of the
+within-block triad communality rule.
 
 \section{Uniqueness-first rules}
 
