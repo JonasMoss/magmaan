@@ -29,10 +29,21 @@ method_label <- c(
   ar = "AR",
   rs = "RS",
   ilm = "ILM",
-  gmm_block = "GMM block",
-  gmm_full = "GMM full",
+  nt_gls_block = "NT-GLS block",
+  nt_gls_full = "NT-GLS full",
+  gmm_block = "NT-GLS block",
+  gmm_full = "NT-GLS full",
   nt_ml = "NT ML"
 )
+canonical_method <- function(x) {
+  x[x == "gmm_block"] <- "nt_gls_block"
+  x[x == "gmm_full"] <- "nt_gls_full"
+  x
+}
+summary$method <- canonical_method(summary$method)
+if (has_timing) timing$method <- canonical_method(timing$method)
+method_order <- c("ar", "rs", "ilm", "nt_gls_block", "nt_gls_full", "nt_ml")
+guttman_order <- setdiff(method_order, "nt_ml")
 fmt <- function(x, digits = 2) {
   ifelse(is.na(x), "", formatC(x, format = "f", digits = digits))
 }
@@ -64,12 +75,12 @@ acc <- Reduce(function(x, y) merge(x, y, by = "method", all = TRUE),
                 transform(ordinal_rs, ordinal_rel_rs = value)[c("method", "ordinal_rel_rs")]
               ))
 acc$Method <- method_label[acc$method]
-acc <- acc[match(c("ar", "rs", "ilm", "gmm_block", "gmm_full"), acc$method),
+acc <- acc[match(guttman_order, acc$method),
            c("Method", "normal_rel_nt", "normal_rel_rs", "ordinal_rel_rs")]
 names(acc) <- c("Method", "Normal / NT", "Normal / RS", "Ordinal / RS")
 for (j in 2:ncol(acc)) acc[[j]] <- fmt(acc[[j]], 3)
 
-rank_data <- subset(normal, method %in% c("rs", "ilm", "gmm_block", "gmm_full"))
+rank_data <- subset(normal, method %in% c("rs", "ilm", "nt_gls_block", "nt_gls_full"))
 best <- median_by_method(rank_data, "common_rel_nt")
 best <- best[which.min(best$value), , drop = FALSE]
 best_method <- method_label[best$method]
@@ -82,7 +93,7 @@ rt <- aggregate(cbind(elapsed_median_ms, elapsed_p90_ms, fail_rate) ~ method,
                 summary,
                 function(x) median(x, na.rm = TRUE))
 rt$Method <- method_label[rt$method]
-rt <- rt[match(c("ar", "rs", "ilm", "gmm_block", "gmm_full", "nt_ml"), rt$method),
+rt <- rt[match(method_order, rt$method),
          c("Method", "elapsed_median_ms", "elapsed_p90_ms", "fail_rate")]
 names(rt) <- c("Method", "Median Time (ms)", "P90 Time (ms)", "Failure Rate")
 rt$`Median Time (ms)` <- fmt(rt$`Median Time (ms)`, 3)
@@ -110,8 +121,7 @@ bad <- aggregate(summary[bad_cols],
 bad <- subset(bad, n %in% head(sort(unique(summary$n)), 3))
 bad$Method <- method_label[bad$method]
 bad <- bad[order(bad$n, match(bad$method,
-                              c("ar", "rs", "ilm", "gmm_block",
-                                "gmm_full", "nt_ml"))), ]
+                              method_order)), ]
 bad_show <- bad[c("n", "Method", bad_cols)]
 names(bad_show) <- c("N", "Method", "Fail", "Heywood", "S Singular",
                      "Bad H Diag", "H Indef.", "Score Nonpos.",
@@ -131,9 +141,7 @@ if (has_timing) {
     timing_by_n$elapsed_median_ms
   timing_by_n$Method <- method_label[timing_by_n$method]
   timing_by_n <- timing_by_n[order(timing_by_n$n,
-                                   match(timing_by_n$method,
-                                         c("ar", "rs", "ilm", "gmm_block",
-                                           "gmm_full", "nt_ml"))), ]
+                                   match(timing_by_n$method, method_order)), ]
   timing_n_show <- timing_by_n[c("n", "Method", "elapsed_median_ms",
                                  "nt_over_method", "fail_rate")]
   names(timing_n_show) <- c("N", "Method", "Median Time (ms)",
@@ -158,16 +166,16 @@ if (has_timing) {
   )
   component_order <- names(component_label)
   timing_comp <- subset(timing, component != "total" &
-                          method %in% c("ilm", "gmm_block",
-                                        "gmm_full", "nt_ml"))
+                          method %in% c("ilm", "nt_gls_block",
+                                        "nt_gls_full", "nt_ml"))
   timing_comp <- aggregate(elapsed_median_ms ~ method + component,
                            timing_comp, median, na.rm = TRUE,
                            na.action = na.pass)
   timing_comp$Method <- method_label[timing_comp$method]
   timing_comp$Component <- component_label[timing_comp$component]
   timing_comp <- timing_comp[order(match(timing_comp$method,
-                                         c("ilm", "gmm_block",
-                                           "gmm_full", "nt_ml")),
+                                         c("ilm", "nt_gls_block",
+                                           "nt_gls_full", "nt_ml")),
                                    match(timing_comp$component,
                                          component_order)), ]
   timing_comp_show <- timing_comp[c("Method", "Component",
@@ -198,15 +206,17 @@ only the diagonal communalities.
 
 The current recommendation candidate is **ILM**: the identity-weighted linear
 moment estimator. In this run its median common-covariance MISE is
-`r fmt(ilm_rel_rs, 3)` times RS over the Guttman cells, while avoiding the Gamma
-estimation and inverse used by the plug-in GMM variants. Under normal data the
-best closed-form method versus magmaan NT ML is `r best_method`, with median
-common-covariance MISE ratio `r fmt(best_ratio, 2)`.
+`r fmt(ilm_rel_rs, 3)` times RS over the Guttman cells, while avoiding the
+normal-theory triad covariance and inverse used by the NT-GLS variants. Under
+normal data the best closed-form method versus magmaan NT ML is
+`r best_method`, with median common-covariance MISE ratio
+`r fmt(best_ratio, 2)`.
 
-The GMM variants do not buy much here. `gmm_block` needs only within-factor
-correlation blocks, while `gmm_full` uses all within-factor correlation pairs
-across factors, but neither uses the whole SEM Gamma. At the largest displayed
-design (`r cx$factors` factors, `r cx$indicators` indicators each), that means
+The NT-GLS variants do not buy much here. `nt_gls_block` needs only
+within-factor correlation blocks, while `nt_gls_full` uses all within-factor
+correlation pairs across factors, but neither uses the whole SEM Gamma. At the
+largest displayed design (`r cx$factors` factors, `r cx$indicators` indicators
+each), that means
 `r cx$within_corr_pairs_total` within-block correlations and
 `r cx$triad_rows_total` triad moments, versus `r cx$full_sem_corr_pairs`
 off-diagonal correlations for full SEM ADF.
@@ -239,8 +249,8 @@ knitr::kable(acc, row.names = FALSE)
 The point is not that AR is a serious baseline. It is useful as a warning:
 individual ratio averaging is unstable when one of the other-indicator
 correlations is small. RS already removes most of that pathology. ILM and the
-GMM variants then replace the ratio with a linear moment pooling; in this grid,
-the simple ILM pooling is as good as the heavier plug-in weights.
+NT-GLS variants then replace the ratio with a weighted linear moment pooling;
+in this grid, the simple ILM pooling is as good as the heavier plug-in weights.
 
 ### Runtime
 
@@ -250,7 +260,7 @@ Median per-replication wall time by method, pooled across cells.
 knitr::kable(rt, row.names = FALSE)
 ```
 
-The GMM rows include construction and pseudo-inversion of their estimated
+The NT-GLS rows include construction and pseudo-inversion of the normal-theory
 triad-moment covariance. The NT ML row is magmaan's iterative normal-theory fit.
 Model syntax parsing and lavaanification are outside the per-replication clock;
 the NT row still pays magmaan's current R-to-C++ partable conversion inside the
@@ -300,8 +310,8 @@ knitr::kable(bad_show, row.names = FALSE)
 
 ### Complexity
 
-The reduced GMM covariance is block-local in the recommended form. It does not
-need the full SEM Gamma matrix.
+The reduced NT-GLS covariance is block-local in the recommended form. It does
+not need the full SEM Gamma matrix.
 
 ```{r}
 cx_show <- complexity
@@ -311,10 +321,10 @@ names(cx_show) <- c("Factors", "Indicators", "p", "Pairs / Block",
 knitr::kable(cx_show, row.names = FALSE)
 ```
 
-For a factor with `m` indicators, block GMM uses `choose(m, 2)` within-block
-correlations and `m * choose(m - 1, 2)` triad equations. Full GMM still ignores
-cross-block correlations as moments, but its weight can couple the within-block
-triads across factors.
+For a factor with `m` indicators, block NT-GLS uses `choose(m, 2)` within-block
+correlations and `m * choose(m - 1, 2)` triad equations. Full NT-GLS still
+ignores cross-block correlations as moments, but its weight can couple the
+within-block triads across factors.
 
 ## Caveats
 
@@ -324,7 +334,10 @@ triads across factors.
   `magmaan::sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` and then treated as
   continuous. It is a stress arm for the covariance estimator, not an ordinal
   latent-response estimator.
-- The H-diagonal rules are computed by `magmaan::guttman_h()`. The full package
+- The H-diagonal rules are computed by `magmaan::guttman_h()`. In the current
+  C++ API, `nt_gls_block` and `nt_gls_full` are the experiment names for the
+  existing `gmm_block` and `gmm_full` methods, which use the normal-theory
+  covariance of sample correlations as the plug-in GLS weight. The full package
   frontier CFA estimator still uses the existing Guttman map; this experiment is
   evidence for which communality rule to promote into that map.
 - Per-replication covariance/sample-statistics construction uses ML scaling
