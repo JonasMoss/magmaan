@@ -595,7 +595,22 @@ the full two-factor off-diagonal model. Full ADF can be more efficient for the
 communalities when \(\kappa\ne0\), because cross-block correlations provide
 additional noisy measurements involving the same loadings.
 
-Cross-block rank-one restrictions can be written as additional moment
+The most useful additional moments keep one anchor in the target item's own
+block. For \(i,j\in I_1\) and \(a\in I_2\),
+\[
+  \gamma_i\rho_{ja}-\rho_{ij}\rho_{ia}=0,
+\]
+because both sides are
+\(\kappa\alpha_i^2\alpha_j\beta_a\). Similarly, for \(a,b\in I_2\) and
+\(i\in I_1\),
+\[
+  \delta_a\rho_{ib}-\rho_{ai}\rho_{ab}=0 .
+\]
+These are cross-block analogues of the Spearman triads, but they remain linear
+in the target communality. They add finite-sample information without adding
+\(\kappa\) to the itemwise solve.
+
+Other cross-block rank-one restrictions can also be written as moment
 equations. For example,
 \[
   \rho_{ia}\rho_{jb}
@@ -614,13 +629,142 @@ Also,
   =
   \kappa^2\gamma_i\rho_{ab}.
 \]
-These equations show why the two-factor case is richer. The cross-block
-moments are exact, but they introduce \(\kappa\) and products such as
-\(\kappa^2\gamma_i\). A closed-form blockwise Guttman communality rule can
-ignore them and remain consistent. A more efficient two-factor GMM rule would
-include them and jointly estimate \(\gamma\), \(\delta\), and \(\kappa\), but
-that is no longer the same simple itemwise linear solve unless an additional
-parameterization or one-step linearization is chosen.
+These equations show the difference between two extensions. One-same-block
+anchor moments remain affine in the communalities. Moments whose two anchors
+both lie outside the target block usually introduce latent-correlation nuisance
+parameters such as \(\kappa^2\), and are no longer the same simple itemwise
+linear solve unless an additional parameterization or one-step linearization is
+chosen.
+
+\section{Extended anchor-triad GMM}
+
+The preceding two-factor identity has a direct many-factor form. Let
+\[
+  \Sigma=\Lambda\Phi\Lambda\T+\Theta
+\]
+be an independent-clusters CFA population with diagonal \(\Theta\). For
+\(i\in I_f\), define
+\[
+  c_i=H_{ii}=\lambda_i^2\Phi_{ff}.
+\]
+Let \(j\in I_f\setminus\{i\}\), and let \(k\notin\{i,j\}\) be any other
+indicator, possibly in another block \(I_g\). Then
+\begin{equation}\label{eq:anchor-triad}
+  c_i\sigma_{jk}-\sigma_{ij}\sigma_{ik}=0 .
+\end{equation}
+Indeed,
+\[
+  c_i\sigma_{jk}
+  =
+  \lambda_i^2\Phi_{ff}\lambda_j\lambda_k\Phi_{fg}
+  =
+  \sigma_{ij}\sigma_{ik}.
+\]
+When \(g=f\), this is the ordinary within-block Spearman triad. When \(g\ne f\),
+it uses a cross-block covariance but still estimates the same \(c_i\). If
+\(\Phi_{fg}=0\), the row is exact but has zero first-order sensitivity to
+\(c_i\), so it contributes no population information about \(c_i\) except
+possibly as a control variate through its sampling covariance with other rows.
+
+Choose any collection \(\mathcal T\) of anchor triples
+\[
+  r=(i;j,k),
+  \qquad
+  j\in I_{f(i)}\setminus\{i\},
+  \qquad
+  k\notin\{i,j\}.
+\]
+On the covariance scale, define
+\[
+  A_{r\ell}(\Sigma)
+  =
+  \begin{cases}
+    \sigma_{jk}, & \ell=i,\\
+    0,           & \ell\ne i,
+  \end{cases}
+  \qquad
+  b_r(\Sigma)=\sigma_{ij}\sigma_{ik}.
+\]
+Then the population moment equations are simply
+\[
+  A(\Sigma)c-b(\Sigma)=0 .
+\]
+For a sample covariance \(S\) and a fixed positive semidefinite weight \(W\),
+the weighted estimator remains closed form:
+\begin{equation}\label{eq:extended-anchor-solve}
+  \hat c_W
+  =
+  \{A(S)\T W A(S)\}^{+}A(S)\T W b(S).
+\end{equation}
+With a block-diagonal or diagonal \(W\), this is just a weighted itemwise
+regression through the origin. With a full \(W\), different item equations can
+be coupled, but the normal equations are still linear in \(c\).
+
+Pure row-proportionality tetrads can be added without losing closed form. If
+\(i\) and \(j\) are distinct indicators in the same block and \(k,l\) are any
+other distinct indicators not equal to \(i\) or \(j\), then
+\begin{equation}\label{eq:pure-row-tetrad}
+  \sigma_{ik}\sigma_{jl}-\sigma_{il}\sigma_{jk}=0 .
+\end{equation}
+These moments contain no \(c\), but under a full optimal GMM weight they can act
+as control variates for the affine anchor-triad moments. Stack
+\[
+  m(c;S)=
+  \begin{bmatrix}
+    A(S)c-b(S)\\
+    q(S)
+  \end{bmatrix}
+  =
+  M(S)c+e(S),
+\]
+where \(q(S)\) stacks chosen pure tetrads and
+\[
+  M(S)=
+  \begin{bmatrix}
+    A(S)\\
+    0
+  \end{bmatrix},
+  \qquad
+  e(S)=
+  \begin{bmatrix}
+    -b(S)\\
+    q(S)
+  \end{bmatrix}.
+\]
+For fixed \(W\),
+\begin{equation}\label{eq:affine-gmm-solve}
+  \hat c_W
+  =
+  -\{M(S)\T W M(S)\}^{+}M(S)\T W e(S).
+\end{equation}
+Thus adding the rank restrictions changes the rows and the weight, not the
+closed-form character of the communality solve.
+
+The efficiency statement is the usual GMM one. If \(W\) converges to the
+generalized inverse of the asymptotic covariance of the stacked moments, then
+\eqref{eq:affine-gmm-solve} is efficient within the declared affine moment
+family. If the chosen anchor triads and pure tetrads form a locally complete set
+of off-diagonal independent-clusters restrictions, their optimally weighted GMM
+estimator is first-order equivalent to the corresponding off-diagonal
+minimum-distance estimator for \(c\). Under normality, the convenient plug-in
+choice is the normal-theory covariance of the sample covariance or correlation
+matrix pushed through the Jacobian of \(m(c;S)\), with \(c\) replaced by any
+regular preliminary estimate. This gives a one-step efficient version while
+keeping the final update linear.
+
+There is still a boundary. If both anchors lie outside the target block, then
+\[
+  \sigma_{ij}\sigma_{ik}
+  =
+  c_i
+  \frac{\Phi_{fg}\Phi_{fh}}{\Phi_{ff}\Phi_{gh}}
+  \sigma_{jk},
+  \qquad j\in I_g,\ k\in I_h ,
+\]
+when the displayed factor covariances are nonzero. Such rows are exact, but
+they introduce latent-correlation nuisance parameters. They belong to a larger
+nonlinear or one-step-linearized GMM system, not to the purely affine
+communality solve above.
 
 \section{Many-factor consistency and orthogonal-block efficiency}
 
@@ -952,7 +1096,8 @@ communality rules by their population contract:
   Spearman, identity linear moments, weighted linear-moment variants with
   nonzero denominators, one-step triad GMM with a declared correlation
   covariance model, the normal-theory plug-in GLS weight
-  \eqref{eq:nt-gls-triad}, and exact uniqueness-first rules;
+  \eqref{eq:nt-gls-triad}, extended anchor-triad GMM
+  \eqref{eq:extended-anchor-solve}, and exact uniqueness-first rules;
 \item start-value rules only: SMC, arbitrary lower bounds, and repairs that can
   be active at the population target;
 \item regularized variants: any rule that replaces a failed denominator or
@@ -969,9 +1114,11 @@ should be the propositions above, not historical popularity as a starting value.
 For a recommendable closed-form default, the identity linear-moment rule
 \eqref{eq:identity-linear-mom} is the least ratio-sensitive member of the
 certified family. For an efficiency-oriented normal-theory variant, use the
-blockwise NT-GLS rule \eqref{eq:nt-gls-triad}. More general one-step GMM rules
+blockwise NT-GLS rule \eqref{eq:nt-gls-triad}, or the extended anchor-triad
+version \eqref{eq:extended-anchor-solve} when correlated factors make
+cross-block anchor rows informative. More general one-step GMM rules
 \eqref{eq:stacked-gmm} should declare the covariance model used to construct
-the weight.
+the weight and the moment rows included.
 
 \begin{thebibliography}{9}
 
