@@ -29,6 +29,7 @@ method_label <- c(
   ar = "AR",
   rs = "RS",
   ilm = "ILM",
+  anchor_ilm = "Anchor ILM",
   nt_gls_block = "NT-GLS block",
   nt_gls_full = "NT-GLS full",
   gmm_block = "NT-GLS block",
@@ -55,7 +56,8 @@ if (!"map" %in% names(summary)) {
 if (has_timing && !"map" %in% names(timing)) {
   timing$map <- ifelse(timing$method == "nt_ml", "ml", "incidence")
 }
-method_order <- c("ar", "rs", "ilm", "nt_gls_block", "nt_gls_full", "nt_ml")
+method_order <- c("ar", "rs", "ilm", "anchor_ilm", "nt_gls_block",
+                  "nt_gls_full", "nt_ml")
 guttman_order <- setdiff(method_order, "nt_ml")
 map_order <- c("incidence", "aligned", "block_aligned", "diag_aligned")
 maps_present <- intersect(map_order, unique(summary$map))
@@ -74,7 +76,7 @@ if (has_timing) {
 }
 focus_keys <- intersect(
   c("rs|incidence", "ilm|incidence", "ilm|aligned",
-    "nt_gls_block|aligned", "nt_ml|ml"),
+    "anchor_ilm|aligned", "nt_gls_block|aligned", "nt_ml|ml"),
   unique(summary$estimator_key)
 )
 guttman_focus_keys <- setdiff(focus_keys, "nt_ml|ml")
@@ -86,6 +88,8 @@ report_timing <- if (has_timing) {
 }
 probe_keys <- intersect(
   c("ilm|incidence", "ilm|aligned", "ilm|block_aligned",
+    "anchor_ilm|incidence", "anchor_ilm|aligned",
+    "anchor_ilm|block_aligned",
     "nt_gls_block|incidence", "nt_gls_block|aligned",
     "nt_gls_block|block_aligned"),
   unique(summary$estimator_key)
@@ -135,7 +139,8 @@ acc <- acc[match(guttman_focus_keys, acc$estimator_key),
 names(acc) <- c("Estimator", "Normal / NT", "Normal / RS", "Ordinal / RS")
 for (j in 2:ncol(acc)) acc[[j]] <- fmt(acc[[j]], 3)
 
-rank_data <- subset(normal, method %in% c("rs", "ilm", "nt_gls_block"))
+rank_data <- subset(normal, method %in% c("rs", "ilm", "anchor_ilm",
+                                          "nt_gls_block"))
 best <- median_by_estimator(rank_data, "common_rel_nt")
 best <- best[which.min(best$value), , drop = FALSE]
 best_method <- estimator_label(best$method, best$map)
@@ -145,6 +150,8 @@ ar_rel <- median(non_nt$common_rel_rs[non_nt$method == "ar" &
                                         non_nt$map == "incidence"], na.rm = TRUE)
 ilm_rel_rs <- median(non_nt$common_rel_rs[non_nt$method == "ilm" &
                                             non_nt$map == "incidence"], na.rm = TRUE)
+anchor_rel_rs <- median(non_nt$common_rel_rs[non_nt$method == "anchor_ilm" &
+                                               non_nt$map == "aligned"], na.rm = TRUE)
 
 rt <- aggregate(cbind(elapsed_median_ms, elapsed_p90_ms, fail_rate) ~
                   method + map + estimator_key + Estimator,
@@ -232,7 +239,7 @@ if (has_timing) {
   )
   component_order <- names(component_label)
   timing_comp <- subset(report_timing, component != "total" &
-                          method %in% c("ilm", "nt_gls_block",
+                          method %in% c("ilm", "anchor_ilm", "nt_gls_block",
                                         "nt_ml"))
   timing_comp <- aggregate(elapsed_median_ms ~
                              method + map + estimator_key + Estimator +
@@ -287,6 +294,7 @@ group_accuracy <- function(by) {
 
 factor_accuracy_show <- group_accuracy(c("generator", "factors"))
 n_accuracy_show <- group_accuracy(c("generator", "n"))
+rho_accuracy_show <- group_accuracy(c("generator", "rho"))
 
 hs_accuracy_methods <- subset(report_summary, factors == 3 & indicators == 3 &
                                 method %in% method_order)
@@ -370,19 +378,23 @@ categorical data arm? The comparison now crosses the communality rule with
 several closed-form Guttman reconstruction maps, but the displayed report is
 focused on a small candidate set. The baseline is the traditional
 incidence-composite reconstruction, `H Z (Z' H Z)^-1 Z' H`. The main new map is
-the loading-aligned score rule. The estimand is the reconstructed common
-covariance matrix, not only the diagonal communalities.
+the loading-aligned score rule. The new communality rule is `anchor_ilm`, which
+adds cross-block anchor-triad rows to the identity-weighted linear moment solve.
+The estimand is the reconstructed common covariance matrix, not only the
+diagonal communalities.
 
 ## Short answer
 
-The traditional recommendation candidate remains **ILM / incidence**: the
-identity-weighted linear moment communality rule with the historical incidence
-map. In this run its median common-covariance MISE is
-`r fmt(ilm_rel_rs, 3)` times RS / incidence over the Guttman cells, while
-avoiding the normal-theory triad covariance and inverse used by the NT-GLS
-variants. Under normal data the best closed-form estimator versus magmaan NT ML
-on joint-success replications is `r best_method`, with median common-covariance
-MISE ratio `r fmt(best_ratio, 2)`.
+The old cheap baseline is **ILM / incidence**: the identity-weighted
+within-block linear moment rule with the historical incidence map. In this run
+its median common-covariance MISE is `r fmt(ilm_rel_rs, 3)` times RS /
+incidence over the Guttman cells, while avoiding the normal-theory triad
+covariance and inverse used by the NT-GLS variants. The new result is that the
+extended anchor-triad probe, **Anchor ILM / aligned**, is the more interesting
+candidate: its median common-covariance MISE is `r fmt(anchor_rel_rs, 3)` times
+RS / aligned over the displayed Guttman cells. Under normal data the best
+closed-form estimator versus magmaan NT ML on joint-success replications is
+`r best_method`, with median common-covariance MISE ratio `r fmt(best_ratio, 2)`.
 
 The NT-GLS variants do not buy much here. `nt_gls_block` needs only
 within-factor correlation blocks, while `nt_gls_full` uses all within-factor
@@ -390,8 +402,9 @@ correlation pairs across factors, but neither uses the whole SEM Gamma. At the
 largest displayed design (`r cx$factors` factors, `r cx$indicators` indicators
 each), that means
 `r cx$within_corr_pairs_total` within-block correlations and
-`r cx$triad_rows_total` triad moments, versus `r cx$full_sem_corr_pairs`
-off-diagonal correlations for full SEM ADF.
+`r cx$triad_rows_total` within-block triad moments. The anchor extension uses
+`r cx$anchor_rows_total` anchor-triad rows, versus
+`r cx$full_sem_corr_pairs` off-diagonal correlations for full SEM ADF.
 
 Runtime is consistent with the intended niche: NT ML is about
 `r fmt(runtime_factor, 1)` times slower than ILM / incidence on this grid.
@@ -432,6 +445,11 @@ individual ratio averaging is unstable when one of the other-indicator
 correlations is small. RS already removes most of that pathology. ILM and the
 NT-GLS variants then replace the ratio with a weighted linear moment pooling;
 in this grid, the simple ILM pooling is as good as the heavier plug-in weights.
+Anchor ILM keeps the same identity-weighted solve but stacks additional rows
+\(c_i r_{jk}-r_{ij}r_{ik}=0\) where \(j\) is in \(i\)'s factor block and \(k\)
+may be in another block. These rows should help mainly when the latent factors
+are correlated; at \(\rho=0\) their population coefficient is zero, so they are
+mostly a stress test for finite-sample noise.
 
 The reconstruction maps are separate from the communality rule. `incidence` is
 the historical \(Z\)-score map. `aligned` replaces \(Z\) by
@@ -485,6 +503,12 @@ By generator and sample size:
 
 ```{r}
 knitr::kable(n_accuracy_show, row.names = FALSE)
+```
+
+By generator and latent correlation:
+
+```{r}
+knitr::kable(rho_accuracy_show, row.names = FALSE)
 ```
 
 HS-style three-factor slice: `factors = 3` and `indicators = 3`, aggregated
@@ -576,7 +600,8 @@ not need the full SEM Gamma matrix.
 ```{r}
 cx_show <- complexity
 names(cx_show) <- c("Factors", "Indicators", "p", "Pairs / Block",
-                    "Triads / Block", "Within Pairs", "Triads Total",
+                    "Triads / Block", "Anchor Rows / Item",
+                    "Within Pairs", "Triads Total", "Anchor Rows Total",
                     "Full SEM Pairs", "Block Weight Dim", "Full Weight Dim")
 knitr::kable(cx_show, row.names = FALSE)
 ```
@@ -584,7 +609,9 @@ knitr::kable(cx_show, row.names = FALSE)
 For a factor with `m` indicators, block NT-GLS uses `choose(m, 2)` within-block
 correlations and `m * choose(m - 1, 2)` triad equations. Full NT-GLS still
 ignores cross-block correlations as moments, but its weight can couple the
-within-block triads across factors.
+within-block triads across factors. Anchor ILM adds
+`choose(m - 1, 2) + (m - 1) * (p - m)` rows per indicator by pairing one
+same-block anchor with either another same-block anchor or a cross-block anchor.
 
 ## Caveats
 
@@ -600,11 +627,11 @@ within-block triads across factors.
   `magmaan::sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` and then treated as
   continuous. It is a stress arm for the covariance estimator, not an ordinal
   latent-response estimator.
-- The H-diagonal rules are computed by `magmaan::guttman_h()`. In the current
+- Most H-diagonal rules are computed by `magmaan::guttman_h()`. In the current
   C++ API, `nt_gls_block` and `nt_gls_full` are the experiment names for the
   existing `gmm_block` and `gmm_full` methods, which use the normal-theory
-  covariance of sample correlations as the plug-in GLS weight. The
-  reconstruction-map variants are experiment-local R code for now. The full
+  covariance of sample correlations as the plug-in GLS weight. `anchor_ilm` and
+  the reconstruction-map variants are experiment-local R code for now. The full
   package frontier CFA estimator still uses the existing Guttman map; this
   experiment is evidence for which communality rule and map to promote.
 - Per-replication covariance/sample-statistics construction uses ML scaling

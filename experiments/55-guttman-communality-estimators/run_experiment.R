@@ -23,7 +23,7 @@ guttman_backend_method <- function(method) {
 }
 
 accepted_methods <- c(
-  "ar", "rs", "ilm", "nt_gls_block", "nt_gls_full",
+  "ar", "rs", "ilm", "anchor_ilm", "nt_gls_block", "nt_gls_full",
   "gmm_block", "gmm_full", "nt_ml"
 )
 
@@ -42,10 +42,10 @@ usage <- function() {
     "  --n LIST             Sample sizes. Full default: 12,20,50,100,250,500.\n",
     "  --factors LIST       Factor counts. Full default: 1,2,3,4.\n",
     "  --indicators LIST    Indicators per factor. Full default: 3,5.\n",
-    "  --rho LIST           Exchangeable latent correlations. Full default: 0,.4.\n",
+    "  --rho LIST           Exchangeable latent correlations. Default: 0,.4.\n",
     "  --loading LIST       Loading patterns: mild,wide. Full default: mild,wide.\n",
     "  --generators LIST    Data generators: normal,ordinal. Default: both.\n",
-    "  --methods LIST       Methods. Default: rs,ilm,nt_gls_block,nt_ml.\n",
+    "  --methods LIST       Methods. Default: rs,ilm,anchor_ilm,nt_gls_block,nt_ml.\n",
     "                       Also accepted: ar,nt_gls_full,gmm_block,gmm_full.\n",
     "  --maps LIST          Guttman maps: incidence,aligned,block_aligned.\n",
     "                       Optional: diag_aligned. Default: first three.\n",
@@ -71,7 +71,7 @@ parse_args <- function(args) {
     rho = c(0, .4),
     loading = c("mild", "wide"),
     generators = c("normal", "ordinal"),
-    methods = c("rs", "ilm", "nt_gls_block", "nt_ml"),
+    methods = c("rs", "ilm", "anchor_ilm", "nt_gls_block", "nt_ml"),
     maps = c("incidence", "aligned", "block_aligned"),
     timing_reps = 20L,
     timing_warmup = 2L,
@@ -171,7 +171,7 @@ parse_args <- function(args) {
     if (!"n" %in% explicit) opts$n <- c(12L, 20L, 50L, 100L)
     if (!"factors" %in% explicit) opts$factors <- 3L
     if (!"indicators" %in% explicit) opts$indicators <- c(3L, 5L)
-    if (!"rho" %in% explicit) opts$rho <- .4
+    if (!"rho" %in% explicit) opts$rho <- c(0, .4)
     if (!"loading" %in% explicit) opts$loading <- c("mild", "wide")
     if (!"generators" %in% explicit) opts$generators <- c("normal", "ordinal")
     if (!"timing_reps" %in% explicit) opts$timing_reps <- 6L
@@ -271,6 +271,81 @@ make_Z <- function(blocks) {
     Z[blocks == f, f] <- 1
   }
   Z
+}
+
+correlation_from_cov <- function(s) {
+  d <- diag(s)
+  if (any(!is.finite(d) | d <= 0)) {
+    stop("covariance diagonal must be positive", call. = FALSE)
+  }
+  r <- s / sqrt(outer(d, d))
+  diag(r) <- 1
+  dimnames(r) <- dimnames(s)
+  r
+}
+
+anchor_row_cache <- new.env(parent = emptyenv())
+
+anchor_triad_rows <- function(blocks, include_cross = TRUE) {
+  key <- paste(include_cross, paste(blocks, collapse = ","), sep = "|")
+  if (exists(key, envir = anchor_row_cache, inherits = FALSE)) {
+    return(get(key, envir = anchor_row_cache, inherits = FALSE))
+  }
+  p <- length(blocks)
+  target <- integer()
+  own_anchor <- integer()
+  other_anchor <- integer()
+  for (i in seq_len(p)) {
+    same <- setdiff(which(blocks == blocks[[i]]), i)
+    if (length(same) >= 2L) {
+      cmb <- utils::combn(same, 2L)
+      target <- c(target, rep(i, ncol(cmb)))
+      own_anchor <- c(own_anchor, cmb[1L, ])
+      other_anchor <- c(other_anchor, cmb[2L, ])
+    }
+    if (include_cross && length(same)) {
+      cross <- which(blocks != blocks[[i]])
+      if (length(cross)) {
+        grid <- expand.grid(j = same, k = cross)
+        target <- c(target, rep(i, nrow(grid)))
+        own_anchor <- c(own_anchor, grid$j)
+        other_anchor <- c(other_anchor, grid$k)
+      }
+    }
+  }
+  out <- list(i = target, j = own_anchor, k = other_anchor,
+              n = length(target))
+  assign(key, out, envir = anchor_row_cache)
+  out
+}
+
+anchor_gamma_identity <- function(r, blocks, include_cross = TRUE,
+                                  tol = sqrt(.Machine$double.eps)) {
+  rows <- anchor_triad_rows(blocks, include_cross = include_cross)
+  p <- nrow(r)
+  a <- r[cbind(rows$j, rows$k)]
+  b <- r[cbind(rows$i, rows$j)] * r[cbind(rows$i, rows$k)]
+  num <- as.numeric(rowsum(a * b, rows$i, reorder = FALSE))
+  den <- as.numeric(rowsum(a * a, rows$i, reorder = FALSE))
+  gamma <- rep(NA_real_, p)
+  ok <- is.finite(den) & den > tol
+  gamma[ok] <- num[ok] / den[ok]
+  list(gamma = gamma, rows = rows$n)
+}
+
+anchor_guttman_h <- function(s, blocks) {
+  r <- correlation_from_cov(s)
+  fit <- anchor_gamma_identity(r, blocks, include_cross = TRUE)
+  h2 <- diag(s) * fit$gamma
+  H <- s
+  diag(H) <- h2
+  dimnames(H) <- dimnames(s)
+  list(h2 = h2, H = H, gamma = fit$gamma, rows = fit$rows)
+}
+
+estimate_guttman_h <- function(s, blocks, method) {
+  if (method == "anchor_ilm") return(anchor_guttman_h(s, blocks))
+  magmaan::guttman_h(s, blocks, method = guttman_backend_method(method))
 }
 
 sym_power <- function(x, power, label, tol = 1e-10) {
@@ -422,8 +497,7 @@ one_method <- function(x, design, spec, target_common, method, map, ml_control) 
     timed <- time_call({
       s <- sample_cov_n(x, design$vars)
       h <- tryCatch(
-        magmaan::guttman_h(s, design$blocks,
-                           method = guttman_backend_method(method)),
+        estimate_guttman_h(s, design$blocks, method),
         error = function(e) e
       )
       if (inherits(h, "error")) {
@@ -572,8 +646,7 @@ time_one_method_detail <- function(x, design, spec, method, map, ml_control,
     if (cov_t$ok) {
       h_t <- time_repeat(
         timing_inner,
-        function() magmaan::guttman_h(
-          cov_t$value, design$blocks, method = guttman_backend_method(method)))
+        function() estimate_guttman_h(cov_t$value, design$blocks, method))
       h_failed <- !h_t$ok || any(!is.finite(h_t$value$h2))
       h_message <- if (!h_t$ok) {
         h_t$message
@@ -665,14 +738,18 @@ complexity_row <- function(q, m) {
   p <- q * m
   corr_block <- m * (m - 1) / 2
   triad_block <- m * (m - 1) * (m - 2) / 2
+  anchor_rows_per_item <- (m - 1) * (m - 2) / 2 + (m - 1) * (p - m)
+  anchor_rows_total <- p * anchor_rows_per_item
   data.frame(
     factors = q,
     indicators = m,
     p = p,
     corr_pairs_per_block = corr_block,
     triad_rows_per_block = triad_block,
+    anchor_rows_per_item = anchor_rows_per_item,
     within_corr_pairs_total = q * corr_block,
     triad_rows_total = q * triad_block,
+    anchor_rows_total = anchor_rows_total,
     full_sem_corr_pairs = p * (p - 1) / 2,
     block_weight_dim = triad_block,
     full_weight_dim = q * triad_block,
