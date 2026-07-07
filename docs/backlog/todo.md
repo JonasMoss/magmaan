@@ -2221,6 +2221,12 @@ work until a concrete downstream consumer appears.
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
+  `experiments/56-noniterative-constraint-charts` adds the marker-chart sanity
+  check: the pure linear projection is equivariant and the configural implied
+  covariance is marker-invariant, but the current linear marker-coordinate
+  projection is not an off-surface chart-invariant constrained target. New
+  remaining item: formulate a chart-free or moving-chart constrained Guttman
+  target before claiming marker-invariant misspecification behavior.
   Remaining: a **pooled-loading** scalar refinement (test given metric, more
   efficient than the reference-group loadings), an **ordinal** mean-structure
   invariance path (needs threshold modeling, not treated-as-continuous moments),

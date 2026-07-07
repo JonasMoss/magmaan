@@ -222,7 +222,13 @@ golden `parTable()` fixtures.
   over-rejects and the empirical Gamma restores the level, mirroring the ML
   NT-vs-robust split; the scalar Wald is exactly nominal on normal data, far more
   robust to non-normality, and delivers true scalar in one closed-form step where
-  the ML nested test cannot).
+  the ML nested test cannot). The chart diagnostic
+  `experiments/56-noniterative-constraint-charts` shows the current coordinate
+  projection is marker-invariant on the exact constraint surface, and the
+  configural implied covariance is marker-invariant, but off-surface constrained
+  targets can differ by marker chart because the marker-to-marker map is
+  nonlinear in the loading coordinates. A genuinely chart-free off-model
+  constrained Guttman target remains a research item.
 - Frontier empirical reduced-bias estimation (2026-06) implements the
   Kosmidis-Lunardon trace adjustment for raw-data normal-theory SEM and the
   moment-quadratic family. The C++ surface covers

@@ -1,0 +1,163 @@
+---
+title: "Do constrained non-iterative CFA fits depend on the marker chart?"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results_dir <- "results"
+raw_path <- file.path(results_dir, "chart_comparison_raw.csv")
+sum_path <- file.path(results_dir, "chart_comparison_summary.csv")
+lin_path <- file.path(results_dir, "linear_projection_summary.csv")
+if (!file.exists(raw_path) || !file.exists(sum_path) || !file.exists(lin_path)) {
+  stop("No results. Run:\n  Rscript run_experiment.R --smoke")
+}
+raw <- read.csv(raw_path, stringsAsFactors = FALSE, check.names = FALSE)
+sumry <- read.csv(sum_path, stringsAsFactors = FALSE, check.names = FALSE)
+lin <- read.csv(lin_path, stringsAsFactors = FALSE, check.names = FALSE)
+meta <- tryCatch(read.csv(file.path(results_dir, "metadata.csv"),
+                          stringsAsFactors = FALSE), error = function(e) NULL)
+fmt <- function(x) formatC(x, format = "e", digits = 2)
+fmt_fixed <- function(x) formatC(x, format = "f", digits = 3)
+max_col <- function(col) max(raw[[col]], na.rm = TRUE)
+```
+
+## Question
+
+The constrained estimator is an $\Omega$-metric projection of a configural
+closed-form estimate onto the linear equalities carried by the lavaanified
+partable. If those equalities are just a chart expression of the same
+measurement-invariance surface, an arbitrary marker choice should change the
+numeric coordinates but not the fitted covariance matrix or the Wald statistic.
+
+This experiment compares two equivalent marker charts:
+
+- `marker_x1x4`: default markers `x1` and `x4`;
+- `marker_x2x5`: explicit markers `x2` and `x5`.
+
+Both charts use the same observed covariance matrices, the same declared
+indicator-factor blocks, the same non-iterative estimator, and the same
+normal-theory delta covariance construction. We compare the chart-invariant
+objects: the configural implied covariance, the constrained implied covariance,
+and the metric-invariance Wald statistic. The raw parameter vectors are also
+reported as a control; those should differ because they are chart coordinates.
+
+## Short Answer
+
+The pure projection algebra is fine, but the current CFA constraint target is
+not fully marker-chart invariant away from the constraint surface.
+
+The separate linear-algebra control passes: projecting in one coordinate system
+and transforming the result agrees with projecting after a nonsingular linear
+reparameterization, with maximum transformed-coordinate difference
+`r fmt(lin$projected_theta_max_abs_diff_max)` and maximum Wald difference
+`r fmt(lin$W_abs_diff_max)`.
+
+For CFA, the configural map is chart invariant at the level of implied
+covariances: the largest configural implied-covariance difference is
+`r fmt(max_col("config_sigma_max_abs_diff"))`, while the raw coordinate vectors
+differ by as much as `r fmt_fixed(max_col("raw_theta_max_abs_diff"))`. However,
+the constrained projection depends on the marker chart when the unconstrained
+estimate is off the metric-invariance surface: the largest constrained
+implied-covariance difference is
+`r fmt(max_col("constrained_sigma_max_abs_diff"))`, and the largest
+Wald-statistic difference is `r fmt(max_col("W_abs_diff"))`. On the exact
+invariant population these quantities collapse to roundoff, because the
+projection is a no-op.
+
+## Chart Comparison
+
+The population rows use exact model covariances with very large `nobs`, so they
+mostly expose algebraic or numerical defects. The finite-sample rows use the
+same random sample covariance in both marker charts. `metric_viol` is
+deliberately off the metric-invariance surface; this is the more important
+case, because projection targets are where chart dependence would show up.
+
+```{r population-table}
+pop <- raw[raw$source == "population", ]
+pop_out <- pop[c("scenario", "estimator", "k_x1x4", "k_x2x5",
+                 "W_x1x4", "W_x2x5", "W_abs_diff",
+                 "config_sigma_max_abs_diff",
+                 "constrained_sigma_max_abs_diff",
+                 "raw_theta_max_abs_diff")]
+pop_out$W_x1x4 <- fmt_fixed(pop_out$W_x1x4)
+pop_out$W_x2x5 <- fmt_fixed(pop_out$W_x2x5)
+for (nm in c("W_abs_diff", "config_sigma_max_abs_diff",
+             "constrained_sigma_max_abs_diff")) {
+  pop_out[[nm]] <- fmt(pop_out[[nm]])
+}
+pop_out$raw_theta_max_abs_diff <- fmt_fixed(pop_out$raw_theta_max_abs_diff)
+knitr::kable(pop_out, row.names = FALSE,
+             caption = "Exact-population chart comparison.")
+```
+
+```{r finite-summary}
+fin <- sumry[sumry$source == "finite_sample", ]
+cols <- c("scenario", "estimator",
+          "W_abs_diff_max", "W_abs_diff_median",
+          "constrained_sigma_max_abs_diff_max",
+          "constrained_sigma_max_abs_diff_median",
+          "raw_theta_max_abs_diff_median")
+fin_out <- fin[cols]
+for (nm in setdiff(names(fin_out), c("scenario", "estimator"))) {
+  fin_out[[nm]] <- if (grepl("raw_theta", nm)) fmt_fixed(fin_out[[nm]]) else fmt(fin_out[[nm]])
+}
+knitr::kable(fin_out, row.names = FALSE,
+             caption = "Finite-sample chart comparison. Max/median are over replications.")
+```
+
+## Linear Projection Control
+
+This control strips away CFA. For random $(\hat\theta,\Omega,R,c)$, it projects
+onto $R\theta=c$. Then it applies a random nonsingular reparameterization
+$\theta=B\eta$, transforms $\Omega$ and $R$, projects in $\eta$, and maps the
+answer back. The two projections and Wald statistics should match.
+
+```{r linear-table}
+lin_out <- lin
+for (nm in names(lin_out)) lin_out[[nm]] <- fmt(lin_out[[nm]])
+knitr::kable(lin_out, row.names = FALSE,
+             caption = "Pure projection equivariance control.")
+```
+
+## Interpretation
+
+This is the important distinction:
+
+- If the transformation is genuinely linear in the estimated coordinates, the
+  minimum-distance projection is equivariant.
+- The configural non-iterative CFA map itself is fine under a marker change:
+  the implied covariance is unchanged up to roundoff.
+- The marker-to-marker chart change is nonlinear in the loading coordinates.
+  Therefore an $\Omega$-metric projection onto linear marker-chart equalities is
+  only guaranteed to agree on the constraint surface. Under sampling noise or
+  fixed misspecification, different marker charts induce different local
+  distances to the same curved covariance-level surface.
+
+So this experiment does not validate marker-invariant constrained targets for
+the current implementation. It gives a concrete diagnostic: if we want an
+off-model constrained Guttman estimator that is genuinely independent of marker
+choice, the projection should be formulated in a chart-free object (for example
+common fitted covariance / loading orbit) or with an explicit moving-chart
+construction, not as a plain coordinate projection in whichever marker chart
+the partable happens to use.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+quarto render report.qmd
+```
+
+For a less noisy finite-sample summary:
+
+```sh
+Rscript run_experiment.R --full --reps 300 --n 200,400,1000
+quarto render report.qmd
+```
