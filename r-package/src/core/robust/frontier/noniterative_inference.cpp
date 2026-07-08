@@ -110,6 +110,49 @@ int numeric_rank(const Eigen::MatrixXd& A) {
 
 enum class MapKind : std::uint8_t { Configural, Restricted };
 
+post_expected<NonIterativeDiffTest>
+noniterative_difference_test_impl(const Eigen::MatrixXd& M0,
+                                  const Eigen::MatrixXd& M1,
+                                  const Eigen::MatrixXd& V1,
+                                  const Eigen::MatrixXd& U1,
+                                  const Eigen::MatrixXd& Gamma1,
+                                  double T0,
+                                  double T1,
+                                  int df_d) {
+  if (M0.rows() != M1.rows() || M0.cols() != M1.cols() ||
+      V1.rows() != M1.rows() || V1.cols() != M1.rows() ||
+      U1.rows() != M1.cols() || U1.cols() != M1.cols() ||
+      Gamma1.rows() != M1.cols() || Gamma1.cols() != M1.cols()) {
+    return perr("difference test: inconsistent moment dimensions between fits");
+  }
+  if (df_d < 1) return perr("difference test: df_d must be >= 1");
+
+  // Anchor V and Gamma at H1; ULS makes this a no-op, NTML needs the H1
+  // model-implied weight for both residual projectors.
+  const Eigen::MatrixXd U0 = M0.transpose() * V1 * M0;
+  auto sd = compute_diff_spectrum_2001(U0, U1, Gamma1, df_d);
+  if (!sd.has_value()) return perr("difference test: diff spectrum failed");
+
+  const double T_d = T0 - T1;
+  auto lr = lr_test_satorra2000(T_d, *sd);
+  if (!lr.has_value()) return perr("difference test: p-values failed");
+
+  NonIterativeDiffTest out;
+  out.T_d = T_d;
+  out.df_d = df_d;
+  out.eigenvalues = sd->eigenvalues;
+  out.p_scaled = lr->p_scaled;
+  out.p_adjusted = lr->p_adjusted;
+  out.p_scaled_shifted = lr->p_scaled_shifted;
+  out.p_mixture = lr->p_mixture;
+  if (T_d < 0.0)
+    out.warnings.push_back("difference statistic T_d < 0 (non-minimizing "
+                           "estimator; the pseudo-LRT is not monotone)");
+  for (const auto& w : sd->warnings) out.warnings.push_back(w);
+  for (const auto& w : lr->warnings) out.warnings.push_back(w);
+  return out;
+}
+
 }  // namespace
 
 post_expected<NonIterativeInference>
@@ -323,38 +366,9 @@ noniterative_wald(const Eigen::VectorXd& theta, const NonIterativeInference& inf
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test(const NonIterativeInference& inf0,
                              const NonIterativeInference& inf1, int df_d) {
-  if (inf0.M.rows() != inf1.M.rows() || inf1.V.rows() != inf1.M.rows())
-    return perr("difference test: inconsistent moment dimensions between fits");
-  if (df_d < 1) return perr("difference test: df_d must be >= 1");
-
-  // Anchor V and Γ at H1; recompute U0 with the H1 weight so U0/U1/Γ share one
-  // moment space (Satorra 2000). ULS makes this a no-op (V is model-free).
-  const Eigen::MatrixXd& Vc = inf1.V;
-  const Eigen::MatrixXd& Gc = inf1.Gamma;
-  const Eigen::MatrixXd U0 = inf0.M.transpose() * Vc * inf0.M;
-  const Eigen::MatrixXd& U1 = inf1.U;
-
-  auto sd = compute_diff_spectrum_2001(U0, U1, Gc, df_d);
-  if (!sd.has_value()) return perr("difference test: diff spectrum failed");
-
-  const double T_d = inf0.T_gof - inf1.T_gof;
-  auto lr = lr_test_satorra2000(T_d, *sd);
-  if (!lr.has_value()) return perr("difference test: p-values failed");
-
-  NonIterativeDiffTest out;
-  out.T_d = T_d;
-  out.df_d = df_d;
-  out.eigenvalues = sd->eigenvalues;
-  out.p_scaled = lr->p_scaled;
-  out.p_adjusted = lr->p_adjusted;
-  out.p_scaled_shifted = lr->p_scaled_shifted;
-  out.p_mixture = lr->p_mixture;
-  if (T_d < 0.0)
-    out.warnings.push_back("difference statistic T_d < 0 (non-minimizing "
-                           "estimator; the pseudo-LRT is not monotone)");
-  for (const auto& w : sd->warnings) out.warnings.push_back(w);
-  for (const auto& w : lr->warnings) out.warnings.push_back(w);
-  return out;
+  return noniterative_difference_test_impl(
+      inf0.M, inf1.M, inf1.V, inf1.U, inf1.Gamma,
+      inf0.T_gof, inf1.T_gof, df_d);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +450,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
   }
 
   out.Omega = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd M_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  Eigen::MatrixXd V_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
   Eigen::MatrixXd U_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
   Eigen::MatrixXd G_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
   double T = 0.0;
@@ -502,6 +518,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
     } else {
       out.Omega.noalias() += (J_b * gamma_per_block[b] * J_b.transpose()) / N_b;
     }
+    M_big.block(offset[b], offset[b], ps, ps) = M_b;
+    V_big.block(offset[b], offset[b], ps, ps) = V_b;
     U_big.block(offset[b], offset[b], ps, ps) = U_b;
     G_big.block(offset[b], offset[b], ps, ps) = Gamma_cov_b;
     df += static_cast<int>(ps) - q_cov_of_block[b];
@@ -556,6 +574,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
     out.warnings.push_back("joint df <= 0 (saturated blocks); GOF not reported");
   }
 
+  out.M = std::move(M_big);
+  out.V = std::move(V_big);
   out.U = std::move(U_big);
   out.Gamma = std::move(G_big);
   return out;
@@ -804,6 +824,8 @@ noniterative_inference_grouped_restricted(
   }
 
   out.U = U_big;
+  out.M = M;
+  out.V = V_big;
   out.Gamma = G_big;
   return out;
 }
@@ -857,6 +879,15 @@ noniterative_inference_grouped_restricted_empirical(
   }
   return noniterative_inference_grouped_restricted(
       pt, rep, samp, theta, which, disc, gammas);
+}
+
+post_expected<NonIterativeDiffTest>
+noniterative_difference_test(const GroupedNonIterativeInference& inf0,
+                             const GroupedNonIterativeInference& inf1,
+                             int df_d) {
+  return noniterative_difference_test_impl(
+      inf0.M, inf1.M, inf1.V, inf1.U, inf1.Gamma,
+      inf0.T_gof, inf1.T_gof, df_d);
 }
 
 post_expected<ConstrainedNonIterativeFit>

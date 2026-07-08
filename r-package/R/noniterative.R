@@ -94,6 +94,10 @@ fit_noniterative_cfa_restricted <- function(partable, sample_stats,
   noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator)
 }
 
+noniterative_estimator_arg <- function(estimator) {
+  if (is.null(estimator)) "auto" else estimator
+}
+
 #' Residual-based inference for a non-iterative CFA fit.
 #'
 #' Returns delta-method standard errors (`se`, `vcov`), the goodness-of-fit
@@ -110,13 +114,15 @@ fit_noniterative_cfa_restricted <- function(partable, sample_stats,
 #'   Sigma) or `"empirical"` (distribution-free; requires `data`).
 #' @param data Raw data matrix (rows = observations), required when
 #'   `gamma = "empirical"`.
-#' @param estimator Non-iterative estimator; see [fit_noniterative_cfa()].
+#' @param estimator Non-iterative estimator; see [fit_noniterative_cfa()]. If
+#'   `NULL`, infer the estimator map from `fit`.
 #' @export
 noniterative_cfa_inference <- function(fit, discrepancy = c("uls", "ntml"),
                                        gamma = c("nt", "empirical"),
-                                       data = NULL, estimator = "guttman") {
+                                       data = NULL, estimator = NULL) {
   discrepancy <- match.arg(discrepancy)
   gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
   noniterative_cfa_inference_impl(fit, estimator, discrepancy, gamma, data)
 }
 
@@ -132,9 +138,10 @@ noniterative_cfa_inference <- function(fit, discrepancy = c("uls", "ntml"),
 #' @export
 noniterative_cfa_wald <- function(fit, R, q, discrepancy = c("uls", "ntml"),
                                   gamma = c("nt", "empirical"), data = NULL,
-                                  estimator = "guttman") {
+                                  estimator = NULL) {
   discrepancy <- match.arg(discrepancy)
   gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
   R <- as.matrix(R)
   noniterative_cfa_wald_impl(fit, R, as.numeric(q), estimator, discrepancy, gamma, data)
 }
@@ -155,11 +162,35 @@ noniterative_cfa_difference_test <- function(fit0, fit1, df_d,
                                              discrepancy = c("uls", "ntml"),
                                              gamma = c("nt", "empirical"),
                                              data0 = NULL, data1 = NULL,
-                                             estimator = "guttman") {
+                                             estimator = NULL) {
   discrepancy <- match.arg(discrepancy)
   gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
   noniterative_cfa_difference_impl(fit0, fit1, as.integer(df_d), estimator,
                                    discrepancy, gamma, data0, data1)
+}
+
+#' Pseudo-LRT between estimator-side nested non-iterative CFA fits.
+#'
+#' `fit_H1` is the less restricted model and `fit_H0` is the more restricted
+#' estimator-side fit, typically from [fit_noniterative_cfa_restricted()]. The
+#' statistic is `T_diff = T(H0) - T(H1)` with an H1-anchored weighted-chi-square
+#' reference. This is an LRT-shaped discrepancy comparison; unlike ML, it can be
+#' negative for a non-minimizing estimator.
+#'
+#' @param fit_H1 Less restricted non-iterative fit.
+#' @param fit_H0 More restricted non-iterative fit.
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_pseudo_lrt <- function(fit_H1, fit_H0,
+                                        discrepancy = c("uls", "ntml"),
+                                        gamma = c("nt", "empirical"),
+                                        data = NULL, estimator = NULL) {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
+  noniterative_cfa_pseudo_lrt_impl(fit_H1, fit_H0, estimator,
+                                   discrepancy, gamma, data)
 }
 
 #' Grouped (multi-group / mean-structure) residual-based inference.
@@ -176,9 +207,10 @@ noniterative_cfa_difference_test <- function(fit0, fit1, df_d,
 #' @export
 noniterative_cfa_grouped_inference <- function(fit, discrepancy = c("uls", "ntml"),
                                                gamma = c("nt", "empirical"),
-                                               data = NULL, estimator = "guttman") {
+                                               data = NULL, estimator = NULL) {
   discrepancy <- match.arg(discrepancy)
   gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
   noniterative_cfa_grouped_inference_impl(fit, estimator, discrepancy, gamma, data)
 }
 
@@ -198,9 +230,10 @@ noniterative_cfa_grouped_inference <- function(fit, discrepancy = c("uls", "ntml
 #' @export
 noniterative_cfa_constrained <- function(fit, discrepancy = c("uls", "ntml"),
                                          gamma = c("nt", "empirical"),
-                                         data = NULL, estimator = "guttman") {
+                                         data = NULL, estimator = NULL) {
   discrepancy <- match.arg(discrepancy)
   gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
   noniterative_cfa_constrained_impl(fit, estimator, discrepancy, gamma, data)
 }
 
@@ -224,9 +257,10 @@ noniterative_cfa_constrained <- function(fit, discrepancy = c("uls", "ntml"),
 noniterative_cfa_scalar_invariance <- function(fit, ref_group = 1,
                                                discrepancy = c("uls", "ntml"),
                                                gamma = c("nt", "empirical"),
-                                               data = NULL, estimator = "guttman") {
+                                               data = NULL, estimator = NULL) {
   discrepancy <- match.arg(discrepancy)
   gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
   noniterative_cfa_scalar_impl(fit, as.integer(ref_group), estimator,
                                discrepancy, gamma, data)
 }
