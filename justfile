@@ -19,6 +19,20 @@ llvm_bindir := ```
 llvm_cov := if llvm_bindir != "" { llvm_bindir / "llvm-cov" } else { "llvm-cov" }
 llvm_profdata := if llvm_bindir != "" { llvm_bindir / "llvm-profdata" } else { "llvm-profdata" }
 
+# Cap parallel compile jobs by available RAM, not just core count. magmaan's
+# C++23/Eigen translation units can each hold 1-3 GB resident, so an unbounded
+# build (Ninja defaults to ncpu+2) can exhaust RAM+swap and trip the kernel OOM
+# killer, taking browser/terminal sessions down with it. Reserve ~10 GB for the
+# rest of the desktop, budget ~2.5 GB per job, then clamp to the core count.
+# Override per invocation, e.g. `just jobs=12 opt` (all cores) or `just jobs=4 build`.
+jobs := ```
+    cores=$(nproc)
+    mem_gb=$(free -g | awk '/^Mem:/{print $2}')
+    by_mem=$(( (mem_gb - 10) * 2 / 5 ))
+    [ "$by_mem" -lt 1 ] && by_mem=1
+    if [ "$by_mem" -lt "$cores" ]; then echo "$by_mem"; else echo "$cores"; fi
+  ```
+
 default:
     @just --list
 
@@ -30,7 +44,7 @@ configure:
 
 # Build the fast local C++ tree (Debug, no sanitizers).
 fast:
-    cmake --build --preset fast
+    cmake --build --preset fast --parallel {{jobs}}
 
 # Build + run the fast local C++ test suite.
 test-fast: fast
@@ -38,7 +52,7 @@ test-fast: fast
 
 # Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|api|sim|parity|robcat); optional 2nd arg filters test names by regex.
 test-area area regex="":
-    cmake --build --preset fast --target magmaan_test_{{area}}
+    cmake --build --preset fast --target magmaan_test_{{area}} --parallel {{jobs}}
     ctest --preset fast -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
 
 # Build + run the fast suite minus the heavy real-data parity tests.
@@ -47,7 +61,7 @@ test-quick: fast
 
 # Build the sanitizer validation tree (Debug + AddressSanitizer + UBSan).
 dev:
-    cmake --build --preset dev
+    cmake --build --preset dev --parallel {{jobs}}
 
 # Build + run the sanitizer C++ test suite.
 test-dev: dev
@@ -58,7 +72,7 @@ coverage:
     #!/usr/bin/env bash
     set -euo pipefail
     cmake --preset coverage
-    cmake --build --preset coverage --target magmaan_tests
+    cmake --build --preset coverage --target magmaan_tests --parallel {{jobs}}
     rm -rf {{coverage_profiles}} {{coverage_profdata}}
     mkdir -p {{coverage_profiles}}
     LLVM_PROFILE_FILE="$PWD/{{coverage_profiles}}/%p-%m.profraw" ctest --preset coverage
@@ -111,7 +125,7 @@ coverage-html: coverage
 
 # Build the local optimized tree (Release + native CPU tuning).
 opt:
-    cmake --build --preset opt
+    cmake --build --preset opt --parallel {{jobs}}
 
 # Build + run the optimized C++ test suite.
 test-opt: opt
@@ -119,7 +133,7 @@ test-opt: opt
 
 # Build the optional IPOPT optimizer tree (requires system IPOPT).
 ipopt:
-    cmake --build --preset ipopt
+    cmake --build --preset ipopt --parallel {{jobs}}
 
 # Build + run the optional IPOPT optimizer test suite.
 test-ipopt: ipopt
@@ -172,7 +186,7 @@ vendor-check: vendor
 # from pkg-config; override with NLOPT_CFLAGS / NLOPT_LIBS (or R_MAKEVARS_USER on
 # a cluster). See dev/saga/README.md.
 r-install: vendor
-    MAKEFLAGS="-j$(nproc)" R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+    MAKEFLAGS="-j{{jobs}}" R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # FAST dev install (the daily loop). Compiles only the Rcpp glue and links the
 # prebuilt opt libmagmaan.a, via a throwaway build-rdev/ mirror with the dev-only
@@ -183,7 +197,7 @@ r-dev preset="opt" ceres="0" ipopt="0":
     #!/usr/bin/env bash
     set -euo pipefail
     cmake --preset {{preset}}
-    cmake --build --preset {{preset}} --target magmaan --parallel "$(nproc)"
+    cmake --build --preset {{preset}} --target magmaan --parallel {{jobs}}
     root="$(pwd)"
     rsync -a --delete \
         --exclude='*.o' --exclude='*.so' \
@@ -193,7 +207,7 @@ r-dev preset="opt" ceres="0" ipopt="0":
     cp dev/r-makevars-dev build-rdev/src/Makevars
     MAGMAAN_ROOT="$root" MAGMAAN_PRESET={{preset}} \
         MAGMAAN_WITH_CERES_R={{ceres}} MAGMAAN_WITH_IPOPT_R={{ipopt}} \
-        MAKEFLAGS="-j$(nproc)" \
+        MAKEFLAGS="-j{{jobs}}" \
         R CMD INSTALL --no-byte-compile --no-docs --no-help build-rdev
 
 # Back-compat aliases for the old fast/ceres/ipopt installs (now via r-dev).

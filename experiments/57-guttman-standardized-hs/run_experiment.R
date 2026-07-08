@@ -341,8 +341,11 @@ run_rep <- function(rep_id, scenario, n, pop) {
       gi <- safe_eval(guttman_inf(g1$value, X, disc))
       label <- paste0("guttman_std_", disc)
       if (gi$ok) {
-        est_rows <- c(est_rows, list(estimate_rows(
-          rep_id, scenario, n, label, g1$value$theta, gi$value$se, target)))
+        if (disc == "ntml") {
+          est_rows <- c(est_rows, list(estimate_rows(
+            rep_id, scenario, n, "guttman_std", g1$value$theta, gi$value$se,
+            target)))
+        }
         test_rows <- c(test_rows, list(test_row(
           rep_id, scenario, n, label, "gof", gi$value$T, gi$value$df,
           gi$value$p_mixture, gi$value$p_scaled,
@@ -514,7 +517,7 @@ hs_gi <- guttman_inf(hs_g, X_hs, "ntml")
 snapshot <- rbind(
   snapshot_rows(hs_ml, ml_se(hs_ml), "ml_nt"),
   snapshot_rows(hs_uls, uls_se(hs_uls, X_hs), "uls_emp"),
-  snapshot_rows(hs_g, hs_gi$se, "guttman_std_ntml")
+  snapshot_rows(hs_g, hs_gi$se, "guttman_std")
 )
 write_csv(snapshot, file.path(opts$results_dir, "hs_snapshot.csv"))
 
