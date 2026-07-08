@@ -41,6 +41,19 @@ enum class NonIterativeEstimator : std::uint8_t {
   GuttmanGlsAligned,  // block-GLS H diagonal plus aligned score reconstruction
 };
 
+enum class CompositeWeight : std::uint8_t {
+  EstimatorDefault,  // Guttman -> Unit; GuttmanGlsAligned -> GlsAligned
+  Unit,              // Z: unit-weight sums of raw indicators
+  Standardized,      // diag(S)^-1/2 Z: unit-weight sums of standardized indicators
+  GlsAligned,        // H Z (Z'HZ)^-1, Gram-aligned before regression
+};
+
+CompositeWeight
+resolve_composite_weight(NonIterativeEstimator which, CompositeWeight composite);
+
+const char*
+composite_weight_name(CompositeWeight composite);
+
 // The pure map τ: vech(samp.S) ↦ full θ̂ (size ev.n_free()). Deterministic given
 // (pt, rep, ev); reads only `samp.S`. `ev` supplies the free-parameter layout
 // (structural, S-independent) and is reused verbatim across the FD perturbations
@@ -54,7 +67,8 @@ noniterative_cfa_theta(const spec::LatentStructure& pt,
                        const model::MatrixRep& rep,
                        const model::ModelEvaluator& ev,
                        const data::SampleStats& samp,
-                       NonIterativeEstimator which = NonIterativeEstimator::Guttman);
+                       NonIterativeEstimator which = NonIterativeEstimator::Guttman,
+                       CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // Diagnostic wrapper: builds the evaluator internally, returns θ̂ plus the clean
 // per-block matrices (Φ is the latent covariance = magmaan's Ψ; ψ is the
@@ -70,7 +84,8 @@ fit_expected<NonIterativeFit>
 fit_noniterative_cfa(const spec::LatentStructure& pt,
                      const model::MatrixRep& rep,
                      const data::SampleStats& samp,
-                     NonIterativeEstimator which = NonIterativeEstimator::Guttman);
+                     NonIterativeEstimator which = NonIterativeEstimator::Guttman,
+                     CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // Sigma/H-level metric-shape constrained estimator. This is an estimator map,
 // not an inference projection: it estimates a common standardized loading shape
@@ -83,7 +98,8 @@ fit_expected<NonIterativeFit>
 fit_noniterative_cfa_metric(const spec::LatentStructure& pt,
                             const model::MatrixRep& rep,
                             const data::SampleStats& samp,
-                            NonIterativeEstimator which = NonIterativeEstimator::Guttman);
+                            NonIterativeEstimator which = NonIterativeEstimator::Guttman,
+                            CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // Sigma/H-level restricted estimator for linear equality constraints that are
 // separable into residual-variance rows and loading rows. Residual rows are
@@ -99,7 +115,8 @@ fit_noniterative_cfa_restricted(
     const model::MatrixRep& rep,
     const data::SampleStats& samp,
     NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned,
-    CommunalityMethod comm = CommunalityMethod::GmmBlock);
+    CommunalityMethod comm = CommunalityMethod::GmmBlock,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
 // p*_block = p_block(p_block+1)/2), by central finite differences of the
@@ -116,7 +133,9 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
                              const model::ModelEvaluator& ev,
                              const data::SampleStats& samp,
                              NonIterativeEstimator which,
-                             std::size_t block, double rel_step = 1e-6);
+                             std::size_t block, double rel_step = 1e-6,
+                             CompositeWeight composite =
+                                 CompositeWeight::EstimatorDefault);
 
 // Single-block convenience wrapper (block 0), preserving the original signature.
 fit_expected<Eigen::MatrixXd>
@@ -125,7 +144,8 @@ estimator_map_jacobian(const spec::LatentStructure& pt,
                        const model::ModelEvaluator& ev,
                        const data::SampleStats& samp,
                        NonIterativeEstimator which = NonIterativeEstimator::Guttman,
-                       double rel_step = 1e-6);
+                       double rel_step = 1e-6,
+                       CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // Restricted-map analogue of `estimator_map_jacobian_block()`, using
 // `fit_noniterative_cfa_restricted()` for each finite-difference perturbation.
@@ -140,7 +160,8 @@ estimator_map_jacobian_restricted_block(
     NonIterativeEstimator which,
     std::size_t block,
     double rel_step = 1e-6,
-    CommunalityMethod comm = CommunalityMethod::GmmBlock);
+    CommunalityMethod comm = CommunalityMethod::GmmBlock,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // Single-block convenience wrapper (block 0) for the restricted map.
 fit_expected<Eigen::MatrixXd>
@@ -151,6 +172,7 @@ estimator_map_jacobian_restricted(
     const data::SampleStats& samp,
     NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned,
     double rel_step = 1e-6,
-    CommunalityMethod comm = CommunalityMethod::GmmBlock);
+    CommunalityMethod comm = CommunalityMethod::GmmBlock,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 }  // namespace magmaan::estimate::frontier

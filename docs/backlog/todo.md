@@ -2198,12 +2198,17 @@ work until a concrete downstream consumer appears.
   implementation directly. The promoted point-estimator lane landed as
   `guttman_gls_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
+  The composite-weight axis also landed: `auto` keeps estimator defaults,
+  `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
+  recomputed inside every finite-difference perturbation, and `gls_aligned`
+  uses the H-aligned data-dependent weights.
   The estimator-side residual-restricted Guttman map now has an explicit
   communality axis for the four LS-form H rules (`triad_ls`,
   `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
-  threading the same choice through restricted Jacobians and grouped
-  inference; AR/RS are rejected there because they do not supply a linear
-  residual-constraint system. The old `guttman` selector is retained as the
+  threading the same choice, along with the selected composite weight, through
+  restricted Jacobians and grouped inference; AR/RS are rejected there because
+  they do not supply a linear residual-constraint system. The old `guttman`
+  selector is retained as the
   legacy lavaan-like Spearman/incidence map.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
@@ -2224,8 +2229,8 @@ work until a concrete downstream consumer appears.
   `fit_noniterative_cfa_metric` (common standardized loading shape estimated
   inside the Sigma/H reconstruction); the estimator-side restricted map
   `fit_noniterative_cfa_restricted` (separable loading/residual constraints,
-  with residual rows imposed in the selected LS-form H/communality step); the
-  `Omega`-metric
+  with residual rows imposed in the selected LS-form H/communality step and the
+  chosen composite-weight map reused for inference); the `Omega`-metric
   minimum-distance projection onto linear `group.equal` constraints for
   Wald/inference (exact chi2_k); grouped pseudo-LRTs comparing actual
   estimator-side H0/H1 fits; and true (free-latent-mean) scalar invariance via

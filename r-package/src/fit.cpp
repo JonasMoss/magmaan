@@ -7840,6 +7840,39 @@ noniter_comm_for_fit(const Rcpp::List& fit) {
   return ef::CommunalityMethod::GmmBlock;
 }
 
+magmaan::estimate::frontier::CompositeWeight composite_which(const std::string& s) {
+  const std::string k = noniter_lower(s);
+  namespace ef = magmaan::estimate::frontier;
+  if (k == "auto" || k == "default" || k == "")
+    return ef::CompositeWeight::EstimatorDefault;
+  if (k == "unit" || k == "incidence" || k == "z")
+    return ef::CompositeWeight::Unit;
+  if (k == "standardized" || k == "standardised" || k == "std" ||
+      k == "correlation")
+    return ef::CompositeWeight::Standardized;
+  if (k == "gls_aligned" || k == "gls-aligned" || k == "aligned")
+    return ef::CompositeWeight::GlsAligned;
+  Rcpp::stop("magmaan: unknown Guttman composite weight '%s' "
+             "(accepted: auto, unit, standardized, gls_aligned)",
+             s.c_str());
+}
+
+magmaan::estimate::frontier::CompositeWeight
+noniter_comp_for_fit(const Rcpp::List& fit) {
+  namespace ef = magmaan::estimate::frontier;
+  if (fit.containsElementNamed("composite")) {
+    return composite_which(Rcpp::as<std::string>(fit["composite"]));
+  }
+  return ef::CompositeWeight::EstimatorDefault;
+}
+
+magmaan::estimate::frontier::CompositeWeight
+noniter_resolve_composite(
+    magmaan::estimate::frontier::NonIterativeEstimator which,
+    magmaan::estimate::frontier::CompositeWeight composite) {
+  return magmaan::estimate::frontier::resolve_composite_weight(which, composite);
+}
+
 magmaan::robust::frontier::Discrepancy noniter_disc(const std::string& s) {
   const std::string k = noniter_lower(s);
   if (k == "uls") return magmaan::robust::frontier::Discrepancy::ULS;
@@ -7854,23 +7887,26 @@ noniter_inference_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
                            const std::string& gamma, SEXP data,
                            bool restricted = false,
                            magmaan::estimate::frontier::CommunalityMethod comm =
-                               magmaan::estimate::frontier::CommunalityMethod::GmmBlock) {
+                               magmaan::estimate::frontier::CommunalityMethod::GmmBlock,
+                           magmaan::estimate::frontier::CompositeWeight composite =
+                               magmaan::estimate::frontier::CompositeWeight::EstimatorDefault) {
   namespace rf = magmaan::robust::frontier;
   const std::string g = noniter_lower(gamma);
   if (g == "nt" || g == "normal" || g == "normal.theory" || g == "normaltheory")
     return restricted
         ? rf::noniterative_inference_restricted_nt(
-              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc, comm)
+              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc, comm, composite)
         : rf::noniterative_inference_nt(
-              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc);
+              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc, composite);
   if (g == "empirical" || g == "adf" || g == "sandwich") {
     if (Rf_isNull(data)) Rcpp::stop("magmaan: empirical Gamma requires raw `data`");
     magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, data);
     return restricted
         ? rf::noniterative_inference_restricted_empirical(
-              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc, comm)
+              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc, comm,
+              composite)
         : rf::noniterative_inference_empirical(
-              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc);
+              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc, composite);
   }
   Rcpp::stop("magmaan: unknown gamma '%s' (accepted: nt, empirical)", gamma.c_str());
 }
@@ -7898,7 +7934,9 @@ noniter_grouped_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
                          const std::string& gamma, SEXP data,
                          bool restricted,
                          magmaan::estimate::frontier::CommunalityMethod comm =
-                             magmaan::estimate::frontier::CommunalityMethod::GmmBlock);
+                             magmaan::estimate::frontier::CommunalityMethod::GmmBlock,
+                         magmaan::estimate::frontier::CompositeWeight composite =
+                             magmaan::estimate::frontier::CompositeWeight::EstimatorDefault);
 
 Rcpp::List wrap_noniter_diff(const magmaan::robust::frontier::NonIterativeDiffTest& d) {
   return Rcpp::List::create(
@@ -7949,56 +7987,68 @@ Rcpp::List frontier_guttman_h_impl(Rcpp::NumericMatrix S,
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
-                                     std::string estimator = "guttman") {
+                                     std::string estimator = "guttman",
+                                     std::string composite = "auto") {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
                                   std::move(parsed.names), sample_stats);
   const auto which = noniter_which(estimator);
+  const auto comp = composite_which(composite);
   auto ev = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
   if (!ev.has_value()) Rcpp::stop("magmaan: model evaluator build failed");
   auto th = magmaan::estimate::frontier::noniterative_cfa_theta(ctx.pt, ctx.rep, *ev,
-                                                                ctx.samp, which);
+                                                                ctx.samp, which, comp);
   if (!th.has_value()) stop_fit(th.error());
   magmaan::estimate::Estimates est;
   est.theta = *th;
   est.fmin = 0.0;
   Rcpp::List out = fit_result(ctx, est, &starts, "noniterative");
   out["noniterative_map"] = noniter_map_name(which);
+  out["composite"] =
+      magmaan::estimate::frontier::composite_weight_name(
+          noniter_resolve_composite(which, comp));
   return out;
 }
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_stats,
-                                            std::string estimator = "guttman_gls_aligned") {
+                                            std::string estimator = "guttman_gls_aligned",
+                                            std::string composite = "auto") {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_metric_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
                                   std::move(parsed.names), sample_stats);
   const auto which = noniter_which(estimator);
+  const auto comp = composite_which(composite);
   auto fit = magmaan::estimate::frontier::fit_noniterative_cfa_metric(
-      ctx.pt, ctx.rep, ctx.samp, which);
+      ctx.pt, ctx.rep, ctx.samp, which, comp);
   if (!fit.has_value()) stop_fit(fit.error());
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
   est.fmin = 0.0;
   Rcpp::List out = fit_result(ctx, est, &starts, "noniterative_metric");
   out["noniterative_map"] = noniter_map_name(which);
+  out["composite"] =
+      magmaan::estimate::frontier::composite_weight_name(
+          noniter_resolve_composite(which, comp));
   return out;
 }
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample_stats,
                                                 std::string estimator = "guttman_gls_aligned",
-                                                std::string communality = "gmm_block") {
+                                                std::string communality = "gmm_block",
+                                                std::string composite = "auto") {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_restricted_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
                                   std::move(parsed.names), sample_stats);
   const auto which = noniter_which(estimator);
   const auto comm = communality_which(communality);
+  const auto comp = composite_which(composite);
   auto fit = magmaan::estimate::frontier::fit_noniterative_cfa_restricted(
-      ctx.pt, ctx.rep, ctx.samp, which, comm);
+      ctx.pt, ctx.rep, ctx.samp, which, comm, comp);
   if (!fit.has_value()) stop_fit(fit.error());
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
@@ -8007,6 +8057,9 @@ Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample
   out["noniterative_map"] = noniter_map_name(which);
   out["communality"] =
       magmaan::estimate::frontier::communality_method_name(comm);
+  out["composite"] =
+      magmaan::estimate::frontier::composite_weight_name(
+          noniter_resolve_composite(which, comp));
   return out;
 }
 
@@ -8019,7 +8072,8 @@ Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator
   auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                         noniter_disc(discrepancy), gamma, data,
                                         noniter_is_restricted_fit(fit),
-                                        noniter_comm_for_fit(fit));
+                                        noniter_comm_for_fit(fit),
+                                        noniter_comp_for_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
   return wrap_noniter_inference(*inf);
 }
@@ -8034,7 +8088,8 @@ Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R,
   auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                         noniter_disc(discrepancy), gamma, data,
                                         noniter_is_restricted_fit(fit),
-                                        noniter_comm_for_fit(fit));
+                                        noniter_comm_for_fit(fit),
+                                        noniter_comp_for_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
   const Eigen::MatrixXd Rm = Rcpp::as<Eigen::MatrixXd>(R);
   const Eigen::VectorXd qv = Rcpp::as<Eigen::VectorXd>(q);
@@ -8058,11 +8113,11 @@ Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, in
   const auto disc = noniter_disc(discrepancy);
   auto inf0 = noniter_grouped_dispatch(
       c0, e0, which0, disc, gamma, data0, noniter_is_restricted_fit(fit0),
-      noniter_comm_for_fit(fit0));
+      noniter_comm_for_fit(fit0), noniter_comp_for_fit(fit0));
   if (!inf0.has_value()) stop_post(inf0.error());
   auto inf1 = noniter_grouped_dispatch(
       c1, e1, which1, disc, gamma, data1, noniter_is_restricted_fit(fit1),
-      noniter_comm_for_fit(fit1));
+      noniter_comm_for_fit(fit1), noniter_comp_for_fit(fit1));
   if (!inf1.has_value()) stop_post(inf1.error());
   auto d = magmaan::robust::frontier::noniterative_difference_test(*inf0, *inf1, df_d);
   if (!d.has_value()) stop_post(d.error());
@@ -8081,23 +8136,25 @@ noniter_grouped_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
                          magmaan::robust::frontier::Discrepancy disc,
                          const std::string& gamma, SEXP data,
                          bool restricted,
-                         magmaan::estimate::frontier::CommunalityMethod comm) {
+                         magmaan::estimate::frontier::CommunalityMethod comm,
+                         magmaan::estimate::frontier::CompositeWeight composite) {
   namespace rf = magmaan::robust::frontier;
   const std::string g = noniter_lower(gamma);
   if (g == "nt" || g == "normal" || g == "normal.theory" || g == "normaltheory")
     return restricted
         ? rf::noniterative_inference_grouped_restricted_nt(
-              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc, comm)
+              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc, comm, composite)
         : rf::noniterative_inference_grouped_nt(
-              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc);
+              ctx.pt, ctx.rep, ctx.samp, est.theta, which, disc, composite);
   if (g == "empirical" || g == "adf" || g == "sandwich") {
     if (Rf_isNull(data)) Rcpp::stop("magmaan: empirical Gamma requires raw `data`");
     magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, data);
     return restricted
         ? rf::noniterative_inference_grouped_restricted_empirical(
-              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc, comm)
+              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc, comm,
+              composite)
         : rf::noniterative_inference_grouped_empirical(
-              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc);
+              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, disc, composite);
   }
   Rcpp::stop("magmaan: unknown gamma '%s' (accepted: nt, empirical)", gamma.c_str());
 }
@@ -8133,7 +8190,8 @@ Rcpp::List noniterative_cfa_grouped_inference_impl(Rcpp::List fit,
   auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                       noniter_disc(discrepancy), gamma, data,
                                       noniter_is_restricted_fit(fit),
-                                      noniter_comm_for_fit(fit));
+                                      noniter_comm_for_fit(fit),
+                                      noniter_comp_for_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
   return wrap_noniter_grouped(*inf);
 }
@@ -8152,6 +8210,10 @@ Rcpp::List noniterative_cfa_pseudo_lrt_impl(Rcpp::List fit_H1, Rcpp::List fit_H0
   const auto which0 = noniter_which_for_fit(fit_H0, estimator);
   const auto comm1 = noniter_comm_for_fit(fit_H1);
   const auto comm0 = noniter_comm_for_fit(fit_H0);
+  const auto comp1 = noniter_comp_for_fit(fit_H1);
+  const auto comp0 = noniter_comp_for_fit(fit_H0);
+  const auto comp1r = noniter_resolve_composite(which1, comp1);
+  const auto comp0r = noniter_resolve_composite(which0, comp0);
   noniter_require_recorded_map(fit_H1, which1, "H1");
   noniter_require_recorded_map(fit_H0, which0, "H0");
   if (which0 != which1) {
@@ -8165,14 +8227,20 @@ Rcpp::List noniterative_cfa_pseudo_lrt_impl(Rcpp::List fit_H1, Rcpp::List fit_H0
                magmaan::estimate::frontier::communality_method_name(comm1),
                magmaan::estimate::frontier::communality_method_name(comm0));
   }
+  if (comp0r != comp1r) {
+    Rcpp::stop("noniterative_cfa_pseudo_lrt: H1/H0 composite weights differ "
+               "('%s' vs '%s')",
+               magmaan::estimate::frontier::composite_weight_name(comp1r),
+               magmaan::estimate::frontier::composite_weight_name(comp0r));
+  }
   const auto disc = noniter_disc(discrepancy);
   auto inf1 = noniter_grouped_dispatch(
       ctx1, est1, which1, disc, gamma, data, noniter_is_restricted_fit(fit_H1),
-      comm1);
+      comm1, comp1);
   if (!inf1.has_value()) stop_post(inf1.error());
   auto inf0 = noniter_grouped_dispatch(
       ctx0, est0, which0, disc, gamma, data, noniter_is_restricted_fit(fit_H0),
-      comm0);
+      comm0, comp0);
   if (!inf0.has_value()) stop_post(inf0.error());
 
   const int df_d = inf0->df - inf1->df;
@@ -8196,7 +8264,8 @@ Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit,
   auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                       noniter_disc(discrepancy), gamma, data,
                                       noniter_is_restricted_fit(fit),
-                                      noniter_comm_for_fit(fit));
+                                      noniter_comm_for_fit(fit),
+                                      noniter_comp_for_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
   auto con = magmaan::robust::frontier::noniterative_constrained_fit(ctx.pt, *inf);
   if (!con.has_value()) stop_post(con.error());
@@ -8223,7 +8292,8 @@ Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
   auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                       noniter_disc(discrepancy), gamma, data,
                                       noniter_is_restricted_fit(fit),
-                                      noniter_comm_for_fit(fit));
+                                      noniter_comm_for_fit(fit),
+                                      noniter_comp_for_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
   if (ref_group < 1) Rcpp::stop("magmaan: ref_group is 1-based (>= 1)");
   auto sc = magmaan::robust::frontier::noniterative_scalar_invariance(

@@ -517,16 +517,16 @@ frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
     .Call(`_magmaan_frontier_guttman_h_impl`, S, blocks, method)
 }
 
-noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman") {
-    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator)
+noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman", composite = "auto") {
+    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite)
 }
 
-noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned") {
-    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator)
+noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned", composite = "auto") {
+    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite)
 }
 
-noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned", communality = "gmm_block") {
-    .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality)
+noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned", communality = "gmm_block", composite = "auto") {
+    .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite)
 }
 
 noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {

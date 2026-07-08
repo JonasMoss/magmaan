@@ -170,7 +170,12 @@ golden `parTable()` fixtures.
   `(Lambda, Phi, psi)`. The legacy `guttman` selector preserves the existing
   lavaan-like Spearman/incidence Guttman map; `guttman_gls_aligned` is the
   promoted research selector, using the blockwise triad-GMM H diagonal and the
-  aligned score reconstruction from the communality experiment.
+  aligned score reconstruction from the communality experiment. The Guttman
+  regression also has an explicit composite-weight axis:
+  `auto` preserves those estimator defaults, `unit` uses incidence weights,
+  `standardized` uses `diag(S)^-1/2 Z` and is rebuilt from the live covariance
+  in every map evaluation, and `gls_aligned` uses the existing H-aligned
+  data-dependent weights.
   `estimator_map_jacobian` is its central-difference `J = dtheta/dvech(S)` (the
   generality seam so FABIN2/Bentler/JS/MIIV slot in later). `robust::frontier::
   noniterative_inference` builds the residual projector `M = I - Delta J` and
@@ -202,10 +207,11 @@ golden `parTable()` fixtures.
   point-estimator lane consumes the blockwise triad-GMM rule. The
   residual-restricted Guttman map can also select any least-squares-form
   H-diagonal rule (`triad_ls`, `anchor_triad_ls`, `gmm_block`, `gmm_full`) and
-  reuses that choice in its finite-difference Jacobian and grouped inference;
-  AR/RS remain low-level H-estimation diagnostics because they are not
-  constraint-compatible LS systems. `experiments/55-guttman-communality-
-  estimators` times the package implementation directly.
+  any composite weight (`unit`, `standardized`, `gls_aligned`), reusing both
+  choices in its finite-difference Jacobian and grouped inference; AR/RS remain
+  low-level H-estimation diagnostics because they are not constraint-compatible
+  LS systems. `experiments/55-guttman-communality-estimators` times the package
+  implementation directly.
 - Frontier multi-group / constrained / mean-structure non-iterative CFA
   (2026-07) extends the closed-form estimator to measurement invariance. The map
   fits each group's Guttman block independently and stacks them, so
@@ -223,8 +229,9 @@ golden `parTable()` fixtures.
   (default `gmm_block`) and loading rows enter the Sigma-only composite
   projection; unsupported mixed/factor/mean rows error. Grouped restricted
   inference uses the restricted map's full stacked finite-difference Jacobian
-  with the same communality method, so cross-block constraints propagate into
-  `Omega`, GOF, and pseudo-LRTs. General linear equality testing still has the
+  with the same communality and composite choices, so cross-block constraints
+  propagate into `Omega`, GOF, and pseudo-LRTs. General linear equality testing
+  still has the
   `Omega`-metric minimum-distance projection `noniterative_constrained_fit`,
   whose statistic is an exact chi2_k (Wald = min-distance duality). True
   (free-latent-mean) scalar

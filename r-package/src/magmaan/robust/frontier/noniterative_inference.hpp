@@ -66,13 +66,18 @@ post_expected<NonIterativeInference>
 noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                        const data::SampleStats& samp, const Eigen::VectorXd& theta,
                        estimate::frontier::NonIterativeEstimator which,
-                       Discrepancy disc, const Eigen::MatrixXd& gamma);
+                       Discrepancy disc, const Eigen::MatrixXd& gamma,
+                       estimate::frontier::CompositeWeight composite =
+                           estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Convenience: normal-theory Γ = Γ_NT(Σ(θ̂)).
 post_expected<NonIterativeInference>
 noniterative_inference_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                           const data::SampleStats& samp, const Eigen::VectorXd& theta,
-                          estimate::frontier::NonIterativeEstimator which, Discrepancy disc);
+                          estimate::frontier::NonIterativeEstimator which,
+                          Discrepancy disc,
+                          estimate::frontier::CompositeWeight composite =
+                              estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Convenience: empirical (distribution-free) Γ̂ from complete raw data.
 post_expected<NonIterativeInference>
@@ -80,7 +85,9 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  const model::MatrixRep& rep, const data::SampleStats& samp,
                                  const data::RawData& raw, const Eigen::VectorXd& theta,
                                  estimate::frontier::NonIterativeEstimator which,
-                                 Discrepancy disc);
+                                 Discrepancy disc,
+                                 estimate::frontier::CompositeWeight composite =
+                                     estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Same inferential algebra as `noniterative_inference*`, but the finite-
 // difference Jacobian is taken over `fit_noniterative_cfa_restricted()`.
@@ -94,7 +101,9 @@ noniterative_inference_restricted(
     Discrepancy disc,
     const Eigen::MatrixXd& gamma,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock);
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
 
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_nt(
@@ -105,7 +114,9 @@ noniterative_inference_restricted_nt(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock);
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
 
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_empirical(
@@ -117,7 +128,9 @@ noniterative_inference_restricted_empirical(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock);
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Wald test of the linear restriction R·θ = q, using the delta-method Ω.
 // Exact χ²(R.rows()); the primary nested test.
@@ -178,14 +191,18 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
                                const data::SampleStats& samp, const Eigen::VectorXd& theta,
                                estimate::frontier::NonIterativeEstimator which,
                                Discrepancy disc,
-                               const std::vector<Eigen::MatrixXd>& gamma_per_block);
+                               const std::vector<Eigen::MatrixXd>& gamma_per_block,
+                               estimate::frontier::CompositeWeight composite =
+                                   estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Convenience: per-block normal-theory Γ = Γ_NT(Σ_b(θ̂)).
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                                   const data::SampleStats& samp, const Eigen::VectorXd& theta,
                                   estimate::frontier::NonIterativeEstimator which,
-                                  Discrepancy disc);
+                                  Discrepancy disc,
+                                  estimate::frontier::CompositeWeight composite =
+                                      estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Convenience: per-block empirical (distribution-free) Γ̂_b from raw.X[b].
 post_expected<GroupedNonIterativeInference>
@@ -194,7 +211,9 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
                                          const data::SampleStats& samp,
                                          const data::RawData& raw, const Eigen::VectorXd& theta,
                                          estimate::frontier::NonIterativeEstimator which,
-                                         Discrepancy disc);
+                                         Discrepancy disc,
+                                         estimate::frontier::CompositeWeight composite =
+                                             estimate::frontier::CompositeWeight::EstimatorDefault);
 
 // Grouped inference for the restricted estimator map. Equality constraints can
 // couple blocks, so the residual projector is assembled on the full stacked
@@ -210,7 +229,9 @@ noniterative_inference_grouped_restricted(
     Discrepancy disc,
     const std::vector<Eigen::MatrixXd>& gamma_per_block,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock);
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
 
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted_nt(
@@ -221,7 +242,9 @@ noniterative_inference_grouped_restricted_nt(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock);
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
 
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted_empirical(
@@ -233,7 +256,9 @@ noniterative_inference_grouped_restricted_empirical(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock);
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
 
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test(
