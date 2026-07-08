@@ -112,6 +112,69 @@ TEST_CASE("noniterative Guttman map recovers full theta on exact population") {
   }
 }
 
+TEST_CASE("standardized composite weights are exact and inferable") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  for (auto composite : {ef::CompositeWeight::Unit,
+                         ef::CompositeWeight::Standardized,
+                         ef::CompositeWeight::GlsAligned}) {
+    INFO("composite ordinal: " << static_cast<int>(composite));
+    auto th = ef::noniterative_cfa_theta(
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+        composite);
+    REQUIRE_OK(th);
+
+    const auto locs = ev->param_locations();
+    for (std::size_t k = 0; k < locs.size(); ++k)
+      CHECK((*th)(static_cast<Eigen::Index>(k)) ==
+            doctest::Approx(true_param(locs[k])).epsilon(1e-5));
+
+    auto D = ev->dsigma_dtheta(*th);
+    REQUIRE_OK(D);
+    auto J = ef::estimator_map_jacobian(
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+        1e-6, composite);
+    REQUIRE_OK(J);
+    const Eigen::MatrixXd JD = (*J) * (*D);
+    CHECK((JD - Eigen::MatrixXd::Identity(th->size(), th->size()))
+              .cwiseAbs()
+              .maxCoeff() < 1e-4);
+
+    auto inf = rf::noniterative_inference_nt(
+        b.pt, b.rep, samp, *th, ef::NonIterativeEstimator::GuttmanGlsAligned,
+        rf::Discrepancy::ULS, composite);
+    REQUIRE_OK(inf);
+    CHECK(inf->Omega.allFinite());
+  }
+}
+
+TEST_CASE("standardized composite weights change the off-model map") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 4) += 0.15;
+  S(4, 0) += 0.15;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  auto unit = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      ef::CompositeWeight::Unit);
+  auto std = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(unit);
+  REQUIRE_OK(std);
+  CHECK((*unit - *std).cwiseAbs().maxCoeff() > 1e-6);
+}
+
 TEST_CASE("noniterative map Jacobian satisfies Fisher consistency J*Delta = I") {
   Built b = build(kTwoFactor);
   SampleStats samp;

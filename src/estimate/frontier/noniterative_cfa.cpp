@@ -20,6 +20,33 @@ namespace magmaan::estimate::frontier {
 
 using data::SampleStats;
 
+CompositeWeight
+resolve_composite_weight(NonIterativeEstimator which, CompositeWeight composite) {
+  if (composite != CompositeWeight::EstimatorDefault) return composite;
+  switch (which) {
+    case NonIterativeEstimator::Guttman:
+      return CompositeWeight::Unit;
+    case NonIterativeEstimator::GuttmanGlsAligned:
+      return CompositeWeight::GlsAligned;
+  }
+  return CompositeWeight::Unit;
+}
+
+const char*
+composite_weight_name(CompositeWeight composite) {
+  switch (composite) {
+    case CompositeWeight::EstimatorDefault:
+      return "auto";
+    case CompositeWeight::Unit:
+      return "unit";
+    case CompositeWeight::Standardized:
+      return "standardized";
+    case CompositeWeight::GlsAligned:
+      return "gls_aligned";
+  }
+  return "auto";
+}
+
 namespace {
 
 fit_expected<Eigen::VectorXd> num_error(std::string detail) {
@@ -205,40 +232,77 @@ Eigen::MatrixXd incidence_matrix(const CfaBlockLayout& L) {
   return Z;
 }
 
-fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
-                                                  const Eigen::MatrixXd& S,
-                                                  NonIterativeEstimator which) {
-  Eigen::MatrixXd H;
-  Eigen::MatrixXd B;
+fit_expected<Eigen::MatrixXd>
+estimator_h_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
+                   NonIterativeEstimator which) {
   switch (which) {
-    case NonIterativeEstimator::Guttman: {
-      auto H_or = legacy_h_matrix(L, S);
-      if (!H_or.has_value()) return std::unexpected(H_or.error());
-      H = std::move(*H_or);
-      B = incidence_matrix(L);
-      break;
-    }
+    case NonIterativeEstimator::Guttman:
+      return legacy_h_matrix(L, S);
     case NonIterativeEstimator::GuttmanGlsAligned: {
       auto block_of = block_ids_from_layout(L);
       if (!block_of.has_value()) return std::unexpected(block_of.error());
       auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
       if (!h.has_value()) return std::unexpected(h.error());
-      H = std::move(h->H);
+      return h->H;
+    }
+  }
+  return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      "Guttman map: unknown estimator"});
+}
 
-      const Eigen::MatrixXd Z = incidence_matrix(L);
+fit_expected<Eigen::MatrixXd>
+composite_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
+                 const Eigen::MatrixXd& H, CompositeWeight composite,
+                 const char* label) {
+  const Eigen::MatrixXd Z = incidence_matrix(L);
+  switch (composite) {
+    case CompositeWeight::EstimatorDefault:
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": unresolved composite weight"});
+    case CompositeWeight::Unit:
+      return Z;
+    case CompositeWeight::Standardized: {
+      if (S.rows() != L.n_observed || S.cols() != L.n_observed)
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            std::string(label) + ": sample covariance dimension mismatch"});
+      Eigen::MatrixXd B = Z;
+      for (Eigen::Index i = 0; i < L.n_observed; ++i) {
+        const double sii = S(i, i);
+        if (!std::isfinite(sii) || sii <= 0.0)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              std::string(label) + ": non-positive indicator variance for "
+              "standardized composites"});
+        B.row(i) /= std::sqrt(sii);
+      }
+      return B;
+    }
+    case CompositeWeight::GlsAligned: {
       const Eigen::MatrixXd incidence_score_cov = Z.transpose() * H * Z;
-      auto incidence_inv =
-          invert_full_rank(incidence_score_cov, "Guttman GLS-aligned metric map");
+      auto incidence_inv = invert_full_rank(incidence_score_cov, label);
       if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
 
       const Eigen::MatrixXd prelim_loading = H * Z * (*incidence_inv);
       const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
-      auto gram_inv = invert_full_rank(gram, "Guttman GLS-aligned metric map");
+      auto gram_inv = invert_full_rank(gram, label);
       if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-      B = prelim_loading * (*gram_inv);
-      break;
+      return prelim_loading * (*gram_inv);
     }
   }
+  return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      std::string(label) + ": unknown composite weight"});
+}
+
+fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
+                                                  const Eigen::MatrixXd& S,
+                                                  NonIterativeEstimator which,
+                                                  CompositeWeight composite) {
+  auto H_or = estimator_h_matrix(L, S, which);
+  if (!H_or.has_value()) return std::unexpected(H_or.error());
+  Eigen::MatrixXd H = std::move(*H_or);
+  auto B_or = composite_matrix(
+      L, S, H, resolve_composite_weight(which, composite), "Guttman metric map");
+  if (!B_or.has_value()) return std::unexpected(B_or.error());
+  Eigen::MatrixXd B = std::move(*B_or);
 
   const Eigen::Index nfac = L.n_factor();
   const Eigen::MatrixXd score_cov = B.transpose() * H * B;
@@ -454,25 +518,13 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 std::expected<BlockGuttman, FitError>
 guttman_gls_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
   const Eigen::Index nfac = L.n_factor();
-  auto block_of = block_ids_from_layout(L);
-  if (!block_of.has_value()) return std::unexpected(block_of.error());
+  auto H = estimator_h_matrix(L, S, NonIterativeEstimator::GuttmanGlsAligned);
+  if (!H.has_value()) return std::unexpected(H.error());
+  auto B = composite_matrix(
+      L, S, *H, CompositeWeight::GlsAligned, "Guttman GLS-aligned map");
+  if (!B.has_value()) return std::unexpected(B.error());
 
-  auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
-  if (!h.has_value()) return std::unexpected(h.error());
-
-  const Eigen::MatrixXd Z = incidence_matrix(L);
-  const Eigen::MatrixXd incidence_score_cov = Z.transpose() * h->H * Z;
-  auto incidence_inv =
-      invert_full_rank(incidence_score_cov, "Guttman GLS-aligned map");
-  if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
-
-  const Eigen::MatrixXd prelim_loading = h->H * Z * (*incidence_inv);
-  const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
-  auto gram_inv = invert_full_rank(gram, "Guttman GLS-aligned map");
-  if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-
-  const Eigen::MatrixXd B = prelim_loading * (*gram_inv);
-  auto out = regression_block(L, S, h->H, B, "Guttman GLS-aligned map");
+  auto out = regression_block(L, S, *H, *B, "Guttman GLS-aligned map");
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -484,20 +536,12 @@ std::expected<BlockGuttman, FitError>
 guttman_gls_aligned_block_from_h(const CfaBlockLayout& L,
                                  const Eigen::MatrixXd& S,
                                  const Eigen::MatrixXd& H,
-                                 const char* label) {
+                                 const char* label,
+                                 CompositeWeight composite) {
   const Eigen::Index nfac = L.n_factor();
-  const Eigen::MatrixXd Z = incidence_matrix(L);
-  const Eigen::MatrixXd incidence_score_cov = Z.transpose() * H * Z;
-  auto incidence_inv = invert_full_rank(incidence_score_cov, label);
-  if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
-
-  const Eigen::MatrixXd prelim_loading = H * Z * (*incidence_inv);
-  const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
-  auto gram_inv = invert_full_rank(gram, label);
-  if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-
-  const Eigen::MatrixXd B = prelim_loading * (*gram_inv);
-  auto out = regression_block(L, S, H, B, label);
+  auto B = composite_matrix(L, S, H, composite, label);
+  if (!B.has_value()) return std::unexpected(B.error());
+  auto out = regression_block(L, S, H, *B, label);
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -508,21 +552,31 @@ guttman_gls_aligned_block_from_h(const CfaBlockLayout& L,
 
 std::expected<BlockGuttman, FitError>
 fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-          NonIterativeEstimator which) {
+          NonIterativeEstimator which, CompositeWeight composite) {
+  const CompositeWeight resolved = resolve_composite_weight(which, composite);
   switch (which) {
     case NonIterativeEstimator::Guttman:
-      return guttman_block(L, S);
+      if (resolved == CompositeWeight::Unit) return guttman_block(L, S);
+      break;
     case NonIterativeEstimator::GuttmanGlsAligned:
-      return guttman_gls_aligned_block(L, S);
+      if (resolved == CompositeWeight::GlsAligned) return guttman_gls_aligned_block(L, S);
+      break;
   }
-  return std::unexpected(FitError{FitError::Kind::NumericIssue,
-      "non-iterative CFA: unknown estimator"});
+  auto H = estimator_h_matrix(L, S, which);
+  if (!H.has_value()) return std::unexpected(H.error());
+  const char* label = (which == NonIterativeEstimator::Guttman)
+                          ? "Guttman map"
+                          : "Guttman GLS-aligned map";
+  auto B = composite_matrix(L, S, *H, resolved, label);
+  if (!B.has_value()) return std::unexpected(B.error());
+  return regression_block(L, S, *H, *B, label);
 }
 
 fit_expected<std::vector<BlockGuttman>>
 fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
                                const std::vector<Eigen::MatrixXd>& S,
-                               NonIterativeEstimator which) {
+                               NonIterativeEstimator which,
+                               CompositeWeight composite) {
   const std::size_t nblk = layouts.size();
   if (nblk == 0 || nblk != S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -550,7 +604,7 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
             "Guttman metric map: all groups must have the same simple-structure "
             "indicator blocks"});
     }
-    auto sb = standardized_score_block(L, S[b], which);
+    auto sb = standardized_score_block(L, S[b], which, composite);
     if (!sb.has_value()) return std::unexpected(sb.error());
     scores.push_back(std::move(*sb));
   }
@@ -644,7 +698,8 @@ fit_expected<std::vector<BlockGuttman>>
 fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
                       const std::vector<Eigen::MatrixXd>& S,
                       const RestrictedRows& rows,
-                      CommunalityMethod comm) {
+                      CommunalityMethod comm,
+                      CompositeWeight composite) {
   const std::size_t nblk = layouts.size();
   if (nblk == 0 || nblk != S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -702,7 +757,7 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
       H(i, i) = h_diag;
     }
     auto gb = guttman_gls_aligned_block_from_h(
-        layouts[b], S[b], H, "restricted Guttman map");
+        layouts[b], S[b], H, "restricted Guttman map", composite);
     if (!gb.has_value()) return std::unexpected(gb.error());
     out.push_back(std::move(*gb));
     col_off += p;
@@ -927,7 +982,7 @@ assemble_theta(const model::ModelEvaluator& ev,
 fit_expected<Eigen::VectorXd>
 map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
           const model::ModelEvaluator& ev, const data::SampleStats& samp,
-          NonIterativeEstimator which) {
+          NonIterativeEstimator which, CompositeWeight composite) {
   if (rep.form != model::RepForm::PureCFA)
     return num_error("non-iterative CFA: pure-CFA models only (a structural "
                      "part is out of v1 scope)");
@@ -952,7 +1007,7 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
     switch (which) {
       case NonIterativeEstimator::Guttman:
       case NonIterativeEstimator::GuttmanGlsAligned: {
-        auto gb = fit_block(L, samp.S[b], which);
+        auto gb = fit_block(L, samp.S[b], which, composite);
         if (!gb.has_value()) return std::unexpected(gb.error());
         blocks.push_back(std::move(*gb));
         break;
@@ -969,14 +1024,16 @@ noniterative_cfa_theta(const spec::LatentStructure& pt,
                        const model::MatrixRep& rep,
                        const model::ModelEvaluator& ev,
                        const data::SampleStats& samp,
-                       NonIterativeEstimator which) {
+                       NonIterativeEstimator which,
+                       CompositeWeight composite) {
   if (samp.S.empty()) return num_error("non-iterative CFA: empty sample stats");
-  return map_multi(pt, rep, ev, samp, which);
+  return map_multi(pt, rep, ev, samp, which, composite);
 }
 
 fit_expected<NonIterativeFit>
 fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& rep,
-                     const data::SampleStats& samp, NonIterativeEstimator which) {
+                     const data::SampleStats& samp, NonIterativeEstimator which,
+                     CompositeWeight composite) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -984,7 +1041,7 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
 
-  auto theta = noniterative_cfa_theta(pt, rep, *ev, samp, which);
+  auto theta = noniterative_cfa_theta(pt, rep, *ev, samp, which, composite);
   if (!theta.has_value()) return std::unexpected(theta.error());
 
   // Recover the clean per-block matrices for reporting.
@@ -992,7 +1049,7 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
   NonIterativeFit out;
   out.theta = std::move(*theta);
   for (std::size_t b = 0; b < layouts.size() && b < samp.S.size(); ++b) {
-    auto gb = fit_block(layouts[b], samp.S[b], which);
+    auto gb = fit_block(layouts[b], samp.S[b], which, composite);
     if (!gb.has_value()) return std::unexpected(gb.error());
     out.Lambda.push_back(std::move(gb->Lambda));
     out.Phi.push_back(std::move(gb->Phi));
@@ -1003,7 +1060,8 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
 
 fit_expected<NonIterativeFit>
 fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::MatrixRep& rep,
-                            const data::SampleStats& samp, NonIterativeEstimator which) {
+                            const data::SampleStats& samp, NonIterativeEstimator which,
+                            CompositeWeight composite) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative metric CFA: pure-CFA models only"});
@@ -1035,7 +1093,7 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
           "non-iterative metric CFA: every factor needs a marker"});
   }
 
-  auto blocks = fit_metric_standardized_blocks(layouts, samp.S, which);
+  auto blocks = fit_metric_standardized_blocks(layouts, samp.S, which, composite);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -1055,7 +1113,8 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
                                 const model::MatrixRep& rep,
                                 const data::SampleStats& samp,
                                 NonIterativeEstimator which,
-                                CommunalityMethod comm) {
+                                CommunalityMethod comm,
+                                CompositeWeight composite) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: pure-CFA models only"});
@@ -1099,13 +1158,14 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   if (!rows.has_value()) return std::unexpected(rows.error());
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
       comm == CommunalityMethod::GmmBlock)
-    return fit_noniterative_cfa(pt, rep, samp, which);
+    return fit_noniterative_cfa(pt, rep, samp, which, composite);
   if (which != NonIterativeEstimator::GuttmanGlsAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: active restrictions or non-default "
         "communality methods require guttman_gls_aligned"});
 
-  auto blocks = fit_restricted_blocks(layouts, samp.S, *rows, comm);
+  const CompositeWeight resolved = resolve_composite_weight(which, composite);
+  auto blocks = fit_restricted_blocks(layouts, samp.S, *rows, comm, resolved);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -1129,7 +1189,8 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
                              const model::ModelEvaluator& ev,
                              const data::SampleStats& samp,
                              NonIterativeEstimator which, std::size_t block,
-                             double rel_step) {
+                             double rel_step,
+                             CompositeWeight composite) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative CFA: Jacobian block index out of range"});
@@ -1152,13 +1213,13 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
       work.S[block] = S0;
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
-      auto tp = map_multi(pt, rep, ev, work, which);
+      auto tp = map_multi(pt, rep, ev, work, which, composite);
       if (!tp.has_value()) return std::unexpected(tp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
-      auto tm = map_multi(pt, rep, ev, work, which);
+      auto tm = map_multi(pt, rep, ev, work, which, composite);
       if (!tm.has_value()) return std::unexpected(tm.error());
 
       J.col(col) = (*tp - *tm) / (2.0 * h);
@@ -1171,11 +1232,13 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
 fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                        const model::ModelEvaluator& ev, const data::SampleStats& samp,
-                       NonIterativeEstimator which, double rel_step) {
+                       NonIterativeEstimator which, double rel_step,
+                       CompositeWeight composite) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
   // Single-block convenience wrapper (block 0).
-  return estimator_map_jacobian_block(pt, rep, ev, samp, which, 0, rel_step);
+  return estimator_map_jacobian_block(
+      pt, rep, ev, samp, which, 0, rel_step, composite);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -1187,7 +1250,8 @@ estimator_map_jacobian_restricted_block(
     NonIterativeEstimator which,
     std::size_t block,
     double rel_step,
-    CommunalityMethod comm) {
+    CommunalityMethod comm,
+    CompositeWeight composite) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: Jacobian block index out of range"});
@@ -1206,13 +1270,15 @@ estimator_map_jacobian_restricted_block(
       work.S[block] = S0;
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
-      auto fp = fit_noniterative_cfa_restricted(pt, rep, work, which, comm);
+      auto fp = fit_noniterative_cfa_restricted(
+          pt, rep, work, which, comm, composite);
       if (!fp.has_value()) return std::unexpected(fp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
-      auto fm = fit_noniterative_cfa_restricted(pt, rep, work, which, comm);
+      auto fm = fit_noniterative_cfa_restricted(
+          pt, rep, work, which, comm, composite);
       if (!fm.has_value()) return std::unexpected(fm.error());
 
       J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
@@ -1230,11 +1296,12 @@ estimator_map_jacobian_restricted(
     const data::SampleStats& samp,
     NonIterativeEstimator which,
     double rel_step,
-    CommunalityMethod comm) {
+    CommunalityMethod comm,
+    CompositeWeight composite) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "restricted Guttman CFA: empty sample stats"});
   return estimator_map_jacobian_restricted_block(
-      pt, rep, ev, samp, which, 0, rel_step, comm);
+      pt, rep, ev, samp, which, 0, rel_step, comm, composite);
 }
 
 }  // namespace magmaan::estimate::frontier

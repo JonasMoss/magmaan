@@ -57,11 +57,16 @@ guttman_h <- function(S, blocks,
 #' @param estimator Non-iterative estimator. `"guttman"` keeps the legacy
 #'   lavaan-like Spearman/incidence Guttman map; `"guttman_gls_aligned"` uses the
 #'   block-GLS H diagonal and aligned score reconstruction.
+#' @param composite Composite weights used by the Guttman regression:
+#'   `"auto"` preserves the estimator default, `"unit"` uses incidence weights,
+#'   `"standardized"` uses incidence weights after indicator standardization,
+#'   and `"gls_aligned"` uses the aligned data-dependent weights.
 #' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
-fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman") {
-  noniterative_cfa_fit_impl(partable, sample_stats, estimator)
+fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman",
+                                 composite = "auto") {
+  noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite)
 }
 
 #' Fit the estimator-side metric-constrained non-iterative CFA map.
@@ -75,8 +80,9 @@ fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman") 
 #' @inheritParams fit_noniterative_cfa
 #' @export
 fit_noniterative_cfa_metric <- function(partable, sample_stats,
-                                        estimator = "guttman_gls_aligned") {
-  noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator)
+                                        estimator = "guttman_gls_aligned",
+                                        composite = "auto") {
+  noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator, composite)
 }
 
 #' Fit the residual/loading restricted non-iterative CFA map.
@@ -94,9 +100,10 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
 #' @export
 fit_noniterative_cfa_restricted <- function(partable, sample_stats,
                                             estimator = "guttman_gls_aligned",
-                                            communality = "gmm_block") {
+                                            communality = "gmm_block",
+                                            composite = "auto") {
   noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
-                                       communality)
+                                       communality, composite)
 }
 
 noniterative_estimator_arg <- function(estimator) {

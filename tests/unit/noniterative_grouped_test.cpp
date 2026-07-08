@@ -374,6 +374,45 @@ TEST_CASE("residual-restricted map exposes the communality method axis") {
   CHECK(inf->Omega.allFinite());
 }
 
+TEST_CASE("residual-restricted map exposes the composite weight axis") {
+  auto b = build_mg(kOneFactorResidualTie, 1);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  Eigen::MatrixXd S = of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65});
+  S(0, 2) += 0.08;
+  S(2, 0) += 0.08;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+
+  auto fit_aligned = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::GlsAligned);
+  auto fit_std = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::Standardized);
+  REQUIRE_OK(fit_aligned);
+  REQUIRE_OK(fit_std);
+  CHECK((fit_aligned->theta - fit_std->theta).cwiseAbs().maxCoeff() > 1e-6);
+
+  auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
+  REQUIRE_OK(eqc);
+  CHECK((eqc->A_eq * fit_std->theta - eqc->b_eq).cwiseAbs().maxCoeff() < 1e-9);
+
+  auto J = ef::estimator_map_jacobian_restricted(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      1e-6, ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::Standardized);
+  REQUIRE_OK(J);
+  CHECK((eqc->A_eq * (*J)).cwiseAbs().maxCoeff() < 1e-6);
+
+  auto inf = rf::noniterative_inference_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit_std->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS,
+      ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::Standardized);
+  REQUIRE_OK(inf);
+  CHECK(inf->Omega.allFinite());
+}
+
 TEST_CASE("residual-restricted map rejects non-LS communality methods") {
   auto b = build_mg(kOneFactorResidualTie, 1);
   SampleStats samp;

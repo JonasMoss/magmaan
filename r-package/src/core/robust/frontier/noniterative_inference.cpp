@@ -164,7 +164,8 @@ noniterative_inference_impl(const spec::LatentStructure& pt,
                             Discrepancy disc,
                             const Eigen::MatrixXd& gamma,
                             MapKind map_kind,
-                            estimate::frontier::CommunalityMethod comm) {
+                            estimate::frontier::CommunalityMethod comm,
+                            estimate::frontier::CompositeWeight composite) {
   if (samp.S.empty()) return perr("non-iterative inference: empty sample stats");
   const Eigen::MatrixXd& S = samp.S[0];
   const Eigen::Index p = S.rows();
@@ -192,9 +193,9 @@ noniterative_inference_impl(const spec::LatentStructure& pt,
 
   auto Jf = (map_kind == MapKind::Restricted)
                 ? estimate::frontier::estimator_map_jacobian_restricted(
-                      pt, rep, *ev, samp, which, 1e-6, comm)
+                      pt, rep, *ev, samp, which, 1e-6, comm, composite)
                 : estimate::frontier::estimator_map_jacobian(
-                      pt, rep, *ev, samp, which);
+                      pt, rep, *ev, samp, which, 1e-6, composite);
   if (!Jf.has_value()) return perr("non-iterative inference: estimator Jacobian failed");
   const Eigen::MatrixXd J = *Jf;  // q × p*
 
@@ -281,10 +282,11 @@ post_expected<NonIterativeInference>
 noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                        const data::SampleStats& samp, const Eigen::VectorXd& theta,
                        estimate::frontier::NonIterativeEstimator which,
-                       Discrepancy disc, const Eigen::MatrixXd& gamma) {
+                       Discrepancy disc, const Eigen::MatrixXd& gamma,
+                       estimate::frontier::CompositeWeight composite) {
   return noniterative_inference_impl(
       pt, rep, samp, theta, which, disc, gamma, MapKind::Configural,
-      estimate::frontier::CommunalityMethod::GmmBlock);
+      estimate::frontier::CommunalityMethod::GmmBlock, composite);
 }
 
 post_expected<NonIterativeInference>
@@ -296,22 +298,26 @@ noniterative_inference_restricted(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     const Eigen::MatrixXd& gamma,
-    estimate::frontier::CommunalityMethod comm) {
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
   return noniterative_inference_impl(
-      pt, rep, samp, theta, which, disc, gamma, MapKind::Restricted, comm);
+      pt, rep, samp, theta, which, disc, gamma, MapKind::Restricted, comm,
+      composite);
 }
 
 post_expected<NonIterativeInference>
 noniterative_inference_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                           const data::SampleStats& samp, const Eigen::VectorXd& theta,
-                          estimate::frontier::NonIterativeEstimator which, Discrepancy disc) {
+                          estimate::frontier::NonIterativeEstimator which,
+                          Discrepancy disc,
+                          estimate::frontier::CompositeWeight composite) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) return perr("non-iterative inference: evaluator build failed");
   auto sig = ev->sigma(theta);
   if (!sig.has_value()) return perr("non-iterative inference: Sigma(theta) failed");
   auto g = data::gamma_nt(sig->sigma[0]);
   if (!g.has_value()) return perr("non-iterative inference: gamma_nt failed");
-  return noniterative_inference(pt, rep, samp, theta, which, disc, *g);
+  return noniterative_inference(pt, rep, samp, theta, which, disc, *g, composite);
 }
 
 post_expected<NonIterativeInference>
@@ -322,7 +328,8 @@ noniterative_inference_restricted_nt(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
-    estimate::frontier::CommunalityMethod comm) {
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) return perr("non-iterative inference: evaluator build failed");
   auto sig = ev->sigma(theta);
@@ -330,7 +337,7 @@ noniterative_inference_restricted_nt(
   auto g = data::gamma_nt(sig->sigma[0]);
   if (!g.has_value()) return perr("non-iterative inference: gamma_nt failed");
   return noniterative_inference_restricted(
-      pt, rep, samp, theta, which, disc, *g, comm);
+      pt, rep, samp, theta, which, disc, *g, comm, composite);
 }
 
 post_expected<NonIterativeInference>
@@ -338,11 +345,12 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  const model::MatrixRep& rep, const data::SampleStats& samp,
                                  const data::RawData& raw, const Eigen::VectorXd& theta,
                                  estimate::frontier::NonIterativeEstimator which,
-                                 Discrepancy disc) {
+                                 Discrepancy disc,
+                                 estimate::frontier::CompositeWeight composite) {
   if (raw.X.empty()) return perr("non-iterative inference: empty raw data");
   auto g = data::empirical_gamma(raw.X[0]);
   if (!g.has_value()) return perr("non-iterative inference: empirical_gamma failed");
-  return noniterative_inference(pt, rep, samp, theta, which, disc, *g);
+  return noniterative_inference(pt, rep, samp, theta, which, disc, *g, composite);
 }
 
 post_expected<NonIterativeInference>
@@ -354,12 +362,13 @@ noniterative_inference_restricted_empirical(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
-    estimate::frontier::CommunalityMethod comm) {
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
   if (raw.X.empty()) return perr("non-iterative inference: empty raw data");
   auto g = data::empirical_gamma(raw.X[0]);
   if (!g.has_value()) return perr("non-iterative inference: empirical_gamma failed");
   return noniterative_inference_restricted(
-      pt, rep, samp, theta, which, disc, *g, comm);
+      pt, rep, samp, theta, which, disc, *g, comm, composite);
 }
 
 post_expected<inference::WaldTestResult>
@@ -387,7 +396,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
                                const data::SampleStats& samp, const Eigen::VectorXd& theta,
                                estimate::frontier::NonIterativeEstimator which,
                                Discrepancy disc,
-                               const std::vector<Eigen::MatrixXd>& gamma_per_block) {
+                               const std::vector<Eigen::MatrixXd>& gamma_per_block,
+                               estimate::frontier::CompositeWeight composite) {
   if (samp.S.empty()) return perr("grouped inference: empty sample stats");
   const std::size_t nblk = samp.S.size();
   if (gamma_per_block.size() != nblk)
@@ -479,7 +489,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
     const Eigen::MatrixXd Sigma_hat_b = sig->sigma[b];              // copy (P4)
     const Eigen::MatrixXd Delta_b = Delta_full.middleRows(offset[b], ps);  // ps × q
 
-    auto Jf = estimate::frontier::estimator_map_jacobian_block(pt, rep, *ev, samp, which, b);
+    auto Jf = estimate::frontier::estimator_map_jacobian_block(
+        pt, rep, *ev, samp, which, b, 1e-6, composite);
     if (!Jf.has_value()) return perr("grouped inference: block Jacobian failed");
     const Eigen::MatrixXd J_b = *Jf;  // q × ps (rows outside block b are exactly 0)
 
@@ -592,7 +603,8 @@ post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                                   const data::SampleStats& samp, const Eigen::VectorXd& theta,
                                   estimate::frontier::NonIterativeEstimator which,
-                                  Discrepancy disc) {
+                                  Discrepancy disc,
+                                  estimate::frontier::CompositeWeight composite) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) return perr("grouped inference: evaluator build failed");
   auto sig = ev->sigma(theta);
@@ -605,7 +617,8 @@ noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::
     if (!g.has_value()) return perr("grouped inference: gamma_nt failed");
     gammas.push_back(std::move(*g));
   }
-  return noniterative_inference_grouped(pt, rep, samp, theta, which, disc, gammas);
+  return noniterative_inference_grouped(
+      pt, rep, samp, theta, which, disc, gammas, composite);
 }
 
 post_expected<GroupedNonIterativeInference>
@@ -614,7 +627,8 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
                                          const data::SampleStats& samp,
                                          const data::RawData& raw, const Eigen::VectorXd& theta,
                                          estimate::frontier::NonIterativeEstimator which,
-                                         Discrepancy disc) {
+                                         Discrepancy disc,
+                                         estimate::frontier::CompositeWeight composite) {
   if (raw.X.size() != samp.S.size())
     return perr("grouped inference: raw-data block count != sample-stats blocks");
   auto ev = model::ModelEvaluator::build(pt, rep);
@@ -628,7 +642,8 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
     if (!g.has_value()) return perr("grouped inference: empirical_gamma failed");
     gammas.push_back(std::move(*g));
   }
-  return noniterative_inference_grouped(pt, rep, samp, theta, which, disc, gammas);
+  return noniterative_inference_grouped(
+      pt, rep, samp, theta, which, disc, gammas, composite);
 }
 
 post_expected<GroupedNonIterativeInference>
@@ -640,7 +655,8 @@ noniterative_inference_grouped_restricted(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     const std::vector<Eigen::MatrixXd>& gamma_per_block,
-    estimate::frontier::CommunalityMethod comm) {
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
   if (samp.S.empty()) return perr("restricted grouped inference: empty sample stats");
   const std::size_t nblk = samp.S.size();
   if (gamma_per_block.size() != nblk)
@@ -698,7 +714,7 @@ noniterative_inference_grouped_restricted(
   J_blocks.reserve(nblk);
   for (std::size_t b = 0; b < nblk; ++b) {
     auto Jf = estimate::frontier::estimator_map_jacobian_restricted_block(
-        pt, rep, *ev, samp, which, b, 1e-6, comm);
+        pt, rep, *ev, samp, which, b, 1e-6, comm, composite);
     if (!Jf.has_value())
       return perr("restricted grouped inference: block Jacobian failed");
     if (Jf->rows() != q || Jf->cols() != pstar_b[b])
@@ -846,7 +862,8 @@ noniterative_inference_grouped_restricted_nt(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
-    estimate::frontier::CommunalityMethod comm) {
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) return perr("restricted grouped inference: evaluator build failed");
   auto sig = ev->sigma(theta);
@@ -860,7 +877,7 @@ noniterative_inference_grouped_restricted_nt(
     gammas.push_back(std::move(*g));
   }
   return noniterative_inference_grouped_restricted(
-      pt, rep, samp, theta, which, disc, gammas, comm);
+      pt, rep, samp, theta, which, disc, gammas, comm, composite);
 }
 
 post_expected<GroupedNonIterativeInference>
@@ -872,7 +889,8 @@ noniterative_inference_grouped_restricted_empirical(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
-    estimate::frontier::CommunalityMethod comm) {
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
   if (raw.X.size() != samp.S.size())
     return perr("restricted grouped inference: raw-data block count != sample-stats blocks");
   auto ev = model::ModelEvaluator::build(pt, rep);
@@ -888,7 +906,7 @@ noniterative_inference_grouped_restricted_empirical(
     gammas.push_back(std::move(*g));
   }
   return noniterative_inference_grouped_restricted(
-      pt, rep, samp, theta, which, disc, gammas, comm);
+      pt, rep, samp, theta, which, disc, gammas, comm, composite);
 }
 
 post_expected<NonIterativeDiffTest>
