@@ -2211,22 +2211,24 @@ work until a concrete downstream consumer appears.
 
   **Measurement invariance landed** (2026-07): multi-group blocks with a
   block-diagonal `Omega`, mean structure (free intercepts, latent means fixed at
-  0), the `Omega`-metric minimum-distance projection onto linear `group.equal`
-  constraints (exact chi2_k Wald = min-distance duality, so metric / strict /
-  tau-equivalence come for free), and true (free-latent-mean) scalar invariance
-  via the reference-group mean map (linearized pseudo-inverse Wald). C++
+  0), the estimator-side metric map `fit_noniterative_cfa_metric` (common
+  standardized loading shape estimated inside the Sigma/H reconstruction), the
+  `Omega`-metric minimum-distance projection onto linear `group.equal`
+  constraints for Wald/inference (exact chi2_k, so metric / strict /
+  tau-equivalence come for free as tests), and true (free-latent-mean) scalar
+  invariance via the reference-group mean map (linearized pseudo-inverse Wald).
+  C++ `estimate::frontier::fit_noniterative_cfa_metric` and
   `robust::frontier::noniterative_{inference_grouped,constrained_fit,scalar_
-  invariance}`; R `magmaan_core$noniterative_cfa_{grouped_inference,constrained,
-  scalar}_impl`; note `constrained_noniterative_cfa.tex`; validated by
+  invariance}`; R `fit_noniterative_cfa_metric` and
+  `magmaan_core$noniterative_cfa_{grouped_inference,constrained,scalar}_impl`;
+  note `constrained_noniterative_cfa.tex`; validated by
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
   `experiments/56-noniterative-constraint-charts` adds the marker-chart sanity
-  check: the pure linear projection is equivariant and the configural implied
-  covariance is marker-invariant, but the current linear marker-coordinate
-  projection is not an off-surface chart-invariant constrained target. New
-  remaining item: formulate a chart-free or moving-chart constrained Guttman
-  target before claiming marker-invariant misspecification behavior.
+  check for the estimator-side metric map: configural and metric-constrained
+  implied covariances are marker-invariant at roundoff even off the metric
+  surface; theta coordinates differ by chart, as expected.
   Remaining: a **pooled-loading** scalar refinement (test given metric, more
   efficient than the reference-group loadings), an **ordinal** mean-structure
   invariance path (needs threshold modeling, not treated-as-continuous moments),

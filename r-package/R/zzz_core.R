@@ -780,6 +780,7 @@ magmaan_core <- local({
       "infer_robust_se_both_breads_raw",
       "infer_robust_se_both_breads_zc",
       "noniterative_cfa_fit_impl",
+      "noniterative_cfa_metric_fit_impl",
       "noniterative_cfa_inference_impl",
       "noniterative_cfa_wald_impl",
       "noniterative_cfa_difference_impl",

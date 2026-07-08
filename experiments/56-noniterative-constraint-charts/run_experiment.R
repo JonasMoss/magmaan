@@ -1,12 +1,11 @@
 #!/usr/bin/env Rscript
 # Experiment 56: chart sanity checks for constrained non-iterative CFA.
 #
-# The constrained Guttman machinery projects a configural closed-form estimate
-# onto the linear equalities carried by the partable. This experiment checks the
-# invariance-like property we actually need for measurement-invariance work:
-# changing an arbitrary marker chart should change coordinates, but not the
-# constrained fitted covariance or the Wald statistic, provided the H estimator
-# and the induced covariance metric are transformed with the chart.
+# This experiment checks the estimator-side metric-constrained Guttman map, not
+# the inference-side Omega projection. Changing an arbitrary marker chart should
+# change coordinates, but not the Sigma/H-level constrained fitted covariance,
+# because the metric map estimates a common standardized loading shape and only
+# then converts to the partable's marker chart.
 
 suppressWarnings(suppressMessages(library(magmaan)))
 
@@ -21,7 +20,7 @@ core <- magmaan::magmaan_core
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
-    "Marker-chart sanity check for closed-form metric-invariance projection.\n\n",
+    "Marker-chart sanity check for the estimator-side metric Guttman map.\n\n",
     "Options:\n",
     "  --smoke              Quick deterministic + finite-sample run. Default.\n",
     "  --full               Larger finite-sample run.\n",
@@ -187,12 +186,6 @@ sample_stats_finite <- function(S, n, seed) {
   core$data_sample_stats_from_raw(list(X1, X2))
 }
 
-with_theta <- function(fit, theta) {
-  out <- fit
-  out$theta <- as.numeric(theta)
-  out
-}
-
 max_moment_diff <- function(a, b) {
   max(vapply(seq_along(a$sigma), function(i) {
     max(abs(as.matrix(a$sigma[[i]]) - as.matrix(b$sigma[[i]])))
@@ -201,13 +194,12 @@ max_moment_diff <- function(a, b) {
 
 fit_chart <- function(pt, ss, estimator) {
   fit <- fit_noniterative_cfa(pt, ss, estimator = estimator)
-  con <- noniterative_cfa_constrained(fit, estimator = estimator,
-                                      discrepancy = "ntml", gamma = "nt")
+  metric <- fit_noniterative_cfa_metric(pt, ss, estimator = estimator)
   list(
     fit = fit,
-    con = con,
+    metric = metric,
     implied_config = core$model_implied(fit),
-    implied_constrained = core$model_implied(with_theta(fit, con$theta_tilde))
+    implied_metric = core$model_implied(metric)
   )
 }
 
@@ -220,17 +212,10 @@ compare_charts <- function(ss, scenario, estimator, source, rep_id, n) {
     n = n,
     scenario = scenario,
     estimator = estimator,
-    k_x1x4 = a$con$k,
-    k_x2x5 = b$con$k,
-    W_x1x4 = a$con$W,
-    W_x2x5 = b$con$W,
-    W_abs_diff = abs(a$con$W - b$con$W),
-    p_abs_diff = abs(a$con$p_wald - b$con$p_wald),
     config_sigma_max_abs_diff = max_moment_diff(a$implied_config, b$implied_config),
-    constrained_sigma_max_abs_diff = max_moment_diff(a$implied_constrained,
-                                                     b$implied_constrained),
-    raw_theta_max_abs_diff = max(abs(a$fit$theta - b$fit$theta)),
-    constrained_theta_max_abs_diff = max(abs(a$con$theta_tilde - b$con$theta_tilde)),
+    metric_sigma_max_abs_diff = max_moment_diff(a$implied_metric, b$implied_metric),
+    config_theta_max_abs_diff = max(abs(a$fit$theta - b$fit$theta)),
+    metric_theta_max_abs_diff = max(abs(a$metric$theta - b$metric$theta)),
     stringsAsFactors = FALSE
   )
 }
@@ -304,9 +289,8 @@ for (scenario in opts$scenarios) {
 
 raw <- do.call(rbind, rows)
 summary <- stats::aggregate(
-  raw[c("W_abs_diff", "p_abs_diff", "config_sigma_max_abs_diff",
-        "constrained_sigma_max_abs_diff", "raw_theta_max_abs_diff",
-        "constrained_theta_max_abs_diff")],
+  raw[c("config_sigma_max_abs_diff", "metric_sigma_max_abs_diff",
+        "config_theta_max_abs_diff", "metric_theta_max_abs_diff")],
   raw[c("source", "n", "scenario", "estimator")],
   function(x) c(max = max(x), median = stats::median(x))
 )

@@ -7870,6 +7870,23 @@ Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
 }
 
 // [[Rcpp::export]]
+Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_stats,
+                                            std::string estimator = "guttman_gls_aligned") {
+  auto parsed = partable_from_arg(partable, "noniterative_cfa_metric_fit");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  const auto which = noniter_which(estimator);
+  auto fit = magmaan::estimate::frontier::fit_noniterative_cfa_metric(
+      ctx.pt, ctx.rep, ctx.samp, which);
+  if (!fit.has_value()) stop_fit(fit.error());
+  magmaan::estimate::Estimates est;
+  est.theta = std::move(fit->theta);
+  est.fmin = 0.0;
+  return fit_result(ctx, est, &starts, "noniterative_metric");
+}
+
+// [[Rcpp::export]]
 Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator = "guttman",
                                            std::string discrepancy = "uls",
                                            std::string gamma = "nt", SEXP data = R_NilValue) {

@@ -521,6 +521,10 @@ noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttm
     .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator)
 }
 
+noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned") {
+    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator)
+}
+
 noniterative_cfa_inference_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_inference_impl`, fit, estimator, discrepancy, gamma, data)
 }
