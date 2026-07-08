@@ -1,0 +1,195 @@
+---
+title: "Standardized augmented Guttman ILS on a Holzinger-Swineford CFA"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results_dir <- "results"
+need <- c("hs_snapshot", "population", "estimate_summary", "test_summary",
+          "diagnostic_summary", "metadata")
+paths <- file.path(results_dir, paste0(need, ".csv"))
+if (!all(file.exists(paths))) {
+  stop("Missing results. Run:\n  Rscript run_experiment.R --smoke\n",
+       "or:\n  Rscript run_experiment.R --full --reps 500")
+}
+snapshot <- read.csv(paths[1])
+population <- read.csv(paths[2])
+est <- read.csv(paths[3])
+tests <- read.csv(paths[4])
+diag <- read.csv(paths[5])
+metadata <- read.csv(paths[6])
+
+meta <- function(key) metadata$value[match(key, metadata$key)]
+fmt <- function(x, d = 3) ifelse(is.finite(x), formatC(x, format = "f", digits = d), "NA")
+pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "NA")
+label_est <- c(
+  guttman_std_ntml = "Std augmented ILS (NTML)",
+  guttman_std_uls = "Std augmented ILS (ULS)",
+  ml_nt = "NTML",
+  uls_emp = "ULS"
+)
+largest_n <- max(est$n)
+
+lookup <- function(df, estimator, group, scenario = "null", n = largest_n, col = "rmse") {
+  z <- df[df$estimator == estimator & df$group == group &
+          df$scenario == scenario & df$n == n, col]
+  if (length(z)) z[[1]] else NA_real_
+}
+test_lookup <- function(estimator, test, scenario, n = largest_n, col = "rejection_rate") {
+  z <- tests[tests$estimator == estimator & tests$test == test &
+             tests$scenario == scenario & tests$n == n, col]
+  if (length(z)) z[[1]] else NA_real_
+}
+ratio <- function(estimator, group, scenario = "null", n = largest_n) {
+  lookup(est, estimator, group, scenario, n, "rmse") /
+    lookup(est, "ml_nt", group, scenario, n, "rmse")
+}
+```
+
+## Question
+
+Does the standardized, augmented Guttman ILS map behave like a practical CFA
+estimator on a familiar three-factor Holzinger-Swineford problem? We compare it
+with normal-theory ML and ULS on point estimates, Wald intervals, residual
+goodness-of-fit, and the nested restriction `visual ~~ 0*speed`.
+
+## Short answer
+
+On this first Holzinger-Swineford-shaped run, the standardized augmented ILS
+point estimates are close to ML but not ML-efficient. At n = `r largest_n`, its
+all-parameter RMSE is `r fmt(ratio("guttman_std_ntml", "loading"), 2)` times ML
+for loadings and `r fmt(ratio("guttman_std_ntml", "residual_var"), 2)` times ML
+for residual variances in the null cell.
+
+Its Wald intervals are usable in the same broad sense: loading coverage is
+`r pct(lookup(est, "guttman_std_ntml", "loading", col = "coverage"))` with the
+NTML discrepancy and empirical Gamma, compared with
+`r pct(lookup(est, "ml_nt", "loading", col = "coverage"))` for ML and
+`r pct(lookup(est, "uls_emp", "loading", col = "coverage"))` for ULS.
+
+For tests, the residual GOF route is available for Guttman and ML, while ULS is
+included for the nested profile test. In the null cell, the nested rejection
+rates at n = `r largest_n` are `r pct(test_lookup("guttman_std_ntml", "nested_visual_speed_zero", "null"))`
+for standardized augmented ILS, `r pct(test_lookup("ml_nt", "nested_visual_speed_zero", "null"))`
+for ML, and `r pct(test_lookup("uls_emp", "nested_visual_speed_zero", "null"))`
+for ULS. In the alternative cell, the corresponding powers are
+`r pct(test_lookup("guttman_std_ntml", "nested_visual_speed_zero", "alternative"))`,
+`r pct(test_lookup("ml_nt", "nested_visual_speed_zero", "alternative"))`, and
+`r pct(test_lookup("uls_emp", "nested_visual_speed_zero", "alternative"))`.
+
+## Evidence
+
+### Real-data snapshot
+
+The table uses the actual Holzinger-Swineford data only as a sanity check. The
+simulation below uses an ML-fitted population from the same data, with
+`visual ~~ speed` either retained or set to zero.
+
+```{r snapshot-table}
+keep <- snapshot$param %in% c("visual =~ x2", "visual =~ x3",
+                              "textual =~ x5", "speed =~ x8",
+                              "visual ~~ speed", "x1 ~~ x1")
+snap <- snapshot[keep, c("estimator", "param", "estimate", "se", "ci_lower", "ci_upper")]
+snap$Estimator <- label_est[snap$estimator]
+snap$Parameter <- snap$param
+snap$Estimate <- fmt(snap$estimate)
+snap$SE <- fmt(snap$se)
+snap$CI <- paste0("[", fmt(snap$ci_lower), ", ", fmt(snap$ci_upper), "]")
+knitr::kable(snap[, c("Estimator", "Parameter", "Estimate", "SE", "CI")],
+             row.names = FALSE)
+```
+
+### Estimates and intervals
+
+RMSE ratio relative to ML and 95% Wald interval coverage at the largest simulated
+sample size. Values are grouped by free-parameter block.
+
+```{r estimate-table}
+rows <- list()
+for (scenario in c("null", "alternative")) {
+  for (group in c("loading", "factor_cov", "residual_var")) {
+    for (estimator in c("guttman_std_ntml", "guttman_std_uls", "uls_emp")) {
+      r <- est[est$scenario == scenario & est$n == largest_n &
+               est$group == group & est$estimator == estimator, ]
+      if (!nrow(r)) next
+      rows[[length(rows) + 1L]] <- data.frame(
+        Scenario = scenario,
+        Group = group,
+        Estimator = label_est[estimator],
+        `RMSE / ML` = fmt(r$rmse / lookup(est, "ml_nt", group, scenario), 2),
+        Coverage = pct(r$coverage),
+        `Avg SE` = fmt(r$avg_se),
+        check.names = FALSE
+      )
+    }
+  }
+}
+knitr::kable(do.call(rbind, rows), row.names = FALSE)
+```
+
+### Tests
+
+Rejection rates for exact-fit GOF and the nested `visual ~~ 0*speed` restriction.
+The null scenario sets that factor covariance to zero; the alternative scenario
+uses the value from the ML fit to the observed Holzinger-Swineford data.
+
+```{r test-table}
+show_tests <- tests[tests$n == largest_n &
+                    tests$test %in% c("gof", "nested_visual_speed_zero"), ]
+show_tests <- show_tests[show_tests$estimator %in%
+                           c("guttman_std_ntml", "guttman_std_uls", "ml_nt", "uls_emp"), ]
+show_tests$Estimator <- label_est[show_tests$estimator]
+show_tests$Test <- ifelse(show_tests$test == "gof", "GOF", "Nested")
+show_tests$Rejection <- pct(show_tests$rejection_rate)
+show_tests$`Mean p` <- fmt(show_tests$mean_p)
+show_tests$`Negative stat` <- pct(show_tests$negative_stat_rate)
+knitr::kable(show_tests[, c("scenario", "Estimator", "Test", "Rejection",
+                            "Mean p", "Negative stat")],
+             col.names = c("Scenario", "Estimator", "Test", "Rejection",
+                           "Mean p", "Negative Stat"),
+             row.names = FALSE)
+```
+
+### Diagnostics
+
+```{r diag-table}
+d <- diag[diag$n == largest_n & diag$stage == "H1", ]
+d$Estimator <- label_est[d$estimator]
+d$OK <- pct(d$ok_rate)
+d$Converged <- pct(d$converged_rate)
+d$Improper <- pct(d$improper_rate)
+knitr::kable(d[, c("scenario", "Estimator", "OK", "Converged", "Improper")],
+             col.names = c("Scenario", "Estimator", "OK", "Converged", "Improper"),
+             row.names = FALSE)
+```
+
+## Caveats
+
+- This is a normal-data, three-factor, three-indicator design. It is a first
+  comparison of the new standardized augmented ILS path, not a general
+  recommendation.
+- The default `--smoke` render uses only `r meta("reps")` replications per cell.
+  It is a plumbing check; use the `--full` command below before treating rates
+  as Monte Carlo evidence.
+- The population is seeded by fitting ML to the observed Holzinger-Swineford
+  data. That makes the numbers interpretable, but it is one population.
+- Guttman intervals use empirical Gamma and either the NTML or ULS residual
+  discrepancy. ULS intervals use the continuous-LS sandwich. ML intervals use
+  the ordinary expected-information covariance.
+- ULS exact-fit GOF is not reported here; the first pass uses ULS for estimates,
+  CIs, and the nested continuous-LS profile test.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --full --reps 500 --cores 4
+quarto render report.qmd
+```
