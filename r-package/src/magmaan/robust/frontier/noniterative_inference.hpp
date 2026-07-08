@@ -92,7 +92,9 @@ noniterative_inference_restricted(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
-    const Eigen::MatrixXd& gamma);
+    const Eigen::MatrixXd& gamma,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock);
 
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_nt(
@@ -101,7 +103,9 @@ noniterative_inference_restricted_nt(
     const data::SampleStats& samp,
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
-    Discrepancy disc);
+    Discrepancy disc,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock);
 
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_empirical(
@@ -111,7 +115,9 @@ noniterative_inference_restricted_empirical(
     const data::RawData& raw,
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
-    Discrepancy disc);
+    Discrepancy disc,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock);
 
 // Wald test of the linear restriction R·θ = q, using the delta-method Ω.
 // Exact χ²(R.rows()); the primary nested test.
@@ -202,7 +208,9 @@ noniterative_inference_grouped_restricted(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
-    const std::vector<Eigen::MatrixXd>& gamma_per_block);
+    const std::vector<Eigen::MatrixXd>& gamma_per_block,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock);
 
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted_nt(
@@ -211,7 +219,9 @@ noniterative_inference_grouped_restricted_nt(
     const data::SampleStats& samp,
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
-    Discrepancy disc);
+    Discrepancy disc,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock);
 
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted_empirical(
@@ -221,7 +231,9 @@ noniterative_inference_grouped_restricted_empirical(
     const data::RawData& raw,
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
-    Discrepancy disc);
+    Discrepancy disc,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock);
 
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test(

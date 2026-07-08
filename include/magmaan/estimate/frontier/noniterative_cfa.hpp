@@ -7,6 +7,7 @@
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/estimate/frontier/communality.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -96,7 +97,8 @@ fit_noniterative_cfa_restricted(
     const spec::LatentStructure& pt,
     const model::MatrixRep& rep,
     const data::SampleStats& samp,
-    NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned);
+    NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned,
+    CommunalityMethod comm = CommunalityMethod::GmmBlock);
 
 // J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
 // p*_block = p_block(p_block+1)/2), by central finite differences of the
@@ -136,7 +138,8 @@ estimator_map_jacobian_restricted_block(
     const data::SampleStats& samp,
     NonIterativeEstimator which,
     std::size_t block,
-    double rel_step = 1e-6);
+    double rel_step = 1e-6,
+    CommunalityMethod comm = CommunalityMethod::GmmBlock);
 
 // Single-block convenience wrapper (block 0) for the restricted map.
 fit_expected<Eigen::MatrixXd>
@@ -146,6 +149,7 @@ estimator_map_jacobian_restricted(
     const model::ModelEvaluator& ev,
     const data::SampleStats& samp,
     NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned,
-    double rel_step = 1e-6);
+    double rel_step = 1e-6,
+    CommunalityMethod comm = CommunalityMethod::GmmBlock);
 
 }  // namespace magmaan::estimate::frontier

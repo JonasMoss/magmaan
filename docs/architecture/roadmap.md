@@ -198,9 +198,13 @@ golden `parTable()` fixtures.
   (identity-weighted one-same-block anchor triads), blockwise triad-GMM, and
   full selected-triad-GMM diagonals for a fixed simple-structure indicator
   block vector. They return `h2`, `diag(H)`, and
-  `H = S` with only the diagonal replaced. `guttman_gls_aligned` consumes the
-  blockwise triad-GMM rule; the other H-diagonal rules remain available through
-  the low-level frontier primitive. `experiments/55-guttman-communality-
+  `H = S` with only the diagonal replaced. The ordinary `guttman_gls_aligned`
+  point-estimator lane consumes the blockwise triad-GMM rule. The
+  residual-restricted Guttman map can also select any least-squares-form
+  H-diagonal rule (`triad_ls`, `anchor_triad_ls`, `gmm_block`, `gmm_full`) and
+  reuses that choice in its finite-difference Jacobian and grouped inference;
+  AR/RS remain low-level H-estimation diagnostics because they are not
+  constraint-compatible LS systems. `experiments/55-guttman-communality-
   estimators` times the package implementation directly.
 - Frontier multi-group / constrained / mean-structure non-iterative CFA
   (2026-07) extends the closed-form estimator to measurement invariance. The map
@@ -215,11 +219,12 @@ golden `parTable()` fixtures.
   reconstruction and then converts to the partable's marker chart. The
   estimator-side restricted map `fit_noniterative_cfa_restricted` imposes
   separable loading/residual linear constraints inside the Guttman
-  reconstruction: residual rows enter the communality/H step and loading rows
-  enter the Sigma-only composite projection; unsupported mixed/factor/mean rows
-  error. Grouped restricted inference uses the restricted map's full stacked
-  finite-difference Jacobian, so cross-block constraints propagate into `Omega`,
-  GOF, and pseudo-LRTs. General linear equality testing still has the
+  reconstruction: residual rows enter the selected LS-form communality/H step
+  (default `gmm_block`) and loading rows enter the Sigma-only composite
+  projection; unsupported mixed/factor/mean rows error. Grouped restricted
+  inference uses the restricted map's full stacked finite-difference Jacobian
+  with the same communality method, so cross-block constraints propagate into
+  `Omega`, GOF, and pseudo-LRTs. General linear equality testing still has the
   `Omega`-metric minimum-distance projection `noniterative_constrained_fit`,
   whose statistic is an exact chi2_k (Wald = min-distance duality). True
   (free-latent-mean) scalar

@@ -1965,15 +1965,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // noniterative_cfa_restricted_fit_impl
-Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator);
-RcppExport SEXP _magmaan_noniterative_cfa_restricted_fit_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP) {
+Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, std::string communality);
+RcppExport SEXP _magmaan_noniterative_cfa_restricted_fit_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP communalitySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
-    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator));
+    Rcpp::traits::input_parameter< std::string >::type communality(communalitySEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator, communality));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3674,7 +3675,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_guttman_h_impl", (DL_FUNC) &_magmaan_frontier_guttman_h_impl, 3},
     {"_magmaan_noniterative_cfa_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_fit_impl, 3},
     {"_magmaan_noniterative_cfa_metric_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_metric_fit_impl, 3},
-    {"_magmaan_noniterative_cfa_restricted_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_restricted_fit_impl, 3},
+    {"_magmaan_noniterative_cfa_restricted_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_restricted_fit_impl, 4},
     {"_magmaan_noniterative_cfa_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_inference_impl, 5},
     {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},
     {"_magmaan_noniterative_cfa_difference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_difference_impl, 8},

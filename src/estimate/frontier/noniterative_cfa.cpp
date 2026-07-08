@@ -277,6 +277,20 @@ fit_expected<RestrictedRows> restricted_error(std::string detail) {
 
 bool has_rows(const Eigen::MatrixXd& A) { return A.rows() > 0; }
 
+bool is_least_squares_communality(CommunalityMethod comm) {
+  switch (comm) {
+    case CommunalityMethod::TriadLeastSquares:
+    case CommunalityMethod::AnchorTriadLeastSquares:
+    case CommunalityMethod::GmmBlock:
+    case CommunalityMethod::GmmFull:
+      return true;
+    case CommunalityMethod::AverageRatio:
+    case CommunalityMethod::RatioOfSums:
+      return false;
+  }
+  return false;
+}
+
 std::vector<Eigen::Index>
 h2_offsets(const std::vector<CfaBlockLayout>& layouts) {
   std::vector<Eigen::Index> out(layouts.size() + 1, 0);
@@ -629,7 +643,8 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
 fit_expected<std::vector<BlockGuttman>>
 fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
                       const std::vector<Eigen::MatrixXd>& S,
-                      const RestrictedRows& rows) {
+                      const RestrictedRows& rows,
+                      CommunalityMethod comm) {
   const std::size_t nblk = layouts.size();
   if (nblk == 0 || nblk != S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -643,7 +658,7 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
     const CfaBlockLayout& L = layouts[b];
     auto block_of = block_ids_from_layout(L);
     if (!block_of.has_value()) return std::unexpected(block_of.error());
-    auto sys = communality_system(S[b], *block_of, CommunalityMethod::GmmBlock);
+    auto sys = communality_system(S[b], *block_of, comm);
     if (!sys.has_value()) return std::unexpected(sys.error());
     total_rows += sys->A.rows();
     total_cols += sys->A.cols();
@@ -1039,7 +1054,8 @@ fit_expected<NonIterativeFit>
 fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
                                 const model::MatrixRep& rep,
                                 const data::SampleStats& samp,
-                                NonIterativeEstimator which) {
+                                NonIterativeEstimator which,
+                                CommunalityMethod comm) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: pure-CFA models only"});
@@ -1050,6 +1066,10 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   if (samp.S.empty())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: empty sample stats"});
+  if (!is_least_squares_communality(comm))
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: communality method must be least-squares-form "
+        "(triad_ls, anchor_triad_ls, gmm_block, gmm_full)"});
 
   const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
   if (layouts.empty())
@@ -1077,14 +1097,15 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
 
   auto rows = restricted_rows_from_partable(pt, rep, *ev, layouts, samp);
   if (!rows.has_value()) return std::unexpected(rows.error());
-  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load))
+  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
+      comm == CommunalityMethod::GmmBlock)
     return fit_noniterative_cfa(pt, rep, samp, which);
   if (which != NonIterativeEstimator::GuttmanGlsAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
-        "restricted Guttman CFA: active restrictions require "
-        "guttman_gls_aligned"});
+        "restricted Guttman CFA: active restrictions or non-default "
+        "communality methods require guttman_gls_aligned"});
 
-  auto blocks = fit_restricted_blocks(layouts, samp.S, *rows);
+  auto blocks = fit_restricted_blocks(layouts, samp.S, *rows, comm);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -1165,7 +1186,8 @@ estimator_map_jacobian_restricted_block(
     const data::SampleStats& samp,
     NonIterativeEstimator which,
     std::size_t block,
-    double rel_step) {
+    double rel_step,
+    CommunalityMethod comm) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: Jacobian block index out of range"});
@@ -1184,13 +1206,13 @@ estimator_map_jacobian_restricted_block(
       work.S[block] = S0;
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
-      auto fp = fit_noniterative_cfa_restricted(pt, rep, work, which);
+      auto fp = fit_noniterative_cfa_restricted(pt, rep, work, which, comm);
       if (!fp.has_value()) return std::unexpected(fp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
-      auto fm = fit_noniterative_cfa_restricted(pt, rep, work, which);
+      auto fm = fit_noniterative_cfa_restricted(pt, rep, work, which, comm);
       if (!fm.has_value()) return std::unexpected(fm.error());
 
       J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
@@ -1207,11 +1229,12 @@ estimator_map_jacobian_restricted(
     const model::ModelEvaluator& ev,
     const data::SampleStats& samp,
     NonIterativeEstimator which,
-    double rel_step) {
+    double rel_step,
+    CommunalityMethod comm) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "restricted Guttman CFA: empty sample stats"});
   return estimator_map_jacobian_restricted_block(
-      pt, rep, ev, samp, which, 0, rel_step);
+      pt, rep, ev, samp, which, 0, rel_step, comm);
 }
 
 }  // namespace magmaan::estimate::frontier
