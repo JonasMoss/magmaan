@@ -7754,6 +7754,61 @@ magmaan::estimate::frontier::NonIterativeEstimator noniter_which(const std::stri
              s.c_str());
 }
 
+const char* noniter_map_name(magmaan::estimate::frontier::NonIterativeEstimator which) {
+  using K = magmaan::estimate::frontier::NonIterativeEstimator;
+  switch (which) {
+    case K::Guttman:
+      return "guttman";
+    case K::GuttmanGlsAligned:
+      return "guttman_gls_aligned";
+  }
+  return "guttman";
+}
+
+bool noniter_estimator_auto(const std::string& estimator) {
+  const std::string k = noniter_lower(estimator);
+  return k == "auto" || k == "";
+}
+
+bool noniter_has_recorded_map(const Rcpp::List& fit) {
+  return fit.containsElementNamed("noniterative_map");
+}
+
+magmaan::estimate::frontier::NonIterativeEstimator
+noniter_recorded_map(const Rcpp::List& fit) {
+  return noniter_which(Rcpp::as<std::string>(fit["noniterative_map"]));
+}
+
+void noniter_require_recorded_map(const Rcpp::List& fit,
+                                  magmaan::estimate::frontier::NonIterativeEstimator which,
+                                  const char* role) {
+  if (!noniter_has_recorded_map(fit)) return;
+  const auto recorded = noniter_recorded_map(fit);
+  if (recorded != which) {
+    Rcpp::stop("noniterative_cfa_pseudo_lrt: %s fit was produced by '%s', "
+               "but inference requested '%s'",
+               role, noniter_map_name(recorded), noniter_map_name(which));
+  }
+}
+
+bool noniter_is_restricted_fit(const Rcpp::List& fit) {
+  if (!fit.containsElementNamed("estimator")) return false;
+  return noniter_lower(Rcpp::as<std::string>(fit["estimator"])) ==
+         "noniterative_restricted";
+}
+
+magmaan::estimate::frontier::NonIterativeEstimator
+noniter_which_for_fit(const Rcpp::List& fit, const std::string& estimator) {
+  if (!noniter_estimator_auto(estimator)) return noniter_which(estimator);
+  if (noniter_has_recorded_map(fit)) {
+    return noniter_recorded_map(fit);
+  }
+  if (noniter_is_restricted_fit(fit)) {
+    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanGlsAligned;
+  }
+  return magmaan::estimate::frontier::NonIterativeEstimator::Guttman;
+}
+
 magmaan::estimate::frontier::CommunalityMethod communality_which(const std::string& s) {
   const std::string k = noniter_lower(s);
   namespace ef = magmaan::estimate::frontier;
@@ -7781,12 +7836,6 @@ magmaan::robust::frontier::Discrepancy noniter_disc(const std::string& s) {
   if (k == "uls") return magmaan::robust::frontier::Discrepancy::ULS;
   if (k == "ntml" || k == "ml") return magmaan::robust::frontier::Discrepancy::NTML;
   Rcpp::stop("magmaan: unknown discrepancy '%s' (accepted: uls, ntml)", s.c_str());
-}
-
-bool noniter_is_restricted_fit(const Rcpp::List& fit) {
-  if (!fit.containsElementNamed("estimator")) return false;
-  return noniter_lower(Rcpp::as<std::string>(fit["estimator"])) ==
-         "noniterative_restricted";
 }
 
 magmaan::post_expected<magmaan::robust::frontier::NonIterativeInference>
@@ -7829,6 +7878,27 @@ Rcpp::List wrap_noniter_inference(const magmaan::robust::frontier::NonIterativeI
       Rcpp::_["rls_check"] = inf.rls_check,
       Rcpp::_["eigenvalues"] = Rcpp::wrap(inf.gof_eigenvalues),
       Rcpp::_["warnings"] = Rcpp::wrap(inf.warnings));
+}
+
+magmaan::post_expected<magmaan::robust::frontier::GroupedNonIterativeInference>
+noniter_grouped_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
+                         magmaan::estimate::frontier::NonIterativeEstimator which,
+                         magmaan::robust::frontier::Discrepancy disc,
+                         const std::string& gamma, SEXP data,
+                         bool restricted);
+
+Rcpp::List wrap_noniter_diff(const magmaan::robust::frontier::NonIterativeDiffTest& d) {
+  return Rcpp::List::create(
+      Rcpp::_["T_diff"] = d.T_d,
+      Rcpp::_["df_diff"] = d.df_d,
+      Rcpp::_["T_d"] = d.T_d,
+      Rcpp::_["df_d"] = d.df_d,
+      Rcpp::_["p_scaled"] = d.p_scaled,
+      Rcpp::_["p_adjusted"] = d.p_adjusted,
+      Rcpp::_["p_scaled_shifted"] = d.p_scaled_shifted,
+      Rcpp::_["p_mixture"] = d.p_mixture,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(d.eigenvalues),
+      Rcpp::_["warnings"] = Rcpp::wrap(d.warnings));
 }
 
 }  // namespace
@@ -7880,7 +7950,9 @@ Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::estimate::Estimates est;
   est.theta = *th;
   est.fmin = 0.0;
-  return fit_result(ctx, est, &starts, "noniterative");
+  Rcpp::List out = fit_result(ctx, est, &starts, "noniterative");
+  out["noniterative_map"] = noniter_map_name(which);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -7897,7 +7969,9 @@ Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_sta
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
   est.fmin = 0.0;
-  return fit_result(ctx, est, &starts, "noniterative_metric");
+  Rcpp::List out = fit_result(ctx, est, &starts, "noniterative_metric");
+  out["noniterative_map"] = noniter_map_name(which);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -7914,16 +7988,18 @@ Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
   est.fmin = 0.0;
-  return fit_result(ctx, est, &starts, "noniterative_restricted");
+  Rcpp::List out = fit_result(ctx, est, &starts, "noniterative_restricted");
+  out["noniterative_map"] = noniter_map_name(which);
+  return out;
 }
 
 // [[Rcpp::export]]
-Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator = "guttman",
+Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator = "auto",
                                            std::string discrepancy = "uls",
                                            std::string gamma = "nt", SEXP data = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_inference_dispatch(ctx, est, noniter_which(estimator),
+  auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                         noniter_disc(discrepancy), gamma, data,
                                         noniter_is_restricted_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
@@ -7932,12 +8008,12 @@ Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R,
-                                      Rcpp::NumericVector q, std::string estimator = "guttman",
+                                      Rcpp::NumericVector q, std::string estimator = "auto",
                                       std::string discrepancy = "uls",
                                       std::string gamma = "nt", SEXP data = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_inference_dispatch(ctx, est, noniter_which(estimator),
+  auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                         noniter_disc(discrepancy), gamma, data,
                                         noniter_is_restricted_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
@@ -7950,7 +8026,7 @@ Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R,
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, int df_d,
-                                            std::string estimator = "guttman",
+                                            std::string estimator = "auto",
                                             std::string discrepancy = "uls",
                                             std::string gamma = "nt",
                                             SEXP data0 = R_NilValue, SEXP data1 = R_NilValue) {
@@ -7958,22 +8034,18 @@ Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, in
   const auto e0 = est_from_fit(fit0);
   Ctx c1 = ctx_from_fit(fit1);
   const auto e1 = est_from_fit(fit1);
-  const auto which = noniter_which(estimator);
+  const auto which0 = noniter_which_for_fit(fit0, estimator);
+  const auto which1 = noniter_which_for_fit(fit1, estimator);
   const auto disc = noniter_disc(discrepancy);
-  auto inf0 = noniter_inference_dispatch(
-      c0, e0, which, disc, gamma, data0, noniter_is_restricted_fit(fit0));
+  auto inf0 = noniter_grouped_dispatch(
+      c0, e0, which0, disc, gamma, data0, noniter_is_restricted_fit(fit0));
   if (!inf0.has_value()) stop_post(inf0.error());
-  auto inf1 = noniter_inference_dispatch(
-      c1, e1, which, disc, gamma, data1, noniter_is_restricted_fit(fit1));
+  auto inf1 = noniter_grouped_dispatch(
+      c1, e1, which1, disc, gamma, data1, noniter_is_restricted_fit(fit1));
   if (!inf1.has_value()) stop_post(inf1.error());
   auto d = magmaan::robust::frontier::noniterative_difference_test(*inf0, *inf1, df_d);
   if (!d.has_value()) stop_post(d.error());
-  return Rcpp::List::create(
-      Rcpp::_["T_d"] = d->T_d, Rcpp::_["df_d"] = d->df_d,
-      Rcpp::_["p_scaled"] = d->p_scaled, Rcpp::_["p_adjusted"] = d->p_adjusted,
-      Rcpp::_["p_scaled_shifted"] = d->p_scaled_shifted, Rcpp::_["p_mixture"] = d->p_mixture,
-      Rcpp::_["eigenvalues"] = Rcpp::wrap(d->eigenvalues),
-      Rcpp::_["warnings"] = Rcpp::wrap(d->warnings));
+  return wrap_noniter_diff(*d);
 }
 
 // ---------------------------------------------------------------------------
@@ -8030,13 +8102,13 @@ wrap_noniter_grouped(const magmaan::robust::frontier::GroupedNonIterativeInferen
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_grouped_inference_impl(Rcpp::List fit,
-                                                   std::string estimator = "guttman",
+                                                   std::string estimator = "auto",
                                                    std::string discrepancy = "uls",
                                                    std::string gamma = "nt",
                                                    SEXP data = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which(estimator),
+  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                       noniter_disc(discrepancy), gamma, data,
                                       noniter_is_restricted_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
@@ -8044,14 +8116,51 @@ Rcpp::List noniterative_cfa_grouped_inference_impl(Rcpp::List fit,
 }
 
 // [[Rcpp::export]]
+Rcpp::List noniterative_cfa_pseudo_lrt_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                            std::string estimator = "auto",
+                                            std::string discrepancy = "uls",
+                                            std::string gamma = "nt",
+                                            SEXP data = R_NilValue) {
+  Ctx ctx1 = ctx_from_fit(fit_H1);
+  const auto est1 = est_from_fit(fit_H1);
+  Ctx ctx0 = ctx_from_fit(fit_H0);
+  const auto est0 = est_from_fit(fit_H0);
+  const auto which1 = noniter_which_for_fit(fit_H1, estimator);
+  const auto which0 = noniter_which_for_fit(fit_H0, estimator);
+  noniter_require_recorded_map(fit_H1, which1, "H1");
+  noniter_require_recorded_map(fit_H0, which0, "H0");
+  if (which0 != which1) {
+    Rcpp::stop("noniterative_cfa_pseudo_lrt: H1/H0 non-iterative maps differ "
+               "('%s' vs '%s')",
+               noniter_map_name(which1), noniter_map_name(which0));
+  }
+  const auto disc = noniter_disc(discrepancy);
+  auto inf1 = noniter_grouped_dispatch(
+      ctx1, est1, which1, disc, gamma, data, noniter_is_restricted_fit(fit_H1));
+  if (!inf1.has_value()) stop_post(inf1.error());
+  auto inf0 = noniter_grouped_dispatch(
+      ctx0, est0, which0, disc, gamma, data, noniter_is_restricted_fit(fit_H0));
+  if (!inf0.has_value()) stop_post(inf0.error());
+
+  const int df_d = inf0->df - inf1->df;
+  if (df_d < 1) {
+    Rcpp::stop("noniterative_cfa_pseudo_lrt: H0 df (%d) must exceed H1 df (%d)",
+               inf0->df, inf1->df);
+  }
+  auto d = magmaan::robust::frontier::noniterative_difference_test(*inf0, *inf1, df_d);
+  if (!d.has_value()) stop_post(d.error());
+  return wrap_noniter_diff(*d);
+}
+
+// [[Rcpp::export]]
 Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit,
-                                             std::string estimator = "guttman",
+                                             std::string estimator = "auto",
                                              std::string discrepancy = "uls",
                                              std::string gamma = "nt",
                                              SEXP data = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which(estimator),
+  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                       noniter_disc(discrepancy), gamma, data,
                                       noniter_is_restricted_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
@@ -8071,13 +8180,13 @@ Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit,
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
-                                        std::string estimator = "guttman",
+                                        std::string estimator = "auto",
                                         std::string discrepancy = "uls",
                                         std::string gamma = "nt",
                                         SEXP data = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which(estimator),
+  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
                                       noniter_disc(discrepancy), gamma, data,
                                       noniter_is_restricted_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());

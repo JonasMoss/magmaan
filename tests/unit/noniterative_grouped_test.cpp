@@ -102,6 +102,9 @@ constexpr const char* kTwoFactor =
     "f2 =~ x4 + x5 + x6\n"
     "f1 ~~ f2\n";
 
+constexpr const char* kOneFactor =
+    "f =~ x1 + x2 + x3 + x4\n";
+
 constexpr const char* kTwoFactorMarkerX2 =
     "f1 =~ NA*x1 + 1*x2 + x3\n"
     "f2 =~ NA*x4 + 1*x5 + x6\n"
@@ -412,6 +415,73 @@ TEST_CASE("residual-restricted grouped inference carries cross-block covariance"
       if (bop[static_cast<std::size_t>(i)] != bop[static_cast<std::size_t>(j)])
         max_offblock = std::max(max_offblock, std::abs(inf->Omega(i, j)));
   CHECK(max_offblock > 1e-12);
+}
+
+TEST_CASE("grouped pseudo-LRT compares estimator-side restricted and configural fits") {
+  auto h1 = build_mg(kOneFactor, 2);
+  auto h0 = build_mg(kOneFactor, 2, {GroupEqual::Residuals});
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65}),
+            of_cov(kLam4, 0.9, {0.40, 0.75, 0.55, 0.65})};
+  samp.n_obs = {500, 700};
+
+  auto fit1 = ef::fit_noniterative_cfa(
+      h1.pt, h1.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  auto fit0 = ef::fit_noniterative_cfa_restricted(
+      h0.pt, h0.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(fit1);
+  REQUIRE_OK(fit0);
+
+  auto inf1 = rf::noniterative_inference_grouped_nt(
+      h1.pt, h1.rep, samp, fit1->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+  auto inf0 = rf::noniterative_inference_grouped_restricted_nt(
+      h0.pt, h0.rep, samp, fit0->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+  REQUIRE_OK(inf1);
+  REQUIRE_OK(inf0);
+  REQUIRE(inf0->df > inf1->df);
+
+  auto diff = rf::noniterative_difference_test(*inf0, *inf1, inf0->df - inf1->df);
+  REQUIRE_OK(diff);
+  CHECK(diff->df_d == inf0->df - inf1->df);
+  CHECK(diff->eigenvalues.size() == diff->df_d);
+  CHECK(std::abs(diff->T_d) < 1e-7);
+}
+
+TEST_CASE("grouped pseudo-LRT anchors NTML weight at H1") {
+  auto h1 = build_mg(kOneFactor, 2);
+  auto h0 = build_mg(kOneFactor, 2, {GroupEqual::Residuals});
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65}),
+            of_cov(kLam4, 0.9, {0.80, 0.50, 0.60, 0.90})};
+  samp.n_obs = {500, 700};
+
+  auto fit1 = ef::fit_noniterative_cfa(
+      h1.pt, h1.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  auto fit0 = ef::fit_noniterative_cfa_restricted(
+      h0.pt, h0.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(fit1);
+  REQUIRE_OK(fit0);
+
+  auto inf1 = rf::noniterative_inference_grouped_nt(
+      h1.pt, h1.rep, samp, fit1->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::NTML);
+  auto inf0 = rf::noniterative_inference_grouped_restricted_nt(
+      h0.pt, h0.rep, samp, fit0->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::NTML);
+  REQUIRE_OK(inf1);
+  REQUIRE_OK(inf0);
+  REQUIRE(inf0->df > inf1->df);
+
+  const Eigen::MatrixXd U0_h1_weight = inf0->M.transpose() * inf1->V * inf0->M;
+  CHECK((U0_h1_weight - inf0->U).norm() > 1e-8);
+
+  auto diff = rf::noniterative_difference_test(*inf0, *inf1, inf0->df - inf1->df);
+  REQUIRE_OK(diff);
+  CHECK(diff->df_d == inf0->df - inf1->df);
+  CHECK(diff->T_d > 0.0);
+  CHECK(diff->eigenvalues.allFinite());
 }
 
 TEST_CASE("residual-restricted map rejects mixed residual-loading rows") {

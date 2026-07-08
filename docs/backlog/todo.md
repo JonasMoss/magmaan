@@ -2213,17 +2213,23 @@ work until a concrete downstream consumer appears.
   (`papers/guttman-inference/dev/notes/`) before implementation.
 
   **Measurement invariance landed** (2026-07): multi-group blocks with a
-  block-diagonal `Omega`, mean structure (free intercepts, latent means fixed at
-  0), the estimator-side metric map `fit_noniterative_cfa_metric` (common
-  standardized loading shape estimated inside the Sigma/H reconstruction), the
-  `Omega`-metric minimum-distance projection onto linear `group.equal`
-  constraints for Wald/inference (exact chi2_k, so metric / strict /
-  tau-equivalence come for free as tests), and true (free-latent-mean) scalar
-  invariance via the reference-group mean map (linearized pseudo-inverse Wald).
-  C++ `estimate::frontier::fit_noniterative_cfa_metric` and
-  `robust::frontier::noniterative_{inference_grouped,constrained_fit,scalar_
-  invariance}`; R `fit_noniterative_cfa_metric` and
-  `magmaan_core$noniterative_cfa_{grouped_inference,constrained,scalar}_impl`;
+  block-diagonal `Omega` for configural maps and a full stacked restricted
+  Jacobian when equality constraints couple groups; mean structure (free
+  intercepts, latent means fixed at 0); the estimator-side metric map
+  `fit_noniterative_cfa_metric` (common standardized loading shape estimated
+  inside the Sigma/H reconstruction); the estimator-side restricted map
+  `fit_noniterative_cfa_restricted` (separable loading/residual constraints,
+  with residual rows imposed in the H/communality step); the `Omega`-metric
+  minimum-distance projection onto linear `group.equal` constraints for
+  Wald/inference (exact chi2_k); grouped pseudo-LRTs comparing actual
+  estimator-side H0/H1 fits; and true (free-latent-mean) scalar invariance via
+  the reference-group mean map (linearized pseudo-inverse Wald).
+  C++ `estimate::frontier::fit_noniterative_cfa_{metric,restricted}` and
+  `robust::frontier::noniterative_{inference_grouped,difference_test,
+  constrained_fit,scalar_invariance}`; R
+  `fit_noniterative_cfa_{metric,restricted}` and
+  `magmaan_core$noniterative_cfa_{grouped_inference,pseudo_lrt,constrained,
+  scalar}_impl`;
   note `constrained_noniterative_cfa` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`); validated by
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the

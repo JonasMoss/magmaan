@@ -529,27 +529,31 @@ noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimat
     .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator)
 }
 
-noniterative_cfa_inference_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_inference_impl`, fit, estimator, discrepancy, gamma, data)
 }
 
-noniterative_cfa_wald_impl <- function(fit, R, q, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+noniterative_cfa_wald_impl <- function(fit, R, q, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_wald_impl`, fit, R, q, estimator, discrepancy, gamma, data)
 }
 
-noniterative_cfa_difference_impl <- function(fit0, fit1, df_d, estimator = "guttman", discrepancy = "uls", gamma = "nt", data0 = NULL, data1 = NULL) {
+noniterative_cfa_difference_impl <- function(fit0, fit1, df_d, estimator = "auto", discrepancy = "uls", gamma = "nt", data0 = NULL, data1 = NULL) {
     .Call(`_magmaan_noniterative_cfa_difference_impl`, fit0, fit1, df_d, estimator, discrepancy, gamma, data0, data1)
 }
 
-noniterative_cfa_grouped_inference_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+noniterative_cfa_grouped_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_grouped_inference_impl`, fit, estimator, discrepancy, gamma, data)
 }
 
-noniterative_cfa_constrained_impl <- function(fit, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+noniterative_cfa_pseudo_lrt_impl <- function(fit_H1, fit_H0, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaan_noniterative_cfa_pseudo_lrt_impl`, fit_H1, fit_H0, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_constrained_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_constrained_impl`, fit, estimator, discrepancy, gamma, data)
 }
 
-noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "guttman", discrepancy = "uls", gamma = "nt", data = NULL) {
+noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_scalar_impl`, fit, ref_group, estimator, discrepancy, gamma, data)
 }
 

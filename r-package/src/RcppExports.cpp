@@ -2042,6 +2042,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// noniterative_cfa_pseudo_lrt_impl
+Rcpp::List noniterative_cfa_pseudo_lrt_impl(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_pseudo_lrt_impl(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_pseudo_lrt_impl(fit_H1, fit_H0, estimator, discrepancy, gamma, data));
+    return rcpp_result_gen;
+END_RCPP
+}
 // noniterative_cfa_constrained_impl
 Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit, std::string estimator, std::string discrepancy, std::string gamma, SEXP data);
 RcppExport SEXP _magmaan_noniterative_cfa_constrained_impl(SEXP fitSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP) {
@@ -3663,6 +3679,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},
     {"_magmaan_noniterative_cfa_difference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_difference_impl, 8},
     {"_magmaan_noniterative_cfa_grouped_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_grouped_inference_impl, 5},
+    {"_magmaan_noniterative_cfa_pseudo_lrt_impl", (DL_FUNC) &_magmaan_noniterative_cfa_pseudo_lrt_impl, 6},
     {"_magmaan_noniterative_cfa_constrained_impl", (DL_FUNC) &_magmaan_noniterative_cfa_constrained_impl, 5},
     {"_magmaan_noniterative_cfa_scalar_impl", (DL_FUNC) &_magmaan_noniterative_cfa_scalar_impl, 6},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},

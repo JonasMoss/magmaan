@@ -178,7 +178,8 @@ golden `parTable()` fixtures.
   goodness-of-fit test (ULS or model-implied NTML weight; normal-theory or
   empirical Gamma), plus delta-method SEs `Omega = J Gamma J'/N`; `noniterative_
   wald` and `noniterative_difference_test` are the nested tests. R surface:
-  `magmaan_core$noniterative_cfa_{fit,inference,wald,difference}_impl`. Theory in
+  `magmaan_core$noniterative_cfa_{fit,inference,wald,difference,pseudo_lrt}_impl`.
+  Theory in
   the guttman-inference paper's derivation notes
   (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated by
   `experiments/52-noniterative-cfa-tests` (empirical Gamma calibrated across
@@ -211,16 +212,23 @@ golden `parTable()` fixtures.
   for fit, so only `Omega` gains the intercept block (via `gamma_nt_with_means`).
   The estimator-side metric map `fit_noniterative_cfa_metric` estimates a common
   standardized loading shape across groups by a Sigma/H-level rank-one
-  reconstruction and then converts to the partable's marker chart. General
-  linear equality inference (metric / strict / tau-equivalence / fixed values)
-  remains `noniterative_constrained_fit`, the `Omega`-metric minimum-distance
-  projection onto the partable's `group.equal` constraints, whose statistic is an
-  exact chi2_k (Wald = min-distance duality). True (free-latent-mean) scalar
+  reconstruction and then converts to the partable's marker chart. The
+  estimator-side restricted map `fit_noniterative_cfa_restricted` imposes
+  separable loading/residual linear constraints inside the Guttman
+  reconstruction: residual rows enter the communality/H step and loading rows
+  enter the Sigma-only composite projection; unsupported mixed/factor/mean rows
+  error. Grouped restricted inference uses the restricted map's full stacked
+  finite-difference Jacobian, so cross-block constraints propagate into `Omega`,
+  GOF, and pseudo-LRTs. General linear equality testing still has the
+  `Omega`-metric minimum-distance projection `noniterative_constrained_fit`,
+  whose statistic is an exact chi2_k (Wald = min-distance duality). True
+  (free-latent-mean) scalar
   invariance is `noniterative_scalar_invariance`, the reference-group mean map
   `alpha_g = (Lr'Lr)^-1 Lr'(m_g - m_r)` with a linearized pseudo-inverse Wald on
   the mean residual orthogonal to the loadings, df `(G-1)(p-#factors)`. R surface:
-  `fit_noniterative_cfa_metric` plus `magmaan_core$noniterative_cfa_{grouped_
-  inference,constrained,scalar}_impl`.
+  `fit_noniterative_cfa_{metric,restricted}` plus
+  `magmaan_core$noniterative_cfa_{grouped_inference,pseudo_lrt,constrained,
+  scalar}_impl`.
   Theory in the guttman-inference paper's constrained-CFA note
   (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated by
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT on

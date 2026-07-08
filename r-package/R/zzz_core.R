@@ -786,6 +786,7 @@ magmaan_core <- local({
       "noniterative_cfa_wald_impl",
       "noniterative_cfa_difference_impl",
       "noniterative_cfa_grouped_inference_impl",
+      "noniterative_cfa_pseudo_lrt_impl",
       "noniterative_cfa_constrained_impl",
       "noniterative_cfa_scalar_impl"
   )

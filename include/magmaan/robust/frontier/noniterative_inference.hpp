@@ -161,8 +161,8 @@ struct GroupedNonIterativeInference {
   double          p_mixture        = 0.0;
   double          rls_check        = 0.0;    // NTML cross-check (Σ_b), NaN for ULS
   std::vector<std::int32_t> block_of_param;  // q; from param_locations
-  // Block-diagonal pieces retained for the (optional) multi-group difference test.
-  Eigen::MatrixXd U, Gamma;                  // Σ_b p*_b square, block-diagonal
+  // Covariance-moment pieces retained for grouped pseudo-LRTs.
+  Eigen::MatrixXd M, V, U, Gamma;            // Σ_b p*_b square
   std::vector<std::string> warnings;
 };
 
@@ -221,6 +221,12 @@ noniterative_inference_grouped_restricted_empirical(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc);
+
+post_expected<NonIterativeDiffTest>
+noniterative_difference_test(
+    const GroupedNonIterativeInference& inf0 /*restricted H0*/,
+    const GroupedNonIterativeInference& inf1 /*full H1*/,
+    int df_d);
 
 // One-step minimum-distance projection of the configural fit onto the linear
 // equality constraint surface R θ = c, where (R, c, k) = (A_eq, b_eq, rank) from
