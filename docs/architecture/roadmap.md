@@ -179,7 +179,8 @@ golden `parTable()` fixtures.
   empirical Gamma), plus delta-method SEs `Omega = J Gamma J'/N`; `noniterative_
   wald` and `noniterative_difference_test` are the nested tests. R surface:
   `magmaan_core$noniterative_cfa_{fit,inference,wald,difference}_impl`. Theory in
-  `docs/research/notes/noniterative_cfa_tests.tex`; validated by
+  the guttman-inference paper's derivation notes
+  (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated by
   `experiments/52-noniterative-cfa-tests` (empirical Gamma calibrated across
   normal / independent-component / ordinal-as-continuous generators and across a
   0.3-0.7 reliability sweep, NT Gamma asymptotically miscalibrated on non-normal
@@ -220,7 +221,8 @@ golden `parTable()` fixtures.
   the mean residual orthogonal to the loadings, df `(G-1)(p-#factors)`. R surface:
   `fit_noniterative_cfa_metric` plus `magmaan_core$noniterative_cfa_{grouped_
   inference,constrained,scalar}_impl`.
-  Theory in `docs/research/notes/constrained_noniterative_cfa.tex`; validated by
+  Theory in the guttman-inference paper's constrained-CFA note
+  (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated by
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT on
   normal data with matched power; on non-normal data the NT-Gamma metric Wald
   over-rejects and the empirical Gamma restores the level, mirroring the ML

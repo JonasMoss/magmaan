@@ -1516,7 +1516,7 @@ decisions in the simulation backlog.
   256-cell sim is the validation oracle. Open lane beyond Hancock & An (single
   factor only): the multi-factor / multi-group / weighted `ω_G(σ;w)` form and
   omega-hierarchical via a second-stage Schmid-Leiman centroid on `Φ_G` (k>=3),
-  derived in the `guttman_cfa_asymptotics.tex` note.
+  derived in the `docs/research/notes/guttman_cfa_asymptotics.tex` note.
 - **L/XL.** Remaining C++ estimator work on the ordinal SNLLS / Gamma workspace
   track (the landed split is in the roadmap and
   [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);
@@ -2160,8 +2160,10 @@ work until a concrete downstream consumer appears.
   speculative.md.
 - **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
   GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
-  1952, delta-method via the FD map Jacobian; notes
-  `noniterative_cfa_tests.tex` + `guttman_cfa_asymptotics.tex`).
+  1952, delta-method via the FD map Jacobian; derivations in
+  `noniterative_cfa_tests` (guttman-inference paper,
+  `papers/guttman-inference/dev/notes/`) and the shared
+  `docs/research/notes/guttman_cfa_asymptotics.tex`).
   **Validated** by `experiments/52-noniterative-cfa-tests` (SE coverage + GOF /
   difference-test Type-I / power vs magmaan ML across normal / independent-
   component / ordinal-as-continuous generators, Dhaene-Rosseel 2024 style): the
@@ -2206,8 +2208,9 @@ work until a concrete downstream consumer appears.
   covariance \(LP^+L'\) and an explicit boundary warning for the
   marker-scaled parameter representative; separate, named regularized fallback
   (ridge / PSD repair) for indefinite or incompatible systems, because that is
-  no longer the pure Guttman map. Record the derivation in
-  `guttman_estimator_criterion.tex` before implementation.
+  no longer the pure Guttman map. Record the derivation in the
+  guttman-inference paper's estimator-criterion note
+  (`papers/guttman-inference/dev/notes/`) before implementation.
 
   **Measurement invariance landed** (2026-07): multi-group blocks with a
   block-diagonal `Omega`, mean structure (free intercepts, latent means fixed at
@@ -2221,7 +2224,8 @@ work until a concrete downstream consumer appears.
   `robust::frontier::noniterative_{inference_grouped,constrained_fit,scalar_
   invariance}`; R `fit_noniterative_cfa_metric` and
   `magmaan_core$noniterative_cfa_{grouped_inference,constrained,scalar}_impl`;
-  note `constrained_noniterative_cfa.tex`; validated by
+  note `constrained_noniterative_cfa` (guttman-inference paper,
+  `papers/guttman-inference/dev/notes/`); validated by
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
