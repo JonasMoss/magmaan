@@ -334,6 +334,61 @@ TEST_CASE("residual-restricted map with no constraints equals configural aligned
   CHECK((cfg->theta - res->theta).cwiseAbs().maxCoeff() < 1e-12);
 }
 
+TEST_CASE("residual-restricted map exposes the communality method axis") {
+  auto b = build_mg(kOneFactorResidualTie, 1);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  Eigen::MatrixXd S = of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65});
+  S(0, 2) += 0.08;
+  S(2, 0) += 0.08;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+
+  auto fit_gmm = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      ef::CommunalityMethod::GmmBlock);
+  auto fit_ls = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      ef::CommunalityMethod::TriadLeastSquares);
+  REQUIRE_OK(fit_gmm);
+  REQUIRE_OK(fit_ls);
+  CHECK((fit_gmm->theta - fit_ls->theta).cwiseAbs().maxCoeff() > 1e-6);
+
+  auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
+  REQUIRE_OK(eqc);
+  CHECK((eqc->A_eq * fit_gmm->theta - eqc->b_eq).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK((eqc->A_eq * fit_ls->theta - eqc->b_eq).cwiseAbs().maxCoeff() < 1e-9);
+
+  auto J = ef::estimator_map_jacobian_restricted(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      1e-6, ef::CommunalityMethod::TriadLeastSquares);
+  REQUIRE_OK(J);
+  CHECK((eqc->A_eq * (*J)).cwiseAbs().maxCoeff() < 1e-6);
+
+  auto inf = rf::noniterative_inference_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit_ls->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS,
+      ef::CommunalityMethod::TriadLeastSquares);
+  REQUIRE_OK(inf);
+  CHECK(inf->Omega.allFinite());
+}
+
+TEST_CASE("residual-restricted map rejects non-LS communality methods") {
+  auto b = build_mg(kOneFactorResidualTie, 1);
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65})};
+  samp.n_obs = {500};
+
+  for (auto comm : {ef::CommunalityMethod::AverageRatio,
+                    ef::CommunalityMethod::RatioOfSums}) {
+    auto fit = ef::fit_noniterative_cfa_restricted(
+        b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned, comm);
+    CHECK_FALSE(fit.has_value());
+    CHECK(fit.error().detail.find("least-squares-form") != std::string::npos);
+  }
+}
+
 TEST_CASE("residual-restricted map enforces residual variance equality") {
   auto b = build_mg(kOneFactorResidualTie, 1);
   auto ev = ModelEvaluator::build(b.pt, b.rep);

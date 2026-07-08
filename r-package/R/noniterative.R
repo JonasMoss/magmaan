@@ -88,10 +88,15 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
 #' intercepts, or latent means, are rejected.
 #'
 #' @inheritParams fit_noniterative_cfa
+#' @param communality Least-squares-form communality rule for the residual/H
+#'   step: `"gmm_block"` (default), `"gmm_full"`, `"triad_ls"`, or
+#'   `"anchor_triad_ls"`.
 #' @export
 fit_noniterative_cfa_restricted <- function(partable, sample_stats,
-                                            estimator = "guttman_gls_aligned") {
-  noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator)
+                                            estimator = "guttman_gls_aligned",
+                                            communality = "gmm_block") {
+  noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
+                                       communality)
 }
 
 noniterative_estimator_arg <- function(estimator) {
