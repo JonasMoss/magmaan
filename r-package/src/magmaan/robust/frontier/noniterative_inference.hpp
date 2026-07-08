@@ -89,8 +89,9 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  estimate::frontier::CompositeWeight composite =
                                      estimate::frontier::CompositeWeight::EstimatorDefault);
 
-// Same inferential algebra as `noniterative_inference*`, but the finite-
-// difference Jacobian is taken over `fit_noniterative_cfa_restricted()`.
+// Same inferential algebra as `noniterative_inference*`, but the restricted
+// estimator still takes its Jacobian by finite differences over
+// `fit_noniterative_cfa_restricted()`.
 post_expected<NonIterativeInference>
 noniterative_inference_restricted(
     const spec::LatentStructure& pt,

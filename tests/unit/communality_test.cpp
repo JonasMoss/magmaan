@@ -12,6 +12,7 @@ using magmaan::estimate::frontier::CommunalityMethod;
 using magmaan::estimate::frontier::estimate_h_communalities;
 using magmaan::estimate::frontier::estimate_h2_communalities_constrained;
 using magmaan::estimate::frontier::estimate_h2_communalities;
+using magmaan::estimate::frontier::estimate_h2_communalities_directional;
 
 namespace {
 
@@ -51,6 +52,40 @@ TEST_CASE("communality rules recover exact one-factor h2") {
     auto h2 = estimate_h2_communalities(R, blocks, method);
     REQUIRE(h2.has_value());
     CHECK((*h2 - expected).cwiseAbs().maxCoeff() < 1e-10);
+  }
+}
+
+TEST_CASE("communality directional derivative matches central finite differences") {
+  Eigen::MatrixXd S = one_factor_corr({0.55, 0.70, 0.85, 0.62, 0.78});
+  S(0, 0) = 1.20;
+  S(1, 1) = 0.90;
+  S(3, 3) = 1.35;
+  Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(5, 5);
+  dS(0, 0) = 0.30;
+  dS(1, 1) = -0.20;
+  dS(0, 2) = 0.11;
+  dS(2, 0) = 0.11;
+  dS(1, 4) = -0.07;
+  dS(4, 1) = -0.07;
+  const std::vector<std::int32_t> blocks(5, 0);
+  constexpr double eps = 2e-6;
+
+  for (CommunalityMethod method :
+       {CommunalityMethod::AverageRatio,
+        CommunalityMethod::RatioOfSums,
+        CommunalityMethod::TriadLeastSquares,
+        CommunalityMethod::AnchorTriadLeastSquares,
+        CommunalityMethod::GmmBlock,
+        CommunalityMethod::GmmFull}) {
+    INFO("method ordinal: " << static_cast<int>(method));
+    auto analytic = estimate_h2_communalities_directional(S, dS, blocks, method);
+    auto plus = estimate_h2_communalities(S + eps * dS, blocks, method);
+    auto minus = estimate_h2_communalities(S - eps * dS, blocks, method);
+    REQUIRE(analytic.has_value());
+    REQUIRE(plus.has_value());
+    REQUIRE(minus.has_value());
+    const Eigen::VectorXd fd = (*plus - *minus) / (2.0 * eps);
+    CHECK((*analytic - fd).cwiseAbs().maxCoeff() < 5e-5);
   }
 }
 

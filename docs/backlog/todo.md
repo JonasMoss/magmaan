@@ -2160,7 +2160,7 @@ work until a concrete downstream consumer appears.
   speculative.md.
 - **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
   GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
-  1952, delta-method via the FD map Jacobian; derivations in
+  1952, delta-method via the map Jacobian; derivations in
   `noniterative_cfa_tests` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`) and the shared
   `docs/research/notes/guttman_cfa_asymptotics.tex`).
@@ -2200,8 +2200,14 @@ work until a concrete downstream consumer appears.
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
   The composite-weight axis also landed: `auto` keeps estimator defaults,
   `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
-  recomputed inside every finite-difference perturbation, and `gls_aligned`
+  included in the map Jacobian, and `gls_aligned`
   uses the H-aligned data-dependent weights.
+  **Analytic configural Jacobians landed**: `estimator_map_jacobian` now uses
+  the regular-interior analytic derivative for configural Guttman maps,
+  including the correlation-standardization, triad-GMM communality,
+  fixed-rank Moore-Penrose-weight, composite-weight, inverse, and marker-scaling
+  chains; central differences remain the boundary/rank-change fallback and the
+  restricted-map path.
   The estimator-side residual-restricted Guttman map now has an explicit
   communality axis for the four LS-form H rules (`triad_ls`,
   `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
