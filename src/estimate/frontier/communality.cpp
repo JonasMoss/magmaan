@@ -295,12 +295,21 @@ fit_expected<TriadSystem>
 triad_system(const Eigen::MatrixXd& R,
              const std::vector<std::vector<Eigen::Index>>& blocks,
              const std::vector<Pair>& selected_off,
-             const Eigen::VectorXd* h2_for_jac) {
+             const Eigen::VectorXd* h2_for_jac,
+             bool include_anchor_rows = false,
+             const std::vector<Eigen::Index>* block_of_ptr = nullptr) {
   const Eigen::Index p = R.rows();
   Eigen::Index n_rows = 0;
   for (const auto& idx : blocks) {
     const auto m = static_cast<Eigen::Index>(idx.size());
     n_rows += m * (m - 1) * (m - 2) / 2;
+    if (include_anchor_rows) n_rows += m * (m - 1) * (p - m);
+  }
+  if (include_anchor_rows &&
+      (block_of_ptr == nullptr ||
+       static_cast<Eigen::Index>(block_of_ptr->size()) != p)) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "communality anchor system: block map is missing or mis-sized"});
   }
 
   std::unordered_map<std::int64_t, Eigen::Index> off_index;
@@ -325,6 +334,29 @@ triad_system(const Eigen::MatrixXd& R,
         for (std::size_t c = a + 1; c < idx.size(); ++c) {
           const Eigen::Index k = idx[c];
           if (k == i) continue;
+          sys.A(row, i) = R(j, k);
+          sys.b(row) = R(i, j) * R(i, k);
+
+          if (h2_for_jac != nullptr) {
+            const Eigen::Index jk = pair_index(off_index, j, k, p);
+            const Eigen::Index ij = pair_index(off_index, i, j, p);
+            const Eigen::Index ik = pair_index(off_index, i, k, p);
+            if (jk < 0 || ij < 0 || ik < 0)
+              return std::unexpected(FitError{FitError::Kind::NumericIssue,
+                  "communality GMM: selected pair set is incomplete"});
+            sys.M(row, jk) += (*h2_for_jac)(i);
+            sys.M(row, ij) -= R(i, k);
+            sys.M(row, ik) -= R(i, j);
+          }
+          ++row;
+        }
+
+        if (!include_anchor_rows) continue;
+        const Eigen::Index bi = (*block_of_ptr)[static_cast<std::size_t>(i)];
+        for (Eigen::Index k = 0; k < p; ++k) {
+          if (k == i || k == j) continue;
+          if ((*block_of_ptr)[static_cast<std::size_t>(k)] == bi) continue;
+
           sys.A(row, i) = R(j, k);
           sys.b(row) = R(i, j) * R(i, k);
 
@@ -405,11 +437,31 @@ fit_expected<Eigen::VectorXd> solve_gmm(const Eigen::MatrixXd& A,
   return out;
 }
 
-fit_expected<Eigen::VectorXd>
-gmm_block_h2(const Eigen::MatrixXd& R,
-             const std::vector<std::vector<Eigen::Index>>& blocks) {
+fit_expected<CommunalitySystem>
+triad_ls_system(const Eigen::MatrixXd& R,
+                const std::vector<std::vector<Eigen::Index>>& blocks,
+                const std::vector<Eigen::Index>& block_of,
+                bool include_anchor_rows) {
+  const std::vector<Pair> off = include_anchor_rows
+      ? std::vector<Pair>{}
+      : within_off_pairs(blocks);
+  auto sys = triad_system(R, blocks, off, nullptr, include_anchor_rows,
+                          include_anchor_rows ? &block_of : nullptr);
+  if (!sys.has_value()) return std::unexpected(sys.error());
+  CommunalitySystem out;
+  out.A = std::move(sys->A);
+  out.b = std::move(sys->b);
+  out.W = Eigen::MatrixXd::Identity(out.A.rows(), out.A.rows());
+  return out;
+}
+
+fit_expected<CommunalitySystem>
+gmm_block_system(const Eigen::MatrixXd& R,
+                 const std::vector<std::vector<Eigen::Index>>& blocks) {
   const Eigen::Index p = R.rows();
-  Eigen::VectorXd out(p);
+  std::vector<CommunalitySystem> local;
+  local.reserve(blocks.size());
+  Eigen::Index n_rows = 0;
 
   for (const auto& idx : blocks) {
     const Eigen::Index m = static_cast<Eigen::Index>(idx.size());
@@ -440,21 +492,38 @@ gmm_block_h2(const Eigen::MatrixXd& R,
         sys_w->M * normal_cor_gamma_pairs(Rb, off) * sys_w->M.transpose();
     auto W = symmetric_pinv(omega);
     if (!W.has_value()) return std::unexpected(W.error());
-    auto h2 = solve_gmm(sys->A, sys->b, *W);
-    if (!h2.has_value()) return std::unexpected(h2.error());
-    for (Eigen::Index i = 0; i < m; ++i) {
-      out(idx[static_cast<std::size_t>(i)]) = (*h2)(i);
+
+    CommunalitySystem cs;
+    cs.A = Eigen::MatrixXd::Zero(sys->A.rows(), p);
+    for (Eigen::Index c = 0; c < m; ++c) {
+      const Eigen::Index global = idx[static_cast<std::size_t>(c)];
+      cs.A.col(global) = sys->A.col(c);
     }
+    cs.b = std::move(sys->b);
+    cs.W = std::move(*W);
+    n_rows += cs.A.rows();
+    local.push_back(std::move(cs));
   }
-  if (!out.allFinite())
-    return num_error("communality GMM block: non-finite output");
+
+  CommunalitySystem out;
+  out.A = Eigen::MatrixXd::Zero(n_rows, p);
+  out.b = Eigen::VectorXd::Zero(n_rows);
+  out.W = Eigen::MatrixXd::Zero(n_rows, n_rows);
+  Eigen::Index off = 0;
+  for (const auto& cs : local) {
+    const Eigen::Index m = cs.A.rows();
+    out.A.block(off, 0, m, p) = cs.A;
+    out.b.segment(off, m) = cs.b;
+    out.W.block(off, off, m, m) = cs.W;
+    off += m;
+  }
   return out;
 }
 
-fit_expected<Eigen::VectorXd>
-gmm_full_h2(const Eigen::MatrixXd& R,
-            const std::vector<std::vector<Eigen::Index>>& blocks,
-            const std::vector<Eigen::Index>& block_of) {
+fit_expected<CommunalitySystem>
+gmm_full_system(const Eigen::MatrixXd& R,
+                const std::vector<std::vector<Eigen::Index>>& blocks,
+                const std::vector<Eigen::Index>& block_of) {
   auto h20 =
       itemwise_h2(R, blocks, block_of, CommunalityMethod::TriadLeastSquares);
   if (!h20.has_value()) return std::unexpected(h20.error());
@@ -468,7 +537,28 @@ gmm_full_h2(const Eigen::MatrixXd& R,
       sys_w->M * normal_cor_gamma_pairs(R, off) * sys_w->M.transpose();
   auto W = symmetric_pinv(omega);
   if (!W.has_value()) return std::unexpected(W.error());
-  return solve_gmm(sys->A, sys->b, *W);
+  return CommunalitySystem{std::move(sys->A), std::move(sys->b), std::move(*W)};
+}
+
+fit_expected<Eigen::VectorXd>
+gmm_block_h2(const Eigen::MatrixXd& R,
+             const std::vector<std::vector<Eigen::Index>>& blocks) {
+  auto sys = gmm_block_system(R, blocks);
+  if (!sys.has_value()) return std::unexpected(sys.error());
+  auto out = solve_gmm(sys->A, sys->b, sys->W);
+  if (!out.has_value()) return std::unexpected(out.error());
+  if (!out->allFinite())
+    return num_error("communality GMM block: non-finite output");
+  return out;
+}
+
+fit_expected<Eigen::VectorXd>
+gmm_full_h2(const Eigen::MatrixXd& R,
+            const std::vector<std::vector<Eigen::Index>>& blocks,
+            const std::vector<Eigen::Index>& block_of) {
+  auto sys = gmm_full_system(R, blocks, block_of);
+  if (!sys.has_value()) return std::unexpected(sys.error());
+  return solve_gmm(sys->A, sys->b, sys->W);
 }
 
 }  // namespace
@@ -489,6 +579,76 @@ const char* communality_method_name(CommunalityMethod method) {
       return "gmm_full";
   }
   return "unknown";
+}
+
+fit_expected<CommunalitySystem>
+communality_system(const Eigen::MatrixXd& S,
+                   const std::vector<std::int32_t>& block_of_indicator,
+                   CommunalityMethod method) {
+  auto vin = validate_input(S, block_of_indicator);
+  if (!vin.has_value()) return std::unexpected(vin.error());
+
+  switch (method) {
+    case CommunalityMethod::TriadLeastSquares:
+      return triad_ls_system(vin->R, vin->blocks, vin->block_of,
+                             /*include_anchor_rows=*/false);
+    case CommunalityMethod::AnchorTriadLeastSquares:
+      return triad_ls_system(vin->R, vin->blocks, vin->block_of,
+                             /*include_anchor_rows=*/true);
+    case CommunalityMethod::GmmBlock:
+      return gmm_block_system(vin->R, vin->blocks);
+    case CommunalityMethod::GmmFull:
+      return gmm_full_system(vin->R, vin->blocks, vin->block_of);
+    case CommunalityMethod::AverageRatio:
+    case CommunalityMethod::RatioOfSums:
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "communality constrained system: method is not a least-squares/GMM "
+          "triad system"});
+  }
+  return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      "communality constrained system: unknown method"});
+}
+
+fit_expected<Eigen::VectorXd>
+solve_communality_system(const CommunalitySystem& system,
+                         const Eigen::MatrixXd& R_h2,
+                         const Eigen::VectorXd& r_h2) {
+  if (system.A.rows() != system.b.size() ||
+      system.W.rows() != system.A.rows() ||
+      system.W.cols() != system.A.rows()) {
+    return num_error("communality constrained GMM: system dimension mismatch");
+  }
+  if (R_h2.rows() != r_h2.size() ||
+      (R_h2.rows() > 0 && R_h2.cols() != system.A.cols())) {
+    return num_error("communality constrained GMM: constraint dimension mismatch");
+  }
+  if (!system.A.allFinite() || !system.b.allFinite() || !system.W.allFinite() ||
+      !R_h2.allFinite() || !r_h2.allFinite()) {
+    return num_error("communality constrained GMM: non-finite input");
+  }
+  if (R_h2.rows() == 0)
+    return solve_gmm(system.A, system.b, system.W);
+
+  const Eigen::MatrixXd G = system.A.transpose() * system.W * system.A;
+  const Eigen::VectorXd rhs = system.A.transpose() * system.W * system.b;
+  auto Ginv = symmetric_pinv(G);
+  if (!Ginv.has_value()) return std::unexpected(Ginv.error());
+  Eigen::VectorXd h = (*Ginv) * rhs;
+
+  const Eigen::MatrixXd GRt = (*Ginv) * R_h2.transpose();
+  const Eigen::MatrixXd Ssm = R_h2 * GRt;
+  auto Ssm_inv = symmetric_pinv(Ssm);
+  if (!Ssm_inv.has_value()) return std::unexpected(Ssm_inv.error());
+  h -= GRt * ((*Ssm_inv) * (R_h2 * h - r_h2));
+  if (!h.allFinite())
+    return num_error("communality constrained GMM: non-finite solution");
+
+  const Eigen::VectorXd residual = R_h2 * h - r_h2;
+  const double scale = std::max(1.0, r_h2.cwiseAbs().maxCoeff());
+  if (residual.cwiseAbs().maxCoeff() > 1e-8 * scale) {
+    return num_error("communality constrained GMM: infeasible h2 constraints");
+  }
+  return h;
 }
 
 fit_expected<Eigen::VectorXd>
@@ -513,11 +673,39 @@ estimate_h2_communalities(const Eigen::MatrixXd& S,
   return num_error("communality estimator: unknown method");
 }
 
+fit_expected<Eigen::VectorXd>
+estimate_h2_communalities_constrained(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2) {
+  auto sys = communality_system(S, block_of_indicator, method);
+  if (!sys.has_value()) return std::unexpected(sys.error());
+  return solve_communality_system(*sys, R_h2, r_h2);
+}
+
 fit_expected<HCommunalityResult>
 estimate_h_communalities(const Eigen::MatrixXd& S,
                          const std::vector<std::int32_t>& block_of_indicator,
                          CommunalityMethod method) {
   auto h2 = estimate_h2_communalities(S, block_of_indicator, method);
+  if (!h2.has_value()) return std::unexpected(h2.error());
+  Eigen::VectorXd h_diag = S.diagonal().cwiseProduct(*h2);
+  Eigen::MatrixXd H = S;
+  H.diagonal() = h_diag;
+  return HCommunalityResult{std::move(*h2), std::move(h_diag), std::move(H)};
+}
+
+fit_expected<HCommunalityResult>
+estimate_h_communalities_constrained(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2) {
+  auto h2 = estimate_h2_communalities_constrained(S, block_of_indicator,
+                                                  method, R_h2, r_h2);
   if (!h2.has_value()) return std::unexpected(h2.error());
   Eigen::VectorXd h_diag = S.diagonal().cwiseProduct(*h2);
   Eigen::MatrixXd H = S;

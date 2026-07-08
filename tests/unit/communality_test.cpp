@@ -10,6 +10,7 @@
 
 using magmaan::estimate::frontier::CommunalityMethod;
 using magmaan::estimate::frontier::estimate_h_communalities;
+using magmaan::estimate::frontier::estimate_h2_communalities_constrained;
 using magmaan::estimate::frontier::estimate_h2_communalities;
 
 namespace {
@@ -104,6 +105,81 @@ TEST_CASE("communality three-indicator GMM collapses to the just-identified "
   CHECK((*rs)(0) == doctest::Approx(0.30 * 0.45 / 0.50));
   CHECK((*rs - *gb).cwiseAbs().maxCoeff() < 1e-12);
   CHECK((*rs - *gf).cwiseAbs().maxCoeff() < 1e-12);
+}
+
+TEST_CASE("communality constrained system preserves the current GMM solution "
+          "with no rows") {
+  const std::vector<double> lambda = {0.5, 0.7, 0.9, 0.6, 0.8, 0.55};
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 1, 1, 1};
+  Eigen::MatrixXd R = Eigen::MatrixXd::Identity(
+      static_cast<Eigen::Index>(lambda.size()),
+      static_cast<Eigen::Index>(lambda.size()));
+  for (Eigen::Index i = 0; i < R.rows(); ++i) {
+    for (Eigen::Index j = i + 1; j < R.cols(); ++j) {
+      const double phi = blocks[static_cast<std::size_t>(i)] ==
+                                 blocks[static_cast<std::size_t>(j)]
+                             ? 1.0
+                             : 0.35;
+      R(i, j) = lambda[static_cast<std::size_t>(i)] *
+                lambda[static_cast<std::size_t>(j)] * phi;
+      R(j, i) = R(i, j);
+    }
+  }
+
+  const Eigen::MatrixXd R0(0, R.rows());
+  const Eigen::VectorXd r0(0);
+  auto base = estimate_h2_communalities(R, blocks, CommunalityMethod::GmmBlock);
+  auto con = estimate_h2_communalities_constrained(
+      R, blocks, CommunalityMethod::GmmBlock, R0, r0);
+  REQUIRE(base.has_value());
+  REQUIRE(con.has_value());
+  CHECK((*base - *con).cwiseAbs().maxCoeff() < 1e-12);
+}
+
+TEST_CASE("communality constrained system imposes linear h2 rows") {
+  Eigen::MatrixXd R(4, 4);
+  R << 1.0, 0.30, 0.45, 0.28,
+       0.30, 1.0, 0.50, 0.35,
+       0.45, 0.50, 1.0, 0.42,
+       0.28, 0.35, 0.42, 1.0;
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 0};
+  Eigen::MatrixXd C(1, 4);
+  C << 1.0, -1.0, 0.0, 0.0;
+  Eigen::VectorXd d(1);
+  d << 0.0;
+
+  auto h2 = estimate_h2_communalities_constrained(
+      R, blocks, CommunalityMethod::GmmBlock, C, d);
+  REQUIRE(h2.has_value());
+  CHECK((*h2)(0) == doctest::Approx((*h2)(1)).epsilon(1e-10));
+}
+
+TEST_CASE("anchor communality is the anchor joint LS system with no rows") {
+  const std::vector<double> lambda = {0.5, 0.7, 0.9, 0.6, 0.8, 0.55};
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 1, 1, 1};
+  Eigen::MatrixXd R = Eigen::MatrixXd::Identity(
+      static_cast<Eigen::Index>(lambda.size()),
+      static_cast<Eigen::Index>(lambda.size()));
+  for (Eigen::Index i = 0; i < R.rows(); ++i) {
+    for (Eigen::Index j = i + 1; j < R.cols(); ++j) {
+      const double phi = blocks[static_cast<std::size_t>(i)] ==
+                                 blocks[static_cast<std::size_t>(j)]
+                             ? 1.0
+                             : 0.4;
+      R(i, j) = lambda[static_cast<std::size_t>(i)] *
+                lambda[static_cast<std::size_t>(j)] * phi;
+      R(j, i) = R(i, j);
+    }
+  }
+  const Eigen::MatrixXd R0(0, R.rows());
+  const Eigen::VectorXd r0(0);
+  auto item = estimate_h2_communalities(
+      R, blocks, CommunalityMethod::AnchorTriadLeastSquares);
+  auto joint = estimate_h2_communalities_constrained(
+      R, blocks, CommunalityMethod::AnchorTriadLeastSquares, R0, r0);
+  REQUIRE(item.has_value());
+  REQUIRE(joint.has_value());
+  CHECK((*item - *joint).cwiseAbs().maxCoeff() < 1e-12);
 }
 
 TEST_CASE("communality H result replaces only the covariance diagonal") {

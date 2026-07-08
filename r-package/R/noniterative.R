@@ -79,6 +79,21 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
   noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator)
 }
 
+#' Fit the residual/loading restricted non-iterative CFA map.
+#'
+#' Residual-variance equality constraints are imposed in the Guttman H
+#' communality step before the loadings are reconstructed. Loading-only linear
+#' equalities are then projected with a Sigma-only composite metric. Rows that
+#' mix residual and loading parameters, or rows involving factor variances,
+#' intercepts, or latent means, are rejected.
+#'
+#' @inheritParams fit_noniterative_cfa
+#' @export
+fit_noniterative_cfa_restricted <- function(partable, sample_stats,
+                                            estimator = "guttman_gls_aligned") {
+  noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator)
+}
+
 #' Residual-based inference for a non-iterative CFA fit.
 #'
 #' Returns delta-method standard errors (`se`, `vcov`), the goodness-of-fit

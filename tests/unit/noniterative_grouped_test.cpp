@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -87,6 +88,15 @@ Eigen::MatrixXd tf_cov(const std::array<double, 6>& lam, double pd, double po,
   return S;
 }
 
+Eigen::MatrixXd of_cov(const std::array<double, 4>& lam, double psi,
+                       const std::array<double, 4>& theta) {
+  Eigen::VectorXd l(4);
+  for (Eigen::Index i = 0; i < 4; ++i) l(i) = lam[static_cast<std::size_t>(i)];
+  Eigen::MatrixXd S = psi * (l * l.transpose());
+  for (Eigen::Index i = 0; i < 4; ++i) S(i, i) += theta[static_cast<std::size_t>(i)];
+  return S;
+}
+
 constexpr const char* kTwoFactor =
     "f1 =~ x1 + x2 + x3\n"
     "f2 =~ x4 + x5 + x6\n"
@@ -97,7 +107,23 @@ constexpr const char* kTwoFactorMarkerX2 =
     "f2 =~ NA*x4 + 1*x5 + x6\n"
     "f1 ~~ f2\n";
 
+constexpr const char* kOneFactorResidualTie =
+    "f =~ x1 + x2 + x3 + x4\n"
+    "x1 ~~ eq*x1\n"
+    "x2 ~~ eq*x2\n";
+
+constexpr const char* kOneFactorResidualTieX1X3 =
+    "f =~ x1 + x2 + x3 + x4\n"
+    "x1 ~~ eq*x1\n"
+    "x3 ~~ eq*x3\n";
+
+constexpr const char* kOneFactorResidualTieX1X3MarkerX2 =
+    "f =~ NA*x1 + 1*x2 + x3 + x4\n"
+    "x1 ~~ eq*x1\n"
+    "x3 ~~ eq*x3\n";
+
 const std::array<double, 6> kLam = {1.0, 0.8, 1.2, 1.0, 0.7, 1.3};
+const std::array<double, 4> kLam4 = {1.0, 0.8, 1.2, 0.7};
 
 double max_sigma_diff(const ModelEvaluator& a_ev, const Eigen::VectorXd& a_theta,
                       const ModelEvaluator& b_ev, const Eigen::VectorXd& b_theta) {
@@ -288,6 +314,163 @@ TEST_CASE("estimator-side metric map is marker-chart invariant off the surface")
     REQUIRE_OK(fit2);
     CHECK(max_sigma_diff(*ev1, fit1->theta, *ev2, fit2->theta) < 1e-8);
   }
+}
+
+TEST_CASE("residual-restricted map with no constraints equals configural aligned fit") {
+  auto b = build_mg(kTwoFactor, 1);
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5)};
+  samp.n_obs = {500};
+
+  auto cfg = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  auto res = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(cfg);
+  REQUIRE_OK(res);
+  CHECK((cfg->theta - res->theta).cwiseAbs().maxCoeff() < 1e-12);
+}
+
+TEST_CASE("residual-restricted map enforces residual variance equality") {
+  auto b = build_mg(kOneFactorResidualTie, 1);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65})};
+  samp.n_obs = {500};
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(fit);
+
+  using magmaan::model::MatId;
+  const auto locs = ev->param_locations();
+  double x1 = std::numeric_limits<double>::quiet_NaN();
+  double x2 = std::numeric_limits<double>::quiet_NaN();
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& loc = locs[k];
+    if (loc.mat == MatId::Theta && loc.row == loc.col && loc.row == 0)
+      x1 = fit->theta(static_cast<Eigen::Index>(k));
+    if (loc.mat == MatId::Theta && loc.row == loc.col && loc.row == 1)
+      x2 = fit->theta(static_cast<Eigen::Index>(k));
+  }
+  REQUIRE(std::isfinite(x1));
+  REQUIRE(std::isfinite(x2));
+  CHECK(x1 == doctest::Approx(x2).epsilon(1e-10));
+
+  auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
+  REQUIRE_OK(eqc);
+  CHECK((eqc->A_eq * fit->theta - eqc->b_eq).cwiseAbs().maxCoeff() < 1e-9);
+}
+
+TEST_CASE("residual-restricted Jacobian is tangent to equality rows") {
+  auto b = build_mg(kOneFactorResidualTie, 1);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65})};
+  samp.n_obs = {500};
+
+  auto J = ef::estimator_map_jacobian_restricted(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(J);
+  auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
+  REQUIRE_OK(eqc);
+  REQUIRE(eqc->A_eq.rows() > 0);
+  CHECK((eqc->A_eq * (*J)).cwiseAbs().maxCoeff() < 1e-6);
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(fit);
+  auto inf = rf::noniterative_inference_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+  REQUIRE_OK(inf);
+  CHECK(inf->df == 3);
+  CHECK(inf->Omega.allFinite());
+}
+
+TEST_CASE("residual-restricted grouped inference carries cross-block covariance") {
+  auto b = build_mg(kOneFactorResidualTie, 2, {GroupEqual::Residuals});
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65}),
+            of_cov(kLam4, 0.9, {0.70, 0.50, 0.60, 0.80})};
+  samp.n_obs = {500, 700};
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(fit);
+  auto inf = rf::noniterative_inference_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+  REQUIRE_OK(inf);
+
+  double max_offblock = 0.0;
+  const auto& bop = inf->block_of_param;
+  for (Eigen::Index i = 0; i < inf->Omega.rows(); ++i)
+    for (Eigen::Index j = 0; j < inf->Omega.cols(); ++j)
+      if (bop[static_cast<std::size_t>(i)] != bop[static_cast<std::size_t>(j)])
+        max_offblock = std::max(max_offblock, std::abs(inf->Omega(i, j)));
+  CHECK(max_offblock > 1e-12);
+}
+
+TEST_CASE("residual-restricted map rejects mixed residual-loading rows") {
+  auto b = build_mg(
+      "f =~ x1 + l2*x2 + x3\n"
+      "x2 ~~ e2*x2\n"
+      "l2 == e2\n",
+      1);
+  SampleStats samp;
+  samp.S = {of_cov(std::array<double, 4>{1.0, 0.8, 1.1, 0.0}, 1.0,
+                   std::array<double, 4>{0.5, 0.6, 0.7, 1.0})
+                .topLeftCorner(3, 3)
+                .eval()};
+  samp.n_obs = {500};
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  CHECK_FALSE(fit.has_value());
+  CHECK(fit.error().detail.find("mixes") != std::string::npos);
+}
+
+TEST_CASE("residual-restricted map rejects factor-variance rows") {
+  auto b = build_mg(
+      "f =~ x1 + x2 + x3\n"
+      "f ~~ v*f\n"
+      "v == 1\n",
+      1);
+  SampleStats samp;
+  samp.S = {of_cov(std::array<double, 4>{1.0, 0.8, 1.1, 0.0}, 1.0,
+                   std::array<double, 4>{0.5, 0.6, 0.7, 1.0})
+                .topLeftCorner(3, 3)
+                .eval()};
+  samp.n_obs = {500};
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  CHECK_FALSE(fit.has_value());
+  CHECK(fit.error().detail.find("factor") != std::string::npos);
+}
+
+TEST_CASE("residual-restricted map is marker-chart invariant off the surface") {
+  auto bx1 = build_mg(kOneFactorResidualTieX1X3, 1);
+  auto bx2 = build_mg(kOneFactorResidualTieX1X3MarkerX2, 1);
+  auto ev1 = ModelEvaluator::build(bx1.pt, bx1.rep);
+  auto ev2 = ModelEvaluator::build(bx2.pt, bx2.rep);
+  REQUIRE(ev1.has_value());
+  REQUIRE(ev2.has_value());
+
+  SampleStats samp;
+  samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65})};
+  samp.n_obs = {500};
+
+  auto fit1 = ef::fit_noniterative_cfa_restricted(
+      bx1.pt, bx1.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  auto fit2 = ef::fit_noniterative_cfa_restricted(
+      bx2.pt, bx2.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(fit1);
+  REQUIRE_OK(fit2);
+  CHECK(max_sigma_diff(*ev1, fit1->theta, *ev2, fit2->theta) < 1e-8);
 }
 
 TEST_CASE("mean structure: configural intercepts recover nu_g = m_g exactly") {

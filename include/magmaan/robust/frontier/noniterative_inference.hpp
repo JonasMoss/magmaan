@@ -81,6 +81,37 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  estimate::frontier::NonIterativeEstimator which,
                                  Discrepancy disc);
 
+// Same inferential algebra as `noniterative_inference*`, but the finite-
+// difference Jacobian is taken over `fit_noniterative_cfa_restricted()`.
+post_expected<NonIterativeInference>
+noniterative_inference_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc,
+    const Eigen::MatrixXd& gamma);
+
+post_expected<NonIterativeInference>
+noniterative_inference_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc);
+
+post_expected<NonIterativeInference>
+noniterative_inference_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc);
+
 // Wald test of the linear restriction R·θ = q, using the delta-method Ω.
 // Exact χ²(R.rows()); the primary nested test.
 post_expected<inference::WaldTestResult>
@@ -157,6 +188,39 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
                                          const data::RawData& raw, const Eigen::VectorXd& theta,
                                          estimate::frontier::NonIterativeEstimator which,
                                          Discrepancy disc);
+
+// Grouped inference for the restricted estimator map. Equality constraints can
+// couple blocks, so the residual projector is assembled on the full stacked
+// covariance-moment space rather than through the configural block-diagonal
+// shortcut.
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc,
+    const std::vector<Eigen::MatrixXd>& gamma_per_block);
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc);
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc);
 
 // One-step minimum-distance projection of the configural fit onto the linear
 // equality constraint surface R θ = c, where (R, c, k) = (A_eq, b_eq, rank) from
