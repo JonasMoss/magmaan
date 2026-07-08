@@ -1,5 +1,5 @@
 ---
-title: "Standardized augmented Guttman ILS on a Holzinger-Swineford CFA"
+title: "Standardized Guttman map on a Holzinger-Swineford CFA"
 format:
   html:
     toc: true
@@ -30,10 +30,11 @@ meta <- function(key) metadata$value[match(key, metadata$key)]
 fmt <- function(x, d = 3) ifelse(is.finite(x), formatC(x, format = "f", digits = d), "NA")
 pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "NA")
 label_est <- c(
-  guttman_std_ntml = "Std augmented ILS (NTML)",
-  guttman_std_uls = "Std augmented ILS (ULS)",
-  ml_nt = "NTML",
-  uls_emp = "ULS"
+  guttman_std = "Standardized Guttman map",
+  guttman_std_ntml = "Guttman test: NTML metric",
+  guttman_std_uls = "Guttman test: ULS metric",
+  ml_nt = "Iterative NTML",
+  uls_emp = "Iterative ULS"
 )
 largest_n <- max(est$n)
 
@@ -55,29 +56,29 @@ ratio <- function(estimator, group, scenario = "null", n = largest_n) {
 
 ## Question
 
-Does the standardized, augmented Guttman ILS map behave like a practical CFA
-estimator on a familiar three-factor Holzinger-Swineford problem? We compare it
+Does the standardized Guttman map behave like a practical CFA estimator on a
+familiar three-factor Holzinger-Swineford problem? We compare it
 with normal-theory ML and ULS on point estimates, Wald intervals, residual
 goodness-of-fit, and the nested restriction `visual ~~ 0*speed`.
 
 ## Short answer
 
-On this first Holzinger-Swineford-shaped run, the standardized augmented ILS
+On this first Holzinger-Swineford-shaped run, the standardized Guttman
 point estimates are close to ML but not ML-efficient. At n = `r largest_n`, its
-all-parameter RMSE is `r fmt(ratio("guttman_std_ntml", "loading"), 2)` times ML
-for loadings and `r fmt(ratio("guttman_std_ntml", "residual_var"), 2)` times ML
+RMSE is `r fmt(ratio("guttman_std", "loading"), 2)` times ML for loadings and
+`r fmt(ratio("guttman_std", "residual_var"), 2)` times ML
 for residual variances in the null cell.
 
 Its Wald intervals are usable in the same broad sense: loading coverage is
-`r pct(lookup(est, "guttman_std_ntml", "loading", col = "coverage"))` with the
-NTML discrepancy and empirical Gamma, compared with
+`r pct(lookup(est, "guttman_std", "loading", col = "coverage"))` with empirical
+Gamma, compared with
 `r pct(lookup(est, "ml_nt", "loading", col = "coverage"))` for ML and
 `r pct(lookup(est, "uls_emp", "loading", col = "coverage"))` for ULS.
 
 For tests, the residual GOF route is available for Guttman and ML, while ULS is
 included for the nested profile test. In the null cell, the nested rejection
 rates at n = `r largest_n` are `r pct(test_lookup("guttman_std_ntml", "nested_visual_speed_zero", "null"))`
-for standardized augmented ILS, `r pct(test_lookup("ml_nt", "nested_visual_speed_zero", "null"))`
+for Guttman with the NTML residual metric, `r pct(test_lookup("ml_nt", "nested_visual_speed_zero", "null"))`
 for ML, and `r pct(test_lookup("uls_emp", "nested_visual_speed_zero", "null"))`
 for ULS. In the alternative cell, the corresponding powers are
 `r pct(test_lookup("guttman_std_ntml", "nested_visual_speed_zero", "alternative"))`,
@@ -115,7 +116,7 @@ sample size. Values are grouped by free-parameter block.
 rows <- list()
 for (scenario in c("null", "alternative")) {
   for (group in c("loading", "factor_cov", "residual_var")) {
-    for (estimator in c("guttman_std_ntml", "guttman_std_uls", "uls_emp")) {
+    for (estimator in c("guttman_std", "ml_nt", "uls_emp")) {
       r <- est[est$scenario == scenario & est$n == largest_n &
                est$group == group & est$estimator == estimator, ]
       if (!nrow(r)) next
@@ -173,16 +174,17 @@ knitr::kable(d[, c("scenario", "Estimator", "OK", "Converged", "Improper")],
 ## Caveats
 
 - This is a normal-data, three-factor, three-indicator design. It is a first
-  comparison of the new standardized augmented ILS path, not a general
+  comparison of the new standardized Guttman path, not a general
   recommendation.
 - The default `--smoke` render uses only `r meta("reps")` replications per cell.
   It is a plumbing check; use the `--full` command below before treating rates
   as Monte Carlo evidence.
 - The population is seeded by fitting ML to the observed Holzinger-Swineford
   data. That makes the numbers interpretable, but it is one population.
-- Guttman intervals use empirical Gamma and either the NTML or ULS residual
-  discrepancy. ULS intervals use the continuous-LS sandwich. ML intervals use
-  the ordinary expected-information covariance.
+- Guttman intervals use empirical Gamma. In this setup the NTML and ULS residual
+  metrics give the same parameter covariance, so the NTML/ULS split is reported
+  only for residual and nested tests. ULS intervals use the continuous-LS
+  sandwich. ML intervals use the ordinary expected-information covariance.
 - ULS exact-fit GOF is not reported here; the first pass uses ULS for estimates,
   CIs, and the nested continuous-LS profile test.
 
