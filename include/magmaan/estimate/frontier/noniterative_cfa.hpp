@@ -83,6 +83,21 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt,
                             const data::SampleStats& samp,
                             NonIterativeEstimator which = NonIterativeEstimator::Guttman);
 
+// Sigma/H-level restricted estimator for linear equality constraints that are
+// separable into residual-variance rows and loading rows. Residual rows are
+// imposed in the communality h2 least-squares/GMM system before H is formed;
+// loading rows are imposed afterwards by a Sigma-only composite-metric
+// projection. Rows involving factor (co)variances, intercepts, latent means, or
+// rows that mix residual and loading parameters are rejected. The residual
+// diagonal reported in theta is the communality split diag(S) - diag(H), not a
+// post-hoc fitted leftover.
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned);
+
 // J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
 // p*_block = p_block(p_block+1)/2), by central finite differences of the
 // multi-block map w.r.t. block `block`'s covariance only. Column k is the
@@ -108,5 +123,29 @@ estimator_map_jacobian(const spec::LatentStructure& pt,
                        const data::SampleStats& samp,
                        NonIterativeEstimator which = NonIterativeEstimator::Guttman,
                        double rel_step = 1e-6);
+
+// Restricted-map analogue of `estimator_map_jacobian_block()`, using
+// `fit_noniterative_cfa_restricted()` for each finite-difference perturbation.
+// Unlike the configural map, rows for parameters in other blocks can be nonzero
+// when equality constraints couple blocks.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted_block(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    std::size_t block,
+    double rel_step = 1e-6);
+
+// Single-block convenience wrapper (block 0) for the restricted map.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which = NonIterativeEstimator::GuttmanGlsAligned,
+    double rel_step = 1e-6);
 
 }  // namespace magmaan::estimate::frontier

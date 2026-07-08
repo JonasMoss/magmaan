@@ -11,6 +11,7 @@
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
@@ -92,13 +93,34 @@ PinvQuad psd_pinv_quadform(const Eigen::MatrixXd& C, const Eigen::VectorXd& d,
   return {W, rank};
 }
 
+int numeric_rank(const Eigen::MatrixXd& A) {
+  if (A.size() == 0) return 0;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  if (svd.singularValues().size() == 0) return 0;
+  const double smax = svd.singularValues()(0);
+  const double dim = static_cast<double>(
+      std::max<Eigen::Index>(A.rows(), A.cols()));
+  const double tol = std::sqrt(std::numeric_limits<double>::epsilon()) *
+                     dim * std::max(1.0, smax);
+  int rank = 0;
+  for (Eigen::Index i = 0; i < svd.singularValues().size(); ++i)
+    if (svd.singularValues()(i) > tol) ++rank;
+  return rank;
+}
+
+enum class MapKind : std::uint8_t { Configural, Restricted };
+
 }  // namespace
 
 post_expected<NonIterativeInference>
-noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& rep,
-                       const data::SampleStats& samp, const Eigen::VectorXd& theta,
-                       estimate::frontier::NonIterativeEstimator which,
-                       Discrepancy disc, const Eigen::MatrixXd& gamma) {
+noniterative_inference_impl(const spec::LatentStructure& pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            const Eigen::VectorXd& theta,
+                            estimate::frontier::NonIterativeEstimator which,
+                            Discrepancy disc,
+                            const Eigen::MatrixXd& gamma,
+                            MapKind map_kind) {
   if (samp.S.empty()) return perr("non-iterative inference: empty sample stats");
   const Eigen::MatrixXd& S = samp.S[0];
   const Eigen::Index p = S.rows();
@@ -124,7 +146,11 @@ noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& 
   if (!dS.has_value()) return perr("non-iterative inference: dsigma_dtheta failed");
   const Eigen::MatrixXd Delta = *dS;
 
-  auto Jf = estimate::frontier::estimator_map_jacobian(pt, rep, *ev, samp, which);
+  auto Jf = (map_kind == MapKind::Restricted)
+                ? estimate::frontier::estimator_map_jacobian_restricted(
+                      pt, rep, *ev, samp, which)
+                : estimate::frontier::estimator_map_jacobian(
+                      pt, rep, *ev, samp, which);
   if (!Jf.has_value()) return perr("non-iterative inference: estimator Jacobian failed");
   const Eigen::MatrixXd J = *Jf;  // q × p*
 
@@ -152,7 +178,9 @@ noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& 
       Eigen::MatrixXd::Identity(pstar, pstar) - Delta * J;   // I − ΔJ
   const Eigen::MatrixXd U = M.transpose() * V * M;           // M'VM
   const double T_gof = N * r.dot(V * r);
-  const int df = static_cast<int>(pstar - q);
+  const int df = (map_kind == MapKind::Restricted)
+                     ? static_cast<int>(pstar - numeric_rank(Delta * J))
+                     : static_cast<int>(pstar - q);
 
   NonIterativeInference out;
   out.warnings = {};
@@ -206,6 +234,28 @@ noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& 
 }
 
 post_expected<NonIterativeInference>
+noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                       const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                       estimate::frontier::NonIterativeEstimator which,
+                       Discrepancy disc, const Eigen::MatrixXd& gamma) {
+  return noniterative_inference_impl(
+      pt, rep, samp, theta, which, disc, gamma, MapKind::Configural);
+}
+
+post_expected<NonIterativeInference>
+noniterative_inference_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc,
+    const Eigen::MatrixXd& gamma) {
+  return noniterative_inference_impl(
+      pt, rep, samp, theta, which, disc, gamma, MapKind::Restricted);
+}
+
+post_expected<NonIterativeInference>
 noniterative_inference_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                           const data::SampleStats& samp, const Eigen::VectorXd& theta,
                           estimate::frontier::NonIterativeEstimator which, Discrepancy disc) {
@@ -219,6 +269,23 @@ noniterative_inference_nt(const spec::LatentStructure& pt, const model::MatrixRe
 }
 
 post_expected<NonIterativeInference>
+noniterative_inference_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("non-iterative inference: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("non-iterative inference: Sigma(theta) failed");
+  auto g = data::gamma_nt(sig->sigma[0]);
+  if (!g.has_value()) return perr("non-iterative inference: gamma_nt failed");
+  return noniterative_inference_restricted(pt, rep, samp, theta, which, disc, *g);
+}
+
+post_expected<NonIterativeInference>
 noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  const model::MatrixRep& rep, const data::SampleStats& samp,
                                  const data::RawData& raw, const Eigen::VectorXd& theta,
@@ -228,6 +295,21 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
   auto g = data::empirical_gamma(raw.X[0]);
   if (!g.has_value()) return perr("non-iterative inference: empirical_gamma failed");
   return noniterative_inference(pt, rep, samp, theta, which, disc, *g);
+}
+
+post_expected<NonIterativeInference>
+noniterative_inference_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc) {
+  if (raw.X.empty()) return perr("non-iterative inference: empty raw data");
+  auto g = data::empirical_gamma(raw.X[0]);
+  if (!g.has_value()) return perr("non-iterative inference: empirical_gamma failed");
+  return noniterative_inference_restricted(pt, rep, samp, theta, which, disc, *g);
 }
 
 post_expected<inference::WaldTestResult>
@@ -520,6 +602,261 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
     gammas.push_back(std::move(*g));
   }
   return noniterative_inference_grouped(pt, rep, samp, theta, which, disc, gammas);
+}
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc,
+    const std::vector<Eigen::MatrixXd>& gamma_per_block) {
+  if (samp.S.empty()) return perr("restricted grouped inference: empty sample stats");
+  const std::size_t nblk = samp.S.size();
+  if (gamma_per_block.size() != nblk)
+    return perr("restricted grouped inference: Gamma count != block count");
+  if (samp.n_obs.size() != nblk)
+    return perr("restricted grouped inference: n_obs count != block count");
+
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("restricted grouped inference: evaluator build failed");
+  const auto q = static_cast<Eigen::Index>(ev->n_free());
+  if (theta.size() != q)
+    return perr("restricted grouped inference: theta size mismatch");
+
+  const bool has_means = has_mean_params(*ev);
+  if (has_means && samp.mean.size() != nblk)
+    return perr("restricted grouped inference: mean structure requires per-block "
+                "sample means");
+
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("restricted grouped inference: Sigma(theta) failed");
+  auto dS = ev->dsigma_dtheta(theta);
+  if (!dS.has_value()) return perr("restricted grouped inference: dsigma_dtheta failed");
+  const Eigen::MatrixXd Delta_full = *dS;
+
+  std::vector<Eigen::MatrixXd> Wntml;
+  if (disc == Discrepancy::NTML) {
+    auto w = estimate::gmm::expected_information_weight(*ev, samp, theta);
+    if (!w.has_value() || w->size() != nblk)
+      return perr("restricted grouped inference: NTML weight build failed");
+    Wntml = std::move(*w);
+  }
+
+  std::vector<Eigen::Index> pstar_b(nblk), offset(nblk);
+  Eigen::Index pstar_total = 0;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p_b = samp.S[b].rows();
+    pstar_b[b] = p_b * (p_b + 1) / 2;
+    offset[b] = pstar_total;
+    pstar_total += pstar_b[b];
+  }
+  if (Delta_full.rows() != pstar_total || Delta_full.cols() != q)
+    return perr("restricted grouped inference: Delta dimension mismatch");
+
+  const std::vector<model::ParamLocation> locs = ev->param_locations();
+  GroupedNonIterativeInference out;
+  out.block_of_param.assign(static_cast<std::size_t>(q), -1);
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto b = static_cast<std::size_t>(locs[k].block);
+    if (locs[k].block < 0 || b >= nblk)
+      return perr("restricted grouped inference: parameter has out-of-range block");
+    out.block_of_param[k] = static_cast<std::int32_t>(b);
+  }
+
+  std::vector<Eigen::MatrixXd> J_blocks;
+  J_blocks.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    auto Jf = estimate::frontier::estimator_map_jacobian_restricted_block(
+        pt, rep, *ev, samp, which, b);
+    if (!Jf.has_value())
+      return perr("restricted grouped inference: block Jacobian failed");
+    if (Jf->rows() != q || Jf->cols() != pstar_b[b])
+      return perr("restricted grouped inference: block Jacobian dimension mismatch");
+    J_blocks.push_back(std::move(*Jf));
+  }
+
+  out.Omega = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd V_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  Eigen::MatrixXd G_big = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  Eigen::MatrixXd DJ = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  double T = 0.0;
+  double rls = (disc == Discrepancy::NTML)
+                   ? 0.0 : std::numeric_limits<double>::quiet_NaN();
+
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p_b = samp.S[b].rows();
+    const Eigen::Index ps = pstar_b[b];
+    const Eigen::Index pm = has_means ? p_b : 0;
+    const Eigen::Index maug = pm + ps;
+    if (gamma_per_block[b].rows() != maug || gamma_per_block[b].cols() != maug)
+      return perr("restricted grouped inference: Gamma[b] dimension mismatch");
+
+    const Eigen::MatrixXd Sigma_hat_b = sig->sigma[b];
+    Eigen::MatrixXd V_b;
+    if (disc == Discrepancy::ULS) {
+      V_b = uls_weight(p_b);
+    } else {
+      const Eigen::MatrixXd& W0 = Wntml[b];
+      if (W0.rows() == ps) V_b = W0;
+      else if (W0.rows() > ps) V_b = W0.bottomRightCorner(ps, ps);
+      else return perr("restricted grouped inference: NTML weight smaller than p*");
+    }
+
+    const Eigen::MatrixXd Gamma_cov_b =
+        has_means ? gamma_per_block[b].bottomRightCorner(ps, ps).eval()
+                  : gamma_per_block[b];
+    const Eigen::VectorXd r_b =
+        vech_lower(samp.S[b]) - vech_lower(Sigma_hat_b);
+    const double N_b = static_cast<double>(samp.n_obs[b]);
+    if (!(N_b > 0.0))
+      return perr("restricted grouped inference: non-positive n_obs");
+    T += N_b * r_b.dot(V_b * r_b);
+
+    if (has_means) {
+      Eigen::MatrixXd Jaug = Eigen::MatrixXd::Zero(q, maug);
+      Jaug.rightCols(ps) = J_blocks[b];
+      for (std::size_t k = 0; k < locs.size(); ++k) {
+        const auto& loc = locs[k];
+        if (loc.mat == model::MatId::Nu &&
+            static_cast<std::size_t>(loc.block) == b) {
+          if (loc.row < 0 || loc.row >= p_b)
+            return perr("restricted grouped inference: intercept row out of range");
+          Jaug(static_cast<Eigen::Index>(k), loc.row) = 1.0;
+        }
+      }
+      out.Omega.noalias() += (Jaug * gamma_per_block[b] * Jaug.transpose()) / N_b;
+    } else {
+      out.Omega.noalias() +=
+          (J_blocks[b] * gamma_per_block[b] * J_blocks[b].transpose()) / N_b;
+    }
+
+    V_big.block(offset[b], offset[b], ps, ps) = V_b;
+    G_big.block(offset[b], offset[b], ps, ps) = Gamma_cov_b;
+
+    if (disc == Discrepancy::NTML) {
+      model::ImpliedMoments im;
+      im.sigma = {Sigma_hat_b};
+      data::SampleStats one;
+      one.S = {samp.S[b]};
+      one.n_obs = {samp.n_obs[b]};
+      if (!has_means && !samp.mean.empty()) one.mean = {samp.mean[b]};
+      if (auto rc = inference::rls_chi2(one, im); rc.has_value()) rls += *rc;
+    }
+  }
+
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::MatrixXd Delta_b =
+        Delta_full.middleRows(offset[b], pstar_b[b]);
+    const double N_b = static_cast<double>(samp.n_obs[b]);
+    for (std::size_t c = 0; c < nblk; ++c) {
+      const double N_c = static_cast<double>(samp.n_obs[c]);
+      const double scale = std::sqrt(N_b / N_c);
+      DJ.block(offset[b], offset[c], pstar_b[b], pstar_b[c]).noalias() =
+          scale * Delta_b * J_blocks[c];
+    }
+  }
+
+  const Eigen::MatrixXd M =
+      Eigen::MatrixXd::Identity(pstar_total, pstar_total) - DJ;
+  const Eigen::MatrixXd U_big = M.transpose() * V_big * M;
+  const int df = std::max(0, static_cast<int>(pstar_total - numeric_rank(DJ)));
+
+  out.theta_hat = theta;
+  out.se = Eigen::VectorXd(q);
+  for (Eigen::Index i = 0; i < q; ++i)
+    out.se(i) = std::sqrt(std::max(out.Omega(i, i), 0.0));
+  out.T_gof = T;
+  out.df = df;
+  out.rls_check = rls;
+
+  if (df >= 1) {
+    auto sd = compute_profile_contrast_spectrum(U_big, G_big, 1e-10);
+    if (!sd.has_value())
+      return perr("restricted grouped inference: GOF spectrum failed");
+    SatorraDiffResult sd_df = *sd;
+    const Eigen::Index navail = sd_df.eigenvalues.size();
+    if (navail > df) {
+      sd_df.eigenvalues = sd_df.eigenvalues.tail(df).eval();
+    } else if (navail < df) {
+      out.warnings.push_back("GOF spectrum rank " + std::to_string(navail) +
+                             " < df " + std::to_string(df) +
+                             " (ill-conditioned residual projector)");
+    }
+    sd_df.trace_CinvS = sd_df.eigenvalues.sum();
+    sd_df.trace_CinvS_sq = sd_df.eigenvalues.squaredNorm();
+    for (const auto& w : sd_df.warnings) out.warnings.push_back(w);
+
+    auto lr = lr_test_satorra2000(T, sd_df);
+    if (!lr.has_value())
+      return perr("restricted grouped inference: GOF p-values failed");
+    out.gof_eigenvalues = sd_df.eigenvalues;
+    out.scale_c = lr->scale_c;
+    out.p_scaled = lr->p_scaled;
+    out.p_meanvar = lr->p_adjusted;
+    out.p_scaled_shifted = lr->p_scaled_shifted;
+    out.p_mixture = lr->p_mixture;
+    for (const auto& w : lr->warnings) out.warnings.push_back(w);
+  } else {
+    out.warnings.push_back("joint df <= 0 (saturated blocks); GOF not reported");
+  }
+
+  out.U = U_big;
+  out.Gamma = G_big;
+  return out;
+}
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("restricted grouped inference: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("restricted grouped inference: Sigma(theta) failed");
+  const bool has_means = has_mean_params(*ev);
+  std::vector<Eigen::MatrixXd> gammas;
+  gammas.reserve(sig->sigma.size());
+  for (const auto& Sig : sig->sigma) {
+    auto g = has_means ? data::gamma_nt_with_means(Sig) : data::gamma_nt(Sig);
+    if (!g.has_value()) return perr("restricted grouped inference: gamma_nt failed");
+    gammas.push_back(std::move(*g));
+  }
+  return noniterative_inference_grouped_restricted(
+      pt, rep, samp, theta, which, disc, gammas);
+}
+
+post_expected<GroupedNonIterativeInference>
+noniterative_inference_grouped_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    Discrepancy disc) {
+  if (raw.X.size() != samp.S.size())
+    return perr("restricted grouped inference: raw-data block count != sample-stats blocks");
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("restricted grouped inference: evaluator build failed");
+  const bool has_means = has_mean_params(*ev);
+  std::vector<Eigen::MatrixXd> gammas;
+  gammas.reserve(raw.X.size());
+  for (const auto& Xb : raw.X) {
+    auto g = has_means ? data::empirical_gamma_with_means(Xb)
+                       : data::empirical_gamma(Xb);
+    if (!g.has_value())
+      return perr("restricted grouped inference: empirical_gamma failed");
+    gammas.push_back(std::move(*g));
+  }
+  return noniterative_inference_grouped_restricted(
+      pt, rep, samp, theta, which, disc, gammas);
 }
 
 post_expected<ConstrainedNonIterativeFit>

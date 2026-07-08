@@ -29,16 +29,51 @@ struct HCommunalityResult {
   Eigen::MatrixXd H;       // S with diag(S) replaced by h_diag
 };
 
+// Linear least-squares/GMM representation of the triad communality moments
+// A h2 ~= b on the correlation scale. W is the criterion weight for the rows of
+// A. It is a function of S only; no fourth-moment Gamma enters here.
+struct CommunalitySystem {
+  Eigen::MatrixXd A;
+  Eigen::VectorXd b;
+  Eigen::MatrixXd W;
+};
+
 const char* communality_method_name(CommunalityMethod method);
+
+fit_expected<CommunalitySystem>
+communality_system(const Eigen::MatrixXd& S,
+                   const std::vector<std::int32_t>& block_of_indicator,
+                   CommunalityMethod method);
+
+fit_expected<Eigen::VectorXd>
+solve_communality_system(const CommunalitySystem& system,
+                         const Eigen::MatrixXd& R_h2,
+                         const Eigen::VectorXd& r_h2);
 
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities(const Eigen::MatrixXd& S,
                           const std::vector<std::int32_t>& block_of_indicator,
                           CommunalityMethod method);
 
+fit_expected<Eigen::VectorXd>
+estimate_h2_communalities_constrained(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2);
+
 fit_expected<HCommunalityResult>
 estimate_h_communalities(const Eigen::MatrixXd& S,
                          const std::vector<std::int32_t>& block_of_indicator,
                          CommunalityMethod method);
+
+fit_expected<HCommunalityResult>
+estimate_h_communalities_constrained(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2);
 
 }  // namespace magmaan::estimate::frontier

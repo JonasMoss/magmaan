@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 #include <Eigen/Dense>
 
 #include "magmaan/error.hpp"
+#include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/cfa_utils.hpp"
 #include "magmaan/estimate/frontier/communality.hpp"
 
@@ -155,6 +157,27 @@ fit_expected<Eigen::MatrixXd> invert_full_rank(const Eigen::MatrixXd& A,
   return lu.inverse();
 }
 
+fit_expected<Eigen::MatrixXd> symmetric_pinv_local(const Eigen::MatrixXd& A,
+                                                   const char* what) {
+  if (A.rows() != A.cols() || !A.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(what) + ": invalid matrix"});
+  if (A.size() == 0) return Eigen::MatrixXd(A.rows(), A.cols());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (A + A.transpose()));
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(what) + ": eigendecomposition failed"});
+  const Eigen::VectorXd& evals = es.eigenvalues();
+  const double max_abs = evals.cwiseAbs().maxCoeff();
+  const double cutoff = std::sqrt(std::numeric_limits<double>::epsilon()) *
+                        std::max(1.0, max_abs);
+  Eigen::VectorXd inv = Eigen::VectorXd::Zero(evals.size());
+  for (Eigen::Index i = 0; i < evals.size(); ++i) {
+    if (evals(i) > cutoff) inv(i) = 1.0 / evals(i);
+  }
+  return es.eigenvectors() * inv.asDiagonal() * es.eigenvectors().transpose();
+}
+
 fit_expected<std::vector<std::int32_t>>
 block_ids_from_layout(const CfaBlockLayout& L) {
   std::vector<std::int32_t> block_of(static_cast<std::size_t>(L.n_observed), -1);
@@ -242,6 +265,138 @@ std::vector<std::vector<Eigen::Index>> rows_by_factor(const CfaBlockLayout& L) {
   return rows;
 }
 
+struct RestrictedRows {
+  Eigen::MatrixXd R_h2;
+  Eigen::VectorXd r_h2;
+  Eigen::MatrixXd R_load;
+  Eigen::VectorXd r_load;
+};
+
+fit_expected<RestrictedRows> restricted_error(std::string detail) {
+  return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail)});
+}
+
+bool has_rows(const Eigen::MatrixXd& A) { return A.rows() > 0; }
+
+std::vector<Eigen::Index>
+h2_offsets(const std::vector<CfaBlockLayout>& layouts) {
+  std::vector<Eigen::Index> out(layouts.size() + 1, 0);
+  for (std::size_t b = 0; b < layouts.size(); ++b)
+    out[b + 1] = out[b] + layouts[b].n_observed;
+  return out;
+}
+
+fit_expected<RestrictedRows>
+restricted_rows_from_partable(const spec::LatentStructure& pt,
+                              const model::MatrixRep& rep,
+                              const model::ModelEvaluator& ev,
+                              const std::vector<CfaBlockLayout>& layouts,
+                              const data::SampleStats& samp) {
+  auto con = estimate::build_eq_constraints(pt);
+  if (!con.has_value()) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman map: " + con.error().detail});
+  }
+
+  const auto locs = ev.param_locations();
+  const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
+  const std::vector<Eigen::Index> offs = h2_offsets(layouts);
+  const Eigen::Index n_h2 = offs.back();
+  std::vector<Eigen::VectorXd> d_rows;
+  std::vector<double> d_rhs;
+  std::vector<Eigen::VectorXd> o_rows;
+  std::vector<double> o_rhs;
+  constexpr double tol = 1e-12;
+
+  for (Eigen::Index r = 0; r < con->A_eq.rows(); ++r) {
+    bool any = false;
+    bool touches_resid = false;
+    bool touches_load = false;
+    bool touches_other = false;
+    for (Eigen::Index k = 0; k < q; ++k) {
+      if (std::abs(con->A_eq(r, k)) <= tol) continue;
+      any = true;
+      const auto& loc = locs[static_cast<std::size_t>(k)];
+      if (loc.mat == model::MatId::Theta && loc.row == loc.col) {
+        touches_resid = true;
+      } else if (loc.mat == model::MatId::Lambda) {
+        touches_load = true;
+      } else {
+        touches_other = true;
+      }
+    }
+    if (!any) {
+      if (std::abs(con->b_eq(r)) > tol)
+        return restricted_error(
+            "restricted Guttman map: infeasible empty constraint row");
+      continue;
+    }
+    if ((touches_resid && touches_load) ||
+        ((touches_resid || touches_load) && touches_other)) {
+      return restricted_error("restricted Guttman map: equality row mixes residual, "
+                              "loading, or unsupported parameters");
+    }
+    if (touches_other)
+      return restricted_error("restricted Guttman map: factor/intercept constraints "
+                              "are outside the residual-constrained Sigma-only map");
+
+    if (touches_resid) {
+      Eigen::VectorXd row = Eigen::VectorXd::Zero(n_h2);
+      double rhs = con->b_eq(r);
+      for (Eigen::Index k = 0; k < q; ++k) {
+        const double a = con->A_eq(r, k);
+        if (std::abs(a) <= tol) continue;
+        const auto& loc = locs[static_cast<std::size_t>(k)];
+        const auto b = static_cast<std::size_t>(loc.block);
+        if (b >= layouts.size() || loc.row < 0 ||
+            loc.row >= layouts[b].n_observed)
+          return restricted_error("restricted Guttman map: residual constraint row "
+                                  "has out-of-range location");
+        const double sii = samp.S[b](loc.row, loc.row);
+        row(offs[b] + loc.row) -= a * sii;
+        rhs -= a * sii;
+      }
+      d_rows.push_back(std::move(row));
+      d_rhs.push_back(rhs);
+    } else {
+      Eigen::VectorXd row = Eigen::VectorXd::Zero(q);
+      for (Eigen::Index k = 0; k < q; ++k) row(k) = con->A_eq(r, k);
+      o_rows.push_back(std::move(row));
+      o_rhs.push_back(con->b_eq(r));
+    }
+  }
+
+  for (std::size_t row_id = 0; row_id < pt.size(); ++row_id) {
+    if (pt.free[row_id] != 0 || !std::isfinite(pt.fixed_value[row_id])) continue;
+    const auto& c = rep.cell_for_row[row_id];
+    if (!c.used || c.mat != model::MatId::Theta || c.row != c.col) continue;
+    const auto b = static_cast<std::size_t>(c.block);
+    if (b >= layouts.size() || c.row < 0 || c.row >= layouts[b].n_observed)
+      return restricted_error(
+          "restricted Guttman map: fixed residual row is out of range");
+    Eigen::VectorXd row = Eigen::VectorXd::Zero(n_h2);
+    const double sii = samp.S[b](c.row, c.row);
+    row(offs[b] + c.row) = -sii;
+    d_rows.push_back(std::move(row));
+    d_rhs.push_back(pt.fixed_value[row_id] - sii);
+  }
+
+  RestrictedRows out;
+  out.R_h2 = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(d_rows.size()), n_h2);
+  out.r_h2 = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(d_rows.size()));
+  for (std::size_t i = 0; i < d_rows.size(); ++i) {
+    out.R_h2.row(static_cast<Eigen::Index>(i)) = d_rows[i].transpose();
+    out.r_h2(static_cast<Eigen::Index>(i)) = d_rhs[i];
+  }
+  out.R_load = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(o_rows.size()), q);
+  out.r_load = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(o_rows.size()));
+  for (std::size_t i = 0; i < o_rows.size(); ++i) {
+    out.R_load.row(static_cast<Eigen::Index>(i)) = o_rows[i].transpose();
+    out.r_load(static_cast<Eigen::Index>(i)) = o_rhs[i];
+  }
+  return out;
+}
+
 std::expected<BlockGuttman, FitError>
 regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                  const Eigen::MatrixXd& H, const Eigen::MatrixXd& B,
@@ -309,6 +464,32 @@ guttman_gls_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman GLS-aligned map: output factor dimension mismatch"});
+  return out;
+}
+
+std::expected<BlockGuttman, FitError>
+guttman_gls_aligned_block_from_h(const CfaBlockLayout& L,
+                                 const Eigen::MatrixXd& S,
+                                 const Eigen::MatrixXd& H,
+                                 const char* label) {
+  const Eigen::Index nfac = L.n_factor();
+  const Eigen::MatrixXd Z = incidence_matrix(L);
+  const Eigen::MatrixXd incidence_score_cov = Z.transpose() * H * Z;
+  auto incidence_inv = invert_full_rank(incidence_score_cov, label);
+  if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
+
+  const Eigen::MatrixXd prelim_loading = H * Z * (*incidence_inv);
+  const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
+  auto gram_inv = invert_full_rank(gram, label);
+  if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
+
+  const Eigen::MatrixXd B = prelim_loading * (*gram_inv);
+  auto out = regression_block(L, S, H, B, label);
+  if (!out.has_value()) return std::unexpected(out.error());
+  if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": output factor dimension mismatch"});
+  for (Eigen::Index i = 0; i < L.n_observed; ++i) out->psi(i) = S(i, i) - H(i, i);
   return out;
 }
 
@@ -444,6 +625,185 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
     out.push_back(BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)});
   }
   return out;
+}
+
+fit_expected<std::vector<BlockGuttman>>
+fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
+                      const std::vector<Eigen::MatrixXd>& S,
+                      const RestrictedRows& rows) {
+  const std::size_t nblk = layouts.size();
+  if (nblk == 0 || nblk != S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman map: block / sample covariance count mismatch"});
+
+  std::vector<CommunalitySystem> systems;
+  systems.reserve(nblk);
+  Eigen::Index total_rows = 0;
+  Eigen::Index total_cols = 0;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    auto block_of = block_ids_from_layout(L);
+    if (!block_of.has_value()) return std::unexpected(block_of.error());
+    auto sys = communality_system(S[b], *block_of, CommunalityMethod::GmmBlock);
+    if (!sys.has_value()) return std::unexpected(sys.error());
+    total_rows += sys->A.rows();
+    total_cols += sys->A.cols();
+    systems.push_back(std::move(*sys));
+  }
+
+  CommunalitySystem joint;
+  joint.A = Eigen::MatrixXd::Zero(total_rows, total_cols);
+  joint.b = Eigen::VectorXd::Zero(total_rows);
+  joint.W = Eigen::MatrixXd::Zero(total_rows, total_rows);
+  Eigen::Index row_off = 0;
+  Eigen::Index col_off = 0;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const auto& sys = systems[b];
+    joint.A.block(row_off, col_off, sys.A.rows(), sys.A.cols()) = sys.A;
+    joint.b.segment(row_off, sys.A.rows()) = sys.b;
+    joint.W.block(row_off, row_off, sys.W.rows(), sys.W.cols()) = sys.W;
+    row_off += sys.A.rows();
+    col_off += sys.A.cols();
+  }
+
+  auto h2 = solve_communality_system(joint, rows.R_h2, rows.r_h2);
+  if (!h2.has_value()) return std::unexpected(h2.error());
+
+  std::vector<BlockGuttman> out;
+  out.reserve(nblk);
+  col_off = 0;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p = layouts[b].n_observed;
+    Eigen::MatrixXd H = S[b];
+    for (Eigen::Index i = 0; i < p; ++i) {
+      const double h_diag = S[b](i, i) * (*h2)(col_off + i);
+      const double resid = S[b](i, i) - h_diag;
+      const double scale = std::max(1.0, std::abs(S[b](i, i)));
+      if (!std::isfinite(h_diag) || !std::isfinite(resid) ||
+          h_diag < -1e-8 * scale || resid < -1e-8 * scale) {
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman map: constrained communality split is "
+            "improper"});
+      }
+      H(i, i) = h_diag;
+    }
+    auto gb = guttman_gls_aligned_block_from_h(
+        layouts[b], S[b], H, "restricted Guttman map");
+    if (!gb.has_value()) return std::unexpected(gb.error());
+    out.push_back(std::move(*gb));
+    col_off += p;
+  }
+  return out;
+}
+
+std::vector<std::int16_t> lat_to_f_of(const CfaBlockLayout& L);
+
+fit_expected<Eigen::VectorXd>
+project_loading_constraints(const model::ModelEvaluator& ev,
+                            const std::vector<CfaBlockLayout>& layouts,
+                            std::vector<BlockGuttman>& blocks,
+                            const RestrictedRows& rows,
+                            const Eigen::VectorXd& theta0) {
+  if (!has_rows(rows.R_load)) return theta0;
+
+  const auto locs = ev.param_locations();
+  const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
+  if (rows.R_load.cols() != q)
+    return num_error("restricted Guttman map: loading constraint width mismatch");
+
+  std::vector<Eigen::Index> lambda_param_to_local(static_cast<std::size_t>(q), -1);
+  std::vector<Eigen::Index> lambda_params;
+  lambda_params.reserve(static_cast<std::size_t>(q));
+  for (Eigen::Index k = 0; k < q; ++k) {
+    if (locs[static_cast<std::size_t>(k)].mat != model::MatId::Lambda) continue;
+    lambda_param_to_local[static_cast<std::size_t>(k)] =
+        static_cast<Eigen::Index>(lambda_params.size());
+    lambda_params.push_back(k);
+  }
+  const Eigen::Index nlam = static_cast<Eigen::Index>(lambda_params.size());
+  if (nlam == 0)
+    return num_error("restricted Guttman map: loading constraints but no "
+                     "free loadings");
+
+  Eigen::VectorXd l0(nlam);
+  for (Eigen::Index a = 0; a < nlam; ++a)
+    l0(a) = theta0(lambda_params[static_cast<std::size_t>(a)]);
+
+  Eigen::MatrixXd Rl = Eigen::MatrixXd::Zero(rows.R_load.rows(), nlam);
+  for (Eigen::Index r = 0; r < rows.R_load.rows(); ++r) {
+    for (Eigen::Index k = 0; k < q; ++k) {
+      const double v = rows.R_load(r, k);
+      if (std::abs(v) <= 1e-12) continue;
+      const Eigen::Index local = lambda_param_to_local[static_cast<std::size_t>(k)];
+      if (local < 0)
+        return num_error("restricted Guttman map: non-loading column in loading "
+                         "constraint block");
+      Rl(r, local) = v;
+    }
+  }
+
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(nlam, nlam);
+  std::vector<std::vector<std::int16_t>> lat_to_f(layouts.size());
+  for (std::size_t b = 0; b < layouts.size(); ++b) lat_to_f[b] = lat_to_f_of(layouts[b]);
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    const auto& la =
+        locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(a)])];
+    const auto ba = static_cast<std::size_t>(la.block);
+    if (ba >= layouts.size()) return num_error("restricted Guttman map: "
+                                               "loading block out of range");
+    if (la.col < 0 ||
+        static_cast<std::size_t>(la.col) >= lat_to_f[ba].size())
+      return num_error("restricted Guttman map: loading factor out of range");
+    const std::int16_t fa = lat_to_f[ba][static_cast<std::size_t>(la.col)];
+    if (fa < 0) return num_error("restricted Guttman map: loading factor out of range");
+    for (Eigen::Index c = 0; c < nlam; ++c) {
+      const auto& lc =
+          locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(c)])];
+      if (lc.block != la.block || lc.row != la.row) continue;  // V = I_p
+      if (lc.col < 0 ||
+          static_cast<std::size_t>(lc.col) >= lat_to_f[ba].size())
+        return num_error("restricted Guttman map: loading factor out of range");
+      const std::int16_t fc =
+          lat_to_f[ba][static_cast<std::size_t>(lc.col)];
+      if (fc < 0) return num_error("restricted Guttman map: loading factor out of range");
+      W(a, c) = blocks[ba].Phi(fa, fc);
+    }
+  }
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    if (!std::isfinite(W(a, a)) || W(a, a) <= 0.0)
+      return num_error("restricted Guttman map: non-positive loading metric");
+  }
+  auto Winv = symmetric_pinv_local(W, "restricted Guttman loading projection");
+  if (!Winv.has_value()) return std::unexpected(Winv.error());
+  const Eigen::MatrixXd middle = Rl * (*Winv) * Rl.transpose();
+  auto middle_inv =
+      symmetric_pinv_local(middle, "restricted Guttman loading projection");
+  if (!middle_inv.has_value()) return std::unexpected(middle_inv.error());
+
+  Eigen::VectorXd l = l0 - (*Winv) * Rl.transpose() *
+                            ((*middle_inv) * (Rl * l0 - rows.r_load));
+  if (!l.allFinite())
+    return num_error("restricted Guttman map: non-finite loading projection");
+  const Eigen::VectorXd resid = Rl * l - rows.r_load;
+  const double scale = std::max(1.0, rows.r_load.cwiseAbs().maxCoeff());
+  if (resid.cwiseAbs().maxCoeff() > 1e-8 * scale)
+    return num_error("restricted Guttman map: infeasible loading constraints");
+
+  Eigen::VectorXd theta = theta0;
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    const Eigen::Index k = lambda_params[static_cast<std::size_t>(a)];
+    theta(k) = l(a);
+    const auto& loc = locs[static_cast<std::size_t>(k)];
+    const auto b = static_cast<std::size_t>(loc.block);
+    if (b >= layouts.size() || loc.col < 0 ||
+        static_cast<std::size_t>(loc.col) >= lat_to_f[b].size() ||
+        loc.row < 0 || loc.row >= layouts[b].n_observed)
+      return num_error("restricted Guttman map: loading location out of range");
+    const std::int16_t f = lat_to_f[b][static_cast<std::size_t>(loc.col)];
+    if (f < 0) return num_error("restricted Guttman map: loading factor out of range");
+    blocks[b].Lambda(loc.row, f) = l(a);
+  }
+  return theta;
 }
 
 // latent column index → block layout's factor ordinal, precomputed per block.
@@ -676,6 +1036,73 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
   return out;
 }
 
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
+                                const model::MatrixRep& rep,
+                                const data::SampleStats& samp,
+                                NonIterativeEstimator which) {
+  if (rep.form != model::RepForm::PureCFA)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: pure-CFA models only"});
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: model evaluator build failed"});
+  if (samp.S.empty())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: empty sample stats"});
+
+  const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
+  if (layouts.empty())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: no CFA block found"});
+  if (layouts.size() != samp.S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: block / sample-stats count mismatch"});
+
+  for (std::size_t b = 0; b < layouts.size(); ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    if (L.n_factor() == 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman CFA: no factors"});
+    if (L.crossloadings)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman CFA: cross-loadings are out of scope"});
+    if (!L.all_have_marker)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman CFA: every factor needs a marker"});
+    if (samp.S[b].rows() != L.n_observed || samp.S[b].cols() != L.n_observed)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman CFA: sample covariance dimension mismatch"});
+  }
+
+  auto rows = restricted_rows_from_partable(pt, rep, *ev, layouts, samp);
+  if (!rows.has_value()) return std::unexpected(rows.error());
+  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load))
+    return fit_noniterative_cfa(pt, rep, samp, which);
+  if (which != NonIterativeEstimator::GuttmanGlsAligned)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: active restrictions require "
+        "guttman_gls_aligned"});
+
+  auto blocks = fit_restricted_blocks(layouts, samp.S, *rows);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  auto theta = assemble_theta(*ev, layouts, *blocks, samp);
+  if (!theta.has_value()) return std::unexpected(theta.error());
+  auto theta_proj =
+      project_loading_constraints(*ev, layouts, *blocks, *rows, *theta);
+  if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
+
+  NonIterativeFit out;
+  out.theta = std::move(*theta_proj);
+  for (auto& gb : *blocks) {
+    out.Lambda.push_back(std::move(gb.Lambda));
+    out.Phi.push_back(std::move(gb.Phi));
+    out.psi.push_back(std::move(gb.psi));
+  }
+  return out;
+}
+
 fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian_block(const spec::LatentStructure& pt,
                              const model::MatrixRep& rep,
@@ -729,6 +1156,63 @@ estimator_map_jacobian(const spec::LatentStructure& pt, const model::MatrixRep& 
       "non-iterative CFA: empty sample stats"});
   // Single-block convenience wrapper (block 0).
   return estimator_map_jacobian_block(pt, rep, ev, samp, which, 0, rel_step);
+}
+
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted_block(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    std::size_t block,
+    double rel_step) {
+  if (block >= samp.S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman CFA: Jacobian block index out of range"});
+  const Eigen::MatrixXd S0 = samp.S[block];
+  const Eigen::Index p = S0.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  const auto q = static_cast<Eigen::Index>(ev.n_free());
+
+  data::SampleStats work = samp;
+  Eigen::MatrixXd J(q, pstar);
+  Eigen::Index col = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      const double h = rel_step * std::max(std::abs(S0(r, c)), 1.0);
+
+      work.S[block] = S0;
+      work.S[block](r, c) += h;
+      if (r != c) work.S[block](c, r) += h;
+      auto fp = fit_noniterative_cfa_restricted(pt, rep, work, which);
+      if (!fp.has_value()) return std::unexpected(fp.error());
+
+      work.S[block] = S0;
+      work.S[block](r, c) -= h;
+      if (r != c) work.S[block](c, r) -= h;
+      auto fm = fit_noniterative_cfa_restricted(pt, rep, work, which);
+      if (!fm.has_value()) return std::unexpected(fm.error());
+
+      J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
+      ++col;
+    }
+  }
+  return J;
+}
+
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    double rel_step) {
+  if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      "restricted Guttman CFA: empty sample stats"});
+  return estimator_map_jacobian_restricted_block(
+      pt, rep, ev, samp, which, 0, rel_step);
 }
 
 }  // namespace magmaan::estimate::frontier
