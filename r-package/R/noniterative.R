@@ -64,6 +64,21 @@ fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman") 
   noniterative_cfa_fit_impl(partable, sample_stats, estimator)
 }
 
+#' Fit the estimator-side metric-constrained non-iterative CFA map.
+#'
+#' This is not the inference-side Omega projection returned by
+#' [noniterative_cfa_constrained()]. It imposes the metric loading-shape
+#' constraint inside the Sigma/H reconstruction itself: a common standardized
+#' loading shape is estimated across groups and then converted back to the
+#' marker chart represented by `partable`.
+#'
+#' @inheritParams fit_noniterative_cfa
+#' @export
+fit_noniterative_cfa_metric <- function(partable, sample_stats,
+                                        estimator = "guttman_gls_aligned") {
+  noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator)
+}
+
 #' Residual-based inference for a non-iterative CFA fit.
 #'
 #' Returns delta-method standard errors (`se`, `vcov`), the goodness-of-fit

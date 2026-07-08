@@ -36,18 +36,20 @@ struct BlockGuttman {
   Eigen::VectorXd psi;     // nvar, residual variances
 };
 
-std::expected<BlockGuttman, FitError>
-guttman_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
+struct ScoreBlock {
+  Eigen::MatrixXd H;      // common covariance estimate: S with diagonal replaced
+  Eigen::MatrixXd Bstd;   // nvar × nfac; U = Bstd'Y_H has unit marginal variances
+  Eigen::MatrixXd P;      // Cov(U)
+  Eigen::MatrixXd C;      // Cov(Y_H, U) = H Bstd
+};
+
+fit_expected<Eigen::MatrixXd> legacy_h_matrix(const CfaBlockLayout& L,
+                                              const Eigen::MatrixXd& S) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
-
-  // Loading pattern X (nvar × nfac) and the per-factor indicator rows.
-  Eigen::MatrixXd X = Eigen::MatrixXd::Zero(nvar, nfac);
   std::vector<std::vector<Eigen::Index>> rows_of(static_cast<std::size_t>(nfac));
-  for (const auto& load : L.loads) {
-    X(load.ov_row, load.factor) = 1.0;
+  for (const auto& load : L.loads)
     rows_of[static_cast<std::size_t>(load.factor)].push_back(load.ov_row);
-  }
   for (const auto& rr : rows_of) {
     if (rr.size() < 3)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -55,8 +57,6 @@ guttman_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
           "undefined)"});
   }
 
-  // Communalities on the diagonal: C = S − diag(residual), with per-factor
-  // Spearman residual variances. No clamp / no floor (the clean analytic map).
   Eigen::VectorXd resid = Eigen::VectorXd::Zero(nvar);
   for (const auto& rr : rows_of) {
     const auto k = static_cast<Eigen::Index>(rr.size());
@@ -68,8 +68,28 @@ guttman_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
     for (Eigen::Index a = 0; a < k; ++a)
       resid(rr[static_cast<std::size_t>(a)]) = tf(a);
   }
-  Eigen::MatrixXd C = S;
-  C.diagonal() -= resid;
+
+  Eigen::MatrixXd H = S;
+  H.diagonal() -= resid;
+  return H;
+}
+
+std::expected<BlockGuttman, FitError>
+guttman_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
+  const Eigen::Index nvar = L.n_observed;
+  const Eigen::Index nfac = L.n_factor();
+
+  // Loading pattern X (nvar × nfac).
+  Eigen::MatrixXd X = Eigen::MatrixXd::Zero(nvar, nfac);
+  for (const auto& load : L.loads) {
+    X(load.ov_row, load.factor) = 1.0;
+  }
+
+  // Communalities on the diagonal: H = S − diag(residual), with per-factor
+  // Spearman residual variances. No clamp / no floor (the clean analytic map).
+  auto H_or = legacy_h_matrix(L, S);
+  if (!H_or.has_value()) return std::unexpected(H_or.error());
+  const Eigen::MatrixXd& C = *H_or;
 
   const Eigen::MatrixXd A_mat = C * X;                  // nvar × nfac  (= CX)
   const Eigen::MatrixXd Bmat = X.transpose() * A_mat;   // nfac × nfac  (= XᵀCX)
@@ -163,6 +183,65 @@ Eigen::MatrixXd incidence_matrix(const CfaBlockLayout& L) {
   return Z;
 }
 
+fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
+                                                  const Eigen::MatrixXd& S,
+                                                  NonIterativeEstimator which) {
+  Eigen::MatrixXd H;
+  Eigen::MatrixXd B;
+  switch (which) {
+    case NonIterativeEstimator::Guttman: {
+      auto H_or = legacy_h_matrix(L, S);
+      if (!H_or.has_value()) return std::unexpected(H_or.error());
+      H = std::move(*H_or);
+      B = incidence_matrix(L);
+      break;
+    }
+    case NonIterativeEstimator::GuttmanGlsAligned: {
+      auto block_of = block_ids_from_layout(L);
+      if (!block_of.has_value()) return std::unexpected(block_of.error());
+      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
+      if (!h.has_value()) return std::unexpected(h.error());
+      H = std::move(h->H);
+
+      const Eigen::MatrixXd Z = incidence_matrix(L);
+      const Eigen::MatrixXd incidence_score_cov = Z.transpose() * H * Z;
+      auto incidence_inv =
+          invert_full_rank(incidence_score_cov, "Guttman GLS-aligned metric map");
+      if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
+
+      const Eigen::MatrixXd prelim_loading = H * Z * (*incidence_inv);
+      const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
+      auto gram_inv = invert_full_rank(gram, "Guttman GLS-aligned metric map");
+      if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
+      B = prelim_loading * (*gram_inv);
+      break;
+    }
+  }
+
+  const Eigen::Index nfac = L.n_factor();
+  const Eigen::MatrixXd score_cov = B.transpose() * H * B;
+  Eigen::VectorXd scale(nfac);
+  for (Eigen::Index f = 0; f < nfac; ++f) {
+    if (score_cov(f, f) <= 0.0 || !std::isfinite(score_cov(f, f)))
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman metric map: non-positive score variance"});
+    scale(f) = std::sqrt(score_cov(f, f));
+  }
+
+  Eigen::MatrixXd Bstd = B;
+  for (Eigen::Index f = 0; f < nfac; ++f) Bstd.col(f) /= scale(f);
+  Eigen::MatrixXd P = Bstd.transpose() * H * Bstd;
+  Eigen::MatrixXd C = H * Bstd;
+  return ScoreBlock{std::move(H), std::move(Bstd), std::move(P), std::move(C)};
+}
+
+std::vector<std::vector<Eigen::Index>> rows_by_factor(const CfaBlockLayout& L) {
+  std::vector<std::vector<Eigen::Index>> rows(static_cast<std::size_t>(L.n_factor()));
+  for (const auto& load : L.loads)
+    rows[static_cast<std::size_t>(load.factor)].push_back(load.ov_row);
+  return rows;
+}
+
 std::expected<BlockGuttman, FitError>
 regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                  const Eigen::MatrixXd& H, const Eigen::MatrixXd& B,
@@ -244,6 +323,127 @@ fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   }
   return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: unknown estimator"});
+}
+
+fit_expected<std::vector<BlockGuttman>>
+fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
+                               const std::vector<Eigen::MatrixXd>& S,
+                               NonIterativeEstimator which) {
+  const std::size_t nblk = layouts.size();
+  if (nblk == 0 || nblk != S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Guttman metric map: block / sample covariance count mismatch"});
+
+  const CfaBlockLayout& L0 = layouts.front();
+  const Eigen::Index nvar = L0.n_observed;
+  const Eigen::Index nfac = L0.n_factor();
+  const auto rows0 = rows_by_factor(L0);
+
+  std::vector<ScoreBlock> scores;
+  scores.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    if (L.n_observed != nvar || L.n_factor() != nfac)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman metric map: all groups must share the observed/factor layout"});
+    if (S[b].rows() != nvar || S[b].cols() != nvar)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman metric map: sample covariance dimension mismatch"});
+    const auto rows = rows_by_factor(L);
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      if (rows[static_cast<std::size_t>(f)] != rows0[static_cast<std::size_t>(f)])
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "Guttman metric map: all groups must have the same simple-structure "
+            "indicator blocks"});
+    }
+    auto sb = standardized_score_block(L, S[b], which);
+    if (!sb.has_value()) return std::unexpected(sb.error());
+    scores.push_back(std::move(*sb));
+  }
+
+  // Lunit[b] is the constrained loading matrix in the standardized score basis
+  // U_b = B_b'Y_H, diag Cov(U_b) = I. The per-factor solve is the best rank-one
+  // approximation of the group-by-indicator cross-covariances C_i,b =
+  // Cov(Y_i, U_f). This estimates a common loading shape and group-specific
+  // factor scale before any marker chart is chosen for output.
+  std::vector<Eigen::MatrixXd> Lunit;
+  Lunit.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b)
+    Lunit.push_back(Eigen::MatrixXd::Zero(nvar, nfac));
+
+  for (Eigen::Index f = 0; f < nfac; ++f) {
+    const auto& rr = rows0[static_cast<std::size_t>(f)];
+    if (rr.empty())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman metric map: factor without indicators"});
+
+    Eigen::MatrixXd Cfg(static_cast<Eigen::Index>(rr.size()),
+                        static_cast<Eigen::Index>(nblk));
+    for (Eigen::Index a = 0; a < Cfg.rows(); ++a) {
+      const Eigen::Index i = rr[static_cast<std::size_t>(a)];
+      for (std::size_t b = 0; b < nblk; ++b)
+        Cfg(a, static_cast<Eigen::Index>(b)) = scores[b].C(i, f);
+    }
+
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(Cfg, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    if (svd.singularValues().size() == 0 || svd.singularValues()(0) <= 0.0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman metric map: zero rank loading-shape block"});
+    Eigen::VectorXd shape = svd.matrixU().col(0);
+    Eigen::VectorXd scale = svd.singularValues()(0) * svd.matrixV().col(0);
+
+    const std::int16_t mk0 = L0.marker_ov[static_cast<std::size_t>(f)];
+    Eigen::Index marker_pos = -1;
+    for (Eigen::Index a = 0; a < static_cast<Eigen::Index>(rr.size()); ++a) {
+      if (rr[static_cast<std::size_t>(a)] == mk0) {
+        marker_pos = a;
+        break;
+      }
+    }
+    if (marker_pos < 0 || std::abs(shape(marker_pos)) < 1e-12)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman metric map: marker has near-zero loading shape"});
+    if (shape(marker_pos) < 0.0) {
+      shape = -shape;
+      scale = -scale;
+    }
+
+    for (Eigen::Index a = 0; a < static_cast<Eigen::Index>(rr.size()); ++a) {
+      const Eigen::Index i = rr[static_cast<std::size_t>(a)];
+      for (std::size_t b = 0; b < nblk; ++b)
+        Lunit[b](i, f) = shape(a) * scale(static_cast<Eigen::Index>(b));
+    }
+  }
+
+  std::vector<BlockGuttman> out;
+  out.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    Eigen::VectorXd marker(nfac);
+    Eigen::MatrixXd Lambda = Eigen::MatrixXd::Zero(nvar, nfac);
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
+      if (mk < 0 || mk >= nvar)
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "Guttman metric map: factor without a marker indicator"});
+      marker(f) = Lunit[b](mk, f);
+      if (std::abs(marker(f)) < 1e-10)
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "Guttman metric map: near-zero marker loading"});
+      Lambda.col(f) = Lunit[b].col(f) / marker(f);
+    }
+
+    Eigen::MatrixXd Phi(nfac, nfac);
+    for (Eigen::Index f = 0; f < nfac; ++f)
+      for (Eigen::Index g = 0; g < nfac; ++g)
+        Phi(f, g) = marker(f) * scores[b].P(f, g) * marker(g);
+
+    const Eigen::MatrixXd common = Lunit[b] * scores[b].P * Lunit[b].transpose();
+    Eigen::VectorXd psi(nvar);
+    for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S[b](i, i) - common(i, i);
+    out.push_back(BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)});
+  }
+  return out;
 }
 
 // latent column index → block layout's factor ordinal, precomputed per block.
@@ -423,6 +623,55 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
     out.Lambda.push_back(std::move(gb->Lambda));
     out.Phi.push_back(std::move(gb->Phi));
     out.psi.push_back(std::move(gb->psi));
+  }
+  return out;
+}
+
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                            const data::SampleStats& samp, NonIterativeEstimator which) {
+  if (rep.form != model::RepForm::PureCFA)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "non-iterative metric CFA: pure-CFA models only"});
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "non-iterative metric CFA: model evaluator build failed"});
+  if (samp.S.empty())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "non-iterative metric CFA: empty sample stats"});
+
+  const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
+  if (layouts.empty())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "non-iterative metric CFA: no CFA block found"});
+  if (layouts.size() != samp.S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "non-iterative metric CFA: block / sample-stats count mismatch"});
+
+  for (const auto& L : layouts) {
+    if (L.n_factor() == 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative metric CFA: no factors"});
+    if (L.crossloadings)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative metric CFA: cross-loadings are out of scope"});
+    if (!L.all_have_marker)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative metric CFA: every factor needs a marker"});
+  }
+
+  auto blocks = fit_metric_standardized_blocks(layouts, samp.S, which);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  auto theta = assemble_theta(*ev, layouts, *blocks, samp);
+  if (!theta.has_value()) return std::unexpected(theta.error());
+
+  NonIterativeFit out;
+  out.theta = std::move(*theta);
+  for (auto& gb : *blocks) {
+    out.Lambda.push_back(std::move(gb.Lambda));
+    out.Phi.push_back(std::move(gb.Phi));
+    out.psi.push_back(std::move(gb.psi));
   }
   return out;
 }

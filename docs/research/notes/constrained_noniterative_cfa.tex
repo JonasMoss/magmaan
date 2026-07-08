@@ -51,7 +51,12 @@ after a configural non-iterative map has produced \(\hat\theta\) and
 \(\Om\)-metric projection of the selected configural map. It is not the
 alternative population target that would impose loading equalities inside the
 \(H\)-based reconstruction regression itself; that regression-constrained map is
-a different off-model estimator.
+a different off-model estimator. The first such estimator-side target is now
+implemented separately as \texttt{fit\_noniterative\_cfa\_metric}: it estimates a
+common standardized loading shape inside the \(H\)-based reconstruction and then
+converts the result to the requested marker chart. Consequently its chart
+diagnostics belong with the Guttman reconstruction note rather than with the
+\(\Om\)-projection Wald theory below.
 
 \section{Multiple groups}
 

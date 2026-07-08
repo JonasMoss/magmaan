@@ -92,7 +92,25 @@ constexpr const char* kTwoFactor =
     "f2 =~ x4 + x5 + x6\n"
     "f1 ~~ f2\n";
 
+constexpr const char* kTwoFactorMarkerX2 =
+    "f1 =~ NA*x1 + 1*x2 + x3\n"
+    "f2 =~ NA*x4 + 1*x5 + x6\n"
+    "f1 ~~ f2\n";
+
 const std::array<double, 6> kLam = {1.0, 0.8, 1.2, 1.0, 0.7, 1.3};
+
+double max_sigma_diff(const ModelEvaluator& a_ev, const Eigen::VectorXd& a_theta,
+                      const ModelEvaluator& b_ev, const Eigen::VectorXd& b_theta) {
+  auto ai = a_ev.sigma(a_theta);
+  auto bi = b_ev.sigma(b_theta);
+  REQUIRE(ai.has_value());
+  REQUIRE(bi.has_value());
+  REQUIRE(ai->sigma.size() == bi->sigma.size());
+  double out = 0.0;
+  for (std::size_t b = 0; b < ai->sigma.size(); ++b)
+    out = std::max(out, (ai->sigma[b] - bi->sigma[b]).cwiseAbs().maxCoeff());
+  return out;
+}
 
 }  // namespace
 
@@ -221,6 +239,55 @@ TEST_CASE("metric invariance: W > 0 when loadings differ, projection equates the
   for (Eigen::Index i = 0; i < svd.singularValues().size(); ++i)
     if (svd.singularValues()(i) > tol) ++rank;
   CHECK(rank == con->Omega_tilde.rows() - con->k);
+}
+
+TEST_CASE("estimator-side metric map recovers equal loading shape on exact population") {
+  auto b = build_mg(kTwoFactor, 2, {GroupEqual::Loadings});
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
+  samp.n_obs = {500, 600};
+
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto fit = ef::fit_noniterative_cfa_metric(b.pt, b.rep, samp, which);
+    REQUIRE_OK(fit);
+
+    const auto locs = ev->param_locations();
+    for (std::size_t k = 0; k < locs.size(); ++k) {
+      const auto& loc = locs[k];
+      if (loc.mat == magmaan::model::MatId::Lambda) {
+        CHECK(fit->theta(static_cast<Eigen::Index>(k)) ==
+              doctest::Approx(kLam[static_cast<std::size_t>(loc.row)]).epsilon(1e-8));
+      }
+    }
+  }
+}
+
+TEST_CASE("estimator-side metric map is marker-chart invariant off the surface") {
+  auto bx1 = build_mg(kTwoFactor, 2, {GroupEqual::Loadings});
+  auto bx2 = build_mg(kTwoFactorMarkerX2, 2, {GroupEqual::Loadings});
+  auto ev1 = ModelEvaluator::build(bx1.pt, bx1.rep);
+  auto ev2 = ModelEvaluator::build(bx2.pt, bx2.rep);
+  REQUIRE(ev1.has_value());
+  REQUIRE(ev2.has_value());
+
+  const std::array<double, 6> lam2 = {1.0, 0.95, 1.2, 1.0, 0.7, 1.05};
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(lam2, 1.4, 0.2, 0.7)};
+  samp.n_obs = {500, 600};
+
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto fit1 = ef::fit_noniterative_cfa_metric(bx1.pt, bx1.rep, samp, which);
+    auto fit2 = ef::fit_noniterative_cfa_metric(bx2.pt, bx2.rep, samp, which);
+    REQUIRE_OK(fit1);
+    REQUIRE_OK(fit2);
+    CHECK(max_sigma_diff(*ev1, fit1->theta, *ev2, fit2->theta) < 1e-8);
+  }
 }
 
 TEST_CASE("mean structure: configural intercepts recover nu_g = m_g exactly") {

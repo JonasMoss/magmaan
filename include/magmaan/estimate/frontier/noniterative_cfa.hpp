@@ -24,10 +24,10 @@
 // simple-structure indicators. Mean structure is supported for free intercepts
 // with latent means fixed at 0 (ν_g = m_g saturated); free latent means (true
 // scalar invariance) are handled by the reference-group mean map downstream, not
-// here. Cross-group / general linear equality constraints (measurement
-// invariance, tau-equivalence, ...) are imposed downstream by the
-// minimum-distance projection in robust::frontier, not here: the map always
-// produces the configural (per-block unconstrained) θ̂. The
+// here. The ordinary map produces the configural (per-block unconstrained) θ̂;
+// `fit_noniterative_cfa_metric()` is the separate Sigma/H-level metric-shape
+// constrained estimator. General inference-side linear equality constraints are
+// imposed downstream by the minimum-distance projection in robust::frontier. The
 // `NonIterativeEstimator` enum is the generality seam: FABIN2/Bentler-1982/
 // James-Stein/MIIV-2SLS slot in as further maps without any change to the
 // residual-based inference bundle that consumes (τ, J).
@@ -69,6 +69,19 @@ fit_noniterative_cfa(const spec::LatentStructure& pt,
                      const model::MatrixRep& rep,
                      const data::SampleStats& samp,
                      NonIterativeEstimator which = NonIterativeEstimator::Guttman);
+
+// Sigma/H-level metric-shape constrained estimator. This is an estimator map,
+// not an inference projection: it estimates a common standardized loading shape
+// across groups by a per-factor rank-one regression solve, then converts that
+// common shape into the marker chart carried by `pt`. The resulting full
+// configural θ vector satisfies marker-chart loading equality rows when
+// `group.equal = "loadings"` is present, but the fitted common covariance is
+// independent of which nonzero marker indicator is used for output.
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa_metric(const spec::LatentStructure& pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            NonIterativeEstimator which = NonIterativeEstimator::Guttman);
 
 // J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
 // p*_block = p_block(p_block+1)/2), by central finite differences of the

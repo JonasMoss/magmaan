@@ -70,7 +70,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 52 | [noniterative-cfa-tests](52-noniterative-cfa-tests/report.qmd) | benchmark | active | Are delta-method SEs, residual goodness-of-fit, and difference tests for the closed-form Guttman CFA estimator calibrated in finite samples, and at what efficiency cost vs ML, across normal / independent-generator / ordinal-as-continuous data? |
 | 54 | [noniterative-invariance](54-noniterative-invariance/report.qmd) | benchmark | active | Are the closed-form Guttman metric (projection Wald) and scalar (reference-group mean map) measurement-invariance tests calibrated and powered vs the ML likelihood-ratio test, and does the empirical fourth-moment matrix restore the level under non-normal data? |
 | 55 | [guttman-communality-estimators](55-guttman-communality-estimators/report.qmd) | benchmark | active | Which closed-form communality rule should the Guttman CFA paper recommend once RS, ILM, plug-in triad GMM, magmaan NT ML, and an ordinal Pearson-code stress arm are compared? |
-| 56 | [noniterative-constraint-charts](56-noniterative-constraint-charts/report.qmd) | probe | active | Does the closed-form metric-invariance projection stay invariant to arbitrary marker-chart choices, on and off the constraint surface? |
+| 56 | [noniterative-constraint-charts](56-noniterative-constraint-charts/report.qmd) | probe | active | Does the estimator-side metric Guttman map stay invariant to arbitrary marker-chart choices, on and off the constraint surface? |
 
 ## Archived
 

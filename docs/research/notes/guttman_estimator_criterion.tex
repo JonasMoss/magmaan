@@ -1433,6 +1433,14 @@ For one covariance block, the implementation can be checked in this order:
   \eqref{eq:constrained-loading-space}, or by the weighted version
   \eqref{eq:weighted-loading-space} if a row metric \(V_Y\) is part of the
   estimator definition.
+\item Implementation note. The current \texttt{magmaan}
+  \texttt{fit\_noniterative\_cfa\_metric} path implements the closed-form
+  multi-group metric version for simple-structure CFA: for each factor it forms
+  the standardized-score cross-covariance matrix across groups and takes its
+  best rank-one approximation. This estimates a common loading shape and
+  group-specific scales before converting to the output marker chart, so the
+  fitted common covariance is invariant to which nonzero indicator is chosen as
+  marker.
 \item If the constraints are stated in another identification chart, transform
   the score basis with that chart as in Proposition
   \ref{prop:chart-equivariance}. For marker-linear constraints, decide whether

@@ -30,11 +30,11 @@ max_col <- function(col) max(raw[[col]], na.rm = TRUE)
 
 ## Question
 
-The constrained estimator is an $\Omega$-metric projection of a configural
-closed-form estimate onto the linear equalities carried by the lavaanified
-partable. If those equalities are just a chart expression of the same
-measurement-invariance surface, an arbitrary marker choice should change the
-numeric coordinates but not the fitted covariance matrix or the Wald statistic.
+The estimator-side metric Guttman map estimates a common standardized loading
+shape across groups and only then converts the result into the marker chart
+carried by the lavaanified partable. If the construction is chart-correct, an
+arbitrary marker choice should change the numeric coordinates but not the
+Sigma/H-level constrained fitted covariance matrix.
 
 This experiment compares two equivalent marker charts:
 
@@ -42,34 +42,29 @@ This experiment compares two equivalent marker charts:
 - `marker_x2x5`: explicit markers `x2` and `x5`.
 
 Both charts use the same observed covariance matrices, the same declared
-indicator-factor blocks, the same non-iterative estimator, and the same
-normal-theory delta covariance construction. We compare the chart-invariant
-objects: the configural implied covariance, the constrained implied covariance,
-and the metric-invariance Wald statistic. The raw parameter vectors are also
+indicator-factor blocks, and the same non-iterative estimator. We compare the
+chart-invariant objects: the configural implied covariance and the estimator-
+side metric-constrained implied covariance. The raw parameter vectors are also
 reported as a control; those should differ because they are chart coordinates.
 
 ## Short Answer
 
-The pure projection algebra is fine, but the current CFA constraint target is
-not fully marker-chart invariant away from the constraint surface.
+The estimator-side metric map passes this marker-chart sanity check. The largest
+chart difference in the configural implied covariance is
+`r fmt(max_col("config_sigma_max_abs_diff"))`; the largest chart difference in
+the metric-constrained implied covariance is
+`r fmt(max_col("metric_sigma_max_abs_diff"))`. Both are roundoff. The coordinate
+vectors still differ, with maximum configural coordinate difference
+`r fmt_fixed(max_col("config_theta_max_abs_diff"))` and maximum metric-map
+coordinate difference `r fmt_fixed(max_col("metric_theta_max_abs_diff"))`, which
+is expected because the two partables use different marker charts.
 
-The separate linear-algebra control passes: projecting in one coordinate system
-and transforming the result agrees with projecting after a nonsingular linear
+The separate linear-algebra control is retained as a guardrail for the old
+inference projection algebra: projecting in one coordinate system and
+transforming the result agrees with projecting after a nonsingular linear
 reparameterization, with maximum transformed-coordinate difference
 `r fmt(lin$projected_theta_max_abs_diff_max)` and maximum Wald difference
 `r fmt(lin$W_abs_diff_max)`.
-
-For CFA, the configural map is chart invariant at the level of implied
-covariances: the largest configural implied-covariance difference is
-`r fmt(max_col("config_sigma_max_abs_diff"))`, while the raw coordinate vectors
-differ by as much as `r fmt_fixed(max_col("raw_theta_max_abs_diff"))`. However,
-the constrained projection depends on the marker chart when the unconstrained
-estimate is off the metric-invariance surface: the largest constrained
-implied-covariance difference is
-`r fmt(max_col("constrained_sigma_max_abs_diff"))`, and the largest
-Wald-statistic difference is `r fmt(max_col("W_abs_diff"))`. On the exact
-invariant population these quantities collapse to roundoff, because the
-projection is a no-op.
 
 ## Chart Comparison
 
@@ -77,22 +72,21 @@ The population rows use exact model covariances with very large `nobs`, so they
 mostly expose algebraic or numerical defects. The finite-sample rows use the
 same random sample covariance in both marker charts. `metric_viol` is
 deliberately off the metric-invariance surface; this is the more important
-case, because projection targets are where chart dependence would show up.
+case, because off-surface constrained targets are where chart dependence would
+show up.
 
 ```{r population-table}
 pop <- raw[raw$source == "population", ]
-pop_out <- pop[c("scenario", "estimator", "k_x1x4", "k_x2x5",
-                 "W_x1x4", "W_x2x5", "W_abs_diff",
+pop_out <- pop[c("scenario", "estimator",
                  "config_sigma_max_abs_diff",
-                 "constrained_sigma_max_abs_diff",
-                 "raw_theta_max_abs_diff")]
-pop_out$W_x1x4 <- fmt_fixed(pop_out$W_x1x4)
-pop_out$W_x2x5 <- fmt_fixed(pop_out$W_x2x5)
-for (nm in c("W_abs_diff", "config_sigma_max_abs_diff",
-             "constrained_sigma_max_abs_diff")) {
+                 "metric_sigma_max_abs_diff",
+                 "config_theta_max_abs_diff",
+                 "metric_theta_max_abs_diff")]
+for (nm in c("config_sigma_max_abs_diff", "metric_sigma_max_abs_diff")) {
   pop_out[[nm]] <- fmt(pop_out[[nm]])
 }
-pop_out$raw_theta_max_abs_diff <- fmt_fixed(pop_out$raw_theta_max_abs_diff)
+pop_out$config_theta_max_abs_diff <- fmt_fixed(pop_out$config_theta_max_abs_diff)
+pop_out$metric_theta_max_abs_diff <- fmt_fixed(pop_out$metric_theta_max_abs_diff)
 knitr::kable(pop_out, row.names = FALSE,
              caption = "Exact-population chart comparison.")
 ```
@@ -100,13 +94,14 @@ knitr::kable(pop_out, row.names = FALSE,
 ```{r finite-summary}
 fin <- sumry[sumry$source == "finite_sample", ]
 cols <- c("scenario", "estimator",
-          "W_abs_diff_max", "W_abs_diff_median",
-          "constrained_sigma_max_abs_diff_max",
-          "constrained_sigma_max_abs_diff_median",
-          "raw_theta_max_abs_diff_median")
+          "config_sigma_max_abs_diff_max",
+          "metric_sigma_max_abs_diff_max",
+          "metric_sigma_max_abs_diff_median",
+          "config_theta_max_abs_diff_median",
+          "metric_theta_max_abs_diff_median")
 fin_out <- fin[cols]
 for (nm in setdiff(names(fin_out), c("scenario", "estimator"))) {
-  fin_out[[nm]] <- if (grepl("raw_theta", nm)) fmt_fixed(fin_out[[nm]]) else fmt(fin_out[[nm]])
+  fin_out[[nm]] <- if (grepl("theta", nm)) fmt_fixed(fin_out[[nm]]) else fmt(fin_out[[nm]])
 }
 knitr::kable(fin_out, row.names = FALSE,
              caption = "Finite-sample chart comparison. Max/median are over replications.")
@@ -128,25 +123,15 @@ knitr::kable(lin_out, row.names = FALSE,
 
 ## Interpretation
 
-This is the important distinction:
-
-- If the transformation is genuinely linear in the estimated coordinates, the
-  minimum-distance projection is equivariant.
-- The configural non-iterative CFA map itself is fine under a marker change:
-  the implied covariance is unchanged up to roundoff.
-- The marker-to-marker chart change is nonlinear in the loading coordinates.
-  Therefore an $\Omega$-metric projection onto linear marker-chart equalities is
-  only guaranteed to agree on the constraint surface. Under sampling noise or
-  fixed misspecification, different marker charts induce different local
-  distances to the same curved covariance-level surface.
-
-So this experiment does not validate marker-invariant constrained targets for
-the current implementation. It gives a concrete diagnostic: if we want an
-off-model constrained Guttman estimator that is genuinely independent of marker
-choice, the projection should be formulated in a chart-free object (for example
-common fitted covariance / loading orbit) or with an explicit moving-chart
-construction, not as a plain coordinate projection in whichever marker chart
-the partable happens to use.
+This is the distinction the earlier Omega-projection version of this experiment
+missed. The inference-side `noniterative_cfa_constrained()` function is an
+Omega-metric projection of a configural estimator and is a valid Wald/minimum-
+distance algebra object, but it is not the Sigma/H-level constrained estimator.
+The estimator-side map tested here imposes the metric loading-shape constraint
+inside the reconstruction, before marker output coordinates are chosen. That is
+why the coordinate vectors differ while the implied metric-constrained
+covariances agree at roundoff, even under the deliberately misspecified
+`metric_viol` population.
 
 ## Reproduce
 
