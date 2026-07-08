@@ -71,7 +71,9 @@ Does the standardized Guttman map behave like a practical CFA estimator on a
 familiar three-factor Holzinger-Swineford problem? We compare it with
 normal-theory ML and ULS on two targets: marker-chart free parameters and the
 whole reconstructed covariance objects. Residual goodness-of-fit and the nested
-restriction `visual ~~ 0*speed` are included as first test probes.
+restriction `visual ~~ 0*speed` are included as first test probes. The
+`misspecified` scenario adds a hidden `x1 ~~ x2` residual covariance so GOF can
+be checked for power/consistency, not just size.
 
 ## Short answer
 
@@ -98,8 +100,9 @@ Gamma, compared with
 `r pct(lookup(est, "uls_emp", "loading", col = "coverage"))` for ULS.
 
 For tests, the residual GOF route is available for Guttman and ML, while ULS is
-included for the nested profile test. In the null cell, the nested rejection
-rates at n = `r largest_n` are `r pct(test_lookup("guttman_std_ntml", "nested_visual_speed_zero", "null"))`
+included with Browne's residual NT statistic for exact-fit GOF and with the
+continuous-LS profile test for the nested restriction. In the null cell, the
+nested rejection rates at n = `r largest_n` are `r pct(test_lookup("guttman_std_ntml", "nested_visual_speed_zero", "null"))`
 for Guttman with the NTML residual metric, `r pct(test_lookup("ml_nt", "nested_visual_speed_zero", "null"))`
 for ML, and `r pct(test_lookup("uls_emp", "nested_visual_speed_zero", "null"))`
 for ULS. In the alternative cell, the corresponding powers are
@@ -107,13 +110,23 @@ for ULS. In the alternative cell, the corresponding powers are
 `r pct(test_lookup("ml_nt", "nested_visual_speed_zero", "alternative"))`, and
 `r pct(test_lookup("uls_emp", "nested_visual_speed_zero", "alternative"))`.
 
+For exact-fit GOF, the relevant consistency check is the misspecified cell. At
+n = `r largest_n`, rejection rates there are
+`r pct(test_lookup("guttman_std_ntml", "gof", "misspecified"))` for Guttman
+with the NTML metric, `r pct(test_lookup("guttman_std_uls", "gof", "misspecified"))`
+for Guttman with the ULS metric, `r pct(test_lookup("ml_nt", "gof", "misspecified"))`
+for ML, and `r pct(test_lookup("uls_emp", "gof", "misspecified"))` for ULS
+Browne GOF. The smoke run is too small for stable rates; the table below is
+mainly a plumbing and monotonicity check.
+
 ## Evidence
 
 ### Real-data snapshot
 
 The table uses the actual Holzinger-Swineford data only as a sanity check. The
 simulation below uses an ML-fitted population from the same data, with
-`visual ~~ speed` either retained or set to zero.
+`visual ~~ speed` retained, set to zero, or retained with an added hidden
+`x1 ~~ x2` residual covariance.
 
 ```{r snapshot-table}
 keep <- snapshot$param %in% c("visual =~ x2", "visual =~ x3",
@@ -196,17 +209,39 @@ knitr::kable(do.call(rbind, rows), row.names = FALSE)
 
 ### Tests
 
-Rejection rates for exact-fit GOF and the nested `visual ~~ 0*speed` restriction.
-The null scenario sets that factor covariance to zero; the alternative scenario
-uses the value from the ML fit to the observed Holzinger-Swineford data.
+Rejection rates for exact-fit GOF by sample size. The null and alternative
+scenarios are both correct for the H1 CFA, so GOF should stay near alpha there.
+The misspecified scenario adds an unmodeled `x1 ~~ x2` residual covariance, so
+GOF should reject more often as n increases.
+
+```{r gof-table}
+show_gof <- tests[tests$test == "gof", ]
+show_gof <- show_gof[show_gof$estimator %in%
+                       c("guttman_std_ntml", "guttman_std_uls", "ml_nt", "uls_emp"), ]
+show_gof$Estimator <- label_est[show_gof$estimator]
+show_gof$Rejection <- pct(show_gof$rejection_rate)
+show_gof$`Mean p` <- fmt(show_gof$mean_p)
+show_gof$`Finite` <- paste0(show_gof$n_finite, "/", show_gof$n_rows)
+show_gof <- show_gof[order(show_gof$scenario, show_gof$n, show_gof$estimator), ]
+knitr::kable(show_gof[, c("scenario", "n", "Estimator", "Rejection",
+                          "Mean p", "Finite")],
+             col.names = c("Scenario", "n", "Estimator", "Rejection",
+                           "Mean p", "Finite"),
+             row.names = FALSE)
+```
+
+Nested rejection rates for the `visual ~~ 0*speed` restriction at the largest
+simulated sample size. The null scenario sets that factor covariance to zero;
+the alternative and misspecified scenarios use the value from the ML fit to the
+observed Holzinger-Swineford data.
 
 ```{r test-table}
 show_tests <- tests[tests$n == largest_n &
-                    tests$test %in% c("gof", "nested_visual_speed_zero"), ]
+                    tests$test == "nested_visual_speed_zero", ]
 show_tests <- show_tests[show_tests$estimator %in%
                            c("guttman_std_ntml", "guttman_std_uls", "ml_nt", "uls_emp"), ]
 show_tests$Estimator <- label_est[show_tests$estimator]
-show_tests$Test <- ifelse(show_tests$test == "gof", "GOF", "Nested")
+show_tests$Test <- "Nested"
 show_tests$Rejection <- pct(show_tests$rejection_rate)
 show_tests$`Mean p` <- fmt(show_tests$mean_p)
 show_tests$`Negative stat` <- pct(show_tests$negative_stat_rate)
@@ -244,12 +279,15 @@ knitr::kable(d[, c("scenario", "Estimator", "OK", "Converged", "Improper")],
   success, convergence, and improper-solution rates.
 - The population is seeded by fitting ML to the observed Holzinger-Swineford
   data. That makes the numbers interpretable, but it is one population.
+- Parameter and whole-estimator RMSE rows are omitted for the misspecified
+  scenario, because the relevant large-sample target would be estimator-specific
+  pseudo-true parameters.
 - Guttman intervals use empirical Gamma. In this setup the NTML and ULS residual
   metrics give the same parameter covariance, so the NTML/ULS split is reported
   only for residual and nested tests. ULS intervals use the continuous-LS
   sandwich. ML intervals use the ordinary expected-information covariance.
-- ULS exact-fit GOF is not reported here; the first pass uses ULS for estimates,
-  CIs, and the nested continuous-LS profile test.
+- ULS exact-fit GOF uses Browne's residual NT statistic, matching magmaan's
+  continuous-LS GOF convention for ULS.
 
 ## Reproduce
 

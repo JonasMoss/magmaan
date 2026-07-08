@@ -17,14 +17,15 @@ usage <- function() {
     "Usage: Rscript run_experiment.R [options]\n\n",
     "Holzinger-Swineford-shaped comparison of standardized augmented Guttman ILS\n",
     "against normal-theory ML and ULS: estimates, Wald intervals, GOF tests,\n",
-    "and a nested visual~~speed restriction.\n\n",
+    "and a nested visual~~speed restriction. The misspecified scenario adds\n",
+    "an unmodeled x1~~x2 residual covariance for GOF consistency checks.\n\n",
     "Options:\n",
     "  --smoke              Quick run. Default.\n",
     "  --full               Larger default grid.\n",
     "  --reps N             Replications per cell. Smoke: 12; full: 500.\n",
-    "  --n LIST             Comma-separated sample sizes. Smoke: 150,300;\n",
-    "                       full: 150,300,600.\n",
-    "  --scenarios LIST     null,alternative. Default: both.\n",
+    "  --n LIST             Comma-separated sample sizes. Smoke: 150,600;\n",
+    "                       full: 150,300,600,1200.\n",
+    "  --scenarios LIST     null,alternative,misspecified. Default: all.\n",
     "  --cores N            mclapply cores. Default: 1.\n",
     "  --alpha X            Test and CI alpha. Default: 0.05.\n",
     "  --seed-base N        Base RNG seed. Default: 20260708.\n",
@@ -39,8 +40,8 @@ parse_args <- function(args) {
   opts <- list(
     smoke = TRUE,
     reps = 12L,
-    n = c(150L, 300L),
-    scenarios = c("null", "alternative"),
+    n = c(150L, 600L),
+    scenarios = c("null", "alternative", "misspecified"),
     cores = 1L,
     alpha = 0.05,
     seed_base = 20260708L,
@@ -64,7 +65,7 @@ parse_args <- function(args) {
     } else if (a == "--full") {
       opts$smoke <- FALSE
       if (!"reps" %in% explicit) opts$reps <- 500L
-      if (!"n" %in% explicit) opts$n <- c(150L, 300L, 600L)
+      if (!"n" %in% explicit) opts$n <- c(150L, 300L, 600L, 1200L)
     } else if (a == "--reps") {
       opts$reps <- as.integer(take(a)); explicit <- c(explicit, "reps")
     } else if (grepl("^--reps=", a)) {
@@ -103,7 +104,7 @@ parse_args <- function(args) {
     }
     i <- i + 1L
   }
-  bad <- setdiff(opts$scenarios, c("null", "alternative"))
+  bad <- setdiff(opts$scenarios, c("null", "alternative", "misspecified"))
   if (length(bad)) stop("unknown scenarios: ", paste(bad, collapse = ","), call. = FALSE)
   if (!is.finite(opts$reps) || opts$reps < 1L) stop("--reps must be positive", call. = FALSE)
   if (any(!is.finite(opts$n)) || any(opts$n < 30L)) stop("--n values must be at least 30", call. = FALSE)
@@ -170,6 +171,12 @@ uls_se <- function(fit, X) {
   core$robust_se_raw_fit(fit, X, bread = "expected")$se
 }
 
+uls_gof <- function(fit, ss) {
+  stat <- core$infer_browne_residual_nt(fit)$statistic
+  df <- core$infer_df_stat(fit$partable, ss)
+  list(T = stat, df = df, p = stats::pchisq(stat, df, lower.tail = FALSE))
+}
+
 guttman_inf <- function(fit, X, discrepancy) {
   magmaan::noniterative_cfa_inference(
     fit, discrepancy = discrepancy, gamma = "empirical", data = X)
@@ -224,17 +231,28 @@ population_from_fit <- function(fit, scenario) {
       Theta[lhs] <- value
     }
   }
+  misspec_resid_cov <- 0
+  target_valid <- TRUE
   if (scenario == "null") {
     Phi["visual", "speed"] <- 0
     Phi["speed", "visual"] <- 0
+  } else if (scenario == "misspecified") {
+    target_valid <- FALSE
   } else if (scenario != "alternative") {
     stop("unknown scenario: ", scenario, call. = FALSE)
   }
   Sigma <- Lambda %*% Phi %*% t(Lambda) + diag(Theta, length(Theta))
+  if (scenario == "misspecified") {
+    misspec_resid_cov <- 0.30 * sqrt(Theta["x1"] * Theta["x2"])
+    Sigma["x1", "x2"] <- Sigma["x1", "x2"] + misspec_resid_cov
+    Sigma["x2", "x1"] <- Sigma["x1", "x2"]
+  }
   dimnames(Sigma) <- list(ov, ov)
   ev <- eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values
   if (min(ev) <= 1e-8) stop("population covariance is not positive definite", call. = FALSE)
-  list(Lambda = Lambda, Phi = Phi, Theta = Theta, Sigma = Sigma, scenario = scenario)
+  list(Lambda = Lambda, Phi = Phi, Theta = Theta, Sigma = Sigma,
+       scenario = scenario, target_valid = target_valid,
+       misspec_resid_cov = misspec_resid_cov)
 }
 
 theta_target <- function(pt, pop) {
@@ -325,10 +343,12 @@ ok_diag <- function(rep_id, scenario, n, stage, estimator, fit) {
 }
 
 run_rep <- function(rep_id, scenario, n, pop) {
-  seed <- opts$seed_base + rep_id + 10000L * match(scenario, c("null", "alternative")) + n
+  seed <- opts$seed_base + rep_id +
+    10000L * match(scenario, c("null", "alternative", "misspecified")) + n
   X <- draw_mvn(n, pop$Sigma, seed)
   ss <- sample_stats(X)
-  target <- theta_target(pt_h1, pop)
+  target_valid <- isTRUE(pop$target_valid)
+  target <- if (target_valid) theta_target(pt_h1, pop) else NULL
 
   est_rows <- list()
   test_rows <- list()
@@ -345,7 +365,7 @@ run_rep <- function(rep_id, scenario, n, pop) {
       gi <- safe_eval(guttman_inf(g1$value, X, disc))
       label <- paste0("guttman_std_", disc)
       if (gi$ok) {
-        if (disc == "ntml") {
+        if (disc == "ntml" && target_valid) {
           est_rows <- c(est_rows, list(estimate_rows(
             rep_id, scenario, n, "guttman_std", g1$value$theta, gi$value$se,
             target)))
@@ -381,10 +401,10 @@ run_rep <- function(rep_id, scenario, n, pop) {
   else diag_rows <- c(diag_rows, list(error_diag(rep_id, scenario, n, "H0", "ml_nt", m0$error)))
   if (m1$ok && converged(m1$value)) {
     ms <- safe_eval(ml_se(m1$value))
-    if (ms$ok) {
+    if (ms$ok && target_valid) {
       est_rows <- c(est_rows, list(estimate_rows(
         rep_id, scenario, n, "ml_nt", m1$value$theta, ms$value, target)))
-    } else {
+    } else if (!ms$ok) {
       diag_rows <- c(diag_rows, list(error_diag(rep_id, scenario, n, "se", "ml_nt", ms$error)))
     }
     T1 <- core$infer_chi2_stat(ss, m1$value$fmin)
@@ -411,11 +431,19 @@ run_rep <- function(rep_id, scenario, n, pop) {
   else diag_rows <- c(diag_rows, list(error_diag(rep_id, scenario, n, "H0", "uls_emp", u0$error)))
   if (u1$ok && converged(u1$value)) {
     us <- safe_eval(uls_se(u1$value, X))
-    if (us$ok) {
+    if (us$ok && target_valid) {
       est_rows <- c(est_rows, list(estimate_rows(
         rep_id, scenario, n, "uls_emp", u1$value$theta, us$value, target)))
-    } else {
+    } else if (!us$ok) {
       diag_rows <- c(diag_rows, list(error_diag(rep_id, scenario, n, "se", "uls_emp", us$error)))
+    }
+    ug <- safe_eval(uls_gof(u1$value, ss))
+    if (ug$ok) {
+      test_rows <- c(test_rows, list(test_row(
+        rep_id, scenario, n, "uls_emp", "gof", ug$value$T, ug$value$df,
+        ug$value$p)))
+    } else {
+      diag_rows <- c(diag_rows, list(error_diag(rep_id, scenario, n, "gof", "uls_emp", ug$error)))
     }
     if (u0$ok && converged(u0$value)) {
       ud <- safe_eval(core$continuous_ls_profile_lrt(u1$value, u0$value, list(X)))
@@ -690,6 +718,8 @@ pop_rows <- do.call(rbind, lapply(populations, function(pop) {
     scenario = pop$scenario,
     min_eigen = min(eigen(pop$Sigma, symmetric = TRUE, only.values = TRUE)$values),
     visual_speed_cov = pop$Phi["visual", "speed"],
+    misspec_x1_x2_resid_cov = pop$misspec_resid_cov,
+    target_valid = pop$target_valid,
     stringsAsFactors = FALSE
   )
 }))
