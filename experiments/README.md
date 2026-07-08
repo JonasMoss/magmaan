@@ -72,6 +72,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 55 | [guttman-communality-estimators](55-guttman-communality-estimators/report.qmd) | benchmark | active | Which closed-form communality rule should the Guttman CFA paper recommend once RS, ILM, plug-in triad GMM, magmaan NT ML, and an ordinal Pearson-code stress arm are compared? |
 | 56 | [noniterative-constraint-charts](56-noniterative-constraint-charts/report.qmd) | probe | active | Does the estimator-side metric Guttman map stay invariant to arbitrary marker-chart choices, on and off the constraint surface? |
 | 57 | [guttman-standardized-hs](57-guttman-standardized-hs/report.qmd) | benchmark | active | On a Holzinger-Swineford-shaped CFA, how do standardized augmented Guttman ILS estimates, intervals, and tests compare with NTML and ULS? |
+| 58 | [guttman-rmse-coverage](58-guttman-rmse-coverage/report.qmd) | benchmark | active | Across normal, independent-generator, and Pearson-code categorical CFA simulations, how do configural and constrained Guttman maps compare with NTML and ULS on RMSE, coverage, failures, and timing? |
 
 ## Archived
 
