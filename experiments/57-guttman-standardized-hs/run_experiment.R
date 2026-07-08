@@ -118,6 +118,7 @@ fit_control <- list(max_iter = opts$ml_max_iter, ftol = 1e-11, gtol = 1e-8)
 
 factors <- c("visual", "textual", "speed")
 ov <- paste0("x", 1:9)
+markers <- c(visual = "x1", textual = "x4", speed = "x7")
 model_h1 <- paste(
   "visual  =~ x1 + x2 + x3",
   "textual =~ x4 + x5 + x6",
@@ -272,6 +273,9 @@ estimate_rows <- function(rep_id, scenario, n, estimator, theta, se, target) {
     n = n,
     estimator = estimator,
     free = param_info$free,
+    lhs = param_info$lhs,
+    op = param_info$op,
+    rhs = param_info$rhs,
     param = param_info$param,
     group = param_info$group,
     estimate = theta,
@@ -456,6 +460,38 @@ summarise_estimates <- function(x) {
   do.call(rbind, rows)
 }
 
+summarise_estimates_joint <- function(x, baseline = "ml_nt") {
+  if (!nrow(x)) return(data.frame())
+  base <- x[x$estimator == baseline,
+            c("scenario", "n", "rep", "free", "param", "group", "error", "finite")]
+  if (!nrow(base)) return(data.frame())
+  names(base)[names(base) == "error"] <- "baseline_error"
+  names(base)[names(base) == "finite"] <- "baseline_finite"
+  j <- merge(x, base, by = c("scenario", "n", "rep", "free", "param", "group"))
+  if (!nrow(j)) return(data.frame())
+  key <- interaction(j$scenario, j$n, j$estimator, j$group, drop = TRUE, sep = "\r")
+  rows <- lapply(split(j, key), function(d) {
+    ok <- d$finite & d$baseline_finite
+    rmse <- sqrt(mean(d$error[ok]^2, na.rm = TRUE))
+    base_rmse <- sqrt(mean(d$baseline_error[ok]^2, na.rm = TRUE))
+    data.frame(
+      scenario = d$scenario[[1]],
+      n = d$n[[1]],
+      estimator = d$estimator[[1]],
+      baseline = baseline,
+      group = d$group[[1]],
+      n_rows = nrow(d),
+      n_joint_rows = sum(ok),
+      n_joint_reps = length(unique(d$rep[ok])),
+      rmse = rmse,
+      baseline_rmse = base_rmse,
+      rmse_ratio = rmse / base_rmse,
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
 summarise_tests <- function(x) {
   if (!nrow(x)) return(data.frame())
   key <- interaction(x$scenario, x$n, x$estimator, x$test, drop = TRUE, sep = "\r")
@@ -471,6 +507,132 @@ summarise_tests <- function(x) {
       rejection_rate = mean(d$reject[ok], na.rm = TRUE),
       mean_p = mean(d$p[ok], na.rm = TRUE),
       negative_stat_rate = mean(d$statistic[ok] < 0, na.rm = TRUE),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
+moments_from_rows <- function(d, value_col) {
+  Lambda <- matrix(0, length(ov), length(factors), dimnames = list(ov, factors))
+  Phi <- matrix(NA_real_, length(factors), length(factors),
+                dimnames = list(factors, factors))
+  Theta <- stats::setNames(rep(NA_real_, length(ov)), ov)
+  for (f in factors) Lambda[markers[[f]], f] <- 1
+
+  for (i in seq_len(nrow(d))) {
+    lhs <- d$lhs[[i]]
+    op <- d$op[[i]]
+    rhs <- d$rhs[[i]]
+    value <- d[[value_col]][[i]]
+    if (op == "=~" && lhs %in% factors && rhs %in% ov) {
+      Lambda[rhs, lhs] <- value
+    } else if (op == "~~" && lhs %in% factors && rhs %in% factors) {
+      Phi[lhs, rhs] <- value
+      Phi[rhs, lhs] <- value
+    } else if (op == "~~" && lhs == rhs && lhs %in% ov) {
+      Theta[lhs] <- value
+    }
+  }
+
+  if (anyNA(Phi) || anyNA(Theta) ||
+      !all(is.finite(Lambda)) || !all(is.finite(Phi)) || !all(is.finite(Theta))) {
+    return(NULL)
+  }
+  common <- Lambda %*% Phi %*% t(Lambda)
+  sigma <- common + diag(Theta, length(Theta))
+  list(common = common, sigma = sigma, theta = Theta)
+}
+
+whole_draw_rows <- function(x) {
+  if (!nrow(x)) return(data.frame())
+  key <- interaction(x$scenario, x$n, x$rep, x$estimator, drop = TRUE, sep = "\r")
+  rows <- lapply(split(x, key), function(d) {
+    est <- moments_from_rows(d, "estimate")
+    target <- moments_from_rows(d, "target")
+    ok <- !is.null(est) && !is.null(target)
+    data.frame(
+      scenario = d$scenario[[1]],
+      n = d$n[[1]],
+      rep = d$rep[[1]],
+      estimator = d$estimator[[1]],
+      finite = ok,
+      common_mse = if (ok) mean((est$common - target$common)^2) else NA_real_,
+      sigma_mse = if (ok) mean((est$sigma - target$sigma)^2) else NA_real_,
+      common_diag_mse = if (ok) {
+        mean((diag(est$common) - diag(target$common))^2)
+      } else NA_real_,
+      residual_diag_mse = if (ok) mean((est$theta - target$theta)^2) else NA_real_,
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
+summarise_whole <- function(x) {
+  if (!nrow(x)) return(data.frame())
+  key <- interaction(x$scenario, x$n, x$estimator, drop = TRUE, sep = "\r")
+  rows <- lapply(split(x, key), function(d) {
+    ok <- d$finite
+    data.frame(
+      scenario = d$scenario[[1]],
+      n = d$n[[1]],
+      estimator = d$estimator[[1]],
+      n_reps = nrow(d),
+      n_finite = sum(ok),
+      common_rmse = sqrt(mean(d$common_mse[ok], na.rm = TRUE)),
+      sigma_rmse = sqrt(mean(d$sigma_mse[ok], na.rm = TRUE)),
+      common_diag_rmse = sqrt(mean(d$common_diag_mse[ok], na.rm = TRUE)),
+      residual_diag_rmse = sqrt(mean(d$residual_diag_mse[ok], na.rm = TRUE)),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
+summarise_whole_joint <- function(x, baseline = "ml_nt") {
+  if (!nrow(x)) return(data.frame())
+  base <- x[x$estimator == baseline,
+            c("scenario", "n", "rep", "finite", "common_mse", "sigma_mse",
+              "common_diag_mse", "residual_diag_mse")]
+  if (!nrow(base)) return(data.frame())
+  names(base)[names(base) == "finite"] <- "baseline_finite"
+  names(base)[names(base) == "common_mse"] <- "baseline_common_mse"
+  names(base)[names(base) == "sigma_mse"] <- "baseline_sigma_mse"
+  names(base)[names(base) == "common_diag_mse"] <- "baseline_common_diag_mse"
+  names(base)[names(base) == "residual_diag_mse"] <- "baseline_residual_diag_mse"
+  j <- merge(x, base, by = c("scenario", "n", "rep"))
+  if (!nrow(j)) return(data.frame())
+  key <- interaction(j$scenario, j$n, j$estimator, drop = TRUE, sep = "\r")
+  rows <- lapply(split(j, key), function(d) {
+    ok <- d$finite & d$baseline_finite
+    common_rmse <- sqrt(mean(d$common_mse[ok], na.rm = TRUE))
+    sigma_rmse <- sqrt(mean(d$sigma_mse[ok], na.rm = TRUE))
+    common_diag_rmse <- sqrt(mean(d$common_diag_mse[ok], na.rm = TRUE))
+    residual_diag_rmse <- sqrt(mean(d$residual_diag_mse[ok], na.rm = TRUE))
+    baseline_common_rmse <- sqrt(mean(d$baseline_common_mse[ok], na.rm = TRUE))
+    baseline_sigma_rmse <- sqrt(mean(d$baseline_sigma_mse[ok], na.rm = TRUE))
+    baseline_common_diag_rmse <- sqrt(mean(d$baseline_common_diag_mse[ok], na.rm = TRUE))
+    baseline_residual_diag_rmse <- sqrt(mean(d$baseline_residual_diag_mse[ok], na.rm = TRUE))
+    data.frame(
+      scenario = d$scenario[[1]],
+      n = d$n[[1]],
+      estimator = d$estimator[[1]],
+      baseline = baseline,
+      n_reps = nrow(d),
+      n_joint_reps = sum(ok),
+      common_rmse = common_rmse,
+      baseline_common_rmse = baseline_common_rmse,
+      common_rmse_ratio = common_rmse / baseline_common_rmse,
+      sigma_rmse = sigma_rmse,
+      baseline_sigma_rmse = baseline_sigma_rmse,
+      sigma_rmse_ratio = sigma_rmse / baseline_sigma_rmse,
+      common_diag_rmse = common_diag_rmse,
+      baseline_common_diag_rmse = baseline_common_diag_rmse,
+      common_diag_rmse_ratio = common_diag_rmse / baseline_common_diag_rmse,
+      residual_diag_rmse = residual_diag_rmse,
+      baseline_residual_diag_rmse = baseline_residual_diag_rmse,
+      residual_diag_rmse_ratio = residual_diag_rmse / baseline_residual_diag_rmse,
       stringsAsFactors = FALSE
     )
   })
@@ -567,11 +729,19 @@ test_draws <- if (length(all_tests)) do.call(rbind, all_tests) else data.frame()
 diagnostics <- if (length(all_diagnostics)) do.call(rbind, all_diagnostics) else data.frame()
 
 estimate_summary <- summarise_estimates(estimate_draws)
+estimate_joint_summary <- summarise_estimates_joint(estimate_draws)
+whole_draws <- whole_draw_rows(estimate_draws)
+whole_summary <- summarise_whole(whole_draws)
+whole_joint_summary <- summarise_whole_joint(whole_draws)
 test_summary <- summarise_tests(test_draws)
 diagnostic_summary <- summarise_diagnostics(diagnostics)
 
 write_csv(estimate_draws, file.path(opts$results_dir, "estimate_draws.csv"))
 write_csv(estimate_summary, file.path(opts$results_dir, "estimate_summary.csv"))
+write_csv(estimate_joint_summary, file.path(opts$results_dir, "estimate_joint_summary.csv"))
+write_csv(whole_draws, file.path(opts$results_dir, "whole_draws.csv"))
+write_csv(whole_summary, file.path(opts$results_dir, "whole_summary.csv"))
+write_csv(whole_joint_summary, file.path(opts$results_dir, "whole_joint_summary.csv"))
 write_csv(test_draws, file.path(opts$results_dir, "test_draws.csv"))
 write_csv(test_summary, file.path(opts$results_dir, "test_summary.csv"))
 write_csv(diagnostics, file.path(opts$results_dir, "diagnostics.csv"))
@@ -593,7 +763,9 @@ write_metadata(
 
 cat("Wrote:\n")
 for (nm in c("hs_snapshot.csv", "population.csv", "estimate_draws.csv",
-             "estimate_summary.csv", "test_draws.csv", "test_summary.csv",
-             "diagnostics.csv", "diagnostic_summary.csv", "metadata.csv")) {
+             "estimate_summary.csv", "estimate_joint_summary.csv",
+             "whole_draws.csv", "whole_summary.csv", "whole_joint_summary.csv",
+             "test_draws.csv", "test_summary.csv", "diagnostics.csv",
+             "diagnostic_summary.csv", "metadata.csv")) {
   cat("  ", file.path(opts$results_dir, nm), "\n", sep = "")
 }
