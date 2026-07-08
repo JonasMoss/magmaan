@@ -14,8 +14,11 @@
 #include "magmaan/spec/partable.hpp"
 
 // Non-iterative CFA estimators as covariance maps τ: vech(S) ↦ θ, plus the
-// finite-difference Jacobian J = ∂τ/∂vech(S) that turns any such map into a
-// delta-method-inferable estimator. Unlike the start-value producers in
+// map Jacobian J = ∂τ/∂vech(S) that turns any such map into a
+// delta-method-inferable estimator. The configural Jacobian uses the analytic
+// regular-interior derivative of the Guttman map and falls back to central
+// differences at unsupported boundary/rank-changing points; restricted maps
+// still use finite differences. Unlike the start-value producers in
 // start_values.hpp (which only fill free loadings and clamp), these return a
 // COMPLETE parameter vector (Λ, Φ, ψ) so σ(θ̂) and the residual r = vech(S) −
 // σ(θ̂) are well-defined; the theory is in docs/research/notes/
@@ -56,8 +59,8 @@ composite_weight_name(CompositeWeight composite);
 
 // The pure map τ: vech(samp.S) ↦ full θ̂ (size ev.n_free()). Deterministic given
 // (pt, rep, ev); reads only `samp.S`. `ev` supplies the free-parameter layout
-// (structural, S-independent) and is reused verbatim across the FD perturbations
-// of `estimator_map_jacobian`. Returns an error (never clamps) when the
+// (structural, S-independent) and is reused verbatim by
+// `estimator_map_jacobian`. Returns an error (never clamps) when the
 // interior-point assumptions fail (a factor with < 3 indicators, a singular
 // score covariance, a zero marker loading) or the model is out of scope (a
 // structural part, a cross-loading, a markerless factor, a residual covariance,
@@ -119,8 +122,9 @@ fit_noniterative_cfa_restricted(
     CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
-// p*_block = p_block(p_block+1)/2), by central finite differences of the
-// multi-block map w.r.t. block `block`'s covariance only. Column k is the
+// p*_block = p_block(p_block+1)/2), for the multi-block map w.r.t. block
+// `block`'s covariance only. The regular path is analytic; `rel_step` is used
+// only by the finite-difference fallback. Column k is the
 // derivative w.r.t. the k-th lower-triangle column-major vech(S_block)
 // coordinate. Rows for parameters in other blocks are exactly zero (independent
 // blocks), so the inference layer slices out the rows with
@@ -137,6 +141,20 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
                              CompositeWeight composite =
                                  CompositeWeight::EstimatorDefault);
 
+// Analytic regular-interior configural Jacobian. Unlike
+// `estimator_map_jacobian_block()`, this does not fall back to finite
+// differences when a rank-changing pseudo-inverse or other boundary condition
+// is encountered.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_block_analytic(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    std::size_t block,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault);
+
 // Single-block convenience wrapper (block 0), preserving the original signature.
 fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian(const spec::LatentStructure& pt,
@@ -146,6 +164,15 @@ estimator_map_jacobian(const spec::LatentStructure& pt,
                        NonIterativeEstimator which = NonIterativeEstimator::Guttman,
                        double rel_step = 1e-6,
                        CompositeWeight composite = CompositeWeight::EstimatorDefault);
+
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_analytic(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which = NonIterativeEstimator::Guttman,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
 // Restricted-map analogue of `estimator_map_jacobian_block()`, using
 // `fit_noniterative_cfa_restricted()` for each finite-difference perturbation.

@@ -55,6 +55,18 @@ estimate_h2_communalities(const Eigen::MatrixXd& S,
                           const std::vector<std::int32_t>& block_of_indicator,
                           CommunalityMethod method);
 
+// Directional derivative of `estimate_h2_communalities(S, ..., method)` in the
+// symmetric covariance direction `dS`. This is the regular interior derivative:
+// GMM weight derivatives are included when the normality-implied triad weight is
+// full rank; rank-changing pseudo-inverse points return an error so callers can
+// fall back to finite differences.
+fit_expected<Eigen::VectorXd>
+estimate_h2_communalities_directional(
+    const Eigen::MatrixXd& S,
+    const Eigen::MatrixXd& dS,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method);
+
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities_constrained(
     const Eigen::MatrixXd& S,

@@ -176,8 +176,12 @@ golden `parTable()` fixtures.
   `standardized` uses `diag(S)^-1/2 Z` and is rebuilt from the live covariance
   in every map evaluation, and `gls_aligned` uses the existing H-aligned
   data-dependent weights.
-  `estimator_map_jacobian` is its central-difference `J = dtheta/dvech(S)` (the
-  generality seam so FABIN2/Bentler/JS/MIIV slot in later). `robust::frontier::
+  `estimator_map_jacobian` is its `J = dtheta/dvech(S)`: configural Guttman
+  maps use an analytic regular-interior derivative (including the
+  correlation-standardization, triad-GMM communality, fixed-rank
+  Moore-Penrose-weight, composite-weight, inverse, and marker-scaling chains)
+  with central differences retained as a boundary/rank-change fallback and as
+  the generality seam for future FABIN2/Bentler/JS/MIIV maps. `robust::frontier::
   noniterative_inference` builds the residual projector `M = I - Delta J` and
   reuses the existing weighted-chi2 spectrum reducer for a residual-based
   goodness-of-fit test (ULS or model-implied NTML weight; normal-theory or
@@ -208,7 +212,8 @@ golden `parTable()` fixtures.
   residual-restricted Guttman map can also select any least-squares-form
   H-diagonal rule (`triad_ls`, `anchor_triad_ls`, `gmm_block`, `gmm_full`) and
   any composite weight (`unit`, `standardized`, `gls_aligned`), reusing both
-  choices in its finite-difference Jacobian and grouped inference; AR/RS remain
+  choices in its restricted finite-difference Jacobian and grouped inference;
+  AR/RS remain
   low-level H-estimation diagnostics because they are not constraint-compatible
   LS systems. `experiments/55-guttman-communality-estimators` times the package
   implementation directly.

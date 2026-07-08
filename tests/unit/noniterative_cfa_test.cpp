@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
@@ -88,6 +89,42 @@ double true_param(const magmaan::model::ParamLocation& loc) {
   }
 }
 
+magmaan::fit_expected<Eigen::MatrixXd>
+finite_difference_jacobian(const LatentStructure& pt, const MatrixRep& rep,
+                           const ModelEvaluator& ev, const SampleStats& samp,
+                           ef::NonIterativeEstimator which,
+                           ef::CompositeWeight composite) {
+  if (samp.S.empty()) {
+    return std::unexpected(magmaan::FitError{
+        magmaan::FitError::Kind::NumericIssue, "test: empty sample stats"});
+  }
+  const Eigen::MatrixXd S0 = samp.S[0];
+  const Eigen::Index p = S0.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  Eigen::MatrixXd J(static_cast<Eigen::Index>(ev.n_free()), pstar);
+  SampleStats work = samp;
+  Eigen::Index col = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      const double h = 2e-6 * std::max(std::abs(S0(r, c)), 1.0);
+      work.S[0] = S0;
+      work.S[0](r, c) += h;
+      if (r != c) work.S[0](c, r) += h;
+      auto tp = ef::noniterative_cfa_theta(pt, rep, ev, work, which, composite);
+      if (!tp.has_value()) return std::unexpected(tp.error());
+
+      work.S[0] = S0;
+      work.S[0](r, c) -= h;
+      if (r != c) work.S[0](c, r) -= h;
+      auto tm = ef::noniterative_cfa_theta(pt, rep, ev, work, which, composite);
+      if (!tm.has_value()) return std::unexpected(tm.error());
+      J.col(col) = (*tp - *tm) / (2.0 * h);
+      ++col;
+    }
+  }
+  return J;
+}
+
 }  // namespace
 
 TEST_CASE("noniterative Guttman map recovers full theta on exact population") {
@@ -173,6 +210,37 @@ TEST_CASE("standardized composite weights change the off-model map") {
   REQUIRE_OK(unit);
   REQUIRE_OK(std);
   CHECK((*unit - *std).cwiseAbs().maxCoeff() > 1e-6);
+}
+
+TEST_CASE("analytic configural Jacobian matches central finite differences") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 0) += 0.20;
+  S(3, 3) += 0.15;
+  S(0, 4) += 0.12;
+  S(4, 0) += 0.12;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    for (auto composite : {ef::CompositeWeight::Unit,
+                           ef::CompositeWeight::Standardized,
+                           ef::CompositeWeight::GlsAligned}) {
+      INFO("estimator ordinal: " << static_cast<int>(which));
+      INFO("composite ordinal: " << static_cast<int>(composite));
+      auto Ja = ef::estimator_map_jacobian_analytic(
+          b.pt, b.rep, *ev, samp, which, composite);
+      auto Jfd = finite_difference_jacobian(
+          b.pt, b.rep, *ev, samp, which, composite);
+      REQUIRE_OK(Ja);
+      REQUIRE_OK(Jfd);
+      CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 2e-5);
+    }
+  }
 }
 
 TEST_CASE("noniterative map Jacobian satisfies Fisher consistency J*Delta = I") {
