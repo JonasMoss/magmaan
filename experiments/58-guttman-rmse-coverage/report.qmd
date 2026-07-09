@@ -165,10 +165,11 @@ data types. ULS is the only arm that runs consistently a little low.
 
 ## Cost and reliability
 
-Median total time for one fit **plus** its standard error, and how often the
-fit is well behaved. The closed-form maps fit almost instantly, but their
-empirical standard error re-evaluates the map many times, and on the 25-variable
-models that dominates and makes them slower than ML end to end.
+Two costs side by side: the fit on its own, and the fit **plus** its standard
+error. The closed-form maps fit in a fraction of a millisecond, several times
+faster than ML's fit. But the empirical standard error re-evaluates the map many
+times, and it is that step, not the fit, that dominates the total: on the
+25-variable models it makes the aligned maps slower than ML end to end.
 
 ```{r cost-table}
 ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "ml_emp", "uls_emp")
@@ -177,18 +178,20 @@ big <- tt[tt$factors == 5 & tt$indicators == 5, ]
 cost <- do.call(rbind, lapply(ests, function(e) {
   data.frame(
     Estimator = label(e),
-    `Fit+SE median (ms)` = fmt(median(tt$total_median_ms[tt$estimator == e]), 0),
-    `25-var median (ms)` = fmt(median(big$total_median_ms[big$estimator == e]), 0),
-    `Min converged` = pct(min(diag$converged_rate[diag$estimator == e])),
-    `Improper at n=100` = pct(median(diag$improper_rate[diag$estimator == e & diag$n == 100]), 1),
+    `Fit-only (ms)` = fmt(median(tt$fit_mean_ms[tt$estimator == e]), 2),
+    `Fit+SE (ms)` = fmt(median(tt$total_median_ms[tt$estimator == e]), 0),
+    `25-var fit-only (ms)` = fmt(median(big$fit_mean_ms[big$estimator == e]), 2),
+    `25-var fit+SE (ms)` = fmt(median(big$total_median_ms[big$estimator == e]), 0),
     check.names = FALSE)
 }))
 knitr::kable(cost, row.names = FALSE)
 ```
 
-Convergence and improper-solution (Heywood) rates are low and essentially the
-same across estimators, so no arm is reaching the accuracy comparison on a
-different footing.
+The clock is millisecond-resolution, so the closed-form fits (sub-millisecond)
+would round to zero as a median; the fit-only column is therefore the mean,
+which recovers the sub-millisecond average. Convergence and improper-solution
+(Heywood) rates are low and essentially the same across all estimators, so no
+arm is reaching the accuracy comparison on a different footing.
 
 ## Caveats
 
