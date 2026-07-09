@@ -2314,3 +2314,70 @@ work until a concrete downstream consumer appears.
   minimum-distance EPC construction sketched in the note, not the ML score test)
   and continuous **reliability omega from a non-iterative fit** (the omega
   primitive has no non-iterative `weight`; would use the delta-method Omega).
+
+  ### Non-iterative CFA — heavy remaining work (consolidated)
+
+  A single scannable list of the substantial items left after the post-fit
+  parity pass. Gathers the pieces scattered in the prose above plus the new
+  gaps; ordered roughly by heaviness. The light adapters (standardized,
+  residuals, factor scores, composite weights, defined params, parameter table,
+  vcov, fit indices) are **done**.
+
+  **Post-fit measures still missing**
+  - [ ] **Residual-based modification indices / score tests / EPC.** The single
+    biggest post-fit gap. The ML score test is invalid (non-minimizer), so this
+    needs the residual localization + one-step minimum-distance EPC derived in
+    `papers/guttman-inference/dev/notes/noniterative_modification_indices.tex`.
+    Validate each candidate against a real refit
+    (`noniterative_cfa_difference_test`) the way `modification_indices_lrt`
+    validates the ML score test. Core work (needs the map/model Jacobians), not
+    pure R.
+  - [ ] **Reliability omega from a non-iterative fit.** `measures_reliability_
+    omega_from_fit` has no non-iterative `weight`; wire the delta-method Omega as
+    the covariance so omega_total / omega_h / H carry SEs. Natural fit since
+    Guttman is itself a reliability-family estimator.
+
+  **Fit-index hardening** (the interface shipped; these are the loose ends)
+  - [ ] Validate the **empirical-Gamma baseline scaling `c_0`** against an
+    independent source (e.g. an independence-model magmaan fit's scaled test).
+    The NT `c_0` is exact/closed-form; the empirical `c_0` uses a raw-data
+    cross-product-variance approximation whose N-convention is documented but not
+    cross-checked.
+  - [ ] Exercise **multi-group fit indices** end-to-end (only single-group HS is
+    verified today; `fit_measures_noniterative` sums per block but is untested
+    on `ngroups > 1`).
+  - [ ] Decide the **logl / AIC / BIC** treatment: currently carried with an
+    ML-referenced-at-non-ML caveat. Either keep, `NA` them, or define a proper
+    non-ML information criterion.
+
+  **Ergonomics / API**
+  - [ ] A friendly **one-call entry** (`api::frontier` / a `magmaan_noniterative
+    (model, data, ...)` convenience) so the fit + SE + fit-measures are not
+    hand-staged. Plus a `summary.magmaan_fit`-style dump.
+
+  **Estimator lanes** (heavy; some already noted in the prose above)
+  - [ ] **Boundary-complete Guttman map** — well-labeled object when the
+    composite correlation `P` is singular / near-singular (note-first; policy
+    sketch already in the prose above).
+  - [ ] **Other estimator maps**: FABIN2, Bentler-1982, James-Stein, MIIV-2SLS.
+    The `NonIterativeEstimator` enum seam and the loadings producers exist;
+    each needs a complete `(Lambda, Phi, psi)` map plus its Jacobian so the
+    residual inference bundle consumes it unchanged.
+  - [ ] **Invariance remainders**: pooled-loading scalar refinement (test given
+    metric, more efficient than reference-group loadings); ordinal
+    mean-structure invariance; nonlinear / inequality constraints (both leave
+    closed form).
+
+  **Model-form extensions** (heaviest; extend the estimator, not just inference;
+  candidates for `speculative.md` with a build-if trigger once a consumer
+  appears)
+  - [ ] **Polychoric-ADF Gamma path** (ordinal data). The Gamma seam already
+    takes any Gamma; the *map* is continuous-moment only, so this needs a
+    threshold/polychoric map, not just a new Gamma.
+  - [ ] **FIML / missing data** for the closed-form path (complete data only
+    today).
+  - [ ] **Structural part** — regressions among latents (`~` paths), which also
+    unlocks `measures::effects` (indirect / total effects). Needs Reduced-LISREL
+    variable-table support.
+  - [ ] **Cross-loadings, residual covariances, std.lv identification** — the map
+    rejects all three today (simple-structure, marker-only).
