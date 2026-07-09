@@ -400,6 +400,85 @@ Design cautions (author, 2026-06-30, after the experiment-44 2x2):
   (near-nominal and balanced on normal data to N=20; the residual is heavy-tails x
   tiny-N, the avar-debias's territory).
 
+### Efficient leave-one-out / infinitesimal jackknife for closed-form (non-iterative) CFA
+
+Near-free leave-one-out cross-validation for the non-iterative (Guttman) CFA
+estimators ([[noniterative-cfa-inference]]), exploiting that the point estimate is
+a closed-form covariance map `theta-hat = tau(S)` whose Jacobian `J = d tau / d
+vech(S)` is *already computed* for the delta-method SEs. For an iterative ML fit,
+LOO is `N` re-optimizations; here it is either `N` closed-form map evaluations
+(exact) or a single precomputed reduction (first order), so the "so much least
+squares" structure buys a genuine cost collapse.
+
+The one primitive is a rank-1 *scatter* downdate. Work with the cross-product
+`W = sum_j u_j u_j'`, `u_j = x_j - xbar`; removing case `i` *with* recentering is
+exactly `W_{-i} = W - (N/(N-1)) u_i u_i'`, so `S_{-i} = W_{-i}/(N-1)` and the only
+per-case temporary is the residual vector `u_i` (apply the perturbation
+matrix-free, never form it). Two tiers:
+
+- **Exact sweep.** `theta-hat_{-i} = tau(S_{-i})` re-runs the closed-form stages
+  on the downdated scatter, reusing each stage's factorization (Sherman-Morrison
+  RHS update on the GLS regression nodes, perturbed-eigenpair on the loading
+  blocks). O(p^3)-ish per case, no optimization.
+- **First order (RidgeCV-shaped).** Freeze all stage designs and the whole
+  pipeline collapses to the operator already in hand: each parameter's leave-one-out
+  shift is a *quadratic form in the case residual*,
+  `theta-hat_{-i,r} ~= theta-hat_r - (1/(N-1)) ( u_i' G_r u_i - tr(G_r S) )`,
+  where `G_r` is the r-th row of `J` reshaped to a symmetric `p x p` matrix (via
+  the duplication-matrix inner-product bookkeeping). Precompute `{G_r}` and
+  `{tr(G_r S)}` once (pure reorganization of `J`), then every case is one quadratic
+  form per parameter, O(p^2) each, zero refits. `u_i' G_r u_i` is the direct
+  analogue of RidgeCV's leverage `x_i'(X'X)^{-1}x_i`. This *is* the infinitesimal
+  jackknife / empirical influence function, i.e. the closed-form specialization of
+  the existing case-influence one-step ([[case-influence-semfindr]]).
+
+Why there is no single `e_i/(1-h_ii)` collapse: the estimator's internal
+regressions are over *moments*, not over cases. A row of any stage's normal
+equations is a covariance entry, so leaving out a case is not a leave-one-row-out
+of any regression, it is a rank-1 perturbation of the data feeding *every*
+regression at once. Hence a forward rank-1 sweep, not a hat matrix. The
+downstream deliverables are all reductions over the same `N` LOO vectors:
+(a) a **jackknife SE** `V_jack = ((N-1)/N) sum (theta-hat_{-i}-thetabar)(.)'`, a
+third distribution-free leg alongside delta-method-NT and delta-method-empirical-Gamma
+(exp-52 showed NT-Gamma SEs are asymptotically wrong on non-normal data and
+empirical-Gamma is calibrated -- does jackknife track empirical-Gamma at N=50?);
+(b) an **estimator-native LOO-CV discrepancy** `(1/N) sum_i F(S, Sigma(theta-hat_{-i}))`
+(ULS or NTML) for model comparison where AIC/BIC are documented-invalid for this
+estimator (the fit-indices note flags logl/AIC/BIC as ML-referenced quantities
+evaluated at a non-ML estimate) -- the empirical realization of Browne-Cudeck
+ECVI, which is the *analytic* approximation to exactly this; (c) a **CV-debiased
+omega** `(1/N) sum_i omega(Sigma(theta-hat_{-i}))` correcting the in-sample
+optimism of reliability, tying into [[closed-form-omega-engine-modal]]; (d) exact
+cheap **case influence / leverage** at scale.
+
+**Alternative already available.** The first-order object already exists
+conceptually as the case-influence one-step ([[case-influence-semfindr]], the
+`continuous_ls_casewise_influence_ij` / semfindr-parity lane); the delta-method-NT
+and empirical-Gamma sandwich SEs cover the SE question; ECVI on a refit and the
+(invalid-here) information criteria are the model-selection incumbents; logit-Wald
+and the bootstrap (Kelley-Pornprasertmanit) cover reliability CIs. Nothing wires
+the *closed-form* LOO specifically, and nothing exploits the exact-sweep tier or
+the precomputed-`G_r` quadratic-form collapse.
+
+**Build if.** A concrete consumer for the non-iterative estimator appears that
+one of the incumbents does not cover: a **model-selection** need where the
+documented-invalid AIC/BIC leave a real hole (LOO-CV discrepancy is the
+likelihood-free answer, and the closed form is what makes it affordable -- the
+strength/weakness symmetry is the hook), a **jackknife-vs-empirical-Gamma SE**
+calibration study on the existing exp-52 harness, or **CV-debiased reliability**
+graduating the closed-form-omega lane. Cheapest probe (~40 lines, pure R over the
+landed post-fit surface): `loo_influence(fit)` = the first-order quadratic forms,
+validated against a brute-force exact refit sweep on Holzinger-Swineford; if they
+track, jackknife SE / CV discrepancy / debiased omega are all reductions over the
+`N` vectors. Honest risks: (i) ECVI already occupies the analytic-CV chair, so the
+differentiator must be exact + cheap + likelihood-free, not "CV for SEM"; (ii) the
+first-order approximation is expected to degrade at high leverage / near-Heywood,
+the same boundary regime that broke the bifactor `rho*` correction ([[profile-lr-reliability-ci-project]]),
+which is exactly what the exact-sweep tier is for as a check. LOO-CV for a
+covariance-structure target (prediction object = a case's covariance contribution,
+not a scalar `y`) is a less familiar construction and needs its estimand pinned
+before any coverage claim.
+
 ## Measures / reporting
 
 ### MI effect sizes (dMACS / EDM family) for fitted multi-group models
