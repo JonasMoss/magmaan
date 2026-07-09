@@ -66,6 +66,19 @@ estimate_h2_communalities_directional(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method);
 
+// Batched regular-interior Jacobian of
+// `estimate_h2_communalities(S, ..., method)`, with columns ordered as the
+// lower-triangle column-major vech(S). The current batched path covers the
+// least-squares/GMM rules used by the configural GLS-aligned Guttman map:
+// triad_ls, anchor_triad_ls, and gmm_block. Unsupported methods return an
+// error so callers can fall back to directional derivatives or finite
+// differences.
+fit_expected<Eigen::MatrixXd>
+estimate_h2_communalities_jacobian(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method);
+
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities_constrained(
     const Eigen::MatrixXd& S,

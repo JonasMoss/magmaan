@@ -181,7 +181,12 @@ golden `parTable()` fixtures.
   correlation-standardization, triad-GMM communality, fixed-rank
   Moore-Penrose-weight, composite-weight, inverse, and marker-scaling chains)
   with central differences retained as a boundary/rank-change fallback and as
-  the generality seam for future FABIN2/Bentler/JS/MIIV maps. `robust::frontier::
+  the generality seam for future FABIN2/Bentler/JS/MIIV maps. The promoted
+  `guttman_gls_aligned` configural path batches the block-GMM communality
+  Jacobian and downstream score-regression derivative over all covariance
+  coordinates, while restricted estimator-side maps remain finite-difference
+  based until their active KKT/projection system is differentiated.
+  `robust::frontier::
   noniterative_inference` builds the residual projector `M = I - Delta J` and
   reuses the existing weighted-chi2 spectrum reducer for a residual-based
   goodness-of-fit test (ULS or model-implied NTML weight; normal-theory or

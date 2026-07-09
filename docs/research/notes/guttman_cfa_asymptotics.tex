@@ -620,6 +620,52 @@ Then bias and variance both contribute at first order, and the influence maps
 above give closed-form local asymptotic risk. This is probably the cleanest
 paper-level efficiency comparison.
 
+\section{Computational Jacobian Accounting}
+
+The robust SEs for ordinary NT/ULS estimators and for the Guttman covariance
+map use different Jacobians. NT/ULS inference starts from the model moment
+Jacobian
+\[
+  \Delta(\theta)=\frac{\partial\sigma(\theta)}{\partial\theta\T}.
+\]
+Once \(\Delta\) is built, the bread and residual projector are low-dimensional
+linear algebra in the parameter and residual subspaces. In contrast, Guttman
+map-delta SEs require
+\[
+  J(\sigma)=\frac{\partial\tau(\sigma)}{\partial\vech(S)\T},
+\]
+because the estimator itself is a direct covariance functional. This is a
+different object, but it is not a fundamental reason for SEs to be orders of
+magnitude slower than NT/ULS: the expensive part is how \(J\) is assembled.
+
+For a covariance block with \(p^\star=p(p+1)/2\), the old configural analytic
+implementation computed \(p^\star\) directional derivatives. Each direction
+rebuilt the correlation-scale communality derivative, the triad-GMM weight
+derivative, composite-weight derivative, score covariance inverse, marker
+scaling derivative, and residual split. The point estimator itself was cheap;
+the SE bottleneck was repeating this derivative work over every covariance
+coordinate.
+
+For the GLS-aligned configural Guttman map the regular-interior derivative can
+be batched. The blockwise GMM communality solves
+\[
+  h=(A\T W A)^{-1}A\T Wb,\qquad
+  dh=(A\T W A)^{-1}\{d(A\T Wb)-d(A\T W A)h\},
+\]
+or \(dh=A^{-1}(db-dA\,h)\) in just-identified blocks. Computing all columns of
+\(Dh/D\vech(S)\) at once lets the implementation reuse the base correlation
+rows, \(A,b,W\), the normal-equation factorization, the fixed-rank
+Moore--Penrose derivative of \(W\), and the downstream
+\(H,B,Q,K^\star,\Lambda,\Phi,\psi\) matrices.
+
+Restricted Guttman remains different in this pass. Active residual and loading
+constraints change the estimator map through a constrained communality solve
+and a loading projection. The current restricted SE path therefore still uses
+central finite differences, requiring \(2p^\star\) full restricted-map
+evaluations per covariance block. Making that path competitive requires
+differentiating the active KKT/projection system, including any active
+residual-communality constraints and loading equality rows.
+
 \section{Proposed magmaan Experiment}
 
 The experiment should be deterministic and population based first, with Monte

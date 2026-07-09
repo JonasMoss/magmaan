@@ -72,6 +72,13 @@ struct BlockGuttmanDirection {
   Eigen::VectorXd dpsi;
 };
 
+struct BlockGuttmanJacobian {
+  BlockGuttman base;
+  Eigen::MatrixXd dLambda;  // (nvar * nfac) × pstar
+  Eigen::MatrixXd dPhi;     // (nfac * nfac) × pstar
+  Eigen::MatrixXd dpsi;     // nvar × pstar
+};
+
 struct ScoreBlock {
   Eigen::MatrixXd H;      // common covariance estimate: S with diagonal replaced
   Eigen::MatrixXd Bstd;   // nvar × nfac; U = Bstd'Y_H has unit marginal variances
@@ -341,6 +348,13 @@ struct MatrixDirection {
   Eigen::MatrixXd deriv;
 };
 
+Eigen::Index vech_size(Eigen::Index p) { return p * (p + 1) / 2; }
+
+Eigen::Index vech_index(Eigen::Index r, Eigen::Index c, Eigen::Index p) {
+  if (r < c) std::swap(r, c);
+  return c * p - (c * (c - 1)) / 2 + (r - c);
+}
+
 fit_expected<Eigen::MatrixXd>
 correlation_direction_local(const Eigen::MatrixXd& S, const Eigen::MatrixXd& dS,
                             const Eigen::MatrixXd& R) {
@@ -595,6 +609,204 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   BlockGuttman base{std::move(Lambda), std::move(Phi), std::move(psi)};
   return BlockGuttmanDirection{std::move(base), std::move(dLambda),
                                std::move(dPhi), std::move(dpsi)};
+}
+
+fit_expected<BlockGuttmanJacobian>
+fit_block_jacobian_batched(const CfaBlockLayout& L,
+                           const Eigen::MatrixXd& S,
+                           NonIterativeEstimator which,
+                           CompositeWeight composite) {
+  if (which != NonIterativeEstimator::GuttmanGlsAligned)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Guttman batched Jacobian: only GLS-aligned configural maps are "
+        "batched"});
+  const CompositeWeight resolved = resolve_composite_weight(which, composite);
+  const char* label = "Guttman GLS-aligned map";
+  const Eigen::Index nvar = L.n_observed;
+  const Eigen::Index nfac = L.n_factor();
+  if (S.rows() != nvar || S.cols() != nvar)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Guttman batched Jacobian: sample covariance dimension mismatch"});
+
+  auto block_of = block_ids_from_layout(L);
+  if (!block_of.has_value()) return std::unexpected(block_of.error());
+  auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
+  if (!h.has_value()) return std::unexpected(h.error());
+  auto Jh2 =
+      estimate_h2_communalities_jacobian(S, *block_of,
+                                         CommunalityMethod::GmmBlock);
+  if (!Jh2.has_value()) return std::unexpected(Jh2.error());
+
+  const Eigen::Index pstar = vech_size(nvar);
+  if (Jh2->rows() != nvar || Jh2->cols() != pstar)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Guttman batched Jacobian: communality Jacobian dimension mismatch"});
+
+  Eigen::MatrixXd dH_diag(nvar, pstar);
+  for (Eigen::Index i = 0; i < nvar; ++i) {
+    dH_diag.row(i) = S(i, i) * Jh2->row(i);
+    dH_diag(i, vech_index(i, i, nvar)) += h->h2(i);
+  }
+
+  const Eigen::MatrixXd Z = incidence_matrix(L);
+  Eigen::MatrixXd B;
+  Eigen::MatrixXd gls_Ginv;
+  Eigen::MatrixXd gls_P;
+  Eigen::MatrixXd gls_gram_inv;
+  switch (resolved) {
+    case CompositeWeight::EstimatorDefault:
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman batched Jacobian: unresolved composite weight"});
+    case CompositeWeight::Unit:
+      B = Z;
+      break;
+    case CompositeWeight::Standardized:
+      B = Z;
+      for (Eigen::Index i = 0; i < nvar; ++i) {
+        const double sii = S(i, i);
+        if (!std::isfinite(sii) || sii <= 0.0)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: non-positive indicator variance for "
+              "standardized composites"});
+        B.row(i) /= std::sqrt(sii);
+      }
+      break;
+    case CompositeWeight::GlsAligned: {
+      const Eigen::MatrixXd G = Z.transpose() * h->H * Z;
+      auto Ginv = invert_full_rank(G, label);
+      if (!Ginv.has_value()) return std::unexpected(Ginv.error());
+      gls_Ginv = std::move(*Ginv);
+      gls_P = h->H * Z * gls_Ginv;
+      const Eigen::MatrixXd gram = gls_P.transpose() * gls_P;
+      auto gram_inv = invert_full_rank(gram, label);
+      if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
+      gls_gram_inv = std::move(*gram_inv);
+      B = gls_P * gls_gram_inv;
+      break;
+    }
+  }
+
+  const Eigen::MatrixXd Q = B.transpose() * h->H * B;
+  auto Qinv = invert_full_rank(Q, label);
+  if (!Qinv.has_value()) return std::unexpected(Qinv.error());
+  const Eigen::MatrixXd HB = h->H * B;
+  const Eigen::MatrixXd Kstar = HB * (*Qinv);
+
+  Eigen::VectorXd marker(nfac);
+  Eigen::MatrixXd Lambda = Kstar;
+  for (Eigen::Index f = 0; f < nfac; ++f) {
+    const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
+    if (mk < 0 || mk >= nvar)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman batched Jacobian: factor without a marker indicator"});
+    marker(f) = Kstar(mk, f);
+    if (std::abs(marker(f)) < 1e-10)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman batched Jacobian: near-zero marker loading"});
+    Lambda.col(f) /= marker(f);
+  }
+
+  Eigen::MatrixXd Phi(nfac, nfac);
+  for (Eigen::Index f = 0; f < nfac; ++f) {
+    for (Eigen::Index g = 0; g < nfac; ++g)
+      Phi(f, g) = marker(f) * Q(f, g) * marker(g);
+  }
+  const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
+  Eigen::VectorXd psi(nvar);
+  for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
+
+  Eigen::MatrixXd dLambda = Eigen::MatrixXd::Zero(nvar * nfac, pstar);
+  Eigen::MatrixXd dPhi = Eigen::MatrixXd::Zero(nfac * nfac, pstar);
+  Eigen::MatrixXd dpsi = Eigen::MatrixXd::Zero(nvar, pstar);
+
+  Eigen::Index col = 0;
+  for (Eigen::Index c = 0; c < nvar; ++c) {
+    for (Eigen::Index r = c; r < nvar; ++r) {
+      Eigen::MatrixXd dH = Eigen::MatrixXd::Zero(nvar, nvar);
+      dH.diagonal() = dH_diag.col(col);
+      if (r != c) {
+        dH(r, c) = 1.0;
+        dH(c, r) = 1.0;
+      }
+
+      Eigen::MatrixXd dB = Eigen::MatrixXd::Zero(nvar, nfac);
+      switch (resolved) {
+        case CompositeWeight::Unit:
+          break;
+        case CompositeWeight::Standardized:
+          if (r == c) dB.row(r) = -0.5 * B.row(r) / S(r, r);
+          break;
+        case CompositeWeight::GlsAligned: {
+          const Eigen::MatrixXd dG = Z.transpose() * dH * Z;
+          const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
+          const Eigen::MatrixXd dP =
+              dH * Z * gls_Ginv + h->H * Z * dGinv;
+          const Eigen::MatrixXd dgram =
+              dP.transpose() * gls_P + gls_P.transpose() * dP;
+          const Eigen::MatrixXd dgram_inv =
+              -gls_gram_inv * dgram * gls_gram_inv;
+          dB = dP * gls_gram_inv + gls_P * dgram_inv;
+          break;
+        }
+        case CompositeWeight::EstimatorDefault:
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: unresolved composite weight"});
+      }
+
+      const Eigen::MatrixXd dQ =
+          dB.transpose() * h->H * B + B.transpose() * dH * B +
+          B.transpose() * h->H * dB;
+      const Eigen::MatrixXd dHB = dH * B + h->H * dB;
+      const Eigen::MatrixXd dKstar =
+          dHB * (*Qinv) - Kstar * dQ * (*Qinv);
+
+      Eigen::MatrixXd dLambda_col(nvar, nfac);
+      Eigen::MatrixXd dPhi_col(nfac, nfac);
+      Eigen::VectorXd dmarker(nfac);
+      for (Eigen::Index f = 0; f < nfac; ++f) {
+        const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
+        dmarker(f) = dKstar(mk, f);
+        dLambda_col.col(f) =
+            dKstar.col(f) / marker(f) -
+            Kstar.col(f) * (dmarker(f) / (marker(f) * marker(f)));
+      }
+      for (Eigen::Index f = 0; f < nfac; ++f) {
+        for (Eigen::Index g = 0; g < nfac; ++g) {
+          dPhi_col(f, g) =
+              dmarker(f) * Q(f, g) * marker(g) +
+              marker(f) * dQ(f, g) * marker(g) +
+              marker(f) * Q(f, g) * dmarker(g);
+        }
+      }
+
+      const Eigen::MatrixXd dimplied =
+          dLambda_col * Phi * Lambda.transpose() +
+          Lambda * dPhi_col * Lambda.transpose() +
+          Lambda * Phi * dLambda_col.transpose();
+      for (Eigen::Index i = 0; i < nvar; ++i) {
+        const double dSii = (r == c && r == i) ? 1.0 : 0.0;
+        dpsi(i, col) = dSii - dimplied(i, i);
+      }
+      for (Eigen::Index i = 0; i < nvar; ++i) {
+        for (Eigen::Index f = 0; f < nfac; ++f)
+          dLambda(i * nfac + f, col) = dLambda_col(i, f);
+      }
+      for (Eigen::Index f = 0; f < nfac; ++f) {
+        for (Eigen::Index g = 0; g < nfac; ++g)
+          dPhi(f * nfac + g, col) = dPhi_col(f, g);
+      }
+      ++col;
+    }
+  }
+
+  if (!Lambda.allFinite() || !Phi.allFinite() || !psi.allFinite() ||
+      !dLambda.allFinite() || !dPhi.allFinite() || !dpsi.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Guttman batched Jacobian: non-finite derivative"});
+
+  BlockGuttman base{std::move(Lambda), std::move(Phi), std::move(psi)};
+  return BlockGuttmanJacobian{std::move(base), std::move(dLambda),
+                              std::move(dPhi), std::move(dpsi)};
 }
 
 fit_expected<BlockGuttmanDirection>
@@ -1338,6 +1550,84 @@ assemble_theta_direction(const model::ModelEvaluator& ev,
 }
 
 fit_expected<Eigen::MatrixXd>
+assemble_theta_jacobian(const model::ModelEvaluator& ev,
+                        const std::vector<CfaBlockLayout>& layouts,
+                        const BlockGuttmanJacobian& dblock,
+                        std::size_t active_block,
+                        Eigen::Index pstar) {
+  const std::size_t nblk = layouts.size();
+  std::vector<std::vector<std::int16_t>> lat_to_f(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) lat_to_f[b] = lat_to_f_of(layouts[b]);
+
+  const auto lat_f = [&](std::size_t b, std::int16_t lat) -> std::int16_t {
+    if (lat < 0 || lat >= static_cast<std::int16_t>(lat_to_f[b].size())) return -1;
+    return lat_to_f[b][static_cast<std::size_t>(lat)];
+  };
+
+  const std::vector<model::ParamLocation> locs = ev.param_locations();
+  Eigen::MatrixXd J = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(ev.n_free()),
+                                            pstar);
+
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const model::ParamLocation& loc = locs[k];
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman batched Jacobian: parameter location has out-of-range block"});
+    const auto b = static_cast<std::size_t>(loc.block);
+    if (b >= nblk)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Guttman batched Jacobian: parameter location has out-of-range block"});
+    if (b != active_block) continue;
+
+    const CfaBlockLayout& L = layouts[b];
+    const Eigen::Index nvar = L.n_observed;
+    const Eigen::Index nfac = L.n_factor();
+    const Eigen::Index kk = static_cast<Eigen::Index>(k);
+    switch (loc.mat) {
+      case model::MatId::Lambda: {
+        const std::int16_t f = lat_f(b, loc.col);
+        if (f < 0 || loc.row < 0 || loc.row >= nvar)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: loading location out of range"});
+        if (L.marker_ov[static_cast<std::size_t>(f)] == loc.row)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: free marker loading is out of scope"});
+        J.row(kk) = dblock.dLambda.row(loc.row * nfac + f);
+        break;
+      }
+      case model::MatId::Psi: {
+        const std::int16_t fr = lat_f(b, loc.row);
+        const std::int16_t fc = lat_f(b, loc.col);
+        if (fr < 0 || fc < 0)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: latent covariance location out of range"});
+        J.row(kk) = dblock.dPhi.row(fr * nfac + fc);
+        break;
+      }
+      case model::MatId::Theta: {
+        if (loc.row != loc.col)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: residual covariances are out of scope"});
+        if (loc.row < 0 || loc.row >= nvar)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "Guttman batched Jacobian: residual variance row out of range"});
+        J.row(kk) = dblock.dpsi.row(loc.row);
+        break;
+      }
+      case model::MatId::Nu:
+        break;
+      case model::MatId::Alpha:
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "Guttman batched Jacobian: free latent means are out of scope"});
+      default:
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "Guttman batched Jacobian: structural parameters are out of scope"});
+    }
+  }
+  return J;
+}
+
+fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian_block_analytic_impl(
     const spec::LatentStructure& pt,
     const model::MatrixRep& rep,
@@ -1382,6 +1672,14 @@ estimator_map_jacobian_block_analytic_impl(
   const Eigen::Index pstar = p * (p + 1) / 2;
   const auto q = static_cast<Eigen::Index>(ev.n_free());
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
+
+  if (which == NonIterativeEstimator::GuttmanGlsAligned) {
+    auto db = fit_block_jacobian_batched(L, S0, which, composite);
+    if (db.has_value()) {
+      auto Jb = assemble_theta_jacobian(ev, layouts, *db, block, pstar);
+      if (Jb.has_value()) return Jb;
+    }
+  }
 
   Eigen::Index col = 0;
   for (Eigen::Index c = 0; c < p; ++c) {
@@ -1727,6 +2025,10 @@ estimator_map_jacobian_restricted_block(
   const Eigen::Index pstar = p * (p + 1) / 2;
   const auto q = static_cast<Eigen::Index>(ev.n_free());
 
+  // TODO: make restricted Guttman SEs competitive by differentiating the active
+  // residual/loading KKT projection system. The configural path above has a
+  // batched analytic derivative; active estimator-side restrictions still use
+  // central finite differences by design.
   data::SampleStats work = samp;
   Eigen::MatrixXd J(q, pstar);
   Eigen::Index col = 0;

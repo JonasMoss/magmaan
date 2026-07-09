@@ -13,6 +13,7 @@ using magmaan::estimate::frontier::estimate_h_communalities;
 using magmaan::estimate::frontier::estimate_h2_communalities_constrained;
 using magmaan::estimate::frontier::estimate_h2_communalities;
 using magmaan::estimate::frontier::estimate_h2_communalities_directional;
+using magmaan::estimate::frontier::estimate_h2_communalities_jacobian;
 
 namespace {
 
@@ -86,6 +87,63 @@ TEST_CASE("communality directional derivative matches central finite differences
     REQUIRE(minus.has_value());
     const Eigen::VectorXd fd = (*plus - *minus) / (2.0 * eps);
     CHECK((*analytic - fd).cwiseAbs().maxCoeff() < 5e-5);
+  }
+}
+
+TEST_CASE("communality batched Jacobian matches directional derivatives") {
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 1, 1, 1, 1, 1};
+  const std::vector<double> lambda = {0.58, 0.74, 0.91, 0.52,
+                                      0.67, 0.81, 0.73, 0.88};
+  const std::vector<double> sd = {1.20, 0.90, 1.45, 0.85,
+                                  1.65, 1.10, 1.35, 0.95};
+  const double rho = 0.36;
+
+  Eigen::MatrixXd R = Eigen::MatrixXd::Identity(
+      static_cast<Eigen::Index>(lambda.size()),
+      static_cast<Eigen::Index>(lambda.size()));
+  for (Eigen::Index i = 0; i < R.rows(); ++i) {
+    for (Eigen::Index j = i + 1; j < R.cols(); ++j) {
+      const double phi = blocks[static_cast<std::size_t>(i)] ==
+                                 blocks[static_cast<std::size_t>(j)]
+                             ? 1.0
+                             : rho;
+      R(i, j) = lambda[static_cast<std::size_t>(i)] *
+                lambda[static_cast<std::size_t>(j)] * phi;
+      R(j, i) = R(i, j);
+    }
+  }
+  Eigen::MatrixXd S = R;
+  for (Eigen::Index i = 0; i < S.rows(); ++i) {
+    for (Eigen::Index j = 0; j < S.cols(); ++j)
+      S(i, j) *= sd[static_cast<std::size_t>(i)] *
+                 sd[static_cast<std::size_t>(j)];
+  }
+
+  const Eigen::Index p = S.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  for (CommunalityMethod method :
+       {CommunalityMethod::TriadLeastSquares,
+        CommunalityMethod::AnchorTriadLeastSquares,
+        CommunalityMethod::GmmBlock}) {
+    INFO("method ordinal: " << static_cast<int>(method));
+    auto J = estimate_h2_communalities_jacobian(S, blocks, method);
+    REQUIRE(J.has_value());
+    REQUIRE(J->rows() == p);
+    REQUIRE(J->cols() == pstar);
+
+    Eigen::Index col = 0;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c; r < p; ++r) {
+        Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(p, p);
+        dS(r, c) = 1.0;
+        if (r != c) dS(c, r) = 1.0;
+        auto directional =
+            estimate_h2_communalities_directional(S, dS, blocks, method);
+        REQUIRE(directional.has_value());
+        CHECK((J->col(col) - *directional).cwiseAbs().maxCoeff() < 1e-8);
+        ++col;
+      }
+    }
   }
 }
 
