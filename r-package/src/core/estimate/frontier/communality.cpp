@@ -212,11 +212,27 @@ void add_corr_row(Eigen::Ref<Eigen::RowVectorXd> out,
   if (row >= 0 && scale != 0.0) out.noalias() += scale * J.dR_off.row(row);
 }
 
-Eigen::RowVectorXd corr_row(const CorrelationJacobian& J,
-                            Eigen::Index a,
-                            Eigen::Index b) {
-  Eigen::RowVectorXd out = Eigen::RowVectorXd::Zero(J.pstar);
-  add_corr_row(out, J, a, b, 1.0);
+void add_corr_active_row(Eigen::RowVectorXd& out,
+                         const CorrelationJacobian& J,
+                         const std::vector<Eigen::Index>& active_cols,
+                         Eigen::Index a,
+                         Eigen::Index b,
+                         double scale) {
+  const Eigen::Index row = corr_row_index(J, a, b);
+  if (row < 0 || scale == 0.0) return;
+  for (std::size_t k = 0; k < active_cols.size(); ++k)
+    out(static_cast<Eigen::Index>(k)) +=
+        scale * J.dR_off(row, active_cols[k]);
+}
+
+Eigen::RowVectorXd corr_active_row(
+    const CorrelationJacobian& J,
+    const std::vector<Eigen::Index>& active_cols,
+    Eigen::Index a,
+    Eigen::Index b) {
+  Eigen::RowVectorXd out =
+      Eigen::RowVectorXd::Zero(static_cast<Eigen::Index>(active_cols.size()));
+  add_corr_active_row(out, J, active_cols, a, b, 1.0);
   return out;
 }
 
@@ -395,6 +411,47 @@ fit_expected<Eigen::MatrixXd> symmetric_pinv(const Eigen::MatrixXd& A) {
     if (evals(i) > cutoff) inv(i) = 1.0 / evals(i);
   }
   return es.eigenvectors() * inv.asDiagonal() * es.eigenvectors().transpose();
+}
+
+fit_expected<Eigen::MatrixXd> full_rank_inverse(const Eigen::MatrixXd& A) {
+  if (A.rows() != A.cols())
+    return mat_error("communality GMM: inverse input is not square");
+  if (!A.allFinite())
+    return mat_error("communality GMM: inverse input has non-finite values");
+
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
+  lu.setThreshold(1e-12);
+  if (lu.rank() != A.cols())
+    return mat_error("communality GMM: inverse input is rank deficient");
+  Eigen::MatrixXd inv =
+      lu.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+  if (!inv.allFinite())
+    return mat_error("communality GMM: non-finite inverse");
+  return inv;
+}
+
+fit_expected<Eigen::MatrixXd>
+row_covariance_pinv(const Eigen::MatrixXd& M,
+                    const Eigen::MatrixXd& gamma,
+                    const Eigen::MatrixXd& omega) {
+  if (M.rows() != omega.rows() || omega.rows() != omega.cols() ||
+      M.cols() != gamma.rows() || gamma.rows() != gamma.cols())
+    return mat_error("communality GMM: row covariance dimension mismatch");
+  if (!M.allFinite() || !gamma.allFinite() || !omega.allFinite())
+    return mat_error("communality GMM: non-finite row covariance input");
+  if (M.cols() == 0) return symmetric_pinv(omega);
+
+  const Eigen::MatrixXd gram = M.transpose() * M;
+  auto gram_inv = full_rank_inverse(gram);
+  auto gamma_inv = full_rank_inverse(gamma);
+  if (!gram_inv.has_value() || !gamma_inv.has_value())
+    return symmetric_pinv(omega);
+
+  Eigen::MatrixXd W =
+      M * (*gram_inv) * (*gamma_inv) * (*gram_inv) * M.transpose();
+  W = 0.5 * (W + W.transpose());
+  if (!W.allFinite()) return symmetric_pinv(omega);
+  return W;
 }
 
 struct PinvDirection {
@@ -1016,40 +1073,53 @@ normal_cor_gamma_pairs_jacobian(
       const Eigen::Index bb[3] = {l, k, l};
       const double bd[3] = {1.0, -0.5 * rho_b, -0.5 * rho_b};
 
-      Eigen::RowVectorXd dval = Eigen::RowVectorXd::Zero(J.pstar);
+      Eigen::RowVectorXd dval =
+          Eigen::RowVectorXd::Zero(
+              static_cast<Eigen::Index>(active_cols.size()));
       for (int u = 0; u < 3; ++u) {
         for (int v = 0; v < 3; ++v) {
           const double cov_s = R(aa[u], ba[v]) * R(ab[u], bb[v]) +
                                R(aa[u], bb[v]) * R(ab[u], ba[v]);
           if (u > 0)
-            add_corr_row(dval, J, global_index[static_cast<std::size_t>(i)],
-                         global_index[static_cast<std::size_t>(j)],
-                         -0.5 * bd[v] * cov_s);
+            add_corr_active_row(
+                dval, J, active_cols,
+                global_index[static_cast<std::size_t>(i)],
+                global_index[static_cast<std::size_t>(j)],
+                -0.5 * bd[v] * cov_s);
           if (v > 0)
-            add_corr_row(dval, J, global_index[static_cast<std::size_t>(k)],
-                         global_index[static_cast<std::size_t>(l)],
-                         -0.5 * ad[u] * cov_s);
+            add_corr_active_row(
+                dval, J, active_cols,
+                global_index[static_cast<std::size_t>(k)],
+                global_index[static_cast<std::size_t>(l)],
+                -0.5 * ad[u] * cov_s);
 
           const double scale = ad[u] * bd[v];
-          add_corr_row(dval, J, global_index[static_cast<std::size_t>(aa[u])],
-                       global_index[static_cast<std::size_t>(ba[v])],
-                       scale * R(ab[u], bb[v]));
-          add_corr_row(dval, J, global_index[static_cast<std::size_t>(ab[u])],
-                       global_index[static_cast<std::size_t>(bb[v])],
-                       scale * R(aa[u], ba[v]));
-          add_corr_row(dval, J, global_index[static_cast<std::size_t>(aa[u])],
-                       global_index[static_cast<std::size_t>(bb[v])],
-                       scale * R(ab[u], ba[v]));
-          add_corr_row(dval, J, global_index[static_cast<std::size_t>(ab[u])],
-                       global_index[static_cast<std::size_t>(ba[v])],
-                       scale * R(aa[u], bb[v]));
+          add_corr_active_row(
+              dval, J, active_cols,
+              global_index[static_cast<std::size_t>(aa[u])],
+              global_index[static_cast<std::size_t>(ba[v])],
+              scale * R(ab[u], bb[v]));
+          add_corr_active_row(
+              dval, J, active_cols,
+              global_index[static_cast<std::size_t>(ab[u])],
+              global_index[static_cast<std::size_t>(bb[v])],
+              scale * R(aa[u], ba[v]));
+          add_corr_active_row(
+              dval, J, active_cols,
+              global_index[static_cast<std::size_t>(aa[u])],
+              global_index[static_cast<std::size_t>(bb[v])],
+              scale * R(ab[u], ba[v]));
+          add_corr_active_row(
+              dval, J, active_cols,
+              global_index[static_cast<std::size_t>(ab[u])],
+              global_index[static_cast<std::size_t>(ba[v])],
+              scale * R(aa[u], bb[v]));
         }
       }
 
       for (std::size_t active = 0; active < active_cols.size(); ++active) {
-        const Eigen::Index col = active_cols[active];
-        out[active](a, b) = dval(col);
-        out[active](b, a) = dval(col);
+        out[active](a, b) = dval(static_cast<Eigen::Index>(active));
+        out[active](b, a) = dval(static_cast<Eigen::Index>(active));
       }
     }
   }
@@ -1121,25 +1191,36 @@ solve_gmm_directional(const CommunalitySystem& system,
 }
 
 fit_expected<Eigen::MatrixXd>
-solve_gmm_jacobian(const CommunalitySystem& system,
-                   const std::vector<Eigen::MatrixXd>& dA_cols,
-                   const Eigen::MatrixXd& db_cols,
-                   const std::vector<Eigen::MatrixXd>& dW_cols) {
+solve_gmm_jacobian_weight_actions(
+    const CommunalitySystem& system,
+    const Eigen::MatrixXd& omega,
+    const Eigen::MatrixXd& M,
+    const Eigen::MatrixXd& gamma,
+    const std::vector<Eigen::MatrixXd>& dA_cols,
+    const Eigen::MatrixXd& db_cols,
+    const std::vector<Eigen::MatrixXd>& dM_cols,
+    const std::vector<Eigen::MatrixXd>& dgamma_cols) {
   const Eigen::MatrixXd& A = system.A;
   const Eigen::VectorXd& b = system.b;
   const Eigen::MatrixXd& W = system.W;
   const auto pstar = static_cast<Eigen::Index>(dA_cols.size());
   if (A.rows() != b.size() || W.rows() != A.rows() ||
-      W.cols() != A.rows() || db_cols.rows() != b.size() ||
-      db_cols.cols() != pstar ||
-      static_cast<Eigen::Index>(dW_cols.size()) != pstar)
-    return mat_error("communality GMM Jacobian: dimension mismatch");
+      W.cols() != A.rows() || omega.rows() != A.rows() ||
+      omega.cols() != A.rows() || M.rows() != A.rows() ||
+      gamma.rows() != M.cols() || gamma.cols() != M.cols() ||
+      db_cols.rows() != b.size() || db_cols.cols() != pstar ||
+      static_cast<Eigen::Index>(dM_cols.size()) != pstar ||
+      static_cast<Eigen::Index>(dgamma_cols.size()) != pstar)
+    return mat_error("communality GMM Jacobian: action dimension mismatch");
   for (Eigen::Index col = 0; col < pstar; ++col) {
     const auto& dA = dA_cols[static_cast<std::size_t>(col)];
-    const auto& dW = dW_cols[static_cast<std::size_t>(col)];
+    const auto& dM = dM_cols[static_cast<std::size_t>(col)];
+    const auto& dgamma = dgamma_cols[static_cast<std::size_t>(col)];
     if (dA.rows() != A.rows() || dA.cols() != A.cols() ||
-        dW.rows() != W.rows() || dW.cols() != W.cols())
-      return mat_error("communality GMM Jacobian: derivative dimension mismatch");
+        dM.rows() != M.rows() || dM.cols() != M.cols() ||
+        dgamma.rows() != gamma.rows() || dgamma.cols() != gamma.cols())
+      return mat_error("communality GMM Jacobian: action derivative dimension "
+                       "mismatch");
   }
 
   if (A.rows() == A.cols()) {
@@ -1162,24 +1243,42 @@ solve_gmm_jacobian(const CommunalitySystem& system,
   lu.setThreshold(1e-12);
   if (lu.rank() != G.cols())
     return mat_error("communality GMM Jacobian: normal equations are singular");
-  const Eigen::VectorXd rhs = A.transpose() * W * b;
-  const Eigen::VectorXd h = lu.solve(rhs);
+  const Eigen::VectorXd c = A.transpose() * W * b;
+  const Eigen::VectorXd h = lu.solve(c);
+  const Eigen::VectorXd e = b - A * h;
+  const Eigen::VectorXd We = W * e;
+  const Eigen::MatrixXd AtW = A.transpose() * W;
+  const Eigen::MatrixXd W2 = W * W;
+  const Eigen::MatrixXd left_null =
+      Eigen::MatrixXd::Identity(W.rows(), W.cols()) - W * omega;
+  const Eigen::VectorXd right_null_e = e - omega * We;
+  const Eigen::VectorXd W2e = W2 * e;
 
   Eigen::MatrixXd dh(A.cols(), pstar);
   for (Eigen::Index col = 0; col < pstar; ++col) {
-    const Eigen::MatrixXd& dA = dA_cols[static_cast<std::size_t>(col)];
-    const Eigen::MatrixXd& dW = dW_cols[static_cast<std::size_t>(col)];
-    const Eigen::VectorXd db = db_cols.col(col);
-    const Eigen::MatrixXd dG =
-        dA.transpose() * W * A + A.transpose() * dW * A +
-        A.transpose() * W * dA;
-    const Eigen::VectorXd drhs =
-        dA.transpose() * W * b + A.transpose() * dW * b +
-        A.transpose() * W * db;
-    dh.col(col) = lu.solve(drhs - dG * h);
+    const auto& dA = dA_cols[static_cast<std::size_t>(col)];
+    const auto& dM = dM_cols[static_cast<std::size_t>(col)];
+    const auto& dgamma = dgamma_cols[static_cast<std::size_t>(col)];
+    const auto domega_times = [&](const Eigen::VectorXd& x) {
+      const Eigen::VectorXd Mtx = M.transpose() * x;
+      Eigen::VectorXd out = dM * (gamma * Mtx);
+      out.noalias() += M * (dgamma * Mtx);
+      out.noalias() += M * (gamma * (dM.transpose() * x));
+      return out;
+    };
+
+    const Eigen::VectorXd dWe =
+        -W * domega_times(We) +
+        W2 * domega_times(right_null_e) +
+        left_null * domega_times(W2e);
+    const Eigen::VectorXd rhs =
+        dA.transpose() * We +
+        AtW * (db_cols.col(col) - dA * h) +
+        A.transpose() * dWe;
+    dh.col(col) = lu.solve(rhs);
   }
   if (!dh.allFinite())
-    return mat_error("communality GMM Jacobian: non-finite solution");
+    return mat_error("communality GMM Jacobian: non-finite action solution");
   return dh;
 }
 
@@ -1234,9 +1333,9 @@ gmm_block_system(const Eigen::MatrixXd& R,
     if (!sys.has_value()) return std::unexpected(sys.error());
     auto sys_w = triad_system(Rb, local_blocks, off, &*h20);
     if (!sys_w.has_value()) return std::unexpected(sys_w.error());
-    const Eigen::MatrixXd omega =
-        sys_w->M * normal_cor_gamma_pairs(Rb, off) * sys_w->M.transpose();
-    auto W = symmetric_pinv(omega);
+    const Eigen::MatrixXd gamma = normal_cor_gamma_pairs(Rb, off);
+    const Eigen::MatrixXd omega = sys_w->M * gamma * sys_w->M.transpose();
+    auto W = row_covariance_pinv(sys_w->M, gamma, omega);
     if (!W.has_value()) return std::unexpected(W.error());
 
     CommunalitySystem cs;
@@ -1370,9 +1469,9 @@ gmm_full_system(const Eigen::MatrixXd& R,
   if (!sys.has_value()) return std::unexpected(sys.error());
   auto sys_w = triad_system(R, blocks, off, &*h20);
   if (!sys_w.has_value()) return std::unexpected(sys_w.error());
-  const Eigen::MatrixXd omega =
-      sys_w->M * normal_cor_gamma_pairs(R, off) * sys_w->M.transpose();
-  auto W = symmetric_pinv(omega);
+  const Eigen::MatrixXd gamma = normal_cor_gamma_pairs(R, off);
+  const Eigen::MatrixXd omega = sys_w->M * gamma * sys_w->M.transpose();
+  auto W = row_covariance_pinv(sys_w->M, gamma, omega);
   if (!W.has_value()) return std::unexpected(W.error());
   return CommunalitySystem{std::move(sys->A), std::move(sys->b), std::move(*W)};
 }
@@ -1477,9 +1576,10 @@ gmm_block_h2_jacobian(const Eigen::MatrixXd& R,
     const Eigen::MatrixXd gamma = normal_cor_gamma_pairs(Rb, off);
     const auto dgamma =
         normal_cor_gamma_pairs_jacobian(Rb, off, global_index, J, active_cols);
+
     const Eigen::MatrixXd omega =
         sys_w->M * gamma * sys_w->M.transpose();
-    auto W = symmetric_pinv(omega);
+    auto W = row_covariance_pinv(sys_w->M, gamma, omega);
     if (!W.has_value()) return std::unexpected(W.error());
 
     const Eigen::Index n_rows = sys->A.rows();
@@ -1511,11 +1611,14 @@ gmm_block_h2_jacobian(const Eigen::MatrixXd& R,
           const Eigen::Index gi = global_index[static_cast<std::size_t>(i)];
           const Eigen::Index gj = global_index[static_cast<std::size_t>(j)];
           const Eigen::Index gk = global_index[static_cast<std::size_t>(k)];
-          const Eigen::RowVectorXd d_rjk = corr_row(J, gj, gk);
-          const Eigen::RowVectorXd d_rij = corr_row(J, gi, gj);
-          const Eigen::RowVectorXd d_rik = corr_row(J, gi, gk);
+          const Eigen::RowVectorXd d_rjk =
+              corr_active_row(J, active_cols, gj, gk);
+          const Eigen::RowVectorXd d_rij =
+              corr_active_row(J, active_cols, gi, gj);
+          const Eigen::RowVectorXd d_rik =
+              corr_active_row(J, active_cols, gi, gk);
 
-          const Eigen::RowVectorXd db_full =
+          const Eigen::RowVectorXd db_active =
               d_rij * Rb(i, k) + Rb(i, j) * d_rik;
           const Eigen::Index jk = pair_index(off_index, j, k, m);
           const Eigen::Index ij = pair_index(off_index, i, j, m);
@@ -1526,39 +1629,22 @@ gmm_block_h2_jacobian(const Eigen::MatrixXd& R,
 
           for (std::size_t active = 0; active < active_cols.size(); ++active) {
             const Eigen::Index col = active_cols[active];
-            db_cols(row, static_cast<Eigen::Index>(active)) = db_full(col);
-            dA_cols[active](row, i) = d_rjk(col);
+            const auto ac = static_cast<Eigen::Index>(active);
+            db_cols(row, ac) = db_active(ac);
+            dA_cols[active](row, i) = d_rjk(ac);
             dM_cols[active](row, jk) += Jh20(i, col);
-            dM_cols[active](row, ij) -= d_rik(col);
-            dM_cols[active](row, ik) -= d_rij(col);
+            dM_cols[active](row, ij) -= d_rik(ac);
+            dM_cols[active](row, ik) -= d_rij(ac);
           }
           ++row;
         }
       }
     }
 
-    std::vector<Eigen::MatrixXd> dW_cols(
-        active_cols.size(),
-        Eigen::MatrixXd::Zero(n_rows, n_rows));
-    const Eigen::MatrixXd I =
-        Eigen::MatrixXd::Identity(omega.rows(), omega.cols());
-    for (std::size_t active = 0; active < active_cols.size(); ++active) {
-      const Eigen::MatrixXd& dM = dM_cols[active];
-      const Eigen::MatrixXd& dgamma_col =
-          dgamma[active];
-      const Eigen::MatrixXd domega =
-          dM * gamma * sys_w->M.transpose() +
-          sys_w->M * dgamma_col * sys_w->M.transpose() +
-          sys_w->M * gamma * dM.transpose();
-      Eigen::MatrixXd dW =
-          -(*W) * domega * (*W) +
-          (*W) * (*W) * domega * (I - omega * (*W)) +
-          (I - (*W) * omega) * domega * (*W) * (*W);
-      dW_cols[active] = 0.5 * (dW + dW.transpose());
-    }
-
     CommunalitySystem system{std::move(sys->A), std::move(sys->b), std::move(*W)};
-    auto dh = solve_gmm_jacobian(system, dA_cols, db_cols, dW_cols);
+    auto dh = solve_gmm_jacobian_weight_actions(system, omega, sys_w->M, gamma,
+                                                dA_cols, db_cols, dM_cols,
+                                                dgamma);
     if (!dh.has_value()) return std::unexpected(dh.error());
     for (Eigen::Index i = 0; i < m; ++i) {
       const Eigen::Index gi = idx[static_cast<std::size_t>(i)];

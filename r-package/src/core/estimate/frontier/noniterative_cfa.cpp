@@ -738,13 +738,14 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
   Eigen::Index col = 0;
   for (Eigen::Index c = 0; c < nvar; ++c) {
     for (Eigen::Index r = c; r < nvar; ++r) {
-      Eigen::MatrixXd dB = Eigen::MatrixXd::Zero(nvar, nfac);
+      Eigen::MatrixXd dB;
       bool dB_nonzero = false;
       switch (resolved) {
         case CompositeWeight::Unit:
           break;
         case CompositeWeight::Standardized:
           if (r == c) {
+            dB = Eigen::MatrixXd::Zero(nvar, nfac);
             dB.row(r) = -0.5 * B.row(r) / S(r, r);
             dB_nonzero = true;
           }

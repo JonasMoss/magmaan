@@ -2214,18 +2214,21 @@ work until a concrete downstream consumer appears.
   `noniterative_se*` primitives compute just `Omega = J Gamma J'/N`; empirical
   SEs stream casewise moment rows in parameter space, while full
   `noniterative_inference*` remains responsible for the residual GOF projector
-  and weighted-chi2 spectrum. A p = 25 configural slice of experiment 58
-  (`normal`, five factors, five indicators each, n = 300, empirical SEs) now
-  has Guttman SE medians of 5-6 ms for `guttman_std`, `guttman_unit`, and
-  `guttman_gls`, versus 2 ms for the ML/ULS empirical-SE arms in the same cell.
-  Follow-up profiling on 2026-07-09 found that this remaining 5 ms is fixed
-  Jacobian cost, not the empirical meat: NT and empirical SE timings are nearly
-  identical at n = 300, while n-scaling only makes the casewise contraction
-  visible at much larger n. A small allocation cleanup in the SE path and
-  batched Guttman Jacobian saved only a few tenths of a millisecond. If this
-  becomes material, the next pass should profile/reshape
-  `gmm_block_h2_jacobian()` and `fit_block_jacobian_batched()` rather than
-  revisiting GOF decoupling or dense empirical Gamma.
+  and weighted-chi2 spectrum. A p = 25 configural probe of the experiment-58
+  shape (`normal`, five factors, five indicators each) initially showed
+  remaining 5 ms fixed Jacobian cost, not empirical meat: NT and empirical SE
+  timings were nearly identical at n = 300, while n-scaling only made the
+  casewise contraction visible at much larger n. Follow-up profiling on
+  2026-07-09 traced the cost to `gmm_block_h2_jacobian()` building
+  full-global-width `dGamma` rows for block-local derivatives and materializing
+  dense `dW` matrices when the GMM derivative needs only `A' dW e`. The
+  configural path now accumulates block-active derivative columns directly,
+  applies the fixed-rank pseudo-inverse derivative as a `dW e` action, and uses
+  a guarded full-column-rank pseudo-inverse fast path for `M Gamma M'`.
+  Repeated-call p = 25 timings dropped to roughly 1.5 ms for `unit` and
+  `standardized`, and 2.3 ms for `gls_aligned`; the remaining extra
+  `gls_aligned` cost is mostly the downstream data-dependent composite-weight
+  derivative.
   The estimator-side residual-restricted Guttman map now has an explicit
   communality axis for the four LS-form H rules (`triad_ls`,
   `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
