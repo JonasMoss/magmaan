@@ -37,16 +37,22 @@ their intended target rather than under misspecification.
 
 - generators: `normal`, `ig`, `ordinal`
 - factors: `2`, `3`, `5`
-- indicators per factor: `3`, `5`
+- indicators per factor: `3`, `5`, `u` (`u` = unbalanced 3/6 alternation)
 - latent correlations: `0`, `0.35`, `0.6`, `0.8`
-- sample sizes: `100`, `300`, `800`
+- loading strength: `moderate`, `weak` (`weak` scales loadings to ~0.62x)
+- sample sizes: `50`, `100`, `300`, `800`
 - configural scales: `equal`, `unequal`
 - configural loading pattern: `mixed`
 - restricted cells: `tau_resid` with equal scales and tau loadings
 
-That is 648 cells: 432 configural plus 216 constrained. The independent-generator
-stress arm uses a mild Tukey g-and-h target, skewness `0.2` and excess kurtosis
-`0.5`, because stronger targets failed calibration for the 25-variable cells.
+That is 2592 cells: 1728 configural plus 864 constrained. The
+independent-generator stress arm uses a mild Tukey g-and-h target, skewness
+`0.2` and excess kurtosis `0.5`, because stronger targets failed calibration for
+the 25-variable cells. The higher-rho / weak-loading / unbalanced arms are new,
+aimed at finally stressing the aligned maps' cross-factor information and the
+communality estimators where average-of-ratios should hurt. Trim any axis with
+its flag (e.g. `--strength moderate`, `--indicators 3,5`, `--n 100,300,800`) or
+lower `--reps` to shrink the grid.
 
 ## How To Start It
 
@@ -69,9 +75,10 @@ Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
 ```
 
 The prior 324-cell run (rho `0`/`0.35`) took about 75 minutes at `--reps 150`
-on 8 cores. This grid doubles the rho axis to 648 cells, so budget on the order
-of 2.5-3 hours at 8 cores with the current SE path (faster once the
-inference-speed fix lands); an overnight-scale run either way.
+on 8 cores. This grid is 2592 cells (8x larger), so at `--reps 150` budget on
+the order of 8-10 hours at 8 cores with the current SE path; the inference-speed
+fix should cut that several-fold. For a quicker pass drop to the full-mode
+default `--reps 50` (roughly a third of the time) or trim an axis.
 
 If launching detached, keep logs in the ignored results directory:
 

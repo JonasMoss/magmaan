@@ -28,10 +28,12 @@ usage <- function() {
     "  --n LIST             Comma-separated sample sizes.\n",
     "  --generators LIST    normal,ig,ordinal. Default depends on mode.\n",
     "  --factors LIST       Comma-separated factor counts.\n",
-    "  --indicators LIST    Comma-separated indicators per factor.\n",
+    "  --indicators LIST    Indicators per factor: an integer, or 'u' for an\n",
+    "                       unbalanced 3/6 alternation across factors.\n",
     "  --rho LIST           Comma-separated latent correlations.\n",
     "  --scales LIST        equal,unequal. Continuous scales or ordinal marginals.\n",
     "  --loadings LIST      mixed,tau. Configural loading patterns.\n",
+    "  --strength LIST      weak,moderate,strong. Scales loading magnitude.\n",
     "  --no-restricted      Drop tau/residual-equality constrained cells.\n",
     "  --max-cells N        Keep only first N cells after grid construction.\n",
     "  --cores N            mclapply cores. Default: 1.\n",
@@ -52,10 +54,11 @@ parse_args <- function(args) {
     n = c(120L),
     generators = c("normal", "ig", "ordinal"),
     factors = c(2L, 3L),
-    indicators = c(3L),
+    indicators = c("3"),
     rho = c(0, 0.35),
     scales = c("equal"),
     loadings = c("mixed"),
+    strength = c("moderate"),
     include_restricted = TRUE,
     max_cells = NA_integer_,
     cores = 1L,
@@ -73,30 +76,35 @@ parse_args <- function(args) {
       if (!"n" %in% explicit) opts$n <<- c(120L)
       if (!"generators" %in% explicit) opts$generators <<- c("normal", "ig", "ordinal")
       if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L)
-      if (!"indicators" %in% explicit) opts$indicators <<- c(3L)
+      if (!"indicators" %in% explicit) opts$indicators <<- c("3")
       if (!"rho" %in% explicit) opts$rho <<- c(0, 0.35)
       if (!"scales" %in% explicit) opts$scales <<- c("equal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
+      if (!"strength" %in% explicit) opts$strength <<- c("moderate")
     } else if (mode == "smoke") {
       if (!"reps" %in% explicit) opts$reps <<- 5L
       if (!"n" %in% explicit) opts$n <<- c(120L, 300L)
       if (!"generators" %in% explicit) opts$generators <<- c("normal", "ordinal")
       if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L)
-      if (!"indicators" %in% explicit) opts$indicators <<- c(3L)
+      if (!"indicators" %in% explicit) opts$indicators <<- c("3")
       if (!"rho" %in% explicit) opts$rho <<- c(0, 0.35)
       if (!"scales" %in% explicit) opts$scales <<- c("equal", "unequal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
+      if (!"strength" %in% explicit) opts$strength <<- c("moderate")
     } else if (mode == "full") {
       if (!"reps" %in% explicit) opts$reps <<- 50L
-      if (!"n" %in% explicit) opts$n <<- c(100L, 300L, 800L)
+      # n adds 50 for the small-sample stress; strength adds a weak-loading arm
+      # where average-of-ratios communalities hurt; indicators adds "u" (an
+      # unbalanced 3/6 alternation). rho spans orthogonal -> strong so the
+      # aligned maps' cross-factor information actually gets stressed.
+      if (!"n" %in% explicit) opts$n <<- c(50L, 100L, 300L, 800L)
       if (!"generators" %in% explicit) opts$generators <<- c("normal", "ig", "ordinal")
       if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L, 5L)
-      if (!"indicators" %in% explicit) opts$indicators <<- c(3L, 5L)
-      # rho spans orthogonal -> strong so the aligned maps' cross-factor
-      # information actually gets stressed (0/0.35 alone showed no aligned gain).
+      if (!"indicators" %in% explicit) opts$indicators <<- c("3", "5", "u")
       if (!"rho" %in% explicit) opts$rho <<- c(0, 0.35, 0.6, 0.8)
       if (!"scales" %in% explicit) opts$scales <<- c("equal", "unequal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
+      if (!"strength" %in% explicit) opts$strength <<- c("moderate", "weak")
     }
   }
   i <- 1L
@@ -133,9 +141,9 @@ parse_args <- function(args) {
     } else if (grepl("^--factors=", a)) {
       opts$factors <- as.integer(parse_csv_arg(sub("^--factors=", "", a))); explicit <- c(explicit, "factors")
     } else if (a == "--indicators") {
-      opts$indicators <- as.integer(parse_csv_arg(take(a))); explicit <- c(explicit, "indicators")
+      opts$indicators <- parse_csv_arg(take(a)); explicit <- c(explicit, "indicators")
     } else if (grepl("^--indicators=", a)) {
-      opts$indicators <- as.integer(parse_csv_arg(sub("^--indicators=", "", a))); explicit <- c(explicit, "indicators")
+      opts$indicators <- parse_csv_arg(sub("^--indicators=", "", a)); explicit <- c(explicit, "indicators")
     } else if (a == "--rho") {
       opts$rho <- parse_csv_numeric(take(a)); explicit <- c(explicit, "rho")
     } else if (grepl("^--rho=", a)) {
@@ -148,6 +156,10 @@ parse_args <- function(args) {
       opts$loadings <- parse_csv_arg(take(a)); explicit <- c(explicit, "loadings")
     } else if (grepl("^--loadings=", a)) {
       opts$loadings <- parse_csv_arg(sub("^--loadings=", "", a)); explicit <- c(explicit, "loadings")
+    } else if (a == "--strength") {
+      opts$strength <- parse_csv_arg(take(a)); explicit <- c(explicit, "strength")
+    } else if (grepl("^--strength=", a)) {
+      opts$strength <- parse_csv_arg(sub("^--strength=", "", a)); explicit <- c(explicit, "strength")
     } else if (a == "--no-restricted") {
       opts$include_restricted <- FALSE
     } else if (a == "--max-cells") {
@@ -184,15 +196,32 @@ parse_args <- function(args) {
   bad_gen <- setdiff(opts$generators, c("normal", "ig", "ordinal"))
   bad_scales <- setdiff(opts$scales, c("equal", "unequal"))
   bad_loadings <- setdiff(opts$loadings, c("mixed", "tau"))
+  bad_strength <- setdiff(opts$strength, c("weak", "moderate", "strong"))
+  bad_ind <- opts$indicators[!grepl("^([0-9]+|u)$", as.character(opts$indicators))]
   if (length(bad_gen)) stop("unknown generators: ", paste(bad_gen, collapse = ","), call. = FALSE)
   if (length(bad_scales)) stop("unknown scales: ", paste(bad_scales, collapse = ","), call. = FALSE)
   if (length(bad_loadings)) stop("unknown loadings: ", paste(bad_loadings, collapse = ","), call. = FALSE)
+  if (length(bad_strength)) stop("unknown strength: ", paste(bad_strength, collapse = ","), call. = FALSE)
+  if (length(bad_ind)) stop("bad indicators (want an integer or 'u'): ", paste(bad_ind, collapse = ","), call. = FALSE)
   if (!is.finite(opts$reps) || opts$reps < 1L) stop("--reps must be positive", call. = FALSE)
   if (any(!is.finite(opts$n)) || any(opts$n < 30L)) stop("--n values must be at least 30", call. = FALSE)
-  if (any(opts$factors < 1L) || any(opts$indicators < 3L)) stop("need at least 3 indicators per factor", call. = FALSE)
+  if (any(opts$factors < 1L) || any(vapply(opts$indicators, indicators_min, integer(1)) < 3L))
+    stop("need at least 3 indicators per factor", call. = FALSE)
   if (!is.finite(opts$cores) || opts$cores < 1L) stop("--cores must be positive", call. = FALSE)
   opts
 }
+
+# Per-factor indicator counts. An `indicators` token is either an integer count
+# (uniform: every factor gets that many) or "u" for an unbalanced 3/6 alternation
+# across factors. All downstream builders take the resolved per-factor vector so
+# uniform cells stay identical to the pre-unbalanced grid.
+mvec_for <- function(q, indicators) {
+  if (identical(as.character(indicators), "u"))
+    return(rep(c(3L, 6L), length.out = q))
+  rep(as.integer(indicators), q)
+}
+indicators_min <- function(indicators)
+  if (identical(as.character(indicators), "u")) 3L else as.integer(indicators)
 
 opts <- parse_args(commandArgs(TRUE))
 dir.create(opts$results_dir, recursive = TRUE, showWarnings = FALSE)
@@ -200,7 +229,7 @@ zcrit <- stats::qnorm(1 - opts$alpha / 2)
 fit_control <- list(max_iter = opts$ml_max_iter, ftol = 1e-10, gtol = 1e-7)
 
 condition_cols <- c("generator", "factors", "indicators", "rho", "scale",
-                    "loading", "constraint", "n")
+                    "loading", "strength", "constraint", "n")
 
 interaction_key <- function(df, cols) {
   do.call(interaction, c(df[cols], list(drop = TRUE, sep = "\r")))
@@ -226,17 +255,19 @@ timed_eval <- function(expr) {
   out
 }
 
-vars_for <- function(q, m) paste0("x", seq_len(q * m))
+vars_for <- function(mvec) paste0("x", seq_len(sum(mvec)))
 factors_for <- function(q) paste0("f", seq_len(q))
 
-block_index <- function(q, m) rep(seq_len(q), each = m)
+block_index <- function(mvec) rep(seq_along(mvec), times = mvec)
 
-model_syntax <- function(q, m, restricted = FALSE) {
-  vars <- vars_for(q, m)
+model_syntax <- function(q, indicators, restricted = FALSE) {
+  mvec <- mvec_for(q, indicators)
+  vars <- vars_for(mvec)
   fac <- factors_for(q)
+  off <- c(0L, cumsum(mvec))
   rows <- character()
   for (f in seq_len(q)) {
-    idx <- ((f - 1L) * m + 1L):(f * m)
+    idx <- (off[f] + 1L):off[f + 1L]
     rhs <- vars[idx]
     if (restricted) {
       rhs[-1L] <- paste0("l", f, "*", rhs[-1L])
@@ -245,7 +276,7 @@ model_syntax <- function(q, m, restricted = FALSE) {
   }
   if (restricted) {
     for (f in seq_len(q)) {
-      idx <- ((f - 1L) * m + 1L):(f * m)
+      idx <- (off[f] + 1L):off[f + 1L]
       for (v in vars[idx]) rows <- c(rows, paste0(v, " ~~ e", f, "*", v))
     }
   }
@@ -258,21 +289,28 @@ compound_phi <- function(q, rho) {
   Phi
 }
 
-loading_values <- function(q, m, loading) {
-  if (loading == "tau") return(rep(0.70, q * m))
-  base <- rep(c(0.55, 0.65, 0.75, 0.60, 0.70), length.out = m)
-  rep(base, q)
+# Standardized loadings, per factor. `strength` scales the whole pattern:
+# moderate reproduces the original magnitudes; weak stresses the communality
+# estimators (where average-of-ratios hurts); strong makes them easy. Capped
+# below 1 so residual variances stay positive.
+loading_values <- function(mvec, loading, strength = "moderate") {
+  mult <- c(weak = 0.62, moderate = 1.0, strong = 1.20)[[strength]]
+  cap <- function(v) pmin(v, 0.95)
+  if (loading == "tau") return(cap(rep(0.70 * mult, sum(mvec))))
+  pattern <- c(0.55, 0.65, 0.75, 0.60, 0.70)
+  vals <- unlist(lapply(mvec, function(mi) rep(pattern, length.out = mi)))
+  cap(vals * mult)
 }
 
-continuous_scales <- function(q, m, scale) {
-  if (scale == "equal") return(rep(1, q * m))
-  base <- rep(c(0.70, 1.00, 1.45, 0.85, 1.25), length.out = m)
-  rep(base, q)
+continuous_scales <- function(mvec, scale) {
+  if (scale == "equal") return(rep(1, sum(mvec)))
+  pattern <- c(0.70, 1.00, 1.45, 0.85, 1.25)
+  unlist(lapply(mvec, function(mi) rep(pattern, length.out = mi)))
 }
 
-ordinal_probs_for <- function(q, m, scale) {
+ordinal_probs_for <- function(mvec, scale) {
   base <- c(.08, .17, .35, .25, .15)
-  if (scale == "equal") return(rep(list(base), q * m))
+  if (scale == "equal") return(rep(list(base), sum(mvec)))
   pats <- list(
     c(.03, .12, .30, .35, .20),
     c(.15, .30, .30, .18, .07),
@@ -280,7 +318,7 @@ ordinal_probs_for <- function(q, m, scale) {
     c(.20, .25, .30, .17, .08),
     c(.04, .16, .28, .32, .20)
   )
-  rep(pats, length.out = q * m)
+  rep(pats, length.out = sum(mvec))
 }
 
 code_variance <- function(prob) {
@@ -289,32 +327,33 @@ code_variance <- function(prob) {
   sum((x - mu)^2 * prob)
 }
 
-make_population <- function(q, m, rho, loading, scale, generator) {
-  vars <- vars_for(q, m)
+make_population <- function(q, indicators, rho, loading, scale, generator,
+                            strength = "moderate") {
+  mvec <- mvec_for(q, indicators)
+  p <- sum(mvec)
+  off <- c(0L, cumsum(mvec))
+  vars <- vars_for(mvec)
   fac <- factors_for(q)
-  blocks <- block_index(q, m)
-  lambda_std <- loading_values(q, m, loading)
+  blocks <- block_index(mvec)
+  lambda_std <- loading_values(mvec, loading, strength)
   theta_std <- 1 - lambda_std^2
   Phi_cor <- compound_phi(q, rho)
-  Lstd <- matrix(0, q * m, q, dimnames = list(vars, fac))
+  Lstd <- matrix(0, p, q, dimnames = list(vars, fac))
   for (j in seq_along(vars)) Lstd[j, blocks[[j]]] <- lambda_std[[j]]
-  R <- Lstd %*% Phi_cor %*% t(Lstd) + diag(theta_std, q * m)
+  R <- Lstd %*% Phi_cor %*% t(Lstd) + diag(theta_std, p)
   dimnames(R) <- list(vars, vars)
   marginals <- NULL
-  scales <- continuous_scales(q, m, scale)
+  scales <- continuous_scales(mvec, scale)
   if (generator == "ordinal") {
-    marginals <- ordinal_probs_for(q, m, scale)
+    marginals <- ordinal_probs_for(mvec, scale)
     scales <- sqrt(vapply(marginals, code_variance, numeric(1)))
   }
-  D <- diag(scales, q * m)
+  D <- diag(scales, p)
   Sigma <- D %*% R %*% D
-  Lambda <- matrix(0, q * m, q, dimnames = list(vars, fac))
+  Lambda <- matrix(0, p, q, dimnames = list(vars, fac))
   Phi <- matrix(0, q, q, dimnames = list(fac, fac))
   Theta <- stats::setNames(scales^2 * theta_std, vars)
-  markers <- integer(q)
-  for (f in seq_len(q)) {
-    markers[[f]] <- (f - 1L) * m + 1L
-  }
+  markers <- off[seq_len(q)] + 1L
   marker_scale_loading <- scales[markers] * lambda_std[markers]
   for (j in seq_along(vars)) {
     f <- blocks[[j]]
@@ -808,6 +847,7 @@ condition_grid <- function(opts) {
     rho = opts$rho,
     scale = opts$scales,
     loading = opts$loadings,
+    strength = opts$strength,
     constraint = "configural",
     n = opts$n,
     stringsAsFactors = FALSE
@@ -821,6 +861,7 @@ condition_grid <- function(opts) {
       rho = opts$rho,
       scale = "equal",
       loading = "tau",
+      strength = opts$strength,
       constraint = "tau_resid",
       n = opts$n,
       stringsAsFactors = FALSE
@@ -829,7 +870,7 @@ condition_grid <- function(opts) {
   grid <- rbind(config, restricted)
   grid <- grid[order(grid$constraint, grid$generator, grid$factors,
                      grid$indicators, grid$rho, grid$scale, grid$loading,
-                     grid$n), ]
+                     grid$strength, grid$n), ]
   rownames(grid) <- NULL
   if (is.finite(opts$max_cells)) grid <- head(grid, opts$max_cells)
   grid
@@ -839,7 +880,7 @@ population_rows <- function(grid) {
   pops <- lapply(seq_len(nrow(grid)), function(i) {
     g <- grid[i, ]
     pop <- make_population(g$factors, g$indicators, g$rho, g$loading,
-                           g$scale, g$generator)
+                           g$scale, g$generator, g$strength)
     data.frame(
       g,
       p = length(pop$vars),
@@ -885,6 +926,7 @@ write_metadata(
     rho = opts$rho,
     scales = opts$scales,
     loadings = opts$loadings,
+    strength = opts$strength,
     include_restricted = opts$include_restricted,
     max_cells = opts$max_cells,
     cores = opts$cores,
@@ -911,7 +953,8 @@ for (cell in seq_len(nrow(grid))) {
   cond <- grid[cell, condition_cols, drop = FALSE]
   restricted <- identical(cond$constraint[[1]], "tau_resid")
   pop <- make_population(cond$factors[[1]], cond$indicators[[1]], cond$rho[[1]],
-                         cond$loading[[1]], cond$scale[[1]], cond$generator[[1]])
+                         cond$loading[[1]], cond$scale[[1]], cond$generator[[1]],
+                         cond$strength[[1]])
   pt <- core$lavaan_lavaanify(model_syntax(cond$factors[[1]], cond$indicators[[1]], restricted))
   info <- free_param_info(pt, pop$vars, pop$factors)
   target <- theta_target(info, pop)
@@ -924,9 +967,10 @@ for (cell in seq_len(nrow(grid))) {
   }
   baseline <- if (restricted) "ml_emp_restricted" else "ml_emp"
   seed <- opts$seed_base + 100000L * cell
-  cat(sprintf("[%d/%d] %s q=%d m=%d rho=%.2f scale=%s loading=%s constraint=%s n=%d reps=%d\n",
+  cat(sprintf("[%d/%d] %s q=%d m=%s rho=%.2f scale=%s loading=%s strength=%s constraint=%s n=%d reps=%d\n",
               cell, nrow(grid), cond$generator, cond$factors, cond$indicators,
-              cond$rho, cond$scale, cond$loading, cond$constraint, cond$n, opts$reps))
+              cond$rho, cond$scale, cond$loading, cond$strength, cond$constraint,
+              cond$n, opts$reps))
   draws_res <- timed_eval(draws_for_condition(pop, cond$generator[[1]], cond$n[[1]],
                                               opts$reps, seed))
   if (!draws_res$ok) {
