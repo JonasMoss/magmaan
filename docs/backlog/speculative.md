@@ -400,6 +400,95 @@ Design cautions (author, 2026-06-30, after the experiment-44 2x2):
   (near-nominal and balanced on normal data to N=20; the residual is heavy-tails x
   tiny-N, the avar-debias's territory).
 
+### Studentized permutation measurement-invariance test (and why the closed-form map is the wrong engine for it)
+
+Permutation testing of metric invariance was scoped as a possible raison d'etre for
+the non-iterative (Guttman) CFA estimators ([[noniterative-cfa-inference]]): a
+permutation reference needs `B` refits, the closed-form map refits far faster than
+ML, so a `B`-fold speedup looked like it was sitting there. **Probed and rejected
+2026-07-09.** The probe is tracked at
+`docs/research/sims/r/guttman_permutation_invariance_probe.R`; both tables below
+reproduce from it.
+
+The statistic is a Wald test of the metric restriction in the marker metric,
+`W(labels) = (A theta)'(A Omega A')^-1 (A theta)`, which both estimators compute
+through the same `inference_wald_test_theta` primitive with the same `A` and the
+same permutations. Plain label permutation is exact only under *full*
+exchangeability, which metric invariance does not deliver: the groups may still
+differ in `Phi`, `alpha`, `Psi`. The pooled data is nevertheless a common-factor
+model with the same `Lambda` (the between-mean term lives in `Lambda`'s column
+space), so `A theta` stays centred at 0 under permutation and the heterogeneity
+leaks in only through the *variance*. That is a Behrens-Fisher problem, and by
+Chung & Romano (2013, Ann. Statist.) a permutation test with an asymptotically
+*pivotal* (studentized) statistic stays asymptotically valid when exchangeability
+fails, and exact when it holds. So the studentizer is not a convenience, it is the
+precondition.
+
+Three studentizer arms, each computing `Omega` the same way for the observed and
+permuted labellings (the symmetry a permutation test requires; freezing `Omega` at
+the *observed* fit self-studentizes only the observed statistic and is spuriously
+conservative, which is a trap worth remembering):
+
+| arm | `Omega(labels)` | Jacobians |
+| --- | --- | --- |
+| `full` | `J(S(labels)) Gamma(X(labels)) J(S(labels))'/N` | `B+1` |
+| `pbread` | `J(S_pool) Gamma(X(labels)) J(S_pool)'/N` | 1 |
+| `pboth` | `J(S_pool) Gamma(X_pool) J(S_pool)'/N` | 1, constant |
+
+Level at `alpha=.05`, 2-group 2-factor 6-indicator CFA, metric-invariant loadings,
+600 reps x 199 permutations:
+
+| cell | map `full` | `pbread` | `pboth` | ML `full` |
+| --- | --- | --- | --- | --- |
+| `n=50`, `phi=(1,1)` | 0.064 | 0.042 | 0.042 | 0.059 |
+| `n=50`, `phi=(1,3)` | 0.053 | **0.217** | **0.232** | 0.067 |
+| `n=100`, `phi=(1,3)` | 0.042 | **0.240** | **0.250** | 0.043 |
+| `n=300`, `phi=(1,3)` | 0.038 | **0.183** | **0.190** | 0.037 |
+
+The frozen arms are exact under exchangeability and reject at 18-25% under
+factor-variance heterogeneity, and that does *not* shrink with `N`. Updating the
+meat buys essentially nothing over freezing everything (0.217 vs 0.232). **The
+pivotality lives entirely in the bread `J(S(labels))`** -- which is precisely the
+map's dominant cost, and precisely ML's cheapest object. Cost of one *valid*
+permutation (refit + restudentize), `n=300` per group:
+
+| `p` | map point | map full | ML point | ML full |
+| --- | --- | --- | --- | --- |
+| 6 | 0.058 | 0.370 | 0.245 | 0.308 |
+| 15 | 0.198 | 13.7 | 1.44 | 2.02 |
+| 25 | 0.364 | **172.0** | 4.28 | **9.06** |
+
+The map is ~12x *faster* per point fit and ~20x *slower* per valid permutation. The
+cost profiles are mirror images (map: cheap `tau`, expensive `J`; ML: expensive
+optimize, cheap expected information), and permutation inference amortizes neither.
+Statistically the map buys nothing either: level and power track ML to within noise
+(power 0.265 vs 0.282). Even a 10x optimization of `gmm_block_h2_jacobian` /
+`fit_block_jacobian_batched` (the known target, per `guttman_cfa_asymptotics.tex`)
+would leave the map at rough parity, not at a raison d'etre.
+
+**Alternative already available.** ML with per-permutation expected information is
+already the cheap and correct engine for this test, and `semTools::permuteMeasEq`
+(Jorgensen, Kite, Chen & Short 2018) is the incumbent. Note their `Delta chi^2` is
+LRT-based and therefore *implicitly* studentized (the nuisance `Phi` is re-estimated
+under both models), so the failure documented above is specific to Wald statistics
+carrying a frozen covariance, not to permutation MI testing as such. Confirm that
+before treating the level table as a criticism of the incumbent.
+
+**Build if.** Two live leads, neither of which needs the closed-form estimator.
+(1) *A small-sample MI paper, estimator-agnostic.* At `n=50` the asymptotic
+chi-square Wald rejects at 0.008 where the studentized permutation Wald is nominal
+(0.053) and carries roughly twice the power (0.166 vs 0.093). That is a real
+finding about MI testing at small `N` and it holds for ML. Gate it on first
+checking `permuteMeasEq`'s `Delta chi^2` under the same `phi` heterogeneity: if the
+LRT is already calibrated, the contribution shrinks to "do not permute a
+frozen-covariance Wald," which is a note, not a paper.
+(2) *The redirect.* The map's profile pays off in procedures that resample the
+**point estimate** and need no per-replicate studentizer: bootstrap percentile CIs,
+jackknife, cross-validation, Monte Carlo. That is exactly the lane below, which
+this probe materially strengthens. Do not re-attempt permutation MI as a
+closed-form showcase without first collapsing the Jacobian cost by an order of
+magnitude *and* finding a statistic whose pivotality does not require it.
+
 ### Efficient leave-one-out / infinitesimal jackknife for closed-form (non-iterative) CFA
 
 Near-free leave-one-out cross-validation for the non-iterative (Guttman) CFA
@@ -409,6 +498,12 @@ vech(S)` is *already computed* for the delta-method SEs. For an iterative ML fit
 LOO is `N` re-optimizations; here it is either `N` closed-form map evaluations
 (exact) or a single precomputed reduction (first order), so the "so much least
 squares" structure buys a genuine cost collapse.
+
+The permutation-MI probe above is direct empirical support for this lane's premise:
+the map is ~12x faster than ML per point fit at `p=25` and the gap widens with `p`,
+so any resampling scheme that needs *only* the point map (no per-replicate `Omega`)
+inherits that factor. Resampling schemes that need a per-replicate studentizer
+invert it.
 
 The one primitive is a rank-1 *scatter* downdate. Work with the cross-product
 `W = sum_j u_j u_j'`, `u_j = x_j - xbar`; removing case `i` *with* recentering is
