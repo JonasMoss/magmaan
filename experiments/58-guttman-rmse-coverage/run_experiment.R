@@ -92,7 +92,9 @@ parse_args <- function(args) {
       if (!"generators" %in% explicit) opts$generators <<- c("normal", "ig", "ordinal")
       if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L, 5L)
       if (!"indicators" %in% explicit) opts$indicators <<- c(3L, 5L)
-      if (!"rho" %in% explicit) opts$rho <<- c(0, 0.35)
+      # rho spans orthogonal -> strong so the aligned maps' cross-factor
+      # information actually gets stressed (0/0.35 alone showed no aligned gain).
+      if (!"rho" %in% explicit) opts$rho <<- c(0, 0.35, 0.6, 0.8)
       if (!"scales" %in% explicit) opts$scales <<- c("equal", "unequal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
     }

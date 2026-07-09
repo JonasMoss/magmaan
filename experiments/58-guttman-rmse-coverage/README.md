@@ -38,13 +38,13 @@ their intended target rather than under misspecification.
 - generators: `normal`, `ig`, `ordinal`
 - factors: `2`, `3`, `5`
 - indicators per factor: `3`, `5`
-- latent correlations: `0`, `0.35`
+- latent correlations: `0`, `0.35`, `0.6`, `0.8`
 - sample sizes: `100`, `300`, `800`
 - configural scales: `equal`, `unequal`
 - configural loading pattern: `mixed`
 - restricted cells: `tau_resid` with equal scales and tau loadings
 
-That is 324 cells: 216 configural plus 108 constrained. The independent-generator
+That is 648 cells: 432 configural plus 216 constrained. The independent-generator
 stress arm uses a mild Tukey g-and-h target, skewness `0.2` and excess kurtosis
 `0.5`, because stronger targets failed calibration for the 25-variable cells.
 
@@ -64,13 +64,14 @@ Then run the overnight grid:
 Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
   --full \
   --reps 150 \
-  --cores 3 \
+  --cores 8 \
   --results-dir experiments/58-guttman-rmse-coverage/results
 ```
 
-The largest-cell timing probe was about 1 second per heavy rep-cell on one core.
-With 324 cells and 150 reps, the conservative single-core bound is about 13.5
-hours; with 3 workers and thermal throttling, expect an overnight-scale run.
+The prior 324-cell run (rho `0`/`0.35`) took about 75 minutes at `--reps 150`
+on 8 cores. This grid doubles the rho axis to 648 cells, so budget on the order
+of 2.5-3 hours at 8 cores with the current SE path (faster once the
+inference-speed fix lands); an overnight-scale run either way.
 
 If launching detached, keep logs in the ignored results directory:
 
@@ -78,7 +79,7 @@ If launching detached, keep logs in the ignored results directory:
 nohup Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
   --full \
   --reps 150 \
-  --cores 3 \
+  --cores 8 \
   --results-dir experiments/58-guttman-rmse-coverage/results \
   > experiments/58-guttman-rmse-coverage/results/run.log 2>&1 &
 echo $! > experiments/58-guttman-rmse-coverage/results/run.pid
