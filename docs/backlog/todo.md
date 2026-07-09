@@ -2191,16 +2191,16 @@ work until a concrete downstream consumer appears.
   `estimate::frontier::estimate_h_communalities` and R `guttman_h()` expose AR,
   RS, triad least squares, anchor triad least squares, blockwise triad-GMM, and
   full selected-triad-GMM for a fixed simple-structure indicator block vector,
-  returning `h2`, `diag(H)`, and the filled `H`. `anchor_triad_ls` is the
+  returning `h2`, `diag(H)`, and the filled `H`. `extended_triad_ls` is the
   identity-weighted extended anchor-triad rule: one anchor stays in the target
   indicator's block, while the other may be cross-block.
   `experiments/55-guttman-communality-estimators` now benchmarks the package
   implementation directly. The promoted point-estimator lane landed as
-  `guttman_gls_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
+  `guttman_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
   The composite-weight axis also landed: `auto` keeps estimator defaults,
   `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
-  included in the map Jacobian, and `gls_aligned`
+  included in the map Jacobian, and `adaptive`
   uses the H-aligned data-dependent weights.
   **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
   now uses the regular-interior analytic derivative for configural Guttman
@@ -2219,25 +2219,25 @@ work until a concrete downstream consumer appears.
   remaining 5 ms fixed Jacobian cost, not empirical meat: NT and empirical SE
   timings were nearly identical at n = 300, while n-scaling only made the
   casewise contraction visible at much larger n. Follow-up profiling on
-  2026-07-09 traced the cost to `gmm_block_h2_jacobian()` building
+  2026-07-09 traced the cost to `triad_wls_h2_jacobian()` building
   full-global-width `dGamma` rows for block-local derivatives and materializing
   dense `dW` matrices when the GMM derivative needs only `A' dW e`. The
   configural path now accumulates block-active derivative columns directly,
   applies the fixed-rank pseudo-inverse derivative as a `dW e` action, and uses
   a guarded full-column-rank pseudo-inverse fast path for `M Gamma M'`.
   Repeated-call p = 25 timings dropped to roughly 1.5 ms for `unit` and
-  `standardized`, and 2.3 ms for `gls_aligned`; the remaining extra
-  `gls_aligned` cost is mostly the downstream data-dependent composite-weight
+  `standardized`, and 2.3 ms for `adaptive`; the remaining extra
+  `adaptive` cost is mostly the downstream data-dependent composite-weight
   derivative.
   The estimator-side residual-restricted Guttman map now has an explicit
   communality axis for the four LS-form H rules (`triad_ls`,
-  `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
+  `extended_triad_ls`, `triad_wls`, `triad_wls_joint`), defaulting to `triad_wls` and
   threading the same choice, along with the selected composite weight, through
   restricted Jacobians and grouped inference; AR/RS are rejected there because
   they do not supply a linear residual-constraint system. A second restricted
   timing pass found that the regular path was analytic but still assembled one
   covariance coordinate at a time: p = 25 residual-restricted SE calls were
-  about 166 ms. The default single-block `gmm_block` restricted path now
+  about 166 ms. The default single-block `triad_wls` restricted path now
   batches the constrained h2 KKT RHS with the same block-active `dW e` action
   as configural, solves the KKT system once over all RHS columns, batches the
   downstream score-regression derivative from the constrained `dH` diagonal,
@@ -2246,14 +2246,14 @@ work until a concrete downstream consumer appears.
   covariance column. Repeated-call p = 25 timings
   are now roughly 1.8 ms for residual-only restrictions, 2.8 ms for
   loading-only restrictions, and 3.2 ms for both under `unit`/`standardized`;
-  `gls_aligned` is about 2.7 / 3.7 / 3.9 ms. A follow-up fixed-fit empirical
+  `adaptive` is about 2.7 / 3.7 / 3.9 ms. A follow-up fixed-fit empirical
   restricted probe put `unit`/`standardized` at about 1.5x ULS robust SE and
-  `gls_aligned` at about 1.7x in the same p = 25 cell. The remaining restricted
+  `adaptive` at about 1.7x in the same p = 25 cell. The remaining restricted
   speed pass batches constrained RHS assembly for `triad_ls`,
-  `anchor_triad_ls`, and `gmm_block`, and lifts the fast path to grouped
+  `extended_triad_ls`, and `triad_wls`, and lifts the fast path to grouped
   restricted maps by solving the stacked communality KKT system once and
   feeding cross-block `dH` diagonals through the batched score-regression and
-  loading-projection derivatives. `gmm_full` remains analytic but direction-wise
+  loading-projection derivatives. `triad_wls_joint` remains analytic but direction-wise
   until the joint selected-triad GMM weight derivative is batched. The old
   `guttman` selector is retained as the legacy lavaan-like
   Spearman/incidence map.

@@ -14,22 +14,25 @@
 #'
 #' @param S Observed covariance or correlation matrix.
 #' @param blocks One simple-structure factor/block label per observed variable.
-#' @param method Communality rule: `"triad_ls"` (identity-weighted triad least
-#'   squares), `"anchor_triad_ls"` (same with cross-block anchor rows), `"rs"`
-#'   (ratio of sums), `"ar"` (average ratio), `"gmm_block"` (blockwise triad
-#'   GMM), or `"gmm_full"` (joint selected triad GMM). Historical aliases
-#'   `"ilm"` and `"anchor_ilm"` are accepted.
+#' @param method Communality rule, named as `[extended_]triad_[mean|pooled|ls|wls|wls_joint]`:
+#'   `"triad_ls"` (identity-weighted triad least squares),
+#'   `"extended_triad_ls"` (same plus cross-block triads, leveraging factor
+#'   correlations), `"triad_pooled"` (pooled ratio of triad sums),
+#'   `"triad_mean"` (mean of triad ratios; the lavaan rule), `"triad_wls"`
+#'   (efficiency-weighted triad LS, per block), or `"triad_wls_joint"` (one
+#'   joint weight across blocks). Old names `"ar"`, `"rs"`, `"gmm_block"`,
+#'   `"gmm_full"`, `"anchor_triad_ls"`, `"ilm"`, and `"anchor_ilm"` are still
+#'   accepted as aliases.
 #' @return A list with correlation-scale communalities `h2`, covariance-scale
 #'   diagonal `h_diag`, and `H`, equal to `S` with the diagonal replaced by
 #'   `h_diag`.
 #' @export
 guttman_h <- function(S, blocks,
-                      method = c("triad_ls", "anchor_triad_ls", "rs", "ar",
-                                 "gmm_block", "gmm_full", "ilm",
-                                 "anchor_ilm")) {
+                      method = c("triad_ls", "extended_triad_ls", "triad_mean",
+                                 "triad_pooled", "triad_wls", "triad_wls_joint",
+                                 "ar", "rs", "gmm_block", "gmm_full",
+                                 "anchor_triad_ls", "ilm", "anchor_ilm")) {
   method <- match.arg(method)
-  if (method == "ilm") method <- "triad_ls"
-  if (method == "anchor_ilm") method <- "anchor_triad_ls"
   S <- as.matrix(S)
   if (nrow(S) != ncol(S)) {
     stop("guttman_h(): `S` must be square", call. = FALSE)
@@ -58,17 +61,20 @@ guttman_h <- function(S, blocks,
 #'
 #' @param partable A magmaan/lavaan partable (as consumed by [fit_fit()]).
 #' @param sample_stats A magmaan sample-statistics list (S, nobs, ...).
-#' @param estimator Non-iterative estimator. `"guttman"` keeps the legacy
-#'   lavaan-like Spearman/incidence Guttman map; `"guttman_gls_aligned"` uses the
-#'   block-GLS H diagonal and aligned score reconstruction.
+#' @param estimator Non-iterative estimator. `"guttman_lavaan"` keeps the legacy
+#'   lavaan-like Spearman/incidence Guttman map (AR communality); `"guttman_aligned"`
+#'   uses the block-GLS H diagonal and aligned score reconstruction. Old names
+#'   `"guttman"` and `"guttman_gls_aligned"` are still accepted as aliases.
 #' @param composite Composite weights used by the Guttman regression:
 #'   `"auto"` preserves the estimator default, `"unit"` uses incidence weights,
 #'   `"standardized"` uses incidence weights after indicator standardization,
-#'   and `"gls_aligned"` uses the aligned data-dependent weights.
+#'   and `"adaptive"` uses the aligned data-dependent weights (retired; the old
+#'   name `"gls_aligned"` is still accepted).
 #' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
-fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman",
+fit_noniterative_cfa <- function(partable, sample_stats,
+                                 estimator = "guttman_lavaan",
                                  composite = "auto") {
   .finalize_noniterative_fit(
     noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite))
@@ -85,7 +91,7 @@ fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman",
 #' @inheritParams fit_noniterative_cfa
 #' @export
 fit_noniterative_cfa_metric <- function(partable, sample_stats,
-                                        estimator = "guttman_gls_aligned",
+                                        estimator = "guttman_aligned",
                                         composite = "auto") {
   .finalize_noniterative_fit(
     noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator,
@@ -102,12 +108,13 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
 #'
 #' @inheritParams fit_noniterative_cfa
 #' @param communality Least-squares-form communality rule for the residual/H
-#'   step: `"gmm_block"` (default), `"gmm_full"`, `"triad_ls"`, or
-#'   `"anchor_triad_ls"`.
+#'   step: `"triad_wls"` (default), `"triad_wls_joint"`, `"triad_ls"`, or
+#'   `"extended_triad_ls"`. Old names `"gmm_block"`, `"gmm_full"`, and
+#'   `"anchor_triad_ls"` are still accepted.
 #' @export
 fit_noniterative_cfa_restricted <- function(partable, sample_stats,
-                                            estimator = "guttman_gls_aligned",
-                                            communality = "gmm_block",
+                                            estimator = "guttman_aligned",
+                                            communality = "triad_wls",
                                             composite = "auto") {
   .finalize_noniterative_fit(
     noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,

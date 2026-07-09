@@ -168,13 +168,13 @@ golden `parTable()` fixtures.
   estimators into delta-method-inferable ones. `estimate::frontier::
   noniterative_cfa_theta` maps `sigma -> theta` and returns a complete
   `(Lambda, Phi, psi)`. The legacy `guttman` selector preserves the existing
-  lavaan-like Spearman/incidence Guttman map; `guttman_gls_aligned` is the
+  lavaan-like Spearman/incidence Guttman map; `guttman_aligned` is the
   promoted research selector, using the blockwise triad-GMM H diagonal and the
   aligned score reconstruction from the communality experiment. The Guttman
   regression also has an explicit composite-weight axis:
   `auto` preserves those estimator defaults, `unit` uses incidence weights,
   `standardized` uses `diag(S)^-1/2 Z` and is rebuilt from the live covariance
-  in every map evaluation, and `gls_aligned` uses the existing H-aligned
+  in every map evaluation, and `adaptive` uses the existing H-aligned
   data-dependent weights.
   `estimator_map_jacobian` is its `J = dtheta/dvech(S)`: configural Guttman
   maps use an analytic regular-interior derivative (including the
@@ -182,7 +182,7 @@ golden `parTable()` fixtures.
   Moore-Penrose-weight, composite-weight, inverse, and marker-scaling chains)
   with central differences retained as a boundary/rank-change fallback and as
   the generality seam for future FABIN2/Bentler/JS/MIIV maps. The promoted
-  `guttman_gls_aligned` configural path batches the block-GMM communality
+  `guttman_aligned` configural path batches the block-GMM communality
   Jacobian and downstream score-regression derivative over all covariance
   coordinates; the GMM communality Jacobian now works on block-active
   derivative columns, applies the pseudo-inverse derivative through its
@@ -192,13 +192,13 @@ golden `parTable()` fixtures.
   system and the loading projection, with central differences retained for
   rank-changing pseudo-inverse or singular projection boundary cases. The
   restricted path batches the constrained h2 KKT right-hand sides for
-  `triad_ls`, `anchor_triad_ls`, and `gmm_block`; the GMM branch uses the same
+  `triad_ls`, `extended_triad_ls`, and `triad_wls`; the GMM branch uses the same
   active-column `dW e` derivative as configural. The grouped restricted path
   embeds the active block RHS in the stacked communality system, reuses one
   joint KKT factorization across all covariance columns, feeds every block's
   constrained `dH` diagonal into the batched score-regression derivative, and
   applies the loading-projection derivative in action form, avoiding per-column
-  inverse-derivative matrices. `gmm_full` remains analytic but direction-wise.
+  inverse-derivative matrices. `triad_wls_joint` remains analytic but direction-wise.
   `robust::frontier::noniterative_se*` is the SE-only primitive:
   normal-theory paths contract `J Gamma J'/N`, while empirical paths stream
   casewise moment rows in parameter space rather than materializing dense
@@ -257,11 +257,11 @@ golden `parTable()` fixtures.
   (identity-weighted one-same-block anchor triads), blockwise triad-GMM, and
   full selected-triad-GMM diagonals for a fixed simple-structure indicator
   block vector. They return `h2`, `diag(H)`, and
-  `H = S` with only the diagonal replaced. The ordinary `guttman_gls_aligned`
+  `H = S` with only the diagonal replaced. The ordinary `guttman_aligned`
   point-estimator lane consumes the blockwise triad-GMM rule. The
   residual-restricted Guttman map can also select any least-squares-form
-  H-diagonal rule (`triad_ls`, `anchor_triad_ls`, `gmm_block`, `gmm_full`) and
-  any composite weight (`unit`, `standardized`, `gls_aligned`), reusing both
+  H-diagonal rule (`triad_ls`, `extended_triad_ls`, `triad_wls`, `triad_wls_joint`) and
+  any composite weight (`unit`, `standardized`, `adaptive`), reusing both
   choices in its restricted analytic-first Jacobian and grouped inference;
   AR/RS remain
   low-level H-estimation diagnostics because they are not constraint-compatible
@@ -281,7 +281,7 @@ golden `parTable()` fixtures.
   estimator-side restricted map `fit_noniterative_cfa_restricted` imposes
   separable loading/residual linear constraints inside the Guttman
   reconstruction: residual rows enter the selected LS-form communality/H step
-  (default `gmm_block`) and loading rows enter the Sigma-only composite
+  (default `triad_wls`) and loading rows enter the Sigma-only composite
   projection; unsupported mixed/factor/mean rows error. Grouped restricted
   inference uses the restricted map's full stacked analytic-first Jacobian
   with the same communality and composite choices, so cross-block constraints

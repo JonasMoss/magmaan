@@ -14,12 +14,12 @@ namespace magmaan::estimate::frontier {
 // The loading pattern is supplied as one block id per observed variable; each
 // block is one simple-structure factor and needs at least three indicators.
 enum class CommunalityMethod : std::uint8_t {
-  AverageRatio,                // mean_jk r_ij r_ik / r_jk
-  RatioOfSums,                 // sum_jk r_ij r_ik / sum_jk r_jk
-  TriadLeastSquares,           // sum_jk r_jk r_ij r_ik / sum_jk r_jk^2
-  AnchorTriadLeastSquares,     // same, adding cross-block anchor rows
-  GmmBlock,                    // triad-moment GMM, independent block weights
-  GmmFull,                     // triad-moment GMM, one joint selected weight
+  TriadMean,                  // mean_jk r_ij r_ik / r_jk         (was ar)
+  TriadPooled,                // sum_jk r_ij r_ik / sum_jk r_jk   (was rs)
+  TriadLeastSquares,          // sum_jk r_jk r_ij r_ik / sum_jk r_jk^2
+  ExtendedTriadLeastSquares,  // triad LS + cross-block triads    (was anchor_triad_ls)
+  TriadWls,                   // efficiency-weighted triad LS, per block   (was gmm_block)
+  TriadWlsJoint,              // efficiency-weighted triad LS, one joint weight (was gmm_full)
 };
 
 struct HCommunalityResult {
@@ -97,7 +97,7 @@ estimate_h2_communalities_directional(
 // `estimate_h2_communalities(S, ..., method)`, with columns ordered as the
 // lower-triangle column-major vech(S). The current batched path covers the
 // least-squares/GMM rules used by the configural GLS-aligned Guttman map:
-// triad_ls, anchor_triad_ls, and gmm_block. Unsupported methods return an
+// triad_ls, extended_triad_ls, and triad_wls. Unsupported methods return an
 // error so callers can fall back to directional derivatives or finite
 // differences.
 fit_expected<Eigen::MatrixXd>

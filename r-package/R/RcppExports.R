@@ -517,15 +517,15 @@ frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
     .Call(`_magmaan_frontier_guttman_h_impl`, S, blocks, method)
 }
 
-noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman", composite = "auto") {
+noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto") {
     .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite)
 }
 
-noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned", composite = "auto") {
+noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto") {
     .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite)
 }
 
-noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_gls_aligned", communality = "gmm_block", composite = "auto") {
+noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto") {
     .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite)
 }
 
