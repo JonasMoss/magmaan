@@ -177,9 +177,10 @@ guttman_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
   for (Eigen::Index f = 0; f < nfac; ++f)
     for (Eigen::Index g = 0; g < nfac; ++g) Phi(f, g) = ml(f) * P(f, g) * ml(g);
 
-  const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
+  const Eigen::MatrixXd LambdaPhi = Lambda * Phi;
   Eigen::VectorXd psi(nvar);
-  for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
+  for (Eigen::Index i = 0; i < nvar; ++i)
+    psi(i) = S(i, i) - LambdaPhi.row(i).dot(Lambda.row(i));
 
   return BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)};
 }
@@ -710,41 +711,55 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
     for (Eigen::Index g = 0; g < nfac; ++g)
       Phi(f, g) = marker(f) * Q(f, g) * marker(g);
   }
-  const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
+  const Eigen::MatrixXd LambdaPhi = Lambda * Phi;
   Eigen::VectorXd psi(nvar);
-  for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
+  for (Eigen::Index i = 0; i < nvar; ++i)
+    psi(i) = S(i, i) - LambdaPhi.row(i).dot(Lambda.row(i));
 
   Eigen::MatrixXd dLambda = Eigen::MatrixXd::Zero(nvar * nfac, pstar);
   Eigen::MatrixXd dPhi = Eigen::MatrixXd::Zero(nfac * nfac, pstar);
   Eigen::MatrixXd dpsi = Eigen::MatrixXd::Zero(nvar, pstar);
 
+  const auto dH_times = [&](const Eigen::Index col,
+                            const Eigen::Index r,
+                            const Eigen::Index c,
+                            const Eigen::MatrixXd& X) {
+    Eigen::MatrixXd out = X;
+    for (Eigen::Index i = 0; i < nvar; ++i)
+      out.row(i) *= dH_diag(i, col);
+    if (r != c) {
+      out.row(r) += X.row(c);
+      out.row(c) += X.row(r);
+    }
+    return out;
+  };
+
   Eigen::Index col = 0;
   for (Eigen::Index c = 0; c < nvar; ++c) {
     for (Eigen::Index r = c; r < nvar; ++r) {
-      Eigen::MatrixXd dH = Eigen::MatrixXd::Zero(nvar, nvar);
-      dH.diagonal() = dH_diag.col(col);
-      if (r != c) {
-        dH(r, c) = 1.0;
-        dH(c, r) = 1.0;
-      }
-
       Eigen::MatrixXd dB = Eigen::MatrixXd::Zero(nvar, nfac);
+      bool dB_nonzero = false;
       switch (resolved) {
         case CompositeWeight::Unit:
           break;
         case CompositeWeight::Standardized:
-          if (r == c) dB.row(r) = -0.5 * B.row(r) / S(r, r);
+          if (r == c) {
+            dB.row(r) = -0.5 * B.row(r) / S(r, r);
+            dB_nonzero = true;
+          }
           break;
         case CompositeWeight::GlsAligned: {
-          const Eigen::MatrixXd dG = Z.transpose() * dH * Z;
+          const Eigen::MatrixXd dHZ = dH_times(col, r, c, Z);
+          const Eigen::MatrixXd dG = Z.transpose() * dHZ;
           const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
           const Eigen::MatrixXd dP =
-              dH * Z * gls_Ginv + h->H * Z * dGinv;
+              dHZ * gls_Ginv + h->H * Z * dGinv;
           const Eigen::MatrixXd dgram =
               dP.transpose() * gls_P + gls_P.transpose() * dP;
           const Eigen::MatrixXd dgram_inv =
               -gls_gram_inv * dgram * gls_gram_inv;
           dB = dP * gls_gram_inv + gls_P * dgram_inv;
+          dB_nonzero = true;
           break;
         }
         case CompositeWeight::EstimatorDefault:
@@ -752,10 +767,15 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
               "Guttman batched Jacobian: unresolved composite weight"});
       }
 
-      const Eigen::MatrixXd dQ =
-          dB.transpose() * h->H * B + B.transpose() * dH * B +
-          B.transpose() * h->H * dB;
-      const Eigen::MatrixXd dHB = dH * B + h->H * dB;
+      const Eigen::MatrixXd dH_B = dH_times(col, r, c, B);
+      Eigen::MatrixXd dQ = B.transpose() * dH_B;
+      Eigen::MatrixXd dHB = dH_B;
+      if (dB_nonzero) {
+        const Eigen::MatrixXd HdB = h->H * dB;
+        dQ.noalias() += dB.transpose() * HB;
+        dQ.noalias() += HB.transpose() * dB;
+        dHB.noalias() += HdB;
+      }
       const Eigen::MatrixXd dKstar =
           dHB * (*Qinv) - Kstar * dQ * (*Qinv);
 
@@ -778,13 +798,15 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
         }
       }
 
-      const Eigen::MatrixXd dimplied =
-          dLambda_col * Phi * Lambda.transpose() +
-          Lambda * dPhi_col * Lambda.transpose() +
-          Lambda * Phi * dLambda_col.transpose();
+      const Eigen::MatrixXd dLambdaPhi = dLambda_col * Phi;
+      const Eigen::MatrixXd LambdaDPhi = Lambda * dPhi_col;
       for (Eigen::Index i = 0; i < nvar; ++i) {
         const double dSii = (r == c && r == i) ? 1.0 : 0.0;
-        dpsi(i, col) = dSii - dimplied(i, i);
+        const double dimplied_ii =
+            dLambdaPhi.row(i).dot(Lambda.row(i)) +
+            LambdaDPhi.row(i).dot(Lambda.row(i)) +
+            LambdaPhi.row(i).dot(dLambda_col.row(i));
+        dpsi(i, col) = dSii - dimplied_ii;
       }
       for (Eigen::Index i = 0; i < nvar; ++i) {
         for (Eigen::Index f = 0; f < nfac; ++f)
