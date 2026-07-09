@@ -33,13 +33,13 @@
 #
 # Only `full` is asymptotically pivotal, so by Chung & Romano (2013, Ann. Statist.)
 # only `full` should survive the loss of exchangeability that factor-variance
-# heterogeneity induces. `pbread` is the only arm that is cheap for the map, because
-# the map's Jacobian J is its dominant cost while Gamma is nearly free.
+# heterogeneity induces. `pbread` is cheaper because it avoids per-permutation
+# Jacobians, but it is a diagnostic arm rather than a valid heteroskedastic test.
 #
 # Finding (see docs/backlog/speculative.md): `pbread` buys essentially nothing over
 # `pboth` -- the pivotality lives in the bread, not the meat -- so a valid permutation
-# Wald must rebuild J per permutation. That inverts the estimator's cost profile: the
-# map is ~12x faster than ML per point fit and ~20x slower per valid permutation.
+# Wald must rebuild J per permutation. The probe uses the SE-only postfit path, so
+# it times the needed studentizer rather than the residual GOF spectrum.
 
 suppressMessages(library(magmaan))
 core <- magmaan::magmaan_core
@@ -117,9 +117,11 @@ fit_map <- function(pt, ss) {
 }
 # ctx_from_fit(fit) supplies S/nobs/partable (the bread); `data` supplies only the
 # empirical fourth-moment meat. That split is what makes the `pbread` arm expressible.
+# Use the SE-only path: the permutation statistic needs Omega, not the residual
+# projector or weighted-chi-square GOF spectrum.
 omega_map <- function(fit, ss) {
   if (is.null(fit)) return(NULL)
-  tryCatch(noniterative_cfa_grouped_inference(fit, "uls", "empirical", ss)$vcov,
+  tryCatch(noniterative_cfa_se(fit, "empirical", ss)$vcov,
            error = function(e) NULL)
 }
 fit_ml <- function(pt, ss) {
