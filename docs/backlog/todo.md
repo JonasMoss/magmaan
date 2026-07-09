@@ -2248,14 +2248,18 @@ work until a concrete downstream consumer appears.
   loading-only restrictions, and 3.2 ms for both under `unit`/`standardized`;
   `adaptive` is about 2.7 / 3.7 / 3.9 ms. A follow-up fixed-fit empirical
   restricted probe put `unit`/`standardized` at about 1.5x ULS robust SE and
-  `adaptive` at about 1.7x in the same p = 25 cell. The remaining restricted
-  speed pass batches constrained RHS assembly for `triad_ls`,
-  `extended_triad_ls`, and `triad_wls`, and lifts the fast path to grouped
-  restricted maps by solving the stacked communality KKT system once and
-  feeding cross-block `dH` diagonals through the batched score-regression and
-  loading-projection derivatives. `triad_wls_joint` remains analytic but direction-wise
-  until the joint selected-triad GMM weight derivative is batched. The old
-  `guttman` selector is retained as the legacy lavaan-like
+  `adaptive` at about 1.7x in the same p = 25 cell. A later no-constraint
+  restricted-proxy speed fix bypassed the stacked KKT system whenever
+  `R_h2` is empty, evaluates the selected H diagonal directly, and feeds its
+  batched `dH` columns into the existing score-regression/loading-projection
+  derivative. The same pass changed correlation-standardization Jacobian rows
+  from dense `p*` additions to three-coordinate scatters. This specifically
+  removed the `extended_triad_ls` + `standardized` proxy artifact: repeated-call
+  p = 15/25/50 fit+empirical-SE timings are now roughly 0.3 / 0.9 / 8.0 ms,
+  not 7.3 / 91 / 2142 ms. True residual-communality constraints still use the
+  stacked KKT path above, and `triad_wls_joint` remains analytic but
+  direction-wise until the joint selected-triad GMM weight derivative is
+  batched. The old `guttman` selector is retained as the legacy lavaan-like
   Spearman/incidence map.
   **Deferred: Guttman vocabulary cleanup phase.** The 2026-07 rename
   (commit 7655659) made the gmm-free names canonical (communality
@@ -2279,7 +2283,8 @@ work until a concrete downstream consumer appears.
   Trigger: after the configural `extended_triad_ls`-with-`standardized`
   wiring lands and exp-58 re-runs on the new names.
   **Quality verdict (2026-07-09): the aligned map is a decent success on
-  RMSE; speed is the weak point.** Bad-boi worst-draw sanity (q=3, m=5,
+  RMSE; speed is now mostly an SE-coverage caveat, not a blocker.** Bad-boi
+  worst-draw sanity (q=3, m=5,
   rho=0.8, weak, n=150; single draw, exp-58 has the across-draws numbers):
   the recommended `extended_triad_ls` + `standardized` recipe lands loading
   RMSE at ~1.1x NTML (a dead heat on the parameters, in closed form on the
@@ -2290,29 +2295,28 @@ work until a concrete downstream consumer appears.
   catastrophic here (~22-30x NTML on loadings, loadings to ~65) which is why
   it is retired; legacy `guttman_lavaan` is ~3.65x (the AR/`triad_mean`
   instability, see `papers/closed-form-omega/dev/notes/anti-ar-example.md`).
-  Good enough for most purposes. **Speed: the fit wins big, the SE is the
-  cost, the restricted SE is the acute problem.** Head-to-head timing
+  Good enough for most purposes. **Speed: the fit wins big, and the old
+  extended-via-restricted proxy bottleneck is gone.** Head-to-head timing
   (2026-07-09, n=300, ms/call, p=q*5):
   ```
   p    guttman_fit  guttman_fit+SE   ntml_fit  ntml_fit+SE  uls_fit+SE  ext_via_restricted+SE
-  15      0.10          0.63           0.54        0.83        0.74            7.3
-  25      0.19          1.74           1.73        3.08        3.27           91
-  50      0.68         13.4           14.9        55.3        61.5         2142
+  15      0.10          0.63           0.54        0.83        0.74            0.3
+  25      0.19          1.74           1.73        3.08        3.27            0.9
+  50      0.68         13.4           14.9        55.3        61.5            8.0
   ```
   Read-out: (1) the point fit is 5x-22x faster than NTML and scales better
   (0.68 vs 14.9 ms at p=50); (2) the configural fit+SE fast path already
   BEATS NTML+SE and pulls ahead with p (0.76x -> 0.57x -> 0.24x), so the
-  recommended recipe's speed is already a win once extended rides it;
-  (3) within configural Guttman the SE is ~20x the fit (p=50: 0.68 ms fit,
-  13.4 ms fit+SE), so the SE is where the time now lives; (4) the restricted
-  path SE is unbatched and catastrophic (30x-40x NTML, 2142 ms at p=50),
-  which is where extended is stuck today via the restricted-unconstrained
-  proxy. Levers: (a) Part B (expose `extended` on the configural fast path)
-  moves it off the 2142 ms proxy onto the ~13 ms path -- biggest single win;
-  (b) batch the restricted empirical-SE (the "main selling point"); (c)
-  `triad_wls_joint`/`triad_mean`/`triad_pooled` SE still fall back to finite
-  differences. The estimator is not slow -- the SE is, and the restricted SE
-  acutely so.
+  recommended recipe's speed is already a win; (3) the no-constraint
+  restricted proxy for extended is now on the direct-H fast path and is faster
+  than current configural fit+SE at p=50 in this probe (8.0 vs 13.4 ms), so
+  Part B is now first-class configural API wiring rather than a speed rescue;
+  (4) within configural Guttman the SE is ~20x the fit (p=50: 0.68 ms fit,
+  13.4 ms fit+SE), so any remaining speed work is mostly SE work; (5) the
+  remaining C++ speed caveats are true residual-communality constraints, which
+  still use the stacked KKT path, and methods whose SE is still direction-wise
+  or finite-difference fallback (`triad_wls_joint`, `triad_mean`,
+  `triad_pooled`).
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary

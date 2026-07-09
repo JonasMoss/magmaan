@@ -1557,6 +1557,31 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
   return out;
 }
 
+fit_expected<BlockGuttman>
+fit_aligned_block_with_communality(const CfaBlockLayout& L,
+                                   const Eigen::MatrixXd& S,
+                                   CommunalityMethod comm,
+                                   CompositeWeight composite,
+                                   const char* label) {
+  auto block_of = block_ids_from_layout(L);
+  if (!block_of.has_value()) return std::unexpected(block_of.error());
+  auto h = estimate_h_communalities(S, *block_of, comm);
+  if (!h.has_value()) return std::unexpected(h.error());
+
+  for (Eigen::Index i = 0; i < S.rows(); ++i) {
+    const double h_diag = h->h_diag(i);
+    const double resid = S(i, i) - h_diag;
+    const double scale = std::max(1.0, std::abs(S(i, i)));
+    if (!std::isfinite(h_diag) || !std::isfinite(resid) ||
+        h_diag < -1e-8 * scale || resid < -1e-8 * scale) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": communality split is improper"});
+    }
+  }
+
+  return guttman_aligned_block_from_h(L, S, h->H, label, composite);
+}
+
 fit_expected<std::vector<BlockGuttman>>
 fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
                       const std::vector<Eigen::MatrixXd>& S,
@@ -1567,6 +1592,18 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
   if (nblk == 0 || nblk != S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman map: block / sample covariance count mismatch"});
+
+  if (!has_rows(rows.R_h2)) {
+    std::vector<BlockGuttman> out;
+    out.reserve(nblk);
+    for (std::size_t b = 0; b < nblk; ++b) {
+      auto gb = fit_aligned_block_with_communality(
+          layouts[b], S[b], comm, composite, "restricted Guttman map");
+      if (!gb.has_value()) return std::unexpected(gb.error());
+      out.push_back(std::move(*gb));
+    }
+    return out;
+  }
 
   std::vector<CommunalitySystem> systems;
   systems.reserve(nblk);
@@ -2675,6 +2712,73 @@ assemble_theta_jacobian_multi(
 }
 
 fit_expected<Eigen::MatrixXd>
+restricted_no_h2_jacobian(
+    const model::ModelEvaluator& ev,
+    const std::vector<CfaBlockLayout>& layouts,
+    const data::SampleStats& samp,
+    const RestrictedRows& rows,
+    std::size_t block,
+    CommunalityMethod comm,
+    CompositeWeight resolved) {
+  const Eigen::Index p_active = samp.S[block].rows();
+  const Eigen::Index pstar = vech_size(p_active);
+  const char* label = "restricted Guttman analytic Jacobian";
+
+  std::vector<BlockGuttmanJacobian> dblocks;
+  std::vector<BlockGuttman> base_blocks;
+  dblocks.reserve(layouts.size());
+  base_blocks.reserve(layouts.size());
+
+  for (std::size_t b = 0; b < layouts.size(); ++b) {
+    auto block_of = block_ids_from_layout(layouts[b]);
+    if (!block_of.has_value()) return std::unexpected(block_of.error());
+    auto h = estimate_h_communalities(samp.S[b], *block_of, comm);
+    if (!h.has_value()) return std::unexpected(h.error());
+
+    const Eigen::Index p = layouts[b].n_observed;
+    Eigen::MatrixXd dH_diag = Eigen::MatrixXd::Zero(p, pstar);
+    std::vector<DirectCovColumn> direct_cols(
+        static_cast<std::size_t>(pstar), DirectCovColumn{-1, -1});
+
+    if (b == block) {
+      auto Jh2 = estimate_h2_communalities_jacobian(samp.S[b], *block_of, comm);
+      if (!Jh2.has_value()) return std::unexpected(Jh2.error());
+      if (Jh2->rows() != p || Jh2->cols() != pstar)
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman analytic Jacobian: communality Jacobian "
+            "dimension mismatch"});
+      for (Eigen::Index i = 0; i < p; ++i) {
+        dH_diag.row(i) = samp.S[b](i, i) * Jh2->row(i);
+        dH_diag(i, vech_index(i, i, p)) += h->h2(i);
+      }
+
+      Eigen::Index col = 0;
+      for (Eigen::Index c = 0; c < p; ++c) {
+        for (Eigen::Index r = c; r < p; ++r) {
+          direct_cols[static_cast<std::size_t>(col)] = DirectCovColumn{r, c};
+          ++col;
+        }
+      }
+    }
+
+    auto db = fit_block_jacobian_from_h_batched_columns(
+        layouts[b], samp.S[b], h->H, dH_diag, direct_cols, resolved, label);
+    if (!db.has_value()) return std::unexpected(db.error());
+    base_blocks.push_back(db->base);
+    dblocks.push_back(std::move(*db));
+  }
+
+  auto J0 = assemble_theta_jacobian_multi(ev, layouts, dblocks, pstar);
+  if (!J0.has_value()) return std::unexpected(J0.error());
+  if (!has_rows(rows.R_load)) return J0;
+
+  auto theta0 = assemble_theta(ev, layouts, base_blocks, samp);
+  if (!theta0.has_value()) return std::unexpected(theta0.error());
+  return project_loading_constraints_jacobian(
+      ev, layouts, dblocks, rows, *theta0, *J0);
+}
+
+fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian_block_analytic_impl(
     const spec::LatentStructure& pt,
     const model::MatrixRep& rep,
@@ -2808,6 +2912,13 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   const char* label = "restricted Guttman analytic Jacobian";
+
+  if (!has_rows(rows->R_h2) && comm != CommunalityMethod::TriadWlsJoint) {
+    auto fast = restricted_no_h2_jacobian(
+        ev, layouts, samp, *rows, block, comm, resolved);
+    if (fast.has_value()) return fast;
+    return std::unexpected(fast.error());
+  }
 
   std::vector<std::vector<std::int32_t>> block_of(nblk);
   std::vector<CommunalitySystem> systems;
