@@ -2202,12 +2202,22 @@ work until a concrete downstream consumer appears.
   `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
   included in the map Jacobian, and `gls_aligned`
   uses the H-aligned data-dependent weights.
-  **Analytic configural Jacobians landed**: `estimator_map_jacobian` now uses
-  the regular-interior analytic derivative for configural Guttman maps,
-  including the correlation-standardization, triad-GMM communality,
-  fixed-rank Moore-Penrose-weight, composite-weight, inverse, and marker-scaling
-  chains; central differences remain the boundary/rank-change fallback and the
-  restricted-map path.
+  **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
+  now uses the regular-interior analytic derivative for configural Guttman
+  maps, including the correlation-standardization, triad-GMM communality,
+  fixed-rank Moore-Penrose-weight, composite-weight, inverse, and
+  marker-scaling chains. The promoted configural path batches the
+  block-GMM communality Jacobian and downstream score-regression derivative over
+  all covariance coordinates. Restricted estimator-side maps differentiate the
+  active communality KKT system and loading projection in the regular interior;
+  central differences remain only as the boundary/rank-change fallback. The
+  `noniterative_se*` primitives compute just `Omega = J Gamma J'/N`; empirical
+  SEs stream casewise moment rows in parameter space, while full
+  `noniterative_inference*` remains responsible for the residual GOF projector
+  and weighted-chi2 spectrum. A p = 25 configural slice of experiment 58
+  (`normal`, five factors, five indicators each, n = 300, empirical SEs) now
+  has Guttman SE medians of 5-6 ms for `guttman_std`, `guttman_unit`, and
+  `guttman_gls`, versus 2 ms for the ML/ULS empirical-SE arms in the same cell.
   The estimator-side residual-restricted Guttman map now has an explicit
   communality axis for the four LS-form H rules (`triad_ls`,
   `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
@@ -2242,11 +2252,11 @@ work until a concrete downstream consumer appears.
   estimator-side H0/H1 fits; and true (free-latent-mean) scalar invariance via
   the reference-group mean map (linearized pseudo-inverse Wald).
   C++ `estimate::frontier::fit_noniterative_cfa_{metric,restricted}` and
-  `robust::frontier::noniterative_{inference_grouped,difference_test,
+  `robust::frontier::noniterative_{se,inference_grouped,difference_test,
   constrained_fit,scalar_invariance}`; R
   `fit_noniterative_cfa_{metric,restricted}` and
-  `magmaan_core$noniterative_cfa_{grouped_inference,pseudo_lrt,constrained,
-  scalar}_impl`;
+  `magmaan_core$noniterative_cfa_{se,grouped_inference,pseudo_lrt,
+  constrained,scalar}_impl`;
   note `constrained_noniterative_cfa` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`); validated by
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the

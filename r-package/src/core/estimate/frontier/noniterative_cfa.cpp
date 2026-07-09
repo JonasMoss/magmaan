@@ -833,6 +833,11 @@ struct RestrictedRows {
   Eigen::VectorXd r_load;
 };
 
+struct RestrictedRowsDirection {
+  Eigen::MatrixXd dR_h2;
+  Eigen::VectorXd dr_h2;
+};
+
 fit_expected<RestrictedRows> restricted_error(std::string detail) {
   return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail)});
 }
@@ -968,6 +973,116 @@ restricted_rows_from_partable(const spec::LatentStructure& pt,
   for (std::size_t i = 0; i < o_rows.size(); ++i) {
     out.R_load.row(static_cast<Eigen::Index>(i)) = o_rows[i].transpose();
     out.r_load(static_cast<Eigen::Index>(i)) = o_rhs[i];
+  }
+  return out;
+}
+
+fit_expected<RestrictedRowsDirection>
+restricted_rows_direction_from_partable(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const std::vector<CfaBlockLayout>& layouts,
+    const std::vector<Eigen::MatrixXd>& dS) {
+  auto con = estimate::build_eq_constraints(pt);
+  if (!con.has_value()) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman derivative: " + con.error().detail});
+  }
+  if (dS.size() != layouts.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman derivative: block / covariance-direction count "
+        "mismatch"});
+
+  const auto locs = ev.param_locations();
+  const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
+  const std::vector<Eigen::Index> offs = h2_offsets(layouts);
+  const Eigen::Index n_h2 = offs.back();
+  std::vector<Eigen::VectorXd> d_rows;
+  std::vector<double> d_rhs;
+  constexpr double tol = 1e-12;
+
+  for (std::size_t b = 0; b < layouts.size(); ++b) {
+    if (dS[b].rows() != layouts[b].n_observed ||
+        dS[b].cols() != layouts[b].n_observed)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman derivative: covariance direction dimension "
+          "mismatch"});
+  }
+
+  for (Eigen::Index r = 0; r < con->A_eq.rows(); ++r) {
+    bool any = false;
+    bool touches_resid = false;
+    bool touches_load = false;
+    bool touches_other = false;
+    for (Eigen::Index k = 0; k < q; ++k) {
+      if (std::abs(con->A_eq(r, k)) <= tol) continue;
+      any = true;
+      const auto& loc = locs[static_cast<std::size_t>(k)];
+      if (loc.mat == model::MatId::Theta && loc.row == loc.col) {
+        touches_resid = true;
+      } else if (loc.mat == model::MatId::Lambda) {
+        touches_load = true;
+      } else {
+        touches_other = true;
+      }
+    }
+    if (!any) continue;
+    if ((touches_resid && touches_load) ||
+        ((touches_resid || touches_load) && touches_other)) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman derivative: equality row mixes residual, "
+          "loading, or unsupported parameters"});
+    }
+    if (touches_other)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman derivative: factor/intercept constraints are "
+          "outside the residual-constrained Sigma-only map"});
+    if (!touches_resid) continue;
+
+    Eigen::VectorXd row = Eigen::VectorXd::Zero(n_h2);
+    double rhs = 0.0;
+    for (Eigen::Index k = 0; k < q; ++k) {
+      const double a = con->A_eq(r, k);
+      if (std::abs(a) <= tol) continue;
+      const auto& loc = locs[static_cast<std::size_t>(k)];
+      const auto b = static_cast<std::size_t>(loc.block);
+      if (b >= layouts.size() || loc.row < 0 ||
+          loc.row >= layouts[b].n_observed)
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman derivative: residual constraint row has "
+            "out-of-range location"});
+      const double d_sii = dS[b](loc.row, loc.row);
+      row(offs[b] + loc.row) -= a * d_sii;
+      rhs -= a * d_sii;
+    }
+    d_rows.push_back(std::move(row));
+    d_rhs.push_back(rhs);
+  }
+
+  for (std::size_t row_id = 0; row_id < pt.size(); ++row_id) {
+    if (pt.free[row_id] != 0 || !std::isfinite(pt.fixed_value[row_id])) continue;
+    const auto& c = rep.cell_for_row[row_id];
+    if (!c.used || c.mat != model::MatId::Theta || c.row != c.col) continue;
+    const auto b = static_cast<std::size_t>(c.block);
+    if (b >= layouts.size() || c.row < 0 || c.row >= layouts[b].n_observed)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman derivative: fixed residual row is out of range"});
+    Eigen::VectorXd row = Eigen::VectorXd::Zero(n_h2);
+    const double d_sii = dS[b](c.row, c.row);
+    row(offs[b] + c.row) = -d_sii;
+    d_rows.push_back(std::move(row));
+    d_rhs.push_back(-d_sii);
+  }
+
+  RestrictedRowsDirection out;
+  out.dR_h2 =
+      Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(d_rows.size()), n_h2);
+  out.dr_h2 =
+      Eigen::VectorXd::Zero(static_cast<Eigen::Index>(d_rows.size()));
+  for (std::size_t i = 0; i < d_rows.size(); ++i) {
+    out.dR_h2.row(static_cast<Eigen::Index>(i)) = d_rows[i].transpose();
+    out.dr_h2(static_cast<Eigen::Index>(i)) = d_rhs[i];
   }
   return out;
 }
@@ -1263,6 +1378,101 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
   return out;
 }
 
+fit_expected<Eigen::VectorXd>
+solve_communality_system_directional_regular(
+    const CommunalitySystem& system,
+    const Eigen::MatrixXd& dA,
+    const Eigen::VectorXd& db,
+    const Eigen::MatrixXd& dW,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2,
+    const Eigen::MatrixXd& dR_h2,
+    const Eigen::VectorXd& dr_h2,
+    const Eigen::VectorXd& h2) {
+  const Eigen::MatrixXd& A = system.A;
+  const Eigen::VectorXd& b = system.b;
+  const Eigen::MatrixXd& W = system.W;
+  if (A.rows() != b.size() || W.rows() != A.rows() ||
+      W.cols() != A.rows() || dA.rows() != A.rows() ||
+      dA.cols() != A.cols() || db.size() != b.size() ||
+      dW.rows() != W.rows() || dW.cols() != W.cols() ||
+      R_h2.rows() != r_h2.size() ||
+      dR_h2.rows() != R_h2.rows() || dR_h2.cols() != R_h2.cols() ||
+      dr_h2.size() != r_h2.size() || h2.size() != A.cols() ||
+      (R_h2.rows() > 0 && R_h2.cols() != A.cols())) {
+    return num_error("restricted Guttman derivative: communality KKT dimension "
+                     "mismatch");
+  }
+  if (!A.allFinite() || !b.allFinite() || !W.allFinite() ||
+      !dA.allFinite() || !db.allFinite() || !dW.allFinite() ||
+      !R_h2.allFinite() || !r_h2.allFinite() ||
+      !dR_h2.allFinite() || !dr_h2.allFinite() || !h2.allFinite()) {
+    return num_error("restricted Guttman derivative: non-finite communality "
+                     "KKT input");
+  }
+
+  const Eigen::MatrixXd G = A.transpose() * W * A;
+  const Eigen::VectorXd c = A.transpose() * W * b;
+  const Eigen::MatrixXd dG =
+      dA.transpose() * W * A + A.transpose() * dW * A +
+      A.transpose() * W * dA;
+  const Eigen::VectorXd dc =
+      dA.transpose() * W * b + A.transpose() * dW * b +
+      A.transpose() * W * db;
+  const Eigen::Index n = A.cols();
+  const Eigen::Index m = R_h2.rows();
+
+  if (m == 0) {
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(G);
+    lu.setThreshold(1e-12);
+    if (lu.rank() != n)
+      return num_error("restricted Guttman derivative: communality normal "
+                       "equations are singular");
+    const Eigen::VectorXd h_check = lu.solve(c);
+    const double scale = std::max(1.0, h2.cwiseAbs().maxCoeff());
+    if ((h_check - h2).cwiseAbs().maxCoeff() > 1e-7 * scale)
+      return num_error("restricted Guttman derivative: regular solve differs "
+                       "from base communality solution");
+    const Eigen::VectorXd dh = lu.solve(dc - dG * h2);
+    if (!dh.allFinite())
+      return num_error("restricted Guttman derivative: non-finite "
+                       "communality derivative");
+    return dh;
+  }
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Zero(n + m, n + m);
+  K.block(0, 0, n, n) = G;
+  K.block(0, n, n, m) = R_h2.transpose();
+  K.block(n, 0, m, n) = R_h2;
+  Eigen::VectorXd krhs(n + m);
+  krhs.head(n) = c;
+  krhs.tail(m) = r_h2;
+
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(K);
+  lu.setThreshold(1e-12);
+  if (lu.rank() != n + m)
+    return num_error("restricted Guttman derivative: communality KKT system is "
+                     "singular");
+  const Eigen::VectorXd x = lu.solve(krhs);
+  if (!x.allFinite())
+    return num_error("restricted Guttman derivative: non-finite KKT solution");
+  const Eigen::VectorXd h_check = x.head(n);
+  const Eigen::VectorXd lambda = x.tail(m);
+  const double scale = std::max(1.0, h2.cwiseAbs().maxCoeff());
+  if ((h_check - h2).cwiseAbs().maxCoeff() > 1e-7 * scale)
+    return num_error("restricted Guttman derivative: regular KKT solution "
+                     "differs from base communality solution");
+
+  Eigen::VectorXd rhs(n + m);
+  rhs.head(n) = dc - dG * h2 - dR_h2.transpose() * lambda;
+  rhs.tail(m) = dr_h2 - dR_h2 * h2;
+  const Eigen::VectorXd dx = lu.solve(rhs);
+  if (!dx.allFinite())
+    return num_error("restricted Guttman derivative: non-finite KKT "
+                     "derivative");
+  return dx.head(n);
+}
+
 std::vector<std::int16_t> lat_to_f_of(const CfaBlockLayout& L);
 
 fit_expected<Eigen::VectorXd>
@@ -1371,6 +1581,211 @@ project_loading_constraints(const model::ModelEvaluator& ev,
     blocks[b].Lambda(loc.row, f) = l(a);
   }
   return theta;
+}
+
+fit_expected<Eigen::VectorXd>
+assemble_theta_direction_multi(const model::ModelEvaluator& ev,
+                               const std::vector<CfaBlockLayout>& layouts,
+                               const std::vector<BlockGuttmanDirection>& dblocks) {
+  const std::size_t nblk = layouts.size();
+  if (dblocks.size() != nblk)
+    return num_error("restricted Guttman derivative: block derivative count "
+                     "mismatch");
+  std::vector<std::vector<std::int16_t>> lat_to_f(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) lat_to_f[b] = lat_to_f_of(layouts[b]);
+
+  const auto lat_f = [&](std::size_t b, std::int16_t lat) -> std::int16_t {
+    if (lat < 0 || lat >= static_cast<std::int16_t>(lat_to_f[b].size())) return -1;
+    return lat_to_f[b][static_cast<std::size_t>(lat)];
+  };
+
+  const std::vector<model::ParamLocation> locs = ev.param_locations();
+  Eigen::VectorXd dtheta =
+      Eigen::VectorXd::Zero(static_cast<Eigen::Index>(ev.n_free()));
+
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const model::ParamLocation& loc = locs[k];
+    if (loc.block < 0)
+      return num_error("restricted Guttman derivative: parameter location has "
+                       "out-of-range block");
+    const auto b = static_cast<std::size_t>(loc.block);
+    if (b >= nblk)
+      return num_error("restricted Guttman derivative: parameter location has "
+                       "out-of-range block");
+    const CfaBlockLayout& L = layouts[b];
+    const Eigen::Index nvar = L.n_observed;
+    const Eigen::Index kk = static_cast<Eigen::Index>(k);
+    switch (loc.mat) {
+      case model::MatId::Lambda: {
+        const std::int16_t f = lat_f(b, loc.col);
+        if (f < 0 || loc.row < 0 || loc.row >= nvar)
+          return num_error("restricted Guttman derivative: loading location "
+                           "out of range");
+        if (L.marker_ov[static_cast<std::size_t>(f)] == loc.row)
+          return num_error("restricted Guttman derivative: free marker loading "
+                           "is out of scope");
+        dtheta(kk) = dblocks[b].dLambda(loc.row, f);
+        break;
+      }
+      case model::MatId::Psi: {
+        const std::int16_t fr = lat_f(b, loc.row);
+        const std::int16_t fc = lat_f(b, loc.col);
+        if (fr < 0 || fc < 0)
+          return num_error("restricted Guttman derivative: latent covariance "
+                           "location out of range");
+        dtheta(kk) = dblocks[b].dPhi(fr, fc);
+        break;
+      }
+      case model::MatId::Theta: {
+        if (loc.row != loc.col)
+          return num_error("restricted Guttman derivative: residual "
+                           "covariances are out of scope");
+        if (loc.row < 0 || loc.row >= nvar)
+          return num_error("restricted Guttman derivative: residual variance "
+                           "row out of range");
+        dtheta(kk) = dblocks[b].dpsi(loc.row);
+        break;
+      }
+      case model::MatId::Nu:
+        dtheta(kk) = 0.0;
+        break;
+      case model::MatId::Alpha:
+        return num_error("restricted Guttman derivative: free latent means are "
+                         "out of scope");
+      default:
+        return num_error("restricted Guttman derivative: structural "
+                         "parameters are out of scope");
+    }
+  }
+  return dtheta;
+}
+
+fit_expected<Eigen::VectorXd>
+project_loading_constraints_direction(
+    const model::ModelEvaluator& ev,
+    const std::vector<CfaBlockLayout>& layouts,
+    const std::vector<BlockGuttman>& blocks,
+    const std::vector<BlockGuttmanDirection>& dblocks,
+    const RestrictedRows& rows,
+    const Eigen::VectorXd& theta0,
+    const Eigen::VectorXd& dtheta0) {
+  if (!has_rows(rows.R_load)) return dtheta0;
+  if (blocks.size() != layouts.size() || dblocks.size() != layouts.size())
+    return num_error("restricted Guttman derivative: loading projection block "
+                     "count mismatch");
+
+  const auto locs = ev.param_locations();
+  const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
+  if (rows.R_load.cols() != q || theta0.size() != q || dtheta0.size() != q)
+    return num_error("restricted Guttman derivative: loading projection "
+                     "dimension mismatch");
+
+  std::vector<Eigen::Index> lambda_param_to_local(static_cast<std::size_t>(q), -1);
+  std::vector<Eigen::Index> lambda_params;
+  lambda_params.reserve(static_cast<std::size_t>(q));
+  for (Eigen::Index k = 0; k < q; ++k) {
+    if (locs[static_cast<std::size_t>(k)].mat != model::MatId::Lambda) continue;
+    lambda_param_to_local[static_cast<std::size_t>(k)] =
+        static_cast<Eigen::Index>(lambda_params.size());
+    lambda_params.push_back(k);
+  }
+  const Eigen::Index nlam = static_cast<Eigen::Index>(lambda_params.size());
+  if (nlam == 0)
+    return num_error("restricted Guttman derivative: loading constraints but "
+                     "no free loadings");
+
+  Eigen::VectorXd l0(nlam);
+  Eigen::VectorXd dl0(nlam);
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    const Eigen::Index k = lambda_params[static_cast<std::size_t>(a)];
+    l0(a) = theta0(k);
+    dl0(a) = dtheta0(k);
+  }
+
+  Eigen::MatrixXd Rl = Eigen::MatrixXd::Zero(rows.R_load.rows(), nlam);
+  for (Eigen::Index r = 0; r < rows.R_load.rows(); ++r) {
+    for (Eigen::Index k = 0; k < q; ++k) {
+      const double v = rows.R_load(r, k);
+      if (std::abs(v) <= 1e-12) continue;
+      const Eigen::Index local = lambda_param_to_local[static_cast<std::size_t>(k)];
+      if (local < 0)
+        return num_error("restricted Guttman derivative: non-loading column in "
+                         "loading constraint block");
+      Rl(r, local) = v;
+    }
+  }
+
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(nlam, nlam);
+  Eigen::MatrixXd dW = Eigen::MatrixXd::Zero(nlam, nlam);
+  std::vector<std::vector<std::int16_t>> lat_to_f(layouts.size());
+  for (std::size_t b = 0; b < layouts.size(); ++b) lat_to_f[b] = lat_to_f_of(layouts[b]);
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    const auto& la =
+        locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(a)])];
+    const auto ba = static_cast<std::size_t>(la.block);
+    if (ba >= layouts.size())
+      return num_error("restricted Guttman derivative: loading block out of "
+                       "range");
+    if (la.col < 0 ||
+        static_cast<std::size_t>(la.col) >= lat_to_f[ba].size())
+      return num_error("restricted Guttman derivative: loading factor out of "
+                       "range");
+    const std::int16_t fa = lat_to_f[ba][static_cast<std::size_t>(la.col)];
+    if (fa < 0)
+      return num_error("restricted Guttman derivative: loading factor out of "
+                       "range");
+    for (Eigen::Index c = 0; c < nlam; ++c) {
+      const auto& lc =
+          locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(c)])];
+      if (lc.block != la.block || lc.row != la.row) continue;
+      if (lc.col < 0 ||
+          static_cast<std::size_t>(lc.col) >= lat_to_f[ba].size())
+        return num_error("restricted Guttman derivative: loading factor out of "
+                         "range");
+      const std::int16_t fc = lat_to_f[ba][static_cast<std::size_t>(lc.col)];
+      if (fc < 0)
+        return num_error("restricted Guttman derivative: loading factor out of "
+                         "range");
+      W(a, c) = blocks[ba].Phi(fa, fc);
+      dW(a, c) = dblocks[ba].dPhi(fa, fc);
+    }
+  }
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    if (!std::isfinite(W(a, a)) || W(a, a) <= 0.0)
+      return num_error("restricted Guttman derivative: non-positive loading "
+                       "metric");
+  }
+
+  auto Winv = invert_full_rank(W, "restricted Guttman loading projection "
+                                  "derivative");
+  if (!Winv.has_value()) return std::unexpected(Winv.error());
+  const Eigen::MatrixXd dWinv = -(*Winv) * dW * (*Winv);
+  const Eigen::MatrixXd middle = Rl * (*Winv) * Rl.transpose();
+  auto middle_inv = invert_full_rank(middle,
+                                    "restricted Guttman loading projection "
+                                    "derivative");
+  if (!middle_inv.has_value()) return std::unexpected(middle_inv.error());
+  const Eigen::MatrixXd dmiddle = Rl * dWinv * Rl.transpose();
+  const Eigen::MatrixXd dmiddle_inv =
+      -(*middle_inv) * dmiddle * (*middle_inv);
+  const Eigen::MatrixXd C = (*Winv) * Rl.transpose() * (*middle_inv);
+  const Eigen::MatrixXd dC =
+      dWinv * Rl.transpose() * (*middle_inv) +
+      (*Winv) * Rl.transpose() * dmiddle_inv;
+
+  const Eigen::VectorXd u = Rl * l0 - rows.r_load;
+  const Eigen::VectorXd du = Rl * dl0;
+  const Eigen::VectorXd dl = dl0 - dC * u - C * du;
+  if (!dl.allFinite())
+    return num_error("restricted Guttman derivative: non-finite loading "
+                     "projection derivative");
+
+  Eigen::VectorXd dtheta = dtheta0;
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    const Eigen::Index k = lambda_params[static_cast<std::size_t>(a)];
+    dtheta(k) = dl(a);
+  }
+  return dtheta;
 }
 
 // latent column index → block layout's factor ordinal, precomputed per block.
@@ -1695,6 +2110,219 @@ estimator_map_jacobian_block_analytic_impl(
       ++col;
     }
   }
+  return J;
+}
+
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted_block_analytic_impl(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    std::size_t block,
+    CommunalityMethod comm,
+    CompositeWeight composite) {
+  if (rep.form != model::RepForm::PureCFA)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: pure-CFA models only"});
+  if (!is_least_squares_communality(comm))
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: communality method must be "
+        "least-squares-form"});
+
+  const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
+  const std::size_t nblk = layouts.size();
+  if (nblk == 0)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: no CFA block found"});
+  if (nblk != samp.S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: block / sample-stats count "
+        "mismatch"});
+  if (block >= nblk)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: block index out of range"});
+
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    if (L.n_factor() == 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman analytic Jacobian: no factors"});
+    if (L.crossloadings)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman analytic Jacobian: cross-loadings are out of "
+          "scope"});
+    if (!L.all_have_marker)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman analytic Jacobian: every factor needs a marker"});
+    if (samp.S[b].rows() != L.n_observed || samp.S[b].cols() != L.n_observed)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman analytic Jacobian: sample covariance dimension "
+          "mismatch"});
+  }
+
+  auto rows = restricted_rows_from_partable(pt, rep, ev, layouts, samp);
+  if (!rows.has_value()) return std::unexpected(rows.error());
+  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
+      comm == CommunalityMethod::GmmBlock) {
+    return estimator_map_jacobian_block_analytic_impl(
+        pt, rep, ev, samp, which, block, composite);
+  }
+  if (which != NonIterativeEstimator::GuttmanGlsAligned)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: active restrictions or "
+        "non-default communality methods require guttman_gls_aligned"});
+
+  const CompositeWeight resolved = resolve_composite_weight(which, composite);
+  const char* label = "restricted Guttman analytic Jacobian";
+
+  std::vector<std::vector<std::int32_t>> block_of(nblk);
+  std::vector<CommunalitySystem> systems;
+  systems.reserve(nblk);
+  std::vector<Eigen::Index> row_offsets(nblk + 1, 0);
+  std::vector<Eigen::Index> col_offsets(nblk + 1, 0);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    auto ids = block_ids_from_layout(layouts[b]);
+    if (!ids.has_value()) return std::unexpected(ids.error());
+    block_of[b] = std::move(*ids);
+    auto sys = communality_system(samp.S[b], block_of[b], comm);
+    if (!sys.has_value()) return std::unexpected(sys.error());
+    row_offsets[b + 1] = row_offsets[b] + sys->A.rows();
+    col_offsets[b + 1] = col_offsets[b] + sys->A.cols();
+    systems.push_back(std::move(*sys));
+  }
+
+  CommunalitySystem joint;
+  joint.A = Eigen::MatrixXd::Zero(row_offsets.back(), col_offsets.back());
+  joint.b = Eigen::VectorXd::Zero(row_offsets.back());
+  joint.W = Eigen::MatrixXd::Zero(row_offsets.back(), row_offsets.back());
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const auto& sys = systems[b];
+    const Eigen::Index ro = row_offsets[b];
+    const Eigen::Index co = col_offsets[b];
+    joint.A.block(ro, co, sys.A.rows(), sys.A.cols()) = sys.A;
+    joint.b.segment(ro, sys.A.rows()) = sys.b;
+    joint.W.block(ro, ro, sys.W.rows(), sys.W.cols()) = sys.W;
+  }
+
+  auto h2 = solve_communality_system(joint, rows->R_h2, rows->r_h2);
+  if (!h2.has_value()) return std::unexpected(h2.error());
+  if (h2->size() != col_offsets.back())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: communality solution dimension "
+        "mismatch"});
+
+  std::vector<Eigen::MatrixXd> H(nblk);
+  std::vector<BlockGuttman> blocks;
+  blocks.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p = layouts[b].n_observed;
+    H[b] = samp.S[b];
+    for (Eigen::Index i = 0; i < p; ++i) {
+      const double h_diag = samp.S[b](i, i) * (*h2)(col_offsets[b] + i);
+      const double resid = samp.S[b](i, i) - h_diag;
+      const double scale = std::max(1.0, std::abs(samp.S[b](i, i)));
+      if (!std::isfinite(h_diag) || !std::isfinite(resid) ||
+          h_diag < -1e-8 * scale || resid < -1e-8 * scale) {
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman analytic Jacobian: constrained communality "
+            "split is improper"});
+      }
+      H[b](i, i) = h_diag;
+    }
+    auto gb = guttman_gls_aligned_block_from_h(
+        layouts[b], samp.S[b], H[b], label, resolved);
+    if (!gb.has_value()) return std::unexpected(gb.error());
+    blocks.push_back(std::move(*gb));
+  }
+
+  auto theta0 = assemble_theta(ev, layouts, blocks, samp);
+  if (!theta0.has_value()) return std::unexpected(theta0.error());
+  std::vector<BlockGuttman> projected_blocks = blocks;
+  auto theta_proj =
+      project_loading_constraints(ev, layouts, projected_blocks, *rows, *theta0);
+  if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
+
+  const Eigen::Index p_active = samp.S[block].rows();
+  const Eigen::Index pstar = vech_size(p_active);
+  const auto q = static_cast<Eigen::Index>(ev.n_free());
+  Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
+
+  Eigen::Index col = 0;
+  for (Eigen::Index c = 0; c < p_active; ++c) {
+    for (Eigen::Index r = c; r < p_active; ++r) {
+      std::vector<Eigen::MatrixXd> dS(nblk);
+      for (std::size_t b = 0; b < nblk; ++b)
+        dS[b] = Eigen::MatrixXd::Zero(samp.S[b].rows(), samp.S[b].cols());
+      dS[block](r, c) = 1.0;
+      if (r != c) dS[block](c, r) = 1.0;
+
+      CommunalitySystem djoint;
+      djoint.A = Eigen::MatrixXd::Zero(joint.A.rows(), joint.A.cols());
+      djoint.b = Eigen::VectorXd::Zero(joint.b.size());
+      djoint.W = Eigen::MatrixXd::Zero(joint.W.rows(), joint.W.cols());
+      auto dsys = communality_system_directional(
+          samp.S[block], dS[block], block_of[block], comm);
+      if (!dsys.has_value()) return std::unexpected(dsys.error());
+      if (dsys->dA.rows() != systems[block].A.rows() ||
+          dsys->dA.cols() != systems[block].A.cols() ||
+          dsys->db.size() != systems[block].b.size() ||
+          dsys->dW.rows() != systems[block].W.rows() ||
+          dsys->dW.cols() != systems[block].W.cols()) {
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman analytic Jacobian: communality derivative "
+            "dimension mismatch"});
+      }
+      const Eigen::Index ro = row_offsets[block];
+      const Eigen::Index co = col_offsets[block];
+      djoint.A.block(ro, co, dsys->dA.rows(), dsys->dA.cols()) = dsys->dA;
+      djoint.b.segment(ro, dsys->db.size()) = dsys->db;
+      djoint.W.block(ro, ro, dsys->dW.rows(), dsys->dW.cols()) = dsys->dW;
+
+      auto drows =
+          restricted_rows_direction_from_partable(pt, rep, ev, layouts, dS);
+      if (!drows.has_value()) return std::unexpected(drows.error());
+      auto dh2 = solve_communality_system_directional_regular(
+          joint, djoint.A, djoint.b, djoint.W, rows->R_h2, rows->r_h2,
+          drows->dR_h2, drows->dr_h2, *h2);
+      if (!dh2.has_value()) return std::unexpected(dh2.error());
+
+      std::vector<BlockGuttmanDirection> dblocks;
+      dblocks.reserve(nblk);
+      for (std::size_t b = 0; b < nblk; ++b) {
+        const Eigen::Index p = layouts[b].n_observed;
+        Eigen::MatrixXd dH = dS[b];
+        for (Eigen::Index i = 0; i < p; ++i) {
+          dH(i, i) = dS[b](i, i) * (*h2)(col_offsets[b] + i) +
+                     samp.S[b](i, i) * (*dh2)(col_offsets[b] + i);
+        }
+        auto B = composite_matrix_directional(
+            layouts[b], samp.S[b], dS[b], H[b], dH, resolved, label);
+        if (!B.has_value()) return std::unexpected(B.error());
+        auto db = regression_block_directional(
+            layouts[b], samp.S[b], dS[b], H[b], dH, B->value, B->deriv, label);
+        if (!db.has_value()) return std::unexpected(db.error());
+        for (Eigen::Index i = 0; i < p; ++i) {
+          db->base.psi(i) = samp.S[b](i, i) - H[b](i, i);
+          db->dpsi(i) = dS[b](i, i) - dH(i, i);
+        }
+        dblocks.push_back(std::move(*db));
+      }
+
+      auto dtheta0 = assemble_theta_direction_multi(ev, layouts, dblocks);
+      if (!dtheta0.has_value()) return std::unexpected(dtheta0.error());
+      auto dtheta = project_loading_constraints_direction(
+          ev, layouts, blocks, dblocks, *rows, *theta0, *dtheta0);
+      if (!dtheta.has_value()) return std::unexpected(dtheta.error());
+      J.col(col) = *dtheta;
+      ++col;
+    }
+  }
+
+  if (!J.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman analytic Jacobian: non-finite output"});
   return J;
 }
 
@@ -2025,10 +2653,14 @@ estimator_map_jacobian_restricted_block(
   const Eigen::Index pstar = p * (p + 1) / 2;
   const auto q = static_cast<Eigen::Index>(ev.n_free());
 
-  // TODO: make restricted Guttman SEs competitive by differentiating the active
-  // residual/loading KKT projection system. The configural path above has a
-  // batched analytic derivative; active estimator-side restrictions still use
-  // central finite differences by design.
+  auto analytic = estimator_map_jacobian_restricted_block_analytic_impl(
+      pt, rep, ev, samp, which, block, comm, composite);
+  if (analytic.has_value()) return analytic;
+
+  // Regular-interior restricted maps are differentiated analytically above. Keep
+  // the central-difference refit path for rank-changing pseudo-inverses,
+  // singular loading projections, and other boundary cases where the smooth KKT
+  // derivative is not well defined.
   data::SampleStats work = samp;
   Eigen::MatrixXd J(q, pstar);
   Eigen::Index col = 0;

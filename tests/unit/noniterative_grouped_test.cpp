@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <string_view>
 #include <vector>
@@ -139,6 +140,56 @@ double max_sigma_diff(const ModelEvaluator& a_ev, const Eigen::VectorXd& a_theta
   for (std::size_t b = 0; b < ai->sigma.size(); ++b)
     out = std::max(out, (ai->sigma[b] - bi->sigma[b]).cwiseAbs().maxCoeff());
   return out;
+}
+
+magmaan::fit_expected<Eigen::MatrixXd>
+finite_difference_restricted_jacobian(
+    const LatentStructure& pt,
+    const MatrixRep& rep,
+    const SampleStats& samp,
+    ef::NonIterativeEstimator which,
+    std::size_t block,
+    double rel_step,
+    ef::CommunalityMethod comm,
+    ef::CompositeWeight composite) {
+  auto ev = ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) {
+    return std::unexpected(magmaan::FitError{
+        magmaan::FitError::Kind::NumericIssue,
+        "test: model evaluator build failed"});
+  }
+  if (block >= samp.S.size()) {
+    return std::unexpected(magmaan::FitError{
+        magmaan::FitError::Kind::NumericIssue,
+        "test: restricted Jacobian block out of range"});
+  }
+  const Eigen::MatrixXd S0 = samp.S[block];
+  const Eigen::Index p = S0.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  Eigen::MatrixXd J(static_cast<Eigen::Index>(ev->n_free()), pstar);
+  SampleStats work = samp;
+  Eigen::Index col = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      const double h = rel_step * std::max(std::abs(S0(r, c)), 1.0);
+      work.S[block] = S0;
+      work.S[block](r, c) += h;
+      if (r != c) work.S[block](c, r) += h;
+      auto fp = ef::fit_noniterative_cfa_restricted(
+          pt, rep, work, which, comm, composite);
+      if (!fp.has_value()) return std::unexpected(fp.error());
+
+      work.S[block] = S0;
+      work.S[block](r, c) -= h;
+      if (r != c) work.S[block](c, r) -= h;
+      auto fm = ef::fit_noniterative_cfa_restricted(
+          pt, rep, work, which, comm, composite);
+      if (!fm.has_value()) return std::unexpected(fm.error());
+      J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
+      ++col;
+    }
+  }
+  return J;
 }
 
 }  // namespace
@@ -487,6 +538,28 @@ TEST_CASE("residual-restricted Jacobian is tangent to equality rows") {
   CHECK(inf->Omega.allFinite());
 }
 
+TEST_CASE("residual-restricted analytic Jacobian matches accurate finite differences") {
+  auto b = build_mg(kOneFactorResidualTie, 1);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+  Eigen::MatrixXd S = of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65});
+  S(0, 2) += 0.07;
+  S(2, 0) += 0.07;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+
+  auto Ja = ef::estimator_map_jacobian_restricted(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      2e-2, ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::GlsAligned);
+  auto Jfd = finite_difference_restricted_jacobian(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      0, 2e-6, ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::GlsAligned);
+  REQUIRE_OK(Ja);
+  REQUIRE_OK(Jfd);
+  CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 4e-5);
+}
+
 TEST_CASE("residual-restricted grouped inference carries cross-block covariance") {
   auto b = build_mg(kOneFactorResidualTie, 2, {GroupEqual::Residuals});
   SampleStats samp;
@@ -501,6 +574,13 @@ TEST_CASE("residual-restricted grouped inference carries cross-block covariance"
       b.pt, b.rep, samp, fit->theta,
       ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
   REQUIRE_OK(inf);
+  auto se = rf::noniterative_se_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit->theta,
+      ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(se);
+  CHECK((se->theta_hat - fit->theta).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((se->Omega - inf->Omega).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((se->se - inf->se).cwiseAbs().maxCoeff() < 1e-12);
 
   double max_offblock = 0.0;
   const auto& bop = inf->block_of_param;

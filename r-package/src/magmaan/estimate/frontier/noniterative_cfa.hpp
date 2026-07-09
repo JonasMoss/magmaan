@@ -17,8 +17,9 @@
 // map Jacobian J = ∂τ/∂vech(S) that turns any such map into a
 // delta-method-inferable estimator. The configural Jacobian uses the analytic
 // regular-interior derivative of the Guttman map and falls back to central
-// differences at unsupported boundary/rank-changing points; restricted maps
-// still use finite differences. Unlike the start-value producers in
+// differences at unsupported boundary/rank-changing points; restricted maps use
+// the analytic constrained-communality KKT / loading-projection derivative with
+// the same finite-difference fallback. Unlike the start-value producers in
 // start_values.hpp (which only fill free loadings and clamp), these return a
 // COMPLETE parameter vector (Λ, Φ, ψ) so σ(θ̂) and the residual r = vech(S) −
 // σ(θ̂) are well-defined; the theory is in docs/research/notes/
@@ -174,10 +175,11 @@ estimator_map_jacobian_analytic(
     NonIterativeEstimator which = NonIterativeEstimator::Guttman,
     CompositeWeight composite = CompositeWeight::EstimatorDefault);
 
-// Restricted-map analogue of `estimator_map_jacobian_block()`, using
-// `fit_noniterative_cfa_restricted()` for each finite-difference perturbation.
-// Unlike the configural map, rows for parameters in other blocks can be nonzero
-// when equality constraints couple blocks.
+// Restricted-map analogue of `estimator_map_jacobian_block()`. The
+// regular-interior path differentiates the active residual communality KKT
+// system and loading projection; `rel_step` is used only by the
+// finite-difference fallback. Unlike the configural map, rows for parameters in
+// other blocks can be nonzero when equality constraints couple blocks.
 fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian_restricted_block(
     const spec::LatentStructure& pt,

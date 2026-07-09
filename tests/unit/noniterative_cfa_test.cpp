@@ -4,9 +4,12 @@
 #include <cmath>
 #include <cstdint>
 #include <string_view>
+#include <utility>
 
 #include <Eigen/Core>
+#include <Eigen/Cholesky>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/frontier/noniterative_cfa.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -17,6 +20,7 @@
 #include "magmaan/spec/partable.hpp"
 
 using magmaan::data::SampleStats;
+using magmaan::data::RawData;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::MatrixRep;
 using magmaan::model::ModelEvaluator;
@@ -61,6 +65,21 @@ Eigen::MatrixXd two_factor_cov() {
   Eigen::MatrixXd S = L * Psi * L.transpose();
   for (Eigen::Index i = 0; i < 6; ++i) S(i, i) += 0.5;
   return S;
+}
+
+RawData raw_from_cov(const Eigen::MatrixXd& S) {
+  Eigen::LLT<Eigen::MatrixXd> llt(S);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::Index p = S.rows();
+  const Eigen::Index n = 2 * p;
+  const double scale = std::sqrt(static_cast<double>(n) / 2.0);
+  const Eigen::MatrixXd L = llt.matrixL();
+  Eigen::MatrixXd X(n, p);
+  X.topRows(p) = scale * L.transpose();
+  X.bottomRows(p) = -scale * L.transpose();
+  RawData raw;
+  raw.X = {std::move(X)};
+  return raw;
 }
 
 constexpr const char* kTwoFactor =
@@ -294,6 +313,61 @@ TEST_CASE("noniterative GOF is ~0 at exact fit with correct df and finite SEs") 
       }
     }
   }
+}
+
+TEST_CASE("noniterative SE-only path matches the full inference covariance") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 4) += 0.12;
+  S(4, 0) += 0.12;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  for (auto which : {ef::NonIterativeEstimator::Guttman,
+                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+    INFO("estimator ordinal: " << static_cast<int>(which));
+    auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
+    REQUIRE_OK(th);
+    auto inf = rf::noniterative_inference_nt(
+        b.pt, b.rep, samp, *th, which, rf::Discrepancy::NTML);
+    auto se = rf::noniterative_se_nt(b.pt, b.rep, samp, *th, which);
+    REQUIRE_OK(inf);
+    REQUIRE_OK(se);
+
+    CHECK((se->theta_hat - *th).cwiseAbs().maxCoeff() < 1e-12);
+    CHECK((se->Omega - inf->Omega).cwiseAbs().maxCoeff() < 1e-12);
+    CHECK((se->se - inf->se).cwiseAbs().maxCoeff() < 1e-12);
+  }
+}
+
+TEST_CASE("noniterative empirical SE-only path matches dense Gamma inference") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 4) += 0.10;
+  S(4, 0) += 0.10;
+  RawData raw = raw_from_cov(S);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE_OK(samp_or);
+  SampleStats samp = std::move(*samp_or);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  auto th = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_empirical(
+      b.pt, b.rep, samp, raw, *th, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      rf::Discrepancy::ULS);
+  auto se = rf::noniterative_se_empirical(
+      b.pt, b.rep, samp, raw, *th, ef::NonIterativeEstimator::GuttmanGlsAligned);
+  REQUIRE_OK(inf);
+  REQUIRE_OK(se);
+
+  CHECK((se->Omega - inf->Omega).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((se->se - inf->se).cwiseAbs().maxCoeff() < 1e-12);
 }
 
 TEST_CASE("NTML GOF statistic equals the RLS chi-square (model-implied weight)") {

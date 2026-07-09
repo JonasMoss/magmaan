@@ -620,7 +620,7 @@ Then bias and variance both contribute at first order, and the influence maps
 above give closed-form local asymptotic risk. This is probably the cleanest
 paper-level efficiency comparison.
 
-\section{Computational Jacobian Accounting}
+\section{Computational Accounting}
 
 The robust SEs for ordinary NT/ULS estimators and for the Guttman covariance
 map use different Jacobians. NT/ULS inference starts from the model moment
@@ -636,7 +636,32 @@ map-delta SEs require
 \]
 because the estimator itself is a direct covariance functional. This is a
 different object, but it is not a fundamental reason for SEs to be orders of
-magnitude slower than NT/ULS: the expensive part is how \(J\) is assembled.
+magnitude slower than NT/ULS.
+
+The first implementation bundled three responsibilities in one call:
+standard errors, the residual goodness-of-fit statistic, and the reference
+weighted-\(\chi^2\) spectrum. The spectrum forms
+\[
+  M = I-\Delta J,\qquad U=M\T V M,
+\]
+on the full \(p^\star\times p^\star\) moment space and then diagonalizes the
+profile contrast \(U\Gamma\). At \(p=25\), \(p^\star=325\), so this dense
+spectral step dominates a call that only reads the SEs. The same bundle also
+materialized empirical \(\Gamma\) as a dense \(p^\star\times p^\star\) matrix
+before contracting \(J\Gamma J\T\), whereas an SE-only path can stream
+casewise moment rows
+\[
+  u_i = J\{\vech[(x_i-\bar x)(x_i-\bar x)\T]-\vech(S)\}
+\]
+and accumulate \(\sum_i u_i u_i\T/N^2\) directly in parameter space.
+
+The implementation now separates these responsibilities. The
+\texttt{noniterative\_se} family computes only \(J\Gamma J\T/N\) and skips the
+\(I-\Delta J\) residual projector and weighted-\(\chi^2\) spectrum. Its
+empirical overloads use the casewise contraction above, so they never allocate
+dense \(\Gamma\). The full \texttt{noniterative\_inference} family still builds
+the GOF bundle because the scaled and mixture reference tests genuinely need the
+moment-space spectrum.
 
 For a covariance block with \(p^\star=p(p+1)/2\), the old configural analytic
 implementation computed \(p^\star\) directional derivatives. Each direction
@@ -658,13 +683,27 @@ rows, \(A,b,W\), the normal-equation factorization, the fixed-rank
 Moore--Penrose derivative of \(W\), and the downstream
 \(H,B,Q,K^\star,\Lambda,\Phi,\psi\) matrices.
 
-Restricted Guttman remains different in this pass. Active residual and loading
-constraints change the estimator map through a constrained communality solve
-and a loading projection. The current restricted SE path therefore still uses
-central finite differences, requiring \(2p^\star\) full restricted-map
-evaluations per covariance block. Making that path competitive requires
-differentiating the active KKT/projection system, including any active
-residual-communality constraints and loading equality rows.
+Restricted Guttman is now analytic on the same regular-interior principle.
+Active residual rows enter the communality problem as \(Rh=r\). With
+\[
+  G=A\T W A,\qquad c=A\T Wb,
+\]
+the full-rank constrained derivative solves
+\[
+  \begin{bmatrix}G&R\T\\R&0\end{bmatrix}
+  \begin{bmatrix}dh\\d\lambda\end{bmatrix}
+  =
+  \begin{bmatrix}
+    dc-dG\,h-dR\T\lambda\\
+    dr-dR\,h
+  \end{bmatrix}.
+\]
+Loading equality rows are differentiated through the same composite-metric
+projection used by the point estimator. Rank-deficient pseudo-inverse points,
+singular loading-projection metrics, and other boundary cases fall back to the
+older central finite-difference restricted map. Thus the regular restricted
+path avoids \(2p^\star\) full refits, while preserving the conservative
+fallback needed for active-set or rank changes.
 
 \section{Proposed magmaan Experiment}
 

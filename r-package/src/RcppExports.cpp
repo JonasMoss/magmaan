@@ -1994,6 +1994,20 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
     rcpp_result_gen = Rcpp::wrap(noniterative_cfa_inference_impl(fit, estimator, discrepancy, gamma, data));
     return rcpp_result_gen;
+	END_RCPP
+}
+// noniterative_cfa_se_impl
+Rcpp::List noniterative_cfa_se_impl(Rcpp::List fit, std::string estimator, std::string gamma, SEXP data);
+RcppExport SEXP _magmaan_noniterative_cfa_se_impl(SEXP fitSEXP, SEXP estimatorSEXP, SEXP gammaSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_se_impl(fit, estimator, gamma, data));
+    return rcpp_result_gen;
 END_RCPP
 }
 // noniterative_cfa_wald_impl
@@ -3680,6 +3694,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_noniterative_cfa_metric_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_metric_fit_impl, 4},
     {"_magmaan_noniterative_cfa_restricted_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_restricted_fit_impl, 5},
     {"_magmaan_noniterative_cfa_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_inference_impl, 5},
+    {"_magmaan_noniterative_cfa_se_impl", (DL_FUNC) &_magmaan_noniterative_cfa_se_impl, 4},
     {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},
     {"_magmaan_noniterative_cfa_difference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_difference_impl, 8},
     {"_magmaan_noniterative_cfa_grouped_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_grouped_inference_impl, 5},

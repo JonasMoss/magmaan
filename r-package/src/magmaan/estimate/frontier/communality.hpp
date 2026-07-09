@@ -38,12 +38,26 @@ struct CommunalitySystem {
   Eigen::MatrixXd W;
 };
 
+struct CommunalitySystemDirection {
+  CommunalitySystem system;
+  Eigen::MatrixXd dA;
+  Eigen::VectorXd db;
+  Eigen::MatrixXd dW;
+};
+
 const char* communality_method_name(CommunalityMethod method);
 
 fit_expected<CommunalitySystem>
 communality_system(const Eigen::MatrixXd& S,
                    const std::vector<std::int32_t>& block_of_indicator,
                    CommunalityMethod method);
+
+fit_expected<CommunalitySystemDirection>
+communality_system_directional(
+    const Eigen::MatrixXd& S,
+    const Eigen::MatrixXd& dS,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method);
 
 fit_expected<Eigen::VectorXd>
 solve_communality_system(const CommunalitySystem& system,

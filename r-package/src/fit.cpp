@@ -7911,6 +7911,35 @@ noniter_inference_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
   Rcpp::stop("magmaan: unknown gamma '%s' (accepted: nt, empirical)", gamma.c_str());
 }
 
+magmaan::post_expected<magmaan::robust::frontier::NonIterativeSE>
+noniter_se_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
+                    magmaan::estimate::frontier::NonIterativeEstimator which,
+                    const std::string& gamma, SEXP data,
+                    bool restricted = false,
+                    magmaan::estimate::frontier::CommunalityMethod comm =
+                        magmaan::estimate::frontier::CommunalityMethod::GmmBlock,
+                    magmaan::estimate::frontier::CompositeWeight composite =
+                        magmaan::estimate::frontier::CompositeWeight::EstimatorDefault) {
+  namespace rf = magmaan::robust::frontier;
+  const std::string g = noniter_lower(gamma);
+  if (g == "nt" || g == "normal" || g == "normal.theory" || g == "normaltheory")
+    return restricted
+        ? rf::noniterative_se_grouped_restricted_nt(
+              ctx.pt, ctx.rep, ctx.samp, est.theta, which, comm, composite)
+        : rf::noniterative_se_grouped_nt(
+              ctx.pt, ctx.rep, ctx.samp, est.theta, which, composite);
+  if (g == "empirical" || g == "adf" || g == "sandwich") {
+    if (Rf_isNull(data)) Rcpp::stop("magmaan: empirical Gamma requires raw `data`");
+    magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, data);
+    return restricted
+        ? rf::noniterative_se_grouped_restricted_empirical(
+              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, comm, composite)
+        : rf::noniterative_se_grouped_empirical(
+              ctx.pt, ctx.rep, ctx.samp, raw, est.theta, which, composite);
+  }
+  Rcpp::stop("magmaan: unknown gamma '%s' (accepted: nt, empirical)", gamma.c_str());
+}
+
 Rcpp::List wrap_noniter_inference(const magmaan::robust::frontier::NonIterativeInference& inf) {
   return Rcpp::List::create(
       Rcpp::_["se"] = Rcpp::wrap(inf.se),
@@ -7925,6 +7954,15 @@ Rcpp::List wrap_noniter_inference(const magmaan::robust::frontier::NonIterativeI
       Rcpp::_["rls_check"] = inf.rls_check,
       Rcpp::_["eigenvalues"] = Rcpp::wrap(inf.gof_eigenvalues),
       Rcpp::_["warnings"] = Rcpp::wrap(inf.warnings));
+}
+
+Rcpp::List wrap_noniter_se(const magmaan::robust::frontier::NonIterativeSE& se) {
+  return Rcpp::List::create(
+      Rcpp::_["se"] = Rcpp::wrap(se.se),
+      Rcpp::_["vcov"] = Rcpp::wrap(se.Omega),
+      Rcpp::_["theta_hat"] = Rcpp::wrap(se.theta_hat),
+      Rcpp::_["block_of_param"] = Rcpp::wrap(se.block_of_param),
+      Rcpp::_["warnings"] = Rcpp::wrap(se.warnings));
 }
 
 magmaan::post_expected<magmaan::robust::frontier::GroupedNonIterativeInference>
@@ -8079,21 +8117,35 @@ Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator
 }
 
 // [[Rcpp::export]]
+Rcpp::List noniterative_cfa_se_impl(Rcpp::List fit, std::string estimator = "auto",
+                                    std::string gamma = "nt",
+                                    SEXP data = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  auto se = noniter_se_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
+                                gamma, data, noniter_is_restricted_fit(fit),
+                                noniter_comm_for_fit(fit),
+                                noniter_comp_for_fit(fit));
+  if (!se.has_value()) stop_post(se.error());
+  return wrap_noniter_se(*se);
+}
+
+// [[Rcpp::export]]
 Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R,
                                       Rcpp::NumericVector q, std::string estimator = "auto",
                                       std::string discrepancy = "uls",
                                       std::string gamma = "nt", SEXP data = R_NilValue) {
+  (void)discrepancy;
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
-                                        noniter_disc(discrepancy), gamma, data,
-                                        noniter_is_restricted_fit(fit),
-                                        noniter_comm_for_fit(fit),
-                                        noniter_comp_for_fit(fit));
-  if (!inf.has_value()) stop_post(inf.error());
+  auto se = noniter_se_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
+                                gamma, data, noniter_is_restricted_fit(fit),
+                                noniter_comm_for_fit(fit),
+                                noniter_comp_for_fit(fit));
+  if (!se.has_value()) stop_post(se.error());
   const Eigen::MatrixXd Rm = Rcpp::as<Eigen::MatrixXd>(R);
   const Eigen::VectorXd qv = Rcpp::as<Eigen::VectorXd>(q);
-  auto w = magmaan::robust::frontier::noniterative_wald(est.theta, *inf, Rm, qv);
+  auto w = magmaan::robust::frontier::noniterative_wald(est.theta, *se, Rm, qv);
   if (!w.has_value()) stop_post(w.error());
   return Rcpp::List::create(Rcpp::_["chi2"] = w->chi2, Rcpp::_["df"] = w->df);
 }
@@ -8259,15 +8311,15 @@ Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit,
                                              std::string discrepancy = "uls",
                                              std::string gamma = "nt",
                                              SEXP data = R_NilValue) {
+  (void)discrepancy;
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
-                                      noniter_disc(discrepancy), gamma, data,
-                                      noniter_is_restricted_fit(fit),
-                                      noniter_comm_for_fit(fit),
-                                      noniter_comp_for_fit(fit));
-  if (!inf.has_value()) stop_post(inf.error());
-  auto con = magmaan::robust::frontier::noniterative_constrained_fit(ctx.pt, *inf);
+  auto se = noniter_se_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
+                                gamma, data, noniter_is_restricted_fit(fit),
+                                noniter_comm_for_fit(fit),
+                                noniter_comp_for_fit(fit));
+  if (!se.has_value()) stop_post(se.error());
+  auto con = magmaan::robust::frontier::noniterative_constrained_fit(ctx.pt, *se);
   if (!con.has_value()) stop_post(con.error());
   return Rcpp::List::create(
       Rcpp::_["theta_hat"] = Rcpp::wrap(con->theta_hat),
@@ -8287,17 +8339,17 @@ Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
                                         std::string discrepancy = "uls",
                                         std::string gamma = "nt",
                                         SEXP data = R_NilValue) {
+  (void)discrepancy;
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
-  auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
-                                      noniter_disc(discrepancy), gamma, data,
-                                      noniter_is_restricted_fit(fit),
-                                      noniter_comm_for_fit(fit),
-                                      noniter_comp_for_fit(fit));
-  if (!inf.has_value()) stop_post(inf.error());
+  auto se = noniter_se_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
+                                gamma, data, noniter_is_restricted_fit(fit),
+                                noniter_comm_for_fit(fit),
+                                noniter_comp_for_fit(fit));
+  if (!se.has_value()) stop_post(se.error());
   if (ref_group < 1) Rcpp::stop("magmaan: ref_group is 1-based (>= 1)");
   auto sc = magmaan::robust::frontier::noniterative_scalar_invariance(
-      ctx.pt, ctx.rep, *inf, static_cast<std::size_t>(ref_group - 1));
+      ctx.pt, ctx.rep, *se, static_cast<std::size_t>(ref_group - 1));
   if (!sc.has_value()) stop_post(sc.error());
   const std::size_t ng = sc->alpha.size();
   Rcpp::List alpha(ng), alpha_se(ng), alpha_cov(ng);

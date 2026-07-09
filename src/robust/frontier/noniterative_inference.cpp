@@ -109,6 +109,250 @@ int numeric_rank(const Eigen::MatrixXd& A) {
 
 enum class MapKind : std::uint8_t { Configural, Restricted };
 
+Eigen::VectorXd se_from_omega(const Eigen::MatrixXd& Omega) {
+  Eigen::VectorXd se(Omega.rows());
+  for (Eigen::Index i = 0; i < Omega.rows(); ++i)
+    se(i) = std::sqrt(std::max(Omega(i, i), 0.0));
+  return se;
+}
+
+Eigen::MatrixXd casewise_moment_rows(const Eigen::Ref<const Eigen::MatrixXd>& X,
+                                     const Eigen::MatrixXd& S,
+                                     const Eigen::VectorXd& mean,
+                                     bool include_means) {
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  Eigen::MatrixXd Z = Eigen::MatrixXd::Zero(n, (include_means ? p : 0) + pstar);
+  const Eigen::VectorXd s_vech = vech_lower(S);
+  const Eigen::Index sig_off = include_means ? p : 0;
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::VectorXd xi = X.row(i).transpose() - mean;
+    if (include_means) Z.block(i, 0, 1, p) = xi.transpose();
+    const Eigen::MatrixXd outer = xi * xi.transpose();
+    Z.block(i, sig_off, 1, pstar) =
+        (vech_lower(outer) - s_vech).transpose();
+  }
+  return Z;
+}
+
+struct SingleDerivative {
+  Eigen::MatrixXd Sigma_hat;
+  Eigen::MatrixXd Delta;
+  Eigen::MatrixXd J;
+  Eigen::Index pstar = 0;
+  Eigen::Index q = 0;
+  double N = 0.0;
+};
+
+post_expected<SingleDerivative>
+build_single_derivative(const spec::LatentStructure& pt,
+                        const model::MatrixRep& rep,
+                        const data::SampleStats& samp,
+                        const Eigen::VectorXd& theta,
+                        estimate::frontier::NonIterativeEstimator which,
+                        MapKind map_kind,
+                        estimate::frontier::CommunalityMethod comm,
+                        estimate::frontier::CompositeWeight composite) {
+  if (samp.S.empty()) return perr("non-iterative SE: empty sample stats");
+  const Eigen::MatrixXd& S = samp.S[0];
+  const Eigen::Index p = S.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("non-iterative SE: evaluator build failed");
+  const auto q = static_cast<Eigen::Index>(ev->n_free());
+  if (theta.size() != q) return perr("non-iterative SE: theta size mismatch");
+  if (has_mean_params(*ev))
+    return perr("non-iterative SE: mean structure requires the grouped path");
+
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("non-iterative SE: Sigma(theta) failed");
+  auto dS = ev->dsigma_dtheta(theta);
+  if (!dS.has_value()) return perr("non-iterative SE: dsigma_dtheta failed");
+
+  auto Jf = (map_kind == MapKind::Restricted)
+                ? estimate::frontier::estimator_map_jacobian_restricted(
+                      pt, rep, *ev, samp, which, 1e-6, comm, composite)
+                : estimate::frontier::estimator_map_jacobian(
+                      pt, rep, *ev, samp, which, 1e-6, composite);
+  if (!Jf.has_value()) return perr("non-iterative SE: estimator Jacobian failed");
+  if (Jf->rows() != q || Jf->cols() != pstar)
+    return perr("non-iterative SE: estimator Jacobian dimension mismatch");
+
+  SingleDerivative out;
+  out.Sigma_hat = sig->sigma[0];
+  out.Delta = std::move(*dS);
+  out.J = std::move(*Jf);
+  out.pstar = pstar;
+  out.q = q;
+  out.N = total_n(samp);
+  return out;
+}
+
+NonIterativeSE finish_single_se(const Eigen::VectorXd& theta,
+                                const SingleDerivative& d,
+                                Eigen::MatrixXd Omega) {
+  NonIterativeSE out;
+  out.theta_hat = theta;
+  out.Omega = 0.5 * (Omega + Omega.transpose()).eval();
+  out.se = se_from_omega(out.Omega);
+  out.block_of_param.assign(static_cast<std::size_t>(d.q), -1);
+  return out;
+}
+
+struct GroupedDerivative {
+  std::vector<model::ParamLocation> locs;
+  std::vector<Eigen::Index> pstar_b;
+  std::vector<Eigen::Index> offset;
+  std::vector<Eigen::MatrixXd> J_blocks;
+  Eigen::Index pstar_total = 0;
+  Eigen::Index q = 0;
+  bool has_means = false;
+  std::vector<std::int32_t> block_of_param;
+};
+
+post_expected<GroupedDerivative>
+build_grouped_derivative(const spec::LatentStructure& pt,
+                         const model::MatrixRep& rep,
+                         const data::SampleStats& samp,
+                         const Eigen::VectorXd& theta,
+                         estimate::frontier::NonIterativeEstimator which,
+                         MapKind map_kind,
+                         estimate::frontier::CommunalityMethod comm,
+                         estimate::frontier::CompositeWeight composite) {
+  if (samp.S.empty()) return perr("grouped SE: empty sample stats");
+  const std::size_t nblk = samp.S.size();
+  if (samp.n_obs.size() != nblk) return perr("grouped SE: n_obs count != block count");
+
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("grouped SE: evaluator build failed");
+  const auto q = static_cast<Eigen::Index>(ev->n_free());
+  if (theta.size() != q) return perr("grouped SE: theta size mismatch");
+  const bool has_means = has_mean_params(*ev);
+  if (has_means && samp.mean.size() != nblk)
+    return perr("grouped SE: mean structure requires per-block sample means");
+
+  GroupedDerivative out;
+  out.q = q;
+  out.has_means = has_means;
+  out.pstar_b.resize(nblk);
+  out.offset.resize(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    out.pstar_b[b] = p * (p + 1) / 2;
+    out.offset[b] = out.pstar_total;
+    out.pstar_total += out.pstar_b[b];
+  }
+
+  out.locs = ev->param_locations();
+  out.block_of_param.assign(static_cast<std::size_t>(q), -1);
+  for (std::size_t k = 0; k < out.locs.size(); ++k) {
+    const auto b = static_cast<std::size_t>(out.locs[k].block);
+    if (out.locs[k].block < 0 || b >= nblk)
+      return perr("grouped SE: parameter has out-of-range block");
+    out.block_of_param[k] = static_cast<std::int32_t>(b);
+  }
+
+  out.J_blocks.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    auto Jf = (map_kind == MapKind::Restricted)
+                  ? estimate::frontier::estimator_map_jacobian_restricted_block(
+                        pt, rep, *ev, samp, which, b, 1e-6, comm, composite)
+                  : estimate::frontier::estimator_map_jacobian_block(
+                        pt, rep, *ev, samp, which, b, 1e-6, composite);
+    if (!Jf.has_value()) return perr("grouped SE: block Jacobian failed");
+    if (Jf->rows() != q || Jf->cols() != out.pstar_b[b])
+      return perr("grouped SE: block Jacobian dimension mismatch");
+    out.J_blocks.push_back(std::move(*Jf));
+  }
+  return out;
+}
+
+post_expected<Eigen::MatrixXd>
+block_j_aug(const GroupedDerivative& d, const data::SampleStats& samp,
+            std::size_t b, const Eigen::Index maug) {
+  const Eigen::Index p = samp.S[b].rows();
+  const Eigen::Index ps = d.pstar_b[b];
+  Eigen::MatrixXd Jaug = Eigen::MatrixXd::Zero(d.q, maug);
+  Jaug.rightCols(ps) = d.J_blocks[b];
+  if (!d.has_means) return Jaug;
+  for (std::size_t k = 0; k < d.locs.size(); ++k) {
+    const auto& loc = d.locs[k];
+    if (loc.mat == model::MatId::Nu && static_cast<std::size_t>(loc.block) == b) {
+      if (loc.row < 0 || loc.row >= p)
+        return perr("grouped SE: intercept row out of range");
+      Jaug(static_cast<Eigen::Index>(k), loc.row) = 1.0;
+    }
+  }
+  return Jaug;
+}
+
+post_expected<NonIterativeSE>
+finish_grouped_se(const Eigen::VectorXd& theta,
+                  const data::SampleStats& samp,
+                  const GroupedDerivative& d,
+                  const std::vector<Eigen::MatrixXd>& gamma_per_block) {
+  const std::size_t nblk = samp.S.size();
+  if (gamma_per_block.size() != nblk) return perr("grouped SE: Gamma count != block count");
+  NonIterativeSE out;
+  out.theta_hat = theta;
+  out.Omega = Eigen::MatrixXd::Zero(d.q, d.q);
+  out.block_of_param = d.block_of_param;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    const Eigen::Index ps = d.pstar_b[b];
+    const Eigen::Index pm = d.has_means ? p : 0;
+    const Eigen::Index maug = pm + ps;
+    if (gamma_per_block[b].rows() != maug || gamma_per_block[b].cols() != maug)
+      return perr("grouped SE: Gamma[b] dimension mismatch");
+    const double N_b = static_cast<double>(samp.n_obs[b]);
+    if (!(N_b > 0.0)) return perr("grouped SE: non-positive n_obs");
+    auto Jaug = block_j_aug(d, samp, b, maug);
+    if (!Jaug.has_value()) return std::unexpected(Jaug.error());
+    out.Omega.noalias() += (*Jaug * gamma_per_block[b] * Jaug->transpose()) / N_b;
+  }
+  out.Omega = 0.5 * (out.Omega + out.Omega.transpose()).eval();
+  out.se = se_from_omega(out.Omega);
+  return out;
+}
+
+post_expected<NonIterativeSE>
+finish_grouped_empirical_se(const Eigen::VectorXd& theta,
+                            const data::SampleStats& samp,
+                            const data::RawData& raw,
+                            const GroupedDerivative& d) {
+  const std::size_t nblk = samp.S.size();
+  if (raw.X.size() != nblk) return perr("grouped SE: raw-data block count mismatch");
+  NonIterativeSE out;
+  out.theta_hat = theta;
+  out.Omega = Eigen::MatrixXd::Zero(d.q, d.q);
+  out.block_of_param = d.block_of_param;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    const Eigen::Index ps = d.pstar_b[b];
+    const Eigen::Index pm = d.has_means ? p : 0;
+    const Eigen::Index maug = pm + ps;
+    const auto& Xb = raw.X[b];
+    if (Xb.cols() != p) return perr("grouped SE: raw-data column mismatch");
+    const double N_b = static_cast<double>(Xb.rows());
+    if (!(N_b > 0.0)) return perr("grouped SE: non-positive raw-data rows");
+    const Eigen::VectorXd mean =
+        (b < samp.mean.size() && samp.mean[b].size() == p)
+            ? samp.mean[b]
+            : Xb.colwise().mean().transpose().eval();
+    auto Jaug = block_j_aug(d, samp, b, maug);
+    if (!Jaug.has_value()) return std::unexpected(Jaug.error());
+    const Eigen::MatrixXd Z =
+        casewise_moment_rows(Xb, samp.S[b], mean, d.has_means);
+    const Eigen::MatrixXd U = Z * Jaug->transpose();  // n_b × q
+    out.Omega.noalias() += (U.transpose() * U) / (N_b * N_b);
+  }
+  out.Omega = 0.5 * (out.Omega + out.Omega.transpose()).eval();
+  out.se = se_from_omega(out.Omega);
+  return out;
+}
+
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test_impl(const Eigen::MatrixXd& M0,
                                   const Eigen::MatrixXd& M1,
@@ -352,6 +596,63 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
   return noniterative_inference(pt, rep, samp, theta, which, disc, *g, composite);
 }
 
+post_expected<NonIterativeSE>
+noniterative_se(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                estimate::frontier::NonIterativeEstimator which,
+                const Eigen::MatrixXd& gamma,
+                estimate::frontier::CompositeWeight composite) {
+  auto d = build_single_derivative(
+      pt, rep, samp, theta, which, MapKind::Configural,
+      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  if (gamma.rows() != d->pstar || gamma.cols() != d->pstar)
+    return perr("non-iterative SE: Gamma dimension mismatch");
+  const Eigen::MatrixXd Omega = (d->J * gamma * d->J.transpose()) / d->N;
+  return finish_single_se(theta, *d, Omega);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                   const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                   estimate::frontier::NonIterativeEstimator which,
+                   estimate::frontier::CompositeWeight composite) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("non-iterative SE: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("non-iterative SE: Sigma(theta) failed");
+  auto g = data::gamma_nt(sig->sigma[0]);
+  if (!g.has_value()) return perr("non-iterative SE: gamma_nt failed");
+  return noniterative_se(pt, rep, samp, theta, which, *g, composite);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_empirical(const spec::LatentStructure& pt,
+                          const model::MatrixRep& rep,
+                          const data::SampleStats& samp,
+                          const data::RawData& raw,
+                          const Eigen::VectorXd& theta,
+                          estimate::frontier::NonIterativeEstimator which,
+                          estimate::frontier::CompositeWeight composite) {
+  if (raw.X.empty()) return perr("non-iterative SE: empty raw data");
+  auto d = build_single_derivative(
+      pt, rep, samp, theta, which, MapKind::Configural,
+      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  const Eigen::MatrixXd& X = raw.X[0];
+  if (X.cols() != samp.S[0].rows()) return perr("non-iterative SE: raw-data column mismatch");
+  const double N = static_cast<double>(X.rows());
+  if (!(N > 0.0)) return perr("non-iterative SE: non-positive raw-data rows");
+  const Eigen::VectorXd mean =
+      (!samp.mean.empty() && samp.mean[0].size() == X.cols())
+          ? samp.mean[0]
+          : X.colwise().mean().transpose().eval();
+  const Eigen::MatrixXd Z = casewise_moment_rows(X, samp.S[0], mean,
+                                                 /*include_means=*/false);
+  const Eigen::MatrixXd U = Z * d->J.transpose();
+  return finish_single_se(theta, *d, (U.transpose() * U) / (N * N));
+}
+
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_empirical(
     const spec::LatentStructure& pt,
@@ -370,12 +671,86 @@ noniterative_inference_restricted_empirical(
       pt, rep, samp, theta, which, disc, *g, comm, composite);
 }
 
+post_expected<NonIterativeSE>
+noniterative_se_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    const Eigen::MatrixXd& gamma,
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
+  auto d = build_single_derivative(
+      pt, rep, samp, theta, which, MapKind::Restricted, comm, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  if (gamma.rows() != d->pstar || gamma.cols() != d->pstar)
+    return perr("restricted non-iterative SE: Gamma dimension mismatch");
+  const Eigen::MatrixXd Omega = (d->J * gamma * d->J.transpose()) / d->N;
+  return finish_single_se(theta, *d, Omega);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("restricted non-iterative SE: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("restricted non-iterative SE: Sigma(theta) failed");
+  auto g = data::gamma_nt(sig->sigma[0]);
+  if (!g.has_value()) return perr("restricted non-iterative SE: gamma_nt failed");
+  return noniterative_se_restricted(pt, rep, samp, theta, which, *g, comm, composite);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
+  if (raw.X.empty()) return perr("restricted non-iterative SE: empty raw data");
+  auto d = build_single_derivative(
+      pt, rep, samp, theta, which, MapKind::Restricted, comm, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  const Eigen::MatrixXd& X = raw.X[0];
+  if (X.cols() != samp.S[0].rows())
+    return perr("restricted non-iterative SE: raw-data column mismatch");
+  const double N = static_cast<double>(X.rows());
+  if (!(N > 0.0)) return perr("restricted non-iterative SE: non-positive raw-data rows");
+  const Eigen::VectorXd mean =
+      (!samp.mean.empty() && samp.mean[0].size() == X.cols())
+          ? samp.mean[0]
+          : X.colwise().mean().transpose().eval();
+  const Eigen::MatrixXd Z = casewise_moment_rows(X, samp.S[0], mean,
+                                                 /*include_means=*/false);
+  const Eigen::MatrixXd U = Z * d->J.transpose();
+  return finish_single_se(theta, *d, (U.transpose() * U) / (N * N));
+}
+
 post_expected<inference::WaldTestResult>
 noniterative_wald(const Eigen::VectorXd& theta, const NonIterativeInference& inf,
                   const Eigen::MatrixXd& R, const Eigen::VectorXd& q) {
   estimate::Estimates est;
   est.theta = theta;
   return inference::wald_test(R, q, est, inf.Omega);
+}
+
+post_expected<inference::WaldTestResult>
+noniterative_wald(const Eigen::VectorXd& theta, const NonIterativeSE& se,
+                  const Eigen::MatrixXd& R, const Eigen::VectorXd& q) {
+  estimate::Estimates est;
+  est.theta = theta;
+  return inference::wald_test(R, q, est, se.Omega);
 }
 
 post_expected<NonIterativeDiffTest>
@@ -645,6 +1020,54 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
       pt, rep, samp, theta, which, disc, gammas, composite);
 }
 
+post_expected<NonIterativeSE>
+noniterative_se_grouped(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                        const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                        estimate::frontier::NonIterativeEstimator which,
+                        const std::vector<Eigen::MatrixXd>& gamma_per_block,
+                        estimate::frontier::CompositeWeight composite) {
+  auto d = build_grouped_derivative(
+      pt, rep, samp, theta, which, MapKind::Configural,
+      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  return finish_grouped_se(theta, samp, *d, gamma_per_block);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                           const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                           estimate::frontier::NonIterativeEstimator which,
+                           estimate::frontier::CompositeWeight composite) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("grouped SE: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("grouped SE: Sigma(theta) failed");
+  const bool has_means = has_mean_params(*ev);
+  std::vector<Eigen::MatrixXd> gammas;
+  gammas.reserve(sig->sigma.size());
+  for (const auto& Sig : sig->sigma) {
+    auto g = has_means ? data::gamma_nt_with_means(Sig) : data::gamma_nt(Sig);
+    if (!g.has_value()) return perr("grouped SE: gamma_nt failed");
+    gammas.push_back(std::move(*g));
+  }
+  return noniterative_se_grouped(pt, rep, samp, theta, which, gammas, composite);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_empirical(const spec::LatentStructure& pt,
+                                  const model::MatrixRep& rep,
+                                  const data::SampleStats& samp,
+                                  const data::RawData& raw,
+                                  const Eigen::VectorXd& theta,
+                                  estimate::frontier::NonIterativeEstimator which,
+                                  estimate::frontier::CompositeWeight composite) {
+  auto d = build_grouped_derivative(
+      pt, rep, samp, theta, which, MapKind::Configural,
+      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  return finish_grouped_empirical_se(theta, samp, raw, *d);
+}
+
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted(
     const spec::LatentStructure& pt,
@@ -908,6 +1331,63 @@ noniterative_inference_grouped_restricted_empirical(
       pt, rep, samp, theta, which, disc, gammas, comm, composite);
 }
 
+post_expected<NonIterativeSE>
+noniterative_se_grouped_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    const std::vector<Eigen::MatrixXd>& gamma_per_block,
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
+  auto d = build_grouped_derivative(
+      pt, rep, samp, theta, which, MapKind::Restricted, comm, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  return finish_grouped_se(theta, samp, *d, gamma_per_block);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) return perr("restricted grouped SE: evaluator build failed");
+  auto sig = ev->sigma(theta);
+  if (!sig.has_value()) return perr("restricted grouped SE: Sigma(theta) failed");
+  const bool has_means = has_mean_params(*ev);
+  std::vector<Eigen::MatrixXd> gammas;
+  gammas.reserve(sig->sigma.size());
+  for (const auto& Sig : sig->sigma) {
+    auto g = has_means ? data::gamma_nt_with_means(Sig) : data::gamma_nt(Sig);
+    if (!g.has_value()) return perr("restricted grouped SE: gamma_nt failed");
+    gammas.push_back(std::move(*g));
+  }
+  return noniterative_se_grouped_restricted(
+      pt, rep, samp, theta, which, gammas, comm, composite);
+}
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm,
+    estimate::frontier::CompositeWeight composite) {
+  auto d = build_grouped_derivative(
+      pt, rep, samp, theta, which, MapKind::Restricted, comm, composite);
+  if (!d.has_value()) return std::unexpected(d.error());
+  return finish_grouped_empirical_se(theta, samp, raw, *d);
+}
+
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test(const GroupedNonIterativeInference& inf0,
                              const GroupedNonIterativeInference& inf1,
@@ -964,6 +1444,18 @@ noniterative_constrained_fit(const spec::LatentStructure& pt,
   for (Eigen::Index i = 0; i < q; ++i)
     out.se_constrained(i) = std::sqrt(std::max(out.Omega_tilde(i, i), 0.0));
   return out;
+}
+
+post_expected<ConstrainedNonIterativeFit>
+noniterative_constrained_fit(const spec::LatentStructure& pt,
+                             const NonIterativeSE& se) {
+  GroupedNonIterativeInference inf;
+  inf.theta_hat = se.theta_hat;
+  inf.Omega = se.Omega;
+  inf.se = se.se;
+  inf.block_of_param = se.block_of_param;
+  inf.warnings = se.warnings;
+  return noniterative_constrained_fit(pt, inf);
 }
 
 post_expected<ScalarInvarianceFit>
@@ -1073,6 +1565,20 @@ noniterative_scalar_invariance(const spec::LatentStructure& pt,
                            " (near-degenerate reference metric)");
   out.p_value = inference::chi2_pvalue(out.W, out.df);
   return out;
+}
+
+post_expected<ScalarInvarianceFit>
+noniterative_scalar_invariance(const spec::LatentStructure& pt,
+                               const model::MatrixRep& rep,
+                               const NonIterativeSE& se,
+                               std::size_t ref_group) {
+  GroupedNonIterativeInference inf;
+  inf.theta_hat = se.theta_hat;
+  inf.Omega = se.Omega;
+  inf.se = se.se;
+  inf.block_of_param = se.block_of_param;
+  inf.warnings = se.warnings;
+  return noniterative_scalar_invariance(pt, rep, inf, ref_group);
 }
 
 }  // namespace magmaan::robust::frontier

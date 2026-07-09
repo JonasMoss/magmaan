@@ -616,8 +616,7 @@ legacy_guttman_fit <- function(pt, ss) {
 }
 
 guttman_se <- function(fit, X) {
-  magmaan::noniterative_cfa_inference(
-    fit, discrepancy = "ntml", gamma = "empirical", data = X)$se
+  magmaan::noniterative_cfa_se(fit, gamma = "empirical", data = X)$se
 }
 
 ml_fit <- function(pt, ss) core$fit_ml(pt, ss, control = fit_control)
