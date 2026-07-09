@@ -757,8 +757,8 @@ fallback needed for active-set or rank changes.
 The first restricted implementation still assembled the regular derivative one
 covariance coordinate at a time. On the same \(p=25\) shape this made a
 residual-restricted SE call about \(166\) ms, even though no finite-difference
-refits were being used. The default \texttt{gmm\_block} restricted path now
-batches the constrained \(h^2\) derivative: it builds the block-active GMM RHS
+refits were being used. The default \texttt{gmm\_block} restricted path first
+batched the constrained \(h^2\) derivative: it builds the block-active GMM RHS
 columns with the same \(dW e\) action used by the configural path, solves the
 KKT system once with all right-hand sides, and then feeds the constrained
 \(dH\) diagonal into the batched score-regression derivative. Loading-only
@@ -767,14 +767,24 @@ base \(W^{-1}\), \((RW^{-1}R\T)^{-1}\), and projection matrix. A repeated-call
 \(p=25\) probe reports roughly \(1.8\) ms for residual-only restrictions,
 \(2.8\) ms for loading-only restrictions, and \(3.2\) ms for both under
 \texttt{unit}/\texttt{standardized}; the corresponding \texttt{gls\_aligned}
-numbers are about \(2.7\), \(3.7\), and \(3.9\) ms. Non-default restricted
-communality rules remain analytic but may fall back to the direction-wise
-assembly until their constrained RHS columns are batched too.
+numbers are about \(2.7\), \(3.7\), and \(3.9\) ms.
+
+The restricted batching now covers the rest of the regular LS-form restricted
+path except \texttt{gmm\_full}. For \texttt{triad\_ls} and
+\texttt{anchor\_triad\_ls}, the full normal-equation RHS
+\(dc-dG\,h\) is accumulated directly from all local covariance columns; for
+\texttt{gmm\_block}, the same RHS is built with block-active GMM weight actions.
+Grouped restricted maps embed the active sample block's RHS in the stacked
+communality system, solve the joint constrained KKT system once, and pass the
+resulting cross-block \(dH\) diagonals to every block's batched score-regression
+derivative. This is the same chain rule as the earlier directional grouped
+implementation, but without rebuilding the communality system for each
+covariance coordinate. \texttt{gmm\_full} still uses the direction-wise analytic
+fallback; making it competitive requires a batched derivative of the joint
+selected-triad weight.
 
 A later restricted-cost pass removed a smaller remaining duplication. The
-single-block fast path now constructs the base restricted block from the
-batched derivative result instead of first rebuilding the same block for
-validation, and the loading projection applies
+loading projection applies
 \[
   dl = (I-CR)\,dl_0 + (I-CR)\,W^{-1}(dW\,a),\qquad
   C=W^{-1}R\T(RW^{-1}R\T)^{-1},\quad a=C(Rl_0-r),

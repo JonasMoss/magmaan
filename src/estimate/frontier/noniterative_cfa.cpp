@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -77,6 +78,15 @@ struct BlockGuttmanJacobian {
   Eigen::MatrixXd dPhi;     // (nfac * nfac) × pstar
   Eigen::MatrixXd dpsi;     // nvar × pstar
 };
+
+struct DirectCovColumn {
+  Eigen::Index row = -1;
+  Eigen::Index col = -1;
+};
+
+bool has_direct_cov_column(const DirectCovColumn& direct) {
+  return direct.row >= 0 && direct.col >= 0;
+}
 
 struct ScoreBlock {
   Eigen::MatrixXd H;      // common covariance estimate: S with diagonal replaced
@@ -832,21 +842,33 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
 }
 
 fit_expected<BlockGuttmanJacobian>
-fit_block_jacobian_from_h_batched(const CfaBlockLayout& L,
-                                  const Eigen::MatrixXd& S,
-                                  const Eigen::MatrixXd& H,
-                                  const Eigen::MatrixXd& dH_diag,
-                                  CompositeWeight resolved,
-                                  const char* label) {
+fit_block_jacobian_from_h_batched_columns(
+    const CfaBlockLayout& L,
+    const Eigen::MatrixXd& S,
+    const Eigen::MatrixXd& H,
+    const Eigen::MatrixXd& dH_diag,
+    const std::vector<DirectCovColumn>& direct_cols,
+    CompositeWeight resolved,
+    const char* label) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
-  const Eigen::Index pstar = vech_size(nvar);
+  const auto pstar = static_cast<Eigen::Index>(direct_cols.size());
   if (S.rows() != nvar || S.cols() != nvar || H.rows() != nvar ||
       H.cols() != nvar || dH_diag.rows() != nvar ||
       dH_diag.cols() != pstar)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         std::string(label) + ": batched restricted H derivative dimension "
         "mismatch"});
+  for (const auto& direct : direct_cols) {
+    const bool has_direct = has_direct_cov_column(direct);
+    if ((!has_direct && (direct.row != -1 || direct.col != -1)) ||
+        (has_direct && (direct.row < direct.col || direct.row >= nvar ||
+                        direct.col >= nvar))) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": batched restricted covariance column map "
+          "is invalid"});
+    }
+  }
 
   const Eigen::MatrixXd Z = incidence_matrix(L);
   Eigen::MatrixXd B;
@@ -918,108 +940,111 @@ fit_block_jacobian_from_h_batched(const CfaBlockLayout& L,
   Eigen::MatrixXd dPhi = Eigen::MatrixXd::Zero(nfac * nfac, pstar);
   Eigen::MatrixXd dpsi = Eigen::MatrixXd::Zero(nvar, pstar);
 
-  const auto dH_times = [&](Eigen::Index col, Eigen::Index r, Eigen::Index c,
+  const auto dH_times = [&](Eigen::Index col, const DirectCovColumn& direct,
                             const Eigen::MatrixXd& X) {
     Eigen::MatrixXd out = X;
     for (Eigen::Index i = 0; i < nvar; ++i)
       out.row(i) *= dH_diag(i, col);
-    if (r != c) {
-      out.row(r) += X.row(c);
-      out.row(c) += X.row(r);
+    if (has_direct_cov_column(direct) && direct.row != direct.col) {
+      out.row(direct.row) += X.row(direct.col);
+      out.row(direct.col) += X.row(direct.row);
     }
     return out;
   };
 
-  Eigen::Index col = 0;
-  for (Eigen::Index c = 0; c < nvar; ++c) {
-    for (Eigen::Index r = c; r < nvar; ++r) {
-      Eigen::MatrixXd dQ(nfac, nfac);
-      Eigen::MatrixXd dHB(nvar, nfac);
-      if (resolved == CompositeWeight::Unit ||
-          resolved == CompositeWeight::Standardized) {
-        dHB.setZero();
-        for (Eigen::Index i = 0; i < nvar; ++i)
-          dHB.row(i).noalias() = dH_diag(i, col) * B.row(i);
-        if (r != c) {
-          dHB.row(r).noalias() += B.row(c);
-          dHB.row(c).noalias() += B.row(r);
-        }
-        dQ.noalias() = B.transpose() * dHB;
-        if (resolved == CompositeWeight::Standardized && r == c) {
-          const Eigen::RowVectorXd dBrow = -0.5 * B.row(r) / S(r, r);
-          dQ.noalias() += dBrow.transpose() * HB.row(r);
-          dQ.noalias() += HB.row(r).transpose() * dBrow;
-          dHB.noalias() += H.col(r) * dBrow;
-        }
-      } else {
-        Eigen::MatrixXd dB;
-        bool dB_nonzero = false;
-        switch (resolved) {
-          case CompositeWeight::GlsAligned: {
-            const Eigen::MatrixXd dHZ = dH_times(col, r, c, Z);
-            const Eigen::MatrixXd dG = Z.transpose() * dHZ;
-            const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
-            const Eigen::MatrixXd dP = dHZ * gls_Ginv + H * Z * dGinv;
-            const Eigen::MatrixXd dgram =
-                dP.transpose() * gls_P + gls_P.transpose() * dP;
-            const Eigen::MatrixXd dgram_inv =
-                -gls_gram_inv * dgram * gls_gram_inv;
-            dB = dP * gls_gram_inv + gls_P * dgram_inv;
-            dB_nonzero = true;
-            break;
-          }
-          case CompositeWeight::EstimatorDefault:
-          case CompositeWeight::Unit:
-          case CompositeWeight::Standardized:
-            return std::unexpected(FitError{FitError::Kind::NumericIssue,
-                std::string(label) + ": unresolved composite weight"});
-        }
-
-        const Eigen::MatrixXd dH_B = dH_times(col, r, c, B);
-        dQ = B.transpose() * dH_B;
-        dHB = dH_B;
-        if (dB_nonzero) {
-          const Eigen::MatrixXd HdB = H * dB;
-          dQ.noalias() += dB.transpose() * HB;
-          dQ.noalias() += HB.transpose() * dB;
-          dHB.noalias() += HdB;
-        }
+  for (Eigen::Index col = 0; col < pstar; ++col) {
+    const DirectCovColumn direct =
+        direct_cols[static_cast<std::size_t>(col)];
+    const bool has_direct = has_direct_cov_column(direct);
+    Eigen::MatrixXd dQ(nfac, nfac);
+    Eigen::MatrixXd dHB(nvar, nfac);
+    if (resolved == CompositeWeight::Unit ||
+        resolved == CompositeWeight::Standardized) {
+      dHB.setZero();
+      for (Eigen::Index i = 0; i < nvar; ++i)
+        dHB.row(i).noalias() = dH_diag(i, col) * B.row(i);
+      if (has_direct && direct.row != direct.col) {
+        dHB.row(direct.row).noalias() += B.row(direct.col);
+        dHB.row(direct.col).noalias() += B.row(direct.row);
       }
-      const Eigen::MatrixXd dKstar =
-          dHB * (*Qinv) - Kstar * dQ * (*Qinv);
-
-      Eigen::MatrixXd dLambda_col(nvar, nfac);
-      Eigen::MatrixXd dPhi_col(nfac, nfac);
-      Eigen::VectorXd dmarker(nfac);
-      for (Eigen::Index f = 0; f < nfac; ++f) {
-        const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
-        dmarker(f) = dKstar(mk, f);
-        dLambda_col.col(f) =
-            dKstar.col(f) / marker(f) -
-            Kstar.col(f) * (dmarker(f) / (marker(f) * marker(f)));
+      dQ.noalias() = B.transpose() * dHB;
+      if (resolved == CompositeWeight::Standardized && has_direct &&
+          direct.row == direct.col) {
+        const Eigen::RowVectorXd dBrow =
+            -0.5 * B.row(direct.row) / S(direct.row, direct.row);
+        dQ.noalias() += dBrow.transpose() * HB.row(direct.row);
+        dQ.noalias() += HB.row(direct.row).transpose() * dBrow;
+        dHB.noalias() += H.col(direct.row) * dBrow;
       }
-      for (Eigen::Index f = 0; f < nfac; ++f) {
-        for (Eigen::Index g = 0; g < nfac; ++g) {
-          dPhi_col(f, g) =
-              dmarker(f) * Q(f, g) * marker(g) +
-              marker(f) * dQ(f, g) * marker(g) +
-              marker(f) * Q(f, g) * dmarker(g);
+    } else {
+      Eigen::MatrixXd dB;
+      bool dB_nonzero = false;
+      switch (resolved) {
+        case CompositeWeight::GlsAligned: {
+          const Eigen::MatrixXd dHZ = dH_times(col, direct, Z);
+          const Eigen::MatrixXd dG = Z.transpose() * dHZ;
+          const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
+          const Eigen::MatrixXd dP = dHZ * gls_Ginv + H * Z * dGinv;
+          const Eigen::MatrixXd dgram =
+              dP.transpose() * gls_P + gls_P.transpose() * dP;
+          const Eigen::MatrixXd dgram_inv =
+              -gls_gram_inv * dgram * gls_gram_inv;
+          dB = dP * gls_gram_inv + gls_P * dgram_inv;
+          dB_nonzero = true;
+          break;
         }
+        case CompositeWeight::EstimatorDefault:
+        case CompositeWeight::Unit:
+        case CompositeWeight::Standardized:
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              std::string(label) + ": unresolved composite weight"});
       }
 
-      for (Eigen::Index i = 0; i < nvar; ++i) {
-        const double dSii = (r == c && r == i) ? 1.0 : 0.0;
-        dpsi(i, col) = dSii - dH_diag(i, col);
+      const Eigen::MatrixXd dH_B = dH_times(col, direct, B);
+      dQ = B.transpose() * dH_B;
+      dHB = dH_B;
+      if (dB_nonzero) {
+        const Eigen::MatrixXd HdB = H * dB;
+        dQ.noalias() += dB.transpose() * HB;
+        dQ.noalias() += HB.transpose() * dB;
+        dHB.noalias() += HdB;
       }
-      for (Eigen::Index i = 0; i < nvar; ++i) {
-        for (Eigen::Index f = 0; f < nfac; ++f)
-          dLambda(i * nfac + f, col) = dLambda_col(i, f);
+    }
+    const Eigen::MatrixXd dKstar =
+        dHB * (*Qinv) - Kstar * dQ * (*Qinv);
+
+    Eigen::MatrixXd dLambda_col(nvar, nfac);
+    Eigen::MatrixXd dPhi_col(nfac, nfac);
+    Eigen::VectorXd dmarker(nfac);
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
+      dmarker(f) = dKstar(mk, f);
+      dLambda_col.col(f) =
+          dKstar.col(f) / marker(f) -
+          Kstar.col(f) * (dmarker(f) / (marker(f) * marker(f)));
+    }
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      for (Eigen::Index g = 0; g < nfac; ++g) {
+        dPhi_col(f, g) =
+            dmarker(f) * Q(f, g) * marker(g) +
+            marker(f) * dQ(f, g) * marker(g) +
+            marker(f) * Q(f, g) * dmarker(g);
       }
-      for (Eigen::Index f = 0; f < nfac; ++f) {
-        for (Eigen::Index g = 0; g < nfac; ++g)
-          dPhi(f * nfac + g, col) = dPhi_col(f, g);
-      }
-      ++col;
+    }
+
+    for (Eigen::Index i = 0; i < nvar; ++i) {
+      const double dSii =
+          (has_direct && direct.row == direct.col && direct.row == i) ? 1.0
+                                                                      : 0.0;
+      dpsi(i, col) = dSii - dH_diag(i, col);
+    }
+    for (Eigen::Index i = 0; i < nvar; ++i) {
+      for (Eigen::Index f = 0; f < nfac; ++f)
+        dLambda(i * nfac + f, col) = dLambda_col(i, f);
+    }
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      for (Eigen::Index g = 0; g < nfac; ++g)
+        dPhi(f * nfac + g, col) = dPhi_col(f, g);
     }
   }
 
@@ -1721,6 +1746,115 @@ solve_communality_system_directional_regular(
     return num_error("restricted Guttman derivative: non-finite KKT "
                      "derivative");
   return dx.head(n);
+}
+
+fit_expected<Eigen::MatrixXd>
+solve_communality_system_jacobian_regular(
+    const CommunalitySystem& system,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2,
+    const Eigen::MatrixXd& rhs_head,
+    const Eigen::MatrixXd& S_active,
+    Eigen::Index active_offset,
+    const Eigen::VectorXd& h2) {
+  const Eigen::MatrixXd& A = system.A;
+  const Eigen::VectorXd& b = system.b;
+  const Eigen::MatrixXd& W = system.W;
+  const Eigen::Index n = A.cols();
+  const Eigen::Index m = R_h2.rows();
+  const Eigen::Index p_active = S_active.rows();
+  const Eigen::Index pstar = rhs_head.cols();
+  if (A.rows() != b.size() || W.rows() != A.rows() ||
+      W.cols() != A.rows() || R_h2.rows() != r_h2.size() ||
+      (m > 0 && R_h2.cols() != n) || rhs_head.rows() != n ||
+      S_active.cols() != p_active || active_offset < 0 ||
+      active_offset + p_active > n || h2.size() != n ||
+      pstar != vech_size(p_active)) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: communality KKT dimension "
+        "mismatch"});
+  }
+  if (!A.allFinite() || !b.allFinite() || !W.allFinite() ||
+      !R_h2.allFinite() || !r_h2.allFinite() || !rhs_head.allFinite() ||
+      !S_active.allFinite() || !h2.allFinite()) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: non-finite communality KKT "
+        "input"});
+  }
+
+  const Eigen::MatrixXd G = A.transpose() * W * A;
+  const Eigen::VectorXd c = A.transpose() * W * b;
+  if (m == 0) {
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(G);
+    lu.setThreshold(1e-12);
+    if (lu.rank() != n)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman batched derivative: communality normal "
+          "equations are singular"});
+    const Eigen::VectorXd h_check = lu.solve(c);
+    const double scale = std::max(1.0, h2.cwiseAbs().maxCoeff());
+    if ((h_check - h2).cwiseAbs().maxCoeff() > 1e-7 * scale)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman batched derivative: regular solve differs from "
+          "base communality solution"});
+    Eigen::MatrixXd out = lu.solve(rhs_head);
+    if (!out.allFinite())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman batched derivative: non-finite communality "
+          "Jacobian"});
+    return out;
+  }
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Zero(n + m, n + m);
+  K.block(0, 0, n, n) = G;
+  K.block(0, n, n, m) = R_h2.transpose();
+  K.block(n, 0, m, n) = R_h2;
+  Eigen::VectorXd krhs(n + m);
+  krhs.head(n) = c;
+  krhs.tail(m) = r_h2;
+
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(K);
+  lu.setThreshold(1e-12);
+  if (lu.rank() != n + m)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: communality KKT system is "
+        "singular"});
+  const Eigen::VectorXd x = lu.solve(krhs);
+  if (!x.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: non-finite KKT solution"});
+  const Eigen::VectorXd h_check = x.head(n);
+  const Eigen::VectorXd lambda = x.tail(m);
+  const double scale = std::max(1.0, h2.cwiseAbs().maxCoeff());
+  if ((h_check - h2).cwiseAbs().maxCoeff() > 1e-7 * scale)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: regular KKT solution differs "
+        "from base communality solution"});
+
+  Eigen::MatrixXd rhs = Eigen::MatrixXd::Zero(n + m, pstar);
+  rhs.topRows(n) = rhs_head;
+  for (Eigen::Index row = 0; row < m; ++row) {
+    for (Eigen::Index i = 0; i < p_active; ++i) {
+      const Eigen::Index gi = active_offset + i;
+      const double coeff = R_h2(row, gi);
+      if (std::abs(coeff) <= 1e-12) continue;
+      const double sii = S_active(i, i);
+      if (!std::isfinite(sii) || sii <= 0.0)
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman batched derivative: non-positive active "
+            "variance in constraint derivative"});
+      const double dcoeff = coeff / sii;
+      const Eigen::Index col = vech_index(i, i, p_active);
+      rhs(gi, col) -= dcoeff * lambda(row);
+      rhs(n + row, col) += dcoeff * (1.0 - h2(gi));
+    }
+  }
+
+  const Eigen::MatrixXd dx = lu.solve(rhs);
+  if (!dx.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: non-finite KKT Jacobian"});
+  return dx.topRows(n);
 }
 
 std::vector<std::int16_t> lat_to_f_of(const CfaBlockLayout& L);
@@ -2440,6 +2574,106 @@ assemble_theta_jacobian(const model::ModelEvaluator& ev,
 }
 
 fit_expected<Eigen::MatrixXd>
+assemble_theta_jacobian_multi(
+    const model::ModelEvaluator& ev,
+    const std::vector<CfaBlockLayout>& layouts,
+    const std::vector<BlockGuttmanJacobian>& dblocks,
+    Eigen::Index pstar) {
+  const std::size_t nblk = layouts.size();
+  if (dblocks.size() != nblk)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman batched derivative: block derivative count "
+        "mismatch"});
+  std::vector<std::vector<std::int16_t>> lat_to_f(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    lat_to_f[b] = lat_to_f_of(layouts[b]);
+    if (dblocks[b].dLambda.cols() != pstar ||
+        dblocks[b].dPhi.cols() != pstar ||
+        dblocks[b].dpsi.cols() != pstar) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman batched derivative: block derivative width "
+          "mismatch"});
+    }
+  }
+
+  const auto lat_f = [&](std::size_t b, std::int16_t lat) -> std::int16_t {
+    if (lat < 0 || lat >= static_cast<std::int16_t>(lat_to_f[b].size()))
+      return -1;
+    return lat_to_f[b][static_cast<std::size_t>(lat)];
+  };
+
+  const std::vector<model::ParamLocation> locs = ev.param_locations();
+  Eigen::MatrixXd J = Eigen::MatrixXd::Zero(
+      static_cast<Eigen::Index>(ev.n_free()), pstar);
+
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const model::ParamLocation& loc = locs[k];
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman batched derivative: parameter location has "
+          "out-of-range block"});
+    const auto b = static_cast<std::size_t>(loc.block);
+    if (b >= nblk)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "restricted Guttman batched derivative: parameter location has "
+          "out-of-range block"});
+
+    const CfaBlockLayout& L = layouts[b];
+    const Eigen::Index nvar = L.n_observed;
+    const Eigen::Index nfac = L.n_factor();
+    const Eigen::Index kk = static_cast<Eigen::Index>(k);
+    switch (loc.mat) {
+      case model::MatId::Lambda: {
+        const std::int16_t f = lat_f(b, loc.col);
+        if (f < 0 || loc.row < 0 || loc.row >= nvar)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "restricted Guttman batched derivative: loading location out of "
+              "range"});
+        if (L.marker_ov[static_cast<std::size_t>(f)] == loc.row)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "restricted Guttman batched derivative: free marker loading is "
+              "out of scope"});
+        J.row(kk) = dblocks[b].dLambda.row(loc.row * nfac + f);
+        break;
+      }
+      case model::MatId::Psi: {
+        const std::int16_t fr = lat_f(b, loc.row);
+        const std::int16_t fc = lat_f(b, loc.col);
+        if (fr < 0 || fc < 0)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "restricted Guttman batched derivative: latent covariance "
+              "location out of range"});
+        J.row(kk) = dblocks[b].dPhi.row(fr * nfac + fc);
+        break;
+      }
+      case model::MatId::Theta: {
+        if (loc.row != loc.col)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "restricted Guttman batched derivative: residual covariances "
+              "are out of scope"});
+        if (loc.row < 0 || loc.row >= nvar)
+          return std::unexpected(FitError{FitError::Kind::NumericIssue,
+              "restricted Guttman batched derivative: residual variance row "
+              "out of range"});
+        J.row(kk) = dblocks[b].dpsi.row(loc.row);
+        break;
+      }
+      case model::MatId::Nu:
+        break;
+      case model::MatId::Alpha:
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman batched derivative: free latent means are out "
+            "of scope"});
+      default:
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "restricted Guttman batched derivative: structural parameters are "
+            "out of scope"});
+    }
+  }
+  return J;
+}
+
+fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian_block_analytic_impl(
     const spec::LatentStructure& pt,
     const model::MatrixRep& rep,
@@ -2614,60 +2848,6 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   const Eigen::Index pstar = vech_size(p_active);
   const auto q = static_cast<Eigen::Index>(ev.n_free());
 
-  if (nblk == 1 && block == 0) {
-    fit_expected<Eigen::MatrixXd> Jh2_or =
-        std::unexpected(FitError{FitError::Kind::NumericIssue,
-            "restricted Guttman analytic Jacobian: batched h2 path not "
-            "attempted"});
-    if (has_rows(rows->R_h2)) {
-      Jh2_or = estimate_h2_communalities_constrained_jacobian(
-          samp.S[0], block_of[0], comm, rows->R_h2, rows->r_h2);
-    } else {
-      Jh2_or = estimate_h2_communalities_jacobian(
-          samp.S[0], block_of[0], comm);
-    }
-
-    if (Jh2_or.has_value() && Jh2_or->rows() == p_active &&
-        Jh2_or->cols() == pstar) {
-      auto H0 = restricted_h_matrix_from_h2(samp.S[0], *h2, 0, label);
-      if (H0.has_value()) {
-        Eigen::MatrixXd dH_diag(p_active, pstar);
-        for (Eigen::Index i = 0; i < p_active; ++i) {
-          dH_diag.row(i) = samp.S[0](i, i) * Jh2_or->row(i);
-          dH_diag(i, vech_index(i, i, p_active)) += (*h2)(i);
-        }
-        auto db = fit_block_jacobian_from_h_batched(
-            layouts[0], samp.S[0], *H0, dH_diag, resolved, label);
-        if (db.has_value()) {
-          std::vector<BlockGuttman> fast_blocks;
-          fast_blocks.push_back(db->base);
-          auto theta0_fast = assemble_theta(ev, layouts, fast_blocks, samp);
-          if (theta0_fast.has_value()) {
-            std::vector<BlockGuttman> projected_blocks = fast_blocks;
-            auto theta_proj = project_loading_constraints(
-                ev, layouts, projected_blocks, *rows, *theta0_fast);
-            if (theta_proj.has_value()) {
-              auto J0 = assemble_theta_jacobian(ev, layouts, *db, 0, pstar);
-              if (J0.has_value()) {
-                std::vector<BlockGuttmanJacobian> dblocks;
-                dblocks.push_back(std::move(*db));
-                auto Jproj = project_loading_constraints_jacobian(
-                    ev, layouts, dblocks, *rows, *theta0_fast, *J0);
-                if (Jproj.has_value()) {
-                  if (!Jproj->allFinite())
-                    return std::unexpected(FitError{FitError::Kind::NumericIssue,
-                        "restricted Guttman analytic Jacobian: non-finite "
-                        "batched output"});
-                  return Jproj;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
   std::vector<Eigen::MatrixXd> H(nblk);
   std::vector<BlockGuttman> blocks;
   blocks.reserve(nblk);
@@ -2688,6 +2868,79 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   auto theta_proj =
       project_loading_constraints(ev, layouts, projected_blocks, *rows, *theta0);
   if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
+
+  {
+    const Eigen::Index active_offset = col_offsets[block];
+    const Eigen::VectorXd h2_active =
+        h2->segment(active_offset, p_active).eval();
+    auto rhs_local = communality_system_jacobian_rhs(
+        samp.S[block], block_of[block], comm, h2_active);
+    if (rhs_local.has_value() && rhs_local->rows() == p_active &&
+        rhs_local->cols() == pstar) {
+      Eigen::MatrixXd rhs_joint =
+          Eigen::MatrixXd::Zero(col_offsets.back(), pstar);
+      rhs_joint.block(active_offset, 0, p_active, pstar) = *rhs_local;
+      auto Jh2 = solve_communality_system_jacobian_regular(
+          joint, rows->R_h2, rows->r_h2, rhs_joint, samp.S[block],
+          active_offset, *h2);
+      if (Jh2.has_value() && Jh2->rows() == col_offsets.back() &&
+          Jh2->cols() == pstar) {
+        std::vector<BlockGuttmanJacobian> dblocks;
+        dblocks.reserve(nblk);
+        bool ok = true;
+        for (std::size_t b = 0; b < nblk; ++b) {
+          const Eigen::Index p = layouts[b].n_observed;
+          Eigen::MatrixXd dH_diag = Eigen::MatrixXd::Zero(p, pstar);
+          for (Eigen::Index i = 0; i < p; ++i) {
+            const Eigen::Index gi = col_offsets[b] + i;
+            dH_diag.row(i) = samp.S[b](i, i) * Jh2->row(gi);
+          }
+
+          std::vector<DirectCovColumn> direct_cols(
+              static_cast<std::size_t>(pstar), DirectCovColumn{-1, -1});
+          if (b == block) {
+            Eigen::Index col = 0;
+            for (Eigen::Index c = 0; c < p_active; ++c) {
+              for (Eigen::Index r = c; r < p_active; ++r) {
+                direct_cols[static_cast<std::size_t>(col)] =
+                    DirectCovColumn{r, c};
+                ++col;
+              }
+            }
+            for (Eigen::Index i = 0; i < p_active; ++i) {
+              dH_diag(i, vech_index(i, i, p_active)) +=
+                  (*h2)(active_offset + i);
+            }
+          }
+
+          auto db = fit_block_jacobian_from_h_batched_columns(
+              layouts[b], samp.S[b], H[b], dH_diag, direct_cols, resolved,
+              label);
+          if (!db.has_value()) {
+            ok = false;
+            break;
+          }
+          dblocks.push_back(std::move(*db));
+        }
+
+        if (ok && dblocks.size() == nblk) {
+          auto J0 = assemble_theta_jacobian_multi(
+              ev, layouts, dblocks, pstar);
+          if (J0.has_value()) {
+            auto Jproj = project_loading_constraints_jacobian(
+                ev, layouts, dblocks, *rows, *theta0, *J0);
+            if (Jproj.has_value()) {
+              if (!Jproj->allFinite())
+                return std::unexpected(FitError{FitError::Kind::NumericIssue,
+                    "restricted Guttman analytic Jacobian: non-finite batched "
+                    "output"});
+              return Jproj;
+            }
+          }
+        }
+      }
+    }
+  }
 
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
 

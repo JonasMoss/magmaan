@@ -2248,10 +2248,15 @@ work until a concrete downstream consumer appears.
   loading-only restrictions, and 3.2 ms for both under `unit`/`standardized`;
   `gls_aligned` is about 2.7 / 3.7 / 3.9 ms. A follow-up fixed-fit empirical
   restricted probe put `unit`/`standardized` at about 1.5x ULS robust SE and
-  `gls_aligned` at about 1.7x in the same p = 25 cell. Non-default restricted
-  communality choices remain analytic but may still use direction-wise
-  constrained RHS assembly. The old `guttman` selector is retained as the
-  legacy lavaan-like Spearman/incidence map.
+  `gls_aligned` at about 1.7x in the same p = 25 cell. The remaining restricted
+  speed pass batches constrained RHS assembly for `triad_ls`,
+  `anchor_triad_ls`, and `gmm_block`, and lifts the fast path to grouped
+  restricted maps by solving the stacked communality KKT system once and
+  feeding cross-block `dH` diagonals through the batched score-regression and
+  loading-projection derivatives. `gmm_full` remains analytic but direction-wise
+  until the joint selected-triad GMM weight derivative is batched. The old
+  `guttman` selector is retained as the legacy lavaan-like
+  Spearman/incidence map.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary

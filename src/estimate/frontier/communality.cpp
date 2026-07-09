@@ -1813,23 +1813,70 @@ gmm_block_h2_jacobian(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::MatrixXd>
-gmm_block_h2_constrained_jacobian(
-    const Eigen::MatrixXd& S,
-    const Eigen::MatrixXd& R,
-    const std::vector<std::vector<Eigen::Index>>& blocks,
-    const std::vector<Eigen::Index>& block_of,
-    const CorrelationJacobian& J,
-    const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2) {
+triad_ls_h2_jacobian_rhs(const Eigen::MatrixXd& R,
+                         const std::vector<std::vector<Eigen::Index>>& blocks,
+                         const std::vector<Eigen::Index>& block_of,
+                         const CorrelationJacobian& J,
+                         const Eigen::VectorXd& h2,
+                         bool include_anchor_rows) {
   const Eigen::Index p = R.rows();
-  auto system = gmm_block_system(R, blocks);
-  if (!system.has_value()) return std::unexpected(system.error());
-  auto h2 = solve_communality_system(*system, R_h2, r_h2);
-  if (!h2.has_value()) return std::unexpected(h2.error());
-  if (h2->size() != p)
-    return mat_error("communality constrained GMM block Jacobian: h2 dimension "
+  if (h2.size() != p || J.p != p)
+    return mat_error("communality constrained Jacobian RHS: dimension "
                      "mismatch");
 
+  Eigen::MatrixXd rhs = Eigen::MatrixXd::Zero(p, J.pstar);
+  for (const auto& idx : blocks) {
+    for (const Eigen::Index i : idx) {
+      for (std::size_t a = 0; a < idx.size(); ++a) {
+        const Eigen::Index j = idx[a];
+        if (j == i) continue;
+        for (std::size_t c = a + 1; c < idx.size(); ++c) {
+          const Eigen::Index k = idx[c];
+          if (k == i) continue;
+          Eigen::RowVectorXd dA = Eigen::RowVectorXd::Zero(J.pstar);
+          Eigen::RowVectorXd db = Eigen::RowVectorXd::Zero(J.pstar);
+          add_corr_row(dA, J, j, k, 1.0);
+          add_corr_row(db, J, i, j, R(i, k));
+          add_corr_row(db, J, i, k, R(i, j));
+          const double Aik = R(j, k);
+          const double e = R(i, j) * R(i, k) - Aik * h2(i);
+          rhs.row(i).noalias() += dA * e + Aik * (db - dA * h2(i));
+        }
+
+        if (!include_anchor_rows) continue;
+        const Eigen::Index bi = block_of[static_cast<std::size_t>(i)];
+        for (Eigen::Index k = 0; k < p; ++k) {
+          if (k == i || k == j) continue;
+          if (block_of[static_cast<std::size_t>(k)] == bi) continue;
+          Eigen::RowVectorXd dA = Eigen::RowVectorXd::Zero(J.pstar);
+          Eigen::RowVectorXd db = Eigen::RowVectorXd::Zero(J.pstar);
+          add_corr_row(dA, J, j, k, 1.0);
+          add_corr_row(db, J, i, j, R(i, k));
+          add_corr_row(db, J, i, k, R(i, j));
+          const double Aik = R(j, k);
+          const double e = R(i, j) * R(i, k) - Aik * h2(i);
+          rhs.row(i).noalias() += dA * e + Aik * (db - dA * h2(i));
+        }
+      }
+    }
+  }
+
+  if (!rhs.allFinite())
+    return mat_error("communality constrained Jacobian RHS: non-finite LS "
+                     "output");
+  return rhs;
+}
+
+fit_expected<Eigen::MatrixXd>
+gmm_block_h2_jacobian_rhs(const Eigen::MatrixXd& R,
+                          const std::vector<std::vector<Eigen::Index>>& blocks,
+                          const std::vector<Eigen::Index>& block_of,
+                          const CorrelationJacobian& J,
+                          const Eigen::VectorXd& h2) {
+  const Eigen::Index p = R.rows();
+  if (h2.size() != p || J.p != p)
+    return mat_error("communality constrained GMM block Jacobian RHS: "
+                     "dimension mismatch");
   auto h20_global =
       itemwise_h2(R, blocks, block_of, CommunalityMethod::TriadLeastSquares);
   if (!h20_global.has_value()) return std::unexpected(h20_global.error());
@@ -1874,7 +1921,7 @@ gmm_block_h2_constrained_jacobian(
     for (Eigen::Index i = 0; i < m; ++i) {
       const Eigen::Index gi = idx[static_cast<std::size_t>(i)];
       h20(i) = (*h20_global)(gi);
-      h_local(i) = (*h2)(gi);
+      h_local(i) = h2(gi);
       Jh20.row(i) = Jh20_global->row(gi);
     }
 
@@ -1967,8 +2014,34 @@ gmm_block_h2_constrained_jacobian(
     }
   }
 
+  if (!rhs_head.allFinite())
+    return mat_error("communality constrained GMM block Jacobian RHS: "
+                     "non-finite output");
+  return rhs_head;
+}
+
+fit_expected<Eigen::MatrixXd>
+gmm_block_h2_constrained_jacobian(
+    const Eigen::MatrixXd& S,
+    const Eigen::MatrixXd& R,
+    const std::vector<std::vector<Eigen::Index>>& blocks,
+    const std::vector<Eigen::Index>& block_of,
+    const CorrelationJacobian& J,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2) {
+  const Eigen::Index p = R.rows();
+  auto system = gmm_block_system(R, blocks);
+  if (!system.has_value()) return std::unexpected(system.error());
+  auto h2 = solve_communality_system(*system, R_h2, r_h2);
+  if (!h2.has_value()) return std::unexpected(h2.error());
+  if (h2->size() != p)
+    return mat_error("communality constrained GMM block Jacobian: h2 dimension "
+                     "mismatch");
+
+  auto rhs_head = gmm_block_h2_jacobian_rhs(R, blocks, block_of, J, *h2);
+  if (!rhs_head.has_value()) return std::unexpected(rhs_head.error());
   return solve_constrained_h2_jacobian_from_rhs(
-      *system, R_h2, r_h2, rhs_head, S, *h2);
+      *system, R_h2, r_h2, *rhs_head, S, *h2);
 }
 
 fit_expected<Eigen::VectorXd>
@@ -2094,6 +2167,43 @@ communality_system_directional(
   }
   return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "communality system derivative: unknown method"});
+}
+
+fit_expected<Eigen::MatrixXd>
+communality_system_jacobian_rhs(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::VectorXd& h2) {
+  auto vin = validate_input(S, block_of_indicator);
+  if (!vin.has_value()) return std::unexpected(vin.error());
+  if (h2.size() != S.rows() || !h2.allFinite())
+    return mat_error("communality constrained Jacobian RHS: h2 dimension "
+                     "mismatch or non-finite value");
+  auto J = correlation_jacobian(S, vin->R);
+  if (!J.has_value()) return std::unexpected(J.error());
+
+  switch (method) {
+    case CommunalityMethod::TriadLeastSquares:
+      return triad_ls_h2_jacobian_rhs(
+          vin->R, vin->blocks, vin->block_of, *J, h2,
+          /*include_anchor_rows=*/false);
+    case CommunalityMethod::AnchorTriadLeastSquares:
+      return triad_ls_h2_jacobian_rhs(
+          vin->R, vin->blocks, vin->block_of, *J, h2,
+          /*include_anchor_rows=*/true);
+    case CommunalityMethod::GmmBlock:
+      return gmm_block_h2_jacobian_rhs(
+          vin->R, vin->blocks, vin->block_of, *J, h2);
+    case CommunalityMethod::GmmFull:
+      return mat_error("communality constrained Jacobian RHS: gmm_full "
+                       "batched derivative is deferred");
+    case CommunalityMethod::AverageRatio:
+    case CommunalityMethod::RatioOfSums:
+      return mat_error("communality constrained Jacobian RHS: method is not a "
+                       "least-squares/GMM constrained system");
+  }
+  return mat_error("communality constrained Jacobian RHS: unknown method");
 }
 
 fit_expected<Eigen::VectorXd>
@@ -2250,10 +2360,20 @@ estimate_h2_communalities_constrained_jacobian(
       return gmm_block_h2_constrained_jacobian(
           S, vin->R, vin->blocks, vin->block_of, *J, R_h2, r_h2);
     case CommunalityMethod::TriadLeastSquares:
-    case CommunalityMethod::AnchorTriadLeastSquares:
+    case CommunalityMethod::AnchorTriadLeastSquares: {
+      auto system = communality_system(S, block_of_indicator, method);
+      if (!system.has_value()) return std::unexpected(system.error());
+      auto h2 = solve_communality_system(*system, R_h2, r_h2);
+      if (!h2.has_value()) return std::unexpected(h2.error());
+      auto rhs_head = communality_system_jacobian_rhs(
+          S, block_of_indicator, method, *h2);
+      if (!rhs_head.has_value()) return std::unexpected(rhs_head.error());
+      return solve_constrained_h2_jacobian_from_rhs(
+          *system, R_h2, r_h2, *rhs_head, S, *h2);
+    }
     case CommunalityMethod::GmmFull:
       return mat_error("communality constrained Jacobian: batched constrained "
-                       "path is currently implemented for gmm_block");
+                       "path is deferred for gmm_full");
     case CommunalityMethod::AverageRatio:
     case CommunalityMethod::RatioOfSums:
       return mat_error("communality constrained Jacobian: method is not a "

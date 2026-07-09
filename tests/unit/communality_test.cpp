@@ -251,19 +251,33 @@ TEST_CASE("communality constrained system imposes linear h2 rows") {
 }
 
 TEST_CASE("communality constrained Jacobian matches finite differences") {
-  Eigen::MatrixXd S = one_factor_corr({0.55, 0.70, 0.85, 0.62, 0.78});
-  S(0, 0) = 1.20;
-  S(1, 1) = 0.90;
-  S(2, 2) = 1.35;
-  S(3, 3) = 1.10;
-  S(4, 4) = 1.55;
-  for (Eigen::Index i = 0; i < S.rows(); ++i) {
-    for (Eigen::Index j = i + 1; j < S.cols(); ++j) {
-      S(i, j) *= std::sqrt(S(i, i) * S(j, j));
-      S(j, i) = S(i, j);
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 0, 0, 1, 1, 1};
+  const std::vector<double> lambda = {0.55, 0.70, 0.85, 0.62,
+                                      0.78, 0.58, 0.76, 0.68};
+  const std::vector<double> sd = {1.20, 0.90, 1.35, 1.10,
+                                  1.55, 0.85, 1.45, 1.05};
+  const double rho = 0.32;
+
+  Eigen::MatrixXd R = Eigen::MatrixXd::Identity(
+      static_cast<Eigen::Index>(lambda.size()),
+      static_cast<Eigen::Index>(lambda.size()));
+  for (Eigen::Index i = 0; i < R.rows(); ++i) {
+    for (Eigen::Index j = i + 1; j < R.cols(); ++j) {
+      const double phi = blocks[static_cast<std::size_t>(i)] ==
+                                 blocks[static_cast<std::size_t>(j)]
+                             ? 1.0
+                             : rho;
+      R(i, j) = lambda[static_cast<std::size_t>(i)] *
+                lambda[static_cast<std::size_t>(j)] * phi;
+      R(j, i) = R(i, j);
     }
   }
-  const std::vector<std::int32_t> blocks(5, 0);
+  Eigen::MatrixXd S = R;
+  for (Eigen::Index i = 0; i < S.rows(); ++i) {
+    for (Eigen::Index j = 0; j < S.cols(); ++j)
+      S(i, j) *= sd[static_cast<std::size_t>(i)] *
+                 sd[static_cast<std::size_t>(j)];
+  }
   const auto constraints = [](const Eigen::MatrixXd& X) {
     Eigen::MatrixXd C = Eigen::MatrixXd::Zero(1, X.rows());
     C(0, 0) = -X(0, 0);
@@ -274,29 +288,35 @@ TEST_CASE("communality constrained Jacobian matches finite differences") {
   };
   auto [C, d] = constraints(S);
 
-  auto J = estimate_h2_communalities_constrained_jacobian(
-      S, blocks, CommunalityMethod::GmmBlock, C, d);
-  REQUIRE(J.has_value());
-
   const Eigen::Index p = S.rows();
-  Eigen::Index col = 0;
   constexpr double eps = 2e-6;
-  for (Eigen::Index c = 0; c < p; ++c) {
-    for (Eigen::Index r = c; r < p; ++r) {
-      Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(p, p);
-      dS(r, c) = 1.0;
-      if (r != c) dS(c, r) = 1.0;
-      auto [Cp, dp] = constraints(S + eps * dS);
-      auto [Cm, dm] = constraints(S - eps * dS);
-      auto hp = estimate_h2_communalities_constrained(
-          S + eps * dS, blocks, CommunalityMethod::GmmBlock, Cp, dp);
-      auto hm = estimate_h2_communalities_constrained(
-          S - eps * dS, blocks, CommunalityMethod::GmmBlock, Cm, dm);
-      REQUIRE(hp.has_value());
-      REQUIRE(hm.has_value());
-      const Eigen::VectorXd fd = (*hp - *hm) / (2.0 * eps);
-      CHECK((J->col(col) - fd).cwiseAbs().maxCoeff() < 5e-5);
-      ++col;
+  for (CommunalityMethod method :
+       {CommunalityMethod::TriadLeastSquares,
+        CommunalityMethod::AnchorTriadLeastSquares,
+        CommunalityMethod::GmmBlock}) {
+    INFO("method ordinal: " << static_cast<int>(method));
+    auto J = estimate_h2_communalities_constrained_jacobian(
+        S, blocks, method, C, d);
+    REQUIRE(J.has_value());
+
+    Eigen::Index col = 0;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c; r < p; ++r) {
+        Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(p, p);
+        dS(r, c) = 1.0;
+        if (r != c) dS(c, r) = 1.0;
+        auto [Cp, dp] = constraints(S + eps * dS);
+        auto [Cm, dm] = constraints(S - eps * dS);
+        auto hp = estimate_h2_communalities_constrained(
+            S + eps * dS, blocks, method, Cp, dp);
+        auto hm = estimate_h2_communalities_constrained(
+            S - eps * dS, blocks, method, Cm, dm);
+        REQUIRE(hp.has_value());
+        REQUIRE(hm.has_value());
+        const Eigen::VectorXd fd = (*hp - *hm) / (2.0 * eps);
+        CHECK((J->col(col) - fd).cwiseAbs().maxCoeff() < 5e-5);
+        ++col;
+      }
     }
   }
 }

@@ -191,12 +191,14 @@ golden `parTable()` fixtures.
   estimator-side maps differentiate the regular constrained communality KKT
   system and the loading projection, with central differences retained for
   rank-changing pseudo-inverse or singular projection boundary cases. The
-  default single-block `gmm_block` restricted path batches the constrained h2
-  KKT right-hand sides with the same active-column `dW e` GMM derivative,
-  reuses one KKT factorization across all covariance columns, feeds the
+  restricted path batches the constrained h2 KKT right-hand sides for
+  `triad_ls`, `anchor_triad_ls`, and `gmm_block`; the GMM branch uses the same
+  active-column `dW e` derivative as configural. The grouped restricted path
+  embeds the active block RHS in the stacked communality system, reuses one
+  joint KKT factorization across all covariance columns, feeds every block's
   constrained `dH` diagonal into the batched score-regression derivative, and
   applies the loading-projection derivative in action form, avoiding per-column
-  inverse-derivative matrices.
+  inverse-derivative matrices. `gmm_full` remains analytic but direction-wise.
   `robust::frontier::noniterative_se*` is the SE-only primitive:
   normal-theory paths contract `J Gamma J'/N`, while empirical paths stream
   casewise moment rows in parameter space rather than materializing dense
