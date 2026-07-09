@@ -76,7 +76,7 @@ cov_table <- function(constraint, ests) {
 }
 cost_table <- function(constraint, ests) {
   tt <- timing[timing$estimator %in% ests & timing$constraint == constraint, ]
-  big <- tt[tt$factors == 5 & tt$indicators == 5, ]
+  big <- tt[tt$factors == 5 & as.character(tt$indicators) == "5", ]
   do.call(rbind, lapply(ests, function(e) {
     data.frame(
       Estimator = label(e),
