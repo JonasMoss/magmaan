@@ -1200,13 +1200,6 @@ triad_ls_system(const Eigen::MatrixXd& R,
   return out;
 }
 
-struct CommunalitySystemDirection {
-  CommunalitySystem system;
-  Eigen::MatrixXd dA;
-  Eigen::VectorXd db;
-  Eigen::MatrixXd dW;
-};
-
 fit_expected<CommunalitySystem>
 gmm_block_system(const Eigen::MatrixXd& R,
                  const std::vector<std::vector<Eigen::Index>>& blocks) {
@@ -1646,6 +1639,62 @@ communality_system(const Eigen::MatrixXd& S,
   }
   return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "communality constrained system: unknown method"});
+}
+
+fit_expected<CommunalitySystemDirection>
+communality_system_directional(
+    const Eigen::MatrixXd& S,
+    const Eigen::MatrixXd& dS,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method) {
+  auto vin = validate_input(S, block_of_indicator);
+  if (!vin.has_value()) return std::unexpected(vin.error());
+  auto dR = correlation_direction(S, dS, vin->R);
+  if (!dR.has_value()) return std::unexpected(dR.error());
+
+  switch (method) {
+    case CommunalityMethod::TriadLeastSquares: {
+      const std::vector<Pair> off = within_off_pairs(vin->blocks);
+      auto sys = triad_system_directional(vin->R, *dR, vin->blocks, off, nullptr,
+                                          nullptr);
+      if (!sys.has_value()) return std::unexpected(sys.error());
+      CommunalitySystemDirection out;
+      out.system.A = std::move(sys->sys.A);
+      out.system.b = std::move(sys->sys.b);
+      out.system.W = Eigen::MatrixXd::Identity(out.system.A.rows(),
+                                               out.system.A.rows());
+      out.dA = std::move(sys->dA);
+      out.db = std::move(sys->db);
+      out.dW = Eigen::MatrixXd::Zero(out.system.A.rows(), out.system.A.rows());
+      return out;
+    }
+    case CommunalityMethod::AnchorTriadLeastSquares: {
+      auto sys = triad_system_directional(
+          vin->R, *dR, vin->blocks, std::vector<Pair>{}, nullptr, nullptr,
+          /*include_anchor_rows=*/true, &vin->block_of);
+      if (!sys.has_value()) return std::unexpected(sys.error());
+      CommunalitySystemDirection out;
+      out.system.A = std::move(sys->sys.A);
+      out.system.b = std::move(sys->sys.b);
+      out.system.W = Eigen::MatrixXd::Identity(out.system.A.rows(),
+                                               out.system.A.rows());
+      out.dA = std::move(sys->dA);
+      out.db = std::move(sys->db);
+      out.dW = Eigen::MatrixXd::Zero(out.system.A.rows(), out.system.A.rows());
+      return out;
+    }
+    case CommunalityMethod::GmmBlock:
+      return gmm_block_system_directional(vin->R, *dR, vin->blocks);
+    case CommunalityMethod::GmmFull:
+      return gmm_full_system_directional(vin->R, *dR, vin->blocks, vin->block_of);
+    case CommunalityMethod::AverageRatio:
+    case CommunalityMethod::RatioOfSums:
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "communality system derivative: method is not a least-squares/GMM "
+          "triad system"});
+  }
+  return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      "communality system derivative: unknown method"});
 }
 
 fit_expected<Eigen::VectorXd>

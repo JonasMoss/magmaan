@@ -138,6 +138,19 @@ noniterative_cfa_inference <- function(fit, discrepancy = c("uls", "ntml"),
   noniterative_cfa_inference_impl(fit, estimator, discrepancy, gamma, data)
 }
 
+#' Delta-method standard errors for a non-iterative CFA fit.
+#'
+#' Returns only `se` and `vcov`, skipping residual goodness-of-fit spectra.
+#'
+#' @inheritParams noniterative_cfa_inference
+#' @export
+noniterative_cfa_se <- function(fit, gamma = c("nt", "empirical"),
+                                data = NULL, estimator = NULL) {
+  gamma <- match.arg(gamma)
+  estimator <- noniterative_estimator_arg(estimator)
+  noniterative_cfa_se_impl(fit, estimator, gamma, data)
+}
+
 #' Wald test of a linear restriction R theta = q for a non-iterative CFA fit.
 #'
 #' Exact chi-square on `nrow(R)` degrees of freedom, using the delta-method
@@ -146,6 +159,8 @@ noniterative_cfa_inference <- function(fit, discrepancy = c("uls", "ntml"),
 #' @param fit A fit from [fit_noniterative_cfa()].
 #' @param R Restriction matrix (`k x n_free`).
 #' @param q Right-hand side (length `k`).
+#' @param discrepancy Accepted for compatibility; ignored because this wrapper
+#'   only needs the delta-method covariance.
 #' @inheritParams noniterative_cfa_inference
 #' @export
 noniterative_cfa_wald <- function(fit, R, q, discrepancy = c("uls", "ntml"),
@@ -238,6 +253,8 @@ noniterative_cfa_grouped_inference <- function(fit, discrepancy = c("uls", "ntml
 #' rank-deficient covariance (`vcov_constrained`, `se_constrained`), and the
 #' constraint test (`W`, `k`, `p_wald`).
 #'
+#' @param discrepancy Accepted for compatibility; ignored because this wrapper
+#'   only needs the delta-method covariance.
 #' @inheritParams noniterative_cfa_inference
 #' @export
 noniterative_cfa_constrained <- function(fit, discrepancy = c("uls", "ntml"),
@@ -264,6 +281,8 @@ noniterative_cfa_constrained <- function(fit, discrepancy = c("uls", "ntml"),
 #' residual `d`, and the test (`W`, `df`, `rank`, `p_value`).
 #'
 #' @param ref_group Reference group (1-based; latent means are 0 there).
+#' @param discrepancy Accepted for compatibility; ignored because this wrapper
+#'   only needs the delta-method covariance.
 #' @inheritParams noniterative_cfa_inference
 #' @export
 noniterative_cfa_scalar_invariance <- function(fit, ref_group = 1,

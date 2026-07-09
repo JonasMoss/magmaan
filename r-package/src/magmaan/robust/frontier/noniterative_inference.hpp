@@ -37,6 +37,14 @@ namespace magmaan::robust::frontier {
 //          weight; NOT the sample GLS weight.
 enum class Discrepancy : std::uint8_t { ULS, NTML };
 
+struct NonIterativeSE {
+  Eigen::VectorXd theta_hat;                 // q
+  Eigen::MatrixXd Omega;                     // q × q = J Γ Jᵀ / N, block-summed
+  Eigen::VectorXd se;                        // √diag(Ω)
+  std::vector<std::int32_t> block_of_param;  // q; -1 for single-block legacy paths
+  std::vector<std::string> warnings;
+};
+
 struct NonIterativeInference {
   // Delta-method standard errors.
   Eigen::MatrixXd Omega;  // q × q = J Γ Jᵀ / N
@@ -89,9 +97,39 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  estimate::frontier::CompositeWeight composite =
                                      estimate::frontier::CompositeWeight::EstimatorDefault);
 
-// Same inferential algebra as `noniterative_inference*`, but the restricted
-// estimator still takes its Jacobian by finite differences over
-// `fit_noniterative_cfa_restricted()`.
+// SE-only counterparts. These compute the estimator-map Jacobian and delta-method
+// covariance but do not build residual projectors or weighted-χ² spectra. The
+// empirical raw-data overloads stream casewise moment contributions in q-space
+// instead of materialising dense Γ.
+post_expected<NonIterativeSE>
+noniterative_se(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                estimate::frontier::NonIterativeEstimator which,
+                const Eigen::MatrixXd& gamma,
+                estimate::frontier::CompositeWeight composite =
+                    estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                   const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                   estimate::frontier::NonIterativeEstimator which,
+                   estimate::frontier::CompositeWeight composite =
+                       estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_empirical(const spec::LatentStructure& pt,
+                          const model::MatrixRep& rep,
+                          const data::SampleStats& samp,
+                          const data::RawData& raw,
+                          const Eigen::VectorXd& theta,
+                          estimate::frontier::NonIterativeEstimator which,
+                          estimate::frontier::CompositeWeight composite =
+                              estimate::frontier::CompositeWeight::EstimatorDefault);
+
+// Same inferential algebra as `noniterative_inference*`, using the restricted
+// estimator-map Jacobian. The regular restricted path is analytic; boundary or
+// rank-changing cases fall back to finite differences inside the estimator
+// layer.
 post_expected<NonIterativeInference>
 noniterative_inference_restricted(
     const spec::LatentStructure& pt,
@@ -133,10 +171,52 @@ noniterative_inference_restricted_empirical(
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
+post_expected<NonIterativeSE>
+noniterative_se_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    const Eigen::MatrixXd& gamma,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
+
 // Wald test of the linear restriction R·θ = q, using the delta-method Ω.
 // Exact χ²(R.rows()); the primary nested test.
 post_expected<inference::WaldTestResult>
 noniterative_wald(const Eigen::VectorXd& theta, const NonIterativeInference& inf,
+                  const Eigen::MatrixXd& R, const Eigen::VectorXd& q);
+
+post_expected<inference::WaldTestResult>
+noniterative_wald(const Eigen::VectorXd& theta, const NonIterativeSE& se,
                   const Eigen::MatrixXd& R, const Eigen::VectorXd& q);
 
 // Difference / pseudo-LRT: T_d = T_0 − T_1 with reference = spectrum of
@@ -216,6 +296,31 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
                                          estimate::frontier::CompositeWeight composite =
                                              estimate::frontier::CompositeWeight::EstimatorDefault);
 
+post_expected<NonIterativeSE>
+noniterative_se_grouped(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                        const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                        estimate::frontier::NonIterativeEstimator which,
+                        const std::vector<Eigen::MatrixXd>& gamma_per_block,
+                        estimate::frontier::CompositeWeight composite =
+                            estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                           const data::SampleStats& samp, const Eigen::VectorXd& theta,
+                           estimate::frontier::NonIterativeEstimator which,
+                           estimate::frontier::CompositeWeight composite =
+                               estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_empirical(const spec::LatentStructure& pt,
+                                  const model::MatrixRep& rep,
+                                  const data::SampleStats& samp,
+                                  const data::RawData& raw,
+                                  const Eigen::VectorXd& theta,
+                                  estimate::frontier::NonIterativeEstimator which,
+                                  estimate::frontier::CompositeWeight composite =
+                                      estimate::frontier::CompositeWeight::EstimatorDefault);
+
 // Grouped inference for the restricted estimator map. Equality constraints can
 // couple blocks, so the residual projector is assembled on the full stacked
 // covariance-moment space rather than through the configural block-diagonal
@@ -261,6 +366,44 @@ noniterative_inference_grouped_restricted_empirical(
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
+post_expected<NonIterativeSE>
+noniterative_se_grouped_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    const std::vector<Eigen::MatrixXd>& gamma_per_block,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_restricted_nt(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
+
+post_expected<NonIterativeSE>
+noniterative_se_grouped_restricted_empirical(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& theta,
+    estimate::frontier::NonIterativeEstimator which,
+    estimate::frontier::CommunalityMethod comm =
+        estimate::frontier::CommunalityMethod::GmmBlock,
+    estimate::frontier::CompositeWeight composite =
+        estimate::frontier::CompositeWeight::EstimatorDefault);
+
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test(
     const GroupedNonIterativeInference& inf0 /*restricted H0*/,
@@ -289,6 +432,10 @@ struct ConstrainedNonIterativeFit {
 post_expected<ConstrainedNonIterativeFit>
 noniterative_constrained_fit(const spec::LatentStructure& pt,
                              const GroupedNonIterativeInference& inf);
+
+post_expected<ConstrainedNonIterativeFit>
+noniterative_constrained_fit(const spec::LatentStructure& pt,
+                             const NonIterativeSE& se);
 
 // ---------------------------------------------------------------------------
 // True (lavaan-compatible) scalar invariance via the reference-group mean map.
@@ -336,6 +483,12 @@ post_expected<ScalarInvarianceFit>
 noniterative_scalar_invariance(const spec::LatentStructure& pt,
                                const model::MatrixRep& rep,
                                const GroupedNonIterativeInference& inf,
+                               std::size_t ref_group = 0);
+
+post_expected<ScalarInvarianceFit>
+noniterative_scalar_invariance(const spec::LatentStructure& pt,
+                               const model::MatrixRep& rep,
+                               const NonIterativeSE& se,
                                std::size_t ref_group = 0);
 
 }  // namespace magmaan::robust::frontier

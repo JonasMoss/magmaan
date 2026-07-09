@@ -31,6 +31,10 @@ The constrained population is true tau-equivalent within each factor with equal
 within-factor residual variances, so the restricted estimators are evaluated on
 their intended target rather than under misspecification.
 
+The Guttman arms use `noniterative_cfa_se()` for empirical SE timing. The full
+`noniterative_cfa_inference()` GOF bundle is intentionally not called here,
+because this RMSE/coverage grid only consumes standard errors.
+
 ## Default Full Grid
 
 `--full` currently expands to:

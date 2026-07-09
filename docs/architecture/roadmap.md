@@ -184,15 +184,20 @@ golden `parTable()` fixtures.
   the generality seam for future FABIN2/Bentler/JS/MIIV maps. The promoted
   `guttman_gls_aligned` configural path batches the block-GMM communality
   Jacobian and downstream score-regression derivative over all covariance
-  coordinates, while restricted estimator-side maps remain finite-difference
-  based until their active KKT/projection system is differentiated.
-  `robust::frontier::
-  noniterative_inference` builds the residual projector `M = I - Delta J` and
-  reuses the existing weighted-chi2 spectrum reducer for a residual-based
-  goodness-of-fit test (ULS or model-implied NTML weight; normal-theory or
-  empirical Gamma), plus delta-method SEs `Omega = J Gamma J'/N`; `noniterative_
-  wald` and `noniterative_difference_test` are the nested tests. R surface:
-  `magmaan_core$noniterative_cfa_{fit,inference,wald,difference,pseudo_lrt}_impl`.
+  coordinates. Restricted estimator-side maps differentiate the regular
+  constrained communality KKT system and the loading projection, with central
+  differences retained for rank-changing pseudo-inverse or singular projection
+  boundary cases.
+  `robust::frontier::noniterative_se*` is the SE-only primitive:
+  normal-theory paths contract `J Gamma J'/N`, while empirical paths stream
+  casewise moment rows in parameter space rather than materializing dense
+  moment-space Gamma. `robust::frontier::noniterative_inference*` is the full
+  GOF bundle: it builds the residual projector `M = I - Delta J` and reuses the
+  existing weighted-chi2 spectrum reducer for ULS or model-implied NTML tests,
+  then includes the same delta-method SEs. `noniterative_wald` and
+  `noniterative_difference_test` are the nested tests. R surface:
+  `magmaan_core$noniterative_cfa_{fit,se,inference,wald,difference,
+  pseudo_lrt}_impl`.
   Theory in
   the guttman-inference paper's derivation notes
   (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated by
@@ -238,7 +243,7 @@ golden `parTable()` fixtures.
   reconstruction: residual rows enter the selected LS-form communality/H step
   (default `gmm_block`) and loading rows enter the Sigma-only composite
   projection; unsupported mixed/factor/mean rows error. Grouped restricted
-  inference uses the restricted map's full stacked finite-difference Jacobian
+  inference uses the restricted map's full stacked analytic-first Jacobian
   with the same communality and composite choices, so cross-block constraints
   propagate into `Omega`, GOF, and pseudo-LRTs. General linear equality testing
   still has the
@@ -249,7 +254,7 @@ golden `parTable()` fixtures.
   `alpha_g = (Lr'Lr)^-1 Lr'(m_g - m_r)` with a linearized pseudo-inverse Wald on
   the mean residual orthogonal to the loadings, df `(G-1)(p-#factors)`. R surface:
   `fit_noniterative_cfa_{metric,restricted}` plus
-  `magmaan_core$noniterative_cfa_{grouped_inference,pseudo_lrt,constrained,
+  `magmaan_core$noniterative_cfa_{se,grouped_inference,pseudo_lrt,constrained,
   scalar}_impl`.
   Theory in the guttman-inference paper's constrained-CFA note
   (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated by
