@@ -2290,14 +2290,29 @@ work until a concrete downstream consumer appears.
   catastrophic here (~22-30x NTML on loadings, loadings to ~65) which is why
   it is retired; legacy `guttman_lavaan` is ~3.65x (the AR/`triad_mean`
   instability, see `papers/closed-form-omega/dev/notes/anti-ar-example.md`).
-  Good enough for most purposes. **Open concern: speed is disappointing.**
-  The closed-form estimator's whole pitch is speed, and it currently
-  underwhelms. Known levers to chase before claiming the speed win:
-  (a) the restricted SE path is not yet batched (the flagged "main selling
-  point"); (b) `triad_wls_joint`, `triad_mean`, and `triad_pooled` SE
-  Jacobians fall back to finite differences; (c) quantify the actual
-  fit+SE wall-cost vs NTML/ULS so the speed claim is evidence-backed rather
-  than assumed.
+  Good enough for most purposes. **Speed: the fit wins big, the SE is the
+  cost, the restricted SE is the acute problem.** Head-to-head timing
+  (2026-07-09, n=300, ms/call, p=q*5):
+  ```
+  p    guttman_fit  guttman_fit+SE   ntml_fit  ntml_fit+SE  uls_fit+SE  ext_via_restricted+SE
+  15      0.10          0.63           0.54        0.83        0.74            7.3
+  25      0.19          1.74           1.73        3.08        3.27           91
+  50      0.68         13.4           14.9        55.3        61.5         2142
+  ```
+  Read-out: (1) the point fit is 5x-22x faster than NTML and scales better
+  (0.68 vs 14.9 ms at p=50); (2) the configural fit+SE fast path already
+  BEATS NTML+SE and pulls ahead with p (0.76x -> 0.57x -> 0.24x), so the
+  recommended recipe's speed is already a win once extended rides it;
+  (3) within configural Guttman the SE is ~20x the fit (p=50: 0.68 ms fit,
+  13.4 ms fit+SE), so the SE is where the time now lives; (4) the restricted
+  path SE is unbatched and catastrophic (30x-40x NTML, 2142 ms at p=50),
+  which is where extended is stuck today via the restricted-unconstrained
+  proxy. Levers: (a) Part B (expose `extended` on the configural fast path)
+  moves it off the 2142 ms proxy onto the ~13 ms path -- biggest single win;
+  (b) batch the restricted empirical-SE (the "main selling point"); (c)
+  `triad_wls_joint`/`triad_mean`/`triad_pooled` SE still fall back to finite
+  differences. The estimator is not slow -- the SE is, and the restricted SE
+  acutely so.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
