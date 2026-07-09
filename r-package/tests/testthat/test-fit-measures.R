@@ -64,3 +64,91 @@ test_that("FIML fit_measures exposes robust baseline CFI and RMSEA fields", {
   same <- c("chisq", "df", "baseline.chisq", "baseline.df", "cfi", "rmsea")
   expect_equal(unlist(fm[same]), unlist(fm_ml[same]), tolerance = 1e-8)
 })
+
+test_that("non-iterative fit measures use empirical baseline scaling and no IC", {
+  skip_if_not_installed("lavaan")
+
+  hs <- lavaan::HolzingerSwineford1939
+  vars <- paste0("x", 1:9)
+  X <- as.matrix(hs[vars])
+  model <- "visual  =~ x1 + x2 + x3
+            textual =~ x4 + x5 + x6
+            speed   =~ x7 + x8 + x9"
+
+  pt <- magmaan_core$lavaan_lavaanify(model)
+  ss <- magmaan_core$data_sample_stats_from_raw(X)
+  fit <- fit_noniterative_cfa(pt, ss, estimator = "guttman_gls_aligned",
+                              composite = "standardized")
+
+  fm <- fit_measures_noniterative(fit, discrepancy = "uls",
+                                  gamma = "empirical", data = X)
+
+  S <- fit$S[[1L]]
+  ut <- upper.tri(S)
+  Xc <- scale(X, center = TRUE, scale = FALSE)
+  ii <- row(S)[ut]
+  jj <- col(S)[ut]
+  gdiag <- vapply(seq_along(ii), function(k) {
+    cp <- Xc[, ii[k]] * Xc[, jj[k]]
+    mean((cp - mean(cp))^2)
+  }, numeric(1))
+  c0_hand <- sum(2 * gdiag) / sum(ut)
+
+  expect_equal(fm$baseline.scale.c, c0_hand, tolerance = 1e-12)
+  expect_true(all(is.na(unlist(
+    fm[c("logl", "unrestricted.logl", "aic", "bic", "bic2")]))))
+  expect_true(is.finite(fm$srmr))
+  expect_true(is.finite(fm$cfi.robust))
+})
+
+test_that("non-iterative fit measures use grouped inference and baselines", {
+  skip_if_not_installed("lavaan")
+
+  hs <- lavaan::HolzingerSwineford1939
+  vars <- paste0("x", 1:9)
+  dat <- hs[c("school", vars)]
+  labels <- unique(as.character(dat$school))
+  model <- "visual  =~ x1 + x2 + x3
+            textual =~ x4 + x5 + x6
+            speed   =~ x7 + x8 + x9"
+  spec <- model_spec(model, group = "school", group_labels = labels)
+  ss <- df_to_data(dat, spec, group = "school", missing = "error")
+  fit <- fit_noniterative_cfa(spec$partable, ss,
+                              estimator = "guttman_gls_aligned",
+                              composite = "standardized")
+
+  fm <- fit_measures_noniterative(fit, discrepancy = "uls",
+                                  gamma = "empirical", data = ss)
+  inf <- noniterative_cfa_grouped_inference(fit, discrepancy = "uls",
+                                            gamma = "empirical", data = ss)
+
+  baseline_chisq <- 0
+  baseline_df <- 0L
+  baseline_scale_num <- 0
+  for (b in seq_along(ss$S)) {
+    S <- ss$S[[b]]
+    X <- ss$X[[b]]
+    ut <- upper.tri(S)
+    baseline_chisq <- baseline_chisq +
+      ss$nobs[[b]] * 2 * sum(S[ut]^2)
+    baseline_df <- baseline_df + sum(ut)
+
+    Xc <- scale(X, center = TRUE, scale = FALSE)
+    ii <- row(S)[ut]
+    jj <- col(S)[ut]
+    gdiag <- vapply(seq_along(ii), function(k) {
+      cp <- Xc[, ii[k]] * Xc[, jj[k]]
+      mean((cp - mean(cp))^2)
+    }, numeric(1))
+    baseline_scale_num <- baseline_scale_num + sum(2 * gdiag)
+  }
+
+  expect_equal(fm$chisq, inf$T, tolerance = 1e-10)
+  expect_equal(fm$df, inf$df)
+  expect_equal(fm$baseline.chisq, baseline_chisq, tolerance = 1e-10)
+  expect_equal(fm$baseline.df, baseline_df)
+  expect_equal(fm$baseline.scale.c, baseline_scale_num / baseline_df,
+               tolerance = 1e-12)
+  expect_true(is.finite(fm$cfi.robust))
+  expect_true(is.finite(fm$rmsea.robust))
+})

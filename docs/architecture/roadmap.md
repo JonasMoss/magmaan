@@ -219,7 +219,11 @@ golden `parTable()` fixtures.
   under the NT (`ntml`) or ULS discrepancy, referred to a same-discrepancy
   independence baseline, giving naive and robust/mixture-scaled CFI/TLI/RMSEA
   plus SRMR (the ULS baseline and the baseline scaling `c_0` are closed-form; NT
-  `c_0 = 1` exactly). The ML score / LRT machinery
+  `c_0 = 1` exactly). Multi-group non-iterative fits route through the grouped
+  residual inference path, empirical baseline scaling is fixture-checked against
+  raw cross-product variances, and likelihood information criteria
+  (`logl`/AIC/BIC/BIC2) are reported as `NA` because the closed-form map is not
+  an ML estimator. The ML score / LRT machinery
   (`modification_indices`, `score_tests`, their robust/LRT variants,
   `case_rerun`, `nestedTest`) is guarded off with a message pointing to the
   residual-based nested tests, because a closed-form map is not a gradient-zero
