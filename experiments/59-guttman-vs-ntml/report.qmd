@@ -1,0 +1,146 @@
+---
+title: "The closed-form Guttman recipe versus NTML"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  results_dir: results
+---
+
+```{r setup}
+results_dir <- params$results_dir
+need <- c("metadata", "estimate_summary", "estimate_joint_summary",
+          "whole_joint_summary", "diagnostic_summary", "timing_summary",
+          "population", "progress")
+paths <- file.path(results_dir, paste0(need, ".csv"))
+if (!all(file.exists(paths))) {
+  stop("Missing results. Run the grid first (see Reproduce), or point\n",
+       "  -P results_dir:<dir> at a completed run.")
+}
+metadata   <- read.csv(paths[1]); est      <- read.csv(paths[2])
+est_joint  <- read.csv(paths[3]); wjoint    <- read.csv(paths[4])
+diag       <- read.csv(paths[5]); timing    <- read.csv(paths[6])
+population <- read.csv(paths[7]); progress <- read.csv(paths[8])
+
+fmt <- function(x, d = 2) ifelse(is.finite(x), formatC(x, format = "f", digits = d), "NA")
+pct <- function(x, d = 0) ifelse(is.finite(x), paste0(formatC(100 * x, format = "f", digits = d), "%"), "NA")
+med <- function(x) median(x[is.finite(x)])
+# p = number of observed variables, joined by (factors, indicators)
+pkey <- function(df) population$p[match(paste(df$factors, df$indicators),
+                                        paste(population$factors, population$indicators))]
+est$p <- pkey(est); est_joint$p <- pkey(est_joint); timing$p <- pkey(timing)
+
+G <- "guttman"; M <- "ml_emp"
+# headline numbers
+rr    <- est_joint$rmse_ratio[est_joint$estimator == G & is.finite(est_joint$rmse_ratio)]
+covG  <- med(est$coverage[est$estimator == G]); covM <- med(est$coverage[est$estimator == M])
+sfit  <- med(wjoint$sigma_rmse_ratio[wjoint$estimator == G])
+tg    <- tapply(timing$total_median_ms[timing$estimator == G], timing$p[timing$estimator == G], med)
+tm    <- tapply(timing$total_median_ms[timing$estimator == M], timing$p[timing$estimator == M], med)
+speed_big <- { ps <- as.integer(names(tg)); p <- max(ps); tm[[as.character(p)]] / tg[[as.character(p)]] }
+failG <- 1 - med(diag$fit_ok_rate[diag$estimator == G] * diag$converged_rate[diag$estimator == G])
+failM <- 1 - med(diag$fit_ok_rate[diag$estimator == M] * diag$converged_rate[diag$estimator == M])
+ncells <- nrow(progress); ncells_ok <- sum(progress$draw_ok)
+```
+
+## Question
+
+Does the recommended closed-form recipe -- `extended_triad_ls` communality with
+the `standardized` composite on the aligned Guttman map -- match normal-theory ML
+(NTML) on parameter RMSE and empirical-SE coverage, including the high-rho /
+weak-loading regime that broke the retired adaptive composite, while being faster
+and never failing to fit?
+
+## Short answer
+
+Across `r ncells_ok` grid cells (n, generator, factors, indicators, latent
+correlation, scales, loading strength), the closed-form recipe recovers the free
+parameters at a **median RMSE of `r fmt(med(rr))`x NTML** -- effectively a
+dead heat -- with **empirical-SE coverage of `r pct(covG)`** (NTML `r pct(covM)`)
+at a nominal 95%. It pays a modest **`r fmt(sfit)`x on implied-covariance fit**
+(it is a covariance functional, not a discrepancy minimizer) and runs
+**`r fmt(speed_big)`x faster than NTML+SE** at the largest models here, while
+never failing to fit (Guttman fit failures `r pct(failG)`, NTML `r pct(failM)`).
+
+```{r partial}
+total_cells <- 1152
+if (ncells_ok < total_cells)
+  cat(sprintf("_Partial run: %d / %d cells complete._\n", ncells_ok, total_cells))
+```
+
+## Evidence
+
+### Parameter RMSE vs NTML (same-replication ratio)
+
+```{r rmse}
+sub <- est_joint[est_joint$estimator == G & is.finite(est_joint$rmse_ratio), ]
+m <- tapply(sub$rmse_ratio, list(sub$strength, sub$rho), med)
+knitr::kable(round(m, 3), caption = "Median RMSE ratio (Guttman / NTML) by loading strength x latent correlation. 1.00 = tie.")
+```
+
+Values near 1 across the grid -- including `rho = 0.8` with weak loadings -- are
+the headline: the closed form tracks ML on the parameters even in the regime that
+used to blow up under the adaptive composite.
+
+### Empirical-SE coverage by data type
+
+```{r coverage}
+cc <- est[est$estimator %in% c(G, M), ]
+tab <- tapply(cc$coverage, list(cc$estimator, cc$generator), med)
+rownames(tab) <- c(guttman = "Guttman (extended+std)", ml_emp = "NTML")[rownames(tab)]
+knitr::kable(round(tab, 3), caption = "Median 95% CI coverage by generator (normal, inverse-Gaussian, ordinal codes).")
+```
+
+### The one cost: implied-covariance fit
+
+```{r sigmafit}
+sj <- wjoint[wjoint$estimator == G & is.finite(wjoint$sigma_rmse_ratio), ]
+knitr::kable(
+  data.frame(
+    Statistic = c("Common-part RMSE ratio", "Sigma RMSE ratio", "Residual-diag RMSE ratio"),
+    `Median vs NTML` = c(fmt(med(sj$common_rmse_ratio)), fmt(med(sj$sigma_rmse_ratio)),
+                         fmt(med(sj$residual_diag_rmse_ratio))),
+    check.names = FALSE),
+  caption = "Whole-matrix recovery vs NTML. >1 = closed form fits the covariance less tightly.")
+```
+
+### Speed and reliability
+
+```{r speed}
+ps <- sort(unique(timing$p))
+sp <- data.frame(
+  p = ps,
+  `Guttman total ms` = fmt(sapply(ps, function(pp) med(timing$total_median_ms[timing$estimator==G & timing$p==pp]))),
+  `NTML total ms`    = fmt(sapply(ps, function(pp) med(timing$total_median_ms[timing$estimator==M & timing$p==pp]))),
+  check.names = FALSE)
+knitr::kable(sp, caption = "Median fit+SE time (ms) by number of observed variables p.")
+```
+
+Fit/convergence failures: Guttman `r pct(failG)`, NTML `r pct(failM)`. The
+closed form is a deterministic map, so it always returns an estimate.
+
+## Caveats
+
+- Per-fit timings use a millisecond clock; sub-millisecond fits at small `p` read
+  as ~1 ms, so the speed gap is clearest at larger `p`.
+- The recipe runs through the restricted-map entry with an unconstrained partable
+  (a bit-exact proxy) because the configural entry does not yet expose communality
+  selection; the numbers are the configural aligned map's.
+- Categorical cells fit the observed Pearson-code covariance directly; no
+  polychoric statistics enter either arm.
+
+## Reproduce
+
+```sh
+Rscript experiments/59-guttman-vs-ntml/run_experiment.R --full \
+  --reps 2000 --cores 6 \
+  --results-dir experiments/59-guttman-vs-ntml/results
+
+quarto render experiments/59-guttman-vs-ntml/report.qmd
+```
+```
