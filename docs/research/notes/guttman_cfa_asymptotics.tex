@@ -754,6 +754,23 @@ older central finite-difference restricted map. Thus the regular restricted
 path avoids \(2p^\star\) full refits, while preserving the conservative
 fallback needed for active-set or rank changes.
 
+The first restricted implementation still assembled the regular derivative one
+covariance coordinate at a time. On the same \(p=25\) shape this made a
+residual-restricted SE call about \(166\) ms, even though no finite-difference
+refits were being used. The default \texttt{gmm\_block} restricted path now
+batches the constrained \(h^2\) derivative: it builds the block-active GMM RHS
+columns with the same \(dW e\) action used by the configural path, solves the
+KKT system once with all right-hand sides, and then feeds the constrained
+\(dH\) diagonal into the batched score-regression derivative. Loading-only
+restrictions also batch the composite-metric projection derivative, reusing the
+base \(W^{-1}\), \((RW^{-1}R\T)^{-1}\), and projection matrix. A repeated-call
+\(p=25\) probe reports roughly \(1.8\) ms for residual-only restrictions,
+\(2.8\) ms for loading-only restrictions, and \(3.2\) ms for both under
+\texttt{unit}/\texttt{standardized}; the corresponding \texttt{gls\_aligned}
+numbers are about \(2.7\), \(3.7\), and \(3.9\) ms. Non-default restricted
+communality rules remain analytic but may fall back to the direction-wise
+assembly until their constrained RHS columns are batched too.
+
 \section{Proposed magmaan Experiment}
 
 The experiment should be deterministic and population based first, with Monte

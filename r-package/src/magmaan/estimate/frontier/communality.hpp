@@ -94,6 +94,21 @@ estimate_h2_communalities_jacobian(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method);
 
+// Batched regular-interior Jacobian of the residual-restricted
+// least-squares/GMM communality map. R_h2 and r_h2 are the linear constraints
+// imposed on the correlation-scale h2 vector at the current S. Nonzero
+// coefficients are treated as residual-variance transformed rows, so
+// dR_ai/dS_ii = R_ai/S_ii and dr_a/dS_ii follows the same convention used by
+// the restricted Guttman estimator; this helper is not for fixed, S-invariant
+// h2 constraints.
+fit_expected<Eigen::MatrixXd>
+estimate_h2_communalities_constrained_jacobian(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::MatrixXd& R_h2,
+    const Eigen::VectorXd& r_h2);
+
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities_constrained(
     const Eigen::MatrixXd& S,
