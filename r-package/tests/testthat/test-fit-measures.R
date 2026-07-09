@@ -101,6 +101,46 @@ test_that("non-iterative fit measures use empirical baseline scaling and no IC",
   expect_true(is.finite(fm$cfi.robust))
 })
 
+test_that("non-iterative residual modification indices expose all diagnostic variants", {
+  skip_if_not_installed("lavaan")
+
+  hs <- lavaan::HolzingerSwineford1939
+  vars <- paste0("x", 1:9)
+  X <- as.matrix(hs[vars])
+  model <- "visual  =~ x1 + x2 + x3
+            textual =~ x4 + x5 + x6
+            speed   =~ x7 + x8 + x9"
+
+  pt <- magmaan_core$lavaan_lavaanify(model)
+  ss <- magmaan_core$data_sample_stats_from_raw(X)
+  fit <- fit_noniterative_cfa(pt, ss, estimator = "guttman_gls_aligned",
+                              composite = "standardized")
+
+  mi <- noniterative_cfa_modification_indices(fit, discrepancy = "uls",
+                                              gamma = "nt",
+                                              candidates = "all")
+  expect_gt(nrow(mi), 0)
+  expect_true(all(c("score.raw", "mi.raw", "pvalue.raw", "epc.raw",
+                    "drop.raw", "score.resid", "mi.resid", "pvalue.resid",
+                    "epc.resid", "drop.resid", "residualized.norm") %in%
+                    names(mi)))
+  expect_true(any(mi$op == "=~"))
+  finite <- is.finite(mi$mi.resid)
+  expect_true(any(finite))
+  expect_true(all(mi$pvalue.resid[finite] >= 0 & mi$pvalue.resid[finite] <= 1))
+  expect_true(any(is.finite(mi$drop.resid)))
+  expect_true(any(is.finite(mi$epc.resid)))
+
+  mi_emp <- noniterative_cfa_modification_indices(fit, discrepancy = "uls",
+                                                  gamma = "empirical", data = X,
+                                                  candidates = "all")
+  expect_equal(nrow(mi_emp), nrow(mi))
+  expect_true(any(is.finite(mi_emp$mi.resid)))
+
+  expect_error(modification_indices(fit),
+               "noniterative_cfa_modification_indices")
+})
+
 test_that("non-iterative fit measures use grouped inference and baselines", {
   skip_if_not_installed("lavaan")
 

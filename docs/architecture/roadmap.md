@@ -226,8 +226,15 @@ golden `parTable()` fixtures.
   an ML estimator. The ML score / LRT machinery
   (`modification_indices`, `score_tests`, their robust/LRT variants,
   `case_rerun`, `nestedTest`) is guarded off with a message pointing to the
-  residual-based nested tests, because a closed-form map is not a gradient-zero
-  minimizer. Glue in `r-package/R/noniterative_postfit.R`; derivations in the
+  residual-based diagnostics and nested tests, because a closed-form map is not
+  a gradient-zero minimizer. The explicit
+  `noniterative_cfa_modification_indices()` surface reports three diagnostics
+  for each fixed-zero or absent one-parameter candidate: a raw residual score,
+  a `V`-tangent-residualized residual score, and local one-step
+  discrepancy-drop/EPC values. It is single-group covariance-only in v1 and
+  intentionally does not reuse the ML score-test name. Glue in
+  `r-package/R/noniterative_postfit.R` and `r-package/R/noniterative.R`;
+  derivations in the
   paper notes `noniterative_fit_indices` and
   `noniterative_modification_indices`; validated by
   `r-package/examples/noniterative_postfit.R`.

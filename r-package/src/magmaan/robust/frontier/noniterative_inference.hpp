@@ -12,6 +12,7 @@
 #include "magmaan/estimate/frontier/noniterative_cfa.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/inference/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -66,6 +67,54 @@ struct NonIterativeInference {
 
   std::vector<std::string> warnings;
 };
+
+// Residual-based modification-index diagnostics for closed-form non-iterative
+// CFA fits. These are deliberately not ML score tests. For each fixed or absent
+// one-parameter candidate with moment signature g = ∂σ/∂η, the table reports:
+//   raw          z² from g' V r with Var(g' V r) = g' V MΓM' V g / N,
+//   residualized the same statistic after V-orthogonalizing g against Δ,
+//   drop         the local one-parameter discrepancy decrease N(g'Vr)²/(g'Vg).
+// The residualized statistic is the default interpretation; raw and drop are
+// shipped side by side as diagnostics because closed-form maps are not
+// stationary minimizers.
+struct NonIterativeModificationIndexResult {
+  inference::ScoreCandidate candidate;
+
+  double score_raw = 0.0;
+  double var_raw = 0.0;
+  double z_raw = 0.0;
+  double mi_raw = 0.0;
+  double p_raw = 1.0;
+  double epc_raw = 0.0;
+  double drop_raw = 0.0;
+  double p_drop_raw = 1.0;
+
+  double score_resid = 0.0;
+  double var_resid = 0.0;
+  double z_resid = 0.0;
+  double mi_resid = 0.0;
+  double p_resid = 1.0;
+  double epc_resid = 0.0;
+  double drop_resid = 0.0;
+  double p_drop_resid = 1.0;
+
+  double signature_norm = 0.0;
+  double residualized_norm = 0.0;
+};
+
+struct NonIterativeModificationIndexTable {
+  std::vector<NonIterativeModificationIndexResult> rows;
+  std::vector<std::string> warnings;
+};
+
+post_expected<NonIterativeModificationIndexTable>
+noniterative_modification_indices(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    const Eigen::VectorXd& theta,
+    const NonIterativeInference& inf,
+    const inference::ModificationIndexOptions& options = {});
 
 // Core: inference at θ̂ with a caller-supplied fourth-moment matrix Γ (p* × p*,
 // lower-triangle column-major, matching Δ). This is the Γ-agnostic seam — a

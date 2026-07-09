@@ -2324,9 +2324,13 @@ work until a concrete downstream consumer appears.
   `noniterative_fit_indices` and `noniterative_modification_indices`
   (guttman-inference paper); validated by
   `r-package/examples/noniterative_postfit.R`.
-  Still stubbed / deferred: **modification indices** (needs the residual /
-  minimum-distance EPC construction sketched in the note, not the ML score test)
-  and continuous **reliability omega from a non-iterative fit** (the omega
+  Residual-based modification-index diagnostics landed as the explicit
+  `noniterative_cfa_modification_indices()` surface: fixed-zero and absent
+  candidates get raw residual scores, tangent-residualized residual scores, and
+  local discrepancy-drop/EPC diagnostics, while the ordinary ML score/LRT names
+  remain guarded. Still deferred: exact augmented-map/refit releases for
+  candidates outside the simple-structure Guttman map, grouped/mean-structure
+  MI diagnostics, and continuous **reliability omega from a non-iterative fit** (the omega
   primitive has no non-iterative `weight`; would use the delta-method Omega).
 
   ### Non-iterative CFA — heavy remaining work (consolidated)
@@ -2338,14 +2342,14 @@ work until a concrete downstream consumer appears.
   vcov, fit indices) are **done**.
 
   **Post-fit measures still missing**
-  - [ ] **Residual-based modification indices / score tests / EPC.** The single
-    biggest post-fit gap. The ML score test is invalid (non-minimizer), so this
-    needs the residual localization + one-step minimum-distance EPC derived in
-    `papers/guttman-inference/dev/notes/noniterative_modification_indices.tex`.
-    Validate each candidate against a real refit
-    (`noniterative_cfa_difference_test`) the way `modification_indices_lrt`
-    validates the ML score test. Core work (needs the map/model Jacobians), not
-    pure R.
+  - [x] **Residual-based modification-index diagnostics.** Landed 2026-07-09 as
+    `noniterative_cfa_modification_indices()`: raw residual score,
+    tangent-residualized residual score, and local discrepancy-drop/EPC
+    variants are reported side by side for fixed-zero and absent loading /
+    covariance candidates. The generic ML score/LRT MI names stay guarded.
+    Remaining work in this lane is exact augmented-map/refit validation where a
+    candidate is inside the estimator map, and a grouped/mean-structure
+    extension.
   - [ ] **Reliability omega from a non-iterative fit.** `measures_reliability_
     omega_from_fit` has no non-iterative `weight`; wire the delta-method Omega as
     the covariance so omega_total / omega_h / H carry SEs. Natural fit since
