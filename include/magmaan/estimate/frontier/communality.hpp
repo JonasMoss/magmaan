@@ -63,6 +63,19 @@ solve_communality_system(const CommunalitySystem& system,
                          const Eigen::MatrixXd& R_h2,
                          const Eigen::VectorXd& r_h2);
 
+// Batched right-hand side for the regular-interior derivative of the
+// unconstrained normal equations underlying `system`, evaluated at h2. Columns
+// are ordered as vech(S). The result is dc - dG h2, before any active
+// constraints are added by the KKT solve. This is an internal frontier building
+// block for restricted Guttman Jacobians that share a joint constrained solve
+// across blocks.
+fit_expected<Eigen::MatrixXd>
+communality_system_jacobian_rhs(
+    const Eigen::MatrixXd& S,
+    const std::vector<std::int32_t>& block_of_indicator,
+    CommunalityMethod method,
+    const Eigen::VectorXd& h2);
+
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities(const Eigen::MatrixXd& S,
                           const std::vector<std::int32_t>& block_of_indicator,
