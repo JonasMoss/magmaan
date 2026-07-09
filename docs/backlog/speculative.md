@@ -490,6 +490,65 @@ jackknife, cross-validation, Monte Carlo. That is exactly the lane below, which
 this probe materially strengthens. Do not benchmark permutation MI through the
 GOF-producing grouped-inference path when the statistic needs only `Omega`.
 
+### Null-bootstrap GOF calibration for non-iterative CFA
+
+Absolute GOF is a better resampling target than permutation MI for the
+non-iterative CFA estimators ([[noniterative-cfa-inference]]). The analytic
+robust/mixture GOF path is expensive because it builds the estimator-map
+Jacobian, residual projector `M = I - Delta J`, fourth-moment matrix, and
+weighted-chi-square spectrum. A null bootstrap needs only the raw discrepancy
+statistic on each draw:
+`T = N (vech(S) - vech(Sigma_hat))' V (vech(S) - vech(Sigma_hat))`.
+So a bootstrap replicate is `S_b -> tau(S_b) -> T_b`, with no `J`, no `Omega`,
+and no spectrum.
+
+**Probe (2026-07-09).** Tracked at
+`docs/research/sims/r/guttman_bollen_stine_gof_probe.R`. The script compares
+naive central chi-square, analytic NT mixture, analytic empirical-Gamma mixture,
+Gaussian parametric bootstrap, and a Bollen-Stine covariance-null row bootstrap.
+The Bollen-Stine arm recentres the data, maps its ML covariance to the fitted
+`Sigma_hat`, and row-resamples the transformed cases, preserving non-normal shape
+while imposing the covariance null.
+
+Cost on a one-factor block at `n=300`:
+
+| `p` | point | `T` only | analytic empirical GOF |
+| --- | --- | --- | --- |
+| 6 | 0.079 | 0.114 | 0.440 |
+| 9 | 0.527 | 0.615 | 6.367 |
+| 12 | 6.609 | 6.922 | 89.000 |
+| 15 | 43.750 | 43.375 | 663.500 |
+
+The bootstrap draw cost is essentially the point-map cost, whereas analytic
+empirical-Gamma GOF is 4x-15x slower in this grid. The large single-block
+point-map cost at `p >= 12` is itself a reminder that block size matters; this
+is still a much better fit to the estimator profile than per-replicate
+studentized MI.
+
+Calibration/power pilot (`n=100`, `p=9`, 200 datasets x 99 bootstrap draws,
+ULS statistic):
+
+| cell | chisq | NT mix | empirical mix | param boot | Bollen-Stine |
+| --- | --- | --- | --- | --- | --- |
+| normal null | 0.000 | 0.060 | 0.025 | 0.050 | 0.035 |
+| t5 null | 0.000 | 0.075 | 0.005 | 0.070 | 0.040 |
+| chisq3 null | 0.000 | 0.075 | 0.010 | 0.055 | 0.075 |
+| t5 residual-covariance alternative | 0.005 | 0.255 | 0.110 | 0.220 | 0.195 |
+
+This is a cautious positive, not a victory lap. Bollen-Stine did not obviously
+collapse: it was closest to nominal across normal/heavy-tail/skew, but it gave up
+power relative to NT mixture and Gaussian parametric bootstrap in the alternative
+row, and the skew null was high in this small pilot. The empirical-Gamma mixture
+was conservative here. A larger grid with `B >= 399`, more alternatives, and an
+ML Bollen-Stine comparator is needed before treating this as an application.
+
+**Build if.** The next step is still R-only: expand the probe to a serious grid
+and compare against ML / lavaan Bollen-Stine where feasible. Promote only if
+Bollen-Stine keeps level under non-normality while retaining enough power to be
+useful. If it does, add a core `noniterative_gof_stat` / R
+`noniterative_cfa_gof_bootstrap()` surface so production code does not have to
+call the full inference bundle for bootstrap draws.
+
 ### Efficient leave-one-out / infinitesimal jackknife for closed-form (non-iterative) CFA
 
 Near-free leave-one-out cross-validation for the non-iterative (Guttman) CFA
