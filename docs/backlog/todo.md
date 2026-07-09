@@ -2234,8 +2234,19 @@ work until a concrete downstream consumer appears.
   `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
   threading the same choice, along with the selected composite weight, through
   restricted Jacobians and grouped inference; AR/RS are rejected there because
-  they do not supply a linear residual-constraint system. The old `guttman`
-  selector is retained as the
+  they do not supply a linear residual-constraint system. A second restricted
+  timing pass found that the regular path was analytic but still assembled one
+  covariance coordinate at a time: p = 25 residual-restricted SE calls were
+  about 166 ms. The default single-block `gmm_block` restricted path now
+  batches the constrained h2 KKT RHS with the same block-active `dW e` action
+  as configural, solves the KKT system once over all RHS columns, batches the
+  downstream score-regression derivative from the constrained `dH` diagonal,
+  and batches the loading-projection derivative. Repeated-call p = 25 timings
+  are now roughly 1.8 ms for residual-only restrictions, 2.8 ms for
+  loading-only restrictions, and 3.2 ms for both under `unit`/`standardized`;
+  `gls_aligned` is about 2.7 / 3.7 / 3.9 ms. Non-default restricted
+  communality choices remain analytic but may still use direction-wise
+  constrained RHS assembly. The old `guttman` selector is retained as the
   legacy lavaan-like Spearman/incidence map.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite

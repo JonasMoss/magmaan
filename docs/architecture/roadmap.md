@@ -188,10 +188,14 @@ golden `parTable()` fixtures.
   derivative columns, applies the pseudo-inverse derivative through its
   required `dW e` action instead of materializing dense `dW` columns, and uses a
   guarded full-column-rank row-weight pseudo-inverse fast path. Restricted
-  estimator-side maps differentiate the regular
-  constrained communality KKT system and the loading projection, with central
-  differences retained for rank-changing pseudo-inverse or singular projection
-  boundary cases.
+  estimator-side maps differentiate the regular constrained communality KKT
+  system and the loading projection, with central differences retained for
+  rank-changing pseudo-inverse or singular projection boundary cases. The
+  default single-block `gmm_block` restricted path batches the constrained h2
+  KKT right-hand sides with the same active-column `dW e` GMM derivative,
+  reuses one KKT factorization across all covariance columns, feeds the
+  constrained `dH` diagonal into the batched score-regression derivative, and
+  batches the loading-projection derivative.
   `robust::frontier::noniterative_se*` is the SE-only primitive:
   normal-theory paths contract `J Gamma J'/N`, while empirical paths stream
   casewise moment rows in parameter space rather than materializing dense
@@ -226,7 +230,7 @@ golden `parTable()` fixtures.
   residual-restricted Guttman map can also select any least-squares-form
   H-diagonal rule (`triad_ls`, `anchor_triad_ls`, `gmm_block`, `gmm_full`) and
   any composite weight (`unit`, `standardized`, `gls_aligned`), reusing both
-  choices in its restricted finite-difference Jacobian and grouped inference;
+  choices in its restricted analytic-first Jacobian and grouped inference;
   AR/RS remain
   low-level H-estimation diagnostics because they are not constraint-compatible
   LS systems. `experiments/55-guttman-communality-estimators` times the package
