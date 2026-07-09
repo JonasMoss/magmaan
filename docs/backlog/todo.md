@@ -2218,6 +2218,14 @@ work until a concrete downstream consumer appears.
   (`normal`, five factors, five indicators each, n = 300, empirical SEs) now
   has Guttman SE medians of 5-6 ms for `guttman_std`, `guttman_unit`, and
   `guttman_gls`, versus 2 ms for the ML/ULS empirical-SE arms in the same cell.
+  Follow-up profiling on 2026-07-09 found that this remaining 5 ms is fixed
+  Jacobian cost, not the empirical meat: NT and empirical SE timings are nearly
+  identical at n = 300, while n-scaling only makes the casewise contraction
+  visible at much larger n. A small allocation cleanup in the SE path and
+  batched Guttman Jacobian saved only a few tenths of a millisecond. If this
+  becomes material, the next pass should profile/reshape
+  `gmm_block_h2_jacobian()` and `fit_block_jacobian_batched()` rather than
+  revisiting GOF decoupling or dense empirical Gamma.
   The estimator-side residual-restricted Guttman map now has an explicit
   communality axis for the four LS-form H rules (`triad_ls`,
   `anchor_triad_ls`, `gmm_block`, `gmm_full`), defaulting to `gmm_block` and
