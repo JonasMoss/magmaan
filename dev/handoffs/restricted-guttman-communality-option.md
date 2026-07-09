@@ -53,7 +53,7 @@ Pass it to `fit_restricted_blocks`.
 
 - **Upfront guard.** Before doing work, reject `AverageRatio` / `RatioOfSums`
   with a clear message ("restricted Guttman CFA: communality method must be
-  least-squares-form (triad_ls, anchor_triad_ls, gmm_block, gmm_full)").
+  least-squares-form (triad_ls, extended_triad_ls, triad_wls, triad_wls_joint)").
   `communality_system` already errors, but an upfront guard names the axis.
 - **No-constraint fast path.** The early `return fit_noniterative_cfa(...)` when
   there are no rows currently ignores `comm` and always returns the GmmBlock
@@ -80,7 +80,7 @@ callers and the existing inference test unchanged.
 **5. R binding.**
 
 - `noniterative_cfa_restricted_fit_impl` (`r-package/src/fit.cpp:7979`): add a
-  `std::string communality = "gmm_block"` argument, resolve it with the existing
+  `std::string communality = "triad_wls"` argument, resolve it with the existing
   `communality_which()` mapper (`fit.cpp:7812`), pass to
   `fit_noniterative_cfa_restricted`. Stamp the resolved name onto the returned
   fit list via `communality_method_name(comm)` (mirror how the estimator string
@@ -93,7 +93,7 @@ callers and the existing inference test unchanged.
   R inference call signatures stable (they read `comm` off the fit, exactly like
   they already read the estimator).
 - `fit_noniterative_cfa_restricted` R wrapper (`r-package/R/noniterative.R:92`):
-  add `communality = "gmm_block"` and forward it. Regen `RcppExports`
+  add `communality = "triad_wls"` and forward it. Regen `RcppExports`
   (`just vendor` runs `compileAttributes`, or `Rcpp::compileAttributes()`).
 
 ## Tests (add to `tests/unit/`, ASan `dev`)
@@ -115,7 +115,7 @@ callers and the existing inference test unchanged.
 ```
 cmake --build --preset dev && ctest --preset dev
 cmake --build --preset opt && ctest --preset opt
-just vendor && just r-dev            # R smoke: fit with communality="triad_ls" vs "gmm_block"
+just vendor && just r-dev            # R smoke: fit with communality="triad_ls" vs "triad_wls"
 ```
 
 ## Scope guards

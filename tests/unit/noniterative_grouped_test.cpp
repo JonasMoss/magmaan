@@ -238,7 +238,7 @@ TEST_CASE("grouped inference: Omega is block-diagonal across groups") {
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
+                                                   ef::NonIterativeEstimator::GuttmanLavaan,
                                                    rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
 
@@ -261,8 +261,8 @@ TEST_CASE("metric invariance: W ~ 0 when loadings are equal, projection is a no-
   samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};  // equal loadings
   samp.n_obs = {500, 600};
 
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
     REQUIRE_OK(th);
@@ -291,7 +291,7 @@ TEST_CASE("metric invariance: W > 0 when loadings differ, projection equates the
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
+                                                   ef::NonIterativeEstimator::GuttmanLavaan,
                                                    rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
   auto con = rf::noniterative_constrained_fit(b.pt, *inf);
@@ -329,8 +329,8 @@ TEST_CASE("estimator-side metric map recovers equal loading shape on exact popul
   samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(kLam, 1.4, 0.2, 0.7)};
   samp.n_obs = {500, 600};
 
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto fit = ef::fit_noniterative_cfa_metric(b.pt, b.rep, samp, which);
     REQUIRE_OK(fit);
@@ -359,8 +359,8 @@ TEST_CASE("estimator-side metric map is marker-chart invariant off the surface")
   samp.S = {tf_cov(kLam, 1.0, 0.3, 0.5), tf_cov(lam2, 1.4, 0.2, 0.7)};
   samp.n_obs = {500, 600};
 
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto fit1 = ef::fit_noniterative_cfa_metric(bx1.pt, bx1.rep, samp, which);
     auto fit2 = ef::fit_noniterative_cfa_metric(bx2.pt, bx2.rep, samp, which);
@@ -377,9 +377,9 @@ TEST_CASE("residual-restricted map with no constraints equals configural aligned
   samp.n_obs = {500};
 
   auto cfg = ef::fit_noniterative_cfa(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   auto res = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(cfg);
   REQUIRE_OK(res);
   CHECK((cfg->theta - res->theta).cwiseAbs().maxCoeff() < 1e-12);
@@ -397,10 +397,10 @@ TEST_CASE("residual-restricted map exposes the communality method axis") {
   samp.n_obs = {500};
 
   auto fit_gmm = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
-      ef::CommunalityMethod::GmmBlock);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::TriadWls);
   auto fit_ls = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
       ef::CommunalityMethod::TriadLeastSquares);
   REQUIRE_OK(fit_gmm);
   REQUIRE_OK(fit_ls);
@@ -412,14 +412,14 @@ TEST_CASE("residual-restricted map exposes the communality method axis") {
   CHECK((eqc->A_eq * fit_ls->theta - eqc->b_eq).cwiseAbs().maxCoeff() < 1e-9);
 
   auto J = ef::estimator_map_jacobian_restricted(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
       1e-6, ef::CommunalityMethod::TriadLeastSquares);
   REQUIRE_OK(J);
   CHECK((eqc->A_eq * (*J)).cwiseAbs().maxCoeff() < 1e-6);
 
   auto inf = rf::noniterative_inference_grouped_restricted_nt(
       b.pt, b.rep, samp, fit_ls->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS,
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS,
       ef::CommunalityMethod::TriadLeastSquares);
   REQUIRE_OK(inf);
   CHECK(inf->Omega.allFinite());
@@ -437,11 +437,11 @@ TEST_CASE("residual-restricted map exposes the composite weight axis") {
   samp.n_obs = {500};
 
   auto fit_aligned = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
-      ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::GlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Adaptive);
   auto fit_std = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
-      ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::Standardized);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Standardized);
   REQUIRE_OK(fit_aligned);
   REQUIRE_OK(fit_std);
   CHECK((fit_aligned->theta - fit_std->theta).cwiseAbs().maxCoeff() > 1e-6);
@@ -451,15 +451,15 @@ TEST_CASE("residual-restricted map exposes the composite weight axis") {
   CHECK((eqc->A_eq * fit_std->theta - eqc->b_eq).cwiseAbs().maxCoeff() < 1e-9);
 
   auto J = ef::estimator_map_jacobian_restricted(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
-      1e-6, ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::Standardized);
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      1e-6, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Standardized);
   REQUIRE_OK(J);
   CHECK((eqc->A_eq * (*J)).cwiseAbs().maxCoeff() < 1e-6);
 
   auto inf = rf::noniterative_inference_grouped_restricted_nt(
       b.pt, b.rep, samp, fit_std->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS,
-      ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::Standardized);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS,
+      ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Standardized);
   REQUIRE_OK(inf);
   CHECK(inf->Omega.allFinite());
 }
@@ -470,10 +470,10 @@ TEST_CASE("residual-restricted map rejects non-LS communality methods") {
   samp.S = {of_cov(kLam4, 1.2, {0.40, 0.75, 0.55, 0.65})};
   samp.n_obs = {500};
 
-  for (auto comm : {ef::CommunalityMethod::AverageRatio,
-                    ef::CommunalityMethod::RatioOfSums}) {
+  for (auto comm : {ef::CommunalityMethod::TriadMean,
+                    ef::CommunalityMethod::TriadPooled}) {
     auto fit = ef::fit_noniterative_cfa_restricted(
-        b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned, comm);
+        b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned, comm);
     CHECK_FALSE(fit.has_value());
     CHECK(fit.error().detail.find("least-squares-form") != std::string::npos);
   }
@@ -488,7 +488,7 @@ TEST_CASE("residual-restricted map enforces residual variance equality") {
   samp.n_obs = {500};
 
   auto fit = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(fit);
 
   using magmaan::model::MatId;
@@ -520,7 +520,7 @@ TEST_CASE("residual-restricted Jacobian is tangent to equality rows") {
   samp.n_obs = {500};
 
   auto J = ef::estimator_map_jacobian_restricted(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(J);
   auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
   REQUIRE_OK(eqc);
@@ -528,11 +528,11 @@ TEST_CASE("residual-restricted Jacobian is tangent to equality rows") {
   CHECK((eqc->A_eq * (*J)).cwiseAbs().maxCoeff() < 1e-6);
 
   auto fit = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(fit);
   auto inf = rf::noniterative_inference_grouped_restricted_nt(
       b.pt, b.rep, samp, fit->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS);
   REQUIRE_OK(inf);
   CHECK(inf->df == 3);
   CHECK(inf->Omega.allFinite());
@@ -550,11 +550,11 @@ TEST_CASE("residual-restricted analytic Jacobian matches accurate finite differe
   samp.n_obs = {500};
 
   auto Ja = ef::estimator_map_jacobian_restricted(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
-      2e-2, ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::GlsAligned);
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      2e-2, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Adaptive);
   auto Jfd = finite_difference_restricted_jacobian(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
-      0, 2e-6, ef::CommunalityMethod::GmmBlock, ef::CompositeWeight::GlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      0, 2e-6, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Adaptive);
   REQUIRE_OK(Ja);
   REQUIRE_OK(Jfd);
   CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 4e-5);
@@ -568,15 +568,15 @@ TEST_CASE("residual-restricted grouped inference carries cross-block covariance"
   samp.n_obs = {500, 700};
 
   auto fit = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(fit);
   auto inf = rf::noniterative_inference_grouped_restricted_nt(
       b.pt, b.rep, samp, fit->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS);
   REQUIRE_OK(inf);
   auto se = rf::noniterative_se_grouped_restricted_nt(
       b.pt, b.rep, samp, fit->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned);
+      ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(se);
   CHECK((se->theta_hat - fit->theta).cwiseAbs().maxCoeff() < 1e-12);
   CHECK((se->Omega - inf->Omega).cwiseAbs().maxCoeff() < 1e-12);
@@ -600,18 +600,18 @@ TEST_CASE("grouped pseudo-LRT compares estimator-side restricted and configural 
   samp.n_obs = {500, 700};
 
   auto fit1 = ef::fit_noniterative_cfa(
-      h1.pt, h1.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      h1.pt, h1.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   auto fit0 = ef::fit_noniterative_cfa_restricted(
-      h0.pt, h0.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      h0.pt, h0.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(fit1);
   REQUIRE_OK(fit0);
 
   auto inf1 = rf::noniterative_inference_grouped_nt(
       h1.pt, h1.rep, samp, fit1->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS);
   auto inf0 = rf::noniterative_inference_grouped_restricted_nt(
       h0.pt, h0.rep, samp, fit0->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::ULS);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS);
   REQUIRE_OK(inf1);
   REQUIRE_OK(inf0);
   REQUIRE(inf0->df > inf1->df);
@@ -632,18 +632,18 @@ TEST_CASE("grouped pseudo-LRT anchors NTML weight at H1") {
   samp.n_obs = {500, 700};
 
   auto fit1 = ef::fit_noniterative_cfa(
-      h1.pt, h1.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      h1.pt, h1.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   auto fit0 = ef::fit_noniterative_cfa_restricted(
-      h0.pt, h0.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      h0.pt, h0.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(fit1);
   REQUIRE_OK(fit0);
 
   auto inf1 = rf::noniterative_inference_grouped_nt(
       h1.pt, h1.rep, samp, fit1->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::NTML);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::NTML);
   auto inf0 = rf::noniterative_inference_grouped_restricted_nt(
       h0.pt, h0.rep, samp, fit0->theta,
-      ef::NonIterativeEstimator::GuttmanGlsAligned, rf::Discrepancy::NTML);
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::NTML);
   REQUIRE_OK(inf1);
   REQUIRE_OK(inf0);
   REQUIRE(inf0->df > inf1->df);
@@ -672,7 +672,7 @@ TEST_CASE("residual-restricted map rejects mixed residual-loading rows") {
   samp.n_obs = {500};
 
   auto fit = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   CHECK_FALSE(fit.has_value());
   CHECK(fit.error().detail.find("mixes") != std::string::npos);
 }
@@ -691,7 +691,7 @@ TEST_CASE("residual-restricted map rejects factor-variance rows") {
   samp.n_obs = {500};
 
   auto fit = ef::fit_noniterative_cfa_restricted(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   CHECK_FALSE(fit.has_value());
   CHECK(fit.error().detail.find("factor") != std::string::npos);
 }
@@ -709,9 +709,9 @@ TEST_CASE("residual-restricted map is marker-chart invariant off the surface") {
   samp.n_obs = {500};
 
   auto fit1 = ef::fit_noniterative_cfa_restricted(
-      bx1.pt, bx1.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      bx1.pt, bx1.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   auto fit2 = ef::fit_noniterative_cfa_restricted(
-      bx2.pt, bx2.rep, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      bx2.pt, bx2.rep, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(fit1);
   REQUIRE_OK(fit2);
   CHECK(max_sigma_diff(*ev1, fit1->theta, *ev2, fit2->theta) < 1e-8);
@@ -762,7 +762,7 @@ TEST_CASE("mean structure: intercept SE is the analytic saturated-mean SE") {
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
+                                                   ef::NonIterativeEstimator::GuttmanLavaan,
                                                    rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
 
@@ -810,7 +810,7 @@ TEST_CASE("mean structure: intercept-equality projection (alpha = 0)") {
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
     REQUIRE_OK(th);
     auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                     ef::NonIterativeEstimator::Guttman,
+                                                     ef::NonIterativeEstimator::GuttmanLavaan,
                                                      rf::Discrepancy::NTML);
     REQUIRE_OK(inf);
     auto con = rf::noniterative_constrained_fit(b.pt, *inf);
@@ -829,7 +829,7 @@ TEST_CASE("mean structure: intercept-equality projection (alpha = 0)") {
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
     REQUIRE_OK(th);
     auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                     ef::NonIterativeEstimator::Guttman,
+                                                     ef::NonIterativeEstimator::GuttmanLavaan,
                                                      rf::Discrepancy::NTML);
     REQUIRE_OK(inf);
     auto con = rf::noniterative_constrained_fit(b.pt, *inf);
@@ -853,7 +853,7 @@ TEST_CASE("mean structure: single-block path errors, directing to the grouped pa
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
-                                           ef::NonIterativeEstimator::Guttman,
+                                           ef::NonIterativeEstimator::GuttmanLavaan,
                                            rf::Discrepancy::NTML);
   CHECK_FALSE(inf.has_value());  // single-block SEs would omit the intercept block
 }
@@ -878,7 +878,7 @@ TEST_CASE("scalar invariance: recovers latent means and W ~ 0 under true scalar"
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
+                                                   ef::NonIterativeEstimator::GuttmanLavaan,
                                                    rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
   auto sc = rf::noniterative_scalar_invariance(b.pt, b.rep, *inf);
@@ -919,7 +919,7 @@ TEST_CASE("scalar invariance: W > 0 when an intercept deviates off col(Lambda)")
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
+                                                   ef::NonIterativeEstimator::GuttmanLavaan,
                                                    rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
   auto sc = rf::noniterative_scalar_invariance(b.pt, b.rep, *inf);
@@ -940,7 +940,7 @@ TEST_CASE("scalar invariance: errors on a covariance-only model") {
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                   ef::NonIterativeEstimator::Guttman,
+                                                   ef::NonIterativeEstimator::GuttmanLavaan,
                                                    rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
   auto sc = rf::noniterative_scalar_invariance(b.pt, b.rep, *inf);
@@ -958,11 +958,11 @@ TEST_CASE("grouped inference reduces to single-block inference at G=1") {
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto single = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
-                                              ef::NonIterativeEstimator::Guttman,
+                                              ef::NonIterativeEstimator::GuttmanLavaan,
                                               rf::Discrepancy::NTML);
   REQUIRE_OK(single);
   auto grouped = rf::noniterative_inference_grouped_nt(b.pt, b.rep, samp, *th,
-                                                       ef::NonIterativeEstimator::Guttman,
+                                                       ef::NonIterativeEstimator::GuttmanLavaan,
                                                        rf::Discrepancy::NTML);
   REQUIRE_OK(grouped);
 

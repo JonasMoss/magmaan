@@ -25,10 +25,10 @@ CompositeWeight
 resolve_composite_weight(NonIterativeEstimator which, CompositeWeight composite) {
   if (composite != CompositeWeight::EstimatorDefault) return composite;
   switch (which) {
-    case NonIterativeEstimator::Guttman:
+    case NonIterativeEstimator::GuttmanLavaan:
       return CompositeWeight::Unit;
-    case NonIterativeEstimator::GuttmanGlsAligned:
-      return CompositeWeight::GlsAligned;
+    case NonIterativeEstimator::GuttmanAligned:
+      return CompositeWeight::Adaptive;
   }
   return CompositeWeight::Unit;
 }
@@ -42,8 +42,8 @@ composite_weight_name(CompositeWeight composite) {
       return "unit";
     case CompositeWeight::Standardized:
       return "standardized";
-    case CompositeWeight::GlsAligned:
-      return "gls_aligned";
+    case CompositeWeight::Adaptive:
+      return "adaptive";
   }
   return "auto";
 }
@@ -57,7 +57,7 @@ fit_expected<Eigen::VectorXd> num_error(std::string detail) {
 // Legacy per-block Guttman (1952) map: covariances → (Λ_G, Φ_G, ψ_G). This
 // preserves the existing lavaan-like Spearman diagonal (including its wide h²
 // bounds) and the incidence-score reconstruction. The promoted
-// GuttmanGlsAligned variant below uses the frontier H-diagonal estimators
+// GuttmanAligned variant below uses the frontier H-diagonal estimators
 // instead.
 struct BlockGuttman {
   Eigen::MatrixXd Lambda;  // nvar × nfac, marker-scaled
@@ -261,12 +261,12 @@ fit_expected<Eigen::MatrixXd>
 estimator_h_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                    NonIterativeEstimator which) {
   switch (which) {
-    case NonIterativeEstimator::Guttman:
+    case NonIterativeEstimator::GuttmanLavaan:
       return legacy_h_matrix(L, S);
-    case NonIterativeEstimator::GuttmanGlsAligned: {
+    case NonIterativeEstimator::GuttmanAligned: {
       auto block_of = block_ids_from_layout(L);
       if (!block_of.has_value()) return std::unexpected(block_of.error());
-      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
+      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::TriadWls);
       if (!h.has_value()) return std::unexpected(h.error());
       return h->H;
     }
@@ -301,7 +301,7 @@ composite_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       }
       return B;
     }
-    case CompositeWeight::GlsAligned: {
+    case CompositeWeight::Adaptive: {
       const Eigen::MatrixXd incidence_score_cov = Z.transpose() * H * Z;
       auto incidence_inv = invert_full_rank(incidence_score_cov, label);
       if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
@@ -476,15 +476,15 @@ estimator_h_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S
                                const Eigen::MatrixXd& dS,
                                NonIterativeEstimator which) {
   switch (which) {
-    case NonIterativeEstimator::Guttman:
+    case NonIterativeEstimator::GuttmanLavaan:
       return legacy_h_matrix_directional(L, S, dS);
-    case NonIterativeEstimator::GuttmanGlsAligned: {
+    case NonIterativeEstimator::GuttmanAligned: {
       auto block_of = block_ids_from_layout(L);
       if (!block_of.has_value()) return std::unexpected(block_of.error());
-      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
+      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::TriadWls);
       if (!h.has_value()) return std::unexpected(h.error());
       auto dh2 = estimate_h2_communalities_directional(
-          S, dS, *block_of, CommunalityMethod::GmmBlock);
+          S, dS, *block_of, CommunalityMethod::TriadWls);
       if (!dh2.has_value()) return std::unexpected(dh2.error());
       Eigen::MatrixXd dH = dS;
       for (Eigen::Index i = 0; i < S.rows(); ++i)
@@ -522,7 +522,7 @@ composite_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       }
       return MatrixDirection{std::move(B), std::move(dB)};
     }
-    case CompositeWeight::GlsAligned: {
+    case CompositeWeight::Adaptive: {
       const Eigen::MatrixXd G = Z.transpose() * H * Z;
       auto Ginv = invert_full_rank(G, label);
       if (!Ginv.has_value()) return std::unexpected(Ginv.error());
@@ -626,7 +626,7 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
                            const Eigen::MatrixXd& S,
                            NonIterativeEstimator which,
                            CompositeWeight composite) {
-  if (which != NonIterativeEstimator::GuttmanGlsAligned)
+  if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman batched Jacobian: only GLS-aligned configural maps are "
         "batched"});
@@ -640,11 +640,11 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
 
   auto block_of = block_ids_from_layout(L);
   if (!block_of.has_value()) return std::unexpected(block_of.error());
-  auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::GmmBlock);
+  auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::TriadWls);
   if (!h.has_value()) return std::unexpected(h.error());
   auto Jh2 =
       estimate_h2_communalities_jacobian(S, *block_of,
-                                         CommunalityMethod::GmmBlock);
+                                         CommunalityMethod::TriadWls);
   if (!Jh2.has_value()) return std::unexpected(Jh2.error());
 
   const Eigen::Index pstar = vech_size(nvar);
@@ -681,7 +681,7 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
         B.row(i) /= std::sqrt(sii);
       }
       break;
-    case CompositeWeight::GlsAligned: {
+    case CompositeWeight::Adaptive: {
       const Eigen::MatrixXd G = Z.transpose() * h->H * Z;
       auto Ginv = invert_full_rank(G, label);
       if (!Ginv.has_value()) return std::unexpected(Ginv.error());
@@ -759,7 +759,7 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
             dB_nonzero = true;
           }
           break;
-        case CompositeWeight::GlsAligned: {
+        case CompositeWeight::Adaptive: {
           const Eigen::MatrixXd dHZ = dH_times(col, r, c, Z);
           const Eigen::MatrixXd dG = Z.transpose() * dHZ;
           const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
@@ -893,7 +893,7 @@ fit_block_jacobian_from_h_batched_columns(
         B.row(i) /= std::sqrt(sii);
       }
       break;
-    case CompositeWeight::GlsAligned: {
+    case CompositeWeight::Adaptive: {
       const Eigen::MatrixXd G = Z.transpose() * H * Z;
       auto Ginv = invert_full_rank(G, label);
       if (!Ginv.has_value()) return std::unexpected(Ginv.error());
@@ -980,7 +980,7 @@ fit_block_jacobian_from_h_batched_columns(
       Eigen::MatrixXd dB;
       bool dB_nonzero = false;
       switch (resolved) {
-        case CompositeWeight::GlsAligned: {
+        case CompositeWeight::Adaptive: {
           const Eigen::MatrixXd dHZ = dH_times(col, direct, Z);
           const Eigen::MatrixXd dG = Z.transpose() * dHZ;
           const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
@@ -1065,7 +1065,7 @@ fit_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   auto H = estimator_h_matrix_directional(L, S, dS, which);
   if (!H.has_value()) return std::unexpected(H.error());
-  const char* label = (which == NonIterativeEstimator::Guttman)
+  const char* label = (which == NonIterativeEstimator::GuttmanLavaan)
                           ? "Guttman map"
                           : "Guttman GLS-aligned map";
   auto B = composite_matrix_directional(
@@ -1096,12 +1096,12 @@ bool has_rows(const Eigen::MatrixXd& A) { return A.rows() > 0; }
 bool is_least_squares_communality(CommunalityMethod comm) {
   switch (comm) {
     case CommunalityMethod::TriadLeastSquares:
-    case CommunalityMethod::AnchorTriadLeastSquares:
-    case CommunalityMethod::GmmBlock:
-    case CommunalityMethod::GmmFull:
+    case CommunalityMethod::ExtendedTriadLeastSquares:
+    case CommunalityMethod::TriadWls:
+    case CommunalityMethod::TriadWlsJoint:
       return true;
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
       return false;
   }
   return false;
@@ -1378,12 +1378,12 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 }
 
 std::expected<BlockGuttman, FitError>
-guttman_gls_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
+guttman_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
   const Eigen::Index nfac = L.n_factor();
-  auto H = estimator_h_matrix(L, S, NonIterativeEstimator::GuttmanGlsAligned);
+  auto H = estimator_h_matrix(L, S, NonIterativeEstimator::GuttmanAligned);
   if (!H.has_value()) return std::unexpected(H.error());
   auto B = composite_matrix(
-      L, S, *H, CompositeWeight::GlsAligned, "Guttman GLS-aligned map");
+      L, S, *H, CompositeWeight::Adaptive, "Guttman GLS-aligned map");
   if (!B.has_value()) return std::unexpected(B.error());
 
   auto out = regression_block(L, S, *H, *B, "Guttman GLS-aligned map");
@@ -1395,7 +1395,7 @@ guttman_gls_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
 }
 
 std::expected<BlockGuttman, FitError>
-guttman_gls_aligned_block_from_h(const CfaBlockLayout& L,
+guttman_aligned_block_from_h(const CfaBlockLayout& L,
                                  const Eigen::MatrixXd& S,
                                  const Eigen::MatrixXd& H,
                                  const char* label,
@@ -1417,16 +1417,16 @@ fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
           NonIterativeEstimator which, CompositeWeight composite) {
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   switch (which) {
-    case NonIterativeEstimator::Guttman:
+    case NonIterativeEstimator::GuttmanLavaan:
       if (resolved == CompositeWeight::Unit) return guttman_block(L, S);
       break;
-    case NonIterativeEstimator::GuttmanGlsAligned:
-      if (resolved == CompositeWeight::GlsAligned) return guttman_gls_aligned_block(L, S);
+    case NonIterativeEstimator::GuttmanAligned:
+      if (resolved == CompositeWeight::Adaptive) return guttman_aligned_block(L, S);
       break;
   }
   auto H = estimator_h_matrix(L, S, which);
   if (!H.has_value()) return std::unexpected(H.error());
-  const char* label = (which == NonIterativeEstimator::Guttman)
+  const char* label = (which == NonIterativeEstimator::GuttmanLavaan)
                           ? "Guttman map"
                           : "Guttman GLS-aligned map";
   auto B = composite_matrix(L, S, *H, resolved, label);
@@ -1618,7 +1618,7 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
       }
       H(i, i) = h_diag;
     }
-    auto gb = guttman_gls_aligned_block_from_h(
+    auto gb = guttman_aligned_block_from_h(
         layouts[b], S[b], H, "restricted Guttman map", composite);
     if (!gb.has_value()) return std::unexpected(gb.error());
     out.push_back(std::move(*gb));
@@ -2719,7 +2719,7 @@ estimator_map_jacobian_block_analytic_impl(
   const auto q = static_cast<Eigen::Index>(ev.n_free());
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
 
-  if (which == NonIterativeEstimator::GuttmanGlsAligned) {
+  if (which == NonIterativeEstimator::GuttmanAligned) {
     auto db = fit_block_jacobian_batched(L, S0, which, composite);
     if (db.has_value()) {
       auto Jb = assemble_theta_jacobian(ev, layouts, *db, block, pstar);
@@ -2796,14 +2796,14 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   auto rows = restricted_rows_from_partable(pt, rep, ev, layouts, samp);
   if (!rows.has_value()) return std::unexpected(rows.error());
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
-      comm == CommunalityMethod::GmmBlock) {
+      comm == CommunalityMethod::TriadWls) {
     return estimator_map_jacobian_block_analytic_impl(
         pt, rep, ev, samp, which, block, composite);
   }
-  if (which != NonIterativeEstimator::GuttmanGlsAligned)
+  if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman analytic Jacobian: active restrictions or "
-        "non-default communality methods require guttman_gls_aligned"});
+        "non-default communality methods require guttman_aligned"});
 
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   const char* label = "restricted Guttman analytic Jacobian";
@@ -2856,7 +2856,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
         samp.S[b], *h2, col_offsets[b], label);
     if (!Hb.has_value()) return std::unexpected(Hb.error());
     H[b] = std::move(*Hb);
-    auto gb = guttman_gls_aligned_block_from_h(
+    auto gb = guttman_aligned_block_from_h(
         layouts[b], samp.S[b], H[b], label, resolved);
     if (!gb.has_value()) return std::unexpected(gb.error());
     blocks.push_back(std::move(*gb));
@@ -3051,8 +3051,8 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
       return num_error("non-iterative CFA: sample covariance dimension mismatch");
 
     switch (which) {
-      case NonIterativeEstimator::Guttman:
-      case NonIterativeEstimator::GuttmanGlsAligned: {
+      case NonIterativeEstimator::GuttmanLavaan:
+      case NonIterativeEstimator::GuttmanAligned: {
         auto gb = fit_block(L, samp.S[b], which, composite);
         if (!gb.has_value()) return std::unexpected(gb.error());
         blocks.push_back(std::move(*gb));
@@ -3174,7 +3174,7 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   if (!is_least_squares_communality(comm))
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: communality method must be least-squares-form "
-        "(triad_ls, anchor_triad_ls, gmm_block, gmm_full)"});
+        "(triad_ls, extended_triad_ls, triad_wls, triad_wls_joint)"});
 
   const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
   if (layouts.empty())
@@ -3203,12 +3203,12 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   auto rows = restricted_rows_from_partable(pt, rep, *ev, layouts, samp);
   if (!rows.has_value()) return std::unexpected(rows.error());
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
-      comm == CommunalityMethod::GmmBlock)
+      comm == CommunalityMethod::TriadWls)
     return fit_noniterative_cfa(pt, rep, samp, which, composite);
-  if (which != NonIterativeEstimator::GuttmanGlsAligned)
+  if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: active restrictions or non-default "
-        "communality methods require guttman_gls_aligned"});
+        "communality methods require guttman_aligned"});
 
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   auto blocks = fit_restricted_blocks(layouts, samp.S, *rows, comm, resolved);

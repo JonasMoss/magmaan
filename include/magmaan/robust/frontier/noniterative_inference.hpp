@@ -188,7 +188,7 @@ noniterative_inference_restricted(
     Discrepancy disc,
     const Eigen::MatrixXd& gamma,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -201,7 +201,7 @@ noniterative_inference_restricted_nt(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -215,7 +215,7 @@ noniterative_inference_restricted_empirical(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -228,7 +228,7 @@ noniterative_se_restricted(
     estimate::frontier::NonIterativeEstimator which,
     const Eigen::MatrixXd& gamma,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -240,7 +240,7 @@ noniterative_se_restricted_nt(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -253,7 +253,7 @@ noniterative_se_restricted_empirical(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -383,7 +383,7 @@ noniterative_inference_grouped_restricted(
     Discrepancy disc,
     const std::vector<Eigen::MatrixXd>& gamma_per_block,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -396,7 +396,7 @@ noniterative_inference_grouped_restricted_nt(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -410,7 +410,7 @@ noniterative_inference_grouped_restricted_empirical(
     estimate::frontier::NonIterativeEstimator which,
     Discrepancy disc,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -423,7 +423,7 @@ noniterative_se_grouped_restricted(
     estimate::frontier::NonIterativeEstimator which,
     const std::vector<Eigen::MatrixXd>& gamma_per_block,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -435,7 +435,7 @@ noniterative_se_grouped_restricted_nt(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -448,7 +448,7 @@ noniterative_se_grouped_restricted_empirical(
     const Eigen::VectorXd& theta,
     estimate::frontier::NonIterativeEstimator which,
     estimate::frontier::CommunalityMethod comm =
-        estimate::frontier::CommunalityMethod::GmmBlock,
+        estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
         estimate::frontier::CompositeWeight::EstimatorDefault);
 

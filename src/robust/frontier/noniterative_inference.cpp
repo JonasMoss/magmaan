@@ -880,7 +880,7 @@ noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& 
                        estimate::frontier::CompositeWeight composite) {
   return noniterative_inference_impl(
       pt, rep, samp, theta, which, disc, gamma, MapKind::Configural,
-      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+      estimate::frontier::CommunalityMethod::TriadWls, composite);
 }
 
 post_expected<NonIterativeInference>
@@ -955,7 +955,7 @@ noniterative_se(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                 estimate::frontier::CompositeWeight composite) {
   auto d = build_single_derivative(
       pt, rep, samp, theta, which, MapKind::Configural,
-      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+      estimate::frontier::CommunalityMethod::TriadWls, composite);
   if (!d.has_value()) return std::unexpected(d.error());
   if (gamma.rows() != d->pstar || gamma.cols() != d->pstar)
     return perr("non-iterative SE: Gamma dimension mismatch");
@@ -988,7 +988,7 @@ noniterative_se_empirical(const spec::LatentStructure& pt,
   if (raw.X.empty()) return perr("non-iterative SE: empty raw data");
   auto d = build_single_derivative(
       pt, rep, samp, theta, which, MapKind::Configural,
-      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+      estimate::frontier::CommunalityMethod::TriadWls, composite);
   if (!d.has_value()) return std::unexpected(d.error());
   const Eigen::MatrixXd& X = raw.X[0];
   if (X.cols() != samp.S[0].rows()) return perr("non-iterative SE: raw-data column mismatch");
@@ -1379,7 +1379,7 @@ noniterative_se_grouped(const spec::LatentStructure& pt, const model::MatrixRep&
                         estimate::frontier::CompositeWeight composite) {
   auto d = build_grouped_derivative(
       pt, rep, samp, theta, which, MapKind::Configural,
-      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+      estimate::frontier::CommunalityMethod::TriadWls, composite);
   if (!d.has_value()) return std::unexpected(d.error());
   return finish_grouped_se(theta, samp, *d, gamma_per_block);
 }
@@ -1414,7 +1414,7 @@ noniterative_se_grouped_empirical(const spec::LatentStructure& pt,
                                   estimate::frontier::CompositeWeight composite) {
   auto d = build_grouped_derivative(
       pt, rep, samp, theta, which, MapKind::Configural,
-      estimate::frontier::CommunalityMethod::GmmBlock, composite);
+      estimate::frontier::CommunalityMethod::TriadWls, composite);
   if (!d.has_value()) return std::unexpected(d.error());
   return finish_grouped_empirical_se(theta, samp, raw, *d);
 }

@@ -83,10 +83,10 @@ Residual constraints are just extra rows on it. No new solver family is needed.
 
 **1. Make extended-triad-LS a joint system.** `triad_system` currently emits
 within-block triads only. Add the cross-block anchor rows that
-`anchor_triad_ls_h2` (`:210`) uses: for base pair `(i,j)` with `f(j)=f(i)` and
+`extended_triad_ls_h2` (`:210`) uses: for base pair `(i,j)` with `f(j)=f(i)` and
 third item `k` with `f(k)!=f(i)`, emit `A(row,i)=R(j,k)`, `b(row)=R(i,j)R(i,k)`.
 Bump `n_rows` by the anchor count. Verify `solve_gmm(A_ext, b_ext, I)` equals
-`anchor_triad_ls_h2` to roundoff, then that joint form is the constraint-ready
+`extended_triad_ls_h2` to roundoff, then that joint form is the constraint-ready
 communality estimator.
 
 **2. Constrained solve.** Add `solve_gmm_constrained(A, b, W, R_D, r_D)`,
@@ -141,7 +141,7 @@ tests:
 - (a) no constraints == configural fit;
 - (b) `Theta_i = Theta_j` yields equal residuals, exact on an equal-uniqueness
   population;
-- (c) `solve_gmm(A_ext, b_ext, I)` == `anchor_triad_ls_h2` (the joint-form
+- (c) `solve_gmm(A_ext, b_ext, I)` == `extended_triad_ls_h2` (the joint-form
   sanity);
 - (d) a mixed `lambda = eps` row errors;
 - (e) a factor-variance row errors;
@@ -161,7 +161,7 @@ just vendor && just r-dev                            # then an R smoke of the wr
 
 ## Pitfalls / scope guards
 
-- Do not break `guttman_block`, `guttman_gls_aligned_block`,
+- Do not break `guttman_block`, `guttman_aligned_block`,
   `fit_noniterative_cfa_metric`, or `noniterative_cfa_constrained`. This is a new
   sibling map, not a change to those.
 - Heywood: a residual tie can push `h2` out of `[0,1]` (negative `Theta`).

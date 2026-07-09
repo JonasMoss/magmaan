@@ -268,7 +268,7 @@ itemwise_h2_jacobian(const Eigen::MatrixXd& R,
         const double rij = R(i, j);
         const double rik = R(i, k);
         const double rjk = R(j, k);
-        if (method == CommunalityMethod::AverageRatio) {
+        if (method == CommunalityMethod::TriadMean) {
           if (std::abs(rjk) <= kZeroTol)
             return mat_error("communality AR Jacobian: zero triad denominator");
           const double ratio = rij * rik / rjk;
@@ -296,11 +296,11 @@ itemwise_h2_jacobian(const Eigen::MatrixXd& R,
     if (count == 0)
       return mat_error("communality Jacobian: no triads for an indicator");
     switch (method) {
-      case CommunalityMethod::AverageRatio:
+      case CommunalityMethod::TriadMean:
         (void)ar_sum;
         out.row(i) = dar_sum / static_cast<double>(count);
         break;
-      case CommunalityMethod::RatioOfSums:
+      case CommunalityMethod::TriadPooled:
         if (std::abs(rs_den) <= kZeroTol)
           return mat_error("communality RS Jacobian: zero triad denominator");
         out.row(i) =
@@ -323,7 +323,7 @@ itemwise_h2_jacobian(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::MatrixXd>
-anchor_triad_ls_h2_jacobian(
+extended_triad_ls_h2_jacobian(
     const Eigen::MatrixXd& R,
     const std::vector<std::vector<Eigen::Index>>& blocks,
     const std::vector<Eigen::Index>& block_of,
@@ -378,14 +378,14 @@ anchor_triad_ls_h2_jacobian(
     }
 
     if (count == 0)
-      return mat_error("communality anchor triad LS Jacobian: no anchor rows");
+      return mat_error("communality extended triad LS Jacobian: no anchor rows");
     if (den <= kZeroTol)
       return mat_error(
-          "communality anchor triad LS Jacobian: zero anchor denominator");
+          "communality extended triad LS Jacobian: zero anchor denominator");
     out.row(i) = (dnum * den - num * dden) / (den * den);
   }
   if (!out.allFinite())
-    return mat_error("communality anchor triad LS Jacobian: non-finite output");
+    return mat_error("communality extended triad LS Jacobian: non-finite output");
   return out;
 }
 
@@ -504,7 +504,7 @@ itemwise_h2(const Eigen::MatrixXd& R,
         const double rjk = R(j, k);
         if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
           return num_error("communality estimator: non-finite correlation");
-        if (method == CommunalityMethod::AverageRatio) {
+        if (method == CommunalityMethod::TriadMean) {
           if (std::abs(rjk) <= kZeroTol)
             return num_error("communality AR: zero triad denominator");
           ar_sum += rij * rik / rjk;
@@ -520,10 +520,10 @@ itemwise_h2(const Eigen::MatrixXd& R,
     if (count == 0)
       return num_error("communality estimator: no triads for an indicator");
     switch (method) {
-      case CommunalityMethod::AverageRatio:
+      case CommunalityMethod::TriadMean:
         h2(i) = ar_sum / static_cast<double>(count);
         break;
-      case CommunalityMethod::RatioOfSums:
+      case CommunalityMethod::TriadPooled:
         if (std::abs(rs_den) <= kZeroTol)
           return num_error("communality RS: zero triad denominator");
         h2(i) = rs_num / rs_den;
@@ -578,7 +578,7 @@ itemwise_h2_directional(const Eigen::MatrixXd& R,
         const double drij = dR(i, j);
         const double drik = dR(i, k);
         const double drjk = dR(j, k);
-        if (method == CommunalityMethod::AverageRatio) {
+        if (method == CommunalityMethod::TriadMean) {
           if (std::abs(rjk) <= kZeroTol)
             return num_error("communality AR derivative: zero triad denominator");
           const double ratio = rij * rik / rjk;
@@ -601,11 +601,11 @@ itemwise_h2_directional(const Eigen::MatrixXd& R,
     if (count == 0)
       return num_error("communality derivative: no triads for an indicator");
     switch (method) {
-      case CommunalityMethod::AverageRatio:
+      case CommunalityMethod::TriadMean:
         (void)ar_sum;
         dh2(i) = dar_sum / static_cast<double>(count);
         break;
-      case CommunalityMethod::RatioOfSums:
+      case CommunalityMethod::TriadPooled:
         if (std::abs(rs_den) <= kZeroTol)
           return num_error("communality RS derivative: zero triad denominator");
         dh2(i) = (drs_num * rs_den - rs_num * drs_den) / (rs_den * rs_den);
@@ -627,7 +627,7 @@ itemwise_h2_directional(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::VectorXd>
-anchor_triad_ls_h2(const Eigen::MatrixXd& R,
+extended_triad_ls_h2(const Eigen::MatrixXd& R,
                    const std::vector<std::vector<Eigen::Index>>& blocks,
                    const std::vector<Eigen::Index>& block_of) {
   const Eigen::Index p = R.rows();
@@ -651,7 +651,7 @@ anchor_triad_ls_h2(const Eigen::MatrixXd& R,
         const double rik = R(i, k);
         const double rjk = R(j, k);
         if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
-          return num_error("communality anchor triad LS: non-finite correlation");
+          return num_error("communality extended triad LS: non-finite correlation");
         num += rjk * rij * rik;
         den += rjk * rjk;
         ++count;
@@ -666,7 +666,7 @@ anchor_triad_ls_h2(const Eigen::MatrixXd& R,
         const double rik = R(i, k);
         const double rjk = R(j, k);
         if (!std::isfinite(rij) || !std::isfinite(rik) || !std::isfinite(rjk))
-          return num_error("communality anchor triad LS: non-finite correlation");
+          return num_error("communality extended triad LS: non-finite correlation");
         num += rjk * rij * rik;
         den += rjk * rjk;
         ++count;
@@ -675,18 +675,18 @@ anchor_triad_ls_h2(const Eigen::MatrixXd& R,
 
     if (count == 0)
       return num_error(
-          "communality anchor triad LS: no anchor rows for an indicator");
+          "communality extended triad LS: no anchor rows for an indicator");
     if (den <= kZeroTol)
-      return num_error("communality anchor triad LS: zero anchor denominator");
+      return num_error("communality extended triad LS: zero anchor denominator");
     h2(i) = num / den;
   }
   if (!h2.allFinite())
-    return num_error("communality anchor triad LS: non-finite output");
+    return num_error("communality extended triad LS: non-finite output");
   return h2;
 }
 
 fit_expected<Eigen::VectorXd>
-anchor_triad_ls_h2_directional(
+extended_triad_ls_h2_directional(
     const Eigen::MatrixXd& R,
     const Eigen::MatrixXd& dR,
     const std::vector<std::vector<Eigen::Index>>& blocks,
@@ -744,14 +744,14 @@ anchor_triad_ls_h2_directional(
 
     if (count == 0)
       return num_error(
-          "communality anchor triad LS derivative: no anchor rows");
+          "communality extended triad LS derivative: no anchor rows");
     if (den <= kZeroTol)
       return num_error(
-          "communality anchor triad LS derivative: zero anchor denominator");
+          "communality extended triad LS derivative: zero anchor denominator");
     dh2(i) = (dnum * den - num * dden) / (den * den);
   }
   if (!dh2.allFinite())
-    return num_error("communality anchor triad LS derivative: non-finite output");
+    return num_error("communality extended triad LS derivative: non-finite output");
   return dh2;
 }
 
@@ -1454,7 +1454,7 @@ triad_ls_system(const Eigen::MatrixXd& R,
 }
 
 fit_expected<CommunalitySystem>
-gmm_block_system(const Eigen::MatrixXd& R,
+triad_wls_system(const Eigen::MatrixXd& R,
                  const std::vector<std::vector<Eigen::Index>>& blocks) {
   const Eigen::Index p = R.rows();
   std::vector<CommunalitySystem> local;
@@ -1519,7 +1519,7 @@ gmm_block_system(const Eigen::MatrixXd& R,
 }
 
 fit_expected<CommunalitySystemDirection>
-gmm_block_system_directional(const Eigen::MatrixXd& R,
+triad_wls_system_directional(const Eigen::MatrixXd& R,
                              const Eigen::MatrixXd& dR,
                              const std::vector<std::vector<Eigen::Index>>& blocks) {
   const Eigen::Index p = R.rows();
@@ -1610,7 +1610,7 @@ gmm_block_system_directional(const Eigen::MatrixXd& R,
 }
 
 fit_expected<CommunalitySystem>
-gmm_full_system(const Eigen::MatrixXd& R,
+triad_wls_joint_system(const Eigen::MatrixXd& R,
                 const std::vector<std::vector<Eigen::Index>>& blocks,
                 const std::vector<Eigen::Index>& block_of) {
   auto h20 =
@@ -1630,7 +1630,7 @@ gmm_full_system(const Eigen::MatrixXd& R,
 }
 
 fit_expected<CommunalitySystemDirection>
-gmm_full_system_directional(const Eigen::MatrixXd& R,
+triad_wls_joint_system_directional(const Eigen::MatrixXd& R,
                             const Eigen::MatrixXd& dR,
                             const std::vector<std::vector<Eigen::Index>>& blocks,
                             const std::vector<Eigen::Index>& block_of) {
@@ -1669,7 +1669,7 @@ gmm_full_system_directional(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::MatrixXd>
-gmm_block_h2_jacobian(const Eigen::MatrixXd& R,
+triad_wls_h2_jacobian(const Eigen::MatrixXd& R,
                       const std::vector<std::vector<Eigen::Index>>& blocks,
                       const std::vector<Eigen::Index>& block_of,
                       const CorrelationJacobian& J) {
@@ -1868,7 +1868,7 @@ triad_ls_h2_jacobian_rhs(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::MatrixXd>
-gmm_block_h2_jacobian_rhs(const Eigen::MatrixXd& R,
+triad_wls_h2_jacobian_rhs(const Eigen::MatrixXd& R,
                           const std::vector<std::vector<Eigen::Index>>& blocks,
                           const std::vector<Eigen::Index>& block_of,
                           const CorrelationJacobian& J,
@@ -2021,7 +2021,7 @@ gmm_block_h2_jacobian_rhs(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::MatrixXd>
-gmm_block_h2_constrained_jacobian(
+triad_wls_h2_constrained_jacobian(
     const Eigen::MatrixXd& S,
     const Eigen::MatrixXd& R,
     const std::vector<std::vector<Eigen::Index>>& blocks,
@@ -2030,7 +2030,7 @@ gmm_block_h2_constrained_jacobian(
     const Eigen::MatrixXd& R_h2,
     const Eigen::VectorXd& r_h2) {
   const Eigen::Index p = R.rows();
-  auto system = gmm_block_system(R, blocks);
+  auto system = triad_wls_system(R, blocks);
   if (!system.has_value()) return std::unexpected(system.error());
   auto h2 = solve_communality_system(*system, R_h2, r_h2);
   if (!h2.has_value()) return std::unexpected(h2.error());
@@ -2038,16 +2038,16 @@ gmm_block_h2_constrained_jacobian(
     return mat_error("communality constrained GMM block Jacobian: h2 dimension "
                      "mismatch");
 
-  auto rhs_head = gmm_block_h2_jacobian_rhs(R, blocks, block_of, J, *h2);
+  auto rhs_head = triad_wls_h2_jacobian_rhs(R, blocks, block_of, J, *h2);
   if (!rhs_head.has_value()) return std::unexpected(rhs_head.error());
   return solve_constrained_h2_jacobian_from_rhs(
       *system, R_h2, r_h2, *rhs_head, S, *h2);
 }
 
 fit_expected<Eigen::VectorXd>
-gmm_block_h2(const Eigen::MatrixXd& R,
+triad_wls_h2(const Eigen::MatrixXd& R,
              const std::vector<std::vector<Eigen::Index>>& blocks) {
-  auto sys = gmm_block_system(R, blocks);
+  auto sys = triad_wls_system(R, blocks);
   if (!sys.has_value()) return std::unexpected(sys.error());
   auto out = solve_gmm(sys->A, sys->b, sys->W);
   if (!out.has_value()) return std::unexpected(out.error());
@@ -2057,10 +2057,10 @@ gmm_block_h2(const Eigen::MatrixXd& R,
 }
 
 fit_expected<Eigen::VectorXd>
-gmm_full_h2(const Eigen::MatrixXd& R,
+triad_wls_joint_h2(const Eigen::MatrixXd& R,
             const std::vector<std::vector<Eigen::Index>>& blocks,
             const std::vector<Eigen::Index>& block_of) {
-  auto sys = gmm_full_system(R, blocks, block_of);
+  auto sys = triad_wls_joint_system(R, blocks, block_of);
   if (!sys.has_value()) return std::unexpected(sys.error());
   return solve_gmm(sys->A, sys->b, sys->W);
 }
@@ -2069,18 +2069,18 @@ gmm_full_h2(const Eigen::MatrixXd& R,
 
 const char* communality_method_name(CommunalityMethod method) {
   switch (method) {
-    case CommunalityMethod::AverageRatio:
-      return "ar";
-    case CommunalityMethod::RatioOfSums:
-      return "rs";
+    case CommunalityMethod::TriadMean:
+      return "triad_mean";
+    case CommunalityMethod::TriadPooled:
+      return "triad_pooled";
     case CommunalityMethod::TriadLeastSquares:
       return "triad_ls";
-    case CommunalityMethod::AnchorTriadLeastSquares:
-      return "anchor_triad_ls";
-    case CommunalityMethod::GmmBlock:
-      return "gmm_block";
-    case CommunalityMethod::GmmFull:
-      return "gmm_full";
+    case CommunalityMethod::ExtendedTriadLeastSquares:
+      return "extended_triad_ls";
+    case CommunalityMethod::TriadWls:
+      return "triad_wls";
+    case CommunalityMethod::TriadWlsJoint:
+      return "triad_wls_joint";
   }
   return "unknown";
 }
@@ -2096,15 +2096,15 @@ communality_system(const Eigen::MatrixXd& S,
     case CommunalityMethod::TriadLeastSquares:
       return triad_ls_system(vin->R, vin->blocks, vin->block_of,
                              /*include_anchor_rows=*/false);
-    case CommunalityMethod::AnchorTriadLeastSquares:
+    case CommunalityMethod::ExtendedTriadLeastSquares:
       return triad_ls_system(vin->R, vin->blocks, vin->block_of,
                              /*include_anchor_rows=*/true);
-    case CommunalityMethod::GmmBlock:
-      return gmm_block_system(vin->R, vin->blocks);
-    case CommunalityMethod::GmmFull:
-      return gmm_full_system(vin->R, vin->blocks, vin->block_of);
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadWls:
+      return triad_wls_system(vin->R, vin->blocks);
+    case CommunalityMethod::TriadWlsJoint:
+      return triad_wls_joint_system(vin->R, vin->blocks, vin->block_of);
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "communality constrained system: method is not a least-squares/GMM "
           "triad system"});
@@ -2140,7 +2140,7 @@ communality_system_directional(
       out.dW = Eigen::MatrixXd::Zero(out.system.A.rows(), out.system.A.rows());
       return out;
     }
-    case CommunalityMethod::AnchorTriadLeastSquares: {
+    case CommunalityMethod::ExtendedTriadLeastSquares: {
       auto sys = triad_system_directional(
           vin->R, *dR, vin->blocks, std::vector<Pair>{}, nullptr, nullptr,
           /*include_anchor_rows=*/true, &vin->block_of);
@@ -2155,12 +2155,12 @@ communality_system_directional(
       out.dW = Eigen::MatrixXd::Zero(out.system.A.rows(), out.system.A.rows());
       return out;
     }
-    case CommunalityMethod::GmmBlock:
-      return gmm_block_system_directional(vin->R, *dR, vin->blocks);
-    case CommunalityMethod::GmmFull:
-      return gmm_full_system_directional(vin->R, *dR, vin->blocks, vin->block_of);
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadWls:
+      return triad_wls_system_directional(vin->R, *dR, vin->blocks);
+    case CommunalityMethod::TriadWlsJoint:
+      return triad_wls_joint_system_directional(vin->R, *dR, vin->blocks, vin->block_of);
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "communality system derivative: method is not a least-squares/GMM "
           "triad system"});
@@ -2188,18 +2188,18 @@ communality_system_jacobian_rhs(
       return triad_ls_h2_jacobian_rhs(
           vin->R, vin->blocks, vin->block_of, *J, h2,
           /*include_anchor_rows=*/false);
-    case CommunalityMethod::AnchorTriadLeastSquares:
+    case CommunalityMethod::ExtendedTriadLeastSquares:
       return triad_ls_h2_jacobian_rhs(
           vin->R, vin->blocks, vin->block_of, *J, h2,
           /*include_anchor_rows=*/true);
-    case CommunalityMethod::GmmBlock:
-      return gmm_block_h2_jacobian_rhs(
+    case CommunalityMethod::TriadWls:
+      return triad_wls_h2_jacobian_rhs(
           vin->R, vin->blocks, vin->block_of, *J, h2);
-    case CommunalityMethod::GmmFull:
-      return mat_error("communality constrained Jacobian RHS: gmm_full "
+    case CommunalityMethod::TriadWlsJoint:
+      return mat_error("communality constrained Jacobian RHS: triad_wls_joint "
                        "batched derivative is deferred");
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
       return mat_error("communality constrained Jacobian RHS: method is not a "
                        "least-squares/GMM constrained system");
   }
@@ -2256,16 +2256,16 @@ estimate_h2_communalities(const Eigen::MatrixXd& S,
   if (!vin.has_value()) return std::unexpected(vin.error());
 
   switch (method) {
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
     case CommunalityMethod::TriadLeastSquares:
       return itemwise_h2(vin->R, vin->blocks, vin->block_of, method);
-    case CommunalityMethod::AnchorTriadLeastSquares:
-      return anchor_triad_ls_h2(vin->R, vin->blocks, vin->block_of);
-    case CommunalityMethod::GmmBlock:
-      return gmm_block_h2(vin->R, vin->blocks);
-    case CommunalityMethod::GmmFull:
-      return gmm_full_h2(vin->R, vin->blocks, vin->block_of);
+    case CommunalityMethod::ExtendedTriadLeastSquares:
+      return extended_triad_ls_h2(vin->R, vin->blocks, vin->block_of);
+    case CommunalityMethod::TriadWls:
+      return triad_wls_h2(vin->R, vin->blocks);
+    case CommunalityMethod::TriadWlsJoint:
+      return triad_wls_joint_h2(vin->R, vin->blocks, vin->block_of);
   }
   return num_error("communality estimator: unknown method");
 }
@@ -2282,21 +2282,21 @@ estimate_h2_communalities_directional(
   if (!dR.has_value()) return std::unexpected(dR.error());
 
   switch (method) {
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
     case CommunalityMethod::TriadLeastSquares:
       return itemwise_h2_directional(vin->R, *dR, vin->blocks, vin->block_of,
                                      method);
-    case CommunalityMethod::AnchorTriadLeastSquares:
-      return anchor_triad_ls_h2_directional(vin->R, *dR, vin->blocks,
+    case CommunalityMethod::ExtendedTriadLeastSquares:
+      return extended_triad_ls_h2_directional(vin->R, *dR, vin->blocks,
                                             vin->block_of);
-    case CommunalityMethod::GmmBlock: {
-      auto sys = gmm_block_system_directional(vin->R, *dR, vin->blocks);
+    case CommunalityMethod::TriadWls: {
+      auto sys = triad_wls_system_directional(vin->R, *dR, vin->blocks);
       if (!sys.has_value()) return std::unexpected(sys.error());
       return solve_gmm_directional(sys->system, sys->dA, sys->db, sys->dW);
     }
-    case CommunalityMethod::GmmFull: {
-      auto sys = gmm_full_system_directional(vin->R, *dR, vin->blocks,
+    case CommunalityMethod::TriadWlsJoint: {
+      auto sys = triad_wls_joint_system_directional(vin->R, *dR, vin->blocks,
                                              vin->block_of);
       if (!sys.has_value()) return std::unexpected(sys.error());
       return solve_gmm_directional(sys->system, sys->dA, sys->db, sys->dW);
@@ -2316,22 +2316,22 @@ estimate_h2_communalities_jacobian(
   if (!J.has_value()) return std::unexpected(J.error());
 
   switch (method) {
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "communality Jacobian: batched path is only enabled for LS/GMM "
           "methods"});
     case CommunalityMethod::TriadLeastSquares:
       return itemwise_h2_jacobian(vin->R, vin->blocks, vin->block_of, method,
                                   *J);
-    case CommunalityMethod::AnchorTriadLeastSquares:
-      return anchor_triad_ls_h2_jacobian(vin->R, vin->blocks, vin->block_of,
+    case CommunalityMethod::ExtendedTriadLeastSquares:
+      return extended_triad_ls_h2_jacobian(vin->R, vin->blocks, vin->block_of,
                                          *J);
-    case CommunalityMethod::GmmBlock:
-      return gmm_block_h2_jacobian(vin->R, vin->blocks, vin->block_of, *J);
-    case CommunalityMethod::GmmFull:
+    case CommunalityMethod::TriadWls:
+      return triad_wls_h2_jacobian(vin->R, vin->blocks, vin->block_of, *J);
+    case CommunalityMethod::TriadWlsJoint:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
-          "communality Jacobian: gmm_full batched derivative is deferred"});
+          "communality Jacobian: triad_wls_joint batched derivative is deferred"});
   }
   return mat_error("communality Jacobian: unknown method");
 }
@@ -2356,11 +2356,11 @@ estimate_h2_communalities_constrained_jacobian(
   if (!J.has_value()) return std::unexpected(J.error());
 
   switch (method) {
-    case CommunalityMethod::GmmBlock:
-      return gmm_block_h2_constrained_jacobian(
+    case CommunalityMethod::TriadWls:
+      return triad_wls_h2_constrained_jacobian(
           S, vin->R, vin->blocks, vin->block_of, *J, R_h2, r_h2);
     case CommunalityMethod::TriadLeastSquares:
-    case CommunalityMethod::AnchorTriadLeastSquares: {
+    case CommunalityMethod::ExtendedTriadLeastSquares: {
       auto system = communality_system(S, block_of_indicator, method);
       if (!system.has_value()) return std::unexpected(system.error());
       auto h2 = solve_communality_system(*system, R_h2, r_h2);
@@ -2371,11 +2371,11 @@ estimate_h2_communalities_constrained_jacobian(
       return solve_constrained_h2_jacobian_from_rhs(
           *system, R_h2, r_h2, *rhs_head, S, *h2);
     }
-    case CommunalityMethod::GmmFull:
+    case CommunalityMethod::TriadWlsJoint:
       return mat_error("communality constrained Jacobian: batched constrained "
-                       "path is deferred for gmm_full");
-    case CommunalityMethod::AverageRatio:
-    case CommunalityMethod::RatioOfSums:
+                       "path is deferred for triad_wls_joint");
+    case CommunalityMethod::TriadMean:
+    case CommunalityMethod::TriadPooled:
       return mat_error("communality constrained Jacobian: method is not a "
                        "least-squares/GMM constrained system");
   }

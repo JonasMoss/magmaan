@@ -112,7 +112,7 @@ ss_split <- function(proto, Xa, Xb) {
 }
 
 fit_map <- function(pt, ss) {
-  tryCatch(fit_noniterative_cfa(pt, ss, "guttman_gls_aligned", "standardized"),
+  tryCatch(fit_noniterative_cfa(pt, ss, "guttman_aligned", "standardized"),
            error = function(e) NULL)
 }
 # ctx_from_fit(fit) supplies S/nobs/partable (the bread); `data` supplies only the

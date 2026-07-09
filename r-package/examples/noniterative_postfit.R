@@ -23,7 +23,7 @@ model_1f <- "g =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9"
 guttman <- function(model) {
   pt <- core$lavaan_lavaanify(model)
   ss <- core$data_sample_stats_from_raw(X)
-  fit_noniterative_cfa(pt, ss, estimator = "guttman_gls_aligned",
+  fit_noniterative_cfa(pt, ss, estimator = "guttman_aligned",
                        composite = "standardized")
 }
 

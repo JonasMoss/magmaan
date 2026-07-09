@@ -154,8 +154,8 @@ TEST_CASE("noniterative Guttman map recovers full theta on exact population") {
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
 
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
     REQUIRE_OK(th);
@@ -178,10 +178,10 @@ TEST_CASE("standardized composite weights are exact and inferable") {
 
   for (auto composite : {ef::CompositeWeight::Unit,
                          ef::CompositeWeight::Standardized,
-                         ef::CompositeWeight::GlsAligned}) {
+                         ef::CompositeWeight::Adaptive}) {
     INFO("composite ordinal: " << static_cast<int>(composite));
     auto th = ef::noniterative_cfa_theta(
-        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
         composite);
     REQUIRE_OK(th);
 
@@ -193,7 +193,7 @@ TEST_CASE("standardized composite weights are exact and inferable") {
     auto D = ev->dsigma_dtheta(*th);
     REQUIRE_OK(D);
     auto J = ef::estimator_map_jacobian(
-        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
         1e-6, composite);
     REQUIRE_OK(J);
     const Eigen::MatrixXd JD = (*J) * (*D);
@@ -202,7 +202,7 @@ TEST_CASE("standardized composite weights are exact and inferable") {
               .maxCoeff() < 1e-4);
 
     auto inf = rf::noniterative_inference_nt(
-        b.pt, b.rep, samp, *th, ef::NonIterativeEstimator::GuttmanGlsAligned,
+        b.pt, b.rep, samp, *th, ef::NonIterativeEstimator::GuttmanAligned,
         rf::Discrepancy::ULS, composite);
     REQUIRE_OK(inf);
     CHECK(inf->Omega.allFinite());
@@ -221,10 +221,10 @@ TEST_CASE("standardized composite weights change the off-model map") {
   REQUIRE_OK(ev);
 
   auto unit = ef::noniterative_cfa_theta(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
       ef::CompositeWeight::Unit);
   auto std = ef::noniterative_cfa_theta(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
       ef::CompositeWeight::Standardized);
   REQUIRE_OK(unit);
   REQUIRE_OK(std);
@@ -244,11 +244,11 @@ TEST_CASE("analytic configural Jacobian matches central finite differences") {
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
 
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     for (auto composite : {ef::CompositeWeight::Unit,
                            ef::CompositeWeight::Standardized,
-                           ef::CompositeWeight::GlsAligned}) {
+                           ef::CompositeWeight::Adaptive}) {
       INFO("estimator ordinal: " << static_cast<int>(which));
       INFO("composite ordinal: " << static_cast<int>(composite));
       auto Ja = ef::estimator_map_jacobian_analytic(
@@ -269,8 +269,8 @@ TEST_CASE("noniterative map Jacobian satisfies Fisher consistency J*Delta = I") 
   samp.n_obs = {400};
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
     REQUIRE_OK(th);
@@ -294,8 +294,8 @@ TEST_CASE("noniterative GOF is ~0 at exact fit with correct df and finite SEs") 
   samp.n_obs = {400};
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
     REQUIRE_OK(th);
@@ -326,8 +326,8 @@ TEST_CASE("noniterative SE-only path matches the full inference covariance") {
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE_OK(ev);
 
-  for (auto which : {ef::NonIterativeEstimator::Guttman,
-                     ef::NonIterativeEstimator::GuttmanGlsAligned}) {
+  for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
+                     ef::NonIterativeEstimator::GuttmanAligned}) {
     INFO("estimator ordinal: " << static_cast<int>(which));
     auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp, which);
     REQUIRE_OK(th);
@@ -356,13 +356,13 @@ TEST_CASE("noniterative empirical SE-only path matches dense Gamma inference") {
   REQUIRE_OK(ev);
 
   auto th = ef::noniterative_cfa_theta(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_empirical(
-      b.pt, b.rep, samp, raw, *th, ef::NonIterativeEstimator::GuttmanGlsAligned,
+      b.pt, b.rep, samp, raw, *th, ef::NonIterativeEstimator::GuttmanAligned,
       rf::Discrepancy::ULS);
   auto se = rf::noniterative_se_empirical(
-      b.pt, b.rep, samp, raw, *th, ef::NonIterativeEstimator::GuttmanGlsAligned);
+      b.pt, b.rep, samp, raw, *th, ef::NonIterativeEstimator::GuttmanAligned);
   REQUIRE_OK(inf);
   REQUIRE_OK(se);
 
@@ -385,7 +385,7 @@ TEST_CASE("NTML GOF statistic equals the RLS chi-square (model-implied weight)")
   REQUIRE_OK(th);
 
   auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
-                                           ef::NonIterativeEstimator::Guttman,
+                                           ef::NonIterativeEstimator::GuttmanLavaan,
                                            rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
   CHECK(inf->T_gof > 0.0);
@@ -410,7 +410,7 @@ TEST_CASE("ULS GOF statistic equals N*tr((S-Sigma)^2) (D'D weight, vech aligned)
   const double expected = 500.0 * D.squaredNorm();   // N·tr(D²) for symmetric D
 
   auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
-                                           ef::NonIterativeEstimator::Guttman,
+                                           ef::NonIterativeEstimator::GuttmanLavaan,
                                            rf::Discrepancy::ULS);
   REQUIRE_OK(inf);
   CHECK(inf->T_gof == doctest::Approx(expected).epsilon(1e-9));
@@ -426,7 +426,7 @@ TEST_CASE("noniterative Wald test: exact at the truth, positive off it, df corre
   auto th = ef::noniterative_cfa_theta(b.pt, b.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_nt(b.pt, b.rep, samp, *th,
-                                           ef::NonIterativeEstimator::Guttman,
+                                           ef::NonIterativeEstimator::GuttmanLavaan,
                                            rf::Discrepancy::NTML);
   REQUIRE_OK(inf);
 
@@ -467,7 +467,7 @@ TEST_CASE("noniterative residual modification indices expose raw, residualized, 
   auto t0 = ef::noniterative_cfa_theta(h0.pt, h0.rep, *ev0, samp);
   REQUIRE_OK(t0);
   auto inf0 = rf::noniterative_inference_nt(
-      h0.pt, h0.rep, samp, *t0, ef::NonIterativeEstimator::Guttman,
+      h0.pt, h0.rep, samp, *t0, ef::NonIterativeEstimator::GuttmanLavaan,
       rf::Discrepancy::ULS);
   REQUIRE_OK(inf0);
 
@@ -491,7 +491,7 @@ TEST_CASE("noniterative residual modification indices expose raw, residualized, 
   auto th = ef::noniterative_cfa_theta(cfg.pt, cfg.rep, *ev, samp);
   REQUIRE_OK(th);
   auto inf = rf::noniterative_inference_nt(
-      cfg.pt, cfg.rep, samp, *th, ef::NonIterativeEstimator::Guttman,
+      cfg.pt, cfg.rep, samp, *th, ef::NonIterativeEstimator::GuttmanLavaan,
       rf::Discrepancy::ULS);
   REQUIRE_OK(inf);
 
@@ -540,10 +540,10 @@ TEST_CASE("noniterative difference test flags a false zero-covariance restrictio
   REQUIRE_OK(t0);
 
   auto inf1 = rf::noniterative_inference_nt(h1.pt, h1.rep, samp, *t1,
-                                            ef::NonIterativeEstimator::Guttman,
+                                            ef::NonIterativeEstimator::GuttmanLavaan,
                                             rf::Discrepancy::ULS);
   auto inf0 = rf::noniterative_inference_nt(h0.pt, h0.rep, samp, *t0,
-                                            ef::NonIterativeEstimator::Guttman,
+                                            ef::NonIterativeEstimator::GuttmanLavaan,
                                             rf::Discrepancy::ULS);
   REQUIRE_OK(inf1);
   REQUIRE_OK(inf0);

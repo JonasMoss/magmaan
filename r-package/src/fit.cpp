@@ -7829,25 +7829,28 @@ std::string noniter_lower(std::string s) {
 
 magmaan::estimate::frontier::NonIterativeEstimator noniter_which(const std::string& s) {
   const std::string k = noniter_lower(s);
-  if (k == "guttman" || k == "guttman1952")
-    return magmaan::estimate::frontier::NonIterativeEstimator::Guttman;
-  if (k == "guttman_gls_aligned" || k == "guttman-gls-aligned" ||
-      k == "guttman_aligned" || k == "guttman-aligned")
-    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanGlsAligned;
+  if (k == "guttman_lavaan" || k == "guttman-lavaan" || k == "guttman_ar" ||
+      k == "guttman-ar" || k == "guttman_spearman" || k == "spearman" ||
+      k == "guttman" || k == "guttman1952")
+    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanLavaan;
+  if (k == "guttman_aligned" || k == "guttman-aligned" ||
+      k == "guttman_gls_aligned" || k == "guttman-gls-aligned" ||
+      k == "aligned")
+    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanAligned;
   Rcpp::stop("magmaan: unknown non-iterative estimator '%s' "
-             "(accepted: guttman, guttman_gls_aligned)",
+             "(accepted: guttman_lavaan, guttman_aligned)",
              s.c_str());
 }
 
 const char* noniter_map_name(magmaan::estimate::frontier::NonIterativeEstimator which) {
   using K = magmaan::estimate::frontier::NonIterativeEstimator;
   switch (which) {
-    case K::Guttman:
-      return "guttman";
-    case K::GuttmanGlsAligned:
-      return "guttman_gls_aligned";
+    case K::GuttmanLavaan:
+      return "guttman_lavaan";
+    case K::GuttmanAligned:
+      return "guttman_aligned";
   }
-  return "guttman";
+  return "guttman_lavaan";
 }
 
 bool noniter_estimator_auto(const std::string& estimator) {
@@ -7889,30 +7892,35 @@ noniter_which_for_fit(const Rcpp::List& fit, const std::string& estimator) {
     return noniter_recorded_map(fit);
   }
   if (noniter_is_restricted_fit(fit)) {
-    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanGlsAligned;
+    return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanAligned;
   }
-  return magmaan::estimate::frontier::NonIterativeEstimator::Guttman;
+  return magmaan::estimate::frontier::NonIterativeEstimator::GuttmanLavaan;
 }
 
 magmaan::estimate::frontier::CommunalityMethod communality_which(const std::string& s) {
   const std::string k = noniter_lower(s);
   namespace ef = magmaan::estimate::frontier;
-  if (k == "ar" || k == "average_ratio" || k == "average-ratio")
-    return ef::CommunalityMethod::AverageRatio;
-  if (k == "rs" || k == "ratio_of_sums" || k == "ratio-of-sums")
-    return ef::CommunalityMethod::RatioOfSums;
+  if (k == "triad_mean" || k == "triad-mean" || k == "ar" ||
+      k == "average_ratio" || k == "average-ratio")
+    return ef::CommunalityMethod::TriadMean;
+  if (k == "triad_pooled" || k == "triad-pooled" || k == "rs" ||
+      k == "ratio_of_sums" || k == "ratio-of-sums")
+    return ef::CommunalityMethod::TriadPooled;
   if (k == "triad_ls" || k == "triad-ls" || k == "ilm")
     return ef::CommunalityMethod::TriadLeastSquares;
-  if (k == "anchor_triad_ls" || k == "anchor-triad-ls" ||
+  if (k == "extended_triad_ls" || k == "extended-triad-ls" ||
+      k == "anchor_triad_ls" || k == "anchor-triad-ls" ||
       k == "anchor_ilm" || k == "anchor-ilm")
-    return ef::CommunalityMethod::AnchorTriadLeastSquares;
-  if (k == "gmm_block" || k == "gmm-block")
-    return ef::CommunalityMethod::GmmBlock;
-  if (k == "gmm_full" || k == "gmm-full")
-    return ef::CommunalityMethod::GmmFull;
+    return ef::CommunalityMethod::ExtendedTriadLeastSquares;
+  if (k == "triad_wls" || k == "triad-wls" || k == "gmm_block" ||
+      k == "gmm-block")
+    return ef::CommunalityMethod::TriadWls;
+  if (k == "triad_wls_joint" || k == "triad-wls-joint" || k == "gmm_full" ||
+      k == "gmm-full")
+    return ef::CommunalityMethod::TriadWlsJoint;
   Rcpp::stop("magmaan: unknown Guttman H method '%s' "
-             "(accepted: ar, rs, triad_ls, anchor_triad_ls, gmm_block, "
-             "gmm_full)",
+             "(accepted: triad_mean, triad_pooled, triad_ls, "
+             "extended_triad_ls, triad_wls, triad_wls_joint)",
              s.c_str());
 }
 
@@ -7922,7 +7930,7 @@ noniter_comm_for_fit(const Rcpp::List& fit) {
   if (fit.containsElementNamed("communality")) {
     return communality_which(Rcpp::as<std::string>(fit["communality"]));
   }
-  return ef::CommunalityMethod::GmmBlock;
+  return ef::CommunalityMethod::TriadWls;
 }
 
 magmaan::estimate::frontier::CompositeWeight composite_which(const std::string& s) {
@@ -7935,10 +7943,11 @@ magmaan::estimate::frontier::CompositeWeight composite_which(const std::string& 
   if (k == "standardized" || k == "standardised" || k == "std" ||
       k == "correlation")
     return ef::CompositeWeight::Standardized;
-  if (k == "gls_aligned" || k == "gls-aligned" || k == "aligned")
-    return ef::CompositeWeight::GlsAligned;
+  if (k == "adaptive" || k == "gls_aligned" || k == "gls-aligned" ||
+      k == "aligned")
+    return ef::CompositeWeight::Adaptive;
   Rcpp::stop("magmaan: unknown Guttman composite weight '%s' "
-             "(accepted: auto, unit, standardized, gls_aligned)",
+             "(accepted: auto, unit, standardized, adaptive)",
              s.c_str());
 }
 
@@ -7972,7 +7981,7 @@ noniter_inference_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
                            const std::string& gamma, SEXP data,
                            bool restricted = false,
                            magmaan::estimate::frontier::CommunalityMethod comm =
-                               magmaan::estimate::frontier::CommunalityMethod::GmmBlock,
+                               magmaan::estimate::frontier::CommunalityMethod::TriadWls,
                            magmaan::estimate::frontier::CompositeWeight composite =
                                magmaan::estimate::frontier::CompositeWeight::EstimatorDefault) {
   namespace rf = magmaan::robust::frontier;
@@ -8002,7 +8011,7 @@ noniter_se_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
                     const std::string& gamma, SEXP data,
                     bool restricted = false,
                     magmaan::estimate::frontier::CommunalityMethod comm =
-                        magmaan::estimate::frontier::CommunalityMethod::GmmBlock,
+                        magmaan::estimate::frontier::CommunalityMethod::TriadWls,
                     magmaan::estimate::frontier::CompositeWeight composite =
                         magmaan::estimate::frontier::CompositeWeight::EstimatorDefault) {
   namespace rf = magmaan::robust::frontier;
@@ -8057,7 +8066,7 @@ noniter_grouped_dispatch(Ctx& ctx, const magmaan::estimate::Estimates& est,
                          const std::string& gamma, SEXP data,
                          bool restricted,
                          magmaan::estimate::frontier::CommunalityMethod comm =
-                             magmaan::estimate::frontier::CommunalityMethod::GmmBlock,
+                             magmaan::estimate::frontier::CommunalityMethod::TriadWls,
                          magmaan::estimate::frontier::CompositeWeight composite =
                              magmaan::estimate::frontier::CompositeWeight::EstimatorDefault);
 
@@ -8110,7 +8119,7 @@ Rcpp::List frontier_guttman_h_impl(Rcpp::NumericMatrix S,
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
-                                     std::string estimator = "guttman",
+                                     std::string estimator = "guttman_lavaan",
                                      std::string composite = "auto") {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -8136,7 +8145,7 @@ Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_stats,
-                                            std::string estimator = "guttman_gls_aligned",
+                                            std::string estimator = "guttman_aligned",
                                             std::string composite = "auto") {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_metric_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -8160,8 +8169,8 @@ Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_sta
 
 // [[Rcpp::export]]
 Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample_stats,
-                                                std::string estimator = "guttman_gls_aligned",
-                                                std::string communality = "gmm_block",
+                                                std::string estimator = "guttman_aligned",
+                                                std::string communality = "triad_wls",
                                                 std::string composite = "auto") {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_restricted_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);

@@ -603,16 +603,16 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
 guttman_fit <- function(pt, ss, composite, restricted = FALSE) {
   if (restricted) {
     magmaan::fit_noniterative_cfa_restricted(
-      pt, ss, estimator = "guttman_gls_aligned",
-      communality = "gmm_block", composite = composite)
+      pt, ss, estimator = "guttman_aligned",
+      communality = "triad_wls", composite = composite)
   } else {
     magmaan::fit_noniterative_cfa(
-      pt, ss, estimator = "guttman_gls_aligned", composite = composite)
+      pt, ss, estimator = "guttman_aligned", composite = composite)
   }
 }
 
 legacy_guttman_fit <- function(pt, ss) {
-  magmaan::fit_noniterative_cfa(pt, ss, estimator = "guttman", composite = "auto")
+  magmaan::fit_noniterative_cfa(pt, ss, estimator = "guttman_lavaan", composite = "auto")
 }
 
 guttman_se <- function(fit, X) {
@@ -631,11 +631,11 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
   fit_expr <- switch(
     arm,
     guttman_std = quote(guttman_fit(pt, ss, "standardized", FALSE)),
-    guttman_gls = quote(guttman_fit(pt, ss, "gls_aligned", FALSE)),
+    guttman_gls = quote(guttman_fit(pt, ss, "adaptive", FALSE)),
     guttman_unit = quote(guttman_fit(pt, ss, "unit", FALSE)),
     guttman_legacy = quote(legacy_guttman_fit(pt, ss)),
     guttman_std_restricted = quote(guttman_fit(pt, ss, "standardized", TRUE)),
-    guttman_gls_restricted = quote(guttman_fit(pt, ss, "gls_aligned", TRUE)),
+    guttman_gls_restricted = quote(guttman_fit(pt, ss, "adaptive", TRUE)),
     ml_emp = quote(ml_fit(pt, ss)),
     ml_emp_restricted = quote(ml_fit(pt, ss)),
     uls_emp = quote(uls_fit(pt, ss)),

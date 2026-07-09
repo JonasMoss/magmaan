@@ -47,12 +47,12 @@ TEST_CASE("communality rules recover exact one-factor h2") {
   }
 
   for (CommunalityMethod method :
-       {CommunalityMethod::AverageRatio,
-        CommunalityMethod::RatioOfSums,
+       {CommunalityMethod::TriadMean,
+        CommunalityMethod::TriadPooled,
         CommunalityMethod::TriadLeastSquares,
-        CommunalityMethod::AnchorTriadLeastSquares,
-        CommunalityMethod::GmmBlock,
-        CommunalityMethod::GmmFull}) {
+        CommunalityMethod::ExtendedTriadLeastSquares,
+        CommunalityMethod::TriadWls,
+        CommunalityMethod::TriadWlsJoint}) {
     auto h2 = estimate_h2_communalities(R, blocks, method);
     REQUIRE(h2.has_value());
     CHECK((*h2 - expected).cwiseAbs().maxCoeff() < 1e-10);
@@ -75,12 +75,12 @@ TEST_CASE("communality directional derivative matches central finite differences
   constexpr double eps = 2e-6;
 
   for (CommunalityMethod method :
-       {CommunalityMethod::AverageRatio,
-        CommunalityMethod::RatioOfSums,
+       {CommunalityMethod::TriadMean,
+        CommunalityMethod::TriadPooled,
         CommunalityMethod::TriadLeastSquares,
-        CommunalityMethod::AnchorTriadLeastSquares,
-        CommunalityMethod::GmmBlock,
-        CommunalityMethod::GmmFull}) {
+        CommunalityMethod::ExtendedTriadLeastSquares,
+        CommunalityMethod::TriadWls,
+        CommunalityMethod::TriadWlsJoint}) {
     INFO("method ordinal: " << static_cast<int>(method));
     auto analytic = estimate_h2_communalities_directional(S, dS, blocks, method);
     auto plus = estimate_h2_communalities(S + eps * dS, blocks, method);
@@ -126,8 +126,8 @@ TEST_CASE("communality batched Jacobian matches directional derivatives") {
   const Eigen::Index pstar = p * (p + 1) / 2;
   for (CommunalityMethod method :
        {CommunalityMethod::TriadLeastSquares,
-        CommunalityMethod::AnchorTriadLeastSquares,
-        CommunalityMethod::GmmBlock}) {
+        CommunalityMethod::ExtendedTriadLeastSquares,
+        CommunalityMethod::TriadWls}) {
     INFO("method ordinal: " << static_cast<int>(method));
     auto J = estimate_h2_communalities_jacobian(S, blocks, method);
     REQUIRE(J.has_value());
@@ -177,7 +177,7 @@ TEST_CASE("anchor communality recovers exact two-factor h2") {
     }
 
     auto h2 = estimate_h2_communalities(
-        R, blocks, CommunalityMethod::AnchorTriadLeastSquares);
+        R, blocks, CommunalityMethod::ExtendedTriadLeastSquares);
     REQUIRE(h2.has_value());
     CHECK((*h2 - expected).cwiseAbs().maxCoeff() < 1e-10);
   }
@@ -191,9 +191,9 @@ TEST_CASE("communality three-indicator GMM collapses to the just-identified "
        0.45, 0.50, 1.0;
   const std::vector<std::int32_t> blocks = {0, 0, 0};
 
-  auto rs = estimate_h2_communalities(R, blocks, CommunalityMethod::RatioOfSums);
-  auto gb = estimate_h2_communalities(R, blocks, CommunalityMethod::GmmBlock);
-  auto gf = estimate_h2_communalities(R, blocks, CommunalityMethod::GmmFull);
+  auto rs = estimate_h2_communalities(R, blocks, CommunalityMethod::TriadPooled);
+  auto gb = estimate_h2_communalities(R, blocks, CommunalityMethod::TriadWls);
+  auto gf = estimate_h2_communalities(R, blocks, CommunalityMethod::TriadWlsJoint);
   REQUIRE(rs.has_value());
   REQUIRE(gb.has_value());
   REQUIRE(gf.has_value());
@@ -224,9 +224,9 @@ TEST_CASE("communality constrained system preserves the current GMM solution "
 
   const Eigen::MatrixXd R0(0, R.rows());
   const Eigen::VectorXd r0(0);
-  auto base = estimate_h2_communalities(R, blocks, CommunalityMethod::GmmBlock);
+  auto base = estimate_h2_communalities(R, blocks, CommunalityMethod::TriadWls);
   auto con = estimate_h2_communalities_constrained(
-      R, blocks, CommunalityMethod::GmmBlock, R0, r0);
+      R, blocks, CommunalityMethod::TriadWls, R0, r0);
   REQUIRE(base.has_value());
   REQUIRE(con.has_value());
   CHECK((*base - *con).cwiseAbs().maxCoeff() < 1e-12);
@@ -245,7 +245,7 @@ TEST_CASE("communality constrained system imposes linear h2 rows") {
   d << 0.0;
 
   auto h2 = estimate_h2_communalities_constrained(
-      R, blocks, CommunalityMethod::GmmBlock, C, d);
+      R, blocks, CommunalityMethod::TriadWls, C, d);
   REQUIRE(h2.has_value());
   CHECK((*h2)(0) == doctest::Approx((*h2)(1)).epsilon(1e-10));
 }
@@ -292,8 +292,8 @@ TEST_CASE("communality constrained Jacobian matches finite differences") {
   constexpr double eps = 2e-6;
   for (CommunalityMethod method :
        {CommunalityMethod::TriadLeastSquares,
-        CommunalityMethod::AnchorTriadLeastSquares,
-        CommunalityMethod::GmmBlock}) {
+        CommunalityMethod::ExtendedTriadLeastSquares,
+        CommunalityMethod::TriadWls}) {
     INFO("method ordinal: " << static_cast<int>(method));
     auto J = estimate_h2_communalities_constrained_jacobian(
         S, blocks, method, C, d);
@@ -341,9 +341,9 @@ TEST_CASE("anchor communality is the anchor joint LS system with no rows") {
   const Eigen::MatrixXd R0(0, R.rows());
   const Eigen::VectorXd r0(0);
   auto item = estimate_h2_communalities(
-      R, blocks, CommunalityMethod::AnchorTriadLeastSquares);
+      R, blocks, CommunalityMethod::ExtendedTriadLeastSquares);
   auto joint = estimate_h2_communalities_constrained(
-      R, blocks, CommunalityMethod::AnchorTriadLeastSquares, R0, r0);
+      R, blocks, CommunalityMethod::ExtendedTriadLeastSquares, R0, r0);
   REQUIRE(item.has_value());
   REQUIRE(joint.has_value());
   CHECK((*item - *joint).cwiseAbs().maxCoeff() < 1e-12);
@@ -356,7 +356,7 @@ TEST_CASE("communality H result replaces only the covariance diagonal") {
        1.20, 1.50, 16.0;
   const std::vector<std::int32_t> blocks = {0, 0, 0};
 
-  auto out = estimate_h_communalities(S, blocks, CommunalityMethod::RatioOfSums);
+  auto out = estimate_h_communalities(S, blocks, CommunalityMethod::TriadPooled);
   REQUIRE(out.has_value());
 
   CHECK(out->H(0, 1) == doctest::Approx(S(0, 1)));
