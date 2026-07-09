@@ -933,44 +933,57 @@ fit_block_jacobian_from_h_batched(const CfaBlockLayout& L,
   Eigen::Index col = 0;
   for (Eigen::Index c = 0; c < nvar; ++c) {
     for (Eigen::Index r = c; r < nvar; ++r) {
-      Eigen::MatrixXd dB;
-      bool dB_nonzero = false;
-      switch (resolved) {
-        case CompositeWeight::Unit:
-          break;
-        case CompositeWeight::Standardized:
-          if (r == c) {
-            dB = Eigen::MatrixXd::Zero(nvar, nfac);
-            dB.row(r) = -0.5 * B.row(r) / S(r, r);
-            dB_nonzero = true;
-          }
-          break;
-        case CompositeWeight::GlsAligned: {
-          const Eigen::MatrixXd dHZ = dH_times(col, r, c, Z);
-          const Eigen::MatrixXd dG = Z.transpose() * dHZ;
-          const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
-          const Eigen::MatrixXd dP = dHZ * gls_Ginv + H * Z * dGinv;
-          const Eigen::MatrixXd dgram =
-              dP.transpose() * gls_P + gls_P.transpose() * dP;
-          const Eigen::MatrixXd dgram_inv =
-              -gls_gram_inv * dgram * gls_gram_inv;
-          dB = dP * gls_gram_inv + gls_P * dgram_inv;
-          dB_nonzero = true;
-          break;
+      Eigen::MatrixXd dQ(nfac, nfac);
+      Eigen::MatrixXd dHB(nvar, nfac);
+      if (resolved == CompositeWeight::Unit ||
+          resolved == CompositeWeight::Standardized) {
+        dHB.setZero();
+        for (Eigen::Index i = 0; i < nvar; ++i)
+          dHB.row(i).noalias() = dH_diag(i, col) * B.row(i);
+        if (r != c) {
+          dHB.row(r).noalias() += B.row(c);
+          dHB.row(c).noalias() += B.row(r);
         }
-        case CompositeWeight::EstimatorDefault:
-          return std::unexpected(FitError{FitError::Kind::NumericIssue,
-              std::string(label) + ": unresolved composite weight"});
-      }
+        dQ.noalias() = B.transpose() * dHB;
+        if (resolved == CompositeWeight::Standardized && r == c) {
+          const Eigen::RowVectorXd dBrow = -0.5 * B.row(r) / S(r, r);
+          dQ.noalias() += dBrow.transpose() * HB.row(r);
+          dQ.noalias() += HB.row(r).transpose() * dBrow;
+          dHB.noalias() += H.col(r) * dBrow;
+        }
+      } else {
+        Eigen::MatrixXd dB;
+        bool dB_nonzero = false;
+        switch (resolved) {
+          case CompositeWeight::GlsAligned: {
+            const Eigen::MatrixXd dHZ = dH_times(col, r, c, Z);
+            const Eigen::MatrixXd dG = Z.transpose() * dHZ;
+            const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
+            const Eigen::MatrixXd dP = dHZ * gls_Ginv + H * Z * dGinv;
+            const Eigen::MatrixXd dgram =
+                dP.transpose() * gls_P + gls_P.transpose() * dP;
+            const Eigen::MatrixXd dgram_inv =
+                -gls_gram_inv * dgram * gls_gram_inv;
+            dB = dP * gls_gram_inv + gls_P * dgram_inv;
+            dB_nonzero = true;
+            break;
+          }
+          case CompositeWeight::EstimatorDefault:
+          case CompositeWeight::Unit:
+          case CompositeWeight::Standardized:
+            return std::unexpected(FitError{FitError::Kind::NumericIssue,
+                std::string(label) + ": unresolved composite weight"});
+        }
 
-      const Eigen::MatrixXd dH_B = dH_times(col, r, c, B);
-      Eigen::MatrixXd dQ = B.transpose() * dH_B;
-      Eigen::MatrixXd dHB = dH_B;
-      if (dB_nonzero) {
-        const Eigen::MatrixXd HdB = H * dB;
-        dQ.noalias() += dB.transpose() * HB;
-        dQ.noalias() += HB.transpose() * dB;
-        dHB.noalias() += HdB;
+        const Eigen::MatrixXd dH_B = dH_times(col, r, c, B);
+        dQ = B.transpose() * dH_B;
+        dHB = dH_B;
+        if (dB_nonzero) {
+          const Eigen::MatrixXd HdB = H * dB;
+          dQ.noalias() += dB.transpose() * HB;
+          dQ.noalias() += HB.transpose() * dB;
+          dHB.noalias() += HdB;
+        }
       }
       const Eigen::MatrixXd dKstar =
           dHB * (*Qinv) - Kstar * dQ * (*Qinv);
@@ -1589,6 +1602,32 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
   return out;
 }
 
+fit_expected<Eigen::MatrixXd>
+restricted_h_matrix_from_h2(const Eigen::MatrixXd& S,
+                            const Eigen::VectorXd& h2,
+                            Eigen::Index offset,
+                            const char* label) {
+  const Eigen::Index p = S.rows();
+  if (S.cols() != p || offset < 0 || offset + p > h2.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": constrained communality split dimension "
+        "mismatch"});
+  Eigen::MatrixXd H = S;
+  for (Eigen::Index i = 0; i < p; ++i) {
+    const double h_diag = S(i, i) * h2(offset + i);
+    const double resid = S(i, i) - h_diag;
+    const double scale = std::max(1.0, std::abs(S(i, i)));
+    if (!std::isfinite(h_diag) || !std::isfinite(resid) ||
+        h_diag < -1e-8 * scale || resid < -1e-8 * scale) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": constrained communality split is "
+          "improper"});
+    }
+    H(i, i) = h_diag;
+  }
+  return H;
+}
+
 fit_expected<Eigen::VectorXd>
 solve_communality_system_directional_regular(
     const CommunalitySystem& system,
@@ -2060,6 +2099,9 @@ project_loading_constraints_jacobian(
   std::vector<std::vector<std::int16_t>> lat_to_f(layouts.size());
   for (std::size_t b = 0; b < layouts.size(); ++b)
     lat_to_f[b] = lat_to_f_of(layouts[b]);
+  std::vector<std::size_t> lambda_block(static_cast<std::size_t>(nlam), 0);
+  std::vector<Eigen::Index> lambda_row(static_cast<std::size_t>(nlam), -1);
+  std::vector<std::int16_t> lambda_factor(static_cast<std::size_t>(nlam), -1);
   for (Eigen::Index a = 0; a < nlam; ++a) {
     const auto& la =
         locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(a)])];
@@ -2074,6 +2116,9 @@ project_loading_constraints_jacobian(
     if (fa < 0)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "restricted Guttman derivative: loading factor out of range"});
+    lambda_block[static_cast<std::size_t>(a)] = ba;
+    lambda_row[static_cast<std::size_t>(a)] = la.row;
+    lambda_factor[static_cast<std::size_t>(a)] = fa;
     for (Eigen::Index c = 0; c < nlam; ++c) {
       const auto& lc =
           locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(c)])];
@@ -2104,44 +2149,39 @@ project_loading_constraints_jacobian(
                                     "batched derivative");
   if (!middle_inv.has_value()) return std::unexpected(middle_inv.error());
   const Eigen::MatrixXd C = (*Winv) * Rl.transpose() * (*middle_inv);
+  const Eigen::MatrixXd P =
+      Eigen::MatrixXd::Identity(nlam, nlam) - C * Rl;
+  const Eigen::MatrixXd PWinv = P * (*Winv);
   const Eigen::VectorXd u = Rl * l0 - rows.r_load;
+  const Eigen::VectorXd a_vec = C * u;
 
   Eigen::MatrixXd J = J0;
-  for (Eigen::Index col = 0; col < pstar; ++col) {
-    Eigen::VectorXd dl0(nlam);
-    for (Eigen::Index a = 0; a < nlam; ++a)
-      dl0(a) = J0(lambda_params[static_cast<std::size_t>(a)], col);
+  Eigen::MatrixXd dl0(nlam, pstar);
+  for (Eigen::Index a = 0; a < nlam; ++a)
+    dl0.row(a) = J0.row(lambda_params[static_cast<std::size_t>(a)]);
 
-    Eigen::MatrixXd dW = Eigen::MatrixXd::Zero(nlam, nlam);
-    for (Eigen::Index a = 0; a < nlam; ++a) {
-      const auto& la =
-          locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(a)])];
-      const auto ba = static_cast<std::size_t>(la.block);
-      const std::int16_t fa = lat_to_f[ba][static_cast<std::size_t>(la.col)];
-      const Eigen::Index nfac = layouts[ba].n_factor();
-      for (Eigen::Index c = 0; c < nlam; ++c) {
-        const auto& lc =
-            locs[static_cast<std::size_t>(lambda_params[static_cast<std::size_t>(c)])];
-        if (lc.block != la.block || lc.row != la.row) continue;
-        const std::int16_t fc = lat_to_f[ba][static_cast<std::size_t>(lc.col)];
-        dW(a, c) = dblocks[ba].dPhi(fa * nfac + fc, col);
-      }
+  Eigen::MatrixXd dW_a = Eigen::MatrixXd::Zero(nlam, pstar);
+  for (Eigen::Index a = 0; a < nlam; ++a) {
+    const auto ba = lambda_block[static_cast<std::size_t>(a)];
+    const Eigen::Index row_a = lambda_row[static_cast<std::size_t>(a)];
+    const std::int16_t fa = lambda_factor[static_cast<std::size_t>(a)];
+    const Eigen::Index nfac = layouts[ba].n_factor();
+    for (Eigen::Index c = 0; c < nlam; ++c) {
+      if (lambda_block[static_cast<std::size_t>(c)] != ba ||
+          lambda_row[static_cast<std::size_t>(c)] != row_a)
+        continue;
+      const std::int16_t fc = lambda_factor[static_cast<std::size_t>(c)];
+      dW_a.row(a).noalias() +=
+          a_vec(c) * dblocks[ba].dPhi.row(fa * nfac + fc);
     }
-    const Eigen::MatrixXd dWinv = -(*Winv) * dW * (*Winv);
-    const Eigen::MatrixXd dmiddle = Rl * dWinv * Rl.transpose();
-    const Eigen::MatrixXd dmiddle_inv =
-        -(*middle_inv) * dmiddle * (*middle_inv);
-    const Eigen::MatrixXd dC =
-        dWinv * Rl.transpose() * (*middle_inv) +
-        (*Winv) * Rl.transpose() * dmiddle_inv;
-    const Eigen::VectorXd dl = dl0 - dC * u - C * (Rl * dl0);
-    if (!dl.allFinite())
-      return std::unexpected(FitError{FitError::Kind::NumericIssue,
-          "restricted Guttman derivative: non-finite batched loading "
-          "projection derivative"});
-    for (Eigen::Index a = 0; a < nlam; ++a)
-      J(lambda_params[static_cast<std::size_t>(a)], col) = dl(a);
   }
+  const Eigen::MatrixXd dl = P * dl0 + PWinv * dW_a;
+  if (!dl.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "restricted Guttman derivative: non-finite batched loading "
+        "projection derivative"});
+  for (Eigen::Index a = 0; a < nlam; ++a)
+    J.row(lambda_params[static_cast<std::size_t>(a)]) = dl.row(a);
   return J;
 }
 
@@ -2570,37 +2610,6 @@ estimator_map_jacobian_restricted_block_analytic_impl(
         "restricted Guttman analytic Jacobian: communality solution dimension "
         "mismatch"});
 
-  std::vector<Eigen::MatrixXd> H(nblk);
-  std::vector<BlockGuttman> blocks;
-  blocks.reserve(nblk);
-  for (std::size_t b = 0; b < nblk; ++b) {
-    const Eigen::Index p = layouts[b].n_observed;
-    H[b] = samp.S[b];
-    for (Eigen::Index i = 0; i < p; ++i) {
-      const double h_diag = samp.S[b](i, i) * (*h2)(col_offsets[b] + i);
-      const double resid = samp.S[b](i, i) - h_diag;
-      const double scale = std::max(1.0, std::abs(samp.S[b](i, i)));
-      if (!std::isfinite(h_diag) || !std::isfinite(resid) ||
-          h_diag < -1e-8 * scale || resid < -1e-8 * scale) {
-        return std::unexpected(FitError{FitError::Kind::NumericIssue,
-            "restricted Guttman analytic Jacobian: constrained communality "
-            "split is improper"});
-      }
-      H[b](i, i) = h_diag;
-    }
-    auto gb = guttman_gls_aligned_block_from_h(
-        layouts[b], samp.S[b], H[b], label, resolved);
-    if (!gb.has_value()) return std::unexpected(gb.error());
-    blocks.push_back(std::move(*gb));
-  }
-
-  auto theta0 = assemble_theta(ev, layouts, blocks, samp);
-  if (!theta0.has_value()) return std::unexpected(theta0.error());
-  std::vector<BlockGuttman> projected_blocks = blocks;
-  auto theta_proj =
-      project_loading_constraints(ev, layouts, projected_blocks, *rows, *theta0);
-  if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
-
   const Eigen::Index p_active = samp.S[block].rows();
   const Eigen::Index pstar = vech_size(p_active);
   const auto q = static_cast<Eigen::Index>(ev.n_free());
@@ -2620,31 +2629,65 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
     if (Jh2_or.has_value() && Jh2_or->rows() == p_active &&
         Jh2_or->cols() == pstar) {
-      Eigen::MatrixXd dH_diag(p_active, pstar);
-      for (Eigen::Index i = 0; i < p_active; ++i) {
-        dH_diag.row(i) = samp.S[0](i, i) * Jh2_or->row(i);
-        dH_diag(i, vech_index(i, i, p_active)) += (*h2)(i);
-      }
-      auto db = fit_block_jacobian_from_h_batched(
-          layouts[0], samp.S[0], H[0], dH_diag, resolved, label);
-      if (db.has_value()) {
-        auto J0 = assemble_theta_jacobian(ev, layouts, *db, 0, pstar);
-        if (J0.has_value()) {
-          std::vector<BlockGuttmanJacobian> dblocks;
-          dblocks.push_back(std::move(*db));
-          auto Jproj = project_loading_constraints_jacobian(
-              ev, layouts, dblocks, *rows, *theta0, *J0);
-          if (Jproj.has_value()) {
-            if (!Jproj->allFinite())
-              return std::unexpected(FitError{FitError::Kind::NumericIssue,
-                  "restricted Guttman analytic Jacobian: non-finite batched "
-                  "output"});
-            return Jproj;
+      auto H0 = restricted_h_matrix_from_h2(samp.S[0], *h2, 0, label);
+      if (H0.has_value()) {
+        Eigen::MatrixXd dH_diag(p_active, pstar);
+        for (Eigen::Index i = 0; i < p_active; ++i) {
+          dH_diag.row(i) = samp.S[0](i, i) * Jh2_or->row(i);
+          dH_diag(i, vech_index(i, i, p_active)) += (*h2)(i);
+        }
+        auto db = fit_block_jacobian_from_h_batched(
+            layouts[0], samp.S[0], *H0, dH_diag, resolved, label);
+        if (db.has_value()) {
+          std::vector<BlockGuttman> fast_blocks;
+          fast_blocks.push_back(db->base);
+          auto theta0_fast = assemble_theta(ev, layouts, fast_blocks, samp);
+          if (theta0_fast.has_value()) {
+            std::vector<BlockGuttman> projected_blocks = fast_blocks;
+            auto theta_proj = project_loading_constraints(
+                ev, layouts, projected_blocks, *rows, *theta0_fast);
+            if (theta_proj.has_value()) {
+              auto J0 = assemble_theta_jacobian(ev, layouts, *db, 0, pstar);
+              if (J0.has_value()) {
+                std::vector<BlockGuttmanJacobian> dblocks;
+                dblocks.push_back(std::move(*db));
+                auto Jproj = project_loading_constraints_jacobian(
+                    ev, layouts, dblocks, *rows, *theta0_fast, *J0);
+                if (Jproj.has_value()) {
+                  if (!Jproj->allFinite())
+                    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+                        "restricted Guttman analytic Jacobian: non-finite "
+                        "batched output"});
+                  return Jproj;
+                }
+              }
+            }
           }
         }
       }
     }
   }
+
+  std::vector<Eigen::MatrixXd> H(nblk);
+  std::vector<BlockGuttman> blocks;
+  blocks.reserve(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    auto Hb = restricted_h_matrix_from_h2(
+        samp.S[b], *h2, col_offsets[b], label);
+    if (!Hb.has_value()) return std::unexpected(Hb.error());
+    H[b] = std::move(*Hb);
+    auto gb = guttman_gls_aligned_block_from_h(
+        layouts[b], samp.S[b], H[b], label, resolved);
+    if (!gb.has_value()) return std::unexpected(gb.error());
+    blocks.push_back(std::move(*gb));
+  }
+
+  auto theta0 = assemble_theta(ev, layouts, blocks, samp);
+  if (!theta0.has_value()) return std::unexpected(theta0.error());
+  std::vector<BlockGuttman> projected_blocks = blocks;
+  auto theta_proj =
+      project_loading_constraints(ev, layouts, projected_blocks, *rows, *theta0);
+  if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
 
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
 

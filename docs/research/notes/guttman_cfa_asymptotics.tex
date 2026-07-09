@@ -771,6 +771,20 @@ numbers are about \(2.7\), \(3.7\), and \(3.9\) ms. Non-default restricted
 communality rules remain analytic but may fall back to the direction-wise
 assembly until their constrained RHS columns are batched too.
 
+A later restricted-cost pass removed a smaller remaining duplication. The
+single-block fast path now constructs the base restricted block from the
+batched derivative result instead of first rebuilding the same block for
+validation, and the loading projection applies
+\[
+  dl = (I-CR)\,dl_0 + (I-CR)\,W^{-1}(dW\,a),\qquad
+  C=W^{-1}R\T(RW^{-1}R\T)^{-1},\quad a=C(Rl_0-r),
+\]
+so no per-column \(dW^{-1}\), \(d(RW^{-1}R\T)^{-1}\), or \(dC\) matrices are
+materialized. In a p = 25 restricted empirical-SE probe, absolute timings
+depended on the build tree, but \texttt{unit}/\texttt{standardized} were about
+\(1.5\times\) the ULS robust-SE time and \texttt{gls\_aligned} about
+\(1.7\times\), meeting the current ``within \(2\times\) NT'' target.
+
 \section{Proposed magmaan Experiment}
 
 The experiment should be deterministic and population based first, with Monte
