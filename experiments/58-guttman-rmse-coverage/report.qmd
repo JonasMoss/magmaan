@@ -42,12 +42,57 @@ est_label <- c(
   ml_emp_restricted = "ML (reference)", uls_emp_restricted = "ULS")
 label <- function(x) ifelse(x %in% names(est_label), est_label[x], x)
 
-# --- headline numbers computed once, reused in prose ---
+# estimator sets per constraint
+cfg_ratio <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "uls_emp")
+res_ratio <- c("guttman_gls_restricted", "guttman_std_restricted", "uls_emp_restricted")
+cfg_all <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "ml_emp", "uls_emp")
+res_all <- c("guttman_gls_restricted", "guttman_std_restricted", "ml_emp_restricted", "uls_emp_restricted")
+aligned <- c("guttman_gls", "guttman_std", "guttman_unit")
+
+# --- table builders (constraint-specific, apples-to-apples) ---
+eff_table <- function(constraint, ests) {
+  do.call(rbind, lapply(ests, function(e) {
+    x <- whole_joint[whole_joint$estimator == e & whole_joint$constraint == constraint &
+                       is.finite(whole_joint$common_rmse_ratio), ]
+    data.frame(
+      Estimator = label(e),
+      `Median RMSE vs ML` = fmt(median(x$common_rmse_ratio)),
+      `Beats ML` = pct(mean(x$common_rmse_ratio < 1)),
+      `Median at n=100` = fmt(median(x$common_rmse_ratio[x$n == 100])),
+      `Median at n=800` = fmt(median(x$common_rmse_ratio[x$n == 800])),
+      check.names = FALSE)
+  }))
+}
+cov_table <- function(constraint, ests) {
+  ce <- est[est$estimator %in% ests & est$constraint == constraint, ]
+  m <- tapply(ce$coverage, list(ce$estimator, ce$generator), median, na.rm = TRUE)
+  ord <- ests[ests %in% rownames(m)]
+  data.frame(
+    Estimator = label(ord),
+    Normal = pct(m[ord, "normal"], 1),
+    `Non-normal` = pct(m[ord, "ig"], 1),
+    Ordinal = pct(m[ord, "ordinal"], 1),
+    check.names = FALSE)
+}
+cost_table <- function(constraint, ests) {
+  tt <- timing[timing$estimator %in% ests & timing$constraint == constraint, ]
+  big <- tt[tt$factors == 5 & tt$indicators == 5, ]
+  do.call(rbind, lapply(ests, function(e) {
+    data.frame(
+      Estimator = label(e),
+      `Fit-only (ms)` = fmt(median(tt$fit_mean_ms[tt$estimator == e]), 2),
+      `Fit+SE (ms)` = fmt(median(tt$total_median_ms[tt$estimator == e]), 0),
+      `25-var fit-only (ms)` = fmt(median(big$fit_mean_ms[big$estimator == e]), 2),
+      `25-var fit+SE (ms)` = fmt(median(big$total_median_ms[big$estimator == e]), 0),
+      check.names = FALSE)
+  }))
+}
+
+# --- headline numbers reused in prose ---
 gutt <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy")
 wj <- whole_joint[is.finite(whole_joint$common_rmse_ratio), ]
 wjg <- wj[wj$estimator %in% gutt, ]
 med_ratio <- median(wjg$common_rmse_ratio)
-# best closed-form map per condition cell vs ML on the same replications
 wjg$cell <- with(wjg, paste(generator, factors, indicators, rho, scale, constraint, n))
 best_ratio <- tapply(wjg$common_rmse_ratio, wjg$cell, min)
 best_n <- tapply(wjg$n, wjg$cell, `[`, 1)
@@ -56,155 +101,159 @@ win_100 <- mean(best_ratio[best_n == 100] < 1)
 win_800 <- mean(best_ratio[best_n == 800] < 1)
 cov_g <- est$coverage[est$estimator %in% gutt & is.finite(est$coverage)]
 cov_lo <- quantile(cov_g, 0.1, names = FALSE); cov_hi <- quantile(cov_g, 0.9, names = FALSE)
+# aligned vs legacy, configural only
+wj_cfg <- whole_joint[whole_joint$constraint == "configural" & is.finite(whole_joint$common_rmse_ratio), ]
+med_aligned <- median(wj_cfg$common_rmse_ratio[wj_cfg$estimator %in% aligned])
+med_legacy <- median(wj_cfg$common_rmse_ratio[wj_cfg$estimator == "guttman_legacy"])
 ```
 
 ## Question
 
 We have four closed-form (non-iterative) Guttman CFA maps. Used as full
 estimators (point estimate plus standard error), how close do they get to
-iterative maximum likelihood on accuracy and confidence-interval coverage, and
-does that hold up as we vary sample size, model size, factor correlation, item
-scaling, non-normal data, and ordinal category-score data?
+iterative maximum likelihood on accuracy and coverage across sample size, model
+size, factor correlation, item scaling, non-normal data, and ordinal
+category-score data? And a second question aimed at our own machinery: do the
+three *aligned* maps, which spend the full within-factor covariance, actually
+beat the plain *legacy* incidence map that does not?
 
 ## Short answer
 
-**They are competitive full estimators, not a poor relation of ML.** Across the
-grid the closed-form maps carry a median of only about
-**`r fmt((med_ratio - 1) * 100, 0)`% more error** than ML on the common part of
-the covariance. ML is modestly more efficient on average, which is exactly what
-theory predicts when the model is correct and the data are near-normal, so that
-small gap is the expected price of a non-iterative fit.
+**The closed-form maps are competitive full estimators, and the aligned ones do
+not earn their extra machinery here.** Across the grid the maps carry a median of
+only about **`r fmt((med_ratio - 1) * 100, 0)`% more error** than ML on the
+common covariance. ML is modestly more efficient on average, which is what theory
+predicts under a correct, near-normal model, so that small gap is the expected
+price of a non-iterative fit. ML does not win everywhere, though: the best map
+beats it in **`r pct(win_best)` of conditions**, rising to **`r pct(win_100)` at
+n = 100** (down to `r pct(win_800)` at n = 800). Coverage of the empirical
+standard error stays near the nominal 95% (about
+`r fmt(cov_lo*100,0)`–`r fmt(cov_hi*100,0)`%) for every map, uniformly on normal,
+non-normal, and ordinal-score data.
 
-But ML does **not** win everywhere. On the same replications, the best
-closed-form map beats ML in **`r pct(win_best)` of conditions**, and that share
-climbs to **`r pct(win_100)` at n = 100** (falling to `r pct(win_800)` at
-n = 800): ML's efficiency edge is real but concentrates at large samples and
-erodes when n is small. Meanwhile the empirical standard error keeps
-**coverage near the nominal 95%** (roughly `r fmt(cov_lo*100,0)`–`r fmt(cov_hi*100,0)`%)
-for every closed-form map, and it does so uniformly on normal, non-normal, and
-ordinal-score data. The one thing the closed form does *not* buy here is speed:
-the fit is cheap, but its empirical standard error costs more than the whole ML
-fit.
+On the aligned-versus-legacy question the answer so far is **no**: the three
+aligned maps (median RMSE `r fmt(med_aligned)` vs ML) track the legacy incidence
+map (`r fmt(med_legacy)`) to within about a percent. Spending the full covariance
+buys essentially nothing in this grid. The likely reason is that factor
+correlations are low here (rho ≤ 0.35), so the cross-factor information the
+aligned reconstruction exploits has little to bite on; whether it pays off at
+higher rho is left open.
 
 ## What the conditions mean
 
-Every cell of the grid is one combination of the following. The full grid is
+Every cell is one combination of the following. The full grid is
 `r nrow(design)` cells, `r meta("reps")` replications each.
 
 - **Generator — how the data are drawn.** *Normal*: multivariate normal.
   *Non-normal* (`ig`): mildly skewed, heavier-tailed marginals (skewness 0.2,
   excess kurtosis 0.5). *Ordinal*: ordered-category scores calibrated so the
-  ordinary correlation of the integer category codes equals the CFA target. The
-  ordinal arm fits the plain covariance of those codes and is deliberately
-  **not** a polychoric analysis.
+  ordinary correlation of the integer codes equals the CFA target; the ordinal
+  arm fits the plain covariance of those codes and is **not** a polychoric
+  analysis.
 - **Model size.** `r meta("factors")` factors, `r meta("indicators")` indicators
   per factor, so 6 to 25 observed variables.
 - **Factor correlation (rho).** `r meta("rho")` — orthogonal versus mildly
   correlated factors.
-- **Item scaling.** *Equal*: every indicator on the same scale. *Unequal*:
-  heterogeneous indicator scales (or ordinal marginals).
-- **Configural vs restricted.** *Configural*: loadings and residual variances
-  all free. *Restricted*: the population is genuinely tau-equivalent (equal
-  loadings within a factor, equal residual variances) and the estimator imposes
-  that, so the restricted maps are judged on a correctly specified target, never
-  under misspecification.
-- **Estimators.** Four closed-form Guttman maps (GLS-aligned, standardized,
-  unit-weight, legacy) plus iterative **ML** and **ULS** as references. Every
-  arm reports an empirical (data-driven) standard error, so coverage is
-  comparable across all of them.
+- **Item scaling.** *Equal* versus *unequal* indicator scales (or ordinal
+  marginals).
+- **Configural vs restricted.** *Configural*: loadings and residual variances all
+  free. *Restricted*: the population is genuinely tau-equivalent (equal loadings
+  within a factor, equal residual variances) and the estimator imposes that, so
+  the restricted maps are judged on a correctly specified target, never under
+  misspecification. The two regimes are reported separately below.
+- **Estimators.** Four closed-form Guttman maps, in two families. The three
+  *aligned* maps take each item's communality from the full within-factor
+  covariance (a pooled, block-GLS estimate) and reconstruct loadings from an
+  aligned composite, differing only in the composite weight — *standardized*,
+  *GLS-aligned*, or *unit*. The *legacy* map is the classic incidence
+  construction: communalities from the Spearman/Guttman (1952)
+  **average-of-ratios** formula (the same one lavaan uses,
+  `h²ₖ = mean of Rₐₖ·R_bₖ / Rₐb` over item pairs, with wide bounds), and a unit
+  incidence composite. Average-of-ratios has wider sampling variance than the
+  pooled communality the aligned maps use, so legacy is the natural "does the
+  extra machinery help?" baseline. Iterative **ML** and **ULS** are the
+  references. Every arm reports an empirical standard error. Only the aligned
+  maps are run in the restricted regime.
 
 ## Efficiency: error relative to ML
 
-Same-replication RMSE on the common covariance, as a ratio to ML. Below 1 means
-lower error than ML. The last two columns show the median split by sample size.
+Same-replication RMSE on the common covariance, as a ratio to ML (below 1 = lower
+error than ML), with the median split by sample size.
 
-```{r eff-table}
-ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "uls_emp")
-eff <- do.call(rbind, lapply(ests, function(e) {
-  x <- whole_joint[whole_joint$estimator == e & whole_joint$constraint == "configural" &
-                     is.finite(whole_joint$common_rmse_ratio), ]
-  data.frame(
-    Estimator = label(e),
-    `Median RMSE vs ML` = fmt(median(x$common_rmse_ratio)),
-    `Beats ML` = pct(mean(x$common_rmse_ratio < 1)),
-    `Median at n=100` = fmt(median(x$common_rmse_ratio[x$n == 100])),
-    `Median at n=800` = fmt(median(x$common_rmse_ratio[x$n == 800])),
-    check.names = FALSE)
-}))
-knitr::kable(eff, row.names = FALSE)
+**Configural.**
+
+```{r eff-configural}
+knitr::kable(eff_table("configural", cfg_ratio), row.names = FALSE)
 ```
 
-The restricted (tau-equivalent) maps sit even closer to ML, essentially tied
-(median ratio about
-`r fmt(median(whole_joint$common_rmse_ratio[whole_joint$estimator %in% c("guttman_gls_restricted","guttman_std_restricted") & is.finite(whole_joint$common_rmse_ratio)]))`),
-because the constraint removes most of the room for the estimators to differ.
-Per-cell detail lives in `results/whole_joint_summary.csv`.
+**Restricted (tau-equivalent).** The constraint removes most of the room for the
+estimators to differ, so the aligned maps sit even closer to ML.
+
+```{r eff-restricted}
+knitr::kable(eff_table("tau_resid", res_ratio), row.names = FALSE)
+```
+
+In neither regime do the aligned maps open a clear gap on legacy; per-cell detail
+is in `results/whole_joint_summary.csv`.
 
 ## Coverage: are the intervals honest?
 
 Median Wald coverage of the empirical standard error, nominal 95%, split by how
-the data were generated. This is the robustness result: it holds across data
-types, not just under normality.
+the data were generated. This holds across data types, not just under normality.
 
-```{r cov-table}
-ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "ml_emp", "uls_emp")
-ce <- est[est$estimator %in% ests, ]
-m <- tapply(ce$coverage, list(ce$estimator, ce$generator), median, na.rm = TRUE)
-ord <- ests[ests %in% rownames(m)]
-covtab <- data.frame(
-  Estimator = label(ord),
-  Normal = pct(m[ord, "normal"], 1),
-  `Non-normal` = pct(m[ord, "ig"], 1),
-  Ordinal = pct(m[ord, "ordinal"], 1),
-  check.names = FALSE)
-knitr::kable(covtab, row.names = FALSE)
+**Configural.**
+
+```{r cov-configural}
+knitr::kable(cov_table("configural", cfg_all), row.names = FALSE)
 ```
 
-Every closed-form map and ML land within about a point of nominal on all three
-data types. ULS is the only arm that runs consistently a little low.
+**Restricted (tau-equivalent).**
+
+```{r cov-restricted}
+knitr::kable(cov_table("tau_resid", res_all), row.names = FALSE)
+```
+
+Every map and ML land within about a point of nominal; ULS runs consistently a
+little low.
 
 ## Cost and reliability
 
-Two costs side by side: the fit on its own, and the fit **plus** its standard
-error. The closed-form maps fit in a fraction of a millisecond, several times
-faster than ML's fit. But the empirical standard error re-evaluates the map many
-times, and it is that step, not the fit, that dominates the total: on the
-25-variable models it makes the aligned maps slower than ML end to end.
+Fit on its own versus fit **plus** standard error. The closed-form maps fit in a
+fraction of a millisecond, several times faster than ML's fit, but the empirical
+standard error re-evaluates the map many times and dominates the total, so on the
+25-variable models the aligned maps are slower than ML end to end.
 
-```{r cost-table}
-ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "ml_emp", "uls_emp")
-tt <- timing[timing$estimator %in% ests, ]
-big <- tt[tt$factors == 5 & tt$indicators == 5, ]
-cost <- do.call(rbind, lapply(ests, function(e) {
-  data.frame(
-    Estimator = label(e),
-    `Fit-only (ms)` = fmt(median(tt$fit_mean_ms[tt$estimator == e]), 2),
-    `Fit+SE (ms)` = fmt(median(tt$total_median_ms[tt$estimator == e]), 0),
-    `25-var fit-only (ms)` = fmt(median(big$fit_mean_ms[big$estimator == e]), 2),
-    `25-var fit+SE (ms)` = fmt(median(big$total_median_ms[big$estimator == e]), 0),
-    check.names = FALSE)
-}))
-knitr::kable(cost, row.names = FALSE)
+**Configural.**
+
+```{r cost-configural}
+knitr::kable(cost_table("configural", cfg_all), row.names = FALSE)
 ```
 
-The clock is millisecond-resolution, so the closed-form fits (sub-millisecond)
-would round to zero as a median; the fit-only column is therefore the mean,
-which recovers the sub-millisecond average. Convergence and improper-solution
-(Heywood) rates are low and essentially the same across all estimators, so no
-arm is reaching the accuracy comparison on a different footing.
+**Restricted (tau-equivalent).**
+
+```{r cost-restricted}
+knitr::kable(cost_table("tau_resid", res_all), row.names = FALSE)
+```
+
+The clock is millisecond-resolution, so the sub-millisecond fits round to a zero
+median; the fit-only column is therefore the mean, which recovers the sub-ms
+average. Convergence and improper-solution (Heywood) rates are low and
+essentially the same across estimators.
 
 ## Caveats
 
-- **Correct specification only.** Every population here is a true CFA and, for
-  the restricted cells, truly tau-equivalent. This measures efficiency, not
-  robustness to a wrong model. ML's small average edge is expected precisely
-  because the model is right; the interesting open question is what happens
-  under misspecification.
+- **The aligned-vs-legacy verdict is conditional on low rho.** Factor
+  correlations here are 0 and 0.35. The aligned reconstruction's advantage should
+  grow with rho, so "aligned buys nothing" is a statement about this grid, not a
+  general one; a higher-rho arm is the obvious next test.
+- **Correct specification only.** Every population is a true CFA and, for the
+  restricted cells, truly tau-equivalent. This measures efficiency, not
+  robustness to a wrong model; ML's small average edge is expected precisely
+  because the model is right.
 - **Mild non-normality.** The non-normal arm is a gentle stress (skewness 0.2,
   excess kurtosis 0.5); stronger targets failed calibration on the 25-variable
-  cells. Heavier tails could widen the coverage story.
-- **Ordinal means category codes, not polychorics.** The ordinal result speaks
-  to fitting the covariance of integer codes, not to a polychoric CFA.
+  cells.
+- **Ordinal means category codes, not polychorics.**
 - **RMSE ratios are same-replication.** A few small-n cells produce extreme
   ratios in either direction; read the medians and win-rates, not the tails.
 
@@ -222,6 +271,4 @@ Rscript experiments/58-guttman-rmse-coverage/run_experiment.R --probe \
 
 # render this report
 quarto render experiments/58-guttman-rmse-coverage/report.qmd
-```
-```{r reproduce-note}
 ```
