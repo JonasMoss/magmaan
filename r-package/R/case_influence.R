@@ -139,6 +139,7 @@
 #'   a refit fails or is inadmissible), `fit`, `selected`, `case_id`, `converged`.
 #' @export
 case_rerun <- function(fit, data = NULL, to_rerun = NULL, warm_start = TRUE) {
+  if (.is_noniterative(fit)) .guard_noniterative("case_rerun()")
   if (!inherits(fit, "magmaan_fit")) {
     stop("case_rerun(): `fit` must be a magmaan_fit", call. = FALSE)
   }

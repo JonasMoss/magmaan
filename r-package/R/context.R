@@ -37,6 +37,18 @@ vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
     }
     return(fit$vcov)
   }
+  if (.is_noniterative(fit)) {
+    # Delta-method covariance of the closed-form map. regime "model" -> the
+    # normal-theory Gamma (model-correct); regime "robust" -> the empirical /
+    # distribution-free Gamma (needs raw data), which exp 52 found calibrated
+    # under non-normality where the NT Gamma is asymptotically wrong.
+    gamma <- if (identical(regime, "robust")) "empirical" else "nt"
+    if (identical(gamma, "empirical") && is.null(data)) {
+      stop("vcov(regime = 'robust'): non-iterative fits need `data` (raw ",
+           "observations) for the empirical-Gamma sandwich", call. = FALSE)
+    }
+    return(noniterative_cfa_se(fit, gamma = gamma, data = data)$vcov)
+  }
   if (isTRUE(fit$ordinal)) {
     stats <- fit$ordinal_stats
     if (is.null(stats)) {
@@ -137,6 +149,7 @@ factor_score_precision <- function(fit, data) {
 }
 
 modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
+  if (.is_noniterative(fit)) .guard_noniterative("modification_indices()")
   dots <- list(...)
   if (!is.null(data)) {
     if ("weight" %in% names(dots)) {
@@ -149,6 +162,7 @@ modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
 }
 
 score_tests <- function(fit, data = NULL, ...) {
+  if (.is_noniterative(fit)) .guard_noniterative("score_tests()")
   dots <- list(...)
   if (!is.null(data)) {
     if ("weight" %in% names(dots)) {
@@ -183,6 +197,7 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         include_covariances = TRUE,
                                         information = "expected",
                                         estimated_weight = FALSE) {
+  if (.is_noniterative(fit)) .guard_noniterative("modification_indices_robust()")
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_modification_indices_robust(
@@ -195,6 +210,7 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
 score_tests_robust <- function(fit, data = NULL, weight = NULL,
                                bread = "expected", moments = "structured",
                                cov = "empirical", estimated_weight = FALSE) {
+  if (.is_noniterative(fit)) .guard_noniterative("score_tests_robust()")
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_score_tests_robust(

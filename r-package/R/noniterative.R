@@ -3,8 +3,12 @@
 # Closed-form CFA estimation as covariance maps, exposing a complete parameter
 # vector so goodness-of-fit, nested tests, and delta-method standard errors
 # follow as explicit post-fit calls. Thin wrappers over the C++
-# estimate::frontier / robust::frontier entry points. See
-# docs/research/notes/noniterative_cfa_tests.tex.
+# estimate::frontier / robust::frontier entry points. The returned fit is a
+# first-class magmaan_fit (see noniterative_postfit.R), so the ordinary post-fit
+# measures (standardized, residuals, factor_scores, vcov, fit_measures,
+# parameter_table) apply. Derivations: the guttman-inference paper notes
+# (noniterative_cfa_tests, noniterative_fit_indices) and
+# docs/research/notes/guttman_cfa_asymptotics.tex.
 
 #' Estimate the diagonal of the Guttman H matrix.
 #'
@@ -66,7 +70,8 @@ guttman_h <- function(S, blocks,
 #' @export
 fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman",
                                  composite = "auto") {
-  noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite)
+  .finalize_noniterative_fit(
+    noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite))
 }
 
 #' Fit the estimator-side metric-constrained non-iterative CFA map.
@@ -82,7 +87,9 @@ fit_noniterative_cfa <- function(partable, sample_stats, estimator = "guttman",
 fit_noniterative_cfa_metric <- function(partable, sample_stats,
                                         estimator = "guttman_gls_aligned",
                                         composite = "auto") {
-  noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator, composite)
+  .finalize_noniterative_fit(
+    noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator,
+                                     composite))
 }
 
 #' Fit the residual/loading restricted non-iterative CFA map.
@@ -102,8 +109,9 @@ fit_noniterative_cfa_restricted <- function(partable, sample_stats,
                                             estimator = "guttman_gls_aligned",
                                             communality = "gmm_block",
                                             composite = "auto") {
-  noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
-                                       communality, composite)
+  .finalize_noniterative_fit(
+    noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
+                                         communality, composite))
 }
 
 noniterative_estimator_arg <- function(estimator) {

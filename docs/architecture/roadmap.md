@@ -206,6 +206,24 @@ golden `parTable()` fixtures.
   `noniterative_difference_test` are the nested tests. R surface:
   `magmaan_core$noniterative_cfa_{fit,se,inference,wald,difference,
   pseudo_lrt}_impl`.
+  The R fits are now first-class `magmaan_fit` objects (classed
+  `magmaan_noniterative_fit`), so the ordinary post-fit measures apply
+  unchanged: `vcov()` (regime `model` -> NT Gamma, `robust` -> empirical Gamma),
+  `standardized()`, `residuals()` / `lav_residuals()` (SRMR), `factor_scores()`,
+  `composite_weights()`, `compute_defined()`, the general `parameter_table()`
+  (est/se/z/p/CI), and `fit_measures()`. The last routes to
+  `fit_measures_noniterative()`: the residual GOF supplies the user statistic
+  under the NT (`ntml`) or ULS discrepancy, referred to a same-discrepancy
+  independence baseline, giving naive and robust/mixture-scaled CFI/TLI/RMSEA
+  plus SRMR (the ULS baseline and the baseline scaling `c_0` are closed-form; NT
+  `c_0 = 1` exactly). The ML score / LRT machinery
+  (`modification_indices`, `score_tests`, their robust/LRT variants,
+  `case_rerun`, `nestedTest`) is guarded off with a message pointing to the
+  residual-based nested tests, because a closed-form map is not a gradient-zero
+  minimizer. Glue in `r-package/R/noniterative_postfit.R`; derivations in the
+  paper notes `noniterative_fit_indices` and
+  `noniterative_modification_indices`; validated by
+  `r-package/examples/noniterative_postfit.R`.
   Theory in
   the guttman-inference paper's derivation notes
   (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated by

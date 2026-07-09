@@ -377,6 +377,9 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
   convention <- match.arg(convention)
   if (missing(A.method) && identical(convention, "lavaan")) A.method <- "delta"
   ud_method <- match.arg(ud_method)
+  if (.is_noniterative(fit_H1) || .is_noniterative(fit_H0)) {
+    .guard_noniterative("nestedTest()")
+  }
   canonical <- switch(method,
     satorra.2000 = "restriction_map",
     satorra.bentler.2001 = "lavaan_sb2001",

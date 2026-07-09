@@ -2293,3 +2293,24 @@ work until a concrete downstream consumer appears.
   invariance path (needs threshold modeling, not treated-as-continuous moments),
   and **nonlinear / inequality** constraints (both leave closed form: the first
   needs linearize-and-iterate, the second an active set).
+
+  **Post-fit magmaan-parity interface landed** (2026-07, pure R in
+  `r-package/R/noniterative_postfit.R`): the non-iterative fits are now
+  first-class `magmaan_fit` objects, so `standardized`, `residuals` /
+  `lav_residuals` (SRMR), `factor_scores`, `composite_weights`,
+  `compute_defined`, `vcov` (regime `model` -> NT, `robust` -> empirical), and a
+  general exported `parameter_table` (est/se/z/p/CI) all dispatch on them.
+  `fit_measures` routes to the new exported `fit_measures_noniterative`:
+  residual-GOF CFI/TLI/RMSEA + SRMR under the NT (`ntml`) or ULS discrepancy,
+  each against a same-discrepancy independence baseline, naive and
+  robust/mixture-scaled (user `scale_c` + closed-form baseline `c_0`, NT
+  `c_0 = 1`). The ML score / LRT machinery (`modification_indices`,
+  `score_tests`, `*_robust`, `*_lrt`, `case_rerun`, `nestedTest`) is guarded off
+  for these fits (a closed-form map is not a gradient-zero minimizer). Notes
+  `noniterative_fit_indices` and `noniterative_modification_indices`
+  (guttman-inference paper); validated by
+  `r-package/examples/noniterative_postfit.R`.
+  Still stubbed / deferred: **modification indices** (needs the residual /
+  minimum-distance EPC construction sketched in the note, not the ML score test)
+  and continuous **reliability omega from a non-iterative fit** (the omega
+  primitive has no non-iterative `weight`; would use the delta-method Omega).

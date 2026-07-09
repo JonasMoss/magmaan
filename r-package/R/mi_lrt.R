@@ -22,6 +22,7 @@ modification_indices_lrt <- function(fit, data,
                                                     "covariances"),
                                      robust = TRUE, weight = NULL) {
   candidates <- match.arg(candidates)
+  if (.is_noniterative(fit)) .guard_noniterative("modification_indices_lrt()")
   if (!inherits(fit, "magmaan_fit")) {
     stop("modification_indices_lrt(): `fit` must be a fitted magmaan model.",
          call. = FALSE)
@@ -268,6 +269,7 @@ score_tests_lrt <- function(fit, data,
   method <- match.arg(method)
   gamma <- match.arg(gamma)
 
+  if (.is_noniterative(fit)) .guard_noniterative("score_tests_lrt()")
   if (!inherits(fit, "magmaan_fit")) {
     stop("score_tests_lrt(): `fit` must be a fitted magmaan model.", call. = FALSE)
   }

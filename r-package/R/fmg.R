@@ -923,6 +923,14 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
     return(out)
   }
 
+  if (.is_noniterative(fit)) {
+    # Non-iterative fits have fmin == 0, so the chi-square below is degenerate.
+    # Route to the residual-based fit indices instead (naive + robust-scaled over
+    # the NT / ULS discrepancies).
+    return(fit_measures_noniterative(fit, data = data, baseline = baseline,
+                                     fmg = fmg))
+  }
+
   ss <- fit_sample_stats(fit)
   chi2 <- infer_chi2_stat(ss, fit$fmin)
   df <- infer_df_stat(fit$partable, ss)
