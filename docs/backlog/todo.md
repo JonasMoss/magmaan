@@ -2278,6 +2278,26 @@ work until a concrete downstream consumer appears.
   "GMM" solver prose stay (they name the weighted solve, not a method).
   Trigger: after the configural `extended_triad_ls`-with-`standardized`
   wiring lands and exp-58 re-runs on the new names.
+  **Quality verdict (2026-07-09): the aligned map is a decent success on
+  RMSE; speed is the weak point.** Bad-boi worst-draw sanity (q=3, m=5,
+  rho=0.8, weak, n=150; single draw, exp-58 has the across-draws numbers):
+  the recommended `extended_triad_ls` + `standardized` recipe lands loading
+  RMSE at ~1.1x NTML (a dead heat on the parameters, in closed form on the
+  worst draw), and `extended_triad_ls` beats `triad_wls` in every composite.
+  The honest cost is implied-Sigma *fit*: ~3x NTML, because the map is a
+  covariance functional, not a discrepancy minimizer (fine for a reliability
+  functional; disclose for SRMR-minded users). The `adaptive` composite is
+  catastrophic here (~22-30x NTML on loadings, loadings to ~65) which is why
+  it is retired; legacy `guttman_lavaan` is ~3.65x (the AR/`triad_mean`
+  instability, see `papers/closed-form-omega/dev/notes/anti-ar-example.md`).
+  Good enough for most purposes. **Open concern: speed is disappointing.**
+  The closed-form estimator's whole pitch is speed, and it currently
+  underwhelms. Known levers to chase before claiming the speed win:
+  (a) the restricted SE path is not yet batched (the flagged "main selling
+  point"); (b) `triad_wls_joint`, `triad_mean`, and `triad_pooled` SE
+  Jacobians fall back to finite differences; (c) quantify the actual
+  fit+SE wall-cost vs NTML/ULS so the speed claim is evidence-backed rather
+  than assumed.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
