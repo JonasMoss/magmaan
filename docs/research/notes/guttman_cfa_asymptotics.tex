@@ -663,6 +663,30 @@ dense \(\Gamma\). The full \texttt{noniterative\_inference} family still builds
 the GOF bundle because the scaled and mixture reference tests genuinely need the
 moment-space spectrum.
 
+\paragraph{Timing note, 2026-07-09.}
+After the SE-only split and the batched configural Jacobian, the remaining
+runtime at \(p=25\) is not the empirical meat. In the experiment-58 normal
+slice with five factors, five indicators per factor, \(n=300\), and empirical
+SEs, the R harness reports configural Guttman SE medians of about \(5\) ms for
+\texttt{guttman\_std}, \texttt{guttman\_unit}, and \texttt{guttman\_gls}. A
+repeated-call microbenchmark on the same shape gives roughly \(4.6\) ms for
+\texttt{standardized}/\texttt{unit} and \(5.3\) ms for
+\texttt{gls\_aligned}, with normal-theory SEs essentially the same cost. Varying
+\(n\) from \(30\) to \(3000\) shows the empirical contraction only becomes
+visible for large \(n\); at \(n=300\) it is below about half a millisecond. The
+fixed cost is therefore the estimator-map Jacobian: the block-GMM communality
+Jacobian, the downstream score-regression derivative, and assembly into the
+free-parameter rows. A small allocation cleanup that writes casewise moment
+rows directly, avoids mean-augmentation copies when means are absent, applies
+\(dH\) as an operator, and computes only \(\diag(d\Lambda\Phi\Lambda\T+
+\Lambda d\Phi\Lambda\T+\Lambda\Phi d\Lambda\T)\) saved only a few tenths of a
+millisecond. The next meaningful optimization pass should profile inside
+\texttt{gmm\_block\_h2\_jacobian} and
+\texttt{fit\_block\_jacobian\_batched}, or derive a more fully column-batched
+downstream regression derivative. Further decoupling of the GOF machinery or
+dense empirical \(\Gamma\) will not explain the remaining \(5\) ms configural
+SE cost.
+
 For a covariance block with \(p^\star=p(p+1)/2\), the old configural analytic
 implementation computed \(p^\star\) directional derivatives. Each direction
 rebuilt the correlation-scale communality derivative, the triad-GMM weight
