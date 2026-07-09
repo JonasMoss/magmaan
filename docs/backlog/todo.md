@@ -2313,7 +2313,12 @@ work until a concrete downstream consumer appears.
   residual-GOF CFI/TLI/RMSEA + SRMR under the NT (`ntml`) or ULS discrepancy,
   each against a same-discrepancy independence baseline, naive and
   robust/mixture-scaled (user `scale_c` + closed-form baseline `c_0`, NT
-  `c_0 = 1`). The ML score / LRT machinery (`modification_indices`,
+  `c_0 = 1`). Fit-index hardening landed 2026-07-09: empirical `c_0` is
+  checked against raw cross-product variances, multi-group fits route through
+  grouped residual inference and have hand-summed baseline tests, and
+  likelihood information criteria (`logl`/AIC/BIC/BIC2) are `NA` by policy
+  because the closed-form map is not an ML estimator. The ML score / LRT
+  machinery (`modification_indices`,
   `score_tests`, `*_robust`, `*_lrt`, `case_rerun`, `nestedTest`) is guarded off
   for these fits (a closed-form map is not a gradient-zero minimizer). Notes
   `noniterative_fit_indices` and `noniterative_modification_indices`
@@ -2345,19 +2350,6 @@ work until a concrete downstream consumer appears.
     omega_from_fit` has no non-iterative `weight`; wire the delta-method Omega as
     the covariance so omega_total / omega_h / H carry SEs. Natural fit since
     Guttman is itself a reliability-family estimator.
-
-  **Fit-index hardening** (the interface shipped; these are the loose ends)
-  - [ ] Validate the **empirical-Gamma baseline scaling `c_0`** against an
-    independent source (e.g. an independence-model magmaan fit's scaled test).
-    The NT `c_0` is exact/closed-form; the empirical `c_0` uses a raw-data
-    cross-product-variance approximation whose N-convention is documented but not
-    cross-checked.
-  - [ ] Exercise **multi-group fit indices** end-to-end (only single-group HS is
-    verified today; `fit_measures_noniterative` sums per block but is untested
-    on `ngroups > 1`).
-  - [ ] Decide the **logl / AIC / BIC** treatment: currently carried with an
-    ML-referenced-at-non-ML caveat. Either keep, `NA` them, or define a proper
-    non-ML information criterion.
 
   **Ergonomics / API**
   - [ ] A friendly **one-call entry** (`api::frontier` / a `magmaan_noniterative

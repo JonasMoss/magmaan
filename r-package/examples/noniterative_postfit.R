@@ -56,6 +56,7 @@ stopifnot(is.finite(sr$srmr), sr$srmr >= 0, is.list(sr$summary))
 ## 5. fit measures: naive + robust-scaled, NT and ULS discrepancies ----------
 fm_nt  <- fit_measures(m_g)                                   # default: ntml/nt
 fm_uls <- fit_measures_noniterative(m_g, discrepancy = "uls")
+S <- m_g$S[[1]]
 for (fm in list(fm_nt, fm_uls)) {
   stopifnot(fm$chisq != 0,                                    # not the fmin=0 path
             fm$cfi >= 0, fm$cfi <= 1, fm$tli <= 1.0001, fm$rmsea >= 0,
@@ -65,6 +66,18 @@ for (fm in list(fm_nt, fm_uls)) {
 }
 ## NTML baseline scaling collapses to 1 under NT Gamma (efficient weight).
 stopifnot(isTRUE(all.equal(fm_nt$baseline.scale.c, 1)))
+## Likelihood criteria are intentionally undefined for closed-form non-ML fits.
+stopifnot(all(is.na(unlist(
+  fm_nt[c("logl", "unrestricted.logl", "aic", "bic", "bic2")]))))
+fm_emp <- fit_measures_noniterative(m_g, discrepancy = "uls",
+                                    gamma = "empirical", data = X)
+Xc <- scale(X, center = TRUE, scale = FALSE)
+ii <- row(S)[upper.tri(S)]; jj <- col(S)[upper.tri(S)]
+gdiag <- vapply(seq_along(ii), function(k) {
+  cp <- Xc[, ii[k]] * Xc[, jj[k]]
+  mean((cp - mean(cp))^2)
+}, numeric(1))
+stopifnot(isTRUE(all.equal(fm_emp$baseline.scale.c, sum(2 * gdiag) / length(gdiag))))
 ## discrimination: the 1-factor model must fit worse.
 fm_bad <- fit_measures(m_g1)
 stopifnot(fm_bad$cfi < fm_nt$cfi, fm_bad$rmsea > fm_nt$rmsea)
@@ -93,7 +106,7 @@ for (g in guarded) stopifnot(inherits(try(g(), silent = TRUE), "try-error"))
 
 ## ---- baseline convention cross-check (dev) --------------------------------
 ## The closed-form ULS baseline T should equal 2 N sum_{i<j} S_ij^2.
-S <- m_g$S[[1]]; off <- S[upper.tri(S)]
+off <- S[upper.tri(S)]
 Tb_uls_hand <- m_g$nobs * 2 * sum(off^2)
 stopifnot(isTRUE(all.equal(fm_uls$baseline.chisq, Tb_uls_hand)))
 

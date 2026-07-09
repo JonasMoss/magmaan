@@ -93,6 +93,31 @@ parameter_table <- function(fit, vcov, level = 0.95) {
   list(S = Sl, n = nb)
 }
 
+.noniter_needs_grouped_inference <- function(fit) {
+  length(.noniter_blocks(fit)$S) > 1L ||
+    any(as.character(fit$partable$op %||% character()) == "~1")
+}
+
+.noniter_raw_data_arg <- function(fit, data) {
+  if (is.null(data)) return(NULL)
+  raw <- raw_data_arg(fit, data)
+  if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  if (is.list(raw) && !is.data.frame(raw)) {
+    X <- lapply(raw, as.matrix)
+    if (length(X) == 1L) return(X[[1L]])
+    return(list(X = X))
+  }
+  as.matrix(raw)
+}
+
+.noniter_raw_blocks <- function(fit, data) {
+  raw <- .noniter_raw_data_arg(fit, data)
+  if (is.null(raw)) return(NULL)
+  if (is.list(raw) && !is.null(raw$X)) return(lapply(raw$X, as.matrix))
+  if (is.list(raw) && !is.data.frame(raw)) return(lapply(raw, as.matrix))
+  list(as.matrix(raw))
+}
+
 # Independence-model baseline statistic under the SAME residual discrepancy as
 # the user statistic (so the incremental indices are internally coherent). The
 # baseline residual is exactly the off-diagonals of S; the implied Sigma is
@@ -137,8 +162,7 @@ parameter_table <- function(fit, vcov, level = 0.95) {
       stop("fit_measures(gamma = 'empirical'): raw `data` is required for the ",
            "robust baseline scaling", call. = FALSE)
     }
-    Xl <- raw_data_arg(fit, data)
-    if (!is.list(Xl)) Xl <- list(Xl)
+    Xl <- .noniter_raw_blocks(fit, data)
   }
   num <- 0
   df <- 0L
@@ -172,16 +196,16 @@ parameter_table <- function(fit, vcov, level = 0.95) {
   num / df
 }
 
-#' Fit indices (CFI/TLI/RMSEA + SRMR + information criteria) for a non-iterative
-#' CFA fit.
+#' Fit indices (CFI/TLI/RMSEA + SRMR) for a non-iterative CFA fit.
 #'
 #' The user statistic is the residual goodness-of-fit `T` on `df` degrees of
 #' freedom under the chosen `discrepancy`, referred to an independence-model
 #' baseline under the SAME discrepancy. Naive indices treat `T` as central
 #' chi-square; robust indices use the Satorra-Bentler scaling `scale_c` (user) and
 #' the baseline scaling (independence model) to correct the mixture reference.
-#' `logl`/`aic`/`bic`/`bic2` are ML-referenced quantities evaluated at a non-ML
-#' estimate; carried for completeness, interpret with care.
+#' `logl`/`unrestricted.logl`/`aic`/`bic`/`bic2` are reported as `NA`: these are
+#' likelihood information criteria and are not defined for the closed-form
+#' non-ML estimator.
 #'
 #' @param fit A fit from [fit_noniterative_cfa()].
 #' @param discrepancy `"ntml"` (model-implied normal-theory) or `"uls"`.
@@ -201,19 +225,27 @@ fit_measures_noniterative <- function(fit, discrepancy = c("ntml", "uls"),
          "fits; the residual GOF is already scaled. Use the noniterative_cfa_* ",
          "nested tests for difference testing.", call. = FALSE)
   }
-  inf <- noniterative_cfa_inference(fit, discrepancy = discrepancy,
-                                    gamma = gamma, data = data)
+  raw <- if (identical(gamma, "empirical")) .noniter_raw_data_arg(fit, data) else NULL
+  inf <- if (.noniter_needs_grouped_inference(fit)) {
+    noniterative_cfa_grouped_inference(fit, discrepancy = discrepancy,
+                                       gamma = gamma, data = raw)
+  } else {
+    noniterative_cfa_inference(fit, discrepancy = discrepancy,
+                               gamma = gamma, data = raw)
+  }
   Tu <- inf$T
   dfu <- inf$df
   cu <- inf$scale_c
   if (is.null(baseline)) baseline <- .noniter_baseline(fit, discrepancy)
-  cb <- .noniter_baseline_scale(fit, discrepancy, gamma, data)
+  cb <- .noniter_baseline_scale(fit, discrepancy, gamma, raw)
   n <- sum(as.numeric(fit$nobs))
   g <- as.integer(fit$ngroups %||% length(fit$nobs) %||% 1L)
 
-  # Naive block + SRMR + information criteria from the shared C++ closed form.
+  # Naive block + SRMR from the shared C++ closed form; likelihood criteria are
+  # intentionally blanked below because the estimator is not an ML fit.
   fm <- magmaan_core$measures_fit(fit, Tu, dfu,
                                   list(chi2 = baseline$chi2, df = baseline$df))
+  fm[c("logl", "unrestricted.logl", "aic", "bic", "bic2")] <- NA_real_
 
   # Robust / mixture-scaled additions.
   cfi_r <- .fit_cfi(Tu, dfu, baseline$chi2, baseline$df, c_hat = cu,
