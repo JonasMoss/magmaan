@@ -184,7 +184,11 @@ golden `parTable()` fixtures.
   the generality seam for future FABIN2/Bentler/JS/MIIV maps. The promoted
   `guttman_gls_aligned` configural path batches the block-GMM communality
   Jacobian and downstream score-regression derivative over all covariance
-  coordinates. Restricted estimator-side maps differentiate the regular
+  coordinates; the GMM communality Jacobian now works on block-active
+  derivative columns, applies the pseudo-inverse derivative through its
+  required `dW e` action instead of materializing dense `dW` columns, and uses a
+  guarded full-column-rank row-weight pseudo-inverse fast path. Restricted
+  estimator-side maps differentiate the regular
   constrained communality KKT system and the loading projection, with central
   differences retained for rank-changing pseudo-inverse or singular projection
   boundary cases.
