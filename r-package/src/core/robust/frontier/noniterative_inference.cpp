@@ -124,15 +124,19 @@ Eigen::MatrixXd casewise_moment_rows(const Eigen::Ref<const Eigen::MatrixXd>& X,
   const Eigen::Index n = X.rows();
   const Eigen::Index p = X.cols();
   const Eigen::Index pstar = p * (p + 1) / 2;
-  Eigen::MatrixXd Z = Eigen::MatrixXd::Zero(n, (include_means ? p : 0) + pstar);
-  const Eigen::VectorXd s_vech = vech_lower(S);
+  Eigen::MatrixXd Z(n, (include_means ? p : 0) + pstar);
   const Eigen::Index sig_off = include_means ? p : 0;
   for (Eigen::Index i = 0; i < n; ++i) {
-    const Eigen::VectorXd xi = X.row(i).transpose() - mean;
-    if (include_means) Z.block(i, 0, 1, p) = xi.transpose();
-    const Eigen::MatrixXd outer = xi * xi.transpose();
-    Z.block(i, sig_off, 1, pstar) =
-        (vech_lower(outer) - s_vech).transpose();
+    if (include_means) {
+      for (Eigen::Index a = 0; a < p; ++a)
+        Z(i, a) = X(i, a) - mean(a);
+    }
+    Eigen::Index k = sig_off;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      const double xc = X(i, c) - mean(c);
+      for (Eigen::Index r = c; r < p; ++r)
+        Z(i, k++) = (X(i, r) - mean(r)) * xc - S(r, c);
+    }
   }
   return Z;
 }
@@ -309,9 +313,15 @@ finish_grouped_se(const Eigen::VectorXd& theta,
       return perr("grouped SE: Gamma[b] dimension mismatch");
     const double N_b = static_cast<double>(samp.n_obs[b]);
     if (!(N_b > 0.0)) return perr("grouped SE: non-positive n_obs");
-    auto Jaug = block_j_aug(d, samp, b, maug);
-    if (!Jaug.has_value()) return std::unexpected(Jaug.error());
-    out.Omega.noalias() += (*Jaug * gamma_per_block[b] * Jaug->transpose()) / N_b;
+    if (d.has_means) {
+      auto Jaug = block_j_aug(d, samp, b, maug);
+      if (!Jaug.has_value()) return std::unexpected(Jaug.error());
+      out.Omega.noalias() +=
+          (*Jaug * gamma_per_block[b] * Jaug->transpose()) / N_b;
+    } else {
+      out.Omega.noalias() +=
+          (d.J_blocks[b] * gamma_per_block[b] * d.J_blocks[b].transpose()) / N_b;
+    }
   }
   out.Omega = 0.5 * (out.Omega + out.Omega.transpose()).eval();
   out.se = se_from_omega(out.Omega);
@@ -342,11 +352,16 @@ finish_grouped_empirical_se(const Eigen::VectorXd& theta,
         (b < samp.mean.size() && samp.mean[b].size() == p)
             ? samp.mean[b]
             : Xb.colwise().mean().transpose().eval();
-    auto Jaug = block_j_aug(d, samp, b, maug);
-    if (!Jaug.has_value()) return std::unexpected(Jaug.error());
     const Eigen::MatrixXd Z =
         casewise_moment_rows(Xb, samp.S[b], mean, d.has_means);
-    const Eigen::MatrixXd U = Z * Jaug->transpose();  // n_b × q
+    Eigen::MatrixXd U;
+    if (d.has_means) {
+      auto Jaug = block_j_aug(d, samp, b, maug);
+      if (!Jaug.has_value()) return std::unexpected(Jaug.error());
+      U = Z * Jaug->transpose();  // n_b × q
+    } else {
+      U = Z * d.J_blocks[b].transpose();  // n_b × q
+    }
     out.Omega.noalias() += (U.transpose() * U) / (N_b * N_b);
   }
   out.Omega = 0.5 * (out.Omega + out.Omega.transpose()).eval();
