@@ -195,7 +195,8 @@ golden `parTable()` fixtures.
   KKT right-hand sides with the same active-column `dW e` GMM derivative,
   reuses one KKT factorization across all covariance columns, feeds the
   constrained `dH` diagonal into the batched score-regression derivative, and
-  batches the loading-projection derivative.
+  applies the loading-projection derivative in action form, avoiding per-column
+  inverse-derivative matrices.
   `robust::frontier::noniterative_se*` is the SE-only primitive:
   normal-theory paths contract `J Gamma J'/N`, while empirical paths stream
   casewise moment rows in parameter space rather than materializing dense

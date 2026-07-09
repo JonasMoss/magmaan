@@ -2241,10 +2241,14 @@ work until a concrete downstream consumer appears.
   batches the constrained h2 KKT RHS with the same block-active `dW e` action
   as configural, solves the KKT system once over all RHS columns, batches the
   downstream score-regression derivative from the constrained `dH` diagonal,
-  and batches the loading-projection derivative. Repeated-call p = 25 timings
+  and applies the loading-projection derivative as an action of
+  `(I - C R) W^-1 dW a` rather than materializing inverse derivatives for every
+  covariance column. Repeated-call p = 25 timings
   are now roughly 1.8 ms for residual-only restrictions, 2.8 ms for
   loading-only restrictions, and 3.2 ms for both under `unit`/`standardized`;
-  `gls_aligned` is about 2.7 / 3.7 / 3.9 ms. Non-default restricted
+  `gls_aligned` is about 2.7 / 3.7 / 3.9 ms. A follow-up fixed-fit empirical
+  restricted probe put `unit`/`standardized` at about 1.5x ULS robust SE and
+  `gls_aligned` at about 1.7x in the same p = 25 cell. Non-default restricted
   communality choices remain analytic but may still use direction-wise
   constrained RHS assembly. The old `guttman` selector is retained as the
   legacy lavaan-like Spearman/incidence map.
