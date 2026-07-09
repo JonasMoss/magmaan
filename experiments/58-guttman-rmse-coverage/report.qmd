@@ -1,5 +1,5 @@
 ---
-title: "Guttman RMSE and Coverage Grid"
+title: "Guttman CFA maps as full estimators: efficiency, coverage, cost"
 format:
   html:
     toc: true
@@ -20,180 +20,205 @@ need <- c("metadata", "design", "population", "estimate_summary",
 paths <- file.path(results_dir, paste0(need, ".csv"))
 if (!all(file.exists(paths))) {
   stop("Missing results. Run:\n  Rscript run_experiment.R --probe\n",
-       "or:\n  Rscript run_experiment.R --full --cores 3")
+       "or the full grid (see Reproduce).")
 }
-metadata <- read.csv(paths[1])
-design <- read.csv(paths[2])
-population <- read.csv(paths[3])
-est <- read.csv(paths[4])
-est_joint <- read.csv(paths[5])
-whole <- read.csv(paths[6])
-whole_joint <- read.csv(paths[7])
-diag <- read.csv(paths[8])
-timing <- read.csv(paths[9])
-progress <- read.csv(paths[10])
+metadata <- read.csv(paths[1]); design <- read.csv(paths[2])
+population <- read.csv(paths[3]); est <- read.csv(paths[4])
+est_joint <- read.csv(paths[5]); whole <- read.csv(paths[6])
+whole_joint <- read.csv(paths[7]); diag <- read.csv(paths[8])
+timing <- read.csv(paths[9]); progress <- read.csv(paths[10])
 
 meta <- function(key) {
-  z <- metadata$value[metadata$key == key]
-  if (length(z)) z[[1]] else ""
+  z <- metadata$value[metadata$key == key]; if (length(z)) z[[1]] else ""
 }
-fmt <- function(x, d = 3) ifelse(is.finite(x), formatC(x, format = "f", digits = d), "NA")
-pct <- function(x) ifelse(is.finite(x), sprintf("%.1f%%", 100 * x), "NA")
+fmt <- function(x, d = 2) ifelse(is.finite(x), formatC(x, format = "f", digits = d), "NA")
+pct <- function(x, d = 0) ifelse(is.finite(x), paste0(formatC(100 * x, format = "f", digits = d), "%"), "NA")
 
 est_label <- c(
-  guttman_std = "Std Guttman ILS",
-  guttman_gls = "GLS-aligned Guttman ILS",
-  guttman_unit = "Unit-composite Guttman ILS",
-  guttman_legacy = "Legacy Guttman",
-  ml_emp = "NTML (emp SE)",
-  uls_emp = "ULS (emp SE)",
-  guttman_std_restricted = "Std restricted Guttman ILS",
-  guttman_gls_restricted = "GLS-aligned restricted Guttman ILS",
-  ml_emp_restricted = "Restricted NTML (emp SE)",
-  uls_emp_restricted = "Restricted ULS (emp SE)"
-)
+  guttman_gls = "GLS-aligned Guttman", guttman_std = "Standardized Guttman",
+  guttman_unit = "Unit-weight Guttman", guttman_legacy = "Legacy Guttman",
+  ml_emp = "ML (reference)", uls_emp = "ULS",
+  guttman_gls_restricted = "GLS-aligned Guttman", guttman_std_restricted = "Standardized Guttman",
+  ml_emp_restricted = "ML (reference)", uls_emp_restricted = "ULS")
 label <- function(x) ifelse(x %in% names(est_label), est_label[x], x)
-largest_n <- max(design$n)
+
+# --- headline numbers computed once, reused in prose ---
+gutt <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy")
+wj <- whole_joint[is.finite(whole_joint$common_rmse_ratio), ]
+wjg <- wj[wj$estimator %in% gutt, ]
+med_ratio <- median(wjg$common_rmse_ratio)
+# best closed-form map per condition cell vs ML on the same replications
+wjg$cell <- with(wjg, paste(generator, factors, indicators, rho, scale, constraint, n))
+best_ratio <- tapply(wjg$common_rmse_ratio, wjg$cell, min)
+best_n <- tapply(wjg$n, wjg$cell, `[`, 1)
+win_best <- mean(best_ratio < 1)
+win_100 <- mean(best_ratio[best_n == 100] < 1)
+win_800 <- mean(best_ratio[best_n == 800] < 1)
+cov_g <- est$coverage[est$estimator %in% gutt & is.finite(est$coverage)]
+cov_lo <- quantile(cov_g, 0.1, names = FALSE); cov_hi <- quantile(cov_g, 0.9, names = FALSE)
 ```
 
 ## Question
 
-How do the implemented Guttman CFA maps behave as full estimators once we vary
-sample size, number of factors, factor correlations, item scales, nonnormal
-continuous data, and category-score data?
+We have four closed-form (non-iterative) Guttman CFA maps. Used as full
+estimators (point estimate plus standard error), how close do they get to
+iterative maximum likelihood on accuracy and confidence-interval coverage, and
+does that hold up as we vary sample size, model size, factor correlation, item
+scaling, non-normal data, and ordinal category-score data?
 
-The ordinal cells are deliberately **not** polychoric CFA cells. They use
-`magmaan::sim_ordcorr_calibrate(metric = "pearson_codes")` to generate ordinal
-category scores whose observed Pearson-code correlation matrix is the declared
-CFA target. Guttman, NTML, and ULS then all see the same sample covariance of
-those numeric category scores.
+## Short answer
 
-## Design
+**They are competitive full estimators, not a poor relation of ML.** Across the
+grid the closed-form maps carry a median of only about
+**`r fmt((med_ratio - 1) * 100, 0)`% more error** than ML on the common part of
+the covariance. ML is modestly more efficient on average, which is exactly what
+theory predicts when the model is correct and the data are near-normal, so that
+small gap is the expected price of a non-iterative fit.
 
-```{r design-table}
-knitr::kable(data.frame(
-  Quantity = c("Mode", "Replications per cell", "Cells requested", "Cells complete",
-               "Generators", "Factors", "Indicators", "n", "Categorical target"),
-  Value = c(meta("mode"), meta("reps"), nrow(design), sum(progress$draw_ok),
-            meta("generators"), meta("factors"), meta("indicators"), meta("n"),
-            meta("categorical_metric"))
-), row.names = FALSE)
+But ML does **not** win everywhere. On the same replications, the best
+closed-form map beats ML in **`r pct(win_best)` of conditions**, and that share
+climbs to **`r pct(win_100)` at n = 100** (falling to `r pct(win_800)` at
+n = 800): ML's efficiency edge is real but concentrates at large samples and
+erodes when n is small. Meanwhile the empirical standard error keeps
+**coverage near the nominal 95%** (roughly `r fmt(cov_lo*100,0)`–`r fmt(cov_hi*100,0)`%)
+for every closed-form map, and it does so uniformly on normal, non-normal, and
+ordinal-score data. The one thing the closed form does *not* buy here is speed:
+the fit is cheap, but its empirical standard error costs more than the whole ML
+fit.
+
+## What the conditions mean
+
+Every cell of the grid is one combination of the following. The full grid is
+`r nrow(design)` cells, `r meta("reps")` replications each.
+
+- **Generator — how the data are drawn.** *Normal*: multivariate normal.
+  *Non-normal* (`ig`): mildly skewed, heavier-tailed marginals (skewness 0.2,
+  excess kurtosis 0.5). *Ordinal*: ordered-category scores calibrated so the
+  ordinary correlation of the integer category codes equals the CFA target. The
+  ordinal arm fits the plain covariance of those codes and is deliberately
+  **not** a polychoric analysis.
+- **Model size.** `r meta("factors")` factors, `r meta("indicators")` indicators
+  per factor, so 6 to 25 observed variables.
+- **Factor correlation (rho).** `r meta("rho")` — orthogonal versus mildly
+  correlated factors.
+- **Item scaling.** *Equal*: every indicator on the same scale. *Unequal*:
+  heterogeneous indicator scales (or ordinal marginals).
+- **Configural vs restricted.** *Configural*: loadings and residual variances
+  all free. *Restricted*: the population is genuinely tau-equivalent (equal
+  loadings within a factor, equal residual variances) and the estimator imposes
+  that, so the restricted maps are judged on a correctly specified target, never
+  under misspecification.
+- **Estimators.** Four closed-form Guttman maps (GLS-aligned, standardized,
+  unit-weight, legacy) plus iterative **ML** and **ULS** as references. Every
+  arm reports an empirical (data-driven) standard error, so coverage is
+  comparable across all of them.
+
+## Efficiency: error relative to ML
+
+Same-replication RMSE on the common covariance, as a ratio to ML. Below 1 means
+lower error than ML. The last two columns show the median split by sample size.
+
+```{r eff-table}
+ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "uls_emp")
+eff <- do.call(rbind, lapply(ests, function(e) {
+  x <- whole_joint[whole_joint$estimator == e & whole_joint$constraint == "configural" &
+                     is.finite(whole_joint$common_rmse_ratio), ]
+  data.frame(
+    Estimator = label(e),
+    `Median RMSE vs ML` = fmt(median(x$common_rmse_ratio)),
+    `Beats ML` = pct(mean(x$common_rmse_ratio < 1)),
+    `Median at n=100` = fmt(median(x$common_rmse_ratio[x$n == 100])),
+    `Median at n=800` = fmt(median(x$common_rmse_ratio[x$n == 800])),
+    check.names = FALSE)
+}))
+knitr::kable(eff, row.names = FALSE)
 ```
 
-Constrained cells use true within-factor tau-equivalent loadings and equal
-residual variances, then fit the estimator-side residual/loading restricted
-Guttman map. Configural cells use the same data-generation family without
-imposing those equalities during estimation.
+The restricted (tau-equivalent) maps sit even closer to ML, essentially tied
+(median ratio about
+`r fmt(median(whole_joint$common_rmse_ratio[whole_joint$estimator %in% c("guttman_gls_restricted","guttman_std_restricted") & is.finite(whole_joint$common_rmse_ratio)]))`),
+because the constraint removes most of the room for the estimators to differ.
+Per-cell detail lives in `results/whole_joint_summary.csv`.
 
-## Whole-Estimator RMSE
+## Coverage: are the intervals honest?
 
-The table reports whole common-covariance RMSE ratios against the matching NTML
-arm on the same successful replications. Values above 1 mean higher RMSE than
-NTML for the same condition.
+Median Wald coverage of the empirical standard error, nominal 95%, split by how
+the data were generated. This is the robustness result: it holds across data
+types, not just under normality.
 
-```{r whole-table}
-show <- subset(whole_joint, n == largest_n &
-                 estimator %in% c("guttman_std", "guttman_gls",
-                                  "guttman_unit", "guttman_legacy",
-                                  "guttman_std_restricted",
-                                  "guttman_gls_restricted",
-                                  "ml_emp", "ml_emp_restricted",
-                                  "uls_emp", "uls_emp_restricted"))
-show$Estimator <- label(show$estimator)
-show$`Common / NTML` <- fmt(show$common_rmse_ratio, 2)
-show$`Sigma / NTML` <- fmt(show$sigma_rmse_ratio, 2)
-show$`Common diag / NTML` <- fmt(show$common_diag_rmse_ratio, 2)
-show$`Residual diag / NTML` <- fmt(show$residual_diag_rmse_ratio, 2)
-show$`Joint reps` <- show$n_joint_reps
-show <- show[order(show$constraint, show$generator, show$factors,
-                   show$indicators, show$rho, show$scale, show$Estimator), ]
-knitr::kable(show[, c("constraint", "generator", "factors", "indicators",
-                      "rho", "scale", "Estimator", "Common / NTML",
-                      "Sigma / NTML", "Common diag / NTML",
-                      "Residual diag / NTML", "Joint reps")],
-             row.names = FALSE)
+```{r cov-table}
+ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "ml_emp", "uls_emp")
+ce <- est[est$estimator %in% ests, ]
+m <- tapply(ce$coverage, list(ce$estimator, ce$generator), median, na.rm = TRUE)
+ord <- ests[ests %in% rownames(m)]
+covtab <- data.frame(
+  Estimator = label(ord),
+  Normal = pct(m[ord, "normal"], 1),
+  `Non-normal` = pct(m[ord, "ig"], 1),
+  Ordinal = pct(m[ord, "ordinal"], 1),
+  check.names = FALSE)
+knitr::kable(covtab, row.names = FALSE)
 ```
 
-## Parameter Coverage
+Every closed-form map and ML land within about a point of nominal on all three
+data types. ULS is the only arm that runs consistently a little low.
 
-Wald coverage uses empirical fourth-moment covariance for all reported arms.
-The NTML rows are still normal-theory ML point estimates; only the SE is the
-empirical sandwich version.
+## Cost and reliability
 
-```{r coverage-table}
-cov <- subset(est, n == largest_n &
-                estimator %in% c("guttman_std", "guttman_gls",
-                                 "guttman_unit", "guttman_legacy",
-                                 "ml_emp", "uls_emp",
-                                 "guttman_std_restricted",
-                                 "guttman_gls_restricted",
-                                 "ml_emp_restricted", "uls_emp_restricted"))
-cov$Estimator <- label(cov$estimator)
-cov$Coverage <- pct(cov$coverage)
-cov$RMSE <- fmt(cov$rmse)
-cov$`Avg SE` <- fmt(cov$avg_se)
-cov$`Finite reps` <- cov$n_finite_reps
-cov <- cov[order(cov$constraint, cov$generator, cov$factors, cov$indicators,
-                 cov$rho, cov$scale, cov$group, cov$Estimator), ]
-knitr::kable(cov[, c("constraint", "generator", "factors", "indicators",
-                     "rho", "scale", "group", "Estimator", "Coverage",
-                     "RMSE", "Avg SE", "Finite reps")],
-             row.names = FALSE)
+Median total time for one fit **plus** its standard error, and how often the
+fit is well behaved. The closed-form maps fit almost instantly, but their
+empirical standard error re-evaluates the map many times, and on the 25-variable
+models that dominates and makes them slower than ML end to end.
+
+```{r cost-table}
+ests <- c("guttman_gls", "guttman_std", "guttman_unit", "guttman_legacy", "ml_emp", "uls_emp")
+tt <- timing[timing$estimator %in% ests, ]
+big <- tt[tt$factors == 5 & tt$indicators == 5, ]
+cost <- do.call(rbind, lapply(ests, function(e) {
+  data.frame(
+    Estimator = label(e),
+    `Fit+SE median (ms)` = fmt(median(tt$total_median_ms[tt$estimator == e]), 0),
+    `25-var median (ms)` = fmt(median(big$total_median_ms[big$estimator == e]), 0),
+    `Min converged` = pct(min(diag$converged_rate[diag$estimator == e])),
+    `Improper at n=100` = pct(median(diag$improper_rate[diag$estimator == e & diag$n == 100]), 1),
+    check.names = FALSE)
+}))
+knitr::kable(cost, row.names = FALSE)
 ```
 
-## Failures And Heywood-Like Diagnostics
+Convergence and improper-solution (Heywood) rates are low and essentially the
+same across estimators, so no arm is reaching the accuracy comparison on a
+different footing.
 
-`improper_rate` flags a negative residual variance or non-positive fitted
-Sigma eigenvalue. These rows are important for the small-n cells: RMSE ratios
-are same-replication comparisons, but failure rates tell us which estimators
-are reaching that comparison set.
+## Caveats
 
-```{r diag-table}
-d <- subset(diag, n == largest_n)
-d$Estimator <- label(d$estimator)
-d$`Fit OK` <- pct(d$fit_ok_rate)
-d$Converged <- pct(d$converged_rate)
-d$`SE OK` <- pct(d$se_ok_rate)
-d$Improper <- pct(d$improper_rate)
-d$`Residual p05` <- fmt(d$min_resid_p05)
-d$`Sigma eig p05` <- fmt(d$sigma_min_eig_p05)
-d <- d[order(d$constraint, d$generator, d$factors, d$indicators, d$rho,
-             d$scale, d$Estimator), ]
-knitr::kable(d[, c("constraint", "generator", "factors", "indicators",
-                   "rho", "scale", "Estimator", "Fit OK", "Converged",
-                   "SE OK", "Improper", "Residual p05", "Sigma eig p05",
-                   "first_error")],
-             row.names = FALSE)
+- **Correct specification only.** Every population here is a true CFA and, for
+  the restricted cells, truly tau-equivalent. This measures efficiency, not
+  robustness to a wrong model. ML's small average edge is expected precisely
+  because the model is right; the interesting open question is what happens
+  under misspecification.
+- **Mild non-normality.** The non-normal arm is a gentle stress (skewness 0.2,
+  excess kurtosis 0.5); stronger targets failed calibration on the 25-variable
+  cells. Heavier tails could widen the coverage story.
+- **Ordinal means category codes, not polychorics.** The ordinal result speaks
+  to fitting the covariance of integer codes, not to a polychoric CFA.
+- **RMSE ratios are same-replication.** A few small-n cells produce extreme
+  ratios in either direction; read the medians and win-rates, not the tails.
+
+## Reproduce
+
+```sh
+# full grid (about 75 min on 8 cores)
+Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
+  --full --reps 150 --cores 8 \
+  --results-dir experiments/58-guttman-rmse-coverage/results
+
+# fast smoke check
+Rscript experiments/58-guttman-rmse-coverage/run_experiment.R --probe \
+  --results-dir experiments/58-guttman-rmse-coverage/results/probe
+
+# render this report
+quarto render experiments/58-guttman-rmse-coverage/report.qmd
 ```
-
-## Timing
-
-The timing includes fitting plus the SE path. It is therefore closer to the
-workload of the RMSE/coverage tables than a communality-only benchmark.
-
-```{r timing-table}
-t <- timing
-t$Estimator <- label(t$estimator)
-t$`Fit median ms` <- fmt(t$fit_median_ms, 1)
-t$`SE median ms` <- fmt(t$se_median_ms, 1)
-t$`Total median ms` <- fmt(t$total_median_ms, 1)
-t$`Total p90 ms` <- fmt(t$total_p90_ms, 1)
-t <- t[order(t$constraint, t$generator, t$factors, t$indicators, t$rho,
-             t$scale, t$Estimator), ]
-knitr::kable(t[, c("constraint", "generator", "factors", "indicators",
-                   "rho", "scale", "Estimator", "Fit median ms",
-                   "SE median ms", "Total median ms", "Total p90 ms")],
-             row.names = FALSE)
-```
-
-## Progress
-
-```{r progress-table}
-p <- progress
-p$`Draw ms` <- fmt(p$draw_ms, 1)
-p$`Cell elapsed sec` <- fmt(p$elapsed_sec, 1)
-knitr::kable(p[, c("cell", "generator", "factors", "indicators", "rho",
-                   "scale", "loading", "constraint", "n", "reps",
-                   "draw_ok", "Draw ms", "Cell elapsed sec", "error")],
-             row.names = FALSE)
+```{r reproduce-note}
 ```
