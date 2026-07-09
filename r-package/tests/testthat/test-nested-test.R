@@ -6,7 +6,7 @@ test_that("ML2S weighted fits use the ML2S nested-test branch", {
     infer_ml2s_lr_test_satorra2000 = function(
         fit_H1, fit_H0, gamma = "empirical", a_method = "exact",
         h_step = 1e-4, ud_method = "2000", stage2_weight = "nt",
-        dls_a = 0.5) {
+        dls_a = 0.5, convention = "magmaan") {
       calls$ml2s <- list(
         gamma = gamma, a_method = a_method, ud_method = ud_method,
         stage2_weight = stage2_weight, dls_a = dls_a)
@@ -40,7 +40,7 @@ test_that("ML2S stage2 weight can be inferred from estimator labels", {
     infer_ml2s_lr_test_satorra2000 = function(
         fit_H1, fit_H0, gamma = "empirical", a_method = "exact",
         h_step = 1e-4, ud_method = "2000", stage2_weight = "nt",
-        dls_a = 0.5) {
+        dls_a = 0.5, convention = "magmaan") {
       calls$stage2_weight <- stage2_weight
       list(statistic = 1, df = 1, p_value = 0.3)
     },
