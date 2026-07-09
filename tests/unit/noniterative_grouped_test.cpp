@@ -385,6 +385,45 @@ TEST_CASE("residual-restricted map with no constraints equals configural aligned
   CHECK((cfg->theta - res->theta).cwiseAbs().maxCoeff() < 1e-12);
 }
 
+TEST_CASE("residual-restricted no-constraint extended LS Jacobian is analytic") {
+  auto b = build_mg(kTwoFactor, 1);
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE(ev.has_value());
+
+  Eigen::MatrixXd S = tf_cov(kLam, 1.0, 0.3, 0.5);
+  S(0, 4) += 0.04;
+  S(4, 0) += 0.04;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(fit);
+
+  auto Ja = ef::estimator_map_jacobian_restricted(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      2e-2, ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  auto Jfd = finite_difference_restricted_jacobian(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      0, 2e-6, ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(Ja);
+  REQUIRE_OK(Jfd);
+  CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 5e-5);
+
+  auto se = rf::noniterative_se_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit->theta,
+      ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(se);
+  CHECK(se->Omega.allFinite());
+}
+
 TEST_CASE("residual-restricted map exposes the communality method axis") {
   auto b = build_mg(kOneFactorResidualTie, 1);
   auto ev = ModelEvaluator::build(b.pt, b.rep);

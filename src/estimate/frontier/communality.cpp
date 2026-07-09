@@ -208,7 +208,13 @@ void add_corr_row(Eigen::Ref<Eigen::RowVectorXd> out,
                   Eigen::Index b,
                   double scale) {
   const Eigen::Index row = corr_row_index(J, a, b);
-  if (row >= 0 && scale != 0.0) out.noalias() += scale * J.dR_off.row(row);
+  if (row < 0 || scale == 0.0) return;
+  const Eigen::Index off = vech_index(a, b, J.p);
+  const Eigen::Index aa = vech_index(a, a, J.p);
+  const Eigen::Index bb = vech_index(b, b, J.p);
+  out(off) += scale * J.dR_off(row, off);
+  out(aa) += scale * J.dR_off(row, aa);
+  out(bb) += scale * J.dR_off(row, bb);
 }
 
 void add_corr_active_row(Eigen::RowVectorXd& out,

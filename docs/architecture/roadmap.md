@@ -198,7 +198,13 @@ golden `parTable()` fixtures.
   joint KKT factorization across all covariance columns, feeds every block's
   constrained `dH` diagonal into the batched score-regression derivative, and
   applies the loading-projection derivative in action form, avoiding per-column
-  inverse-derivative matrices. `triad_wls_joint` remains analytic but direction-wise.
+  inverse-derivative matrices. When no residual-communality rows are active,
+  restricted maps bypass the stacked KKT system and evaluate the selected H
+  diagonal directly; this keeps the `extended_triad_ls` +
+  `standardized` configural proxy on the fast path. The correlation-standardizing
+  Jacobian scatters each `dR_ab` row through its three nonzero covariance
+  coordinates rather than adding dense `p*` rows. `triad_wls_joint` remains
+  analytic but direction-wise.
   `robust::frontier::noniterative_se*` is the SE-only primitive:
   normal-theory paths contract `J Gamma J'/N`, while empirical paths stream
   casewise moment rows in parameter space rather than materializing dense
