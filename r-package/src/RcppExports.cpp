@@ -1994,7 +1994,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
     rcpp_result_gen = Rcpp::wrap(noniterative_cfa_inference_impl(fit, estimator, discrepancy, gamma, data));
     return rcpp_result_gen;
-	END_RCPP
+END_RCPP
+}
+// noniterative_cfa_modindices_impl
+Rcpp::DataFrame noniterative_cfa_modindices_impl(Rcpp::List fit, std::string estimator, std::string discrepancy, std::string gamma, SEXP data, std::string candidates, bool include_loadings, bool include_covariances);
+RcppExport SEXP _magmaan_noniterative_cfa_modindices_impl(SEXP fitSEXP, SEXP estimatorSEXP, SEXP discrepancySEXP, SEXP gammaSEXP, SEXP dataSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type discrepancy(discrepancySEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< std::string >::type candidates(candidatesSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_loadings(include_loadingsSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_covariances(include_covariancesSEXP);
+    rcpp_result_gen = Rcpp::wrap(noniterative_cfa_modindices_impl(fit, estimator, discrepancy, gamma, data, candidates, include_loadings, include_covariances));
+    return rcpp_result_gen;
+END_RCPP
 }
 // noniterative_cfa_se_impl
 Rcpp::List noniterative_cfa_se_impl(Rcpp::List fit, std::string estimator, std::string gamma, SEXP data);
@@ -3694,6 +3712,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_noniterative_cfa_metric_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_metric_fit_impl, 4},
     {"_magmaan_noniterative_cfa_restricted_fit_impl", (DL_FUNC) &_magmaan_noniterative_cfa_restricted_fit_impl, 5},
     {"_magmaan_noniterative_cfa_inference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_inference_impl, 5},
+    {"_magmaan_noniterative_cfa_modindices_impl", (DL_FUNC) &_magmaan_noniterative_cfa_modindices_impl, 8},
     {"_magmaan_noniterative_cfa_se_impl", (DL_FUNC) &_magmaan_noniterative_cfa_se_impl, 4},
     {"_magmaan_noniterative_cfa_wald_impl", (DL_FUNC) &_magmaan_noniterative_cfa_wald_impl, 7},
     {"_magmaan_noniterative_cfa_difference_impl", (DL_FUNC) &_magmaan_noniterative_cfa_difference_impl, 8},

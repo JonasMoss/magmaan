@@ -159,6 +159,36 @@ noniterative_cfa_se <- function(fit, gamma = c("nt", "empirical"),
   noniterative_cfa_se_impl(fit, estimator, gamma, data)
 }
 
+#' Residual-based modification-index diagnostics for a non-iterative CFA fit.
+#'
+#' Closed-form Guttman fits are not stationary minimizers of the ML/ULS
+#' discrepancy, so the usual score-test modification index is not defined.
+#' This helper reports residual-space analogues for fixed-zero and absent
+#' one-parameter candidates: raw residual scores, tangent-residualized residual
+#' scores, and local one-step discrepancy-drop/EPC diagnostics.
+#'
+#' @inheritParams noniterative_cfa_inference
+#' @param candidates `"fixed"` for fixed rows already present in the partable,
+#'   or `"all"` to also enumerate absent cross-loadings and covariances.
+#' @param include_loadings,include_covariances Scope absent-row enumeration when
+#'   `candidates = "all"`.
+#' @return A data frame with candidate columns and `.raw`, `.resid`, and `drop`
+#'   diagnostics.
+#' @export
+noniterative_cfa_modification_indices <- function(
+    fit, discrepancy = c("uls", "ntml"), gamma = c("nt", "empirical"),
+    data = NULL, estimator = NULL, candidates = c("all", "fixed"),
+    include_loadings = TRUE, include_covariances = TRUE) {
+  discrepancy <- match.arg(discrepancy)
+  gamma <- match.arg(gamma)
+  candidates <- match.arg(candidates)
+  estimator <- noniterative_estimator_arg(estimator)
+  raw <- if (identical(gamma, "empirical")) .noniter_raw_data_arg(fit, data) else NULL
+  noniterative_cfa_modindices_impl(
+    fit, estimator, discrepancy, gamma, raw, candidates,
+    include_loadings, include_covariances)
+}
+
 #' Wald test of a linear restriction R theta = q for a non-iterative CFA fit.
 #'
 #' Exact chi-square on `nrow(R)` degrees of freedom, using the delta-method

@@ -533,6 +533,10 @@ noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy
     .Call(`_magmaan_noniterative_cfa_inference_impl`, fit, estimator, discrepancy, gamma, data)
 }
 
+noniterative_cfa_modindices_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL, candidates = "all", include_loadings = TRUE, include_covariances = TRUE) {
+    .Call(`_magmaan_noniterative_cfa_modindices_impl`, fit, estimator, discrepancy, gamma, data, candidates, include_loadings, include_covariances)
+}
+
 noniterative_cfa_se_impl <- function(fit, estimator = "auto", gamma = "nt", data = NULL) {
     .Call(`_magmaan_noniterative_cfa_se_impl`, fit, estimator, gamma, data)
 }

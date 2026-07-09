@@ -875,6 +875,91 @@ Rcpp::DataFrame score_table_df(
       Rcpp::_["scaling.factor"] = scaling_factor,
       Rcpp::_["stringsAsFactors"] = false);
 }
+
+Rcpp::DataFrame noniter_mi_table_df(
+    const magmaan::robust::frontier::NonIterativeModificationIndexTable& tab,
+    const magmaan::spec::LatentNames& names) {
+  const R_xlen_t n = static_cast<R_xlen_t>(tab.rows.size());
+  Rcpp::CharacterVector kind(n), op(n), lhs(n), rhs(n);
+  Rcpp::IntegerVector row(n), group(n);
+  Rcpp::NumericVector score_raw(n), var_raw(n), z_raw(n), mi_raw(n), p_raw(n),
+      epc_raw(n), drop_raw(n), p_drop_raw(n), score_resid(n), var_resid(n),
+      z_resid(n), mi_resid(n), p_resid(n), epc_resid(n), drop_resid(n),
+      p_drop_resid(n), signature_norm(n), residualized_norm(n);
+
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& r = tab.rows[static_cast<std::size_t>(i)];
+    const auto& c = r.candidate;
+    kind[i] = score_candidate_kind_str(c.kind);
+    row[i] = static_cast<int>(c.row) + 1;
+    op[i] = std::string(magmaan::parse::to_string(c.op));
+    group[i] = c.group;
+    if (c.lhs_var >= 0 &&
+        static_cast<std::size_t>(c.lhs_var) < names.var_name.size()) {
+      lhs[i] = names.var_name[static_cast<std::size_t>(c.lhs_var)];
+    } else if (c.row < names.row_lhs.size()) {
+      lhs[i] = names.row_lhs[c.row];
+    } else {
+      lhs[i] = "";
+    }
+    if (c.rhs_var >= 0 &&
+        static_cast<std::size_t>(c.rhs_var) < names.var_name.size()) {
+      rhs[i] = names.var_name[static_cast<std::size_t>(c.rhs_var)];
+    } else if (c.row < names.row_rhs.size()) {
+      rhs[i] = names.row_rhs[c.row];
+    } else {
+      rhs[i] = "";
+    }
+    score_raw[i] = r.score_raw;
+    var_raw[i] = r.var_raw;
+    z_raw[i] = r.z_raw;
+    mi_raw[i] = r.mi_raw;
+    p_raw[i] = r.p_raw;
+    epc_raw[i] = r.epc_raw;
+    drop_raw[i] = r.drop_raw;
+    p_drop_raw[i] = r.p_drop_raw;
+    score_resid[i] = r.score_resid;
+    var_resid[i] = r.var_resid;
+    z_resid[i] = r.z_resid;
+    mi_resid[i] = r.mi_resid;
+    p_resid[i] = r.p_resid;
+    epc_resid[i] = r.epc_resid;
+    drop_resid[i] = r.drop_resid;
+    p_drop_resid[i] = r.p_drop_resid;
+    signature_norm[i] = r.signature_norm;
+    residualized_norm[i] = r.residualized_norm;
+  }
+
+  Rcpp::DataFrame out = Rcpp::DataFrame::create(
+      Rcpp::_["kind"] = kind,
+      Rcpp::_["row"] = row,
+      Rcpp::_["lhs"] = lhs,
+      Rcpp::_["op"] = op,
+      Rcpp::_["rhs"] = rhs,
+      Rcpp::_["group"] = group,
+      Rcpp::_["score.raw"] = score_raw,
+      Rcpp::_["var.raw"] = var_raw,
+      Rcpp::_["z.raw"] = z_raw,
+      Rcpp::_["mi.raw"] = mi_raw,
+      Rcpp::_["pvalue.raw"] = p_raw,
+      Rcpp::_["epc.raw"] = epc_raw,
+      Rcpp::_["drop.raw"] = drop_raw,
+      Rcpp::_["pvalue.drop.raw"] = p_drop_raw,
+      Rcpp::_["score.resid"] = score_resid,
+      Rcpp::_["var.resid"] = var_resid,
+      Rcpp::_["z.resid"] = z_resid,
+      Rcpp::_["mi.resid"] = mi_resid,
+      Rcpp::_["pvalue.resid"] = p_resid,
+      Rcpp::_["epc.resid"] = epc_resid,
+      Rcpp::_["drop.resid"] = drop_resid,
+      Rcpp::_["pvalue.drop.resid"] = p_drop_resid,
+      Rcpp::_["signature.norm"] = signature_norm,
+      Rcpp::_["residualized.norm"] = residualized_norm,
+      Rcpp::_["stringsAsFactors"] = false);
+  out.attr("warnings") = Rcpp::wrap(tab.warnings);
+  return out;
+}
+
 Rcpp::DataFrame cells_df(const std::vector<lvm::Cell>& cells) {
   const R_xlen_t m = static_cast<R_xlen_t>(cells.size());
   Rcpp::CharacterVector mat(m);
@@ -8114,6 +8199,32 @@ Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator
                                         noniter_comp_for_fit(fit));
   if (!inf.has_value()) stop_post(inf.error());
   return wrap_noniter_inference(*inf);
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame noniterative_cfa_modindices_impl(
+    Rcpp::List fit, std::string estimator = "auto",
+    std::string discrepancy = "uls", std::string gamma = "nt",
+    SEXP data = R_NilValue, std::string candidates = "all",
+    bool include_loadings = true, bool include_covariances = true) {
+  Ctx ctx = ctx_from_fit(fit);
+  if (ctx.samp.S.size() != 1) {
+    Rcpp::stop("magmaan: noniterative_cfa_modification_indices() currently "
+               "supports single-group covariance-only fits");
+  }
+  const auto est = est_from_fit(fit);
+  const auto opts = modification_options_from(
+      "expected", candidates, include_loadings, include_covariances);
+  auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
+                                        noniter_disc(discrepancy), gamma, data,
+                                        noniter_is_restricted_fit(fit),
+                                        noniter_comm_for_fit(fit),
+                                        noniter_comp_for_fit(fit));
+  if (!inf.has_value()) stop_post(inf.error());
+  auto tab = magmaan::robust::frontier::noniterative_modification_indices(
+      ctx.pt, ctx.rep, ctx.samp, est.theta, *inf, opts);
+  if (!tab.has_value()) stop_post(tab.error());
+  return noniter_mi_table_df(*tab, ctx.names);
 }
 
 // [[Rcpp::export]]

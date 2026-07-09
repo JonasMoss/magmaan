@@ -454,6 +454,72 @@ TEST_CASE("noniterative Wald test: exact at the truth, positive off it, df corre
   CHECK(std::isfinite(w_off->chi2));
 }
 
+TEST_CASE("noniterative residual modification indices expose raw, residualized, and drop diagnostics") {
+  Built h0 = build(
+      "f1 =~ x1 + x2 + x3\n"
+      "f2 =~ x4 + x5 + x6\n"
+      "f1 ~~ 0*f2\n");
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  auto ev0 = ModelEvaluator::build(h0.pt, h0.rep);
+  REQUIRE_OK(ev0);
+  auto t0 = ef::noniterative_cfa_theta(h0.pt, h0.rep, *ev0, samp);
+  REQUIRE_OK(t0);
+  auto inf0 = rf::noniterative_inference_nt(
+      h0.pt, h0.rep, samp, *t0, ef::NonIterativeEstimator::Guttman,
+      rf::Discrepancy::ULS);
+  REQUIRE_OK(inf0);
+
+  magmaan::inference::ModificationIndexOptions fixed_opts;
+  auto fixed = rf::noniterative_modification_indices(
+      h0.pt, h0.rep, samp, *t0, *inf0, fixed_opts);
+  REQUIRE_OK(fixed);
+  REQUIRE(fixed->rows.size() == 1);
+  const auto& cov = fixed->rows.front();
+  CHECK(cov.candidate.op == magmaan::parse::Op::Covariance);
+  CHECK(cov.score_raw == doctest::Approx(cov.score_resid).epsilon(1e-10));
+  CHECK(cov.mi_raw > 0.0);
+  CHECK(cov.mi_resid > 0.0);
+  CHECK(cov.drop_resid > 0.0);
+  CHECK(std::isfinite(cov.epc_resid));
+  CHECK(cov.residualized_norm > 0.0);
+
+  Built cfg = build(kTwoFactor);
+  auto ev = ModelEvaluator::build(cfg.pt, cfg.rep);
+  REQUIRE_OK(ev);
+  auto th = ef::noniterative_cfa_theta(cfg.pt, cfg.rep, *ev, samp);
+  REQUIRE_OK(th);
+  auto inf = rf::noniterative_inference_nt(
+      cfg.pt, cfg.rep, samp, *th, ef::NonIterativeEstimator::Guttman,
+      rf::Discrepancy::ULS);
+  REQUIRE_OK(inf);
+
+  magmaan::inference::ModificationIndexOptions absent_opts;
+  absent_opts.candidates =
+      magmaan::inference::ScoreCandidateSet::WithAbsentRows;
+  absent_opts.include_loadings = true;
+  absent_opts.include_covariances = false;
+  auto absent = rf::noniterative_modification_indices(
+      cfg.pt, cfg.rep, samp, *th, *inf, absent_opts);
+  REQUIRE_OK(absent);
+  REQUIRE(absent->rows.size() > 0);
+  bool saw_loading = false;
+  for (const auto& row : absent->rows) {
+    if (row.candidate.op != magmaan::parse::Op::Measurement) continue;
+    saw_loading = true;
+    CHECK(std::isfinite(row.mi_raw));
+    CHECK(std::isfinite(row.mi_resid));
+    CHECK(std::isfinite(row.drop_raw));
+    CHECK(std::isfinite(row.drop_resid));
+    CHECK(std::isfinite(row.epc_raw));
+    CHECK(std::isfinite(row.epc_resid));
+    CHECK(row.signature_norm > 0.0);
+    CHECK(row.residualized_norm >= 0.0);
+  }
+  CHECK(saw_loading);
+}
+
 TEST_CASE("noniterative difference test flags a false zero-covariance restriction") {
   // Population has f1~~f2 = 0.3. H0 fixes it to 0 (misspecified); H1 frees it.
   Built h1 = build(kTwoFactor);

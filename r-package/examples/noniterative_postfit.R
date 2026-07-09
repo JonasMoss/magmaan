@@ -1,10 +1,11 @@
 ## magmaan R bindings -- post-fit interface for the non-iterative (Guttman)
 ## closed-form CFA estimators. A Guttman fit is a first-class magmaan_fit, so the
 ## ordinary post-fit measures apply: vcov(), standardized(), residuals(),
-## factor_scores(), composite_weights(), parameter_table(), and fit_measures()
+## factor_scores(), composite_weights(), parameter_table(), fit_measures()
 ## (CFI/TLI/RMSEA + SRMR, naive and robust-scaled, over the NT / ULS
-## discrepancies). The ML score / LRT machinery is guarded off, since a
-## closed-form map is not a gradient-zero minimizer.
+## discrepancies), and residual-based modification-index diagnostics. The ML
+## score / LRT machinery is guarded off, since a closed-form map is not a
+## gradient-zero minimizer.
 ##
 ## Run from the repo root (after `R CMD INSTALL r-package` / `just r-dev`):
 ##     Rscript r-package/examples/noniterative_postfit.R
@@ -89,12 +90,21 @@ stopifnot(all(c("lhs", "op", "rhs", "est", "se", "z", "pvalue",
           nrow(ptab) == m_g$npar, all(is.finite(ptab$se)),
           isTRUE(all.equal(ptab$est, as.numeric(m_g$theta))))
 
-## 7. composite weights + factor scores --------------------------------------
+## 7. residual-based modification-index diagnostics --------------------------
+mi <- noniterative_cfa_modification_indices(m_g, discrepancy = "uls",
+                                            gamma = "empirical", data = X)
+stopifnot(nrow(mi) > 0,
+          all(c("mi.raw", "mi.resid", "drop.resid", "epc.resid") %in% names(mi)),
+          any(mi$kind == "fixed"),
+          any(is.finite(mi$mi.resid)),
+          any(is.finite(mi$drop.resid)))
+
+## 8. composite weights + factor scores --------------------------------------
 cw <- composite_weights(m_g, V)
 fs <- factor_scores(m_g, hs)
 stopifnot(all(is.finite(unlist(fs$scores))))
 
-## 8. guarded (ML score / LRT machinery) -------------------------------------
+## 9. guarded (ML score / LRT machinery) -------------------------------------
 guarded <- list(
   function() modification_indices(m_g),
   function() score_tests(m_g),

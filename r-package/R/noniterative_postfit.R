@@ -34,8 +34,9 @@
 .guard_noniterative <- function(fn) {
   stop(fn, " is not defined for non-iterative / Guttman closed-form CFA fits: ",
        "the ML score / LRT machinery assumes a gradient-zero minimizer, which a ",
-       "closed-form map is not. Use the residual-based nested tests instead ",
-       "(noniterative_cfa_wald / _difference_test / _pseudo_lrt / _constrained / ",
+       "closed-form map is not. Use the residual-based diagnostics and nested tests ",
+       "instead (noniterative_cfa_modification_indices / ",
+       "noniterative_cfa_wald / _difference_test / _pseudo_lrt / _constrained / ",
        "_scalar_invariance).", call. = FALSE)
 }
 
