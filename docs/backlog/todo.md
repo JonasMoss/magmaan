@@ -2257,6 +2257,27 @@ work until a concrete downstream consumer appears.
   until the joint selected-triad GMM weight derivative is batched. The old
   `guttman` selector is retained as the legacy lavaan-like
   Spearman/incidence map.
+  **Deferred: Guttman vocabulary cleanup phase.** The 2026-07 rename
+  (commit 7655659) made the gmm-free names canonical (communality
+  `triad_mean`/`triad_pooled`/`triad_ls`/`extended_triad_ls`/`triad_wls`/
+  `triad_wls_joint`; estimator `guttman_lavaan`/`guttman_aligned`;
+  composite `adaptive`) but kept every old string as an accepted input
+  alias and left loose ends. A later cleanup pass should: (1) decide a
+  removal point for the deprecated aliases (`ar`, `rs`, `gmm_block`,
+  `gmm_full`, `anchor_triad_ls`, `ilm`, `anchor_ilm`, `guttman`,
+  `guttman_gls_aligned`, `gls_aligned`); (2) refresh remaining descriptive
+  prose still on old terms (this file's "AR/RS/anchor/triad-GMM" wording,
+  the roadmap); (3) align the self-contained research sims
+  `docs/research/sims/r/guttman_triad_gmm_*.R`, which keep their own
+  internal `gmm_block`/`gmm_full` labels; (4) resolve two naming warts held
+  deliberately: bare `guttman` still resolves to legacy `guttman_lavaan`
+  (decide whether it should instead point at the recommended
+  `guttman_aligned`), and `guttman_aligned` defaults to the `adaptive`
+  composite (decide whether the default becomes `standardized` as
+  `adaptive` retires). Not in scope: the `estimate::gmm` namespace and
+  "GMM" solver prose stay (they name the weighted solve, not a method).
+  Trigger: after the configural `extended_triad_ls`-with-`standardized`
+  wiring lands and exp-58 re-runs on the new names.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
