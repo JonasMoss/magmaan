@@ -1643,16 +1643,24 @@ decisions in the simulation backlog.
     above, not through lavaan's degenerate delta `group.equal` convention. The
     paper's arm should use `parameterization = "theta"`.
   - **Mixed-ordinal release not started** (all-ordinal only).
-  - **Adjacent finding (continuous `group.equal`).** The same keyword now reaches
-    continuous fits: `group.equal = "loadings"` ties at the npar level and the
-    free estimates match lavaan (only magmaan's synthetic `.eqg` labels vs
-    lavaan's `.pN.` differ cosmetically). But families that require a
-    *compensating* release are not wired: `c("loadings","intercepts")` gives
-    npar 60 vs lavaan's 63 — lavaan frees the group-2 latent means when
-    indicator intercepts are equated, and `build` does not. This is a separate
-    continuous strong-invariance feature (a `Means`/`Intercepts` build release,
-    analogous to Wu-Estabrook), not part of the gated ordinal scope; promote to
-    its own item if a continuous-invariance consumer appears.
+  - **M/L — continuous scalar `group.equal` release.** Continuous
+    `group.equal = "loadings"` already ties at the npar level and its free
+    estimates match lavaan (only magmaan's synthetic `.eqg` labels versus
+    lavaan's `.pN.` differ cosmetically). Complete the semantic macro for
+    `group.equal = c("loadings", "intercepts")`: when indicator intercepts
+    are equated, `build` must release the latent means in group 2+ under the
+    reference-group convention. Today it only adds equality ties, yielding
+    npar 60 versus lavaan's 63 and an overconstrained mean block.
+
+    This belongs in lavaanification, not the FIML/optimizer path: `group.equal`
+    must lower both its equality labels and identification changes into the
+    lavaanified model triple. Define the precedence for explicit latent-mean
+    syntax, `group.partial`, growth models, and identification options; do not
+    silently duplicate or override a user mean row. Gate the resulting
+    partable, free/fixed mean rows, ML/FIML estimates, and scalar nested test
+    against lavaan. `continuous_invariance()` is the current R-layer workaround:
+    it explicitly appends `f ~ c(0, NA, ...)*1` and uses the delta restriction
+    map for metric-to-scalar because that pair is not strict parameter nesting.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the
