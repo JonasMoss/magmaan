@@ -2212,6 +2212,15 @@ work until a concrete downstream consumer appears.
   default or choosing `(margin, beta0, rate)`. Making the configural and
   restricted Raw-path improper-split guards consistent remains a separate,
   announced behavior change.
+  **Deferred: configural `n_h2_clamped` plumbing.** The restricted and metric
+  R entries echo real per-block clamp-activation counts (`fit->n_h2_clamped`),
+  but the configural `fit_noniterative_cfa` echoes a hardcoded `0` because
+  `estimator_h_matrix` returns only the `H` matrix and drops the
+  `HCommunalityResult::n_active_clamped` count. So `$n_h2_clamped` is misleading
+  (all zeros even when clamping fired) on the configural path only. Harmless for
+  `experiments/60` (it fits through the restricted proxy, which reports true
+  counts), but the field should not be trusted on the configural entry until
+  `estimator_h_matrix` is changed to carry the count up alongside `H`.
   **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
   now uses the regular-interior analytic derivative for configural Guttman
   maps, including the correlation-standardization, triad-GMM communality,
