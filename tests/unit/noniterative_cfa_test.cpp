@@ -168,6 +168,74 @@ TEST_CASE("noniterative Guttman map recovers full theta on exact population") {
   }
 }
 
+TEST_CASE("restricted aligned map clamps an improper communality draw") {
+  Built b = build("f =~ x1 + x2 + x3\n");
+  SampleStats samp;
+  Eigen::MatrixXd S(3, 3);
+  S << 1.0, 0.30, 0.45,
+       0.30, 1.0, -0.10,
+       0.45, -0.10, 1.0;
+  samp.S = {S};
+  samp.n_obs = {400};
+
+  ef::AdmissibilityConfig hard;
+  hard.policy = ef::AdmissibilityPolicy::Hard;
+  hard.margin = 0.01;
+  auto hard_fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized, hard);
+  REQUIRE_OK(hard_fit);
+  REQUIRE(hard_fit->n_h2_clamped.size() == 1);
+  CHECK(hard_fit->n_h2_clamped[0] > 0);
+
+  ef::AdmissibilityConfig soft = hard;
+  soft.policy = ef::AdmissibilityPolicy::Soft;
+  soft.beta0 = 1.0;
+  soft.rate_exp = 0.5;
+  auto soft_fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized, soft);
+  REQUIRE_OK(soft_fit);
+  CHECK(soft_fit->n_h2_clamped[0] > 0);
+
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  auto analytic = ef::estimator_map_jacobian_restricted_block(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned, 0,
+      2e-6, ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized, soft);
+  REQUIRE_OK(analytic);
+  Eigen::MatrixXd fd(analytic->rows(), analytic->cols());
+  Eigen::Index col = 0;
+  for (Eigen::Index c = 0; c < S.rows(); ++c) {
+    for (Eigen::Index r = c; r < S.rows(); ++r) {
+      const double h = 2e-6 * std::max(std::abs(S(r, c)), 1.0);
+      SampleStats plus = samp;
+      SampleStats minus = samp;
+      plus.S[0](r, c) += h;
+      minus.S[0](r, c) -= h;
+      if (r != c) {
+        plus.S[0](c, r) += h;
+        minus.S[0](c, r) -= h;
+      }
+      auto fp = ef::fit_noniterative_cfa_restricted(
+          b.pt, b.rep, plus, ef::NonIterativeEstimator::GuttmanAligned,
+          ef::CommunalityMethod::ExtendedTriadLeastSquares,
+          ef::CompositeWeight::Standardized, soft);
+      auto fm = ef::fit_noniterative_cfa_restricted(
+          b.pt, b.rep, minus, ef::NonIterativeEstimator::GuttmanAligned,
+          ef::CommunalityMethod::ExtendedTriadLeastSquares,
+          ef::CompositeWeight::Standardized, soft);
+      REQUIRE_OK(fp);
+      REQUIRE_OK(fm);
+      fd.col(col++) = (fp->theta - fm->theta) / (2.0 * h);
+    }
+  }
+  CHECK((*analytic - fd).cwiseAbs().maxCoeff() < 5e-5);
+}
+
 TEST_CASE("standardized composite weights are exact and inferable") {
   Built b = build(kTwoFactor);
   SampleStats samp;

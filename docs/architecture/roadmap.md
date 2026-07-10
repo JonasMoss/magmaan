@@ -187,7 +187,15 @@ golden `parTable()` fixtures.
   coordinates; the GMM communality Jacobian now works on block-active
   derivative columns, applies the pseudo-inverse derivative through its
   required `dW e` action instead of materializing dense `dW` columns, and uses a
-  guarded full-column-rank row-weight pseudo-inverse fast path. Restricted
+  guarded full-column-rank row-weight pseudo-inverse fast path. The aligned map
+  has an explicit sample-size-resolved communality
+  admissibility policy: `raw` is the exact historical no-op default, `hard`
+  clips correlation-scale h2 to `[margin, 1-margin]`, and `soft` uses a smooth
+  box with `beta = beta0 * n^rate`. Value, directional, batched, and
+  constrained-KKT Jacobian paths compose the same clamp derivative. C++ and R
+  fit/inference surfaces carry the policy and per-block activation counts;
+  `guttman_lavaan` remains untouched and experiment 60 calibrates the
+  provisional constants. Restricted
   estimator-side maps differentiate the regular constrained communality KKT
   system and the loading projection, with central differences retained for
   rank-changing pseudo-inverse or singular projection boundary cases. The

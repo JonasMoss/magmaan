@@ -11,12 +11,18 @@
 #include "magmaan/estimate/frontier/communality.hpp"
 
 using magmaan::estimate::frontier::CommunalityMethod;
+using magmaan::estimate::frontier::AdmissibilityClamp;
+using magmaan::estimate::frontier::AdmissibilityConfig;
+using magmaan::estimate::frontier::AdmissibilityPolicy;
+using magmaan::estimate::frontier::admissibility_clamp_deriv;
+using magmaan::estimate::frontier::admissibility_clamp_value;
 using magmaan::estimate::frontier::estimate_h_communalities;
 using magmaan::estimate::frontier::estimate_h2_communalities_constrained;
 using magmaan::estimate::frontier::estimate_h2_communalities_constrained_jacobian;
 using magmaan::estimate::frontier::estimate_h2_communalities;
 using magmaan::estimate::frontier::estimate_h2_communalities_directional;
 using magmaan::estimate::frontier::estimate_h2_communalities_jacobian;
+using magmaan::estimate::frontier::resolve_admissibility;
 
 namespace {
 
@@ -34,6 +40,67 @@ Eigen::MatrixXd one_factor_corr(const std::vector<double>& lambda) {
 }
 
 }  // namespace
+
+TEST_CASE("communality admissibility primitives resolve and clamp stably") {
+  const AdmissibilityClamp raw;
+  const AdmissibilityClamp hard{AdmissibilityPolicy::Hard, 1e-3, 0.0};
+  const AdmissibilityClamp soft{AdmissibilityPolicy::Soft, 1e-3, 100.0};
+
+  CHECK(admissibility_clamp_value(-1e300, raw) == -1e300);
+  CHECK(admissibility_clamp_value(0.4, raw) == 0.4);
+  CHECK(admissibility_clamp_deriv(0.4, raw) == 1.0);
+  CHECK(admissibility_clamp_value(-1e300, hard) == hard.margin);
+  CHECK(admissibility_clamp_value(1e300, hard) == 1.0 - hard.margin);
+  CHECK(admissibility_clamp_value(0.4, hard) == 0.4);
+  CHECK(admissibility_clamp_deriv(-1.0, hard) == 0.0);
+  CHECK(admissibility_clamp_deriv(0.4, hard) == 1.0);
+
+  double previous = admissibility_clamp_value(-100.0, soft);
+  for (const double x : {-2.0, -0.1, 0.0, 0.4, 1.0, 1.1, 3.0, 100.0}) {
+    const double value = admissibility_clamp_value(x, soft);
+    CHECK(std::isfinite(value));
+    CHECK(value >= soft.margin - 1e-12);
+    CHECK(value <= 1.0 - soft.margin + 1e-12);
+    CHECK(value + 1e-12 >= previous);
+    previous = value;
+  }
+  CHECK(admissibility_clamp_value(0.4, soft) == doctest::Approx(0.4));
+
+  AdmissibilityConfig config;
+  config.policy = AdmissibilityPolicy::Soft;
+  config.margin = 0.02;
+  config.beta0 = 2.0;
+  config.rate_exp = 0.5;
+  auto resolved = resolve_admissibility(config, 100.0);
+  REQUIRE(resolved.has_value());
+  CHECK(resolved->margin == 0.02);
+  CHECK(resolved->beta == doctest::Approx(20.0));
+  config.margin = 0.5;
+  CHECK_FALSE(resolve_admissibility(config, 100.0).has_value());
+}
+
+TEST_CASE("communality admissibility soft derivative matches finite differences") {
+  const AdmissibilityClamp soft{AdmissibilityPolicy::Soft, 0.01, 12.0};
+  constexpr double eps = 1e-6;
+  for (const double x : {-4.0, -0.1, 0.01, 0.35, 0.99, 1.1, 4.0}) {
+    const double fd =
+        (admissibility_clamp_value(x + eps, soft) -
+         admissibility_clamp_value(x - eps, soft)) /
+        (2.0 * eps);
+    CHECK(admissibility_clamp_deriv(x, soft) == doctest::Approx(fd).epsilon(1e-7));
+  }
+
+  const AdmissibilityClamp hard{AdmissibilityPolicy::Hard, 0.01, 0.0};
+  CHECK(admissibility_clamp_deriv(-0.2, hard) == 0.0);
+  CHECK(admissibility_clamp_deriv(0.5, hard) == 1.0);
+  CHECK(admissibility_clamp_deriv(1.2, hard) == 0.0);
+
+  for (const double x : {-0.5, 0.2, 0.995, 1.5}) {
+    const AdmissibilityClamp steep{AdmissibilityPolicy::Soft, 0.01, 1e4};
+    CHECK(admissibility_clamp_value(x, steep) ==
+          doctest::Approx(admissibility_clamp_value(x, hard)).epsilon(1e-8));
+  }
+}
 
 TEST_CASE("communality rules recover exact one-factor h2") {
   const std::vector<double> lambda = {0.5, 0.7, 0.9, 0.6, 0.8};
@@ -148,6 +215,96 @@ TEST_CASE("communality batched Jacobian matches directional derivatives") {
       }
     }
   }
+}
+
+TEST_CASE("clamped communality batched Jacobian matches directional derivatives") {
+  const std::vector<std::int32_t> blocks = {0, 0, 0, 1, 1, 1};
+  Eigen::MatrixXd S = Eigen::MatrixXd::Identity(6, 6);
+  S << 1.0, 0.30, 0.45, 0.12, 0.16, 0.14,
+       0.30, 1.0, 0.50, 0.15, 0.20, 0.17,
+       0.45, 0.50, 1.0, 0.18, 0.24, 0.21,
+       0.12, 0.15, 0.18, 1.0, 0.28, 0.42,
+       0.16, 0.20, 0.24, 0.28, 1.0, 0.48,
+       0.14, 0.17, 0.21, 0.42, 0.48, 1.0;
+  const AdmissibilityClamp soft{AdmissibilityPolicy::Soft, 0.02, 8.0};
+  const Eigen::Index p = S.rows();
+
+  for (CommunalityMethod method :
+       {CommunalityMethod::TriadLeastSquares,
+        CommunalityMethod::ExtendedTriadLeastSquares,
+        CommunalityMethod::TriadWls}) {
+    INFO("method ordinal: " << static_cast<int>(method));
+    auto J = estimate_h2_communalities_jacobian(S, blocks, method, soft);
+    REQUIRE(J.has_value());
+    Eigen::Index col = 0;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c; r < p; ++r) {
+        Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(p, p);
+        dS(r, c) = 1.0;
+        if (r != c) dS(c, r) = 1.0;
+        auto directional = estimate_h2_communalities_directional(
+            S, dS, blocks, method, soft);
+        REQUIRE(directional.has_value());
+        CHECK((J->col(col) - *directional).cwiseAbs().maxCoeff() < 1e-8);
+        ++col;
+      }
+    }
+  }
+}
+
+TEST_CASE("soft-clamped communality derivative matches finite differences") {
+  Eigen::MatrixXd S(3, 3);
+  S << 1.0, 0.30, 0.45,
+       0.30, 1.0, -0.10,
+       0.45, -0.10, 1.0;
+  Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(3, 3);
+  dS(0, 1) = dS(1, 0) = 0.13;
+  dS(1, 2) = dS(2, 1) = -0.07;
+  const std::vector<std::int32_t> blocks = {0, 0, 0};
+  const AdmissibilityClamp soft{AdmissibilityPolicy::Soft, 0.01, 6.0};
+  constexpr double eps = 2e-6;
+
+  for (CommunalityMethod method :
+       {CommunalityMethod::TriadMean,
+        CommunalityMethod::TriadPooled,
+        CommunalityMethod::TriadLeastSquares,
+        CommunalityMethod::ExtendedTriadLeastSquares,
+        CommunalityMethod::TriadWls,
+        CommunalityMethod::TriadWlsJoint}) {
+    auto analytic = estimate_h2_communalities_directional(
+        S, dS, blocks, method, soft);
+    auto plus = estimate_h2_communalities(
+        S + eps * dS, blocks, method, soft);
+    auto minus = estimate_h2_communalities(
+        S - eps * dS, blocks, method, soft);
+    REQUIRE(analytic.has_value());
+    REQUIRE(plus.has_value());
+    REQUIRE(minus.has_value());
+    CHECK((*analytic - (*plus - *minus) / (2.0 * eps))
+              .cwiseAbs().maxCoeff() < 5e-5);
+  }
+}
+
+TEST_CASE("hard clamp makes improper aligned communality methods agree") {
+  Eigen::MatrixXd S(3, 3);
+  S << 1.0, 0.30, 0.45,
+       0.30, 1.0, -0.10,
+       0.45, -0.10, 1.0;
+  const std::vector<std::int32_t> blocks = {0, 0, 0};
+  const AdmissibilityClamp hard{AdmissibilityPolicy::Hard, 0.01, 0.0};
+  auto extended = estimate_h2_communalities(
+      S, blocks, CommunalityMethod::ExtendedTriadLeastSquares, hard);
+  auto wls = estimate_h2_communalities(
+      S, blocks, CommunalityMethod::TriadWls, hard);
+  REQUIRE(extended.has_value());
+  REQUIRE(wls.has_value());
+  CHECK((*extended - *wls).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK(extended->minCoeff() == doctest::Approx(hard.margin));
+
+  auto H = estimate_h_communalities(
+      S, blocks, CommunalityMethod::ExtendedTriadLeastSquares, hard);
+  REQUIRE(H.has_value());
+  CHECK(H->n_active_clamped == 3);
 }
 
 TEST_CASE("anchor communality recovers exact two-factor h2") {
@@ -290,6 +447,7 @@ TEST_CASE("communality constrained Jacobian matches finite differences") {
 
   const Eigen::Index p = S.rows();
   constexpr double eps = 2e-6;
+  const AdmissibilityClamp soft{AdmissibilityPolicy::Soft, 0.01, 20.0};
   for (CommunalityMethod method :
        {CommunalityMethod::TriadLeastSquares,
         CommunalityMethod::ExtendedTriadLeastSquares,
@@ -315,6 +473,29 @@ TEST_CASE("communality constrained Jacobian matches finite differences") {
         REQUIRE(hm.has_value());
         const Eigen::VectorXd fd = (*hp - *hm) / (2.0 * eps);
         CHECK((J->col(col) - fd).cwiseAbs().maxCoeff() < 5e-5);
+        ++col;
+      }
+    }
+
+    auto Jsoft = estimate_h2_communalities_constrained_jacobian(
+        S, blocks, method, C, d, soft);
+    REQUIRE(Jsoft.has_value());
+    col = 0;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c; r < p; ++r) {
+        Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(p, p);
+        dS(r, c) = 1.0;
+        if (r != c) dS(c, r) = 1.0;
+        auto [Cp, dp] = constraints(S + eps * dS);
+        auto [Cm, dm] = constraints(S - eps * dS);
+        auto hp = estimate_h2_communalities_constrained(
+            S + eps * dS, blocks, method, Cp, dp, soft);
+        auto hm = estimate_h2_communalities_constrained(
+            S - eps * dS, blocks, method, Cm, dm, soft);
+        REQUIRE(hp.has_value());
+        REQUIRE(hm.has_value());
+        const Eigen::VectorXd fd = (*hp - *hm) / (2.0 * eps);
+        CHECK((Jsoft->col(col) - fd).cwiseAbs().maxCoeff() < 5e-5);
         ++col;
       }
     }

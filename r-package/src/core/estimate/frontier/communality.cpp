@@ -23,6 +23,44 @@ namespace {
 
 constexpr double kZeroTol = 1e-12;
 
+double stable_softplus(double x) {
+  if (x > 0.0) return x + std::log1p(std::exp(-x));
+  return std::log1p(std::exp(x));
+}
+
+double stable_sigmoid(double x) {
+  if (x >= 0.0) {
+    const double z = std::exp(-x);
+    return 1.0 / (1.0 + z);
+  }
+  const double z = std::exp(x);
+  return z / (1.0 + z);
+}
+
+Eigen::VectorXd clamp_values(const Eigen::VectorXd& raw,
+                             const AdmissibilityClamp& clamp) {
+  if (clamp.policy == AdmissibilityPolicy::Raw) return raw;
+  return raw.unaryExpr(
+      [&clamp](double x) { return admissibility_clamp_value(x, clamp); });
+}
+
+void compose_clamp_rows(Eigen::MatrixXd& J, const Eigen::VectorXd& raw,
+                        const AdmissibilityClamp& clamp) {
+  if (clamp.policy == AdmissibilityPolicy::Raw) return;
+  for (Eigen::Index i = 0; i < J.rows(); ++i)
+    J.row(i) *= admissibility_clamp_deriv(raw(i), clamp);
+}
+
+Eigen::Index count_clamped(const Eigen::VectorXd& raw,
+                           const AdmissibilityClamp& clamp) {
+  if (clamp.policy == AdmissibilityPolicy::Raw) return 0;
+  const double upper = 1.0 - clamp.margin;
+  Eigen::Index count = 0;
+  for (Eigen::Index i = 0; i < raw.size(); ++i)
+    count += raw(i) < clamp.margin || raw(i) > upper;
+  return count;
+}
+
 fit_expected<Eigen::VectorXd> num_error(std::string detail) {
   return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail)});
 }
@@ -2092,6 +2130,70 @@ const char* communality_method_name(CommunalityMethod method) {
   return "unknown";
 }
 
+const char* admissibility_policy_name(AdmissibilityPolicy policy) {
+  switch (policy) {
+    case AdmissibilityPolicy::Raw:
+      return "raw";
+    case AdmissibilityPolicy::Hard:
+      return "hard";
+    case AdmissibilityPolicy::Soft:
+      return "soft";
+  }
+  return "unknown";
+}
+
+fit_expected<AdmissibilityClamp>
+resolve_admissibility(const AdmissibilityConfig& config, double n_obs) {
+  if (!std::isfinite(config.margin) || config.margin < 0.0 ||
+      config.margin >= 0.5)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "communality admissibility: margin must be finite and in [0, 0.5)"});
+  if (!std::isfinite(config.beta0) || config.beta0 <= 0.0)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "communality admissibility: beta0 must be finite and positive"});
+  if (!std::isfinite(config.rate_exp) || config.rate_exp < 0.0)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "communality admissibility: rate exponent must be finite and non-negative"});
+  if (!std::isfinite(n_obs))
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "communality admissibility: sample size must be finite"});
+
+  AdmissibilityClamp out;
+  out.policy = config.policy;
+  out.margin = config.margin;
+  if (config.policy == AdmissibilityPolicy::Soft) {
+    out.beta = config.beta0 *
+               std::pow(std::max(n_obs, 1.0), config.rate_exp);
+    if (!std::isfinite(out.beta) || out.beta <= 0.0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "communality admissibility: resolved beta is not finite and positive"});
+  }
+  return out;
+}
+
+double admissibility_clamp_value(double x, const AdmissibilityClamp& clamp) {
+  if (clamp.policy == AdmissibilityPolicy::Raw) return x;
+  const double lower = clamp.margin;
+  const double upper = 1.0 - clamp.margin;
+  if (clamp.policy == AdmissibilityPolicy::Hard)
+    return std::clamp(x, lower, upper);
+  const double a = clamp.beta * (x - upper);
+  const double b = clamp.beta * (lower - x);
+  return x - stable_softplus(a) / clamp.beta +
+         stable_softplus(b) / clamp.beta;
+}
+
+double admissibility_clamp_deriv(double x, const AdmissibilityClamp& clamp) {
+  if (clamp.policy == AdmissibilityPolicy::Raw) return 1.0;
+  const double lower = clamp.margin;
+  const double upper = 1.0 - clamp.margin;
+  if (clamp.policy == AdmissibilityPolicy::Hard)
+    return x > lower && x < upper ? 1.0 : 0.0;
+  const double a = clamp.beta * (x - upper);
+  const double b = clamp.beta * (lower - x);
+  return 1.0 - stable_sigmoid(a) - stable_sigmoid(b);
+}
+
 fit_expected<CommunalitySystem>
 communality_system(const Eigen::MatrixXd& S,
                    const std::vector<std::int32_t>& block_of_indicator,
@@ -2258,11 +2360,13 @@ solve_communality_system(const CommunalitySystem& system,
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities(const Eigen::MatrixXd& S,
                           const std::vector<std::int32_t>& block_of_indicator,
-                          CommunalityMethod method) {
+                          CommunalityMethod method,
+                          const AdmissibilityClamp& clamp) {
   auto vin = validate_input(S, block_of_indicator);
   if (!vin.has_value()) return std::unexpected(vin.error());
 
-  switch (method) {
+  fit_expected<Eigen::VectorXd> raw = [&]() -> fit_expected<Eigen::VectorXd> {
+    switch (method) {
     case CommunalityMethod::TriadMean:
     case CommunalityMethod::TriadPooled:
     case CommunalityMethod::TriadLeastSquares:
@@ -2273,8 +2377,11 @@ estimate_h2_communalities(const Eigen::MatrixXd& S,
       return triad_wls_h2(vin->R, vin->blocks);
     case CommunalityMethod::TriadWlsJoint:
       return triad_wls_joint_h2(vin->R, vin->blocks, vin->block_of);
-  }
-  return num_error("communality estimator: unknown method");
+    }
+    return num_error("communality estimator: unknown method");
+  }();
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  return clamp_values(*raw, clamp);
 }
 
 fit_expected<Eigen::VectorXd>
@@ -2282,13 +2389,15 @@ estimate_h2_communalities_directional(
     const Eigen::MatrixXd& S,
     const Eigen::MatrixXd& dS,
     const std::vector<std::int32_t>& block_of_indicator,
-    CommunalityMethod method) {
+    CommunalityMethod method,
+    const AdmissibilityClamp& clamp) {
   auto vin = validate_input(S, block_of_indicator);
   if (!vin.has_value()) return std::unexpected(vin.error());
   auto dR = correlation_direction(S, dS, vin->R);
   if (!dR.has_value()) return std::unexpected(dR.error());
 
-  switch (method) {
+  fit_expected<Eigen::VectorXd> raw_deriv = [&]() -> fit_expected<Eigen::VectorXd> {
+    switch (method) {
     case CommunalityMethod::TriadMean:
     case CommunalityMethod::TriadPooled:
     case CommunalityMethod::TriadLeastSquares:
@@ -2308,21 +2417,32 @@ estimate_h2_communalities_directional(
       if (!sys.has_value()) return std::unexpected(sys.error());
       return solve_gmm_directional(sys->system, sys->dA, sys->db, sys->dW);
     }
-  }
-  return num_error("communality derivative: unknown method");
+    }
+    return num_error("communality derivative: unknown method");
+  }();
+  if (!raw_deriv.has_value()) return std::unexpected(raw_deriv.error());
+  if (clamp.policy == AdmissibilityPolicy::Raw) return raw_deriv;
+  auto raw = estimate_h2_communalities(
+      S, block_of_indicator, method, AdmissibilityClamp{});
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  for (Eigen::Index i = 0; i < raw_deriv->size(); ++i)
+    (*raw_deriv)(i) *= admissibility_clamp_deriv((*raw)(i), clamp);
+  return raw_deriv;
 }
 
 fit_expected<Eigen::MatrixXd>
 estimate_h2_communalities_jacobian(
     const Eigen::MatrixXd& S,
     const std::vector<std::int32_t>& block_of_indicator,
-    CommunalityMethod method) {
+    CommunalityMethod method,
+    const AdmissibilityClamp& clamp) {
   auto vin = validate_input(S, block_of_indicator);
   if (!vin.has_value()) return std::unexpected(vin.error());
   auto J = correlation_jacobian(S, vin->R);
   if (!J.has_value()) return std::unexpected(J.error());
 
-  switch (method) {
+  fit_expected<Eigen::MatrixXd> out = [&]() -> fit_expected<Eigen::MatrixXd> {
+    switch (method) {
     case CommunalityMethod::TriadMean:
     case CommunalityMethod::TriadPooled:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -2339,8 +2459,16 @@ estimate_h2_communalities_jacobian(
     case CommunalityMethod::TriadWlsJoint:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "communality Jacobian: triad_wls_joint batched derivative is deferred"});
-  }
-  return mat_error("communality Jacobian: unknown method");
+    }
+    return mat_error("communality Jacobian: unknown method");
+  }();
+  if (!out.has_value()) return std::unexpected(out.error());
+  if (clamp.policy == AdmissibilityPolicy::Raw) return out;
+  auto raw = estimate_h2_communalities(
+      S, block_of_indicator, method, AdmissibilityClamp{});
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  compose_clamp_rows(*out, *raw, clamp);
+  return out;
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -2349,7 +2477,8 @@ estimate_h2_communalities_constrained_jacobian(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method,
     const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2) {
+    const Eigen::VectorXd& r_h2,
+    const AdmissibilityClamp& clamp) {
   auto vin = validate_input(S, block_of_indicator);
   if (!vin.has_value()) return std::unexpected(vin.error());
   if (R_h2.rows() != r_h2.size() ||
@@ -2362,7 +2491,8 @@ estimate_h2_communalities_constrained_jacobian(
   auto J = correlation_jacobian(S, vin->R);
   if (!J.has_value()) return std::unexpected(J.error());
 
-  switch (method) {
+  fit_expected<Eigen::MatrixXd> out = [&]() -> fit_expected<Eigen::MatrixXd> {
+    switch (method) {
     case CommunalityMethod::TriadWls:
       return triad_wls_h2_constrained_jacobian(
           S, vin->R, vin->blocks, vin->block_of, *J, R_h2, r_h2);
@@ -2385,8 +2515,16 @@ estimate_h2_communalities_constrained_jacobian(
     case CommunalityMethod::TriadPooled:
       return mat_error("communality constrained Jacobian: method is not a "
                        "least-squares/GMM constrained system");
-  }
-  return mat_error("communality constrained Jacobian: unknown method");
+    }
+    return mat_error("communality constrained Jacobian: unknown method");
+  }();
+  if (!out.has_value()) return std::unexpected(out.error());
+  if (clamp.policy == AdmissibilityPolicy::Raw) return out;
+  auto raw = estimate_h2_communalities_constrained(
+      S, block_of_indicator, method, R_h2, r_h2, AdmissibilityClamp{});
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  compose_clamp_rows(*out, *raw, clamp);
+  return out;
 }
 
 fit_expected<Eigen::VectorXd>
@@ -2395,22 +2533,30 @@ estimate_h2_communalities_constrained(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method,
     const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2) {
+    const Eigen::VectorXd& r_h2,
+    const AdmissibilityClamp& clamp) {
   auto sys = communality_system(S, block_of_indicator, method);
   if (!sys.has_value()) return std::unexpected(sys.error());
-  return solve_communality_system(*sys, R_h2, r_h2);
+  auto raw = solve_communality_system(*sys, R_h2, r_h2);
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  return clamp_values(*raw, clamp);
 }
 
 fit_expected<HCommunalityResult>
 estimate_h_communalities(const Eigen::MatrixXd& S,
                          const std::vector<std::int32_t>& block_of_indicator,
-                         CommunalityMethod method) {
-  auto h2 = estimate_h2_communalities(S, block_of_indicator, method);
-  if (!h2.has_value()) return std::unexpected(h2.error());
-  Eigen::VectorXd h_diag = S.diagonal().cwiseProduct(*h2);
+                         CommunalityMethod method,
+                         const AdmissibilityClamp& clamp) {
+  auto raw = estimate_h2_communalities(
+      S, block_of_indicator, method, AdmissibilityClamp{});
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  const Eigen::Index n_active_clamped = count_clamped(*raw, clamp);
+  Eigen::VectorXd h2 = clamp_values(*raw, clamp);
+  Eigen::VectorXd h_diag = S.diagonal().cwiseProduct(h2);
   Eigen::MatrixXd H = S;
   H.diagonal() = h_diag;
-  return HCommunalityResult{std::move(*h2), std::move(h_diag), std::move(H)};
+  return HCommunalityResult{std::move(h2), std::move(h_diag), std::move(H),
+                            n_active_clamped};
 }
 
 fit_expected<HCommunalityResult>
@@ -2419,14 +2565,18 @@ estimate_h_communalities_constrained(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method,
     const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2) {
-  auto h2 = estimate_h2_communalities_constrained(S, block_of_indicator,
-                                                  method, R_h2, r_h2);
-  if (!h2.has_value()) return std::unexpected(h2.error());
-  Eigen::VectorXd h_diag = S.diagonal().cwiseProduct(*h2);
+    const Eigen::VectorXd& r_h2,
+    const AdmissibilityClamp& clamp) {
+  auto raw = estimate_h2_communalities_constrained(
+      S, block_of_indicator, method, R_h2, r_h2, AdmissibilityClamp{});
+  if (!raw.has_value()) return std::unexpected(raw.error());
+  const Eigen::Index n_active_clamped = count_clamped(*raw, clamp);
+  Eigen::VectorXd h2 = clamp_values(*raw, clamp);
+  Eigen::VectorXd h_diag = S.diagonal().cwiseProduct(h2);
   Eigen::MatrixXd H = S;
   H.diagonal() = h_diag;
-  return HCommunalityResult{std::move(*h2), std::move(h_diag), std::move(H)};
+  return HCommunalityResult{std::move(h2), std::move(h_diag), std::move(H),
+                            n_active_clamped};
 }
 
 }  // namespace magmaan::estimate::frontier

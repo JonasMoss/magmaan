@@ -1,0 +1,68 @@
+---
+title: "Calibrating the Guttman communality clamp"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Which hard or soft admissibility setting best repairs out-of-box closed-form
+communalities in weak-loading, small-sample CFA without sacrificing loading
+RMSE or empirical-SE coverage relative to the raw map and NTML?
+
+## Short answer
+
+No calibration run is checked in. Run the experiment before interpreting a
+policy cell; the report will summarize clamp activation, loading RMSE ratios,
+coverage, failures, and score-system conditioning.
+
+```{r}
+root <- dirname(knitr::current_input(dir = TRUE))
+results <- file.path(root, "results")
+need <- c("estimate_summary.csv", "estimate_joint_summary.csv",
+          "diagnostic_summary.csv")
+paths <- file.path(results, need)
+if (!all(file.exists(paths))) {
+  stop("Missing results. Run: Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --smoke")
+}
+estimate <- read.csv(paths[[1L]])
+joint <- read.csv(paths[[2L]])
+diagnostic <- read.csv(paths[[3L]])
+```
+
+## Evidence
+
+```{r}
+loading <- estimate[estimate$kind == "loading", ]
+loading <- aggregate(cbind(rmse, coverage) ~ estimator, loading, mean,
+                     na.rm = TRUE)
+joint_loading <- joint[joint$kind == "loading", ]
+joint_loading <- aggregate(rmse_ratio ~ estimator + baseline, joint_loading,
+                           mean, na.rm = TRUE)
+diag_show <- aggregate(cbind(clamp_rate, fit_ok_rate, se_ok_rate,
+                             zhz_min_eig_p05, bhb_min_eig_p05) ~ estimator,
+                       diagnostic, mean, na.rm = TRUE)
+knitr::kable(merge(merge(loading, joint_loading, by = "estimator", all = TRUE),
+                         diag_show, by = "estimator", all = TRUE), digits = 3)
+```
+
+## Caveats
+
+The experiment is a calibration benchmark, not a lavaan-parity gate. Smoke
+runs establish pipeline integrity only; choosing production constants requires
+the full replication count and attention to the stress-cell slices rather than
+the pooled table alone.
+
+## Reproduce
+
+```sh
+Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --smoke \
+  --results-dir experiments/60-guttman-admissibility-clamp/results
+quarto render experiments/60-guttman-admissibility-clamp/report.qmd
+```

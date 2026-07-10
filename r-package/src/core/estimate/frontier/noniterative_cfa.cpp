@@ -55,6 +55,26 @@ fit_expected<Eigen::VectorXd> num_error(std::string detail) {
   return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail)});
 }
 
+fit_expected<std::vector<AdmissibilityClamp>>
+resolve_block_clamps(const data::SampleStats& samp,
+                     const AdmissibilityConfig& config) {
+  if (config.policy == AdmissibilityPolicy::Soft &&
+      samp.n_obs.size() != samp.S.size())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "communality admissibility: sample-size count does not match blocks"});
+  std::vector<AdmissibilityClamp> out;
+  out.reserve(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const double n = b < samp.n_obs.size()
+                         ? static_cast<double>(samp.n_obs[b])
+                         : 1.0;
+    auto clamp = resolve_admissibility(config, n);
+    if (!clamp.has_value()) return std::unexpected(clamp.error());
+    out.push_back(*clamp);
+  }
+  return out;
+}
+
 // Legacy per-block Guttman (1952) map: covariances → (Λ_G, Φ_G, ψ_G). This
 // preserves the existing lavaan-like Spearman diagonal (including its wide h²
 // bounds) and the incidence-score reconstruction. The promoted
@@ -64,6 +84,7 @@ struct BlockGuttman {
   Eigen::MatrixXd Lambda;  // nvar × nfac, marker-scaled
   Eigen::MatrixXd Phi;     // nfac × nfac, latent covariance = M P M
   Eigen::VectorXd psi;     // nvar, residual variances
+  Eigen::Index n_h2_clamped = 0;
 };
 
 struct BlockGuttmanDirection {
@@ -260,14 +281,16 @@ Eigen::MatrixXd incidence_matrix(const CfaBlockLayout& L) {
 
 fit_expected<Eigen::MatrixXd>
 estimator_h_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-                   NonIterativeEstimator which) {
+                   NonIterativeEstimator which,
+                   const AdmissibilityClamp& clamp) {
   switch (which) {
     case NonIterativeEstimator::GuttmanLavaan:
       return legacy_h_matrix(L, S);
     case NonIterativeEstimator::GuttmanAligned: {
       auto block_of = block_ids_from_layout(L);
       if (!block_of.has_value()) return std::unexpected(block_of.error());
-      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::TriadWls);
+      auto h = estimate_h_communalities(
+          S, *block_of, CommunalityMethod::TriadWls, clamp);
       if (!h.has_value()) return std::unexpected(h.error());
       return h->H;
     }
@@ -321,8 +344,9 @@ composite_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
                                                   const Eigen::MatrixXd& S,
                                                   NonIterativeEstimator which,
-                                                  CompositeWeight composite) {
-  auto H_or = estimator_h_matrix(L, S, which);
+                                                  CompositeWeight composite,
+                                                  const AdmissibilityClamp& clamp) {
+  auto H_or = estimator_h_matrix(L, S, which, clamp);
   if (!H_or.has_value()) return std::unexpected(H_or.error());
   Eigen::MatrixXd H = std::move(*H_or);
   auto B_or = composite_matrix(
@@ -475,17 +499,19 @@ legacy_h_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 fit_expected<MatrixDirection>
 estimator_h_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                                const Eigen::MatrixXd& dS,
-                               NonIterativeEstimator which) {
+                               NonIterativeEstimator which,
+                               const AdmissibilityClamp& clamp) {
   switch (which) {
     case NonIterativeEstimator::GuttmanLavaan:
       return legacy_h_matrix_directional(L, S, dS);
     case NonIterativeEstimator::GuttmanAligned: {
       auto block_of = block_ids_from_layout(L);
       if (!block_of.has_value()) return std::unexpected(block_of.error());
-      auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::TriadWls);
+      auto h = estimate_h_communalities(
+          S, *block_of, CommunalityMethod::TriadWls, clamp);
       if (!h.has_value()) return std::unexpected(h.error());
       auto dh2 = estimate_h2_communalities_directional(
-          S, dS, *block_of, CommunalityMethod::TriadWls);
+          S, dS, *block_of, CommunalityMethod::TriadWls, clamp);
       if (!dh2.has_value()) return std::unexpected(dh2.error());
       Eigen::MatrixXd dH = dS;
       for (Eigen::Index i = 0; i < S.rows(); ++i)
@@ -626,7 +652,8 @@ fit_expected<BlockGuttmanJacobian>
 fit_block_jacobian_batched(const CfaBlockLayout& L,
                            const Eigen::MatrixXd& S,
                            NonIterativeEstimator which,
-                           CompositeWeight composite) {
+                           CompositeWeight composite,
+                           const AdmissibilityClamp& clamp) {
   if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman batched Jacobian: only GLS-aligned configural maps are "
@@ -641,11 +668,12 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
 
   auto block_of = block_ids_from_layout(L);
   if (!block_of.has_value()) return std::unexpected(block_of.error());
-  auto h = estimate_h_communalities(S, *block_of, CommunalityMethod::TriadWls);
+  auto h = estimate_h_communalities(
+      S, *block_of, CommunalityMethod::TriadWls, clamp);
   if (!h.has_value()) return std::unexpected(h.error());
   auto Jh2 =
       estimate_h2_communalities_jacobian(S, *block_of,
-                                         CommunalityMethod::TriadWls);
+                                         CommunalityMethod::TriadWls, clamp);
   if (!Jh2.has_value()) return std::unexpected(Jh2.error());
 
   const Eigen::Index pstar = vech_size(nvar);
@@ -1062,9 +1090,10 @@ fit_block_jacobian_from_h_batched_columns(
 fit_expected<BlockGuttmanDirection>
 fit_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                       const Eigen::MatrixXd& dS, NonIterativeEstimator which,
-                      CompositeWeight composite) {
+                      CompositeWeight composite,
+                      const AdmissibilityClamp& clamp) {
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
-  auto H = estimator_h_matrix_directional(L, S, dS, which);
+  auto H = estimator_h_matrix_directional(L, S, dS, which, clamp);
   if (!H.has_value()) return std::unexpected(H.error());
   const char* label = (which == NonIterativeEstimator::GuttmanLavaan)
                           ? "Guttman map"
@@ -1379,9 +1408,11 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 }
 
 std::expected<BlockGuttman, FitError>
-guttman_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S) {
+guttman_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
+                      const AdmissibilityClamp& clamp) {
   const Eigen::Index nfac = L.n_factor();
-  auto H = estimator_h_matrix(L, S, NonIterativeEstimator::GuttmanAligned);
+  auto H = estimator_h_matrix(
+      L, S, NonIterativeEstimator::GuttmanAligned, clamp);
   if (!H.has_value()) return std::unexpected(H.error());
   auto B = composite_matrix(
       L, S, *H, CompositeWeight::Adaptive, "Guttman GLS-aligned map");
@@ -1415,17 +1446,19 @@ guttman_aligned_block_from_h(const CfaBlockLayout& L,
 
 std::expected<BlockGuttman, FitError>
 fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-          NonIterativeEstimator which, CompositeWeight composite) {
+          NonIterativeEstimator which, CompositeWeight composite,
+          const AdmissibilityClamp& clamp) {
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   switch (which) {
     case NonIterativeEstimator::GuttmanLavaan:
       if (resolved == CompositeWeight::Unit) return guttman_block(L, S);
       break;
     case NonIterativeEstimator::GuttmanAligned:
-      if (resolved == CompositeWeight::Adaptive) return guttman_aligned_block(L, S);
+      if (resolved == CompositeWeight::Adaptive)
+        return guttman_aligned_block(L, S, clamp);
       break;
   }
-  auto H = estimator_h_matrix(L, S, which);
+  auto H = estimator_h_matrix(L, S, which, clamp);
   if (!H.has_value()) return std::unexpected(H.error());
   const char* label = (which == NonIterativeEstimator::GuttmanLavaan)
                           ? "Guttman map"
@@ -1439,9 +1472,10 @@ fit_expected<std::vector<BlockGuttman>>
 fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
                                const std::vector<Eigen::MatrixXd>& S,
                                NonIterativeEstimator which,
-                               CompositeWeight composite) {
+                               CompositeWeight composite,
+                               const std::vector<AdmissibilityClamp>& clamps) {
   const std::size_t nblk = layouts.size();
-  if (nblk == 0 || nblk != S.size())
+  if (nblk == 0 || nblk != S.size() || nblk != clamps.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman metric map: block / sample covariance count mismatch"});
 
@@ -1467,7 +1501,7 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
             "Guttman metric map: all groups must have the same simple-structure "
             "indicator blocks"});
     }
-    auto sb = standardized_score_block(L, S[b], which, composite);
+    auto sb = standardized_score_block(L, S[b], which, composite, clamps[b]);
     if (!sb.has_value()) return std::unexpected(sb.error());
     scores.push_back(std::move(*sb));
   }
@@ -1562,10 +1596,11 @@ fit_aligned_block_with_communality(const CfaBlockLayout& L,
                                    const Eigen::MatrixXd& S,
                                    CommunalityMethod comm,
                                    CompositeWeight composite,
-                                   const char* label) {
+                                   const char* label,
+                                   const AdmissibilityClamp& clamp) {
   auto block_of = block_ids_from_layout(L);
   if (!block_of.has_value()) return std::unexpected(block_of.error());
-  auto h = estimate_h_communalities(S, *block_of, comm);
+  auto h = estimate_h_communalities(S, *block_of, comm, clamp);
   if (!h.has_value()) return std::unexpected(h.error());
 
   for (Eigen::Index i = 0; i < S.rows(); ++i) {
@@ -1579,7 +1614,10 @@ fit_aligned_block_with_communality(const CfaBlockLayout& L,
     }
   }
 
-  return guttman_aligned_block_from_h(L, S, h->H, label, composite);
+  auto out = guttman_aligned_block_from_h(L, S, h->H, label, composite);
+  if (!out.has_value()) return std::unexpected(out.error());
+  out->n_h2_clamped = h->n_active_clamped;
+  return out;
 }
 
 fit_expected<std::vector<BlockGuttman>>
@@ -1587,9 +1625,10 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
                       const std::vector<Eigen::MatrixXd>& S,
                       const RestrictedRows& rows,
                       CommunalityMethod comm,
-                      CompositeWeight composite) {
+                      CompositeWeight composite,
+                      const std::vector<AdmissibilityClamp>& clamps) {
   const std::size_t nblk = layouts.size();
-  if (nblk == 0 || nblk != S.size())
+  if (nblk == 0 || nblk != S.size() || nblk != clamps.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman map: block / sample covariance count mismatch"});
 
@@ -1598,7 +1637,8 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
     out.reserve(nblk);
     for (std::size_t b = 0; b < nblk; ++b) {
       auto gb = fit_aligned_block_with_communality(
-          layouts[b], S[b], comm, composite, "restricted Guttman map");
+          layouts[b], S[b], comm, composite, "restricted Guttman map",
+          clamps[b]);
       if (!gb.has_value()) return std::unexpected(gb.error());
       out.push_back(std::move(*gb));
     }
@@ -1644,8 +1684,14 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
   for (std::size_t b = 0; b < nblk; ++b) {
     const Eigen::Index p = layouts[b].n_observed;
     Eigen::MatrixXd H = S[b];
+    Eigen::Index n_h2_clamped = 0;
     for (Eigen::Index i = 0; i < p; ++i) {
-      const double h_diag = S[b](i, i) * (*h2)(col_off + i);
+      const double raw = (*h2)(col_off + i);
+      if (clamps[b].policy != AdmissibilityPolicy::Raw &&
+          (raw < clamps[b].margin || raw > 1.0 - clamps[b].margin))
+        ++n_h2_clamped;
+      const double clamped = admissibility_clamp_value(raw, clamps[b]);
+      const double h_diag = S[b](i, i) * clamped;
       const double resid = S[b](i, i) - h_diag;
       const double scale = std::max(1.0, std::abs(S[b](i, i)));
       if (!std::isfinite(h_diag) || !std::isfinite(resid) ||
@@ -1659,6 +1705,7 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
     auto gb = guttman_aligned_block_from_h(
         layouts[b], S[b], H, "restricted Guttman map", composite);
     if (!gb.has_value()) return std::unexpected(gb.error());
+    gb->n_h2_clamped = n_h2_clamped;
     out.push_back(std::move(*gb));
     col_off += p;
   }
@@ -2719,7 +2766,8 @@ restricted_no_h2_jacobian(
     const RestrictedRows& rows,
     std::size_t block,
     CommunalityMethod comm,
-    CompositeWeight resolved) {
+    CompositeWeight resolved,
+    const std::vector<AdmissibilityClamp>& clamps) {
   const Eigen::Index p_active = samp.S[block].rows();
   const Eigen::Index pstar = vech_size(p_active);
   const char* label = "restricted Guttman analytic Jacobian";
@@ -2732,7 +2780,8 @@ restricted_no_h2_jacobian(
   for (std::size_t b = 0; b < layouts.size(); ++b) {
     auto block_of = block_ids_from_layout(layouts[b]);
     if (!block_of.has_value()) return std::unexpected(block_of.error());
-    auto h = estimate_h_communalities(samp.S[b], *block_of, comm);
+    auto h = estimate_h_communalities(
+        samp.S[b], *block_of, comm, clamps[b]);
     if (!h.has_value()) return std::unexpected(h.error());
 
     const Eigen::Index p = layouts[b].n_observed;
@@ -2741,7 +2790,8 @@ restricted_no_h2_jacobian(
         static_cast<std::size_t>(pstar), DirectCovColumn{-1, -1});
 
     if (b == block) {
-      auto Jh2 = estimate_h2_communalities_jacobian(samp.S[b], *block_of, comm);
+      auto Jh2 = estimate_h2_communalities_jacobian(
+          samp.S[b], *block_of, comm, clamps[b]);
       if (!Jh2.has_value()) return std::unexpected(Jh2.error());
       if (Jh2->rows() != p || Jh2->cols() != pstar)
         return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -2786,7 +2836,8 @@ estimator_map_jacobian_block_analytic_impl(
     const data::SampleStats& samp,
     NonIterativeEstimator which,
     std::size_t block,
-  CompositeWeight composite) {
+    CompositeWeight composite,
+    const AdmissibilityConfig& admissibility) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman analytic Jacobian: pure-CFA models only"});
@@ -2823,9 +2874,12 @@ estimator_map_jacobian_block_analytic_impl(
   const Eigen::Index pstar = p * (p + 1) / 2;
   const auto q = static_cast<Eigen::Index>(ev.n_free());
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
+  auto clamps = resolve_block_clamps(samp, admissibility);
+  if (!clamps.has_value()) return std::unexpected(clamps.error());
 
   if (which == NonIterativeEstimator::GuttmanAligned) {
-    auto db = fit_block_jacobian_batched(L, S0, which, composite);
+    auto db = fit_block_jacobian_batched(
+        L, S0, which, composite, (*clamps)[block]);
     if (db.has_value()) {
       auto Jb = assemble_theta_jacobian(ev, layouts, *db, block, pstar);
       if (Jb.has_value()) return Jb;
@@ -2838,7 +2892,8 @@ estimator_map_jacobian_block_analytic_impl(
       Eigen::MatrixXd dS = Eigen::MatrixXd::Zero(p, p);
       dS(r, c) = 1.0;
       if (r != c) dS(c, r) = 1.0;
-      auto db = fit_block_directional(L, S0, dS, which, composite);
+      auto db = fit_block_directional(
+          L, S0, dS, which, composite, (*clamps)[block]);
       if (!db.has_value()) return std::unexpected(db.error());
       auto dt = assemble_theta_direction(ev, layouts, *db, block);
       if (!dt.has_value()) return std::unexpected(dt.error());
@@ -2858,7 +2913,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
     NonIterativeEstimator which,
     std::size_t block,
     CommunalityMethod comm,
-    CompositeWeight composite) {
+    CompositeWeight composite,
+    const AdmissibilityConfig& admissibility) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman analytic Jacobian: pure-CFA models only"});
@@ -2903,7 +2959,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
       comm == CommunalityMethod::TriadWls) {
     return estimator_map_jacobian_block_analytic_impl(
-        pt, rep, ev, samp, which, block, composite);
+        pt, rep, ev, samp, which, block, composite, admissibility);
   }
   if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -2912,10 +2968,12 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   const char* label = "restricted Guttman analytic Jacobian";
+  auto clamps = resolve_block_clamps(samp, admissibility);
+  if (!clamps.has_value()) return std::unexpected(clamps.error());
 
   if (!has_rows(rows->R_h2) && comm != CommunalityMethod::TriadWlsJoint) {
     auto fast = restricted_no_h2_jacobian(
-        ev, layouts, samp, *rows, block, comm, resolved);
+        ev, layouts, samp, *rows, block, comm, resolved, *clamps);
     if (fast.has_value()) return fast;
     return std::unexpected(fast.error());
   }
@@ -2955,6 +3013,11 @@ estimator_map_jacobian_restricted_block_analytic_impl(
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman analytic Jacobian: communality solution dimension "
         "mismatch"});
+  Eigen::VectorXd h2_clamped = *h2;
+  for (std::size_t b = 0; b < nblk; ++b) {
+    for (Eigen::Index i = col_offsets[b]; i < col_offsets[b + 1]; ++i)
+      h2_clamped(i) = admissibility_clamp_value((*h2)(i), (*clamps)[b]);
+  }
 
   const Eigen::Index p_active = samp.S[block].rows();
   const Eigen::Index pstar = vech_size(p_active);
@@ -2965,7 +3028,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   blocks.reserve(nblk);
   for (std::size_t b = 0; b < nblk; ++b) {
     auto Hb = restricted_h_matrix_from_h2(
-        samp.S[b], *h2, col_offsets[b], label);
+        samp.S[b], h2_clamped, col_offsets[b], label);
     if (!Hb.has_value()) return std::unexpected(Hb.error());
     H[b] = std::move(*Hb);
     auto gb = guttman_aligned_block_from_h(
@@ -2997,6 +3060,11 @@ estimator_map_jacobian_restricted_block_analytic_impl(
           active_offset, *h2);
       if (Jh2.has_value() && Jh2->rows() == col_offsets.back() &&
           Jh2->cols() == pstar) {
+        for (std::size_t b = 0; b < nblk; ++b) {
+          for (Eigen::Index i = col_offsets[b]; i < col_offsets[b + 1]; ++i)
+            Jh2->row(i) *=
+                admissibility_clamp_deriv((*h2)(i), (*clamps)[b]);
+        }
         std::vector<BlockGuttmanJacobian> dblocks;
         dblocks.reserve(nblk);
         bool ok = true;
@@ -3021,7 +3089,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
             }
             for (Eigen::Index i = 0; i < p_active; ++i) {
               dH_diag(i, vech_index(i, i, p_active)) +=
-                  (*h2)(active_offset + i);
+                  h2_clamped(active_offset + i);
             }
           }
 
@@ -3094,6 +3162,11 @@ estimator_map_jacobian_restricted_block_analytic_impl(
           joint, djoint.A, djoint.b, djoint.W, rows->R_h2, rows->r_h2,
           drows->dR_h2, drows->dr_h2, *h2);
       if (!dh2.has_value()) return std::unexpected(dh2.error());
+      for (std::size_t b = 0; b < nblk; ++b) {
+        for (Eigen::Index i = col_offsets[b]; i < col_offsets[b + 1]; ++i)
+          (*dh2)(i) *=
+              admissibility_clamp_deriv((*h2)(i), (*clamps)[b]);
+      }
 
       std::vector<BlockGuttmanDirection> dblocks;
       dblocks.reserve(nblk);
@@ -3101,7 +3174,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
         const Eigen::Index p = layouts[b].n_observed;
         Eigen::MatrixXd dH = dS[b];
         for (Eigen::Index i = 0; i < p; ++i) {
-          dH(i, i) = dS[b](i, i) * (*h2)(col_offsets[b] + i) +
+          dH(i, i) = dS[b](i, i) * h2_clamped(col_offsets[b] + i) +
                      samp.S[b](i, i) * (*dh2)(col_offsets[b] + i);
         }
         auto B = composite_matrix_directional(
@@ -3140,7 +3213,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 fit_expected<Eigen::VectorXd>
 map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
           const model::ModelEvaluator& ev, const data::SampleStats& samp,
-          NonIterativeEstimator which, CompositeWeight composite) {
+          NonIterativeEstimator which, CompositeWeight composite,
+          const AdmissibilityConfig& admissibility) {
   if (rep.form != model::RepForm::PureCFA)
     return num_error("non-iterative CFA: pure-CFA models only (a structural "
                      "part is out of v1 scope)");
@@ -3149,6 +3223,8 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
   if (layouts.empty()) return num_error("non-iterative CFA: no CFA block found");
   if (layouts.size() != samp.S.size())
     return num_error("non-iterative CFA: block / sample-stats count mismatch");
+  auto clamps = resolve_block_clamps(samp, admissibility);
+  if (!clamps.has_value()) return std::unexpected(clamps.error());
 
   std::vector<BlockGuttman> blocks;
   blocks.reserve(layouts.size());
@@ -3165,7 +3241,7 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
     switch (which) {
       case NonIterativeEstimator::GuttmanLavaan:
       case NonIterativeEstimator::GuttmanAligned: {
-        auto gb = fit_block(L, samp.S[b], which, composite);
+        auto gb = fit_block(L, samp.S[b], which, composite, (*clamps)[b]);
         if (!gb.has_value()) return std::unexpected(gb.error());
         blocks.push_back(std::move(*gb));
         break;
@@ -3183,15 +3259,17 @@ noniterative_cfa_theta(const spec::LatentStructure& pt,
                        const model::ModelEvaluator& ev,
                        const data::SampleStats& samp,
                        NonIterativeEstimator which,
-                       CompositeWeight composite) {
+                       CompositeWeight composite,
+                       AdmissibilityConfig admissibility) {
   if (samp.S.empty()) return num_error("non-iterative CFA: empty sample stats");
-  return map_multi(pt, rep, ev, samp, which, composite);
+  return map_multi(pt, rep, ev, samp, which, composite, admissibility);
 }
 
 fit_expected<NonIterativeFit>
 fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                      const data::SampleStats& samp, NonIterativeEstimator which,
-                     CompositeWeight composite) {
+                     CompositeWeight composite,
+                     AdmissibilityConfig admissibility) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -3199,19 +3277,24 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
 
-  auto theta = noniterative_cfa_theta(pt, rep, *ev, samp, which, composite);
+  auto theta = noniterative_cfa_theta(
+      pt, rep, *ev, samp, which, composite, admissibility);
   if (!theta.has_value()) return std::unexpected(theta.error());
 
   // Recover the clean per-block matrices for reporting.
   const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
+  auto clamps = resolve_block_clamps(samp, admissibility);
+  if (!clamps.has_value()) return std::unexpected(clamps.error());
   NonIterativeFit out;
   out.theta = std::move(*theta);
   for (std::size_t b = 0; b < layouts.size() && b < samp.S.size(); ++b) {
-    auto gb = fit_block(layouts[b], samp.S[b], which, composite);
+    auto gb = fit_block(
+        layouts[b], samp.S[b], which, composite, (*clamps)[b]);
     if (!gb.has_value()) return std::unexpected(gb.error());
     out.Lambda.push_back(std::move(gb->Lambda));
     out.Phi.push_back(std::move(gb->Phi));
     out.psi.push_back(std::move(gb->psi));
+    out.n_h2_clamped.push_back(0);
   }
   return out;
 }
@@ -3219,7 +3302,8 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
 fit_expected<NonIterativeFit>
 fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                             const data::SampleStats& samp, NonIterativeEstimator which,
-                            CompositeWeight composite) {
+                            CompositeWeight composite,
+                            AdmissibilityConfig admissibility) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative metric CFA: pure-CFA models only"});
@@ -3251,7 +3335,10 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
           "non-iterative metric CFA: every factor needs a marker"});
   }
 
-  auto blocks = fit_metric_standardized_blocks(layouts, samp.S, which, composite);
+  auto clamps = resolve_block_clamps(samp, admissibility);
+  if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto blocks = fit_metric_standardized_blocks(
+      layouts, samp.S, which, composite, *clamps);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -3262,6 +3349,7 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
     out.Lambda.push_back(std::move(gb.Lambda));
     out.Phi.push_back(std::move(gb.Phi));
     out.psi.push_back(std::move(gb.psi));
+    out.n_h2_clamped.push_back(0);
   }
   return out;
 }
@@ -3272,7 +3360,8 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
                                 const data::SampleStats& samp,
                                 NonIterativeEstimator which,
                                 CommunalityMethod comm,
-                                CompositeWeight composite) {
+                                CompositeWeight composite,
+                                AdmissibilityConfig admissibility) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: pure-CFA models only"});
@@ -3316,14 +3405,18 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   if (!rows.has_value()) return std::unexpected(rows.error());
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
       comm == CommunalityMethod::TriadWls)
-    return fit_noniterative_cfa(pt, rep, samp, which, composite);
+    return fit_noniterative_cfa(
+        pt, rep, samp, which, composite, admissibility);
   if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: active restrictions or non-default "
         "communality methods require guttman_aligned"});
 
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
-  auto blocks = fit_restricted_blocks(layouts, samp.S, *rows, comm, resolved);
+  auto clamps = resolve_block_clamps(samp, admissibility);
+  if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto blocks = fit_restricted_blocks(
+      layouts, samp.S, *rows, comm, resolved, *clamps);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -3337,6 +3430,7 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
     out.Lambda.push_back(std::move(gb.Lambda));
     out.Phi.push_back(std::move(gb.Phi));
     out.psi.push_back(std::move(gb.psi));
+    out.n_h2_clamped.push_back(gb.n_h2_clamped);
   }
   return out;
 }
@@ -3348,7 +3442,8 @@ estimator_map_jacobian_block_fd(const spec::LatentStructure& pt,
                                 const data::SampleStats& samp,
                                 NonIterativeEstimator which, std::size_t block,
                                 double rel_step,
-                                CompositeWeight composite) {
+                                CompositeWeight composite,
+                                AdmissibilityConfig admissibility) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative CFA: Jacobian block index out of range"});
@@ -3371,13 +3466,15 @@ estimator_map_jacobian_block_fd(const spec::LatentStructure& pt,
       work.S[block] = S0;
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
-      auto tp = map_multi(pt, rep, ev, work, which, composite);
+      auto tp = map_multi(
+          pt, rep, ev, work, which, composite, admissibility);
       if (!tp.has_value()) return std::unexpected(tp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
-      auto tm = map_multi(pt, rep, ev, work, which, composite);
+      auto tm = map_multi(
+          pt, rep, ev, work, which, composite, admissibility);
       if (!tm.has_value()) return std::unexpected(tm.error());
 
       J.col(col) = (*tp - *tm) / (2.0 * h);
@@ -3395,9 +3492,10 @@ estimator_map_jacobian_block_analytic(
     const data::SampleStats& samp,
     NonIterativeEstimator which,
     std::size_t block,
-    CompositeWeight composite) {
+    CompositeWeight composite,
+    AdmissibilityConfig admissibility) {
   return estimator_map_jacobian_block_analytic_impl(
-      pt, rep, ev, samp, which, block, composite);
+      pt, rep, ev, samp, which, block, composite, admissibility);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3407,24 +3505,26 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
                              const data::SampleStats& samp,
                              NonIterativeEstimator which, std::size_t block,
                              double rel_step,
-                             CompositeWeight composite) {
+                             CompositeWeight composite,
+                             AdmissibilityConfig admissibility) {
   auto analytic = estimator_map_jacobian_block_analytic(
-      pt, rep, ev, samp, which, block, composite);
+      pt, rep, ev, samp, which, block, composite, admissibility);
   if (analytic.has_value()) return analytic;
   return estimator_map_jacobian_block_fd(
-      pt, rep, ev, samp, which, block, rel_step, composite);
+      pt, rep, ev, samp, which, block, rel_step, composite, admissibility);
 }
 
 fit_expected<Eigen::MatrixXd>
 estimator_map_jacobian(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                        const model::ModelEvaluator& ev, const data::SampleStats& samp,
                        NonIterativeEstimator which, double rel_step,
-                       CompositeWeight composite) {
+                       CompositeWeight composite,
+                       AdmissibilityConfig admissibility) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
   // Single-block convenience wrapper (block 0).
   return estimator_map_jacobian_block(
-      pt, rep, ev, samp, which, 0, rel_step, composite);
+      pt, rep, ev, samp, which, 0, rel_step, composite, admissibility);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3434,11 +3534,12 @@ estimator_map_jacobian_analytic(
     const model::ModelEvaluator& ev,
     const data::SampleStats& samp,
     NonIterativeEstimator which,
-    CompositeWeight composite) {
+    CompositeWeight composite,
+    AdmissibilityConfig admissibility) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
   return estimator_map_jacobian_block_analytic(
-      pt, rep, ev, samp, which, 0, composite);
+      pt, rep, ev, samp, which, 0, composite, admissibility);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3451,7 +3552,8 @@ estimator_map_jacobian_restricted_block(
     std::size_t block,
     double rel_step,
     CommunalityMethod comm,
-    CompositeWeight composite) {
+    CompositeWeight composite,
+    AdmissibilityConfig admissibility) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: Jacobian block index out of range"});
@@ -3461,7 +3563,7 @@ estimator_map_jacobian_restricted_block(
   const auto q = static_cast<Eigen::Index>(ev.n_free());
 
   auto analytic = estimator_map_jacobian_restricted_block_analytic_impl(
-      pt, rep, ev, samp, which, block, comm, composite);
+      pt, rep, ev, samp, which, block, comm, composite, admissibility);
   if (analytic.has_value()) return analytic;
 
   // Regular-interior restricted maps are differentiated analytically above. Keep
@@ -3479,14 +3581,14 @@ estimator_map_jacobian_restricted_block(
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
       auto fp = fit_noniterative_cfa_restricted(
-          pt, rep, work, which, comm, composite);
+          pt, rep, work, which, comm, composite, admissibility);
       if (!fp.has_value()) return std::unexpected(fp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
       auto fm = fit_noniterative_cfa_restricted(
-          pt, rep, work, which, comm, composite);
+          pt, rep, work, which, comm, composite, admissibility);
       if (!fm.has_value()) return std::unexpected(fm.error());
 
       J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
@@ -3505,11 +3607,12 @@ estimator_map_jacobian_restricted(
     NonIterativeEstimator which,
     double rel_step,
     CommunalityMethod comm,
-    CompositeWeight composite) {
+    CompositeWeight composite,
+    AdmissibilityConfig admissibility) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "restricted Guttman CFA: empty sample stats"});
   return estimator_map_jacobian_restricted_block(
-      pt, rep, ev, samp, which, 0, rel_step, comm, composite);
+      pt, rep, ev, samp, which, 0, rel_step, comm, composite, admissibility);
 }
 
 }  // namespace magmaan::estimate::frontier

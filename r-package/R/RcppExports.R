@@ -517,16 +517,16 @@ frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
     .Call(`_magmaan_frontier_guttman_h_impl`, S, blocks, method)
 }
 
-noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto") {
-    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite)
+noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5) {
+    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate)
 }
 
-noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto") {
-    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite)
+noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5) {
+    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate)
 }
 
-noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto") {
-    .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite)
+noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5) {
+    .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite, admissibility, margin, beta0, rate)
 }
 
 noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
@@ -932,3 +932,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+
