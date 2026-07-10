@@ -16,14 +16,14 @@ core <- magmaan::magmaan_core
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
-    "RMSE/coverage comparison for standardized/aligned Guttman CFA maps,\n",
+    "RMSE/coverage comparison for raw and soft-clamped standardized Guttman CFA maps,\n",
     "continuous NTML, and ULS. Ordinal cells simulate category-score data with\n",
     "magmaan::sim_ordcorr_calibrate(metric = 'pearson_codes') and fit the\n",
     "observed code covariance directly; no polychoric inputs are used.\n\n",
     "Options:\n",
     "  --probe              Tiny timing probe. Default if neither --smoke nor --full.\n",
     "  --smoke              Small validation run.\n",
-    "  --full               Larger overnight grid.\n",
+    "  --full               Larger configural overnight grid.\n",
     "  --reps N             Replications per cell. Probe: 2; smoke: 5; full: 50.\n",
     "  --n LIST             Comma-separated sample sizes.\n",
     "  --generators LIST    normal,ig,ordinal. Default depends on mode.\n",
@@ -34,7 +34,8 @@ usage <- function() {
     "  --scales LIST        equal,unequal. Continuous scales or ordinal marginals.\n",
     "  --loadings LIST      mixed,tau. Configural loading patterns.\n",
     "  --strength LIST      weak,moderate,strong. Scales loading magnitude.\n",
-    "  --no-restricted      Drop tau/residual-equality constrained cells.\n",
+    "  --restricted         Also run tau/residual-equality constrained cells.\n",
+    "  --no-restricted      Compatibility alias; constrained cells are already off.\n",
     "  --max-cells N        Keep only first N cells after grid construction.\n",
     "  --cores N            mclapply cores. Default: 1.\n",
     "  --alpha X            CI alpha. Default: 0.05.\n",
@@ -59,7 +60,7 @@ parse_args <- function(args) {
     scales = c("equal"),
     loadings = c("mixed"),
     strength = c("moderate"),
-    include_restricted = TRUE,
+    include_restricted = FALSE,
     max_cells = NA_integer_,
     cores = 1L,
     alpha = 0.05,
@@ -160,6 +161,8 @@ parse_args <- function(args) {
       opts$strength <- parse_csv_arg(take(a)); explicit <- c(explicit, "strength")
     } else if (grepl("^--strength=", a)) {
       opts$strength <- parse_csv_arg(sub("^--strength=", "", a)); explicit <- c(explicit, "strength")
+    } else if (a == "--restricted") {
+      opts$include_restricted <- TRUE
     } else if (a == "--no-restricted") {
       opts$include_restricted <- FALSE
     } else if (a == "--max-cells") {
@@ -600,14 +603,20 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
   )
 }
 
-guttman_fit <- function(pt, ss, composite, restricted = FALSE) {
+guttman_fit <- function(pt, ss, composite = "standardized",
+                        admissibility = "raw", margin = 0.001,
+                        beta0 = 4, rate = 1, restricted = FALSE) {
   if (restricted) {
     magmaan::fit_noniterative_cfa_restricted(
       pt, ss, estimator = "guttman_aligned",
-      communality = "triad_wls", composite = composite)
+      communality = "triad_wls", composite = composite,
+      admissibility = admissibility, margin = margin, beta0 = beta0, rate = rate,
+      score_conditioning = "raw", h_conditioning = "raw")
   } else {
     magmaan::fit_noniterative_cfa(
-      pt, ss, estimator = "guttman_aligned", composite = composite)
+      pt, ss, estimator = "guttman_aligned", composite = composite,
+      admissibility = admissibility, margin = margin, beta0 = beta0, rate = rate,
+      score_conditioning = "raw", h_conditioning = "raw")
   }
 }
 
@@ -630,12 +639,13 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
   attr(cond, "pop") <- pop
   fit_expr <- switch(
     arm,
-    guttman_std = quote(guttman_fit(pt, ss, "standardized", FALSE)),
-    guttman_gls = quote(guttman_fit(pt, ss, "adaptive", FALSE)),
-    guttman_unit = quote(guttman_fit(pt, ss, "unit", FALSE)),
+    guttman_std_raw = quote(guttman_fit(pt, ss, admissibility = "raw")),
+    guttman_std_soft = quote(guttman_fit(pt, ss, admissibility = "soft")),
     guttman_legacy = quote(legacy_guttman_fit(pt, ss)),
-    guttman_std_restricted = quote(guttman_fit(pt, ss, "standardized", TRUE)),
-    guttman_gls_restricted = quote(guttman_fit(pt, ss, "adaptive", TRUE)),
+    guttman_std_raw_restricted = quote(guttman_fit(
+      pt, ss, admissibility = "raw", restricted = TRUE)),
+    guttman_std_soft_restricted = quote(guttman_fit(
+      pt, ss, admissibility = "soft", restricted = TRUE)),
     ml_emp = quote(ml_fit(pt, ss)),
     ml_emp_restricted = quote(ml_fit(pt, ss)),
     uls_emp = quote(uls_fit(pt, ss)),
@@ -927,6 +937,14 @@ write_metadata(
     loadings = opts$loadings,
     strength = opts$strength,
     include_restricted = opts$include_restricted,
+    aligned_composite = "standardized",
+    raw_admissibility = "raw",
+    soft_admissibility = "soft",
+    soft_margin = 0.001,
+    soft_beta0 = 4,
+    soft_rate = 1,
+    score_conditioning = "raw",
+    h_conditioning = "raw",
     max_cells = opts$max_cells,
     cores = opts$cores,
     alpha = opts$alpha,
@@ -958,10 +976,10 @@ for (cell in seq_len(nrow(grid))) {
   info <- free_param_info(pt, pop$vars, pop$factors)
   target <- theta_target(info, pop)
   arms <- if (restricted) {
-    c("guttman_std_restricted", "guttman_gls_restricted",
+    c("guttman_std_raw_restricted", "guttman_std_soft_restricted",
       "ml_emp_restricted", "uls_emp_restricted")
   } else {
-    c("guttman_std", "guttman_gls", "guttman_unit", "guttman_legacy",
+    c("guttman_std_raw", "guttman_std_soft", "guttman_legacy",
       "ml_emp", "uls_emp")
   }
   baseline <- if (restricted) "ml_emp_restricted" else "ml_emp"
