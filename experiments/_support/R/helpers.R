@@ -98,6 +98,21 @@ write_csv <- function(x, path) {
   invisible(path)
 }
 
+# Append a rectangular result chunk without reserializing rows already written.
+# A runner owns the output path and clears it before starting a fresh run.
+append_csv <- function(x, path) {
+  if (!is.data.frame(x)) stop("`x` must be a data frame", call. = FALSE)
+  if (!ncol(x)) return(invisible(path))
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  exists <- file.exists(path)
+  if (!nrow(x) && exists) return(invisible(path))
+  utils::write.table(
+    x, path, sep = ",", row.names = FALSE, col.names = !exists,
+    append = exists, quote = TRUE, na = ""
+  )
+  invisible(path)
+}
+
 write_rows <- function(rows, path) {
   if (length(rows)) write_csv(do.call(rbind, rows), path)
   else write_csv(data.frame(), path)

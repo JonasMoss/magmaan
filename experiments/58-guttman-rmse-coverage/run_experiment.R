@@ -42,6 +42,7 @@ usage <- function() {
     "  --seed-base N        Base RNG seed. Default: 20260708.\n",
     "  --ml-max-iter N      ML/ULS optimizer max iterations. Default: 1500.\n",
     "  --keep-draws         Write raw estimate/whole draw rows as CSV.\n",
+    "  --write-every N      Buffered-cell flush interval. Default: 25.\n",
     "  --results-dir PATH   Output directory. Default: results.\n",
     "  --help               Show this help.\n",
     sep = ""
@@ -67,6 +68,7 @@ parse_args <- function(args) {
     seed_base = 20260708L,
     ml_max_iter = 1500L,
     keep_draws = FALSE,
+    write_every = 25L,
     results_dir = experiment_path("results")
   )
   explicit <- character()
@@ -187,6 +189,10 @@ parse_args <- function(args) {
       opts$ml_max_iter <- as.integer(sub("^--ml-max-iter=", "", a))
     } else if (a == "--keep-draws") {
       opts$keep_draws <- TRUE
+    } else if (a == "--write-every") {
+      opts$write_every <- as.integer(take(a))
+    } else if (grepl("^--write-every=", a)) {
+      opts$write_every <- as.integer(sub("^--write-every=", "", a))
     } else if (a == "--results-dir") {
       opts$results_dir <- take(a)
     } else if (grepl("^--results-dir=", a)) {
@@ -211,6 +217,8 @@ parse_args <- function(args) {
   if (any(opts$factors < 1L) || any(vapply(opts$indicators, indicators_min, integer(1)) < 3L))
     stop("need at least 3 indicators per factor", call. = FALSE)
   if (!is.finite(opts$cores) || opts$cores < 1L) stop("--cores must be positive", call. = FALSE)
+  if (!is.finite(opts$write_every) || opts$write_every < 1L)
+    stop("--write-every must be positive", call. = FALSE)
   opts
 }
 
@@ -904,19 +912,32 @@ population_rows <- function(grid) {
   bind_rows(pops)
 }
 
-write_current <- function(outputs, opts) {
-  write_csv(bind_rows(outputs$estimate_summary), file.path(opts$results_dir, "estimate_summary.csv"))
-  write_csv(bind_rows(outputs$estimate_joint_summary), file.path(opts$results_dir, "estimate_joint_summary.csv"))
-  write_csv(bind_rows(outputs$whole_summary), file.path(opts$results_dir, "whole_summary.csv"))
-  write_csv(bind_rows(outputs$whole_joint_summary), file.path(opts$results_dir, "whole_joint_summary.csv"))
-  write_csv(bind_rows(outputs$diagnostic_summary), file.path(opts$results_dir, "diagnostic_summary.csv"))
-  write_csv(bind_rows(outputs$timing_summary), file.path(opts$results_dir, "timing_summary.csv"))
-  write_csv(bind_rows(outputs$diagnostics), file.path(opts$results_dir, "diagnostics.csv"))
-  write_csv(bind_rows(outputs$progress), file.path(opts$results_dir, "progress.csv"))
-  if (isTRUE(opts$keep_draws)) {
-    write_csv(bind_rows(outputs$estimate_draws), file.path(opts$results_dir, "estimate_draws.csv"))
-    write_csv(bind_rows(outputs$whole_draws), file.path(opts$results_dir, "whole_draws.csv"))
+stream_names <- c(
+  "estimate_summary", "estimate_joint_summary", "whole_summary",
+  "whole_joint_summary", "diagnostic_summary", "timing_summary",
+  "diagnostics", "progress"
+)
+if (isTRUE(opts$keep_draws)) stream_names <- c(stream_names, "estimate_draws", "whole_draws")
+stream_paths <- stats::setNames(
+  file.path(opts$results_dir, paste0(stream_names, ".csv")), stream_names
+)
+# A run owns its output directory, as the old rewrite-on-each-cell behavior did.
+# Clearing these files makes append-only output deterministic on a rerun.
+unlink(unname(stream_paths), force = TRUE)
+
+buffer_names <- setdiff(stream_names, c("progress", "estimate_draws", "whole_draws"))
+buffers <- stats::setNames(vector("list", length(buffer_names)), buffer_names)
+for (nm in names(buffers)) buffers[[nm]] <- list()
+
+append_progress <- function(x) append_csv(x, stream_paths[["progress"]])
+
+flush_buffers <- function() {
+  for (nm in names(buffers)) {
+    append_csv(bind_rows(buffers[[nm]]), stream_paths[[nm]])
   }
+  buffers <<- stats::setNames(vector("list", length(buffer_names)), buffer_names)
+  for (nm in names(buffers)) buffers[[nm]] <<- list()
+  invisible(NULL)
 }
 
 grid <- condition_grid(opts)
@@ -945,6 +966,7 @@ write_metadata(
     soft_rate = 1,
     score_conditioning = "raw",
     h_conditioning = "raw",
+    write_every = opts$write_every,
     max_cells = opts$max_cells,
     cores = opts$cores,
     alpha = opts$alpha,
@@ -957,14 +979,6 @@ write_metadata(
 
 cat(sprintf("Running %d cells x %d reps (mode=%s, cores=%d)\n",
             nrow(grid), opts$reps, opts$mode, opts$cores))
-
-outputs <- list(
-  estimate_summary = list(), estimate_joint_summary = list(),
-  whole_summary = list(), whole_joint_summary = list(),
-  diagnostic_summary = list(), timing_summary = list(),
-  diagnostics = list(), progress = list(),
-  estimate_draws = list(), whole_draws = list()
-)
 
 for (cell in seq_len(nrow(grid))) {
   cond <- grid[cell, condition_cols, drop = FALSE]
@@ -991,12 +1005,12 @@ for (cell in seq_len(nrow(grid))) {
   draws_res <- timed_eval(draws_for_condition(pop, cond$generator[[1]], cond$n[[1]],
                                               opts$reps, seed))
   if (!draws_res$ok) {
-    outputs$progress[[length(outputs$progress) + 1L]] <- data.frame(
+    append_progress(data.frame(
       cond, cell = cell, reps = opts$reps, draw_ok = FALSE,
       draw_ms = draws_res$ms, elapsed_sec = NA_real_,
       error = draws_res$error, stringsAsFactors = FALSE
-    )
-    write_current(outputs, opts)
+    ))
+    if (cell == 1L || cell %% opts$write_every == 0L) flush_buffers()
     next
   }
   cell_t0 <- proc.time()[["elapsed"]]
@@ -1013,27 +1027,27 @@ for (cell in seq_len(nrow(grid))) {
   estimate_draws <- bind_rows(lapply(cell_out, `[[`, "estimates"))
   whole_draws <- bind_rows(lapply(cell_out, `[[`, "whole"))
   diagnostics <- bind_rows(lapply(cell_out, `[[`, "diagnostics"))
-  outputs$estimate_summary[[length(outputs$estimate_summary) + 1L]] <- summarise_estimates(estimate_draws)
-  outputs$estimate_joint_summary[[length(outputs$estimate_joint_summary) + 1L]] <- summarise_estimates_joint(estimate_draws, baseline)
-  outputs$whole_summary[[length(outputs$whole_summary) + 1L]] <- summarise_whole(whole_draws)
-  outputs$whole_joint_summary[[length(outputs$whole_joint_summary) + 1L]] <- summarise_whole_joint(whole_draws, baseline)
-  outputs$diagnostic_summary[[length(outputs$diagnostic_summary) + 1L]] <- summarise_diagnostics(diagnostics)
-  outputs$timing_summary[[length(outputs$timing_summary) + 1L]] <- summarise_timing(diagnostics)
-  outputs$diagnostics[[length(outputs$diagnostics) + 1L]] <- diagnostics
+  buffers$estimate_summary[[length(buffers$estimate_summary) + 1L]] <- summarise_estimates(estimate_draws)
+  buffers$estimate_joint_summary[[length(buffers$estimate_joint_summary) + 1L]] <- summarise_estimates_joint(estimate_draws, baseline)
+  buffers$whole_summary[[length(buffers$whole_summary) + 1L]] <- summarise_whole(whole_draws)
+  buffers$whole_joint_summary[[length(buffers$whole_joint_summary) + 1L]] <- summarise_whole_joint(whole_draws, baseline)
+  buffers$diagnostic_summary[[length(buffers$diagnostic_summary) + 1L]] <- summarise_diagnostics(diagnostics)
+  buffers$timing_summary[[length(buffers$timing_summary) + 1L]] <- summarise_timing(diagnostics)
+  buffers$diagnostics[[length(buffers$diagnostics) + 1L]] <- diagnostics
   if (isTRUE(opts$keep_draws)) {
-    outputs$estimate_draws[[length(outputs$estimate_draws) + 1L]] <- estimate_draws
-    outputs$whole_draws[[length(outputs$whole_draws) + 1L]] <- whole_draws
+    append_csv(estimate_draws, stream_paths[["estimate_draws"]])
+    append_csv(whole_draws, stream_paths[["whole_draws"]])
   }
-  outputs$progress[[length(outputs$progress) + 1L]] <- data.frame(
+  append_progress(data.frame(
     cond, cell = cell, reps = opts$reps, draw_ok = TRUE,
     draw_ms = draws_res$ms,
     elapsed_sec = proc.time()[["elapsed"]] - cell_t0,
     error = "", stringsAsFactors = FALSE
-  )
-  write_current(outputs, opts)
+  ))
+  if (cell == 1L || cell %% opts$write_every == 0L) flush_buffers()
 }
 
-write_current(outputs, opts)
+flush_buffers()
 
 cat("Wrote:\n")
 for (nm in c("metadata.csv", "design.csv", "population.csv",
