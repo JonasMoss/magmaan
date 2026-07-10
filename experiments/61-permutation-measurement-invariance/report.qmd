@@ -1,0 +1,79 @@
+---
+title: "Can a studentized permutation Wald test calibrate metric invariance?"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+summary_path <- file.path("results", "summary.csv")
+if (!file.exists(summary_path)) {
+  stop("No results. Run:\n  Rscript run_experiment.R --smoke\nthen:\n  Rscript run_experiment.R --full --reps 1000 --permutations 499")
+}
+results <- read.csv(summary_path, check.names = FALSE, stringsAsFactors = FALSE)
+fmt <- function(x) formatC(x, format = "f", digits = 3)
+```
+
+## Question
+
+Can a raw group-label permutation distribution of a fully recomputed,
+studentized Wald statistic control Type-I error for continuous metric invariance
+when the two groups have unequal sample sizes, factor variances, and residual
+variances? The comparison is against ordinary and robust likelihood-ratio and
+Wald tests.
+
+## Short answer
+
+This feasibility experiment is intentionally a gate rather than a finished
+method claim. The `invariant` rows show whether the studentized permutation
+test stays near 0.05 under the heterogeneous null; the `loading_violation` rows
+show whether that calibration retains useful power. The ordinary raw-contrast
+permutation is included as a negative control: a gap between it and the
+studentized column is the finite-sample behavior the Chung--Romano argument
+predicts.
+
+## Evidence
+
+Rejection rates at the configured alpha. The two permutation methods refit the
+configural CFA and recompute their statistic after every relabeling; they do
+not reuse the observed covariance estimate.
+
+```{r table}
+cols <- c("distribution", "scenario", "n1", "n2", "reps", "converged",
+          "reject_lrt", "reject_robust_lrt", "reject_model_wald",
+          "reject_sandwich_wald", "reject_permutation_studentized",
+          "reject_permutation_raw", "median_valid_permutations")
+tab <- results[, intersect(cols, names(results)), drop = FALSE]
+names(tab) <- c("Distribution", "Scenario", "N1", "N2", "Replications",
+                "Converged", "LRT", "Robust LRT", "Model Wald",
+                "Sandwich Wald", "Studentized permutation", "Raw permutation",
+                "Median valid permutations")[seq_len(ncol(tab))]
+numeric <- vapply(tab, is.numeric, logical(1))
+tab[numeric] <- lapply(tab[numeric], function(x) round(x, 3))
+knitr::kable(tab, row.names = FALSE,
+             caption = "Metric-invariance rejection rates and permutation availability.")
+```
+
+## Caveats
+
+- The Chung--Romano argument requires the estimator and its studentization to
+  remain asymptotically regular under the pooled mixture, not merely under the
+  two source groups. This continuous CFA is the first population class checked.
+- The ordinal arm is deliberately absent. A mixture of ordinal-probit groups is
+  generally not ordinal-probit, so it needs a separate validity result or a
+  different resampling scheme.
+- Smoke output is a wiring and runtime check only. The full grid should use at
+  least 1,000 replications before interpreting a 0.05 rejection rate.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --full --reps 1000 --permutations 499
+quarto render report.qmd
+```
