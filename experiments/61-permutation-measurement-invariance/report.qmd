@@ -23,9 +23,9 @@ fmt <- function(x) formatC(x, format = "f", digits = 3)
 
 Can a raw group-label permutation distribution of a fully recomputed,
 studentized Wald statistic control Type-I error for continuous metric invariance
-when the two groups have unequal sample sizes, factor variances, and residual
-variances? The comparison is against ordinary and robust likelihood-ratio and
-Wald tests.
+when group sample sizes, factor covariances, residual variances, and CFA size
+vary? The comparison is against ordinary and robust likelihood-ratio and Wald
+tests.
 
 ## Short answer
 
@@ -44,12 +44,12 @@ configural CFA and recompute their statistic after every relabeling; they do
 not reuse the observed covariance estimate.
 
 ```{r table}
-cols <- c("distribution", "scenario", "n1", "n2", "reps", "converged",
+cols <- c("model", "heterogeneity", "distribution", "scenario", "n1", "n2", "reps", "converged",
           "reject_lrt", "reject_robust_lrt", "reject_model_wald",
           "reject_sandwich_wald", "reject_permutation_studentized",
           "reject_permutation_raw", "median_valid_permutations")
 tab <- results[, intersect(cols, names(results)), drop = FALSE]
-names(tab) <- c("Distribution", "Scenario", "N1", "N2", "Replications",
+names(tab) <- c("Model", "Heterogeneity", "Distribution", "Scenario", "N1", "N2", "Replications",
                 "Converged", "LRT", "Robust LRT", "Model Wald",
                 "Sandwich Wald", "Studentized permutation", "Raw permutation",
                 "Median valid permutations")[seq_len(ncol(tab))]
@@ -63,7 +63,8 @@ knitr::kable(tab, row.names = FALSE,
 
 - The Chung--Romano argument requires the estimator and its studentization to
   remain asymptotically regular under the pooled mixture, not merely under the
-  two source groups. This continuous CFA is the first population class checked.
+  two source groups. This experiment checks one- and three-factor CFA
+  populations at standard and stronger group heterogeneity.
 - The `exchangeable` scenario is a finite-sample control: both group
   distributions are identical, so a random label permutation is valid even for
   the raw contrast statistic. It distinguishes a resampling implementation bug

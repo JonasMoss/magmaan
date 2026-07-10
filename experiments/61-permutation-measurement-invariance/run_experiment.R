@@ -27,6 +27,8 @@ usage <- function() {
     "  --permutations B    Random label permutations per replication. Default: 499.\n",
     "  --n LIST            Group-size pairs, e.g. 100:250,250:250.\n",
     "                      Default: 100:250,250:250.\n",
+    "  --models L          Subset of one_factor,three_factor. Default: one_factor.\n",
+    "  --heterogeneity L   Subset of standard,strong. Default: standard.\n",
     "  --distributions L   Subset of normal,t5. Default: both.\n",
     "  --scenarios L       Subset of exchangeable,invariant,loading_violation.\n",
     "                      Default: invariant,loading_violation.\n",
@@ -54,6 +56,7 @@ parse_group_sizes <- function(x) {
 opts <- list(
   mode = "smoke", reps = 1000L, permutations = 499L,
   sizes = list(c(100L, 250L), c(250L, 250L)),
+  models = "one_factor", heterogeneity = "standard",
   distributions = c("normal", "t5"),
   scenarios = c("invariant", "loading_violation"),
   alpha = 0.05,
@@ -72,6 +75,8 @@ while (i <= length(args)) {
   else if (a == "--reps") { opts$reps <- as.integer(take()); opts$explicit <- c(opts$explicit, "reps") }
   else if (a == "--permutations") { opts$permutations <- as.integer(take()); opts$explicit <- c(opts$explicit, "permutations") }
   else if (a == "--n") { opts$sizes <- parse_group_sizes(take()); opts$explicit <- c(opts$explicit, "sizes") }
+  else if (a == "--models") { opts$models <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "models") }
+  else if (a == "--heterogeneity") { opts$heterogeneity <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "heterogeneity") }
   else if (a == "--distributions") { opts$distributions <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "distributions") }
   else if (a == "--scenarios") { opts$scenarios <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "scenarios") }
   else if (a == "--alpha") opts$alpha <- as.numeric(take())
@@ -84,6 +89,10 @@ while (i <= length(args)) {
 if (is.na(opts$reps) || opts$reps < 1L) stop("--reps must be positive", call. = FALSE)
 if (is.na(opts$permutations) || opts$permutations < 1L) stop("--permutations must be positive", call. = FALSE)
 if (!is.finite(opts$alpha) || opts$alpha <= 0 || opts$alpha >= 1) stop("--alpha must be in (0, 1)", call. = FALSE)
+bad <- setdiff(opts$models, c("one_factor", "three_factor"))
+if (length(bad)) stop("unknown models: ", paste(bad, collapse = ","), call. = FALSE)
+bad <- setdiff(opts$heterogeneity, c("standard", "strong"))
+if (length(bad)) stop("unknown heterogeneity levels: ", paste(bad, collapse = ","), call. = FALSE)
 bad <- setdiff(opts$distributions, c("normal", "t5"))
 if (length(bad)) stop("unknown distributions: ", paste(bad, collapse = ","), call. = FALSE)
 bad <- setdiff(opts$scenarios, c("exchangeable", "invariant", "loading_violation"))
@@ -93,47 +102,96 @@ if (opts$mode == "smoke") {
   if (!"reps" %in% opts$explicit) opts$reps <- 10L
   if (!"permutations" %in% opts$explicit) opts$permutations <- 19L
   if (!"sizes" %in% opts$explicit) opts$sizes <- list(c(60L, 90L))
+  if (!"models" %in% opts$explicit) opts$models <- "one_factor"
+  if (!"heterogeneity" %in% opts$explicit) opts$heterogeneity <- "standard"
   if (!"distributions" %in% opts$explicit) opts$distributions <- "normal"
   if (!"scenarios" %in% opts$explicit) opts$scenarios <- "invariant"
 }
 results_path <- opts$results_dir %||% ensure_results_dir()
 dir.create(results_path, recursive = TRUE, showWarnings = FALSE)
 
-# Population: a six-indicator marker-identified one-factor CFA. The
-# exchangeable control makes both group distributions identical, so its random
-# label permutation is finite-sample valid for every statistic. Under the
-# invariant scenario loadings agree while factor and residual variances differ.
-p <- 6L
-ov <- paste0("x", seq_len(p))
-model <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
-lambda_1 <- c(1.00, 0.82, 0.74, 0.93, 0.68, 0.88)
-theta_1 <- c(0.42, 0.48, 0.56, 0.44, 0.60, 0.50)
-theta_2 <- c(0.25, 0.73, 0.37, 0.78, 0.45, 0.66)
-phi_1 <- 1.00
-phi_2 <- 1.65
+# Population builders. The exchangeable control makes both group distributions
+# identical, so its random label permutation is finite-sample valid for every
+# statistic. The invariant scenario instead holds the loadings fixed while
+# factor and residual variances differ between groups.
+make_phi <- function(variances, correlations) {
+  D <- diag(sqrt(variances))
+  D %*% correlations %*% D
+}
 
-population_covariances <- function(scenario) {
-  lambda_2 <- lambda_1
-  phi_group_2 <- phi_2
-  theta_group_2 <- theta_2
-  if (identical(scenario, "exchangeable")) {
-    phi_group_2 <- phi_1
-    theta_group_2 <- theta_1
+population_spec <- function(model_name, heterogeneity, scenario) {
+  if (identical(model_name, "one_factor")) {
+    ov <- paste0("x", 1:6)
+    model <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
+    Lambda1 <- matrix(c(1.00, 0.82, 0.74, 0.93, 0.68, 0.88), ncol = 1L)
+    Theta1 <- c(0.42, 0.48, 0.56, 0.44, 0.60, 0.50)
+    loading_rows <- data.frame(lhs = "f", rhs = ov[-1L], stringsAsFactors = FALSE)
+    if (identical(heterogeneity, "strong")) {
+      Phi2 <- matrix(2.40, 1L, 1L)
+      Theta2 <- c(0.15, 0.95, 0.25, 1.05, 0.30, 0.90)
+    } else {
+      Phi2 <- matrix(1.65, 1L, 1L)
+      Theta2 <- c(0.25, 0.73, 0.37, 0.78, 0.45, 0.66)
+    }
+    Phi1 <- matrix(1.00, 1L, 1L)
+  } else {
+    ov <- paste0("x", 1:9)
+    model <- paste(
+      "f1 =~ x1 + x2 + x3",
+      "f2 =~ x4 + x5 + x6",
+      "f3 =~ x7 + x8 + x9",
+      "f1 ~~ f2",
+      "f1 ~~ f3",
+      "f2 ~~ f3",
+      sep = "\n"
+    )
+    Lambda1 <- matrix(0, 9L, 3L)
+    Lambda1[1:3, 1] <- c(1.00, 0.82, 0.74)
+    Lambda1[4:6, 2] <- c(1.00, 0.78, 0.69)
+    Lambda1[7:9, 3] <- c(1.00, 0.86, 0.72)
+    Theta1 <- c(0.42, 0.48, 0.56, 0.46, 0.52, 0.60, 0.40, 0.50, 0.58)
+    loading_rows <- data.frame(
+      lhs = c("f1", "f1", "f2", "f2", "f3", "f3"),
+      rhs = c("x2", "x3", "x5", "x6", "x8", "x9"),
+      stringsAsFactors = FALSE
+    )
+    Phi1 <- make_phi(c(1.00, 1.10, 0.95),
+                     matrix(c(1, .30, .25, .30, 1, .35, .25, .35, 1), 3L, 3L))
+    if (identical(heterogeneity, "strong")) {
+      Phi2 <- make_phi(c(2.40, 0.80, 2.80),
+                       matrix(c(1, .45, .40, .45, 1, .30, .40, .30, 1), 3L, 3L))
+      Theta2 <- c(0.14, 0.95, 0.22, 0.18, 1.05, 0.30, 0.12, 0.92, 0.24)
+    } else {
+      Phi2 <- make_phi(c(1.65, 1.30, 1.90),
+                       matrix(c(1, .20, .35, .20, 1, .18, .35, .18, 1), 3L, 3L))
+      Theta2 <- c(0.25, 0.73, 0.37, 0.35, 0.82, 0.46, 0.20, 0.76, 0.43)
+    }
   }
-  if (identical(scenario, "loading_violation")) lambda_2[3] <- lambda_2[3] + 0.28
-  S1 <- phi_1 * tcrossprod(lambda_1) + diag(theta_1)
-  S2 <- phi_group_2 * tcrossprod(lambda_2) + diag(theta_group_2)
+
+  Lambda2 <- Lambda1
+  if (identical(scenario, "loading_violation")) Lambda2[3L, 1L] <- Lambda2[3L, 1L] + 0.28
+  if (identical(scenario, "exchangeable")) {
+    Phi2 <- Phi1
+    Theta2 <- Theta1
+  }
+  S1 <- Lambda1 %*% Phi1 %*% t(Lambda1) + diag(Theta1)
+  S2 <- Lambda2 %*% Phi2 %*% t(Lambda2) + diag(Theta2)
+  if (min(eigen(S1, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8 ||
+      min(eigen(S2, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8) {
+    stop("population covariance is not positive definite", call. = FALSE)
+  }
   dimnames(S1) <- dimnames(S2) <- list(ov, ov)
-  list(S1 = S1, S2 = S2)
+  list(name = model_name, heterogeneity = heterogeneity, model = model,
+       ov = ov, loading_rows = loading_rows, S1 = S1, S2 = S2)
 }
 
 draw_group <- function(n, Sigma, distribution, seed) {
   set.seed(seed)
-  Z <- matrix(stats::rnorm(n * p), nrow = n) %*% chol(Sigma)
+  Z <- matrix(stats::rnorm(n * ncol(Sigma)), nrow = n) %*% chol(Sigma)
   if (identical(distribution, "t5")) {
     Z <- Z * sqrt(3 / stats::rchisq(n, df = 5))
   }
-  colnames(Z) <- ov
+  colnames(Z) <- colnames(Sigma)
   Z
 }
 
@@ -144,24 +202,24 @@ stack_groups <- function(X1, X2) {
   out
 }
 
-fit_cfa <- function(X1, X2, metric = FALSE) {
+fit_cfa <- function(X1, X2, population, metric = FALSE) {
   magmaan::magmaan(
-    model, stack_groups(X1, X2), estimator = "ML", groups = "group",
+    population$model, stack_groups(X1, X2), estimator = "ML", groups = "group",
     group_equal = if (metric) "loadings" else NULL,
     control = list(max_iter = 1000L, ftol = 1e-10, gtol = 1e-7)
   )
 }
 
-metric_contrast <- function(fit) {
+metric_contrast <- function(fit, population) {
   pt <- fit$partable
   npar <- length(fit$theta)
-  indicators <- ov[-1L]
-  R <- matrix(0, nrow = length(indicators), ncol = npar)
-  for (j in seq_along(indicators)) {
-    rhs <- indicators[[j]]
-    i1 <- which(pt$group == 1L & pt$lhs == "f" & pt$op == "=~" &
+  R <- matrix(0, nrow = nrow(population$loading_rows), ncol = npar)
+  for (j in seq_len(nrow(population$loading_rows))) {
+    lhs <- population$loading_rows$lhs[[j]]
+    rhs <- population$loading_rows$rhs[[j]]
+    i1 <- which(pt$group == 1L & pt$lhs == lhs & pt$op == "=~" &
                   pt$rhs == rhs & pt$free > 0L)
-    i2 <- which(pt$group == 2L & pt$lhs == "f" & pt$op == "=~" &
+    i2 <- which(pt$group == 2L & pt$lhs == lhs & pt$op == "=~" &
                   pt$rhs == rhs & pt$free > 0L)
     if (length(i1) != 1L || length(i2) != 1L) {
       stop("could not locate free group-specific loading contrast for ", rhs,
@@ -173,10 +231,10 @@ metric_contrast <- function(fit) {
   R
 }
 
-fit_statistics <- function(X1, X2, include_lrt = FALSE) {
-  fit <- tryCatch(fit_cfa(X1, X2), error = function(e) NULL)
+fit_statistics <- function(X1, X2, population, include_lrt = FALSE) {
+  fit <- tryCatch(fit_cfa(X1, X2, population), error = function(e) NULL)
   if (is.null(fit)) return(NULL)
-  R <- tryCatch(metric_contrast(fit), error = function(e) NULL)
+  R <- tryCatch(metric_contrast(fit, population), error = function(e) NULL)
   if (is.null(R)) return(NULL)
   model_vcov <- tryCatch({
     info <- core$inference_information_expected(fit)
@@ -199,7 +257,7 @@ fit_statistics <- function(X1, X2, include_lrt = FALSE) {
   )
   if (!include_lrt) return(out)
 
-  metric <- tryCatch(fit_cfa(X1, X2, metric = TRUE), error = function(e) NULL)
+  metric <- tryCatch(fit_cfa(X1, X2, population, metric = TRUE), error = function(e) NULL)
   if (is.null(metric)) return(out)
   n_total <- nrow(X1) + nrow(X2)
   t_diff <- 2 * n_total * (metric$fmin - fit$fmin)
@@ -213,14 +271,14 @@ fit_statistics <- function(X1, X2, include_lrt = FALSE) {
   out
 }
 
-permutation_pvalues <- function(X1, X2, observed, permutations, seed) {
+permutation_pvalues <- function(X1, X2, population, observed, permutations, seed) {
   n1 <- nrow(X1)
   pooled <- rbind(X1, X2)
   set.seed(seed)
   permuted <- replicate(permutations, sample.int(nrow(pooled)), simplify = FALSE)
   draws <- lapply(permuted, function(index) {
     fit_statistics(pooled[index[seq_len(n1)], , drop = FALSE],
-                   pooled[index[-seq_len(n1)], , drop = FALSE])
+                   pooled[index[-seq_len(n1)], , drop = FALSE], population)
   })
   w <- vapply(draws, function(x) if (is.null(x)) NA_real_ else x$w_sandwich, numeric(1))
   raw <- vapply(draws, function(x) if (is.null(x)) NA_real_ else x$raw, numeric(1))
@@ -245,14 +303,14 @@ replication_record <- function(rep_id, converged = FALSE) {
   )
 }
 
-one_replication <- function(rep_id, S1, S2, n, distribution, scenario, seed) {
-  X1 <- draw_group(n[[1]], S1, distribution, seed + 11L)
-  X2 <- draw_group(n[[2]], S2, distribution, seed + 29L)
-  observed <- fit_statistics(X1, X2, include_lrt = TRUE)
+one_replication <- function(rep_id, population, n, distribution, seed) {
+  X1 <- draw_group(n[[1]], population$S1, distribution, seed + 11L)
+  X2 <- draw_group(n[[2]], population$S2, distribution, seed + 29L)
+  observed <- fit_statistics(X1, X2, population, include_lrt = TRUE)
   if (is.null(observed)) {
     return(replication_record(rep_id))
   }
-  perm <- permutation_pvalues(X1, X2, observed, opts$permutations, seed + 101L)
+  perm <- permutation_pvalues(X1, X2, population, observed, opts$permutations, seed + 101L)
   out <- replication_record(rep_id, converged = TRUE)
   scalar_or_na <- function(x) if (length(x) == 1L) as.numeric(x) else NA_real_
   out$p_lrt <- scalar_or_na(observed$lrt_p)
@@ -269,10 +327,18 @@ one_replication <- function(rep_id, S1, S2, n, distribution, scenario, seed) {
 }
 
 design <- do.call(rbind, lapply(opts$sizes, function(n) {
-  expand.grid(distribution = opts$distributions, scenario = opts$scenarios,
+  expand.grid(model = opts$models, heterogeneity = opts$heterogeneity,
+              distribution = opts$distributions, scenario = opts$scenarios,
               n1 = n[[1]], n2 = n[[2]], stringsAsFactors = FALSE)
 }))
-design <- design[order(design$distribution, design$scenario, design$n1, design$n2), ]
+# Heterogeneity has no meaning when the two populations are identical, so keep
+# one exact-exchangeability control per model/distribution/sample-size cell.
+if ("exchangeable" %in% opts$scenarios && length(opts$heterogeneity) > 1L) {
+  design <- design[design$scenario != "exchangeable" |
+                     design$heterogeneity == opts$heterogeneity[[1L]], , drop = FALSE]
+}
+design <- design[order(design$model, design$heterogeneity, design$distribution,
+                       design$scenario, design$n1, design$n2), ]
 message(sprintf("Grid: %d cells; reps=%d, permutations=%d, cores=%d",
                 nrow(design), opts$reps, opts$permutations, opts$cores))
 
@@ -280,7 +346,7 @@ all_results <- vector("list", nrow(design))
 t0 <- proc.time()[["elapsed"]]
 for (cell in seq_len(nrow(design))) {
   d <- design[cell, ]
-  population <- population_covariances(d$scenario)
+  population <- population_spec(d$model, d$heterogeneity, d$scenario)
   seed_cell <- opts$seed_base + cell * 1000003L
   cell_t0 <- proc.time()[["elapsed"]]
   chunks <- split(seq_len(opts$reps),
@@ -289,8 +355,8 @@ for (cell in seq_len(nrow(design))) {
   for (chunk_id in seq_along(chunks)) {
     rep_ids <- chunks[[chunk_id]]
     rows <- parallel::mclapply(rep_ids, function(rep_id) {
-      one_replication(rep_id, population$S1, population$S2, c(d$n1, d$n2),
-                      d$distribution, d$scenario, seed_cell + rep_id * 1009L)
+      one_replication(rep_id, population, c(d$n1, d$n2), d$distribution,
+                      seed_cell + rep_id * 1009L)
     }, mc.cores = opts$cores, mc.preschedule = TRUE)
     chunk_rows[[chunk_id]] <- do.call(rbind, rows)
     done <- sum(vapply(chunks[seq_len(chunk_id)], length, integer(1)))
@@ -300,6 +366,8 @@ for (cell in seq_len(nrow(design))) {
                     cell, nrow(design), done, opts$reps, cell_elapsed, cell_eta))
   }
   out <- do.call(rbind, chunk_rows)
+  out$model <- d$model
+  out$heterogeneity <- d$heterogeneity
   out$distribution <- d$distribution
   out$scenario <- d$scenario
   out$n1 <- d$n1
@@ -307,19 +375,22 @@ for (cell in seq_len(nrow(design))) {
   all_results[[cell]] <- out
   elapsed <- proc.time()[["elapsed"]] - t0
   eta <- elapsed / cell * (nrow(design) - cell)
-  message(sprintf("  [%d/%d] %s/%s n=(%d,%d): %.1fs elapsed, %.1fs ETA",
-                  cell, nrow(design), d$distribution, d$scenario, d$n1, d$n2,
+  message(sprintf("  [%d/%d] %s/%s/%s/%s n=(%d,%d): %.1fs elapsed, %.1fs ETA",
+                  cell, nrow(design), d$model, d$heterogeneity,
+                  d$distribution, d$scenario, d$n1, d$n2,
                   elapsed, eta))
 }
 replicate_results <- do.call(rbind, all_results)
 
 p_columns <- grep("^p_", names(replicate_results), value = TRUE)
 summary_rows <- lapply(split(replicate_results,
-                             interaction(replicate_results$distribution,
+                             interaction(replicate_results$model,
+                                         replicate_results$heterogeneity,
+                                         replicate_results$distribution,
                                          replicate_results$scenario,
                                          replicate_results$n1,
                                          replicate_results$n2, drop = TRUE)), function(x) {
-  ans <- x[1L, c("distribution", "scenario", "n1", "n2"), drop = FALSE]
+  ans <- x[1L, c("model", "heterogeneity", "distribution", "scenario", "n1", "n2"), drop = FALSE]
   ans$reps <- nrow(x)
   ans$converged <- sum(x$converged)
   for (p_name in p_columns) {
@@ -345,6 +416,7 @@ write_metadata(
     experiment = "61-permutation-measurement-invariance", mode = opts$mode,
     reps = opts$reps, permutations = opts$permutations,
     group_sizes = vapply(opts$sizes, function(x) paste(x, collapse = ":"), character(1)),
+    models = opts$models, heterogeneity = opts$heterogeneity,
     distributions = opts$distributions, scenarios = opts$scenarios,
     alpha = opts$alpha, seed_base = opts$seed_base, cores = opts$cores
   ), packages = "magmaan"
