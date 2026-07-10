@@ -37,6 +37,11 @@ permutation is included as a negative control: a gap between it and the
 studentized column is the finite-sample behavior the Chung--Romano argument
 predicts.
 
+The loading-violation alternative raises the standardized loading for `x3` by
+0.05 from its group-2 metric-invariant baseline. Its raw loading difference is
+recorded in the results because the same standardized departure implies
+different raw loadings when the factor and residual variances differ.
+
 ## Evidence
 
 Rejection rates at the configured alpha. The two permutation methods refit the
@@ -44,15 +49,19 @@ configural CFA and recompute their statistic after every relabeling; they do
 not reuse the observed covariance estimate.
 
 ```{r table}
-cols <- c("model", "heterogeneity", "distribution", "scenario", "n1", "n2", "reps", "converged",
+cols <- c("model", "heterogeneity", "distribution", "scenario", "n1", "n2",
+          "loading_shift_raw", "loading_shift_standardized", "reps", "converged",
           "reject_lrt", "reject_robust_lrt", "reject_model_wald",
           "reject_sandwich_wald", "reject_permutation_studentized",
           "reject_permutation_raw", "median_valid_permutations")
 tab <- results[, intersect(cols, names(results)), drop = FALSE]
-names(tab) <- c("Model", "Heterogeneity", "Distribution", "Scenario", "N1", "N2", "Replications",
-                "Converged", "LRT", "Robust LRT", "Model Wald",
-                "Sandwich Wald", "Studentized permutation", "Raw permutation",
-                "Median valid permutations")[seq_len(ncol(tab))]
+labels <- c("Model", "Heterogeneity", "Distribution", "Scenario", "N1", "N2",
+            "Raw loading shift", "Standardized loading shift", "Replications",
+            "Converged", "LRT", "Robust LRT", "Model Wald",
+            "Sandwich Wald", "Studentized permutation", "Raw permutation",
+            "Median valid permutations")
+names(labels) <- cols
+names(tab) <- unname(labels[names(tab)])
 numeric <- vapply(tab, is.numeric, logical(1))
 tab[numeric] <- lapply(tab[numeric], function(x) round(x, 3))
 knitr::kable(tab, row.names = FALSE,

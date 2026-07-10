@@ -109,6 +109,7 @@ if (opts$mode == "smoke") {
 }
 results_path <- opts$results_dir %||% ensure_results_dir()
 dir.create(results_path, recursive = TRUE, showWarnings = FALSE)
+loading_violation_standardized_departure <- .05
 
 # Population builders. The exchangeable control makes both group distributions
 # identical, so its random label permutation is finite-sample valid for every
@@ -169,7 +170,26 @@ population_spec <- function(model_name, heterogeneity, scenario) {
   }
 
   Lambda2 <- Lambda1
-  if (identical(scenario, "loading_violation")) Lambda2[3L, 1L] <- Lambda2[3L, 1L] + 0.28
+  loading_shift_raw <- 0
+  loading_shift_standardized <- 0
+  if (identical(scenario, "loading_violation")) {
+    # Keep the population alternative comparable across heterogeneity lanes.
+    # A fixed raw loading increment has a different observed-scale meaning when
+    # Phi and Theta change; solve instead for a fixed standardized departure
+    # from this group's metric-invariant baseline loading.
+    item <- 3L
+    lambda_std <- function(lambda, phi, theta) {
+      lambda * sqrt(phi) / sqrt(lambda^2 * phi + theta)
+    }
+    target_std <- lambda_std(Lambda1[item, 1L], Phi2[1L, 1L], Theta2[item]) +
+      loading_violation_standardized_departure
+    if (target_std >= .99) stop("standardized loading alternative is inadmissible", call. = FALSE)
+    Lambda2[item, 1L] <- target_std * sqrt(
+      Theta2[item] / (Phi2[1L, 1L] * (1 - target_std^2)))
+    loading_shift_raw <- Lambda2[item, 1L] - Lambda1[item, 1L]
+    loading_shift_standardized <- lambda_std(Lambda2[item, 1L], Phi2[1L, 1L], Theta2[item]) -
+      lambda_std(Lambda1[item, 1L], Phi2[1L, 1L], Theta2[item])
+  }
   if (identical(scenario, "exchangeable")) {
     Phi2 <- Phi1
     Theta2 <- Theta1
@@ -182,7 +202,9 @@ population_spec <- function(model_name, heterogeneity, scenario) {
   }
   dimnames(S1) <- dimnames(S2) <- list(ov, ov)
   list(name = model_name, heterogeneity = heterogeneity, model = model,
-       ov = ov, loading_rows = loading_rows, S1 = S1, S2 = S2)
+       ov = ov, loading_rows = loading_rows, S1 = S1, S2 = S2,
+       loading_shift_raw = loading_shift_raw,
+       loading_shift_standardized = loading_shift_standardized)
 }
 
 draw_group <- function(n, Sigma, distribution, seed) {
@@ -299,6 +321,7 @@ replication_record <- function(rep_id, converged = FALSE) {
     p_permutation_studentized = NA_real_, p_permutation_raw = NA_real_,
     w_model = NA_real_, w_sandwich = NA_real_,
     n_perm_studentized = NA_real_, n_perm_raw = NA_real_,
+    loading_shift_raw = NA_real_, loading_shift_standardized = NA_real_,
     stringsAsFactors = FALSE
   )
 }
@@ -323,6 +346,8 @@ one_replication <- function(rep_id, population, n, distribution, seed) {
   out$w_sandwich <- observed$w_sandwich
   out$n_perm_studentized <- perm$n_studentized
   out$n_perm_raw <- perm$n_raw
+  out$loading_shift_raw <- population$loading_shift_raw
+  out$loading_shift_standardized <- population$loading_shift_standardized
   out
 }
 
@@ -390,13 +415,14 @@ summary_rows <- lapply(split(replicate_results,
                                          replicate_results$scenario,
                                          replicate_results$n1,
                                          replicate_results$n2, drop = TRUE)), function(x) {
-  ans <- x[1L, c("model", "heterogeneity", "distribution", "scenario", "n1", "n2"), drop = FALSE]
+  ans <- x[1L, c("model", "heterogeneity", "distribution", "scenario", "n1", "n2",
+                 "loading_shift_raw", "loading_shift_standardized"), drop = FALSE]
   ans$reps <- nrow(x)
   ans$converged <- sum(x$converged)
   for (p_name in p_columns) {
     usable <- x[[p_name]][is.finite(x[[p_name]])]
     suffix <- sub("^p_", "", p_name)
-    ans[[paste0("reject_", suffix)]] <- if (length(usable)) mean(usable < opts$alpha) else NA_real_
+    ans[[paste0("reject_", suffix)]] <- if (length(usable)) mean(usable <= opts$alpha) else NA_real_
     ans[[paste0("n_", suffix)]] <- length(usable)
   }
   ans$median_valid_permutations <- stats::median(x$n_perm_studentized, na.rm = TRUE)
@@ -418,6 +444,7 @@ write_metadata(
     group_sizes = vapply(opts$sizes, function(x) paste(x, collapse = ":"), character(1)),
     models = opts$models, heterogeneity = opts$heterogeneity,
     distributions = opts$distributions, scenarios = opts$scenarios,
+    loading_violation_standardized_departure = loading_violation_standardized_departure,
     alpha = opts$alpha, seed_base = opts$seed_base, cores = opts$cores
   ), packages = "magmaan"
 )
