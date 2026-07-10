@@ -28,7 +28,8 @@ usage <- function() {
     "  --n LIST            Group-size pairs, e.g. 100:250,250:250.\n",
     "                      Default: 100:250,250:250.\n",
     "  --distributions L   Subset of normal,t5. Default: both.\n",
-    "  --scenarios L       Subset of invariant,loading_violation. Default: both.\n",
+    "  --scenarios L       Subset of exchangeable,invariant,loading_violation.\n",
+    "                      Default: invariant,loading_violation.\n",
     "  --alpha X           Rejection level. Default: 0.05.\n",
     "  --cores N           mclapply cores. Default: detectCores()-1.\n",
     "  --seed-base N       Base RNG seed. Default: 20260710.\n",
@@ -85,7 +86,7 @@ if (is.na(opts$permutations) || opts$permutations < 1L) stop("--permutations mus
 if (!is.finite(opts$alpha) || opts$alpha <= 0 || opts$alpha >= 1) stop("--alpha must be in (0, 1)", call. = FALSE)
 bad <- setdiff(opts$distributions, c("normal", "t5"))
 if (length(bad)) stop("unknown distributions: ", paste(bad, collapse = ","), call. = FALSE)
-bad <- setdiff(opts$scenarios, c("invariant", "loading_violation"))
+bad <- setdiff(opts$scenarios, c("exchangeable", "invariant", "loading_violation"))
 if (length(bad)) stop("unknown scenarios: ", paste(bad, collapse = ","), call. = FALSE)
 
 if (opts$mode == "smoke") {
@@ -98,7 +99,9 @@ if (opts$mode == "smoke") {
 results_path <- opts$results_dir %||% ensure_results_dir()
 dir.create(results_path, recursive = TRUE, showWarnings = FALSE)
 
-# Population: a six-indicator marker-identified one-factor CFA. Under the
+# Population: a six-indicator marker-identified one-factor CFA. The
+# exchangeable control makes both group distributions identical, so its random
+# label permutation is finite-sample valid for every statistic. Under the
 # invariant scenario loadings agree while factor and residual variances differ.
 p <- 6L
 ov <- paste0("x", seq_len(p))
@@ -111,9 +114,15 @@ phi_2 <- 1.65
 
 population_covariances <- function(scenario) {
   lambda_2 <- lambda_1
+  phi_group_2 <- phi_2
+  theta_group_2 <- theta_2
+  if (identical(scenario, "exchangeable")) {
+    phi_group_2 <- phi_1
+    theta_group_2 <- theta_1
+  }
   if (identical(scenario, "loading_violation")) lambda_2[3] <- lambda_2[3] + 0.28
   S1 <- phi_1 * tcrossprod(lambda_1) + diag(theta_1)
-  S2 <- phi_2 * tcrossprod(lambda_2) + diag(theta_2)
+  S2 <- phi_group_2 * tcrossprod(lambda_2) + diag(theta_group_2)
   dimnames(S1) <- dimnames(S2) <- list(ov, ov)
   list(S1 = S1, S2 = S2)
 }
@@ -273,11 +282,24 @@ for (cell in seq_len(nrow(design))) {
   d <- design[cell, ]
   population <- population_covariances(d$scenario)
   seed_cell <- opts$seed_base + cell * 1000003L
-  rows <- parallel::mclapply(seq_len(opts$reps), function(rep_id) {
-    one_replication(rep_id, population$S1, population$S2, c(d$n1, d$n2),
-                    d$distribution, d$scenario, seed_cell + rep_id * 1009L)
-  }, mc.cores = opts$cores, mc.preschedule = TRUE)
-  out <- do.call(rbind, rows)
+  cell_t0 <- proc.time()[["elapsed"]]
+  chunks <- split(seq_len(opts$reps),
+                  ceiling(seq_len(opts$reps) / min(50L, opts$reps)))
+  chunk_rows <- vector("list", length(chunks))
+  for (chunk_id in seq_along(chunks)) {
+    rep_ids <- chunks[[chunk_id]]
+    rows <- parallel::mclapply(rep_ids, function(rep_id) {
+      one_replication(rep_id, population$S1, population$S2, c(d$n1, d$n2),
+                      d$distribution, d$scenario, seed_cell + rep_id * 1009L)
+    }, mc.cores = opts$cores, mc.preschedule = TRUE)
+    chunk_rows[[chunk_id]] <- do.call(rbind, rows)
+    done <- sum(vapply(chunks[seq_len(chunk_id)], length, integer(1)))
+    cell_elapsed <- proc.time()[["elapsed"]] - cell_t0
+    cell_eta <- cell_elapsed / done * (opts$reps - done)
+    message(sprintf("    cell %d/%d: %d/%d reps (%.1fs elapsed, %.1fs cell ETA)",
+                    cell, nrow(design), done, opts$reps, cell_elapsed, cell_eta))
+  }
+  out <- do.call(rbind, chunk_rows)
   out$distribution <- d$distribution
   out$scenario <- d$scenario
   out$n1 <- d$n1

@@ -64,6 +64,10 @@ knitr::kable(tab, row.names = FALSE,
 - The Chung--Romano argument requires the estimator and its studentization to
   remain asymptotically regular under the pooled mixture, not merely under the
   two source groups. This continuous CFA is the first population class checked.
+- The `exchangeable` scenario is a finite-sample control: both group
+  distributions are identical, so a random label permutation is valid even for
+  the raw contrast statistic. It distinguishes a resampling implementation bug
+  from a failure of asymptotic robustness under heterogeneous populations.
 - The ordinal arm is deliberately absent. A mixture of ordinal-probit groups is
   generally not ordinal-probit, so it needs a separate validity result or a
   different resampling scheme.
