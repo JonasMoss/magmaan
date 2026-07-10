@@ -602,21 +602,30 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
 arm_token <- function(x) sub("\\.$", "", gsub("\\.", "p", format(x, scientific = FALSE)))
 
 make_arm_specs <- function() {
-  tuning <- expand.grid(
-    policy = c("hard", "soft"), rate = c(0.5, 1),
-    beta0 = c(0.5, 1, 2, 4), margin = c(1e-3, 1e-2),
+  cols <- c("arm", "policy", "rate", "beta0", "margin")
+  # Soft depends on (rate, beta0, margin). Hard ignores beta entirely (the box
+  # is a function of margin only), so it must not be replicated across
+  # rate/beta0 -- those cells would be identical fits.
+  soft <- expand.grid(
+    rate = c(0.5, 1), beta0 = c(0.5, 1, 2, 4), margin = c(1e-3, 1e-2),
     stringsAsFactors = FALSE
   )
-  tuning$arm <- paste0(
-    "guttman_", tuning$policy, "_r", vapply(tuning$rate, arm_token, character(1)),
-    "_b", vapply(tuning$beta0, arm_token, character(1)),
-    "_m", vapply(tuning$margin, arm_token, character(1)))
+  soft$policy <- "soft"
+  soft$arm <- paste0(
+    "guttman_soft_r", vapply(soft$rate, arm_token, character(1)),
+    "_b", vapply(soft$beta0, arm_token, character(1)),
+    "_m", vapply(soft$margin, arm_token, character(1)))
+  hard <- data.frame(
+    policy = "hard", rate = 0.5, beta0 = 1, margin = c(1e-3, 1e-2),
+    stringsAsFactors = FALSE)
+  hard$arm <- paste0("guttman_hard_m", vapply(hard$margin, arm_token, character(1)))
   rbind(
     data.frame(arm = "guttman_raw", policy = "raw", rate = 0.5,
-               beta0 = 1, margin = 1e-3, stringsAsFactors = FALSE),
-    tuning[, c("arm", "policy", "rate", "beta0", "margin")],
+               beta0 = 1, margin = 1e-3, stringsAsFactors = FALSE)[, cols],
+    hard[, cols],
+    soft[, cols],
     data.frame(arm = "ml_emp", policy = NA_character_, rate = NA_real_,
-               beta0 = NA_real_, margin = NA_real_, stringsAsFactors = FALSE)
+               beta0 = NA_real_, margin = NA_real_, stringsAsFactors = FALSE)[, cols]
   )
 }
 
