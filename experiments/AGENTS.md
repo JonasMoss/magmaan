@@ -74,10 +74,13 @@ Required files:
 - `.gitignore`: ignore generated Quarto output and local resources.
 - `results/.gitignore`: keep `results/` present while ignoring generated data.
 
-Do not add a per-experiment `README.md`. The report is the readable document,
-and `Rscript run_experiment.R --help` is the command reference. If a report is
-not self-contained enough to replace a README, fix the report. (The exception is
-the collection-level `experiments/README.md` index; see "Index And Lifecycle".)
+Per-experiment `README.md` files are forbidden. The report is the single
+reader-facing source of truth, and `Rscript run_experiment.R --help` is the
+command reference. Do not split design rationale, findings, reproduction
+instructions, or output descriptions into a README; if the report is not
+self-contained enough to replace one, fix the report. Remove a per-experiment
+README when encountered. The sole exception is the collection-level
+`experiments/README.md` index (see "Index And Lifecycle").
 
 ## Generated And Local Files
 
