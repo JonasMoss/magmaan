@@ -474,6 +474,47 @@ TEST_CASE("score conditioning is scale equivariant and validates its scope") {
       ef::CompositeWeight::Adaptive, {}, hard).has_value());
 }
 
+TEST_CASE("fixed-diagonal H conditioning repairs the aligned proxy for point fits") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+
+  auto raw = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(raw);
+
+  ef::HConditioningConfig hard;
+  hard.policy = ef::HConditioningPolicy::Hard;
+  hard.floor0 = 16.0;
+  auto repaired = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, {}, hard);
+  REQUIRE_OK(repaired);
+  REQUIRE(repaired->h_conditioning_diagnostics.size() == 1);
+  const auto& d = repaired->h_conditioning_diagnostics[0];
+  CHECK(d.target_floor == doctest::Approx(0.8));
+  CHECK(d.min_h_variance > 0.0);
+  CHECK(d.repaired_normalized_min_eigenvalue >= d.target_floor - 1e-10);
+  CHECK(d.shrinkage >= 0.0);
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(repaired->Phi[0]);
+  REQUIRE(es.info() == Eigen::Success);
+  CHECK(es.eigenvalues().minCoeff() > 0.0);
+
+  auto raw_explicit = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, {}, {});
+  REQUIRE_OK(raw_explicit);
+  CHECK((raw->theta.array() == raw_explicit->theta.array()).all());
+  CHECK_FALSE(ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanLavaan,
+      ef::CompositeWeight::Unit, {}, {}, hard).has_value());
+  CHECK_FALSE(ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Adaptive, {}, {}, hard).has_value());
+}
+
 TEST_CASE("conditioned analytic Jacobians match central differences and inference") {
   Built b = build(kTwoFactor);
   Eigen::MatrixXd S = two_factor_cov();

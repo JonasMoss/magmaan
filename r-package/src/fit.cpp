@@ -8008,6 +8008,45 @@ score_conditioning_config(const std::string& policy, double floor0,
       score_conditioning_which(policy), floor0, rate};
 }
 
+magmaan::estimate::frontier::HConditioningPolicy
+h_conditioning_which(const std::string& s) {
+  const std::string k = noniter_lower(s);
+  namespace ef = magmaan::estimate::frontier;
+  if (k == "raw" || k == "none" || k == "off" || k == "")
+    return ef::HConditioningPolicy::Raw;
+  if (k == "hard") return ef::HConditioningPolicy::Hard;
+  if (k == "soft" || k == "smooth") return ef::HConditioningPolicy::Soft;
+  Rcpp::stop("magmaan: unknown H conditioning policy '%s' "
+             "(accepted: raw, hard, soft)", s.c_str());
+}
+
+magmaan::estimate::frontier::HConditioningConfig
+h_conditioning_config(const std::string& policy, double floor0, double rate) {
+  return magmaan::estimate::frontier::HConditioningConfig{
+      h_conditioning_which(policy), floor0, rate};
+}
+
+magmaan::estimate::frontier::HConditioningConfig
+noniter_h_conditioning_for_fit(const Rcpp::List& fit) {
+  const std::string policy = fit.containsElementNamed("h_conditioning")
+                                 ? Rcpp::as<std::string>(fit["h_conditioning"])
+                                 : "raw";
+  const double floor0 = fit.containsElementNamed("h_floor0")
+                            ? Rcpp::as<double>(fit["h_floor0"])
+                            : 1.0;
+  const double rate = fit.containsElementNamed("h_rate")
+                          ? Rcpp::as<double>(fit["h_rate"])
+                          : 0.5;
+  return h_conditioning_config(policy, floor0, rate);
+}
+
+void noniter_require_raw_h_conditioning(const Rcpp::List& fit) {
+  if (noniter_h_conditioning_for_fit(fit).policy !=
+      magmaan::estimate::frontier::HConditioningPolicy::Raw)
+    Rcpp::stop("non-raw H conditioning is a point-estimation feasibility "
+               "prototype; post-fit inference is not yet supported");
+}
+
 magmaan::estimate::frontier::ScoreConditioningConfig
 noniter_score_conditioning_for_fit(const Rcpp::List& fit) {
   const std::string policy = fit.containsElementNamed("score_conditioning")
@@ -8062,6 +8101,39 @@ Rcpp::DataFrame score_conditioning_diagnostics_df(
       Rcpp::_["hard_violation"] = hard_violation,
       Rcpp::_["min_score_variance"] = min_score_variance,
       Rcpp::_["min_abs_marker"] = min_abs_marker);
+}
+
+Rcpp::DataFrame h_conditioning_diagnostics_df(
+    const std::vector<magmaan::estimate::frontier::HConditioningDiagnostics>&
+        diagnostics) {
+  const R_xlen_t n = static_cast<R_xlen_t>(diagnostics.size());
+  Rcpp::IntegerVector block(n);
+  Rcpp::NumericVector target_floor(n), raw_min(n), repaired_min(n),
+      raw_normalized_min(n), repaired_normalized_min(n), shrinkage(n),
+      min_h_variance(n);
+  Rcpp::LogicalVector hard_violation(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& d = diagnostics[static_cast<std::size_t>(i)];
+    block[i] = static_cast<int>(i) + 1;
+    target_floor[i] = d.target_floor;
+    raw_min[i] = d.raw_min_eigenvalue;
+    repaired_min[i] = d.repaired_min_eigenvalue;
+    raw_normalized_min[i] = d.raw_normalized_min_eigenvalue;
+    repaired_normalized_min[i] = d.repaired_normalized_min_eigenvalue;
+    shrinkage[i] = d.shrinkage;
+    hard_violation[i] = d.hard_violation;
+    min_h_variance[i] = d.min_h_variance;
+  }
+  return Rcpp::DataFrame::create(
+      Rcpp::_["block"] = block,
+      Rcpp::_["target_floor"] = target_floor,
+      Rcpp::_["raw_min_eigenvalue"] = raw_min,
+      Rcpp::_["repaired_min_eigenvalue"] = repaired_min,
+      Rcpp::_["raw_normalized_min_eigenvalue"] = raw_normalized_min,
+      Rcpp::_["repaired_normalized_min_eigenvalue"] = repaired_normalized_min,
+      Rcpp::_["shrinkage"] = shrinkage,
+      Rcpp::_["hard_violation"] = hard_violation,
+      Rcpp::_["min_h_variance"] = min_h_variance);
 }
 
 magmaan::estimate::frontier::CompositeWeight
@@ -8256,7 +8328,10 @@ Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
                                      double rate = 0.5,
                                      std::string score_conditioning = "raw",
                                      double score_floor0 = 1.0,
-                                     double score_rate = 0.5) {
+                                     double score_rate = 0.5,
+                                     std::string h_conditioning = "raw",
+                                     double h_floor0 = 1.0,
+                                     double h_rate = 0.5) {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
@@ -8267,8 +8342,9 @@ Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
       admissibility, margin, beta0, rate);
   const auto score = score_conditioning_config(
       score_conditioning, score_floor0, score_rate);
+  const auto h = h_conditioning_config(h_conditioning, h_floor0, h_rate);
   auto fit = magmaan::estimate::frontier::fit_noniterative_cfa(
-      ctx.pt, ctx.rep, ctx.samp, which, comp, admiss, score);
+      ctx.pt, ctx.rep, ctx.samp, which, comp, admiss, score, h);
   if (!fit.has_value()) stop_fit(fit.error());
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
@@ -8290,6 +8366,12 @@ Rcpp::List noniterative_cfa_fit_impl(SEXP partable, Rcpp::List sample_stats,
   out["score_rate"] = score_rate;
   out["score_conditioning_diagnostics"] =
       score_conditioning_diagnostics_df(fit->score_conditioning_diagnostics);
+  out["h_conditioning"] =
+      magmaan::estimate::frontier::h_conditioning_policy_name(h.policy);
+  out["h_floor0"] = h_floor0;
+  out["h_rate"] = h_rate;
+  out["h_conditioning_diagnostics"] =
+      h_conditioning_diagnostics_df(fit->h_conditioning_diagnostics);
   return out;
 }
 
@@ -8303,7 +8385,10 @@ Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_sta
                                             double rate = 0.5,
                                             std::string score_conditioning = "raw",
                                             double score_floor0 = 1.0,
-                                            double score_rate = 0.5) {
+                                            double score_rate = 0.5,
+                                            std::string h_conditioning = "raw",
+                                            double h_floor0 = 1.0,
+                                            double h_rate = 0.5) {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_metric_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
@@ -8314,8 +8399,9 @@ Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_sta
       admissibility, margin, beta0, rate);
   const auto score = score_conditioning_config(
       score_conditioning, score_floor0, score_rate);
+  const auto h = h_conditioning_config(h_conditioning, h_floor0, h_rate);
   auto fit = magmaan::estimate::frontier::fit_noniterative_cfa_metric(
-      ctx.pt, ctx.rep, ctx.samp, which, comp, admiss, score);
+      ctx.pt, ctx.rep, ctx.samp, which, comp, admiss, score, h);
   if (!fit.has_value()) stop_fit(fit.error());
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
@@ -8337,6 +8423,12 @@ Rcpp::List noniterative_cfa_metric_fit_impl(SEXP partable, Rcpp::List sample_sta
   out["score_rate"] = score_rate;
   out["score_conditioning_diagnostics"] =
       score_conditioning_diagnostics_df(fit->score_conditioning_diagnostics);
+  out["h_conditioning"] =
+      magmaan::estimate::frontier::h_conditioning_policy_name(h.policy);
+  out["h_floor0"] = h_floor0;
+  out["h_rate"] = h_rate;
+  out["h_conditioning_diagnostics"] =
+      h_conditioning_diagnostics_df(fit->h_conditioning_diagnostics);
   return out;
 }
 
@@ -8351,7 +8443,10 @@ Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample
                                                 double rate = 0.5,
                                                 std::string score_conditioning = "raw",
                                                 double score_floor0 = 1.0,
-                                                double score_rate = 0.5) {
+                                                double score_rate = 0.5,
+                                                std::string h_conditioning = "raw",
+                                                double h_floor0 = 1.0,
+                                                double h_rate = 0.5) {
   auto parsed = partable_from_arg(partable, "noniterative_cfa_restricted_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
@@ -8363,8 +8458,9 @@ Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample
       admissibility, margin, beta0, rate);
   const auto score = score_conditioning_config(
       score_conditioning, score_floor0, score_rate);
+  const auto h = h_conditioning_config(h_conditioning, h_floor0, h_rate);
   auto fit = magmaan::estimate::frontier::fit_noniterative_cfa_restricted(
-      ctx.pt, ctx.rep, ctx.samp, which, comm, comp, admiss, score);
+      ctx.pt, ctx.rep, ctx.samp, which, comm, comp, admiss, score, h);
   if (!fit.has_value()) stop_fit(fit.error());
   magmaan::estimate::Estimates est;
   est.theta = std::move(fit->theta);
@@ -8388,6 +8484,12 @@ Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample
   out["score_rate"] = score_rate;
   out["score_conditioning_diagnostics"] =
       score_conditioning_diagnostics_df(fit->score_conditioning_diagnostics);
+  out["h_conditioning"] =
+      magmaan::estimate::frontier::h_conditioning_policy_name(h.policy);
+  out["h_floor0"] = h_floor0;
+  out["h_rate"] = h_rate;
+  out["h_conditioning_diagnostics"] =
+      h_conditioning_diagnostics_df(fit->h_conditioning_diagnostics);
   return out;
 }
 
@@ -8395,6 +8497,7 @@ Rcpp::List noniterative_cfa_restricted_fit_impl(SEXP partable, Rcpp::List sample
 Rcpp::List noniterative_cfa_inference_impl(Rcpp::List fit, std::string estimator = "auto",
                                            std::string discrepancy = "uls",
                                            std::string gamma = "nt", SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit);
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
   auto inf = noniter_inference_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
@@ -8414,6 +8517,7 @@ Rcpp::DataFrame noniterative_cfa_modindices_impl(
     std::string discrepancy = "uls", std::string gamma = "nt",
     SEXP data = R_NilValue, std::string candidates = "all",
     bool include_loadings = true, bool include_covariances = true) {
+  noniter_require_raw_h_conditioning(fit);
   Ctx ctx = ctx_from_fit(fit);
   if (ctx.samp.S.size() != 1) {
     Rcpp::stop("magmaan: noniterative_cfa_modification_indices() currently "
@@ -8440,6 +8544,7 @@ Rcpp::DataFrame noniterative_cfa_modindices_impl(
 Rcpp::List noniterative_cfa_se_impl(Rcpp::List fit, std::string estimator = "auto",
                                     std::string gamma = "nt",
                                     SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit);
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
   auto se = noniter_se_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
@@ -8457,6 +8562,7 @@ Rcpp::List noniterative_cfa_wald_impl(Rcpp::List fit, Rcpp::NumericMatrix R,
                                       Rcpp::NumericVector q, std::string estimator = "auto",
                                       std::string discrepancy = "uls",
                                       std::string gamma = "nt", SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit);
   (void)discrepancy;
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
@@ -8480,6 +8586,8 @@ Rcpp::List noniterative_cfa_difference_impl(Rcpp::List fit0, Rcpp::List fit1, in
                                             std::string discrepancy = "uls",
                                             std::string gamma = "nt",
                                             SEXP data0 = R_NilValue, SEXP data1 = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit0);
+  noniter_require_raw_h_conditioning(fit1);
   Ctx c0 = ctx_from_fit(fit0);
   const auto e0 = est_from_fit(fit0);
   Ctx c1 = ctx_from_fit(fit1);
@@ -8576,6 +8684,7 @@ Rcpp::List noniterative_cfa_grouped_inference_impl(Rcpp::List fit,
                                                    std::string discrepancy = "uls",
                                                    std::string gamma = "nt",
                                                    SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit);
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
   auto inf = noniter_grouped_dispatch(ctx, est, noniter_which_for_fit(fit, estimator),
@@ -8595,6 +8704,8 @@ Rcpp::List noniterative_cfa_pseudo_lrt_impl(Rcpp::List fit_H1, Rcpp::List fit_H0
                                             std::string discrepancy = "uls",
                                             std::string gamma = "nt",
                                             SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit_H1);
+  noniter_require_raw_h_conditioning(fit_H0);
   Ctx ctx1 = ctx_from_fit(fit_H1);
   const auto est1 = est_from_fit(fit_H1);
   Ctx ctx0 = ctx_from_fit(fit_H0);
@@ -8657,6 +8768,7 @@ Rcpp::List noniterative_cfa_constrained_impl(Rcpp::List fit,
                                              std::string discrepancy = "uls",
                                              std::string gamma = "nt",
                                              SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit);
   (void)discrepancy;
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);
@@ -8687,6 +8799,7 @@ Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
                                         std::string discrepancy = "uls",
                                         std::string gamma = "nt",
                                         SEXP data = R_NilValue) {
+  noniter_require_raw_h_conditioning(fit);
   (void)discrepancy;
   Ctx ctx = ctx_from_fit(fit);
   const auto est = est_from_fit(fit);

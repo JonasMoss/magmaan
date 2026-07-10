@@ -84,6 +84,12 @@ guttman_h <- function(S, blocks,
 #' @param score_floor0 Base normalized score-eigenvalue floor.
 #' @param score_rate Sample-size exponent resolving the floor as
 #'   `score_floor0 * nobs^(-score_rate)`; the result must lie strictly in `(0, 1)`.
+#' @param h_conditioning Feasibility-only fixed-diagonal PSD repair for the
+#'   aligned H proxy: `"raw"`, `"hard"`, or `"soft"`. Non-raw modes currently
+#'   support point estimation only.
+#' @param h_floor0 Base normalized H-eigenvalue floor.
+#' @param h_rate Sample-size exponent resolving the H floor as
+#'   `h_floor0 * nobs^(-h_rate)`.
 #' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
@@ -93,11 +99,14 @@ fit_noniterative_cfa <- function(partable, sample_stats,
                                  admissibility = "raw", margin = 1e-4,
                                  beta0 = 1, rate = 0.5,
                                  score_conditioning = "raw",
-                                 score_floor0 = 1, score_rate = 0.5) {
+                                 score_floor0 = 1, score_rate = 0.5,
+                                 h_conditioning = "raw", h_floor0 = 1,
+                                 h_rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite,
                               admissibility, margin, beta0, rate,
-                              score_conditioning, score_floor0, score_rate))
+                              score_conditioning, score_floor0, score_rate,
+                              h_conditioning, h_floor0, h_rate))
 }
 
 #' Fit the estimator-side metric-constrained non-iterative CFA map.
@@ -116,12 +125,15 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
                                         admissibility = "raw", margin = 1e-4,
                                         beta0 = 1, rate = 0.5,
                                         score_conditioning = "raw",
-                                        score_floor0 = 1, score_rate = 0.5) {
+                                        score_floor0 = 1, score_rate = 0.5,
+                                        h_conditioning = "raw", h_floor0 = 1,
+                                        h_rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator,
                                      composite, admissibility, margin, beta0,
                                      rate, score_conditioning, score_floor0,
-                                     score_rate))
+                                     score_rate, h_conditioning, h_floor0,
+                                     h_rate))
 }
 
 #' Fit the residual/loading restricted non-iterative CFA map.
@@ -147,13 +159,17 @@ fit_noniterative_cfa_restricted <- function(partable, sample_stats,
                                             rate = 0.5,
                                             score_conditioning = "raw",
                                             score_floor0 = 1,
-                                            score_rate = 0.5) {
+                                            score_rate = 0.5,
+                                            h_conditioning = "raw",
+                                            h_floor0 = 1,
+                                            h_rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
                                          communality, composite, admissibility,
                                          margin, beta0, rate,
                                          score_conditioning, score_floor0,
-                                         score_rate))
+                                         score_rate, h_conditioning, h_floor0,
+                                         h_rate))
 }
 
 noniterative_estimator_arg <- function(estimator) {

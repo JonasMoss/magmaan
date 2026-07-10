@@ -23,6 +23,23 @@ promotion gate, not an automatic default change: a candidate must pass every
 success, PD-factor-covariance, coverage, stress-tail, benign-RMSE, and runtime
 criterion before it is eligible for the larger confirmation run.
 
+The completed 24-cell, 300-replication screen had no survivor. Raw-H arms
+frequently failed at the existing improper-communality-split guard; when H was
+clamped, some score-conditioned arms still had non-positive score variances.
+That is outside the reach of the original Q repair, which deliberately preserves
+the score diagonal. The follow-up `--h-feasibility` mode therefore tests a
+separate fixed-diagonal PSD repair of H before scores are constructed. It is a
+point-estimation diagnostic only: no SE or coverage claim is made until its map
+derivative is implemented and validated.
+
+That follow-up was run on all 18 weak/equal-scale stress cells at 100
+replications. It restored 100% point-fit success and PD factor covariance, but
+every tested repair worsened loading RMSE relative to its clamp-only counterpart.
+The normalized-H shrinkage was necessarily large (median roughly 6--12, with
+substantial upper tails), and hard and soft variants saturated to the same
+practical repair. This is a second no-survivor result; no analytic-SE work or
+default promotion is warranted for H repair.
+
 ```{r}
 root <- dirname(knitr::current_input(dir = TRUE))
 results <- file.path(root, "results")
@@ -92,6 +109,9 @@ Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --smoke \
   --results-dir experiments/60-guttman-admissibility-clamp/results
 Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --screen \
   --results-dir experiments/60-guttman-admissibility-clamp/results
+# Follow-up point-fit feasibility screen for fixed-diagonal H repair:
+Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --h-feasibility \
+  --results-dir /tmp/exp60-h-feasibility
 # If survivors exist, pass the best two explicitly (or reuse screen_survivors.csv):
 Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --confirm \
   --finalists ARM1,ARM2 --results-dir /tmp/exp60-confirm
