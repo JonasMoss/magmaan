@@ -75,6 +75,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 58 | [guttman-rmse-coverage](58-guttman-rmse-coverage/report.qmd) | benchmark | active | Across normal, independent-generator, and Pearson-code categorical CFA simulations, how do configural and constrained Guttman maps compare with NTML and ULS on RMSE, coverage, failures, and timing? |
 | 59 | [guttman-vs-ntml](59-guttman-vs-ntml/report.qmd) | benchmark | active | Does the chosen closed-form recipe (extended_triad_ls + standardized, aligned configural) match NTML on parameter RMSE and empirical-SE coverage, including the high-rho/weak-loading regime, at a modest Sigma-fit cost while being faster and never failing? |
 | 60 | [guttman-admissibility-clamp](60-guttman-admissibility-clamp/report.qmd) | benchmark | active | Which hard or soft finite-sample communality clamp best repairs inadmissible aligned Guttman draws without degrading loading RMSE or empirical-SE coverage relative to Raw and NTML? |
+| 61 | [permutation-measurement-invariance](61-permutation-measurement-invariance/report.qmd) | probe | active | Can fully recomputed studentized-Wald label permutations calibrate continuous metric-invariance tests under heterogeneous group populations? |
 
 ## Archived
 
