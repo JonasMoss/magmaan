@@ -21,6 +21,7 @@ usage <- function() {
     "  --smoke              Small validation run.\n",
     "  --screen             24-cell candidate screen (300 reps/cell).\n",
     "  --confirm            27-cell finalist confirmation (1000 reps/cell).\n",
+    "  --h-feasibility      Point-fit screen of fixed-diagonal H PSD repair.\n",
     "  --full               Alias for --screen.\n",
     "  --reps N             Override replications per cell.\n",
     "  --finalists LIST     Comma-separated joint-arm names for --confirm.\n",
@@ -65,6 +66,7 @@ parse_args <- function(args) {
     seed_base = 20260708L,
     ml_max_iter = 1500L,
     keep_draws = FALSE,
+    point_only = FALSE,
     finalists = character(),
     results_dir = experiment_path("results")
   )
@@ -111,6 +113,17 @@ parse_args <- function(args) {
       if (!"scales" %in% explicit) opts$scales <<- c("equal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
       if (!"strength" %in% explicit) opts$strength <<- c("weak")
+    } else if (mode == "h_feasibility") {
+      opts$point_only <<- TRUE
+      if (!"reps" %in% explicit) opts$reps <<- 100L
+      if (!"n" %in% explicit) opts$n <<- c(50L, 100L)
+      if (!"generators" %in% explicit) opts$generators <<- c("normal", "ig", "ordinal")
+      if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L, 5L)
+      if (!"indicators" %in% explicit) opts$indicators <<- c("3")
+      if (!"rho" %in% explicit) opts$rho <<- c(0.8)
+      if (!"scales" %in% explicit) opts$scales <<- c("equal")
+      if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
+      if (!"strength" %in% explicit) opts$strength <<- c("weak")
     }
   }
   i <- 1L
@@ -134,6 +147,8 @@ parse_args <- function(args) {
       apply_mode("screen")
     } else if (a == "--confirm") {
       apply_mode("confirm")
+    } else if (a == "--h-feasibility") {
+      apply_mode("h_feasibility")
     } else if (a == "--reps") {
       opts$reps <- as.integer(take(a)); explicit <- c(explicit, "reps")
     } else if (grepl("^--reps=", a)) {
@@ -601,6 +616,9 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
   score_raw_normalized_min <- score_repaired_normalized_min <- NA_real_
   score_shrinkage <- score_shrinkage_rate <- score_hard_violation_rate <- NA_real_
   marker_min <- score_variance_min <- NA_real_
+  h_target <- h_raw_min <- h_repaired_min <- NA_real_
+  h_raw_normalized_min <- h_repaired_normalized_min <- NA_real_
+  h_shrinkage <- h_shrinkage_rate <- h_hard_violation_rate <- h_variance_min <- NA_real_
   improper <- NA
   if (isTRUE(fit_ok) && !is.null(fit)) {
     mats <- matrices_from_partable(fit$partable, attr(cond, "pop"))
@@ -624,6 +642,18 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
       score_hard_violation_rate <- mean(sd$hard_violation)
       marker_min <- min(sd$min_abs_marker)
       score_variance_min <- min(sd$min_score_variance)
+    }
+    hd <- fit$h_conditioning_diagnostics
+    if (is.data.frame(hd) && nrow(hd)) {
+      h_target <- min(hd$target_floor)
+      h_raw_min <- min(hd$raw_min_eigenvalue)
+      h_repaired_min <- min(hd$repaired_min_eigenvalue)
+      h_raw_normalized_min <- min(hd$raw_normalized_min_eigenvalue)
+      h_repaired_normalized_min <- min(hd$repaired_normalized_min_eigenvalue)
+      h_shrinkage <- max(hd$shrinkage)
+      h_shrinkage_rate <- mean(hd$shrinkage > 0)
+      h_hard_violation_rate <- mean(hd$hard_violation)
+      h_variance_min <- min(hd$min_h_variance)
     }
   }
   data.frame(
@@ -650,6 +680,15 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
     score_hard_violation_rate = score_hard_violation_rate,
     score_variance_min = score_variance_min,
     marker_min = marker_min,
+    h_target = h_target,
+    h_raw_min_eig = h_raw_min,
+    h_repaired_min_eig = h_repaired_min,
+    h_raw_normalized_min_eig = h_raw_normalized_min,
+    h_repaired_normalized_min_eig = h_repaired_normalized_min,
+    h_shrinkage = h_shrinkage,
+    h_shrinkage_rate = h_shrinkage_rate,
+    h_hard_violation_rate = h_hard_violation_rate,
+    h_variance_min = h_variance_min,
     fit_ms = fit_ms,
     se_ms = se_ms,
     total_ms = fit_ms + ifelse(is.finite(se_ms), se_ms, 0),
@@ -688,7 +727,11 @@ make_arm_specs <- function() {
   joint$clamp_only_arm <- paste0("guttman_c_", joint$clamp, "_s_raw")
   cols <- c("arm", "clamp_only_arm", "clamp", "policy", "rate", "beta0",
             "margin", "score", "score_policy", "score_rate", "delta50",
-            "score_floor0")
+            "score_floor0", "h_policy", "h_rate", "h_delta50", "h_floor0")
+  joint$h_policy <- "raw"
+  joint$h_rate <- 0.5
+  joint$h_delta50 <- 0
+  joint$h_floor0 <- 1
   rbind(
     joint[, cols],
     data.frame(
@@ -696,7 +739,38 @@ make_arm_specs <- function() {
       policy = NA_character_, rate = NA_real_, beta0 = NA_real_,
       margin = NA_real_, score = NA_character_, score_policy = NA_character_,
       score_rate = NA_real_, delta50 = NA_real_, score_floor0 = NA_real_,
+      h_policy = NA_character_, h_rate = NA_real_, h_delta50 = NA_real_,
+      h_floor0 = NA_real_,
       stringsAsFactors = FALSE)[, cols])
+}
+
+make_h_feasibility_specs <- function() {
+  clamps <- data.frame(
+    clamp = c("hard_m0p001", "soft_r0p5_b4_m0p001", "soft_r1_b4_m0p001"),
+    policy = c("hard", "soft", "soft"),
+    rate = c(0.5, 0.5, 1), beta0 = c(1, 4, 4), margin = 1e-3,
+    stringsAsFactors = FALSE)
+  h <- expand.grid(h_policy = c("hard", "soft"), h_delta50 = c(0.01, 0.05),
+                   stringsAsFactors = FALSE)
+  h$h_rate <- 0.5
+  h$h_floor0 <- h$h_delta50 * 50^h$h_rate
+  h$score <- "raw"
+  h$score_policy <- "raw"
+  h$score_rate <- 0.5
+  h$delta50 <- 0
+  h$score_floor0 <- 1
+  joint <- merge(clamps, h, by = NULL)
+  joint$arm <- paste0("guttman_c_", joint$clamp, "_h_", joint$h_policy,
+                      "_d", vapply(joint$h_delta50, arm_token, character(1)))
+  joint$clamp_only_arm <- paste0("guttman_c_", joint$clamp, "_h_raw")
+  raw <- clamps
+  raw$score <- "raw"; raw$score_policy <- "raw"; raw$score_rate <- 0.5
+  raw$delta50 <- 0; raw$score_floor0 <- 1
+  raw$h_policy <- "raw"; raw$h_rate <- 0.5; raw$h_delta50 <- 0; raw$h_floor0 <- 1
+  raw$arm <- paste0("guttman_c_", raw$clamp, "_h_raw")
+  raw$clamp_only_arm <- raw$arm
+  cols <- names(make_arm_specs())
+  rbind(raw[, cols], joint[, cols])
 }
 
 guttman_fit <- function(pt, ss, spec) {
@@ -706,7 +780,9 @@ guttman_fit <- function(pt, ss, spec) {
     admissibility = spec$policy, margin = spec$margin,
     beta0 = spec$beta0, rate = spec$rate,
     score_conditioning = spec$score_policy,
-    score_floor0 = spec$score_floor0, score_rate = spec$score_rate)
+    score_floor0 = spec$score_floor0, score_rate = spec$score_rate,
+    h_conditioning = spec$h_policy,
+    h_floor0 = spec$h_floor0, h_rate = spec$h_rate)
 }
 
 guttman_se <- function(fit, X) {
@@ -743,15 +819,29 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
   clamp_rate <- if (grepl("^guttman", arm) && !is.null(fit$n_h2_clamped))
     sum(unlist(fit$n_h2_clamped)) / nrow(ss$S[[1L]]) else NA_real_
   whole <- fit_whole_row(cond, rep_id, arm, fit, pop)
-  se_res <- timed_eval({
-    if (grepl("^guttman", arm)) guttman_se(fit, X) else empirical_se(fit, X)
-  })
+  se_res <- if (isTRUE(opts$point_only)) {
+    list(ok = TRUE, value = rep(1, length(fit$theta)), ms = 0)
+  } else {
+    timed_eval({
+      if (grepl("^guttman", arm)) guttman_se(fit, X) else empirical_se(fit, X)
+    })
+  }
   estimates <- data.frame()
   if (se_res$ok && converged(fit)) {
     estimates <- estimate_rows(cond, rep_id, arm, fit$theta, se_res$value, target, info)
+    if (isTRUE(opts$point_only)) {
+      estimates$se <- NA_real_
+      estimates$ci_lower <- NA_real_
+      estimates$ci_upper <- NA_real_
+      estimates$ci_width <- NA_real_
+      estimates$covered <- NA
+    }
   }
-  diag <- fit_diagnostics(cond, rep_id, "fit_se", arm, TRUE, fit = fit,
-                          fit_ms = fit_res$ms, se_ok = se_res$ok,
+  diag <- fit_diagnostics(cond, rep_id,
+                          if (isTRUE(opts$point_only)) "fit_point" else "fit_se",
+                          arm, TRUE, fit = fit,
+                          fit_ms = fit_res$ms,
+                          se_ok = if (isTRUE(opts$point_only)) NA else se_res$ok,
                           se_ms = se_res$ms,
                           error = if (se_res$ok) "" else se_res$error,
                           clamp_rate = clamp_rate)
@@ -918,6 +1008,15 @@ summarise_diagnostics <- function(x) {
       marker_min_p01 = q_safe(d$marker_min, .01),
       shrinkage_rate = mean(d$score_shrinkage_rate, na.rm = TRUE),
       score_hard_violation_rate = mean(d$score_hard_violation_rate, na.rm = TRUE),
+      h_raw_min_eig_p01 = q_safe(d$h_raw_min_eig, .01),
+      h_repaired_min_eig_p01 = q_safe(d$h_repaired_min_eig, .01),
+      h_raw_normalized_min_eig_p01 =
+        q_safe(d$h_raw_normalized_min_eig, .01),
+      h_repaired_normalized_min_eig_p01 =
+        q_safe(d$h_repaired_normalized_min_eig, .01),
+      h_shrinkage_rate = mean(d$h_shrinkage_rate, na.rm = TRUE),
+      h_hard_violation_rate = mean(d$h_hard_violation_rate, na.rm = TRUE),
+      h_variance_min_p01 = q_safe(d$h_variance_min, .01),
       min_resid_p05 = q_safe(d$min_resid, .05),
       sigma_min_eig_p05 = q_safe(d$sigma_min_eig, .05),
       first_error = paste(unique(d$error[nzchar(d$error)])[1] %||% "", collapse = ""),
@@ -1119,6 +1218,10 @@ append_csv <- function(rows, name, dir) {
 
 arm_specs <- make_arm_specs()
 raw_arm <- "guttman_c_raw_s_raw"
+if (opts$mode == "h_feasibility") {
+  arm_specs <- make_h_feasibility_specs()
+  raw_arm <- "guttman_c_hard_m0p001_h_raw"
+}
 if (opts$mode == "probe") {
   keep <- c(raw_arm, "guttman_c_hard_m0p001_s_raw",
             "guttman_c_raw_s_hard_r0p5_d0p05",
@@ -1163,11 +1266,13 @@ write_metadata(
     include_restricted = opts$include_restricted,
     max_cells = opts$max_cells,
     cores = opts$cores,
+    point_only = opts$point_only,
     alpha = opts$alpha,
     seed_base = opts$seed_base,
     ml_max_iter = opts$ml_max_iter,
     finalists = opts$finalists,
     score_candidate_rule = "hard/soft x rate(0.5,1) x delta50(0.01,0.025,0.05,0.1)",
+    h_feasibility_rule = "hard/soft fixed-diagonal H repair x delta50(0.01,0.05); point fits only",
     production_score_conditioning = "raw",
     categorical_metric = "observed Pearson-code covariance; no polychoric inputs"
   ),

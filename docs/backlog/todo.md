@@ -2231,8 +2231,20 @@ work until a concrete downstream consumer appears.
   Experiment 60 crosses the four communality-clamp finalists with hard/soft
   score rates `{0.5,1}` and `delta_50 in {0.01,0.025,0.05,0.1}`, screens them
   under the predeclared success/PD/coverage/tail/benign/runtime gate, and can
-  confirm the best two survivors. No conditioning default is promoted by this
-  implementation; run and interpret the screen/confirmation first.
+  confirm the best two survivors. The completed 24-cell/300-rep screen on
+  2026-07-10 had **no survivor**: raw H generated improper communality splits,
+  while some clamped-H score arms had non-positive score variances that a
+  fixed-diagonal Q repair cannot change. The gate therefore correctly blocks a
+  confirmation run and leaves production conditioning raw. The next recorded
+  feasibility branch is fixed-diagonal PSD repair of H itself (hard/soft
+  normalized spectral shrinkage before aligned score construction), initially
+  point-estimation-only with its own 18-cell stress screen. That screen is
+  complete (2026-07-10; 100 reps): repaired-H arms achieved 100% point-fit
+  success and PD Phi but all worsened loading RMSE relative to their matching
+  clamp-only arm; median shrinkage was about 6--12 and hard/soft saturated to
+  the same practical map. **Do not build analytic/FD post-fit support or promote
+  H repair.** Retain the opt-in point-fit implementation and experiment mode as
+  a reproducible negative result; the R post-fit surface rejects it explicitly.
   **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
   now uses the regular-interior analytic derivative for configural Guttman
   maps, including the correlation-standardization, triad-GMM communality,

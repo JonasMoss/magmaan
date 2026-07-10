@@ -104,3 +104,30 @@ test_that("non-raw score conditioning rejects legacy and adaptive maps", {
       score_conditioning = "soft"),
     "not supported for adaptive")
 })
+
+test_that("fixed-diagonal H repair is recorded as a point-fit feasibility map", {
+  set.seed(20260714)
+  X <- matrix(rnorm(400L * 6L), 400L, 6L)
+  X[, 2] <- 0.8 * X[, 1] + 0.6 * X[, 2]
+  X[, 3] <- 0.7 * X[, 1] + 0.7 * X[, 3]
+  X[, 5] <- 0.8 * X[, 4] + 0.6 * X[, 5]
+  X[, 6] <- 0.7 * X[, 4] + 0.7 * X[, 6]
+  colnames(X) <- paste0("x", 1:6)
+  pt <- magmaan_core$lavaan_lavaanify(
+    "f1 =~ x1 + x2 + x3
+     f2 =~ x4 + x5 + x6
+     f1 ~~ f2")
+  ss <- magmaan_core$data_sample_stats_from_raw(X)
+
+  fit <- fit_noniterative_cfa(
+    pt, ss, estimator = "guttman_aligned", composite = "standardized",
+    h_conditioning = "hard", h_floor0 = 16, h_rate = 0.5)
+  expect_equal(fit$h_conditioning, "hard")
+  expect_equal(fit$h_floor0, 16)
+  expect_s3_class(fit$h_conditioning_diagnostics, "data.frame")
+  expect_gte(
+    fit$h_conditioning_diagnostics$repaired_normalized_min_eigenvalue,
+    fit$h_conditioning_diagnostics$target_floor - 1e-10)
+  expect_error(noniterative_cfa_se(fit, gamma = "nt"),
+               "point-estimation feasibility prototype")
+})

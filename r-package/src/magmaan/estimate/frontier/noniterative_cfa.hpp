@@ -61,6 +61,17 @@ struct ScoreConditioningConfig {
   double rate_exp = 0.5;
 };
 
+// Feasibility-only repair of the aligned H proxy before score construction.
+// Non-raw modes preserve diag(H), shrink its normalized spectrum toward I, and
+// are deliberately not yet admitted to analytic post-fit inference.
+enum class HConditioningPolicy : std::uint8_t { Raw, Hard, Soft };
+
+struct HConditioningConfig {
+  HConditioningPolicy policy = HConditioningPolicy::Raw;
+  double floor0 = 1.0;
+  double rate_exp = 0.5;
+};
+
 struct ScoreConditioningDiagnostics {
   double target_floor = 0.0;
   double raw_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
@@ -75,6 +86,19 @@ struct ScoreConditioningDiagnostics {
   double min_abs_marker = std::numeric_limits<double>::quiet_NaN();
 };
 
+struct HConditioningDiagnostics {
+  double target_floor = 0.0;
+  double raw_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double repaired_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double raw_normalized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double repaired_normalized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double shrinkage = 0.0;
+  bool hard_violation = false;
+  double min_h_variance = std::numeric_limits<double>::quiet_NaN();
+};
+
 CompositeWeight
 resolve_composite_weight(NonIterativeEstimator which, CompositeWeight composite);
 
@@ -83,6 +107,9 @@ composite_weight_name(CompositeWeight composite);
 
 const char*
 score_conditioning_policy_name(ScoreConditioningPolicy policy);
+
+const char*
+h_conditioning_policy_name(HConditioningPolicy policy);
 
 // The pure map τ: vech(samp.S) ↦ full θ̂ (size ev.n_free()). Deterministic given
 // (pt, rep, ev); reads only `samp.S`. `ev` supplies the free-parameter layout
@@ -100,7 +127,8 @@ noniterative_cfa_theta(const spec::LatentStructure& pt,
                        NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
                        CompositeWeight composite = CompositeWeight::EstimatorDefault,
                        AdmissibilityConfig admissibility = {},
-                       ScoreConditioningConfig score_conditioning = {});
+                       ScoreConditioningConfig score_conditioning = {},
+                       HConditioningConfig h_conditioning = {});
 
 // Diagnostic wrapper: builds the evaluator internally, returns θ̂ plus the clean
 // per-block matrices (Φ is the latent covariance = magmaan's Ψ; ψ is the
@@ -112,6 +140,7 @@ struct NonIterativeFit {
   std::vector<Eigen::VectorXd> psi;
   std::vector<Eigen::Index> n_h2_clamped;
   std::vector<ScoreConditioningDiagnostics> score_conditioning_diagnostics;
+  std::vector<HConditioningDiagnostics> h_conditioning_diagnostics;
 };
 
 fit_expected<NonIterativeFit>
@@ -121,7 +150,8 @@ fit_noniterative_cfa(const spec::LatentStructure& pt,
                      NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
                      CompositeWeight composite = CompositeWeight::EstimatorDefault,
                      AdmissibilityConfig admissibility = {},
-                     ScoreConditioningConfig score_conditioning = {});
+                     ScoreConditioningConfig score_conditioning = {},
+                     HConditioningConfig h_conditioning = {});
 
 // Sigma/H-level metric-shape constrained estimator. This is an estimator map,
 // not an inference projection: it estimates a common standardized loading shape
@@ -137,7 +167,8 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt,
                             NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
                             CompositeWeight composite = CompositeWeight::EstimatorDefault,
                             AdmissibilityConfig admissibility = {},
-                            ScoreConditioningConfig score_conditioning = {});
+                            ScoreConditioningConfig score_conditioning = {},
+                            HConditioningConfig h_conditioning = {});
 
 // Sigma/H-level restricted estimator for linear equality constraints that are
 // separable into residual-variance rows and loading rows. Residual rows are
@@ -156,7 +187,8 @@ fit_noniterative_cfa_restricted(
     CommunalityMethod comm = CommunalityMethod::TriadWls,
     CompositeWeight composite = CompositeWeight::EstimatorDefault,
     AdmissibilityConfig admissibility = {},
-    ScoreConditioningConfig score_conditioning = {});
+    ScoreConditioningConfig score_conditioning = {},
+    HConditioningConfig h_conditioning = {});
 
 // J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
 // p*_block = p_block(p_block+1)/2), for the multi-block map w.r.t. block

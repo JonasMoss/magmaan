@@ -211,6 +211,21 @@ golden `parTable()` fixtures.
   the identical map. Conditioning remains `raw` by default, is rejected for
   legacy `guttman_lavaan` and explicit `adaptive`, and experiment 60 calibrates
   hard and smooth score repairs jointly with the communality-clamp finalists.
+  The completed 24-cell/300-rep screen (2026-07-10) produced no survivor:
+  raw-H arms frequently hit the existing improper-communality-split guard, and
+  even clamped-H arms could have non-positive score variances. Fixed-diagonal
+  Q repair intentionally cannot cure that latter failure because it preserves
+  diag(Q). A separate, opt-in point-estimation feasibility branch now repairs
+  the normalized H proxy itself toward the identity while preserving diag(H),
+  before score construction. It is restricted to aligned unit/standardized
+  maps, records raw/repaired H spectra and intensity, and has no post-fit
+  inference claim until its derivative and calibration work are complete. Its
+  18-cell/100-rep stress feasibility screen is also a no-go: it restored 100%
+  point-fit availability and PD Phi, but every tested H repair worsened loading
+  RMSE, often sharply, because the required normalized-H shrinkage was large
+  (median intensity roughly 6--12 with substantial upper tails). The soft and
+  hard variants saturated to the same repair in this failure region. Keep this
+  as documented research evidence, not a production or inference candidate.
   Restricted
   estimator-side maps differentiate the regular constrained communality KKT
   system and the loading projection, with central differences retained for
