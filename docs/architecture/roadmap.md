@@ -172,10 +172,11 @@ golden `parTable()` fixtures.
   promoted research selector, using the blockwise triad-GMM H diagonal and the
   aligned score reconstruction from the communality experiment. The Guttman
   regression also has an explicit composite-weight axis:
-  `auto` preserves those estimator defaults, `unit` uses incidence weights,
+  `auto` resolves to `unit` for `guttman_lavaan` and to `standardized` for
+  `guttman_aligned`; `unit` uses incidence weights,
   `standardized` uses `diag(S)^-1/2 Z` and is rebuilt from the live covariance
   in every map evaluation, and `adaptive` uses the existing H-aligned
-  data-dependent weights.
+  data-dependent weights as an explicit retired compatibility path.
   `estimator_map_jacobian` is its `J = dtheta/dvech(S)`: configural Guttman
   maps use an analytic regular-interior derivative (including the
   correlation-standardization, triad-GMM communality, fixed-rank
@@ -194,8 +195,23 @@ golden `parTable()` fixtures.
   box with `beta = beta0 * n^rate`. Value, directional, batched, and
   constrained-KKT Jacobian paths compose the same clamp derivative. C++ and R
   fit/inference surfaces carry the policy and per-block activation counts;
-  `guttman_lavaan` remains untouched and experiment 60 calibrates the
-  provisional constants. Restricted
+  `guttman_lavaan` remains untouched. The aligned `unit` and `standardized`
+  paths also have opt-in score-covariance conditioning for
+  `Q = B' H B`. With `D = diag(Q)` and `R = D^-1/2 Q D^-1/2`, the hard map
+  adds the exact diagonal intensity needed to attain
+  `delta_n = floor0 n^-rate`, while the soft map uses a smooth spectral
+  minimum and softplus activation; both return `(Q + tD)/(1+t)`, preserve the
+  score variances, and use the repaired matrix consistently in the score
+  inverse and factor covariance. The batched analytic Jacobian caches one
+  eigensystem per block; hard activation/tie boundaries fall back to central
+  differences and soft repeated eigenvalues use the invariant spectral
+  projector. Fit objects retain the conditioning configuration and per-block
+  raw/repaired eigenvalues, normalized eigenvalues, intensity, floor violation,
+  score variance, and marker diagnostics, so post-fit inference reconstructs
+  the identical map. Conditioning remains `raw` by default, is rejected for
+  legacy `guttman_lavaan` and explicit `adaptive`, and experiment 60 calibrates
+  hard and smooth score repairs jointly with the communality-clamp finalists.
+  Restricted
   estimator-side maps differentiate the regular constrained communality KKT
   system and the loading projection, with central differences retained for
   rank-changing pseudo-inverse or singular projection boundary cases. The

@@ -517,16 +517,16 @@ frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
     .Call(`_magmaan_frontier_guttman_h_impl`, S, blocks, method)
 }
 
-noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5) {
-    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate)
+noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5) {
+    .Call(`_magmaan_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate)
 }
 
-noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5) {
-    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate)
+noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5) {
+    .Call(`_magmaan_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate)
 }
 
-noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5) {
-    .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite, admissibility, margin, beta0, rate)
+noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5) {
+    .Call(`_magmaan_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate)
 }
 
 noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {

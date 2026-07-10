@@ -151,7 +151,9 @@ finite_difference_restricted_jacobian(
     std::size_t block,
     double rel_step,
     ef::CommunalityMethod comm,
-    ef::CompositeWeight composite) {
+    ef::CompositeWeight composite,
+    ef::AdmissibilityConfig admissibility = {},
+    ef::ScoreConditioningConfig score_conditioning = {}) {
   auto ev = ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) {
     return std::unexpected(magmaan::FitError{
@@ -176,14 +178,16 @@ finite_difference_restricted_jacobian(
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
       auto fp = ef::fit_noniterative_cfa_restricted(
-          pt, rep, work, which, comm, composite);
+          pt, rep, work, which, comm, composite, admissibility,
+          score_conditioning);
       if (!fp.has_value()) return std::unexpected(fp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
       auto fm = ef::fit_noniterative_cfa_restricted(
-          pt, rep, work, which, comm, composite);
+          pt, rep, work, which, comm, composite, admissibility,
+          score_conditioning);
       if (!fm.has_value()) return std::unexpected(fm.error());
       J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
       ++col;
@@ -628,6 +632,59 @@ TEST_CASE("residual-restricted grouped inference carries cross-block covariance"
       if (bop[static_cast<std::size_t>(i)] != bop[static_cast<std::size_t>(j)])
         max_offblock = std::max(max_offblock, std::abs(inf->Omega(i, j)));
   CHECK(max_offblock > 1e-12);
+}
+
+TEST_CASE("conditioned metric and grouped restricted maps retain analytic inference") {
+  auto b = build_mg(kTwoFactor, 2, {GroupEqual::Residuals});
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  SampleStats samp;
+  samp.S = {tf_cov(kLam, 1.0, 0.4, 0.5),
+            tf_cov(kLam, 1.2, 0.5, 0.5)};
+  samp.n_obs = {500, 700};
+  ef::ScoreConditioningConfig soft{
+      ef::ScoreConditioningPolicy::Soft, 16.0, 0.5};
+
+  auto metric = ef::fit_noniterative_cfa_metric(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, soft);
+  REQUIRE_OK(metric);
+  REQUIRE(metric->score_conditioning_diagnostics.size() == 2);
+  for (std::size_t block = 0; block < metric->Phi.size(); ++block) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(metric->Phi[block]);
+    REQUIRE(es.info() == Eigen::Success);
+    CHECK(es.eigenvalues().minCoeff() > 0.0);
+    CHECK(metric->score_conditioning_diagnostics[block]
+              .repaired_normalized_min_eigenvalue >=
+          metric->score_conditioning_diagnostics[block].target_floor - 1e-10);
+  }
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::TriadWls,
+      ef::CompositeWeight::Standardized, {}, soft);
+  REQUIRE_OK(fit);
+  for (std::size_t block = 0; block < samp.S.size(); ++block) {
+    auto Ja = ef::estimator_map_jacobian_restricted_block(
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+        block, 2e-6, ef::CommunalityMethod::TriadWls,
+        ef::CompositeWeight::Standardized, {}, soft);
+    auto Jfd = finite_difference_restricted_jacobian(
+        b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+        block, 2e-6, ef::CommunalityMethod::TriadWls,
+        ef::CompositeWeight::Standardized, {}, soft);
+    REQUIRE_OK(Ja);
+    REQUIRE_OK(Jfd);
+    CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 1e-4);
+  }
+
+  auto inf = rf::noniterative_inference_grouped_restricted_nt(
+      b.pt, b.rep, samp, fit->theta,
+      ef::NonIterativeEstimator::GuttmanAligned, rf::Discrepancy::ULS,
+      ef::CommunalityMethod::TriadWls,
+      ef::CompositeWeight::Standardized, {}, soft);
+  REQUIRE_OK(inf);
+  CHECK(inf->Omega.allFinite());
 }
 
 TEST_CASE("grouped pseudo-LRT compares estimator-side restricted and configural fits") {

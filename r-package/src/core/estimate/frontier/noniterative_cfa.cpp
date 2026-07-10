@@ -29,7 +29,7 @@ resolve_composite_weight(NonIterativeEstimator which, CompositeWeight composite)
     case NonIterativeEstimator::GuttmanLavaan:
       return CompositeWeight::Unit;
     case NonIterativeEstimator::GuttmanAligned:
-      return CompositeWeight::Adaptive;
+      return CompositeWeight::Standardized;
   }
   return CompositeWeight::Unit;
 }
@@ -49,7 +49,66 @@ composite_weight_name(CompositeWeight composite) {
   return "auto";
 }
 
+const char*
+score_conditioning_policy_name(ScoreConditioningPolicy policy) {
+  switch (policy) {
+    case ScoreConditioningPolicy::Raw:
+      return "raw";
+    case ScoreConditioningPolicy::Hard:
+      return "hard";
+    case ScoreConditioningPolicy::Soft:
+      return "soft";
+  }
+  return "raw";
+}
+
 namespace {
+
+struct ResolvedScoreConditioning {
+  ScoreConditioningPolicy policy = ScoreConditioningPolicy::Raw;
+  double target_floor = 0.0;
+};
+
+fit_expected<std::vector<ResolvedScoreConditioning>>
+resolve_block_score_conditioning(
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    CompositeWeight composite,
+    const ScoreConditioningConfig& config) {
+  const CompositeWeight resolved = resolve_composite_weight(which, composite);
+  if (config.policy != ScoreConditioningPolicy::Raw) {
+    if (which != NonIterativeEstimator::GuttmanAligned)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "score conditioning is supported only for guttman_aligned"});
+    if (resolved == CompositeWeight::Adaptive)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "score conditioning is not supported for adaptive composites"});
+    if (resolved != CompositeWeight::Unit &&
+        resolved != CompositeWeight::Standardized)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "score conditioning requires unit or standardized composites"});
+    if (samp.n_obs.size() != samp.S.size())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "score conditioning: sample-size count does not match blocks"});
+  }
+
+  std::vector<ResolvedScoreConditioning> out;
+  out.reserve(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    ResolvedScoreConditioning resolved_config;
+    resolved_config.policy = config.policy;
+    if (config.policy != ScoreConditioningPolicy::Raw) {
+      const double n = static_cast<double>(samp.n_obs[b]);
+      const double delta = config.floor0 * std::pow(n, -config.rate_exp);
+      if (!std::isfinite(delta) || !(delta > 0.0) || !(delta < 1.0))
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "score conditioning: floor0 * n_obs^(-rate_exp) must lie in (0, 1)"});
+      resolved_config.target_floor = delta;
+    }
+    out.push_back(resolved_config);
+  }
+  return out;
+}
 
 fit_expected<Eigen::VectorXd> num_error(std::string detail) {
   return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail)});
@@ -85,6 +144,13 @@ struct BlockGuttman {
   Eigen::MatrixXd Phi;     // nfac × nfac, latent covariance = M P M
   Eigen::VectorXd psi;     // nvar, residual variances
   Eigen::Index n_h2_clamped = 0;
+  ScoreConditioningDiagnostics score_conditioning;
+
+  BlockGuttman(Eigen::MatrixXd Lambda_in, Eigen::MatrixXd Phi_in,
+               Eigen::VectorXd psi_in)
+      : Lambda(std::move(Lambda_in)),
+        Phi(std::move(Phi_in)),
+        psi(std::move(psi_in)) {}
 };
 
 struct BlockGuttmanDirection {
@@ -115,6 +181,8 @@ struct ScoreBlock {
   Eigen::MatrixXd Bstd;   // nvar × nfac; U = Bstd'Y_H has unit marginal variances
   Eigen::MatrixXd P;      // Cov(U)
   Eigen::MatrixXd C;      // Cov(Y_H, U) = H Bstd
+  Eigen::Index n_h2_clamped = 0;
+  ScoreConditioningDiagnostics score_conditioning;
 };
 
 fit_expected<Eigen::MatrixXd> legacy_h_matrix(const CfaBlockLayout& L,
@@ -230,6 +298,215 @@ fit_expected<Eigen::MatrixXd> invert_full_rank(const Eigen::MatrixXd& A,
   return lu.inverse();
 }
 
+struct ConditionedScoreCovariance {
+  Eigen::MatrixXd value;
+  Eigen::VectorXd diagonal;
+  Eigen::MatrixXd normalized;
+  Eigen::VectorXd normalized_eigenvalues;
+  Eigen::MatrixXd normalized_eigenvectors;
+  Eigen::MatrixXd soft_projector;
+  ScoreConditioningPolicy policy = ScoreConditioningPolicy::Raw;
+  double target_floor = 0.0;
+  double shrinkage = 0.0;
+  bool hard_derivative_regular = true;
+  ScoreConditioningDiagnostics diagnostics;
+};
+
+double stable_softplus(double x) {
+  return std::max(x, 0.0) + std::log1p(std::exp(-std::abs(x)));
+}
+
+double stable_logistic(double x) {
+  if (x >= 0.0) {
+    const double z = std::exp(-x);
+    return 1.0 / (1.0 + z);
+  }
+  const double z = std::exp(x);
+  return z / (1.0 + z);
+}
+
+fit_expected<ConditionedScoreCovariance>
+condition_score_covariance(const Eigen::MatrixXd& Q,
+                           const ResolvedScoreConditioning& config,
+                           const char* label) {
+  if (Q.rows() != Q.cols() || Q.rows() == 0 || !Q.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": invalid score covariance"});
+
+  ConditionedScoreCovariance out;
+  out.value = Q;
+  out.diagonal = Q.diagonal();
+  out.policy = config.policy;
+  out.target_floor = config.target_floor;
+  out.diagnostics.target_floor = config.target_floor;
+  out.diagnostics.min_score_variance = out.diagonal.minCoeff();
+
+  const Eigen::MatrixXd Qsym = 0.5 * (Q + Q.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> q_es(Qsym);
+  if (q_es.info() == Eigen::Success && q_es.eigenvalues().allFinite())
+    out.diagnostics.raw_min_eigenvalue = q_es.eigenvalues().minCoeff();
+
+  const bool positive_diagonal =
+      out.diagonal.allFinite() && (out.diagonal.array() > 0.0).all();
+  if (positive_diagonal) {
+    const Eigen::VectorXd inv_sd = out.diagonal.array().sqrt().inverse();
+    out.normalized = inv_sd.asDiagonal() * Qsym * inv_sd.asDiagonal();
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> r_es(out.normalized);
+    if (r_es.info() != Eigen::Success || !r_es.eigenvalues().allFinite())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": normalized score eigendecomposition failed"});
+    out.normalized_eigenvalues = r_es.eigenvalues();
+    out.normalized_eigenvectors = r_es.eigenvectors();
+    out.diagnostics.raw_normalized_min_eigenvalue =
+        out.normalized_eigenvalues.minCoeff();
+  } else if (config.policy != ScoreConditioningPolicy::Raw) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) +
+            ": score conditioning requires positive score variances"});
+  }
+
+  if (config.policy == ScoreConditioningPolicy::Raw || Q.rows() == 1) {
+    if (config.policy != ScoreConditioningPolicy::Raw && Q(0, 0) <= 0.0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": non-positive one-factor score variance"});
+    out.diagnostics.repaired_min_eigenvalue =
+        out.diagnostics.raw_min_eigenvalue;
+    out.diagnostics.repaired_normalized_min_eigenvalue =
+        out.diagnostics.raw_normalized_min_eigenvalue;
+    return out;
+  }
+
+  const Eigen::Index k = Q.rows();
+  const double lambda = out.normalized_eigenvalues(0);
+  const double delta = config.target_floor;
+  double t = 0.0;
+  if (config.policy == ScoreConditioningPolicy::Hard) {
+    t = std::max(0.0, (delta - lambda) / (1.0 - delta));
+    out.diagnostics.hard_violation = lambda < delta;
+    const double tol = 1e-8 * std::max({1.0, std::abs(lambda), delta});
+    const bool near_boundary = std::abs(delta - lambda) <= tol;
+    const bool repeated_min =
+        k > 1 && out.normalized_eigenvalues(1) - lambda <= tol;
+    out.hard_derivative_regular = !near_boundary && !repeated_min;
+  } else {
+    constexpr double eta = 0.1;
+    const double beta = std::log(static_cast<double>(k)) / (eta * delta);
+    const double shifted_min = out.normalized_eigenvalues(0);
+    Eigen::VectorXd exp_terms =
+        (-beta * (out.normalized_eigenvalues.array() - shifted_min)).exp();
+    const double denom = exp_terms.sum();
+    const double ell = shifted_min - std::log(denom) / beta;
+    const double gamma = std::log(2.0) / (eta * delta);
+    const double x = gamma * (delta - ell) / (1.0 - delta);
+    t = stable_softplus(x) / gamma;
+    const Eigen::VectorXd weights = exp_terms / denom;
+    out.soft_projector = out.normalized_eigenvectors * weights.asDiagonal() *
+                         out.normalized_eigenvectors.transpose();
+    out.diagnostics.hard_violation = lambda < delta;
+  }
+
+  out.shrinkage = t;
+  out.diagnostics.shrinkage = t;
+  const Eigen::MatrixXd Dmat = out.diagonal.asDiagonal();
+  out.value = (Q + t * Dmat) / (1.0 + t);
+  out.value.diagonal() = out.diagonal;
+
+  const Eigen::MatrixXd repaired_sym =
+      0.5 * (out.value + out.value.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> repaired_es(repaired_sym);
+  if (repaired_es.info() != Eigen::Success ||
+      !repaired_es.eigenvalues().allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": repaired score eigendecomposition failed"});
+  out.diagnostics.repaired_min_eigenvalue =
+      repaired_es.eigenvalues().minCoeff();
+  const Eigen::VectorXd inv_sd = out.diagonal.array().sqrt().inverse();
+  const Eigen::MatrixXd repaired_normalized =
+      inv_sd.asDiagonal() * repaired_sym * inv_sd.asDiagonal();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> repaired_r_es(
+      repaired_normalized);
+  if (repaired_r_es.info() != Eigen::Success ||
+      !repaired_r_es.eigenvalues().allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": repaired normalized score eigendecomposition failed"});
+  out.diagnostics.repaired_normalized_min_eigenvalue =
+      repaired_r_es.eigenvalues().minCoeff();
+  const double floor_tol =
+      1e-10 * std::max(1.0, std::abs(config.target_floor));
+  if (out.diagnostics.repaired_normalized_min_eigenvalue <
+      config.target_floor - floor_tol)
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": score conditioning failed to attain its floor"});
+  return out;
+}
+
+fit_expected<Eigen::MatrixXd>
+condition_score_covariance_direction(
+    const ConditionedScoreCovariance& conditioned,
+    const Eigen::MatrixXd& dQ,
+    const char* label) {
+  if (dQ.rows() != conditioned.value.rows() ||
+      dQ.cols() != conditioned.value.cols() || !dQ.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string(label) + ": invalid score covariance derivative"});
+  if (conditioned.policy == ScoreConditioningPolicy::Raw || dQ.rows() == 1)
+    return dQ;
+
+  const Eigen::VectorXd& D = conditioned.diagonal;
+  const Eigen::VectorXd inv_sd = D.array().sqrt().inverse();
+  const Eigen::MatrixXd dQsym = 0.5 * (dQ + dQ.transpose());
+  const Eigen::VectorXd dD = dQ.diagonal();
+  Eigen::MatrixXd dR = inv_sd.asDiagonal() * dQsym * inv_sd.asDiagonal();
+  for (Eigen::Index i = 0; i < dR.rows(); ++i) {
+    for (Eigen::Index j = 0; j < dR.cols(); ++j) {
+      dR(i, j) -= 0.5 * conditioned.normalized(i, j) *
+                  (dD(i) / D(i) + dD(j) / D(j));
+    }
+  }
+  dR.diagonal().setZero();
+
+  double dt = 0.0;
+  if (conditioned.policy == ScoreConditioningPolicy::Hard) {
+    if (!conditioned.hard_derivative_regular)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) +
+              ": hard score conditioning is at an activation/tie boundary"});
+    if (conditioned.shrinkage == 0.0) return dQ;
+    const Eigen::VectorXd v = conditioned.normalized_eigenvectors.col(0);
+    const double dlambda = v.dot(dR * v);
+    dt = -dlambda / (1.0 - conditioned.target_floor);
+  } else {
+    const double dell =
+        (conditioned.soft_projector.cwiseProduct(dR.transpose())).sum();
+    constexpr double eta = 0.1;
+    const double gamma =
+        std::log(2.0) / (eta * conditioned.target_floor);
+    const double beta = std::log(
+        static_cast<double>(conditioned.normalized_eigenvalues.size())) /
+                        (eta * conditioned.target_floor);
+    const double shifted_min = conditioned.normalized_eigenvalues(0);
+    const double denom =
+        (-beta *
+         (conditioned.normalized_eigenvalues.array() - shifted_min))
+            .exp()
+            .sum();
+    const double ell = shifted_min - std::log(denom) / beta;
+    const double x = gamma *
+                     (conditioned.target_floor - ell) /
+                     (1.0 - conditioned.target_floor);
+    dt = -stable_logistic(x) * dell /
+         (1.0 - conditioned.target_floor);
+  }
+
+  const double t = conditioned.shrinkage;
+  const Eigen::MatrixXd dDmat = dD.asDiagonal();
+  const Eigen::MatrixXd Dmat = D.asDiagonal();
+  Eigen::MatrixXd out =
+      (dQ + t * dDmat + dt * (Dmat - conditioned.value)) / (1.0 + t);
+  out.diagonal() = dD;
+  return out;
+}
+
 fit_expected<Eigen::MatrixXd> symmetric_pinv_local(const Eigen::MatrixXd& A,
                                                    const char* what) {
   if (A.rows() != A.cols() || !A.allFinite())
@@ -279,20 +556,28 @@ Eigen::MatrixXd incidence_matrix(const CfaBlockLayout& L) {
   return Z;
 }
 
-fit_expected<Eigen::MatrixXd>
+struct HMatrixResult {
+  Eigen::MatrixXd H;
+  Eigen::Index n_h2_clamped = 0;
+};
+
+fit_expected<HMatrixResult>
 estimator_h_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                    NonIterativeEstimator which,
                    const AdmissibilityClamp& clamp) {
   switch (which) {
-    case NonIterativeEstimator::GuttmanLavaan:
-      return legacy_h_matrix(L, S);
+    case NonIterativeEstimator::GuttmanLavaan: {
+      auto H = legacy_h_matrix(L, S);
+      if (!H.has_value()) return std::unexpected(H.error());
+      return HMatrixResult{std::move(*H), 0};
+    }
     case NonIterativeEstimator::GuttmanAligned: {
       auto block_of = block_ids_from_layout(L);
       if (!block_of.has_value()) return std::unexpected(block_of.error());
       auto h = estimate_h_communalities(
           S, *block_of, CommunalityMethod::TriadWls, clamp);
       if (!h.has_value()) return std::unexpected(h.error());
-      return h->H;
+      return HMatrixResult{std::move(h->H), h->n_active_clamped};
     }
   }
   return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -345,10 +630,13 @@ fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
                                                   const Eigen::MatrixXd& S,
                                                   NonIterativeEstimator which,
                                                   CompositeWeight composite,
-                                                  const AdmissibilityClamp& clamp) {
+                                                  const AdmissibilityClamp& clamp,
+                                                  const ResolvedScoreConditioning&
+                                                      score_conditioning) {
   auto H_or = estimator_h_matrix(L, S, which, clamp);
   if (!H_or.has_value()) return std::unexpected(H_or.error());
-  Eigen::MatrixXd H = std::move(*H_or);
+  const Eigen::Index n_h2_clamped = H_or->n_h2_clamped;
+  Eigen::MatrixXd H = std::move(H_or->H);
   auto B_or = composite_matrix(
       L, S, H, resolve_composite_weight(which, composite), "Guttman metric map");
   if (!B_or.has_value()) return std::unexpected(B_or.error());
@@ -356,6 +644,10 @@ fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
 
   const Eigen::Index nfac = L.n_factor();
   const Eigen::MatrixXd score_cov = B.transpose() * H * B;
+  auto conditioned =
+      condition_score_covariance(score_cov, score_conditioning,
+                                 "Guttman metric map");
+  if (!conditioned.has_value()) return std::unexpected(conditioned.error());
   Eigen::VectorXd scale(nfac);
   for (Eigen::Index f = 0; f < nfac; ++f) {
     if (score_cov(f, f) <= 0.0 || !std::isfinite(score_cov(f, f)))
@@ -366,9 +658,13 @@ fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
 
   Eigen::MatrixXd Bstd = B;
   for (Eigen::Index f = 0; f < nfac; ++f) Bstd.col(f) /= scale(f);
-  Eigen::MatrixXd P = Bstd.transpose() * H * Bstd;
+  Eigen::MatrixXd P(nfac, nfac);
+  for (Eigen::Index f = 0; f < nfac; ++f)
+    for (Eigen::Index g = 0; g < nfac; ++g)
+      P(f, g) = conditioned->value(f, g) / (scale(f) * scale(g));
   Eigen::MatrixXd C = H * Bstd;
-  return ScoreBlock{std::move(H), std::move(Bstd), std::move(P), std::move(C)};
+  return ScoreBlock{std::move(H), std::move(Bstd), std::move(P), std::move(C),
+                    n_h2_clamped, conditioned->diagnostics};
 }
 
 std::vector<std::vector<Eigen::Index>> rows_by_factor(const CfaBlockLayout& L) {
@@ -576,7 +872,9 @@ fit_expected<BlockGuttmanDirection>
 regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                              const Eigen::MatrixXd& dS, const Eigen::MatrixXd& H,
                              const Eigen::MatrixXd& dH, const Eigen::MatrixXd& B,
-                             const Eigen::MatrixXd& dB, const char* label) {
+                             const Eigen::MatrixXd& dB, const char* label,
+                             const ResolvedScoreConditioning&
+                                 score_conditioning) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   if (B.rows() != nvar || B.cols() != nfac || dB.rows() != nvar ||
@@ -584,12 +882,20 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         std::string(label) + ": score matrix dimension mismatch"});
 
-  const Eigen::MatrixXd Q = B.transpose() * H * B;
+  const Eigen::MatrixXd Qraw = B.transpose() * H * B;
+  auto conditioned =
+      condition_score_covariance(Qraw, score_conditioning, label);
+  if (!conditioned.has_value()) return std::unexpected(conditioned.error());
+  const Eigen::MatrixXd& Q = conditioned->value;
   auto Qinv = invert_full_rank(Q, label);
   if (!Qinv.has_value()) return std::unexpected(Qinv.error());
-  const Eigen::MatrixXd dQ =
+  const Eigen::MatrixXd dQraw =
       dB.transpose() * H * B + B.transpose() * dH * B +
       B.transpose() * H * dB;
+  auto dQ_or =
+      condition_score_covariance_direction(*conditioned, dQraw, label);
+  if (!dQ_or.has_value()) return std::unexpected(dQ_or.error());
+  const Eigen::MatrixXd& dQ = *dQ_or;
 
   const Eigen::MatrixXd HB = H * B;
   const Eigen::MatrixXd dHB = dH * B + H * dB;
@@ -615,6 +921,7 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
         dKstar.col(f) / marker(f) -
         Kstar.col(f) * (dmarker(f) / (marker(f) * marker(f)));
   }
+  conditioned->diagnostics.min_abs_marker = marker.cwiseAbs().minCoeff();
 
   Eigen::MatrixXd Phi(nfac, nfac);
   Eigen::MatrixXd dPhi(nfac, nfac);
@@ -644,6 +951,7 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
         std::string(label) + ": non-finite analytic derivative"});
 
   BlockGuttman base{std::move(Lambda), std::move(Phi), std::move(psi)};
+  base.score_conditioning = conditioned->diagnostics;
   return BlockGuttmanDirection{std::move(base), std::move(dLambda),
                                std::move(dPhi), std::move(dpsi)};
 }
@@ -653,7 +961,9 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
                            const Eigen::MatrixXd& S,
                            NonIterativeEstimator which,
                            CompositeWeight composite,
-                           const AdmissibilityClamp& clamp) {
+                           const AdmissibilityClamp& clamp,
+                           const ResolvedScoreConditioning&
+                               score_conditioning) {
   if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman batched Jacobian: only GLS-aligned configural maps are "
@@ -725,7 +1035,11 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
     }
   }
 
-  const Eigen::MatrixXd Q = B.transpose() * h->H * B;
+  const Eigen::MatrixXd Qraw = B.transpose() * h->H * B;
+  auto conditioned =
+      condition_score_covariance(Qraw, score_conditioning, label);
+  if (!conditioned.has_value()) return std::unexpected(conditioned.error());
+  const Eigen::MatrixXd& Q = conditioned->value;
   auto Qinv = invert_full_rank(Q, label);
   if (!Qinv.has_value()) return std::unexpected(Qinv.error());
   const Eigen::MatrixXd HB = h->H * B;
@@ -744,6 +1058,7 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
           "Guttman batched Jacobian: near-zero marker loading"});
     Lambda.col(f) /= marker(f);
   }
+  conditioned->diagnostics.min_abs_marker = marker.cwiseAbs().minCoeff();
 
   Eigen::MatrixXd Phi(nfac, nfac);
   for (Eigen::Index f = 0; f < nfac; ++f) {
@@ -808,14 +1123,18 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
       }
 
       const Eigen::MatrixXd dH_B = dH_times(col, r, c, B);
-      Eigen::MatrixXd dQ = B.transpose() * dH_B;
+      Eigen::MatrixXd dQraw = B.transpose() * dH_B;
       Eigen::MatrixXd dHB = dH_B;
       if (dB_nonzero) {
         const Eigen::MatrixXd HdB = h->H * dB;
-        dQ.noalias() += dB.transpose() * HB;
-        dQ.noalias() += HB.transpose() * dB;
+        dQraw.noalias() += dB.transpose() * HB;
+        dQraw.noalias() += HB.transpose() * dB;
         dHB.noalias() += HdB;
       }
+      auto dQ_or =
+          condition_score_covariance_direction(*conditioned, dQraw, label);
+      if (!dQ_or.has_value()) return std::unexpected(dQ_or.error());
+      const Eigen::MatrixXd& dQ = *dQ_or;
       const Eigen::MatrixXd dKstar =
           dHB * (*Qinv) - Kstar * dQ * (*Qinv);
 
@@ -866,6 +1185,8 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
         "Guttman batched Jacobian: non-finite derivative"});
 
   BlockGuttman base{std::move(Lambda), std::move(Phi), std::move(psi)};
+  base.n_h2_clamped = h->n_active_clamped;
+  base.score_conditioning = conditioned->diagnostics;
   return BlockGuttmanJacobian{std::move(base), std::move(dLambda),
                               std::move(dPhi), std::move(dpsi)};
 }
@@ -878,7 +1199,8 @@ fit_block_jacobian_from_h_batched_columns(
     const Eigen::MatrixXd& dH_diag,
     const std::vector<DirectCovColumn>& direct_cols,
     CompositeWeight resolved,
-    const char* label) {
+    const char* label,
+    const ResolvedScoreConditioning& score_conditioning) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   const auto pstar = static_cast<Eigen::Index>(direct_cols.size());
@@ -937,7 +1259,11 @@ fit_block_jacobian_from_h_batched_columns(
     }
   }
 
-  const Eigen::MatrixXd Q = B.transpose() * H * B;
+  const Eigen::MatrixXd Qraw = B.transpose() * H * B;
+  auto conditioned =
+      condition_score_covariance(Qraw, score_conditioning, label);
+  if (!conditioned.has_value()) return std::unexpected(conditioned.error());
+  const Eigen::MatrixXd& Q = conditioned->value;
   auto Qinv = invert_full_rank(Q, label);
   if (!Qinv.has_value()) return std::unexpected(Qinv.error());
   const Eigen::MatrixXd HB = H * B;
@@ -956,6 +1282,7 @@ fit_block_jacobian_from_h_batched_columns(
           std::string(label) + ": near-zero marker loading"});
     Lambda.col(f) /= marker(f);
   }
+  conditioned->diagnostics.min_abs_marker = marker.cwiseAbs().minCoeff();
 
   Eigen::MatrixXd Phi(nfac, nfac);
   for (Eigen::Index f = 0; f < nfac; ++f)
@@ -985,7 +1312,7 @@ fit_block_jacobian_from_h_batched_columns(
     const DirectCovColumn direct =
         direct_cols[static_cast<std::size_t>(col)];
     const bool has_direct = has_direct_cov_column(direct);
-    Eigen::MatrixXd dQ(nfac, nfac);
+    Eigen::MatrixXd dQraw(nfac, nfac);
     Eigen::MatrixXd dHB(nvar, nfac);
     if (resolved == CompositeWeight::Unit ||
         resolved == CompositeWeight::Standardized) {
@@ -996,13 +1323,13 @@ fit_block_jacobian_from_h_batched_columns(
         dHB.row(direct.row).noalias() += B.row(direct.col);
         dHB.row(direct.col).noalias() += B.row(direct.row);
       }
-      dQ.noalias() = B.transpose() * dHB;
+      dQraw.noalias() = B.transpose() * dHB;
       if (resolved == CompositeWeight::Standardized && has_direct &&
           direct.row == direct.col) {
         const Eigen::RowVectorXd dBrow =
             -0.5 * B.row(direct.row) / S(direct.row, direct.row);
-        dQ.noalias() += dBrow.transpose() * HB.row(direct.row);
-        dQ.noalias() += HB.row(direct.row).transpose() * dBrow;
+        dQraw.noalias() += dBrow.transpose() * HB.row(direct.row);
+        dQraw.noalias() += HB.row(direct.row).transpose() * dBrow;
         dHB.noalias() += H.col(direct.row) * dBrow;
       }
     } else {
@@ -1030,15 +1357,19 @@ fit_block_jacobian_from_h_batched_columns(
       }
 
       const Eigen::MatrixXd dH_B = dH_times(col, direct, B);
-      dQ = B.transpose() * dH_B;
+      dQraw = B.transpose() * dH_B;
       dHB = dH_B;
       if (dB_nonzero) {
         const Eigen::MatrixXd HdB = H * dB;
-        dQ.noalias() += dB.transpose() * HB;
-        dQ.noalias() += HB.transpose() * dB;
+        dQraw.noalias() += dB.transpose() * HB;
+        dQraw.noalias() += HB.transpose() * dB;
         dHB.noalias() += HdB;
       }
     }
+    auto dQ_or =
+        condition_score_covariance_direction(*conditioned, dQraw, label);
+    if (!dQ_or.has_value()) return std::unexpected(dQ_or.error());
+    const Eigen::MatrixXd& dQ = *dQ_or;
     const Eigen::MatrixXd dKstar =
         dHB * (*Qinv) - Kstar * dQ * (*Qinv);
 
@@ -1083,6 +1414,7 @@ fit_block_jacobian_from_h_batched_columns(
         std::string(label) + ": non-finite restricted batched derivative"});
 
   BlockGuttman base{std::move(Lambda), std::move(Phi), std::move(psi)};
+  base.score_conditioning = conditioned->diagnostics;
   return BlockGuttmanJacobian{std::move(base), std::move(dLambda),
                               std::move(dPhi), std::move(dpsi)};
 }
@@ -1091,7 +1423,8 @@ fit_expected<BlockGuttmanDirection>
 fit_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                       const Eigen::MatrixXd& dS, NonIterativeEstimator which,
                       CompositeWeight composite,
-                      const AdmissibilityClamp& clamp) {
+                      const AdmissibilityClamp& clamp,
+                      const ResolvedScoreConditioning& score_conditioning) {
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   auto H = estimator_h_matrix_directional(L, S, dS, which, clamp);
   if (!H.has_value()) return std::unexpected(H.error());
@@ -1102,7 +1435,7 @@ fit_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       L, S, dS, H->value, H->deriv, resolved, label);
   if (!B.has_value()) return std::unexpected(B.error());
   return regression_block_directional(L, S, dS, H->value, H->deriv, B->value,
-                                      B->deriv, label);
+                                      B->deriv, label, score_conditioning);
 }
 
 struct RestrictedRows {
@@ -1369,14 +1702,19 @@ restricted_rows_direction_from_partable(
 std::expected<BlockGuttman, FitError>
 regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                  const Eigen::MatrixXd& H, const Eigen::MatrixXd& B,
-                 const char* label) {
+                 const char* label,
+                 const ResolvedScoreConditioning& score_conditioning) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   if (B.rows() != nvar || B.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         std::string(label) + ": score matrix dimension mismatch"});
 
-  const Eigen::MatrixXd score_cov = B.transpose() * H * B;
+  const Eigen::MatrixXd score_cov_raw = B.transpose() * H * B;
+  auto conditioned =
+      condition_score_covariance(score_cov_raw, score_conditioning, label);
+  if (!conditioned.has_value()) return std::unexpected(conditioned.error());
+  const Eigen::MatrixXd& score_cov = conditioned->value;
   auto score_cov_inv = invert_full_rank(score_cov, label);
   if (!score_cov_inv.has_value()) return std::unexpected(score_cov_inv.error());
 
@@ -1394,6 +1732,7 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
           std::string(label) + ": near-zero marker loading"});
     Lambda.col(f) /= marker(f);
   }
+  conditioned->diagnostics.min_abs_marker = marker.cwiseAbs().minCoeff();
 
   Eigen::MatrixXd Phi(nfac, nfac);
   for (Eigen::Index f = 0; f < nfac; ++f)
@@ -1404,25 +1743,30 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   Eigen::VectorXd psi(nvar);
   for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
 
-  return BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)};
+  BlockGuttman out{std::move(Lambda), std::move(Phi), std::move(psi)};
+  out.score_conditioning = conditioned->diagnostics;
+  return out;
 }
 
 std::expected<BlockGuttman, FitError>
 guttman_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-                      const AdmissibilityClamp& clamp) {
+                      const AdmissibilityClamp& clamp,
+                      const ResolvedScoreConditioning& score_conditioning) {
   const Eigen::Index nfac = L.n_factor();
   auto H = estimator_h_matrix(
       L, S, NonIterativeEstimator::GuttmanAligned, clamp);
   if (!H.has_value()) return std::unexpected(H.error());
   auto B = composite_matrix(
-      L, S, *H, CompositeWeight::Adaptive, "Guttman GLS-aligned map");
+      L, S, H->H, CompositeWeight::Adaptive, "Guttman GLS-aligned map");
   if (!B.has_value()) return std::unexpected(B.error());
 
-  auto out = regression_block(L, S, *H, *B, "Guttman GLS-aligned map");
+  auto out = regression_block(L, S, H->H, *B, "Guttman GLS-aligned map",
+                              score_conditioning);
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman GLS-aligned map: output factor dimension mismatch"});
+  out->n_h2_clamped = H->n_h2_clamped;
   return out;
 }
 
@@ -1431,11 +1775,13 @@ guttman_aligned_block_from_h(const CfaBlockLayout& L,
                                  const Eigen::MatrixXd& S,
                                  const Eigen::MatrixXd& H,
                                  const char* label,
-                                 CompositeWeight composite) {
+                                 CompositeWeight composite,
+                                 const ResolvedScoreConditioning&
+                                     score_conditioning) {
   const Eigen::Index nfac = L.n_factor();
   auto B = composite_matrix(L, S, H, composite, label);
   if (!B.has_value()) return std::unexpected(B.error());
-  auto out = regression_block(L, S, H, *B, label);
+  auto out = regression_block(L, S, H, *B, label, score_conditioning);
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -1447,15 +1793,31 @@ guttman_aligned_block_from_h(const CfaBlockLayout& L,
 std::expected<BlockGuttman, FitError>
 fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
           NonIterativeEstimator which, CompositeWeight composite,
-          const AdmissibilityClamp& clamp) {
+          const AdmissibilityClamp& clamp,
+          const ResolvedScoreConditioning& score_conditioning) {
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   switch (which) {
     case NonIterativeEstimator::GuttmanLavaan:
-      if (resolved == CompositeWeight::Unit) return guttman_block(L, S);
+      if (resolved == CompositeWeight::Unit) {
+        auto out = guttman_block(L, S);
+        if (!out.has_value()) return std::unexpected(out.error());
+        const Eigen::MatrixXd Z = incidence_matrix(L);
+        auto legacy_H = legacy_h_matrix(L, S);
+        if (!legacy_H.has_value()) return std::unexpected(legacy_H.error());
+        auto score = condition_score_covariance(
+            Z.transpose() * (*legacy_H) * Z,
+            score_conditioning, "Guttman map");
+        if (score.has_value()) {
+          out->score_conditioning = score->diagnostics;
+          out->score_conditioning.min_abs_marker =
+              out->Phi.diagonal().array().sqrt().minCoeff();
+        }
+        return out;
+      }
       break;
     case NonIterativeEstimator::GuttmanAligned:
       if (resolved == CompositeWeight::Adaptive)
-        return guttman_aligned_block(L, S, clamp);
+        return guttman_aligned_block(L, S, clamp, score_conditioning);
       break;
   }
   auto H = estimator_h_matrix(L, S, which, clamp);
@@ -1463,9 +1825,13 @@ fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   const char* label = (which == NonIterativeEstimator::GuttmanLavaan)
                           ? "Guttman map"
                           : "Guttman GLS-aligned map";
-  auto B = composite_matrix(L, S, *H, resolved, label);
+  auto B = composite_matrix(L, S, H->H, resolved, label);
   if (!B.has_value()) return std::unexpected(B.error());
-  return regression_block(L, S, *H, *B, label);
+  auto out = regression_block(
+      L, S, H->H, *B, label, score_conditioning);
+  if (!out.has_value()) return std::unexpected(out.error());
+  out->n_h2_clamped = H->n_h2_clamped;
+  return out;
 }
 
 fit_expected<std::vector<BlockGuttman>>
@@ -1473,9 +1839,12 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
                                const std::vector<Eigen::MatrixXd>& S,
                                NonIterativeEstimator which,
                                CompositeWeight composite,
-                               const std::vector<AdmissibilityClamp>& clamps) {
+                               const std::vector<AdmissibilityClamp>& clamps,
+                               const std::vector<ResolvedScoreConditioning>&
+                                   score_conditioning) {
   const std::size_t nblk = layouts.size();
-  if (nblk == 0 || nblk != S.size() || nblk != clamps.size())
+  if (nblk == 0 || nblk != S.size() || nblk != clamps.size() ||
+      nblk != score_conditioning.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman metric map: block / sample covariance count mismatch"});
 
@@ -1501,7 +1870,8 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
             "Guttman metric map: all groups must have the same simple-structure "
             "indicator blocks"});
     }
-    auto sb = standardized_score_block(L, S[b], which, composite, clamps[b]);
+    auto sb = standardized_score_block(
+        L, S[b], which, composite, clamps[b], score_conditioning[b]);
     if (!sb.has_value()) return std::unexpected(sb.error());
     scores.push_back(std::move(*sb));
   }
@@ -1586,7 +1956,11 @@ fit_metric_standardized_blocks(const std::vector<CfaBlockLayout>& layouts,
     const Eigen::MatrixXd common = Lunit[b] * scores[b].P * Lunit[b].transpose();
     Eigen::VectorXd psi(nvar);
     for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S[b](i, i) - common(i, i);
-    out.push_back(BlockGuttman{std::move(Lambda), std::move(Phi), std::move(psi)});
+    BlockGuttman block{std::move(Lambda), std::move(Phi), std::move(psi)};
+    block.n_h2_clamped = scores[b].n_h2_clamped;
+    block.score_conditioning = scores[b].score_conditioning;
+    block.score_conditioning.min_abs_marker = marker.cwiseAbs().minCoeff();
+    out.push_back(std::move(block));
   }
   return out;
 }
@@ -1597,7 +1971,9 @@ fit_aligned_block_with_communality(const CfaBlockLayout& L,
                                    CommunalityMethod comm,
                                    CompositeWeight composite,
                                    const char* label,
-                                   const AdmissibilityClamp& clamp) {
+                                   const AdmissibilityClamp& clamp,
+                                   const ResolvedScoreConditioning&
+                                       score_conditioning) {
   auto block_of = block_ids_from_layout(L);
   if (!block_of.has_value()) return std::unexpected(block_of.error());
   auto h = estimate_h_communalities(S, *block_of, comm, clamp);
@@ -1614,7 +1990,8 @@ fit_aligned_block_with_communality(const CfaBlockLayout& L,
     }
   }
 
-  auto out = guttman_aligned_block_from_h(L, S, h->H, label, composite);
+  auto out = guttman_aligned_block_from_h(
+      L, S, h->H, label, composite, score_conditioning);
   if (!out.has_value()) return std::unexpected(out.error());
   out->n_h2_clamped = h->n_active_clamped;
   return out;
@@ -1626,9 +2003,12 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
                       const RestrictedRows& rows,
                       CommunalityMethod comm,
                       CompositeWeight composite,
-                      const std::vector<AdmissibilityClamp>& clamps) {
+                      const std::vector<AdmissibilityClamp>& clamps,
+                      const std::vector<ResolvedScoreConditioning>&
+                          score_conditioning) {
   const std::size_t nblk = layouts.size();
-  if (nblk == 0 || nblk != S.size() || nblk != clamps.size())
+  if (nblk == 0 || nblk != S.size() || nblk != clamps.size() ||
+      nblk != score_conditioning.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman map: block / sample covariance count mismatch"});
 
@@ -1638,7 +2018,7 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
     for (std::size_t b = 0; b < nblk; ++b) {
       auto gb = fit_aligned_block_with_communality(
           layouts[b], S[b], comm, composite, "restricted Guttman map",
-          clamps[b]);
+          clamps[b], score_conditioning[b]);
       if (!gb.has_value()) return std::unexpected(gb.error());
       out.push_back(std::move(*gb));
     }
@@ -1703,7 +2083,8 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
       H(i, i) = h_diag;
     }
     auto gb = guttman_aligned_block_from_h(
-        layouts[b], S[b], H, "restricted Guttman map", composite);
+        layouts[b], S[b], H, "restricted Guttman map", composite,
+        score_conditioning[b]);
     if (!gb.has_value()) return std::unexpected(gb.error());
     gb->n_h2_clamped = n_h2_clamped;
     out.push_back(std::move(*gb));
@@ -2767,7 +3148,8 @@ restricted_no_h2_jacobian(
     std::size_t block,
     CommunalityMethod comm,
     CompositeWeight resolved,
-    const std::vector<AdmissibilityClamp>& clamps) {
+    const std::vector<AdmissibilityClamp>& clamps,
+    const std::vector<ResolvedScoreConditioning>& score_conditioning) {
   const Eigen::Index p_active = samp.S[block].rows();
   const Eigen::Index pstar = vech_size(p_active);
   const char* label = "restricted Guttman analytic Jacobian";
@@ -2812,7 +3194,8 @@ restricted_no_h2_jacobian(
     }
 
     auto db = fit_block_jacobian_from_h_batched_columns(
-        layouts[b], samp.S[b], h->H, dH_diag, direct_cols, resolved, label);
+        layouts[b], samp.S[b], h->H, dH_diag, direct_cols, resolved, label,
+        score_conditioning[b]);
     if (!db.has_value()) return std::unexpected(db.error());
     base_blocks.push_back(db->base);
     dblocks.push_back(std::move(*db));
@@ -2837,7 +3220,8 @@ estimator_map_jacobian_block_analytic_impl(
     NonIterativeEstimator which,
     std::size_t block,
     CompositeWeight composite,
-    const AdmissibilityConfig& admissibility) {
+    const AdmissibilityConfig& admissibility,
+    const ScoreConditioningConfig& score_conditioning) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "Guttman analytic Jacobian: pure-CFA models only"});
@@ -2876,10 +3260,13 @@ estimator_map_jacobian_block_analytic_impl(
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(q, pstar);
   auto clamps = resolve_block_clamps(samp, admissibility);
   if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto score_configs = resolve_block_score_conditioning(
+      samp, which, composite, score_conditioning);
+  if (!score_configs.has_value()) return std::unexpected(score_configs.error());
 
   if (which == NonIterativeEstimator::GuttmanAligned) {
     auto db = fit_block_jacobian_batched(
-        L, S0, which, composite, (*clamps)[block]);
+        L, S0, which, composite, (*clamps)[block], (*score_configs)[block]);
     if (db.has_value()) {
       auto Jb = assemble_theta_jacobian(ev, layouts, *db, block, pstar);
       if (Jb.has_value()) return Jb;
@@ -2893,7 +3280,8 @@ estimator_map_jacobian_block_analytic_impl(
       dS(r, c) = 1.0;
       if (r != c) dS(c, r) = 1.0;
       auto db = fit_block_directional(
-          L, S0, dS, which, composite, (*clamps)[block]);
+          L, S0, dS, which, composite, (*clamps)[block],
+          (*score_configs)[block]);
       if (!db.has_value()) return std::unexpected(db.error());
       auto dt = assemble_theta_direction(ev, layouts, *db, block);
       if (!dt.has_value()) return std::unexpected(dt.error());
@@ -2914,7 +3302,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
     std::size_t block,
     CommunalityMethod comm,
     CompositeWeight composite,
-    const AdmissibilityConfig& admissibility) {
+    const AdmissibilityConfig& admissibility,
+    const ScoreConditioningConfig& score_conditioning) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman analytic Jacobian: pure-CFA models only"});
@@ -2959,7 +3348,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
       comm == CommunalityMethod::TriadWls) {
     return estimator_map_jacobian_block_analytic_impl(
-        pt, rep, ev, samp, which, block, composite, admissibility);
+        pt, rep, ev, samp, which, block, composite, admissibility,
+        score_conditioning);
   }
   if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -2970,10 +3360,14 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   const char* label = "restricted Guttman analytic Jacobian";
   auto clamps = resolve_block_clamps(samp, admissibility);
   if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto score_configs = resolve_block_score_conditioning(
+      samp, which, composite, score_conditioning);
+  if (!score_configs.has_value()) return std::unexpected(score_configs.error());
 
   if (!has_rows(rows->R_h2) && comm != CommunalityMethod::TriadWlsJoint) {
     auto fast = restricted_no_h2_jacobian(
-        ev, layouts, samp, *rows, block, comm, resolved, *clamps);
+        ev, layouts, samp, *rows, block, comm, resolved, *clamps,
+        *score_configs);
     if (fast.has_value()) return fast;
     return std::unexpected(fast.error());
   }
@@ -3032,7 +3426,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
     if (!Hb.has_value()) return std::unexpected(Hb.error());
     H[b] = std::move(*Hb);
     auto gb = guttman_aligned_block_from_h(
-        layouts[b], samp.S[b], H[b], label, resolved);
+        layouts[b], samp.S[b], H[b], label, resolved, (*score_configs)[b]);
     if (!gb.has_value()) return std::unexpected(gb.error());
     blocks.push_back(std::move(*gb));
   }
@@ -3095,7 +3489,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
           auto db = fit_block_jacobian_from_h_batched_columns(
               layouts[b], samp.S[b], H[b], dH_diag, direct_cols, resolved,
-              label);
+              label, (*score_configs)[b]);
           if (!db.has_value()) {
             ok = false;
             break;
@@ -3181,7 +3575,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
             layouts[b], samp.S[b], dS[b], H[b], dH, resolved, label);
         if (!B.has_value()) return std::unexpected(B.error());
         auto db = regression_block_directional(
-            layouts[b], samp.S[b], dS[b], H[b], dH, B->value, B->deriv, label);
+            layouts[b], samp.S[b], dS[b], H[b], dH, B->value, B->deriv,
+            label, (*score_configs)[b]);
         if (!db.has_value()) return std::unexpected(db.error());
         for (Eigen::Index i = 0; i < p; ++i) {
           db->base.psi(i) = samp.S[b](i, i) - H[b](i, i);
@@ -3214,7 +3609,8 @@ fit_expected<Eigen::VectorXd>
 map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
           const model::ModelEvaluator& ev, const data::SampleStats& samp,
           NonIterativeEstimator which, CompositeWeight composite,
-          const AdmissibilityConfig& admissibility) {
+          const AdmissibilityConfig& admissibility,
+          const ScoreConditioningConfig& score_conditioning) {
   if (rep.form != model::RepForm::PureCFA)
     return num_error("non-iterative CFA: pure-CFA models only (a structural "
                      "part is out of v1 scope)");
@@ -3225,6 +3621,9 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
     return num_error("non-iterative CFA: block / sample-stats count mismatch");
   auto clamps = resolve_block_clamps(samp, admissibility);
   if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto score_configs = resolve_block_score_conditioning(
+      samp, which, composite, score_conditioning);
+  if (!score_configs.has_value()) return std::unexpected(score_configs.error());
 
   std::vector<BlockGuttman> blocks;
   blocks.reserve(layouts.size());
@@ -3241,7 +3640,8 @@ map_multi(const spec::LatentStructure& pt, const model::MatrixRep& rep,
     switch (which) {
       case NonIterativeEstimator::GuttmanLavaan:
       case NonIterativeEstimator::GuttmanAligned: {
-        auto gb = fit_block(L, samp.S[b], which, composite, (*clamps)[b]);
+        auto gb = fit_block(L, samp.S[b], which, composite, (*clamps)[b],
+                            (*score_configs)[b]);
         if (!gb.has_value()) return std::unexpected(gb.error());
         blocks.push_back(std::move(*gb));
         break;
@@ -3260,16 +3660,19 @@ noniterative_cfa_theta(const spec::LatentStructure& pt,
                        const data::SampleStats& samp,
                        NonIterativeEstimator which,
                        CompositeWeight composite,
-                       AdmissibilityConfig admissibility) {
+                       AdmissibilityConfig admissibility,
+                       ScoreConditioningConfig score_conditioning) {
   if (samp.S.empty()) return num_error("non-iterative CFA: empty sample stats");
-  return map_multi(pt, rep, ev, samp, which, composite, admissibility);
+  return map_multi(pt, rep, ev, samp, which, composite, admissibility,
+                   score_conditioning);
 }
 
 fit_expected<NonIterativeFit>
 fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                      const data::SampleStats& samp, NonIterativeEstimator which,
                      CompositeWeight composite,
-                     AdmissibilityConfig admissibility) {
+                     AdmissibilityConfig admissibility,
+                     ScoreConditioningConfig score_conditioning) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -3278,23 +3681,29 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
       "non-iterative CFA: empty sample stats"});
 
   auto theta = noniterative_cfa_theta(
-      pt, rep, *ev, samp, which, composite, admissibility);
+      pt, rep, *ev, samp, which, composite, admissibility,
+      score_conditioning);
   if (!theta.has_value()) return std::unexpected(theta.error());
 
   // Recover the clean per-block matrices for reporting.
   const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
   auto clamps = resolve_block_clamps(samp, admissibility);
   if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto score_configs = resolve_block_score_conditioning(
+      samp, which, composite, score_conditioning);
+  if (!score_configs.has_value()) return std::unexpected(score_configs.error());
   NonIterativeFit out;
   out.theta = std::move(*theta);
   for (std::size_t b = 0; b < layouts.size() && b < samp.S.size(); ++b) {
     auto gb = fit_block(
-        layouts[b], samp.S[b], which, composite, (*clamps)[b]);
+        layouts[b], samp.S[b], which, composite, (*clamps)[b],
+        (*score_configs)[b]);
     if (!gb.has_value()) return std::unexpected(gb.error());
     out.Lambda.push_back(std::move(gb->Lambda));
     out.Phi.push_back(std::move(gb->Phi));
     out.psi.push_back(std::move(gb->psi));
-    out.n_h2_clamped.push_back(0);
+    out.n_h2_clamped.push_back(gb->n_h2_clamped);
+    out.score_conditioning_diagnostics.push_back(gb->score_conditioning);
   }
   return out;
 }
@@ -3303,7 +3712,8 @@ fit_expected<NonIterativeFit>
 fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                             const data::SampleStats& samp, NonIterativeEstimator which,
                             CompositeWeight composite,
-                            AdmissibilityConfig admissibility) {
+                            AdmissibilityConfig admissibility,
+                            ScoreConditioningConfig score_conditioning) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative metric CFA: pure-CFA models only"});
@@ -3337,8 +3747,11 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
 
   auto clamps = resolve_block_clamps(samp, admissibility);
   if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto score_configs = resolve_block_score_conditioning(
+      samp, which, composite, score_conditioning);
+  if (!score_configs.has_value()) return std::unexpected(score_configs.error());
   auto blocks = fit_metric_standardized_blocks(
-      layouts, samp.S, which, composite, *clamps);
+      layouts, samp.S, which, composite, *clamps, *score_configs);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -3349,7 +3762,8 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
     out.Lambda.push_back(std::move(gb.Lambda));
     out.Phi.push_back(std::move(gb.Phi));
     out.psi.push_back(std::move(gb.psi));
-    out.n_h2_clamped.push_back(0);
+    out.n_h2_clamped.push_back(gb.n_h2_clamped);
+    out.score_conditioning_diagnostics.push_back(gb.score_conditioning);
   }
   return out;
 }
@@ -3361,7 +3775,8 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
                                 NonIterativeEstimator which,
                                 CommunalityMethod comm,
                                 CompositeWeight composite,
-                                AdmissibilityConfig admissibility) {
+                                AdmissibilityConfig admissibility,
+                                ScoreConditioningConfig score_conditioning) {
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: pure-CFA models only"});
@@ -3406,7 +3821,7 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
       comm == CommunalityMethod::TriadWls)
     return fit_noniterative_cfa(
-        pt, rep, samp, which, composite, admissibility);
+        pt, rep, samp, which, composite, admissibility, score_conditioning);
   if (which != NonIterativeEstimator::GuttmanAligned)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: active restrictions or non-default "
@@ -3415,8 +3830,11 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   const CompositeWeight resolved = resolve_composite_weight(which, composite);
   auto clamps = resolve_block_clamps(samp, admissibility);
   if (!clamps.has_value()) return std::unexpected(clamps.error());
+  auto score_configs = resolve_block_score_conditioning(
+      samp, which, composite, score_conditioning);
+  if (!score_configs.has_value()) return std::unexpected(score_configs.error());
   auto blocks = fit_restricted_blocks(
-      layouts, samp.S, *rows, comm, resolved, *clamps);
+      layouts, samp.S, *rows, comm, resolved, *clamps, *score_configs);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
@@ -3431,6 +3849,7 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
     out.Phi.push_back(std::move(gb.Phi));
     out.psi.push_back(std::move(gb.psi));
     out.n_h2_clamped.push_back(gb.n_h2_clamped);
+    out.score_conditioning_diagnostics.push_back(gb.score_conditioning);
   }
   return out;
 }
@@ -3443,7 +3862,8 @@ estimator_map_jacobian_block_fd(const spec::LatentStructure& pt,
                                 NonIterativeEstimator which, std::size_t block,
                                 double rel_step,
                                 CompositeWeight composite,
-                                AdmissibilityConfig admissibility) {
+                                AdmissibilityConfig admissibility,
+                                ScoreConditioningConfig score_conditioning) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative CFA: Jacobian block index out of range"});
@@ -3467,14 +3887,16 @@ estimator_map_jacobian_block_fd(const spec::LatentStructure& pt,
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
       auto tp = map_multi(
-          pt, rep, ev, work, which, composite, admissibility);
+          pt, rep, ev, work, which, composite, admissibility,
+          score_conditioning);
       if (!tp.has_value()) return std::unexpected(tp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
       auto tm = map_multi(
-          pt, rep, ev, work, which, composite, admissibility);
+          pt, rep, ev, work, which, composite, admissibility,
+          score_conditioning);
       if (!tm.has_value()) return std::unexpected(tm.error());
 
       J.col(col) = (*tp - *tm) / (2.0 * h);
@@ -3493,9 +3915,11 @@ estimator_map_jacobian_block_analytic(
     NonIterativeEstimator which,
     std::size_t block,
     CompositeWeight composite,
-    AdmissibilityConfig admissibility) {
+    AdmissibilityConfig admissibility,
+    ScoreConditioningConfig score_conditioning) {
   return estimator_map_jacobian_block_analytic_impl(
-      pt, rep, ev, samp, which, block, composite, admissibility);
+      pt, rep, ev, samp, which, block, composite, admissibility,
+      score_conditioning);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3506,12 +3930,15 @@ estimator_map_jacobian_block(const spec::LatentStructure& pt,
                              NonIterativeEstimator which, std::size_t block,
                              double rel_step,
                              CompositeWeight composite,
-                             AdmissibilityConfig admissibility) {
+                             AdmissibilityConfig admissibility,
+                             ScoreConditioningConfig score_conditioning) {
   auto analytic = estimator_map_jacobian_block_analytic(
-      pt, rep, ev, samp, which, block, composite, admissibility);
+      pt, rep, ev, samp, which, block, composite, admissibility,
+      score_conditioning);
   if (analytic.has_value()) return analytic;
   return estimator_map_jacobian_block_fd(
-      pt, rep, ev, samp, which, block, rel_step, composite, admissibility);
+      pt, rep, ev, samp, which, block, rel_step, composite, admissibility,
+      score_conditioning);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3519,12 +3946,14 @@ estimator_map_jacobian(const spec::LatentStructure& pt, const model::MatrixRep& 
                        const model::ModelEvaluator& ev, const data::SampleStats& samp,
                        NonIterativeEstimator which, double rel_step,
                        CompositeWeight composite,
-                       AdmissibilityConfig admissibility) {
+                       AdmissibilityConfig admissibility,
+                       ScoreConditioningConfig score_conditioning) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
   // Single-block convenience wrapper (block 0).
   return estimator_map_jacobian_block(
-      pt, rep, ev, samp, which, 0, rel_step, composite, admissibility);
+      pt, rep, ev, samp, which, 0, rel_step, composite, admissibility,
+      score_conditioning);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3535,11 +3964,13 @@ estimator_map_jacobian_analytic(
     const data::SampleStats& samp,
     NonIterativeEstimator which,
     CompositeWeight composite,
-    AdmissibilityConfig admissibility) {
+    AdmissibilityConfig admissibility,
+    ScoreConditioningConfig score_conditioning) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "non-iterative CFA: empty sample stats"});
   return estimator_map_jacobian_block_analytic(
-      pt, rep, ev, samp, which, 0, composite, admissibility);
+      pt, rep, ev, samp, which, 0, composite, admissibility,
+      score_conditioning);
 }
 
 fit_expected<Eigen::MatrixXd>
@@ -3553,7 +3984,8 @@ estimator_map_jacobian_restricted_block(
     double rel_step,
     CommunalityMethod comm,
     CompositeWeight composite,
-    AdmissibilityConfig admissibility) {
+    AdmissibilityConfig admissibility,
+    ScoreConditioningConfig score_conditioning) {
   if (block >= samp.S.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: Jacobian block index out of range"});
@@ -3563,7 +3995,8 @@ estimator_map_jacobian_restricted_block(
   const auto q = static_cast<Eigen::Index>(ev.n_free());
 
   auto analytic = estimator_map_jacobian_restricted_block_analytic_impl(
-      pt, rep, ev, samp, which, block, comm, composite, admissibility);
+      pt, rep, ev, samp, which, block, comm, composite, admissibility,
+      score_conditioning);
   if (analytic.has_value()) return analytic;
 
   // Regular-interior restricted maps are differentiated analytically above. Keep
@@ -3581,14 +4014,16 @@ estimator_map_jacobian_restricted_block(
       work.S[block](r, c) += h;
       if (r != c) work.S[block](c, r) += h;
       auto fp = fit_noniterative_cfa_restricted(
-          pt, rep, work, which, comm, composite, admissibility);
+          pt, rep, work, which, comm, composite, admissibility,
+          score_conditioning);
       if (!fp.has_value()) return std::unexpected(fp.error());
 
       work.S[block] = S0;
       work.S[block](r, c) -= h;
       if (r != c) work.S[block](c, r) -= h;
       auto fm = fit_noniterative_cfa_restricted(
-          pt, rep, work, which, comm, composite, admissibility);
+          pt, rep, work, which, comm, composite, admissibility,
+          score_conditioning);
       if (!fm.has_value()) return std::unexpected(fm.error());
 
       J.col(col) = (fp->theta - fm->theta) / (2.0 * h);
@@ -3608,11 +4043,13 @@ estimator_map_jacobian_restricted(
     double rel_step,
     CommunalityMethod comm,
     CompositeWeight composite,
-    AdmissibilityConfig admissibility) {
+    AdmissibilityConfig admissibility,
+    ScoreConditioningConfig score_conditioning) {
   if (samp.S.empty()) return std::unexpected(FitError{FitError::Kind::NumericIssue,
       "restricted Guttman CFA: empty sample stats"});
   return estimator_map_jacobian_restricted_block(
-      pt, rep, ev, samp, which, 0, rel_step, comm, composite, admissibility);
+      pt, rep, ev, samp, which, 0, rel_step, comm, composite, admissibility,
+      score_conditioning);
 }
 
 }  // namespace magmaan::estimate::frontier

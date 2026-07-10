@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
@@ -8,6 +9,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -67,6 +69,20 @@ Eigen::MatrixXd two_factor_cov() {
   return S;
 }
 
+Eigen::MatrixXd three_factor_equicorrelated_cov() {
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(9, 3);
+  for (Eigen::Index f = 0; f < 3; ++f) {
+    L(3 * f, f) = 1.0;
+    L(3 * f + 1, f) = 0.8;
+    L(3 * f + 2, f) = 1.2;
+  }
+  Eigen::MatrixXd Phi = Eigen::MatrixXd::Constant(3, 3, 0.6);
+  Phi.diagonal().setOnes();
+  Eigen::MatrixXd S = L * Phi * L.transpose();
+  S.diagonal().array() += 0.5;
+  return S;
+}
+
 RawData raw_from_cov(const Eigen::MatrixXd& S) {
   Eigen::LLT<Eigen::MatrixXd> llt(S);
   REQUIRE(llt.info() == Eigen::Success);
@@ -86,6 +102,13 @@ constexpr const char* kTwoFactor =
     "f1 =~ x1 + x2 + x3\n"
     "f2 =~ x4 + x5 + x6\n"
     "f1 ~~ f2\n";
+
+constexpr const char* kThreeFactor =
+    "f1 =~ x1 + x2 + x3\n"
+    "f2 =~ x4 + x5 + x6\n"
+    "f3 =~ x7 + x8 + x9\n"
+    "f1 ~~ f2 + f3\n"
+    "f2 ~~ f3\n";
 
 // The θ₀ that the exact population implies, keyed by matrix cell.
 double true_param(const magmaan::model::ParamLocation& loc) {
@@ -112,7 +135,9 @@ magmaan::fit_expected<Eigen::MatrixXd>
 finite_difference_jacobian(const LatentStructure& pt, const MatrixRep& rep,
                            const ModelEvaluator& ev, const SampleStats& samp,
                            ef::NonIterativeEstimator which,
-                           ef::CompositeWeight composite) {
+                           ef::CompositeWeight composite,
+                           ef::AdmissibilityConfig admissibility = {},
+                           ef::ScoreConditioningConfig score_conditioning = {}) {
   if (samp.S.empty()) {
     return std::unexpected(magmaan::FitError{
         magmaan::FitError::Kind::NumericIssue, "test: empty sample stats"});
@@ -129,13 +154,17 @@ finite_difference_jacobian(const LatentStructure& pt, const MatrixRep& rep,
       work.S[0] = S0;
       work.S[0](r, c) += h;
       if (r != c) work.S[0](c, r) += h;
-      auto tp = ef::noniterative_cfa_theta(pt, rep, ev, work, which, composite);
+      auto tp = ef::noniterative_cfa_theta(
+          pt, rep, ev, work, which, composite, admissibility,
+          score_conditioning);
       if (!tp.has_value()) return std::unexpected(tp.error());
 
       work.S[0] = S0;
       work.S[0](r, c) -= h;
       if (r != c) work.S[0](c, r) -= h;
-      auto tm = ef::noniterative_cfa_theta(pt, rep, ev, work, which, composite);
+      auto tm = ef::noniterative_cfa_theta(
+          pt, rep, ev, work, which, composite, admissibility,
+          score_conditioning);
       if (!tm.has_value()) return std::unexpected(tm.error());
       J.col(col) = (*tp - *tm) / (2.0 * h);
       ++col;
@@ -297,6 +326,231 @@ TEST_CASE("standardized composite weights change the off-model map") {
   REQUIRE_OK(unit);
   REQUIRE_OK(std);
   CHECK((*unit - *std).cwiseAbs().maxCoeff() > 1e-6);
+}
+
+TEST_CASE("aligned score conditioning preserves raw compatibility and resolves auto") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 4) += 0.12;
+  S(4, 0) += 0.12;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  ef::ScoreConditioningConfig raw;
+  auto std_default = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized);
+  auto std_raw = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, raw);
+  auto aligned_auto = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned);
+  REQUIRE_OK(std_default);
+  REQUIRE_OK(std_raw);
+  REQUIRE_OK(aligned_auto);
+  CHECK((std_default->array() == std_raw->array()).all());
+  CHECK((std_default->array() == aligned_auto->array()).all());
+
+  raw.floor0 = -123.0;
+  raw.rate_exp = -4.0;
+  auto adaptive_compat = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Adaptive, {}, raw);
+  auto adaptive_default = ef::noniterative_cfa_theta(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Adaptive);
+  REQUIRE_OK(adaptive_compat);
+  REQUIRE_OK(adaptive_default);
+  CHECK((adaptive_compat->array() == adaptive_default->array()).all());
+}
+
+TEST_CASE("hard and soft score conditioning attain the normalized floor") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+
+  ef::ScoreConditioningConfig inactive;
+  inactive.policy = ef::ScoreConditioningPolicy::Hard;
+  inactive.floor0 = 1.0;  // delta_400 = 0.05 < lambda_min(R)
+  auto raw = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized);
+  auto hard_inactive = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, inactive);
+  REQUIRE_OK(raw);
+  REQUIRE_OK(hard_inactive);
+  CHECK((raw->theta.array() == hard_inactive->theta.array()).all());
+  REQUIRE(hard_inactive->score_conditioning_diagnostics.size() == 1);
+  CHECK(hard_inactive->score_conditioning_diagnostics[0].shrinkage == 0.0);
+
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+  ef::ScoreConditioningConfig boundary = inactive;
+  boundary.floor0 =
+      20.0 * raw->score_conditioning_diagnostics[0]
+                   .raw_normalized_min_eigenvalue;
+  auto boundary_analytic = ef::estimator_map_jacobian_analytic(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, boundary);
+  CHECK_FALSE(boundary_analytic.has_value());
+  auto boundary_fallback = ef::estimator_map_jacobian(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      2e-6, ef::CompositeWeight::Standardized, {}, boundary);
+  REQUIRE_OK(boundary_fallback);
+
+  ef::ScoreConditioningConfig active = inactive;
+  active.floor0 = 16.0;  // delta_400 = 0.8 > lambda_min(R) = 0.7
+  for (auto policy : {ef::ScoreConditioningPolicy::Hard,
+                      ef::ScoreConditioningPolicy::Soft}) {
+    active.policy = policy;
+    INFO("score policy ordinal: " << static_cast<int>(policy));
+    auto fit = ef::fit_noniterative_cfa(
+        b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+        ef::CompositeWeight::Standardized, {}, active);
+    REQUIRE_OK(fit);
+    REQUIRE(fit->score_conditioning_diagnostics.size() == 1);
+    const auto& d = fit->score_conditioning_diagnostics[0];
+    CHECK(d.target_floor == doctest::Approx(0.8));
+    CHECK(d.raw_normalized_min_eigenvalue < d.target_floor);
+    CHECK(d.repaired_normalized_min_eigenvalue >= d.target_floor - 1e-10);
+    CHECK(d.shrinkage > 0.0);
+    CHECK(d.hard_violation);
+    CHECK(d.min_score_variance > 0.0);
+    CHECK(d.min_abs_marker > 0.0);
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(fit->Phi[0]);
+    REQUIRE(es.info() == Eigen::Success);
+    CHECK(es.eigenvalues().minCoeff() > 0.0);
+  }
+}
+
+TEST_CASE("score conditioning is scale equivariant and validates its scope") {
+  Built b = build(kTwoFactor);
+  SampleStats samp;
+  samp.S = {two_factor_cov()};
+  samp.n_obs = {400};
+  SampleStats scaled = samp;
+  scaled.S[0] *= 7.0;
+
+  ef::ScoreConditioningConfig hard;
+  hard.policy = ef::ScoreConditioningPolicy::Hard;
+  hard.floor0 = 16.0;
+  auto fit = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Unit, {}, hard);
+  auto fit_scaled = ef::fit_noniterative_cfa(
+      b.pt, b.rep, scaled, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Unit, {}, hard);
+  REQUIRE_OK(fit);
+  REQUIRE_OK(fit_scaled);
+  CHECK((fit_scaled->Lambda[0] - fit->Lambda[0]).cwiseAbs().maxCoeff() < 1e-11);
+  CHECK((fit_scaled->Phi[0] - 7.0 * fit->Phi[0]).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((fit_scaled->psi[0] - 7.0 * fit->psi[0]).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK(fit_scaled->score_conditioning_diagnostics[0]
+            .raw_normalized_min_eigenvalue ==
+        doctest::Approx(fit->score_conditioning_diagnostics[0]
+                            .raw_normalized_min_eigenvalue));
+  CHECK(fit_scaled->score_conditioning_diagnostics[0].shrinkage ==
+        doctest::Approx(fit->score_conditioning_diagnostics[0].shrinkage));
+
+  ef::ScoreConditioningConfig invalid = hard;
+  invalid.floor0 = 0.0;
+  CHECK_FALSE(ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Unit, {}, invalid).has_value());
+  invalid.floor0 = 20.0;  // delta_400 = 1
+  CHECK_FALSE(ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Unit, {}, invalid).has_value());
+  CHECK_FALSE(ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanLavaan,
+      ef::CompositeWeight::Unit, {}, hard).has_value());
+  CHECK_FALSE(ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Adaptive, {}, hard).has_value());
+}
+
+TEST_CASE("conditioned analytic Jacobians match central differences and inference") {
+  Built b = build(kTwoFactor);
+  Eigen::MatrixXd S = two_factor_cov();
+  S(0, 0) += 0.10;
+  S(0, 4) += 0.04;
+  S(4, 0) += 0.04;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  for (const auto config : std::array{
+           ef::ScoreConditioningConfig{ef::ScoreConditioningPolicy::Hard, 1.0, 0.5},
+           ef::ScoreConditioningConfig{ef::ScoreConditioningPolicy::Hard, 16.0, 0.5},
+           ef::ScoreConditioningConfig{ef::ScoreConditioningPolicy::Soft, 16.0, 0.5}}) {
+    INFO("score policy ordinal: " << static_cast<int>(config.policy));
+    auto Ja = ef::estimator_map_jacobian_analytic(
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+        ef::CompositeWeight::Standardized, {}, config);
+    auto Jfd = finite_difference_jacobian(
+        b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+        ef::CompositeWeight::Standardized, {}, config);
+    REQUIRE_OK(Ja);
+    REQUIRE_OK(Jfd);
+    CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 8e-5);
+
+    auto fit = ef::fit_noniterative_cfa(
+        b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+        ef::CompositeWeight::Standardized, {}, config);
+    REQUIRE_OK(fit);
+    auto se = rf::noniterative_se_nt(
+        b.pt, b.rep, samp, fit->theta,
+        ef::NonIterativeEstimator::GuttmanAligned,
+        ef::CompositeWeight::Standardized, {}, config);
+    REQUIRE_OK(se);
+    CHECK(se->Omega.allFinite());
+  }
+}
+
+TEST_CASE("hard score ties fall back while soft repeated eigenvalues stay analytic") {
+  Built b = build(kThreeFactor);
+  SampleStats samp;
+  samp.S = {three_factor_equicorrelated_cov()};
+  samp.n_obs = {400};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  REQUIRE_OK(ev);
+
+  ef::ScoreConditioningConfig hard{
+      ef::ScoreConditioningPolicy::Hard, 16.0, 0.5};
+  auto hard_fit = ef::fit_noniterative_cfa(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, hard);
+  REQUIRE_OK(hard_fit);
+  CHECK(hard_fit->score_conditioning_diagnostics[0]
+            .repaired_normalized_min_eigenvalue >= 0.8 - 1e-10);
+
+  auto hard_analytic = ef::estimator_map_jacobian_analytic(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, hard);
+  CHECK_FALSE(hard_analytic.has_value());
+  auto hard_fallback = ef::estimator_map_jacobian(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      2e-6, ef::CompositeWeight::Standardized, {}, hard);
+  REQUIRE_OK(hard_fallback);
+
+  ef::ScoreConditioningConfig soft = hard;
+  soft.policy = ef::ScoreConditioningPolicy::Soft;
+  auto soft_analytic = ef::estimator_map_jacobian_analytic(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, soft);
+  auto soft_fd = finite_difference_jacobian(
+      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CompositeWeight::Standardized, {}, soft);
+  REQUIRE_OK(soft_analytic);
+  REQUIRE_OK(soft_fd);
+  CHECK((*soft_analytic - *soft_fd).cwiseAbs().maxCoeff() < 1e-4);
 }
 
 TEST_CASE("analytic configural Jacobian matches central finite differences") {

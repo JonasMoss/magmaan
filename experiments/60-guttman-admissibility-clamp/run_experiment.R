@@ -1,9 +1,8 @@
 #!/usr/bin/env Rscript
 
-# Calibration study for the aligned Guttman communality admissibility clamp.
-# Raw, hard, and soft policy cells are compared with NTML on loading RMSE,
-# empirical-SE coverage, failures, and score-system conditioning. The grid
-# concentrates on weak-loading, small-n, three-indicator stress conditions.
+# Joint calibration study for the aligned Guttman communality clamp and the
+# opt-in score-covariance conditioning map. Raw, hard, and smooth score repairs
+# are crossed with the four communality-clamp finalists and compared with NTML.
 
 suppressWarnings(suppressMessages(library(magmaan)))
 
@@ -16,12 +15,15 @@ core <- magmaan::magmaan_core
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
-    "Calibration of raw/hard/soft aligned-Guttman communality clamps against NTML.\n\n",
+    "Calibration of aligned-Guttman communality clamps and score conditioning.\n\n",
     "Options:\n",
     "  --probe              Tiny timing probe. Default if neither --smoke nor --full.\n",
     "  --smoke              Small validation run.\n",
-    "  --full               Larger overnight grid.\n",
-    "  --reps N             Replications per cell. Probe: 2; smoke: 5; full: 50.\n",
+    "  --screen             24-cell candidate screen (300 reps/cell).\n",
+    "  --confirm            27-cell finalist confirmation (1000 reps/cell).\n",
+    "  --full               Alias for --screen.\n",
+    "  --reps N             Override replications per cell.\n",
+    "  --finalists LIST     Comma-separated joint-arm names for --confirm.\n",
     "  --n LIST             Comma-separated sample sizes.\n",
     "  --generators LIST    normal,ig,ordinal. Default depends on mode.\n",
     "  --factors LIST       Comma-separated factor counts.\n",
@@ -63,6 +65,7 @@ parse_args <- function(args) {
     seed_base = 20260708L,
     ml_max_iter = 1500L,
     keep_draws = FALSE,
+    finalists = character(),
     results_dir = experiment_path("results")
   )
   explicit <- character()
@@ -88,14 +91,24 @@ parse_args <- function(args) {
       if (!"scales" %in% explicit) opts$scales <<- c("equal", "unequal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
       if (!"strength" %in% explicit) opts$strength <<- c("weak")
-    } else if (mode == "full") {
-      if (!"reps" %in% explicit) opts$reps <<- 500L
-      if (!"n" %in% explicit) opts$n <<- c(50L, 100L, 300L)
+    } else if (mode == "screen") {
+      if (!"reps" %in% explicit) opts$reps <<- 300L
+      if (!"n" %in% explicit) opts$n <<- c(50L, 100L, 800L)
       if (!"generators" %in% explicit) opts$generators <<- c("normal", "ig", "ordinal")
-      if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L)
-      if (!"indicators" %in% explicit) opts$indicators <<- c("3")
-      if (!"rho" %in% explicit) opts$rho <<- c(0.6, 0.8)
-      if (!"scales" %in% explicit) opts$scales <<- c("equal", "unequal")
+      if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L, 5L)
+      if (!"indicators" %in% explicit) opts$indicators <<- c("3", "5")
+      if (!"rho" %in% explicit) opts$rho <<- c(0, 0.8)
+      if (!"scales" %in% explicit) opts$scales <<- c("equal")
+      if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
+      if (!"strength" %in% explicit) opts$strength <<- c("weak")
+    } else if (mode == "confirm") {
+      if (!"reps" %in% explicit) opts$reps <<- 1000L
+      if (!"n" %in% explicit) opts$n <<- c(50L, 100L, 800L)
+      if (!"generators" %in% explicit) opts$generators <<- c("normal", "ig", "ordinal")
+      if (!"factors" %in% explicit) opts$factors <<- c(2L, 3L, 5L)
+      if (!"indicators" %in% explicit) opts$indicators <<- c("3", "5")
+      if (!"rho" %in% explicit) opts$rho <<- c(0, 0.8)
+      if (!"scales" %in% explicit) opts$scales <<- c("equal")
       if (!"loadings" %in% explicit) opts$loadings <<- c("mixed")
       if (!"strength" %in% explicit) opts$strength <<- c("weak")
     }
@@ -116,7 +129,11 @@ parse_args <- function(args) {
     } else if (a == "--smoke") {
       apply_mode("smoke")
     } else if (a == "--full") {
-      apply_mode("full")
+      apply_mode("screen")
+    } else if (a == "--screen") {
+      apply_mode("screen")
+    } else if (a == "--confirm") {
+      apply_mode("confirm")
     } else if (a == "--reps") {
       opts$reps <- as.integer(take(a)); explicit <- c(explicit, "reps")
     } else if (grepl("^--reps=", a)) {
@@ -177,6 +194,10 @@ parse_args <- function(args) {
       opts$ml_max_iter <- as.integer(sub("^--ml-max-iter=", "", a))
     } else if (a == "--keep-draws") {
       opts$keep_draws <- TRUE
+    } else if (a == "--finalists") {
+      opts$finalists <- parse_csv_arg(take(a))
+    } else if (grepl("^--finalists=", a)) {
+      opts$finalists <- parse_csv_arg(sub("^--finalists=", "", a))
     } else if (a == "--results-dir") {
       opts$results_dir <- take(a)
     } else if (grepl("^--results-dir=", a)) {
@@ -232,6 +253,12 @@ bind_rows <- function(xs) {
   xs <- xs[vapply(xs, function(x) is.data.frame(x) && nrow(x) > 0L, logical(1))]
   if (!length(xs)) return(data.frame())
   do.call(rbind, xs)
+}
+
+q_safe <- function(x, prob) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return(NA_real_)
+  stats::quantile(x, prob, names = FALSE)
 }
 
 safe_eval <- function(expr) {
@@ -554,6 +581,7 @@ estimate_rows <- function(cond, rep_id, estimator, theta, se, target, info) {
     error = theta - target,
     ci_lower = theta - zcrit * se,
     ci_upper = theta + zcrit * se,
+    ci_width = 2 * zcrit * se,
     covered = finite & (target >= theta - zcrit * se) & (target <= theta + zcrit * se),
     finite = finite,
     stringsAsFactors = FALSE
@@ -564,10 +592,15 @@ converged <- function(fit) is.null(fit$converged) || isTRUE(fit$converged)
 
 fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
                             fit_ms = NA_real_, se_ok = NA, se_ms = NA_real_,
-                            error = "", clamp_rate = NA_real_,
-                            zhz_min_eig = NA_real_, bhb_min_eig = NA_real_) {
+                            error = "", clamp_rate = NA_real_) {
   min_resid <- NA_real_
   sigma_min_eig <- NA_real_
+  phi_min_eig <- NA_real_
+  phi_condition <- NA_real_
+  score_target <- score_raw_min <- score_repaired_min <- NA_real_
+  score_raw_normalized_min <- score_repaired_normalized_min <- NA_real_
+  score_shrinkage <- score_shrinkage_rate <- score_hard_violation_rate <- NA_real_
+  marker_min <- score_variance_min <- NA_real_
   improper <- NA
   if (isTRUE(fit_ok) && !is.null(fit)) {
     mats <- matrices_from_partable(fit$partable, attr(cond, "pop"))
@@ -575,6 +608,22 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
       min_resid <- min(mats$Theta)
       sigma_min_eig <- min(eigen(mats$sigma, symmetric = TRUE, only.values = TRUE)$values)
       improper <- min_resid < -1e-8 || sigma_min_eig < -1e-8
+      phi_eig <- eigen(mats$Phi, symmetric = TRUE, only.values = TRUE)$values
+      phi_min_eig <- min(phi_eig)
+      phi_condition <- max(phi_eig) / phi_min_eig
+    }
+    sd <- fit$score_conditioning_diagnostics
+    if (is.data.frame(sd) && nrow(sd)) {
+      score_target <- min(sd$target_floor)
+      score_raw_min <- min(sd$raw_min_eigenvalue)
+      score_repaired_min <- min(sd$repaired_min_eigenvalue)
+      score_raw_normalized_min <- min(sd$raw_normalized_min_eigenvalue)
+      score_repaired_normalized_min <- min(sd$repaired_normalized_min_eigenvalue)
+      score_shrinkage <- max(sd$shrinkage)
+      score_shrinkage_rate <- mean(sd$shrinkage > 0)
+      score_hard_violation_rate <- mean(sd$hard_violation)
+      marker_min <- min(sd$min_abs_marker)
+      score_variance_min <- min(sd$min_score_variance)
     }
   }
   data.frame(
@@ -588,9 +637,19 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
     improper = improper,
     min_resid = min_resid,
     sigma_min_eig = sigma_min_eig,
+    phi_min_eig = phi_min_eig,
+    phi_condition = phi_condition,
     clamp_rate = clamp_rate,
-    zhz_min_eig = zhz_min_eig,
-    bhb_min_eig = bhb_min_eig,
+    score_target = score_target,
+    score_raw_min_eig = score_raw_min,
+    score_repaired_min_eig = score_repaired_min,
+    score_raw_normalized_min_eig = score_raw_normalized_min,
+    score_repaired_normalized_min_eig = score_repaired_normalized_min,
+    score_shrinkage = score_shrinkage,
+    score_shrinkage_rate = score_shrinkage_rate,
+    score_hard_violation_rate = score_hard_violation_rate,
+    score_variance_min = score_variance_min,
+    marker_min = marker_min,
     fit_ms = fit_ms,
     se_ms = se_ms,
     total_ms = fit_ms + ifelse(is.finite(se_ms), se_ms, 0),
@@ -602,31 +661,42 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
 arm_token <- function(x) sub("\\.$", "", gsub("\\.", "p", format(x, scientific = FALSE)))
 
 make_arm_specs <- function() {
-  cols <- c("arm", "policy", "rate", "beta0", "margin")
-  # Soft depends on (rate, beta0, margin). Hard ignores beta entirely (the box
-  # is a function of margin only), so it must not be replicated across
-  # rate/beta0 -- those cells would be identical fits.
-  soft <- expand.grid(
-    rate = c(0.5, 1), beta0 = c(0.5, 1, 2, 4), margin = c(1e-3, 1e-2),
-    stringsAsFactors = FALSE
-  )
-  soft$policy <- "soft"
-  soft$arm <- paste0(
-    "guttman_soft_r", vapply(soft$rate, arm_token, character(1)),
-    "_b", vapply(soft$beta0, arm_token, character(1)),
-    "_m", vapply(soft$margin, arm_token, character(1)))
-  hard <- data.frame(
-    policy = "hard", rate = 0.5, beta0 = 1, margin = c(1e-3, 1e-2),
-    stringsAsFactors = FALSE)
-  hard$arm <- paste0("guttman_hard_m", vapply(hard$margin, arm_token, character(1)))
+  clamps <- data.frame(
+    clamp = c("raw", "hard_m0p001", "soft_r0p5_b4_m0p001",
+              "soft_r1_b4_m0p001"),
+    policy = c("raw", "hard", "soft", "soft"),
+    rate = c(0.5, 0.5, 0.5, 1), beta0 = c(1, 1, 4, 4),
+    margin = 1e-3, stringsAsFactors = FALSE)
+
+  # Hard score conditioning depends only on (rate, delta50); there is no beta
+  # dimension to duplicate. This keeps the earlier hard-arm deduplication.
+  scores <- expand.grid(
+    score_policy = c("hard", "soft"), score_rate = c(0.5, 1),
+    delta50 = c(0.01, 0.025, 0.05, 0.1), stringsAsFactors = FALSE)
+  scores$score_floor0 <- scores$delta50 * 50^scores$score_rate
+  scores$score <- paste0(
+    scores$score_policy, "_r",
+    vapply(scores$score_rate, arm_token, character(1)), "_d",
+    vapply(scores$delta50, arm_token, character(1)))
+  scores <- rbind(
+    data.frame(score_policy = "raw", score_rate = 0.5, delta50 = 0,
+               score_floor0 = 1, score = "raw", stringsAsFactors = FALSE),
+    scores)
+
+  joint <- merge(clamps, scores, by = NULL)
+  joint$arm <- paste0("guttman_c_", joint$clamp, "_s_", joint$score)
+  joint$clamp_only_arm <- paste0("guttman_c_", joint$clamp, "_s_raw")
+  cols <- c("arm", "clamp_only_arm", "clamp", "policy", "rate", "beta0",
+            "margin", "score", "score_policy", "score_rate", "delta50",
+            "score_floor0")
   rbind(
-    data.frame(arm = "guttman_raw", policy = "raw", rate = 0.5,
-               beta0 = 1, margin = 1e-3, stringsAsFactors = FALSE)[, cols],
-    hard[, cols],
-    soft[, cols],
-    data.frame(arm = "ml_emp", policy = NA_character_, rate = NA_real_,
-               beta0 = NA_real_, margin = NA_real_, stringsAsFactors = FALSE)[, cols]
-  )
+    joint[, cols],
+    data.frame(
+      arm = "ntml_emp", clamp_only_arm = NA_character_, clamp = NA_character_,
+      policy = NA_character_, rate = NA_real_, beta0 = NA_real_,
+      margin = NA_real_, score = NA_character_, score_policy = NA_character_,
+      score_rate = NA_real_, delta50 = NA_real_, score_floor0 = NA_real_,
+      stringsAsFactors = FALSE)[, cols])
 }
 
 guttman_fit <- function(pt, ss, spec) {
@@ -634,36 +704,9 @@ guttman_fit <- function(pt, ss, spec) {
     pt, ss, estimator = "guttman_aligned",
     communality = "extended_triad_ls", composite = "standardized",
     admissibility = spec$policy, margin = spec$margin,
-    beta0 = spec$beta0, rate = spec$rate)
-}
-
-softplus <- function(x) pmax(x, 0) + log1p(exp(-abs(x)))
-
-clamp_h2 <- function(h2, spec, n) {
-  if (spec$policy == "raw") return(h2)
-  lo <- spec$margin
-  hi <- 1 - lo
-  if (spec$policy == "hard") return(pmin(pmax(h2, lo), hi))
-  beta <- spec$beta0 * max(n, 1)^spec$rate
-  h2 - softplus(beta * (h2 - hi)) / beta +
-    softplus(beta * (lo - h2)) / beta
-}
-
-score_conditioning <- function(ss, pop, spec) {
-  S <- ss$S[[1L]]
-  raw <- magmaan::guttman_h(S, pop$blocks, method = "extended_triad_ls")$h2
-  h2 <- clamp_h2(raw, spec, ss$nobs[[1L]])
-  H <- S
-  diag(H) <- diag(S) * h2
-  Z <- model.matrix(~ 0 + factor(pop$blocks))
-  B <- Z / sqrt(diag(S))
-  list(
-    clamp_rate = mean(raw < spec$margin | raw > 1 - spec$margin),
-    zhz_min_eig = min(eigen(crossprod(Z, H %*% Z), symmetric = TRUE,
-                            only.values = TRUE)$values),
-    bhb_min_eig = min(eigen(crossprod(B, H %*% B), symmetric = TRUE,
-                            only.values = TRUE)$values)
-  )
+    beta0 = spec$beta0, rate = spec$rate,
+    score_conditioning = spec$score_policy,
+    score_floor0 = spec$score_floor0, score_rate = spec$score_rate)
 }
 
 guttman_se <- function(fit, X) {
@@ -683,12 +726,9 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
   fit_expr <- switch(
     if (grepl("^guttman", arm)) "guttman" else arm,
     guttman = quote(guttman_fit(pt, ss, spec)),
-    ml_emp = quote(ml_fit(pt, ss)),
+    ntml_emp = quote(ml_fit(pt, ss)),
     stop("unknown arm: ", arm, call. = FALSE)
   )
-  conditioning <- if (grepl("^guttman", arm))
-    score_conditioning(ss, pop, spec) else
-    list(clamp_rate = NA_real_, zhz_min_eig = NA_real_, bhb_min_eig = NA_real_)
   fit_res <- timed_eval(eval(fit_expr))
   if (!fit_res$ok) {
     return(list(
@@ -696,14 +736,12 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
       whole = data.frame(),
       diagnostics = fit_diagnostics(cond, rep_id, "fit", arm, FALSE,
                                     fit_ms = fit_res$ms, error = fit_res$error,
-                                    clamp_rate = conditioning$clamp_rate,
-                                    zhz_min_eig = conditioning$zhz_min_eig,
-                                    bhb_min_eig = conditioning$bhb_min_eig)
+                                    clamp_rate = NA_real_)
     ))
   }
   fit <- fit_res$value
-  if (grepl("^guttman", arm) && !is.null(fit$n_h2_clamped))
-    conditioning$clamp_rate <- sum(unlist(fit$n_h2_clamped)) / nrow(ss$S[[1L]])
+  clamp_rate <- if (grepl("^guttman", arm) && !is.null(fit$n_h2_clamped))
+    sum(unlist(fit$n_h2_clamped)) / nrow(ss$S[[1L]]) else NA_real_
   whole <- fit_whole_row(cond, rep_id, arm, fit, pop)
   se_res <- timed_eval({
     if (grepl("^guttman", arm)) guttman_se(fit, X) else empirical_se(fit, X)
@@ -716,9 +754,7 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
                           fit_ms = fit_res$ms, se_ok = se_res$ok,
                           se_ms = se_res$ms,
                           error = if (se_res$ok) "" else se_res$error,
-                          clamp_rate = conditioning$clamp_rate,
-                          zhz_min_eig = conditioning$zhz_min_eig,
-                          bhb_min_eig = conditioning$bhb_min_eig)
+                          clamp_rate = clamp_rate)
   list(estimates = estimates, whole = whole, diagnostics = diag)
 }
 
@@ -752,6 +788,11 @@ summarise_estimates <- function(x) {
       coverage = mean(d$covered[ok], na.rm = TRUE),
       avg_se = mean(d$se[ok], na.rm = TRUE),
       emp_sd = stats::sd(d$estimate[ok], na.rm = TRUE),
+      abs_error_p95 = q_safe(abs(d$error[ok]), .95),
+      abs_error_p99 = q_safe(abs(d$error[ok]), .99),
+      abs_estimate_p99 = q_safe(abs(d$estimate[ok]), .99),
+      ci_width_p95 = q_safe(d$ci_width[ok], .95),
+      ci_width_p99 = q_safe(d$ci_width[ok], .99),
       stringsAsFactors = FALSE
     )
   })
@@ -865,10 +906,20 @@ summarise_diagnostics <- function(x) {
       se_ok_rate = mean(d$se_ok, na.rm = TRUE),
       improper_rate = mean(d$improper, na.rm = TRUE),
       clamp_rate = mean(d$clamp_rate, na.rm = TRUE),
-      zhz_min_eig_p05 = stats::quantile(d$zhz_min_eig, .05, na.rm = TRUE, names = FALSE),
-      bhb_min_eig_p05 = stats::quantile(d$bhb_min_eig, .05, na.rm = TRUE, names = FALSE),
-      min_resid_p05 = stats::quantile(d$min_resid, .05, na.rm = TRUE, names = FALSE),
-      sigma_min_eig_p05 = stats::quantile(d$sigma_min_eig, .05, na.rm = TRUE, names = FALSE),
+      pd_phi_rate = mean(d$phi_min_eig > 0, na.rm = TRUE),
+      phi_min_eig_min = min(d$phi_min_eig, na.rm = TRUE),
+      phi_condition_p99 = q_safe(d$phi_condition, .99),
+      score_raw_min_eig_p01 = q_safe(d$score_raw_min_eig, .01),
+      score_repaired_min_eig_p01 = q_safe(d$score_repaired_min_eig, .01),
+      score_raw_normalized_min_eig_p01 =
+        q_safe(d$score_raw_normalized_min_eig, .01),
+      score_repaired_normalized_min_eig_p01 =
+        q_safe(d$score_repaired_normalized_min_eig, .01),
+      marker_min_p01 = q_safe(d$marker_min, .01),
+      shrinkage_rate = mean(d$score_shrinkage_rate, na.rm = TRUE),
+      score_hard_violation_rate = mean(d$score_hard_violation_rate, na.rm = TRUE),
+      min_resid_p05 = q_safe(d$min_resid, .05),
+      sigma_min_eig_p05 = q_safe(d$sigma_min_eig, .05),
       first_error = paste(unique(d$error[nzchar(d$error)])[1] %||% "", collapse = ""),
       stringsAsFactors = FALSE
     )
@@ -896,7 +947,52 @@ summarise_timing <- function(x) {
   bind_rows(rows)
 }
 
+summarise_timing_paired <- function(x, specs) {
+  if (!nrow(x)) return(data.frame())
+  rows <- lapply(seq_len(nrow(specs)), function(i) {
+    arm <- specs$arm[[i]]
+    baseline <- specs$clamp_only_arm[[i]]
+    if (is.na(baseline) || arm == baseline) return(data.frame())
+    lhs <- x[x$estimator == arm & x$fit_ok & x$se_ok,
+             c(condition_cols, "rep", "total_ms")]
+    rhs <- x[x$estimator == baseline & x$fit_ok & x$se_ok,
+             c(condition_cols, "rep", "total_ms")]
+    names(rhs)[names(rhs) == "total_ms"] <- "baseline_total_ms"
+    paired <- merge(lhs, rhs, by = c(condition_cols, "rep"))
+    if (!nrow(paired)) return(data.frame())
+    data.frame(
+      paired[1, condition_cols, drop = FALSE], estimator = arm,
+      baseline = baseline, n_pairs = nrow(paired),
+      median_overhead_ratio = stats::median(
+        paired$total_ms / paired$baseline_total_ms, na.rm = TRUE),
+      median_overhead_ms = stats::median(
+        paired$total_ms - paired$baseline_total_ms, na.rm = TRUE),
+      stringsAsFactors = FALSE)
+  })
+  bind_rows(rows)
+}
+
 condition_grid <- function(opts) {
+  if (opts$mode %in% c("screen", "confirm")) {
+    stress <- expand.grid(
+      generator = c("normal", "ig", "ordinal"),
+      factors = c(2L, 3L, 5L), indicators = "3", rho = 0.8,
+      scale = "equal", loading = "mixed", strength = "weak",
+      constraint = "configural", n = c(50L, 100L),
+      stringsAsFactors = FALSE)
+    benign_factors <- if (opts$mode == "screen") c(2L, 3L) else c(2L, 3L, 5L)
+    benign <- expand.grid(
+      generator = c("normal", "ig", "ordinal"),
+      factors = benign_factors, indicators = "5", rho = 0,
+      scale = "equal", loading = "mixed", strength = "weak",
+      constraint = "configural", n = 800L,
+      stringsAsFactors = FALSE)
+    grid <- rbind(stress, benign)
+    grid <- grid[order(grid$n, grid$generator, grid$factors), ]
+    rownames(grid) <- NULL
+    if (is.finite(opts$max_cells)) grid <- head(grid, opts$max_cells)
+    return(grid)
+  }
   config <- expand.grid(
     generator = opts$generators,
     factors = opts$factors,
@@ -931,6 +1027,58 @@ condition_grid <- function(opts) {
   rownames(grid) <- NULL
   if (is.finite(opts$max_cells)) grid <- head(grid, opts$max_cells)
   grid
+}
+
+screen_decisions <- function(estimate, diagnostic, paired_timing, specs) {
+  candidates <- specs[specs$score_policy %in% c("hard", "soft"), ]
+  clamp_only <- specs[specs$score_policy == "raw" & grepl("^guttman", specs$arm), ]
+  loading <- estimate[estimate$kind == "loading", ]
+  stress <- loading$n %in% c(50L, 100L)
+  benign <- loading$n == 800L
+  clamp_stress_rmse <- vapply(clamp_only$arm, function(arm) {
+    z <- loading[stress & loading$estimator == arm, "rmse"]
+    sqrt(mean(z^2, na.rm = TRUE))
+  }, numeric(1))
+  best_clamp_rmse <- min(clamp_stress_rmse, na.rm = TRUE)
+
+  rows <- lapply(seq_len(nrow(candidates)), function(i) {
+    spec <- candidates[i, ]
+    arm <- spec$arm[[1L]]
+    counterpart <- spec$clamp_only_arm[[1L]]
+    ld_stress <- loading[stress & loading$estimator == arm, ]
+    ld_benign <- loading[benign & loading$estimator == arm, ]
+    cp_stress <- loading[stress & loading$estimator == counterpart, ]
+    cp_benign <- loading[benign & loading$estimator == counterpart, ]
+    dg <- diagnostic[diagnostic$estimator == arm, ]
+    tm <- paired_timing[paired_timing$estimator == arm, ]
+
+    stress_rmse <- sqrt(mean(ld_stress$rmse^2, na.rm = TRUE))
+    counterpart_stress_rmse <- sqrt(mean(cp_stress$rmse^2, na.rm = TRUE))
+    benign_rmse <- sqrt(mean(ld_benign$rmse^2, na.rm = TRUE))
+    counterpart_benign_rmse <- sqrt(mean(cp_benign$rmse^2, na.rm = TRUE))
+    p99_ratio <- max(ld_stress$abs_error_p99, na.rm = TRUE) /
+      max(cp_stress$abs_error_p99, na.rm = TRUE)
+    benign_ratio <- benign_rmse / counterpart_benign_rmse
+    overhead <- max(tm$median_overhead_ratio, na.rm = TRUE)
+    coverage <- mean(ld_stress$coverage, na.rm = TRUE)
+    success <- nrow(dg) > 0 && all(dg$fit_ok_rate == 1) && all(dg$se_ok_rate == 1)
+    pd_phi <- nrow(dg) > 0 && all(dg$pd_phi_rate == 1)
+    survive <- success && pd_phi && is.finite(coverage) &&
+      coverage >= 0.92 && coverage <= 0.98 &&
+      stress_rmse < best_clamp_rmse && p99_ratio <= 0.5 &&
+      benign_ratio >= 0.99 && benign_ratio <= 1.01 && overhead <= 1.10
+    data.frame(
+      arm = arm, clamp_only_arm = counterpart,
+      fit_se_success = success, pd_phi_all = pd_phi, coverage = coverage,
+      stress_rmse = stress_rmse, best_clamp_only_stress_rmse = best_clamp_rmse,
+      counterpart_stress_rmse = counterpart_stress_rmse,
+      p99_loading_error_ratio = p99_ratio,
+      benign_rmse_ratio = benign_ratio,
+      fit_se_overhead_ratio = overhead, survive = survive,
+      stringsAsFactors = FALSE)
+  })
+  out <- bind_rows(rows)
+  out[order(!out$survive, out$stress_rmse, out$fit_se_overhead_ratio), ]
 }
 
 population_rows <- function(grid) {
@@ -970,6 +1118,30 @@ append_csv <- function(rows, name, dir) {
 }
 
 arm_specs <- make_arm_specs()
+raw_arm <- "guttman_c_raw_s_raw"
+if (opts$mode == "probe") {
+  keep <- c(raw_arm, "guttman_c_hard_m0p001_s_raw",
+            "guttman_c_raw_s_hard_r0p5_d0p05",
+            "guttman_c_raw_s_soft_r0p5_d0p05", "ntml_emp")
+  arm_specs <- arm_specs[arm_specs$arm %in% keep, ]
+}
+if (opts$mode == "confirm") {
+  finalists <- opts$finalists
+  survivor_path <- file.path(opts$results_dir, "screen_survivors.csv")
+  if (!length(finalists) && file.exists(survivor_path)) {
+    survivors <- read.csv(survivor_path, stringsAsFactors = FALSE)
+    finalists <- head(survivors$arm[survivors$survive], 2L)
+  }
+  if (!length(finalists))
+    stop("--confirm needs --finalists or results/screen_survivors.csv", call. = FALSE)
+  finalists <- head(finalists, 2L)
+  missing <- setdiff(finalists, arm_specs$arm)
+  if (length(missing)) stop("unknown finalist arm(s): ", paste(missing, collapse = ","),
+                            call. = FALSE)
+  counterparts <- arm_specs$clamp_only_arm[match(finalists, arm_specs$arm)]
+  keep <- unique(c(raw_arm, finalists, counterparts, "ntml_emp"))
+  arm_specs <- arm_specs[arm_specs$arm %in% keep, ]
+}
 grid <- condition_grid(opts)
 write_csv(grid, file.path(opts$results_dir, "design.csv"))
 write_csv(arm_specs, file.path(opts$results_dir, "arms.csv"))
@@ -994,6 +1166,9 @@ write_metadata(
     alpha = opts$alpha,
     seed_base = opts$seed_base,
     ml_max_iter = opts$ml_max_iter,
+    finalists = opts$finalists,
+    score_candidate_rule = "hard/soft x rate(0.5,1) x delta50(0.01,0.025,0.05,0.1)",
+    production_score_conditioning = "raw",
     categorical_metric = "observed Pearson-code covariance; no polychoric inputs"
   ),
   packages = c("magmaan")
@@ -1043,16 +1218,18 @@ for (cell in seq_len(nrow(grid))) {
   diagnostics <- bind_rows(lapply(cell_out, `[[`, "diagnostics"))
   append_csv(summarise_estimates(estimate_draws), "estimate_summary", opts$results_dir)
   append_csv(bind_rows(list(
-    summarise_estimates_joint(estimate_draws, "guttman_raw"),
-    summarise_estimates_joint(estimate_draws, "ml_emp")
+    summarise_estimates_joint(estimate_draws, raw_arm),
+    summarise_estimates_joint(estimate_draws, "ntml_emp")
   )), "estimate_joint_summary", opts$results_dir)
   append_csv(summarise_whole(whole_draws), "whole_summary", opts$results_dir)
   append_csv(bind_rows(list(
-    summarise_whole_joint(whole_draws, "guttman_raw"),
-    summarise_whole_joint(whole_draws, "ml_emp")
+    summarise_whole_joint(whole_draws, raw_arm),
+    summarise_whole_joint(whole_draws, "ntml_emp")
   )), "whole_joint_summary", opts$results_dir)
   append_csv(summarise_diagnostics(diagnostics), "diagnostic_summary", opts$results_dir)
   append_csv(summarise_timing(diagnostics), "timing_summary", opts$results_dir)
+  append_csv(summarise_timing_paired(diagnostics, arm_specs),
+             "paired_timing_summary", opts$results_dir)
   append_csv(diagnostics, "diagnostics", opts$results_dir)
   if (isTRUE(opts$keep_draws)) {
     append_csv(estimate_draws, "estimate_draws", opts$results_dir)
@@ -1066,11 +1243,33 @@ for (cell in seq_len(nrow(grid))) {
   ), "progress", opts$results_dir)
 }
 
+if (opts$mode == "screen") {
+  required <- file.path(opts$results_dir,
+                        c("estimate_summary.csv", "diagnostic_summary.csv",
+                          "paired_timing_summary.csv"))
+  if (all(file.exists(required))) {
+    decision <- screen_decisions(
+      read.csv(required[[1L]], stringsAsFactors = FALSE),
+      read.csv(required[[2L]], stringsAsFactors = FALSE),
+      read.csv(required[[3L]], stringsAsFactors = FALSE),
+      arm_specs)
+    write_csv(decision, file.path(opts$results_dir, "screen_decisions.csv"))
+    survivors <- decision[decision$survive, ]
+    write_csv(survivors, file.path(opts$results_dir, "screen_survivors.csv"))
+    if (!nrow(survivors))
+      cat("No joint score-conditioning setting survived; production remains raw.\n")
+    else
+      cat("Screen survivors (production still remains raw): ",
+          paste(head(survivors$arm, 2L), collapse = ", "), "\n", sep = "")
+  }
+}
+
 cat("Wrote:\n")
 for (nm in c("metadata.csv", "design.csv", "arms.csv", "population.csv",
              "estimate_summary.csv", "estimate_joint_summary.csv",
              "whole_summary.csv", "whole_joint_summary.csv",
              "diagnostic_summary.csv", "timing_summary.csv",
-             "diagnostics.csv", "progress.csv")) {
+             "paired_timing_summary.csv", "diagnostics.csv", "progress.csv",
+             "screen_decisions.csv", "screen_survivors.csv")) {
   cat("  ", file.path(opts$results_dir, nm), "\n", sep = "")
 }
