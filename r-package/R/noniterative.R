@@ -70,14 +70,24 @@ guttman_h <- function(S, blocks,
 #'   `"standardized"` uses incidence weights after indicator standardization,
 #'   and `"adaptive"` uses the aligned data-dependent weights (retired; the old
 #'   name `"gls_aligned"` is still accepted).
+#' @param admissibility Communality admissibility policy: `"raw"` leaves the
+#'   closed-form estimate unchanged, `"hard"` clips it to the symmetric box,
+#'   and `"soft"` applies the smooth box map.
+#' @param margin Symmetric communality-box margin.
+#' @param beta0 Base soft-clamp sharpness.
+#' @param rate Sample-size exponent used to resolve soft-clamp sharpness as
+#'   `beta0 * nobs^rate`.
 #' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
 fit_noniterative_cfa <- function(partable, sample_stats,
                                  estimator = "guttman_lavaan",
-                                 composite = "auto") {
+                                 composite = "auto",
+                                 admissibility = "raw", margin = 1e-4,
+                                 beta0 = 1, rate = 0.5) {
   .finalize_noniterative_fit(
-    noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite))
+    noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite,
+                              admissibility, margin, beta0, rate))
 }
 
 #' Fit the estimator-side metric-constrained non-iterative CFA map.
@@ -92,10 +102,13 @@ fit_noniterative_cfa <- function(partable, sample_stats,
 #' @export
 fit_noniterative_cfa_metric <- function(partable, sample_stats,
                                         estimator = "guttman_aligned",
-                                        composite = "auto") {
+                                        composite = "auto",
+                                        admissibility = "raw", margin = 1e-4,
+                                        beta0 = 1, rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator,
-                                     composite))
+                                     composite, admissibility, margin, beta0,
+                                     rate))
 }
 
 #' Fit the residual/loading restricted non-iterative CFA map.
@@ -115,10 +128,14 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
 fit_noniterative_cfa_restricted <- function(partable, sample_stats,
                                             estimator = "guttman_aligned",
                                             communality = "triad_wls",
-                                            composite = "auto") {
+                                            composite = "auto",
+                                            admissibility = "raw",
+                                            margin = 1e-4, beta0 = 1,
+                                            rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
-                                         communality, composite))
+                                         communality, composite, admissibility,
+                                         margin, beta0, rate))
 }
 
 noniterative_estimator_arg <- function(estimator) {

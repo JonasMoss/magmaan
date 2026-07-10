@@ -23,10 +23,26 @@ enum class CommunalityMethod : std::uint8_t {
   TriadWlsJoint,              // efficiency-weighted triad LS, one joint weight (was gmm_full)
 };
 
+enum class AdmissibilityPolicy : std::uint8_t { Raw, Hard, Soft };
+
+struct AdmissibilityConfig {
+  AdmissibilityPolicy policy = AdmissibilityPolicy::Raw;
+  double margin = 1e-4;
+  double beta0 = 1.0;
+  double rate_exp = 0.5;
+};
+
+struct AdmissibilityClamp {
+  AdmissibilityPolicy policy = AdmissibilityPolicy::Raw;
+  double margin = 1e-4;
+  double beta = 0.0;
+};
+
 struct HCommunalityResult {
   Eigen::VectorXd h2;      // correlation-scale communalities
   Eigen::VectorXd h_diag;  // covariance-scale diagonal of H
   Eigen::MatrixXd H;       // S with diag(S) replaced by h_diag
+  Eigen::Index n_active_clamped = 0;
 };
 
 // Linear least-squares/GMM representation of the triad communality moments
@@ -46,6 +62,13 @@ struct CommunalitySystemDirection {
 };
 
 const char* communality_method_name(CommunalityMethod method);
+const char* admissibility_policy_name(AdmissibilityPolicy policy);
+
+fit_expected<AdmissibilityClamp>
+resolve_admissibility(const AdmissibilityConfig& config, double n_obs);
+
+double admissibility_clamp_value(double x, const AdmissibilityClamp& clamp);
+double admissibility_clamp_deriv(double x, const AdmissibilityClamp& clamp);
 
 fit_expected<CommunalitySystem>
 communality_system(const Eigen::MatrixXd& S,
@@ -80,7 +103,8 @@ communality_system_jacobian_rhs(
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities(const Eigen::MatrixXd& S,
                           const std::vector<std::int32_t>& block_of_indicator,
-                          CommunalityMethod method);
+                          CommunalityMethod method,
+                          const AdmissibilityClamp& clamp = {});
 
 // Directional derivative of `estimate_h2_communalities(S, ..., method)` in the
 // symmetric covariance direction `dS`. This is the regular interior derivative:
@@ -92,7 +116,8 @@ estimate_h2_communalities_directional(
     const Eigen::MatrixXd& S,
     const Eigen::MatrixXd& dS,
     const std::vector<std::int32_t>& block_of_indicator,
-    CommunalityMethod method);
+    CommunalityMethod method,
+    const AdmissibilityClamp& clamp = {});
 
 // Batched regular-interior Jacobian of
 // `estimate_h2_communalities(S, ..., method)`, with columns ordered as the
@@ -105,7 +130,8 @@ fit_expected<Eigen::MatrixXd>
 estimate_h2_communalities_jacobian(
     const Eigen::MatrixXd& S,
     const std::vector<std::int32_t>& block_of_indicator,
-    CommunalityMethod method);
+    CommunalityMethod method,
+    const AdmissibilityClamp& clamp = {});
 
 // Batched regular-interior Jacobian of the residual-restricted
 // least-squares/GMM communality map. R_h2 and r_h2 are the linear constraints
@@ -113,14 +139,16 @@ estimate_h2_communalities_jacobian(
 // coefficients are treated as residual-variance transformed rows, so
 // dR_ai/dS_ii = R_ai/S_ii and dr_a/dS_ii follows the same convention used by
 // the restricted Guttman estimator; this helper is not for fixed, S-invariant
-// h2 constraints.
+// h2 constraints. A non-Raw admissibility map is applied after the KKT solve;
+// boundary values therefore need not retain the raw residual-equality rows.
 fit_expected<Eigen::MatrixXd>
 estimate_h2_communalities_constrained_jacobian(
     const Eigen::MatrixXd& S,
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method,
     const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2);
+    const Eigen::VectorXd& r_h2,
+    const AdmissibilityClamp& clamp = {});
 
 fit_expected<Eigen::VectorXd>
 estimate_h2_communalities_constrained(
@@ -128,12 +156,14 @@ estimate_h2_communalities_constrained(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method,
     const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2);
+    const Eigen::VectorXd& r_h2,
+    const AdmissibilityClamp& clamp = {});
 
 fit_expected<HCommunalityResult>
 estimate_h_communalities(const Eigen::MatrixXd& S,
                          const std::vector<std::int32_t>& block_of_indicator,
-                         CommunalityMethod method);
+                         CommunalityMethod method,
+                         const AdmissibilityClamp& clamp = {});
 
 fit_expected<HCommunalityResult>
 estimate_h_communalities_constrained(
@@ -141,6 +171,7 @@ estimate_h_communalities_constrained(
     const std::vector<std::int32_t>& block_of_indicator,
     CommunalityMethod method,
     const Eigen::MatrixXd& R_h2,
-    const Eigen::VectorXd& r_h2);
+    const Eigen::VectorXd& r_h2,
+    const AdmissibilityClamp& clamp = {});
 
 }  // namespace magmaan::estimate::frontier

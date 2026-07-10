@@ -2202,6 +2202,16 @@ work until a concrete downstream consumer appears.
   `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
   included in the map Jacobian, and `adaptive`
   uses the H-aligned data-dependent weights.
+  **Admissibility machinery landed; constants remain a calibration task.**
+  The aligned map supports explicit `raw`, `hard`, and smooth `soft`
+  communality policies on the symmetric correlation-scale box. `raw` is the
+  production default and is bit-for-bit behavior preserving; clamp derivatives
+  are included in analytic SEs, and R fits record tuning values and per-block
+  activation counts. Run and interpret
+  `experiments/60-guttman-admissibility-clamp` before changing the production
+  default or choosing `(margin, beta0, rate)`. Making the configural and
+  restricted Raw-path improper-split guards consistent remains a separate,
+  announced behavior change.
   **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
   now uses the regular-interior analytic derivative for configural Guttman
   maps, including the correlation-standardization, triad-GMM communality,

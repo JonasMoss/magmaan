@@ -125,7 +125,8 @@ noniterative_inference(const spec::LatentStructure& pt, const model::MatrixRep& 
                        estimate::frontier::NonIterativeEstimator which,
                        Discrepancy disc, const Eigen::MatrixXd& gamma,
                        estimate::frontier::CompositeWeight composite =
-                           estimate::frontier::CompositeWeight::EstimatorDefault);
+                           estimate::frontier::CompositeWeight::EstimatorDefault,
+                       estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Convenience: normal-theory Γ = Γ_NT(Σ(θ̂)).
 post_expected<NonIterativeInference>
@@ -134,7 +135,8 @@ noniterative_inference_nt(const spec::LatentStructure& pt, const model::MatrixRe
                           estimate::frontier::NonIterativeEstimator which,
                           Discrepancy disc,
                           estimate::frontier::CompositeWeight composite =
-                              estimate::frontier::CompositeWeight::EstimatorDefault);
+                              estimate::frontier::CompositeWeight::EstimatorDefault,
+                          estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Convenience: empirical (distribution-free) Γ̂ from complete raw data.
 post_expected<NonIterativeInference>
@@ -144,7 +146,8 @@ noniterative_inference_empirical(const spec::LatentStructure& pt,
                                  estimate::frontier::NonIterativeEstimator which,
                                  Discrepancy disc,
                                  estimate::frontier::CompositeWeight composite =
-                                     estimate::frontier::CompositeWeight::EstimatorDefault);
+                                     estimate::frontier::CompositeWeight::EstimatorDefault,
+                                 estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // SE-only counterparts. These compute the estimator-map Jacobian and delta-method
 // covariance but do not build residual projectors or weighted-χ² spectra. The
@@ -156,14 +159,16 @@ noniterative_se(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                 estimate::frontier::NonIterativeEstimator which,
                 const Eigen::MatrixXd& gamma,
                 estimate::frontier::CompositeWeight composite =
-                    estimate::frontier::CompositeWeight::EstimatorDefault);
+                    estimate::frontier::CompositeWeight::EstimatorDefault,
+                estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                    const data::SampleStats& samp, const Eigen::VectorXd& theta,
                    estimate::frontier::NonIterativeEstimator which,
                    estimate::frontier::CompositeWeight composite =
-                       estimate::frontier::CompositeWeight::EstimatorDefault);
+                       estimate::frontier::CompositeWeight::EstimatorDefault,
+                   estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_empirical(const spec::LatentStructure& pt,
@@ -173,7 +178,8 @@ noniterative_se_empirical(const spec::LatentStructure& pt,
                           const Eigen::VectorXd& theta,
                           estimate::frontier::NonIterativeEstimator which,
                           estimate::frontier::CompositeWeight composite =
-                              estimate::frontier::CompositeWeight::EstimatorDefault);
+                              estimate::frontier::CompositeWeight::EstimatorDefault,
+                          estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Same inferential algebra as `noniterative_inference*`, using the restricted
 // estimator-map Jacobian. The regular restricted path is analytic; boundary or
@@ -191,7 +197,8 @@ noniterative_inference_restricted(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_nt(
@@ -204,7 +211,8 @@ noniterative_inference_restricted_nt(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeInference>
 noniterative_inference_restricted_empirical(
@@ -218,7 +226,8 @@ noniterative_inference_restricted_empirical(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_restricted(
@@ -231,7 +240,8 @@ noniterative_se_restricted(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_restricted_nt(
@@ -243,7 +253,8 @@ noniterative_se_restricted_nt(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_restricted_empirical(
@@ -256,7 +267,8 @@ noniterative_se_restricted_empirical(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Wald test of the linear restriction R·θ = q, using the delta-method Ω.
 // Exact χ²(R.rows()); the primary nested test.
@@ -323,7 +335,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
                                Discrepancy disc,
                                const std::vector<Eigen::MatrixXd>& gamma_per_block,
                                estimate::frontier::CompositeWeight composite =
-                                   estimate::frontier::CompositeWeight::EstimatorDefault);
+                                   estimate::frontier::CompositeWeight::EstimatorDefault,
+                               estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Convenience: per-block normal-theory Γ = Γ_NT(Σ_b(θ̂)).
 post_expected<GroupedNonIterativeInference>
@@ -332,7 +345,8 @@ noniterative_inference_grouped_nt(const spec::LatentStructure& pt, const model::
                                   estimate::frontier::NonIterativeEstimator which,
                                   Discrepancy disc,
                                   estimate::frontier::CompositeWeight composite =
-                                      estimate::frontier::CompositeWeight::EstimatorDefault);
+                                      estimate::frontier::CompositeWeight::EstimatorDefault,
+                                  estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Convenience: per-block empirical (distribution-free) Γ̂_b from raw.X[b].
 post_expected<GroupedNonIterativeInference>
@@ -343,7 +357,8 @@ noniterative_inference_grouped_empirical(const spec::LatentStructure& pt,
                                          estimate::frontier::NonIterativeEstimator which,
                                          Discrepancy disc,
                                          estimate::frontier::CompositeWeight composite =
-                                             estimate::frontier::CompositeWeight::EstimatorDefault);
+                                             estimate::frontier::CompositeWeight::EstimatorDefault,
+                                         estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_grouped(const spec::LatentStructure& pt, const model::MatrixRep& rep,
@@ -351,14 +366,16 @@ noniterative_se_grouped(const spec::LatentStructure& pt, const model::MatrixRep&
                         estimate::frontier::NonIterativeEstimator which,
                         const std::vector<Eigen::MatrixXd>& gamma_per_block,
                         estimate::frontier::CompositeWeight composite =
-                            estimate::frontier::CompositeWeight::EstimatorDefault);
+                            estimate::frontier::CompositeWeight::EstimatorDefault,
+                        estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_grouped_nt(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                            const data::SampleStats& samp, const Eigen::VectorXd& theta,
                            estimate::frontier::NonIterativeEstimator which,
                            estimate::frontier::CompositeWeight composite =
-                               estimate::frontier::CompositeWeight::EstimatorDefault);
+                               estimate::frontier::CompositeWeight::EstimatorDefault,
+                           estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_grouped_empirical(const spec::LatentStructure& pt,
@@ -368,7 +385,8 @@ noniterative_se_grouped_empirical(const spec::LatentStructure& pt,
                                   const Eigen::VectorXd& theta,
                                   estimate::frontier::NonIterativeEstimator which,
                                   estimate::frontier::CompositeWeight composite =
-                                      estimate::frontier::CompositeWeight::EstimatorDefault);
+                                      estimate::frontier::CompositeWeight::EstimatorDefault,
+                                  estimate::frontier::AdmissibilityConfig admissibility = {});
 
 // Grouped inference for the restricted estimator map. Equality constraints can
 // couple blocks, so the residual projector is assembled on the full stacked
@@ -386,7 +404,8 @@ noniterative_inference_grouped_restricted(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted_nt(
@@ -399,7 +418,8 @@ noniterative_inference_grouped_restricted_nt(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<GroupedNonIterativeInference>
 noniterative_inference_grouped_restricted_empirical(
@@ -413,7 +433,8 @@ noniterative_inference_grouped_restricted_empirical(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_grouped_restricted(
@@ -426,7 +447,8 @@ noniterative_se_grouped_restricted(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_grouped_restricted_nt(
@@ -438,7 +460,8 @@ noniterative_se_grouped_restricted_nt(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeSE>
 noniterative_se_grouped_restricted_empirical(
@@ -451,7 +474,8 @@ noniterative_se_grouped_restricted_empirical(
     estimate::frontier::CommunalityMethod comm =
         estimate::frontier::CommunalityMethod::TriadWls,
     estimate::frontier::CompositeWeight composite =
-        estimate::frontier::CompositeWeight::EstimatorDefault);
+        estimate::frontier::CompositeWeight::EstimatorDefault,
+    estimate::frontier::AdmissibilityConfig admissibility = {});
 
 post_expected<NonIterativeDiffTest>
 noniterative_difference_test(
