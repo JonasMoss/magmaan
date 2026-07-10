@@ -17,6 +17,22 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
+- **XL — establish whether raw-label permutation is valid for ordinal
+  measurement-invariance tests.** Experiment 61's continuous studentized-Wald
+  path is motivated by Chung and Romano: raw observations need not be exactly
+  exchangeable when the recomputed test statistic is asymptotically pivotal.
+  Ordinal DWLS/WLSMV is a separate question, not an automatic extension. A
+  relabelled sample changes thresholds, polychoric/polyserial moments, their
+  estimated NACOV, and possibly the pooled pseudo-true model; first establish
+  whether the fully recomputed ordinal Wald pivot has the required common
+  limiting law under heterogeneous but invariant groups. Only then add an
+  ordinal lane to the experiment, with exact-exchangeable controls, balanced
+  and unbalanced heterogeneous nulls, sparse-category diagnostics, and an
+  ordinary/robust Wald and nested-test comparator. Do not use a fixed-statistics
+  label shuffle as a surrogate: it is not the proposed test. The existing
+  `mplus_wlsmv_invariance()` helper covers the fitting ladder, but it does not
+  settle this resampling validity question.
+
 - **M — finish streaming the continuous pairwise NT bread for observed-bread
   inference.** The pairwise empirical meat path is projection-first:
   `pairwise_casewise_contributions()` builds Van-Praag influence rows and
