@@ -37,10 +37,12 @@ permutation is included as a negative control: a gap between it and the
 studentized column is the finite-sample behavior the Chung--Romano argument
 predicts.
 
-The loading-violation alternative raises the standardized loading for `x3` by
-0.05 from its group-2 metric-invariant baseline. Its raw loading difference is
-recorded in the results because the same standardized departure implies
-different raw loadings when the factor and residual variances differ.
+The loading-violation alternative is calibrated to comparable sandwich-Wald
+noncentrality in the normal `n=(250,250)` reference cell, using raw loading
+shifts of 0.18--0.21 according to CFA size and heterogeneity. The raw and
+implied standardized shifts are both recorded in the results; equal
+standardized shifts were rejected because they created radically unequal power
+for the raw-loading invariance test.
 
 ## Evidence
 

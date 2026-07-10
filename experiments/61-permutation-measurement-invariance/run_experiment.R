@@ -109,7 +109,6 @@ if (opts$mode == "smoke") {
 }
 results_path <- opts$results_dir %||% ensure_results_dir()
 dir.create(results_path, recursive = TRUE, showWarnings = FALSE)
-loading_violation_standardized_departure <- .05
 
 # Population builders. The exchangeable control makes both group distributions
 # identical, so its random label permutation is finite-sample valid for every
@@ -173,20 +172,19 @@ population_spec <- function(model_name, heterogeneity, scenario) {
   loading_shift_raw <- 0
   loading_shift_standardized <- 0
   if (identical(scenario, "loading_violation")) {
-    # Keep the population alternative comparable across heterogeneity lanes.
-    # A fixed raw loading increment has a different observed-scale meaning when
-    # Phi and Theta change; solve instead for a fixed standardized departure
-    # from this group's metric-invariant baseline loading.
+    # The target is comparable local power, not equal observed-scale loadings.
+    # These pilot-calibrated raw shifts approximately equalize the sandwich-Wald
+    # noncentrality at normal n = (250, 250) across model/heterogeneity cells.
     item <- 3L
+    loading_shift_raw <- if (identical(model_name, "one_factor")) {
+      if (identical(heterogeneity, "strong")) .18 else .20
+    } else {
+      if (identical(heterogeneity, "strong")) .21 else .20
+    }
     lambda_std <- function(lambda, phi, theta) {
       lambda * sqrt(phi) / sqrt(lambda^2 * phi + theta)
     }
-    target_std <- lambda_std(Lambda1[item, 1L], Phi2[1L, 1L], Theta2[item]) +
-      loading_violation_standardized_departure
-    if (target_std >= .99) stop("standardized loading alternative is inadmissible", call. = FALSE)
-    Lambda2[item, 1L] <- target_std * sqrt(
-      Theta2[item] / (Phi2[1L, 1L] * (1 - target_std^2)))
-    loading_shift_raw <- Lambda2[item, 1L] - Lambda1[item, 1L]
+    Lambda2[item, 1L] <- Lambda1[item, 1L] + loading_shift_raw
     loading_shift_standardized <- lambda_std(Lambda2[item, 1L], Phi2[1L, 1L], Theta2[item]) -
       lambda_std(Lambda1[item, 1L], Phi2[1L, 1L], Theta2[item])
   }
@@ -444,7 +442,7 @@ write_metadata(
     group_sizes = vapply(opts$sizes, function(x) paste(x, collapse = ":"), character(1)),
     models = opts$models, heterogeneity = opts$heterogeneity,
     distributions = opts$distributions, scenarios = opts$scenarios,
-    loading_violation_standardized_departure = loading_violation_standardized_departure,
+    loading_violation_calibration = "pilot_sandwich_wald_ncp_normal_n250_250",
     alpha = opts$alpha, seed_base = opts$seed_base, cores = opts$cores
   ), packages = "magmaan"
 )
