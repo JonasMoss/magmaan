@@ -2198,11 +2198,13 @@ work until a concrete downstream consumer appears.
   implementation directly. The promoted point-estimator lane landed as
   `guttman_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
-  The composite-weight axis also landed: `auto` keeps estimator defaults,
+  The composite-weight axis also landed: `auto` resolves to `unit` for legacy
+  `guttman_lavaan` and `standardized` for `guttman_aligned`,
   `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
-  included in the map Jacobian, and `adaptive`
-  uses the H-aligned data-dependent weights.
-  **Admissibility machinery landed; constants remain a calibration task.**
+  included in the map Jacobian, and explicit `adaptive` preserves the retired
+  H-aligned data-dependent compatibility path.
+  **Communality and score admissibility machinery landed; constants remain a
+  calibration task.**
   The aligned map supports explicit `raw`, `hard`, and smooth `soft`
   communality policies on the symmetric correlation-scale box. `raw` is the
   production default and is bit-for-bit behavior preserving; clamp derivatives
@@ -2212,15 +2214,25 @@ work until a concrete downstream consumer appears.
   default or choosing `(margin, beta0, rate)`. Making the configural and
   restricted Raw-path improper-split guards consistent remains a separate,
   announced behavior change.
-  **Deferred: configural `n_h2_clamped` plumbing.** The restricted and metric
-  R entries echo real per-block clamp-activation counts (`fit->n_h2_clamped`),
-  but the configural `fit_noniterative_cfa` echoes a hardcoded `0` because
-  `estimator_h_matrix` returns only the `H` matrix and drops the
-  `HCommunalityResult::n_active_clamped` count. So `$n_h2_clamped` is misleading
-  (all zeros even when clamping fired) on the configural path only. Harmless for
-  `experiments/60` (it fits through the restricted proxy, which reports true
-  counts), but the field should not be trusted on the configural entry until
-  `estimator_h_matrix` is changed to carry the count up alongside `H`.
+  Score covariance conditioning is separately opt-in and `raw` by default.
+  For aligned `unit`/`standardized` composites, `hard` and `soft` repair
+  `Q=B'HB` by diagonal shrinkage on its normalized correlation scale, preserve
+  `diag(Q)`, guarantee a positive-definite factor covariance at the requested
+  `delta_n=floor0*n^-rate`, and include the spectral repair in analytic SEs.
+  Hard activation/tie boundaries retain the finite-difference fallback; soft
+  repeated eigenvalues use the invariant soft projector. Legacy
+  `guttman_lavaan` and explicit `adaptive` reject non-raw conditioning. C++ and
+  R fit/inference surfaces retain the exact configuration and per-block
+  raw/repaired score eigenvalues, normalized eigenvalues, intensity, floor
+  violation, minimum score variance, and marker diagnostic. Existing R fits
+  without these fields reconstruct raw conditioning, and nested pseudo-LRTs
+  require matching configurations. Configural, metric, and restricted fits now
+  all report the real communality-clamp activation counts.
+  Experiment 60 crosses the four communality-clamp finalists with hard/soft
+  score rates `{0.5,1}` and `delta_50 in {0.01,0.025,0.05,0.1}`, screens them
+  under the predeclared success/PD/coverage/tail/benign/runtime gate, and can
+  confirm the best two survivors. No conditioning default is promoted by this
+  implementation; run and interpret the screen/confirmation first.
   **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
   now uses the regular-interior analytic derivative for configural Guttman
   maps, including the correlation-standardization, triad-GMM communality,
@@ -2295,12 +2307,11 @@ work until a concrete downstream consumer appears.
   internal `gmm_block`/`gmm_full` labels; (4) resolve two naming warts held
   deliberately: bare `guttman` still resolves to legacy `guttman_lavaan`
   (decide whether it should instead point at the recommended
-  `guttman_aligned`), and `guttman_aligned` defaults to the `adaptive`
-  composite (decide whether the default becomes `standardized` as
-  `adaptive` retires). Not in scope: the `estimate::gmm` namespace and
+  `guttman_aligned`). The aligned default is now `standardized`; explicit
+  `adaptive` remains the old-behavior compatibility spelling. Not in scope:
+  the `estimate::gmm` namespace and
   "GMM" solver prose stay (they name the weighted solve, not a method).
-  Trigger: after the configural `extended_triad_ls`-with-`standardized`
-  wiring lands and exp-58 re-runs on the new names.
+  Trigger: when a downstream compatibility window is chosen for alias removal.
   **Quality verdict (2026-07-09): the aligned map is a decent success on
   RMSE; speed is now mostly an SE-coverage caveat, not a blocker.** Bad-boi
   worst-draw sanity (q=3, m=5,

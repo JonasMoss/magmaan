@@ -77,6 +77,13 @@ guttman_h <- function(S, blocks,
 #' @param beta0 Base soft-clamp sharpness.
 #' @param rate Sample-size exponent used to resolve soft-clamp sharpness as
 #'   `beta0 * nobs^rate`.
+#' @param score_conditioning Score-covariance conditioning policy. `"raw"`
+#'   preserves the unconditioned map, `"hard"` applies the exact normalized
+#'   eigenvalue floor, and `"soft"` applies its smooth spectral analogue.
+#'   Non-raw policies are supported for aligned unit and standardized composites.
+#' @param score_floor0 Base normalized score-eigenvalue floor.
+#' @param score_rate Sample-size exponent resolving the floor as
+#'   `score_floor0 * nobs^(-score_rate)`; the result must lie strictly in `(0, 1)`.
 #' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
@@ -84,10 +91,13 @@ fit_noniterative_cfa <- function(partable, sample_stats,
                                  estimator = "guttman_lavaan",
                                  composite = "auto",
                                  admissibility = "raw", margin = 1e-4,
-                                 beta0 = 1, rate = 0.5) {
+                                 beta0 = 1, rate = 0.5,
+                                 score_conditioning = "raw",
+                                 score_floor0 = 1, score_rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_fit_impl(partable, sample_stats, estimator, composite,
-                              admissibility, margin, beta0, rate))
+                              admissibility, margin, beta0, rate,
+                              score_conditioning, score_floor0, score_rate))
 }
 
 #' Fit the estimator-side metric-constrained non-iterative CFA map.
@@ -104,11 +114,14 @@ fit_noniterative_cfa_metric <- function(partable, sample_stats,
                                         estimator = "guttman_aligned",
                                         composite = "auto",
                                         admissibility = "raw", margin = 1e-4,
-                                        beta0 = 1, rate = 0.5) {
+                                        beta0 = 1, rate = 0.5,
+                                        score_conditioning = "raw",
+                                        score_floor0 = 1, score_rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_metric_fit_impl(partable, sample_stats, estimator,
                                      composite, admissibility, margin, beta0,
-                                     rate))
+                                     rate, score_conditioning, score_floor0,
+                                     score_rate))
 }
 
 #' Fit the residual/loading restricted non-iterative CFA map.
@@ -131,11 +144,16 @@ fit_noniterative_cfa_restricted <- function(partable, sample_stats,
                                             composite = "auto",
                                             admissibility = "raw",
                                             margin = 1e-4, beta0 = 1,
-                                            rate = 0.5) {
+                                            rate = 0.5,
+                                            score_conditioning = "raw",
+                                            score_floor0 = 1,
+                                            score_rate = 0.5) {
   .finalize_noniterative_fit(
     noniterative_cfa_restricted_fit_impl(partable, sample_stats, estimator,
                                          communality, composite, admissibility,
-                                         margin, beta0, rate))
+                                         margin, beta0, rate,
+                                         score_conditioning, score_floor0,
+                                         score_rate))
 }
 
 noniterative_estimator_arg <- function(estimator) {

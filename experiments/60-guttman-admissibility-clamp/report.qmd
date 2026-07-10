@@ -1,5 +1,5 @@
 ---
-title: "Calibrating the Guttman communality clamp"
+title: "Calibrating the Guttman communality clamp and score covariance"
 format:
   html:
     toc: true
@@ -12,21 +12,22 @@ execute:
 
 ## Question
 
-Which hard or soft admissibility setting best repairs out-of-box closed-form
-communalities in weak-loading, small-sample CFA without sacrificing loading
-RMSE or empirical-SE coverage relative to the raw map and NTML?
+Can a hard or smooth repair of the aligned Guttman score covariance eliminate
+ill-conditioned factor covariances after the communality clamp, without harming
+loading RMSE, empirical-SE coverage, benign-cell accuracy, or runtime?
 
 ## Short answer
 
-No calibration run is checked in. Run the experiment before interpreting a
-policy cell; the report will summarize clamp activation, loading RMSE ratios,
-coverage, failures, and score-system conditioning.
+Production score conditioning remains `raw`. The screen is deliberately a
+promotion gate, not an automatic default change: a candidate must pass every
+success, PD-factor-covariance, coverage, stress-tail, benign-RMSE, and runtime
+criterion before it is eligible for the larger confirmation run.
 
 ```{r}
 root <- dirname(knitr::current_input(dir = TRUE))
 results <- file.path(root, "results")
 need <- c("estimate_summary.csv", "estimate_joint_summary.csv",
-          "diagnostic_summary.csv")
+          "diagnostic_summary.csv", "paired_timing_summary.csv")
 paths <- file.path(results, need)
 if (!all(file.exists(paths))) {
   stop("Missing results. Run: Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --smoke")
@@ -34,35 +35,65 @@ if (!all(file.exists(paths))) {
 estimate <- read.csv(paths[[1L]])
 joint <- read.csv(paths[[2L]])
 diagnostic <- read.csv(paths[[3L]])
+timing <- read.csv(paths[[4L]])
+decision_path <- file.path(results, "screen_decisions.csv")
+decision <- if (file.exists(decision_path)) read.csv(decision_path) else NULL
 ```
 
 ## Evidence
 
 ```{r}
 loading <- estimate[estimate$kind == "loading", ]
-loading <- aggregate(cbind(rmse, coverage) ~ estimator, loading, mean,
+loading <- aggregate(cbind(rmse, coverage, abs_error_p95, abs_error_p99,
+                           abs_estimate_p99, ci_width_p99) ~ estimator,
+                     loading, mean,
                      na.rm = TRUE)
 joint_loading <- joint[joint$kind == "loading", ]
 joint_loading <- aggregate(rmse_ratio ~ estimator + baseline, joint_loading,
                            mean, na.rm = TRUE)
-diag_show <- aggregate(cbind(clamp_rate, fit_ok_rate, se_ok_rate,
-                             zhz_min_eig_p05, bhb_min_eig_p05) ~ estimator,
+diag_show <- aggregate(cbind(clamp_rate, fit_ok_rate, se_ok_rate, pd_phi_rate,
+                             score_raw_normalized_min_eig_p01,
+                             score_repaired_normalized_min_eig_p01,
+                             phi_min_eig_min, phi_condition_p99,
+                             marker_min_p01, shrinkage_rate) ~ estimator,
                        diagnostic, mean, na.rm = TRUE)
 knitr::kable(merge(merge(loading, joint_loading, by = "estimator", all = TRUE),
                          diag_show, by = "estimator", all = TRUE), digits = 3)
 ```
 
+## Promotion gate
+
+```{r}
+if (is.null(decision)) {
+  cat("No 300-replication screen is present; there is no survivor decision.\n")
+} else {
+  show <- decision[order(!decision$survive, decision$stress_rmse), ]
+  knitr::kable(head(show, 20), digits = 3)
+  if (!any(decision$survive))
+    cat("\nNo setting survived. Score conditioning remains raw.\n")
+  else
+    cat("\nEligible confirmation finalists (conditioning still raw in production): ",
+        paste(head(decision$arm[decision$survive], 2L), collapse = ", "), "\n",
+        sep = "")
+}
+```
+
 ## Caveats
 
-The experiment is a calibration benchmark, not a lavaan-parity gate. Smoke
-runs establish pipeline integrity only; choosing production constants requires
-the full replication count and attention to the stress-cell slices rather than
-the pooled table alone.
+The 24-cell screen uses 300 replications: 18 weak/equal-scale stress cells
+(`m=3`, `rho=.8`, `n=50/100`) plus six benign cells (`m=5`, `rho=0`, `n=800`).
+Only the best two survivors proceed to the 1,000-replication, 27-cell
+normal/IG/ordinal confirmation. Smoke runs establish pipeline integrity only.
 
 ## Reproduce
 
 ```sh
 Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --smoke \
   --results-dir experiments/60-guttman-admissibility-clamp/results
+Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --screen \
+  --results-dir experiments/60-guttman-admissibility-clamp/results
+# If survivors exist, pass the best two explicitly (or reuse screen_survivors.csv):
+Rscript experiments/60-guttman-admissibility-clamp/run_experiment.R --confirm \
+  --finalists ARM1,ARM2 --results-dir /tmp/exp60-confirm
 quarto render experiments/60-guttman-admissibility-clamp/report.qmd
 ```
