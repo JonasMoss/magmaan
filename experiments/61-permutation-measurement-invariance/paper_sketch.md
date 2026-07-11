@@ -15,8 +15,7 @@ It follows the design spine of Brace and Savalei (2017): 8 or 16 indicators,
 balanced and 1:3 group allocations, and the ordered configural-to-metric-to-
 scalar-to-strict ladder. The primary outcome is Type-I error under a fully
 invariant measurement model with unequal factor means and variances, followed
-by power against separately calibrated configural, metric, scalar, and strict
-departures.
+by power against separately calibrated metric, scalar, and strict departures.
 
 Continuous data are generated under normality and moderate/severe Pearson
 independent-generator nonnormality. The latter conditions use the `(2, 7)` and
@@ -47,10 +46,8 @@ total N. Metric and scalar alternatives retain the affected-item proportion
 (1/3 or 2/3) and the small, large, mixed, and non-uniform departure patterns
 from their study. Strict invariance is added as our extension, using the same
 affected-item proportions and multiplicative residual-variance departures.
-Configural invariance is included as the fitted common-pattern baseline. A
-group-specific cross-loading is used only as an auxiliary pattern-misspecification
-alternative for its global-fit outcome; it is not relabeled as a conventional
-configural invariance difference test.
+The configural model is fitted internally as the reference model for the metric
+comparison. It is not a reported global-fit outcome in this inference study.
 
 This slice compares their multivariate Wald test, the ordinary likelihood-ratio
 difference test, sandwich Wald, and the studentized permutation Wald. It gives
@@ -59,9 +56,8 @@ Wald tests can have better power than likelihood-ratio tests under severe group
 imbalance. The permutation method is evaluated as a finite-sample calibration
 of that same studentized-Wald idea, not as an unrelated resampling benchmark.
 
-Configural fit is reported in both studies as the common-pattern baseline and
-its global-fit outcome. The ordinary, sandwich, and permutation Wald comparisons
-apply to the metric, scalar, and strict equality restrictions.
+The reported ordinary, sandwich, and permutation Wald comparisons apply to the
+metric, scalar, and strict equality restrictions.
 
 ## References
 
