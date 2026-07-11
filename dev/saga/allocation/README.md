@@ -23,6 +23,14 @@ bottlenecked on laptops and paid cloud (Modal); Saga removes that ceiling and th
 - The Resource Allocation Committee judges scientific excellence + efficient,
   justified need. A modest, well-justified first ask that scales beats an
   inflated one.
+- **Keep it short.** Sigma2 national access is a MAS form plus a tight project
+  description, not a ten-page grant. Aim for ~1 page of prose and a clear
+  resource-justification table. Cite only the key methods references. Author
+  credibility is PI eligibility + funding source, not a narrative.
+- **Funding source is mandatory** in MAS. Have it ready.
+- **Fast path / top-up:** extra allocations mid-period need only a short
+  justification and can be submitted any time. So a modest base ask now can be
+  grown without waiting for the next round.
 
 ## Deadlines / status
 
@@ -30,8 +38,10 @@ bottlenecked on laptops and paid cloud (Modal); Saga removes that ceiling and th
 | --- | --- |
 | Next deadline | **~26 Aug 2026** (verify on sigma2.no) |
 | Period it funds | 1 Oct 2026 - 31 Mar 2027 |
-| Headline ask (draft) | see `compute-budget.md` (tunable) |
+| Headline ask (draft) | **120-150 kCPU-h** (see `compute-budget.md`) |
+| Flagships | estimated-weight-se, fiml-fmg, ordinal-fmg, guttman-inference |
 | PI / institution | TODO - Sigma2 requires a lead at a Norwegian institution |
+| Funding source (mandatory) | TODO |
 | MAS project created | TODO |
 | Storage (NIRD) needed? | small; results are CSV/JSON. TODO decide |
 | Status | DRAFT |

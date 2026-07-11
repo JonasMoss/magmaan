@@ -2,67 +2,56 @@
 
 Bottom-up CPU-core-hour estimate for one 6-month period, anchored on the **one
 grid we have actually timed**: experiment 61's complete-data invariance
-permutation grid. Everything else is scaled from that anchor and should be
-refined by the paper leads. These are order-of-magnitude planning figures, not
-promises.
+permutation grid. The four flagship studies carry the number; the rest of the
+program sits in aggregate lines. Order-of-magnitude planning figures, to be
+refined by the paper leads, not promises.
 
 ## Anchor (measured)
 
 | Quantity | Value | Source |
 | --- | --- | --- |
 | exp 61 complete full grid | 963 cells x 1000 reps x B=199 | measured |
-| Per-rep cost | ~1 s (p=8) to ~5.5 s (p=16), B=199 | measured on this machine |
+| Per-rep cost | ~1 s (p=8) to ~5.5 s (p=16), B=199 | measured |
 | Complete grid total | **~700 core-hours** | measured extrapolation |
-| FIML multiplier | **10-100x** (iterative refit per permutation) | estimate |
-| Modal reference cost | ~$33 CPU for the same 700 core-hr | measured rate |
+| FIML multiplier | **10-100x** (iterative refit per permutation) | estimate, measure before submitting |
 
-So a "unit study" (one complete-data grid) is ~0.7 kCPU-h. A FIML/permutation or
-bootstrap study is ~7-70 kCPU-h. Ordinal/polychoric studies sit in between
-(slower fits, similar grids). Multiply raw estimates by ~1.5 for the calibration
-pre-passes, sensitivity slices, and revision reruns every real paper needs.
+A "unit" complete-data grid is ~0.7 kCPU-h. A FIML or resampling-heavy study is
+~7-70 kCPU-h. Ordinal/polychoric studies sit between (slower fits, similar grids).
+Multiply raw figures by ~1.2 for the calibration pre-passes, sensitivity slices,
+and revision reruns every real study needs.
 
-## Per-paper estimate (refine with leads)
+## Budget
 
-| Paper (papers/<slug>) | Study character | Raw kCPU-h | Notes |
-| --- | --- | --- | --- |
-| fiml-fmg | FIML robust MI, permutation extension | 40 | heaviest; FIML x resampling |
-| exp 61 permutation-MI (this) | complete now + FIML later | 50 | complete ~3, FIML ~45 |
-| h-polychorics-sem | polychoric SEM grids | 20 | slow categorical fits |
-| ordinal-fmg | ordinal robust tests | 20 | slow categorical fits |
-| ordinal-snlls | ordinal SNLLS | 12 | |
-| estimated-weight-se | misspec-robust SE sandwich | 8 | |
-| guttman-inference | closed-form CFA inference | 8 | |
-| snlls-continuous | SNLLS robustness | 8 | |
-| closed-form-omega | reliability inference | 5 | |
-| composite-ml | composite / Henseler-Ogasawara | 5 | |
-| second-order-reliability-gaps | reliability gaps | 5 | |
-| methods-dev / exploratory experiments | ongoing (55 experiments) | 30 | shared engine validation |
-| **Subtotal (raw)** | | **~211** | |
-| **x1.5 iteration/revision factor** | | **~315** | |
-
-## Headline ask options
-
-| Strategy | kCPU-h | Rationale |
+| Line | kCPU-h | Notes |
 | --- | --- | --- |
-| Conservative first ask | **50-100** | modest, easy to justify, scale next period |
-| Portfolio-matched | **150-250** | matches the bottom-up total with headroom |
-| Full pipeline + growth | **300+** | the raw x1.5 figure; needs strong justification |
+| **Flagship 1** - robust SE under misspecification (`estimated-weight-se`) | 20 | coverage grids x estimators x misspec x n; MI extension |
+| **Flagship 2** - FIML invariance + permutation (`fiml-fmg`) | 45 | heaviest; FIML x resampling x missingness x non-normality |
+| **Flagship 3** - ordinal robust reference laws (`ordinal-fmg`) | 20 | slow polychoric/WLSMV fits, large categorical grid |
+| **Flagship 4** - non-iterative CFA inference (`guttman-inference`) | 10 | large coverage/size grids, convergence-free |
+| Additional active studies (6, aggregate) | 25 | closed-form-omega, composite-ml, snlls-continuous, ordinal-snlls, second-order-reliability-gaps, h-polychorics-sem |
+| Methods-dev / engine validation (55 experiments, ongoing) | 15 | shared parity and calibration runs |
+| **Subtotal (raw)** | **135** | |
+| **x1.2 iteration/revision factor** | **~160** | |
 
-Recommendation for a **first** application: request in the **100-150 kCPU-h**
-band. It is well above the measured anchor (so it is clearly usable), backed by a
-concrete per-paper breakdown, and modest enough to clear the committee. Grow the
-ask in the April 2027 round once there is a Saga usage history to point at.
+## Headline ask
+
+Request in the **120-150 kCPU-h** band for the 1 Oct 2026 - 31 Mar 2027 period.
+It sits above the measured anchor by a wide margin (so it is clearly usable),
+is backed by a concrete per-flagship breakdown, and is modest enough to clear the
+committee on a first application. Grow it in the April 2027 round once there is a
+Saga usage history, or top up mid-period (extra allocations need only a short
+justification and can be submitted any time).
 
 ## Storage
 
-Results are CSV; fixtures are JSON. Estimate a few hundred GB of NIRD project
-storage. No large primary datasets.
+Results are CSV, fixtures are JSON. A few hundred GB of NIRD project storage. No
+large primary datasets.
 
-## What to lock before submitting
+## Lock before submitting
 
 - [ ] PI + Norwegian-institution affiliation (Sigma2 eligibility).
-- [ ] Final headline kCPU-h (pick a band above).
-- [ ] Trim/confirm the per-paper rows with each lead; drop papers that will be
-      done before 1 Oct and add any not yet listed.
-- [ ] Confirm the FIML multiplier with a small measured Saga trial if time
-      allows (turns the 10-100x guess into a number).
+- [ ] Funding source (mandatory MAS field).
+- [ ] Final headline kCPU-h (pick within 120-150).
+- [ ] Confirm the FIML multiplier with a small measured Saga (or local) trial.
+      That single number dominates the budget; measuring it turns 10-100x into a
+      figure and hardens the whole justification.
