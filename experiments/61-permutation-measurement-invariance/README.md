@@ -59,8 +59,10 @@ restrictions explicit and nested. Strict invariance then tests equality of the
 residual variances from the scalar chart.
 
 The primary comparison in each continuous cell will be ordinary LRT, robust nested
-LRT, model-based Wald, sandwich Wald, studentized permutation Wald, and the
-raw-contrast permutation negative control.
+LRT, the Chen--Chao model-based multivariate Wald, sandwich Wald, studentized
+permutation Wald, and the raw-contrast permutation negative control. Configural
+invariance is the baseline loading-pattern model; metric, scalar, and strict are
+the three equality-restriction tests in the confirmatory sequence.
 
 ## Target Report
 

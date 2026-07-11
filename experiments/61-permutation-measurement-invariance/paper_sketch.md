@@ -42,9 +42,10 @@ Study 2 is a direct comparison slice based on Chen and Chao (2026), rather than
 another large factorial. It uses their two-group one-factor, six-indicator CFA,
 with group A fixed at 200 and group B in `{400, 600, 800, 1000, 1400, 2000,
 3000}` (ratios 1:2 through 1:15), plus matched balanced samples with the same
-total N. Metric and scalar alternatives vary the affected-item proportion (1/3
-or 2/3) and the small, large, mixed, and non-uniform departure patterns from
-their study.
+total N. Metric and scalar alternatives retain the affected-item proportion
+(1/3 or 2/3) and the small, large, mixed, and non-uniform departure patterns
+from their study. Strict invariance is added as our extension, using the same
+affected-item proportions and multiplicative residual-variance departures.
 
 This slice compares their multivariate Wald test, the ordinary likelihood-ratio
 difference test, sandwich Wald, and the studentized permutation Wald. It gives
@@ -52,6 +53,11 @@ the paper a direct answer to the current SEM-journal result that multivariate
 Wald tests can have better power than likelihood-ratio tests under severe group
 imbalance. The permutation method is evaluated as a finite-sample calibration
 of that same studentized-Wald idea, not as an unrelated resampling benchmark.
+
+Configural invariance remains the baseline model in both studies rather than a
+Wald-comparison outcome: it asserts the same loading pattern, not equality of a
+fixed parameter family. The confirmatory sequence of equality tests is metric,
+scalar, and strict.
 
 ## References
 
