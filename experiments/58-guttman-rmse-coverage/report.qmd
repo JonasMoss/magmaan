@@ -1,28 +1,34 @@
 ---
-title: "Raw and soft-clamped Guttman CFA: RMSE, coverage, and admissibility"
+title: "When does closed-form Guttman CFA work?"
+subtitle: "A simulation sketch of accuracy, inference, admissibility, and restrictions"
 format:
   html:
     toc: true
     number-sections: false
+bibliography: references.bib
 execute:
   echo: false
   warning: false
   message: false
 params:
-  results_dir: results
+  results_dir: results/paper-full
 ---
 
 ```{r setup}
 results_dir <- params$results_dir
 need <- c("metadata", "design", "estimate_summary", "whole_joint_summary",
-          "diagnostic_summary", "timing_summary", "progress")
-paths <- file.path(results_dir, paste0(need, ".csv"))
+          "diagnostic_summary", "progress")
+paths <- setNames(file.path(results_dir, paste0(need, ".csv")), need)
 if (!all(file.exists(paths))) {
-  stop("Missing results. Run the smoke check or full grid shown under Reproduce.")
+  stop("Missing results. Run the paper grid shown under Reproduce, then render again.")
 }
-metadata <- read.csv(paths[1]); design <- read.csv(paths[2])
-est <- read.csv(paths[3]); whole_joint <- read.csv(paths[4])
-diag <- read.csv(paths[5]); timing <- read.csv(paths[6]); progress <- read.csv(paths[7])
+
+metadata <- read.csv(paths[["metadata"]], stringsAsFactors = FALSE)
+design <- read.csv(paths[["design"]], stringsAsFactors = FALSE)
+est <- read.csv(paths[["estimate_summary"]], stringsAsFactors = FALSE)
+whole <- read.csv(paths[["whole_joint_summary"]], stringsAsFactors = FALSE)
+diag <- read.csv(paths[["diagnostic_summary"]], stringsAsFactors = FALSE)
+progress <- read.csv(paths[["progress"]], stringsAsFactors = FALSE)
 
 meta <- function(key) {
   x <- metadata$value[metadata$key == key]
@@ -34,174 +40,415 @@ fmt <- function(x, digits = 2) {
 pct <- function(x, digits = 1) {
   ifelse(is.finite(x), paste0(formatC(100 * x, format = "f", digits = digits), "%"), "NA")
 }
-first_available <- function(ids) {
-  found <- ids[ids %in% unique(whole_joint$estimator)]
-  if (length(found)) found[[1]] else NA_character_
-}
+med <- function(x) median(x[is.finite(x)], na.rm = TRUE)
+collapse_values <- function(x) paste(sort(unique(x)), collapse = ", ")
 
-# `guttman_std` names the completed historical raw screen. New runs label the
-# policy explicitly, while retaining this reader for the existing evidence.
-raw_std <- first_available(c("guttman_std_raw", "guttman_std"))
-soft_std <- first_available(c("guttman_std_soft"))
-legacy <- first_available(c("guttman_legacy"))
-ml <- first_available(c("ml_emp"))
-uls <- first_available(c("uls_emp"))
-if (is.na(raw_std) || is.na(ml)) stop("Results lack the standardized raw map or ML reference.")
+# The completed 2026-07-11 configural run predates the cleaner population-model
+# column. Normalize it here so the report remains an honest reader of that run.
+normalize_population <- function(x) {
+  if (!"population_model" %in% names(x)) {
+    x$population_model <- if ("constraint" %in% names(x) &
+                                any(x$constraint == "tau_resid")) {
+      ifelse(x$constraint == "tau_resid", "tau_resid", "congeneric")
+    } else {
+      "congeneric"
+    }
+  }
+  x
+}
+design <- normalize_population(design)
+est <- normalize_population(est)
+whole <- normalize_population(whole)
+diag <- normalize_population(diag)
+progress <- normalize_population(progress)
 
 label_map <- c(
-  guttman_std = "Standardized Guttman (raw)",
-  guttman_std_raw = "Standardized Guttman (raw)",
-  guttman_std_soft = "Standardized Guttman (soft clamp)",
-  guttman_legacy = "Legacy Guttman",
-  ml_emp = "ML (reference)",
-  uls_emp = "ULS")
-label <- function(x) unname(label_map[x])
-primary <- c(raw_std, soft_std, legacy, ml, uls)
-primary <- unique(primary[!is.na(primary)])
-
-rmse_by_rho <- function(estimator) {
-  w <- whole_joint[whole_joint$estimator == estimator &
-                     is.finite(whole_joint$common_rmse_ratio), ]
-  d <- diag[diag$estimator == estimator, ]
-  rmse <- aggregate(common_rmse_ratio ~ rho, w, median, na.rm = TRUE)
-  fit <- aggregate(fit_ok_rate ~ rho, d, mean, na.rm = TRUE)
-  improper <- aggregate(improper_rate ~ rho, d, mean, na.rm = TRUE)
-  out <- Reduce(function(x, y) merge(x, y, by = "rho", all = TRUE),
-                list(rmse, fit, improper))
-  out$Estimator <- label(estimator)
+  guttman_std = "Guttman, raw",
+  guttman_std_raw = "Guttman, raw",
+  guttman_std_soft = "Guttman, soft clamp",
+  guttman_legacy = "Guttman, legacy",
+  ml_emp = "ML",
+  uls_emp = "ULS",
+  guttman_std_raw_restricted = "Restricted Guttman, raw",
+  guttman_std_soft_restricted = "Restricted Guttman, soft clamp",
+  ml_emp_restricted = "Restricted ML",
+  uls_emp_restricted = "Restricted ULS")
+label <- function(x) {
+  out <- unname(label_map[x])
+  out[is.na(out)] <- x[is.na(out)]
   out
 }
-rho_summary <- do.call(rbind, lapply(primary, rmse_by_rho))
-rho_summary <- rho_summary[, c("Estimator", "rho", "common_rmse_ratio",
-                               "fit_ok_rate", "improper_rate")]
-names(rho_summary) <- c("Estimator", "Factor correlation", "Median RMSE vs ML",
-                        "Fit success", "Improper solution")
-rho_summary$`Median RMSE vs ML` <- fmt(rho_summary$`Median RMSE vs ML`)
-rho_summary$`Fit success` <- pct(rho_summary$`Fit success`)
-rho_summary$`Improper solution` <- pct(rho_summary$`Improper solution`)
-
-coverage_table <- function(estimators) {
-  rows <- lapply(estimators, function(estimator) {
-    x <- est[est$estimator == estimator & is.finite(est$coverage), ]
-    by_generator <- tapply(x$coverage, x$generator, median, na.rm = TRUE)
-    at <- function(name) {
-      if (name %in% names(by_generator)) by_generator[[name]] else NA_real_
-    }
-    data.frame(
-      Estimator = label(estimator),
-      Normal = pct(at("normal")),
-      `Non-normal` = pct(at("ig")),
-      Ordinal = pct(at("ordinal")),
-      check.names = FALSE)
-  })
-  do.call(rbind, rows)
+first_available <- function(ids) {
+  found <- ids[ids %in% unique(whole$estimator)]
+  if (length(found)) found[[1]] else NA_character_
 }
-coverage_summary <- coverage_table(primary)
-
-ratio_at <- function(rho) {
-  x <- whole_joint[whole_joint$estimator == raw_std & whole_joint$rho == rho &
-                     is.finite(whole_joint$common_rmse_ratio), "common_rmse_ratio"]
-  median(x)
+raw_std <- first_available(c("guttman_std_raw", "guttman_std"))
+soft_std <- first_available("guttman_std_soft")
+if (is.na(raw_std) || is.na(soft_std)) {
+  stop("Results must contain both raw and soft-clamped standardized Guttman arms.")
 }
-raw_ratios <- setNames(vapply(c(0, .35, .6, .8), ratio_at, numeric(1)),
-                        c("0", ".35", ".6", ".8"))
-raw_coverage <- median(est$coverage[est$estimator == raw_std & is.finite(est$coverage)])
-soft_note <- if (is.na(soft_std)) {
-  "The completed screen predates the soft-clamped arm. The runner now fixes that arm before the next confirmation run; this report does not impute an outcome for it."
+
+restricted_present <- any(design$population_model == "tau_resid") &&
+  any(grepl("_restricted$", whole$estimator))
+config <- whole[whole$population_model == "congeneric", , drop = FALSE]
+config_diag <- diag[diag$population_model == "congeneric", , drop = FALSE]
+config_est <- est[est$population_model == "congeneric", , drop = FALSE]
+
+rho_value <- function(estimator, rho) {
+  x <- config$common_rmse_ratio[config$estimator == estimator & config$rho == rho]
+  med(x)
+}
+raw_moderate_rho <- setNames(vapply(c(0, .35, .6, .8), function(r) {
+  med(config$common_rmse_ratio[config$estimator == raw_std &
+                                 config$rho == r & config$strength == "moderate"])
+}, numeric(1)), c("0", ".35", ".6", ".8"))
+
+design_table <- data.frame(
+  Dimension = c("Population model", "Observed variables", "Factors",
+                "Indicators per factor", "Standardized loadings",
+                "Factor correlation", "Sample size", "Data law",
+                "Observed-variable scales", "Replications"),
+  `Levels in this result set` = c(
+    if (restricted_present) "Congeneric; tau-equivalent with equal residual variances" else
+      "Congeneric only; restricted regime not yet run",
+    {
+      p <- vapply(seq_len(nrow(design)), function(i) {
+        q <- design$factors[[i]]
+        m <- design$indicators[[i]]
+        if (m == "u") sum(rep(c(3L, 6L), length.out = q)) else q * as.integer(m)
+      }, integer(1))
+      paste0(min(p), " to ", max(p))
+    },
+    collapse_values(design$factors),
+    "3, 5, or alternating 3/6 (unbalanced)",
+    "Moderate or weak; heterogeneous within factor in the congeneric regime",
+    collapse_values(design$rho),
+    collapse_values(design$n),
+    "Normal; mildly non-normal independent generator; five-category ordinal scores",
+    collapse_values(design$scale),
+    meta("reps")),
+  check.names = FALSE)
+
+status_table <- data.frame(
+  Population = c("Congeneric", "Tau-equivalent + equal residual variances"),
+  Fits = c("Configural Guttman, legacy Guttman, ML, ULS",
+           "The same configural fits plus correctly restricted Guttman, ML, and ULS"),
+  Status = c(
+    if (any(design$population_model == "congeneric")) paste0(
+      sum(design$population_model == "congeneric"), " cells complete") else "Not run",
+    if (restricted_present) paste0(sum(design$population_model == "tau_resid"),
+                                  " cells complete") else "Not in this result set"),
+  check.names = FALSE)
+
+rho_estimators <- c(raw_std, soft_std, "guttman_legacy", "ml_emp", "uls_emp")
+rho_estimators <- rho_estimators[rho_estimators %in% unique(config$estimator)]
+rho_long <- aggregate(common_rmse_ratio ~ rho + estimator,
+                      config[config$estimator %in% rho_estimators, ], med)
+rho_long$Estimator <- factor(label(rho_long$estimator), levels = label(rho_estimators))
+rho_wide <- reshape(rho_long[c("rho", "Estimator", "common_rmse_ratio")],
+                    idvar = "rho", timevar = "Estimator", direction = "wide")
+names(rho_wide) <- sub("common_rmse_ratio\\.", "", names(rho_wide))
+names(rho_wide)[names(rho_wide) == "rho"] <- "Factor Correlation"
+for (j in setdiff(names(rho_wide), "Factor Correlation")) rho_wide[[j]] <- fmt(rho_wide[[j]])
+
+strength_long <- aggregate(common_rmse_ratio ~ rho + strength + estimator,
+                           config[config$estimator %in% c(raw_std, soft_std), ], med)
+strength_long$Estimator <- label(strength_long$estimator)
+strength_wide <- reshape(strength_long[c("rho", "strength", "Estimator", "common_rmse_ratio")],
+                         idvar = c("rho", "strength"), timevar = "Estimator",
+                         direction = "wide")
+names(strength_wide) <- sub("common_rmse_ratio\\.", "", names(strength_wide))
+names(strength_wide)[1:2] <- c("Factor Correlation", "Loading Strength")
+strength_wide$`Loading Strength` <- tools::toTitleCase(strength_wide$`Loading Strength`)
+for (j in 3:ncol(strength_wide)) strength_wide[[j]] <- fmt(strength_wide[[j]])
+
+diag_estimators <- rho_estimators
+admissibility <- aggregate(cbind(fit_ok_rate, improper_rate) ~ estimator,
+                           config_diag[config_diag$estimator %in% diag_estimators, ],
+                           mean, na.rm = TRUE)
+admissibility$Estimator <- factor(label(admissibility$estimator),
+                                  levels = label(diag_estimators))
+admissibility <- admissibility[order(admissibility$Estimator), ]
+admissibility <- data.frame(
+  Estimator = admissibility$Estimator,
+  `Fit Returned` = pct(admissibility$fit_ok_rate),
+  `Improper Among Returned Fits` = pct(admissibility$improper_rate),
+  check.names = FALSE)
+
+coverage_estimators <- c(raw_std, soft_std, "ml_emp", "uls_emp")
+coverage_estimators <- coverage_estimators[coverage_estimators %in% unique(config_est$estimator)]
+coverage_long <- aggregate(coverage ~ estimator + group,
+                           config_est[config_est$estimator %in% coverage_estimators, ], med)
+coverage_long$Estimator <- factor(label(coverage_long$estimator),
+                                  levels = label(coverage_estimators))
+coverage_wide <- reshape(coverage_long[c("Estimator", "group", "coverage")],
+                         idvar = "Estimator", timevar = "group", direction = "wide")
+names(coverage_wide) <- sub("coverage\\.", "", names(coverage_wide))
+names(coverage_wide) <- sub("factor_cov", "Factor Covariances", names(coverage_wide))
+names(coverage_wide) <- sub("factor_var", "Factor Variances", names(coverage_wide))
+names(coverage_wide) <- sub("loading", "Loadings", names(coverage_wide))
+names(coverage_wide) <- sub("residual_var", "Residual Variances", names(coverage_wide))
+for (j in setdiff(names(coverage_wide), "Estimator")) coverage_wide[[j]] <- pct(coverage_wide[[j]])
+
+raw_improper <- mean(config_diag$improper_rate[config_diag$estimator == raw_std], na.rm = TRUE)
+soft_improper <- mean(config_diag$improper_rate[config_diag$estimator == soft_std], na.rm = TRUE)
+restricted_sentence <- if (restricted_present) {
+  "The correctly restricted regime is present and reported separately below."
 } else {
-  paste0("The soft-clamped arm is present in these results. Its row is shown alongside the raw control in both evidence tables.")
+  "This result set contains no paper-grade restricted cells, so it cannot yet answer whether imposing correct tau/equal-residual restrictions improves the estimator."
 }
 ```
 
 ## Question
 
-When does a closed-form Guttman CFA map remain a useful full estimator—point
-estimate plus empirical standard error—relative to ML and ULS? In particular,
-does smoothly enforcing the physically admissible communality range make the
-standardized aligned map a better practical estimator than its raw counterpart?
+Guttman's multiple-group construction gives a closed-form CFA estimator
+[@guttman1952], and recent work has renewed interest in non-iterative CFA as a
+practical estimator class [@dhaene2024]. We ask where the aligned Guttman map
+delivers useful point estimates and empirical-sandwich intervals, whether a
+smooth communality clamp improves its behavior, and how much is gained when
+correct loading and residual restrictions are imposed.
 
 ## Short answer
 
-**The completed raw screen identifies factor correlation, not distributional
-shape, as the decisive stressor.** The raw standardized map is at ML parity at
-rho = 0 (median RMSE ratio `r fmt(raw_ratios[["0"]])`), rises to
-`r fmt(raw_ratios[[".35"]])` at rho = .35, `r fmt(raw_ratios[[".6"]])` at .60,
-and `r fmt(raw_ratios[[".8"]])` at .80. Its median conditional empirical-SE
-coverage is `r pct(raw_coverage)`, but that statement is conditional on a
-returned fit and must be read with the improper-solution rates below.
+**For the completed configural regime, the method works well only away from the
+combination of weak loadings and strongly correlated factors.** With moderate
+loadings, raw Guttman's median common-covariance RMSE relative to ML rises from
+`r fmt(raw_moderate_rho[["0"]])` at factor correlation 0 to
+`r fmt(raw_moderate_rho[[".8"]])` at .80. With weak loadings, the corresponding
+high-correlation deterioration is orders of magnitude larger. The soft clamp
+slightly reduces improper returned solutions (`r pct(raw_improper)` to
+`r pct(soft_improper)`), but does not repair the high-correlation RMSE failure.
+Conditional empirical-SE coverage remains near nominal for the Guttman arms,
+but cannot be interpreted without the separate fit and admissibility rates.
 
-`r soft_note`
+`r restricted_sentence`
 
-The paper-primary admissible variant is therefore the standardized aligned map
-with a symmetric smooth communality clamp: margin .001, base sharpness 4, and
-sample-size rate 1. Score-covariance and full-H spectral conditioning remain
-raw; the calibration evidence does not support either repair as a default.
+## Study design
 
-## Evidence
+The simulation treats the fitted common covariance as the primary point target.
+For each design cell, RMSE is divided by the RMSE of the relevant ML fit on the
+same successful replications. Values near 1 indicate ML-level accuracy; values
+above 1 indicate efficiency loss. Parameter-specific bias, RMSE, empirical-SE
+coverage, fit availability, and improper solutions are secondary outcomes.
+Reporting failures separately follows the longstanding warning that convergence
+and improper solutions are themselves simulation outcomes in CFA [@boomsma1985].
+The design and performance measures are fixed before inspecting individual
+cells, in the spirit of simulation-study guidance from @morris2019.
 
-The completed raw screen has `r nrow(progress)` configural cells and
-`r meta("reps")` replications per cell. RMSE is calculated on the same draws as
-ML and only when both fits are finite. “Improper solution” is reported over
-returned fits, separately from fit failure.
+```{r design-table}
+knitr::kable(design_table, row.names = FALSE, caption = "Conditions represented in the loaded results.")
+```
+
+The two population regimes have different jobs. The congeneric regime asks how
+the unrestricted estimator behaves under heterogeneous loadings. The restricted
+regime generates tau-equivalent loadings and equal residual variances within
+each factor, then fits configural and correctly restricted estimators to the
+same draws. This pairing identifies the gain from using valid restrictions;
+misspecified restrictions are a separate robustness question.
+
+```{r design-status}
+knitr::kable(status_table, row.names = FALSE, caption = "Which parts of the paper design are complete in this result set.")
+```
+
+Five-category ordinal variables are analyzed through their ordinary score
+covariance rather than polychoric correlations. That arm therefore studies an
+ordinal-as-continuous use case, whose adequacy is known to depend on the number
+of categories and marginal shape [@rhemtulla2012]. The mildly non-normal arm
+uses empirical fourth moments for sandwich SEs, consistent with the
+distribution-free covariance-structure framework [@browne1984].
+
+## Configural evidence
+
+### Aggregate accuracy
+
+The first aggregation keeps factor correlation visible because averaging over
+it hides the main failure mode. The entries are median cell-wise RMSE ratios
+relative to ML.
 
 ```{r rho-evidence}
-knitr::kable(rho_summary, row.names = FALSE)
+knitr::kable(rho_wide, row.names = FALSE,
+             caption = "Common-covariance RMSE relative to ML, aggregated over the other configural conditions.")
 ```
 
-The raw map’s conditional coverage remains close to 95% across all three data
-generators, while ML and ULS are included to show the same small-sample and
-non-normal context. Coverage does not erase a point-estimation or admissibility
-failure.
+The raw and soft maps are essentially tied in the regular cells. The clamp is
+not a general efficiency correction: it changes boundary behavior, and in the
+most stressed cells its wins and losses are both large.
+
+### Where the aggregate comes from
+
+Separating loading strength reveals the interaction concealed by the preceding
+margin. Moderate-loading cells deteriorate gradually as factors become more
+correlated. Weak-loading cells become unstable much earlier. This is the main
+design slice to carry into the paper.
+
+```{r strength-evidence}
+knitr::kable(strength_wide, row.names = FALSE,
+             caption = "RMSE ratio by loading strength and factor correlation.")
+```
+
+Sample size moderates but does not remove this interaction. The following plot
+shows the median over the remaining conditions; the logarithmic vertical scale
+is necessary because the stressed cells span several orders of magnitude.
+
+```{r n-rho-plot, fig.width=8, fig.height=5.5, fig.cap="RMSE ratio by sample size and factor correlation. Lines summarize raw and soft-clamped Guttman over the remaining configural conditions."}
+n_slice <- aggregate(common_rmse_ratio ~ estimator + n + rho,
+                     config[config$estimator %in% c(raw_std, soft_std), ], med)
+old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 1), oma = c(0, 0, 1, 0))
+for (r in sort(unique(n_slice$rho))) {
+  z <- n_slice[n_slice$rho == r, ]
+  yr <- range(z$common_rmse_ratio[z$common_rmse_ratio > 0], finite = TRUE)
+  plot(NA, xlim = range(z$n), ylim = yr, log = "xy", xlab = "Sample size",
+       ylab = "RMSE ratio vs ML", main = paste0("Factor correlation = ", r),
+       xaxt = "n")
+  axis(1, at = sort(unique(z$n)))
+  abline(h = 1, col = "grey70", lty = 2)
+  for (i in seq_along(c(raw_std, soft_std))) {
+    zz <- z[z$estimator == c(raw_std, soft_std)[i], ]
+    zz <- zz[order(zz$n), ]
+    lines(zz$n, zz$common_rmse_ratio, type = "b", pch = c(16, 1)[i],
+          lty = i, col = c("#1B4F72", "#B03A2E")[i])
+  }
+}
+legend("topleft", legend = c("Raw", "Soft clamp"), lty = 1:2,
+       pch = c(16, 1), col = c("#1B4F72", "#B03A2E"), bty = "n")
+par(old_par)
+```
+
+### Inference and admissibility
+
+Coverage below is conditional on a finite estimate and SE. It is summarized by
+parameter family because a single overall coverage number overweights models
+with more indicators. The Guttman intervals are generally close to 95%; ML and
+ULS show more small-sample undercoverage in this grid.
 
 ```{r coverage-evidence}
-knitr::kable(coverage_summary, row.names = FALSE)
+knitr::kable(coverage_wide, row.names = FALSE,
+             caption = "Median 95% empirical-sandwich coverage across configural cells.")
 ```
 
-## Conditions
+That conditional result is only one part of operating performance. The soft
+clamp modestly reduces, but does not eliminate, improper solutions. A returned
+fit is called improper when it has a negative residual variance or a non-positive
+fitted covariance eigenvalue.
 
-The completed screen is configural only: 2, 3, or 5 factors; 3, 5, or an
-unbalanced 3/6 indicator pattern; sample sizes 50, 100, 300, and 800; factor
-correlations 0, .35, .60, and .80; equal or unequal scales; moderate or weak
-loadings; and normal, mildly non-normal, or ordinal-score data. The ordinal arm
-fits the ordinary covariance of integer category scores, not polychorics.
+```{r admissibility-evidence}
+knitr::kable(admissibility, row.names = FALSE,
+             caption = "Fit availability and admissibility in the configural regime.")
+```
 
-New runs compare five arms: raw standardized Guttman, soft-clamped standardized
-Guttman, legacy Guttman, ML, and ULS. The soft clamp is deliberately an
-estimator choice rather than a hidden cleanup. The retired adaptive composite is
-not a primary competitor here; its compatibility behavior remains available in
-the library and in the earlier raw screen.
+## Correctly restricted evidence
+
+```{r restricted-evidence, results='asis'}
+if (!restricted_present) {
+  cat(paste0(
+    "This section is intentionally empty: the loaded run used `include_restricted=FALSE`. ",
+    "The small development smoke under `results/check-restricted` is not evidence. ",
+    "Run the paper grid below. It fits configural and correctly restricted models ",
+    "to each tau/equal-residual draw, so the comparison is paired.\n"))
+} else {
+  tau <- whole[whole$population_model == "tau_resid", , drop = FALSE]
+  pairs <- data.frame(
+    Family = c("Guttman, raw", "Guttman, soft clamp", "ML", "ULS"),
+    configural = c(raw_std, soft_std, "ml_emp", "uls_emp"),
+    restricted = c("guttman_std_raw_restricted", "guttman_std_soft_restricted",
+                   "ml_emp_restricted", "uls_emp_restricted"),
+    stringsAsFactors = FALSE)
+  rows <- lapply(seq_len(nrow(pairs)), function(i) {
+    a <- aggregate(common_rmse_ratio ~ rho,
+                   tau[tau$estimator == pairs$configural[[i]], ], med)
+    b <- aggregate(common_rmse_ratio ~ rho,
+                   tau[tau$estimator == pairs$restricted[[i]], ], med)
+    names(a)[[2]] <- "Configural Fit"
+    names(b)[[2]] <- "Correctly Restricted Fit"
+    x <- merge(a, b, by = "rho", all = TRUE)
+    x$`Estimator Family` <- pairs$Family[[i]]
+    x
+  })
+  tab <- do.call(rbind, rows)
+  names(tab)[names(tab) == "rho"] <- "Factor Correlation"
+  tab <- tab[c("Factor Correlation", "Estimator Family", "Configural Fit",
+               "Correctly Restricted Fit")]
+  tab$`Configural Fit` <- fmt(tab$`Configural Fit`)
+  tab$`Correctly Restricted Fit` <- fmt(tab$`Correctly Restricted Fit`)
+  cat("\n\n")
+  print(knitr::kable(
+    tab, row.names = FALSE,
+    caption = "Paired RMSE in the tau/equal-residual population, relative to restricted ML."))
+
+  tau_diag <- diag[diag$population_model == "tau_resid", , drop = FALSE]
+  tau_est <- est[est$population_model == "tau_resid", , drop = FALSE]
+  keep <- unique(c(pairs$configural, pairs$restricted))
+  op_rows <- lapply(keep, function(estimator) {
+    d <- tau_diag[tau_diag$estimator == estimator, ]
+    e <- tau_est[tau_est$estimator == estimator, ]
+    cov_group <- function(group) med(e$coverage[e$group == group])
+    data.frame(
+      Estimator = label(estimator),
+      Loadings = pct(cov_group("loading")),
+      `Factor Covariances` = pct(cov_group("factor_cov")),
+      `Residual Variances` = pct(cov_group("residual_var")),
+      `Fit Returned` = pct(mean(d$fit_ok_rate, na.rm = TRUE)),
+      `Improper Among Returned Fits` = pct(mean(d$improper_rate, na.rm = TRUE)),
+      check.names = FALSE)
+  })
+  op <- do.call(rbind, op_rows)
+  cat("\n\n")
+  print(knitr::kable(
+    op, row.names = FALSE,
+    caption = "Coverage and admissibility in the correctly restricted population."))
+  cat("\n\n")
+}
+```
+
+## Interpretation
+
+The current evidence supports a narrow claim. Closed-form Guttman CFA is
+competitive when factors are weakly correlated and the measurement blocks are
+well determined. It is not a drop-in replacement for ML under weak measurement
+and strong factor correlation. The smooth communality clamp is a defensible
+admissibility policy because negative communalities are impossible, but the
+simulation does not support presenting it as a cure for the estimator's main
+accuracy failure. Score-covariance and full-matrix spectral conditioning remain
+raw because their separate calibration produced no acceptable repair.
+
+The restriction question is co-primary for the paper. The paired restricted
+regime is designed to show whether correct tau/equal-residual information
+recovers enough efficiency and stability to change that conclusion. Until that
+regime is complete, the report is a configural result plus a preregistered
+restricted design, not the finished paper simulation.
 
 ## Caveats
 
-- This completed evidence is a broad raw baseline, not the soft-clamp
-  confirmation. The next run must include the configured soft arm before any
-  claim that it improves the final estimator.
-- The smooth communality clamp prevents impossible communality values, but does
-  not by itself guarantee a positive-definite factor covariance. The raw
-  high-rho failure remains a substantive finding, not a result to conceal.
-- RMSE and coverage are conditional on finite fits; success and improper rates
-  are part of the result, not implementation footnotes.
-- The constrained tau-equivalent regime is intentionally not reported here:
-  it was not included in the completed full run and needs its own completed
-  confirmation before it is added to this report.
+- RMSE ratios are conditional on the same finite replications as the ML
+  denominator. Fit availability and improper solutions must be reported beside
+  them.
+- Cell medians describe the typical design condition. The disaggregated tables
+  and plot are needed because tail behavior is scientifically important here.
+- The ordinal arm concerns Pearson covariances of category scores. It does not
+  establish performance with polychoric input.
+- Correct restrictions and misspecified restrictions answer different
+  questions. This design covers the former only.
 
 ## Reproduce
 
 ```sh
-# Configural smoke check; writes a separate result directory.
+# Fast validation of both population regimes and every estimator family.
 Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
-  --smoke --max-cells 1 --reps 2 \
+  --smoke --generators normal --factors 2 --indicators 3 --rho 0 \
+  --scales equal --strength moderate --n 120 --reps 2 --cores 1 \
   --results-dir experiments/58-guttman-rmse-coverage/results/probe
 
-# Configural full grid, including the raw and soft-clamped standardized maps.
+# Paper grid. Restricted cells are included by default and use paired
+# configural/restricted fits on the same draws.
 Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
   --full --reps 150 --cores 8 \
-  --results-dir experiments/58-guttman-rmse-coverage/results
+  --results-dir experiments/58-guttman-rmse-coverage/results/paper-full
 
-# Add the constrained regime only for a dedicated follow-up run.
-Rscript experiments/58-guttman-rmse-coverage/run_experiment.R \
-  --full --restricted --reps 150 --cores 8 \
-  --results-dir /tmp/exp58-restricted
-
-quarto render experiments/58-guttman-rmse-coverage/report.qmd
+quarto render experiments/58-guttman-rmse-coverage/report.qmd \
+  -P results_dir:results/paper-full
 ```
+
+## References
+
+::: {#refs}
+:::

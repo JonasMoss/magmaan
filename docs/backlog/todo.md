@@ -2383,18 +2383,22 @@ work until a concrete downstream consumer appears.
   still use the stacked KKT path, and methods whose SE is still direction-wise
   or finite-difference fallback (`triad_wls_joint`, `triad_mean`,
   `triad_pooled`).
-  **Experiment-58 paper lane (2026-07-10):** the completed broad raw screen is
-  1,728 configural cells by 150 replications. It changes the interpretation of
-  the raw aligned map: its common-covariance RMSE is at ML parity at `rho=0`,
-  about 1.25x at `.35`, about 2.65x at `.60`, and about 193x at `.80` for the
-  standardized composite. Conditional empirical-SE coverage remains near 95%,
-  but fit and improper-solution rates must accompany it. Experiment 58 now
-  treats the raw standardized map as the control and the exp-60-selected smooth
-  communality clamp (`margin=.001`, `beta0=4`, `rate=1`) as the paper-primary
-  admissible arm; score and full-H spectral conditioning remain raw. A fresh
-  confirmation run including that soft arm is required before making a claim
-  for it. The constrained regime is a separate follow-up, not an absent table
-  in the configural report.
+  **Experiment-58 paper lane (2026-07-11):** the completed 1,728-cell by
+  150-replication configural screen now includes raw and soft-clamped aligned
+  maps. Factor correlation and loading strength interact sharply: under
+  moderate loadings, the raw map's median common-covariance RMSE ratio versus ML
+  is about 1.01 / 1.13 / 1.56 / 4.27 at `rho=0/.35/.60/.80`; under weak
+  loadings it is about .99 / 1.95 / 39 / 892. The smooth clamp
+  (`margin=.001`, `beta0=4`, `rate=1`) lowers the average improper-return rate
+  only from 13.4% to 12.7% and does not repair the high-correlation RMSE failure.
+  Conditional empirical-SE coverage remains near 95%, but fit and improper
+  rates must accompany it. Score and full-H spectral conditioning remain raw.
+  The paper grid now makes correct restrictions co-primary: tau-equivalent,
+  equal-residual population cells fit both configural and estimator-side
+  restricted Guttman/ML/ULS maps on the same draws, with restricted ML as the
+  paired RMSE reference. Full runs include that regime by default; the completed
+  configural result set contains no paper-grade restricted evidence, so the
+  paired restricted run remains the next required result.
   Future point-estimator lane: a **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
