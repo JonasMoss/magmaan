@@ -1,5 +1,6 @@
 ---
 title: "Can a studentized permutation Wald test calibrate metric invariance?"
+bibliography: references.bib
 format:
   html:
     toc: true
@@ -18,6 +19,31 @@ if (!file.exists(summary_path)) {
 results <- read.csv(summary_path, check.names = FALSE, stringsAsFactors = FALSE)
 fmt <- function(x) formatC(x, format = "f", digits = 3)
 ```
+
+## Target Paper Design
+
+The current numerical output below is the metric-invariance feasibility gate.
+The paper study expands it into two complementary continuous-data simulations.
+Study 1 follows the multi-group condition spine of Brace and Savalei
+[@bracesavalei2017]. Study 2 directly compares the proposed test with the
+unbalanced-data multivariate Wald design of Chen and Chao [@chenchao2026].
+
+| Study | Population and allocation | Data conditions | Reported tests |
+|---|---|---|---|
+| 1. Reference-law study | Two groups, two correlated factors, `p = 8, 16`; total `N = 220, 440, 1760`; `1:1` and `1:3` allocation | Normal and Pearson IG `(2, 7)` / `(3, 21)`; ordinal-probit category scores analyzed by robust continuous ML | Metric, scalar, and strict LRT/Wald/permutation-Wald tests |
+| 2. Unbalanced-data comparison | Chen--Chao one-factor, six-indicator model; group A `n = 200`, group B `n = 400, 600, 800, 1000, 1400, 2000, 3000`, plus matched balanced samples | Metric/scalar affected-item proportions `1/3` or `2/3`; small, large, mixed, and non-uniform effects; strict residual-variance extension | Chen--Chao multivariate Wald, ordinary/sandwich LRT and Wald, studentized permutation Wald |
+
+The category-score arm deliberately treats ordered categories as continuous
+numeric observations. This is not a polychoric or DWLS analysis. Its category
+count and threshold-symmetry factors follow the conditions under which robust
+continuous ML is, or is not, defensible in Rhemtulla, Brosseau-Liard, and
+Savalei [@rhemtulla2012]. Robust continuous-ML inference follows
+Maydeu-Olivares [@maydeuolivares2017].
+
+All three reported invariance outcomes are adjacent comparisons: metric versus
+configural, scalar versus metric, and strict versus scalar. The configural model
+is fitted internally as the metric reference; this is an inference study rather
+than a global-fit study.
 
 ## Question
 
