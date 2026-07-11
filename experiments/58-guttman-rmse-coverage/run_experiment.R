@@ -23,7 +23,7 @@ usage <- function() {
     "Options:\n",
     "  --probe              Tiny timing probe. Default if neither --smoke nor --full.\n",
     "  --smoke              Small validation run.\n",
-    "  --full               Larger configural overnight grid.\n",
+    "  --full               Paper grid: congeneric and correctly restricted regimes.\n",
     "  --reps N             Replications per cell. Probe: 2; smoke: 5; full: 50.\n",
     "  --n LIST             Comma-separated sample sizes.\n",
     "  --generators LIST    normal,ig,ordinal. Default depends on mode.\n",
@@ -34,8 +34,9 @@ usage <- function() {
     "  --scales LIST        equal,unequal. Continuous scales or ordinal marginals.\n",
     "  --loadings LIST      mixed,tau. Configural loading patterns.\n",
     "  --strength LIST      weak,moderate,strong. Scales loading magnitude.\n",
-    "  --restricted         Also run tau/residual-equality constrained cells.\n",
-    "  --no-restricted      Compatibility alias; constrained cells are already off.\n",
+    "  --restricted         Include tau/equal-residual cells (the default).\n",
+    "  --configural-only    Run only the congeneric/configural regime.\n",
+    "  --no-restricted      Compatibility alias for --configural-only.\n",
     "  --max-cells N        Keep only first N cells after grid construction.\n",
     "  --cores N            mclapply cores. Default: 1.\n",
     "  --alpha X            CI alpha. Default: 0.05.\n",
@@ -61,7 +62,7 @@ parse_args <- function(args) {
     scales = c("equal"),
     loadings = c("mixed"),
     strength = c("moderate"),
-    include_restricted = FALSE,
+    include_restricted = TRUE,
     max_cells = NA_integer_,
     cores = 1L,
     alpha = 0.05,
@@ -165,6 +166,8 @@ parse_args <- function(args) {
       opts$strength <- parse_csv_arg(sub("^--strength=", "", a)); explicit <- c(explicit, "strength")
     } else if (a == "--restricted") {
       opts$include_restricted <- TRUE
+    } else if (a == "--configural-only") {
+      opts$include_restricted <- FALSE
     } else if (a == "--no-restricted") {
       opts$include_restricted <- FALSE
     } else if (a == "--max-cells") {
@@ -240,7 +243,7 @@ zcrit <- stats::qnorm(1 - opts$alpha / 2)
 fit_control <- list(max_iter = opts$ml_max_iter, ftol = 1e-10, gtol = 1e-7)
 
 condition_cols <- c("generator", "factors", "indicators", "rho", "scale",
-                    "loading", "strength", "constraint", "n")
+                    "loading", "strength", "population_model", "n")
 
 interaction_key <- function(df, cols) {
   do.call(interaction, c(df[cols], list(drop = TRUE, sep = "\r")))
@@ -643,8 +646,14 @@ empirical_se <- function(fit, X) {
   core$robust_se_raw_fit(fit, X, bread = "expected")$se
 }
 
-run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
+run_arm <- function(cond, rep_id, arm, specs, ss, X, pop) {
   attr(cond, "pop") <- pop
+  restricted_arm <- grepl("_restricted$", arm)
+  spec <- if (restricted_arm) specs$restricted else specs$configural
+  if (is.null(spec)) stop("restricted arm requested without a restricted specification", call. = FALSE)
+  pt <- spec$pt
+  info <- spec$info
+  target <- spec$target
   fit_expr <- switch(
     arm,
     guttman_std_raw = quote(guttman_fit(pt, ss, admissibility = "raw")),
@@ -685,11 +694,11 @@ run_arm <- function(cond, rep_id, arm, pt, ss, X, pop, info, target) {
   list(estimates = estimates, whole = whole, diagnostics = diag)
 }
 
-run_rep <- function(rep_id, cond, pop, pt, arms, info, target, X) {
+run_rep <- function(rep_id, cond, pop, specs, arms, X) {
   ss <- sample_stats(X, pop$vars)
   outs <- lapply(arms, function(arm) {
-    run_arm(cond = cond, rep_id = rep_id, arm = arm, pt = pt,
-            ss = ss, X = X, pop = pop, info = info, target = target)
+    run_arm(cond = cond, rep_id = rep_id, arm = arm, specs = specs,
+            ss = ss, X = X, pop = pop)
   })
   list(
     estimates = bind_rows(lapply(outs, `[[`, "estimates")),
@@ -865,7 +874,7 @@ condition_grid <- function(opts) {
     scale = opts$scales,
     loading = opts$loadings,
     strength = opts$strength,
-    constraint = "configural",
+    population_model = "congeneric",
     n = opts$n,
     stringsAsFactors = FALSE
   )
@@ -879,13 +888,13 @@ condition_grid <- function(opts) {
       scale = "equal",
       loading = "tau",
       strength = opts$strength,
-      constraint = "tau_resid",
+      population_model = "tau_resid",
       n = opts$n,
       stringsAsFactors = FALSE
     )
   }
   grid <- rbind(config, restricted)
-  grid <- grid[order(grid$constraint, grid$generator, grid$factors,
+  grid <- grid[order(grid$population_model, grid$generator, grid$factors,
                      grid$indicators, grid$rho, grid$scale, grid$loading,
                      grid$strength, grid$n), ]
   rownames(grid) <- NULL
@@ -982,25 +991,32 @@ cat(sprintf("Running %d cells x %d reps (mode=%s, cores=%d)\n",
 
 for (cell in seq_len(nrow(grid))) {
   cond <- grid[cell, condition_cols, drop = FALSE]
-  restricted <- identical(cond$constraint[[1]], "tau_resid")
+  restricted_population <- identical(cond$population_model[[1]], "tau_resid")
   pop <- make_population(cond$factors[[1]], cond$indicators[[1]], cond$rho[[1]],
                          cond$loading[[1]], cond$scale[[1]], cond$generator[[1]],
                          cond$strength[[1]])
-  pt <- core$lavaan_lavaanify(model_syntax(cond$factors[[1]], cond$indicators[[1]], restricted))
-  info <- free_param_info(pt, pop$vars, pop$factors)
-  target <- theta_target(info, pop)
-  arms <- if (restricted) {
-    c("guttman_std_raw_restricted", "guttman_std_soft_restricted",
+  make_spec <- function(restricted) {
+    pt <- core$lavaan_lavaanify(model_syntax(
+      cond$factors[[1]], cond$indicators[[1]], restricted))
+    info <- free_param_info(pt, pop$vars, pop$factors)
+    list(pt = pt, info = info, target = theta_target(info, pop))
+  }
+  specs <- list(configural = make_spec(FALSE), restricted = NULL)
+  if (restricted_population) specs$restricted <- make_spec(TRUE)
+  arms <- if (restricted_population) {
+    c("guttman_std_raw", "guttman_std_soft", "guttman_legacy",
+      "ml_emp", "uls_emp",
+      "guttman_std_raw_restricted", "guttman_std_soft_restricted",
       "ml_emp_restricted", "uls_emp_restricted")
   } else {
     c("guttman_std_raw", "guttman_std_soft", "guttman_legacy",
       "ml_emp", "uls_emp")
   }
-  baseline <- if (restricted) "ml_emp_restricted" else "ml_emp"
+  baseline <- if (restricted_population) "ml_emp_restricted" else "ml_emp"
   seed <- opts$seed_base + 100000L * cell
-  cat(sprintf("[%d/%d] %s q=%d m=%s rho=%.2f scale=%s loading=%s strength=%s constraint=%s n=%d reps=%d\n",
+  cat(sprintf("[%d/%d] %s q=%d m=%s rho=%.2f scale=%s loading=%s strength=%s population=%s n=%d reps=%d\n",
               cell, nrow(grid), cond$generator, cond$factors, cond$indicators,
-              cond$rho, cond$scale, cond$loading, cond$strength, cond$constraint,
+              cond$rho, cond$scale, cond$loading, cond$strength, cond$population_model,
               cond$n, opts$reps))
   draws_res <- timed_eval(draws_for_condition(pop, cond$generator[[1]], cond$n[[1]],
                                               opts$reps, seed))
@@ -1018,11 +1034,11 @@ for (cell in seq_len(nrow(grid))) {
   cell_out <- if (opts$cores > 1L) {
     parallel::mclapply(
       reps,
-      function(r) run_rep(r, cond, pop, pt, arms, info, target, draws_res$value[[r]]),
+      function(r) run_rep(r, cond, pop, specs, arms, draws_res$value[[r]]),
       mc.cores = opts$cores, mc.preschedule = TRUE
     )
   } else {
-    lapply(reps, function(r) run_rep(r, cond, pop, pt, arms, info, target, draws_res$value[[r]]))
+    lapply(reps, function(r) run_rep(r, cond, pop, specs, arms, draws_res$value[[r]]))
   }
   estimate_draws <- bind_rows(lapply(cell_out, `[[`, "estimates"))
   whole_draws <- bind_rows(lapply(cell_out, `[[`, "whole"))
