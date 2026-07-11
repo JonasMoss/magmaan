@@ -262,6 +262,12 @@ for (domain in cfg$domains) {
   dat <- raw[c("vetgroup", vars)]
   used <- rowSums(!is.na(dat[vars])) > 0L
   dat <- dat[used, , drop = FALSE]
+  # magmaan and lavaan both order groups by first appearance in the data, but
+  # the lavaan call below pins group.label to factor-level order. The raw OSF
+  # rows are not group-sorted (chem_lab_assistants appears first), so sort here
+  # to make appearance order equal factor-level order; otherwise the two engines
+  # fix different reference groups and the mean-structure params mirror-image.
+  dat <- dat[order(dat$vetgroup), , drop = FALSE]
 
   models <- list(
     M1 = list(name = "saturated KAS covariance", syntax = model_saturated(vars)),
