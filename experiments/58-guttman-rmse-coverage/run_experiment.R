@@ -16,8 +16,9 @@ core <- magmaan::magmaan_core
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
-    "RMSE/coverage comparison for raw and soft-clamped standardized Guttman CFA maps,\n",
-    "continuous NTML, and ULS. Ordinal cells simulate category-score data with\n",
+    "RMSE/coverage comparison of the chosen raw Guttman recipe (extended_triad_ls\n",
+    "communality + standardized composite) against the legacy Guttman map, NTML,\n",
+    "and ULS. Ordinal cells simulate category-score data with\n",
     "magmaan::sim_ordcorr_calibrate(metric = 'pearson_codes') and fit the\n",
     "observed code covariance directly; no polychoric inputs are used.\n\n",
     "Options:\n",
@@ -614,21 +615,15 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
   )
 }
 
-guttman_fit <- function(pt, ss, composite = "standardized",
-                        admissibility = "raw", margin = 0.001,
-                        beta0 = 4, rate = 1, restricted = FALSE) {
-  if (restricted) {
-    magmaan::fit_noniterative_cfa_restricted(
-      pt, ss, estimator = "guttman_aligned",
-      communality = "triad_wls", composite = composite,
-      admissibility = admissibility, margin = margin, beta0 = beta0, rate = rate,
-      score_conditioning = "raw", h_conditioning = "raw")
-  } else {
-    magmaan::fit_noniterative_cfa(
-      pt, ss, estimator = "guttman_aligned", composite = composite,
-      admissibility = admissibility, margin = margin, beta0 = beta0, rate = rate,
-      score_conditioning = "raw", h_conditioning = "raw")
-  }
+# Chosen recipe: extended_triad_ls communality + standardized composite on the
+# aligned map. The configural entry does not expose communality selection, so
+# both the configural arm (unconstrained partable) and the correctly-restricted
+# arm (constrained partable) run through the restricted-map entry -- a bit-exact,
+# fast proxy for the aligned map with a selectable communality (matches exp 59).
+guttman_fit <- function(pt, ss) {
+  magmaan::fit_noniterative_cfa_restricted(
+    pt, ss, estimator = "guttman_aligned",
+    communality = "extended_triad_ls", composite = "standardized")
 }
 
 legacy_guttman_fit <- function(pt, ss) {
@@ -656,13 +651,9 @@ run_arm <- function(cond, rep_id, arm, specs, ss, X, pop) {
   target <- spec$target
   fit_expr <- switch(
     arm,
-    guttman_std_raw = quote(guttman_fit(pt, ss, admissibility = "raw")),
-    guttman_std_soft = quote(guttman_fit(pt, ss, admissibility = "soft")),
+    guttman_std_raw = quote(guttman_fit(pt, ss)),
     guttman_legacy = quote(legacy_guttman_fit(pt, ss)),
-    guttman_std_raw_restricted = quote(guttman_fit(
-      pt, ss, admissibility = "raw", restricted = TRUE)),
-    guttman_std_soft_restricted = quote(guttman_fit(
-      pt, ss, admissibility = "soft", restricted = TRUE)),
+    guttman_std_raw_restricted = quote(guttman_fit(pt, ss)),
     ml_emp = quote(ml_fit(pt, ss)),
     ml_emp_restricted = quote(ml_fit(pt, ss)),
     uls_emp = quote(uls_fit(pt, ss)),
@@ -967,12 +958,9 @@ write_metadata(
     loadings = opts$loadings,
     strength = opts$strength,
     include_restricted = opts$include_restricted,
+    guttman_communality = "extended_triad_ls",
     aligned_composite = "standardized",
-    raw_admissibility = "raw",
-    soft_admissibility = "soft",
-    soft_margin = 0.001,
-    soft_beta0 = 4,
-    soft_rate = 1,
+    admissibility = "raw",
     score_conditioning = "raw",
     h_conditioning = "raw",
     write_every = opts$write_every,
@@ -1004,12 +992,12 @@ for (cell in seq_len(nrow(grid))) {
   specs <- list(configural = make_spec(FALSE), restricted = NULL)
   if (restricted_population) specs$restricted <- make_spec(TRUE)
   arms <- if (restricted_population) {
-    c("guttman_std_raw", "guttman_std_soft", "guttman_legacy",
+    c("guttman_std_raw", "guttman_legacy",
       "ml_emp", "uls_emp",
-      "guttman_std_raw_restricted", "guttman_std_soft_restricted",
+      "guttman_std_raw_restricted",
       "ml_emp_restricted", "uls_emp_restricted")
   } else {
-    c("guttman_std_raw", "guttman_std_soft", "guttman_legacy",
+    c("guttman_std_raw", "guttman_legacy",
       "ml_emp", "uls_emp")
   }
   baseline <- if (restricted_population) "ml_emp_restricted" else "ml_emp"
