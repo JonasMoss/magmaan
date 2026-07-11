@@ -37,7 +37,12 @@ if modal.is_local():
     MAGMAAN_RPKG = EXPERIMENTS.parent / "r-package"   # magmaan/r-package (vendored)
     SUPPORT = EXPERIMENTS / "_support"
 else:
+    # The image spec below is re-evaluated at import inside the container, so
+    # every name it references must exist here too (dummy remote paths).
     EXP = Path("/exp/experiments/58-guttman-rmse-coverage")
+    EXPERIMENTS = Path("/exp/experiments")
+    MAGMAAN_RPKG = Path("/build/magmaan")
+    SUPPORT = Path("/exp/experiments/_support")
 
 # rocker/r-ver ships a pinned R with the Posit binary repo, so Rcpp/RcppEigen/
 # nloptr/pkgload install as binaries. magmaan is compiled from source in-image
