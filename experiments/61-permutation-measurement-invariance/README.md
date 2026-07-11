@@ -7,26 +7,36 @@ estimation input, refits the unrestricted model, and recomputes the statistic.
 
 ## Target Design
 
-The next experiment revision is deliberately fractional. It separates the
-primary continuous claim from the ordinal validity gate rather than crossing
-every dimension in one uninformative large grid.
+The next experiment revision is a continuous-data main study. It follows the
+two-group measurement-invariance design spine used by Brace and Savalei (2017)
+and the repository's FIML-FMG work, rather than crossing arbitrary CFA sizes.
 
 | Module | Data generation | CFA size | Invariance steps | Purpose |
 | --- | --- | --- | --- | --- |
-| Continuous primary | Normal; Pearson independent generator | 1, 3, 5 factors | Metric, scalar, strict | Main size and power comparison |
-| Ordinal feasibility | Grouped ordinal-correlation simulator, 4 categories | 1, 3 factors | Threshold/loading invariance | Test whether raw-label permutation is empirically viable |
+| Continuous main study | Normal; Pearson IG moderate/severe nonnormality | Two correlated factors; `p = 8,16` indicators | Metric, scalar, strict | Main size and power comparison |
 
-The target continuous designs use balanced and unbalanced group sizes plus heterogeneous
-group factor/residual scales. The exact-exchangeability control is retained to
-separate a resampling implementation failure from failure under the
-heterogeneous invariant null. The independent-generator condition replaces the
-old multivariate-t condition: it preserves the target covariance while varying
-the marginal mechanism through magmaan's calibrated Pearson IG generator.
+The main grid uses total sample sizes `N = 220, 440, 1760` and group-size ratios
+`1:1` and `1:3`. The null has equal loadings, intercepts, and residual variances
+but unequal group factor variances and latent means, so it preserves the
+non-exchangeable nuisance structure relevant to the permutation claim. The
+exact-exchangeability control is retained at the reference `p = 8`, `N = 440`
+cell to separate a resampling implementation failure from failure under the
+heterogeneous invariant null.
 
-The continuous alternative is calibrated to comparable sandwich-Wald signal in
-the normal `n = (250, 250)` reference cells. Raw and implied standardized
-loading departures are reported; equal standardized departures were rejected
-because they generated radically unequal power for a raw-loading test.
+The nonnormal conditions are the calibrated Pearson independent generator at
+the moderate `(skew, excess kurtosis) = (2, 7)` and severe `(3, 21)` settings
+used by the repository's FIML-FMG studies. They replace the old multivariate-t
+condition: t is symmetric and is a weak stressor for several robust difference
+tests, while the IG generator preserves each group's target covariance and
+varies the marginal mechanism in a literature-recognized way.
+
+Each metric, scalar, and strict alternative is calibrated separately to 50%
+studentized-permutation power in the normal, balanced, `N = 440` reference
+cell. The calibrated population departure is then held fixed over sample size,
+allocation, indicator count, and generator conditions. This is the repository's
+existing power-calibration convention; it is preferable to a fixed raw shift
+and serves the same comparability role as the RMSEA-anchored alternatives in
+Brace and Savalei's design.
 
 ## Target Test Definitions
 
@@ -42,14 +52,8 @@ The primary comparison in each continuous cell will be ordinary LRT, robust nest
 LRT, model-based Wald, sandwich Wald, studentized permutation Wald, and the
 raw-contrast permutation negative control.
 
-The ordinal module will use theta-DWLS and rebuild thresholds, polychorics, NACOV, weights,
-and fits after every label permutation. This arm is an empirical feasibility
-gate only: Chung--Romano asymptotic pivotality has not yet been established for
-the pooled ordinal moment estimator. It does not enter a main paper claim
-unless its heterogeneous-null controls pass.
-
 ## Target Report
 
 The report will present a design manifest, size tables, power tables, fit failure
-rates, and the fraction of usable permutations. It does not collapse ordinal
-and continuous results into one table or hide invalid permutation draws.
+rates, and the fraction of usable permutations. It will show the three ordered
+invariance steps separately and will not hide invalid permutation draws.
