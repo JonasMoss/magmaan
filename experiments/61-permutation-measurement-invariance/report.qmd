@@ -13,7 +13,8 @@ execute:
 
 ```{r setup}
 choose_run <- function(study) {
-  candidates <- file.path("results", paste0(study, "-", c("full", "modal", "smoke")))
+  candidates <- file.path(
+    "results", paste0(study, "-", c("full", "sensitivity", "modal", "smoke")))
   found <- candidates[file.exists(file.path(candidates, "summary.csv"))]
   if (!length(found)) return(NULL)
   path <- found[[1L]]
@@ -61,9 +62,13 @@ case: raw exchangeability is unnecessary if the recomputed statistic has a
 common limiting null law.
 
 The comparison includes ordinary and robust/scaled likelihood-ratio tests,
-model-based multivariate Wald tests, sandwich Wald tests, the studentized
-permutation Wald test, and a raw-contrast permutation negative control. In the
-unbalanced study, the model-based Wald is Chen and Chao's MWT restriction test.
+model-based multivariate Wald tests, sandwich Wald tests, the semTools-style
+ordinary permutation likelihood-ratio test, the studentized permutation Wald
+test, and a raw-contrast permutation negative control. In the unbalanced study,
+the model-based Wald is Chen and Chao's MWT restriction test. The ordinary
+permutation LRT reproduces the established continuous-data comparison
+[@jorgensen2018]; robust/scaled nested tests remain analytical comparators and
+are not recalculated inside every permutation.
 
 ## Executed design
 
@@ -112,9 +117,10 @@ knitr::kable(timing, row.names = FALSE,
              caption = "Median per-replication stage timings across selected cells.")
 ```
 
-Invalid permutation fits are retained. `summary.csv` reports the median usable
-permutation fraction and method-specific usable replication counts; any
-observed-fit errors are also written to `failures.csv`.
+Invalid permutation fits are retained separately for the H1-based Wald and
+raw-contrast statistics and the H0/H1 permutation LRT. `summary.csv` reports
+both usable-permutation fractions and method-specific usable replication
+counts; any observed-fit errors are also written to `failures.csv`.
 
 ## Rejection summaries
 
@@ -123,7 +129,9 @@ cols <- c("study", "cell_id", "p", "n1", "n2", "generator", "step", "truth",
           "null_kind", "pattern", "affected_fraction", "reps", "observed_ok",
           "reject_lrt", "reject_robust_lrt", "reject_model_wald",
           "reject_sandwich_wald", "reject_permutation_studentized",
-          "reject_permutation_raw", "median_valid_permutation_fraction")
+          "reject_permutation_lrt", "reject_permutation_raw",
+          "median_valid_permutation_fraction",
+          "median_valid_permutation_lrt_fraction")
 tab <- all_summary[, intersect(cols, names(all_summary)), drop = FALSE]
 names(tab) <- gsub("_", " ", names(tab), fixed = TRUE)
 numeric <- vapply(tab, is.numeric, logical(1))
@@ -152,6 +160,11 @@ chart, and strict versus scalar.
 - The asymptotic argument requires regular estimation under the pooled mixture.
   Exchangeable controls diagnose implementation errors, while the heterogeneous
   nulls test the scientifically relevant departure from raw exchangeability.
+- The ordinary permutation LRT is intentionally not studentized. It is exact in
+  the exchangeable controls and is the literature baseline, but it does not
+  inherit the Chung--Romano guarantee under heterogeneous nuisance
+  distributions. That contrast with the sandwich-studentized permutation Wald
+  is a principal experiment outcome.
 
 ## Reproduce
 
@@ -160,5 +173,6 @@ Rscript run_experiment.R --smoke
 Rscript calibrate_alternatives.R --smoke
 Rscript run_experiment.R --study reference --modal --cores 10
 Rscript run_experiment.R --study imbalance --modal --cores 10
+Rscript run_experiment.R --sensitivity --cores 10
 quarto render report.qmd
 ```

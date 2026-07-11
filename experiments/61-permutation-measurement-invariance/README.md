@@ -3,7 +3,10 @@
 Experiment 61 evaluates fully recomputed, studentized Wald permutation tests
 for multi-group CFA measurement invariance. Every permutation relabels cases,
 refits the unrestricted model for the tested invariance step, rebuilds the
-empirical sandwich covariance, and recomputes the Wald statistic.
+empirical sandwich covariance, and recomputes the Wald statistic. The same
+permutation also fits the constrained model and records the ordinary NT
+likelihood-ratio difference, reproducing the `semTools::permuteMeasEq()`
+comparison without putting robust nested-test corrections inside the loop.
 
 ## Studies
 
@@ -30,7 +33,9 @@ Both modules report the adjacent metric/configural, scalar/metric, and
 strict/scalar tests. Configural is an internal reference, not a global-fit
 outcome. The Chen--Chao MWT is the model-based multivariate Wald column in the
 unbalanced module; the experiment adds sandwich and permutation-studentized
-versions of the same restriction vector.
+versions of the same restriction vector. The ordinary permutation LRT is the
+established SEM baseline; the studentized permutation Wald is the proposed
+asymptotically pivotal method under heterogeneous nuisance distributions.
 
 ## Run profiles
 
@@ -45,6 +50,10 @@ Rscript run_experiment.R --study imbalance --smoke
 # Representative intermediate grids.
 Rscript run_experiment.R --study reference --modal --cores 10
 Rscript run_experiment.R --study imbalance --modal --cores 10
+
+# High-precision reference-law null slice: normal/IG, p=8, N=440,
+# both allocations, all steps, heterogeneous and exchangeable nulls.
+Rscript run_experiment.R --sensitivity --cores 10
 
 # Paper grids. Use calibrated deltas for the reference alternatives.
 Rscript calibrate_alternatives.R --reps 200 --permutations 199 --cores 10
@@ -86,5 +95,6 @@ Each output contains:
 - `summary.csv`: rejection, availability, failure, and timing summaries;
 - `failures.csv`: observed-fit failures, when present.
 
-Render `report.qmd` after either smoke. It selects full, then modal, then smoke
-results independently for each study and labels the selected profiles.
+Render `report.qmd` after either smoke. It selects full, sensitivity, modal,
+then smoke results independently for each study and labels the selected
+profiles.
