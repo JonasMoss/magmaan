@@ -10,8 +10,8 @@ bottlenecked on laptops and paid cloud (Modal); Saga removes that ceiling and th
 
 ## Files
 
-- `proposal-draft.md` - the application narrative (summary, science, methods,
-  resource justification, software/storage, track record). Paste/adapt into MAS.
+- `proposal.qmd` - the application narrative (compiles to `proposal.pdf` via
+  `quarto render proposal.qmd`). Paste/adapt into the MAS fields.
 - `compute-budget.md` - bottom-up core-hour estimate, anchored on the one grid
   we have actually timed (experiment 61). Refine the per-paper rows with the
   paper leads before submitting.

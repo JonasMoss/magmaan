@@ -1,0 +1,111 @@
+---
+title: "SEM-SIM: High-Throughput Simulation for Structural Equation Modeling Methods"
+subtitle: "Application for computing resources on Saga (Sigma2 / NRIS)"
+author: "Jonas Moss, Associate Professor, BI Norwegian Business School (jonas.moss@bi.no)"
+date: last-modified
+format:
+  pdf:
+    geometry: margin=1in
+    fontsize: 11pt
+    colorlinks: true
+    number-sections: false
+    pdf-engine: pdflatex
+---
+
+## Summary
+
+We develop and validate new estimators and test statistics for structural
+equation models (SEM). The hard part of these methods is almost always a
+reference distribution or a finite-sample property that only large-scale
+simulation can establish: weighted chi-square eigenvalue laws, non-regular
+second-order limits, misspecification bias that does not vanish with sample size,
+and permutation calibration. These studies were impractical in standard R
+tooling. We run them on `magmaan`, a C++23 SEM engine that reproduces the
+reference software (lavaan) to documented tolerance and, for several methods, is
+non-iterative or spectrum-cheap. A replicate that costs a multi-second iterative
+fit in R becomes milliseconds, and resampling schemes that need many refits per
+replicate become feasible. The work is embarrassingly parallel, one independent
+fit per (condition, replicate) cell, and maps directly onto Slurm array jobs.
+
+## Why the capability is new
+
+`magmaan` changes the per-replicate cost in three ways this program exploits. It
+is a compiled, lavaan-faithful engine, so full grids run one to two orders of
+magnitude faster. Its closed-form (Guttman) CFA and reliability estimators are
+non-iterative, so per-replicate cost collapses and resampling becomes affordable.
+Its eigenvalue-based robust tests return the full limiting spectrum per fit at low
+cost, which is the object several of these studies must simulate. The bottleneck
+moves from "can we run this at all" to raw CPU throughput.
+
+## Flagship studies
+
+Four representative studies, each embarrassingly parallel.
+
+**1. Robust standard errors under misspecification (the anchor).** Least-squares
+SEM estimators (DWLS, WLS, GLS, ADF, and two-stage estimators for missing data)
+minimise a quadratic form whose weight is estimated from the same data, and the
+standard robust standard error treats that weight as fixed, so its coverage stays
+wrong as the sample grows under misspecification. We derive and validate the
+complete sandwich that restores it. The validation is a coverage program across
+estimators, misspecification types, and sample sizes, and it extends directly to
+measurement-invariance difference testing, where misspecified nuisance structure
+is the rule rather than the exception.
+
+**2. Measurement invariance with missing, non-normal data.** Robust chi-square
+difference tests correct only low-order moments of the non-normal reference law,
+while spectrum-based tests use the limiting eigenvalues directly. We test whether
+the spectrum tests, and a studentized permutation alternative, improve invariance
+inference under incomplete non-normal data, using direct full-information maximum
+likelihood (FIML). FIML across many non-normality, missingness, and invariance
+conditions, with permutation resampling per replicate, is the central
+previously-infeasible case and the heaviest single study.
+
+**3. Reference laws for ordinal robust tests.** For ordinal SEM fit by polychoric
+diagonally weighted least squares (WLSMV), even correctly specified data give a
+weighted chi-square goodness-of-fit and difference law, because the diagonal
+weight is not the efficient one. We characterise the eigenvalue correction across
+category counts, threshold shapes, and model sizes, a large and slow
+categorical-estimation study.
+
+**4. Inference for non-iterative CFA.** Closed-form CFA maps the sample covariance
+directly to parameters and never fails to converge, but has lacked a full
+inferential apparatus, which we supply by the delta method with a fourth-moment
+matrix. Validating the standard errors, goodness-of-fit, and difference tests
+needs large size and coverage grids that the convergence-free estimator makes
+painless to run at scale.
+
+## Broader relevance
+
+These four are a subset. The recurring need behind `magmaan` is broader: any
+resampling-heavy inference (bootstrap intervals, permutation tests, jackknife and
+cross-validation for case influence) and any robust or spectrum-based test whose
+reference law must be simulated. Both are core to `magmaan` and both are
+simulation-bound, so studies of exactly this shape recur across our work. We
+therefore apply for the program, not a single study. Additional active studies
+drawing on the same allocation include closed-form multidimensional reliability,
+native maximum likelihood for composite SEM, separable least squares for
+continuous and ordinal SEM, non-regular reliability contrasts, and polychoric
+SEM.
+
+## Resources, software, readiness
+
+The compute request is dominated by the FIML, ordinal, and permutation work; a
+bottom-up estimate anchored on one measured grid places the first-period request
+in the **120 to 150 kCPU-hour** band. Storage is modest, a few hundred GB of NIRD
+project storage, since inputs are checked-in JSON fixtures and outputs are
+rectangular CSV files. `magmaan` already builds on Saga: it is C++23 (GCC 13 or
+newer) with a small R interface, third-party code is vendored, and NLopt is
+resolved through the `nloptr` CRAN package, so there is no exotic dependency
+chain. Runs are reproducible, with deterministic per-cell seeding, pinned package
+versions, and stable result schemas.
+
+## Principal investigator, funding, track record
+
+Principal investigator: Jonas Moss, Associate Professor, BI Norwegian Business
+School (jonas.moss@bi.no).
+
+Funding source: *to be completed (mandatory MAS field).*
+
+The `magmaan` repository already holds a large body of validated simulation
+experiments and lavaan-parity checks, direct evidence of an efficient working
+pipeline.

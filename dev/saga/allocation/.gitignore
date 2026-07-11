@@ -1,0 +1,4 @@
+# Quarto build artifacts (the .qmd is the tracked source)
+/.quarto/
+proposal.pdf
+proposal_files/
