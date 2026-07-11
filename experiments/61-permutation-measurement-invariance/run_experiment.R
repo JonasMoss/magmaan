@@ -1,452 +1,365 @@
 #!/usr/bin/env Rscript
-# Experiment 61: studentized permutation tests for continuous metric invariance.
-#
-# This is the feasibility gate for a measurement-invariance permutation paper.
-# It compares group-label permutation distributions of a fully recomputed
-# sandwich-Wald statistic with ML LRT and chi-square Wald calibrations. The
-# continuous two-group metric test is deliberately first: its pooled covariance
-# preserves the common-loading CFA form when factor and residual variances differ.
+# Experiment 61: fully refitted studentized permutation Wald tests for
+# measurement invariance. Two checkpointed studies share the same statistic:
+# the two-factor reference-law design and the Chen--Chao imbalance design.
 
+.support_helpers <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args, value = TRUE)
+  script <- if (length(file_arg)) {
+    normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else normalizePath("run_experiment.R", mustWork = FALSE)
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
+}
+source(.support_helpers())
+rm(.support_helpers)
 suppressWarnings(suppressMessages(library(magmaan)))
-source(file.path(
-  dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
-  "..", "_support", "R", "helpers.R"
-))
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+source(experiment_path("R", "main_study.R"))
+source(experiment_path("R", "simulation.R"))
+source(experiment_path("R", "inference.R"))
 
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
-    "Tests continuous two-group metric invariance with an ML LRT, model and\n",
-    "sandwich Wald tests, and fully recomputed raw-label permutation tests.\n\n",
-    "Options:\n",
-    "  --smoke             Cheap H0 check (10 reps, 19 permutations). Default.\n",
-    "  --full              Full distribution x sample-size x scenario grid.\n",
-    "  --reps N            Replications per cell in full mode. Default: 1000.\n",
-    "  --permutations B    Random label permutations per replication. Default: 499.\n",
-    "  --n LIST            Group-size pairs, e.g. 100:250,250:250.\n",
-    "                      Default: 100:250,250:250.\n",
-    "  --models L          Subset of one_factor,three_factor. Default: one_factor.\n",
-    "  --heterogeneity L   Subset of standard,strong. Default: standard.\n",
-    "  --distributions L   Subset of normal,t5. Default: both.\n",
-    "  --scenarios L       Subset of exchangeable,invariant,loading_violation.\n",
-    "                      Default: invariant,loading_violation.\n",
-    "  --alpha X           Rejection level. Default: 0.05.\n",
-    "  --cores N           mclapply cores. Default: detectCores()-1.\n",
-    "  --seed-base N       Base RNG seed. Default: 20260710.\n",
-    "  --results-dir PATH  Output directory. Default: results.\n",
-    "  --help              Show this help.\n",
-    sep = ""
-  )
+    "Profiles:\n",
+    "  --smoke             Both study smokes (default): 1 rep, 9 permutations.\n",
+    "  --modal             Representative design: 100 reps, 99 permutations.\n",
+    "  --full              Paper grid: 1000 reps, 499 permutations.\n\n",
+    "Study and size:\n",
+    "  --study S           reference, imbalance, or both. Default: both.\n",
+    "  --reps N            Override replications per cell.\n",
+    "  --permutations B    Override random permutations per replication.\n",
+    "  --chunk-size N      Reps written per checkpoint. Default: 1/5/10.\n",
+    "  --cores N           Parallel replication fits.\n",
+    "  --seed-base N       Base seed. Default: 20260711.\n",
+    "  --results-dir PATH  Output root. Default: results.\n\n",
+    "Cell filters (comma-separated):\n",
+    "  --cells L           Stable cell IDs.\n",
+    "  --generators L      normal,ig1,ig2,ordinal_*.\n",
+    "  --steps L           metric,scalar,strict.\n",
+    "  --truth L           null,alternative.\n",
+    "  --allocations L     1:1,1:3,unbalanced,matched_balanced.\n",
+    "  --patterns L        none,small,large,mixed,nonuniform.\n",
+    "  --max-cells N       Run the first N filtered cells.\n\n",
+    "  --shard-index J     Run shard J (one-based).\n",
+    "  --shard-count K     Partition stable cell IDs over K jobs.\n\n",
+    "Alternative calibration overrides (reference study):\n",
+    "  --calibration-file PATH  CSV with step and delta columns.\n",
+    "  --delta-metric X --delta-scalar X --delta-strict X\n\n",
+    "Completed chunks are reused automatically. Use a new --results-dir for a\n",
+    "different configuration. Each study writes under <root>/<study>-<mode>/.\n",
+    sep = "")
 }
 
-parse_group_sizes <- function(x) {
-  out <- strsplit(parse_csv_arg(x), ":", fixed = TRUE)
-  ans <- lapply(out, function(z) {
-    if (length(z) != 2L) stop("each --n entry must be n1:n2", call. = FALSE)
-    n <- as.integer(z)
-    if (anyNA(n) || any(n < 20L)) stop("group sizes must be integers >= 20", call. = FALSE)
-    n
-  })
-  if (!length(ans)) stop("--n must contain at least one n1:n2 pair", call. = FALSE)
-  ans
+parse_args <- function(args) {
+  out <- list(study = "both", mode = "smoke", reps = NULL, permutations = NULL,
+              chunk_size = NULL, cores = max(1L, parallel::detectCores() - 1L),
+              seed_base = 20260711, results_dir = experiment_path("results"), cells = NULL,
+              generators = NULL, steps = NULL, truth = NULL, allocations = NULL,
+              patterns = NULL, max_cells = NULL,
+              shard_index = 1L, shard_count = 1L,
+              calibration_file = NULL,
+              delta_metric = NULL, delta_scalar = NULL, delta_strict = NULL)
+  i <- 1L
+  take <- function() { i <<- i + 1L; args[[i]] }
+  while (i <= length(args)) {
+    a <- args[[i]]
+    if (a %in% c("-h", "--help")) { usage(); quit(save = "no", status = 0L) }
+    else if (a == "--smoke") out$mode <- "smoke"
+    else if (a == "--modal") out$mode <- "modal"
+    else if (a == "--full") out$mode <- "full"
+    else if (a == "--study") out$study <- take()
+    else if (a == "--reps") out$reps <- as.integer(take())
+    else if (a == "--permutations") out$permutations <- as.integer(take())
+    else if (a == "--chunk-size") out$chunk_size <- as.integer(take())
+    else if (a == "--cores") out$cores <- as.integer(take())
+    else if (a == "--seed-base") out$seed_base <- as.numeric(take())
+    else if (a == "--results-dir") out$results_dir <- take()
+    else if (a == "--cells") out$cells <- as.integer(parse_csv_arg(take()))
+    else if (a == "--generators") out$generators <- parse_csv_arg(take())
+    else if (a == "--steps") out$steps <- parse_csv_arg(take())
+    else if (a == "--truth") out$truth <- parse_csv_arg(take())
+    else if (a == "--allocations") out$allocations <- parse_csv_arg(take())
+    else if (a == "--patterns") out$patterns <- parse_csv_arg(take())
+    else if (a == "--max-cells") out$max_cells <- as.integer(take())
+    else if (a == "--shard-index") out$shard_index <- as.integer(take())
+    else if (a == "--shard-count") out$shard_count <- as.integer(take())
+    else if (a == "--calibration-file") out$calibration_file <- take()
+    else if (a == "--delta-metric") out$delta_metric <- as.numeric(take())
+    else if (a == "--delta-scalar") out$delta_scalar <- as.numeric(take())
+    else if (a == "--delta-strict") out$delta_strict <- as.numeric(take())
+    else stop("unknown argument: ", a, call. = FALSE)
+    i <- i + 1L
+  }
+  if (!out$study %in% c("reference", "imbalance", "both"))
+    stop("--study must be reference, imbalance, or both", call. = FALSE)
+  defaults <- switch(out$mode,
+    smoke = c(reps = 1L, permutations = 9L, chunk_size = 1L),
+    modal = c(reps = 100L, permutations = 99L, chunk_size = 5L),
+    full = c(reps = 1000L, permutations = 499L, chunk_size = 10L))
+  for (nm in names(defaults)) if (is.null(out[[nm]])) out[[nm]] <- defaults[[nm]]
+  numeric_positive <- c("reps", "permutations", "chunk_size", "cores")
+  if (any(vapply(out[numeric_positive], function(x) is.na(x) || x < 1L, logical(1))))
+    stop("replications, permutations, chunk size, and cores must be positive",
+         call. = FALSE)
+  if (is.na(out$shard_count) || is.na(out$shard_index) || out$shard_count < 1L ||
+      out$shard_index < 1L || out$shard_index > out$shard_count)
+    stop("shard index must be in 1..shard count", call. = FALSE)
+  out
 }
 
-opts <- list(
-  mode = "smoke", reps = 1000L, permutations = 499L,
-  sizes = list(c(100L, 250L), c(250L, 250L)),
-  models = "one_factor", heterogeneity = "standard",
-  distributions = c("normal", "t5"),
-  scenarios = c("invariant", "loading_violation"),
-  alpha = 0.05,
-  cores = max(1L, parallel::detectCores() - 1L),
-  seed_base = 20260710L, results_dir = NULL, explicit = character()
-)
+cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 
-args <- commandArgs(trailingOnly = TRUE)
-i <- 1L
-take <- function() { i <<- i + 1L; args[[i]] }
-while (i <= length(args)) {
-  a <- args[[i]]
-  if (a == "--help") { usage(); quit(status = 0L) }
-  else if (a == "--smoke") opts$mode <- "smoke"
-  else if (a == "--full") opts$mode <- "full"
-  else if (a == "--reps") { opts$reps <- as.integer(take()); opts$explicit <- c(opts$explicit, "reps") }
-  else if (a == "--permutations") { opts$permutations <- as.integer(take()); opts$explicit <- c(opts$explicit, "permutations") }
-  else if (a == "--n") { opts$sizes <- parse_group_sizes(take()); opts$explicit <- c(opts$explicit, "sizes") }
-  else if (a == "--models") { opts$models <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "models") }
-  else if (a == "--heterogeneity") { opts$heterogeneity <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "heterogeneity") }
-  else if (a == "--distributions") { opts$distributions <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "distributions") }
-  else if (a == "--scenarios") { opts$scenarios <- parse_csv_arg(take()); opts$explicit <- c(opts$explicit, "scenarios") }
-  else if (a == "--alpha") opts$alpha <- as.numeric(take())
-  else if (a == "--cores") opts$cores <- as.integer(take())
-  else if (a == "--seed-base") opts$seed_base <- as.integer(take())
-  else if (a == "--results-dir") opts$results_dir <- take()
-  else stop("unknown argument: ", a, call. = FALSE)
-  i <- i + 1L
-}
-if (is.na(opts$reps) || opts$reps < 1L) stop("--reps must be positive", call. = FALSE)
-if (is.na(opts$permutations) || opts$permutations < 1L) stop("--permutations must be positive", call. = FALSE)
-if (!is.finite(opts$alpha) || opts$alpha <= 0 || opts$alpha >= 1) stop("--alpha must be in (0, 1)", call. = FALSE)
-bad <- setdiff(opts$models, c("one_factor", "three_factor"))
-if (length(bad)) stop("unknown models: ", paste(bad, collapse = ","), call. = FALSE)
-bad <- setdiff(opts$heterogeneity, c("standard", "strong"))
-if (length(bad)) stop("unknown heterogeneity levels: ", paste(bad, collapse = ","), call. = FALSE)
-bad <- setdiff(opts$distributions, c("normal", "t5"))
-if (length(bad)) stop("unknown distributions: ", paste(bad, collapse = ","), call. = FALSE)
-bad <- setdiff(opts$scenarios, c("exchangeable", "invariant", "loading_violation"))
-if (length(bad)) stop("unknown scenarios: ", paste(bad, collapse = ","), call. = FALSE)
-
-if (opts$mode == "smoke") {
-  if (!"reps" %in% opts$explicit) opts$reps <- 10L
-  if (!"permutations" %in% opts$explicit) opts$permutations <- 19L
-  if (!"sizes" %in% opts$explicit) opts$sizes <- list(c(60L, 90L))
-  if (!"models" %in% opts$explicit) opts$models <- "one_factor"
-  if (!"heterogeneity" %in% opts$explicit) opts$heterogeneity <- "standard"
-  if (!"distributions" %in% opts$explicit) opts$distributions <- "normal"
-  if (!"scenarios" %in% opts$explicit) opts$scenarios <- "invariant"
-}
-results_path <- opts$results_dir %||% ensure_results_dir()
-dir.create(results_path, recursive = TRUE, showWarnings = FALSE)
-
-# Population builders. The exchangeable control makes both group distributions
-# identical, so its random label permutation is finite-sample valid for every
-# statistic. The invariant scenario instead holds the loadings fixed while
-# factor and residual variances differ between groups.
-make_phi <- function(variances, correlations) {
-  D <- diag(sqrt(variances))
-  D %*% correlations %*% D
+filter_cells <- function(cells, cfg) {
+  if (!is.null(cfg$cells)) cells <- cells[cells$cell_id %in% cfg$cells, ]
+  if (!is.null(cfg$generators)) cells <- cells[cells$generator %in% cfg$generators, ]
+  if (!is.null(cfg$steps)) cells <- cells[cells$step %in% cfg$steps, ]
+  if (!is.null(cfg$truth)) cells <- cells[cells$truth %in% cfg$truth, ]
+  if (!is.null(cfg$allocations)) cells <- cells[cells$allocation %in% cfg$allocations, ]
+  if (!is.null(cfg$patterns)) cells <- cells[cells$pattern %in% cfg$patterns, ]
+  if (!is.null(cfg$max_cells)) cells <- head(cells, cfg$max_cells)
+  if (!nrow(cells)) stop("cell filters selected no rows", call. = FALSE)
+  cells
 }
 
-population_spec <- function(model_name, heterogeneity, scenario) {
-  if (identical(model_name, "one_factor")) {
-    ov <- paste0("x", 1:6)
-    model <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
-    Lambda1 <- matrix(c(1.00, 0.82, 0.74, 0.93, 0.68, 0.88), ncol = 1L)
-    Theta1 <- c(0.42, 0.48, 0.56, 0.44, 0.60, 0.50)
-    loading_rows <- data.frame(lhs = "f", rhs = ov[-1L], stringsAsFactors = FALSE)
-    if (identical(heterogeneity, "strong")) {
-      Phi2 <- matrix(2.40, 1L, 1L)
-      Theta2 <- c(0.15, 0.95, 0.25, 1.05, 0.30, 0.90)
-    } else {
-      Phi2 <- matrix(1.65, 1L, 1L)
-      Theta2 <- c(0.25, 0.73, 0.37, 0.78, 0.45, 0.66)
+apply_delta_overrides <- function(cells, cfg) {
+  if (!is.null(cfg$calibration_file) && any(cells$study == "reference")) {
+    calibration <- read.csv(cfg$calibration_file, stringsAsFactors = FALSE)
+    if (!all(c("step", "delta") %in% names(calibration)))
+      stop("--calibration-file needs step and delta columns", call. = FALSE)
+    for (i in seq_len(nrow(calibration))) {
+      cells$delta[cells$step == calibration$step[[i]] &
+                    cells$truth == "alternative"] <- calibration$delta[[i]]
     }
-    Phi1 <- matrix(1.00, 1L, 1L)
+  }
+  for (step in c("metric", "scalar", "strict")) {
+    value <- cfg[[paste0("delta_", step)]]
+    if (!is.null(value)) cells$delta[cells$step == step & cells$truth == "alternative"] <- value
+  }
+  cells
+}
+
+cell_signature <- function(cells) {
+  fields <- c("cell_id", "study", "p", "n1", "n2", "generator", "step", "truth",
+              "null_kind", "pattern", "affected_fraction", "delta")
+  values <- cells[, fields, drop = FALSE]
+  values[] <- lapply(values, function(x) {
+    x <- as.character(x)
+    x[is.na(x)] <- ""
+    x
+  })
+  apply(values, 1L, paste, collapse = "|")
+}
+
+write_or_validate_manifest <- function(cells, path, cfg, study) {
+  manifest_path <- file.path(path, "manifest.csv")
+  config_path <- file.path(path, "run_config.csv")
+  config <- data.frame(
+    study = study, mode = cfg$mode, reps = cfg$reps,
+    permutations = cfg$permutations, chunk_size = cfg$chunk_size,
+    seed_base = cfg$seed_base, stringsAsFactors = FALSE)
+  if (file.exists(manifest_path) || file.exists(config_path)) {
+    if (!file.exists(manifest_path) || !file.exists(config_path))
+      stop("incomplete existing run metadata in ", path, call. = FALSE)
+    old_cells <- read.csv(manifest_path, stringsAsFactors = FALSE,
+                          check.names = FALSE)
+    old_config <- read.csv(config_path, stringsAsFactors = FALSE,
+                           check.names = FALSE)
+    if (!identical(unname(cell_signature(old_cells)),
+                   unname(cell_signature(cells))) ||
+        !identical(unname(as.character(old_config[1L, names(config)])),
+                   unname(as.character(config[1L, names(config)])))) {
+      stop("existing output configuration differs; choose a new --results-dir: ",
+           path, call. = FALSE)
+    }
   } else {
-    ov <- paste0("x", 1:9)
-    model <- paste(
-      "f1 =~ x1 + x2 + x3",
-      "f2 =~ x4 + x5 + x6",
-      "f3 =~ x7 + x8 + x9",
-      "f1 ~~ f2",
-      "f1 ~~ f3",
-      "f2 ~~ f3",
-      sep = "\n"
-    )
-    Lambda1 <- matrix(0, 9L, 3L)
-    Lambda1[1:3, 1] <- c(1.00, 0.82, 0.74)
-    Lambda1[4:6, 2] <- c(1.00, 0.78, 0.69)
-    Lambda1[7:9, 3] <- c(1.00, 0.86, 0.72)
-    Theta1 <- c(0.42, 0.48, 0.56, 0.46, 0.52, 0.60, 0.40, 0.50, 0.58)
-    loading_rows <- data.frame(
-      lhs = c("f1", "f1", "f2", "f2", "f3", "f3"),
-      rhs = c("x2", "x3", "x5", "x6", "x8", "x9"),
-      stringsAsFactors = FALSE
-    )
-    Phi1 <- make_phi(c(1.00, 1.10, 0.95),
-                     matrix(c(1, .30, .25, .30, 1, .35, .25, .35, 1), 3L, 3L))
-    if (identical(heterogeneity, "strong")) {
-      Phi2 <- make_phi(c(2.40, 0.80, 2.80),
-                       matrix(c(1, .45, .40, .45, 1, .30, .40, .30, 1), 3L, 3L))
-      Theta2 <- c(0.14, 0.95, 0.22, 0.18, 1.05, 0.30, 0.12, 0.92, 0.24)
+    write_csv(cells, manifest_path)
+    write_csv(config, config_path)
+  }
+}
+
+replication_seed <- function(cfg, study, cell_id, rep_id) {
+  study_offset <- if (study == "reference") 0 else 500000000
+  cfg$seed_base + study_offset + cell_id * 1000003 + rep_id * 1009
+}
+
+decorate_rows <- function(rows, cell) {
+  fields <- names(cell)
+  for (nm in fields) rows[[nm]] <- cell[[nm]][[1L]]
+  rows
+}
+
+sampler_cache <- new.env(parent = emptyenv())
+
+run_cell <- function(cell, cfg, raw_dir) {
+  cell_dir <- file.path(raw_dir, sprintf("cell_%04d", cell$cell_id[[1L]]))
+  dir.create(cell_dir, recursive = TRUE, showWarnings = FALSE)
+  existing <- list.files(cell_dir, pattern = "^chunk_[0-9]+_[0-9]+\\.csv$",
+                         full.names = TRUE)
+  completed <- integer()
+  if (length(existing)) {
+    completed <- unique(unlist(lapply(existing, function(f)
+      read.csv(f, stringsAsFactors = FALSE)$rep), use.names = FALSE))
+  }
+  remaining <- setdiff(seq_len(cfg$reps), completed)
+  if (!length(remaining)) return(invisible(length(completed)))
+
+  pop <- population_for_cell(cell)
+  setup_started <- proc.time()[["elapsed"]]
+  cache_key <- sampler_cache_key(pop, cell)
+  if (exists(cache_key, envir = sampler_cache, inherits = FALSE)) {
+    sampler <- get(cache_key, envir = sampler_cache, inherits = FALSE)
+  } else {
+    sampler <- tryCatch(calibrate_cell_sampler(pop, cell), error = function(e) e)
+    if (!inherits(sampler, "error")) assign(cache_key, sampler, envir = sampler_cache)
+  }
+  setup_seconds <- proc.time()[["elapsed"]] - setup_started
+  chunks <- split(remaining, ceiling(seq_along(remaining) / cfg$chunk_size))
+  for (rep_ids in chunks) {
+    if (inherits(sampler, "error")) {
+      rows <- do.call(rbind, lapply(rep_ids, function(rep_id)
+        empty_replication(rep_id, paste0("simulation calibration: ",
+                                        conditionMessage(sampler)))))
     } else {
-      Phi2 <- make_phi(c(1.65, 1.30, 1.90),
-                       matrix(c(1, .20, .35, .20, 1, .18, .35, .18, 1), 3L, 3L))
-      Theta2 <- c(0.25, 0.73, 0.37, 0.35, 0.82, 0.46, 0.20, 0.76, 0.43)
+      simulations <- lapply(rep_ids, function(rep_id) {
+        seed <- replication_seed(cfg, cell$study[[1L]], cell$cell_id[[1L]], rep_id)
+        started <- proc.time()[["elapsed"]]
+        value <- tryCatch(draw_cell_replication(sampler, c(cell$n1, cell$n2), seed),
+                          error = function(e) e)
+        list(value = value, seconds = proc.time()[["elapsed"]] - started,
+             seed = seed)
+      })
+      worker <- function(j) {
+        rep_id <- rep_ids[[j]]
+        sim <- simulations[[j]]
+        if (inherits(sim$value, "error")) {
+          out <- empty_replication(rep_id,
+                                   paste0("simulation draw: ", conditionMessage(sim$value)))
+          out$simulation_seconds <- sim$seconds
+          return(out)
+        }
+        run_replication(rep_id, sim$value, pop, cell$step[[1L]], cfg$permutations,
+                        sim$seed + 700000001, sim$seconds)
+      }
+      if (cfg$cores > 1L && length(rep_ids) > 1L) {
+        rows <- parallel::mclapply(seq_along(rep_ids), worker,
+                                   mc.cores = min(cfg$cores, length(rep_ids)),
+                                   mc.preschedule = TRUE, mc.set.seed = FALSE)
+      } else rows <- lapply(seq_along(rep_ids), worker)
+      rows <- do.call(rbind, rows)
     }
+    rows$permutations_requested <- cfg$permutations
+    rows$setup_seconds <- setup_seconds
+    rows <- decorate_rows(rows, cell)
+    chunk_path <- file.path(cell_dir, sprintf("chunk_%05d_%05d.csv",
+                                              min(rep_ids), max(rep_ids)))
+    write_csv(rows, chunk_path)
+    message(sprintf("    cell %d: checkpoint reps %d-%d; observed %d/%d; median %.2fs/rep",
+                    cell$cell_id[[1L]], min(rep_ids), max(rep_ids),
+                    sum(rows$observed_ok), nrow(rows),
+                    stats::median(rows$total_seconds, na.rm = TRUE)))
   }
-
-  Lambda2 <- Lambda1
-  loading_shift_raw <- 0
-  loading_shift_standardized <- 0
-  if (identical(scenario, "loading_violation")) {
-    # The target is comparable local power, not equal observed-scale loadings.
-    # These pilot-calibrated raw shifts approximately equalize the sandwich-Wald
-    # noncentrality at normal n = (250, 250) across model/heterogeneity cells.
-    item <- 3L
-    loading_shift_raw <- if (identical(model_name, "one_factor")) {
-      if (identical(heterogeneity, "strong")) .18 else .20
-    } else {
-      if (identical(heterogeneity, "strong")) .21 else .20
-    }
-    lambda_std <- function(lambda, phi, theta) {
-      lambda * sqrt(phi) / sqrt(lambda^2 * phi + theta)
-    }
-    Lambda2[item, 1L] <- Lambda1[item, 1L] + loading_shift_raw
-    loading_shift_standardized <- lambda_std(Lambda2[item, 1L], Phi2[1L, 1L], Theta2[item]) -
-      lambda_std(Lambda1[item, 1L], Phi2[1L, 1L], Theta2[item])
-  }
-  if (identical(scenario, "exchangeable")) {
-    Phi2 <- Phi1
-    Theta2 <- Theta1
-  }
-  S1 <- Lambda1 %*% Phi1 %*% t(Lambda1) + diag(Theta1)
-  S2 <- Lambda2 %*% Phi2 %*% t(Lambda2) + diag(Theta2)
-  if (min(eigen(S1, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8 ||
-      min(eigen(S2, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8) {
-    stop("population covariance is not positive definite", call. = FALSE)
-  }
-  dimnames(S1) <- dimnames(S2) <- list(ov, ov)
-  list(name = model_name, heterogeneity = heterogeneity, model = model,
-       ov = ov, loading_rows = loading_rows, S1 = S1, S2 = S2,
-       loading_shift_raw = loading_shift_raw,
-       loading_shift_standardized = loading_shift_standardized)
+  invisible(cfg$reps)
 }
 
-draw_group <- function(n, Sigma, distribution, seed) {
-  set.seed(seed)
-  Z <- matrix(stats::rnorm(n * ncol(Sigma)), nrow = n) %*% chol(Sigma)
-  if (identical(distribution, "t5")) {
-    Z <- Z * sqrt(3 / stats::rchisq(n, df = 5))
-  }
-  colnames(Z) <- colnames(Sigma)
-  Z
-}
-
-stack_groups <- function(X1, X2) {
-  out <- as.data.frame(rbind(X1, X2))
-  out$group <- factor(rep(c("g1", "g2"), c(nrow(X1), nrow(X2))),
-                      levels = c("g1", "g2"))
-  out
-}
-
-fit_cfa <- function(X1, X2, population, metric = FALSE) {
-  magmaan::magmaan(
-    population$model, stack_groups(X1, X2), estimator = "ML", groups = "group",
-    group_equal = if (metric) "loadings" else NULL,
-    control = list(max_iter = 1000L, ftol = 1e-10, gtol = 1e-7)
-  )
-}
-
-metric_contrast <- function(fit, population) {
-  pt <- fit$partable
-  npar <- length(fit$theta)
-  R <- matrix(0, nrow = nrow(population$loading_rows), ncol = npar)
-  for (j in seq_len(nrow(population$loading_rows))) {
-    lhs <- population$loading_rows$lhs[[j]]
-    rhs <- population$loading_rows$rhs[[j]]
-    i1 <- which(pt$group == 1L & pt$lhs == lhs & pt$op == "=~" &
-                  pt$rhs == rhs & pt$free > 0L)
-    i2 <- which(pt$group == 2L & pt$lhs == lhs & pt$op == "=~" &
-                  pt$rhs == rhs & pt$free > 0L)
-    if (length(i1) != 1L || length(i2) != 1L) {
-      stop("could not locate free group-specific loading contrast for ", rhs,
-           call. = FALSE)
-    }
-    R[j, pt$free[[i2]]] <- 1
-    R[j, pt$free[[i1]]] <- -1
-  }
-  R
-}
-
-fit_statistics <- function(X1, X2, population, include_lrt = FALSE) {
-  fit <- tryCatch(fit_cfa(X1, X2, population), error = function(e) NULL)
-  if (is.null(fit)) return(NULL)
-  R <- tryCatch(metric_contrast(fit, population), error = function(e) NULL)
-  if (is.null(R)) return(NULL)
-  model_vcov <- tryCatch({
-    info <- core$inference_information_expected(fit)
-    core$inference_vcov_fit(info, fit)
-  }, error = function(e) NULL)
-  sandwich_vcov <- tryCatch(
-    core$infer_robust_se_raw_fit(fit, list(X1, X2), bread = "expected",
-                                  moments = "structured", cov = "empirical")$vcov,
-    error = function(e) NULL
-  )
-  if (is.null(model_vcov) || is.null(sandwich_vcov)) return(NULL)
-  w_model <- tryCatch(core$infer_wald_test_fit(fit, R, model_vcov)$chi2,
-                      error = function(e) NA_real_)
-  w_sandwich <- tryCatch(core$infer_wald_test_fit(fit, R, sandwich_vcov)$chi2,
-                         error = function(e) NA_real_)
-  d <- drop(R %*% fit$theta)
-  out <- list(
-    fit = fit, w_model = w_model, w_sandwich = w_sandwich,
-    raw = length(c(X1, X2)) * sum(d^2), df = nrow(R)
-  )
-  if (!include_lrt) return(out)
-
-  metric <- tryCatch(fit_cfa(X1, X2, population, metric = TRUE), error = function(e) NULL)
-  if (is.null(metric)) return(out)
-  n_total <- nrow(X1) + nrow(X2)
-  t_diff <- 2 * n_total * (metric$fmin - fit$fmin)
-  out$lrt_p <- stats::pchisq(t_diff, df = out$df, lower.tail = FALSE)
-  robust <- tryCatch(
-    magmaan::robust_nested_lrt(fit, metric, data = list(X1, X2),
-                               gamma = "empirical", method = "restriction_map"),
-    error = function(e) NULL
-  )
-  out$robust_lrt_p <- if (is.null(robust)) NA_real_ else robust$p_scaled
-  out
-}
-
-permutation_pvalues <- function(X1, X2, population, observed, permutations, seed) {
-  n1 <- nrow(X1)
-  pooled <- rbind(X1, X2)
-  set.seed(seed)
-  permuted <- replicate(permutations, sample.int(nrow(pooled)), simplify = FALSE)
-  draws <- lapply(permuted, function(index) {
-    fit_statistics(pooled[index[seq_len(n1)], , drop = FALSE],
-                   pooled[index[-seq_len(n1)], , drop = FALSE], population)
-  })
-  w <- vapply(draws, function(x) if (is.null(x)) NA_real_ else x$w_sandwich, numeric(1))
-  raw <- vapply(draws, function(x) if (is.null(x)) NA_real_ else x$raw, numeric(1))
-  valid_w <- w[is.finite(w)]
-  valid_raw <- raw[is.finite(raw)]
-  list(
-    p_studentized = if (length(valid_w)) (1 + sum(valid_w >= observed$w_sandwich)) / (1 + length(valid_w)) else NA_real_,
-    p_raw = if (length(valid_raw)) (1 + sum(valid_raw >= observed$raw)) / (1 + length(valid_raw)) else NA_real_,
-    n_studentized = length(valid_w), n_raw = length(valid_raw)
-  )
-}
-
-replication_record <- function(rep_id, converged = FALSE) {
-  data.frame(
-    rep = rep_id, converged = converged,
-    p_lrt = NA_real_, p_robust_lrt = NA_real_,
-    p_model_wald = NA_real_, p_sandwich_wald = NA_real_,
-    p_permutation_studentized = NA_real_, p_permutation_raw = NA_real_,
-    w_model = NA_real_, w_sandwich = NA_real_,
-    n_perm_studentized = NA_real_, n_perm_raw = NA_real_,
-    loading_shift_raw = NA_real_, loading_shift_standardized = NA_real_,
-    stringsAsFactors = FALSE
-  )
-}
-
-one_replication <- function(rep_id, population, n, distribution, seed) {
-  X1 <- draw_group(n[[1]], population$S1, distribution, seed + 11L)
-  X2 <- draw_group(n[[2]], population$S2, distribution, seed + 29L)
-  observed <- fit_statistics(X1, X2, population, include_lrt = TRUE)
-  if (is.null(observed)) {
-    return(replication_record(rep_id))
-  }
-  perm <- permutation_pvalues(X1, X2, population, observed, opts$permutations, seed + 101L)
-  out <- replication_record(rep_id, converged = TRUE)
-  scalar_or_na <- function(x) if (length(x) == 1L) as.numeric(x) else NA_real_
-  out$p_lrt <- scalar_or_na(observed$lrt_p)
-  out$p_robust_lrt <- scalar_or_na(observed$robust_lrt_p)
-  out$p_model_wald <- stats::pchisq(observed$w_model, df = observed$df, lower.tail = FALSE)
-  out$p_sandwich_wald <- stats::pchisq(observed$w_sandwich, df = observed$df, lower.tail = FALSE)
-  out$p_permutation_studentized <- perm$p_studentized
-  out$p_permutation_raw <- perm$p_raw
-  out$w_model <- observed$w_model
-  out$w_sandwich <- observed$w_sandwich
-  out$n_perm_studentized <- perm$n_studentized
-  out$n_perm_raw <- perm$n_raw
-  out$loading_shift_raw <- population$loading_shift_raw
-  out$loading_shift_standardized <- population$loading_shift_standardized
-  out
-}
-
-design <- do.call(rbind, lapply(opts$sizes, function(n) {
-  expand.grid(model = opts$models, heterogeneity = opts$heterogeneity,
-              distribution = opts$distributions, scenario = opts$scenarios,
-              n1 = n[[1]], n2 = n[[2]], stringsAsFactors = FALSE)
-}))
-# Heterogeneity has no meaning when the two populations are identical, so keep
-# one exact-exchangeability control per model/distribution/sample-size cell.
-if ("exchangeable" %in% opts$scenarios && length(opts$heterogeneity) > 1L) {
-  design <- design[design$scenario != "exchangeable" |
-                     design$heterogeneity == opts$heterogeneity[[1L]], , drop = FALSE]
-}
-design <- design[order(design$model, design$heterogeneity, design$distribution,
-                       design$scenario, design$n1, design$n2), ]
-message(sprintf("Grid: %d cells; reps=%d, permutations=%d, cores=%d",
-                nrow(design), opts$reps, opts$permutations, opts$cores))
-
-all_results <- vector("list", nrow(design))
-t0 <- proc.time()[["elapsed"]]
-for (cell in seq_len(nrow(design))) {
-  d <- design[cell, ]
-  population <- population_spec(d$model, d$heterogeneity, d$scenario)
-  seed_cell <- opts$seed_base + cell * 1000003L
-  cell_t0 <- proc.time()[["elapsed"]]
-  chunks <- split(seq_len(opts$reps),
-                  ceiling(seq_len(opts$reps) / min(50L, opts$reps)))
-  chunk_rows <- vector("list", length(chunks))
-  for (chunk_id in seq_along(chunks)) {
-    rep_ids <- chunks[[chunk_id]]
-    rows <- parallel::mclapply(rep_ids, function(rep_id) {
-      one_replication(rep_id, population, c(d$n1, d$n2), d$distribution,
-                      seed_cell + rep_id * 1009L)
-    }, mc.cores = opts$cores, mc.preschedule = TRUE)
-    chunk_rows[[chunk_id]] <- do.call(rbind, rows)
-    done <- sum(vapply(chunks[seq_len(chunk_id)], length, integer(1)))
-    cell_elapsed <- proc.time()[["elapsed"]] - cell_t0
-    cell_eta <- cell_elapsed / done * (opts$reps - done)
-    message(sprintf("    cell %d/%d: %d/%d reps (%.1fs elapsed, %.1fs cell ETA)",
-                    cell, nrow(design), done, opts$reps, cell_elapsed, cell_eta))
-  }
-  out <- do.call(rbind, chunk_rows)
-  out$model <- d$model
-  out$heterogeneity <- d$heterogeneity
-  out$distribution <- d$distribution
-  out$scenario <- d$scenario
-  out$n1 <- d$n1
-  out$n2 <- d$n2
-  all_results[[cell]] <- out
-  elapsed <- proc.time()[["elapsed"]] - t0
-  eta <- elapsed / cell * (nrow(design) - cell)
-  message(sprintf("  [%d/%d] %s/%s/%s/%s n=(%d,%d): %.1fs elapsed, %.1fs ETA",
-                  cell, nrow(design), d$model, d$heterogeneity,
-                  d$distribution, d$scenario, d$n1, d$n2,
-                  elapsed, eta))
-}
-replicate_results <- do.call(rbind, all_results)
-
-p_columns <- grep("^p_", names(replicate_results), value = TRUE)
-summary_rows <- lapply(split(replicate_results,
-                             interaction(replicate_results$model,
-                                         replicate_results$heterogeneity,
-                                         replicate_results$distribution,
-                                         replicate_results$scenario,
-                                         replicate_results$n1,
-                                         replicate_results$n2, drop = TRUE)), function(x) {
-  ans <- x[1L, c("model", "heterogeneity", "distribution", "scenario", "n1", "n2",
-                 "loading_shift_raw", "loading_shift_standardized"), drop = FALSE]
+summarize_cell <- function(files, alpha = .05) {
+  x <- do.call(rbind, lapply(files, read.csv, stringsAsFactors = FALSE,
+                            check.names = FALSE))
+  x <- x[order(x$rep), ]
+  p_columns <- grep("^p_", names(x), value = TRUE)
+  design_columns <- c("cell_id", "study", "p", "n_total", "n1", "n2",
+                      "allocation", "ratio", "generator", "data_type",
+                      "categories", "thresholds", "step", "truth", "null_kind",
+                      "pattern", "affected_fraction", "delta")
+  ans <- x[1L, design_columns, drop = FALSE]
   ans$reps <- nrow(x)
-  ans$converged <- sum(x$converged)
-  for (p_name in p_columns) {
-    usable <- x[[p_name]][is.finite(x[[p_name]])]
-    suffix <- sub("^p_", "", p_name)
-    ans[[paste0("reject_", suffix)]] <- if (length(usable)) mean(usable <= opts$alpha) else NA_real_
+  ans$observed_ok <- sum(x$observed_ok)
+  ans$failure_rate <- mean(!x$observed_ok)
+  for (nm in p_columns) {
+    usable <- x[[nm]][is.finite(x[[nm]])]
+    suffix <- sub("^p_", "", nm)
+    ans[[paste0("reject_", suffix)]] <- if (length(usable)) mean(usable <= alpha) else NA_real_
     ans[[paste0("n_", suffix)]] <- length(usable)
   }
-  ans$median_valid_permutations <- stats::median(x$n_perm_studentized, na.rm = TRUE)
+  ans$median_valid_permutation_fraction <-
+    stats::median(x$n_perm_studentized / x$permutations_requested, na.rm = TRUE)
+  ans$mean_setup_seconds <- mean(x$setup_seconds, na.rm = TRUE)
+  ans$median_simulation_seconds <- stats::median(x$simulation_seconds, na.rm = TRUE)
+  ans$median_observed_seconds <- stats::median(x$observed_seconds, na.rm = TRUE)
+  ans$median_permutation_seconds <- stats::median(x$permutation_seconds, na.rm = TRUE)
+  ans$median_total_seconds <- stats::median(x$total_seconds, na.rm = TRUE)
   ans
-})
-summary_results <- do.call(rbind, summary_rows)
+}
 
-raw_dir <- file.path(results_path, "raw")
-dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
-raw_path <- file.path(raw_dir, "replicate_results.csv")
-summary_path <- file.path(results_path, "summary.csv")
-write_csv(replicate_results, raw_path)
-write_csv(summary_results, summary_path)
-write_metadata(
-  file.path(results_path, "metadata.csv"),
-  values = list(
-    experiment = "61-permutation-measurement-invariance", mode = opts$mode,
-    reps = opts$reps, permutations = opts$permutations,
-    group_sizes = vapply(opts$sizes, function(x) paste(x, collapse = ":"), character(1)),
-    models = opts$models, heterogeneity = opts$heterogeneity,
-    distributions = opts$distributions, scenarios = opts$scenarios,
-    loading_violation_calibration = "pilot_sandwich_wald_ncp_normal_n250_250",
-    alpha = opts$alpha, seed_base = opts$seed_base, cores = opts$cores
-  ), packages = "magmaan"
-)
+run_study <- function(study, cfg) {
+  manifest_cells <- if (study == "reference") reference_cells(cfg$mode) else imbalance_cells(cfg$mode)
+  manifest_cells <- apply_delta_overrides(manifest_cells, cfg)
+  manifest_cells <- filter_cells(manifest_cells, cfg)
+  cells <- manifest_cells[(manifest_cells$cell_id - 1L) %% cfg$shard_count ==
+                            cfg$shard_index - 1L, , drop = FALSE]
+  if (!nrow(cells)) stop("selected shard has no cells", call. = FALSE)
+  path <- file.path(cfg$results_dir, paste0(study, "-", cfg$mode))
+  raw_dir <- file.path(path, "raw")
+  dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
+  write_or_validate_manifest(manifest_cells, path, cfg, study)
+  message(sprintf("%s: %d/%d cells (shard %d/%d) x %d reps x %d permutations; %d cores; checkpoints %s",
+                  study, nrow(cells), nrow(manifest_cells), cfg$shard_index,
+                  cfg$shard_count, cfg$reps, cfg$permutations, cfg$cores, raw_dir))
+  started <- Sys.time()
+  for (i in seq_len(nrow(cells))) {
+    cell <- cells[i, , drop = FALSE]
+    message(sprintf("  [%d/%d] cell %d %s/%s/%s n=(%d,%d)",
+                    i, nrow(cells), cell$cell_id, cell$generator, cell$step,
+                    paste(cell$truth, cell$null_kind, sep = ":"), cell$n1, cell$n2))
+    tryCatch(run_cell(cell, cfg, raw_dir), error = function(e)
+      message("    CELL FAILED before checkpoint: ", conditionMessage(e)))
+  }
+  cell_dirs <- list.dirs(raw_dir, recursive = FALSE, full.names = TRUE)
+  summaries <- lapply(cell_dirs, function(d) {
+    files <- list.files(d, pattern = "^chunk_[0-9]+_[0-9]+\\.csv$", full.names = TRUE)
+    if (!length(files)) return(NULL)
+    summarize_cell(files)
+  })
+  summaries <- Filter(Negate(is.null), summaries)
+  if (!length(summaries)) stop("no checkpointed cells completed for ", study,
+                               call. = FALSE)
+  summary <- do.call(rbind, summaries)
+  summary <- summary[order(summary$cell_id), ]
+  write_csv(summary, file.path(path, "summary.csv"))
+  failures <- do.call(rbind, lapply(cell_dirs, function(d) {
+    files <- list.files(d, pattern = "^chunk_[0-9]+_[0-9]+\\.csv$", full.names = TRUE)
+    if (!length(files)) return(NULL)
+    x <- do.call(rbind, lapply(files, read.csv, stringsAsFactors = FALSE))
+    x[!x$observed_ok, c("cell_id", "rep", "generator", "step", "truth", "error"),
+      drop = FALSE]
+  }))
+  if (!is.null(failures) && nrow(failures)) write_csv(failures, file.path(path, "failures.csv"))
+  write_metadata(
+    file.path(path, "metadata.csv"),
+    values = list(experiment = "61-permutation-measurement-invariance",
+                  study = study, mode = cfg$mode, reps = cfg$reps,
+                  permutations = cfg$permutations, chunk_size = cfg$chunk_size,
+                  cores = cfg$cores, seed_base = cfg$seed_base,
+                  shard_index = cfg$shard_index, shard_count = cfg$shard_count,
+                  cells_in_manifest = nrow(manifest_cells),
+                  shard_cells_requested = nrow(cells),
+                  cells_completed_available = nrow(summary),
+                  invocation_elapsed_minutes = round(as.numeric(difftime(Sys.time(), started,
+                                                                          units = "mins")), 3),
+                  recorded_cell_work_minutes = round(sum(
+                    summary$mean_setup_seconds + summary$median_total_seconds * summary$reps,
+                    na.rm = TRUE) / 60, 3),
+                  alternative_calibration = if (study == "reference")
+                    "pilot defaults unless overridden or supplied by calibration file" else
+                    "Chen--Chao metric/scalar values plus strict proportional extension"),
+    packages = "magmaan")
+  message(sprintf("%s complete: %d/%d cells summarized in %s (%.2f min)",
+                  study, nrow(summary), nrow(manifest_cells), path,
+                  as.numeric(difftime(Sys.time(), started, units = "mins"))))
+  invisible(path)
+}
 
-message("Wrote:\n  ", raw_path, "\n  ", summary_path, "\n  ",
-        file.path(results_path, "metadata.csv"))
-print(summary_results, row.names = FALSE)
+studies <- if (cfg$study == "both") c("reference", "imbalance") else cfg$study
+paths <- lapply(studies, run_study, cfg = cfg)
+message("Wrote:\n  ", paste(unlist(paths), collapse = "\n  "))

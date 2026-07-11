@@ -1,5 +1,5 @@
 ---
-title: "Can a studentized permutation Wald test calibrate metric invariance?"
+title: "Studentized permutation Wald tests for measurement invariance"
 bibliography: references.bib
 format:
   html:
@@ -12,110 +12,153 @@ execute:
 ---
 
 ```{r setup}
-summary_path <- file.path("results", "summary.csv")
-if (!file.exists(summary_path)) {
-  stop("No results. Run:\n  Rscript run_experiment.R --smoke\nthen:\n  Rscript run_experiment.R --full --reps 1000 --permutations 499")
+choose_run <- function(study) {
+  candidates <- file.path("results", paste0(study, "-", c("full", "modal", "smoke")))
+  found <- candidates[file.exists(file.path(candidates, "summary.csv"))]
+  if (!length(found)) return(NULL)
+  path <- found[[1L]]
+  list(
+    study = study,
+    profile = sub(paste0("^", study, "-"), "", basename(path)),
+    path = path,
+    summary = read.csv(file.path(path, "summary.csv"), check.names = FALSE,
+                       stringsAsFactors = FALSE),
+    manifest = read.csv(file.path(path, "manifest.csv"), check.names = FALSE,
+                        stringsAsFactors = FALSE),
+    config = read.csv(file.path(path, "run_config.csv"), check.names = FALSE,
+                      stringsAsFactors = FALSE))
 }
-results <- read.csv(summary_path, check.names = FALSE, stringsAsFactors = FALSE)
-fmt <- function(x) formatC(x, format = "f", digits = 3)
+runs <- Filter(Negate(is.null), lapply(c("reference", "imbalance"), choose_run))
+if (!length(runs)) {
+  stop("No new-format results. Run `Rscript run_experiment.R --smoke` first.")
+}
+all_summary <- do.call(rbind, lapply(runs, `[[`, "summary"))
+profiles <- paste(vapply(runs, function(x)
+  sprintf("%s=%s (%d rep, %d permutations)", x$study, x$profile,
+          x$config$reps[[1L]], x$config$permutations[[1L]]), character(1)),
+  collapse = "; ")
+is_smoke <- any(vapply(runs, `[[`, character(1), "profile") == "smoke")
 ```
 
-## Target Paper Design
+## Result status
 
-The current numerical output below is the metric-invariance feasibility gate.
-The paper study expands it into two complementary continuous-data simulations.
-Study 1 follows the multi-group condition spine of Brace and Savalei
-[@bracesavalei2017]. Study 2 directly compares the proposed test with the
-unbalanced-data multivariate Wald design of Chen and Chao [@chenchao2026].
+This render uses `r profiles`.
 
-| Study | Population and allocation | Data conditions | Reported tests |
-|---|---|---|---|
-| 1. Reference-law study | Two groups, two correlated factors, `p = 8, 16`; total `N = 220, 440, 1760`; `1:1` and `1:3` allocation | Normal and Pearson IG `(2, 7)` / `(3, 21)`; ordinal-probit category scores analyzed by robust continuous ML | Metric, scalar, and strict LRT/Wald/permutation-Wald tests |
-| 2. Unbalanced-data comparison | Chen--Chao one-factor, six-indicator model; group A `n = 200`, group B `n = 400, 600, 800, 1000, 1400, 2000, 3000`, plus matched balanced samples | Metric/scalar affected-item proportions `1/3` or `2/3`; small, large, mixed, and non-uniform effects; strict residual-variance extension | Chen--Chao multivariate Wald, ordinary/sandwich LRT and Wald, studentized permutation Wald |
+```{r smoke-warning, results='asis'}
+if (is_smoke) cat(
+  "**Smoke results are wiring and timing evidence only.** With nine random ",
+  "permutations the smallest attainable plus-one p-value is 0.10, so the ",
+  "permutation rejection columns cannot estimate rejection rates at 0.05.\n")
+```
 
-The category-score arm deliberately treats ordered categories as continuous
-numeric observations. This is not a polychoric or DWLS analysis. Its category
-count and threshold-symmetry factors follow the conditions under which robust
-continuous ML is, or is not, defensible in Rhemtulla, Brosseau-Liard, and
-Savalei [@rhemtulla2012]. Robust continuous-ML inference follows
-Maydeu-Olivares [@maydeuolivares2017].
+## Scientific question
 
-All three reported invariance outcomes are adjacent comparisons: metric versus
-configural, scalar versus metric, and strict versus scalar. The configural model
-is fitted internally as the metric reference; this is an inference study rather
-than a global-fit study.
+Does a fully refitted Wald statistic, studentized with a freshly estimated
+empirical sandwich covariance after every group-label permutation, provide
+better calibrated measurement-invariance inference when group observations are
+not exchangeable? The design targets Chung and Romano's asymptotically pivotal
+case: raw exchangeability is unnecessary if the recomputed statistic has a
+common limiting null law.
 
-## Question
+The comparison includes ordinary and robust/scaled likelihood-ratio tests,
+model-based multivariate Wald tests, sandwich Wald tests, the studentized
+permutation Wald test, and a raw-contrast permutation negative control. In the
+unbalanced study, the model-based Wald is Chen and Chao's MWT restriction test.
 
-Can a raw group-label permutation distribution of a fully recomputed,
-studentized Wald statistic control Type-I error for continuous metric invariance
-when group sample sizes, factor covariances, residual variances, and CFA size
-vary? The comparison is against ordinary and robust likelihood-ratio and Wald
-tests.
+## Executed design
 
-## Short answer
+```{r design-table}
+design_rows <- do.call(rbind, lapply(runs, function(run) {
+  m <- run$manifest
+  data.frame(
+    Study = run$study, Profile = run$profile,
+    Cells = nrow(m), Steps = paste(unique(m$step), collapse = ", "),
+    Generators = paste(unique(m$generator), collapse = ", "),
+    `N range` = paste(range(m$n_total), collapse = "--"),
+    Allocations = paste(unique(m$allocation), collapse = ", "),
+    check.names = FALSE)
+}))
+knitr::kable(design_rows, row.names = FALSE,
+             caption = "Manifests used by this report render.")
+```
 
-This feasibility experiment is intentionally a gate rather than a finished
-method claim. The `invariant` rows show whether the studentized permutation
-test stays near 0.05 under the heterogeneous null; the `loading_violation` rows
-show whether that calibration retains useful power. The ordinary raw-contrast
-permutation is included as a negative control: a gap between it and the
-studentized column is the finite-sample behavior the Chung--Romano argument
-predicts.
+The reference-law paper grid contains two correlated factors, `p = 8/16`, total
+`N = 220/440/1760`, balanced and `1:3` allocation, normal and Pearson IG
+nonnormal data, and ordinal-probit integer scores with explicit category and
+threshold-shape factors. Its heterogeneous null retains equal measurement
+parameters while factor means and factor/residual covariance differ. Separate
+exchangeable controls make both group populations identical.
 
-The loading-violation alternative is calibrated to comparable sandwich-Wald
-noncentrality in the normal `n=(250,250)` reference cell, using raw loading
-shifts of 0.18--0.21 according to CFA size and heterogeneity. The raw and
-implied standardized shifts are both recorded in the results; equal
-standardized shifts were rejected because they created radically unequal power
-for the raw-loading invariance test.
+The unbalanced paper grid reproduces Chen and Chao's six-indicator population:
+loading 0.6 and intercept 0 for each item, unit factor and residual variances,
+group A `n = 200`, and group B from 400 through 3000. Metric/scalar violations
+affect items `{2,4}` or `{2,3,4,5}` in group A using their small, large, mixed,
+and non-uniform changes. Matched-balanced cells retain the same total N. Strict
+invariance is the proportional residual-variance extension.
 
-## Evidence
+## Timing and availability
 
-Rejection rates at the configured alpha. The two permutation methods refit the
-configural CFA and recompute their statistic after every relabeling; they do
-not reuse the observed covariance estimate.
+```{r timing-table}
+timing <- aggregate(
+  cbind(median_simulation_seconds, median_observed_seconds,
+        median_permutation_seconds, median_total_seconds, failure_rate) ~
+    study + generator + step,
+  data = all_summary, FUN = function(x) median(x, na.rm = TRUE))
+names(timing) <- c("Study", "Generator", "Step", "Simulation s", "Observed s",
+                   "Permutation s", "Total s", "Failure rate")
+num <- vapply(timing, is.numeric, logical(1))
+timing[num] <- lapply(timing[num], function(x) round(x, 3))
+knitr::kable(timing, row.names = FALSE,
+             caption = "Median per-replication stage timings across selected cells.")
+```
 
-```{r table}
-cols <- c("model", "heterogeneity", "distribution", "scenario", "n1", "n2",
-          "loading_shift_raw", "loading_shift_standardized", "reps", "converged",
+Invalid permutation fits are retained. `summary.csv` reports the median usable
+permutation fraction and method-specific usable replication counts; any
+observed-fit errors are also written to `failures.csv`.
+
+## Rejection summaries
+
+```{r rejection-table}
+cols <- c("study", "cell_id", "p", "n1", "n2", "generator", "step", "truth",
+          "null_kind", "pattern", "affected_fraction", "reps", "observed_ok",
           "reject_lrt", "reject_robust_lrt", "reject_model_wald",
           "reject_sandwich_wald", "reject_permutation_studentized",
-          "reject_permutation_raw", "median_valid_permutations")
-tab <- results[, intersect(cols, names(results)), drop = FALSE]
-labels <- c("Model", "Heterogeneity", "Distribution", "Scenario", "N1", "N2",
-            "Raw loading shift", "Standardized loading shift", "Replications",
-            "Converged", "LRT", "Robust LRT", "Model Wald",
-            "Sandwich Wald", "Studentized permutation", "Raw permutation",
-            "Median valid permutations")
-names(labels) <- cols
-names(tab) <- unname(labels[names(tab)])
+          "reject_permutation_raw", "median_valid_permutation_fraction")
+tab <- all_summary[, intersect(cols, names(all_summary)), drop = FALSE]
+names(tab) <- gsub("_", " ", names(tab), fixed = TRUE)
 numeric <- vapply(tab, is.numeric, logical(1))
 tab[numeric] <- lapply(tab[numeric], function(x) round(x, 3))
 knitr::kable(tab, row.names = FALSE,
-             caption = "Metric-invariance rejection rates and permutation availability.")
+             caption = "Cell-level rejection and availability summaries.")
 ```
 
-## Caveats
+Configural is fitted only as the metric test's internal H1. The reported
+outcomes are metric versus configural, scalar versus the identified metric mean
+chart, and strict versus scalar.
 
-- The Chung--Romano argument requires the estimator and its studentization to
-  remain asymptotically regular under the pooled mixture, not merely under the
-  two source groups. This experiment checks one- and three-factor CFA
-  populations at standard and stronger group heterogeneity.
-- The `exchangeable` scenario is a finite-sample control: both group
-  distributions are identical, so a random label permutation is valid even for
-  the raw contrast statistic. It distinguishes a resampling implementation bug
-  from a failure of asymptotic robustness under heterogeneous populations.
-- The ordinal arm is deliberately absent. A mixture of ordinal-probit groups is
-  generally not ordinal-probit, so it needs a separate validity result or a
-  different resampling scheme.
-- Smoke output is a wiring and runtime check only. The full grid should use at
-  least 1,000 replications before interpreting a 0.05 rejection rate.
+## Interpretation boundaries
+
+- Reference alternatives use explicit step-specific deltas. The defaults are
+  pilot starting values; paper claims require replacing them with departures
+  calibrated to 50% studentized-permutation power in the normal balanced
+  `N = 440` reference cell.
+- Ordinal-probit responses are analyzed as ordinary numeric codes by continuous
+  ML. This does not claim validity for a shuffled DWLS/polychoric statistic; that
+  is a separate problem. Because discretization is nonlinear, latent-response
+  invariance need not imply exact invariance of the continuous-ML pseudo-
+  parameters, especially with asymmetric thresholds; that drift is part of the
+  deliberately misspecified applied workflow and must be diagnosed separately
+  from reference-law calibration.
+- The asymptotic argument requires regular estimation under the pooled mixture.
+  Exchangeable controls diagnose implementation errors, while the heterogeneous
+  nulls test the scientifically relevant departure from raw exchangeability.
 
 ## Reproduce
 
 ```sh
 Rscript run_experiment.R --smoke
-Rscript run_experiment.R --full --reps 1000 --permutations 499
+Rscript calibrate_alternatives.R --smoke
+Rscript run_experiment.R --study reference --modal --cores 10
+Rscript run_experiment.R --study imbalance --modal --cores 10
 quarto render report.qmd
 ```
