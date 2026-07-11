@@ -104,7 +104,7 @@ versions, and stable result schemas.
 Principal investigator: Jonas Moss, Associate Professor, BI Norwegian Business
 School (jonas.moss@bi.no).
 
-Funding source: *to be completed (mandatory MAS field).*
+Funding source: Institutional base funding, BI Norwegian Business School.
 
 The `magmaan` repository already holds a large body of validated simulation
 experiments and lavaan-parity checks, direct evidence of an efficient working
