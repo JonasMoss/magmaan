@@ -7,7 +7,7 @@ main_study_cells <- function() {
     n_total = c(220L, 440L, 1760L),
     ratio = c("1:1", "1:3"),
     generator = c("normal", "ig1", "ig2"),
-    step = c("configural", "metric", "scalar", "strict"),
+    step = c("metric", "scalar", "strict"),
     truth = c("null", "alternative"),
     stringsAsFactors = FALSE)
   base$control <- FALSE
@@ -60,7 +60,6 @@ main_group_moments <- function(pop, group, step = NULL, delta = 0) {
   target <- pop$p
   if (!is.null(step) && group == 2L) {
     switch(step,
-      configural = Lambda[target, 3L - pop$factor_of[target]] <- delta,
       metric = Lambda[target, pop$factor_of[target]] <- Lambda[target, pop$factor_of[target]] + delta,
       scalar = nu[target] <- nu[target] + delta,
       strict = theta[target] <- theta[target] * (1 + delta),
@@ -96,7 +95,6 @@ main_syntax <- function(pop, level) {
 
 step_models <- function(step) {
   switch(step,
-    configural = c(h1 = "configural", h0 = NA_character_),
     metric = c(h1 = "configural", h0 = "metric"),
     scalar = c(h1 = "metric_chart", h0 = "scalar"),
     strict = c(h1 = "scalar", h0 = "strict"),
