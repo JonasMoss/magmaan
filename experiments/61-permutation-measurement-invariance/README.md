@@ -14,6 +14,7 @@ and the repository's FIML-FMG work, rather than crossing arbitrary CFA sizes.
 | Module | Data generation | CFA size | Invariance steps | Purpose |
 | --- | --- | --- | --- | --- |
 | Continuous main study | Normal; Pearson IG moderate/severe nonnormality | Two correlated factors; `p = 8,16` indicators | Metric, scalar, strict | Main size and power comparison |
+| Categorical companion | Grouped ordinal-probit projection, 5 categories | Two correlated factors; `p = 8,16` indicators | Metric, scalar, strict | Categorical size and power comparison |
 
 The main grid uses total sample sizes `N = 220, 440, 1760` and group-size ratios
 `1:1` and `1:3`. The null has equal loadings, intercepts, and residual variances
@@ -29,6 +30,14 @@ used by the repository's FIML-FMG studies. They replace the old multivariate-t
 condition: t is symmetric and is a weak stressor for several robust difference
 tests, while the IG generator preserves each group's target covariance and
 varies the marginal mechanism in a literature-recognized way.
+
+The categorical companion draws latent-response data from magmaan's grouped
+ordinal-correlation simulator and projects each indicator to five ordered
+categories. It repeats the same CFA size, allocation, and invariance ladder.
+Every permutation rebuilds thresholds, polychorics, NACOV, DWLS weights, and
+fits. Its results are reported separately and must first pass the heterogeneous
+invariant-null gate; raw label permutation for the pooled ordinal estimator is
+an empirical question rather than an automatic Chung--Romano corollary.
 
 Each metric, scalar, and strict alternative is calibrated separately to 50%
 studentized-permutation power in the normal, balanced, `N = 440` reference
