@@ -13,8 +13,8 @@ and the repository's FIML-FMG work, rather than crossing arbitrary CFA sizes.
 
 | Module | Data generation | CFA size | Invariance steps | Purpose |
 | --- | --- | --- | --- | --- |
-| Continuous main study | Normal; Pearson IG moderate/severe nonnormality | Two correlated factors; `p = 8,16` indicators | Metric, scalar, strict | Main size and power comparison |
-| Categorical companion | Ordinal-probit projection, analyzed as integer codes by robust continuous ML | Two correlated factors; `p = 8,16` indicators | Metric, scalar, strict | Categorical size and power comparison |
+| Continuous main study | Normal; Pearson IG moderate/severe nonnormality | Two correlated factors; `p = 8,16` indicators | Configural, metric, scalar, strict | Main size and power comparison |
+| Categorical companion | Ordinal-probit projection, analyzed as integer codes by robust continuous ML | Two correlated factors; `p = 8,16` indicators | Configural, metric, scalar, strict | Categorical size and power comparison |
 
 The main grid uses total sample sizes `N = 220, 440, 1760` and group-size ratios
 `1:1` and `1:3`. The null has equal loadings, intercepts, and residual variances
@@ -61,8 +61,9 @@ residual variances from the scalar chart.
 The primary comparison in each continuous cell will be ordinary LRT, robust nested
 LRT, the Chen--Chao model-based multivariate Wald, sandwich Wald, studentized
 permutation Wald, and the raw-contrast permutation negative control. Configural
-invariance is the baseline loading-pattern model; metric, scalar, and strict are
-the three equality-restriction tests in the confirmatory sequence.
+invariance is fitted and reported as the common loading-pattern baseline; metric,
+scalar, and strict are the equality-restriction tests for which the Wald and
+permutation comparisons are defined.
 
 ## Target Report
 
