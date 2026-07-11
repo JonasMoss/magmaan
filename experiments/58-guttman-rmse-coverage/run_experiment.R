@@ -246,6 +246,40 @@ fit_control <- list(max_iter = opts$ml_max_iter, ftol = 1e-10, gtol = 1e-7)
 condition_cols <- c("generator", "factors", "indicators", "rho", "scale",
                     "loading", "strength", "population_model", "n")
 
+# Cell-stable seed. The per-cell RNG seed is a function of the design
+# coordinates, not the grid-row position, so a filtered sub-grid (one Modal
+# container per coarse cell) reproduces its slice of the single-process full
+# sweep bit-for-bit. Levels are the paper-grid superset; a coordinate outside
+# them (e.g. a custom --n in a local smoke) falls back to the row index, which
+# is not fan-out reproducible but is fine for local checks.
+seed_levels <- list(
+  generator = c("normal", "ig", "ordinal"),
+  factors = c(2L, 3L, 5L),
+  indicators = c("3", "5", "u"),
+  rho = c(0, 0.35, 0.6, 0.8),
+  scale = c("equal", "unequal"),
+  loading = c("mixed", "tau"),
+  strength = c("moderate", "weak"),
+  population_model = c("congeneric", "tau_resid"),
+  n = c(50L, 100L, 300L, 800L))
+cell_code <- function(cond) {
+  idx <- c(
+    match(as.character(cond$generator[[1]]), seed_levels$generator),
+    match(as.integer(cond$factors[[1]]), seed_levels$factors),
+    match(as.character(cond$indicators[[1]]), seed_levels$indicators),
+    match(cond$rho[[1]], seed_levels$rho),
+    match(as.character(cond$scale[[1]]), seed_levels$scale),
+    match(as.character(cond$loading[[1]]), seed_levels$loading),
+    match(as.character(cond$strength[[1]]), seed_levels$strength),
+    match(as.character(cond$population_model[[1]]), seed_levels$population_model),
+    match(as.integer(cond$n[[1]]), seed_levels$n))
+  if (anyNA(idx)) return(NA_integer_)
+  radix <- vapply(seed_levels, length, integer(1))
+  code <- 0L
+  for (k in seq_along(idx)) code <- code * radix[[k]] + (idx[[k]] - 1L)
+  as.integer(code + 1L)
+}
+
 interaction_key <- function(df, cols) {
   do.call(interaction, c(df[cols], list(drop = TRUE, sep = "\r")))
 }
@@ -1001,7 +1035,9 @@ for (cell in seq_len(nrow(grid))) {
       "ml_emp", "uls_emp")
   }
   baseline <- if (restricted_population) "ml_emp_restricted" else "ml_emp"
-  seed <- opts$seed_base + 100000L * cell
+  seed_id <- cell_code(cond)
+  if (is.na(seed_id)) seed_id <- cell
+  seed <- opts$seed_base + 100000L * seed_id
   cat(sprintf("[%d/%d] %s q=%d m=%s rho=%.2f scale=%s loading=%s strength=%s population=%s n=%d reps=%d\n",
               cell, nrow(grid), cond$generator, cond$factors, cond$indicators,
               cond$rho, cond$scale, cond$loading, cond$strength, cond$population_model,
