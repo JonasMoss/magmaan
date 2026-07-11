@@ -29,7 +29,7 @@ reference_delta <- function(step) {
          stop("unknown invariance step: ", step, call. = FALSE))
 }
 
-reference_cells <- function(mode = c("smoke", "modal", "full")) {
+reference_cells <- function(mode = c("smoke", "modal", "sensitivity", "full")) {
   mode <- match.arg(mode)
   generators <- reference_generator_catalog()
   if (mode == "smoke") {
@@ -49,6 +49,13 @@ reference_cells <- function(mode = c("smoke", "modal", "full")) {
                   step = c("metric", "scalar", "strict"),
                   truth = c("null", "alternative"), stringsAsFactors = FALSE),
       generators, all = TRUE)
+  } else if (mode == "sensitivity") {
+    generators <- generators[generators$generator %in% c("normal", "ig1", "ig2"), ]
+    base <- merge(
+      expand.grid(p = 8L, n_total = 440L, ratio = c("1:1", "1:3"),
+                  step = c("metric", "scalar", "strict"), truth = "null",
+                  stringsAsFactors = FALSE),
+      generators, all = TRUE)
   } else {
     base <- merge(
       expand.grid(p = c(8L, 16L), n_total = c(220L, 440L, 1760L),
@@ -64,9 +71,12 @@ reference_cells <- function(mode = c("smoke", "modal", "full")) {
   control_n <- if (mode == "smoke") 120L else 440L
   control_generators <- if (mode == "smoke") {
     c("normal", "ig1", "ordinal_5_asymmetric")
+  } else if (mode == "sensitivity") {
+    c("normal", "ig1", "ig2")
   } else c("normal", "ig2", "ordinal_5_symmetric")
+  control_ratios <- if (mode == "sensitivity") c("1:1", "1:3") else "1:1"
   controls <- subset(base, p == 8L & n_total == control_n &
-                       ratio == "1:1" & truth == "null" &
+                       ratio %in% control_ratios & truth == "null" &
                        generator %in% control_generators)
   if (nrow(controls)) {
     controls$null_kind <- "exchangeable"

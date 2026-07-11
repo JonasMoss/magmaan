@@ -5,8 +5,9 @@
 Can a fully recomputed studentized Wald permutation test provide valid and
 useful measurement-invariance inference when the groups are unequal in size or
 otherwise non-exchangeable? The comparison is against the ordinary likelihood-
-ratio difference test and the multivariate Wald test used in current applied
-invariance work.
+ratio difference test, the established semTools-style permutation likelihood-
+ratio test, and the multivariate Wald test used in current applied invariance
+work.
 
 ## Study 1: Reference-Law Study
 
@@ -50,7 +51,8 @@ The configural model is fitted internally as the reference model for the metric
 comparison. It is not a reported global-fit outcome in this inference study.
 
 This slice compares their multivariate Wald test, the ordinary likelihood-ratio
-difference test, sandwich Wald, and the studentized permutation Wald. It gives
+difference test, the ordinary permutation likelihood-ratio test, sandwich Wald,
+and the studentized permutation Wald. It gives
 the paper a direct answer to the current SEM-journal result that multivariate
 Wald tests can have better power than likelihood-ratio tests under severe group
 imbalance. The permutation method is evaluated as a finite-sample calibration
@@ -67,6 +69,11 @@ metric, scalar, and strict equality restrictions.
 - Chen, P.-Y., & Chao, T.-Y. (2026). A comparison of methods for testing
   measurement invariance with unbalanced data. *Structural Equation Modeling*,
   33, 404-411. https://doi.org/10.1080/10705511.2025.2591420
+- Jorgensen, T. D., Kite, B. A., Chen, P.-Y., & Short, S. D. (2018).
+  Permutation randomization methods for testing measurement equivalence and
+  detecting differential item functioning in multiple-group confirmatory
+  factor analysis. *Psychological Methods*, 23, 708-728.
+  https://doi.org/10.1037/met0000152
 - Maydeu-Olivares, A. (2017). Maximum likelihood estimation of structural
   equation models for continuous data: Standard errors and goodness of fit.
   *Structural Equation Modeling*, 24, 383-394.

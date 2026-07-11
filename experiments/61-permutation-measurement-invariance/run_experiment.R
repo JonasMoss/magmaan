@@ -25,7 +25,8 @@ usage <- function() {
     "Profiles:\n",
     "  --smoke             Both study smokes (default): 1 rep, 9 permutations.\n",
     "  --modal             Representative design: 100 reps, 99 permutations.\n",
-    "  --full              Paper grid: 1000 reps, 499 permutations.\n\n",
+    "  --sensitivity       Reference null slice: 1000 reps, 999 permutations.\n",
+    "  --full              Paper grid: 1000 reps, 199 permutations.\n\n",
     "Study and size:\n",
     "  --study S           reference, imbalance, or both. Default: both.\n",
     "  --reps N            Override replications per cell.\n",
@@ -68,6 +69,7 @@ parse_args <- function(args) {
     if (a %in% c("-h", "--help")) { usage(); quit(save = "no", status = 0L) }
     else if (a == "--smoke") out$mode <- "smoke"
     else if (a == "--modal") out$mode <- "modal"
+    else if (a == "--sensitivity") out$mode <- "sensitivity"
     else if (a == "--full") out$mode <- "full"
     else if (a == "--study") out$study <- take()
     else if (a == "--reps") out$reps <- as.integer(take())
@@ -97,7 +99,8 @@ parse_args <- function(args) {
   defaults <- switch(out$mode,
     smoke = c(reps = 1L, permutations = 9L, chunk_size = 1L),
     modal = c(reps = 100L, permutations = 99L, chunk_size = 5L),
-    full = c(reps = 1000L, permutations = 499L, chunk_size = 10L))
+    sensitivity = c(reps = 1000L, permutations = 999L, chunk_size = 10L),
+    full = c(reps = 1000L, permutations = 199L, chunk_size = 10L))
   for (nm in names(defaults)) if (is.null(out[[nm]])) out[[nm]] <- defaults[[nm]]
   numeric_positive <- c("reps", "permutations", "chunk_size", "cores")
   if (any(vapply(out[numeric_positive], function(x) is.na(x) || x < 1L, logical(1))))
@@ -106,6 +109,9 @@ parse_args <- function(args) {
   if (is.na(out$shard_count) || is.na(out$shard_index) || out$shard_count < 1L ||
       out$shard_index < 1L || out$shard_index > out$shard_count)
     stop("shard index must be in 1..shard count", call. = FALSE)
+  if (out$mode == "sensitivity" && out$study == "both") out$study <- "reference"
+  if (out$mode == "sensitivity" && out$study == "imbalance")
+    stop("--sensitivity is a reference-study profile", call. = FALSE)
   out
 }
 
@@ -156,7 +162,7 @@ write_or_validate_manifest <- function(cells, path, cfg, study) {
   manifest_path <- file.path(path, "manifest.csv")
   config_path <- file.path(path, "run_config.csv")
   config <- data.frame(
-    study = study, mode = cfg$mode, reps = cfg$reps,
+    schema_version = 2L, study = study, mode = cfg$mode, reps = cfg$reps,
     permutations = cfg$permutations, chunk_size = cfg$chunk_size,
     seed_base = cfg$seed_base, stringsAsFactors = FALSE)
   if (file.exists(manifest_path) || file.exists(config_path)) {
@@ -166,7 +172,8 @@ write_or_validate_manifest <- function(cells, path, cfg, study) {
                           check.names = FALSE)
     old_config <- read.csv(config_path, stringsAsFactors = FALSE,
                            check.names = FALSE)
-    if (!identical(unname(cell_signature(old_cells)),
+    if (!all(names(config) %in% names(old_config)) ||
+        !identical(unname(cell_signature(old_cells)),
                    unname(cell_signature(cells))) ||
         !identical(unname(as.character(old_config[1L, names(config)])),
                    unname(as.character(config[1L, names(config)])))) {
@@ -284,6 +291,8 @@ summarize_cell <- function(files, alpha = .05) {
   }
   ans$median_valid_permutation_fraction <-
     stats::median(x$n_perm_studentized / x$permutations_requested, na.rm = TRUE)
+  ans$median_valid_permutation_lrt_fraction <-
+    stats::median(x$n_perm_lrt / x$permutations_requested, na.rm = TRUE)
   ans$mean_setup_seconds <- mean(x$setup_seconds, na.rm = TRUE)
   ans$median_simulation_seconds <- stats::median(x$simulation_seconds, na.rm = TRUE)
   ans$median_observed_seconds <- stats::median(x$observed_seconds, na.rm = TRUE)
@@ -350,7 +359,8 @@ run_study <- function(study, cfg) {
                   recorded_cell_work_minutes = round(sum(
                     summary$mean_setup_seconds + summary$median_total_seconds * summary$reps,
                     na.rm = TRUE) / 60, 3),
-                  alternative_calibration = if (study == "reference")
+                  alternative_calibration = if (cfg$mode == "sensitivity")
+                    "not applicable: null-only sensitivity profile" else if (study == "reference")
                     "pilot defaults unless overridden or supplied by calibration file" else
                     "Chen--Chao metric/scalar values plus strict proportional extension"),
     packages = "magmaan")

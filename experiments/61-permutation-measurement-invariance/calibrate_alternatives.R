@@ -75,7 +75,8 @@ candidate_power <- function(step, delta) {
                          error = function(e) NULL)
     if (is.null(observed)) return(NA_real_)
     p <- permutation_pvalues(sim$X[[1L]], sim$X[[2L]], pop, step, observed,
-                             cfg$permutations, sim$seed + 700000001)$p_studentized
+                             cfg$permutations, sim$seed + 700000001,
+                             include_lrt = FALSE)$p_studentized
     p
   }
   p <- if (cfg$cores > 1L) {
