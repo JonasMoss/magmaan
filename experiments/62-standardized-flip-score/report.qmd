@@ -14,11 +14,11 @@ execute:
 files <- file.path("results", c(
   "summary.csv", "expansion_summary.csv", "expansion_replications.csv",
   "expansion_metadata.csv", "timing_summary.csv", "power_summary.csv",
-  "power_replications.csv", "power_metadata.csv"))
+  "power_replications.csv", "power_metadata.csv", "stress_summary.csv"))
 if (any(!file.exists(files))) {
   stop(paste(
     "missing results; run run_experiment.R, run_expansion.R --probe,",
-    "run_expansion.R --power, and run_timing.R"))
+    "run_expansion.R --power, run_expansion.R --stress, and run_timing.R"))
 }
 legacy <- read.csv(files[[1L]])
 s <- read.csv(files[[2L]])
@@ -28,8 +28,32 @@ timing <- read.csv(files[[5L]])
 power_summary <- read.csv(files[[6L]])
 power <- read.csv(files[[7L]])
 power_metadata <- read.csv(files[[8L]])
+stress <- read.csv(files[[9L]])
 r <- r[r$ok, , drop = FALSE]
 power <- power[power$ok, , drop = FALSE]
+
+# Severe non-normal copula stress block (vm = Gaussian copula, pl = non-Gaussian,
+# matched severe marginals). Aggregated for the report.
+stress_cols <- c(
+  `Score standardized` = "rejection_standardized",
+  `Score mean-scaled`  = "rejection_mean_scaled",
+  `Naive chi-square`   = "rejection_chisq",
+  `LR SB scaled`       = "rejection_fmg_sb",
+  `LR MV adjusted`     = "rejection_fmg_mv",
+  `LR scaled-shifted`  = "rejection_fmg_ss",
+  `FMG pEBA4`          = "rejection_fmg_peba4")
+stress_row <- function(d, dff, het = NULL, nn = NULL) {
+  sub <- stress[stress$distribution == d & stress$df == dff, , drop = FALSE]
+  if (!is.null(het)) sub <- sub[sub$heterogeneity == het, , drop = FALSE]
+  if (!is.null(nn)) sub <- sub[sub$n_total == nn, , drop = FALSE]
+  vapply(stress_cols, function(cc) mean(sub[[cc]], na.rm = TRUE), numeric(1L))
+}
+copula_labels <- c(vm = "Vale-Maurelli (Gaussian copula)",
+                   pl = "Piecewise-linear (non-Gaussian copula)")
+stress_df8 <- data.frame(
+  Copula = unname(copula_labels[c("vm", "pl")]),
+  rbind(stress_row("vm", 8L), stress_row("pl", 8L)),
+  check.names = FALSE, row.names = NULL)
 s$calibration_effective <- abs(s$rejection_effective - .05)
 s$calibration_standardized <- abs(s$rejection_standardized - .05)
 s$calibration_gain <- s$calibration_effective - s$calibration_standardized
@@ -213,6 +237,14 @@ to: **standardize by default because it is inexpensive, but expect a material
 calibration difference mainly for small samples and moderate-to-large joint
 tests.**
 
+That verdict holds only where the data are close to asymptotically robust. A
+severe non-Gaussian copula breaks it: with marginals fixed at skewness 3 and
+excess kurtosis 21, the 8-df standardized flip rejects about 0.11--0.13 under a
+piecewise-linear copula, standardization does not repair it, and the effect
+persists as $N$ grows. Under that regime no test in the battery is calibrated,
+and the flip test is not the exception. Standardization is a cheap default, not
+a robustness guarantee.
+
 ## Hypotheses and what happened
 
 ### H1: small samples should matter most — supported
@@ -274,6 +306,9 @@ The covariance-shift diagnostic was almost unchanged across normal, $t_5$, and
 skewed generators. Nonnormality did make both flip tests more liberal, so the
 same conservative standardization adjustment bought more calibration under
 $t_5$ and skew. It did not eliminate the remaining misspecification effect.
+The flat diagnostic is a property of these generators, not of non-normality in
+general: all three are close to asymptotically robust. The severe-copula stress
+section below shows what happens when the generator is not.
 
 ```{r distribution-table}
 names(by_dist) <- c("distribution", "effective", "standardized")
@@ -281,6 +316,15 @@ knitr::kable(by_dist, digits = 4)
 ```
 
 ## LR and FMG null calibration
+
+These comparators are not arbitrary. Foldnes, Moss, and Grønneberg (2026)
+document that the two established robust nested tests fail in opposite
+directions under non-normality: the Satorra-Bentler scaled test (`SB`) is
+chronically liberal, and the scaled-and-shifted test (`SS`) is chronically
+conservative. The mean/variance-adjusted (`MV`) and eigenvalue-averaging
+(EBA/pEBA) families are the proposed repairs. Running all of them lets us ask
+where a resampling flip test lands relative to that spread, rather than against
+a single default.
 
 The full comparator battery includes the basic FMG variants (`SB`, `MV`, `SS`,
 and `SF`), EBA2/4/6 and pEBA2/4/6, the pooled approximations PALL and pOLS, and
@@ -307,6 +351,57 @@ Three patterns matter:
   especially at 4--8 df, but remain well above 0.05.
 - Standardization improves the effective flip test most clearly at 8 df
   (0.073 to 0.070), but this is an adjustment, not complete calibration.
+
+## Severe non-normality: the copula, not the marginals
+
+The three generators above (normal, $t_5$, exponential skew) are mild. $t_5$ is
+elliptical and the skew cell mixes independent coordinates, so neither breaks
+the asymptotic robustness the robust tests rely on. This is why H5 saw so little
+movement, not evidence that non-normality is harmless. The lever that actually
+breaks these tests is the joint dependence structure, the copula, not the
+marginal skewness and kurtosis (Foldnes et al., 2026). Two data sets can share a
+covariance matrix and identical marginal moments yet differ in their copula, and
+normal-theory ML inference is not asymptotically robust to that difference.
+
+The stress block holds the marginals fixed at a severe level (skewness 3, excess
+kurtosis 21) and switches only the copula: Vale-Maurelli is a Gaussian copula,
+piecewise-linear is not. Both use magmaan's native generators. The table reports
+null rejection at the 8-df joint test, averaged over $N$ and the homogeneous and
+geometry populations.
+
+```{r stress-table}
+knitr::kable(stress_df8, digits = 3)
+```
+
+Three things stand out, and none is visible in the mild cells:
+
+- **Every test breaks, including the flip test.** The standardized flip rejects
+  about 0.11--0.13 here, more than double nominal, and standardization does not
+  repair it. The naive chi-square is off the scale. The reading from the mild
+  cells, that flip standardization is a small always-safe adjustment, does not
+  extend: under a severe non-Gaussian copula the flip test is simply not
+  calibrated.
+- **The copula, not the heterogeneity, is the cause.** In the homogeneous
+  populations, where the two groups share covariance and mean structure exactly,
+  the 8-df SB test still rejects about
+  `r sprintf("%.2f", stress_row("vm", 8L, "homogeneous")[["LR SB scaled"]])`
+  under the Gaussian copula and
+  `r sprintf("%.2f", stress_row("pl", 8L, "homogeneous")[["LR SB scaled"]])`
+  under the non-Gaussian one. Same marginals, different copula, very different
+  size.
+- **Piecewise-linear is uniformly harder than Vale-Maurelli**, exactly as the
+  copula explanation predicts: the Gaussian copula sits closer to the
+  normal-theory assumption than the piecewise-linear one.
+
+The distortion shrinks with sample size but does not calibrate. For the hardest
+cell (piecewise-linear, 8 df, geometry heterogeneity), SB rejects about
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 60L)[["LR SB scaled"]])`,
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 100L)[["LR SB scaled"]])`,
+and `r sprintf("%.2f", stress_row("pl", 8L, "geometry", 200L)[["LR SB scaled"]])`
+at $N=60, 100, 200$, while the standardized flip plateaus near 0.12. This is an
+asymptotic-robustness failure, not a small-sample one: it does not vanish as $N$
+grows. Among all tests, only the flip's own mean-scaled asymptotic reference
+stays in single digits (about 0.07--0.09), and even it is not at 0.05.
 
 ## Power
 
@@ -452,10 +547,16 @@ one FMG transform would be cheaper still.
 - Prefer MV/ALL over SB or pEBA/PALL/pOLS if a non-flip comparator is needed in
   this design: they are materially less liberal. None is close enough to 0.05
   here to present as a small-sample solution.
-- Next stress test: hold df fixed while varying nuisance dimension and leverage.
-  This experiment held a 62-slot ambient model constant, so it cannot yet
-  separate "many restrictions" from the ratio of tested dimension to effective
-  residual information.
+- Do not treat any test here as robust to a severe non-Gaussian copula. With
+  marginals fixed and only the copula changed, flip and FMG tests alike
+  over-reject badly and do not calibrate as $N$ grows. If severe non-normality
+  with non-elliptical dependence is plausible, this is a limit of the
+  complete-data method, not a scaling choice to tune.
+- Next stress tests: (a) hold df fixed while varying nuisance dimension and
+  leverage, to separate "many restrictions" from the tested-to-residual
+  information ratio; and (b) raise the observed dimension above the current ten
+  variables, since the FMG results show robust-test over-rejection grows sharply
+  with dimension.
 
 ## Design and caveats
 
@@ -475,6 +576,14 @@ as missing p-values rather than discarding otherwise valid flip results; they
 occurred in about `r sprintf("%.3f", mean(nzchar(power$nested_error)))` of
 successful power fits.
 
+The severe-copula stress block is a separate 24-cell null grid: two copulas
+(Vale-Maurelli and piecewise-linear) at fixed severe marginals, crossed with
+1/8 restrictions, $N=60/100/200$, and the homogeneous and geometry populations,
+at 200 replications per cell. It is kept out of the main aggregations so it does
+not unbalance them. Its purpose is a boundary probe, not a calibrated rejection
+estimate; the independent-generator copula was excluded because its marginal
+moment solve is infeasible at this severity.
+
 Score flipping here remains a frontier method for affine, complete-data ML
 models. These results do not automatically transfer to FIML, ordinal,
 estimated-weight, clustered, boundary, or nonlinear-constraint tests.
@@ -485,6 +594,7 @@ estimated-weight, clustered, boundary, or nonlinear-constraint tests.
 Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --power
+Rscript experiments/62-standardized-flip-score/run_expansion.R --stress
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```
