@@ -11,12 +11,14 @@ source(file.path(script_dir, "R", "expansion_design.R"))
 set_single_threaded_math()
 
 usage <- function() cat(
-  "Usage: Rscript run_expansion.R [--smoke|--probe] [options]\n\n",
-  "Factorial calibration design for when flip standardization matters.\n\n",
+  "Usage: Rscript run_expansion.R [--smoke|--probe|--power|--full] [options]\n\n",
+  "Factorial calibration and power comparison for score flips and FMG.\n\n",
   "Options:\n",
   "  --smoke          Hardest cell, 4 reps, 39 flips (default).\n",
   "  --probe          162-cell null grid.\n",
-  "  --reps N         Replications per cell (probe default: 200).\n",
+  "  --power          540-cell sparse/dense power grid.\n",
+  "  --full           Null and power grids in one output.\n",
+  "  --reps N         Replications per cell (null: 200; power: 150).\n",
   "  --flips N        Random flips per replication (probe default: 499).\n",
   "  --cores N        Parallel cell workers.\n",
   "  --seed-base N    Deterministic seed base.\n",
@@ -33,6 +35,8 @@ while (i <= length(args)) {
   if (a == "--help") { usage(); quit(status = 0L) }
   else if (a == "--smoke") opts$mode <- "smoke"
   else if (a == "--probe") opts$mode <- "probe"
+  else if (a == "--power") opts$mode <- "power"
+  else if (a == "--full") opts$mode <- "full"
   else if (a == "--reps") opts$reps <- as.integer(take())
   else if (a == "--flips") opts$flips <- as.integer(take())
   else if (a == "--cores") opts$cores <- as.integer(take())
@@ -41,28 +45,58 @@ while (i <= length(args)) {
   else stop("unknown argument: ", a, call. = FALSE)
   i <- i + 1L
 }
-if (is.null(opts$reps)) opts$reps <- if (opts$mode == "smoke") 4L else 200L
+if (is.null(opts$reps)) opts$reps <- switch(
+  opts$mode, smoke = 4L, power = 150L, probe = 200L, full = 150L)
 if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else 499L
 stopifnot(opts$reps > 0L, opts$flips > 0L, opts$cores > 0L)
 results_dir <- opts$results_dir %||% file.path(script_dir, "results")
 dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 
 specs <- setNames(lapply(c(1L, 4L, 8L), flip_expansion_specs), c("1", "4", "8"))
-grid <- expand.grid(
+null_grid <- expand.grid(
   df = c(1L, 4L, 8L), n_total = c(60L, 100L, 200L),
   balance = c("1:1", "1:3"),
   heterogeneity = c("homogeneous", "scale", "geometry"),
   distribution = c("normal", "t5", "skew"), stringsAsFactors = FALSE)
-if (opts$mode == "smoke") {
-  grid <- subset(grid, df == 8L & n_total == 60L & balance == "1:3" &
-                   heterogeneity == "geometry" & distribution == "skew")
-}
+null_grid$alternative <- "null"
+null_grid$effect <- 0
+power_grid <- expand.grid(
+  df = c(1L, 4L, 8L), n_total = c(60L, 100L, 200L),
+  balance = c("1:1", "1:3"),
+  heterogeneity = c("homogeneous", "scale", "geometry"),
+  distribution = c("normal", "t5", "skew"),
+  alternative = c("sparse", "dense"), effect = c(.25, .50),
+  stringsAsFactors = FALSE)
+power_grid <- subset(power_grid, !(df == 1L & alternative == "dense"))
+grid <- switch(opts$mode,
+  probe = null_grid,
+  power = power_grid,
+  full = rbind(null_grid, power_grid),
+  smoke = rbind(
+    subset(null_grid, df == 8L & n_total == 60L & balance == "1:3" &
+             heterogeneity == "geometry" & distribution == "skew"),
+    subset(power_grid, df == 8L & n_total == 60L & balance == "1:3" &
+             heterogeneity == "geometry" & distribution == "skew" &
+             alternative == "dense" & effect == .50)))
 grid$cell_id <- seq_len(nrow(grid))
 
-empty_rep <- function(rep_id, error) data.frame(
-  rep = rep_id, ok = FALSE, error = error,
-  p_basic = NA_real_, p_effective = NA_real_, p_standardized = NA_real_,
-  p_chisq = NA_real_, p_mean_scaled = NA_real_, p_mixture = NA_real_,
+output_prefix <- switch(opts$mode, probe = "expansion", power = "power",
+                        full = "combined", smoke = "smoke")
+fmg_tests <- c("SB", "MV", "SS", "SF", "EBA2", "EBA4", "EBA6",
+               "pEBA2", "pEBA4", "pEBA6", "PALL", "pOLS2", "ALL")
+p_columns <- c(
+  "p_basic", "p_effective", "p_standardized", "p_chisq",
+  "p_mean_scaled", "p_mixture", "p_lr_unscaled", "p_lr_scaled",
+  "p_lr_mv_adjusted", "p_lr_scaled_shifted", "p_lr_mixture",
+  "p_fmg_sb", "p_fmg_mv", "p_fmg_ss", "p_fmg_sf", "p_fmg_eba2",
+  "p_fmg_eba4", "p_fmg_eba6", "p_fmg_peba2", "p_fmg_peba4",
+  "p_fmg_peba6", "p_fmg_pall", "p_fmg_pols", "p_fmg_all")
+
+empty_rep <- function(rep_id, error) {
+  out <- data.frame(rep = rep_id, ok = FALSE, error = error,
+                    nested_error = NA_character_, fmg_error = NA_character_)
+  for (name in p_columns) out[[name]] <- NA_real_
+  cbind(out, data.frame(
   reject_effective = NA, reject_standardized = NA,
   changed_to_accept = NA, changed_to_reject = NA,
   abs_delta_p = NA_real_, nuisance_norm = NA_real_,
@@ -72,12 +106,16 @@ empty_rep <- function(rep_id, error) data.frame(
   fit_seconds = NA_real_, flip_elapsed_seconds = NA_real_,
   setup_seconds = NA_real_, resampling_score_seconds = NA_real_,
   resampling_standardization_seconds = NA_real_,
-  asymptotic_seconds = NA_real_, core_total_seconds = NA_real_)
+  asymptotic_seconds = NA_real_, core_total_seconds = NA_real_,
+  nested_seconds = NA_real_, fmg_seconds = NA_real_,
+  fmg_duplicate_max_gap = NA_real_))
+}
 
 one_rep <- function(cell, rep_id) {
   seed <- opts$seed_base + cell$cell_id * 100000L + rep_id
   dat <- flip_expansion_draw_data(
-    cell$n_total, cell$balance, cell$heterogeneity, cell$distribution, seed)
+    cell$n_total, cell$balance, cell$heterogeneity, cell$distribution, seed,
+    cell$df, cell$alternative, cell$effect)
   pair <- specs[[as.character(cell$df)]]
   fit_begin <- proc.time()[["elapsed"]]
   fit <- tryCatch(lapply(
@@ -96,13 +134,71 @@ one_rep <- function(cell, rep_id) {
   if (inherits(flip, "error")) return(empty_rep(rep_id, conditionMessage(flip)))
   stopifnot(flip$df == cell$df)
 
+  raw_blocks <- lapply(c("A", "B"), function(g)
+    as.matrix(dat[dat$school == g, flip_expansion_ov, drop = FALSE]))
+  nested_begin <- proc.time()[["elapsed"]]
+  nested <- tryCatch(nestedTest(
+    fit$configural, fit$restricted, data = raw_blocks,
+    method = "satorra.2000", A.method = "exact"), error = function(e) e)
+  nested_seconds <- proc.time()[["elapsed"]] - nested_begin
+  nested_error <- if (inherits(nested, "error")) conditionMessage(nested) else ""
+
+  fmg_begin <- proc.time()[["elapsed"]]
+  fmg <- tryCatch(fmg_nested(
+    fit$configural, fit$restricted, data = raw_blocks, tests = fmg_tests,
+    A.method = "exact"), error = function(e) e)
+  fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin
+  fmg_error <- if (inherits(fmg, "error")) conditionMessage(fmg) else ""
+
+  p_nested <- rep(NA_real_, 5L)
+  names(p_nested) <- c("p_lr_unscaled", "p_lr_scaled", "p_lr_mv_adjusted",
+                       "p_lr_scaled_shifted", "p_lr_mixture")
+  if (!inherits(nested, "error")) {
+    p_nested[] <- c(nested$p_unscaled, nested$p_scaled, nested$p_adjusted,
+                    nested$p_scaled_shifted, nested$p_mixture)
+  }
+  p_fmg <- setNames(rep(NA_real_, 13L), c(
+    "p_fmg_sb", "p_fmg_mv", "p_fmg_ss", "p_fmg_sf", "p_fmg_eba2",
+    "p_fmg_eba4", "p_fmg_eba6", "p_fmg_peba2", "p_fmg_peba4",
+    "p_fmg_peba6", "p_fmg_pall", "p_fmg_pols", "p_fmg_all"))
+  fmg_duplicate_max_gap <- NA_real_
+  if (!inherits(fmg, "error")) {
+    key <- sub("_ml$", "", fmg$label)
+    key[key == "pols2"] <- "pols"
+    hit <- match(sub("^p_fmg_", "", names(p_fmg)), key)
+    p_fmg[!is.na(hit)] <- fmg$p_value[hit[!is.na(hit)]]
+    if (!inherits(nested, "error")) {
+      fmg_duplicate_max_gap <- max(abs(c(
+        p_fmg[["p_fmg_sb"]] - nested$p_scaled,
+        p_fmg[["p_fmg_mv"]] - nested$p_adjusted,
+        p_fmg[["p_fmg_ss"]] - nested$p_scaled_shifted)))
+    }
+  }
+
   reject_effective <- flip$p_effective < .05
   reject_standardized <- flip$p_standardized < .05
-  data.frame(
-    rep = rep_id, ok = TRUE, error = "",
+  out <- data.frame(
+    rep = rep_id, ok = TRUE, error = "", nested_error = nested_error,
+    fmg_error = fmg_error,
     p_basic = flip$p_basic, p_effective = flip$p_effective,
     p_standardized = flip$p_standardized, p_chisq = flip$p_chisq,
     p_mean_scaled = flip$p_mean_scaled, p_mixture = flip$p_mixture,
+    p_lr_unscaled = p_nested[["p_lr_unscaled"]],
+    p_lr_scaled = p_nested[["p_lr_scaled"]],
+    p_lr_mv_adjusted = p_nested[["p_lr_mv_adjusted"]],
+    p_lr_scaled_shifted = p_nested[["p_lr_scaled_shifted"]],
+    p_lr_mixture = p_nested[["p_lr_mixture"]],
+    p_fmg_sb = p_fmg[["p_fmg_sb"]], p_fmg_mv = p_fmg[["p_fmg_mv"]],
+    p_fmg_ss = p_fmg[["p_fmg_ss"]], p_fmg_sf = p_fmg[["p_fmg_sf"]],
+    p_fmg_eba2 = p_fmg[["p_fmg_eba2"]],
+    p_fmg_eba4 = p_fmg[["p_fmg_eba4"]],
+    p_fmg_eba6 = p_fmg[["p_fmg_eba6"]],
+    p_fmg_peba2 = p_fmg[["p_fmg_peba2"]],
+    p_fmg_peba4 = p_fmg[["p_fmg_peba4"]],
+    p_fmg_peba6 = p_fmg[["p_fmg_peba6"]],
+    p_fmg_pall = p_fmg[["p_fmg_pall"]],
+    p_fmg_pols = p_fmg[["p_fmg_pols"]],
+    p_fmg_all = p_fmg[["p_fmg_all"]],
     reject_effective = reject_effective,
     reject_standardized = reject_standardized,
     changed_to_accept = reject_effective && !reject_standardized,
@@ -119,12 +215,18 @@ one_rep <- function(cell, rep_id) {
     resampling_standardization_seconds =
       flip$resampling_standardization_seconds,
     asymptotic_seconds = flip$asymptotic_seconds,
-    core_total_seconds = flip$total_seconds)
+    core_total_seconds = flip$total_seconds,
+    nested_seconds = nested_seconds, fmg_seconds = fmg_seconds,
+    fmg_duplicate_max_gap = fmg_duplicate_max_gap)
+  stopifnot(identical(p_columns, intersect(p_columns, names(out))))
+  out
 }
 
 run_cell <- function(k) {
   cell <- as.list(grid[k, , drop = FALSE])
-  out <- do.call(rbind, lapply(seq_len(opts$reps), function(r) one_rep(cell, r)))
+  rows <- lapply(seq_len(opts$reps), function(r) tryCatch(
+    one_rep(cell, r), error = function(e) empty_rep(r, conditionMessage(e))))
+  out <- do.call(rbind, rows)
   for (name in names(cell)) out[[name]] <- cell[[name]]
   out
 }
@@ -143,24 +245,22 @@ if (.Platform$OS.type != "windows" && opts$cores > 1L && nrow(grid) > 1L) {
   })
 }
 raw <- do.call(rbind, pieces)
-write.csv(raw, file.path(results_dir, "expansion_replications.csv"),
+write.csv(raw, file.path(results_dir, paste0(output_prefix, "_replications.csv")),
           row.names = FALSE)
 
 summarize_cell <- function(x) {
   ok <- x[x$ok, , drop = FALSE]
-  data.frame(
+  safe_mean <- function(x) if (any(is.finite(x))) mean(x, na.rm = TRUE) else NA_real_
+  safe_max <- function(x) if (any(is.finite(x))) max(x, na.rm = TRUE) else NA_real_
+  out <- list(
     reps = nrow(x), reps_ok = nrow(ok), failure_rate = mean(!x$ok),
-    rejection_basic = mean(ok$p_basic < .05),
-    rejection_effective = mean(ok$reject_effective),
-    rejection_standardized = mean(ok$reject_standardized),
-    rejection_chisq = mean(ok$p_chisq < .05),
-    rejection_mean_scaled = mean(ok$p_mean_scaled < .05),
-    rejection_mixture = mean(ok$p_mixture < .05),
+    nested_failure_rate = mean(nzchar(ok$nested_error)),
+    fmg_failure_rate = mean(nzchar(ok$fmg_error)),
     changed_to_accept = mean(ok$changed_to_accept),
     changed_to_reject = mean(ok$changed_to_reject),
     mean_abs_delta_p = mean(ok$abs_delta_p),
     mean_variance_relative_shift = mean(ok$mean_variance_relative_shift),
-    max_variance_relative_shift = max(ok$max_variance_relative_shift),
+    max_variance_relative_shift = safe_max(ok$max_variance_relative_shift),
     median_variance_condition = median(ok$max_variance_condition),
     median_fit_ms = 1000 * median(ok$fit_seconds),
     median_flip_ms = 1000 * median(ok$flip_elapsed_seconds),
@@ -168,13 +268,22 @@ summarize_cell <- function(x) {
     median_resampling_score_ms = 1000 * median(ok$resampling_score_seconds),
     median_standardization_ms =
       1000 * median(ok$resampling_standardization_seconds),
-    median_asymptotic_ms = 1000 * median(ok$asymptotic_seconds))
+    median_asymptotic_ms = 1000 * median(ok$asymptotic_seconds),
+    median_nested_ms = 1000 * median(ok$nested_seconds),
+    median_fmg_ms = 1000 * median(ok$fmg_seconds),
+    max_fmg_duplicate_gap = safe_max(ok$fmg_duplicate_max_gap))
+  for (name in p_columns) {
+    suffix <- sub("^p_", "", name)
+    out[[paste0("rejection_", suffix)]] <- safe_mean(ok[[name]] < .05)
+    out[[paste0("available_", suffix)]] <- sum(is.finite(ok[[name]]))
+  }
+  as.data.frame(out)
 }
 split_raw <- split(raw, raw$cell_id)
 summary <- do.call(rbind, lapply(split_raw, summarize_cell))
 summary$cell_id <- as.integer(names(split_raw))
 summary <- merge(grid, summary, by = "cell_id", sort = TRUE)
-write.csv(summary, file.path(results_dir, "expansion_summary.csv"),
+write.csv(summary, file.path(results_dir, paste0(output_prefix, "_summary.csv")),
           row.names = FALSE)
 
 metadata <- data.frame(
@@ -183,7 +292,7 @@ metadata <- data.frame(
   value = c(opts$mode, nrow(grid), opts$reps, opts$flips, opts$cores,
             opts$seed_base, proc.time()[["elapsed"]] - t0,
             as.character(packageVersion("magmaan")), R.version.string))
-write.csv(metadata, file.path(results_dir, "expansion_metadata.csv"),
+write.csv(metadata, file.path(results_dir, paste0(output_prefix, "_metadata.csv")),
           row.names = FALSE)
-cat(sprintf("wrote expansion results to %s (%.1fs)\n", results_dir,
+cat(sprintf("wrote %s results to %s (%.1fs)\n", output_prefix, results_dir,
             proc.time()[["elapsed"]] - t0))

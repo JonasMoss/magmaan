@@ -511,7 +511,21 @@ golden `parTable()` fixtures.
   0.060/0.059 (df=1), 0.069/0.064 (df=4), and 0.083/0.077 (df=8); by N=200 the
   differences were 0.0006--0.0017. A warm serial 499-flip call cost 2.3/5.4/8.7
   ms total at df=1/4/8, of which standardization cost 0.7/2.7/4.2 ms. This is
-  frontier evidence, not a support claim.
+  frontier evidence, not a support claim. The follow-up power pass added 540
+  sparse/dense alternative cells (150 attempts each) and the complete-data
+  nested LR/FMG battery: unscaled, SB, mean/variance-adjusted, scaled-shifted,
+  exact mixture, FMG SB/MV/SS/SF, EBA2/4/6, pEBA2/4/6, PALL, pOLS, and ALL.
+  FMG SB/MV/SS matched their nested-test routes to machine precision. Raw
+  nominal power was not rankable because overall null rejection ranged from
+  0.063 for standardized flips through 0.110 for MV/ALL to 0.138 for SB.
+  After method- and design-cell-specific empirical-null calibration,
+  standardized/effective flips averaged about 0.186 power and MV, pEBA4, and
+  ALL about 0.184; the apparent nominal FMG/SB advantage disappeared. Sparse
+  violations were markedly easier than equal-Euclidean-norm dense violations,
+  and adding null restriction directions reduced power at df=8. Under
+  16-worker contention, median latency was 13 ms for two fits, 22 ms for the
+  499-flip battery, 3 ms for the nested LR battery, and 8 ms for all 13 FMG
+  transforms. The null and power sweeps took 147 and 396 wall-clock seconds.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the

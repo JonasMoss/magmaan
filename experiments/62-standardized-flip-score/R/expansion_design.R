@@ -22,7 +22,8 @@ flip_expansion_specs <- function(df) {
       group_partial = partial))
 }
 
-flip_expansion_population <- function(heterogeneity) {
+flip_expansion_population <- function(heterogeneity, df = 1L,
+                                      alternative = "null", effect = 0) {
   loading <- matrix(0, 10, 2)
   loading[1:5, 1] <- c(1, .9, .75, 1.1, .65)
   loading[6:10, 2] <- c(1, .8, 1.15, .7, .95)
@@ -44,12 +45,28 @@ flip_expansion_population <- function(heterogeneity) {
     theta2 <- diag(diag(theta1) * residual_multiplier)
   } else stop("unknown heterogeneity: ", heterogeneity, call. = FALSE)
 
+  loading2 <- loading
+  tested_rows <- c(2:5, 7:10)[seq_len(df)]
+  if (alternative == "sparse") {
+    row <- tested_rows[[1L]]
+    factor <- if (row <= 5L) 1L else 2L
+    loading2[row, factor] <- loading2[row, factor] + effect
+  } else if (alternative == "dense") {
+    per_loading <- effect / sqrt(df)
+    for (row in tested_rows) {
+      factor <- if (row <= 5L) 1L else 2L
+      loading2[row, factor] <- loading2[row, factor] + per_loading
+    }
+  } else if (alternative != "null") {
+    stop("unknown alternative: ", alternative, call. = FALSE)
+  }
+
   intercept <- seq(.15, 1.50, length.out = 10)
   alpha2 <- c(.45, -.30)
   list(
-    mu = list(intercept, intercept + as.vector(loading %*% alpha2)),
+    mu = list(intercept, intercept + as.vector(loading2 %*% alpha2)),
     Sigma = list(loading %*% phi1 %*% t(loading) + theta1,
-                 loading %*% phi2 %*% t(loading) + theta2))
+                 loading2 %*% phi2 %*% t(loading2) + theta2))
 }
 
 flip_expansion_group_sizes <- function(n_total, balance) {
@@ -72,9 +89,10 @@ flip_expansion_draw_block <- function(n, mu, Sigma, distribution) {
 }
 
 flip_expansion_draw_data <- function(n_total, balance, heterogeneity,
-                                     distribution, seed) {
+                                     distribution, seed, df = 1L,
+                                     alternative = "null", effect = 0) {
   set.seed(seed)
-  pop <- flip_expansion_population(heterogeneity)
+  pop <- flip_expansion_population(heterogeneity, df, alternative, effect)
   sizes <- flip_expansion_group_sizes(n_total, balance)
   blocks <- lapply(1:2, function(g) flip_expansion_draw_block(
     sizes[g], pop$mu[[g]], pop$Sigma[[g]], distribution))
