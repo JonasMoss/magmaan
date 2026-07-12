@@ -113,7 +113,8 @@ only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
   (shared benchmark harness that experiments may consume).
 - **T3 leaves / sinks**: each `papers/<name>/`, each `experiments/<NN>-*/`, and
   `tests/`. A leaf consumes only lower tiers, is referenced by nothing, and never
-  references a sibling leaf.
+  references a sibling leaf. `papers/_archive/` contains frozen retired paper
+  trees; it is historical material, not an active T3 leaf or dependency source.
 
 Invariants (enforced by `tests/tools/check_layering.sh`, run via
 `just check-layering`, folded into `just check`, and a hard-failing CI job):
@@ -122,7 +123,8 @@ Invariants (enforced by `tests/tools/check_layering.sh`, run via
    references `papers/`, `experiments/`, `benchmarks/`, or `tests/`.
 2. **Papers are private**: `papers/A/**` is referenced only from within
    `papers/A/` (each paper is its own nested git repo, gitignored by the outer
-   repo).
+   repo). Trees moved under `papers/_archive/` are excluded from active-leaf
+   scanning, while references to that archive from active code remain forbidden.
 3. **Experiments are endpoints**: an `experiments/<NN>/` references no paper and
    no other experiment; the only shared experiment sibling is
    `experiments/_support`. Experiments may consume `benchmarks/` and the corpus
