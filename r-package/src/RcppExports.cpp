@@ -1791,6 +1791,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// inference_score_flip_test
+Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0, SEXP raw, int n_flips, double seed);
+RcppExport SEXP _magmaan_inference_score_flip_test(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< int >::type n_flips(n_flipsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed(seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_flip_test(fit_H1, fit_H0, raw, n_flips, seed));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_z_test
 Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se);
 RcppExport SEXP _magmaan_infer_z_test(SEXP fitSEXP, SEXP seSEXP) {
@@ -3726,6 +3741,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_casewise_influence_ij_fit, 3},
     {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 11},
     {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
+    {"_magmaan_inference_score_flip_test", (DL_FUNC) &_magmaan_inference_score_flip_test, 5},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},

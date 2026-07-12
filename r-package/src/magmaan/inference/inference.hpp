@@ -49,6 +49,17 @@ information_expected(spec::LatentStructure       pt,
                      const SampleStats&              samp,
                      const Estimates&                est);
 
+// Per-case group contributions to `information_expected`. Entry b is J_b such
+// that the total expected information is exactly
+// `sum_b samp.n_obs[b] * J_b`. This is primarily useful for grouped
+// random-transformation inference, where nuisance-estimation leverage depends
+// on the sign sum within each independent group.
+post_expected<std::vector<Eigen::MatrixXd>>
+information_expected_per_case_blocks(spec::LatentStructure pt,
+                                     const model::MatrixRep& rep,
+                                     const SampleStats& samp,
+                                     const Estimates& est);
+
 // Native FC-SEM counterpart. Uses the sample-backed FcSemEvaluator and its
 // numerical covariance Jacobian; covariance-only in the current tranche.
 post_expected<Eigen::MatrixXd>

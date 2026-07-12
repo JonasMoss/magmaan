@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <random>
 #include <set>
 #include <string>
 #include <type_traits>
@@ -27,6 +28,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
+#include "magmaan/robust/restriction.hpp"
 
 namespace magmaan::inference {
 
@@ -2005,6 +2007,340 @@ score_tests_fiml_robust(spec::LatentStructure pt,
   }
   RobustFimlEvaluator ev{rep, raw, pack};
   return equality_release_tests_robust(std::move(pt), rep, est, ev);
+}
+
+namespace {
+
+post_expected<void> validate_flip_raw(const SampleStats& samp,
+                                      const RawData& raw) {
+  if (!raw.mask.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: missing data are not supported; use complete-data ML"));
+  }
+  if (raw.X.size() != samp.S.size() || raw.X.size() != samp.n_obs.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: raw data and sample-statistic block counts differ"));
+  }
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    if (raw.X[b].rows() != samp.n_obs[b] ||
+        raw.X[b].cols() != samp.S[b].rows() || !raw.X[b].allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test: raw block " + std::to_string(b) +
+              " does not match the fitted complete-data sample"));
+    }
+  }
+  auto rebuilt = data::sample_stats_from_raw(raw);
+  if (!rebuilt.has_value()) return std::unexpected(rebuilt.error());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const double s_scale = std::max({1.0, samp.S[b].norm(), rebuilt->S[b].norm()});
+    if ((samp.S[b] - rebuilt->S[b]).norm() > 1e-10 * s_scale) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test: raw covariance does not match the fitted sample"));
+    }
+    if (!samp.mean.empty()) {
+      const double m_scale =
+          std::max({1.0, samp.mean[b].norm(), rebuilt->mean[b].norm()});
+      if ((samp.mean[b] - rebuilt->mean[b]).norm() > 1e-10 * m_scale) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "score_flip_test: raw mean does not match the fitted sample"));
+      }
+    }
+  }
+  return {};
+}
+
+post_expected<void> validate_same_null_point(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Estimates& est_H0) {
+  auto ev1 = build_eval(pt_H1, rep_H1);
+  if (!ev1.has_value()) return std::unexpected(ev1.error());
+  auto ev0 = build_eval(pt_H0, rep_H0);
+  if (!ev0.has_value()) return std::unexpected(ev0.error());
+  auto m1 = ev1->evaluate(est_H0.theta, false, false);
+  if (!m1.has_value()) return std::unexpected(model_to_post(m1.error()));
+  auto m0 = ev0->evaluate(est_H0.theta, false, false);
+  if (!m0.has_value()) return std::unexpected(model_to_post(m0.error()));
+  if (m1->moments.sigma.size() != m0->moments.sigma.size() ||
+      m1->moments.mu.size() != m0->moments.mu.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: H1 and H0 imply different block layouts"));
+  }
+  for (std::size_t b = 0; b < m1->moments.sigma.size(); ++b) {
+    const auto& s1 = m1->moments.sigma[b];
+    const auto& s0 = m0->moments.sigma[b];
+    const double scale = std::max({1.0, s1.norm(), s0.norm()});
+    if (s1.rows() != s0.rows() || s1.cols() != s0.cols() ||
+        (s1 - s0).norm() > 1e-8 * scale) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test: H0 estimate is not the same numeric point in H1"));
+    }
+    if (!m1->moments.mu.empty()) {
+      const auto& u1 = m1->moments.mu[b];
+      const auto& u0 = m0->moments.mu[b];
+      const double uscale = std::max({1.0, u1.norm(), u0.norm()});
+      if (u1.size() != u0.size() || (u1 - u0).norm() > 1e-8 * uscale) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "score_flip_test: H0 and H1 mean structures differ at the null point"));
+      }
+    }
+  }
+  return {};
+}
+
+struct FlipQuadratic {
+  double statistic = 0.0;
+  double min_eigenvalue = 0.0;
+  double condition = 1.0;
+};
+
+post_expected<FlipQuadratic> flip_quadratic(
+    const Eigen::VectorXd& u, const Eigen::MatrixXd& variance,
+    const char* what) {
+  Eigen::MatrixXd V = 0.5 * (variance + variance.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(V);
+  if (es.info() != Eigen::Success || es.eigenvalues().size() == 0) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        std::string(what) + ": variance eigendecomposition failed"));
+  }
+  const double vmax = es.eigenvalues().maxCoeff();
+  const double vmin = es.eigenvalues().minCoeff();
+  const double tol = 1e-12 * std::max(1.0, std::abs(vmax));
+  if (!(vmin > tol) || !std::isfinite(vmax)) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        std::string(what) + ": flip-specific variance is not positive definite"));
+  }
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(V);
+  const Eigen::VectorXd x = ldlt.solve(u);
+  if (ldlt.info() != Eigen::Success || !x.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        std::string(what) + ": variance solve failed"));
+  }
+  const double statistic = u.dot(x);
+  if (!std::isfinite(statistic) || statistic < -tol) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(what) + ": quadratic statistic is invalid"));
+  }
+  return FlipQuadratic{std::max(0.0, statistic), vmin, vmax / vmin};
+}
+
+double flip_mc_se(double p, int n_flips) {
+  return std::sqrt(p * (1.0 - p) / static_cast<double>(n_flips + 1));
+}
+
+}  // namespace
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
+                const SampleStats& samp,
+                const RawData& raw,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options) {
+  if (options.n_flips < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: n_flips must be positive"));
+  }
+  if (auto ok = validate_flip_raw(samp, raw); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (pt_H1.has_inequality_constraints || pt_H0.has_inequality_constraints ||
+      !pt_H1.nonlinear_eq_rows.empty() || !pt_H0.nonlinear_eq_rows.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: only affine equality-constrained model pairs are supported"));
+  }
+  const auto has_fixed_x = [](const spec::LatentStructure& pt) {
+    return std::any_of(pt.exo.begin(), pt.exo.end(),
+                       [](std::int8_t value) { return value != 0; });
+  };
+  if (has_fixed_x(pt_H1) || has_fixed_x(pt_H0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: fixed-X models are not supported"));
+  }
+  if (est_H0.diagnostics.active_bounds_full.any_active()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: boundary null fits are not supported"));
+  }
+  if (pt_H1.n_free() != pt_H0.n_free() ||
+      est_H0.theta.size() != static_cast<Eigen::Index>(pt_H0.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: H1/H0 must share the same ambient parameter slots"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt_H1, rep_H1, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt_H0, rep_H0, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  if (auto e = validate_same_null_point(pt_H1, rep_H1, pt_H0, rep_H0, est_H0);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+
+  auto con1 = build_eq_constraints(pt_H1);
+  if (!con1.has_value()) return std::unexpected(con1.error());
+  auto con0 = build_eq_constraints(pt_H0);
+  if (!con0.has_value()) return std::unexpected(con0.error());
+  auto restriction = robust::restriction_alpha_from_K(*con1, *con0);
+  if (!restriction.has_value()) return std::unexpected(restriction.error());
+  const Eigen::Index df = restriction->A.rows();
+  if (df < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: model pair has no released restrictions"));
+  }
+  const Eigen::MatrixXd D = con1->K() * restriction->A.transpose();
+  const Eigen::MatrixXd& K = con0->K();
+
+  auto info_blocks = information_expected_per_case_blocks(
+      pt_H1, rep_H1, samp, est_H0);
+  if (!info_blocks.has_value()) return std::unexpected(info_blocks.error());
+  if (info_blocks->size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: expected-information block count mismatch"));
+  }
+  const Eigen::Index npar = static_cast<Eigen::Index>(pt_H1.n_free());
+  Eigen::MatrixXd I = Eigen::MatrixXd::Zero(npar, npar);
+  for (std::size_t b = 0; b < info_blocks->size(); ++b) {
+    I.noalias() += static_cast<double>(samp.n_obs[b]) * (*info_blocks)[b];
+  }
+
+  const Eigen::MatrixXd A_nuisance = K.transpose() * I * K;
+  auto Ainv = invert_symmetric(A_nuisance,
+                               "score_flip_test nuisance information");
+  if (!Ainv.has_value()) return std::unexpected(Ainv.error());
+  Eigen::MatrixXd G = D;
+  if (K.cols() > 0) {
+    G.noalias() -= K * ((*Ainv) * (K.transpose() * I * D));
+  }
+  Eigen::MatrixXd V_identity = G.transpose() * I * G;
+  V_identity = 0.5 * (V_identity + V_identity.transpose());
+
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+  auto score_rows = estimate::fiml::fiml_casewise_deviance_scores(
+      pt_H1, rep_H1, raw, *pack, est_H0);
+  if (!score_rows.has_value()) return std::unexpected(score_rows.error());
+  const Eigen::MatrixXd scores = -0.5 * *score_rows;
+  const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
+  const Eigen::MatrixXd basic_rows = scores * D;
+  const Eigen::MatrixXd effective_rows = scores * G;
+
+  const Eigen::VectorXd u_basic_obs = basic_rows.colwise().sum().transpose();
+  const Eigen::VectorXd u_eff_obs = effective_rows.colwise().sum().transpose();
+  auto t_basic_obs = flip_quadratic(u_basic_obs, V_identity,
+                                    "score_flip_test observed basic");
+  if (!t_basic_obs.has_value()) return std::unexpected(t_basic_obs.error());
+  auto t_eff_obs = flip_quadratic(u_eff_obs, V_identity,
+                                  "score_flip_test observed effective");
+  if (!t_eff_obs.has_value()) return std::unexpected(t_eff_obs.error());
+
+  struct GroupGeometry {
+    Eigen::MatrixXd GG;
+    Eigen::MatrixXd GK;
+    Eigen::MatrixXd KK;
+  };
+  std::vector<GroupGeometry> geometry;
+  geometry.reserve(info_blocks->size());
+  for (const auto& J : *info_blocks) {
+    geometry.push_back(GroupGeometry{
+        G.transpose() * J * G,
+        G.transpose() * J * K,
+        K.transpose() * J * K});
+  }
+  auto variance_for = [&](const std::vector<std::int64_t>& sign_sum) {
+    Eigen::MatrixXd cross = Eigen::MatrixXd::Zero(df, K.cols());
+    for (std::size_t b = 0; b < geometry.size(); ++b) {
+      cross.noalias() += static_cast<double>(sign_sum[b]) * geometry[b].GK;
+    }
+    const Eigen::MatrixXd R = cross * (*Ainv);
+    Eigen::MatrixXd V = Eigen::MatrixXd::Zero(df, df);
+    for (std::size_t b = 0; b < geometry.size(); ++b) {
+      const double nb = static_cast<double>(samp.n_obs[b]);
+      const double cb = static_cast<double>(sign_sum[b]);
+      V.noalias() += nb * geometry[b].GG;
+      V.noalias() -= cb * geometry[b].GK * R.transpose();
+      V.noalias() -= cb * R * geometry[b].GK.transpose();
+      V.noalias() += nb * R * geometry[b].KK * R.transpose();
+    }
+    return Eigen::MatrixXd(0.5 * (V + V.transpose()));
+  };
+
+  std::vector<std::int64_t> identity_sums(raw.X.size());
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    identity_sums[b] = raw.X[b].rows();
+  }
+  auto t_std_obs = flip_quadratic(u_eff_obs, variance_for(identity_sums),
+                                  "score_flip_test observed standardized");
+  if (!t_std_obs.has_value()) return std::unexpected(t_std_obs.error());
+
+  std::mt19937_64 rng(options.seed);
+  int exceed_basic = 0;
+  int exceed_effective = 0;
+  int exceed_standardized = 0;
+  double min_variance_eigenvalue = t_std_obs->min_eigenvalue;
+  double max_variance_condition = t_std_obs->condition;
+  for (int bflip = 0; bflip < options.n_flips; ++bflip) {
+    Eigen::VectorXd ub = Eigen::VectorXd::Zero(df);
+    Eigen::VectorXd ue = Eigen::VectorXd::Zero(df);
+    std::vector<std::int64_t> sign_sum(raw.X.size(), 0);
+    Eigen::Index row = 0;
+    for (std::size_t b = 0; b < raw.X.size(); ++b) {
+      for (Eigen::Index i = 0; i < raw.X[b].rows(); ++i, ++row) {
+        const double sign = (rng() & 1ULL) == 0ULL ? -1.0 : 1.0;
+        sign_sum[b] += static_cast<std::int64_t>(sign);
+        ub.noalias() += sign * basic_rows.row(row).transpose();
+        ue.noalias() += sign * effective_rows.row(row).transpose();
+      }
+    }
+    auto tb = flip_quadratic(ub, V_identity, "score_flip_test basic flip");
+    if (!tb.has_value()) return std::unexpected(tb.error());
+    auto te = flip_quadratic(ue, V_identity, "score_flip_test effective flip");
+    if (!te.has_value()) return std::unexpected(te.error());
+    auto ts = flip_quadratic(ue, variance_for(sign_sum),
+                             "score_flip_test standardized flip");
+    if (!ts.has_value()) return std::unexpected(ts.error());
+    if (tb->statistic >= t_basic_obs->statistic) ++exceed_basic;
+    if (te->statistic >= t_eff_obs->statistic) ++exceed_effective;
+    if (ts->statistic >= t_std_obs->statistic) ++exceed_standardized;
+    min_variance_eigenvalue =
+        std::min(min_variance_eigenvalue, ts->min_eigenvalue);
+    max_variance_condition =
+        std::max(max_variance_condition, ts->condition);
+  }
+
+  const Eigen::MatrixXd B1 = scores.transpose() * scores;
+  auto asymptotic = score_for_subspace_robust(
+      {}, score_full, I, I, B1, K, D);
+  if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
+
+  const double denom = static_cast<double>(options.n_flips + 1);
+  ScoreFlipTestResult out;
+  out.df = static_cast<int>(df);
+  out.statistic_basic = t_basic_obs->statistic;
+  out.statistic_effective = t_eff_obs->statistic;
+  out.statistic_standardized = t_std_obs->statistic;
+  out.p_basic = (1.0 + static_cast<double>(exceed_basic)) / denom;
+  out.p_effective = (1.0 + static_cast<double>(exceed_effective)) / denom;
+  out.p_standardized = (1.0 + static_cast<double>(exceed_standardized)) / denom;
+  out.p_value = out.p_standardized;
+  out.mc_se_basic = flip_mc_se(out.p_basic, options.n_flips);
+  out.mc_se_effective = flip_mc_se(out.p_effective, options.n_flips);
+  out.mc_se_standardized = flip_mc_se(out.p_standardized, options.n_flips);
+  out.p_chisq = chi2_pvalue(out.statistic_effective, out.df);
+  out.scaling_factor = asymptotic->scaling_factor;
+  out.statistic_mean_scaled = asymptotic->mi_scaled;
+  out.p_mean_scaled = asymptotic->p_value;
+  out.p_mixture = asymptotic->p_mixture;
+  out.eigvals = std::move(asymptotic->eigvals);
+  out.n_flips = options.n_flips;
+  out.seed = options.seed;
+  out.nuisance_stationarity_norm =
+      K.cols() > 0 ? (K.transpose() * score_full).lpNorm<Eigen::Infinity>() : 0.0;
+  out.min_variance_eigenvalue = min_variance_eigenvalue;
+  out.max_variance_condition = max_variance_condition;
+  return out;
 }
 
 }  // namespace frontier

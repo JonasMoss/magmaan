@@ -477,6 +477,29 @@ golden `parTable()` fixtures.
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
+- `inference::frontier::score_flip_test` adds Monte Carlo Rademacher calibration
+  for affine nested complete-data ML models. It derives the tested directions
+  from the exact H1/H0 restriction map, evaluates individual Gaussian
+  likelihood-score contributions at the H0 fit, and reports three references:
+  basic score flips, Hemerik-Goeman-Finos nuisance-effective flips, and the
+  De Santis-Goeman-Hemerik-Davenport-Finos flip-specifically standardized
+  quadratic statistic. The effective direction
+  `G = D - K(K'IK)^-1 K'ID` is orthogonal to H0's nuisance tangent `K`; each
+  transformed statistic additionally recomputes the conditional variance
+  induced by estimating that nuisance vector. Per-group expected-information
+  blocks make this correction valid for multi-group models without storing an
+  `n x n` hat matrix. The observed identity is included in the Monte Carlo rank,
+  `p_value` aliases the standardized p-value, and deterministic seeds, Monte
+  Carlo SEs, asymptotic score comparators, nuisance-stationarity, and variance-
+  conditioning diagnostics are returned. `api::frontier::score_flip_test` and
+  the R `score_flip_test()` wrapper expose the method. The current contract
+  rejects missing data, fixed-X rows, nonlinear/inequality constraints,
+  boundary null fits, and non-ML estimators. Experiment 62's 300-replication
+  probe found the basic test extremely conservative, effective flips close to
+  nominal, and standardization a small improvement concentrated at n=30; the
+  hard t5 / threefold factor-variance cell rejected at 0.054, 0.077, and 0.050
+  for n=30/50/100, versus 0.190, 0.163, and 0.107 for the mean-scaled
+  Satorra-2000 difference test. This is frontier evidence, not a support claim.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the

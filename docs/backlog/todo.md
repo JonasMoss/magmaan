@@ -17,6 +17,20 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
+- **M/L — broaden and harden standardized score flips.** The first frontier
+  slice supports affine nested complete-data ML pairs and is exercised by
+  experiment 62. Before treating it as more than a research method: add a tiny
+  exact-enumeration kernel test against all `2^n` flips; add an independent
+  dense-hat-matrix oracle for the flip-specific covariance; probe unbalanced
+  group sizes, skew, more restriction dimensions, and near-singular nuisance
+  information. Then decide extensions separately: direct FIML needs observed-
+  pattern scores and a missing-data information convention; continuous LS and
+  ordinal/mixed models need estimator-specific casewise influence contributions
+  including estimated-weight effects; clustered data need cluster-level rather
+  than row-level signs. A residual-based or robust-Wald flip test is a distinct
+  method and should not be hidden behind the score-test entry point. Promote
+  any of these only when a concrete experiment needs it.
+
 - **XL — establish whether raw-label permutation is valid for ordinal
   measurement-invariance tests.** Experiment 61's continuous studentized-Wald
   path is motivated by Chung and Romano: raw observations need not be exactly

@@ -421,7 +421,8 @@ magmaan_core <- local({
       "inference_modification_indices",
       "inference_score_tests",
       "inference_modification_indices_robust",
-      "inference_score_tests_robust"
+      "inference_score_tests_robust",
+      "inference_score_flip_test"
     ),
     robust = c(
       "robust_lr_test_satorra2000",

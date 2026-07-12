@@ -1,3 +1,59 @@
+#' Standardized sign-flip score test for affine nested ML models.
+#'
+#' Calibrates the restrictions separating `fit_H0` from `fit_H1` by random
+#' Rademacher transformations of individual likelihood-score contributions.
+#' The result carries basic, nuisance-effective, and flip-specifically
+#' standardized references; `p_value` selects the standardized result.
+#'
+#' @param fit_H1 Less-restricted complete-data ML fit.
+#' @param fit_H0 More-restricted affine nested ML fit over the same parameter
+#'   slots and observations.
+#' @param data Raw fitting data, in the same form accepted by [nestedTest()].
+#' @param n_flips Number of random sign transformations, excluding the observed
+#'   identity.
+#' @param seed Non-negative deterministic integer seed.
+#'
+#' @return A list of class `magmaan_score_flip_test`.
+#' @export
+score_flip_test <- function(fit_H1, fit_H0, data,
+                            n_flips = 999L, seed = 1) {
+  if (missing(data) || is.null(data)) {
+    stop("score_flip_test(): complete-data ML score flips require `data`",
+         call. = FALSE)
+  }
+  n_flips <- as.integer(n_flips)[1L]
+  if (is.na(n_flips) || n_flips < 1L) {
+    stop("score_flip_test(): `n_flips` must be a positive integer", call. = FALSE)
+  }
+  seed <- as.numeric(seed)[1L]
+  if (!is.finite(seed) || seed < 0 || seed != floor(seed)) {
+    stop("score_flip_test(): `seed` must be a non-negative integer", call. = FALSE)
+  }
+  active_lower <- fit_H0$diagnostics$active_bounds_lower
+  active_upper <- fit_H0$diagnostics$active_bounds_upper
+  if (length(active_lower) > 0L || length(active_upper) > 0L) {
+    stop("score_flip_test(): boundary null fits are not supported", call. = FALSE)
+  }
+  raw <- raw_data_arg(fit_H1, data)
+  if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  out <- magmaan_core$inference_score_flip_test(
+    fit_H1, fit_H0, raw, n_flips, seed)
+  class(out) <- c("magmaan_score_flip_test", "list")
+  out
+}
+
+#' @export
+print.magmaan_score_flip_test <- function(x, ...) {
+  cat("standardized sign-flip score test\n")
+  cat("  statistic:", format(x$statistic_standardized),
+      " df:", x$df, "\n")
+  cat("  p (basic/effective/standardized):",
+      paste(format(c(x$p_basic, x$p_effective, x$p_standardized)),
+            collapse = " / "), "\n")
+  cat("  random flips:", x$n_flips, " seed:", format(x$seed), "\n")
+  invisible(x)
+}
+
 #' Robust nested-model likelihood-ratio tests.
 #'
 #' Compares a restricted model `fit_H0` against the less-restricted superset

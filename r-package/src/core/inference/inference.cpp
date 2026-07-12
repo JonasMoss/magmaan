@@ -327,11 +327,11 @@ df_stat(const spec::LatentStructure& pt,
 //                                  + 2 · ν_a' Σ_b⁻¹ ν_b]
 // ============================================================================
 
-post_expected<Eigen::MatrixXd>
-information_expected(spec::LatentStructure       pt,
-                     const model::MatrixRep&         rep,
-                     const SampleStats&              samp,
-                     const Estimates&                est) {
+post_expected<std::vector<Eigen::MatrixXd>>
+information_expected_per_case_blocks(spec::LatentStructure pt,
+                                     const model::MatrixRep& rep,
+                                     const SampleStats& samp,
+                                     const Estimates& est) {
   auto ev_or = prepare_evaluator(pt, rep, samp, est);
   if (!ev_or.has_value()) return std::unexpected(ev_or.error());
   const auto& ev = *ev_or;
@@ -364,10 +364,8 @@ information_expected(spec::LatentStructure       pt,
   const Eigen::MatrixXd& Jmu = *Jmu_or;
   const bool has_means = (Jmu.size() > 0);
 
-  // Per-block precompute: Σ_b⁻¹ and weight n_b/2. Σ⁻¹ as dense — small
-  // p in v0; cheap.
+  // Per-block precompute: Σ_b⁻¹. Σ⁻¹ as dense — small p in v0; cheap.
   std::vector<Eigen::MatrixXd> SigmaInv(n_blocks);
-  std::vector<double>          weight(n_blocks, 0.0);
   std::vector<Eigen::Index>    p_dim(n_blocks, 0);
   std::vector<Eigen::Index>    vech_off(n_blocks, 0);
 
@@ -390,7 +388,6 @@ information_expected(spec::LatentStructure       pt,
     // n/2, not (n-1)/2 — matches lavaan's default `likelihood = "normal"`
     // convention (vs Wishart's (n-1)/2). Determines both info scaling and
     // the matching chi² formula below.
-    weight[b]   = static_cast<double>(samp.n_obs[b]) / 2.0;
     p_dim[b]    = p;
     vech_off[b] = running;
     running += vech_len(p);
@@ -445,11 +442,11 @@ information_expected(spec::LatentStructure       pt,
   // Pairwise traces. trace(T_a · T_b) = Σ_{i,j} T_a(j,i) · T_b(i,j)
   //                                   = (T_a.transpose().array() * T_b.array()).sum()
   // Mean-structure term: ν_a' η_b carries a factor of 2 inside the (n/2) scale.
-  Eigen::MatrixXd info = Eigen::MatrixXd::Zero(
-      static_cast<Eigen::Index>(n_free), static_cast<Eigen::Index>(n_free));
+  std::vector<Eigen::MatrixXd> info_blocks(
+      n_blocks, Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(n_free),
+                                      static_cast<Eigen::Index>(n_free)));
   for (std::size_t a = 0; a < n_free; ++a) {
     for (std::size_t b = a; b < n_free; ++b) {
-      double acc = 0.0;
       for (std::size_t blk = 0; blk < n_blocks; ++blk) {
         double per_block = (T[a][blk].transpose().array() * T[b][blk].array()).sum();
         if (has_means) {
@@ -457,14 +454,36 @@ information_expected(spec::LatentStructure       pt,
               .segment(mu_off[blk], p_dim[blk]);
           per_block += 2.0 * nu_a.dot(eta[b][blk]);
         }
-        acc += weight[blk] * per_block;
+        const double value = 0.5 * per_block;
+        info_blocks[blk](static_cast<Eigen::Index>(a),
+                         static_cast<Eigen::Index>(b)) = value;
+        if (a != b) {
+          info_blocks[blk](static_cast<Eigen::Index>(b),
+                           static_cast<Eigen::Index>(a)) = value;
+        }
       }
-      info(static_cast<Eigen::Index>(a), static_cast<Eigen::Index>(b)) = acc;
-      if (a != b)
-        info(static_cast<Eigen::Index>(b), static_cast<Eigen::Index>(a)) = acc;
     }
   }
+  return info_blocks;
+}
 
+post_expected<Eigen::MatrixXd>
+information_expected(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const SampleStats& samp,
+                     const Estimates& est) {
+  auto blocks = information_expected_per_case_blocks(
+      std::move(pt), rep, samp, est);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  if (blocks->size() != samp.n_obs.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_expected: per-case block count mismatch"));
+  }
+  const Eigen::Index q = blocks->empty() ? 0 : blocks->front().rows();
+  Eigen::MatrixXd info = Eigen::MatrixXd::Zero(q, q);
+  for (std::size_t b = 0; b < blocks->size(); ++b) {
+    info.noalias() += static_cast<double>(samp.n_obs[b]) * (*blocks)[b];
+  }
   return info;
 }
 

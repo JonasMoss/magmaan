@@ -813,13 +813,14 @@ fiml_casewise_scores(const RawData& raw,
                      const Eigen::MatrixXd& J_sigma,
                      const Eigen::MatrixXd& J_mu) {
   if (raw.X.size() != moments.sigma.size() ||
-      moments.mu.size() != moments.sigma.size()) {
+      (!moments.mu.empty() && moments.mu.size() != moments.sigma.size())) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "FIML robust: raw and implied moment block count mismatch"));
   }
   Eigen::Index n_total = 0;
   for (const auto& X : raw.X) n_total += X.rows();
   Eigen::MatrixXd scores(n_total, J_sigma.cols());
+  const bool has_means = !moments.mu.empty() && J_mu.rows() > 0;
 
   Eigen::VectorXd w(J_sigma.rows());
   Eigen::VectorXd u(J_mu.rows());
@@ -848,8 +849,10 @@ fiml_casewise_scores(const RawData& raw,
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
             "FIML robust: non-finite observed value"));
       }
+      const Eigen::VectorXd zero_mu = Eigen::VectorXd::Zero(p);
+      const Eigen::VectorXd& mu_b = has_means ? moments.mu[b] : zero_mu;
       auto pm_or = pattern_moments_for(
-          bypat, obs, moments.mu[b], moments.sigma[b],
+          bypat, obs, mu_b, moments.sigma[b],
           "FIML robust: implied observed-pattern Sigma");
       if (!pm_or.has_value()) return std::unexpected(pm_or.error());
       const PatternMoments& pm = **pm_or;
@@ -874,12 +877,14 @@ fiml_casewise_scores(const RawData& raw,
           w(idx) += (ri == cj) ? G(ri, cj) : 2.0 * G(ri, cj);
         }
       }
-      for (Eigen::Index i = 0; i < q; ++i) {
-        const Eigen::Index rr = obs[static_cast<std::size_t>(i)];
-        u(mu_off + rr) += -2.0 * z(i);
+      if (has_means) {
+        for (Eigen::Index i = 0; i < q; ++i) {
+          const Eigen::Index rr = obs[static_cast<std::size_t>(i)];
+          u(mu_off + rr) += -2.0 * z(i);
+        }
       }
       scores.row(row_out).noalias() = w.transpose() * J_sigma;
-      scores.row(row_out).noalias() += u.transpose() * J_mu;
+      if (has_means) scores.row(row_out).noalias() += u.transpose() * J_mu;
       ++row_out;
     }
   }
@@ -2357,12 +2362,12 @@ independence_value_from_patterns(const FIMLCache& cache,
 
 }  // namespace
 
-post_expected<FIMLScoreMeatBread>
-fiml_score_meat_bread(const spec::LatentStructure& pt,
-                      const model::MatrixRep& rep,
-                      const RawData& raw,
-                      const FIMLPack& pack,
-                      const Estimates& est) {
+post_expected<Eigen::MatrixXd>
+fiml_casewise_deviance_scores(const spec::LatentStructure& pt,
+                              const model::MatrixRep& rep,
+                              const RawData& raw,
+                              const FIMLPack& pack,
+                              const Estimates& est) {
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -2382,6 +2387,17 @@ fiml_score_meat_bread(const spec::LatentStructure& pt,
   const auto& eval = *eval_or;
   auto scores_or = fiml_casewise_scores(raw, pack.cache, eval.moments,
                                         eval.J_sigma, eval.J_mu);
+  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+  return scores_or;
+}
+
+post_expected<FIMLScoreMeatBread>
+fiml_score_meat_bread(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const RawData& raw,
+                      const FIMLPack& pack,
+                      const Estimates& est) {
+  auto scores_or = fiml_casewise_deviance_scores(pt, rep, raw, pack, est);
   if (!scores_or.has_value()) return std::unexpected(scores_or.error());
   auto H_or =
       fiml_observed_hessian_analytic(pt, rep, pack.cache, pack.start_stats, est);

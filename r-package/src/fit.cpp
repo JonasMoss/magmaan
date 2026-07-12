@@ -7553,6 +7553,55 @@ Rcpp::DataFrame inference_score_tests_robust(
   return score_table_df(*out, ctx.names);
 }
 
+// [[Rcpp::export]]
+Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                     SEXP raw, int n_flips = 999,
+                                     double seed = 1.0) {
+  if (n_flips < 1) Rcpp::stop("magmaan: score_flip_test n_flips must be positive");
+  if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
+    Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
+  }
+  Ctx h1 = ctx_from_fit(fit_H1);
+  Ctx h0 = ctx_from_fit(fit_H0);
+  const std::string est1 = fit_H1.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H1["estimator"]) : "ML";
+  const std::string est0 = fit_H0.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H0["estimator"]) : "ML";
+  if (est1 != "ML" || est0 != "ML") {
+    Rcpp::stop("magmaan: score_flip_test currently supports complete-data ML fits only");
+  }
+  magmaan::data::RawData rd = complete_raw_from_arg(h1.rep, raw);
+  magmaan::inference::frontier::ScoreFlipOptions options;
+  options.n_flips = n_flips;
+  options.seed = static_cast<std::uint64_t>(seed);
+  auto out = magmaan::inference::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, h0.samp, rd, est_from_fit(fit_H0), options);
+  if (!out.has_value()) stop_post(out.error());
+  return Rcpp::List::create(
+      Rcpp::_ ["df"] = out->df,
+      Rcpp::_ ["statistic_basic"] = out->statistic_basic,
+      Rcpp::_ ["statistic_effective"] = out->statistic_effective,
+      Rcpp::_ ["statistic_standardized"] = out->statistic_standardized,
+      Rcpp::_ ["p_basic"] = out->p_basic,
+      Rcpp::_ ["p_effective"] = out->p_effective,
+      Rcpp::_ ["p_standardized"] = out->p_standardized,
+      Rcpp::_ ["p_value"] = out->p_value,
+      Rcpp::_ ["mc_se_basic"] = out->mc_se_basic,
+      Rcpp::_ ["mc_se_effective"] = out->mc_se_effective,
+      Rcpp::_ ["mc_se_standardized"] = out->mc_se_standardized,
+      Rcpp::_ ["p_chisq"] = out->p_chisq,
+      Rcpp::_ ["scaling_factor"] = out->scaling_factor,
+      Rcpp::_ ["statistic_mean_scaled"] = out->statistic_mean_scaled,
+      Rcpp::_ ["p_mean_scaled"] = out->p_mean_scaled,
+      Rcpp::_ ["p_mixture"] = out->p_mixture,
+      Rcpp::_ ["eigenvalues"] = Rcpp::wrap(out->eigvals),
+      Rcpp::_ ["n_flips"] = out->n_flips,
+      Rcpp::_ ["seed"] = static_cast<double>(out->seed),
+      Rcpp::_ ["nuisance_stationarity_norm"] = out->nuisance_stationarity_norm,
+      Rcpp::_ ["min_variance_eigenvalue"] = out->min_variance_eigenvalue,
+      Rcpp::_ ["max_variance_condition"] = out->max_variance_condition);
+}
+
 // infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from
 // infer_se(infer_vcov(info, fit)).
 //
