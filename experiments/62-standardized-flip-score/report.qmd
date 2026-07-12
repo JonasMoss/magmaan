@@ -194,7 +194,7 @@ classic over-rejection of likelihood-ratio tests at small $N$, which adequate
 sample size removes. A residual robustness margin remains under genuine
 non-normality.
 
-That margin holds up. From ten to thirty variables the score base stays near
+That margin holds up. From ten to forty variables the score base stays near
 nominal while the LR base stays liberal, at matched sample adequacy. Sample
 adequacy, not dimension, is what governs. And under a severe non-Gaussian copula,
 where the LR base rejects up to `r sprintf("%.2f", max(base_stress[["LR base"]]))`
@@ -312,27 +312,33 @@ one.
 ## Dimension scaling
 
 Foldnes et al. (2026) show robust-test over-rejection grows with model dimension,
-so the score base's edge might be a ten-variable artifact. This probe holds the
+so the score base's edge might be a low-dimensional artifact. This probe holds the
 tested restriction count fixed at 8 loadings and grows the ambient model from two
-to six factors ($p = 10, 20, 30$) under the severe copula, at a matched per-group
-sample-to-parameter ratio of about 6. The table averages over the two copulas.
+to eight factors ($p = 10, 20, 30, 40$) under the severe copula, over both
+population geometries and both copulas, at a matched per-group
+sample-to-parameter ratio of about 6 and 1700 replications per cell. The table
+averages over geometry and copula.
 
 ```{r dim-adequate}
 knitr::kable(dim_adequate, digits = 3)
 ```
 
-The edge is not a ten-variable artifact: the score base stays near nominal at
-every dimension while the LR base is liberal at every dimension. But sample
-adequacy, not dimension, governs. Because a fixed ratio grows $N$ with $p$, the
-LR base's excess shrinks toward its residual robustness margin as the model grows
-(LR-`SB` falls from about
+The edge is not a low-dimensional artifact: from ten to forty variables the score
+base stays near nominal while the LR base is liberal at every dimension, in both
+geometries. But sample adequacy, not dimension, governs. Because a fixed ratio
+grows $N$ with $p$, the LR base's excess shrinks toward its residual robustness
+margin as the model grows, from about
 `r sprintf("%.2f", dim_pick("adequate", 10, "rejection_lr_sb"))` at $p=10$ to
-`r sprintf("%.2f", dim_pick("adequate", 30, "rejection_lr_sb"))` at $p=30$). At
-an inadequate ratio near 2.5 the LR base over-rejects worst where $N$ is smallest,
-about `r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))` at $p=10$,
-$N=150$, falling to `r sprintf("%.2f", dim_pick("tight", 30, "rejection_lr_sb"))`
-at $p=30$ where the same ratio buys a larger $N$. The score base holds near
-nominal throughout, and `score: ALL` is its most consistently calibrated member.
+`r sprintf("%.2f", dim_pick("adequate", 40, "rejection_lr_sb"))` at $p=40$. The
+largest gaps sit at small $p$ and small $N$, where the small-sample
+likelihood-ratio effect is strongest: at an inadequate ratio near 2.5 the LR base
+reaches about `r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))` at
+$p=10$, falling to `r sprintf("%.2f", dim_pick("tight", 40, "rejection_lr_sb"))`
+at $p=40$ where the same ratio buys a larger $N$. The score base holds near
+nominal throughout, and `score: ALL` is its most consistently calibrated member,
+between about `r sprintf("%.2f", min(dim_summary$rejection_score_all, na.rm = TRUE))`
+and `r sprintf("%.2f", max(dim_summary$rejection_score_all, na.rm = TRUE))` across
+the whole probe.
 
 ## Power
 
@@ -423,11 +429,12 @@ alternatives at two effect sizes.
 Two boundary probes sit outside the main grid so they do not unbalance it. The
 severe-copula stress block crosses two copulas at fixed severe marginals with
 1/8 restrictions, $N=60/100/200$, and two geometries. The dimension-scaling probe
-crosses two copulas, $p=10/20/30$ at fixed 8-df restrictions, and two
-sample-to-parameter ratios (about 2.5 and 6), with $N$ set from the ratio so it
-grows with $p$; the ratios are approximate because the parameter count is
-estimated. The independent-generator copula was excluded because its marginal
-moment solve is infeasible at this severity.
+crosses two copulas and two geometries, $p=10/20/30/40$ at fixed 8-df
+restrictions, and two sample-to-parameter ratios (about 2.5 and 6), with $N$ set
+from the ratio so it grows with $p$, at 1700 replications per cell; the ratios are
+approximate because the parameter count is estimated. The independent-generator
+copula was excluded because its marginal moment solve is infeasible at this
+severity.
 
 Monte Carlo and binomial uncertainty remain visible in cell-level 0.05 decisions.
 Score flipping here is a frontier method for affine, complete-data ML models. The
@@ -441,7 +448,7 @@ Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --power
 Rscript experiments/62-standardized-flip-score/run_expansion.R --stress
-Rscript experiments/62-standardized-flip-score/run_dimension.R --probe
+Rscript experiments/62-standardized-flip-score/run_dimension.R --big
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```
