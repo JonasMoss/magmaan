@@ -27,7 +27,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   group-information geometries. Its next design question is to hold restriction
   df fixed while varying nuisance dimension and leverage, separating a genuinely
   high-dimensional nuisance effect from the joint-test-dimension effect seen at
-  fixed 62-slot ambient dimension. Then decide extensions separately: direct
+  fixed 62-slot ambient dimension. Its sparse/dense power follow-up also found
+  that the nominal FMG/SB power advantage vanished after matched empirical-null
+  calibration: standardized/effective flips, MV-adjusted LR, pEBA4, and exact
+  ALL were within roughly two percentage points on average. The next power
+  design should therefore increase the null calibration budget and vary
+  alternative alignment with the U-Gamma eigenvectors; raw nominal power is not
+  an adequate ranking criterion while the comparator sizes differ this much.
+  Then decide extensions separately: direct
   FIML needs observed-pattern scores and a missing-data information convention;
   continuous LS and ordinal/mixed models need estimator-specific casewise
   influence contributions including estimated-weight effects; clustered data
