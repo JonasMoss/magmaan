@@ -1,5 +1,5 @@
 ---
-title: "Score-flip standardization, FMG comparators, and power"
+title: "Score-flip tests, FMG transforms on the score vs LR base, and power"
 format:
   html:
     toc: true
@@ -35,25 +35,17 @@ power <- power[power$ok, , drop = FALSE]
 # Severe non-normal copula stress block (vm = Gaussian copula, pl = non-Gaussian,
 # matched severe marginals). Aggregated for the report.
 stress_cols <- c(
-  `Score standardized` = "rejection_standardized",
-  `Score mean-scaled`  = "rejection_mean_scaled",
-  `Naive chi-square`   = "rejection_chisq",
-  `LR SB scaled`       = "rejection_fmg_sb",
-  `LR MV adjusted`     = "rejection_fmg_mv",
-  `LR scaled-shifted`  = "rejection_fmg_ss",
-  `FMG pEBA4`          = "rejection_fmg_peba4")
+  `flip (standardized)` = "rejection_standardized",
+  `score: SB`           = "rejection_mean_scaled",
+  `score: ALL`          = "rejection_mixture",
+  `LR: SB`              = "rejection_fmg_sb",
+  `LR: pEBA4`           = "rejection_fmg_peba4")
 stress_row <- function(d, dff, het = NULL, nn = NULL) {
   sub <- stress[stress$distribution == d & stress$df == dff, , drop = FALSE]
   if (!is.null(het)) sub <- sub[sub$heterogeneity == het, , drop = FALSE]
   if (!is.null(nn)) sub <- sub[sub$n_total == nn, , drop = FALSE]
   vapply(stress_cols, function(cc) mean(sub[[cc]], na.rm = TRUE), numeric(1L))
 }
-copula_labels <- c(vm = "Vale-Maurelli (Gaussian copula)",
-                   pl = "Piecewise-linear (non-Gaussian copula)")
-stress_df8 <- data.frame(
-  Copula = unname(copula_labels[c("vm", "pl")]),
-  rbind(stress_row("vm", 8L), stress_row("pl", 8L)),
-  check.names = FALSE, row.names = NULL)
 s$calibration_effective <- abs(s$rejection_effective - .05)
 s$calibration_standardized <- abs(s$rejection_standardized - .05)
 s$calibration_gain <- s$calibration_effective - s$calibration_standardized
@@ -89,26 +81,51 @@ timing_scale <- subset(
   select = c(n_flips, median_resampling_score_ms,
              median_standardization_ms, median_core_total_ms))
 
+# Every method here is built on the same efficient score. What distinguishes
+# them is (i) how the reference distribution is obtained and (ii) which base
+# statistic and eigenvalues feed it. Three groups:
+#   flip:  sign-flip resampling of the score (basic/effective/standardized).
+#   score: FMG spectrum transforms on the SCORE statistic's own eigenvalues.
+#   LR:    the same FMG transforms on the Satorra-2000 LR construction.
 method_labels <- c(
-  p_effective = "score effective",
-  p_standardized = "score standardized",
-  p_lr_scaled = "LR SB scaled",
-  p_lr_mv_adjusted = "LR MV adjusted",
-  p_lr_scaled_shifted = "LR scaled-shifted",
-  p_lr_mixture = "LR exact mixture",
-  p_fmg_sb = "FMG SB",
-  p_fmg_mv = "FMG MV",
-  p_fmg_ss = "FMG SS",
-  p_fmg_sf = "FMG SF",
-  p_fmg_eba2 = "FMG EBA2",
-  p_fmg_eba4 = "FMG EBA4",
-  p_fmg_eba6 = "FMG EBA6",
-  p_fmg_peba2 = "FMG pEBA2",
-  p_fmg_peba4 = "FMG pEBA4",
-  p_fmg_peba6 = "FMG pEBA6",
-  p_fmg_pall = "FMG PALL",
-  p_fmg_pols = "FMG pOLS",
-  p_fmg_all = "FMG ALL")
+  p_effective    = "flip (effective)",
+  p_standardized = "flip (standardized)",
+  p_chisq        = "score: chi-square",
+  p_mean_scaled  = "score: SB",
+  p_score_ss     = "score: SS",
+  p_score_mv     = "score: MV",
+  p_score_sf     = "score: SF",
+  p_score_peba4  = "score: pEBA4",
+  p_mixture      = "score: ALL",
+  p_fmg_sb       = "LR: SB",
+  p_fmg_ss       = "LR: SS",
+  p_fmg_mv       = "LR: MV",
+  p_fmg_sf       = "LR: SF",
+  p_fmg_peba4    = "LR: pEBA4",
+  p_fmg_all      = "LR: ALL")
+
+# The same FMG transform on two base statistics: score vs LR.
+fmg_transforms <- c("SB", "SS", "MV", "SF", "pEBA4", "ALL")
+score_cols <- c(SB = "p_mean_scaled", SS = "p_score_ss", MV = "p_score_mv",
+                SF = "p_score_sf", pEBA4 = "p_score_peba4", ALL = "p_mixture")
+lr_cols <- c(SB = "p_fmg_sb", SS = "p_fmg_ss", MV = "p_fmg_mv",
+             SF = "p_fmg_sf", pEBA4 = "p_fmg_peba4", ALL = "p_fmg_all")
+base_compare_reps <- function(data) data.frame(
+  Transform = fmg_transforms,
+  `Score base` = vapply(fmg_transforms,
+    function(t) mean(data[[score_cols[[t]]]] < .05, na.rm = TRUE), numeric(1L)),
+  `LR base` = vapply(fmg_transforms,
+    function(t) mean(data[[lr_cols[[t]]]] < .05, na.rm = TRUE), numeric(1L)),
+  check.names = FALSE, row.names = NULL)
+base_compare_summary <- function(data) data.frame(
+  Transform = fmg_transforms,
+  `Score base` = vapply(fmg_transforms, function(t)
+    mean(data[[sub("^p_", "rejection_", score_cols[[t]])]], na.rm = TRUE), numeric(1L)),
+  `LR base` = vapply(fmg_transforms, function(t)
+    mean(data[[sub("^p_", "rejection_", lr_cols[[t]])]], na.rm = TRUE), numeric(1L)),
+  check.names = FALSE, row.names = NULL)
+base_null <- base_compare_reps(r)
+base_stress <- base_compare_summary(stress[stress$df == 8L, , drop = FALSE])
 
 method_size <- do.call(rbind, lapply(names(method_labels), function(v) {
   data.frame(
@@ -119,7 +136,7 @@ method_size <- do.call(rbind, lapply(names(method_labels), function(v) {
     df8 = mean(r[[v]][r$df == 8L] < .05, na.rm = TRUE))
 }))
 
-power_methods <- names(method_labels)
+power_methods <- intersect(names(method_labels), names(power))
 
 raw_power <- do.call(rbind, lapply(power_methods, function(v) {
   out <- aggregate(power[[v]] < .05,
@@ -183,7 +200,7 @@ power_by_df <- aggregate(
 names(power_by_df)[[5L]] <- "power"
 power_by_df <- subset(
   power_by_df,
-  method %in% c("score standardized", "LR MV adjusted", "FMG pEBA4", "FMG ALL"))
+  method %in% c("flip (standardized)", "score: MV", "LR: MV", "LR: pEBA4"))
 
 null_elapsed <- as.numeric(m$value[m$key == "elapsed_seconds"])
 power_elapsed <- as.numeric(power_metadata$value[power_metadata$key == "elapsed_seconds"])
@@ -207,17 +224,21 @@ mean p-value increased from the effective reference by
 `r sprintf("%.4f", mean(r$p_standardized - r$p_effective))`; no replication
 had a smaller standardized p-value.
 
-The larger comparator result is cautionary. At a nominal 5% cutoff, the
-standardized score flip rejected `r sprintf("%.3f", method_size$overall[method_size$method == "score standardized"])`
-of null replications. Mean/variance-adjusted LR and FMG ALL rejected about
-`r sprintf("%.3f", method_size$overall[method_size$method == "LR MV adjusted"])`,
-while SB and pEBA4 rejected
-`r sprintf("%.3f", method_size$overall[method_size$method == "LR SB scaled"])`
-and `r sprintf("%.3f", method_size$overall[method_size$method == "FMG pEBA4"])`.
-Their larger nominal power is therefore mostly not a fair power advantage.
-After each method was recalibrated to its matched empirical null cell, average
-power was strikingly similar. The score tests were marginally ahead overall,
-not behind FMG.
+The larger comparator result reframes the question. Every robust test here
+carries the same FMG spectrum transform (SB, SS, MV, SF, pEBA, ALL) on one of
+two base statistics: the score/Lagrange-multiplier statistic's own eigenvalues,
+or the Satorra-2000 likelihood-ratio construction that lavaan and Mplus use by
+default. **The base statistic dominates the transform.** Across the null grid
+the score base is near nominal for every transform (about
+`r sprintf("%.2f", min(base_null[["Score base"]]))`--`r sprintf("%.2f", max(base_null[["Score base"]]))`),
+while the identical transforms on the LR base are uniformly liberal (about
+`r sprintf("%.2f", min(base_null[["LR base"]]))`--`r sprintf("%.2f", max(base_null[["LR base"]]))`).
+The standardized flip test sits at
+`r sprintf("%.3f", method_size$overall[method_size$method == "flip (standardized)"])`.
+Matched-empirical-null calibration equalizes the flip and LR tests on power, so
+the LR family's larger nominal power was mostly size distortion, not a real
+advantage; but the simpler fix is to run the FMG transforms on the score base,
+where recalibration is barely needed.
 
 The strongest interaction was sample size by restriction dimension:
 
@@ -237,13 +258,13 @@ to: **standardize by default because it is inexpensive, but expect a material
 calibration difference mainly for small samples and moderate-to-large joint
 tests.**
 
-That verdict holds only where the data are close to asymptotically robust. A
-severe non-Gaussian copula breaks it: with marginals fixed at skewness 3 and
-excess kurtosis 21, the 8-df standardized flip rejects about 0.11--0.13 under a
-piecewise-linear copula, standardization does not repair it, and the effect
-persists as $N$ grows. Under that regime no test in the battery is calibrated,
-and the flip test is not the exception. Standardization is a cheap default, not
-a robustness guarantee.
+This is where the base statistic matters most. Under a severe non-Gaussian
+copula (marginals fixed at skewness 3 and excess kurtosis 21), the standardized
+flip rejects about 0.11--0.13 at 8 df and the LR base is far worse, both
+persisting as $N$ grows. The score base is the exception: its SS, MV, and ALL
+transforms stay near or below nominal even here. So standardization is a cheap
+default but not a robustness guarantee, whereas the score-base FMG transforms
+are the only members of the battery that hold up when the copula turns severe.
 
 ## Hypotheses and what happened
 
@@ -315,42 +336,45 @@ names(by_dist) <- c("distribution", "effective", "standardized")
 knitr::kable(by_dist, digits = 4)
 ```
 
-## LR and FMG null calibration
+## FMG transforms and the choice of base statistic
 
 These comparators are not arbitrary. Foldnes, Moss, and Grønneberg (2026)
 document that the two established robust nested tests fail in opposite
 directions under non-normality: the Satorra-Bentler scaled test (`SB`) is
 chronically liberal, and the scaled-and-shifted test (`SS`) is chronically
-conservative. The mean/variance-adjusted (`MV`) and eigenvalue-averaging
-(EBA/pEBA) families are the proposed repairs. Running all of them lets us ask
-where a resampling flip test lands relative to that spread, rather than against
-a single default.
+conservative. The mean/variance-adjusted (`MV`), scaled-$F$ (`SF`), and
+eigenvalue-averaging (EBA/pEBA) families are the proposed repairs. All of them
+are transforms of the eigenvalue spectrum of a weighted-chi-square limit.
 
-The full comparator battery includes the basic FMG variants (`SB`, `MV`, `SS`,
-and `SF`), EBA2/4/6 and pEBA2/4/6, the pooled approximations PALL and pOLS, and
-the exact ALL mixture. `MV` is the requested mean/variance-adjusted comparator.
-The FMG
-SB/MV/SS rows are also a wiring check: they agree with the corresponding
-nested-test scaled, mean/variance-adjusted, and scaled-shifted routes to a
+The key observation is that the score test carries its own spectrum. Its
+statistic $T = u^\top V^{-1} u$ over the efficient-score subspace has an
+asymptotic weighted-chi-square limit whose eigenvalues come straight from the
+model, so the identical FMG transforms can be applied to those eigenvalues
+instead of to the Satorra-2000 likelihood-ratio construction that lavaan and
+Mplus use by default. The table applies each transform to both base statistics,
+on the full null grid.
+
+```{r base-compare-null}
+knitr::kable(base_null, digits = 3)
+```
+
+The base statistic dominates the transform. On the LR base every transform is
+uniformly liberal, around 0.10--0.14; on the score base the same transforms are
+near nominal, around 0.03--0.05. The spread across transforms within a base is
+small next to the gap between the two bases. It holds even at a single
+restriction, where the transforms collapse to nearly one scalar test: the LR
+base still rejects about
+`r sprintf("%.2f", mean(r$p_fmg_sb[r$df == 1L] < .05, na.rm = TRUE))`
+for SB while the score base is already near
+`r sprintf("%.2f", mean(r$p_mean_scaled[r$df == 1L] < .05, na.rm = TRUE))`.
+On the score base the more aggressive transforms (SS, MV, SF, ALL) are mildly
+conservative rather than liberal, which trades a little power for size control.
+
+The LR-base SB/MV/SS values are also a wiring check against the nested-test
+scaled, mean/variance-adjusted, and scaled-shifted routes: they agree to a
 maximum absolute p-value gap of
 `r format(max(r$fmg_duplicate_max_gap, na.rm = TRUE), scientific = TRUE,
 digits = 2)`.
-
-```{r comparator-size}
-names(method_size) <- c("method", "overall", "df = 1", "df = 4", "df = 8")
-knitr::kable(method_size, digits = 3)
-```
-
-Three patterns matter:
-
-- At one restriction most spectrum transformations collapse to nearly the
-  same scalar test; the main exception is SF. The common LR/FMG rejection rate
-  is already about 0.105, so scalar robust scaling does not solve this
-  small-sample design.
-- MV, exact mixture/ALL, and SF are less liberal than SB and pEBA/PALL/pOLS,
-  especially at 4--8 df, but remain well above 0.05.
-- Standardization improves the effective flip test most clearly at 8 df
-  (0.073 to 0.070), but this is an adjustment, not complete calibration.
 
 ## Severe non-normality: the copula, not the marginals
 
@@ -365,43 +389,48 @@ normal-theory ML inference is not asymptotically robust to that difference.
 
 The stress block holds the marginals fixed at a severe level (skewness 3, excess
 kurtosis 21) and switches only the copula: Vale-Maurelli is a Gaussian copula,
-piecewise-linear is not. Both use magmaan's native generators. The table reports
-null rejection at the 8-df joint test, averaged over $N$ and the homogeneous and
-geometry populations.
+piecewise-linear is not. Both use magmaan's native generators. The base-statistic
+comparison carries straight through: the table applies each FMG transform to the
+score and LR bases at the 8-df joint test, averaged over $N$ and the homogeneous
+and geometry populations.
 
-```{r stress-table}
-knitr::kable(stress_df8, digits = 3)
+```{r base-compare-stress}
+knitr::kable(base_stress, digits = 3)
 ```
 
-Three things stand out, and none is visible in the mild cells:
+The split that was visible in the mild grid becomes a chasm:
 
-- **Every test breaks, including the flip test.** The standardized flip rejects
-  about 0.11--0.13 here, more than double nominal, and standardization does not
-  repair it. The naive chi-square is off the scale. The reading from the mild
-  cells, that flip standardization is a small always-safe adjustment, does not
-  extend: under a severe non-Gaussian copula the flip test is simply not
-  calibrated.
+- **The score base survives the severe copula; the LR base does not.** On the
+  LR base every transform rejects around 0.28--0.39, four to eight times
+  nominal. On the score base the more aggressive transforms (SS, MV, SF, ALL)
+  stay near or below 0.05, with SB and pEBA4 only mildly liberal. The same
+  spectrum transform, read off a different base statistic, is the difference
+  between a broken test and a working one.
+- **The sign-flip test lands between them and does not survive.** The
+  standardized flip rejects about
+  `r sprintf("%.2f", stress_row("vm", 8L)[["flip (standardized)"]])`--`r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])`,
+  better than the LR base but far worse than the score base, and standardization
+  does not repair it. The score sign-symmetry the flip relies on is itself
+  strained by a severe copula.
 - **The copula, not the heterogeneity, is the cause.** In the homogeneous
   populations, where the two groups share covariance and mean structure exactly,
-  the 8-df SB test still rejects about
-  `r sprintf("%.2f", stress_row("vm", 8L, "homogeneous")[["LR SB scaled"]])`
+  the 8-df LR-SB test still rejects about
+  `r sprintf("%.2f", stress_row("vm", 8L, "homogeneous")[["LR: SB"]])`
   under the Gaussian copula and
-  `r sprintf("%.2f", stress_row("pl", 8L, "homogeneous")[["LR SB scaled"]])`
+  `r sprintf("%.2f", stress_row("pl", 8L, "homogeneous")[["LR: SB"]])`
   under the non-Gaussian one. Same marginals, different copula, very different
-  size.
-- **Piecewise-linear is uniformly harder than Vale-Maurelli**, exactly as the
-  copula explanation predicts: the Gaussian copula sits closer to the
-  normal-theory assumption than the piecewise-linear one.
+  size. Piecewise-linear is uniformly harder than Vale-Maurelli, as the copula
+  explanation predicts.
 
 The distortion shrinks with sample size but does not calibrate. For the hardest
-cell (piecewise-linear, 8 df, geometry heterogeneity), SB rejects about
-`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 60L)[["LR SB scaled"]])`,
-`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 100L)[["LR SB scaled"]])`,
-and `r sprintf("%.2f", stress_row("pl", 8L, "geometry", 200L)[["LR SB scaled"]])`
-at $N=60, 100, 200$, while the standardized flip plateaus near 0.12. This is an
-asymptotic-robustness failure, not a small-sample one: it does not vanish as $N$
-grows. Among all tests, only the flip's own mean-scaled asymptotic reference
-stays in single digits (about 0.07--0.09), and even it is not at 0.05.
+cell (piecewise-linear, 8 df, geometry heterogeneity), the LR-SB test rejects
+about
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 60L)[["LR: SB"]])`,
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 100L)[["LR: SB"]])`,
+and `r sprintf("%.2f", stress_row("pl", 8L, "geometry", 200L)[["LR: SB"]])`
+at $N=60, 100, 200$. This is an asymptotic-robustness failure, not a small-sample
+one: it does not vanish as $N$ grows. The score-base transforms are the only
+members of the battery that hold near nominal across the whole stress block.
 
 ## Power
 
@@ -414,18 +443,18 @@ The df=1 dense cells are omitted because they duplicate sparse exactly.
 ### Nominal power is confounded by size
 
 ```{r raw-power}
-raw_show <- raw_power[c(
-  "alternative", "effect", "score standardized", "score effective",
-  "LR SB scaled", "LR MV adjusted", "LR exact mixture", "FMG SF",
-  "FMG pEBA4", "FMG ALL")]
-knitr::kable(raw_show, digits = 3)
+power_show_cols <- function(tab) intersect(c(
+  "alternative", "effect", "flip (standardized)", "score: SB", "score: MV",
+  "score: pEBA4", "LR: SB", "LR: MV", "LR: pEBA4"), names(tab))
+knitr::kable(raw_power[power_show_cols(raw_power)], digits = 3)
 ```
 
-At face value SB and pEBA4 look substantially more powerful. Their null sizes
-show why that ranking is misleading. For example, sparse 0.50 nominal power is
-about 0.50 for SB, 0.49 for pEBA4, 0.46 for MV/ALL, and 0.38 for standardized
-flips—but their overall null rejection rates are about 0.138, 0.130, 0.110,
-and 0.063, respectively.
+At face value the LR-base SB and pEBA4 look substantially more powerful. Their
+null sizes show why that ranking is misleading. For example, sparse 0.50 nominal
+power is about 0.50 for LR-base SB, 0.49 for LR-base pEBA4, and 0.38 for
+standardized flips, but their overall null rejection rates are about 0.138,
+0.130, and 0.063. The score-base transforms show lower nominal power because
+they are near or below nominal size to begin with, not because they detect less.
 
 ### Matched empirical-null calibration
 
@@ -437,19 +466,17 @@ alternative replications using that cutoff. This respects the discrete
 so differences of a few points should not be over-interpreted.
 
 ```{r calibrated-power}
-calibrated_show <- calibrated_power[c(
-  "alternative", "effect", "score standardized", "score effective",
-  "LR SB scaled", "LR MV adjusted", "LR exact mixture", "FMG SF",
-  "FMG pEBA4", "FMG ALL")]
-knitr::kable(calibrated_show, digits = 3)
+knitr::kable(calibrated_power[power_show_cols(calibrated_power)], digits = 3)
 ```
 
 The dramatic nominal separation largely vanishes. Across all four alternative
-families, standardized flips, MV-adjusted LR, pEBA4, and ALL are generally
-within one or two percentage points. SF trails on sparse alternatives. Averaged
+families, standardized flips, the LR-base MV/pEBA4/ALL, and the score-base
+transforms are generally within one or two percentage points once each is held
+to its own realized size. The score base's mild conservatism therefore costs
+little power after calibration: it buys size control almost for free. Averaged
 over all power cells, standardized/effective flips reach about 0.186 calibrated
-power versus about 0.184 for MV, pEBA4, and ALL; that gap is too small to call a
-general advantage.
+power versus about 0.184 for the LR-base MV/pEBA4/ALL; that gap is too small to
+call a general advantage.
 
 The all-method average makes the comparison among the EBA orders and the basic
 FMG variants explicit. `achieved_size` is the average rejection rate obtained
@@ -527,36 +554,34 @@ one FMG transform would be cheaper still.
 
 ## Recommendation
 
-- Keep `p_standardized` as the default. The serial incremental cost is only a
-  few milliseconds at SEM-sized restriction dimensions, and every decision
-  change in this probe went in the theoretically expected conservative
-  direction.
-- Expect little practical difference for a one-df release or total $N\geq200$,
-  unless leverage or information conditioning is much more extreme than in
-  this design.
-- Expect the clearest benefit around total $N\leq100$ with 4--8 jointly tested
-  restrictions, especially with group imbalance. Standardization helps there,
-  but should not be sold as a complete small-sample correction.
-- Do not decide from "heteroscedastic versus homogeneous" alone. Inspect the
-  returned `mean_variance_relative_shift`; it is a more direct diagnostic of
-  whether standardization is changing the reference distribution.
-- Do not compare raw power for these robust LR/FMG transforms without also
-  comparing null size. In this probe, the apparent pEBA/SB advantage disappears
-  under matched empirical-null calibration; MV-adjusted LR, exact ALL, pEBA4,
-  and standardized flips have broadly similar calibrated power.
-- Prefer MV/ALL over SB or pEBA/PALL/pOLS if a non-flip comparator is needed in
-  this design: they are materially less liberal. None is close enough to 0.05
-  here to present as a small-sample solution.
-- Do not treat any test here as robust to a severe non-Gaussian copula. With
-  marginals fixed and only the copula changed, flip and FMG tests alike
-  over-reject badly and do not calibrate as $N$ grows. If severe non-normality
-  with non-elliptical dependence is plausible, this is a limit of the
-  complete-data method, not a scaling choice to tune.
+- **Put the FMG spectrum transforms on the score base, not the LR base.** The
+  identical transform (SB, SS, MV, SF, pEBA, ALL) is near nominal on the
+  score/LM statistic's own eigenvalues and uniformly liberal on the
+  Satorra-2000 LR construction that lavaan and Mplus default to. This is the
+  largest calibration lever in the study and it costs nothing extra: the score
+  eigenvalues are already computed by the flip test.
+- Among the score-base transforms, the more aggressive members (SS, MV, ALL)
+  are mildly conservative and give the tightest size control, including under
+  the severe copula; SB and pEBA4 sit a little closer to nominal. Their
+  calibrated power is within a point or two of the flip test, so the
+  conservatism costs little.
+- Keep `p_standardized` if you want a resampling test: it is cheap and every
+  decision change went in the conservative direction. But it is not better
+  calibrated than the score-base asymptotics, and it is more strained by severe
+  non-normality. Expect the standardization-vs-effective difference to matter
+  mainly at total $N\leq100$ with 4--8 restrictions and group imbalance; it is a
+  small adjustment, not a small-sample correction.
+- Do not compare raw power for any transform without also comparing null size.
+  The apparent LR-base pEBA/SB power advantage disappears under matched
+  empirical-null calibration.
+- Do not extend "robust" to a severe non-Gaussian copula uncritically. The LR
+  base and the flip test over-reject badly and do not calibrate as $N$ grows;
+  only the score-base transforms hold near nominal there, and that is a probe
+  result at ten variables, not a guarantee.
 - Next stress tests: (a) hold df fixed while varying nuisance dimension and
-  leverage, to separate "many restrictions" from the tested-to-residual
-  information ratio; and (b) raise the observed dimension above the current ten
-  variables, since the FMG results show robust-test over-rejection grows sharply
-  with dimension.
+  leverage; and (b) raise the observed dimension above ten variables, where the
+  FMG results show robust-test over-rejection grows sharply, to check whether the
+  score base keeps its edge.
 
 ## Design and caveats
 
