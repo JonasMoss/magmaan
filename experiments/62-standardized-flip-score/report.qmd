@@ -1,5 +1,5 @@
 ---
-title: "Score-flip tests, FMG transforms on the score vs LR base, and power"
+title: "Robust invariance testing: the base statistic beats the transform"
 format:
   html:
     toc: true
@@ -22,90 +22,19 @@ if (any(!file.exists(files))) {
     "run_expansion.R --power, run_expansion.R --stress, run_dimension.R --probe,",
     "and run_timing.R"))
 }
-legacy <- read.csv(files[[1L]])
 s <- read.csv(files[[2L]])
-r <- read.csv(files[[3L]])
+r <- read.csv(files[[3L]]); r_all_ok <- r$ok; r <- r[r$ok, , drop = FALSE]
 m <- read.csv(files[[4L]])
 timing <- read.csv(files[[5L]])
-power_summary <- read.csv(files[[6L]])
-power <- read.csv(files[[7L]])
+power <- read.csv(files[[7L]]); power <- power[power$ok, , drop = FALSE]
 power_metadata <- read.csv(files[[8L]])
 stress <- read.csv(files[[9L]])
 dim_summary <- read.csv(files[[10L]])
-r <- r[r$ok, , drop = FALSE]
-power <- power[power$ok, , drop = FALSE]
 
-# Dimension-scaling probe: tested df = 8 fixed, ambient p in {10,20,30}, severe
-# copula, two sample-adequacy regimes. Aggregate over the two copulas.
-dim_cols <- c(`score: SB` = "rejection_score_sb",
-              `score: ALL` = "rejection_score_all",
-              `LR: SB` = "rejection_lr_sb",
-              `flip (standardized)` = "rejection_flip_standardized")
-dim_table <- function(adeq) {
-  sub <- dim_summary[dim_summary$adequacy == adeq, , drop = FALSE]
-  agg <- aggregate(sub[unname(dim_cols)], list(p = sub$p), mean)
-  names(agg) <- c("p", names(dim_cols))
-  agg
-}
-dim_adequate <- dim_table("adequate")
-dim_pick <- function(adeq, pp, col)
-  mean(dim_summary[dim_summary$adequacy == adeq & dim_summary$p == pp, col], na.rm = TRUE)
-
-# Severe non-normal copula stress block (vm = Gaussian copula, pl = non-Gaussian,
-# matched severe marginals). Aggregated for the report.
-stress_cols <- c(
-  `flip (standardized)` = "rejection_standardized",
-  `score: SB`           = "rejection_mean_scaled",
-  `score: ALL`          = "rejection_mixture",
-  `LR: SB`              = "rejection_fmg_sb",
-  `LR: pEBA4`           = "rejection_fmg_peba4")
-stress_row <- function(d, dff, het = NULL, nn = NULL) {
-  sub <- stress[stress$distribution == d & stress$df == dff, , drop = FALSE]
-  if (!is.null(het)) sub <- sub[sub$heterogeneity == het, , drop = FALSE]
-  if (!is.null(nn)) sub <- sub[sub$n_total == nn, , drop = FALSE]
-  vapply(stress_cols, function(cc) mean(sub[[cc]], na.rm = TRUE), numeric(1L))
-}
-s$calibration_effective <- abs(s$rejection_effective - .05)
-s$calibration_standardized <- abs(s$rejection_standardized - .05)
-s$calibration_gain <- s$calibration_effective - s$calibration_standardized
-
-means <- function(vars, by) {
-  aggregate(s[vars], s[by], mean)
-}
-by_df <- means(c("rejection_effective", "rejection_standardized",
-                 "changed_to_accept", "mean_abs_delta_p",
-                 "mean_variance_relative_shift"), "df")
-by_n <- means(c("rejection_effective", "rejection_standardized",
-                "changed_to_accept", "mean_abs_delta_p",
-                "mean_variance_relative_shift"), "n_total")
-by_dist <- means(c("rejection_effective", "rejection_standardized"),
-                 "distribution")
-by_balance <- means(c("rejection_effective", "rejection_standardized",
-                      "changed_to_accept"), "balance")
-by_ndf <- aggregate(
-  r[c("reject_effective", "reject_standardized", "changed_to_accept")],
-  r[c("n_total", "df")], mean)
-
-timing_ms <- timing
-for (name in grep("seconds$", names(timing), value = TRUE)) {
-  timing_ms[[sub("seconds$", "ms", name)]] <- 1000 * timing[[name]]
-}
-timing_499 <- subset(
-  timing_ms, scenario == "easy" & n_flips == 499,
-  select = c(df, median_setup_ms, median_resampling_score_ms,
-             median_standardization_ms, median_asymptotic_ms,
-             median_core_total_ms))
-timing_scale <- subset(
-  timing_ms, scenario == "easy" & df == 8,
-  select = c(n_flips, median_resampling_score_ms,
-             median_standardization_ms, median_core_total_ms))
-
-# Every method here is built on the same efficient score. What distinguishes
-# them is (i) how the reference distribution is obtained and (ii) which base
-# statistic and eigenvalues feed it. Three groups:
-#   flip:  sign-flip resampling of the score (basic/effective/standardized).
-#   score: FMG spectrum transforms on the SCORE statistic's own eigenvalues.
-#   LR:    the same FMG transforms on the Satorra-2000 LR construction.
+# Method naming: {flip | score | LR} x transform. Every method is built on the
+# same efficient score; what differs is how the reference is obtained (flip =
+# sign-flip resampling; score/LR = FMG spectrum transforms on the score
+# statistic's own eigenvalues, or on the Satorra-2000 LR construction).
 method_labels <- c(
   p_effective    = "flip (effective)",
   p_standardized = "flip (standardized)",
@@ -123,7 +52,7 @@ method_labels <- c(
   p_fmg_peba4    = "LR: pEBA4",
   p_fmg_all      = "LR: ALL")
 
-# The same FMG transform on two base statistics: score vs LR.
+# Same FMG transform on two base statistics: score vs LR.
 fmg_transforms <- c("SB", "SS", "MV", "SF", "pEBA4", "ALL")
 score_cols <- c(SB = "p_mean_scaled", SS = "p_score_ss", MV = "p_score_mv",
                 SF = "p_score_sf", pEBA4 = "p_score_peba4", ALL = "p_mixture")
@@ -145,31 +74,55 @@ base_compare_summary <- function(data) data.frame(
   check.names = FALSE, row.names = NULL)
 base_null <- base_compare_reps(r)
 base_stress <- base_compare_summary(stress[stress$df == 8L, , drop = FALSE])
+flip_std_overall <- mean(r$p_standardized < .05, na.rm = TRUE)
 
-method_size <- do.call(rbind, lapply(names(method_labels), function(v) {
-  data.frame(
-    method = unname(method_labels[[v]]),
-    overall = mean(r[[v]] < .05, na.rm = TRUE),
-    df1 = mean(r[[v]][r$df == 1L] < .05, na.rm = TRUE),
-    df4 = mean(r[[v]][r$df == 4L] < .05, na.rm = TRUE),
-    df8 = mean(r[[v]][r$df == 8L] < .05, na.rm = TRUE))
+# Normal-data N-convergence: with no non-normality, any gap is small-sample.
+norm_conv <- do.call(rbind, lapply(c(60L, 100L, 200L), function(nn) {
+  sub <- r[r$distribution == "normal" & r$n_total == nn, , drop = FALSE]
+  data.frame(`Total N` = nn,
+    `score: SB` = mean(sub$p_mean_scaled < .05, na.rm = TRUE),
+    `LR: SB` = mean(sub$p_fmg_sb < .05, na.rm = TRUE),
+    `flip (standardized)` = mean(sub$p_standardized < .05, na.rm = TRUE),
+    check.names = FALSE)
 }))
+t5_lr_sb_n200 <- mean(r$p_fmg_sb[r$distribution == "t5" & r$n_total == 200L] < .05,
+                      na.rm = TRUE)
 
+# Severe-copula stress helpers.
+stress_cols <- c(
+  `flip (standardized)` = "rejection_standardized",
+  `score: SB`           = "rejection_mean_scaled",
+  `score: ALL`          = "rejection_mixture",
+  `LR: SB`              = "rejection_fmg_sb",
+  `LR: pEBA4`           = "rejection_fmg_peba4")
+stress_row <- function(d, dff, het = NULL, nn = NULL) {
+  sub <- stress[stress$distribution == d & stress$df == dff, , drop = FALSE]
+  if (!is.null(het)) sub <- sub[sub$heterogeneity == het, , drop = FALSE]
+  if (!is.null(nn)) sub <- sub[sub$n_total == nn, , drop = FALSE]
+  vapply(stress_cols, function(cc) mean(sub[[cc]], na.rm = TRUE), numeric(1L))
+}
+
+# Dimension-scaling helpers.
+dim_cols <- c(`score: SB` = "rejection_score_sb",
+              `score: ALL` = "rejection_score_all",
+              `LR: SB` = "rejection_lr_sb",
+              `flip (standardized)` = "rejection_flip_standardized")
+dim_table <- function(adeq) {
+  sub <- dim_summary[dim_summary$adequacy == adeq, , drop = FALSE]
+  agg <- aggregate(sub[unname(dim_cols)], list(p = sub$p), mean)
+  names(agg) <- c("p", names(dim_cols)); agg
+}
+dim_adequate <- dim_table("adequate")
+dim_pick <- function(adeq, pp, col)
+  mean(dim_summary[dim_summary$adequacy == adeq & dim_summary$p == pp, col], na.rm = TRUE)
+
+# Standardization sub-study: decision changes by N and restriction count.
+by_ndf <- aggregate(
+  r[c("reject_effective", "reject_standardized", "changed_to_accept")],
+  r[c("n_total", "df")], mean)
+
+# Matched-empirical-null (size-adjusted) power.
 power_methods <- intersect(names(method_labels), names(power))
-
-raw_power <- do.call(rbind, lapply(power_methods, function(v) {
-  out <- aggregate(power[[v]] < .05,
-                   power[c("alternative", "effect")], mean, na.rm = TRUE)
-  names(out)[[3L]] <- "power"
-  out$method <- unname(method_labels[[v]])
-  out
-}))
-raw_power <- reshape(raw_power, idvar = c("alternative", "effect"),
-                     timevar = "method", direction = "wide")
-names(raw_power) <- sub("^power\\.", "", names(raw_power))
-
-# Use the largest strict critical value whose observed matched-cell null size
-# does not exceed alpha. This respects the discreteness of the 499-flip tests.
 empirical_critical <- function(x, alpha = .05) {
   x <- x[is.finite(x)]
   candidates <- sort(unique(x))
@@ -177,13 +130,11 @@ empirical_critical <- function(x, alpha = .05) {
   valid <- candidates[rates <= alpha]
   if (!length(valid)) -Inf else max(valid)
 }
-
 keys <- c("df", "n_total", "balance", "heterogeneity", "distribution")
 power_cells <- unique(power[c(keys, "alternative", "effect")])
 calibrated <- do.call(rbind, lapply(seq_len(nrow(power_cells)), function(i) {
   cell <- power_cells[i, , drop = FALSE]
-  null_match <- rep(TRUE, nrow(r))
-  power_match <- rep(TRUE, nrow(power))
+  null_match <- rep(TRUE, nrow(r)); power_match <- rep(TRUE, nrow(power))
   for (key in keys) {
     null_match <- null_match & r[[key]] == cell[[key]]
     power_match <- power_match & power[[key]] == cell[[key]]
@@ -191,75 +142,224 @@ calibrated <- do.call(rbind, lapply(seq_len(nrow(power_cells)), function(i) {
   power_match <- power_match & power$alternative == cell$alternative &
     power$effect == cell$effect
   do.call(rbind, lapply(power_methods, function(v) {
-    null_p <- r[[v]][null_match]
-    alt_p <- power[[v]][power_match]
-    critical <- empirical_critical(null_p)
-    data.frame(
-      cell, method = unname(method_labels[[v]]), critical = critical,
-      achieved_size = mean(null_p < critical, na.rm = TRUE),
-      calibrated_power = mean(alt_p < critical, na.rm = TRUE))
+    critical <- empirical_critical(r[[v]][null_match])
+    data.frame(cell, method = unname(method_labels[[v]]),
+      calibrated_power = mean(power[[v]][power_match] < critical, na.rm = TRUE))
   }))
 }))
-
-calibrated_power <- aggregate(
-  calibrated[c("achieved_size", "calibrated_power")],
+calibrated_power <- aggregate(calibrated["calibrated_power"],
   calibrated[c("alternative", "effect", "method")], mean)
-calibrated_power <- reshape(
-  calibrated_power, idvar = c("alternative", "effect"),
-  timevar = "method", direction = "wide")
+calibrated_power <- reshape(calibrated_power,
+  idvar = c("alternative", "effect"), timevar = "method", direction = "wide")
 names(calibrated_power) <- sub("^calibrated_power\\.", "", names(calibrated_power))
+power_show_cols <- function(tab) intersect(c(
+  "alternative", "effect", "flip (standardized)", "score: SB", "score: MV",
+  "score: pEBA4", "LR: SB", "LR: MV", "LR: pEBA4"), names(tab))
 
-overall_calibrated <- aggregate(
-  calibrated[c("achieved_size", "calibrated_power")],
-  calibrated[c("method")], mean)
-
-power_by_df <- aggregate(
-  calibrated$calibrated_power,
-  calibrated[c("df", "alternative", "effect", "method")], mean)
-names(power_by_df)[[5L]] <- "power"
-power_by_df <- subset(
-  power_by_df,
-  method %in% c("flip (standardized)", "score: MV", "LR: MV", "LR: pEBA4"))
-
+# Timing.
+timing_ms <- timing
+for (name in grep("seconds$", names(timing), value = TRUE))
+  timing_ms[[sub("seconds$", "ms", name)]] <- 1000 * timing[[name]]
+timing_499 <- subset(timing_ms, scenario == "easy" & n_flips == 499,
+  select = c(df, median_setup_ms, median_resampling_score_ms,
+             median_standardization_ms, median_asymptotic_ms, median_core_total_ms))
 null_elapsed <- as.numeric(m$value[m$key == "elapsed_seconds"])
-power_elapsed <- as.numeric(power_metadata$value[power_metadata$key == "elapsed_seconds"])
-parallel_timing <- data.frame(
-  stage = c("two fits", "499-flip score battery", "nested LR battery",
-            "FMG battery"),
-  median_ms = 1000 * c(
-    median(r$fit_seconds, na.rm = TRUE),
-    median(r$flip_elapsed_seconds, na.rm = TRUE),
-    median(r$nested_seconds, na.rm = TRUE),
-    median(r$fmg_seconds, na.rm = TRUE)))
 ```
 
-## Bottom line
+## Question
 
-Standardization is cheap and directionally useful, but its practical value is
-concentrated. Across `r format(nrow(r), big.mark = ",")` successful null
-replications, it changed `r sum(r$changed_to_accept)` decisions from rejection
-to acceptance and `r sum(r$changed_to_reject)` in the opposite direction. The
-mean p-value increased from the effective reference by
-`r sprintf("%.4f", mean(r$p_standardized - r$p_effective))`; no replication
-had a smaller standardized p-value.
+When you test measurement invariance under non-normality, which robust test
+controls Type I error? We compare the sign-flip resampling test against the
+Foldnes-Moss-Grønneberg spectrum transforms (Satorra-Bentler `SB`,
+scaled-shifted `SS`, mean-variance `MV`, scaled-$F$ `SF`, `pEBA`, and the exact
+mixture `ALL`), each applied to two base statistics: the score/Lagrange-multiplier
+statistic, and the Satorra-2000 likelihood-ratio statistic that lavaan and Mplus
+use by default.
 
-The larger comparator result reframes the question. Every robust test here
-carries the same FMG spectrum transform (SB, SS, MV, SF, pEBA, ALL) on one of
-two base statistics: the score/Lagrange-multiplier statistic's own eigenvalues,
-or the Satorra-2000 likelihood-ratio construction that lavaan and Mplus use by
-default. **The base statistic dominates the transform.** Across the null grid
-the score base is near nominal for every transform (about
-`r sprintf("%.2f", min(base_null[["Score base"]]))`--`r sprintf("%.2f", max(base_null[["Score base"]]))`),
-while the identical transforms on the LR base are uniformly liberal (about
-`r sprintf("%.2f", min(base_null[["LR base"]]))`--`r sprintf("%.2f", max(base_null[["LR base"]]))`).
-The standardized flip test sits at
-`r sprintf("%.3f", method_size$overall[method_size$method == "flip (standardized)"])`.
-Matched-empirical-null calibration equalizes the flip and LR tests on power, so
-the LR family's larger nominal power was mostly size distortion, not a real
-advantage; but the simpler fix is to run the FMG transforms on the score base,
-where recalibration is barely needed.
+## Short answer
 
-The strongest interaction was sample size by restriction dimension:
+The base statistic dominates the transform. On the null grid, the FMG transforms
+on the score statistic's own eigenvalues are near nominal for every transform
+(about `r sprintf("%.2f", min(base_null[["Score base"]]))` to
+`r sprintf("%.2f", max(base_null[["Score base"]]))`), while the identical
+transforms on the LR base are uniformly liberal (about
+`r sprintf("%.2f", min(base_null[["LR base"]]))` to
+`r sprintf("%.2f", max(base_null[["LR base"]]))`). Which spectrum transform you
+pick barely matters next to which base statistic you read it from.
+
+The score construction is not exotic. It is Neyman's C(α) test, the same object
+an SEM modification index computes, and it inherits the Lagrange-multiplier
+test's well-known small-sample size advantage. Much of the headline gap is the
+classic over-rejection of likelihood-ratio tests at small $N$, which adequate
+sample size removes. A residual robustness margin remains under genuine
+non-normality.
+
+That margin holds up. From ten to thirty variables the score base stays near
+nominal while the LR base stays liberal, at matched sample adequacy. Sample
+adequacy, not dimension, is what governs. And under a severe non-Gaussian copula,
+where the LR base rejects up to `r sprintf("%.2f", max(base_stress[["LR base"]]))`
+and the sign-flip test reaches
+`r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])` at 8 df, the
+score-base transforms are the only members of the battery that stay near nominal.
+
+Two practical notes. After matched-null calibration all tests reach similar
+power, so the LR base's higher nominal power was size distortion rather than
+detection. And standardizing the sign-flip test is a cheap, minor improvement,
+useful mainly at small $N$ with several restrictions, not a robustness fix.
+
+## The base statistic dominates the transform
+
+The Foldnes, Moss, and Grønneberg (2026) transforms exist because the two
+established robust nested tests fail in opposite directions under non-normality:
+Satorra-Bentler (`SB`) is chronically liberal and scaled-shifted (`SS`) is
+chronically conservative. `MV`, `SF`, and the eigenvalue-averaging families
+(`EBA`, `pEBA`) are the proposed repairs. All of them transform the eigenvalue
+spectrum of a weighted-chi-square limit.
+
+The score test carries its own spectrum. Its statistic
+$T = u^\top V^{-1} u$ over the efficient-score subspace has an asymptotic
+weighted-chi-square limit whose eigenvalues come straight from the model, so the
+identical transforms can be applied to those eigenvalues instead of to the
+Satorra-2000 construction. The table applies each transform to both bases, on the
+full null grid.
+
+```{r base-null}
+knitr::kable(base_null, digits = 3)
+```
+
+On the LR base every transform is liberal; on the score base every transform is
+near nominal. The more aggressive score-base transforms (`SS`, `MV`, `SF`,
+`ALL`) are mildly conservative rather than liberal, trading a little power for
+size control. The gap holds even at a single restriction, where the transforms
+collapse to nearly one scalar test: there the LR base still rejects about
+`r sprintf("%.2f", mean(r$p_fmg_sb[r$df == 1L] < .05, na.rm = TRUE))` for `SB`
+while the score base is already near
+`r sprintf("%.2f", mean(r$p_mean_scaled[r$df == 1L] < .05, na.rm = TRUE))`.
+
+### Why the score base wins, and how much is small-sample
+
+The efficient-score construction is Neyman's C(α) test: the score of the tested
+parameters, orthogonalized against the nuisance parameters and standardized by
+the efficient information. In SEM that is exactly what a modification index
+computes, only univariate. Assembled into a joint test with a spectrum reference
+it is a robust Lagrange-multiplier test, and Lagrange-multiplier tests are the
+least liberal of the classical trio in small samples (the Berndt-Savin ordering
+places them below the likelihood-ratio and Wald statistics). So part of the
+score base's advantage is the documented small-sample over-rejection of the LR
+statistic, not robustness.
+
+The normal-data cells separate the two effects. With no non-normality to correct,
+any gap must be small-sample.
+
+```{r norm-convergence}
+knitr::kable(norm_conv, digits = 3)
+```
+
+Under normality the LR base falls from about 0.12 at $N=60$ toward nominal as $N$
+grows, while the score base stays flat near 0.05. Adequate sample size removes
+that part of the gap. What remains under non-normality is the genuine robustness
+margin: under $t_5$ the LR base is still about
+`r sprintf("%.2f", t5_lr_sb_n200)` at $N=200$, where the score base is near 0.05.
+That margin is smaller than the raw gap but does not wash out.
+
+As a validity check, the LR-base `SB`, `MV`, and `SS` values reproduce the
+independent nested-test scaled, mean-variance, and scaled-shifted routes to a
+maximum p-value gap of
+`r format(max(r$fmg_duplicate_max_gap, na.rm = TRUE), scientific = TRUE, digits = 2)`.
+
+## The copula, not the marginals
+
+Mild non-normality does not stress these tests: an elliptical $t_5$ or a
+coordinatewise skew stays close to asymptotic robustness. The lever that breaks
+them is the joint dependence structure, the copula, not the marginal skewness and
+kurtosis (Foldnes et al., 2026). Two data sets can share a covariance matrix and
+identical marginal moments yet differ in their copula, and normal-theory ML
+inference is not asymptotically robust to that difference.
+
+The stress block fixes the marginals at a severe level (skewness 3, excess
+kurtosis 21) and switches only the copula: Vale-Maurelli is a Gaussian copula,
+piecewise-linear is not. The table applies each transform to both bases at the
+8-df joint test, averaged over $N$ and the homogeneous and geometry populations.
+
+```{r base-stress}
+knitr::kable(base_stress, digits = 3)
+```
+
+The score base survives and the LR base does not. On the LR base every transform
+rejects four to eight times nominal. On the score base the aggressive transforms
+stay near or below 0.05, with `SB` and `pEBA4` only mildly liberal. The sign-flip
+test lands between them, about
+`r sprintf("%.2f", stress_row("vm", 8L)[["flip (standardized)"]])` to
+`r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])`, and
+standardization does not repair it: the score sign-symmetry it relies on is
+itself strained by a severe copula.
+
+The copula, not group heterogeneity, is the cause. In homogeneous populations,
+where the two groups share covariance and means exactly, the 8-df LR-`SB` test
+still rejects about
+`r sprintf("%.2f", stress_row("vm", 8L, "homogeneous")[["LR: SB"]])` under the
+Gaussian copula and
+`r sprintf("%.2f", stress_row("pl", 8L, "homogeneous")[["LR: SB"]])` under the
+non-Gaussian one. Piecewise-linear is uniformly harder than Vale-Maurelli, as the
+copula explanation predicts. The distortion shrinks with sample size but does not
+calibrate: for the hardest cell the LR-`SB` test goes
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 60L)[["LR: SB"]])`,
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 100L)[["LR: SB"]])`,
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 200L)[["LR: SB"]])` at
+$N=60, 100, 200$. This is an asymptotic-robustness failure, not a small-sample
+one.
+
+## Dimension scaling
+
+Foldnes et al. (2026) show robust-test over-rejection grows with model dimension,
+so the score base's edge might be a ten-variable artifact. This probe holds the
+tested restriction count fixed at 8 loadings and grows the ambient model from two
+to six factors ($p = 10, 20, 30$) under the severe copula, at a matched per-group
+sample-to-parameter ratio of about 6. The table averages over the two copulas.
+
+```{r dim-adequate}
+knitr::kable(dim_adequate, digits = 3)
+```
+
+The edge is not a ten-variable artifact: the score base stays near nominal at
+every dimension while the LR base is liberal at every dimension. But sample
+adequacy, not dimension, governs. Because a fixed ratio grows $N$ with $p$, the
+LR base's excess shrinks toward its residual robustness margin as the model grows
+(LR-`SB` falls from about
+`r sprintf("%.2f", dim_pick("adequate", 10, "rejection_lr_sb"))` at $p=10$ to
+`r sprintf("%.2f", dim_pick("adequate", 30, "rejection_lr_sb"))` at $p=30$). At
+an inadequate ratio near 2.5 the LR base over-rejects worst where $N$ is smallest,
+about `r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))` at $p=10$,
+$N=150$, falling to `r sprintf("%.2f", dim_pick("tight", 30, "rejection_lr_sb"))`
+at $p=30$ where the same ratio buys a larger $N$. The score base holds near
+nominal throughout, and `score: ALL` is its most consistently calibrated member.
+
+## Power
+
+Nominal power ranks the LR base above the score base, but only because the LR
+base rejects more of everything. The honest comparison holds each method to its
+own realized null size: each method and matched null cell gets its own critical
+p-value (the largest cutoff whose observed null rejection does not exceed 0.05),
+and power is read off independent alternative replications.
+
+```{r calibrated-power}
+knitr::kable(calibrated_power[power_show_cols(calibrated_power)], digits = 3)
+```
+
+Once size is matched, the flip, score-base, and LR-base tests are within a point
+or two across all four alternative families. The score base's mild conservatism
+therefore costs almost no power: it buys size control nearly for free. As
+expected, a sparse violation concentrated in one loading is easier to detect than
+the same norm spread across all tested loadings, and no single spectrum transform
+dominates once size is aligned.
+
+## Standardizing the sign-flip test
+
+Standardization is the original subject of this probe and it is a minor effect.
+Across `r format(nrow(r), big.mark = ",")` null replications it moved
+`r sum(r$changed_to_accept)` decisions from rejection to acceptance and
+`r sum(r$changed_to_reject)` the other way, always in the conservative direction.
+Its value concentrates at small $N$ with several restrictions.
 
 ```{r n-df-table}
 tab <- by_ndf
@@ -268,412 +368,71 @@ names(tab) <- c("total N", "df", "effective", "standardized",
 knitr::kable(tab, digits = 3)
 ```
 
-At total $N=60$, standardization removes little for one restriction, but about
-0.45 and 0.62 percentage points for 4 and 8 restrictions. It does not fully
-repair the 8-df test, which remains liberal at 0.077. At $N=200$ the absolute
-changes are only 0.06--0.17 percentage points. The answer is therefore not
-"always standardize because the unstandardized test is broken". It is closer
-to: **standardize by default because it is inexpensive, but expect a material
-calibration difference mainly for small samples and moderate-to-large joint
-tests.**
-
-This is where the base statistic matters most. Under a severe non-Gaussian
-copula (marginals fixed at skewness 3 and excess kurtosis 21), the standardized
-flip rejects about 0.11--0.13 at 8 df and the LR base is far worse, both
-persisting as $N$ grows. The score base is the exception: its SS, MV, and ALL
-transforms stay near or below nominal even here. So standardization is a cheap
-default but not a robustness guarantee, whereas the score-base FMG transforms
-are the only members of the battery that hold up when the copula turns severe.
-
-## Hypotheses and what happened
-
-### H1: small samples should matter most — supported
-
-The flip-specific covariance correction depends on group sign sums, whose
-relative size shrinks with group sample size. Both the measured covariance
-shift and the p-value movement decline rapidly with $N$.
-
-```{r n-table}
-names(by_n) <- c("total N", "effective", "standardized",
-                 "effective-only rejection", "mean |delta p|",
-                 "mean relative covariance shift")
-knitr::kable(by_n, digits = 4)
-```
-
-### H2: more restrictions should increase the payoff — supported
-
-The mean covariance shift itself is only slightly larger at 8 df, but the
-multivariate quadratic aggregates those changes across more directions. The
-mean absolute p-value movement rises from 0.0014 at 1 df to 0.0046 at 8 df.
-
-```{r df-table}
-names(by_df) <- c("df", "effective", "standardized",
-                  "effective-only rejection", "mean |delta p|",
-                  "mean relative covariance shift")
-knitr::kable(by_df, digits = 4)
-```
-
-This makes "many restrictions" a better predictor than "large raw covariance
-shift" alone. The replication-level correlation between mean relative
-covariance shift and absolute p-value movement was
-`r sprintf("%.3f", cor(r$mean_variance_relative_shift, r$abs_delta_p))`.
-
-### H3: imbalance should increase the payoff — weakly supported
-
-The 1:3 design produced more effective-only rejections, but did not have a
-larger average covariance shift. Imbalance appears to make a given correction
-more consequential near the rejection boundary rather than mechanically
-making every flip variance more different.
-
-```{r balance-table}
-names(by_balance) <- c("balance", "effective", "standardized",
-                       "effective-only rejection")
-knitr::kable(by_balance, digits = 4)
-```
-
-### H4: heterogeneous populations should matter most — not as stated
-
-Homogeneous, common-scale, and strongly geometry-heterogeneous populations had
-similar effective-to-standardized rejection changes. The homogeneous cells
-actually had the largest mean relative covariance shift. Raw variance
-heterogeneity is therefore not a sufficient proxy: the relevant quantity is
-the group-specific tested--nuisance information cross-geometry after the H0
-restriction map is applied.
-
-### H5: nonnormality should increase the need — consequential, not causal
-
-The covariance-shift diagnostic was almost unchanged across normal, $t_5$, and
-skewed generators. Nonnormality did make both flip tests more liberal, so the
-same conservative standardization adjustment bought more calibration under
-$t_5$ and skew. It did not eliminate the remaining misspecification effect.
-The flat diagnostic is a property of these generators, not of non-normality in
-general: all three are close to asymptotically robust. The severe-copula stress
-section below shows what happens when the generator is not.
-
-```{r distribution-table}
-names(by_dist) <- c("distribution", "effective", "standardized")
-knitr::kable(by_dist, digits = 4)
-```
-
-## FMG transforms and the choice of base statistic
-
-These comparators are not arbitrary. Foldnes, Moss, and Grønneberg (2026)
-document that the two established robust nested tests fail in opposite
-directions under non-normality: the Satorra-Bentler scaled test (`SB`) is
-chronically liberal, and the scaled-and-shifted test (`SS`) is chronically
-conservative. The mean/variance-adjusted (`MV`), scaled-$F$ (`SF`), and
-eigenvalue-averaging (EBA/pEBA) families are the proposed repairs. All of them
-are transforms of the eigenvalue spectrum of a weighted-chi-square limit.
-
-The key observation is that the score test carries its own spectrum. Its
-statistic $T = u^\top V^{-1} u$ over the efficient-score subspace has an
-asymptotic weighted-chi-square limit whose eigenvalues come straight from the
-model, so the identical FMG transforms can be applied to those eigenvalues
-instead of to the Satorra-2000 likelihood-ratio construction that lavaan and
-Mplus use by default. The table applies each transform to both base statistics,
-on the full null grid.
-
-```{r base-compare-null}
-knitr::kable(base_null, digits = 3)
-```
-
-The base statistic dominates the transform. On the LR base every transform is
-uniformly liberal, around 0.10--0.14; on the score base the same transforms are
-near nominal, around 0.03--0.05. The spread across transforms within a base is
-small next to the gap between the two bases. It holds even at a single
-restriction, where the transforms collapse to nearly one scalar test: the LR
-base still rejects about
-`r sprintf("%.2f", mean(r$p_fmg_sb[r$df == 1L] < .05, na.rm = TRUE))`
-for SB while the score base is already near
-`r sprintf("%.2f", mean(r$p_mean_scaled[r$df == 1L] < .05, na.rm = TRUE))`.
-On the score base the more aggressive transforms (SS, MV, SF, ALL) are mildly
-conservative rather than liberal, which trades a little power for size control.
-
-The LR-base SB/MV/SS values are also a wiring check against the nested-test
-scaled, mean/variance-adjusted, and scaled-shifted routes: they agree to a
-maximum absolute p-value gap of
-`r format(max(r$fmg_duplicate_max_gap, na.rm = TRUE), scientific = TRUE,
-digits = 2)`.
-
-## Severe non-normality: the copula, not the marginals
-
-The three generators above (normal, $t_5$, exponential skew) are mild. $t_5$ is
-elliptical and the skew cell mixes independent coordinates, so neither breaks
-the asymptotic robustness the robust tests rely on. This is why H5 saw so little
-movement, not evidence that non-normality is harmless. The lever that actually
-breaks these tests is the joint dependence structure, the copula, not the
-marginal skewness and kurtosis (Foldnes et al., 2026). Two data sets can share a
-covariance matrix and identical marginal moments yet differ in their copula, and
-normal-theory ML inference is not asymptotically robust to that difference.
-
-The stress block holds the marginals fixed at a severe level (skewness 3, excess
-kurtosis 21) and switches only the copula: Vale-Maurelli is a Gaussian copula,
-piecewise-linear is not. Both use magmaan's native generators. The base-statistic
-comparison carries straight through: the table applies each FMG transform to the
-score and LR bases at the 8-df joint test, averaged over $N$ and the homogeneous
-and geometry populations.
-
-```{r base-compare-stress}
-knitr::kable(base_stress, digits = 3)
-```
-
-The split that was visible in the mild grid becomes a chasm:
-
-- **The score base survives the severe copula; the LR base does not.** On the
-  LR base every transform rejects around 0.28--0.39, four to eight times
-  nominal. On the score base the more aggressive transforms (SS, MV, SF, ALL)
-  stay near or below 0.05, with SB and pEBA4 only mildly liberal. The same
-  spectrum transform, read off a different base statistic, is the difference
-  between a broken test and a working one.
-- **The sign-flip test lands between them and does not survive.** The
-  standardized flip rejects about
-  `r sprintf("%.2f", stress_row("vm", 8L)[["flip (standardized)"]])`--`r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])`,
-  better than the LR base but far worse than the score base, and standardization
-  does not repair it. The score sign-symmetry the flip relies on is itself
-  strained by a severe copula.
-- **The copula, not the heterogeneity, is the cause.** In the homogeneous
-  populations, where the two groups share covariance and mean structure exactly,
-  the 8-df LR-SB test still rejects about
-  `r sprintf("%.2f", stress_row("vm", 8L, "homogeneous")[["LR: SB"]])`
-  under the Gaussian copula and
-  `r sprintf("%.2f", stress_row("pl", 8L, "homogeneous")[["LR: SB"]])`
-  under the non-Gaussian one. Same marginals, different copula, very different
-  size. Piecewise-linear is uniformly harder than Vale-Maurelli, as the copula
-  explanation predicts.
-
-The distortion shrinks with sample size but does not calibrate. For the hardest
-cell (piecewise-linear, 8 df, geometry heterogeneity), the LR-SB test rejects
-about
-`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 60L)[["LR: SB"]])`,
-`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 100L)[["LR: SB"]])`,
-and `r sprintf("%.2f", stress_row("pl", 8L, "geometry", 200L)[["LR: SB"]])`
-at $N=60, 100, 200$. This is an asymptotic-robustness failure, not a small-sample
-one: it does not vanish as $N$ grows. The score-base transforms are the only
-members of the battery that hold near nominal across the whole stress block.
-
-## Dimension scaling: does the score base keep its edge?
-
-Everything so far is at ten observed variables. Foldnes et al. (2026) show that
-robust-test over-rejection grows with model dimension, so the score base's
-advantage could be a low-dimensional artifact. This probe holds the tested
-restriction count fixed at 8 loadings and grows the ambient model from two to
-six factors ($p = 10, 20, 30$) under the severe copula, at a matched per-group
-sample-to-parameter ratio of about 6. The table averages over the two copulas.
-
-```{r dim-adequate}
-knitr::kable(dim_adequate, digits = 3)
-```
-
-The advantage is not a ten-variable artifact: the score base stays near nominal
-at every dimension while the LR base is liberal at every dimension. But the
-governing variable is sample adequacy, not dimension. Because a fixed ratio
-means $N$ grows with $p$, the LR base's excess shrinks toward its residual
-robustness margin as the model grows (LR-SB falls from about
-`r sprintf("%.2f", dim_pick("adequate", 10, "rejection_lr_sb"))` at $p=10$ to
-`r sprintf("%.2f", dim_pick("adequate", 30, "rejection_lr_sb"))` at $p=30$),
-while the score base stays flat. The exact-mixture transform on the score base
-(`score: ALL`) is the most consistently calibrated member across the whole
-probe.
-
-Cutting the ratio to about 2.5, an inadequate sample, tells the complementary
-story. There the LR base over-rejects worst where $N$ is smallest: at $p=10$,
-$N=150$ it reaches about
-`r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))`, falling to about
-`r sprintf("%.2f", dim_pick("tight", 30, "rejection_lr_sb"))` at $p=30$, where
-the same ratio buys a larger $N$. The score base holds near nominal throughout.
-So the largest score-vs-LR gaps were driven mostly by small-sample
-likelihood-ratio over-rejection, not by dimension; the score base's robustness
-margin over the LR base is smaller than those gaps suggest but persists as the
-model grows.
-
-## Power
-
-The independent power run contains
-`r format(nrow(power), big.mark = ",")` successful fits from 81,000 attempts.
-For `sparse`, the first tested loading departs by 0.25 or 0.50. For `dense`, the
-same Euclidean violation norm is divided equally over all tested restrictions.
-The df=1 dense cells are omitted because they duplicate sparse exactly.
-
-### Nominal power is confounded by size
-
-```{r raw-power}
-power_show_cols <- function(tab) intersect(c(
-  "alternative", "effect", "flip (standardized)", "score: SB", "score: MV",
-  "score: pEBA4", "LR: SB", "LR: MV", "LR: pEBA4"), names(tab))
-knitr::kable(raw_power[power_show_cols(raw_power)], digits = 3)
-```
-
-At face value the LR-base SB and pEBA4 look substantially more powerful. Their
-null sizes show why that ranking is misleading. For example, sparse 0.50 nominal
-power is about 0.50 for LR-base SB, 0.49 for LR-base pEBA4, and 0.38 for
-standardized flips, but their overall null rejection rates are about 0.138,
-0.130, and 0.063. The score-base transforms show lower nominal power because
-they are near or below nominal size to begin with, not because they detect less.
-
-### Matched empirical-null calibration
-
-For a fairer diagnostic, each method and each of the 162 matched null cells
-gets its own critical p-value: the largest strict cutoff whose observed null
-rejection rate does not exceed 0.05. Power is then evaluated on independent
-alternative replications using that cutoff. This respects the discrete
-499-flip distribution. It also consumes only 200 null replications per cell,
-so differences of a few points should not be over-interpreted.
-
-```{r calibrated-power}
-knitr::kable(calibrated_power[power_show_cols(calibrated_power)], digits = 3)
-```
-
-The dramatic nominal separation largely vanishes. Across all four alternative
-families, standardized flips, the LR-base MV/pEBA4/ALL, and the score-base
-transforms are generally within one or two percentage points once each is held
-to its own realized size. The score base's mild conservatism therefore costs
-little power after calibration: it buys size control almost for free. Averaged
-over all power cells, standardized/effective flips reach about 0.186 calibrated
-power versus about 0.184 for the LR-base MV/pEBA4/ALL; that gap is too small to
-call a general advantage.
-
-The all-method average makes the comparison among the EBA orders and the basic
-FMG variants explicit. `achieved_size` is the average rejection rate obtained
-by the matched empirical critical values, not the original nominal size.
-
-```{r all-method-calibrated}
-knitr::kable(overall_calibrated, digits = 3)
-```
-
-### H6: sparse violations should be easier than dense equal-norm violations — supported
-
-Concentrating the same Euclidean violation in one loading is much easier to
-detect. At effect 0.50, calibrated standardized-flip power is about 0.350 for
-sparse alternatives and 0.134 for dense alternatives. The comparison is not
-available at df=1 because those constructions coincide, but the result persists
-within both df=4 and df=8.
-
-### H7: FMG's spectrum transforms should help more with many restrictions — not supported here
-
-Before size calibration, pEBA4's apparent advantage grows with df, exactly
-where its null over-rejection also grows. After calibration, pEBA4, MV, and ALL
-are nearly indistinguishable. For the sparse 0.50 case, their calibrated power
-is around 0.37 at df=4 and 0.28 at df=8. Standardized flips are about 0.39 and
-0.30. This probe gives no evidence that a particular FMG transform dominates
-once size is aligned.
-
-### H8: more restrictions should always improve power — rejected
-
-Restriction dimension and alternative geometry interact. Dense equal-norm
-signals are diluted across coordinates, and the df=8 tests pay a larger
-critical-value penalty. Sparse power also falls at df=8 because the joint test
-adds seven null directions around one signal. "Many restrictions" predicts
-when flip standardization changes calibration, but does not by itself predict
-higher power.
+At total $N=60$ standardization removes little for one restriction but a few
+tenths of a percentage point for four and eight, and it does not fully repair the
+liberal 8-df test. At $N=200$ the changes are negligible. Standardize by default
+because it is nearly free, but do not read it as a small-sample correction.
 
 ## Timing
 
-The controlled benchmark is single-process, warm-cache, and excludes model
-fitting. At 499 flips, median core latency was about 2.3 ms at 1 df, 5.4 ms at
-4 df, and 8.7 ms at 8 df. Flip-specific standardization accounts for roughly
-0.7, 2.7, and 4.2 ms of those totals.
+Cost is a few milliseconds and linear in the number of flips. At 499 flips,
+median core latency was about 2.3 ms at 1 df, 5.4 ms at 4 df, and 8.7 ms at 8 df,
+of which flip-specific standardization is roughly 0.7, 2.7, and 4.2 ms. The FMG
+transforms on the score eigenvalues are essentially free once the flip test has
+run, since the eigenvalues are already computed.
 
 ```{r timing-df}
-names(timing_499) <- c("df", "setup ms", "basic/effective resampling ms",
-                       "standardization ms", "asymptotic comparator ms",
-                       "total core ms")
+names(timing_499) <- c("df", "setup ms", "resampling ms", "standardization ms",
+                       "asymptotic ms", "total core ms")
 knitr::kable(timing_499, digits = 3)
 ```
-
-Cost is essentially linear in the number of flips. For the 8-df easy case:
-
-```{r timing-flips}
-names(timing_scale) <- c("flips", "basic/effective resampling ms",
-                         "standardization ms", "total core ms")
-knitr::kable(timing_scale, digits = 3)
-```
-
-The two model fits took 3--5 ms in the warmed serial benchmark. In the full
-parallel experiment, fit and score timings include worker contention. The
-following medians average across restriction dimensions; the complete FMG
-battery means all 13 requested transformations, not one p-value.
-
-```{r parallel-timing}
-knitr::kable(parallel_timing, digits = 1)
-```
-
-The 162-cell null run (200 replications per cell, 499 flips, 16 workers) took
-`r sprintf("%.1f", null_elapsed)` seconds, or about
-`r sprintf("%.0f", nrow(r) / null_elapsed)` successful replications per
-wall-clock second. The 540-cell power run (150 replications per cell) took
-`r sprintf("%.1f", power_elapsed)` seconds, or about
-`r sprintf("%.0f", nrow(power) / power_elapsed)` per second. In a single call,
-the FMG battery's median 8 ms is less than half the median score-flip battery;
-one FMG transform would be cheaper still.
 
 ## Recommendation
 
 - **Put the FMG spectrum transforms on the score base, not the LR base.** The
-  identical transform (SB, SS, MV, SF, pEBA, ALL) is near nominal on the
-  score/LM statistic's own eigenvalues and uniformly liberal on the
-  Satorra-2000 LR construction that lavaan and Mplus default to. This is the
-  largest calibration lever in the study and it costs nothing extra: the score
-  eigenvalues are already computed by the flip test.
-- Among the score-base transforms, the more aggressive members (SS, MV, ALL)
-  are mildly conservative and give the tightest size control, including under
-  the severe copula; SB and pEBA4 sit a little closer to nominal. Their
-  calibrated power is within a point or two of the flip test, so the
-  conservatism costs little.
-- Keep `p_standardized` if you want a resampling test: it is cheap and every
-  decision change went in the conservative direction. But it is not better
-  calibrated than the score-base asymptotics, and it is more strained by severe
-  non-normality. Expect the standardization-vs-effective difference to matter
-  mainly at total $N\leq100$ with 4--8 restrictions and group imbalance; it is a
-  small adjustment, not a small-sample correction.
-- Do not compare raw power for any transform without also comparing null size.
-  The apparent LR-base pEBA/SB power advantage disappears under matched
-  empirical-null calibration.
-- Do not extend "robust" to a severe non-Gaussian copula uncritically. The LR
-  base and the flip test over-reject badly and do not calibrate as $N$ grows;
-  only the score-base transforms hold near nominal there. That edge persists
-  from ten to thirty variables at matched sample adequacy, but sample adequacy,
-  not dimension, is the governing variable: below about $n/q = 3$ everything
-  degrades, the LR base most.
-- Next stress tests: hold df fixed while varying nuisance leverage and
-  conditioning at fixed dimension and adequacy; and push $p$ further with a
-  proportionally larger $N$ to confirm the score base's margin does not close.
+  same transform is near nominal on the score/LM statistic's eigenvalues and
+  uniformly liberal on the Satorra-2000 LR construction that lavaan and Mplus
+  default to. This is the largest calibration lever in the study, and it is free:
+  the score eigenvalues are already computed by the flip test.
+- Among the score-base transforms, the aggressive members (`SS`, `MV`, `ALL`)
+  give the tightest size control, including under the severe copula, at a mild
+  cost in conservatism that matched-null power shows is nearly free. `SB` and
+  `pEBA4` sit closer to nominal.
+- Read the advantage correctly: much of the raw gap is the classic small-sample
+  over-rejection of likelihood-ratio tests, which adequate $N$ removes. The
+  genuine robustness margin under non-normality is smaller but real.
+- Keep `p_standardized` as a cheap resampling option, but it is not better
+  calibrated than the score-base asymptotics and is more strained by a severe
+  copula.
+- Do not compare nominal power without comparing null size, and do not extend
+  "robust" to a severe non-Gaussian copula: there only the score-base transforms
+  hold near nominal, and even that is a probe result, not a guarantee.
+- Next: vary nuisance leverage and conditioning at fixed dimension and adequacy,
+  and push $p$ further with a proportionally larger $N$ to confirm the score
+  base's margin does not close.
 
 ## Design and caveats
 
-The null expansion crosses 1/4/8 loading-equality restrictions; total
-$N=60/100/200$; 1:1/1:3 group allocation; homogeneous, common latent-scale,
-and strong factor/residual-geometry heterogeneity; and normal, $t_5$, and
-standardized skewed innovations. Each of 162 null cells has 200 attempted
-replications and 499 random flips. There were
-`r sum(!read.csv(files[[3L]])$ok)` failed fits (maximum cell failure rate
-`r sprintf("%.3f", max(s$failure_rate))`). Monte Carlo and binomial uncertainty
-remain visible, especially in cell-by-cell 0.05 decisions.
+The null grid crosses 1/4/8 loading-equality restrictions, total $N=60/100/200$,
+1:1 and 1:3 allocation, three group-information geometries, and normal, $t_5$,
+and skewed innovations, at 200 replications and 499 flips per cell. Maximum cell
+fit-failure rate was `r sprintf("%.3f", max(s$failure_rate))`; there were
+`r sum(!r_all_ok)` failed fits overall. The power grid adds sparse and dense
+alternatives at two effect sizes.
 
-The power expansion adds sparse/dense alternatives and two effect sizes, for
-540 cells and 150 attempts per cell. It had
-`r 81000 - nrow(power)` fit failures. Comparator-specific failures are retained
-as missing p-values rather than discarding otherwise valid flip results; they
-occurred in about `r sprintf("%.3f", mean(nzchar(power$nested_error)))` of
-successful power fits.
-
-The severe-copula stress block is a separate 24-cell null grid: two copulas
-(Vale-Maurelli and piecewise-linear) at fixed severe marginals, crossed with
-1/8 restrictions, $N=60/100/200$, and the homogeneous and geometry populations,
-at 200 replications per cell. It is kept out of the main aggregations so it does
-not unbalance them. Its purpose is a boundary probe, not a calibrated rejection
-estimate; the independent-generator copula was excluded because its marginal
+Two boundary probes sit outside the main grid so they do not unbalance it. The
+severe-copula stress block crosses two copulas at fixed severe marginals with
+1/8 restrictions, $N=60/100/200$, and two geometries. The dimension-scaling probe
+crosses two copulas, $p=10/20/30$ at fixed 8-df restrictions, and two
+sample-to-parameter ratios (about 2.5 and 6), with $N$ set from the ratio so it
+grows with $p$; the ratios are approximate because the parameter count is
+estimated. The independent-generator copula was excluded because its marginal
 moment solve is infeasible at this severity.
 
-The dimension-scaling probe is a separate 12-cell null grid: two copulas, three
-ambient sizes ($p=10/20/30$, two to six factors) at fixed 8-df tested
-restrictions, and two per-group sample-to-parameter ratios (about 2.5 and 6),
-homogeneous populations, 200 replications per cell. Total $N$ is set from the
-target ratio, so it grows with $p$; the ratios are approximate because the free
-parameter count is estimated, not read from the fit.
-
-Score flipping here remains a frontier method for affine, complete-data ML
-models. These results do not automatically transfer to FIML, ordinal,
-estimated-weight, clustered, boundary, or nonlinear-constraint tests.
+Monte Carlo and binomial uncertainty remain visible in cell-level 0.05 decisions.
+Score flipping here is a frontier method for affine, complete-data ML models. The
+results do not automatically transfer to FIML, ordinal, estimated-weight,
+clustered, boundary, or nonlinear-constraint tests.
 
 ## Reproduce
 
