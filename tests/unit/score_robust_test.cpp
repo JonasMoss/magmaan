@@ -1493,3 +1493,86 @@ TEST_CASE("frontier robust joint: errors cleanly with no equality constraint") {
       inf::frontier::score_tests_robust_joint(h.pt, h.rep, *samp, raw, *est);
   CHECK_FALSE(joint.has_value());  // no active equality constraints to release
 }
+
+TEST_CASE("frontier score flips: affine ML pair is deterministic and standardized") {
+  auto h1 = build("f =~ x1 + a*x2 + b*x3 + x4");
+  auto h0 = build("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  std::mt19937 rng(20260712u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(rng, 320, Sigma, 7.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est0 = magmaan::test::fit(h0.pt, h0.rep, *samp);
+  REQUIRE(est0.has_value());
+
+  auto blocks = inf::information_expected_per_case_blocks(
+      h1.pt, h1.rep, *samp, *est0);
+  REQUIRE(blocks.has_value());
+  REQUIRE(blocks->size() == 1);
+  auto info = inf::information_expected(h1.pt, h1.rep, *samp, *est0);
+  REQUIRE(info.has_value());
+  CHECK((320.0 * blocks->front() - *info).norm() < 1e-10 * (1.0 + info->norm()));
+
+  inf::frontier::ScoreFlipOptions opts;
+  opts.n_flips = 127;
+  opts.seed = 77;
+  auto a = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, opts);
+  if (!a.has_value()) MESSAGE(a.error().detail);
+  REQUIRE(a.has_value());
+  auto b = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, opts);
+  if (!b.has_value()) MESSAGE(b.error().detail);
+  REQUIRE(b.has_value());
+  CHECK(a->df == 1);
+  CHECK(a->n_flips == 127);
+  CHECK(a->seed == 77);
+  CHECK(a->p_basic == b->p_basic);
+  CHECK(a->p_effective == b->p_effective);
+  CHECK(a->p_standardized == b->p_standardized);
+  CHECK(a->p_value == a->p_standardized);
+  CHECK(a->p_basic >= 1.0 / 128.0);
+  CHECK(a->p_effective >= 1.0 / 128.0);
+  CHECK(a->p_standardized >= 1.0 / 128.0);
+  CHECK(std::abs(a->statistic_effective - a->statistic_standardized) <
+        1e-9 * (1.0 + std::abs(a->statistic_effective)));
+  CHECK(std::isfinite(a->statistic_basic));
+  CHECK(std::isfinite(a->nuisance_stationarity_norm));
+  CHECK(std::isfinite(a->p_mixture));
+  CHECK(a->min_variance_eigenvalue > 0.0);
+  CHECK(a->max_variance_condition >= 1.0);
+
+  auto fixed_x_h1 = h1.pt;
+  REQUIRE_FALSE(fixed_x_h1.exo.empty());
+  fixed_x_h1.exo.front() = 1;
+  auto fixed_x = inf::frontier::score_flip_test(
+      fixed_x_h1, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, opts);
+  CHECK_FALSE(fixed_x.has_value());
+
+  auto wrong_raw = raw;
+  wrong_raw.X.front()(0, 0) += 0.5;
+  auto mismatch = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, wrong_raw, *est0, opts);
+  CHECK_FALSE(mismatch.has_value());
+}
+
+TEST_CASE("frontier score flips: rejects invalid flip count and identical pair") {
+  auto h = build("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(31u);
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(rng, 120, four_indicator_sample_cov(), 8.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+  inf::frontier::ScoreFlipOptions opts;
+  opts.n_flips = 0;
+  auto bad_n = inf::frontier::score_flip_test(
+      h.pt, h.rep, h.pt, h.rep, *samp, raw, *est, opts);
+  CHECK_FALSE(bad_n.has_value());
+  opts.n_flips = 9;
+  auto same = inf::frontier::score_flip_test(
+      h.pt, h.rep, h.pt, h.rep, *samp, raw, *est, opts);
+  CHECK_FALSE(same.has_value());
+}

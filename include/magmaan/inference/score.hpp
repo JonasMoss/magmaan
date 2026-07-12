@@ -450,6 +450,54 @@ score_tests_robust_joint(spec::LatentStructure pt,
                          const Estimates& est,
                          const RobustScoreOptions& options = {});
 
+// Random sign-flip calibration of an affine nested-model score test. H1 and H0
+// must share the same ambient parameter slots, with H0's tangent space nested
+// inside H1's. The implementation is currently restricted to complete-data ML.
+// `n_flips` counts random Rademacher transformations; the observed identity is
+// included separately in the Monte Carlo rank denominator.
+struct ScoreFlipOptions {
+  int n_flips = 999;
+  std::uint64_t seed = 1;
+};
+
+struct ScoreFlipTestResult {
+  int df = 0;
+  double statistic_basic = 0.0;
+  double statistic_effective = 0.0;
+  double statistic_standardized = 0.0;
+
+  double p_basic = 1.0;
+  double p_effective = 1.0;
+  double p_standardized = 1.0;
+  double p_value = 1.0;  // recommended alias: p_standardized
+  double mc_se_basic = 0.0;
+  double mc_se_effective = 0.0;
+  double mc_se_standardized = 0.0;
+
+  double p_chisq = 1.0;
+  double scaling_factor = 1.0;
+  double statistic_mean_scaled = 0.0;
+  double p_mean_scaled = 1.0;
+  double p_mixture = 1.0;
+  Eigen::VectorXd eigvals;
+
+  int n_flips = 0;
+  std::uint64_t seed = 1;
+  double nuisance_stationarity_norm = 0.0;
+  double min_variance_eigenvalue = 0.0;
+  double max_variance_condition = 1.0;
+};
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
+                const SampleStats& samp,
+                const RawData& raw,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options = {});
+
 }  // namespace frontier
 
 }  // namespace magmaan::inference

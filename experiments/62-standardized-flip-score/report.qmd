@@ -1,0 +1,78 @@
+---
+title: "Standardized score flips for small-sample metric invariance"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+need <- file.path("results", c("summary.csv", "failures.csv", "metadata.csv"))
+if (any(!file.exists(need))) {
+  stop("missing results; run: Rscript run_experiment.R --probe")
+}
+s <- read.csv(need[[1L]])
+f <- read.csv(need[[2L]])
+m <- read.csv(need[[3L]])
+focus <- s[!s$alternative & s$distribution == "t5" & s$phi_ratio == 3, ]
+wide <- reshape(focus[, c("n", "method", "rejection")], idvar = "n",
+                timevar = "method", direction = "wide")
+names(wide) <- sub("rejection\\.", "", names(wide))
+at50 <- focus[focus$n == 50, ]
+rate <- function(method) at50$rejection[match(method, at50$method)]
+```
+
+## Question
+
+Can nuisance-effective score sign flips improve the small-sample metric-
+invariance test, and does flip-specific variance standardization repair the
+finite-sample mismatch between the observed and transformed statistics?
+
+## Short answer
+
+At the focal heavy-tailed, heterogeneous (n=50) cell, rejection was
+`r sprintf("%.3f", rate("flip_basic"))` for basic flips,
+`r sprintf("%.3f", rate("flip_effective"))` for effective flips, and
+`r sprintf("%.3f", rate("flip_standardized"))` after flip-specific
+standardization. The corresponding robust score-mixture and Satorra-2000 rates
+were `r sprintf("%.3f", rate("score_mixture"))` and
+`r sprintf("%.3f", rate("satorra2000_scaled"))`. This is a calibration probe,
+not a support claim; the table below shows whether the pattern persists with
+sample size.
+
+## Evidence
+
+Heavy-tailed groups with a threefold factor-variance difference; target level
+is 0.05.
+
+```{r table}
+keep <- c("n", "flip_basic", "flip_effective", "flip_standardized",
+          "score_mixture", "satorra2000_scaled")
+tab <- wide[, intersect(keep, names(wide)), drop = FALSE]
+names(tab) <- c("n per group", "basic flip", "effective flip",
+                "standardized flip", "robust score mixture", "Satorra 2000")
+knitr::kable(tab, digits = 3)
+```
+
+## Caveats
+
+- The probe uses continuous complete-data ML, affine metric restrictions, and
+  normal or symmetric heavy-tailed data. Skewed, missing, ordinal, fixed-X, and
+  boundary cases remain outside the implemented contract.
+- Each cell has `r m$value[m$key == "reps"]` replications and
+  `r m$value[m$key == "flips"]` random flips. A 0.05 rejection rate therefore
+  has visible binomial and Monte Carlo noise.
+- Score flipping is asymptotic for covariance-parameter scores; it is not an
+  exact finite-sample randomization test.
+
+## Reproduce
+
+```sh
+Rscript experiments/62-standardized-flip-score/run_experiment.R --smoke
+Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
+quarto render experiments/62-standardized-flip-score/report.qmd
+```

@@ -415,6 +415,16 @@ struct FIMLScoreMeatBread {
   Eigen::MatrixXd scores;   // casewise ∂(deviance_i)/∂θ, n_total × q
 };
 
+// Casewise observed-pattern deviance gradients in full theta space, without
+// requiring or constructing an observed Hessian. This also supports complete
+// covariance-only ML models and is the row-score source for sign-flip tests.
+post_expected<Eigen::MatrixXd>
+fiml_casewise_deviance_scores(const spec::LatentStructure& pt,
+                              const model::MatrixRep& rep,
+                              const RawData& raw,
+                              const FIMLPack& pack,
+                              const Estimates& est);
+
 post_expected<FIMLScoreMeatBread>
 fiml_score_meat_bread(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,

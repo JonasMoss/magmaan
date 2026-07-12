@@ -445,6 +445,9 @@ score_tests_robust(const Fit &fit, const data::RawData &raw,
 Result<inference::ScoreTestTable>
 score_tests_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
                    inference::frontier::RobustScoreOptions options = {});
+Result<inference::frontier::ScoreFlipTestResult>
+score_flip_test(const Fit &h1, const Fit &h0, const data::RawData &raw,
+                inference::frontier::ScoreFlipOptions options = {});
 
 } // namespace frontier
 

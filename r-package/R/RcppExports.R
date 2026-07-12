@@ -469,6 +469,10 @@ inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread =
     .Call(`_magmaan_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
 }
 
+inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0) {
+    .Call(`_magmaan_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed)
+}
+
 infer_z_test <- function(fit, se) {
     .Call(`_magmaan_infer_z_test`, fit, se)
 }
