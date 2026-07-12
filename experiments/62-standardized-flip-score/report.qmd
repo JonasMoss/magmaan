@@ -14,11 +14,13 @@ execute:
 files <- file.path("results", c(
   "summary.csv", "expansion_summary.csv", "expansion_replications.csv",
   "expansion_metadata.csv", "timing_summary.csv", "power_summary.csv",
-  "power_replications.csv", "power_metadata.csv", "stress_summary.csv"))
+  "power_replications.csv", "power_metadata.csv", "stress_summary.csv",
+  "dimension_summary.csv"))
 if (any(!file.exists(files))) {
   stop(paste(
     "missing results; run run_experiment.R, run_expansion.R --probe,",
-    "run_expansion.R --power, run_expansion.R --stress, and run_timing.R"))
+    "run_expansion.R --power, run_expansion.R --stress, run_dimension.R --probe,",
+    "and run_timing.R"))
 }
 legacy <- read.csv(files[[1L]])
 s <- read.csv(files[[2L]])
@@ -29,8 +31,25 @@ power_summary <- read.csv(files[[6L]])
 power <- read.csv(files[[7L]])
 power_metadata <- read.csv(files[[8L]])
 stress <- read.csv(files[[9L]])
+dim_summary <- read.csv(files[[10L]])
 r <- r[r$ok, , drop = FALSE]
 power <- power[power$ok, , drop = FALSE]
+
+# Dimension-scaling probe: tested df = 8 fixed, ambient p in {10,20,30}, severe
+# copula, two sample-adequacy regimes. Aggregate over the two copulas.
+dim_cols <- c(`score: SB` = "rejection_score_sb",
+              `score: ALL` = "rejection_score_all",
+              `LR: SB` = "rejection_lr_sb",
+              `flip (standardized)` = "rejection_flip_standardized")
+dim_table <- function(adeq) {
+  sub <- dim_summary[dim_summary$adequacy == adeq, , drop = FALSE]
+  agg <- aggregate(sub[unname(dim_cols)], list(p = sub$p), mean)
+  names(agg) <- c("p", names(dim_cols))
+  agg
+}
+dim_adequate <- dim_table("adequate")
+dim_pick <- function(adeq, pp, col)
+  mean(dim_summary[dim_summary$adequacy == adeq & dim_summary$p == pp, col], na.rm = TRUE)
 
 # Severe non-normal copula stress block (vm = Gaussian copula, pl = non-Gaussian,
 # matched severe marginals). Aggregated for the report.
@@ -432,6 +451,41 @@ at $N=60, 100, 200$. This is an asymptotic-robustness failure, not a small-sampl
 one: it does not vanish as $N$ grows. The score-base transforms are the only
 members of the battery that hold near nominal across the whole stress block.
 
+## Dimension scaling: does the score base keep its edge?
+
+Everything so far is at ten observed variables. Foldnes et al. (2026) show that
+robust-test over-rejection grows with model dimension, so the score base's
+advantage could be a low-dimensional artifact. This probe holds the tested
+restriction count fixed at 8 loadings and grows the ambient model from two to
+six factors ($p = 10, 20, 30$) under the severe copula, at a matched per-group
+sample-to-parameter ratio of about 6. The table averages over the two copulas.
+
+```{r dim-adequate}
+knitr::kable(dim_adequate, digits = 3)
+```
+
+The advantage is not a ten-variable artifact: the score base stays near nominal
+at every dimension while the LR base is liberal at every dimension. But the
+governing variable is sample adequacy, not dimension. Because a fixed ratio
+means $N$ grows with $p$, the LR base's excess shrinks toward its residual
+robustness margin as the model grows (LR-SB falls from about
+`r sprintf("%.2f", dim_pick("adequate", 10, "rejection_lr_sb"))` at $p=10$ to
+`r sprintf("%.2f", dim_pick("adequate", 30, "rejection_lr_sb"))` at $p=30$),
+while the score base stays flat. The exact-mixture transform on the score base
+(`score: ALL`) is the most consistently calibrated member across the whole
+probe.
+
+Cutting the ratio to about 2.5, an inadequate sample, tells the complementary
+story. There the LR base over-rejects worst where $N$ is smallest: at $p=10$,
+$N=150$ it reaches about
+`r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))`, falling to about
+`r sprintf("%.2f", dim_pick("tight", 30, "rejection_lr_sb"))` at $p=30$, where
+the same ratio buys a larger $N$. The score base holds near nominal throughout.
+So the largest score-vs-LR gaps were driven mostly by small-sample
+likelihood-ratio over-rejection, not by dimension; the score base's robustness
+margin over the LR base is smaller than those gaps suggest but persists as the
+model grows.
+
 ## Power
 
 The independent power run contains
@@ -576,12 +630,13 @@ one FMG transform would be cheaper still.
   empirical-null calibration.
 - Do not extend "robust" to a severe non-Gaussian copula uncritically. The LR
   base and the flip test over-reject badly and do not calibrate as $N$ grows;
-  only the score-base transforms hold near nominal there, and that is a probe
-  result at ten variables, not a guarantee.
-- Next stress tests: (a) hold df fixed while varying nuisance dimension and
-  leverage; and (b) raise the observed dimension above ten variables, where the
-  FMG results show robust-test over-rejection grows sharply, to check whether the
-  score base keeps its edge.
+  only the score-base transforms hold near nominal there. That edge persists
+  from ten to thirty variables at matched sample adequacy, but sample adequacy,
+  not dimension, is the governing variable: below about $n/q = 3$ everything
+  degrades, the LR base most.
+- Next stress tests: hold df fixed while varying nuisance leverage and
+  conditioning at fixed dimension and adequacy; and push $p$ further with a
+  proportionally larger $N$ to confirm the score base's margin does not close.
 
 ## Design and caveats
 
@@ -609,6 +664,13 @@ not unbalance them. Its purpose is a boundary probe, not a calibrated rejection
 estimate; the independent-generator copula was excluded because its marginal
 moment solve is infeasible at this severity.
 
+The dimension-scaling probe is a separate 12-cell null grid: two copulas, three
+ambient sizes ($p=10/20/30$, two to six factors) at fixed 8-df tested
+restrictions, and two per-group sample-to-parameter ratios (about 2.5 and 6),
+homogeneous populations, 200 replications per cell. Total $N$ is set from the
+target ratio, so it grows with $p$; the ratios are approximate because the free
+parameter count is estimated, not read from the fit.
+
 Score flipping here remains a frontier method for affine, complete-data ML
 models. These results do not automatically transfer to FIML, ordinal,
 estimated-weight, clustered, boundary, or nonlinear-constraint tests.
@@ -620,6 +682,7 @@ Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --power
 Rscript experiments/62-standardized-flip-score/run_expansion.R --stress
+Rscript experiments/62-standardized-flip-score/run_dimension.R --probe
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```
