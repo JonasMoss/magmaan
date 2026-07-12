@@ -11,12 +11,13 @@ source(file.path(script_dir, "R", "expansion_design.R"))
 set_single_threaded_math()
 
 usage <- function() cat(
-  "Usage: Rscript run_expansion.R [--smoke|--probe|--power|--full] [options]\n\n",
+  "Usage: Rscript run_expansion.R [--smoke|--probe|--power|--power-sandwich|--stress|--full] [options]\n\n",
   "Factorial calibration and power comparison for score flips and FMG.\n\n",
   "Options:\n",
   "  --smoke          Hardest cell, 4 reps, 39 flips (default).\n",
   "  --probe          162-cell null grid.\n",
   "  --power          540-cell sparse/dense power grid.\n",
+  "  --power-sandwich Same power grid with one flip for asymptotic replay.\n",
   "  --stress         24-cell severe non-normal copula stress block.\n",
   "  --full           Null and power grids in one output.\n",
   "  --reps N         Replications per cell (null: 200; power: 150).\n",
@@ -37,6 +38,7 @@ while (i <= length(args)) {
   else if (a == "--smoke") opts$mode <- "smoke"
   else if (a == "--probe") opts$mode <- "probe"
   else if (a == "--power") opts$mode <- "power"
+  else if (a == "--power-sandwich") opts$mode <- "power_sandwich"
   else if (a == "--stress") opts$mode <- "stress"
   else if (a == "--full") opts$mode <- "full"
   else if (a == "--reps") opts$reps <- as.integer(take())
@@ -48,8 +50,10 @@ while (i <= length(args)) {
   i <- i + 1L
 }
 if (is.null(opts$reps)) opts$reps <- switch(
-  opts$mode, smoke = 4L, power = 150L, probe = 200L, full = 150L, stress = 200L)
-if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else 499L
+  opts$mode, smoke = 4L, power = 150L, power_sandwich = 150L,
+  probe = 200L, full = 150L, stress = 200L)
+if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else
+  if (opts$mode == "power_sandwich") 1L else 499L
 stopifnot(opts$reps > 0L, opts$flips > 0L, opts$cores > 0L)
 results_dir <- opts$results_dir %||% file.path(script_dir, "results")
 dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
@@ -83,6 +87,7 @@ stress_grid$effect <- 0
 grid <- switch(opts$mode,
   probe = null_grid,
   power = power_grid,
+  power_sandwich = power_grid,
   stress = stress_grid,
   full = rbind(null_grid, power_grid),
   smoke = rbind(
@@ -94,12 +99,13 @@ grid <- switch(opts$mode,
 grid$cell_id <- seq_len(nrow(grid))
 
 output_prefix <- switch(opts$mode, probe = "expansion", power = "power",
-                        stress = "stress", full = "combined", smoke = "smoke")
+                        power_sandwich = "sandwich_power", stress = "stress",
+                        full = "combined", smoke = "smoke")
 fmg_tests <- c("SB", "MV", "SS", "SF", "EBA2", "EBA4", "EBA6",
                "pEBA2", "pEBA4", "pEBA6", "PALL", "pOLS2", "ALL")
 p_columns <- c(
   "p_basic", "p_effective", "p_standardized", "p_chisq",
-  "p_mean_scaled", "p_mixture",
+  "p_mean_scaled", "p_mixture", "p_sandwich",
   "p_score_ss", "p_score_mv", "p_score_sf", "p_score_eba4",
   "p_score_peba4", "p_score_pols",
   "p_lr_unscaled", "p_lr_scaled",
@@ -124,7 +130,9 @@ empty_rep <- function(rep_id, error) {
   resampling_standardization_seconds = NA_real_,
   asymptotic_seconds = NA_real_, core_total_seconds = NA_real_,
   nested_seconds = NA_real_, fmg_seconds = NA_real_,
-  fmg_duplicate_max_gap = NA_real_))
+  fmg_duplicate_max_gap = NA_real_, score_eigen_mean = NA_real_,
+  score_eigen_cv = NA_real_, score_eigen_ratio = NA_real_,
+  sandwich_available = NA, sandwich_condition = NA_real_))
 }
 
 one_rep <- function(cell, rep_id) {
@@ -215,6 +223,7 @@ one_rep <- function(cell, rep_id) {
     p_basic = flip$p_basic, p_effective = flip$p_effective,
     p_standardized = flip$p_standardized, p_chisq = flip$p_chisq,
     p_mean_scaled = flip$p_mean_scaled, p_mixture = flip$p_mixture,
+    p_sandwich = flip$p_sandwich,
     p_score_ss = p_score_ss, p_score_mv = p_score_mv,
     p_score_sf = p_score_sf, p_score_eba4 = p_score_eba4,
     p_score_peba4 = p_score_peba4, p_score_pols = p_score_pols,
@@ -252,7 +261,13 @@ one_rep <- function(cell, rep_id) {
     asymptotic_seconds = flip$asymptotic_seconds,
     core_total_seconds = flip$total_seconds,
     nested_seconds = nested_seconds, fmg_seconds = fmg_seconds,
-    fmg_duplicate_max_gap = fmg_duplicate_max_gap)
+    fmg_duplicate_max_gap = fmg_duplicate_max_gap,
+    score_eigen_mean = mean(flip$eigenvalues),
+    score_eigen_cv = if (length(flip$eigenvalues) > 1L)
+      sd(flip$eigenvalues) / mean(flip$eigenvalues) else 0,
+    score_eigen_ratio = max(flip$eigenvalues) / min(flip$eigenvalues),
+    sandwich_available = flip$sandwich_available,
+    sandwich_condition = flip$sandwich_condition)
   stopifnot(identical(p_columns, intersect(p_columns, names(out))))
   out
 }
@@ -306,6 +321,11 @@ summarize_cell <- function(x) {
     median_asymptotic_ms = 1000 * median(ok$asymptotic_seconds),
     median_nested_ms = 1000 * median(ok$nested_seconds),
     median_fmg_ms = 1000 * median(ok$fmg_seconds),
+    sandwich_available_rate = mean(ok$sandwich_available),
+    median_sandwich_condition = median(ok$sandwich_condition, na.rm = TRUE),
+    median_score_eigen_mean = median(ok$score_eigen_mean, na.rm = TRUE),
+    median_score_eigen_cv = median(ok$score_eigen_cv, na.rm = TRUE),
+    median_score_eigen_ratio = median(ok$score_eigen_ratio, na.rm = TRUE),
     max_fmg_duplicate_gap = safe_max(ok$fmg_duplicate_max_gap))
   for (name in p_columns) {
     suffix <- sub("^p_", "", name)

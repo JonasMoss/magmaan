@@ -1,0 +1,10 @@
+note := "score-sb-audit"
+
+build name=note:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    base="$(basename "{{name}}" .tex)"
+    pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null
+    pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null
+    rm -f "$base".{aux,log,out,toc}
+    echo "built $base.pdf"

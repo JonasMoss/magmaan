@@ -1,0 +1,164 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\title{Why the Score-Based Satorra--Bentler Test Looked Too Good}
+\author{}
+\date{2026-07-12}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Finding}
+
+The near-nominal score-based Satorra--Bentler (SB) result in experiment 62
+does not establish that mean scaling is generally correct. It is a finite-sample
+bias--variance tradeoff. The tested population spectra are often close to
+spherical, the one-degree-of-freedom cells make SB exact, and replacing the
+estimated eigenvalues by their mean regularizes severe finite-sample spectral
+noise. Where the mixture is harder, score-SB becomes liberal.
+
+\section*{Reference laws}
+
+Let $u=G^\top s$ be the efficient tested score, with $G$ obtained by
+information-metric orthogonalization against the nuisance tangent. Define
+\[
+ A_G=G^\top A G,\qquad B_G=G^\top B G,\qquad
+ T_A=u^\top A_G^{-1}u.
+\]
+Under the null,
+\[
+ T_A \Rightarrow \sum_{j=1}^q \lambda_j\chi^2_{1,j},
+ \qquad
+ \lambda_j=\operatorname{eig}(A_G^{-1}B_G).
+\]
+Score-SB uses
+\[
+ T_{\mathrm{SB}}=T_A/\bar\lambda,
+ \qquad \bar\lambda=q^{-1}\sum_j\lambda_j,
+\]
+with a $\chi_q^2$ reference. The plug-in ALL test evaluates the weighted
+chi-square tail using every estimated $\lambda_j$.
+
+\begin{proposition}
+Score-SB is exact for $q=1$ and when all population eigenvalues are equal. If
+they differ, its reference variance is too small:
+\[
+ 2q\bar\lambda^2 \leq 2\sum_j\lambda_j^2.
+\]
+Consequently, mean scaling generally understates upper-tail mass.
+\end{proposition}
+
+The direct sandwich score statistic instead uses
+\[
+ T_B=u^\top B_G^{-1}u \Rightarrow \chi_q^2.
+\]
+It is asymptotically pivotal when $B_G$ is consistently estimated and positive
+definite. It avoids both a mixture-tail approximation and eigenvalue-by-eigenvalue
+plug-in noise, although its inverse meat can itself be unstable at small sample
+sizes.
+
+\section*{Audit of experiment 62}
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+Condition & Score-SB & Score-ALL \\
+\midrule
+Main grid, $q=1$ & 0.051 & 0.051 \\
+Main grid, $q=4$ & 0.047 & 0.031 \\
+Main grid, $q=8$ & 0.058 & 0.029 \\
+Severe VM copula, $q=8$ & 0.078 & 0.025 \\
+Severe PL copula, $q=8$ & 0.084 & 0.027 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The overall score-SB rejection rate of 0.052 averages over the exact scalar
+case and hides the deterioration at eight restrictions. A diagnostic at
+$q=8$, $N=200$ found median estimated eigenvalue coefficients of variation of
+approximately 0.31 under normality, 0.69 under $t_5$, and 0.58 under skewness.
+Large-sample diagnostics reduced these to approximately 0.06, 0.16, and 0.40.
+Thus much of the finite-sample eigenvalue dispersion consumed by ALL is
+estimation noise.
+
+Using the large-sample diagnostic spectra as fixed mixture weights gave
+theoretical SB rejection probabilities of approximately 0.050, 0.051, and
+0.059 for normal, $t_5$, and skewed data. This reproduces the direction of the
+observed calibration. SB is accurate where the tested spectrum is nearly
+spherical and mildly liberal where it is not.
+
+\begin{remark}
+The good score-SB result is best interpreted as trace-only spectral shrinkage.
+Its liberal mixture approximation offsets finite-sample conservatism from the
+score base and noisy spectrum estimation. This cancellation is useful evidence
+for regularization, not evidence that SB is the correct reference law.
+\end{remark}
+
+\section*{Direct-sandwich follow-up}
+
+The implemented statistic $T_B$ was available for every successful main-grid
+replication. Its null rejection was 0.036 overall, split as 0.051, 0.033, and
+0.024 at one, four, and eight restrictions. At eight restrictions the median
+condition number of $B_G$ was approximately 36, 22, and 14 at total
+$N=60,100,200$. Thus direct inversion is more conservative precisely where the
+estimated spectrum is noisiest.
+
+Under the severe eight-df copulas, direct-sandwich rejection was 0.029 for the
+piecewise-linear generator and 0.067 for Vale--Maurelli. The corresponding
+average cellwise condition numbers were approximately 251 and 96. Asymptotic
+pivotality therefore does not supply uniform finite-sample calibration when the
+efficient meat is ill-conditioned.
+
+After matched empirical-null calibration, direct-sandwich power was 0.072 and
+0.120 for dense effects 0.25 and 0.50, and 0.126 and 0.302 for sparse effects.
+This is somewhat below the spectrum-score methods, so the additional nominal
+conservatism does not reveal a compensating power advantage.
+
+In the 32-cell dimension replay, direct-sandwich rejection ranged from 0.038 to
+0.061 after averaging over copula and geometry. At the adequate sample ratio it
+was 0.050, 0.046, 0.043, and 0.058 for $p=10,20,30,40$. Mean median condition
+numbers fell from about 45 to 22 over the same sequence because total $N$ grew
+with dimension. This supports asymptotic recovery with information, while also
+showing that ambient dimension alone is not the conditioning driver.
+
+The resulting provisional ordering is not SB versus sandwich. It is a
+regularization continuum: SB collapses the spectrum to its trace, pEBA shrinks
+its shape, ALL uses the noisy shape directly, and direct sandwich inverts the
+noisy meat. In experiment 62, pEBA4 is the most stable compromise.
+
+\section*{Iteration consequences}
+
+The next experiment revision must report the following separately:
+\begin{enumerate}
+  \item nominal size by restriction dimension, rather than only an overall
+        average;
+  \item score-SB, score-ALL, pEBA, standardized flips, and the direct sandwich
+        score statistic;
+  \item eigenvalue mean, coefficient of variation, and condition diagnostics;
+  \item availability and conditioning of $B_G^{-1}$;
+  \item matched-null power, explicitly labeled as a comparison after forced
+        size alignment rather than evidence of nominal validity.
+\end{enumerate}
+
+The report should avoid the generic claim that the score base makes SB correct.
+A defensible provisional conclusion is narrower: in these designs the score
+base is less liberal than the likelihood-ratio base, while trace shrinkage and
+pEBA can outperform a noisy plug-in spectrum at small sample sizes. The direct
+sandwich comparison determines whether that advantage survives without an SB
+mixture approximation.
+
+\end{document}

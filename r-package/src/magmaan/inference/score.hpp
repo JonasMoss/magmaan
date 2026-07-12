@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include <Eigen/Core>
@@ -406,10 +407,11 @@ score_for_direction_robust(const ScoreCandidate& candidate,
 // the df-dimensional efficient-score subspace G (each release direction made
 // info-orthogonal to the nuisance subspace), with u = Gᵀs and V = GᵀIG. The
 // robust version mean-scales by `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G)) / df` (the
-// Satorra-Bentler scaling at df>1) and also reports the exact eigenvalue-mixture
-// p-value `Pr(Σλⱼχ²₁ > T)` via `weighted_chisq_upper`, where λ are the
-// generalized eigenvalues of (GᵀB1G, GᵀA1G). At df=1 this reduces exactly to
-// the per-row `c`.
+// Satorra-Bentler scaling at df>1), the exact eigenvalue-mixture p-value
+// `Pr(Σλⱼχ²₁ > T)`, and the direct sandwich-studentized statistic
+// `uᵀ(GᵀB1G)⁻¹u ~ χ²_df`. Here λ are the generalized eigenvalues of
+// (GᵀB1G, GᵀA1G). At df=1 the mean-scaled, mixture, and sandwich tests reduce
+// to the same scalar robust score test.
 struct JointScoreTestResult {
   std::vector<ScoreCandidate> candidates;  // the jointly released constraints
   int    df = 0;
@@ -418,6 +420,11 @@ struct JointScoreTestResult {
   double mi_scaled = 0.0;      // T / c̄ (mean-scaled)
   double p_value = 1.0;        // χ²_df tail of mi_scaled (mean-scaled)
   double p_mixture = 1.0;      // exact Pr(Σλⱼ χ²₁ > T)
+  double mi_sandwich = std::numeric_limits<double>::quiet_NaN();
+  double p_sandwich = std::numeric_limits<double>::quiet_NaN();
+  bool sandwich_available = false; // GᵀB1G was positive definite
+  double sandwich_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double sandwich_condition = std::numeric_limits<double>::quiet_NaN();
   Eigen::VectorXd eigvals;     // λ of (GᵀA1G)⁻¹(GᵀB1G), ascending
 };
 
@@ -480,6 +487,11 @@ struct ScoreFlipTestResult {
   double statistic_mean_scaled = 0.0;
   double p_mean_scaled = 1.0;
   double p_mixture = 1.0;
+  double statistic_sandwich = std::numeric_limits<double>::quiet_NaN();
+  double p_sandwich = std::numeric_limits<double>::quiet_NaN();
+  bool sandwich_available = false;
+  double sandwich_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double sandwich_condition = std::numeric_limits<double>::quiet_NaN();
   Eigen::VectorXd eigvals;
 
   int n_flips = 0;

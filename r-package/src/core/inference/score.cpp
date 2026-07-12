@@ -1545,6 +1545,36 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
   out.df = static_cast<int>(df);
   out.mi = T;
   out.eigvals = lambda;
+  // Unlike mean scaling or a plug-in mixture tail, this quadratic uses the
+  // full efficient-score meat as its studentizer and is asymptotically
+  // pivotal under the sandwich regularity conditions. Keep the established
+  // spectrum results available when a finite-sample meat is only PSD.
+  // A1/B1 may be per-case or moment-weight scaled while score_full/info_full
+  // are totals. Mean scaling is invariant to that common scale; the direct
+  // quadratic is not. Map the sandwich bread to V's score scale, then apply
+  // the same map to its meat. The supported evaluators construct proportional
+  // breads, so the Frobenius projection is exact up to rounding.
+  const double bread_norm_sq = GtA.squaredNorm();
+  const double bread_scale = bread_norm_sq > 0.0
+      ? V.cwiseProduct(GtA).sum() / bread_norm_sq
+      : std::numeric_limits<double>::quiet_NaN();
+  const Eigen::MatrixXd B_score = bread_scale * GtB;
+  auto GtB_inv = invert_symmetric(
+      B_score, "robust joint score test efficient sandwich variance");
+  if (GtB_inv.has_value()) {
+    const double T_sandwich = u.dot((*GtB_inv) * u);
+    if (std::isfinite(T_sandwich) && T_sandwich >= 0.0) {
+      out.mi_sandwich = T_sandwich;
+      out.p_sandwich = chi2_pvalue(T_sandwich, out.df);
+      out.sandwich_available = true;
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> bes(B_score);
+      if (bes.info() == Eigen::Success) {
+        out.sandwich_min_eigenvalue = bes.eigenvalues().minCoeff();
+        out.sandwich_condition = bes.eigenvalues().maxCoeff() /
+                                 out.sandwich_min_eigenvalue;
+      }
+    }
+  }
   if (std::isfinite(trace) && trace > 0.0) {
     out.scaling_factor = trace / static_cast<double>(df);  // c̄ = Σλ / df
     out.mi_scaled = T / out.scaling_factor;
@@ -2357,6 +2387,11 @@ score_flip_test(spec::LatentStructure pt_H1,
   out.statistic_mean_scaled = asymptotic->mi_scaled;
   out.p_mean_scaled = asymptotic->p_value;
   out.p_mixture = asymptotic->p_mixture;
+  out.statistic_sandwich = asymptotic->mi_sandwich;
+  out.p_sandwich = asymptotic->p_sandwich;
+  out.sandwich_available = asymptotic->sandwich_available;
+  out.sandwich_min_eigenvalue = asymptotic->sandwich_min_eigenvalue;
+  out.sandwich_condition = asymptotic->sandwich_condition;
   out.eigvals = std::move(asymptotic->eigvals);
   out.n_flips = options.n_flips;
   out.seed = options.seed;

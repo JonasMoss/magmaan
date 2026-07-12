@@ -12,7 +12,7 @@ source(file.path(script_dir, "R", "dimension_design.R"))
 set_single_threaded_math()
 
 usage <- function() cat(
-  "Usage: Rscript run_dimension.R [--smoke|--probe] [options]\n\n",
+  "Usage: Rscript run_dimension.R [--smoke|--probe|--big|--sandwich] [options]\n\n",
   "Does the score-base FMG advantage persist as ambient dimension grows?\n",
   "Holds tested df = 8 fixed; grows p in {10,20,30}; severe copula (vm/pl);\n",
   "two sample-adequacy regimes (per-group n/q ~ 2.5 tight, ~6 adequate).\n\n",
@@ -20,6 +20,7 @@ usage <- function() cat(
   "  --smoke          One cell, 4 reps (default).\n",
   "  --probe          12-cell grid (p 10/20/30, homogeneous).\n",
   "  --big            32-cell grid (p 10/20/30/40, both geometries).\n",
+  "  --sandwich       Big grid, 200 reps and one flip, direct-score audit.\n",
   "  --reps N         Replications per cell (probe 200, big 1000).\n",
   "  --flips N        Random flips per replication (default: 499).\n",
   "  --cores N        Parallel cell workers.\n",
@@ -38,6 +39,7 @@ while (i <= length(args)) {
   else if (a == "--smoke") opts$mode <- "smoke"
   else if (a == "--probe") opts$mode <- "probe"
   else if (a == "--big") opts$mode <- "big"
+  else if (a == "--sandwich") opts$mode <- "sandwich"
   else if (a == "--reps") opts$reps <- as.integer(take())
   else if (a == "--flips") opts$flips <- as.integer(take())
   else if (a == "--cores") opts$cores <- as.integer(take())
@@ -47,14 +49,16 @@ while (i <= length(args)) {
   i <- i + 1L
 }
 if (is.null(opts$reps)) opts$reps <- switch(opts$mode,
-  smoke = 4L, big = 1000L, 200L)
-if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else 499L
+  smoke = 4L, big = 1000L, sandwich = 200L, 200L)
+if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else
+  if (opts$mode == "sandwich") 1L else 499L
 results_dir <- opts$results_dir %||% file.path(script_dir, "results")
 dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 
 adequacy_ratio <- c(tight = 2.5, adequate = 6.0)
-factors <- if (opts$mode == "big") c(2L, 4L, 6L, 8L) else c(2L, 4L, 6L)
-hets <- if (opts$mode == "big") c("homogeneous", "geometry") else "homogeneous"
+large_grid <- opts$mode %in% c("big", "sandwich")
+factors <- if (large_grid) c(2L, 4L, 6L, 8L) else c(2L, 4L, 6L)
+hets <- if (large_grid) c("homogeneous", "geometry") else "homogeneous"
 grid <- expand.grid(n_factors = factors, adequacy = names(adequacy_ratio),
                     distribution = c("vm", "pl"), heterogeneity = hets,
                     stringsAsFactors = FALSE)
@@ -70,12 +74,17 @@ score_methods <- c(SB = "sb", SS = "ss", MV = "mv", SF = "scaled_f",
                    pEBA4 = "peba", ALL = "all")
 score_param <- c(SB = 4, SS = 4, MV = 4, SF = 4, pEBA4 = 4, ALL = 4)
 p_columns <- c("p_flip_basic", "p_flip_effective", "p_flip_standardized",
-               paste0("p_score_", tolower(fmg_transforms)),
+               "p_score_sandwich", paste0("p_score_", tolower(fmg_transforms)),
                paste0("p_lr_", tolower(fmg_transforms)))
 
 empty_rep <- function(rep_id, error) {
   out <- data.frame(rep = rep_id, ok = FALSE, error = error)
   for (nm in p_columns) out[[nm]] <- NA_real_
+  out$score_eigen_mean <- NA_real_
+  out$score_eigen_cv <- NA_real_
+  out$score_eigen_ratio <- NA_real_
+  out$sandwich_available <- NA
+  out$sandwich_condition <- NA_real_
   out
 }
 
@@ -105,9 +114,9 @@ one_rep <- function(cell, rep_id) {
   p_score <- setNames(vapply(fmg_transforms, score_fmg, numeric(1L)), fmg_transforms)
 
   rb <- lapply(c("A", "B"), function(g) as.matrix(dat[dat$school == g, ov, drop = FALSE]))
-  fmg <- tryCatch(fmg_nested(fit$configural, fit$restricted, data = rb,
-                             tests = fmg_transforms, A.method = "exact"),
-                  error = function(e) NULL)
+  fmg <- if (opts$mode == "sandwich") NULL else tryCatch(fmg_nested(
+    fit$configural, fit$restricted, data = rb, tests = fmg_transforms,
+    A.method = "exact"), error = function(e) NULL)
   p_lr <- setNames(rep(NA_real_, length(fmg_transforms)), fmg_transforms)
   if (!is.null(fmg)) {
     key <- sub("_ml$", "", fmg$label)
@@ -118,7 +127,13 @@ one_rep <- function(cell, rep_id) {
 
   out <- data.frame(rep = rep_id, ok = TRUE, error = "",
     p_flip_basic = flip$p_basic, p_flip_effective = flip$p_effective,
-    p_flip_standardized = flip$p_standardized)
+    p_flip_standardized = flip$p_standardized,
+    p_score_sandwich = flip$p_sandwich,
+    score_eigen_mean = mean(flip$eigenvalues),
+    score_eigen_cv = sd(flip$eigenvalues) / mean(flip$eigenvalues),
+    score_eigen_ratio = max(flip$eigenvalues) / min(flip$eigenvalues),
+    sandwich_available = flip$sandwich_available,
+    sandwich_condition = flip$sandwich_condition)
   for (t in fmg_transforms) out[[paste0("p_score_", tolower(t))]] <- p_score[[t]]
   for (t in fmg_transforms) out[[paste0("p_lr_", tolower(t))]] <- p_lr[[t]]
   out
@@ -146,12 +161,19 @@ if (.Platform$OS.type != "windows" && opts$cores > 1L && nrow(grid) > 1L) {
   })
 }
 raw <- do.call(rbind, pieces)
-write.csv(raw, file.path(results_dir, "dimension_replications.csv"), row.names = FALSE)
+output_stem <- if (opts$mode == "sandwich") "dimension_sandwich" else "dimension"
+write.csv(raw, file.path(results_dir, paste0(output_stem, "_replications.csv")),
+          row.names = FALSE)
 
 summarize_cell <- function(x) {
   ok <- x[x$ok, , drop = FALSE]
   out <- data.frame(
-    reps = nrow(x), reps_ok = nrow(ok), failure_rate = mean(!x$ok))
+    reps = nrow(x), reps_ok = nrow(ok), failure_rate = mean(!x$ok),
+    sandwich_available_rate = mean(ok$sandwich_available),
+    median_sandwich_condition = median(ok$sandwich_condition, na.rm = TRUE),
+    median_score_eigen_mean = median(ok$score_eigen_mean, na.rm = TRUE),
+    median_score_eigen_cv = median(ok$score_eigen_cv, na.rm = TRUE),
+    median_score_eigen_ratio = median(ok$score_eigen_ratio, na.rm = TRUE))
   for (nm in p_columns)
     out[[paste0("rejection_", sub("^p_", "", nm))]] <-
       if (nrow(ok)) mean(ok[[nm]] < .05, na.rm = TRUE) else NA_real_
@@ -161,7 +183,8 @@ split_raw <- split(raw, raw$cell_id)
 summary <- do.call(rbind, lapply(split_raw, summarize_cell))
 summary$cell_id <- as.integer(names(split_raw))
 summary <- merge(grid, summary, by = "cell_id", sort = TRUE)
-write.csv(summary, file.path(results_dir, "dimension_summary.csv"), row.names = FALSE)
+write.csv(summary, file.path(results_dir, paste0(output_stem, "_summary.csv")),
+          row.names = FALSE)
 
 metadata <- data.frame(
   key = c("mode", "cells", "reps", "flips", "cores", "seed_base",
@@ -169,6 +192,7 @@ metadata <- data.frame(
   value = c(opts$mode, nrow(grid), opts$reps, opts$flips, opts$cores,
             opts$seed_base, proc.time()[["elapsed"]] - t0,
             as.character(packageVersion("magmaan")), R.version.string))
-write.csv(metadata, file.path(results_dir, "dimension_metadata.csv"), row.names = FALSE)
+write.csv(metadata, file.path(results_dir, paste0(output_stem, "_metadata.csv")),
+          row.names = FALSE)
 cat(sprintf("wrote dimension results to %s (%.1fs)\n", results_dir,
             proc.time()[["elapsed"]] - t0))
