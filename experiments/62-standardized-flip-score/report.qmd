@@ -1,5 +1,5 @@
 ---
-title: "Standardized score flips for small-sample metric invariance"
+title: "When is standardized score flipping worth it?"
 format:
   html:
     toc: true
@@ -11,68 +11,220 @@ execute:
 ---
 
 ```{r setup}
-need <- file.path("results", c("summary.csv", "failures.csv", "metadata.csv"))
-if (any(!file.exists(need))) {
-  stop("missing results; run: Rscript run_experiment.R --probe")
+files <- file.path("results", c(
+  "summary.csv", "expansion_summary.csv", "expansion_replications.csv",
+  "expansion_metadata.csv", "timing_summary.csv"))
+if (any(!file.exists(files))) {
+  stop("missing results; run run_experiment.R, run_expansion.R, and run_timing.R")
 }
-s <- read.csv(need[[1L]])
-f <- read.csv(need[[2L]])
-m <- read.csv(need[[3L]])
-focus <- s[!s$alternative & s$distribution == "t5" & s$phi_ratio == 3, ]
-wide <- reshape(focus[, c("n", "method", "rejection")], idvar = "n",
-                timevar = "method", direction = "wide")
-names(wide) <- sub("rejection\\.", "", names(wide))
-at50 <- focus[focus$n == 50, ]
-rate <- function(method) at50$rejection[match(method, at50$method)]
+legacy <- read.csv(files[[1L]])
+s <- read.csv(files[[2L]])
+r <- read.csv(files[[3L]])
+m <- read.csv(files[[4L]])
+timing <- read.csv(files[[5L]])
+r <- r[r$ok, , drop = FALSE]
+s$calibration_effective <- abs(s$rejection_effective - .05)
+s$calibration_standardized <- abs(s$rejection_standardized - .05)
+s$calibration_gain <- s$calibration_effective - s$calibration_standardized
+
+means <- function(vars, by) {
+  aggregate(s[vars], s[by], mean)
+}
+by_df <- means(c("rejection_effective", "rejection_standardized",
+                 "changed_to_accept", "mean_abs_delta_p",
+                 "mean_variance_relative_shift"), "df")
+by_n <- means(c("rejection_effective", "rejection_standardized",
+                "changed_to_accept", "mean_abs_delta_p",
+                "mean_variance_relative_shift"), "n_total")
+by_dist <- means(c("rejection_effective", "rejection_standardized"),
+                 "distribution")
+by_balance <- means(c("rejection_effective", "rejection_standardized",
+                      "changed_to_accept"), "balance")
+by_ndf <- aggregate(
+  r[c("reject_effective", "reject_standardized", "changed_to_accept")],
+  r[c("n_total", "df")], mean)
+
+timing_ms <- timing
+for (name in grep("seconds$", names(timing), value = TRUE)) {
+  timing_ms[[sub("seconds$", "ms", name)]] <- 1000 * timing[[name]]
+}
+timing_499 <- subset(
+  timing_ms, scenario == "easy" & n_flips == 499,
+  select = c(df, median_setup_ms, median_resampling_score_ms,
+             median_standardization_ms, median_asymptotic_ms,
+             median_core_total_ms))
+timing_scale <- subset(
+  timing_ms, scenario == "easy" & df == 8,
+  select = c(n_flips, median_resampling_score_ms,
+             median_standardization_ms, median_core_total_ms))
 ```
 
-## Question
+## Bottom line
 
-Can nuisance-effective score sign flips improve the small-sample metric-
-invariance test, and does flip-specific variance standardization repair the
-finite-sample mismatch between the observed and transformed statistics?
+Standardization is cheap and directionally useful, but its practical value is
+concentrated. Across `r format(nrow(r), big.mark = ",")` successful null
+replications, it changed `r sum(r$changed_to_accept)` decisions from rejection
+to acceptance and `r sum(r$changed_to_reject)` in the opposite direction. The
+mean p-value increased from the effective reference by
+`r sprintf("%.4f", mean(r$p_standardized - r$p_effective))`; no replication
+had a smaller standardized p-value.
 
-## Short answer
+The strongest interaction was sample size by restriction dimension:
 
-At the focal heavy-tailed, heterogeneous (n=50) cell, rejection was
-`r sprintf("%.3f", rate("flip_basic"))` for basic flips,
-`r sprintf("%.3f", rate("flip_effective"))` for effective flips, and
-`r sprintf("%.3f", rate("flip_standardized"))` after flip-specific
-standardization. The corresponding robust score-mixture and Satorra-2000 rates
-were `r sprintf("%.3f", rate("score_mixture"))` and
-`r sprintf("%.3f", rate("satorra2000_scaled"))`. This is a calibration probe,
-not a support claim; the table below shows whether the pattern persists with
-sample size.
-
-## Evidence
-
-Heavy-tailed groups with a threefold factor-variance difference; target level
-is 0.05.
-
-```{r table}
-keep <- c("n", "flip_basic", "flip_effective", "flip_standardized",
-          "score_mixture", "satorra2000_scaled")
-tab <- wide[, intersect(keep, names(wide)), drop = FALSE]
-names(tab) <- c("n per group", "basic flip", "effective flip",
-                "standardized flip", "robust score mixture", "Satorra 2000")
+```{r n-df-table}
+tab <- by_ndf
+names(tab) <- c("total N", "df", "effective", "standardized",
+                "effective-only rejection")
 knitr::kable(tab, digits = 3)
 ```
 
-## Caveats
+At total $N=60$, standardization removes little for one restriction, but about
+0.45 and 0.62 percentage points for 4 and 8 restrictions. It does not fully
+repair the 8-df test, which remains liberal at 0.077. At $N=200$ the absolute
+changes are only 0.06--0.17 percentage points. The answer is therefore not
+"always standardize because the unstandardized test is broken". It is closer
+to: **standardize by default because it is inexpensive, but expect a material
+calibration difference mainly for small samples and moderate-to-large joint
+tests.**
 
-- The probe uses continuous complete-data ML, affine metric restrictions, and
-  normal or symmetric heavy-tailed data. Skewed, missing, ordinal, fixed-X, and
-  boundary cases remain outside the implemented contract.
-- Each cell has `r m$value[m$key == "reps"]` replications and
-  `r m$value[m$key == "flips"]` random flips. A 0.05 rejection rate therefore
-  has visible binomial and Monte Carlo noise.
-- Score flipping is asymptotic for covariance-parameter scores; it is not an
-  exact finite-sample randomization test.
+## Hypotheses and what happened
+
+### H1: small samples should matter most — supported
+
+The flip-specific covariance correction depends on group sign sums, whose
+relative size shrinks with group sample size. Both the measured covariance
+shift and the p-value movement decline rapidly with $N$.
+
+```{r n-table}
+names(by_n) <- c("total N", "effective", "standardized",
+                 "effective-only rejection", "mean |delta p|",
+                 "mean relative covariance shift")
+knitr::kable(by_n, digits = 4)
+```
+
+### H2: more restrictions should increase the payoff — supported
+
+The mean covariance shift itself is only slightly larger at 8 df, but the
+multivariate quadratic aggregates those changes across more directions. The
+mean absolute p-value movement rises from 0.0014 at 1 df to 0.0046 at 8 df.
+
+```{r df-table}
+names(by_df) <- c("df", "effective", "standardized",
+                  "effective-only rejection", "mean |delta p|",
+                  "mean relative covariance shift")
+knitr::kable(by_df, digits = 4)
+```
+
+This makes "many restrictions" a better predictor than "large raw covariance
+shift" alone. The replication-level correlation between mean relative
+covariance shift and absolute p-value movement was
+`r sprintf("%.3f", cor(r$mean_variance_relative_shift, r$abs_delta_p))`.
+
+### H3: imbalance should increase the payoff — weakly supported
+
+The 1:3 design produced more effective-only rejections, but did not have a
+larger average covariance shift. Imbalance appears to make a given correction
+more consequential near the rejection boundary rather than mechanically
+making every flip variance more different.
+
+```{r balance-table}
+names(by_balance) <- c("balance", "effective", "standardized",
+                       "effective-only rejection")
+knitr::kable(by_balance, digits = 4)
+```
+
+### H4: heterogeneous populations should matter most — not as stated
+
+Homogeneous, common-scale, and strongly geometry-heterogeneous populations had
+similar effective-to-standardized rejection changes. The homogeneous cells
+actually had the largest mean relative covariance shift. Raw variance
+heterogeneity is therefore not a sufficient proxy: the relevant quantity is
+the group-specific tested--nuisance information cross-geometry after the H0
+restriction map is applied.
+
+### H5: nonnormality should increase the need — consequential, not causal
+
+The covariance-shift diagnostic was almost unchanged across normal, $t_5$, and
+skewed generators. Nonnormality did make both flip tests more liberal, so the
+same conservative standardization adjustment bought more calibration under
+$t_5$ and skew. It did not eliminate the remaining misspecification effect.
+
+```{r distribution-table}
+names(by_dist) <- c("distribution", "effective", "standardized")
+knitr::kable(by_dist, digits = 4)
+```
+
+## Timing
+
+The controlled benchmark is single-process, warm-cache, and excludes model
+fitting. At 499 flips, median core latency was about 2.3 ms at 1 df, 5.4 ms at
+4 df, and 8.7 ms at 8 df. Flip-specific standardization accounts for roughly
+0.7, 2.7, and 4.2 ms of those totals.
+
+```{r timing-df}
+names(timing_499) <- c("df", "setup ms", "basic/effective resampling ms",
+                       "standardization ms", "asymptotic comparator ms",
+                       "total core ms")
+knitr::kable(timing_499, digits = 3)
+```
+
+Cost is essentially linear in the number of flips. For the 8-df easy case:
+
+```{r timing-flips}
+names(timing_scale) <- c("flips", "basic/effective resampling ms",
+                         "standardization ms", "total core ms")
+knitr::kable(timing_scale, digits = 3)
+```
+
+The two model fits took 3--5 ms in the warmed serial benchmark. In the full
+parallel experiment, fit and score timings include worker contention: median
+fit time was about 13--15 ms and median 499-flip score-test time ranged from
+9 ms at 1 df to 32--35 ms at 8 df. The complete 162-cell design (200
+replications per cell, 499 flips, 16 workers) took
+`r sprintf("%.1f", as.numeric(m$value[m$key == "elapsed_seconds"]))` seconds,
+or about `r sprintf("%.0f", nrow(r) / as.numeric(m$value[m$key == "elapsed_seconds"]))`
+successful replications per wall-clock second.
+
+## Recommendation
+
+- Keep `p_standardized` as the default. The serial incremental cost is only a
+  few milliseconds at SEM-sized restriction dimensions, and every decision
+  change in this probe went in the theoretically expected conservative
+  direction.
+- Expect little practical difference for a one-df release or total $N\geq200$,
+  unless leverage or information conditioning is much more extreme than in
+  this design.
+- Expect the clearest benefit around total $N\leq100$ with 4--8 jointly tested
+  restrictions, especially with group imbalance. Standardization helps there,
+  but should not be sold as a complete small-sample correction.
+- Do not decide from "heteroscedastic versus homogeneous" alone. Inspect the
+  returned `mean_variance_relative_shift`; it is a more direct diagnostic of
+  whether standardization is changing the reference distribution.
+- Next stress test: hold df fixed while varying nuisance dimension and leverage.
+  This experiment held a 62-slot ambient model constant, so it cannot yet
+  separate "many restrictions" from the ratio of tested dimension to effective
+  residual information.
+
+## Design and caveats
+
+The expansion crosses 1/4/8 loading-equality restrictions; total
+$N=60/100/200$; 1:1/1:3 group allocation; homogeneous, common latent-scale,
+and strong factor/residual-geometry heterogeneity; and normal, $t_5$, and
+standardized skewed innovations. Each of 162 null cells has 200 attempted
+replications and 499 random flips. There were
+`r sum(!read.csv(files[[3L]])$ok)` failed fits (maximum cell failure rate
+`r sprintf("%.3f", max(s$failure_rate))`). Monte Carlo and binomial uncertainty
+remain visible, especially in cell-by-cell 0.05 decisions.
+
+Score flipping here remains a frontier method for affine, complete-data ML
+models. These results do not automatically transfer to FIML, ordinal,
+estimated-weight, clustered, boundary, or nonlinear-constraint tests.
 
 ## Reproduce
 
 ```sh
-Rscript experiments/62-standardized-flip-score/run_experiment.R --smoke
 Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
+Rscript experiments/62-standardized-flip-score/run_expansion.R --probe
+Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```

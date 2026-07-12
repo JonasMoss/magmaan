@@ -491,7 +491,10 @@ golden `parTable()` fixtures.
   `n x n` hat matrix. The observed identity is included in the Monte Carlo rank,
   `p_value` aliases the standardized p-value, and deterministic seeds, Monte
   Carlo SEs, asymptotic score comparators, nuisance-stationarity, and variance-
-  conditioning diagnostics are returned. `api::frontier::score_flip_test` and
+  conditioning diagnostics are returned. The result also measures mean/max
+  flip-specific covariance displacement and high-resolution setup,
+  basic/effective resampling, standardization, asymptotic-comparator, and total
+  timings. `api::frontier::score_flip_test` and
   the R `score_flip_test()` wrapper expose the method. The current contract
   rejects missing data, fixed-X rows, nonlinear/inequality constraints,
   boundary null fits, and non-ML estimators. Experiment 62's 300-replication
@@ -499,7 +502,16 @@ golden `parTable()` fixtures.
   nominal, and standardization a small improvement concentrated at n=30; the
   hard t5 / threefold factor-variance cell rejected at 0.054, 0.077, and 0.050
   for n=30/50/100, versus 0.190, 0.163, and 0.107 for the mean-scaled
-  Satorra-2000 difference test. This is frontier evidence, not a support claim.
+  Satorra-2000 difference test. The 2026-07-13 expansion held a 62-slot
+  two-factor nuisance model fixed while crossing 1/4/8 restrictions, total
+  N=60/100/200, 1:1/1:3 allocation, three group-information geometries, and
+  normal/t5/skew distributions (162 cells, 200 attempts each). Across 32,243
+  successful fits, standardization changed 70 decisions, all from effective
+  rejection to acceptance. At N=60, effective/standardized rejection was
+  0.060/0.059 (df=1), 0.069/0.064 (df=4), and 0.083/0.077 (df=8); by N=200 the
+  differences were 0.0006--0.0017. A warm serial 499-flip call cost 2.3/5.4/8.7
+  ms total at df=1/4/8, of which standardization cost 0.7/2.7/4.2 ms. This is
+  frontier evidence, not a support claim.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the

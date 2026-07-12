@@ -487,6 +487,14 @@ struct ScoreFlipTestResult {
   double nuisance_stationarity_norm = 0.0;
   double min_variance_eigenvalue = 0.0;
   double max_variance_condition = 1.0;
+  double mean_variance_relative_shift = 0.0;
+  double max_variance_relative_shift = 0.0;
+
+  double setup_seconds = 0.0;
+  double resampling_score_seconds = 0.0;
+  double resampling_standardization_seconds = 0.0;
+  double asymptotic_seconds = 0.0;
+  double total_seconds = 0.0;
 };
 
 post_expected<ScoreFlipTestResult>

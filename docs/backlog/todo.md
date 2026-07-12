@@ -21,15 +21,20 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   slice supports affine nested complete-data ML pairs and is exercised by
   experiment 62. Before treating it as more than a research method: add a tiny
   exact-enumeration kernel test against all `2^n` flips; add an independent
-  dense-hat-matrix oracle for the flip-specific covariance; probe unbalanced
-  group sizes, skew, more restriction dimensions, and near-singular nuisance
-  information. Then decide extensions separately: direct FIML needs observed-
-  pattern scores and a missing-data information convention; continuous LS and
-  ordinal/mixed models need estimator-specific casewise influence contributions
-  including estimated-weight effects; clustered data need cluster-level rather
-  than row-level signs. A residual-based or robust-Wald flip test is a distinct
-  method and should not be hidden behind the score-test entry point. Promote
-  any of these only when a concrete experiment needs it.
+  dense-hat-matrix oracle for the flip-specific covariance; and probe
+  near-singular nuisance information. The first expanded probe already crosses
+  1/4/8 restrictions, balanced/1:3 groups, skew/t5/normal data, and several
+  group-information geometries. Its next design question is to hold restriction
+  df fixed while varying nuisance dimension and leverage, separating a genuinely
+  high-dimensional nuisance effect from the joint-test-dimension effect seen at
+  fixed 62-slot ambient dimension. Then decide extensions separately: direct
+  FIML needs observed-pattern scores and a missing-data information convention;
+  continuous LS and ordinal/mixed models need estimator-specific casewise
+  influence contributions including estimated-weight effects; clustered data
+  need cluster-level rather than row-level signs. A residual-based or robust-
+  Wald flip test is a distinct method and should not be hidden behind the score-
+  test entry point. Promote any of these only when a concrete experiment needs
+  it.
 
 - **XL — establish whether raw-label permutation is valid for ordinal
   measurement-invariance tests.** Experiment 61's continuous studentized-Wald

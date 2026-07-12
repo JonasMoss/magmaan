@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -2139,6 +2140,8 @@ score_flip_test(spec::LatentStructure pt_H1,
                 const RawData& raw,
                 const Estimates& est_H0,
                 const ScoreFlipOptions& options) {
+  using Clock = std::chrono::steady_clock;
+  const auto total_begin = Clock::now();
   if (options.n_flips < 1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: n_flips must be positive"));
@@ -2274,6 +2277,7 @@ score_flip_test(spec::LatentStructure pt_H1,
   auto t_std_obs = flip_quadratic(u_eff_obs, variance_for(identity_sums),
                                   "score_flip_test observed standardized");
   if (!t_std_obs.has_value()) return std::unexpected(t_std_obs.error());
+  const auto setup_end = Clock::now();
 
   std::mt19937_64 rng(options.seed);
   int exceed_basic = 0;
@@ -2281,7 +2285,12 @@ score_flip_test(spec::LatentStructure pt_H1,
   int exceed_standardized = 0;
   double min_variance_eigenvalue = t_std_obs->min_eigenvalue;
   double max_variance_condition = t_std_obs->condition;
+  double variance_relative_shift_sum = 0.0;
+  double max_variance_relative_shift = 0.0;
+  double resampling_score_seconds = 0.0;
+  double resampling_standardization_seconds = 0.0;
   for (int bflip = 0; bflip < options.n_flips; ++bflip) {
+    const auto score_begin = Clock::now();
     Eigen::VectorXd ub = Eigen::VectorXd::Zero(df);
     Eigen::VectorXd ue = Eigen::VectorXd::Zero(df);
     std::vector<std::int64_t> sign_sum(raw.X.size(), 0);
@@ -2298,9 +2307,22 @@ score_flip_test(spec::LatentStructure pt_H1,
     if (!tb.has_value()) return std::unexpected(tb.error());
     auto te = flip_quadratic(ue, V_identity, "score_flip_test effective flip");
     if (!te.has_value()) return std::unexpected(te.error());
-    auto ts = flip_quadratic(ue, variance_for(sign_sum),
+    const auto score_end = Clock::now();
+    resampling_score_seconds +=
+        std::chrono::duration<double>(score_end - score_begin).count();
+
+    const auto standardized_begin = Clock::now();
+    const Eigen::MatrixXd V_flip = variance_for(sign_sum);
+    const double variance_shift =
+        (V_flip - V_identity).norm() / std::max(1e-30, V_identity.norm());
+    variance_relative_shift_sum += variance_shift;
+    max_variance_relative_shift =
+        std::max(max_variance_relative_shift, variance_shift);
+    auto ts = flip_quadratic(ue, V_flip,
                              "score_flip_test standardized flip");
     if (!ts.has_value()) return std::unexpected(ts.error());
+    resampling_standardization_seconds += std::chrono::duration<double>(
+        Clock::now() - standardized_begin).count();
     if (tb->statistic >= t_basic_obs->statistic) ++exceed_basic;
     if (te->statistic >= t_eff_obs->statistic) ++exceed_effective;
     if (ts->statistic >= t_std_obs->statistic) ++exceed_standardized;
@@ -2310,6 +2332,7 @@ score_flip_test(spec::LatentStructure pt_H1,
         std::max(max_variance_condition, ts->condition);
   }
 
+  const auto asymptotic_begin = Clock::now();
   const Eigen::MatrixXd B1 = scores.transpose() * scores;
   auto asymptotic = score_for_subspace_robust(
       {}, score_full, I, I, B1, K, D);
@@ -2340,6 +2363,18 @@ score_flip_test(spec::LatentStructure pt_H1,
       K.cols() > 0 ? (K.transpose() * score_full).lpNorm<Eigen::Infinity>() : 0.0;
   out.min_variance_eigenvalue = min_variance_eigenvalue;
   out.max_variance_condition = max_variance_condition;
+  out.mean_variance_relative_shift =
+      variance_relative_shift_sum / static_cast<double>(options.n_flips);
+  out.max_variance_relative_shift = max_variance_relative_shift;
+  out.setup_seconds =
+      std::chrono::duration<double>(setup_end - total_begin).count();
+  out.resampling_score_seconds = resampling_score_seconds;
+  out.resampling_standardization_seconds =
+      resampling_standardization_seconds;
+  out.asymptotic_seconds = std::chrono::duration<double>(
+      Clock::now() - asymptotic_begin).count();
+  out.total_seconds =
+      std::chrono::duration<double>(Clock::now() - total_begin).count();
   return out;
 }
 

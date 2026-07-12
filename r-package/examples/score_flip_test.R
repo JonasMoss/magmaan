@@ -23,7 +23,12 @@ stopifnot(
   a$df == 1L,
   a$n_flips == 63L,
   all(c(a$p_basic, a$p_effective, a$p_standardized) >= 1 / 64),
-  abs(a$statistic_effective - a$statistic_standardized) < 1e-8
+  abs(a$statistic_effective - a$statistic_standardized) < 1e-8,
+  a$p_effective == a$p_standardized,
+  a$mean_variance_relative_shift == 0,
+  a$max_variance_relative_shift == 0,
+  a$total_seconds >= a$setup_seconds + a$resampling_score_seconds +
+    a$resampling_standardization_seconds + a$asymptotic_seconds
 )
 
 print(a)

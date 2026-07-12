@@ -1537,11 +1537,24 @@ TEST_CASE("frontier score flips: affine ML pair is deterministic and standardize
   CHECK(a->p_standardized >= 1.0 / 128.0);
   CHECK(std::abs(a->statistic_effective - a->statistic_standardized) <
         1e-9 * (1.0 + std::abs(a->statistic_effective)));
+  CHECK(a->p_effective == a->p_standardized);
   CHECK(std::isfinite(a->statistic_basic));
   CHECK(std::isfinite(a->nuisance_stationarity_norm));
   CHECK(std::isfinite(a->p_mixture));
   CHECK(a->min_variance_eigenvalue > 0.0);
   CHECK(a->max_variance_condition >= 1.0);
+  CHECK(a->mean_variance_relative_shift >= 0.0);
+  CHECK(a->max_variance_relative_shift >= a->mean_variance_relative_shift);
+  CHECK(a->mean_variance_relative_shift == 0.0);
+  CHECK(a->max_variance_relative_shift == 0.0);
+  CHECK(a->setup_seconds >= 0.0);
+  CHECK(a->resampling_score_seconds >= 0.0);
+  CHECK(a->resampling_standardization_seconds >= 0.0);
+  CHECK(a->asymptotic_seconds >= 0.0);
+  CHECK(a->total_seconds >= a->setup_seconds);
+  CHECK(a->total_seconds >= a->setup_seconds + a->resampling_score_seconds +
+                                a->resampling_standardization_seconds +
+                                a->asymptotic_seconds);
 
   auto fixed_x_h1 = h1.pt;
   REQUIRE_FALSE(fixed_x_h1.exo.empty());
