@@ -7599,7 +7599,15 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
       Rcpp::_ ["seed"] = static_cast<double>(out->seed),
       Rcpp::_ ["nuisance_stationarity_norm"] = out->nuisance_stationarity_norm,
       Rcpp::_ ["min_variance_eigenvalue"] = out->min_variance_eigenvalue,
-      Rcpp::_ ["max_variance_condition"] = out->max_variance_condition);
+      Rcpp::_ ["max_variance_condition"] = out->max_variance_condition,
+      Rcpp::_ ["mean_variance_relative_shift"] = out->mean_variance_relative_shift,
+      Rcpp::_ ["max_variance_relative_shift"] = out->max_variance_relative_shift,
+      Rcpp::_ ["setup_seconds"] = out->setup_seconds,
+      Rcpp::_ ["resampling_score_seconds"] = out->resampling_score_seconds,
+      Rcpp::_ ["resampling_standardization_seconds"] =
+          out->resampling_standardization_seconds,
+      Rcpp::_ ["asymptotic_seconds"] = out->asymptotic_seconds,
+      Rcpp::_ ["total_seconds"] = out->total_seconds);
 }
 
 // infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from

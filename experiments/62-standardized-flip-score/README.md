@@ -12,14 +12,24 @@ references, and Satorra-2000 scaled/mixture difference tests. Comparator
 failure does not discard an otherwise valid flip result; fit failures and
 method-specific available-replication counts are recorded separately.
 
+The expansion asks when standardization is worth its cost. It holds a
+two-factor, 62-slot ambient model fixed and crosses 1/4/8 loading restrictions,
+total `N = 60/100/200`, 1:1 versus 1:3 allocation, three group-information
+geometries, and normal, `t(5)`, and skewed innovations. The timing runner uses
+warm serial calls to separate setup, basic/effective resampling,
+flip-standardization, and asymptotic-comparator cost.
+
 ```sh
 Rscript experiments/62-standardized-flip-score/run_experiment.R --smoke
 Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
+Rscript experiments/62-standardized-flip-score/run_expansion.R --probe
+Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```
 
-The default probe uses 300 replications per cell and 499 random flips. Its
-result is a calibration signal, not a validation or support claim.
+The original probe uses 300 replications per cell; the expansion uses 200 per
+cell. Both use 499 random flips. Results are calibration signals, not validation
+or support claims.
 
 Method sources:
 

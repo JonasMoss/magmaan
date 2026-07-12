@@ -13,7 +13,10 @@
 #'   identity.
 #' @param seed Non-negative deterministic integer seed.
 #'
-#' @return A list of class `magmaan_score_flip_test`.
+#' @return A list of class `magmaan_score_flip_test`. In addition to the three
+#'   p-values it includes flip-variance displacement diagnostics and elapsed
+#'   seconds for setup, basic/effective resampling, flip standardization, and
+#'   the asymptotic comparators.
 #' @export
 score_flip_test <- function(fit_H1, fit_H0, data,
                             n_flips = 999L, seed = 1) {
