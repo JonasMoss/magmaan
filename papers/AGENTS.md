@@ -19,6 +19,11 @@ shared infrastructure lives there or in `experiments/_support`, never across a
 paper boundary. Enforced (best-effort, since `papers/*` is gitignored) by
 `tests/tools/check_layering.sh`.
 
+Retired paper working trees live frozen under `papers/_archive/`. They are
+historical material rather than active paper leaves, so the layering checker
+does not scan their internal code. Active core, orchestration, experiment,
+test, benchmark, and paper code still must not depend on the archive.
+
 ## Purpose
 
 One paper folder holds one manuscript-in-progress aimed at a specific

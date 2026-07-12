@@ -7,8 +7,10 @@
 # sibling leaf. Core never references any leaf. Retired experiments live frozen
 # under experiments/_archive/<NN>-*/ and are treated as one archive zone (a path
 # token there truncates to experiments/_archive): an archived file may reference
-# within the archive but still not a paper, a live experiment, or tests. See
-# AGENTS.md 'Dependency layering' and experiments/AGENTS.md / papers/AGENTS.md.
+# within the archive but still not a paper, a live experiment, or tests. Retired
+# paper trees under papers/_archive/ are frozen historical material rather than
+# active leaves and are not scanned; active code still may not reference them.
+# See AGENTS.md 'Dependency layering' and experiments/AGENTS.md / papers/AGENTS.md.
 #
 # Static, dependency-free (POSIX-ish bash + awk/grep/find). No R, no build.
 # Scans code files only (comments stripped), so prose/comments never trip it.
@@ -53,6 +55,7 @@ classify_zone() {
     experiments/_support/*)              Z=SUPPORT ;;
     experiments/_archive/*)              Z=EXP; SELF="experiments/_archive" ;;
     experiments/*) Z=EXP;   SELF="experiments/$(printf '%s' "$1" | cut -d/ -f2)" ;;
+    papers/_archive/*)                  Z=ARCHIVE ;;
     papers/*)      Z=PAPER; SELF="papers/$(printf '%s' "$1" | cut -d/ -f2)" ;;
     benchmarks/*)                        Z=BENCH ;;
     tests/*)                             Z=TESTS ;;
@@ -101,7 +104,7 @@ strip_comments() {  # $1 = iscpp(0/1); strips comments + build/ artifact paths
 while IFS= read -r f; do
   [ "$f" = "$SELF_SCRIPT" ] && continue
   classify_zone "$f"
-  [ "$Z" = OTHER ] && continue
+  case "$Z" in OTHER|ARCHIVE) continue ;; esac
   case "$f" in *.cpp|*.hpp|*.h) iscpp=1 ;; *) iscpp=0 ;; esac
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
