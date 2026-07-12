@@ -99,7 +99,10 @@ fmg_tests <- c("SB", "MV", "SS", "SF", "EBA2", "EBA4", "EBA6",
                "pEBA2", "pEBA4", "pEBA6", "PALL", "pOLS2", "ALL")
 p_columns <- c(
   "p_basic", "p_effective", "p_standardized", "p_chisq",
-  "p_mean_scaled", "p_mixture", "p_lr_unscaled", "p_lr_scaled",
+  "p_mean_scaled", "p_mixture",
+  "p_score_ss", "p_score_mv", "p_score_sf", "p_score_eba4",
+  "p_score_peba4", "p_score_pols",
+  "p_lr_unscaled", "p_lr_scaled",
   "p_lr_mv_adjusted", "p_lr_scaled_shifted", "p_lr_mixture",
   "p_fmg_sb", "p_fmg_mv", "p_fmg_ss", "p_fmg_sf", "p_fmg_eba2",
   "p_fmg_eba4", "p_fmg_eba6", "p_fmg_peba2", "p_fmg_peba4",
@@ -146,6 +149,22 @@ one_rep <- function(cell, rep_id) {
   flip_elapsed <- proc.time()[["elapsed"]] - flip_begin
   if (inherits(flip, "error")) return(empty_rep(rep_id, conditionMessage(flip)))
   stopifnot(flip$df == cell$df)
+
+  # FMG spectrum transforms applied to the SCORE statistic's own eigenvalues.
+  # score-SB/ALL/standard already exist as p_mean_scaled/p_mixture/p_chisq;
+  # these add the SS/MV/SF/EBA/pEBA/pOLS members so the full FMG family runs on
+  # the score base statistic, not only on the Satorra-2000 LR construction.
+  score_fmg <- function(method, param = 4) tryCatch(
+    magmaan:::infer_fmg_test(flip$statistic_effective, flip$df,
+                             flip$eigenvalues, method = method,
+                             param = param)$p_value,
+    error = function(e) NA_real_)
+  p_score_ss <- score_fmg("ss")
+  p_score_mv <- score_fmg("mv")
+  p_score_sf <- score_fmg("scaled_f")
+  p_score_eba4 <- score_fmg("eba", 4)
+  p_score_peba4 <- score_fmg("peba", 4)
+  p_score_pols <- score_fmg("pols", 2)
 
   raw_blocks <- lapply(c("A", "B"), function(g)
     as.matrix(dat[dat$school == g, flip_expansion_ov, drop = FALSE]))
@@ -196,6 +215,9 @@ one_rep <- function(cell, rep_id) {
     p_basic = flip$p_basic, p_effective = flip$p_effective,
     p_standardized = flip$p_standardized, p_chisq = flip$p_chisq,
     p_mean_scaled = flip$p_mean_scaled, p_mixture = flip$p_mixture,
+    p_score_ss = p_score_ss, p_score_mv = p_score_mv,
+    p_score_sf = p_score_sf, p_score_eba4 = p_score_eba4,
+    p_score_peba4 = p_score_peba4, p_score_pols = p_score_pols,
     p_lr_unscaled = p_nested[["p_lr_unscaled"]],
     p_lr_scaled = p_nested[["p_lr_scaled"]],
     p_lr_mv_adjusted = p_nested[["p_lr_mv_adjusted"]],
