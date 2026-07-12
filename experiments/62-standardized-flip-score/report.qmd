@@ -1,5 +1,5 @@
 ---
-title: "Robust invariance testing: the base statistic beats the transform"
+title: "Robust invariance testing: score bases, spectral shrinkage, and sandwich inversion"
 format:
   html:
     toc: true
@@ -15,11 +15,13 @@ files <- file.path("results", c(
   "summary.csv", "expansion_summary.csv", "expansion_replications.csv",
   "expansion_metadata.csv", "timing_summary.csv", "power_summary.csv",
   "power_replications.csv", "power_metadata.csv", "stress_summary.csv",
-  "dimension_summary.csv"))
+  "dimension_summary.csv", "sandwich_power_replications.csv",
+  "dimension_sandwich_summary.csv"))
 if (any(!file.exists(files))) {
   stop(paste(
     "missing results; run run_experiment.R, run_expansion.R --probe,",
-    "run_expansion.R --power, run_expansion.R --stress, run_dimension.R --probe,",
+    "run_expansion.R --power, --power-sandwich, and --stress,",
+    "run_dimension.R --big and --sandwich,",
     "and run_timing.R"))
 }
 s <- read.csv(files[[2L]])
@@ -30,6 +32,17 @@ power <- read.csv(files[[7L]]); power <- power[power$ok, , drop = FALSE]
 power_metadata <- read.csv(files[[8L]])
 stress <- read.csv(files[[9L]])
 dim_summary <- read.csv(files[[10L]])
+sandwich_power <- read.csv(files[[11L]])
+dim_sandwich <- read.csv(files[[12L]])
+
+# The one-flip replay uses the same deterministic cells and replications as the
+# original power grid; merge only the new asymptotic sandwich result.
+merge_keys <- c("rep", "df", "n_total", "balance", "heterogeneity",
+                "distribution", "alternative", "effect")
+sandwich_power <- sandwich_power[sandwich_power$ok,
+  c(merge_keys, "p_sandwich", "sandwich_available", "sandwich_condition")]
+power <- merge(power, sandwich_power, by = merge_keys, all.x = TRUE,
+               sort = FALSE)
 
 # Method naming: {flip | score | LR} x transform. Every method is built on the
 # same efficient score; what differs is how the reference is obtained (flip =
@@ -40,6 +53,7 @@ method_labels <- c(
   p_standardized = "flip (standardized)",
   p_chisq        = "score: chi-square",
   p_mean_scaled  = "score: SB",
+  p_sandwich     = "score: sandwich",
   p_score_ss     = "score: SS",
   p_score_mv     = "score: MV",
   p_score_sf     = "score: SF",
@@ -75,12 +89,21 @@ base_compare_summary <- function(data) data.frame(
 base_null <- base_compare_reps(r)
 base_stress <- base_compare_summary(stress[stress$df == 8L, , drop = FALSE])
 flip_std_overall <- mean(r$p_standardized < .05, na.rm = TRUE)
+score_null_by_df <- aggregate(
+  r[c("p_sandwich", "p_mean_scaled", "p_score_peba4", "p_mixture",
+      "p_standardized")] < .05,
+  r["df"], mean, na.rm = TRUE)
+names(score_null_by_df) <- c("df", "sandwich", "SB", "pEBA4", "ALL", "flip")
+sandwich_diag <- aggregate(
+  r[c("sandwich_condition", "score_eigen_cv")],
+  r[c("df", "n_total")], median, na.rm = TRUE)
 
 # Normal-data N-convergence: with no non-normality, any gap is small-sample.
 norm_conv <- do.call(rbind, lapply(c(60L, 100L, 200L), function(nn) {
   sub <- r[r$distribution == "normal" & r$n_total == nn, , drop = FALSE]
   data.frame(`Total N` = nn,
     `score: SB` = mean(sub$p_mean_scaled < .05, na.rm = TRUE),
+    `score: sandwich` = mean(sub$p_sandwich < .05, na.rm = TRUE),
     `LR: SB` = mean(sub$p_fmg_sb < .05, na.rm = TRUE),
     `flip (standardized)` = mean(sub$p_standardized < .05, na.rm = TRUE),
     check.names = FALSE)
@@ -92,6 +115,7 @@ t5_lr_sb_n200 <- mean(r$p_fmg_sb[r$distribution == "t5" & r$n_total == 200L] < .
 stress_cols <- c(
   `flip (standardized)` = "rejection_standardized",
   `score: SB`           = "rejection_mean_scaled",
+  `score: sandwich`     = "rejection_sandwich",
   `score: ALL`          = "rejection_mixture",
   `LR: SB`              = "rejection_fmg_sb",
   `LR: pEBA4`           = "rejection_fmg_peba4")
@@ -115,6 +139,10 @@ dim_table <- function(adeq) {
 dim_adequate <- dim_table("adequate")
 dim_pick <- function(adeq, pp, col)
   mean(dim_summary[dim_summary$adequacy == adeq & dim_summary$p == pp, col], na.rm = TRUE)
+dim_sandwich_table <- aggregate(
+  dim_sandwich[c("rejection_score_sandwich", "sandwich_available_rate",
+                 "median_sandwich_condition", "median_score_eigen_cv")],
+  dim_sandwich[c("adequacy", "p")], mean, na.rm = TRUE)
 
 # Standardization sub-study: decision changes by N and restriction count.
 by_ndf <- aggregate(
@@ -153,7 +181,8 @@ calibrated_power <- reshape(calibrated_power,
   idvar = c("alternative", "effect"), timevar = "method", direction = "wide")
 names(calibrated_power) <- sub("^calibrated_power\\.", "", names(calibrated_power))
 power_show_cols <- function(tab) intersect(c(
-  "alternative", "effect", "flip (standardized)", "score: SB", "score: MV",
+  "alternative", "effect", "flip (standardized)", "score: sandwich",
+  "score: SB", "score: MV",
   "score: pEBA4", "LR: SB", "LR: MV", "LR: pEBA4"), names(tab))
 
 # Timing.
@@ -174,40 +203,35 @@ Foldnes-Moss-Grønneberg spectrum transforms (Satorra-Bentler `SB`,
 scaled-shifted `SS`, mean-variance `MV`, scaled-$F$ `SF`, `pEBA`, and the exact
 mixture `ALL`), each applied to two base statistics: the score/Lagrange-multiplier
 statistic, and the Satorra-2000 likelihood-ratio statistic that lavaan and Mplus
-use by default.
+use by default. We also include the direct sandwich-studentized score statistic
+$u^\top(G^\top\hat B G)^{-1}u$, whose asymptotic reference is $\chi_q^2$.
 
 ## Short answer
 
-The base statistic dominates the transform. On the null grid, the FMG transforms
-on the score statistic's own eigenvalues are near nominal for every transform
-(about `r sprintf("%.2f", min(base_null[["Score base"]]))` to
-`r sprintf("%.2f", max(base_null[["Score base"]]))`), while the identical
-transforms on the LR base are uniformly liberal (about
-`r sprintf("%.2f", min(base_null[["LR base"]]))` to
-`r sprintf("%.2f", max(base_null[["LR base"]]))`). Which spectrum transform you
-pick barely matters next to which base statistic you read it from.
+The score base is substantially better behaved than the Satorra-2000 LR base,
+but the transform still matters. Score-SB's overall null rejection of
+`r sprintf("%.3f", mean(r$p_mean_scaled < .05, na.rm = TRUE))` looks almost
+perfect because it averages an exact one-df case with relatively spherical
+population spectra and because trace-only scaling regularizes noisy sample
+eigenvalues. At eight restrictions it rejects
+`r sprintf("%.3f", mean(r$p_mean_scaled[r$df == 8L] < .05, na.rm = TRUE))`;
+under the severe copulas it reaches about 0.08. It is not generally exact.
 
-The score construction is not exotic. It is Neyman's C(α) test, the same object
-an SEM modification index computes, and it inherits the Lagrange-multiplier
-test's well-known small-sample size advantage. Much of the headline gap is the
-classic over-rejection of likelihood-ratio tests at small $N$, which adequate
-sample size removes. A residual robustness margin remains under genuine
-non-normality.
+The direct sandwich score test supplies the missing asymptotically pivotal
+comparison, but it moves too far in the other direction at small $N$: overall
+null rejection is `r sprintf("%.3f", mean(r$p_sandwich < .05, na.rm = TRUE))`
+and only `r sprintf("%.3f", mean(r$p_sandwich[r$df == 8L] < .05, na.rm = TRUE))`
+at eight restrictions. Full meat inversion amplifies estimation noise and can
+be poorly conditioned. In this probe pEBA4 gives the best compromise: it shrinks
+the spectrum without discarding all shape information or inverting the raw meat.
 
-That margin holds up. From ten to forty variables the score base stays near
-nominal while the LR base stays liberal, at matched sample adequacy. Sample
-adequacy, not dimension, is what governs. And under a severe non-Gaussian copula,
-where the LR base rejects up to `r sprintf("%.2f", max(base_stress[["LR base"]]))`
-and the sign-flip test reaches
-`r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])` at 8 df, the
-score-base transforms are the only members of the battery that stay near nominal.
+Much of the score-versus-LR gap remains the familiar small-sample difference
+between LM and LR bases. The revised conclusion is about regularization, not a
+universally winning base or transform: score-SB is trace shrinkage, ALL is a
+noisy plug-in mixture, and direct sandwich inversion is asymptotically clean but
+finite-sample fragile.
 
-Two practical notes. After matched-null calibration all tests reach similar
-power, so the LR base's higher nominal power was size distortion rather than
-detection. And standardizing the sign-flip test is a cheap, minor improvement,
-useful mainly at small $N$ with several restrictions, not a robustness fix.
-
-## The base statistic dominates the transform
+## Score base helps, but the transform still matters
 
 The Foldnes, Moss, and Grønneberg (2026) transforms exist because the two
 established robust nested tests fail in opposite directions under non-normality:
@@ -227,16 +251,47 @@ full null grid.
 knitr::kable(base_null, digits = 3)
 ```
 
-On the LR base every transform is liberal; on the score base every transform is
-near nominal. The more aggressive score-base transforms (`SS`, `MV`, `SF`,
-`ALL`) are mildly conservative rather than liberal, trading a little power for
-size control. The gap holds even at a single restriction, where the transforms
+On the LR base every transform is liberal. On the score base the methods span a
+meaningful range: SB and pEBA4 sit near nominal overall, while SS, MV, SF, and
+ALL are conservative. The gap holds even at a single restriction, where the transforms
 collapse to nearly one scalar test: there the LR base still rejects about
 `r sprintf("%.2f", mean(r$p_fmg_sb[r$df == 1L] < .05, na.rm = TRUE))` for `SB`
 while the score base is already near
 `r sprintf("%.2f", mean(r$p_mean_scaled[r$df == 1L] < .05, na.rm = TRUE))`.
 
-### Why the score base wins, and how much is small-sample
+### Why score-SB looked suspiciously good
+
+The normal-theory efficient-score statistic has limit
+$\sum_j\lambda_j\chi^2_{1,j}$. SB replaces every eigenvalue by their mean.
+This is exact at one df and for a spherical population spectrum, but its
+reference variance $2q\bar\lambda^2$ is smaller than the true
+$2\sum_j\lambda_j^2$ whenever the eigenvalues differ.
+
+Finite-sample eigenvalue noise reverses the practical comparison with ALL. At
+$N=200,q=8$, median estimated spectral CV remains about
+`r sprintf("%.2f", median(r$score_eigen_cv[r$n_total == 200L & r$df == 8L]))`.
+The plug-in ALL tail treats this noise as population heterogeneity and becomes
+conservative. SB retains only the more stable trace, acting as maximal spectral
+shrinkage. Disaggregating by df prevents the exact scalar case from hiding the
+joint-test behavior.
+
+```{r score-null-by-df}
+knitr::kable(score_null_by_df, digits = 3)
+```
+
+The direct sandwich statistic avoids the mixture approximation, but it must
+invert the full efficient meat. It is available in every successful main-grid
+fit, yet conditioning worsens rapidly with restriction dimension and shrinking
+sample size.
+
+```{r sandwich-diagnostics}
+knitr::kable(sandwich_diag, digits = 2)
+```
+
+The derivation, diagnostic values, and iteration checklist are preserved in
+[`notes/score-sb-audit.tex`](notes/score-sb-audit.tex).
+
+### How much of the base gap is small-sample
 
 The efficient-score construction is Neyman's C(α) test: the score of the tested
 parameters, orthogonalized against the nuisance parameters and standardized by
@@ -285,14 +340,18 @@ piecewise-linear is not. The table applies each transform to both bases at the
 knitr::kable(base_stress, digits = 3)
 ```
 
-The score base survives and the LR base does not. On the LR base every transform
-rejects four to eight times nominal. On the score base the aggressive transforms
-stay near or below 0.05, with `SB` and `pEBA4` only mildly liberal. The sign-flip
-test lands between them, about
+The LR base fails most dramatically, but the score methods do not share one
+calibration. Score-SB rejects about 0.08, ALL about 0.03, and pEBA4 about 0.06.
+Direct sandwich ranges from about
+`r sprintf("%.2f", stress_row("pl", 8L)[["score: sandwich"]])` under PL to
+`r sprintf("%.2f", stress_row("vm", 8L)[["score: sandwich"]])` under VM; its
+mean cellwise meat condition numbers are roughly 251 and 96. The sign-flip test
+is more liberal still, about
 `r sprintf("%.2f", stress_row("vm", 8L)[["flip (standardized)"]])` to
 `r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])`, and
 standardization does not repair it: the score sign-symmetry it relies on is
-itself strained by a severe copula.
+itself strained by a severe copula. pEBA4 is the only score method that remains
+consistently close to 0.05 across both severe copulas.
 
 The copula, not group heterogeneity, is the cause. In homogeneous populations,
 where the two groups share covariance and means exactly, the 8-df LR-`SB` test
@@ -323,9 +382,9 @@ averages over geometry and copula.
 knitr::kable(dim_adequate, digits = 3)
 ```
 
-The edge is not a low-dimensional artifact: from ten to forty variables the score
-base stays near nominal while the LR base is liberal at every dimension, in both
-geometries. But sample adequacy, not dimension, governs. Because a fixed ratio
+The score base remains less liberal than the LR base, but its transforms bracket
+0.05 rather than agreeing: SB runs high at tight adequacy, while ALL runs low.
+Sample adequacy, not dimension alone, governs. Because a fixed ratio
 grows $N$ with $p$, the LR base's excess shrinks toward its residual robustness
 margin as the model grows, from about
 `r sprintf("%.2f", dim_pick("adequate", 10, "rejection_lr_sb"))` at $p=10$ to
@@ -334,11 +393,23 @@ largest gaps sit at small $p$ and small $N$, where the small-sample
 likelihood-ratio effect is strongest: at an inadequate ratio near 2.5 the LR base
 reaches about `r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))` at
 $p=10$, falling to `r sprintf("%.2f", dim_pick("tight", 40, "rejection_lr_sb"))`
-at $p=40$ where the same ratio buys a larger $N$. The score base holds near
-nominal throughout, and `score: ALL` is its most consistently calibrated member,
-between about `r sprintf("%.2f", min(dim_summary$rejection_score_all, na.rm = TRUE))`
-and `r sprintf("%.2f", max(dim_summary$rejection_score_all, na.rm = TRUE))` across
-the whole probe.
+at $p=40$ where the same ratio buys a larger $N$. Score-SB moves toward nominal
+as adequacy increases; pEBA4 is more stable around 0.05, whereas ALL remains
+conservative between about
+`r sprintf("%.2f", min(dim_summary$rejection_score_all, na.rm = TRUE))` and
+`r sprintf("%.2f", max(dim_summary$rejection_score_all, na.rm = TRUE))`.
+
+The direct-sandwich replay uses the same 32 design cells with 200 replications
+and one nominal flip per replication. It is intentionally separate from the
+1,700-replication spectrum study so the original precision is retained.
+
+```{r dim-sandwich}
+knitr::kable(dim_sandwich_table, digits = 3)
+```
+
+This tests asymptotic recovery directly: sandwich rejection should approach
+0.05 and meat conditioning should improve as adequacy and total information
+grow. At the tight end it is a diagnostic, not a recommended reference.
 
 ## Power
 
@@ -352,9 +423,11 @@ and power is read off independent alternative replications.
 knitr::kable(calibrated_power[power_show_cols(calibrated_power)], digits = 3)
 ```
 
-Once size is matched, the flip, score-base, and LR-base tests are within a point
-or two across all four alternative families. The score base's mild conservatism
-therefore costs almost no power: it buys size control nearly for free. As
+Once size is matched, the flip, spectrum-score, LR-base, and direct-sandwich
+tests are broadly similar for weak dense effects. Direct sandwich remains lower
+for the stronger alternatives even after size alignment, suggesting a power
+cost from noisy directional meat inversion rather than nominal conservatism
+alone. As
 expected, a sparse violation concentrated in one loading is easier to detect than
 the same norm spread across all tested loadings, and no single spectrum transform
 dominates once size is aligned.
@@ -395,27 +468,28 @@ knitr::kable(timing_499, digits = 3)
 
 ## Recommendation
 
-- **Put the FMG spectrum transforms on the score base, not the LR base.** The
-  same transform is near nominal on the score/LM statistic's eigenvalues and
-  uniformly liberal on the Satorra-2000 LR construction that lavaan and Mplus
-  default to. This is the largest calibration lever in the study, and it is free:
-  the score eigenvalues are already computed by the flip test.
-- Among the score-base transforms, the aggressive members (`SS`, `MV`, `ALL`)
-  give the tightest size control, including under the severe copula, at a mild
-  cost in conservatism that matched-null power shows is nearly free. `SB` and
-  `pEBA4` sit closer to nominal.
+- Prefer the score/LM base to the Satorra-2000 LR base in this design, but do not
+  infer that this makes every score transform correct. The LR routes are liberal;
+  score-SB is trace shrinkage, and score-ALL is a conservative plug-in mixture.
+- pEBA4 is the best provisional compromise. It stays closest to 0.05 across the
+  main, severe-copula, and dimension probes by shrinking noisy eigenvalue shape
+  without collapsing fully to SB's common eigenvalue.
+- Keep direct sandwich score output as a theoretical benchmark and diagnostic,
+  not the small-sample default. It is asymptotically pivotal, but null rejection
+  falls to 0.024 at eight restrictions and its meat condition number becomes
+  large in small or severe cells.
 - Read the advantage correctly: much of the raw gap is the classic small-sample
   over-rejection of likelihood-ratio tests, which adequate $N$ removes. The
   genuine robustness margin under non-normality is smaller but real.
 - Keep `p_standardized` as a cheap resampling option, but it is not better
   calibrated than the score-base asymptotics and is more strained by a severe
   copula.
-- Do not compare nominal power without comparing null size, and do not extend
-  "robust" to a severe non-Gaussian copula: there only the score-base transforms
-  hold near nominal, and even that is a probe result, not a guarantee.
-- Next: vary nuisance leverage and conditioning at fixed dimension and adequacy,
-  and push $p$ further with a proportionally larger $N$ to confirm the score
-  base's margin does not close.
+- Do not compare nominal power without comparing null size. The matched-null
+  table is a forced size comparison, not evidence that a nominal reference is
+  valid.
+- Next: study shrinkage of the efficient meat itself, between SB's scalar trace
+  and the unregularized sandwich inverse, while varying nuisance leverage and
+  conditioning at fixed dimension and adequacy.
 
 ## Design and caveats
 
@@ -432,11 +506,17 @@ severe-copula stress block crosses two copulas at fixed severe marginals with
 crosses two copulas and two geometries, $p=10/20/30/40$ at fixed 8-df
 restrictions, and two sample-to-parameter ratios (about 2.5 and 6), with $N$ set
 from the ratio so it grows with $p$, at 1700 replications per cell; the ratios are
-approximate because the parameter count is estimated. The independent-generator
+approximate because the parameter count is estimated. The direct-sandwich
+dimension replay uses 200 replications per cell and one flip because only the
+asymptotic comparator and conditioning diagnostics are consumed. The
+independent-generator
 copula was excluded because its marginal moment solve is infeasible at this
 severity.
 
 Monte Carlo and binomial uncertainty remain visible in cell-level 0.05 decisions.
+The smaller sandwich dimension replay has standard errors around 0.015 within a
+single cell; its aggregate trends are evidence for the next iteration, not a
+fine ranking.
 Score flipping here is a frontier method for affine, complete-data ML models. The
 results do not automatically transfer to FIML, ordinal, estimated-weight,
 clustered, boundary, or nonlinear-constraint tests.
@@ -447,8 +527,10 @@ clustered, boundary, or nonlinear-constraint tests.
 Rscript experiments/62-standardized-flip-score/run_experiment.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --probe
 Rscript experiments/62-standardized-flip-score/run_expansion.R --power
+Rscript experiments/62-standardized-flip-score/run_expansion.R --power-sandwich
 Rscript experiments/62-standardized-flip-score/run_expansion.R --stress
 Rscript experiments/62-standardized-flip-score/run_dimension.R --big
+Rscript experiments/62-standardized-flip-score/run_dimension.R --sandwich
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```

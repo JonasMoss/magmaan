@@ -14,9 +14,10 @@
 #' @param seed Non-negative deterministic integer seed.
 #'
 #' @return A list of class `magmaan_score_flip_test`. In addition to the three
-#'   p-values it includes flip-variance displacement diagnostics and elapsed
-#'   seconds for setup, basic/effective resampling, flip standardization, and
-#'   the asymptotic comparators.
+#'   p-values it includes the mean-scaled and exact-mixture score references,
+#'   the direct sandwich-studentized score statistic and p-value, flip-variance
+#'   displacement diagnostics, and elapsed seconds for setup, resampling,
+#'   flip standardization, and the asymptotic comparators.
 #' @export
 score_flip_test <- function(fit_H1, fit_H0, data,
                             n_flips = 999L, seed = 1) {
@@ -53,6 +54,10 @@ print.magmaan_score_flip_test <- function(x, ...) {
   cat("  p (basic/effective/standardized):",
       paste(format(c(x$p_basic, x$p_effective, x$p_standardized)),
             collapse = " / "), "\n")
+  if (isTRUE(x$sandwich_available)) {
+    cat("  direct sandwich score: statistic", format(x$statistic_sandwich),
+        " p", format(x$p_sandwich), "\n")
+  }
   cat("  random flips:", x$n_flips, " seed:", format(x$seed), "\n")
   invisible(x)
 }

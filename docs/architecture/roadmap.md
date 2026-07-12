@@ -526,6 +526,25 @@ golden `parTable()` fixtures.
   16-worker contention, median latency was 13 ms for two fits, 22 ms for the
   499-flip battery, 3 ms for the nested LR battery, and 8 ms for all 13 FMG
   transforms. The null and power sweeps took 147 and 396 wall-clock seconds.
+  A later audit separated the score base from its spectrum transform and added
+  the direct sandwich-studentized joint statistic
+  `u'(G'B1G)^-1u ~ chi-square(df)` to `JointScoreTestResult` and
+  `ScoreFlipTestResult`, including availability, minimum-meat-eigenvalue, and
+  condition diagnostics. It reduces to the ordinary joint score under normal
+  theory and to the existing robust scalar release at df=1. Experiment 62 shows
+  why it is a comparator rather than a small-sample default: main-grid rejection
+  was 0.036 overall and 0.024 at df=8, with median df=8 meat condition numbers
+  of 36/22/14 at N=60/100/200. Under the severe PL/VM copulas it rejected
+  0.029/0.067 while mean cellwise condition numbers reached 251/96. Score-SB's
+  near-nominal aggregate is therefore interpreted as trace-only spectral
+  shrinkage and partial error cancellation, not correctness of the scaled
+  chi-square law; pEBA4 was the most stable compromise between scalar collapse,
+  noisy plug-in ALL, and unregularized meat inversion. A separate 32-cell
+  dimension replay found direct-sandwich rejection between 0.038 and 0.061;
+  with adequate sample ratios it was 0.050/0.046/0.043/0.058 at
+  p=10/20/30/40 while median condition numbers improved from 45 to 22 as N grew.
+  The derivation and iteration decisions live in experiment 62's
+  `notes/score-sb-audit.tex`.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the

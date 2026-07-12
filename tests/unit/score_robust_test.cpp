@@ -1444,6 +1444,35 @@ TEST_CASE("frontier robust LS MI multi-group: GLS + Γ_NT(S) meat reduces to NT"
 // must reproduce the per-row release bit-for-bit (G is a single column g, so
 // c̄ = λ = gᵀB1g/gᵀA1g and T = (gᵀs)²/(gᵀIg)).
 
+TEST_CASE("frontier robust joint: direct sandwich uses the full score meat") {
+  const Eigen::Vector2d score(1.0, 2.0);
+  const Eigen::Matrix2d identity = Eigen::Matrix2d::Identity();
+  const Eigen::Matrix2d info = 10.0 * identity;
+  const Eigen::Matrix2d bread = 2.0 * identity;
+  Eigen::Matrix2d meat = Eigen::Matrix2d::Zero();
+  meat.diagonal() << 4.0, 16.0;
+  const Eigen::MatrixXd nuisance(2, 0);
+
+  auto out = inf::frontier::score_for_subspace_robust(
+      {}, score, info, bread, meat, nuisance, identity);
+  REQUIRE(out.has_value());
+  REQUIRE(out->sandwich_available);
+  CHECK(out->mi == doctest::Approx(0.5));
+  CHECK(out->mi_sandwich == doctest::Approx(0.1));
+  CHECK(out->p_sandwich == doctest::Approx(std::exp(-0.05)));
+  CHECK(out->sandwich_min_eigenvalue == doctest::Approx(20.0));
+  CHECK(out->sandwich_condition == doctest::Approx(4.0));
+  CHECK(out->eigvals(0) == doctest::Approx(2.0));
+  CHECK(out->eigvals(1) == doctest::Approx(8.0));
+
+  auto nt = inf::frontier::score_for_subspace_robust(
+      {}, score, info, info, info, nuisance, identity);
+  REQUIRE(nt.has_value());
+  REQUIRE(nt->sandwich_available);
+  CHECK(nt->mi_sandwich == doctest::Approx(nt->mi));
+  CHECK(nt->p_sandwich == doctest::Approx(nt->p_value));
+}
+
 TEST_CASE("frontier robust joint: df=1 reduces to the per-row release") {
   auto h = build("f =~ x1 + a*x2 + b*x3 + x4\na == b");
   std::mt19937 rng(13u);
@@ -1475,6 +1504,10 @@ TEST_CASE("frontier robust joint: df=1 reduces to the per-row release") {
   CHECK(std::abs(joint->mi_scaled - row.mi_scaled) <
         1e-9 * (1.0 + std::abs(row.mi_scaled)));
   CHECK(std::abs(joint->eigvals(0) - joint->scaling_factor) < 1e-9);
+  REQUIRE(joint->sandwich_available);
+  CHECK(std::abs(joint->mi_sandwich - row.mi_scaled) <
+        1e-9 * (1.0 + std::abs(row.mi_scaled)));
+  CHECK(joint->p_sandwich == doctest::Approx(row.p_value));
   CHECK(joint->p_mixture > 0.0);
   CHECK(joint->p_mixture <= 1.0);
 }
@@ -1541,6 +1574,9 @@ TEST_CASE("frontier score flips: affine ML pair is deterministic and standardize
   CHECK(std::isfinite(a->statistic_basic));
   CHECK(std::isfinite(a->nuisance_stationarity_norm));
   CHECK(std::isfinite(a->p_mixture));
+  CHECK(a->sandwich_available);
+  CHECK(std::isfinite(a->statistic_sandwich));
+  CHECK(std::isfinite(a->p_sandwich));
   CHECK(a->min_variance_eigenvalue > 0.0);
   CHECK(a->max_variance_condition >= 1.0);
   CHECK(a->mean_variance_relative_shift >= 0.0);

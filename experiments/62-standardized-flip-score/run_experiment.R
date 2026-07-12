@@ -138,6 +138,7 @@ one_rep <- function(cell, rep_id) {
     score_chisq = flip$p_chisq,
     score_mean_scaled = flip$p_mean_scaled,
     score_mixture = flip$p_mixture,
+    score_sandwich = flip$p_sandwich,
     satorra2000_scaled = if (is.null(nt)) NA_real_ else nt$p_scaled,
     satorra2000_mixture = if (is.null(nt)) NA_real_ else nt$p_mixture)
   data.frame(rep = rep_id, ok = TRUE, error = "", method = names(p),

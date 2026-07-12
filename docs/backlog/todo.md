@@ -34,6 +34,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   design should therefore increase the null calibration budget and vary
   alternative alignment with the U-Gamma eigenvectors; raw nominal power is not
   an adequate ranking criterion while the comparator sizes differ this much.
+  The direct efficient-meat sandwich comparator is now exposed and confirms the
+  opposite finite-sample failure mode: full inversion is conservative and can
+  be poorly conditioned even though its asymptotic reference is pivotal. The
+  next bounded method question is shrinkage of `G'B1G` itself, spanning SB's
+  common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
+  inverse; gate any proposal on null size, matched-null power, and meat
+  conditioning rather than one aggregate rejection rate.
   Then decide extensions separately: direct
   FIML needs observed-pattern scores and a missing-data information convention;
   continuous LS and ordinal/mixed models need estimator-specific casewise

@@ -25,6 +25,11 @@ stopifnot(
   all(c(a$p_basic, a$p_effective, a$p_standardized) >= 1 / 64),
   abs(a$statistic_effective - a$statistic_standardized) < 1e-8,
   a$p_effective == a$p_standardized,
+  isTRUE(a$sandwich_available),
+  is.finite(a$sandwich_condition),
+  abs(a$statistic_sandwich - a$statistic_mean_scaled) < 1e-8,
+  abs(a$p_sandwich - a$p_mean_scaled) < 1e-12,
+  abs(a$p_sandwich - a$p_mixture) < 1e-12,
   a$mean_variance_relative_shift == 0,
   a$max_variance_relative_shift == 0,
   a$total_seconds >= a$setup_seconds + a$resampling_score_seconds +
