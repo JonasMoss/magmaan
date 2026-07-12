@@ -75,8 +75,33 @@ flip_expansion_group_sizes <- function(n_total, balance) {
   stop("unknown balance: ", balance, call. = FALSE)
 }
 
+# Severe non-normal marginals (Curran et al. 1996 "severe": skewness 3,
+# excess kurtosis 21). vm/pl below share these marginals but differ in copula
+# (Vale-Maurelli is a Gaussian copula; piecewise-linear is not), which is the
+# Foldnes-Moss-Gronneberg asymptotic-robustness stressor the elliptical t5 and
+# per-coordinate exponential "skew" cells cannot reach.
+flip_expansion_severe_skewness <- 3
+flip_expansion_severe_excess_kurtosis <- 21
+
 flip_expansion_draw_block <- function(n, mu, Sigma, distribution) {
   p <- length(mu)
+  if (distribution %in% c("vm", "pl")) {
+    # Native magmaan generators. Both draw unit-variance marginals with the
+    # target correlation; rescale by the population SDs to recover Sigma.
+    corr <- stats::cov2cor(Sigma)
+    sk <- rep(flip_expansion_severe_skewness, p)
+    ek <- rep(flip_expansion_severe_excess_kurtosis, p)
+    seed_base <- sample.int(.Machine$integer.max, 1L)
+    draws <- if (distribution == "vm") {
+      cal <- magmaan:::sim_vm_calibrate_impl(corr, sk, ek)
+      magmaan:::sim_vm_draw_impl(cal, n = n, reps = 1L, seed_base = seed_base)
+    } else {
+      cal <- magmaan:::sim_plsim_calibrate_impl(corr, sk, ek)
+      magmaan:::sim_plsim_draw_impl(cal, n = n, reps = 1L, seed_base = seed_base)
+    }
+    z <- sweep(draws$draws[[1L]], 2, sqrt(diag(Sigma)), "*")
+    return(sweep(z, 2, mu, "+"))
+  }
   if (distribution == "normal") {
     z <- matrix(rnorm(n * p), n, p)
   } else if (distribution == "t5") {

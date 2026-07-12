@@ -17,6 +17,7 @@ usage <- function() cat(
   "  --smoke          Hardest cell, 4 reps, 39 flips (default).\n",
   "  --probe          162-cell null grid.\n",
   "  --power          540-cell sparse/dense power grid.\n",
+  "  --stress         24-cell severe non-normal copula stress block.\n",
   "  --full           Null and power grids in one output.\n",
   "  --reps N         Replications per cell (null: 200; power: 150).\n",
   "  --flips N        Random flips per replication (probe default: 499).\n",
@@ -36,6 +37,7 @@ while (i <= length(args)) {
   else if (a == "--smoke") opts$mode <- "smoke"
   else if (a == "--probe") opts$mode <- "probe"
   else if (a == "--power") opts$mode <- "power"
+  else if (a == "--stress") opts$mode <- "stress"
   else if (a == "--full") opts$mode <- "full"
   else if (a == "--reps") opts$reps <- as.integer(take())
   else if (a == "--flips") opts$flips <- as.integer(take())
@@ -46,7 +48,7 @@ while (i <= length(args)) {
   i <- i + 1L
 }
 if (is.null(opts$reps)) opts$reps <- switch(
-  opts$mode, smoke = 4L, power = 150L, probe = 200L, full = 150L)
+  opts$mode, smoke = 4L, power = 150L, probe = 200L, full = 150L, stress = 200L)
 if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else 499L
 stopifnot(opts$reps > 0L, opts$flips > 0L, opts$cores > 0L)
 results_dir <- opts$results_dir %||% file.path(script_dir, "results")
@@ -68,9 +70,20 @@ power_grid <- expand.grid(
   alternative = c("sparse", "dense"), effect = c(.25, .50),
   stringsAsFactors = FALSE)
 power_grid <- subset(power_grid, !(df == 1L & alternative == "dense"))
+# Severe non-normal copula stress: same marginals (skew 3, excess kurtosis 21),
+# two copulas (vm = Gaussian, pl = non-Gaussian). Homogeneous isolates the
+# copula from group heterogeneity; geometry is the hardest information geometry.
+# Kept as its own output so it does not reseed or unbalance the main null grid.
+stress_grid <- expand.grid(
+  df = c(1L, 8L), n_total = c(60L, 100L, 200L),
+  balance = "1:1", heterogeneity = c("homogeneous", "geometry"),
+  distribution = c("vm", "pl"), stringsAsFactors = FALSE)
+stress_grid$alternative <- "null"
+stress_grid$effect <- 0
 grid <- switch(opts$mode,
   probe = null_grid,
   power = power_grid,
+  stress = stress_grid,
   full = rbind(null_grid, power_grid),
   smoke = rbind(
     subset(null_grid, df == 8L & n_total == 60L & balance == "1:3" &
@@ -81,7 +94,7 @@ grid <- switch(opts$mode,
 grid$cell_id <- seq_len(nrow(grid))
 
 output_prefix <- switch(opts$mode, probe = "expansion", power = "power",
-                        full = "combined", smoke = "smoke")
+                        stress = "stress", full = "combined", smoke = "smoke")
 fmg_tests <- c("SB", "MV", "SS", "SF", "EBA2", "EBA4", "EBA6",
                "pEBA2", "pEBA4", "pEBA6", "PALL", "pOLS2", "ALL")
 p_columns <- c(
