@@ -18,8 +18,9 @@ usage <- function() cat(
   "two sample-adequacy regimes (per-group n/q ~ 2.5 tight, ~6 adequate).\n\n",
   "Options:\n",
   "  --smoke          One cell, 4 reps (default).\n",
-  "  --probe          12-cell grid.\n",
-  "  --reps N         Replications per cell (probe default: 200).\n",
+  "  --probe          12-cell grid (p 10/20/30, homogeneous).\n",
+  "  --big            32-cell grid (p 10/20/30/40, both geometries).\n",
+  "  --reps N         Replications per cell (probe 200, big 1000).\n",
   "  --flips N        Random flips per replication (default: 499).\n",
   "  --cores N        Parallel cell workers.\n",
   "  --seed-base N    Deterministic seed base.\n",
@@ -36,6 +37,7 @@ while (i <= length(args)) {
   if (a == "--help") { usage(); quit(status = 0L) }
   else if (a == "--smoke") opts$mode <- "smoke"
   else if (a == "--probe") opts$mode <- "probe"
+  else if (a == "--big") opts$mode <- "big"
   else if (a == "--reps") opts$reps <- as.integer(take())
   else if (a == "--flips") opts$flips <- as.integer(take())
   else if (a == "--cores") opts$cores <- as.integer(take())
@@ -44,15 +46,18 @@ while (i <= length(args)) {
   else stop("unknown argument: ", a, call. = FALSE)
   i <- i + 1L
 }
-if (is.null(opts$reps)) opts$reps <- if (opts$mode == "smoke") 4L else 200L
+if (is.null(opts$reps)) opts$reps <- switch(opts$mode,
+  smoke = 4L, big = 1000L, 200L)
 if (is.null(opts$flips)) opts$flips <- if (opts$mode == "smoke") 39L else 499L
 results_dir <- opts$results_dir %||% file.path(script_dir, "results")
 dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 
 adequacy_ratio <- c(tight = 2.5, adequate = 6.0)
-grid <- expand.grid(n_factors = c(2L, 4L, 6L),
-                    adequacy = names(adequacy_ratio),
-                    distribution = c("vm", "pl"), stringsAsFactors = FALSE)
+factors <- if (opts$mode == "big") c(2L, 4L, 6L, 8L) else c(2L, 4L, 6L)
+hets <- if (opts$mode == "big") c("homogeneous", "geometry") else "homogeneous"
+grid <- expand.grid(n_factors = factors, adequacy = names(adequacy_ratio),
+                    distribution = c("vm", "pl"), heterogeneity = hets,
+                    stringsAsFactors = FALSE)
 grid$p <- 5L * grid$n_factors
 grid$ratio <- adequacy_ratio[grid$adequacy]
 grid$n_total <- mapply(dim_total_n, grid$n_factors, grid$ratio)
@@ -76,7 +81,7 @@ empty_rep <- function(rep_id, error) {
 
 one_rep <- function(cell, rep_id) {
   F <- cell$n_factors
-  ov <- dim_ov(F); pop <- dim_population(F); pair <- dim_specs(F)
+  ov <- dim_ov(F); pop <- dim_population(F, cell$heterogeneity); pair <- dim_specs(F)
   sizes <- c(cell$n_total %/% 2L, cell$n_total - cell$n_total %/% 2L)
   set.seed(opts$seed_base + cell$cell_id * 100000L + rep_id)
   blocks <- lapply(1:2, function(g) {

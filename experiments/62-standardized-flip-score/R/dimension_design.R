@@ -35,18 +35,29 @@ dim_specs <- function(n_factors, df = 8L) {
                             group_partial = partial))
 }
 
-dim_population <- function(n_factors) {
+dim_population <- function(n_factors, heterogeneity = "homogeneous") {
   p <- 5L * n_factors
   loading <- matrix(0, p, n_factors)
   for (f in seq_len(n_factors))
     loading[((f - 1L) * 5L + 1L):(f * 5L), f] <- dim_base_loading
-  theta <- diag(rep(dim_residual_cycle, n_factors))
-  phi <- matrix(.3, n_factors, n_factors); diag(phi) <- 1
-  Sigma <- loading %*% phi %*% t(loading) + theta
+  theta1 <- diag(rep(dim_residual_cycle, n_factors))
+  phi1 <- matrix(.3, n_factors, n_factors); diag(phi1) <- 1
+  Sigma1 <- loading %*% phi1 %*% t(loading) + theta1
+  if (heterogeneity == "homogeneous") {
+    Sigma2 <- Sigma1
+  } else if (heterogeneity == "geometry") {
+    # Group 2: heterogeneous latent variances and residual scaling, so the
+    # tested-vs-nuisance information geometry differs across groups. Loadings
+    # stay invariant (the null holds).
+    lv <- rep(c(3, .45), length.out = n_factors)
+    phi2 <- outer(sqrt(lv), sqrt(lv)) * .30; diag(phi2) <- lv
+    theta2 <- diag(diag(theta1) * rep(c(.40, 2.20), length.out = p))
+    Sigma2 <- loading %*% phi2 %*% t(loading) + theta2
+  } else stop("unknown heterogeneity: ", heterogeneity, call. = FALSE)
   intercept <- seq(.15, 1.5, length.out = p)
   alpha <- rep(c(.45, -.30), length.out = n_factors)
   list(mu = list(intercept, intercept + as.vector(loading %*% alpha)),
-       Sigma = list(Sigma, Sigma))   # homogeneous
+       Sigma = list(Sigma1, Sigma2))
 }
 
 # Total N chosen to hit a target per-group sample-to-free-parameter ratio.
