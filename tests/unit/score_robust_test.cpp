@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
+#include "../../src/inference/detail_score_flip.hpp"
 
 #include <array>
 #include <cmath>
@@ -11,6 +12,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/LU>
 
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
@@ -1624,4 +1626,121 @@ TEST_CASE("frontier score flips: rejects invalid flip count and identical pair")
   auto same = inf::frontier::score_flip_test(
       h.pt, h.rep, h.pt, h.rep, *samp, raw, *est, opts);
   CHECK_FALSE(same.has_value());
+}
+
+TEST_CASE("frontier score flips: exact enumeration is seed-free on tiny n") {
+  auto h1 = build("f =~ x1 + a*x2 + b*x3 + x4");
+  auto h0 = build("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  std::mt19937 rng(20260713u);
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(rng, 12, four_indicator_sample_cov(), 9.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est0 = magmaan::test::fit(h0.pt, h0.rep, *samp);
+  REQUIRE(est0.has_value());
+
+  inf::frontier::ScoreFlipOptions opts;
+  opts.exact_enumeration = true;
+  opts.seed = 11;
+  auto a = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, opts);
+  if (!a.has_value()) MESSAGE(a.error().detail);
+  REQUIRE(a.has_value());
+  opts.seed = 9999;
+  auto b = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, opts);
+  REQUIRE(b.has_value());
+
+  CHECK(a->n_flips == 4095);
+  CHECK(a->p_basic == b->p_basic);
+  CHECK(a->p_effective == b->p_effective);
+  CHECK(a->p_standardized == b->p_standardized);
+  CHECK(a->mc_se_basic == 0.0);
+  CHECK(a->mc_se_effective == 0.0);
+  CHECK(a->mc_se_standardized == 0.0);
+  CHECK(std::abs(a->p_basic * 4096.0 - std::round(a->p_basic * 4096.0)) <
+        1e-12);
+  CHECK(std::abs(a->p_effective * 4096.0 -
+                 std::round(a->p_effective * 4096.0)) < 1e-12);
+  CHECK(std::abs(a->p_standardized * 4096.0 -
+                 std::round(a->p_standardized * 4096.0)) < 1e-12);
+
+  auto too_large_raw = raw;
+  too_large_raw.X = {
+      multivariate_t_sample(rng, 21, four_indicator_sample_cov(), 9.0)};
+  auto too_large_samp = magmaan::data::sample_stats_from_raw(too_large_raw);
+  REQUIRE(too_large_samp.has_value());
+  auto too_large_est = magmaan::test::fit(h0.pt, h0.rep, *too_large_samp);
+  REQUIRE(too_large_est.has_value());
+  auto too_large = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *too_large_samp, too_large_raw,
+      *too_large_est, opts);
+  CHECK_FALSE(too_large.has_value());
+}
+
+TEST_CASE("frontier score flips: grouped variance matches dense case oracle") {
+  using inf::frontier::detail::ScoreFlipGroupGeometry;
+  using inf::frontier::detail::score_flip_variance;
+  const std::vector<std::int64_t> n_obs{2, 3};
+  std::vector<Eigen::Matrix4d> J(2);
+  Eigen::Matrix4d L0;
+  L0 << 1.2, 0.0, 0.0, 0.0,
+        0.3, 0.9, 0.0, 0.0,
+       -0.2, 0.1, 1.1, 0.0,
+        0.4, -0.1, 0.2, 0.8;
+  Eigen::Matrix4d L1;
+  L1 << 0.8, 0.0, 0.0, 0.0,
+       -0.1, 1.3, 0.0, 0.0,
+        0.5, 0.2, 0.7, 0.0,
+       -0.2, 0.3, 0.1, 1.0;
+  J[0] = L0 * L0.transpose();
+  J[1] = L1 * L1.transpose();
+
+  Eigen::Matrix<double, 4, 2> K;
+  K << 1.0, 0.0,
+       0.0, 1.0,
+       0.2, -0.3,
+       0.1, 0.4;
+  Eigen::Matrix<double, 4, 2> D;
+  D << 0.2, -0.1,
+       0.3, 0.4,
+       1.0, 0.2,
+      -0.2, 1.0;
+  const Eigen::Matrix4d I = 2.0 * J[0] + 3.0 * J[1];
+  const Eigen::Matrix2d Ainv = (K.transpose() * I * K).inverse();
+  const Eigen::Matrix<double, 4, 2> G =
+      D - K * Ainv * K.transpose() * I * D;
+  std::vector<ScoreFlipGroupGeometry> geometry;
+  for (const auto& Jb : J) {
+    geometry.push_back({G.transpose() * Jb * G,
+                        G.transpose() * Jb * K,
+                        K.transpose() * Jb * K});
+  }
+
+  for (std::uint64_t mask = 0; mask < 32; ++mask) {
+    std::vector<double> signs(5);
+    for (std::size_t i = 0; i < signs.size(); ++i) {
+      signs[i] = ((mask >> i) & 1ULL) == 0ULL ? -1.0 : 1.0;
+    }
+    const std::vector<std::int64_t> sign_sum{
+        static_cast<std::int64_t>(signs[0] + signs[1]),
+        static_cast<std::int64_t>(signs[2] + signs[3] + signs[4])};
+    const Eigen::Matrix2d grouped =
+        score_flip_variance(geometry, Ainv, n_obs, sign_sum);
+
+    Eigen::Matrix2d cross = Eigen::Matrix2d::Zero();
+    for (std::size_t i = 0; i < signs.size(); ++i) {
+      const std::size_t b = i < 2 ? 0 : 1;
+      cross.noalias() += signs[i] * G.transpose() * J[b] * K;
+    }
+    const Eigen::Matrix2d R = cross * Ainv;
+    Eigen::Matrix2d dense = Eigen::Matrix2d::Zero();
+    for (std::size_t i = 0; i < signs.size(); ++i) {
+      const std::size_t b = i < 2 ? 0 : 1;
+      const Eigen::Matrix<double, 4, 2> adjusted =
+          G - signs[i] * K * R.transpose();
+      dense.noalias() += adjusted.transpose() * J[b] * adjusted;
+    }
+    CHECK((grouped - dense).norm() < 1e-12 * (1.0 + dense.norm()));
+  }
 }
