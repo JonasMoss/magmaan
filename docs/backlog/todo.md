@@ -41,14 +41,24 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
   inverse; gate any proposal on null size, matched-null power, and meat
   conditioning rather than one aggregate rejection rate.
+  The focused published-DGP follow-up (experiment 63) adds an important negative
+  result: with n=400 per homogeneous group, raising the weak-invariance rank to
+  133 changed effective versus standardized decisions only twice in 3,200 null
+  replications, while flip-specific standardization cost about 4.1 seconds per
+  replication at that corner. Do not spend the next design on still more
+  restrictions. Vary n/group, nuisance leverage/information heterogeneity, or
+  the restriction-to-sample ratio while holding rank fixed, and use the returned
+  variance-displacement diagnostics as the proposed effect modifier.
   Then decide extensions separately: direct
   FIML needs observed-pattern scores and a missing-data information convention;
   continuous LS and ordinal/mixed models need estimator-specific casewise
   influence contributions including estimated-weight effects; clustered data
   need cluster-level rather than row-level signs. A residual-based or robust-
   Wald flip test is a distinct method and should not be hidden behind the score-
-  test entry point. Promote any of these only when a concrete experiment needs
-  it.
+  test entry point. The biased RLS H0-minus-H1 comparator now available through
+  `fmg_nested(..., tests = "*_rls")` does not supply casewise RLS scores and is
+  not such an extension. Promote any residual/RLS flip only when a concrete
+  experiment needs the new estimating-function derivation.
 
 - **XL — establish whether raw-label permutation is valid for ordinal
   measurement-invariance tests.** Experiment 61's continuous studentized-Wald

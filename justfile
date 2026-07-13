@@ -253,11 +253,6 @@ check-layering:
 # before the slow build.
 check: check-layering vendor-check test r-check
 
-# FIML-FMG paper sync is being rebuilt with the new paper simulation layout.
-fmg-sync *ARGS:
-    @echo "FIML-FMG sync helper pending; see papers/fiml-fmg/dev/todo.md" >&2
-    @exit 1
-
 notes_dir := "docs/research/notes"
 
 # Build one research note (named, or the most recently edited) and open the PDF.

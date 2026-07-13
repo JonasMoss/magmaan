@@ -207,6 +207,16 @@ at p=40, with N; and (b) IG *data generation*. At p=40, N=3000 a single IG
 dataset draw costs ~2.0-2.2 s/rep, dwarfing everything else. So large-model runs
 are p-bound, and the IG generator is the single biggest line item at the corner.
 
+The focused weak-invariance experiment 63 adds a different calibration corner.
+At p=20, G=8, n=400/group and severe marginals, batched IG setup was about 2.2
+seconds per null/power cell, whereas PL setup was about 353-360 seconds because
+the runner calibrates each group covariance separately. That one-time PL cost,
+not drawing or fitting, materially contributed to the 36.7-minute probe. Before
+reusing this design at larger grids, cache/deduplicate identical group
+calibrations (especially the equal-covariance null) and consider a cross-cell PL
+calibration cache keyed by the target correlation and marginal specification.
+Keep generator setup separate from per-replication inference timing in reports.
+
 **Why IG draws are slow: generator family.** `make_cell_sampler` requests
 `generator_family = "pearson"` (chosen to mirror the lavaan/R IG reference). The
 Pearson draw applies a per-element inverse CDF (`normal_cdf` then an inverse

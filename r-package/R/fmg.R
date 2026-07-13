@@ -494,21 +494,28 @@
   .fmg_rows_to_df(rows)
 }
 
-.fmg_adjust_specs_nested <- function(specs, caller = "fmg_nested") {
+.fmg_adjust_specs_nested <- function(specs, allow_rls = FALSE,
+                                     caller = "fmg_nested") {
   lapply(specs, function(s) {
     if (isTRUE(s$ug)) {
       stop(caller, "(): the unbiased Du-Bentler Gamma is undefined for ",
            "nested difference spectra (test '", s$input, "').",
            call. = FALSE)
     }
-    if (identical(s$base, "rls") && isTRUE(s$base_explicit)) {
-      stop(caller, "(): nested FMG uses the model-pair difference statistic; ",
-           "the single-model RLS base is not defined for a difference spectrum ",
-           "(test '", s$input, "').", call. = FALSE)
+    if (identical(s$base, "rls") && isTRUE(s$base_explicit) && !allow_rls) {
+      stop(caller, "(): an RLS difference base is available only for ",
+           "complete-data ML model pairs (test '", s$input, "').",
+           call. = FALSE)
     }
-    s$base <- "ml"
-    s$canonical <- sub("_(rls|ml)$", "_ml", s$canonical)
-    if (!grepl("_ml$", s$canonical)) s$canonical <- paste0(s$canonical, "_ml")
+    # Nested names historically default to the likelihood-ratio difference,
+    # even though the single-model parser defaults to RLS. Preserve that API:
+    # only an explicit `_rls` requests the RLS H0-minus-H1 difference.
+    if (!isTRUE(s$base_explicit)) s$base <- "ml"
+    suffix <- paste0("_", s$base)
+    s$canonical <- sub("_(rls|ml)$", suffix, s$canonical)
+    if (!grepl("_(rls|ml)$", s$canonical)) {
+      s$canonical <- paste0(s$canonical, suffix)
+    }
     s
   })
 }
@@ -517,14 +524,15 @@
   df <- spectrum$df
   eigvals <- spectrum$eigvals
   rows <- lapply(specs, function(s) {
-    res <- infer_fmg_test(spectrum$chisq_standard, df, eigvals,
+    base_statistic <- spectrum$base_statistics[[s$base]]
+    res <- infer_fmg_test(base_statistic, df, eigvals,
                           method = s$method,
                           param = .fmg_param_for_cpp(s$param))
     list(input = s$input,
          label = s$canonical,
          p_value = res$p_value,
          df = res$df,
-         base = "ml",
+         base = s$base,
          base_statistic = res$chi2_source,
          method = res$method,
          param = if (is.na(s$param)) NA_real_ else res$param,
@@ -629,16 +637,20 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
 #' Foldnes-Moss-Gronneberg diagnostics for a nested continuous/FIML/ML2S pair.
 #'
 #' Applies the FMG eigenvalue-tail transforms to the Satorra-2000
-#' restriction-map difference spectrum returned by [robust_nested_lrt()]. This
-#' is the non-ordinal analogue of [fmg_nested_ordinal()] for complete-data ML,
-#' FIML, and two-stage ML (`ML2S`) nested pairs.
+#' restriction-map difference spectrum returned by [robust_nested_lrt()]. For
+#' complete-data ML pairs an explicit `_rls` suffix uses the difference between
+#' the two Browne RLS residual statistics, evaluated at the ML estimates, as the
+#' asymptotically equivalent base statistic. Unsuffixed tests and `_ml` retain
+#' the likelihood-ratio difference. FIML and two-stage ML (`ML2S`) support only
+#' the ML base.
 #'
 #' @param fit_H1 Less-restricted fitted model.
 #' @param fit_H0 More-restricted fitted model.
 #' @param data Raw complete data for complete-data ML pairs. FIML and ML2S pairs
 #'   use `fit_H1$raw_data` and reject `data`, matching [robust_nested_lrt()].
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
-#'   nested defaults (`SB`, `pEBA2`, `pEBA4`, `pEBA6`, `pOLS`).
+#'   nested defaults (`SB`, `pEBA2`, `pEBA4`, `pEBA6`, `pOLS`). Complete-data
+#'   pairs accept explicit `_ml` and `_rls` bases; unsuffixed names use ML.
 #' @param A.method `"exact"` (default) or `"delta"`.
 #'
 #' @return A `magmaan_fmg_tests` data frame.
@@ -647,12 +659,23 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
                        A.method = c("exact", "delta")) {
   A.method <- match.arg(A.method)
   tests <- tests %||% .fmg_default_tests_ordinal()
+  complete_ml <- identical(.fmg_fit_estimator(fit_H1), "ML") &&
+    identical(.fmg_fit_estimator(fit_H0), "ML") &&
+    !.fmg_is_fiml(fit_H1) && !.fmg_is_fiml(fit_H0) &&
+    !.fmg_is_ml2s(fit_H1) && !.fmg_is_ml2s(fit_H0)
   specs <- .fmg_adjust_specs_nested(lapply(tests, .fmg_parse_test),
+                                    allow_rls = complete_ml,
                                     caller = "fmg_nested")
   nested <- robust_nested_lrt(
     fit_H1, fit_H0, data = data, gamma = "empirical",
     method = "restriction_map", A.method = A.method)
-  spectrum <- list(chisq_standard = nested$T_diff,
+  base_statistics <- c(ml = nested$T_diff)
+  if (any(vapply(specs, function(s) identical(s$base, "rls"), logical(1)))) {
+    rls_h1 <- infer_rls_chi2_fit(fit_H1, model_implied(fit_H1))$statistic
+    rls_h0 <- infer_rls_chi2_fit(fit_H0, model_implied(fit_H0))$statistic
+    base_statistics <- c(base_statistics, rls = rls_h0 - rls_h1)
+  }
+  spectrum <- list(base_statistics = base_statistics,
                    df = nested$df_diff,
                    eigvals = nested$eigenvalues)
   .fmg_result_rows_nested(spectrum, specs)
