@@ -57,13 +57,21 @@ dedicated Modal environment with a $10 account-side budget first.
 
 ```sh
 cd experiments/64-flip-calibration-frontier/modal
-modal run app.py
-modal run app.py --mode preflight --run-id july13
-modal run app.py --mode all --run-id july13
+modal run app.py                                       # dry run, no spend
+modal run app.py --mode preflight --run-id july13      # image + 2-rep smoke
+modal run --detach app.py --mode all --run-id july13   # substantive run
 ```
 
 The preflight builds the image, runs a two-replication calibration diagnostic,
 and executes one screen cell. A substantive launch is intentionally separate.
+
+A substantive `--mode all` (or `--mode screen` / `--mode focus`) hands the whole
+pipeline to a server-side `drive` function and returns immediately, so the
+multi-hour run does not depend on the launching process. Launch it with
+`modal run --detach` so the app persists after the entrypoint exits; watch it
+with `modal app logs <app-id>` and pull with `modal volume get
+exp64-flip-results july13 ./july13`. Pass `--skip-calibration` to reuse an
+existing `power_calibration.csv` on the volume.
 
 ## Interpretation contract
 
