@@ -154,16 +154,53 @@ def combine(profile: str, run_id: str, expected_cells: int) -> str:
     return out
 
 
+@app.function(image=image, volumes={"/vol": vol}, timeout=12 * 60 * 60,
+              cpu=0.25, memory=512, retries=0)
+def drive(run_id: str, do_calibration: bool, do_screen: bool, do_focus: bool,
+          screen_reps: int = 0, screen_flips: int = 0,
+          focus_reps: int = 0, focus_flips: int = 0) -> str:
+    """Server-side orchestrator: run every phase from inside Modal.
+
+    The local entrypoint spawns this and returns, so the multi-hour pipeline
+    does not depend on the launching process staying alive. Slice functions fan
+    out as separate containers; each phase blocks here until its slices finish.
+    """
+    if do_calibration:
+        print("DRIVER: calibrating power multiplier...", flush=True)
+        calibrate.remote(run_id, False)
+    if do_screen:
+        print("DRIVER: launching screen slices...", flush=True)
+        args = [(j, run_id, screen_reps, screen_flips, False)
+                for j in range(1, SCREEN_SHARDS + 1)]
+        done = list(run_screen_slice.starmap(args))
+        print(f"DRIVER: screen slices complete {len(done)}/{SCREEN_SHARDS}", flush=True)
+        print("DRIVER: screen combined:", combine.remote("screen", run_id, 128),
+              flush=True)
+    if do_focus:
+        print("DRIVER: launching focus slices...", flush=True)
+        args = [(j, run_id, focus_reps, focus_flips)
+                for j in range(1, FOCUS_SHARDS + 1)]
+        done = list(run_focus_slice.starmap(args))
+        print(f"DRIVER: focus slices complete {len(done)}/{FOCUS_SHARDS}", flush=True)
+        print("DRIVER: focus combined:", combine.remote("focus", run_id, 32),
+              flush=True)
+    print(f"DRIVER: done. Pull: modal volume get exp64-flip-results {run_id} "
+          f"./{run_id}", flush=True)
+    return run_id
+
+
 @app.local_entrypoint()
 def main(mode: str = "dry-run", run_id: str = "full",
          screen_reps: int = 0, screen_flips: int = 0,
-         focus_reps: int = 0, focus_flips: int = 0):
+         focus_reps: int = 0, focus_flips: int = 0,
+         skip_calibration: bool = False):
     validate_run_id(run_id)
     if mode not in {"dry-run", "preflight", "screen", "focus", "all"}:
         raise ValueError("mode must be dry-run, preflight, screen, focus, or all")
     wants_screen = mode in {"screen", "all", "dry-run"}
     wants_focus = mode in {"focus", "all", "dry-run"}
-    wants_calibration = mode in {"focus", "all", "dry-run"}
+    wants_calibration = (mode in {"focus", "all", "dry-run"}
+                         and not skip_calibration)
     estimate = (4 * hourly_usd() if mode == "preflight" else
                 timeout_envelope_usd(wants_calibration, wants_screen, wants_focus))
     print(f"Estimated timeout envelope: ${estimate:.2f}; guard: ${MAX_ESTIMATED_USD:.2f}")
@@ -180,19 +217,13 @@ def main(mode: str = "dry-run", run_id: str = "full",
         done = run_screen_slice.remote(1, run_id, 1, 9, True)
         print(f"Screen preflight slice {done} complete; no substantive run launched.")
         return
-    if wants_calibration:
-        print("Calibrating power multiplier before focus slices...")
-        calibrate.remote(run_id, False)
-    if wants_screen:
-        args = [(j, run_id, screen_reps, screen_flips, False)
-                for j in range(1, SCREEN_SHARDS + 1)]
-        done = list(run_screen_slice.starmap(args))
-        print(f"Screen slices complete: {len(done)}/{SCREEN_SHARDS}")
-        print("Combined:", combine.remote("screen", run_id, 128))
-    if wants_focus:
-        args = [(j, run_id, focus_reps, focus_flips)
-                for j in range(1, FOCUS_SHARDS + 1)]
-        done = list(run_focus_slice.starmap(args))
-        print(f"Focus slices complete: {len(done)}/{FOCUS_SHARDS}")
-        print("Combined:", combine.remote("focus", run_id, 32))
-    print(f"Pull with: modal volume get exp64-flip-results {run_id} ./{run_id}")
+    # Hand the whole pipeline to a server-side driver and return immediately, so
+    # the run survives client disconnect. Launch with `modal run --detach` so the
+    # ephemeral app persists after this entrypoint exits.
+    handle = drive.spawn(run_id, wants_calibration, wants_screen, wants_focus,
+                         screen_reps, screen_flips, focus_reps, focus_flips)
+    print(f"Spawned server-side driver {handle.object_id} for run '{run_id}' "
+          f"(calibration={wants_calibration}, screen={wants_screen}, "
+          f"focus={wants_focus}).")
+    print("Safe to disconnect. Watch: modal app logs <app-id>; "
+          f"pull later: modal volume get exp64-flip-results {run_id} ./{run_id}")
