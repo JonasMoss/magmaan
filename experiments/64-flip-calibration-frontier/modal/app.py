@@ -54,14 +54,32 @@ image = (
 app = modal.App("exp64-flip-calibration-frontier")
 vol = modal.Volume.from_name("exp64-flip-results", create_if_missing=True)
 
-SCREEN_SHARDS = 16
-FOCUS_SHARDS = 8
+# One shard per design cell (128 screen, 32 focus). Even 1-cell shards keep every
+# cell well under its timeout and avoid the cell_id-mod clustering that bundled
+# all the heavy p=20 cells into one shard. Row-index sharding in the runner makes
+# shard j == design row j.
+SCREEN_SHARDS = 128
+FOCUS_SHARDS = 32
+SCREEN_TIMEOUT_H = 4
+FOCUS_TIMEOUT_H = 8
 CPU = 1.0
 MEMORY_MIB = 2048
 # Published Modal list rates used for the July 2026 planning calculation.
 CPU_USD_PER_CORE_SECOND = 0.0000131
 MEM_USD_PER_GIB_SECOND = 0.00000222
-MAX_ESTIMATED_USD = 10.0
+MAX_ESTIMATED_USD = 14.0
+
+# Per-rep cost model fit to Modal timings (2026-07): a rep is one model fit plus
+# `flips` cheap sign-flip re-evaluations of a per-rep influence matrix, so flip
+# cost is ~independent of n and only the fit term scales with n. Measured at
+# p=20, n_avg=50: 1.45 s/rep @199 flips and 5.29 s/rep @999 flips give
+# flip20=0.0048 s, fit20(n50)=0.49 s; p=5 approximated at ~0.3x the p=20 terms.
+FIT_N50 = {5: 0.15, 20: 0.49}       # seconds at n_avg=50
+FLIP_SEC = {5: 0.0014, 20: 0.0048}  # seconds per flip
+N_AVGS = {"screen": [50, 100, 200, 400], "focus": [50, 100]}
+CELLS_PER_P_NAVG = {"screen": 16, "focus": 8}
+DEFAULT_REPS = {"screen": 1000, "focus": 2000}
+DEFAULT_FLIPS = {"screen": 199, "focus": 999}
 
 
 def hourly_usd(cpu: float = CPU, memory_mib: int = MEMORY_MIB) -> float:
@@ -69,11 +87,40 @@ def hourly_usd(cpu: float = CPU, memory_mib: int = MEMORY_MIB) -> float:
                    + memory_mib / 1024 * MEM_USD_PER_GIB_SECOND)
 
 
+def container_usd_per_second() -> float:
+    return CPU * CPU_USD_PER_CORE_SECOND + MEMORY_MIB / 1024 * MEM_USD_PER_GIB_SECOND
+
+
+def _profile_compute_seconds(profile: str, reps: int, flips: int) -> float:
+    reps = reps or DEFAULT_REPS[profile]
+    flips = flips or DEFAULT_FLIPS[profile]
+    total = 0.0
+    for p in (5, 20):
+        for n_avg in N_AVGS[profile]:
+            per_rep = FIT_N50[p] * (n_avg / 50.0) + flips * FLIP_SEC[p]
+            total += CELLS_PER_P_NAVG[profile] * reps * per_rep
+    return total
+
+
+def expected_cost_usd(calibration: bool, screen: bool, focus: bool,
+                      screen_reps: int = 0, screen_flips: int = 0,
+                      focus_reps: int = 0, focus_flips: int = 0) -> float:
+    """Realistic expected spend from the measured per-rep model (not worst case)."""
+    per_sec = container_usd_per_second()
+    total = 0.6 if calibration else 0.0  # ~40 min single-CPU power calibration
+    if screen:
+        total += _profile_compute_seconds("screen", screen_reps, screen_flips) * per_sec
+    if focus:
+        total += _profile_compute_seconds("focus", focus_reps, focus_flips) * per_sec
+    return total
+
+
 def timeout_envelope_usd(include_calibration: bool = True,
                          screen: bool = True, focus: bool = True) -> float:
+    """Absolute worst case: every container runs to its full timeout (will not happen)."""
     hours = (2 if include_calibration else 0)
-    hours += SCREEN_SHARDS * 2 if screen else 0
-    hours += FOCUS_SHARDS * 6 if focus else 0
+    hours += SCREEN_SHARDS * SCREEN_TIMEOUT_H if screen else 0
+    hours += FOCUS_SHARDS * FOCUS_TIMEOUT_H if focus else 0
     hours += (1 if screen else 0) + (1 if focus else 0)
     return hours * hourly_usd()
 
@@ -100,7 +147,7 @@ def calibrate(run_id: str, smoke: bool = False) -> str:
 
 def _slice_command(profile: str, shard: int, shards: int, run_id: str,
                    reps: int, flips: int, smoke: bool = False) -> list[str]:
-    out = f"/vol/{run_id}/{profile}/slices/slice_{shard:02d}"
+    out = f"/vol/{run_id}/{profile}/slices/slice_{shard:03d}"
     cmd = ["Rscript", str(EXP / "run_experiment.R"), f"--{profile}",
            "--shard-index", str(shard), "--shard-count", str(shards),
            "--cores", "1", "--results-dir", out]
@@ -116,7 +163,8 @@ def _slice_command(profile: str, shard: int, shards: int, run_id: str,
     return cmd
 
 
-@app.function(image=image, volumes={"/vol": vol}, timeout=2 * 60 * 60,
+@app.function(image=image, volumes={"/vol": vol},
+              timeout=SCREEN_TIMEOUT_H * 60 * 60,
               cpu=CPU, memory=MEMORY_MIB, retries=0)
 def run_screen_slice(shard: int, run_id: str, reps: int = 0,
                      flips: int = 0, smoke: bool = False) -> int:
@@ -129,7 +177,8 @@ def run_screen_slice(shard: int, run_id: str, reps: int = 0,
     return shard
 
 
-@app.function(image=image, volumes={"/vol": vol}, timeout=6 * 60 * 60,
+@app.function(image=image, volumes={"/vol": vol},
+              timeout=FOCUS_TIMEOUT_H * 60 * 60,
               cpu=CPU, memory=MEMORY_MIB, retries=0)
 def run_focus_slice(shard: int, run_id: str, reps: int = 0,
                     flips: int = 0) -> int:
@@ -154,39 +203,63 @@ def combine(profile: str, run_id: str, expected_cells: int) -> str:
     return out
 
 
-@app.function(image=image, volumes={"/vol": vol}, timeout=12 * 60 * 60,
+def _run_phase(fn, args, shard_count, profile, run_id, expected_cells):
+    """Fan a phase's slices out, tolerating per-slice failures.
+
+    Returns the list of failed shard indices. Combine only runs when the phase
+    is complete; a partial phase leaves its slices on the volume so the failed
+    shards can be resumed and the combine re-run, rather than crashing the whole
+    pipeline on one slow or broken cell.
+    """
+    print(f"DRIVER: launching {shard_count} {profile} slices...", flush=True)
+    results = list(fn.starmap(args, return_exceptions=True))
+    failed = [a[0] for a, r in zip(args, results) if isinstance(r, Exception)]
+    for a, r in zip(args, results):
+        if isinstance(r, Exception):
+            print(f"DRIVER: {profile} shard {a[0]} FAILED: "
+                  f"{type(r).__name__}: {r}", flush=True)
+    print(f"DRIVER: {profile} slices ok {shard_count - len(failed)}/{shard_count}",
+          flush=True)
+    if failed:
+        print(f"DRIVER: {profile} incomplete (shards {failed}); skipping combine. "
+              f"Resume with --mode {profile} --skip-calibration, then it re-runs "
+              f"only the unfinished shards and combines.", flush=True)
+    else:
+        print(f"DRIVER: {profile} combined:",
+              combine.remote(profile, run_id, expected_cells), flush=True)
+    return failed
+
+
+@app.function(image=image, volumes={"/vol": vol}, timeout=24 * 60 * 60,
               cpu=0.25, memory=512, retries=0)
 def drive(run_id: str, do_calibration: bool, do_screen: bool, do_focus: bool,
           screen_reps: int = 0, screen_flips: int = 0,
-          focus_reps: int = 0, focus_flips: int = 0) -> str:
+          focus_reps: int = 0, focus_flips: int = 0) -> dict:
     """Server-side orchestrator: run every phase from inside Modal.
 
     The local entrypoint spawns this and returns, so the multi-hour pipeline
     does not depend on the launching process staying alive. Slice functions fan
     out as separate containers; each phase blocks here until its slices finish.
+    Screen and focus are independent (both only need calibration), so a failure
+    in one does not block the other.
     """
+    summary: dict = {}
     if do_calibration:
         print("DRIVER: calibrating power multiplier...", flush=True)
         calibrate.remote(run_id, False)
     if do_screen:
-        print("DRIVER: launching screen slices...", flush=True)
         args = [(j, run_id, screen_reps, screen_flips, False)
                 for j in range(1, SCREEN_SHARDS + 1)]
-        done = list(run_screen_slice.starmap(args))
-        print(f"DRIVER: screen slices complete {len(done)}/{SCREEN_SHARDS}", flush=True)
-        print("DRIVER: screen combined:", combine.remote("screen", run_id, 128),
-              flush=True)
+        summary["screen_failed"] = _run_phase(
+            run_screen_slice, args, SCREEN_SHARDS, "screen", run_id, 128)
     if do_focus:
-        print("DRIVER: launching focus slices...", flush=True)
         args = [(j, run_id, focus_reps, focus_flips)
                 for j in range(1, FOCUS_SHARDS + 1)]
-        done = list(run_focus_slice.starmap(args))
-        print(f"DRIVER: focus slices complete {len(done)}/{FOCUS_SHARDS}", flush=True)
-        print("DRIVER: focus combined:", combine.remote("focus", run_id, 32),
-              flush=True)
-    print(f"DRIVER: done. Pull: modal volume get exp64-flip-results {run_id} "
-          f"./{run_id}", flush=True)
-    return run_id
+        summary["focus_failed"] = _run_phase(
+            run_focus_slice, args, FOCUS_SHARDS, "focus", run_id, 32)
+    print(f"DRIVER: done. summary={summary}. Pull: modal volume get "
+          f"exp64-flip-results {run_id} ./{run_id}", flush=True)
+    return summary
 
 
 @app.local_entrypoint()
@@ -201,12 +274,20 @@ def main(mode: str = "dry-run", run_id: str = "full",
     wants_focus = mode in {"focus", "all", "dry-run"}
     wants_calibration = (mode in {"focus", "all", "dry-run"}
                          and not skip_calibration)
-    estimate = (4 * hourly_usd() if mode == "preflight" else
-                timeout_envelope_usd(wants_calibration, wants_screen, wants_focus))
-    print(f"Estimated timeout envelope: ${estimate:.2f}; guard: ${MAX_ESTIMATED_USD:.2f}")
+    if mode == "preflight":
+        estimate = 4 * hourly_usd()
+    else:
+        estimate = expected_cost_usd(wants_calibration, wants_screen, wants_focus,
+                                     screen_reps, screen_flips,
+                                     focus_reps, focus_flips)
+    worst = timeout_envelope_usd(wants_calibration, wants_screen, wants_focus)
+    print(f"Expected cost: ${estimate:.2f}; guard: ${MAX_ESTIMATED_USD:.2f}")
+    print(f"Absolute worst case (every container hits its timeout; will not "
+          f"happen): ${worst:.2f}")
     print(f"Rate model: ${hourly_usd():.4f} per one-CPU/2-GiB container-hour")
     if estimate > MAX_ESTIMATED_USD:
-        raise RuntimeError("planned timeout envelope exceeds the $10 guard")
+        raise RuntimeError(
+            f"expected cost ${estimate:.2f} exceeds the ${MAX_ESTIMATED_USD:.0f} guard")
     if mode == "dry-run":
         print(f"No containers launched. screen={SCREEN_SHARDS} slices; "
               f"focus={FOCUS_SHARDS} slices; retries=0.")

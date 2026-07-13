@@ -107,8 +107,11 @@ filter_design <- function(grid, cfg) {
   }
   if (!is.null(cfg$distributions))
     grid <- grid[grid$distribution %in% cfg$distributions, ]
-  # Stable modular sharding is independent of filters and execution order.
-  grid <- grid[(grid$cell_id - 1L) %% cfg$shard_count + 1L == cfg$shard_index, ]
+  # Shard on the filtered row position so cells spread evenly across shards
+  # regardless of how cell_id correlates with cost. Deterministic for a given
+  # (profile, filters, shard_count); seeds key off pair_id, not shard, so the
+  # partition never changes results.
+  grid <- grid[(seq_len(nrow(grid)) - 1L) %% cfg$shard_count + 1L == cfg$shard_index, ]
   if (!is.null(cfg$max_cells)) grid <- head(grid, cfg$max_cells)
   if (!nrow(grid)) stop("cell filters selected no rows", call. = FALSE)
   grid
