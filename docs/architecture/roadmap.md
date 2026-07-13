@@ -497,7 +497,14 @@ golden `parTable()` fixtures.
   timings. `api::frontier::score_flip_test` and
   the R `score_flip_test()` wrapper expose the method. The current contract
   rejects missing data, fixed-X rows, nonlinear/inequality constraints,
-  boundary null fits, and non-ML estimators. Experiment 62's 300-replication
+  boundary null fits, and non-ML estimators.
+  The C++ frontier option additionally has a deterministic verification-only
+  exact-enumeration path capped at n=20. Its unit gate enumerates all 4,096
+  sign vectors at n=12, is seed-invariant, and returns zero Monte Carlo error;
+  a separate independent dense per-case nuisance-adjustment oracle matches the
+  production group-sufficient covariance formula over every sign vector in a
+  two-group n=5 construction. The R surface remains Monte Carlo-only.
+  Experiment 62's 300-replication
   probe found the basic test extremely conservative, effective flips close to
   nominal, and standardization a small improvement concentrated at n=30; the
   hard t5 / threefold factor-variance cell rejected at 0.054, 0.077, and 0.050

@@ -465,6 +465,9 @@ score_tests_robust_joint(spec::LatentStructure pt,
 struct ScoreFlipOptions {
   int n_flips = 999;
   std::uint64_t seed = 1;
+  // Deterministic verification path for tiny samples. Enumerates every
+  // non-identity sign vector and ignores n_flips/seed; capped at n <= 20.
+  bool exact_enumeration = false;
 };
 
 struct ScoreFlipTestResult {
