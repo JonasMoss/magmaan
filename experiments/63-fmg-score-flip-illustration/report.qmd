@@ -12,6 +12,8 @@ execute:
 ---
 
 ```{r setup}
+suppressPackageStartupMessages(library(ggplot2))
+
 files <- file.path("results", c(
   "design.csv", "replications.csv", "method_summary.csv",
   "paired_summary.csv", "matched_power.csv", "timing_summary.csv",
@@ -36,7 +38,7 @@ method_label <- c(
   score_ss = "score: SS", score_peba4 = "score: pEBA4",
   score_pall = "score: PALL", score_all = "score: ALL mixture",
   score_sandwich = "score: direct sandwich", nested_std_ml = "nested: ML",
-  nested_sb_ml = "nested: SB-ML", nested_mv_ml = "nested: MV-ML",
+  nested_sb_ml = "nested: SB-ML", nested_mv_ml = "nested: MV(Satt)-ML",
   nested_pall_ml = "nested: PALL-ML", nested_all_ml = "nested: ALL-ML",
   nested_std_rls = "nested: RLS", nested_ss_rls = "nested: SS-RLS",
   nested_peba4_rls = "nested: pEBA4-RLS")
@@ -49,6 +51,29 @@ weighted_rates <- function(x, value = "rejection_rate") {
     rate = weighted.mean(z[[value]], z$n, na.rm = TRUE))))
   out$label <- label_method(out$method)
   out[order(out$rate), ]
+}
+
+cell_calibration <- function(x, target = .05, lower = .025, upper = .075) {
+  split_x <- split(x, x$method)
+  out <- do.call(rbind, lapply(split_x, function(z) {
+    rates <- z$rejection_rate[is.finite(z$rejection_rate)]
+    data.frame(
+      method = z$method[[1L]],
+      n = sum(z$n[is.finite(z$rejection_rate)]),
+      cells = length(rates),
+      pooled = weighted.mean(z$rejection_rate, z$n, na.rm = TRUE),
+      cell_sd = stats::sd(rates),
+      cell_min = min(rates),
+      cell_median = stats::median(rates),
+      cell_max = max(rates),
+      cell_rmse = sqrt(mean((rates - target)^2)),
+      cell_mad = mean(abs(rates - target)),
+      below = mean(rates < lower),
+      acceptable = mean(rates >= lower & rates <= upper),
+      above = mean(rates > upper))
+  }))
+  out$label <- label_method(out$method)
+  out[order(out$cell_rmse, out$cell_mad), ]
 }
 
 mode <- meta[["mode"]]
@@ -95,15 +120,22 @@ This report uses **`r reps` replications per cell and `r flips` random flips**.
 null_methods <- subset(methods, truth == "null")
 primary <- c("flip_effective", "flip_standardized", "score_mv", "score_peba4",
              "score_all", "score_sandwich", "nested_sb_ml", "nested_mv_ml",
-             "nested_std_rls", "nested_ss_rls", "nested_peba4_rls")
-overall_size <- weighted_rates(subset(null_methods, method %in% primary))
-overall_size$absolute_error <- abs(overall_size$rate - .05)
-knitr::kable(overall_size[c("label", "n", "rate", "absolute_error")],
-             digits = 3, row.names = FALSE,
-             col.names = c("method", "valid reps", "rejection", "|size - .05|"))
+             "nested_all_ml", "nested_std_rls", "nested_ss_rls",
+             "nested_peba4_rls")
+size_cells <- subset(null_methods, method %in% primary)
+size_summary <- cell_calibration(size_cells)
+knitr::kable(
+  size_summary[c("label", "pooled", "cell_sd", "cell_min", "cell_max",
+                 "cell_rmse", "cell_mad", "below", "acceptable", "above")],
+  digits = 3, row.names = FALSE,
+  col.names = c("method", "pooled", "cell SD", "minimum", "maximum",
+                "cell RMSE", "cell MAD", "below .025", "in [.025,.075]",
+                "above .075"))
 ```
 
-The attractive aggregate values are not uniformly stable. Direct-sandwich
+The pooled column is descriptive only: it is not a calibration ranking. Cell
+RMSE/MAD and the acceptable-cell share prevent conservative and liberal cells
+from cancelling. The attractive aggregate values are not uniformly stable. Direct-sandwich
 score rejection is .074 under IG but .031 under PL; score-pEBA4 stays between
 .039 and .054; score-SB stays between .048 and .058. Score MV/ALL are near .05
 under normality but strongly conservative under all three severe families.
@@ -117,6 +149,64 @@ reference. Its trace-only scalar approximation replaces a generally
 nondegenerate chi-square mixture. Apparently good size can therefore be error
 cancellation; pEBA/ALL and the randomization references expose more of the
 spectrum.
+
+```{r size-cell-spread, fig.width=9, fig.height=6.5}
+plot_cells <- subset(size_cells, method != "nested_std_rls")
+plot_order <- size_summary$label[size_summary$method != "nested_std_rls"]
+plot_cells$label <- factor(label_method(plot_cells$method),
+                           levels = rev(plot_order))
+
+ggplot(plot_cells,
+       aes(x = rejection_rate, y = label, colour = distribution)) +
+  annotate("rect", xmin = .025, xmax = .075, ymin = -Inf, ymax = Inf,
+           fill = "grey85", alpha = .55) +
+  geom_vline(xintercept = .05, linewidth = .45, colour = "grey25") +
+  geom_point(position = position_jitter(width = .0015, height = .14,
+                                        seed = 6301),
+             alpha = .78, size = 2.2) +
+  stat_summary(aes(group = label), fun = median, geom = "point",
+               inherit.aes = TRUE, colour = "black", fill = "white",
+               shape = 23, size = 2.8, stroke = .8) +
+  coord_cartesian(xlim = c(0, max(.20, max(plot_cells$rejection_rate) * 1.05))) +
+  scale_x_continuous(labels = scales::label_percent(accuracy = 1)) +
+  labs(x = "Null rejection rate in one design cell", y = NULL,
+       colour = "Distribution",
+       caption = paste(
+         "Each coloured point is one of 16 cells; black diamonds are medians.",
+         "The grey band is the paper's 2.5%-7.5% acceptable range.",
+         "Uncorrected nested RLS is omitted from the plot because some cells reach 100% rejection and obscure the calibrated methods; it remains in the table.")) +
+  theme_minimal(base_size = 10.5) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
+This cell plot is preferable to a histogram for the present 16-cell design: it
+retains the distribution responsible for each extreme and shows cancellation
+directly. The black median is also less sensitive than the pooled mean to one
+extreme corner.
+
+```{r size-unacceptable-cells}
+unacceptable <- subset(size_cells, method == "nested_mv_ml" &
+                       (rejection_rate < .025 | rejection_rate > .075))
+unacceptable$method_label <- label_method(unacceptable$method)
+unacceptable <- unacceptable[order(unacceptable$method_label,
+                                   unacceptable$rejection_rate), ]
+knitr::kable(
+  unacceptable[c("method_label", "p", "groups", "df", "distribution",
+                 "rejection_rate", "ci_lower", "ci_upper")],
+  digits = 3, row.names = FALSE,
+  col.names = c("method", "p", "G", "df", "distribution", "rejection",
+                "Wilson lower", "Wilson upper"),
+  caption = "Nested MV(Satt)-ML null cells outside the paper's 2.5%-7.5% calibration band.")
+```
+
+In particular, nested MV-ML is the fractional-df Satterthwaite adjustment
+applied to the Satorra-2000 restriction-map spectrum, with the ML base and
+biased empirical Gamma. It is not a separately reported method in the 2026
+paper: the paper's `SS` uses a fixed-df scaled-and-shifted adjustment. Here the
+nested MV-ML cells range from .010 to .130 even though their pooled rejection
+rate is .052. Nested ALL-ML is nearly identical cell by cell, so the extremes
+cannot be attributed mainly to the Satterthwaite tail approximation.
 
 ```{r flip-size-detail}
 null_pair <- subset(paired, truth == "null")
@@ -148,19 +238,29 @@ coarse, but it is safer for method comparisons than raw nominal power.
 ```{r power-overall}
 raw_power <- weighted_rates(subset(methods, truth == "power" & method %in% primary))
 matched_primary <- subset(matched, method %in% primary)
-matched_overall <- aggregate(cbind(rejected, n_power) ~ method,
-                             matched_primary, sum)
-matched_overall$matched_power <- matched_overall$rejected /
-  matched_overall$n_power
-power_table <- merge(raw_power[c("method", "rate")],
-                     matched_overall[c("method", "matched_power")],
+matched_split <- split(matched_primary, matched_primary$method)
+matched_spread <- do.call(rbind, lapply(matched_split, function(z) data.frame(
+  method = z$method[[1L]],
+  matched_power = weighted.mean(z$matched_power, z$n_power, na.rm = TRUE),
+  cell_sd = stats::sd(z$matched_power, na.rm = TRUE),
+  cell_min = min(z$matched_power, na.rm = TRUE),
+  cell_median = stats::median(z$matched_power, na.rm = TRUE),
+  cell_max = max(z$matched_power, na.rm = TRUE))))
+power_table <- merge(raw_power[c("method", "rate")], matched_spread,
                      by = "method")
 power_table$method_label <- label_method(power_table$method)
 power_table <- power_table[order(power_table$matched_power, decreasing = TRUE), ]
-knitr::kable(power_table[c("method_label", "rate", "matched_power")],
+knitr::kable(power_table[c("method_label", "rate", "matched_power", "cell_sd",
+                           "cell_min", "cell_median", "cell_max")],
              digits = 3, row.names = FALSE,
-             col.names = c("method", "raw power", "matched-null power"))
+             col.names = c("method", "raw power", "matched-null mean",
+                           "cell SD", "minimum", "median", "maximum"))
 ```
+
+The cell spread in power is not a calibration defect—the published alternatives
+have deliberately different difficulty across dimensions and group counts—but
+it means the matched-null mean is not a universal power ranking. The following
+flip table therefore remains the primary power comparison.
 
 ```{r flip-power-detail}
 flip_power <- subset(matched, method %in%
