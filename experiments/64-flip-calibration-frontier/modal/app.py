@@ -21,6 +21,11 @@ from pathlib import Path
 import re
 import modal
 
+# Container path the experiment dir is mounted at (see the image build below).
+# Must equal runtime EXP so the runner scripts resolve on Modal; the local EXP
+# path only names the source for add_local_dir.
+EXP_REMOTE = "/exp/experiments/64-flip-calibration-frontier"
+
 if modal.is_local():
     HERE = Path(__file__).resolve()
     EXP = HERE.parents[1]
@@ -28,7 +33,7 @@ if modal.is_local():
     MAGMAAN_RPKG = EXPERIMENTS.parent / "r-package"
     SUPPORT = EXPERIMENTS / "_support"
 else:
-    EXP = Path("/exp/experiments/64-flip-calibration-frontier")
+    EXP = Path(EXP_REMOTE)
     EXPERIMENTS = Path("/exp/experiments")
     MAGMAAN_RPKG = Path("/build/magmaan")
     SUPPORT = Path("/exp/experiments/_support")
@@ -42,7 +47,7 @@ image = (
                    ignore=["**/*.o", "**/*.so", "**/*.a"])
     .run_commands("R CMD INSTALL /build/magmaan")
     .add_local_dir(str(SUPPORT), "/exp/experiments/_support", copy=True)
-    .add_local_dir(str(EXP), str(EXP), copy=True,
+    .add_local_dir(str(EXP), EXP_REMOTE, copy=True,
                    ignore=["results/**", ".quarto/**", "report.html", "report_files/**"])
 )
 
