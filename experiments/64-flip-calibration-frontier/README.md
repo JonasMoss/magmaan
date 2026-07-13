@@ -46,14 +46,16 @@ Completed chunks are resumed only if the saved manifest and run configuration
 match. Use a new results directory to change replications, flips, seeds,
 calibration, filters, or shard layout.
 
-## Modal, with a $10 ceiling
+## Modal
 
-The Modal harness defaults to a dry run and has no retries. Its timeout-envelope
-calculation uses one CPU and 2 GiB per container and currently comes to about
-$5.3 for calibration, 16 two-hour screen slices, 8 six-hour focus slices, and
-two combines. Actual billing should be lower because completed containers stop
-before timeout. This calculation is a guard, not a hard billing limit: create a
-dedicated Modal environment with a $10 account-side budget first.
+The Modal harness defaults to a dry run and has no retries. It fans out one
+container per design cell (128 screen, 32 focus) so every cell finishes well
+inside its timeout; the runner shards on the filtered row index, so shard `j` is
+design row `j`. The launch gate is a measured expected-cost estimate (~$8.7 with
+calibration, ~$8.1 without) against a $14 in-code guard, with the absolute
+worst case printed for context. Actual billing tracks the expected estimate:
+containers stop when their cell finishes. The guard is not a hard billing limit;
+create a dedicated Modal environment with an account-side budget first.
 
 ```sh
 cd experiments/64-flip-calibration-frontier/modal
