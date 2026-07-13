@@ -1,0 +1,271 @@
+---
+title: "Can efficient residual flipping calibrate SEM goodness of fit?"
+subtitle: "A small Foldnes--Moss--Gronneberg-style DGP probe"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages(library(ggplot2))
+script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
+read_result <- function(name) read.csv(
+  file.path(script_dir, "results", paste0(name, ".csv")),
+  stringsAsFactors = FALSE, check.names = FALSE)
+required <- c("design", "replications", "method_summary", "paired_summary",
+              "matched_power", "timing_summary", "dgp_timing", "failures",
+              "methods", "metadata")
+paths <- file.path(script_dir, "results", paste0(required, ".csv"))
+if (!all(file.exists(paths))) stop("run run_experiment.R before rendering")
+objects <- lapply(required, read_result); names(objects) <- required
+list2env(objects, environment())
+meta <- setNames(metadata$value, metadata$key)
+reps <- as.integer(meta[["reps"]]); flips <- as.integer(meta[["flips"]])
+is_small_probe <- reps >= 100L
+primary <- c("flip_effective", "flip_standardized", "gof_std_ml", "gof_sb_ml",
+             "gof_mv_ml", "gof_peba4_rls", "gof_all_rls")
+pretty <- function(x) {
+  x <- sub("^gof_", "", x)
+  x <- gsub("_", " ", x, fixed = TRUE)
+  sub("flip standardized chisq", "standardized: chi-square", x, fixed = TRUE)
+}
+cell_rate <- function(method, p, n, distribution) {
+  x <- method_summary[method_summary$truth == "null" &
+                        method_summary$method == method &
+                        method_summary$p == p & method_summary$n == n &
+                        method_summary$distribution == distribution,
+                      "rejection_rate"]
+  if (length(x) == 1L) x else NA_real_
+}
+```
+
+## Result first
+
+This probe implements a coherent GOF analogue of efficient score flipping.
+For every case, the saturated covariance contribution is centred at the fitted
+model and projected onto the expected-information complement of the model
+tangent. The all-plus quadratic is the structured RLS GOF statistic; random
+signs supply its reference distribution.
+
+The optional standardized arm whitens those same projected contributions by
+their empirical covariance. It is therefore an operation on the efficient
+residual scores themselves. It is not the nested test's flip-specific nuisance
+correction, because the GOF projection has already removed the nuisance tangent.
+
+This report contains **`r reps` replications per cell and `r flips` random
+flips**. `r if (is_small_probe) "The run is an exploratory probe, not a method-ranking simulation." else "This is a smoke run: rejection and power estimates are not evidence."`
+
+## Identity and availability checks
+
+```{r checks}
+checks <- data.frame(
+  check = c("replications", "failed fit/test batteries",
+            "largest |flip statistic - RLS statistic|",
+            "standardization available"),
+  value = c(nrow(replications), nrow(failures),
+            format(max(replications$flip_rls_abs_difference, na.rm = TRUE),
+                   scientific = TRUE, digits = 3),
+            sprintf("%d/%d", sum(replications$standardization_available,
+                                 na.rm = TRUE),
+                    sum(!is.na(replications$standardization_available)))))
+knitr::kable(checks, row.names = FALSE)
+```
+
+```{r availability}
+availability <- aggregate(
+  standardization_available ~ p + n + df + n_over_df,
+  replications, mean, na.rm = TRUE)
+knitr::kable(availability, digits = 3, row.names = FALSE,
+             col.names = c("p", "n", "residual df", "n/df",
+                           "standardization availability"))
+```
+
+The unavailable corner is structural, not a software failure: at `p=20`,
+residual df is 170, so an unregularized empirical covariance cannot have full
+rank at `n=100`. No ridge or eigenvalue truncation is inserted. At `n=400` the
+matrix is invertible, but conditioning remains part of the result rather than
+being declared harmless.
+
+## Design
+
+```{r design}
+knitr::kable(unique(design[c("p", "n", "df", "n_over_df", "rho")]),
+             digits = 2, row.names = FALSE,
+             col.names = c("indicators", "n", "GOF df", "n/df",
+                           "omitted residual covariance under power"))
+```
+
+The null is a correctly specified one-factor covariance model. The power DGP
+adds one residual covariance of .25 between the first two indicators but fits
+the same CFA. Normal data are paired with the severe polynomial-logistic
+construction targeting marginal skewness 3 and excess kurtosis 21. There is no
+`t5` cell and no unbiased-Gamma variant.
+
+## Null calibration retains the cells
+
+```{r cellwise, fig.width=9, fig.height=6}
+null_cells <- subset(method_summary, truth == "null" & method %in% primary)
+null_cells$label <- factor(pretty(null_cells$method),
+                           levels = rev(pretty(primary)))
+ggplot(null_cells, aes(rejection_rate, label, colour = distribution)) +
+  annotate("rect", xmin = .025, xmax = .075, ymin = -Inf, ymax = Inf,
+           fill = "grey85", alpha = .55) +
+  geom_vline(xintercept = .05, linetype = 2, colour = "grey30") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = .16,
+                 position = position_dodge(width = .45), alpha = .5) +
+  geom_point(aes(shape = factor(p), size = factor(n)),
+             position = position_dodge(width = .45)) +
+  scale_x_continuous(labels = scales::label_percent(accuracy = 1)) +
+  scale_size_manual(values = c("100" = 2, "400" = 3), name = "n") +
+  labs(x = "Cellwise null rejection probability", y = NULL,
+       colour = "distribution", shape = "p",
+       caption = "Every point is a design cell; Wilson intervals show Monte Carlo uncertainty. No pooled rate is used as a substitute for cell variation.") +
+  theme_minimal(base_size = 10.5) +
+  theme(panel.grid.major.y = element_blank(), legend.position = "bottom")
+```
+
+```{r p-hist, fig.width=9, fig.height=5.5}
+hist_rows <- do.call(rbind, lapply(names(c(
+  p_flip_effective = "effective flip",
+  p_flip_standardized = "standardized flip",
+  p_gof_peba4_rls = "pEBA4 RLS",
+  p_gof_mv_ml = "MV ML")), function(column) {
+    data.frame(replications[c("p", "n", "distribution", "truth")],
+               method = c(
+                 p_flip_effective = "effective flip",
+                 p_flip_standardized = "standardized flip",
+                 p_gof_peba4_rls = "pEBA4 RLS",
+                 p_gof_mv_ml = "MV ML")[[column]],
+               p_value = replications[[column]])
+  }))
+hist_rows <- subset(hist_rows, truth == "null" & is.finite(p_value))
+ggplot(hist_rows, aes(p_value, fill = distribution)) +
+  geom_histogram(binwidth = .05, boundary = 0, position = "identity",
+                 alpha = .45) +
+  facet_grid(method ~ p + n, scales = "free_y") +
+  coord_cartesian(xlim = c(0, 1)) +
+  labs(x = "Null p-value", y = "count",
+       caption = "Histograms expose discreteness and shape; missing standardized panels correspond to singular empirical covariance.") +
+  theme_minimal(base_size = 9) +
+  theme(legend.position = "bottom")
+```
+
+## When might standardization earn its keep?
+
+```{r conditioning}
+condition_summary <- aggregate(
+  cbind(empirical_eigen_min, empirical_eigen_mean, empirical_eigen_cv,
+        empirical_eigen_ratio, empirical_identity_distance) ~
+    p + n + distribution + truth,
+  replications, median, na.rm = TRUE)
+knitr::kable(condition_summary, digits = 3, row.names = FALSE)
+```
+
+```{r paired-scatter, fig.width=8, fig.height=5}
+paired_rows <- subset(replications,
+  is.finite(p_flip_effective) & is.finite(p_flip_standardized))
+paired_rows$delta <- abs(paired_rows$p_flip_standardized -
+                           paired_rows$p_flip_effective)
+ggplot(paired_rows, aes(empirical_eigen_ratio, delta,
+                        colour = distribution, shape = truth)) +
+  geom_point(alpha = .7) +
+  scale_x_log10() +
+  facet_wrap(~ p + n, scales = "free_x") +
+  labs(x = "Empirical projected-meat condition number (log scale)",
+       y = "|standardized p - effective p|",
+       caption = "The useful question is paired movement versus a visible covariance-geometry change, not dimension alone.") +
+  theme_minimal(base_size = 10.5) +
+  theme(legend.position = "bottom")
+```
+
+The a priori prediction is non-monotone. Standardization should have little to
+do under well-sampled normal theory, may help under nonnormal anisotropy, and
+becomes unstable or undefined as residual df approaches sample rank. The probe
+therefore treats availability and condition number as part of the method, not
+as implementation trivia.
+
+## What this probe says
+
+At `p=5`, effective-flip null rejection was
+`r sprintf("%.02f/%.02f", cell_rate("flip_effective", 5, 100, "normal"), cell_rate("flip_effective", 5, 400, "normal"))`
+for normal `n=100/400` and
+`r sprintf("%.02f/%.02f", cell_rate("flip_effective", 5, 100, "pl"), cell_rate("flip_effective", 5, 400, "pl"))`
+for PL. With only 100 replications the intervals are wide, but nothing here
+rules out useful low-rank calibration.
+
+At `p=20` (df 170), the story changes. Effective rejection was
+`r sprintf("%.02f/%.02f", cell_rate("flip_effective", 20, 100, "normal"), cell_rate("flip_effective", 20, 400, "normal"))`
+under normality and
+`r sprintf("%.02f/%.02f", cell_rate("flip_effective", 20, 100, "pl"), cell_rate("flip_effective", 20, 400, "pl"))`
+under PL. Standardization was unavailable at `n=100`; at `n=400` it rejected
+`r sprintf("%.02f/%.02f", cell_rate("flip_standardized", 20, 400, "normal"), cell_rate("flip_standardized", 20, 400, "pl"))`
+under normal/PL, versus the effective arm's
+`r sprintf("%.02f/%.02f", cell_rate("flip_effective", 20, 400, "normal"), cell_rate("flip_effective", 20, 400, "pl"))`.
+The corresponding median empirical-meat condition numbers were about 37 and
+42,000. That is evidence against treating raw empirical whitening as the
+automatic GOF analogue of nested-test standardization.
+
+The high-rank failure is not unique to flipping. At `p=20,n=100`, ordinary ML
+and SB were badly liberal, whereas MV/SS/ALL were often extremely conservative
+under PL; pEBA4-RLS sat between those extremes but still rejected .20. The
+cellwise plot is the result: no pooled average should hide this geometry.
+
+## Power
+
+```{r power}
+power_show <- subset(matched_power, method %in% primary)
+power_show$method <- pretty(power_show$method)
+knitr::kable(power_show[c("p", "n", "df", "distribution", "method",
+                          "n_null", "n_power", "nominal_power",
+                          "matched_power", "ci_lower", "ci_upper")],
+             digits = 3, row.names = FALSE)
+```
+
+Matched power calibrates each method against its empirical null p-values in the
+same `(p,n,distribution)` corner. With a small probe it is noisy, but it keeps
+size distortion from masquerading as power. The single omitted covariance is
+also deliberately sparse: dilution in the 170-dimensional residual space is a
+feature of the question.
+
+## Timing
+
+```{r timing}
+time_tab <- aggregate(median_seconds ~ p + n + phase,
+                      timing_summary, median, na.rm = TRUE)
+time_wide <- reshape(time_tab, idvar = c("p", "n"), timevar = "phase",
+                     direction = "wide")
+knitr::kable(time_wide, digits = 4, row.names = FALSE)
+```
+
+```{r generator-timing}
+knitr::kable(dgp_timing, digits = 3, row.names = FALSE,
+             caption = "One-time generator setup, shared across n=100 and n=400")
+```
+
+The relevant incremental cost is
+`standardization_setup + flip_standardization`, not the whole model fit. Unlike
+the nested flip-specific correction, this empirical whitening is computed once
+and reused for all signs; its statistical conditioning is expected to become a
+problem before its arithmetic cost does. Polynomial-logistic calibration is
+the dominant one-time setup at `p=20` and is kept outside replication timing.
+For this 100-replication run, the four-worker wall time was
+`r sprintf("%.1f", as.numeric(meta[["elapsed_seconds"]]))` seconds. At
+`p=20,n=400`, the median replication took about 55 ms: 5 ms for effective flip
+resampling, 7 ms to factor the empirical standardizer, 2 ms to apply it over
+the flips, and 33 ms for the 12-test FMG battery. Arithmetic cost is modest;
+statistical instability is the binding issue.
+
+## Decision after the probe
+
+The algebraic bridge is sound and the low-rank cells justify another focused
+look. The present gate does **not** justify a general core default: effective
+flipping deteriorated when residual rank was large relative to sample size,
+and raw empirical standardization was unavailable or worse. The next probe
+should stay at low/moderate df, increase the null budget, and vary `n/df`
+directly. If rescuing high-df cells requires a shrinkage parameter, that is a
+separate method-selection problem—not a free extension of sign flipping.
