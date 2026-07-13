@@ -1,0 +1,273 @@
+---
+title: "When is standardized score flipping worth it?"
+subtitle: "A focused FMG weak-invariance illustration"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+files <- file.path("results", c(
+  "design.csv", "replications.csv", "method_summary.csv",
+  "paired_summary.csv", "matched_power.csv", "timing_summary.csv",
+  "failures.csv", "metadata.csv"))
+if (!all(file.exists(files))) {
+  stop("missing experiment results; run `Rscript run_experiment.R --probe`")
+}
+design <- read.csv(files[[1L]], stringsAsFactors = FALSE)
+raw <- read.csv(files[[2L]], stringsAsFactors = FALSE)
+methods <- read.csv(files[[3L]], stringsAsFactors = FALSE)
+paired <- read.csv(files[[4L]], stringsAsFactors = FALSE)
+matched <- read.csv(files[[5L]], stringsAsFactors = FALSE)
+timing <- read.csv(files[[6L]], stringsAsFactors = FALSE)
+failures <- read.csv(files[[7L]], stringsAsFactors = FALSE)
+metadata <- read.csv(files[[8L]], stringsAsFactors = FALSE)
+meta <- setNames(metadata$value, metadata$key)
+
+method_label <- c(
+  flip_basic = "flip: basic", flip_effective = "flip: effective",
+  flip_standardized = "flip: standardized", score_chisq = "score: chi-square",
+  score_sb = "score: SB", score_mv = "score: MV-adjusted",
+  score_ss = "score: SS", score_peba4 = "score: pEBA4",
+  score_pall = "score: PALL", score_all = "score: ALL mixture",
+  score_sandwich = "score: direct sandwich", nested_std_ml = "nested: ML",
+  nested_sb_ml = "nested: SB-ML", nested_mv_ml = "nested: MV-ML",
+  nested_pall_ml = "nested: PALL-ML", nested_all_ml = "nested: ALL-ML",
+  nested_std_rls = "nested: RLS", nested_ss_rls = "nested: SS-RLS",
+  nested_peba4_rls = "nested: pEBA4-RLS")
+label_method <- function(x) unname(method_label[x])
+
+weighted_rates <- function(x, value = "rejection_rate") {
+  split_x <- split(x, x$method)
+  out <- do.call(rbind, lapply(split_x, function(z) data.frame(
+    method = z$method[[1L]], n = sum(z$n),
+    rate = weighted.mean(z[[value]], z$n, na.rm = TRUE))))
+  out$label <- label_method(out$method)
+  out[order(out$rate), ]
+}
+
+mode <- meta[["mode"]]
+reps <- as.integer(meta[["reps"]])
+flips <- as.integer(meta[["flips"]])
+is_probe <- identical(mode, "probe") && reps >= 100L
+```
+
+## Purpose and design
+
+This is an illustrative, speed-conscious comparison, not a replication of
+Foldnes, Grønneberg and Moss (2026). It uses exact loading matrices from their
+[Study 2/3 supplement](https://osf.io/h2y3n/) at four corners: (p=5,20),
+(G=2,8), and 400 observations per group. The null has equal loadings; power
+uses the corresponding published group-specific loading matrices. Residual
+variances and the population factor variance are one.
+
+The distributions are normal and the severe VM, IG and PL constructions, all
+with marginal skewness 3 and excess kurtosis 21. There is no (t_5) cell and no
+unbiased-Gamma variant. The fitted marker-identified pair is covariance-model
+equivalent to the paper's `std.lv` weak-invariance pair, while making the null a
+literal affine submodel required by the score-flip implementation.
+
+```{r design-table}
+d <- unique(design[c("p", "groups", "n_group", "n_total", "df")])
+d <- d[order(d$df), ]
+knitr::kable(d, row.names = FALSE,
+             col.names = c("indicators", "groups", "n/group", "total n",
+                           "restrictions"))
+```
+
+The pre-registered expectation was conservative: at (n_g=400), effective and
+standardized flips should usually be close. Any useful standardization should
+concentrate at (p=20,G=8) (133 restrictions), under severe nonnormality or the
+power alternative. Flip-specific variance displacement should be a better
+predictor of differences than the restriction count alone.
+
+This report uses **`r reps` replications per cell and `r flips` random flips**.
+`r if (!is_probe) "This is a smoke run: rejection rates are structural checks, not evidence." else "The Monte Carlo estimates remain exploratory; paired comparisons are more precise than unpaired rankings."`
+
+## Calibration under the null
+
+```{r size-overall}
+null_methods <- subset(methods, truth == "null")
+primary <- c("flip_effective", "flip_standardized", "score_mv", "score_peba4",
+             "score_all", "score_sandwich", "nested_sb_ml", "nested_mv_ml",
+             "nested_std_rls", "nested_ss_rls", "nested_peba4_rls")
+overall_size <- weighted_rates(subset(null_methods, method %in% primary))
+overall_size$absolute_error <- abs(overall_size$rate - .05)
+knitr::kable(overall_size[c("label", "n", "rate", "absolute_error")],
+             digits = 3, row.names = FALSE,
+             col.names = c("method", "valid reps", "rejection", "|size - .05|"))
+```
+
+The attractive aggregate values are not uniformly stable. Direct-sandwich
+score rejection is .074 under IG but .031 under PL; score-pEBA4 stays between
+.039 and .054; score-SB stays between .048 and .058. Score MV/ALL are near .05
+under normality but strongly conservative under all three severe families.
+Likewise, raw RLS is correctly sized under normality (.053) but rejects .744,
+.944 and .923 under IG, PL and VM. The biased-Gamma SS-RLS correction reduces
+that to .029/.083/.094; pEBA4-RLS is .055/.146/.188. RLS is therefore useful as
+a contrasting base statistic here, not as an automatic robustness fix.
+
+The score-SB column is retained as a diagnostic, not treated as an exact
+reference. Its trace-only scalar approximation replaces a generally
+nondegenerate chi-square mixture. Apparently good size can therefore be error
+cancellation; pEBA/ALL and the randomization references expose more of the
+spectrum.
+
+```{r flip-size-detail}
+null_pair <- subset(paired, truth == "null")
+null_pair$size_gain <- abs(null_pair$rejection_effective - .05) -
+  abs(null_pair$rejection_standardized - .05)
+flip_size <- null_pair[c("p", "groups", "df", "distribution",
+                         "rejection_effective", "rejection_standardized",
+                         "size_gain", "disagreement_rate",
+                         "mean_abs_delta_p", "median_variance_shift")]
+knitr::kable(flip_size, digits = 3, row.names = FALSE,
+             col.names = c("p", "G", "df", "distribution", "effective",
+                           "standardized", "size gain", "decision disagreement",
+                           "mean |delta p|", "median variance shift"))
+```
+
+Positive “size gain” means standardization moved rejection closer to .05. A
+cell is practically persuasive only if the gain or decision disagreement is
+visible beyond its paired Monte Carlo uncertainty; tiny sign changes are not a
+reason to pay the extra inversion cost.
+
+## Power
+
+Raw power inherits each method's size distortion. The matched column instead
+ranks each alternative p-value against the same method's empirical null
+distribution at the identical (p,G,) and distribution. Ties are handled
+conservatively. With `r reps` null draws this calibration is deliberately
+coarse, but it is safer for method comparisons than raw nominal power.
+
+```{r power-overall}
+raw_power <- weighted_rates(subset(methods, truth == "power" & method %in% primary))
+matched_primary <- subset(matched, method %in% primary)
+matched_overall <- aggregate(cbind(rejected, n_power) ~ method,
+                             matched_primary, sum)
+matched_overall$matched_power <- matched_overall$rejected /
+  matched_overall$n_power
+power_table <- merge(raw_power[c("method", "rate")],
+                     matched_overall[c("method", "matched_power")],
+                     by = "method")
+power_table$method_label <- label_method(power_table$method)
+power_table <- power_table[order(power_table$matched_power, decreasing = TRUE), ]
+knitr::kable(power_table[c("method_label", "rate", "matched_power")],
+             digits = 3, row.names = FALSE,
+             col.names = c("method", "raw power", "matched-null power"))
+```
+
+```{r flip-power-detail}
+flip_power <- subset(matched, method %in%
+                       c("flip_effective", "flip_standardized"))
+flip_power$method <- label_method(flip_power$method)
+flip_power <- flip_power[c("p", "groups", "df", "distribution", "method",
+                           "n_null", "n_power", "matched_power")]
+knitr::kable(flip_power, digits = 3, row.names = FALSE,
+             col.names = c("p", "G", "df", "distribution", "method",
+                           "null reps", "power reps", "matched power"))
+```
+
+## Runtime and the price of standardization
+
+Generator setup includes calibration plus batched draws and is paid once per
+cell. Flip standardization is the incremental per-replication work that updates
+and inverts the randomization-specific covariance. RLS variants are residual
+statistics evaluated at the same ML fits; they are not RLS score flips and add
+little beyond the shared nested spectrum.
+
+```{r timing-table}
+timing_core <- subset(timing, phase %in%
+  c("fit", "flip_total", "flip_score", "flip_standardization", "nested_fmg"))
+timing_agg <- aggregate(median_seconds ~ p + groups + df + phase,
+                        timing_core, median, na.rm = TRUE)
+timing_wide <- reshape(timing_agg, idvar = c("p", "groups", "df"),
+                       timevar = "phase", direction = "wide")
+names(timing_wide) <- sub("median_seconds\\.", "", names(timing_wide))
+for (name in setdiff(names(timing_wide), c("p", "groups", "df"))) {
+  timing_wide[[name]] <- 1000 * timing_wide[[name]]
+}
+timing_wide$standardization_share <- timing_wide$flip_standardization /
+  timing_wide$flip_total
+timing_wide <- timing_wide[c("p", "groups", "df", "fit", "nested_fmg",
+                             "flip_score", "flip_standardization", "flip_total",
+                             "standardization_share")]
+knitr::kable(timing_wide, digits = 2, row.names = FALSE,
+             col.names = c("p", "G", "df", "fit ms", "asymptotic/nested ms",
+                           "score resampling ms", "standardization ms",
+                           "flip total ms", "std share"))
+```
+
+```{r generator-table}
+generator <- subset(timing, phase == "generator_setup")
+generator <- aggregate(median_seconds ~ distribution + p + groups,
+                       generator, median, na.rm = TRUE)
+knitr::kable(generator, digits = 2, row.names = FALSE,
+             col.names = c("distribution", "p", "G", "cell setup seconds"))
+```
+
+The full run took `r round(as.numeric(meta[["elapsed_seconds"]]) / 60, 1)` wall
+minutes on `r meta[["cores"]]` workers. Timings are empirical medians and should
+be compared as orders of magnitude, not microbenchmarks.
+
+## Interpretation
+
+```{r interpretation, results='asis'}
+if (!is_probe) {
+  cat("The smoke run validates the complete pipeline but is too small for a ",
+      "statistical conclusion. Run `Rscript run_experiment.R --probe` before ",
+      "interpreting calibration or power.\n", sep = "")
+} else {
+  mean_disagreement <- weighted.mean(null_pair$disagreement_rate, null_pair$n)
+  mean_gain <- weighted.mean(null_pair$size_gain, null_pair$n)
+  best <- null_pair[which.max(null_pair$size_gain), ]
+  cat(sprintf(
+    "Across null cells, effective and standardized flips disagreed on %.1f%% ",
+    100 * mean_disagreement))
+  cat(sprintf(
+    "of decisions, and standardization changed absolute size error by %.3f ",
+    mean_gain))
+  cat("on average (positive favors standardization). ")
+  cat(sprintf(
+    "The largest observed size improvement was %.3f at p=%d, G=%d, %s. ",
+    best$size_gain, best$p, best$groups, best$distribution))
+  hard <- subset(null_pair, df == 133L)
+  cat(sprintf(
+    paste0("At the 133-restriction corner, median decision disagreement ",
+           "across distributions was %.1f%%.\n"),
+    100 * median(hard$disagreement_rate)))
+}
+```
+
+For this design, the answer is unambiguous: **use the effective flip and skip
+standardization**. The standardized result changed almost nothing while its
+rank-133 covariance work dominated runtime. This does not contradict experiment
+62, where standardization helped at (n=30) under heterogeneous information;
+it narrows the hypothesis to small sample/leverage and covariance displacement,
+not “many restrictions” by itself.
+
+The operational rule remains diagnostic rather than dimensional: standardize
+when the effective and standardized decisions separate and the recorded
+flip-variance displacement is appreciable. A large restriction count predicts
+runtime, but by itself does not establish a calibration benefit.
+
+## Reproducibility and failures
+
+```{r failures}
+failure_counts <- data.frame(
+  component = c("fit", "flip", "nested FMG"),
+  failures = c(sum(!raw$fit_ok), sum(raw$fit_ok & !raw$flip_ok),
+               sum(raw$fit_ok & !raw$nested_ok)))
+knitr::kable(failure_counts, row.names = FALSE)
+```
+
+```text
+Rscript experiments/63-fmg-score-flip-illustration/run_experiment.R --smoke
+Rscript experiments/63-fmg-score-flip-illustration/run_experiment.R --probe
+quarto render experiments/63-fmg-score-flip-illustration/report.qmd
+```

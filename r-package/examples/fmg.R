@@ -79,6 +79,37 @@ fiml_data <- df_to_fiml_data(df_missing, model_spec(model))
 err_fiml <- tryCatch(fmg_tests(fit, data = fiml_data), error = conditionMessage)
 stopifnot(grepl("FIML/missing-data", err_fiml, fixed = TRUE))
 
+# Nested complete-data FMG accepts both the ML likelihood-ratio difference and
+# Browne's RLS residual-statistic difference. The model estimates remain ML;
+# `_rls` changes only the asymptotically equivalent source statistic.
+model_h0_complete <- "visual  =~ x1 + a*x2 + a*x3
+                      textual =~ x4 + x5 + x6
+                      speed   =~ x7 + x8 + x9"
+fit_h0_complete <- magmaan(model_h0_complete, df, estimator = "ML",
+                           se = "none", test = "none")
+nested_tests <- c("std_ml", "std_rls", "sb_ml", "ss_rls", "mv_ml",
+                  "peba4_rls", "pall_ml", "all_ml")
+tab_nested <- fmg_nested(fit, fit_h0_complete, data = df,
+                         tests = nested_tests)
+rls_manual <-
+  magmaan:::infer_rls_chi2_fit(
+    fit_h0_complete, magmaan:::model_implied(fit_h0_complete))$statistic -
+  magmaan:::infer_rls_chi2_fit(
+    fit, magmaan:::model_implied(fit))$statistic
+stopifnot(inherits(tab_nested, "magmaan_fmg_tests"))
+stopifnot(identical(tab_nested$label, nested_tests))
+stopifnot(identical(tab_nested$base,
+                    c("ml", "rls", "ml", "rls", "ml", "rls", "ml", "ml")))
+stopifnot(max(abs(tab_nested$base_statistic[tab_nested$base == "rls"] -
+                  rls_manual)) < 1e-10)
+stopifnot(identical(fmg_nested(fit, fit_h0_complete, data = df,
+                              tests = "sb")$label,
+                    "sb_ml"))
+stopifnot(grepl("unbiased", tryCatch(
+  fmg_nested(fit, fit_h0_complete, data = df, tests = "peba4_ug_rls"),
+  error = conditionMessage)))
+cat("Nested complete-data ML/RLS FMG workflow: ok\n")
+
 # ---- FIML (missing-data) FMG: first-principles UGamma spectrum --------------
 # magmaan computes the missing-data UGamma spectrum from its own saturated-model
 # EM information and ACOV (no semTests-style rescale hack; semTests' FIML support
@@ -194,6 +225,9 @@ stopifnot(identical(nt_f$computation, "fiml_eta"))
 stopifnot(inherits(tab_nf, "magmaan_fmg_tests"))
 stopifnot(all(is.finite(tab_nf$p_value)))
 stopifnot(abs(tab_nf$p_value[tab_nf$method == "sb"] - nt_f$p_scaled) < 1e-8)
+stopifnot(grepl("complete-data ML", tryCatch(
+  fmg_nested(fit_nf_h1, fit_nf_h0, tests = "peba4_rls"),
+  error = conditionMessage)))
 
 fit_n2s_h0 <- magmaan(model_h0, df_na, estimator = "ML2S")
 nt_2s <- nestedTest(fit_2s, fit_n2s_h0, method = "restriction_map")
@@ -202,6 +236,9 @@ stopifnot(identical(nt_2s$computation, "ml2s_eta"))
 stopifnot(inherits(tab_n2s, "magmaan_fmg_tests"))
 stopifnot(all(is.finite(tab_n2s$p_value)))
 stopifnot(abs(tab_n2s$p_value[tab_n2s$method == "sb"] - nt_2s$p_scaled) < 1e-8)
+stopifnot(grepl("complete-data ML", tryCatch(
+  fmg_nested(fit_2s, fit_n2s_h0, tests = "peba4_rls"),
+  error = conditionMessage)))
 cat("Nested FIML/ML2S FMG workflow: ok\n")
 
 # Oracle parity: magmaan's FMG p-values must match semTests::pvalues() value-for-
@@ -231,6 +268,25 @@ if (requireNamespace("semTests", quietly = TRUE) &&
   stopifnot(max(abs(pv_m[common] - pv_s[common])) < 1e-6)
   cat(sprintf("FMG vs semTests parity: ok (%d cells, max|d| = %.1e)\n",
               length(common), max(abs(pv_m[common] - pv_s[common]))))
+
+  lav_h1 <- lavaan::sem(model, df, estimator = "MLM",
+                        meanstructure = FALSE)
+  lav_h0 <- lavaan::sem(model_h0_complete, df, estimator = "MLM",
+                        meanstructure = FALSE)
+  nested_parity_tests <- c("std_ml", "std_rls", "sb_ml", "ss_rls",
+                           "peba4_rls", "pall_ml", "all_ml")
+  pv_nested_m <- stats::setNames(tab_nested$p_value[
+    match(nested_parity_tests, tab_nested$label)], nested_parity_tests)
+  pv_nested_s <- stats::setNames(vapply(nested_parity_tests, function(test) {
+    unname(semTests::pvalues_nested(lav_h0, lav_h1, method = "2000",
+                                    tests = test)[[1L]])
+  }, numeric(1L)), nested_parity_tests)
+  # The restriction-map spectrum is assembled independently from magmaan and
+  # lavaan fit geometry; the source-statistic checks are much tighter, while
+  # the transformed nested tails agree to the established millesimal tolerance.
+  stopifnot(max(abs(pv_nested_m - pv_nested_s)) < 1e-3)
+  cat(sprintf("Nested FMG ML/RLS vs semTests parity: ok (max|d| = %.1e)\n",
+              max(abs(pv_nested_m - pv_nested_s))))
 }
 
 # The Satterthwaite mean.var.adjusted statistic is not in semTests' set, so anchor

@@ -545,6 +545,30 @@ golden `parTable()` fixtures.
   p=10/20/30/40 while median condition numbers improved from 45 to 22 as N grew.
   The derivation and iteration decisions live in experiment 62's
   `notes/score-sb-audit.tex`.
+  Experiment 63 then replaced that broad synthetic grid with a focused,
+  published weak-invariance design: exact Foldnes-Grønneberg-Moss Study 2/3
+  loadings at p=5/20, G=2/8, n=400 per group; normal plus severe VM/IG/PL;
+  null plus published power alternatives (32 cells, 200 replications, 199
+  flips, no t5 or unbiased-Gamma variants). The covariance-equivalent marker
+  parameterization keeps the paper's `(G-1)(p-1)` weak-invariance pair affine.
+  All 6,400 fits/flips/nested batteries succeeded. Effective/standardized null
+  rejection was 0.0553/0.0547 and differed on only 2 of 3,200 decisions; raw
+  power was 0.2422/0.2419 and matched-null power 0.2131/0.2125. Thus restriction
+  rank alone did not make standardization useful at n/group=400: median
+  flip-covariance displacement was 0.00093 and its correlation with |delta p|
+  only 0.09. Cost nevertheless exploded with rank. At df=4/19/28/133, median
+  standardization time was 0.8/23/87/4,080 ms; the df=133 flip call took 7.35 s,
+  of which score resampling was 1.94 s. The eight-worker run took 36.7 minutes
+  with zero failures (severe PL calibration at p=20,G=8 added about six minutes
+  per cell). In this homogeneous, adequately sized design the effective flip is
+  the practical choice; standardization needs small-n/leverage or visible
+  variance-displacement evidence, not merely many restrictions.
+  The compact comparator battery reinforced the earlier caution about aggregate
+  size: direct-sandwich score, score-SB, score-pEBA4, and nested ALL/MV rejected
+  0.049/0.054/0.045 and 0.050/0.052 overall, but each moved across the VM/IG/PL
+  families. Their matched-null powers lay between roughly 0.22 and 0.24, versus
+  0.21 for the flips, at only 200 null draws per cell; this is illustrative
+  evidence rather than a method ranking.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the
@@ -1047,7 +1071,15 @@ golden `parTable()` fixtures.
   fit_H0, ...)`, the model-pair analogue of `fmg_nested_ordinal()`: it harvests
   `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
-  table.
+  table. Complete-data ML pairs additionally accept an explicit biased `_rls`
+  base: `T_RLS,H0 - T_RLS,H1` is evaluated at the two ML estimates and fed
+  through the same restriction-map spectrum. Unsuffixed nested names remain ML
+  for compatibility; `_ug` stays undefined for differences, and FIML/ML2S
+  reject `_rls`. The R workflow checks the source statistic directly and the
+  transformed tails against `semTests::pvalues_nested(method = "2000")` (the
+  independently assembled restriction spectra agree within 7e-4 on the fixed
+  example). This is an asymptotically equivalent RLS comparator, not an RLS
+  estimator or casewise RLS score-flip method.
   FIML convention note (2026-06-30): lavaan's public
   `lavTestLRT(method = "satorra.2000")` default is delta/scaled-shifted with
   the lavaan `WLS.V`/Gamma convention above. `convention = "lavaan"` matches
