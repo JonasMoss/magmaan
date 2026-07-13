@@ -226,6 +226,13 @@ target covariance, generator, and distribution targets, and the raw output
 records unique group calibrations and cache hits. A reusable cross-process/core
 cache remains worthwhile only if later grids show this leaf-local policy is
 insufficient.
+Experiment 65 reuses the same leaf-local idea for its single-group GOF probe:
+one PL calibration/draw batch is shared by n=100 and n=400 within each
+`p x truth` DGP. In the 100-replication run, p=20 PL setup cost about 19--23
+seconds per null/power DGP, while the full four-worker experiment finished in
+36.4 seconds. The p=20,n=400 fit/flip/FMG replication itself took about 55 ms.
+This again confirms that high-dimensional PL calibration is the setup
+bottleneck and belongs outside per-replication timing.
 
 **Why IG draws are slow: generator family.** `make_cell_sampler` requests
 `generator_family = "pearson"` (chosen to mirror the lavaan/R IG reference). The

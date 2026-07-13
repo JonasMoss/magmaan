@@ -67,8 +67,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   Wald flip test is a distinct method and should not be hidden behind the score-
   test entry point. The biased RLS H0-minus-H1 comparator now available through
   `fmg_nested(..., tests = "*_rls")` does not supply casewise RLS scores and is
-  not such an extension. Promote any residual/RLS flip only when a concrete
-  experiment needs the new estimating-function derivation.
+  not such an extension. Experiment 65 now supplies the first concrete
+  residual/RLS GOF estimating-function derivation, but its 100-replication gate
+  argues against immediate core promotion: the projected effective flip was
+  plausible at df=5 and liberal at df=170 relative to n; raw empirical
+  standardization was singular at df>=n and badly conditioned or more liberal
+  where available. Before promoting it, run a larger low/moderate-df design
+  that varies n/df directly. Treat any ridge/shrinkage rescue as a distinct
+  tuned method with its own null and matched-power gate.
 
 - **XL — establish whether raw-label permutation is valid for ordinal
   measurement-invariance tests.** Experiment 61's continuous studentized-Wald

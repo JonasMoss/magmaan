@@ -590,6 +590,25 @@ golden `parTable()` fixtures.
   dimension at fixed test rank; it does not answer the separate few-versus-many
   restrictions question. No substantive outcome is recorded until the result
   bundle is run and audited.
+  Experiment 65 is the first concrete residual/RLS-flip GOF derivation, kept
+  leaf-local pending calibration. For one complete covariance block it forms
+  model-centred saturated covariance contributions and projects them through
+  the expected-information residual U-factor; the all-plus quadratic equals
+  the structured RLS GOF statistic (independently gated to `1.2e-7`). Random
+  signs calibrate that df-dimensional residual sum. An optional empirical-meat
+  whitening acts on the already projected residual scores and is deliberately
+  reported unavailable when its covariance is rank deficient; it is not the
+  nested test's flip-specific nuisance correction and adds no hidden ridge.
+  The 16-cell normal/PL null-power probe (p=5/20, n=100/400, one omitted
+  residual covariance, 100 replications, 199 flips) completed 1,600 batteries
+  without failure in 36.4 seconds. Effective null rejection was plausible but
+  noisy at df=5 (.01--.08 across four cells), and poor at df=170: .12/.13 under
+  normal n=100/400 and .33/.08 under PL. Empirical standardization was
+  impossible at df=170,n=100 and worsened n=400 rejection to .23/.11 while the
+  median projected-meat condition number reached about 37/42,000 under
+  normal/PL. Thus the algebraic GOF bridge survives, but broad core promotion
+  does not: the next gate is a larger low/moderate-rank n/df calibration, not a
+  regularized high-rank default.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the
