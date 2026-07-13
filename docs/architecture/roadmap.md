@@ -569,6 +569,20 @@ golden `parTable()` fixtures.
   families. Their matched-null powers lay between roughly 0.22 and 0.24, versus
   0.21 for the flips, at only 200 null draws per cell; this is illustrative
   evidence rather than a method ranking.
+  Experiment 64 is the implemented fixed-rank calibration frontier prompted by
+  those findings; its substantive run is intentionally still pending. It fixes
+  `G=8` and `df=28`, tests the same `x2:x5` loading equalities at p=5 and p=20,
+  and leaves `x6:x20` group-specific in the latter model. The broad 128-cell
+  null screen crosses average group n=50/100/200/400, balanced versus roughly
+  1:3 allocation, homogeneous versus alternating factor/residual information,
+  and normal/VM/IG/PL data. A calibrated 32-cell null/power focus uses the
+  normal and PL corners at n=50/100. Its checkpointed local/Modal harness saves
+  cellwise Wilson intervals, cross-cell calibration dispersion, paired
+  effective/standardized decisions and variance shifts, phase timings, and
+  nominal plus matched-null power. Thus p=5 versus p=20 isolates nuisance
+  dimension at fixed test rank; it does not answer the separate few-versus-many
+  restrictions question. No substantive outcome is recorded until the result
+  bundle is run and audited.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the

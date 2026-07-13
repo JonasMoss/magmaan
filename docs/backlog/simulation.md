@@ -216,6 +216,16 @@ reusing this design at larger grids, cache/deduplicate identical group
 calibrations (especially the equal-covariance null) and consider a cross-cell PL
 calibration cache keyed by the target correlation and marginal specification.
 Keep generator setup separate from per-replication inference timing in reports.
+Experiment 64 implements that experiment-layer policy without changing the
+generator API: identical within-population group covariances are calibrated
+once, and complete calibrated population states are cached across sample-size
+and allocation cells. In its p=20 homogeneous PL smoke, within-group
+deduplication reduced setup from about 133 seconds to 15 seconds; the subsequent
+fit/flip/FMG replication took about 0.6 seconds. The cache key includes the full
+target covariance, generator, and distribution targets, and the raw output
+records unique group calibrations and cache hits. A reusable cross-process/core
+cache remains worthwhile only if later grids show this leaf-local policy is
+insufficient.
 
 **Why IG draws are slow: generator family.** `make_cell_sampler` requests
 `generator_family = "pearson"` (chosen to mirror the lavaan/R IG reference). The

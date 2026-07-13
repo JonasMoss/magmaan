@@ -1,0 +1,213 @@
+---
+title: "Score-flip calibration frontier"
+subtitle: "Fixed G = 8 and df = 28; nuisance dimension, geometry, and nonnormality"
+format:
+  html:
+    toc: true
+    code-fold: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
+source(file.path(script_dir, "R", "design.R"))
+read_optional <- function(profile, name) {
+  path <- file.path(script_dir, "results", profile, paste0(name, ".csv"))
+  if (file.exists(path)) read.csv(path, stringsAsFactors = FALSE,
+                                  check.names = FALSE) else NULL
+}
+screen <- lapply(c("method_summary", "calibration_summary", "paired_summary",
+                   "timing_summary", "availability_summary", "failures", "metadata"),
+                 function(x) read_optional("screen", x))
+names(screen) <- c("method", "calibration", "paired", "timing", "availability",
+                   "failures", "metadata")
+focus <- lapply(c("method_summary", "calibration_summary", "paired_summary",
+                  "timing_summary", "matched_power", "availability_summary",
+                  "failures", "metadata"),
+                function(x) read_optional("focus", x))
+names(focus) <- c("method", "calibration", "paired", "timing", "power",
+                  "availability", "failures", "metadata")
+primary <- c("flip_effective", "flip_standardized", "score_peba4")
+pretty <- function(x) gsub("_", " ", x, fixed = TRUE)
+```
+
+## Question and identification
+
+The experiment asks when flip-specific standardization earns its computation.
+All cells have eight groups and 28 tested loading-equality restrictions. At
+`p = 5`, the tested `x2:x5` loadings exhaust the non-marker loadings. At
+`p = 20`, the test is unchanged but the group-specific `x6:x20` loadings add a
+large nuisance space. Consequently, a p=5 versus p=20 contrast is evidence
+about nuisance estimation, not evidence about the number of restrictions.
+
+That distinction is important. A later rank probe must vary the tested item set
+to answer “few versus many restrictions.” This experiment instead gives the
+cleaner first answer: whether standardization matters more when the same score
+test is partialled through many more estimated directions.
+
+The a priori hypotheses are:
+
+1. Standardization should matter most at small group sizes, under unequal
+   allocation, heterogeneous information geometry, and severe nonnormality.
+2. Holding rank at 28, the incremental benefit should be larger for `p = 20`
+   than `p = 5` if nuisance estimation is the mechanism.
+3. Effective and standardized flips should converge as average group size
+   increases. If they do not, the effect is not merely a small-sample variance
+   displacement.
+4. pEBA4 may remain an excellent calibration benchmark, but unlike the flip it
+   requires the fixed penalty choice. SB is diagnostic only: a mean scale does
+   not generally replace the weighted chi-square reference.
+
+## Design
+
+```{r}
+design_counts <- data.frame(
+  stage = c("broad null screen", "focused null/power"),
+  cells = c(nrow(frontier_design("screen")), nrow(frontier_design("focus"))),
+  replications_per_cell = c(1000L, 2000L),
+  random_flips = c(199L, 999L),
+  distributions = c("normal, VM, IG, PL", "normal, PL"))
+knitr::kable(design_counts)
+```
+
+The exact Monte Carlo rejection convention is $p \leq .05$. With 199 random
+flips plus the identity, strict $p < .05$ can reject at only 9 of the 200 grid
+points (4.5%), whereas $p \leq .05$ admits 10 (5%). Both are saved, but the
+non-strict result is primary.
+
+## Broad null calibration
+
+```{r}
+if (is.null(screen$method)) {
+  cat("The substantive screen has not been placed in `results/screen/` yet.")
+} else {
+  show <- screen$calibration[screen$calibration$method %in%
+                               unique(c(primary, "score_sb", "score_mv",
+                                        "score_ss", "score_sandwich",
+                                        "nested_mv_ml", "nested_peba4_ml",
+                                        "nested_peba4_rls")), ]
+  show$method <- pretty(show$method)
+  knitr::kable(show, digits = 3)
+}
+```
+
+```{r}
+if (!is.null(screen$method)) {
+  x <- screen$method[screen$method$method %in% primary, ]
+  op <- par(mar = c(4.5, 4.2, 1, 1))
+  cols <- c(flip_effective = "#3366AA", flip_standardized = "#CC6677",
+            score_peba4 = "#228833")
+  plot(seq_len(nrow(x)), x$rejection_rate, type = "n", ylim = c(0, max(.12,
+       x$ci_upper, na.rm = TRUE)), xlab = "null cell (ordered within method)",
+       ylab = "rejection probability")
+  abline(h = c(.025, .05, .075), lty = c(3, 2, 3), col = "grey55")
+  for (method in primary) {
+    y <- x[x$method == method, ]
+    y <- y[order(y$p, y$n_avg, y$information, y$allocation, y$distribution), ]
+    lines(seq_len(nrow(y)), y$rejection_rate, col = cols[[method]], lwd = 1.5)
+  }
+  legend("topright", legend = pretty(primary), col = cols, lty = 1, bty = "n")
+  par(op)
+}
+```
+
+The table is a distribution over cells—not a pooled pseudo-replication. RMSE
+and mean absolute deviation measure overall calibration; minima, maxima, and the
+three calibration bands retain heterogeneity that an average would erase.
+
+```{r}
+if (!is.null(screen$availability)) {
+  missing <- screen$availability[screen$availability$availability < 1, ]
+  if (nrow(missing)) {
+    knitr::kable(missing, digits = 4,
+                 caption = "Methods with unavailable p-values")
+  } else cat("Every requested method returned a finite p-value.")
+}
+```
+
+## Is standardization worth it?
+
+```{r}
+if (is.null(screen$paired)) {
+  cat("Paired effective-versus-standardized results are not available yet.")
+} else {
+  x <- screen$paired
+  aggregate_cols <- c("rejection_delta", "disagreement_rate", "mean_abs_delta_p",
+                      "median_variance_shift")
+  out <- aggregate(x[aggregate_cols],
+                   x[c("p", "n_avg", "information", "allocation", "distribution")],
+                   mean, na.rm = TRUE)
+  out <- out[order(-out$disagreement_rate), ]
+  knitr::kable(head(out, 24), digits = 4,
+               caption = "Corners with the largest paired decision disagreement")
+}
+```
+
+The decisive quantities are paired: decision disagreement, the direction of
+changed decisions, absolute p-value displacement, the estimated flip-variance
+shift, and their within-cell correlation. A small marginal rejection-rate
+difference can hide many offsetting changed decisions, so it is not enough by
+itself.
+
+## Timing
+
+```{r}
+timing <- if (!is.null(focus$timing)) focus$timing else screen$timing
+if (is.null(timing)) {
+  cat("Timing output is not available yet.")
+} else {
+  keep <- timing$phase %in% c("fit", "flip_setup", "flip_score",
+                              "flip_standardization", "nested_fmg",
+                              "replication_total")
+  x <- timing[keep, ]
+  tab <- aggregate(x$median_seconds,
+                   x[c("p", "n_avg", "phase")], median, na.rm = TRUE)
+  names(tab)[ncol(tab)] <- "median_seconds"
+  wide <- reshape(tab, idvar = c("p", "n_avg"), timevar = "phase",
+                  direction = "wide")
+  score <- wide$median_seconds.flip_score
+  std <- wide$median_seconds.flip_standardization
+  wide$standardization_over_score <- std / score
+  wide$standardization_share_of_replication <-
+    std / wide$median_seconds.replication_total
+  knitr::kable(wide, digits = 4)
+}
+```
+
+The relevant cost is the incremental `flip_standardization` phase, not the full
+flip test or model fit. The report therefore gives both its ratio to raw flip
+score accumulation and its share of total replication time.
+
+## Focused power
+
+```{r}
+if (is.null(focus$power) || !nrow(focus$power)) {
+  cat("The calibrated focus run has not been placed in `results/focus/` yet.")
+} else {
+  x <- focus$power[focus$power$method %in%
+                     unique(c(primary, "score_mv", "score_ss", "score_sb",
+                              "nested_mv_ml", "nested_peba4_ml",
+                              "nested_peba4_rls")), ]
+  x$method <- pretty(x$method)
+  knitr::kable(x[c("p", "n_avg", "information", "allocation", "distribution",
+                   "method", "null_rejection_rate", "nominal_power",
+                   "matched_power", "ci_lower", "ci_upper")], digits = 3)
+}
+```
+
+Matched power uses each method’s empirical 5% null critical value in the same
+`p × n × geometry × allocation × distribution` corner. It answers a different
+question from nominal power: after equalizing achieved size, how much signal
+does the method retain? Both must be shown.
+
+## Decision rule
+
+Standardization is worth carrying forward if it meaningfully reduces null-cell
+RMSE or upper-tail liberalism in the predicted hard corners, without a material
+matched-power loss, and its incremental runtime is modest. If it merely moves
+p-values without improving calibration—or only helps one isolated generator—it
+stays a diagnostic. The fixed-rank design supports this nuisance-estimation
+decision; it does not settle the separate restriction-rank question.
