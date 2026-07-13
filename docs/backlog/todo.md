@@ -49,6 +49,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   restrictions. Vary n/group, nuisance leverage/information heterogeneity, or
   the restriction-to-sample ratio while holding rank fixed, and use the returned
   variance-displacement diagnostics as the proposed effect modifier.
+  The corresponding fixed-rank design and budget-guarded Modal harness now live
+  in experiment 64: `G=8`, `df=28`, p=5 versus p=20 nuisance dimension,
+  n/group, allocation, information geometry, and normal/VM/IG/PL generators,
+  followed by calibrated normal/PL power. Remaining work is to run and audit
+  that experiment, then decide whether the standardization benefit clears its
+  paired calibration/runtime gate. Do not infer a rank effect from its p
+  contrast: tested rank is deliberately constant. The exact-enumeration,
+  independent dense-hat, and near-singular-information hardening tests above
+  remain core prerequisites independent of the simulation outcome.
   Then decide extensions separately: direct
   FIML needs observed-pattern scores and a missing-data information convention;
   continuous LS and ordinal/mixed models need estimator-specific casewise
