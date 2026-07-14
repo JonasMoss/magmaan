@@ -147,6 +147,12 @@ frontier_calibration_summary <- function(method_summary) {
                            else NA_real_,
       above_075 = if (length(z)) mean(z > .075) else NA_real_)
   }))
+  if (is.null(out))  # power-only slice: no null cells to summarize here
+    return(data.frame(method = character(), cells = integer(),
+      rmse_from_05 = numeric(), mad_from_05 = numeric(),
+      min_rejection = numeric(), max_rejection = numeric(),
+      below_025 = numeric(), acceptable_025_075 = numeric(),
+      above_075 = numeric()))
   row.names(out) <- NULL
   out[order(out$rmse_from_05), ]
 }
