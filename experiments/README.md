@@ -77,6 +77,10 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 60 | [guttman-admissibility-clamp](60-guttman-admissibility-clamp/report.qmd) | benchmark | active | Which hard or soft finite-sample communality clamp best repairs inadmissible aligned Guttman draws without degrading loading RMSE or empirical-SE coverage relative to Raw and NTML? |
 | 61 | [permutation-measurement-invariance](61-permutation-measurement-invariance/report.qmd) | probe | active | Can fully recomputed studentized-Wald label permutations calibrate continuous metric-invariance tests under heterogeneous group populations? |
 | 62 | [standardized-flip-score](62-standardized-flip-score/report.qmd) | probe | active | Do nuisance-effective and flip-specifically standardized score flips calibrate continuous metric-invariance tests at small N? |
+| 63 | [fmg-score-flip-illustration](63-fmg-score-flip-illustration/report.qmd) | probe | complete | In a focused published weak-invariance design, how do score flips compare with the basic FMG nested-test variants? |
+| 64 | [flip-calibration-frontier](64-flip-calibration-frontier/report.qmd) | probe | active | At fixed test rank, when do nuisance dimension, allocation, information geometry, and sample size make flip standardization worthwhile? |
+| 65 | [residual-flip-gof-probe](65-residual-flip-gof-probe/report.qmd) | probe | active | Can efficient residual-score flipping calibrate single-model SEM goodness of fit without an ad hoc regularizer? |
+| 66 | [fiml-score-flip-probe](66-fiml-score-flip-probe/report.qmd) | probe | active | Can nuisance-effective and pattern-standardized score flips rescue small-sample nested FIML tests in the published FIML--FMG design? |
 
 ## Archived
 

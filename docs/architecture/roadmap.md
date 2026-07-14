@@ -478,26 +478,31 @@ golden `parTable()` fixtures.
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
 - `inference::frontier::score_flip_test` adds Monte Carlo Rademacher calibration
-  for affine nested complete-data ML models. It derives the tested directions
-  from the exact H1/H0 restriction map, evaluates individual Gaussian
-  likelihood-score contributions at the H0 fit, and reports three references:
+  for affine nested complete-data ML and direct-FIML models. It derives the
+  tested directions from the exact H1/H0 restriction map, evaluates individual
+  Gaussian observed-data likelihood-score contributions at the H0 fit, and
+  reports three references:
   basic score flips, Hemerik-Goeman-Finos nuisance-effective flips, and the
   De Santis-Goeman-Hemerik-Davenport-Finos flip-specifically standardized
   quadratic statistic. The effective direction
   `G = D - K(K'IK)^-1 K'ID` is orthogonal to H0's nuisance tangent `K`; each
   transformed statistic additionally recomputes the conditional variance
-  induced by estimating that nuisance vector. Per-group expected-information
-  blocks make this correction valid for multi-group models without storing an
-  `n x n` hat matrix. The observed identity is included in the Monte Carlo rank,
+  induced by estimating that nuisance vector. Complete data use per-group
+  expected-information blocks; FIML uses conditional Fisher-information blocks
+  per `(group, observed-pattern)` stratum. Both compress the correction without
+  storing an `n x n` hat matrix, and the all-observed FIML path is unit-gated to
+  the complete-data statistics, p-values, and mixture spectrum. The observed
+  identity is included in the Monte Carlo rank,
   `p_value` aliases the standardized p-value, and deterministic seeds, Monte
   Carlo SEs, asymptotic score comparators, nuisance-stationarity, and variance-
   conditioning diagnostics are returned. The result also measures mean/max
   flip-specific covariance displacement and high-resolution setup,
   basic/effective resampling, standardization, asymptotic-comparator, and total
   timings. `api::frontier::score_flip_test` and
-  the R `score_flip_test()` wrapper expose the method. The current contract
-  rejects missing data, fixed-X rows, nonlinear/inequality constraints,
-  boundary null fits, and non-ML estimators.
+  the R `score_flip_test()` wrapper expose the method; direct FIML reuses the
+  fit's raw data and cached missingness pack. The current contract rejects
+  fixed-X rows, nonlinear/inequality constraints, boundary null fits, and
+  estimators other than complete ML or direct FIML.
   The C++ frontier option additionally has a deterministic verification-only
   exact-enumeration path capped at n=20. Its unit gate enumerates all 4,096
   sign vectors at n=12, is seed-invariant, and returns zero Monte Carlo error;
@@ -609,6 +614,23 @@ golden `parTable()` fixtures.
   normal/PL. Thus the algebraic GOF bridge survives, but broad core promotion
   does not: the next gate is a larger low/moderate-rank n/df calibration, not a
   regularized high-rank default.
+  Experiment 66 extends the nested score construction to direct FIML and probes
+  the published FIML--FMG two-group, six-indicator configural-to-metric design
+  (`df=5`) at group-1 n=50/100/200, 0/15/30% MCAR, normal/severe PL data, and
+  null/loading-power truths (36 cells, 100 replications, 199 signs). Basic,
+  nuisance-effective, and standardized flip null rejection averaged
+  0.009/0.064/0.062; effective versus standardized differed on only 3 null
+  decisions. The important split was normal versus PL (effective 0.038/0.090),
+  not missingness. Pattern-specific covariance displacement increased with
+  missingness, but standardization rose from about 0.8 ms complete to 5--7 ms
+  at n1=100 with missingness and supplied no material calibration gain. Score
+  pEBA4 rejected 0.038/0.060 under normal/PL, whereas nested-LR pEBA4 rejected
+  0.035/0.185. Across 3,600 attempts there were 27 fit failures and 29 further
+  nested-battery conditioning failures, but zero flip failures conditional on a
+  successful fit; the four-worker run took 41.9 seconds. The next gate is a
+  larger reduced-grid null run, with nuisance-effective flip primary and the
+  standardized arm retained only as a diagnostic before restriction rank or
+  MAR is varied.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the

@@ -1,0 +1,324 @@
+---
+title: "Can score flipping rescue small-sample FIML nested tests?"
+subtitle: "A focused probe in the published FIML--FMG measurement-invariance design"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages(library(ggplot2))
+script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
+read_result <- function(name) read.csv(
+  file.path(script_dir, "results", paste0(name, ".csv")),
+  stringsAsFactors = FALSE, check.names = FALSE)
+required <- c("design", "method_summary", "paired_summary", "matched_power",
+              "timing_summary", "dgp_timing", "failures", "metadata")
+paths <- file.path(script_dir, "results", paste0(required, ".csv"))
+if (!all(file.exists(paths))) stop("run run_experiment.R before rendering")
+objects <- lapply(required, read_result); names(objects) <- required
+list2env(objects, environment())
+meta <- setNames(metadata$value, metadata$key)
+reps <- as.integer(meta[["reps"]]); flips <- as.integer(meta[["flips"]])
+
+method_order <- c(
+  "flip_basic", "flip_effective", "flip_standardized",
+  "score_sb", "score_peba4", "score_sandwich", "score_all",
+  "nested_sb_ml", "nested_peba4_ml", "nested_all_ml")
+method_label <- c(
+  flip_basic = "flip: basic",
+  flip_effective = "flip: nuisance-effective",
+  flip_standardized = "flip: standardized",
+  score_sb = "score: SB",
+  score_peba4 = "score: pEBA4",
+  score_sandwich = "score: direct sandwich",
+  score_all = "score: exact mixture",
+  nested_sb_ml = "nested LR: SB",
+  nested_peba4_ml = "nested LR: pEBA4",
+  nested_all_ml = "nested LR: exact mixture")
+label_method <- function(x) unname(method_label[x])
+
+null <- subset(method_summary, truth == "null")
+cell_mean <- function(method, distribution = NULL) {
+  x <- null[null$method == method, , drop = FALSE]
+  if (!is.null(distribution)) x <- x[x$distribution == distribution, , drop = FALSE]
+  mean(x$rejection_rate, na.rm = TRUE)
+}
+weighted_cell_mean <- function(x, value) {
+  ok <- is.finite(x[[value]]) & is.finite(x$n)
+  stats::weighted.mean(x[[value]][ok], x$n[ok])
+}
+
+basic_rate <- cell_mean("flip_basic")
+effective_rate <- cell_mean("flip_effective")
+standardized_rate <- cell_mean("flip_standardized")
+effective_normal <- cell_mean("flip_effective", "normal")
+effective_pl <- cell_mean("flip_effective", "pl")
+standardization_changes <- with(
+  subset(paired_summary, truth == "null"),
+  round(sum(n * disagreement_rate, na.rm = TRUE)))
+fit_failures <- sum(!failures$fit_ok)
+nested_only_failures <- sum(failures$fit_ok & failures$flip_ok & !failures$nested_ok)
+flip_failures_after_fit <- sum(failures$fit_ok & !failures$flip_ok)
+```
+
+## Question
+
+In the two-group, six-indicator FIML measurement-invariance design used by the
+FIML--FMG work, can individual-score sign flipping repair the familiar
+small-sample conservatism without making an ad hoc choice among chi-square
+mixture approximations? Does the extra flip-specific standardization become
+important once observations have different missingness patterns?
+
+## Short answer
+
+**Mostly yes for the nuisance correction; not yet uniformly under severe
+nonnormality.** The basic flip rejected only
+`r sprintf("%.1f%%", 100 * basic_rate)` of null samples. Projecting each
+observed-data likelihood score away from the nuisance-score directions raised
+that to `r sprintf("%.1f%%", 100 * effective_rate)`. The fully standardized
+flip rejected `r sprintf("%.1f%%", 100 * standardized_rate)` and changed only
+`r standardization_changes` null decisions out of about 1,800. In this
+five-restriction problem, the expensive second correction is not earning its
+keep.
+
+The important qualification is distributional. Effective flipping rejected
+`r sprintf("%.1f%%", 100 * effective_normal)` under normality but
+`r sprintf("%.1f%%", 100 * effective_pl)` under the severe polynomial-logistic
+(PL) distribution. Score pEBA4 was closer to nominal in PL, while the nested
+FIML likelihood-ratio pEBA4/SB corrections remained conspicuously liberal.
+This is a promising construction and a useful rescue of basic-flip
+conservatism, not yet a universal finite-sample solution.
+
+The run used **`r reps` replications per cell and `r flips` random signs per
+replication**. Monte Carlo intervals are correspondingly wide; the cellwise
+display below is the result, and pooled means are only orientation.
+
+## What was flipped?
+
+For case (i), let (s_i(\hat\theta_0)) be its score for the *observed-data*
+FIML likelihood. Missing components are integrated out before this score is
+formed. The effective contribution is
+
+\[
+z_i = G^\top s_i(\hat\theta_0),
+\]
+
+where (G) projects the tested loading-equality directions off the nuisance
+score directions. Random Rademacher signs act on the rows (z_i), not on
+labels, imputed data, residuals, or fitted parameters.
+
+The standardized arm additionally evaluates each signed sum using its
+flip-specific covariance. For FIML that covariance is assembled from the
+conditional Fisher information for each observed-data pattern within group.
+Thus the complete-data group correction extends to missingness without treating
+all partially observed cases as equally informative.
+
+## Design
+
+```{r design-table}
+design_show <- unique(design[c("n_group1", "n_group2", "n_total",
+                               "missing_rate", "df")])
+knitr::kable(design_show, digits = 2, row.names = FALSE,
+             col.names = c("group 1 n", "group 2 n", "total n",
+                           "MCAR target", "restrictions"))
+```
+
+The larger model is configural and the smaller model imposes equality of the
+five non-marker loadings across groups. Both contain a mean structure and are
+estimated by direct FIML. The power condition increases the second loading in
+group 2 by 35%. Missingness is Savalei--Bentler-style MCAR with the first two
+indicators kept intact. The distributions are multivariate normal and the
+severe PL construction targeting marginal skewness 3 and excess kurtosis 21;
+there is no (t_5) condition.
+
+## Null calibration: retain the cells
+
+```{r null-cells, fig.width=9, fig.height=12}
+plot_methods <- c("flip_basic", "flip_effective", "flip_standardized",
+                  "score_peba4", "score_sandwich",
+                  "nested_peba4_ml", "nested_all_ml")
+null_plot <- null[null$method %in% plot_methods, , drop = FALSE]
+null_plot$method_label <- factor(label_method(null_plot$method),
+  levels = rev(label_method(plot_methods)))
+null_plot$missing_label <- factor(
+  sprintf("%g%% MCAR", 100 * null_plot$missing_rate))
+ggplot(null_plot,
+       aes(n_group1, rejection_rate, colour = missing_label, group = missing_label)) +
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = .025, ymax = .075,
+           fill = "grey85", alpha = .55) +
+  geom_hline(yintercept = .05, linetype = 2, colour = "grey30") +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 4,
+                alpha = .35, position = position_dodge(width = 5)) +
+  geom_line(position = position_dodge(width = 5), alpha = .6) +
+  geom_point(position = position_dodge(width = 5), size = 1.7) +
+  facet_grid(method_label ~ distribution) +
+  scale_x_continuous(breaks = c(50, 100, 200)) +
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) +
+  labs(x = "group 1 sample size (group 2 is 70% as large)",
+       y = "null rejection probability", colour = NULL,
+       caption = "Points are design cells; bars are 95% Wilson intervals. The shaded band is 2.5%--7.5%.") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.major.x = element_blank(), legend.position = "bottom",
+        strip.text.y = element_text(angle = 0))
+```
+
+Three features matter. First, effective projection supplies the large rescue;
+the basic sign statistic is too conservative throughout. Second, PL rather
+than missingness is the main remaining calibration problem for the flips.
+Third, the score transformations and their nested-LR names are not
+interchangeable: pEBA4 applied to the score statistic is much better behaved
+than pEBA4 applied to the nested FIML likelihood-ratio statistic in the severe
+PL cells. That supports the earlier suspicion that a scalar SB success can be
+accidental when the relevant null law has unequal eigenvalues.
+
+## Does FIML standardization help?
+
+```{r paired-standardization}
+paired_null <- subset(paired_summary, truth == "null")
+paired_by_rate <- do.call(rbind, lapply(split(paired_null,
+                                               paired_null$missing_rate),
+  function(x) data.frame(
+    missing_rate = x$missing_rate[[1L]],
+    n = sum(x$n),
+    effective = weighted_cell_mean(x, "rejection_effective"),
+    standardized = weighted_cell_mean(x, "rejection_standardized"),
+    disagreement = weighted_cell_mean(x, "disagreement_rate"),
+    mean_abs_delta_p = weighted_cell_mean(x, "mean_abs_delta_p"),
+    median_relative_covariance_shift = median(x$median_variance_shift,
+                                               na.rm = TRUE),
+    median_patterns = median(x$median_pattern_count, na.rm = TRUE))))
+knitr::kable(paired_by_rate, digits = 4, row.names = FALSE,
+             col.names = c("MCAR target", "paired n", "effective reject",
+                           "standardized reject", "decision disagreement",
+                           "mean |delta p|", "median covariance shift",
+                           "median patterns"))
+```
+
+Missingness does exactly what the construction predicts: it creates more
+information strata and increases the difference between the identity-sign and
+random-sign covariance matrices. But at rank five the numerical movement is
+small. Every changed null decision moved from rejection to acceptance; none
+moved the other way. Standardization may matter with more restrictions, more
+unequal pattern information, or a much smaller effective sample, but this DGP
+does not support paying for it by default.
+
+## Power, calibrated to each method's null
+
+```{r power-cells, fig.width=9, fig.height=7}
+power_methods <- c("flip_effective", "flip_standardized", "score_peba4",
+                   "score_sandwich", "nested_peba4_ml")
+power_selected <- matched_power[matched_power$method %in% power_methods, ,
+                                drop = FALSE]
+power_selected$method_label <- factor(label_method(power_selected$method),
+                                      levels = label_method(power_methods))
+power_selected$missing_label <- factor(
+  sprintf("%g%% MCAR", 100 * power_selected$missing_rate))
+ggplot(power_selected,
+       aes(n_group1, matched_power, colour = missing_label,
+           group = missing_label)) +
+  geom_line(alpha = .65) + geom_point(size = 1.8) +
+  facet_grid(method_label ~ distribution) +
+  scale_x_continuous(breaks = c(50, 100, 200)) +
+  scale_y_continuous(limits = c(0, 1),
+                     labels = scales::label_percent(accuracy = 1)) +
+  labs(x = "group 1 sample size", y = "matched-null power", colour = NULL,
+       caption = "Each threshold is estimated from only 100 null p-values in the matching cell; comparisons are illustrative.") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.major.x = element_blank(), legend.position = "bottom",
+        strip.text.y = element_text(angle = 0))
+```
+
+Matched-null power prevents a liberal test from winning by definition. At this
+probe budget, effective and standardized flips are essentially tied, and most
+of the calibrated methods are also close. The severe PL cells have little
+matched power for this loading perturbation; with only 100 null draws per cell,
+the empirical 5% threshold itself is noisy. A larger run should therefore
+spend first on null calibration, not add more test variants.
+
+## Timing and numerical availability
+
+```{r timing}
+timing_focus <- subset(timing_summary,
+  distribution == "normal" & truth == "null" & n_group1 == 100 &
+    phase %in% c("fit", "flip_score", "flip_standardization", "nested_fmg",
+                 "replication_total"))
+timing_focus$median_ms <- 1000 * timing_focus$median_seconds
+timing_wide <- reshape(timing_focus[c("missing_rate", "phase", "median_ms")],
+                       idvar = "missing_rate", timevar = "phase",
+                       direction = "wide")
+names(timing_wide) <- sub("^median_ms\\.", "", names(timing_wide))
+knitr::kable(timing_wide, digits = 2, row.names = FALSE,
+             col.names = c("MCAR target", "fit", "flip score sums",
+                           "flip standardization", "nested FMG battery",
+                           "replication total"),
+             caption = "Median milliseconds, normal-null n1=100 cell")
+```
+
+```{r failure-table}
+availability_grid <- expand.grid(
+  distribution = c("normal", "pl"), missing_rate = c(0, .15, .30),
+  stringsAsFactors = FALSE)
+availability_grid$fit_failures <- vapply(seq_len(nrow(availability_grid)),
+  function(i) sum(!failures$fit_ok &
+    failures$distribution == availability_grid$distribution[[i]] &
+    failures$missing_rate == availability_grid$missing_rate[[i]]), integer(1L))
+availability_grid$nested_only_failures <- vapply(seq_len(nrow(availability_grid)),
+  function(i) sum(failures$fit_ok & failures$flip_ok & !failures$nested_ok &
+    failures$distribution == availability_grid$distribution[[i]] &
+    failures$missing_rate == availability_grid$missing_rate[[i]]), integer(1L))
+availability_grid$flip_failures_after_fit <- vapply(seq_len(nrow(availability_grid)),
+  function(i) sum(failures$fit_ok & !failures$flip_ok &
+    failures$distribution == availability_grid$distribution[[i]] &
+    failures$missing_rate == availability_grid$missing_rate[[i]]), integer(1L))
+knitr::kable(availability_grid, row.names = FALSE,
+             col.names = c("distribution", "MCAR target", "fit failures",
+                           "nested-only failures", "flip failures after fit"))
+```
+
+At (n_1=100), pattern-specific standardization grows from under a millisecond
+with complete data to roughly 5--7 ms with missingness and dominates the flip
+calculation. The arithmetic is still modest, but effective flipping is cheaper
+and gave the same decisions here. The full 3,600-replication run took
+`r sprintf("%.1f", as.numeric(meta[["wall_seconds"]]))` wall seconds on
+`r meta[["cores"]]` local workers; severe-PL generator calibration took about
+`r sprintf("%.1f", sum(subset(dgp_timing, distribution == "pl")$generator_setup_seconds))`
+seconds across its two truth conditions.
+
+There were `r fit_failures` FIML fit failures and
+`r nested_only_failures` additional nested-battery failures, concentrated in
+small, 30%-missing PL cells. Conditional on a successful fit, the score-flip
+path failed `r flip_failures_after_fit` times. The nested failures were
+ill-conditioned or indefinite Satorra-2000 sandwich reductions, so method
+availability is part of the comparison rather than a row to silently drop.
+
+## Decision and next probe
+
+Use the nuisance-effective flip as the primary randomization test in the next
+FIML experiment. Keep the standardized arm as a diagnostic, not a default, and
+retain score pEBA4 plus the direct-sandwich and exact-mixture score references.
+The nested FIML corrections remain useful comparators but should not define the
+answer in the severe PL cells.
+
+The next useful spend is a larger null-only run in a reduced grid: normal and
+PL, (n_1=50,100,200), 0% and 30% MCAR, with at least 500--1,000 successful
+fits per cell. Only after that should the design vary restriction rank or add
+MAR. That sequence tests whether the PL liberalism is persistent and whether
+standardization starts paying when the tested subspace, rather than the menu of
+methods, is enlarged.
+
+## Reproduce
+
+The compact summary CSVs are committed to freeze this probe's evidence; the
+larger replication- and method-level files remain local and ignored.
+
+```sh
+Rscript experiments/66-fiml-score-flip-probe/run_experiment.R --smoke
+Rscript experiments/66-fiml-score-flip-probe/run_experiment.R --probe --cores 4
+quarto render experiments/66-fiml-score-flip-probe/report.qmd
+```

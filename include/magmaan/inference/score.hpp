@@ -459,7 +459,10 @@ score_tests_robust_joint(spec::LatentStructure pt,
 
 // Random sign-flip calibration of an affine nested-model score test. H1 and H0
 // must share the same ambient parameter slots, with H0's tangent space nested
-// inside H1's. The implementation is currently restricted to complete-data ML.
+// inside H1's. Complete-data ML uses per-group expected information; FIML uses
+// the corresponding observed-pattern conditional Fisher information. In both
+// cases the signs act on individual likelihood-score contributions and the
+// pattern/group strata only compress the flip-specific nuisance covariance.
 // `n_flips` counts random Rademacher transformations; the observed identity is
 // included separately in the Monte Carlo rank denominator.
 struct ScoreFlipOptions {
@@ -517,6 +520,25 @@ score_flip_test(spec::LatentStructure pt_H1,
                 spec::LatentStructure pt_H0,
                 const model::MatrixRep& rep_H0,
                 const SampleStats& samp,
+                const RawData& raw,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options = {});
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
+                const RawData& raw,
+                const FIMLPack& pack,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options = {});
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
                 const RawData& raw,
                 const Estimates& est_H0,
                 const ScoreFlipOptions& options = {});

@@ -17,9 +17,11 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
-- **M/L — broaden and harden standardized score flips.** The first frontier
-  slice supports affine nested complete-data ML pairs and is exercised by
-  experiment 62. The tiny exact-enumeration kernel gate and independent dense
+- **M/L — broaden and harden standardized score flips.** The frontier slice
+  supports affine nested complete-data ML and direct-FIML pairs and is exercised
+  by experiments 62 and 66. Direct FIML uses casewise observed-pattern scores
+  and conditional Fisher-information pattern strata; its all-observed reduction
+  to complete ML is unit-gated. The tiny exact-enumeration kernel gate and independent dense
   per-case/hatted-nuisance oracle for the flip-specific covariance landed with
   experiment 64; before treating the method as more than research, still probe
   near-singular nuisance information. The first expanded probe already crosses
@@ -59,9 +61,17 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   hardening test above remains a core prerequisite independent of the
   simulation outcome; exact enumeration and the dense covariance oracle are
   now gated.
-  Then decide extensions separately: direct
-  FIML needs observed-pattern scores and a missing-data information convention;
-  continuous LS and ordinal/mixed models need estimator-specific casewise
+  The first FIML probe (experiment 66) found that nuisance-effective flipping
+  rescued basic-flip conservatism at five restrictions, but the pattern-specific
+  standardized arm changed only 3 of about 1,800 null decisions while becoming
+  the dominant flip cost under missingness. Severe PL data remained liberal
+  (0.090 effective versus 0.060 score pEBA4), and the nested FIML battery was
+  both more liberal and less numerically available. Before varying rank or
+  adding MAR, run a reduced normal/PL, complete/30%-MCAR null grid with at least
+  500--1,000 successful fits per cell; keep effective primary, standardization
+  diagnostic, and report fit/test availability. Near-singular nuisance
+  information remains a separate core-hardening prerequisite.
+  Then decide other extensions separately: continuous LS and ordinal/mixed models need estimator-specific casewise
   influence contributions including estimated-weight effects; clustered data
   need cluster-level rather than row-level signs. A residual-based or robust-
   Wald flip test is a distinct method and should not be hidden behind the score-

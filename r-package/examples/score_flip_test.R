@@ -37,3 +37,25 @@ stopifnot(
 )
 
 print(a)
+
+# Direct FIML uses the observed-data score and the pattern-conditional Fisher
+# information. The fitted raw-data objects are the sample contract, so no data
+# argument is passed to score_flip_test().
+dat_mis <- dat
+dat_mis$x3[seq(1, nrow(dat_mis), by = 4)] <- NA_real_
+dat_mis$x4[seq(2, nrow(dat_mis), by = 5)] <- NA_real_
+f1 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
+              estimator = "FIML", se = "none", test = "none")
+f0 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat_mis,
+              estimator = "FIML", se = "none", test = "none")
+fa <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
+fb <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
+stopifnot(
+  identical(fa$p_basic, fb$p_basic),
+  identical(fa$p_effective, fb$p_effective),
+  identical(fa$p_standardized, fb$p_standardized),
+  fa$mean_variance_relative_shift > 0,
+  abs(fa$statistic_effective - fa$statistic_standardized) < 1e-8,
+  is.finite(fa$p_mixture),
+  isTRUE(fa$sandwich_available)
+)

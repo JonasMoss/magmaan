@@ -7567,15 +7567,24 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
       ? Rcpp::as<std::string>(fit_H1["estimator"]) : "ML";
   const std::string est0 = fit_H0.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit_H0["estimator"]) : "ML";
-  if (est1 != "ML" || est0 != "ML") {
-    Rcpp::stop("magmaan: score_flip_test currently supports complete-data ML fits only");
+  if (est1 != est0 || (est1 != "ML" && est1 != "FIML")) {
+    Rcpp::stop("magmaan: score_flip_test requires a matching ML or FIML fit pair");
   }
-  magmaan::data::RawData rd = complete_raw_from_arg(h1.rep, raw);
   magmaan::inference::frontier::ScoreFlipOptions options;
   options.n_flips = n_flips;
   options.seed = static_cast<std::uint64_t>(seed);
-  auto out = magmaan::inference::frontier::score_flip_test(
-      h1.pt, h1.rep, h0.pt, h0.rep, h0.samp, rd, est_from_fit(fit_H0), options);
+  magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
+  if (est1 == "FIML") {
+    magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit_H0, rd, owned_pack);
+    out = magmaan::inference::frontier::score_flip_test(
+        h1.pt, h1.rep, h0.pt, h0.rep, rd, pack, est_from_fit(fit_H0), options);
+  } else {
+    magmaan::data::RawData rd = complete_raw_from_arg(h1.rep, raw);
+    out = magmaan::inference::frontier::score_flip_test(
+        h1.pt, h1.rep, h0.pt, h0.rep, h0.samp, rd, est_from_fit(fit_H0), options);
+  }
   if (!out.has_value()) stop_post(out.error());
   return Rcpp::List::create(
       Rcpp::_ ["df"] = out->df,
