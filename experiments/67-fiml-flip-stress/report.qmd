@@ -1,0 +1,275 @@
+---
+title: "Where do direct-FIML score flips stay calibrated?"
+subtitle: "A 240-cell stress atlas with an independent hard-cell confirmation"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages(library(ggplot2))
+script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
+read_result <- function(profile, name) read.csv(
+  file.path(script_dir, "results", profile, paste0(name, ".csv")),
+  stringsAsFactors = FALSE, check.names = FALSE)
+required <- c("method_summary", "paired_summary", "timing_summary",
+              "availability_summary", "failures", "metadata")
+for (profile in c("screen", "confirm")) {
+  paths <- file.path(script_dir, "results", profile,
+                     paste0(required, ".csv"))
+  if (!all(file.exists(paths))) stop("run the screen and confirmation before rendering")
+}
+screen <- lapply(required, read_result, profile = "screen")
+confirmation <- lapply(required, read_result, profile = "confirm")
+names(screen) <- names(confirmation) <- required
+meta <- function(x) setNames(x$value, x$key)
+screen_meta <- meta(screen$metadata)
+confirmation_meta <- meta(confirmation$metadata)
+
+method_label <- c(
+  flip_basic = "flip: basic",
+  flip_effective = "flip: effective",
+  flip_standardized = "flip: standardized",
+  score_sb = "score: SB",
+  score_peba4 = "score: pEBA4",
+  score_sandwich = "score: sandwich",
+  score_all = "score: exact mixture",
+  nested_sb_ml = "nested LR: SB",
+  nested_peba4_ml = "nested LR: pEBA4",
+  nested_all_ml = "nested LR: exact mixture")
+cell_mean <- function(summary, method) mean(
+  summary$rejection_rate[summary$method == method], na.rm = TRUE)
+weighted <- function(x, field) {
+  keep <- is.finite(x$n) & is.finite(x[[field]])
+  stats::weighted.mean(x[[field]][keep], x$n[keep])
+}
+paired_row <- function(profile, x) data.frame(
+  profile = profile,
+  cells = nrow(x),
+  paired_n = sum(x$n),
+  effective = weighted(x, "rejection_effective"),
+  standardized = weighted(x, "rejection_standardized"),
+  disagreement = weighted(x, "disagreement_rate"),
+  mean_abs_delta_p = weighted(x, "mean_abs_delta_p"))
+paired_compare <- rbind(
+  paired_row("Screen (199 signs)", screen$paired_summary),
+  paired_row("Hard-cell confirmation (999 signs)", confirmation$paired_summary))
+
+screen_effective <- cell_mean(screen$method_summary, "flip_effective")
+screen_standardized <- cell_mean(screen$method_summary, "flip_standardized")
+screen_peba4 <- cell_mean(screen$method_summary, "score_peba4")
+screen_sb <- cell_mean(screen$method_summary, "score_sb")
+screen_nested <- cell_mean(screen$method_summary, "nested_peba4_ml")
+confirm_effective <- cell_mean(confirmation$method_summary, "flip_effective")
+confirm_standardized <- cell_mean(confirmation$method_summary, "flip_standardized")
+confirm_peba4 <- cell_mean(confirmation$method_summary, "score_peba4")
+screen_flip_valid <- with(screen$availability_summary,
+  availability[method == "flip_effective"])
+screen_nested_valid <- with(screen$availability_summary,
+  availability[method == "nested_peba4_ml"])
+```
+
+## Question
+
+Across sample size, restriction rank, missingness mechanism, and four severe
+distribution generators, do nuisance-effective or flip-standardized direct-FIML
+score tests deliver dependable null p-values without choosing a chi-square
+mixture approximation? When is the extra standardization worth its cost?
+
+## Short answer
+
+**Effective score flipping is a useful rescue of the unusably conservative
+basic flip, but it is not uniformly calibrated in the hard nonnormal cells.**
+Across 240 cells, effective and standardized flips rejected
+`r sprintf("%.2f%%", 100 * screen_effective)` and
+`r sprintf("%.2f%%", 100 * screen_standardized)`, respectively. The independent
+11-cell confirmation deliberately concentrated on the difficult corners and
+put them at `r sprintf("%.2f%%", 100 * confirm_effective)` and
+`r sprintf("%.2f%%", 100 * confirm_standardized)`. Standardization helps in the
+right direction, but too little to repair the worst VM, IG, and PL cells.
+
+**Score pEBA4 is the clear calibration winner in this design.** It averaged
+`r sprintf("%.2f%%", 100 * screen_peba4)` across the broad screen and
+`r sprintf("%.2f%%", 100 * confirm_peba4)` in the independent hard-cell run.
+Score SB also looks surprisingly good at `r sprintf("%.2f%%", 100 * screen_sb)`,
+but that is an empirical result for these spectra, not evidence that a scalar
+SB chi-square is generally the right reference law. The nested-LR pEBA4 arm
+averaged `r sprintf("%.2f%%", 100 * screen_nested)` and remained badly liberal
+under VM and PL.
+
+**At ranks 1--5, standardization is rarely worth 999-sign use.** It changed
+only `r sprintf("%.2f%%", 100 * paired_compare$disagreement[[2L]])` of confirmed
+decisions and reduced rejection by about
+`r sprintf("%.2f", 100 * (paired_compare$effective[[2L]] - paired_compare$standardized[[2L]]))`
+percentage points, while its median covariance step cost about 95 ms per test.
+
+## Evidence
+
+The published two-group, six-indicator population is held fixed. The screen
+crosses normal, VM, IG, and PL draws targeting skewness 3 and excess kurtosis
+21; group-1 sample sizes 50, 100, 200, and 400; complete data, 15%/30% MCAR,
+paper-style 30% MAR, and stronger 30% logistic MAR; and 1, 3, or 5 loading
+equalities. Each screen cell has 500 attempts and 199 signs. The confirmation
+uses an independent seed, 2,000 attempts per selected cell, and 999 signs.
+
+### The broad atlas
+
+```{r atlas, fig.width=12, fig.height=10}
+atlas_methods <- c("flip_basic", "flip_effective", "flip_standardized",
+                   "score_sb", "score_peba4", "nested_peba4_ml")
+atlas <- screen$method_summary[screen$method_summary$method %in% atlas_methods, ]
+atlas$method_label <- factor(unname(method_label[atlas$method]),
+                             levels = unname(method_label[atlas_methods]))
+atlas$cell_axis <- factor(
+  paste0("n", atlas$n_group1, " / r", atlas$rank),
+  levels = as.vector(outer(c(50, 100, 200, 400), c(1, 3, 5),
+                           function(n, r) paste0("n", n, " / r", r))))
+missing_label <- c(
+  complete = "complete", mcar15 = "15% MCAR", mcar30 = "30% MCAR",
+  mar30 = "30% paper MAR", strong_mar30 = "30% strong MAR")
+atlas$missing_label <- factor(unname(missing_label[atlas$missingness]),
+                              levels = unname(missing_label))
+ggplot(atlas, aes(cell_axis, missing_label, fill = rejection_rate)) +
+  geom_tile(colour = "white", linewidth = .25) +
+  facet_grid(method_label ~ distribution) +
+  scale_fill_gradient2(
+    low = "#2166ac", mid = "white", high = "#b2182b", midpoint = .05,
+    limits = c(0, .20), oob = scales::squish,
+    labels = scales::label_percent(accuracy = 1)) +
+  labs(x = "group-1 sample size / restriction rank", y = NULL,
+       fill = "null rejection",
+       caption = "Each tile is a 500-attempt design cell; red above 5%, blue below 5%. Values above 20% share the darkest red.") +
+  theme_minimal(base_size = 9) +
+  theme(panel.grid = element_blank(), axis.text.x = element_text(
+    angle = 55, hjust = 1), strip.text.y = element_text(angle = 0),
+    legend.position = "bottom")
+```
+
+The heatmap makes the interaction plain. Normal cells are well behaved after
+the nuisance correction. Under VM, IG, and PL, effective flips are most liberal
+at small sample sizes and higher ranks; stronger MAR is not uniformly the worst
+case. Basic flips remain severely conservative. Score pEBA4 stays close to 5%
+through almost the entire grid, whereas the nested likelihood-ratio correction
+does not.
+
+### Independent hard-cell confirmation
+
+```{r confirmation, fig.width=10, fig.height=6.5}
+confirm_methods <- c("flip_effective", "flip_standardized", "score_peba4",
+                     "nested_peba4_ml")
+hard <- confirmation$method_summary[
+  confirmation$method_summary$method %in% confirm_methods, ]
+hard$method_label <- factor(unname(method_label[hard$method]),
+                            levels = unname(method_label[confirm_methods]))
+hard$cell_label <- with(hard, paste(
+  distribution, paste0("n1=", n_group1), missing_label[missingness],
+  paste0("r=", rank), sep = " / "))
+cell_levels <- unique(hard$cell_label[order(
+  hard$distribution, hard$n_group1, hard$missingness, hard$rank)])
+hard$cell_label <- factor(hard$cell_label, levels = rev(cell_levels))
+position <- position_dodge(width = .62)
+ggplot(hard, aes(rejection_rate, cell_label, colour = method_label,
+                 group = method_label)) +
+  annotate("rect", xmin = .025, xmax = .075, ymin = -Inf, ymax = Inf,
+           fill = "grey85", alpha = .55) +
+  geom_vline(xintercept = .05, linetype = 2, colour = "grey30") +
+  geom_errorbar(aes(xmin = ci_lower, xmax = ci_upper), orientation = "y",
+                width = .38, position = position, alpha = .55) +
+  geom_point(position = position, size = 2) +
+  scale_x_continuous(labels = scales::label_percent(accuracy = 1)) +
+  labs(x = "null rejection probability", y = NULL, colour = NULL,
+       caption = "Independent seed; 2,000 attempts and 999 signs per cell. Bars are 95% Wilson intervals; grey is 2.5%--7.5%.") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.major.y = element_blank(), legend.position = "bottom")
+```
+
+The confirmation rejects a Monte Carlo accident explanation. Standardization
+moves the worst flip cells down by roughly 0.2--0.7 percentage points, but VM
+and PL at group-1 n = 50 remain around 11--12%. Score pEBA4 is not perfect—the
+VM n = 50 cell is mildly liberal—but it is much more stable. The nested test is
+liberal in nearly every severe nonnormal corner.
+
+### Is standardization worth it?
+
+```{r timing-table}
+phase_median <- function(timing, phase) stats::median(
+  timing$median_seconds[timing$phase == phase], na.rm = TRUE)
+timing_compare <- paired_compare
+timing_compare$fit_one_rank_ms <- 1000 * c(
+  phase_median(screen$timing_summary, "fit_pair_equivalent"),
+  phase_median(confirmation$timing_summary, "fit_pair_equivalent"))
+timing_compare$effective_sum_ms <- 1000 * c(
+  phase_median(screen$timing_summary, "flip_score"),
+  phase_median(confirmation$timing_summary, "flip_score"))
+timing_compare$standardization_ms <- 1000 * c(
+  phase_median(screen$timing_summary, "flip_standardization"),
+  phase_median(confirmation$timing_summary, "flip_standardization"))
+timing_compare$wall_minutes <- as.numeric(c(
+  screen_meta[["elapsed_seconds"]], confirmation_meta[["elapsed_seconds"]])) / 60
+show <- timing_compare[c("profile", "cells", "paired_n", "effective",
+  "standardized", "disagreement", "fit_one_rank_ms", "effective_sum_ms",
+  "standardization_ms", "wall_minutes")]
+knitr::kable(show, digits = c(0, 0, 0, 4, 4, 4, 1, 1, 1, 1),
+  row.names = FALSE,
+  col.names = c("run", "cells", "paired n", "effective reject",
+    "standardized reject", "decision disagreement", "two fits (ms)",
+    "effective sums (ms)", "standardization (ms)", "wall (min)"))
+```
+
+At 199 signs, standardization is a small addition to fitting. At 999 signs it
+dominates the per-test work and still changes very few decisions. Its benefit
+does increase with rank and with heterogeneous missing patterns, as expected,
+but rank five is not enough to make it a default here. A sensible policy is to
+keep the effective flip as the resampling baseline and reserve standardization
+for diagnostics or much higher-rank tests.
+
+Numerical availability also matters. Effective flips returned for
+`r sprintf("%.2f%%", 100 * screen_flip_valid)` of the 120,000 screen attempts,
+versus `r sprintf("%.2f%%", 100 * screen_nested_valid)` for the nested battery.
+There were `r sum(!screen$failures$fit_ok)` row-level fit failures and only
+`r sum(screen$failures$fit_ok & !screen$failures$flip_ok)` post-fit flip
+failures. Most losses were concentrated at group-1 n = 50 with 30% missingness.
+
+## Caveats
+
+This is a focused null-calibration study, not a replication of the FIML--FMG
+paper and not a power comparison. It uses one measurement model, one group-size
+ratio, and four generators with the same severe marginal targets; there is no
+Student-t condition. Calibration rates condition on a method returning a finite
+p-value, so availability is reported separately.
+
+The score-SB result deserves restraint. At rank one it coincides with the other
+score references. At ranks three and five, its p-values differ from pEBA4 by
+about 0.005--0.006 on average in the screen and change 0.35--0.54% of decisions.
+Its 5.26% overall rate therefore says that scalar scaling happens to work well
+for this collection of spectra; it does not turn a general chi-square mixture
+into a scalar chi-square.
+
+The screen's 199-sign p-values are discrete, and the stated rejection rule is
+(p \le .05). The independent 999-sign confirmation is the basis for the claims
+about difficult cells. More complex models, more restrictions, smaller
+effective samples, or more heterogeneous pattern information could make
+standardization matter more than it does here.
+
+## Reproduce
+
+```sh
+# Cheap invariant check
+Rscript experiments/67-fiml-flip-stress/run_experiment.R \
+  --smoke --cores 4 --results-dir /tmp/magmaan-exp67-smoke
+
+# Broad null screen (the measured run used 12 local workers)
+Rscript experiments/67-fiml-flip-stress/run_experiment.R \
+  --screen --cores 12
+
+# Independent predefined hard-cell confirmation
+Rscript experiments/67-fiml-flip-stress/run_experiment.R \
+  --confirm --cores 12
+
+quarto render experiments/67-fiml-flip-stress/report.qmd
+```

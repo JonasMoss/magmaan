@@ -61,15 +61,21 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   hardening test above remains a core prerequisite independent of the
   simulation outcome; exact enumeration and the dense covariance oracle are
   now gated.
-  The first FIML probe (experiment 66) found that nuisance-effective flipping
-  rescued basic-flip conservatism at five restrictions, but the pattern-specific
-  standardized arm changed only 3 of about 1,800 null decisions while becoming
-  the dominant flip cost under missingness. Severe PL data remained liberal
-  (0.090 effective versus 0.060 score pEBA4), and the nested FIML battery was
-  both more liberal and less numerically available. Before varying rank or
-  adding MAR, run a reduced normal/PL, complete/30%-MCAR null grid with at least
-  500--1,000 successful fits per cell; keep effective primary, standardization
-  diagnostic, and report fit/test availability. Near-singular nuisance
+  The expanded FIML null gate is now complete in experiment 67. Its 240-cell,
+  500-attempt screen crosses normal/severe VM/IG/PL, n1=50/100/200/400,
+  complete/MCAR/paper-MAR/strong-MAR data, and ranks 1/3/5; an independent
+  11-cell confirmation uses 2,000 attempts and 999 signs. Effective versus
+  standardized rejection was 0.0693/0.0678 in the screen and 0.0808/0.0778 in
+  the deliberately hard confirmation, with only 0.145%/0.301% paired decision
+  disagreement. Score pEBA4 was 0.0496/0.0473, whereas nested pEBA4 was
+  0.1102/0.1146. Standardization therefore does not rescue severe-nonnormal
+  small-n flips at rank <=5, and at 999 signs its median 94.8-ms covariance
+  phase dominates the 12.1-ms effective sign sums. Do not spend another null
+  design on more missingness/rank cells. If power is pursued, use a small set
+  of method/cell-specific empirical-null thresholds so the liberal flips and
+  nested tests cannot win by construction. The bounded method question is now
+  a genuinely small-sample correction to the effective flip under severe
+  nonnormality, not more pattern standardization. Near-singular nuisance
   information remains a separate core-hardening prerequisite.
   Then decide other extensions separately: continuous LS and ordinal/mixed models need estimator-specific casewise
   influence contributions including estimated-weight effects; clustered data

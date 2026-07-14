@@ -81,6 +81,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 64 | [flip-calibration-frontier](64-flip-calibration-frontier/report.qmd) | probe | active | At fixed test rank, when do nuisance dimension, allocation, information geometry, and sample size make flip standardization worthwhile? |
 | 65 | [residual-flip-gof-probe](65-residual-flip-gof-probe/report.qmd) | probe | active | Can efficient residual-score flipping calibrate single-model SEM goodness of fit without an ad hoc regularizer? |
 | 66 | [fiml-score-flip-probe](66-fiml-score-flip-probe/report.qmd) | probe | active | Can nuisance-effective and pattern-standardized score flips rescue small-sample nested FIML tests in the published FIML--FMG design? |
+| 67 | [fiml-flip-stress](67-fiml-flip-stress/report.qmd) | probe | active | Across generator family, sample size, missingness mechanism, and restriction rank, where do direct-FIML effective and standardized score flips remain calibrated? |
 
 ## Archived
 
