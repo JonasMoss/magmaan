@@ -466,9 +466,22 @@ score_tests_robust_joint(spec::LatentStructure pt,
 // pattern/group strata only compress the flip-specific nuisance covariance.
 // `n_flips` counts random Rademacher transformations; the observed identity is
 // included separately in the Monte Carlo rank denominator.
+enum class ScoreFlipCalibration {
+  // Observed nuisance-effective score and asymptotic references only. No
+  // Rademacher transformations are drawn and n_flips is ignored.
+  AsymptoticOnly,
+  // Nuisance-effective Rademacher reference only.
+  Effective,
+  // Effective and flip-specifically standardized Rademacher references.
+  EffectiveStandardized,
+  // Basic, effective, and standardized references (the historical default).
+  All,
+};
+
 struct ScoreFlipOptions {
   int n_flips = 999;
   std::uint64_t seed = 1;
+  ScoreFlipCalibration calibration = ScoreFlipCalibration::All;
   // Deterministic verification path for tiny samples. Enumerates every
   // non-identity sign vector and ignores n_flips/seed; capped at n <= 20.
   bool exact_enumeration = false;

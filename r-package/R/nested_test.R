@@ -5,7 +5,10 @@
 #' The result carries basic, nuisance-effective, and flip-specifically
 #' standardized references; `p_value` selects the standardized result.
 #'
-#' @param fit_H1 Less-restricted complete-data ML or direct-FIML fit.
+#' @param fit_H1 Less-restricted complete-data ML or direct-FIML fit, or a
+#'   `magmaan_model_spec` for the less-restricted model. Supplying the model
+#'   avoids fitting H1 because a score test uses only H1's tangent and H0's
+#'   estimates.
 #' @param fit_H0 More-restricted affine nested fit over the same parameter
 #'   slots, estimator, and observations.
 #' @param data Raw fitting data for complete-data ML. Direct FIML uses the
@@ -13,6 +16,11 @@
 #' @param n_flips Number of random sign transformations, excluding the observed
 #'   identity.
 #' @param seed Non-negative deterministic integer seed.
+#' @param calibration Which randomization references to compute. `"effective"`
+#'   skips the basic and flip-specific covariance calculations;
+#'   `"effective-standardized"` adds the standardized reference; `"all"`
+#'   preserves the original three-reference result. `"asymptotic"` draws no
+#'   signs and is used by [nested_score_test()].
 #'
 #' @return A list of class `magmaan_score_flip_test`. In addition to the three
 #'   p-values it includes the mean-scaled and exact-mixture score references,
@@ -21,17 +29,24 @@
 #'   flip standardization, and the asymptotic comparators.
 #' @export
 score_flip_test <- function(fit_H1, fit_H0, data = NULL,
-                            n_flips = 999L, seed = 1) {
-  estimator_H1 <- toupper(fit_H1$estimator %||% "ML")
+                            n_flips = 999L, seed = 1,
+                            calibration = c("all", "effective-standardized",
+                                            "effective", "asymptotic")) {
+  calibration <- match.arg(calibration)
+  h1_is_model <- inherits(fit_H1, "magmaan_model_spec")
   estimator_H0 <- toupper(fit_H0$estimator %||% "ML")
+  estimator_H1 <- if (h1_is_model) estimator_H0 else
+    toupper(fit_H1$estimator %||% "ML")
   if (!identical(estimator_H1, estimator_H0) ||
       !estimator_H1 %in% c("ML", "FIML")) {
     stop("score_flip_test(): fits must use the same ML or FIML estimator",
          call. = FALSE)
   }
   n_flips <- as.integer(n_flips)[1L]
-  if (is.na(n_flips) || n_flips < 1L) {
-    stop("score_flip_test(): `n_flips` must be a positive integer", call. = FALSE)
+  if (is.na(n_flips) ||
+      (calibration != "asymptotic" && n_flips < 1L) || n_flips < 0L) {
+    stop("score_flip_test(): `n_flips` must be non-negative and positive when signs are drawn",
+         call. = FALSE)
   }
   seed <- as.numeric(seed)[1L]
   if (!is.finite(seed) || seed < 0 || seed != floor(seed)) {
@@ -47,32 +62,75 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
       stop("score_flip_test(): FIML uses the sample stored on the fits; omit `data`",
            call. = FALSE)
     }
-    if (is.null(fit_H1$raw_data) || is.null(fit_H0$raw_data)) {
-      stop("score_flip_test(): both FIML fits must carry `raw_data`", call. = FALSE)
+    if (is.null(fit_H0$raw_data) ||
+        (!h1_is_model && is.null(fit_H1$raw_data))) {
+      stop("score_flip_test(): FIML null fits must carry `raw_data`", call. = FALSE)
     }
-    if (!identical(fit_H1$raw_data, fit_H0$raw_data)) {
+    if (!h1_is_model && !identical(fit_H1$raw_data, fit_H0$raw_data)) {
       stop("score_flip_test(): FIML fits were not fitted to the same sample",
            call. = FALSE)
     }
-    raw <- fit_H1$raw_data
+    raw <- fit_H0$raw_data
   } else {
     if (missing(data) || is.null(data)) {
       stop("score_flip_test(): complete-data ML score flips require `data`",
            call. = FALSE)
     }
-    raw <- raw_data_arg(fit_H1, data)
+    raw <- raw_data_arg(fit_H0, data)
     if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
   }
-  out <- magmaan_core$inference_score_flip_test(
-    fit_H1, fit_H0, raw, n_flips, seed)
+  out <- if (h1_is_model) {
+    magmaan_core$inference_score_flip_test_model(
+      fit_H1$partable, fit_H0, raw, n_flips, seed, calibration)
+  } else {
+    magmaan_core$inference_score_flip_test(
+      fit_H1, fit_H0, raw, n_flips, seed, calibration)
+  }
+  out$calibration <- calibration
   class(out) <- c("magmaan_score_flip_test", "list")
+  out
+}
+
+#' Nuisance-effective nested score test without random sign calibration.
+#'
+#' Computes the same nuisance-orthogonalized observed score and robust
+#' restriction spectrum used by [score_flip_test()], but skips every random
+#' sign draw and the flip-specific covariance calculations. The recommended
+#' `p_value` is the pEBA4 mixture approximation. Scalar SB, exact-mixture, and
+#' direct sandwich comparators remain available for diagnostics.
+#'
+#' @inheritParams score_flip_test
+#'
+#' @return A list of class `magmaan_nested_score_test` containing the effective
+#'   score statistic, restriction eigenvalues, pEBA4/SB/exact-mixture/sandwich
+#'   p-values, conditioning diagnostics, and setup/asymptotic timings.
+#' @export
+nested_score_test <- function(fit_H1, fit_H0, data = NULL) {
+  out <- score_flip_test(
+    fit_H1, fit_H0, data = data, n_flips = 0L, seed = 0,
+    calibration = "asymptotic")
+  peba4 <- magmaan_core$robust_fmg_test(
+    out$statistic_effective, out$df, out$eigenvalues,
+    method = "peba", param = 4, truncate_negative = TRUE)
+  out$p_peba4 <- peba4$p_value
+  out$p_sb <- out$p_mean_scaled
+  out$p_all <- out$p_mixture
+  out$p_value <- out$p_peba4
+  class(out) <- c("magmaan_nested_score_test", "list")
   out
 }
 
 #' @export
 print.magmaan_score_flip_test <- function(x, ...) {
-  cat("standardized sign-flip score test\n")
-  cat("  statistic:", format(x$statistic_standardized),
+  label <- switch(x$calibration %||% "all",
+    effective = "effective sign-flip score test",
+    `effective-standardized` = "standardized sign-flip score test",
+    asymptotic = "nested score test (no sign calibration)",
+    "basic/effective/standardized sign-flip score test")
+  statistic <- if (is.finite(x$statistic_standardized))
+    x$statistic_standardized else x$statistic_effective
+  cat(label, "\n")
+  cat("  statistic:", format(statistic),
       " df:", x$df, "\n")
   cat("  p (basic/effective/standardized):",
       paste(format(c(x$p_basic, x$p_effective, x$p_standardized)),
@@ -82,6 +140,17 @@ print.magmaan_score_flip_test <- function(x, ...) {
         " p", format(x$p_sandwich), "\n")
   }
   cat("  random flips:", x$n_flips, " seed:", format(x$seed), "\n")
+  invisible(x)
+}
+
+#' @export
+print.magmaan_nested_score_test <- function(x, ...) {
+  cat("nuisance-effective nested score test\n")
+  cat("  statistic:", format(x$statistic_effective),
+      " df:", x$df, "\n")
+  cat("  p (pEBA4/SB/exact mixture):",
+      paste(format(c(x$p_peba4, x$p_sb, x$p_all)), collapse = " / "),
+      "\n")
   invisible(x)
 }
 

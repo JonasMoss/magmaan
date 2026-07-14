@@ -450,6 +450,12 @@ Result<inference::frontier::ScoreFlipTestResult>
 score_flip_test(const Fit &h1, const Fit &h0, const data::RawData &raw,
                 inference::frontier::ScoreFlipOptions options = {});
 
+// Score calibration needs H1's tangent but not H1 estimates. This overload
+// avoids fitting an otherwise-unused unrestricted model.
+Result<inference::frontier::ScoreFlipTestResult>
+score_flip_test(const Model &h1, const Fit &h0, const data::RawData &raw,
+                inference::frontier::ScoreFlipOptions options = {});
+
 } // namespace frontier
 
 Result<measures::ResidualMoments> residuals(const Fit &fit);
