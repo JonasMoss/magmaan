@@ -631,6 +631,31 @@ golden `parTable()` fixtures.
   larger reduced-grid null run, with nuisance-effective flip primary and the
   standardized arm retained only as a diagnostic before restriction rank or
   MAR is varied.
+  Experiment 67 completes that gate with a 240-cell null atlas: normal and
+  severe VM/IG/PL data, group-1 n=50/100/200/400 (group 2 at 70%), complete,
+  15/30% MCAR, paper-style 30% MAR, stronger logistic 30% MAR, and loading-
+  equality ranks 1/3/5. Its 500-attempt, 199-sign screen reuses one configural
+  FIML fit across ranks and produced 120,000 rank-specific test attempts.
+  Equal-cell rejection was 0.0128/0.0693/0.0678 for basic/effective/
+  standardized flips, 0.0526/0.0496 for score SB/pEBA4, and 0.1135/0.1102/
+  0.1004 for nested LR SB/pEBA4/exact mixture. Normal effective/standardized
+  rejection was 0.0558/0.0549, while VM and PL were about 0.075/0.073 and
+  0.076/0.074; small n and higher rank, not missingness percentage alone,
+  marked the liberal frontier. Score pEBA4 put 97.9% of cells in 0.025--0.075.
+  An independent predefined 11-cell confirmation (2,000 attempts, 999 signs)
+  put effective/standardized flips at 0.0808/0.0778 and score pEBA4 at 0.0473;
+  VM/PL n1=50, 30%-MCAR flips remained around 0.11--0.12. Standardization
+  changed 0.145% of screen and 0.301% of confirmation decisions. Its median
+  phase cost rose from 3.8 ms at 199 signs to 94.8 ms at 999 signs, versus
+  12.1 ms for the effective sign sums in the latter run. Flip versus nested
+  numerical availability was 99.49% versus 98.85% in the screen and 98.17%
+  versus 96.10% in the hard-cell run. The 12-worker runs took 14.3 and 10.8
+  minutes. This makes the effective flip a useful non-ad-hoc diagnostic, not a
+  uniformly calibrated small-n default under severe nonnormality; at rank <=5,
+  pattern standardization is not the missing correction. Score SB's 0.0526
+  aggregate is retained only as empirical error cancellation: at ranks 3/5 its
+  p-values differ from pEBA4 by about 0.0048/0.0063 while the score-spectrum
+  coefficient of variation averages 0.57/0.72.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the
