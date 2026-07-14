@@ -38,6 +38,27 @@ stopifnot(
 
 print(a)
 
+effective <- score_flip_test(
+  h1, h0, dat, n_flips = 63, seed = 17, calibration = "effective")
+score <- nested_score_test(h1, h0, dat)
+h1_model <- model_spec("f =~ x1 + a*x2 + b*x3 + x4")
+score_model <- nested_score_test(h1_model, h0, dat)
+stopifnot(
+  identical(effective$p_effective, a$p_effective),
+  is.na(effective$p_basic),
+  is.na(effective$p_standardized),
+  effective$resampling_standardization_seconds == 0,
+  inherits(score, "magmaan_nested_score_test"),
+  score$n_flips == 0L,
+  is.finite(score$p_peba4),
+  identical(score$p_value, score$p_peba4),
+  abs(score$statistic_effective - a$statistic_effective) < 1e-8,
+  abs(score_model$statistic_effective - score$statistic_effective) < 1e-8,
+  abs(score_model$p_peba4 - score$p_peba4) < 1e-12,
+  score$resampling_score_seconds == 0,
+  score$resampling_standardization_seconds == 0
+)
+
 # Direct FIML uses the observed-data score and the pattern-conditional Fisher
 # information. The fitted raw-data objects are the sample contract, so no data
 # argument is passed to score_flip_test().
@@ -50,6 +71,10 @@ f0 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat_mis,
               estimator = "FIML", se = "none", test = "none")
 fa <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
 fb <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
+fs <- nested_score_test(f1, f0)
+f1_model <- model_spec(
+  "f =~ x1 + a*x2 + b*x3 + x4", meanstructure = TRUE)
+fs_model <- nested_score_test(f1_model, f0)
 stopifnot(
   identical(fa$p_basic, fb$p_basic),
   identical(fa$p_effective, fb$p_effective),
@@ -57,5 +82,9 @@ stopifnot(
   fa$mean_variance_relative_shift > 0,
   abs(fa$statistic_effective - fa$statistic_standardized) < 1e-8,
   is.finite(fa$p_mixture),
-  isTRUE(fa$sandwich_available)
+  isTRUE(fa$sandwich_available),
+  is.finite(fs$p_peba4),
+  abs(fs$statistic_effective - fa$statistic_effective) < 1e-8,
+  abs(fs_model$statistic_effective - fs$statistic_effective) < 1e-8,
+  abs(fs_model$p_peba4 - fs$p_peba4) < 1e-12
 )

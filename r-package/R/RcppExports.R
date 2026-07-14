@@ -469,8 +469,12 @@ inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread =
     .Call(`_magmaan_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
 }
 
-inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0) {
-    .Call(`_magmaan_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed)
+inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all") {
+    .Call(`_magmaan_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed, calibration)
+}
+
+inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all") {
+    .Call(`_magmaan_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration)
 }
 
 infer_z_test <- function(fit, se) {
@@ -936,4 +940,3 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
-

@@ -498,9 +498,16 @@ golden `parTable()` fixtures.
   conditioning diagnostics are returned. The result also measures mean/max
   flip-specific covariance displacement and high-resolution setup,
   basic/effective resampling, standardization, asymptotic-comparator, and total
-  timings. `api::frontier::score_flip_test` and
-  the R `score_flip_test()` wrapper expose the method; direct FIML reuses the
-  fit's raw data and cached missingness pack. The current contract rejects
+  timings. `ScoreFlipOptions::calibration` can now request asymptotic-only,
+  effective-only, effective-plus-standardized, or the full historical battery;
+  skipped references do not draw signs or build their covariance geometry and
+  are returned as unavailable. `api::frontier::score_flip_test` and the R
+  `score_flip_test()` wrapper expose both the original fit-pair route and a
+  model-plus-H0 route: the latter uses H1's tangent without fitting H1. The R
+  `nested_score_test()` convenience selects the zero-resampling route and
+  reports score pEBA4 as its primary p-value alongside SB, exact-mixture, and
+  direct-sandwich diagnostics. Direct FIML reuses the H0 fit's raw data and
+  cached missingness pack. The current contract rejects
   fixed-X rows, nonlinear/inequality constraints, boundary null fits, and
   estimators other than complete ML or direct FIML.
   The C++ frontier option additionally has a deterministic verification-only

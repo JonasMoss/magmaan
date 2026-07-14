@@ -1558,6 +1558,38 @@ score_flip_test(const Fit &h1, const Fit &h0, const data::RawData &raw,
   return post_result(std::move(out));
 }
 
+Result<inference::frontier::ScoreFlipTestResult>
+score_flip_test(const Model &h1, const Fit &h0, const data::RawData &raw,
+                inference::frontier::ScoreFlipOptions options) {
+  post_expected<inference::frontier::ScoreFlipTestResult> out;
+  if (h0.estimator() == EstimatorKind::ML) {
+    const auto* samp = h0.data().sample_stats();
+    if (samp == nullptr) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "score_flip_test() requires sample statistics on an ML null fit"));
+    }
+    out = inference::frontier::score_flip_test(
+        h1.structure(), h1.matrix_rep(), h0.model().structure(),
+        h0.model().matrix_rep(), *samp, raw, h0.estimates(), options);
+  } else if (h0.estimator() == EstimatorKind::FIML) {
+    if (const auto* pack = h0.fiml_pack()) {
+      out = inference::frontier::score_flip_test(
+          h1.structure(), h1.matrix_rep(), h0.model().structure(),
+          h0.model().matrix_rep(), raw, *pack, h0.estimates(), options);
+    } else {
+      out = inference::frontier::score_flip_test(
+          h1.structure(), h1.matrix_rep(), h0.model().structure(),
+          h0.model().matrix_rep(), raw, h0.estimates(), options);
+    }
+  } else {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "score_flip_test() supports complete-data ML and direct FIML null fits"));
+  }
+  return post_result(std::move(out));
+}
+
 } // namespace frontier
 
 Result<measures::ResidualMoments> residuals(const Fit &fit) {

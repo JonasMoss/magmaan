@@ -19,7 +19,11 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 
 - **M/L — broaden and harden standardized score flips.** The frontier slice
   supports affine nested complete-data ML and direct-FIML pairs and is exercised
-  by experiments 62 and 66. Direct FIML uses casewise observed-pattern scores
+  by experiments 62 and 66. Its production probe path can now take H1 as a
+  model tangent plus the H0 fit, and independently select asymptotic-only,
+  effective, standardized, or full flip calibration, so future stress grids do
+  not refit H1 or compute unused resampling references. Direct FIML uses
+  casewise observed-pattern scores
   and conditional Fisher-information pattern strata; its all-observed reduction
   to complete ML is unit-gated. The tiny exact-enumeration kernel gate and independent dense
   per-case/hatted-nuisance oracle for the flip-specific covariance landed with

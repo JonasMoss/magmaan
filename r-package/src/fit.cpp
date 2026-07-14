@@ -7553,11 +7553,79 @@ Rcpp::DataFrame inference_score_tests_robust(
   return score_table_df(*out, ctx.names);
 }
 
+namespace {
+
+magmaan::inference::frontier::ScoreFlipCalibration
+score_flip_calibration_from_string(const std::string& calibration,
+                                   int n_flips) {
+  using Calibration =
+      magmaan::inference::frontier::ScoreFlipCalibration;
+  Calibration calibration_kind = Calibration::All;
+  if (calibration == "asymptotic") {
+    calibration_kind = Calibration::AsymptoticOnly;
+  } else if (calibration == "effective") {
+    calibration_kind = Calibration::Effective;
+  } else if (calibration == "effective-standardized") {
+    calibration_kind = Calibration::EffectiveStandardized;
+  } else if (calibration != "all") {
+    Rcpp::stop("magmaan: score_flip_test calibration must be 'asymptotic', "
+               "'effective', 'effective-standardized', or 'all'");
+  }
+  if (calibration_kind != Calibration::AsymptoticOnly && n_flips < 1) {
+    Rcpp::stop("magmaan: score_flip_test n_flips must be positive");
+  }
+  return calibration_kind;
+}
+
+Rcpp::List score_flip_result_to_r(
+    const magmaan::inference::frontier::ScoreFlipTestResult& out) {
+  return Rcpp::List::create(
+      Rcpp::_ ["df"] = out.df,
+      Rcpp::_ ["statistic_basic"] = out.statistic_basic,
+      Rcpp::_ ["statistic_effective"] = out.statistic_effective,
+      Rcpp::_ ["statistic_standardized"] = out.statistic_standardized,
+      Rcpp::_ ["p_basic"] = out.p_basic,
+      Rcpp::_ ["p_effective"] = out.p_effective,
+      Rcpp::_ ["p_standardized"] = out.p_standardized,
+      Rcpp::_ ["p_value"] = out.p_value,
+      Rcpp::_ ["mc_se_basic"] = out.mc_se_basic,
+      Rcpp::_ ["mc_se_effective"] = out.mc_se_effective,
+      Rcpp::_ ["mc_se_standardized"] = out.mc_se_standardized,
+      Rcpp::_ ["p_chisq"] = out.p_chisq,
+      Rcpp::_ ["scaling_factor"] = out.scaling_factor,
+      Rcpp::_ ["statistic_mean_scaled"] = out.statistic_mean_scaled,
+      Rcpp::_ ["p_mean_scaled"] = out.p_mean_scaled,
+      Rcpp::_ ["p_mixture"] = out.p_mixture,
+      Rcpp::_ ["statistic_sandwich"] = out.statistic_sandwich,
+      Rcpp::_ ["p_sandwich"] = out.p_sandwich,
+      Rcpp::_ ["sandwich_available"] = out.sandwich_available,
+      Rcpp::_ ["sandwich_min_eigenvalue"] = out.sandwich_min_eigenvalue,
+      Rcpp::_ ["sandwich_condition"] = out.sandwich_condition,
+      Rcpp::_ ["eigenvalues"] = Rcpp::wrap(out.eigvals),
+      Rcpp::_ ["n_flips"] = out.n_flips,
+      Rcpp::_ ["seed"] = static_cast<double>(out.seed),
+      Rcpp::_ ["nuisance_stationarity_norm"] = out.nuisance_stationarity_norm,
+      Rcpp::_ ["min_variance_eigenvalue"] = out.min_variance_eigenvalue,
+      Rcpp::_ ["max_variance_condition"] = out.max_variance_condition,
+      Rcpp::_ ["mean_variance_relative_shift"] = out.mean_variance_relative_shift,
+      Rcpp::_ ["max_variance_relative_shift"] = out.max_variance_relative_shift,
+      Rcpp::_ ["setup_seconds"] = out.setup_seconds,
+      Rcpp::_ ["resampling_score_seconds"] = out.resampling_score_seconds,
+      Rcpp::_ ["resampling_standardization_seconds"] =
+          out.resampling_standardization_seconds,
+      Rcpp::_ ["asymptotic_seconds"] = out.asymptotic_seconds,
+      Rcpp::_ ["total_seconds"] = out.total_seconds);
+}
+
+}  // namespace
+
 // [[Rcpp::export]]
 Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
                                      SEXP raw, int n_flips = 999,
-                                     double seed = 1.0) {
-  if (n_flips < 1) Rcpp::stop("magmaan: score_flip_test n_flips must be positive");
+                                     double seed = 1.0,
+                                     std::string calibration = "all") {
+  const auto calibration_kind =
+      score_flip_calibration_from_string(calibration, n_flips);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -7573,6 +7641,7 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
   magmaan::inference::frontier::ScoreFlipOptions options;
   options.n_flips = n_flips;
   options.seed = static_cast<std::uint64_t>(seed);
+  options.calibration = calibration_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (est1 == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
@@ -7586,42 +7655,53 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
         h1.pt, h1.rep, h0.pt, h0.rep, h0.samp, rd, est_from_fit(fit_H0), options);
   }
   if (!out.has_value()) stop_post(out.error());
-  return Rcpp::List::create(
-      Rcpp::_ ["df"] = out->df,
-      Rcpp::_ ["statistic_basic"] = out->statistic_basic,
-      Rcpp::_ ["statistic_effective"] = out->statistic_effective,
-      Rcpp::_ ["statistic_standardized"] = out->statistic_standardized,
-      Rcpp::_ ["p_basic"] = out->p_basic,
-      Rcpp::_ ["p_effective"] = out->p_effective,
-      Rcpp::_ ["p_standardized"] = out->p_standardized,
-      Rcpp::_ ["p_value"] = out->p_value,
-      Rcpp::_ ["mc_se_basic"] = out->mc_se_basic,
-      Rcpp::_ ["mc_se_effective"] = out->mc_se_effective,
-      Rcpp::_ ["mc_se_standardized"] = out->mc_se_standardized,
-      Rcpp::_ ["p_chisq"] = out->p_chisq,
-      Rcpp::_ ["scaling_factor"] = out->scaling_factor,
-      Rcpp::_ ["statistic_mean_scaled"] = out->statistic_mean_scaled,
-      Rcpp::_ ["p_mean_scaled"] = out->p_mean_scaled,
-      Rcpp::_ ["p_mixture"] = out->p_mixture,
-      Rcpp::_ ["statistic_sandwich"] = out->statistic_sandwich,
-      Rcpp::_ ["p_sandwich"] = out->p_sandwich,
-      Rcpp::_ ["sandwich_available"] = out->sandwich_available,
-      Rcpp::_ ["sandwich_min_eigenvalue"] = out->sandwich_min_eigenvalue,
-      Rcpp::_ ["sandwich_condition"] = out->sandwich_condition,
-      Rcpp::_ ["eigenvalues"] = Rcpp::wrap(out->eigvals),
-      Rcpp::_ ["n_flips"] = out->n_flips,
-      Rcpp::_ ["seed"] = static_cast<double>(out->seed),
-      Rcpp::_ ["nuisance_stationarity_norm"] = out->nuisance_stationarity_norm,
-      Rcpp::_ ["min_variance_eigenvalue"] = out->min_variance_eigenvalue,
-      Rcpp::_ ["max_variance_condition"] = out->max_variance_condition,
-      Rcpp::_ ["mean_variance_relative_shift"] = out->mean_variance_relative_shift,
-      Rcpp::_ ["max_variance_relative_shift"] = out->max_variance_relative_shift,
-      Rcpp::_ ["setup_seconds"] = out->setup_seconds,
-      Rcpp::_ ["resampling_score_seconds"] = out->resampling_score_seconds,
-      Rcpp::_ ["resampling_standardization_seconds"] =
-          out->resampling_standardization_seconds,
-      Rcpp::_ ["asymptotic_seconds"] = out->asymptotic_seconds,
-      Rcpp::_ ["total_seconds"] = out->total_seconds);
+  return score_flip_result_to_r(*out);
+}
+
+// Score/flip calibration needs H0 estimates but only H1's model tangent. This
+// overload accepts H1's partable directly so simulations do not fit an unused
+// unrestricted model merely to reconstruct its structure.
+// [[Rcpp::export]]
+Rcpp::List inference_score_flip_test_model(
+    SEXP partable_H1, Rcpp::List fit_H0, SEXP raw, int n_flips = 999,
+    double seed = 1.0, std::string calibration = "all") {
+  const auto calibration_kind =
+      score_flip_calibration_from_string(calibration, n_flips);
+  if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
+    Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
+  }
+  Ctx h0 = ctx_from_fit(fit_H0);
+  Rcpp::List sample_stats = Rcpp::List::create(
+      Rcpp::_ ["S"] = fit_H0["S"],
+      Rcpp::_ ["nobs"] = fit_H0["nobs"],
+      Rcpp::_ ["mean"] = fit_H0.containsElementNamed("sample_mean")
+          ? SEXP(fit_H0["sample_mean"]) : R_NilValue);
+  Ctx h1 = ctx_from_partable_sample_stats(
+      partable_H1, sample_stats, "inference_score_flip_test_model");
+  const std::string estimator = fit_H0.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H0["estimator"]) : "ML";
+  if (estimator != "ML" && estimator != "FIML") {
+    Rcpp::stop("magmaan: score_flip_test requires an ML or FIML null fit");
+  }
+  magmaan::inference::frontier::ScoreFlipOptions options;
+  options.n_flips = n_flips;
+  options.seed = static_cast<std::uint64_t>(seed);
+  options.calibration = calibration_kind;
+  magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
+  if (estimator == "FIML") {
+    magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit_H0, rd, owned_pack);
+    out = magmaan::inference::frontier::score_flip_test(
+        h1.pt, h1.rep, h0.pt, h0.rep, rd, pack, est_from_fit(fit_H0), options);
+  } else {
+    magmaan::data::RawData rd = complete_raw_from_arg(h1.rep, raw);
+    out = magmaan::inference::frontier::score_flip_test(
+        h1.pt, h1.rep, h0.pt, h0.rep, h0.samp, rd,
+        est_from_fit(fit_H0), options);
+  }
+  if (!out.has_value()) stop_post(out.error());
+  return score_flip_result_to_r(*out);
 }
 
 // infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from

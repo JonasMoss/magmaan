@@ -1594,6 +1594,42 @@ TEST_CASE("frontier score flips: affine ML pair is deterministic and standardize
                                 a->resampling_standardization_seconds +
                                 a->asymptotic_seconds);
 
+  auto effective_opts = opts;
+  effective_opts.calibration =
+      inf::frontier::ScoreFlipCalibration::Effective;
+  auto effective = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, effective_opts);
+  if (!effective.has_value()) MESSAGE(effective.error().detail);
+  REQUIRE(effective.has_value());
+  CHECK(effective->statistic_effective ==
+        doctest::Approx(a->statistic_effective));
+  CHECK(effective->p_effective == a->p_effective);
+  CHECK(effective->p_value == effective->p_effective);
+  CHECK((effective->eigvals - a->eigvals).norm() < 1e-12);
+  CHECK(std::isnan(effective->statistic_basic));
+  CHECK(std::isnan(effective->statistic_standardized));
+  CHECK(std::isnan(effective->p_basic));
+  CHECK(std::isnan(effective->p_standardized));
+  CHECK(effective->resampling_standardization_seconds == 0.0);
+  CHECK(std::isnan(effective->mean_variance_relative_shift));
+
+  auto asymptotic_opts = opts;
+  asymptotic_opts.n_flips = 0;
+  asymptotic_opts.calibration =
+      inf::frontier::ScoreFlipCalibration::AsymptoticOnly;
+  auto asymptotic = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, asymptotic_opts);
+  if (!asymptotic.has_value()) MESSAGE(asymptotic.error().detail);
+  REQUIRE(asymptotic.has_value());
+  CHECK(asymptotic->statistic_effective ==
+        doctest::Approx(a->statistic_effective));
+  CHECK((asymptotic->eigvals - a->eigvals).norm() < 1e-12);
+  CHECK(asymptotic->n_flips == 0);
+  CHECK(std::isnan(asymptotic->p_effective));
+  CHECK(asymptotic->p_value == asymptotic->p_mixture);
+  CHECK(asymptotic->resampling_score_seconds == 0.0);
+  CHECK(asymptotic->resampling_standardization_seconds == 0.0);
+
   auto fixed_x_h1 = h1.pt;
   REQUIRE_FALSE(fixed_x_h1.exo.empty());
   fixed_x_h1.exo.front() = 1;

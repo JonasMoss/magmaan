@@ -2337,9 +2337,20 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
                      const ScoreFlipOptions& options) {
   using Clock = std::chrono::steady_clock;
   const auto total_begin = Clock::now();
-  if (!options.exact_enumeration && options.n_flips < 1) {
+  const bool resample =
+      options.calibration != ScoreFlipCalibration::AsymptoticOnly;
+  const bool include_basic =
+      options.calibration == ScoreFlipCalibration::All;
+  const bool include_standardized =
+      options.calibration == ScoreFlipCalibration::All ||
+      options.calibration == ScoreFlipCalibration::EffectiveStandardized;
+  if (resample && !options.exact_enumeration && options.n_flips < 1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: n_flips must be positive"));
+  }
+  if (!resample && options.exact_enumeration) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: exact enumeration requires a flip calibration"));
   }
   if (fiml_pack == nullptr) {
     if (samp == nullptr) {
@@ -2466,59 +2477,79 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
         "score_flip_test: score rows and information strata differ"));
   }
   const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
-  const Eigen::MatrixXd basic_rows = scores * D;
   const Eigen::MatrixXd effective_rows = scores * G;
 
-  const Eigen::VectorXd u_basic_obs = basic_rows.colwise().sum().transpose();
   const Eigen::VectorXd u_eff_obs = effective_rows.colwise().sum().transpose();
-  auto t_basic_obs = flip_quadratic(u_basic_obs, V_identity,
-                                    "score_flip_test observed basic");
-  if (!t_basic_obs.has_value()) return std::unexpected(t_basic_obs.error());
   auto t_eff_obs = flip_quadratic(u_eff_obs, V_identity,
                                   "score_flip_test observed effective");
   if (!t_eff_obs.has_value()) return std::unexpected(t_eff_obs.error());
 
+  std::optional<Eigen::MatrixXd> basic_rows;
+  std::optional<FlipQuadratic> t_basic_obs;
+  if (include_basic) {
+    basic_rows.emplace(scores * D);
+    const Eigen::VectorXd u_basic_obs =
+        basic_rows->colwise().sum().transpose();
+    auto t = flip_quadratic(u_basic_obs, V_identity,
+                            "score_flip_test observed basic");
+    if (!t.has_value()) return std::unexpected(t.error());
+    t_basic_obs.emplace(std::move(*t));
+  }
+
   std::vector<detail::ScoreFlipGroupGeometry> geometry;
-  geometry.reserve(strata.per_case.size());
-  for (const auto& J : strata.per_case) {
-    geometry.push_back(detail::ScoreFlipGroupGeometry{
-        G.transpose() * J * G,
-        G.transpose() * J * K,
-        K.transpose() * J * K});
+  if (include_standardized) {
+    geometry.reserve(strata.per_case.size());
+    for (const auto& J : strata.per_case) {
+      geometry.push_back(detail::ScoreFlipGroupGeometry{
+          G.transpose() * J * G,
+          G.transpose() * J * K,
+          K.transpose() * J * K});
+    }
   }
   auto variance_for = [&](const std::vector<std::int64_t>& sign_sum) {
     return detail::score_flip_variance(geometry, *Ainv, strata.n_obs, sign_sum);
   };
 
-  const std::vector<std::int64_t> identity_sums = strata.n_obs;
-  auto t_std_obs = flip_quadratic(u_eff_obs, variance_for(identity_sums),
-                                  "score_flip_test observed standardized");
-  if (!t_std_obs.has_value()) return std::unexpected(t_std_obs.error());
+  std::optional<FlipQuadratic> t_std_obs;
+  if (include_standardized) {
+    const std::vector<std::int64_t> identity_sums = strata.n_obs;
+    auto t = flip_quadratic(u_eff_obs, variance_for(identity_sums),
+                            "score_flip_test observed standardized");
+    if (!t.has_value()) return std::unexpected(t.error());
+    t_std_obs.emplace(std::move(*t));
+  }
   const auto setup_end = Clock::now();
 
   std::mt19937_64 rng(options.seed);
   int exceed_basic = 0;
   int exceed_effective = 0;
   int exceed_standardized = 0;
-  double min_variance_eigenvalue = t_std_obs->min_eigenvalue;
-  double max_variance_condition = t_std_obs->condition;
+  double min_variance_eigenvalue = include_standardized
+      ? t_std_obs->min_eigenvalue
+      : std::numeric_limits<double>::quiet_NaN();
+  double max_variance_condition = include_standardized
+      ? t_std_obs->condition
+      : std::numeric_limits<double>::quiet_NaN();
   double variance_relative_shift_sum = 0.0;
   double max_variance_relative_shift = 0.0;
   double resampling_score_seconds = 0.0;
   double resampling_standardization_seconds = 0.0;
   const Eigen::Index total_n = scores.rows();
-  if (options.exact_enumeration && total_n > 20) {
+  if (resample && options.exact_enumeration && total_n > 20) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: exact enumeration is capped at n <= 20"));
   }
-  const int n_resamples = options.exact_enumeration
+  const int n_resamples = !resample ? 0 : options.exact_enumeration
       ? static_cast<int>((std::uint64_t{1} << total_n) - 1ULL)
       : options.n_flips;
   for (int bflip = 0; bflip < n_resamples; ++bflip) {
     const auto score_begin = Clock::now();
-    Eigen::VectorXd ub = Eigen::VectorXd::Zero(df);
+    Eigen::VectorXd ub;
+    if (include_basic) ub = Eigen::VectorXd::Zero(df);
     Eigen::VectorXd ue = Eigen::VectorXd::Zero(df);
-    std::vector<std::int64_t> sign_sum(strata.per_case.size(), 0);
+    std::vector<std::int64_t> sign_sum;
+    if (include_standardized)
+      sign_sum.assign(strata.per_case.size(), 0);
     for (Eigen::Index row = 0; row < total_n; ++row) {
       const double sign = options.exact_enumeration
           ? (((static_cast<std::uint64_t>(bflip) >> row) & 1ULL) == 0ULL
@@ -2526,37 +2557,49 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
           : ((rng() & 1ULL) == 0ULL ? -1.0 : 1.0);
       const std::size_t stratum =
           strata.row_stratum[static_cast<std::size_t>(row)];
-      sign_sum[stratum] += static_cast<std::int64_t>(sign);
-      ub.noalias() += sign * basic_rows.row(row).transpose();
+      if (include_standardized)
+        sign_sum[stratum] += static_cast<std::int64_t>(sign);
+      if (include_basic)
+        ub.noalias() += sign * basic_rows->row(row).transpose();
       ue.noalias() += sign * effective_rows.row(row).transpose();
     }
-    auto tb = flip_quadratic(ub, V_identity, "score_flip_test basic flip");
-    if (!tb.has_value()) return std::unexpected(tb.error());
     auto te = flip_quadratic(ue, V_identity, "score_flip_test effective flip");
     if (!te.has_value()) return std::unexpected(te.error());
+    std::optional<FlipQuadratic> tb;
+    if (include_basic) {
+      auto t = flip_quadratic(ub, V_identity, "score_flip_test basic flip");
+      if (!t.has_value()) return std::unexpected(t.error());
+      tb.emplace(std::move(*t));
+    }
     const auto score_end = Clock::now();
     resampling_score_seconds +=
         std::chrono::duration<double>(score_end - score_begin).count();
 
-    const auto standardized_begin = Clock::now();
-    const Eigen::MatrixXd V_flip = variance_for(sign_sum);
-    const double variance_shift =
-        (V_flip - V_identity).norm() / std::max(1e-30, V_identity.norm());
-    variance_relative_shift_sum += variance_shift;
-    max_variance_relative_shift =
-        std::max(max_variance_relative_shift, variance_shift);
-    auto ts = flip_quadratic(ue, V_flip,
-                             "score_flip_test standardized flip");
-    if (!ts.has_value()) return std::unexpected(ts.error());
-    resampling_standardization_seconds += std::chrono::duration<double>(
-        Clock::now() - standardized_begin).count();
-    if (tb->statistic >= t_basic_obs->statistic) ++exceed_basic;
+    std::optional<FlipQuadratic> ts;
+    if (include_standardized) {
+      const auto standardized_begin = Clock::now();
+      const Eigen::MatrixXd V_flip = variance_for(sign_sum);
+      const double variance_shift =
+          (V_flip - V_identity).norm() / std::max(1e-30, V_identity.norm());
+      variance_relative_shift_sum += variance_shift;
+      max_variance_relative_shift =
+          std::max(max_variance_relative_shift, variance_shift);
+      auto t = flip_quadratic(ue, V_flip,
+                              "score_flip_test standardized flip");
+      if (!t.has_value()) return std::unexpected(t.error());
+      ts.emplace(std::move(*t));
+      resampling_standardization_seconds += std::chrono::duration<double>(
+          Clock::now() - standardized_begin).count();
+    }
+    if (include_basic && tb->statistic >= t_basic_obs->statistic) ++exceed_basic;
     if (te->statistic >= t_eff_obs->statistic) ++exceed_effective;
-    if (ts->statistic >= t_std_obs->statistic) ++exceed_standardized;
-    min_variance_eigenvalue =
-        std::min(min_variance_eigenvalue, ts->min_eigenvalue);
-    max_variance_condition =
-        std::max(max_variance_condition, ts->condition);
+    if (include_standardized) {
+      if (ts->statistic >= t_std_obs->statistic) ++exceed_standardized;
+      min_variance_eigenvalue =
+          std::min(min_variance_eigenvalue, ts->min_eigenvalue);
+      max_variance_condition =
+          std::max(max_variance_condition, ts->condition);
+    }
   }
 
   const auto asymptotic_begin = Clock::now();
@@ -2565,27 +2608,39 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
       {}, score_full, I, I, B1, K, D);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
 
+  const double nan = std::numeric_limits<double>::quiet_NaN();
   const double denom = static_cast<double>(n_resamples + 1);
   ScoreFlipTestResult out;
   out.df = static_cast<int>(df);
-  out.statistic_basic = t_basic_obs->statistic;
+  out.statistic_basic = include_basic ? t_basic_obs->statistic : nan;
   out.statistic_effective = t_eff_obs->statistic;
-  out.statistic_standardized = t_std_obs->statistic;
-  out.p_basic = (1.0 + static_cast<double>(exceed_basic)) / denom;
-  out.p_effective = (1.0 + static_cast<double>(exceed_effective)) / denom;
-  out.p_standardized = (1.0 + static_cast<double>(exceed_standardized)) / denom;
-  out.p_value = out.p_standardized;
-  out.mc_se_basic = options.exact_enumeration
-      ? 0.0 : flip_mc_se(out.p_basic, n_resamples);
-  out.mc_se_effective = options.exact_enumeration
-      ? 0.0 : flip_mc_se(out.p_effective, n_resamples);
-  out.mc_se_standardized = options.exact_enumeration
-      ? 0.0 : flip_mc_se(out.p_standardized, n_resamples);
+  out.statistic_standardized = include_standardized
+      ? t_std_obs->statistic : nan;
+  out.p_basic = include_basic
+      ? (1.0 + static_cast<double>(exceed_basic)) / denom : nan;
+  out.p_effective = resample
+      ? (1.0 + static_cast<double>(exceed_effective)) / denom : nan;
+  out.p_standardized = include_standardized
+      ? (1.0 + static_cast<double>(exceed_standardized)) / denom : nan;
+  out.mc_se_basic = include_basic
+      ? (options.exact_enumeration ? 0.0
+                                   : flip_mc_se(out.p_basic, n_resamples))
+      : nan;
+  out.mc_se_effective = resample
+      ? (options.exact_enumeration ? 0.0
+                                   : flip_mc_se(out.p_effective, n_resamples))
+      : nan;
+  out.mc_se_standardized = include_standardized
+      ? (options.exact_enumeration
+             ? 0.0 : flip_mc_se(out.p_standardized, n_resamples))
+      : nan;
   out.p_chisq = chi2_pvalue(out.statistic_effective, out.df);
   out.scaling_factor = asymptotic->scaling_factor;
   out.statistic_mean_scaled = asymptotic->mi_scaled;
   out.p_mean_scaled = asymptotic->p_value;
   out.p_mixture = asymptotic->p_mixture;
+  out.p_value = include_standardized ? out.p_standardized
+      : resample ? out.p_effective : out.p_mixture;
   out.statistic_sandwich = asymptotic->mi_sandwich;
   out.p_sandwich = asymptotic->p_sandwich;
   out.sandwich_available = asymptotic->sandwich_available;
@@ -2599,8 +2654,11 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   out.min_variance_eigenvalue = min_variance_eigenvalue;
   out.max_variance_condition = max_variance_condition;
   out.mean_variance_relative_shift =
-      variance_relative_shift_sum / static_cast<double>(n_resamples);
-  out.max_variance_relative_shift = max_variance_relative_shift;
+      include_standardized
+          ? variance_relative_shift_sum / static_cast<double>(n_resamples)
+          : nan;
+  out.max_variance_relative_shift = include_standardized
+      ? max_variance_relative_shift : nan;
   out.setup_seconds =
       std::chrono::duration<double>(setup_end - total_begin).count();
   out.resampling_score_seconds = resampling_score_seconds;
