@@ -1,0 +1,237 @@
+---
+title: "What breaks the Satorra–Bentler score test?"
+subtitle: "Degrees of freedom, structure, and the eigenvalue spectrum — with a map of the test family"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({library(ggplot2); library(knitr)})
+files <- file.path("results", c("df_sweep.csv", "structure.csv", "metadata.csv"))
+if (!all(file.exists(files)))
+  stop("missing results; run `Rscript run_experiment.R --full` (or --help)")
+dfs <- read.csv(files[[1L]], stringsAsFactors = FALSE)
+st  <- read.csv(files[[2L]], stringsAsFactors = FALSE)
+meta <- read.csv(files[[3L]], stringsAsFactors = FALSE)
+reps_df <- dfs$reps[1]; reps_st <- st$reps[1]
+pretty <- c(score_chisq = "naive χ²", score_sb = "SB (mean-scaled)",
+  score_mv = "mean+var", score_ss = "scaled-shifted", score_peba4 = "pEBA4",
+  score_pall = "pEBA-all", score_sandwich = "sandwich", flip_basic = "flip (basic)",
+  flip_effective = "flip (effective)", flip_standardized = "flip (standardized)")
+```
+
+## Question
+
+The Satorra–Bentler mean-scaled statistic is the default robust score/LRT test
+for a non-normal SEM restriction. In a companion calibration screen it was
+almost suspiciously well behaved. This experiment asks **what, if anything,
+actually degrades it**: the degrees of freedom of the restriction, the
+structural information geometry of the model, or something else — and how it
+compares with the spectrum-aware corrections and the sign-flip tests that target
+the same null distribution.
+
+## Short answer
+
+The master variable is neither df nor structure but the **dispersion of the
+test's eigenvalue spectrum**, summarized by its coefficient of variation
+`CV(λ)`. Satorra–Bentler's error grows like `1 + CV(λ)²`, and under homogeneous
+non-normality `CV(λ)` sits near 1 no matter what we do — so SB is remarkably
+robust. **Lowering the degrees of freedom does not break it**: SB stays at the
+nominal 5% across the whole range from `df = 1` to `df = 28`. **Clean structural
+imbalance barely moves it** either; the one structural setting that nudges it
+liberal (near-Heywood residuals) does so through boundary ill-conditioning, not
+spectrum concentration, and it degrades the flip tests *more* than SB. The only
+lever that would raise `CV(λ)` enough to matter is directional (heterogeneous)
+kurtosis, which these clean designs deliberately exclude. Net: the corrected
+score test is dependable across df and structure; the spectrum-aware and flip
+variants earn their keep only in the concentrated-kurtosis corner.
+
+## Evidence
+
+### Degrees of freedom do not move Satorra–Bentler
+
+Holding everything else clean (homogeneous `Φ = Θ = 1`, homogeneous excess
+kurtosis 21 on every indicator), we vary only the restriction rank
+`df = q · (G − 1)` — low df by testing one loading across few groups, high df by
+testing several across eight. SB tracks the nominal 5% at every df; at `df = 1`
+it is *exact* (a single eigenvalue leaves nothing to mean-scale), and it never
+leaves the acceptable band. The flip tests run a hair liberal throughout, and
+naive χ² (off the chart, rejecting 40–100%) is unusable.
+
+```{r df-plot, fig.width = 7, fig.height = 4.2}
+show <- c("score_sb", "score_peba4", "score_pall", "flip_effective")
+d <- dfs[dfs$distribution == "vm", ]
+long <- do.call(rbind, lapply(show, function(m)
+  data.frame(df = d$df_obs, method = pretty[[m]], rate = d[[m]])))
+long$method <- factor(long$method, levels = pretty[show])
+ggplot(long, aes(df, rate, colour = method)) +
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = .025, ymax = .075,
+           alpha = .08, fill = "grey40") +
+  geom_hline(yintercept = .05, linetype = 2, colour = "grey40") +
+  geom_line(alpha = .5) + geom_point(size = 2) +
+  scale_x_continuous(breaks = sort(unique(long$df))) +
+  coord_cartesian(ylim = c(0, .12)) +
+  labs(x = "restriction df", y = "rejection rate at α = .05", colour = NULL,
+       caption = sprintf("Vale–Maurelli, homogeneous kurtosis; %s reps/cell. Band = 2.5–7.5%%.", reps_df)) +
+  theme_minimal(base_size = 12) + theme(legend.position = "top")
+```
+
+### Clean structure barely moves it; near-Heywood is a fragile, shared failure
+
+Fixing `df = 28` and pushing the model's information geometry — from the
+alternating-group "geometry" regime to a concentrated near-Heywood structure —
+moves the eigenvalue `CV` only modestly. SB drifts from nominal to mildly liberal
+only in the concentrated regime, and there the flip tests degrade at least as much
+while the pEBA corrections stay conservative. On normal data the identical
+concentrated structure leaves every test at nominal, confirming there is no
+structural lever without non-normality.
+
+```{r structure-table}
+cols <- c("structure", "distribution", "eigen_cv", "score_sb", "score_peba4",
+          "score_pall", "flip_effective", "flip_standardized", "score_chisq")
+tab <- st[, cols]
+names(tab) <- c("Structure", "Data", "CV(λ)", "SB", "pEBA4", "pEBA-all",
+                "flip-eff", "flip-std", "naive χ²")
+kable(tab, digits = 3, caption = sprintf(
+  "Rejection at α = .05, df = 28, p = 20, %s reps/cell. Target .050.", reps_st))
+```
+
+## What the tests are
+
+*Heuristic, no proofs; the aim is to say what each statistic is and why they
+differ. The lineage runs through the SEM, semiparametric M-estimation, and GEE
+literatures, which are the same construction seen from three angles.*
+
+### One object underlies all of them
+
+With sample covariance `S`, model `Σ(θ)`, and `s = vech(S)`, `σ(θ) = vech(Σ(θ))`,
+the sample moments obey $\sqrt{n}\,(s-\sigma(\theta_0)) \xrightarrow{d}
+\mathcal N(0,\Gamma)$. Under normality $\Gamma = \Gamma_N =
+2D^{+}(\Sigma\otimes\Sigma)D^{+\prime}$; in general $\Gamma$ carries fourth-order
+cumulants (excess kurtosis) — Browne's ADF matrix. Normal-theory ML behaves near
+the optimum like GLS with weight $W = \tfrac12 D'(\Sigma^{-1}\otimes\Sigma^{-1})D
+\propto \Gamma_N^{-1}$, and with Jacobian $\Delta = \partial\sigma/\partial\theta$.
+For a rank-$r$ restriction ($r = \text{df}$), the LRT, Lagrange-multiplier
+(score), and Wald statistics are asymptotically one quadratic form, and under
+$H_0$
+
+$$
+T_n \ \xrightarrow{d}\ \sum_{i=1}^{r}\lambda_i\,\chi^2_{1,i},\qquad
+\lambda_i = \text{eigenvalues of } U\Gamma,\quad
+U = W - W\Delta(\Delta'W\Delta)^{-1}\Delta'W .
+$$
+
+Everything is in the $\lambda_i$. If the working weight matches the truth
+($W \propto \Gamma^{-1}$, e.g. normal data), $U\Gamma$ is a projector, the
+$\lambda_i$ are $r$ ones and the rest zero, and $T_n \to \chi^2_r$ — the textbook
+case. Non-normality keeps the normal-theory $W$ while $\Gamma \neq \Gamma_N$, so
+the $\lambda_i$ spread and $\mathbb E[T_n] = \sum_i\lambda_i = \operatorname{tr}(U\Gamma) > r$:
+naive χ² over-rejects. Two scalars govern the corrections:
+$m_1 = \sum_i\lambda_i$, $m_2 = \sum_i\lambda_i^2$, and
+$\mathrm{CV}(\lambda) = \mathrm{sd}(\lambda)/\bar\lambda$.
+
+This is exactly a **score test under a working model**. The estimating equations
+$\Delta'W(s-\sigma(\theta)) = 0$ and the sandwich law of $\hat\theta$ are the
+misspecified-likelihood results of White (1982) and Godambe's estimating-function
+theory; the nuisance projection in $U$ is the semiparametric **effective score**
+(Bickel–Klaassen–Ritov–Wellner; Tsiatis). In GEE the normal-theory $W$ *is* the
+working correlation, and the **generalized score test** (Boos 1992) with the
+cluster-GLM correction of Rotnitzky & Jewell (1990) is the GEE twin of
+Satorra–Bentler — same weighted sum of χ², same mean/variance adjustments.
+
+### The corrections, by how much of the spectrum they use
+
+| test (code) | reference | uses |
+|---|---|---|
+| naive χ² (`score_chisq`) | $\chi^2_r$ | nothing ($\lambda_i\equiv1$) |
+| **SB** (`score_sb`) | $T_n/c \sim \chi^2_r,\ c = m_1/r$ | mean |
+| mean+var / scaled-shift (`score_mv`,`score_ss`) | $\chi^2_d,\ d = m_1^2/m_2$ | first two moments |
+| pEBA / Imhof (`score_peba4`,`score_pall`) | $\Pr(\sum\hat\lambda_i\chi^2_1 > T_n)$ | full spectrum |
+| flip (`flip_*`) | sign-flip resample | spectrum implicitly, no $\widehat\Gamma$ |
+
+- **Satorra–Bentler** divides by $c = \bar\lambda$ so the reference has the right
+  mean. Its only error is the variance it misses:
+  $\mathrm{Var}(T_n)/\mathrm{Var}(c\,\chi^2_r) = r\,m_2/m_1^2 = 1 + \mathrm{CV}(\lambda)^2$.
+  Exact when the eigenvalues are equal ($\mathrm{CV}=0$; e.g. $r=1$); degrades only
+  as the spectrum disperses. This identity is the whole empirical story above.
+- **Mean-and-variance / scaled-shifted** (Satorra–Bentler 1994; Asparouhov–Muthén
+  2010) also matches $m_2$ through a Satterthwaite fractional df — recovering the
+  tail SB misses once $\mathrm{CV}$ is large.
+- **pEBA / Imhof** plug in the estimated spectrum and evaluate the actual
+  weighted-χ² tail (Imhof 1961; Davies 1980); pEBA uses a leading block of
+  eigenvalues plus a tail penalty for stability. Most accurate — when $\widehat\Gamma$
+  is well estimated.
+- **Sandwich** ($V_{\text{sw}} = (\Delta'W\Delta)^{-1}\Delta'W\Gamma W\Delta(\Delta'W\Delta)^{-1}$)
+  is the SEM Huber–White / Liang–Zeger robust covariance; excellent for standard
+  errors, but a single sandwich χ² still treats the $\lambda_i$ as equal, so as a
+  *test* it behaves like an unscaled family member.
+
+### Flip tests: resample the null, never estimate $\Gamma$
+
+Write the effective score as a sum of per-case contributions,
+$U_n = n^{-1/2}\sum_i \psi_i$ with $\mathbb E_{H_0}[\psi_i] = 0$, where $\psi_i$ is
+the case-$i$ influence for the tested constraint after projecting out the nuisance
+parameters. Draw Rademacher signs $\varepsilon_i\in\{\pm1\}$ and recompute
+$U_n^\varepsilon = n^{-1/2}\sum_i \varepsilon_i\hat\psi_i$. Flipping kills the mean
+but preserves the covariance, so the flipped statistics reproduce the same
+$\sum\lambda_i\chi^2_1$ law **without ever forming $\widehat\Gamma$**; the p-value
+is $(1+\#\{T_n^\varepsilon \ge T_n\})/(1+B)$. The variants trade robustness for
+accuracy: `basic` flips the raw score; `effective` flips the nuisance-orthogonalized
+(Neyman-orthogonal) score; `standardized` additionally studentizes each flip for a
+pivotal statistic. This is the wild / sign-flip bootstrap (Wu 1986; Liu 1988;
+Mammen 1993) specialized to score contributions, exactly as in Hemerik–Goeman–Finos
+(2020) for GLMs, and the SEM instance is the Foldnes–Grønneberg–Moss flip test.
+
+### How to hold them in your head
+
+Every test references the *same* null law $\sum_i\lambda_i\chi^2_{1,i}$ and differs
+only in how much of the spectrum it uses: naive (0 moments) → SB (1) → mean+var (2)
+→ pEBA/Imhof (all) → flip (all, implicitly, $\widehat\Gamma$-free). Under homogeneous
+kurtosis $\mathrm{CV}(\lambda)\approx1$, SB's $1+\mathrm{CV}^2$ penalty is small, which
+is why df and clean structure cannot dislodge it; only concentrated, directional
+kurtosis raises $\mathrm{CV}$ enough for the richer references to matter.
+
+## Caveats
+
+- Reps are modest (see the caption); cell rejection rates carry visible Monte
+  Carlo scatter, so read trends, not third decimals. The df result (flat) and the
+  structure result (no clean lever) are the robust conclusions.
+- The kurtosis here is **homogeneous** across indicators by design — that is what
+  caps `CV(λ)`. The complementary study, heterogeneous/directional kurtosis, is
+  the one expected to move SB and is deliberately out of scope.
+- The concentrated structure leans on near-Heywood residuals; a few fits fail to
+  converge there and are dropped, so that column is the least clean.
+- These are calibration (Type-I) results under a true equality null; power is not
+  studied here.
+
+## Reproduce
+
+```sh
+Rscript experiments/68-score-test-calibration-drivers/run_experiment.R --help
+Rscript experiments/68-score-test-calibration-drivers/run_experiment.R          # smoke
+Rscript experiments/68-score-test-calibration-drivers/run_experiment.R --full   # full pilot
+quarto render experiments/68-score-test-calibration-drivers/report.qmd
+```
+
+## References
+
+*SEM.* Satorra (1989, *Psychometrika*); Satorra & Bentler (1988 ASA Proc.; 1994,
+*Latent Variables Analysis*); Browne (1984, *BJMSP*); Shapiro (1986, *JASA*);
+Sörbom (1989, *Psychometrika*); Asparouhov & Muthén (2010); Maydeu-Olivares (2017,
+*Psychometrika*).
+*Semiparametric / M-estimation.* Godambe (1960); White (1982, *Econometrica*);
+Bickel, Klaassen, Ritov & Wellner (1993); Tsiatis (2006).
+*GEE.* Liang & Zeger (1986, *Biometrika*); Rotnitzky & Jewell (1990, *Biometrika*);
+Boos (1992, *Am. Stat.*).
+*Quadratic forms in normals.* Satterthwaite (1946); Box (1954); Imhof (1961,
+*Biometrika*); Davies (1980, *Appl. Stat.*).
+*Sign-flip / wild bootstrap.* Wu (1986); Liu (1988); Mammen (1993);
+DiCiccio & Romano (2017, *JASA*); Hemerik, Goeman & Finos (2020, *JRSS-B*).
+*SEM flip test / pEBA.* Foldnes, Grønneberg & Moss — fill exact citation(s) and
+the pEBA reference.
