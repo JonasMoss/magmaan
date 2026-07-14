@@ -1678,6 +1678,88 @@ TEST_CASE("frontier score flips: exact enumeration is seed-free on tiny n") {
   CHECK_FALSE(too_large.has_value());
 }
 
+TEST_CASE("frontier FIML score flips: all-observed patterns equal complete ML") {
+  auto h1 = build_mean("f =~ x1 + a*x2 + b*x3 + x4");
+  auto h0 = build_mean("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  std::mt19937 rng(20260714u);
+  auto raw_fiml = gaussian_cfa_raw(rng, 180, 0);
+  auto raw_ml = raw_fiml;
+  raw_ml.mask.clear();
+  auto samp = magmaan::data::sample_stats_from_raw(raw_ml);
+  REQUIRE(samp.has_value());
+
+  magmaan::optim::OptimOptions fit_opts;
+  fit_opts.max_iter = 1000;
+  auto est0 = magmaan::test::fit_fiml(h0.pt, h0.rep, raw_fiml, fit_opts);
+  REQUIRE(est0.has_value());
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw_fiml);
+  REQUIRE(pack.has_value());
+
+  inf::frontier::ScoreFlipOptions opts;
+  opts.n_flips = 127;
+  opts.seed = 414;
+  auto complete = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw_ml, *est0, opts);
+  if (!complete.has_value()) MESSAGE(complete.error().detail);
+  REQUIRE(complete.has_value());
+  auto fiml = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw_fiml, *pack, *est0, opts);
+  if (!fiml.has_value()) MESSAGE(fiml.error().detail);
+  REQUIRE(fiml.has_value());
+
+  CHECK(fiml->df == complete->df);
+  CHECK(std::abs(fiml->statistic_basic - complete->statistic_basic) < 1e-9);
+  CHECK(std::abs(fiml->statistic_effective - complete->statistic_effective) <
+        1e-9);
+  CHECK(std::abs(fiml->statistic_standardized -
+                 complete->statistic_standardized) < 1e-9);
+  CHECK(fiml->p_basic == complete->p_basic);
+  CHECK(fiml->p_effective == complete->p_effective);
+  CHECK(fiml->p_standardized == complete->p_standardized);
+  CHECK((fiml->eigvals - complete->eigvals).norm() < 1e-9);
+  CHECK(fiml->mean_variance_relative_shift ==
+        doctest::Approx(complete->mean_variance_relative_shift).epsilon(1e-9));
+}
+
+TEST_CASE("frontier FIML score flips: missing-pattern correction is reproducible") {
+  auto h1 = build_mean("f =~ x1 + a*x2 + b*x3 + x4");
+  auto h0 = build_mean("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  std::mt19937 rng(1717u);
+  const auto raw = gaussian_cfa_raw(rng, 240, 3);
+  magmaan::optim::OptimOptions fit_opts;
+  fit_opts.max_iter = 1200;
+  auto est0 = magmaan::test::fit_fiml(h0.pt, h0.rep, raw, fit_opts);
+  REQUIRE(est0.has_value());
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  REQUIRE(pack->cache.patterns.size() > 1);
+
+  inf::frontier::ScoreFlipOptions opts;
+  opts.n_flips = 127;
+  opts.seed = 991;
+  auto a = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw, *pack, *est0, opts);
+  if (!a.has_value()) MESSAGE(a.error().detail);
+  REQUIRE(a.has_value());
+  auto b = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw, *pack, *est0, opts);
+  REQUIRE(b.has_value());
+
+  CHECK(a->df == 1);
+  CHECK(a->p_basic == b->p_basic);
+  CHECK(a->p_effective == b->p_effective);
+  CHECK(a->p_standardized == b->p_standardized);
+  CHECK(std::abs(a->statistic_effective - a->statistic_standardized) < 1e-9);
+  CHECK(a->mean_variance_relative_shift > 0.0);
+  CHECK(a->max_variance_relative_shift >= a->mean_variance_relative_shift);
+  CHECK(a->min_variance_eigenvalue > 0.0);
+  CHECK(a->max_variance_condition >= 1.0);
+  CHECK(std::isfinite(a->p_mean_scaled));
+  CHECK(std::isfinite(a->p_mixture));
+  CHECK(a->sandwich_available);
+  CHECK(std::isfinite(a->p_sandwich));
+}
+
 TEST_CASE("frontier score flips: grouped variance matches dense case oracle") {
   using inf::frontier::detail::ScoreFlipGroupGeometry;
   using inf::frontier::detail::score_flip_variance;

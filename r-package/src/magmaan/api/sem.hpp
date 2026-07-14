@@ -445,6 +445,8 @@ score_tests_robust(const Fit &fit, const data::RawData &raw,
 Result<inference::ScoreTestTable>
 score_tests_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
                    inference::frontier::RobustScoreOptions options = {});
+// Supports complete-data ML and direct FIML pairs; `raw` must be the common
+// fitted sample (including the FIML observed-value mask where applicable).
 Result<inference::frontier::ScoreFlipTestResult>
 score_flip_test(const Fit &h1, const Fit &h0, const data::RawData &raw,
                 inference::frontier::ScoreFlipOptions options = {});

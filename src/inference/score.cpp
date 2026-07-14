@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <random>
 #include <set>
 #include <string>
@@ -2044,8 +2045,8 @@ score_tests_fiml_robust(spec::LatentStructure pt,
 
 namespace {
 
-post_expected<void> validate_flip_raw(const SampleStats& samp,
-                                      const RawData& raw) {
+post_expected<void> validate_complete_flip_raw(const SampleStats& samp,
+                                               const RawData& raw) {
   if (!raw.mask.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: missing data are not supported; use complete-data ML"));
@@ -2080,6 +2081,167 @@ post_expected<void> validate_flip_raw(const SampleStats& samp,
     }
   }
   return {};
+}
+
+struct FlipInformationStrata {
+  std::vector<Eigen::MatrixXd> per_case;
+  std::vector<std::int64_t> n_obs;
+  std::vector<std::size_t> row_stratum;
+};
+
+Eigen::Index score_flip_vech_index(Eigen::Index p, Eigen::Index row,
+                                   Eigen::Index col) {
+  return col * p - (col * (col - 1)) / 2 + (row - col);
+}
+
+post_expected<FlipInformationStrata> fiml_flip_information_strata(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const RawData& raw, const estimate::fiml::FIMLPack& pack,
+    const Estimates& est) {
+  auto ev = build_eval(pt, rep);
+  if (!ev.has_value()) return std::unexpected(ev.error());
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(model_to_post(eval.error()));
+  }
+  const Eigen::Index npar = est.theta.size();
+  const Eigen::MatrixXd& J_sigma = eval->J_sigma;
+  const Eigen::MatrixXd& J_mu = eval->J_mu;
+  const bool has_means = !eval->moments.mu.empty() && J_mu.rows() > 0;
+  if (raw.X.size() != eval->moments.sigma.size() ||
+      raw.X.size() != pack.cache.block_p.size() ||
+      pack.cache.sigma_offsets.size() != raw.X.size() ||
+      pack.cache.mu_offsets.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test FIML: raw, model, and pattern-cache blocks differ"));
+  }
+
+  FlipInformationStrata out;
+  out.per_case.reserve(pack.cache.patterns.size());
+  out.n_obs.reserve(pack.cache.patterns.size());
+  for (const auto& pattern : pack.cache.patterns) {
+    if (pattern.block >= raw.X.size() || pattern.n_obs <= 0 ||
+        pattern.observed.empty()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test FIML: invalid observed-data pattern"));
+    }
+    const std::size_t block = pattern.block;
+    const Eigen::Index p = pack.cache.block_p[block];
+    const Eigen::Index q = static_cast<Eigen::Index>(pattern.observed.size());
+    const Eigen::MatrixXd& Sigma = eval->moments.sigma[block];
+    if (Sigma.rows() != p || Sigma.cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test FIML: implied covariance and pattern dimensions differ"));
+    }
+    Eigen::MatrixXd Sigma_o(q, q);
+    for (Eigen::Index j = 0; j < q; ++j) {
+      for (Eigen::Index i = 0; i < q; ++i) {
+        Sigma_o(i, j) = Sigma(
+            pattern.observed[static_cast<std::size_t>(i)],
+            pattern.observed[static_cast<std::size_t>(j)]);
+      }
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt(0.5 * (Sigma_o + Sigma_o.transpose()));
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test FIML: observed-pattern covariance is not positive definite"));
+    }
+    const Eigen::MatrixXd Sigma_inv =
+        llt.solve(Eigen::MatrixXd::Identity(q, q));
+
+    std::vector<Eigen::MatrixXd> T(
+        static_cast<std::size_t>(npar), Eigen::MatrixXd::Zero(q, q));
+    Eigen::MatrixXd Nu = Eigen::MatrixXd::Zero(q, npar);
+    const Eigen::Index sigma_offset = pack.cache.sigma_offsets[block];
+    const Eigen::Index mu_offset = pack.cache.mu_offsets[block];
+    for (Eigen::Index k = 0; k < npar; ++k) {
+      Eigen::MatrixXd dSigma = Eigen::MatrixXd::Zero(q, q);
+      for (Eigen::Index cj = 0; cj < q; ++cj) {
+        const Eigen::Index full_c =
+            pattern.observed[static_cast<std::size_t>(cj)];
+        for (Eigen::Index ri = cj; ri < q; ++ri) {
+          const Eigen::Index full_r0 =
+              pattern.observed[static_cast<std::size_t>(ri)];
+          const Eigen::Index full_r = std::max(full_r0, full_c);
+          const Eigen::Index full_col = std::min(full_r0, full_c);
+          const double value = J_sigma(
+              sigma_offset + score_flip_vech_index(p, full_r, full_col), k);
+          dSigma(ri, cj) = value;
+          dSigma(cj, ri) = value;
+        }
+      }
+      T[static_cast<std::size_t>(k)].noalias() = Sigma_inv * dSigma;
+      if (has_means) {
+        for (Eigen::Index j = 0; j < q; ++j) {
+          Nu(j, k) = J_mu(
+              mu_offset + pattern.observed[static_cast<std::size_t>(j)], k);
+        }
+      }
+    }
+
+    Eigen::MatrixXd info = Eigen::MatrixXd::Zero(npar, npar);
+    const Eigen::MatrixXd mean_info =
+        has_means ? Eigen::MatrixXd(Nu.transpose() * Sigma_inv * Nu)
+                  : Eigen::MatrixXd::Zero(npar, npar);
+    for (Eigen::Index a = 0; a < npar; ++a) {
+      for (Eigen::Index b = a; b < npar; ++b) {
+        const double cov_info = 0.5 *
+            (T[static_cast<std::size_t>(a)].transpose().array() *
+             T[static_cast<std::size_t>(b)].array()).sum();
+        const double value = cov_info + mean_info(a, b);
+        info(a, b) = value;
+        info(b, a) = value;
+      }
+    }
+    out.per_case.push_back(std::move(info));
+    out.n_obs.push_back(pattern.n_obs);
+  }
+
+  out.row_stratum.reserve(static_cast<std::size_t>(pack.cache.n_total));
+  std::vector<std::int64_t> observed_counts(out.n_obs.size(), 0);
+  for (std::size_t block = 0; block < raw.X.size(); ++block) {
+    const Eigen::MatrixXd& X = raw.X[block];
+    if (!raw.mask.empty() &&
+        (block >= raw.mask.size() || raw.mask[block].rows() != X.rows() ||
+         raw.mask[block].cols() != X.cols())) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test FIML: raw mask shape mismatch"));
+    }
+    for (Eigen::Index row = 0; row < X.rows(); ++row) {
+      std::vector<Eigen::Index> observed;
+      observed.reserve(static_cast<std::size_t>(X.cols()));
+      for (Eigen::Index col = 0; col < X.cols(); ++col) {
+        const bool keep = raw.mask.empty() || raw.mask[block](row, col) != 0;
+        if (keep) {
+          if (!std::isfinite(X(row, col))) {
+            return std::unexpected(make_err(PostError::Kind::NumericIssue,
+                "score_flip_test FIML: non-finite observed value"));
+          }
+          observed.push_back(col);
+        }
+      }
+      std::size_t matched = out.per_case.size();
+      for (std::size_t s = 0; s < pack.cache.patterns.size(); ++s) {
+        if (pack.cache.patterns[s].block == block &&
+            pack.cache.patterns[s].observed == observed) {
+          matched = s;
+          break;
+        }
+      }
+      if (matched == out.per_case.size()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "score_flip_test FIML: raw row is absent from pattern cache"));
+      }
+      out.row_stratum.push_back(matched);
+      ++observed_counts[matched];
+    }
+  }
+  if (out.row_stratum.size() != static_cast<std::size_t>(pack.cache.n_total) ||
+      observed_counts != out.n_obs) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test FIML: raw rows and pattern counts differ"));
+  }
+  return out;
 }
 
 post_expected<void> validate_same_null_point(
@@ -2164,22 +2326,32 @@ double flip_mc_se(double p, int n_flips) {
 }  // namespace
 
 post_expected<ScoreFlipTestResult>
-score_flip_test(spec::LatentStructure pt_H1,
-                const model::MatrixRep& rep_H1,
-                spec::LatentStructure pt_H0,
-                const model::MatrixRep& rep_H0,
-                const SampleStats& samp,
-                const RawData& raw,
-                const Estimates& est_H0,
-                const ScoreFlipOptions& options) {
+score_flip_test_impl(spec::LatentStructure pt_H1,
+                     const model::MatrixRep& rep_H1,
+                     spec::LatentStructure pt_H0,
+                     const model::MatrixRep& rep_H0,
+                     const SampleStats* samp,
+                     const RawData& raw,
+                     const estimate::fiml::FIMLPack* fiml_pack,
+                     const Estimates& est_H0,
+                     const ScoreFlipOptions& options) {
   using Clock = std::chrono::steady_clock;
   const auto total_begin = Clock::now();
   if (!options.exact_enumeration && options.n_flips < 1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: n_flips must be positive"));
   }
-  if (auto ok = validate_flip_raw(samp, raw); !ok.has_value()) {
-    return std::unexpected(ok.error());
+  if (fiml_pack == nullptr) {
+    if (samp == nullptr) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test: complete-data path requires sample statistics"));
+    }
+    if (auto ok = validate_complete_flip_raw(*samp, raw); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+  } else if (samp != nullptr) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test FIML: received conflicting sample-statistic inputs"));
   }
   if (pt_H1.has_inequality_constraints || pt_H0.has_inequality_constraints ||
       !pt_H1.nonlinear_eq_rows.empty() || !pt_H0.nonlinear_eq_rows.empty()) {
@@ -2203,10 +2375,14 @@ score_flip_test(spec::LatentStructure pt_H1,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: H1/H0 must share the same ambient parameter slots"));
   }
-  if (auto e = resolve_fixed_x_from_sample(pt_H1, rep_H1, samp); !e.has_value()) {
+  const SampleStats& start_stats =
+      fiml_pack == nullptr ? *samp : fiml_pack->start_stats;
+  if (auto e = resolve_fixed_x_from_sample(pt_H1, rep_H1, start_stats);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  if (auto e = resolve_fixed_x_from_sample(pt_H0, rep_H0, samp); !e.has_value()) {
+  if (auto e = resolve_fixed_x_from_sample(pt_H0, rep_H0, start_stats);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
   if (auto e = validate_same_null_point(pt_H1, rep_H1, pt_H0, rep_H0, est_H0);
@@ -2228,17 +2404,39 @@ score_flip_test(spec::LatentStructure pt_H1,
   const Eigen::MatrixXd D = con1->K() * restriction->A.transpose();
   const Eigen::MatrixXd& K = con0->K();
 
-  auto info_blocks = information_expected_per_case_blocks(
-      pt_H1, rep_H1, samp, est_H0);
-  if (!info_blocks.has_value()) return std::unexpected(info_blocks.error());
-  if (info_blocks->size() != raw.X.size()) {
+  FlipInformationStrata strata;
+  if (fiml_pack == nullptr) {
+    auto info_blocks = information_expected_per_case_blocks(
+        pt_H1, rep_H1, *samp, est_H0);
+    if (!info_blocks.has_value()) return std::unexpected(info_blocks.error());
+    if (info_blocks->size() != raw.X.size()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_flip_test: expected-information block count mismatch"));
+    }
+    strata.per_case = std::move(*info_blocks);
+    strata.n_obs = samp->n_obs;
+    for (std::size_t block = 0; block < raw.X.size(); ++block) {
+      for (Eigen::Index row = 0; row < raw.X[block].rows(); ++row) {
+        strata.row_stratum.push_back(block);
+      }
+    }
+  } else {
+    auto pattern_info = fiml_flip_information_strata(
+        pt_H1, rep_H1, raw, *fiml_pack, est_H0);
+    if (!pattern_info.has_value()) {
+      return std::unexpected(pattern_info.error());
+    }
+    strata = std::move(*pattern_info);
+  }
+  if (strata.per_case.empty() ||
+      strata.per_case.size() != strata.n_obs.size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: expected-information block count mismatch"));
+        "score_flip_test: information strata are empty or inconsistent"));
   }
   const Eigen::Index npar = static_cast<Eigen::Index>(pt_H1.n_free());
   Eigen::MatrixXd I = Eigen::MatrixXd::Zero(npar, npar);
-  for (std::size_t b = 0; b < info_blocks->size(); ++b) {
-    I.noalias() += static_cast<double>(samp.n_obs[b]) * (*info_blocks)[b];
+  for (std::size_t s = 0; s < strata.per_case.size(); ++s) {
+    I.noalias() += static_cast<double>(strata.n_obs[s]) * strata.per_case[s];
   }
 
   const Eigen::MatrixXd A_nuisance = K.transpose() * I * K;
@@ -2252,12 +2450,21 @@ score_flip_test(spec::LatentStructure pt_H1,
   Eigen::MatrixXd V_identity = G.transpose() * I * G;
   V_identity = 0.5 * (V_identity + V_identity.transpose());
 
-  auto pack = estimate::fiml::fiml_pack(raw);
-  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+  std::optional<estimate::fiml::FIMLPack> owned_pack;
+  if (fiml_pack == nullptr) {
+    auto pack = estimate::fiml::fiml_pack(raw);
+    if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+    owned_pack.emplace(std::move(*pack));
+    fiml_pack = &*owned_pack;
+  }
   auto score_rows = estimate::fiml::fiml_casewise_deviance_scores(
-      pt_H1, rep_H1, raw, *pack, est_H0);
+      pt_H1, rep_H1, raw, *fiml_pack, est_H0);
   if (!score_rows.has_value()) return std::unexpected(score_rows.error());
   const Eigen::MatrixXd scores = -0.5 * *score_rows;
+  if (strata.row_stratum.size() != static_cast<std::size_t>(scores.rows())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: score rows and information strata differ"));
+  }
   const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
   const Eigen::MatrixXd basic_rows = scores * D;
   const Eigen::MatrixXd effective_rows = scores * G;
@@ -2272,21 +2479,18 @@ score_flip_test(spec::LatentStructure pt_H1,
   if (!t_eff_obs.has_value()) return std::unexpected(t_eff_obs.error());
 
   std::vector<detail::ScoreFlipGroupGeometry> geometry;
-  geometry.reserve(info_blocks->size());
-  for (const auto& J : *info_blocks) {
+  geometry.reserve(strata.per_case.size());
+  for (const auto& J : strata.per_case) {
     geometry.push_back(detail::ScoreFlipGroupGeometry{
         G.transpose() * J * G,
         G.transpose() * J * K,
         K.transpose() * J * K});
   }
   auto variance_for = [&](const std::vector<std::int64_t>& sign_sum) {
-    return detail::score_flip_variance(geometry, *Ainv, samp.n_obs, sign_sum);
+    return detail::score_flip_variance(geometry, *Ainv, strata.n_obs, sign_sum);
   };
 
-  std::vector<std::int64_t> identity_sums(raw.X.size());
-  for (std::size_t b = 0; b < raw.X.size(); ++b) {
-    identity_sums[b] = raw.X[b].rows();
-  }
+  const std::vector<std::int64_t> identity_sums = strata.n_obs;
   auto t_std_obs = flip_quadratic(u_eff_obs, variance_for(identity_sums),
                                   "score_flip_test observed standardized");
   if (!t_std_obs.has_value()) return std::unexpected(t_std_obs.error());
@@ -2314,18 +2518,17 @@ score_flip_test(spec::LatentStructure pt_H1,
     const auto score_begin = Clock::now();
     Eigen::VectorXd ub = Eigen::VectorXd::Zero(df);
     Eigen::VectorXd ue = Eigen::VectorXd::Zero(df);
-    std::vector<std::int64_t> sign_sum(raw.X.size(), 0);
-    Eigen::Index row = 0;
-    for (std::size_t b = 0; b < raw.X.size(); ++b) {
-      for (Eigen::Index i = 0; i < raw.X[b].rows(); ++i, ++row) {
-        const double sign = options.exact_enumeration
-            ? (((static_cast<std::uint64_t>(bflip) >> row) & 1ULL) == 0ULL
-                   ? -1.0 : 1.0)
-            : ((rng() & 1ULL) == 0ULL ? -1.0 : 1.0);
-        sign_sum[b] += static_cast<std::int64_t>(sign);
-        ub.noalias() += sign * basic_rows.row(row).transpose();
-        ue.noalias() += sign * effective_rows.row(row).transpose();
-      }
+    std::vector<std::int64_t> sign_sum(strata.per_case.size(), 0);
+    for (Eigen::Index row = 0; row < total_n; ++row) {
+      const double sign = options.exact_enumeration
+          ? (((static_cast<std::uint64_t>(bflip) >> row) & 1ULL) == 0ULL
+                 ? -1.0 : 1.0)
+          : ((rng() & 1ULL) == 0ULL ? -1.0 : 1.0);
+      const std::size_t stratum =
+          strata.row_stratum[static_cast<std::size_t>(row)];
+      sign_sum[stratum] += static_cast<std::int64_t>(sign);
+      ub.noalias() += sign * basic_rows.row(row).transpose();
+      ue.noalias() += sign * effective_rows.row(row).transpose();
     }
     auto tb = flip_quadratic(ub, V_identity, "score_flip_test basic flip");
     if (!tb.has_value()) return std::unexpected(tb.error());
@@ -2408,6 +2611,49 @@ score_flip_test(spec::LatentStructure pt_H1,
   out.total_seconds =
       std::chrono::duration<double>(Clock::now() - total_begin).count();
   return out;
+}
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
+                const SampleStats& samp,
+                const RawData& raw,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options) {
+  return score_flip_test_impl(
+      std::move(pt_H1), rep_H1, std::move(pt_H0), rep_H0, &samp, raw,
+      nullptr, est_H0, options);
+}
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
+                const RawData& raw,
+                const estimate::fiml::FIMLPack& pack,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options) {
+  return score_flip_test_impl(
+      std::move(pt_H1), rep_H1, std::move(pt_H0), rep_H0, nullptr, raw,
+      &pack, est_H0, options);
+}
+
+post_expected<ScoreFlipTestResult>
+score_flip_test(spec::LatentStructure pt_H1,
+                const model::MatrixRep& rep_H1,
+                spec::LatentStructure pt_H0,
+                const model::MatrixRep& rep_H0,
+                const RawData& raw,
+                const Estimates& est_H0,
+                const ScoreFlipOptions& options) {
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+  return score_flip_test_impl(
+      std::move(pt_H1), rep_H1, std::move(pt_H0), rep_H0, nullptr, raw,
+      &*pack, est_H0, options);
 }
 
 }  // namespace frontier

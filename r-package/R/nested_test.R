@@ -1,14 +1,15 @@
-#' Standardized sign-flip score test for affine nested ML models.
+#' Standardized sign-flip score test for affine nested ML/FIML models.
 #'
 #' Calibrates the restrictions separating `fit_H0` from `fit_H1` by random
 #' Rademacher transformations of individual likelihood-score contributions.
 #' The result carries basic, nuisance-effective, and flip-specifically
 #' standardized references; `p_value` selects the standardized result.
 #'
-#' @param fit_H1 Less-restricted complete-data ML fit.
-#' @param fit_H0 More-restricted affine nested ML fit over the same parameter
-#'   slots and observations.
-#' @param data Raw fitting data, in the same form accepted by [nestedTest()].
+#' @param fit_H1 Less-restricted complete-data ML or direct-FIML fit.
+#' @param fit_H0 More-restricted affine nested fit over the same parameter
+#'   slots, estimator, and observations.
+#' @param data Raw fitting data for complete-data ML. Direct FIML uses the
+#'   observed-data sample stored on both fits, so this argument must be omitted.
 #' @param n_flips Number of random sign transformations, excluding the observed
 #'   identity.
 #' @param seed Non-negative deterministic integer seed.
@@ -19,10 +20,13 @@
 #'   displacement diagnostics, and elapsed seconds for setup, resampling,
 #'   flip standardization, and the asymptotic comparators.
 #' @export
-score_flip_test <- function(fit_H1, fit_H0, data,
+score_flip_test <- function(fit_H1, fit_H0, data = NULL,
                             n_flips = 999L, seed = 1) {
-  if (missing(data) || is.null(data)) {
-    stop("score_flip_test(): complete-data ML score flips require `data`",
+  estimator_H1 <- toupper(fit_H1$estimator %||% "ML")
+  estimator_H0 <- toupper(fit_H0$estimator %||% "ML")
+  if (!identical(estimator_H1, estimator_H0) ||
+      !estimator_H1 %in% c("ML", "FIML")) {
+    stop("score_flip_test(): fits must use the same ML or FIML estimator",
          call. = FALSE)
   }
   n_flips <- as.integer(n_flips)[1L]
@@ -38,8 +42,27 @@ score_flip_test <- function(fit_H1, fit_H0, data,
   if (length(active_lower) > 0L || length(active_upper) > 0L) {
     stop("score_flip_test(): boundary null fits are not supported", call. = FALSE)
   }
-  raw <- raw_data_arg(fit_H1, data)
-  if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  if (estimator_H1 == "FIML") {
+    if (!missing(data) && !is.null(data)) {
+      stop("score_flip_test(): FIML uses the sample stored on the fits; omit `data`",
+           call. = FALSE)
+    }
+    if (is.null(fit_H1$raw_data) || is.null(fit_H0$raw_data)) {
+      stop("score_flip_test(): both FIML fits must carry `raw_data`", call. = FALSE)
+    }
+    if (!identical(fit_H1$raw_data, fit_H0$raw_data)) {
+      stop("score_flip_test(): FIML fits were not fitted to the same sample",
+           call. = FALSE)
+    }
+    raw <- fit_H1$raw_data
+  } else {
+    if (missing(data) || is.null(data)) {
+      stop("score_flip_test(): complete-data ML score flips require `data`",
+           call. = FALSE)
+    }
+    raw <- raw_data_arg(fit_H1, data)
+    if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  }
   out <- magmaan_core$inference_score_flip_test(
     fit_H1, fit_H0, raw, n_flips, seed)
   class(out) <- c("magmaan_score_flip_test", "list")

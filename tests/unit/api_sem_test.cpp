@@ -523,6 +523,49 @@ TEST_CASE("api FIML exposes likelihood test, fit measures, and MLR reporting") {
   REQUIRE_OK(scores);
 }
 
+TEST_CASE("api frontier score flips support a nested FIML pair") {
+  magmaan::api::ModelOptions options;
+  options.build.meanstructure = true;
+  const auto h1_model = magmaan::api::model_from_lavaan(
+      "f =~ x1 + a*x2 + b*x3 + x4", options);
+  REQUIRE_OK(h1_model);
+  const auto h0_model = magmaan::api::model_from_lavaan(
+      "f =~ x1 + a*x2 + a*x3 + x4", options);
+  REQUIRE_OK(h0_model);
+
+  auto raw = fiml_interior_raw();
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask(
+      raw.X[0].rows(), raw.X[0].cols());
+  mask.setOnes();
+  for (Eigen::Index i = 0; i < mask.rows(); ++i) {
+    if (i % 7 == 0) mask(i, 1) = 0;
+    if (i % 11 == 0) mask(i, 2) = 0;
+  }
+  raw.mask.push_back(std::move(mask));
+  const auto h1_data = magmaan::api::data_from_raw(*h1_model, raw);
+  REQUIRE_OK(h1_data);
+  const auto h0_data = magmaan::api::data_from_raw(*h0_model, raw);
+  REQUIRE_OK(h0_data);
+  const auto h1_fit = magmaan::api::fit(
+      *h1_model, *h1_data, magmaan::api::fiml());
+  REQUIRE_OK(h1_fit);
+  const auto h0_fit = magmaan::api::fit(
+      *h0_model, *h0_data, magmaan::api::fiml());
+  REQUIRE_OK(h0_fit);
+
+  magmaan::inference::frontier::ScoreFlipOptions flip_options;
+  flip_options.n_flips = 31;
+  flip_options.seed = 20260714;
+  const auto flip = magmaan::api::frontier::score_flip_test(
+      *h1_fit, *h0_fit, raw, flip_options);
+  REQUIRE_OK(flip);
+  CHECK(flip->df == 1);
+  CHECK(std::isfinite(flip->p_basic));
+  CHECK(std::isfinite(flip->p_effective));
+  CHECK(std::isfinite(flip->p_standardized));
+  CHECK(flip->mean_variance_relative_shift > 0.0);
+}
+
 TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   const auto model = magmaan::api::model_from_lavaan(ordinal_syntax());
   REQUIRE_OK(model);

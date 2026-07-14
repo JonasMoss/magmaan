@@ -1520,22 +1520,42 @@ score_tests_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
 Result<inference::frontier::ScoreFlipTestResult>
 score_flip_test(const Fit &h1, const Fit &h0, const data::RawData &raw,
                 inference::frontier::ScoreFlipOptions options) {
-  auto ok1 = require_complete_ml(h1, "score_flip_test()");
-  if (!ok1) return std::unexpected(ok1.error());
-  auto ok0 = require_complete_ml(h0, "score_flip_test()");
-  if (!ok0) return std::unexpected(ok0.error());
-  const auto* samp1 = h1.data().sample_stats();
-  const auto* samp0 = h0.data().sample_stats();
-  if (samp1 == nullptr || samp0 == nullptr ||
-      samp1->n_obs != samp0->n_obs || samp1->S.size() != samp0->S.size()) {
+  if (h1.estimator() != h0.estimator()) {
     return std::unexpected(make_error(
         ErrorStage::UnsupportedCombination,
-        "score_flip_test() requires H1 and H0 fitted to the same complete sample"));
+        "score_flip_test() requires H1 and H0 to use the same estimator"));
   }
-  auto out = inference::frontier::score_flip_test(
-      h1.model().structure(), h1.model().matrix_rep(),
-      h0.model().structure(), h0.model().matrix_rep(), *samp0, raw,
-      h0.estimates(), options);
+  post_expected<inference::frontier::ScoreFlipTestResult> out;
+  if (h1.estimator() == EstimatorKind::ML) {
+    const auto* samp1 = h1.data().sample_stats();
+    const auto* samp0 = h0.data().sample_stats();
+    if (samp1 == nullptr || samp0 == nullptr ||
+        samp1->n_obs != samp0->n_obs || samp1->S.size() != samp0->S.size()) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "score_flip_test() requires H1 and H0 fitted to the same complete sample"));
+    }
+    out = inference::frontier::score_flip_test(
+        h1.model().structure(), h1.model().matrix_rep(),
+        h0.model().structure(), h0.model().matrix_rep(), *samp0, raw,
+        h0.estimates(), options);
+  } else if (h1.estimator() == EstimatorKind::FIML) {
+    if (const auto* pack = h0.fiml_pack()) {
+      out = inference::frontier::score_flip_test(
+          h1.model().structure(), h1.model().matrix_rep(),
+          h0.model().structure(), h0.model().matrix_rep(), raw, *pack,
+          h0.estimates(), options);
+    } else {
+      out = inference::frontier::score_flip_test(
+          h1.model().structure(), h1.model().matrix_rep(),
+          h0.model().structure(), h0.model().matrix_rep(), raw,
+          h0.estimates(), options);
+    }
+  } else {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "score_flip_test() supports complete-data ML and direct FIML fits"));
+  }
   return post_result(std::move(out));
 }
 
