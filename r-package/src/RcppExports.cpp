@@ -1685,6 +1685,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_continuous_ls_robust
+Rcpp::List infer_continuous_ls_robust(Rcpp::List fit, SEXP raw_data, SEXP weight, std::string bread, std::string gamma);
+RcppExport SEXP _magmaan_infer_continuous_ls_robust(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP gammaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_robust(fit, raw_data, weight, bread, gamma));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_continuous_ls_profile_lrt
 Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, SEXP weight, double eig_tol);
 RcppExport SEXP _magmaan_infer_continuous_ls_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP weightSEXP, SEXP eig_tolSEXP) {
@@ -3751,6 +3766,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
+    {"_magmaan_infer_continuous_ls_robust", (DL_FUNC) &_magmaan_infer_continuous_ls_robust, 5},
     {"_magmaan_infer_continuous_ls_profile_lrt", (DL_FUNC) &_magmaan_infer_continuous_ls_profile_lrt, 5},
     {"_magmaan_infer_fiml_profile_lrt", (DL_FUNC) &_magmaan_infer_fiml_profile_lrt, 3},
     {"_magmaan_infer_two_stage_nt_profile_lrt", (DL_FUNC) &_magmaan_infer_two_stage_nt_profile_lrt, 3},

@@ -1708,6 +1708,9 @@ decisions in the simulation backlog.
     `lavTestLRT(method="satorra.2000")` on `se="robust.sem"` fits (≤ 5e-3 for
     metric, ≤ 1.5e-2 scalar scaled statistic, reproducing the C++ nested
     golden), and the FMG `sb_ls` row reproduces `nestedTest()`'s `T_scaled`.
+    The mixed continuous/ordinal companion `fmg_nested_mixed_ordinal()` landed
+    2026-07-17; it exposes the already-implemented mixed difference spectrum
+    and both delta/exact restriction maps at the friendly R boundary.
   - **Paper** (`papers/ordinal-fmg/`, private leaf): switch
     `harness-population.R::invariance_syntax` from loadings-only to
     `group.equal = c("thresholds","loadings")` under theta; add a

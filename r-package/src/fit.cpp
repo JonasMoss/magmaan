@@ -7144,6 +7144,78 @@ magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
 
 }  // namespace
 
+// infer_continuous_ls_robust() — the R binding for the existing
+// robust_continuous_ls() C++ post-fit path. ULS uses the identity weight, GLS
+// rebuilds its fitted normal-theory weight, and WLS requires the explicit
+// fitting weight because fit lists do not retain caller-supplied W. The meat
+// can be empirical (from raw rows) or normal-theory (from the fitted sample
+// covariance); both are existing C++ overloads.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_continuous_ls_robust(
+    Rcpp::List fit, SEXP raw_data, SEXP weight = R_NilValue,
+    std::string bread = "expected", std::string gamma = "empirical") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
+  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
+    Rcpp::stop("infer_continuous_ls_robust() requires a continuous ULS/GLS/WLS "
+               "fit, got estimator '%s'", estimator.c_str());
+  }
+
+  magmaan::estimate::gmm::Weight w =
+      continuous_ls_weight(ctx, est, estimator, weight,
+                           "continuous-LS inference");
+  for (char& ch : gamma) {
+    if (ch == '-' || ch == '.') ch = '_';
+    else ch = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(ch)));
+  }
+  magmaan::post_expected<magmaan::estimate::WeightedRobustResult> r_or;
+  if (gamma == "empirical" || gamma == "adf") {
+    magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+    r_or = magmaan::estimate::robust_continuous_ls(
+        std::move(ctx.pt), ctx.rep, ctx.samp, est, w, raw,
+        info_from_string(bread));
+  } else if (gamma == "normal" || gamma == "normal_theory" ||
+             gamma == "nt") {
+    std::vector<Eigen::MatrixXd> gamma_nt;
+    gamma_nt.reserve(ctx.samp.S.size());
+    for (const auto& S : ctx.samp.S) {
+      auto g_or = ctx.meanstructure
+          ? magmaan::data::gamma_nt_with_means(S)
+          : magmaan::data::gamma_nt(S);
+      if (!g_or.has_value()) stop_post(g_or.error());
+      gamma_nt.push_back(std::move(*g_or));
+    }
+    r_or = magmaan::estimate::robust_continuous_ls(
+        std::move(ctx.pt), ctx.rep, ctx.samp, est, w, gamma_nt,
+        info_from_string(bread));
+  } else {
+    Rcpp::stop("infer_continuous_ls_robust(): `gamma` must be 'empirical' "
+               "or 'normal'");
+  }
+  if (!r_or.has_value()) stop_post(r_or.error());
+  const magmaan::estimate::WeightedRobustResult& r = *r_or;
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r.vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r.se),
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["chisq_standard"] = r.chisq_standard,
+      Rcpp::_["satorra_bentler"] = Rcpp::List::create(
+          Rcpp::_["chi2_scaled"] = r.satorra_bentler.chi2_scaled,
+          Rcpp::_["scale_c"] = r.satorra_bentler.scale_c,
+          Rcpp::_["df"] = r.satorra_bentler.df),
+      Rcpp::_["mean_var_adjusted"] = Rcpp::List::create(
+          Rcpp::_["chi2_adj"] = r.mean_var_adjusted.chi2_adj,
+          Rcpp::_["df_adj"] = r.mean_var_adjusted.df_adj),
+      Rcpp::_["scaled_shifted"] =
+          scaled_shifted_to_list(r.scaled_shifted));
+}
+
 // infer_continuous_ls_profile_lrt() — misspecification-robust ("observed-Hessian
 // profile bread") nested difference test for two continuous moment-quadratic
 // (ULS/GLS/WLS) fits sharing the same observed data and one caller-fixed weight.

@@ -1061,7 +1061,8 @@ golden `parTable()` fixtures.
   `fit_measures(fit, robust = fit$ml2s)` reports the lavaan two-stage robust
   global-index fields.
 - FMG single-model goodness-of-fit p-values are first-class complete-data ML
-  post-fit diagnostics on the R surface. `fmg_tests()` returns the p-value,
+  and continuous ULS/GLS/WLS post-fit diagnostics on the R surface.
+  `fmg_tests()` returns the p-value,
   df, ML/RLS source statistic, method/parameter, UG flag, chi-square-equivalent
   diagnostic, truncation count, and UGamma/lambda spectra; `fit_measures(...,
   fmg = ...)` attaches the same table to the ordinary fit-measure path, while
@@ -1069,8 +1070,14 @@ golden `parTable()` fixtures.
   built from `magmaan(..., data.frame, estimator = "ML")` or
   `fit_ml(model, df_to_data(...))` retain listwise-complete raw blocks in
   `fit$raw_data`, so FMG no longer requires a separate raw-data argument in the
-  normal fit workflow. The fused C++ spectra primitive supports complete-data
-  single- and multi-group ML, including mean structures. FIML/missing-data fits
+  normal fit workflow. Continuous LS composes the existing
+  `estimate::robust_continuous_ls` primitive and exposes empirical or
+  normal-theory Gamma explicitly; continuous WLS also takes the caller's
+  fitting weight because fit lists do not retain it. The public
+  `df_to_data(scaling = "n" | "n-1")` choice makes covariance scaling explicit
+  for cross-implementation work. The fused C++ spectra primitive supports
+  complete-data single- and multi-group ML, including mean structures.
+  FIML/missing-data fits
   are also supported (`fmg_tests()` accepts a `fit_fiml()` /
   `magmaan(..., estimator = "FIML")` fit, single- or multi-group): the
   missing-data UGamma spectrum is built first-principles by
@@ -1278,6 +1285,10 @@ golden `parTable()` fixtures.
   spectrum-derived mean/variance-adjusted `T_adjusted`/`d0` for `m > 1`;
   `r-package/examples/mplus_wlsmv_invariance.R` pins the mixed listwise bridge
   on a small deterministic mixed CFA.
+  Friendly FMG composition is available for both branches:
+  `fmg_nested_ordinal()` and `fmg_nested_mixed_ordinal()` consume the existing
+  Satorra-2000 difference triple and keep both `A.method = "delta"` and
+  `"exact"` selectable.
 - All-ordinal pairwise-deletion sample statistics are implemented for the
   categorical LS path (`data::ordinal_stats_from_observed_integer_data`,
   surfaced in R as `missing = "pairwise"` with `pd_gamma = "overlap" |
