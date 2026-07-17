@@ -52,7 +52,7 @@ correctness sentinel?
   winner <- calibration$paper_label[[which.min(calibration$rmse_percentage_points)]]
   sprintf("Yes for the completed design: %s has the lowest magmaan cell-RMSE (%.3f percentage points), across %d cells with %d replications each. The run had %d failed and %d warning-bearing replications.", winner, min(calibration$rmse_percentage_points), n_cells, reps, nrow(failures), nrow(warnings))
 } else {
-  sprintf("The native pipeline is operational on the %s profile (%d cells, %d replications per cell), including all 38 method variants. This run is a structural/timing check, not a replication result; the 189 x 2000 run remains required for paper-level Type-I conclusions.", profile, n_cells, reps)
+  sprintf("The native pipeline is operational on the %s profile (%d cells, %d replications per cell), including all 38 method variants. This is sufficient as a translation/sentinel endpoint: the published study already supplies the paper-level Type-I evidence, so a new 189 x 2000 rerun is optional rather than a project requirement.", profile, n_cells, reps)
 }`
 
 `r if (nrow(parity) && any(is.finite(parity$abs_diff))) {
@@ -185,7 +185,7 @@ Rscript run_experiment.R --smoke --semtests-parity
 # Speed/calibration pilot: all seven distributions at three geometry corners
 Rscript run_experiment.R --pilot --cores 8 --semtests-parity
 
-# Exact 189-cell, 2000-replication Study 2 design
+# Optional exact replication; not required for current magmaan hardening
 Rscript run_experiment.R --full --cores 16 --semtests-parity
 ```
 

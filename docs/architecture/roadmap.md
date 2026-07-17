@@ -1042,6 +1042,14 @@ golden `parTable()` fixtures.
   complete-data analytic observed information via `detail_second_order.hpp`);
   `diagnostic::fiml_observed_information_fd` retains the central-difference
   route as a regression comparator.
+  The comparison primitive
+  `inference_fiml_information_vcov()` additionally exposes the structured
+  expected Fisher, observed-H1, and full observed-Hessian matrices at one
+  retained fit. Each information matrix is returned with its inverse and with
+  the same observed-pattern score-cross-product sandwich, preserving equality-
+  constraint projection through the model covariance. Experiment 70 validates
+  these six SE conventions against explicit lavaan settings and studies their
+  calibration without changing the high-level FIML defaults.
 - The public fixed.x policy rejects missing observed exogenous variables rather
   than approximating lavaan's conditional likelihood behavior.
 - The R boundary exposes `df_to_fiml_data()`, estimate-only `fit_fiml()` with
