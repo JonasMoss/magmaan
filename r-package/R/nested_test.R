@@ -162,7 +162,8 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #' `"lavaan_sb2001"` and `"lavaan_sb2010"` options mirror lavaan's
 #' compatibility difference-test approximations.
 #'
-#' @param fit_H1 Less-restricted fit from `magmaan::fit_fit()`.
+#' @param fit_H1 Less-restricted fitted magmaan model, ordinarily returned by
+#'   [magmaan()].
 #' @param fit_H0 More-restricted fit (same lavaanified partable shape,
 #'   differing only in constraint rows / shared labels).
 #' @param data Raw complete data for complete-data fits: either a data.frame
@@ -212,7 +213,9 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   of matrices). Continuous ULS/GLS rebuild their own weights and reject this
 #'   argument.
 #'
-#' @return A list of class `magmaan_nested_test`.
+#' @return A list of class `magmaan_nested_test`. With `gamma = "both"`,
+#'   `eigenvalues` and the scalar test summaries use empirical Gamma, while
+#'   `eigenvalues_unbiased` contains the auxiliary unbiased spectrum.
 #' @export
 robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                               gamma = c("empirical", "unbiased", "NT", "both"),
@@ -635,9 +638,18 @@ print.magmaan_nested_test <- function(x, digits = 4L, ...) {
   }
   print(format(rows, digits = digits))
   if (identical(method, "restriction_map")) {
-    cat("\nEigenvalues:",
-        paste(format(x$eigenvalues, digits = digits), collapse = ", "),
-        "\nScale c:", format(x$scale_c, digits = digits),
+    if (identical(x$gamma, "both")) {
+      cat("\nEmpirical eigenvalues:",
+          paste(format(x$eigenvalues, digits = digits), collapse = ", "),
+          "\nUnbiased eigenvalues:",
+          paste(format(x$eigenvalues_unbiased, digits = digits),
+                collapse = ", "),
+          "\nReported scalar statistics use empirical Gamma.")
+    } else {
+      cat("\nEigenvalues:",
+          paste(format(x$eigenvalues, digits = digits), collapse = ", "))
+    }
+    cat("\nScale c:", format(x$scale_c, digits = digits),
         "  Adjust d0:", format(x$adjust_d0, digits = digits), "\n")
   } else {
     cat("\nScale c:", format(x$scale_c, digits = digits),

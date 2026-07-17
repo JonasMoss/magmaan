@@ -259,6 +259,15 @@
   scalar
 }
 
+# Preserve numerical diagnostics returned by the nested-test backend without
+# changing the long-standing data-frame columns.
+.fmg_attach_warnings <- function(x, warnings) {
+  warnings <- unique(as.character(warnings %||% character()))
+  warnings <- warnings[!is.na(warnings) & nzchar(warnings)]
+  attr(x, "warnings") <- warnings
+  x
+}
+
 # Is this a FIML / missing-data fit? FIML fits carry $fiml = TRUE, estimator
 # "FIML", and a `magmaan_fiml_data` raw object.
 .fmg_is_fiml <- function(fit) {
@@ -660,7 +669,8 @@ fmg_tests_mixed_ordinal <- function(fit, mixed_stats, tests = NULL, weight = "")
 #' @param A.method `"delta"` (default) or `"exact"`.
 #'
 #' @return A `magmaan_fmg_tests` data frame, identical in shape to
-#'   [fmg_tests_ordinal()].
+#'   [fmg_tests_ordinal()]. Numerical diagnostics from the nested-test backend
+#'   are available in `attr(x, "warnings")`.
 #' @export
 fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
                                weight = "", A.method = c("delta", "exact")) {
@@ -675,7 +685,10 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
   spectrum <- list(chisq_standard = nested$T_diff,
                    df = nested$df_diff,
                    eigvals = nested$eigenvalues)
-  .fmg_result_rows_ordinal(spectrum, specs)
+  .fmg_attach_warnings(
+    .fmg_result_rows_ordinal(spectrum, specs),
+    nested$warnings
+  )
 }
 
 #' @rdname fmg_nested_ordinal
@@ -699,7 +712,10 @@ fmg_nested_mixed_ordinal <- function(
   spectrum <- list(chisq_standard = nested$T_diff,
                    df = nested$df_diff,
                    eigvals = nested$eigenvalues)
-  .fmg_result_rows_ordinal(spectrum, specs)
+  .fmg_attach_warnings(
+    .fmg_result_rows_ordinal(spectrum, specs),
+    nested$warnings
+  )
 }
 
 #' Foldnes-Moss-Gronneberg diagnostics for a nested continuous/FIML/ML2S pair.
@@ -728,7 +744,8 @@ fmg_nested_mixed_ordinal <- function(
 #'   (matching lavaan's robust.sem.nt default) and empirical Gamma for GLS/WLS.
 #'   Otherwise use `"empirical"` or `"normal"`.
 #'
-#' @return A `magmaan_fmg_tests` data frame.
+#' @return A `magmaan_fmg_tests` data frame. Numerical diagnostics from the
+#'   nested-test backend are available in `attr(x, "warnings")`.
 #' @export
 fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
                        A.method = c("exact", "delta"), weight = NULL,
@@ -774,7 +791,10 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
       eigvals = nested$eigenvalues,
       eigvals_unbiased = NULL
     )
-    return(.fmg_result_rows_nested(spectrum, specs))
+    return(.fmg_attach_warnings(
+      .fmg_result_rows_nested(spectrum, specs),
+      nested$warnings
+    ))
   }
   if (!is.null(gamma)) {
     stop("fmg_nested(): `gamma` is used only for continuous ULS/GLS/WLS ",
@@ -826,7 +846,10 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
                    } else {
                      NULL
                    })
-  .fmg_result_rows_nested(spectrum, specs)
+  .fmg_attach_warnings(
+    .fmg_result_rows_nested(spectrum, specs),
+    c(nested_biased$warnings, nested_unbiased$warnings)
+  )
 }
 
 #' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics.
