@@ -120,9 +120,62 @@ test_that("mixed-ordinal nested FMG composes the existing nested spectrum", {
   expect_equal(res$eigenvalues[[1]], c(0.8, 1.2))
 })
 
-test_that("generic nested FMG rejects continuous LS instead of using ML geometry", {
-  expect_error(
-    fmg_nested(list(estimator = "ULS"), list(estimator = "ULS")),
-    "least-squares restriction-map spectrum"
+test_that("generic nested FMG uses the continuous-LS restriction spectrum", {
+  calls <- new.env(parent = emptyenv())
+  calls$gamma <- NULL
+  local_mocked_bindings(
+    robust_nested_lrt = function(fit_H1, fit_H0, data = NULL, gamma, ...) {
+      calls$gamma <- gamma
+      list(T_diff = 5, df_diff = 2L, eigenvalues = c(0.7, 1.3))
+    },
+    infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
+                              param = 4.0, truncate_negative = TRUE) {
+      list(
+        p_value = 0.24, df = df, chi2_source = chi2_source,
+        method = method, param = param, chi2_equiv = chi2_source,
+        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        lambdas_reference = eigvals
+      )
+    },
+    .package = "magmaan"
   )
+  fit <- list(estimator = "ULS")
+  res <- fmg_nested(fit, fit, data = matrix(1:8, ncol = 2), tests = "SB")
+  expect_equal(calls$gamma, "NT")
+  expect_equal(res$label, "sb_ls")
+  expect_equal(res$base, "ls")
+  expect_equal(res$eigenvalues[[1]], c(0.7, 1.3))
+})
+
+test_that("nested ML FMG selects biased and unbiased spectra per test", {
+  calls <- character()
+  local_mocked_bindings(
+    robust_nested_lrt = function(fit_H1, fit_H0, data = NULL, gamma, ...) {
+      calls <<- c(calls, gamma)
+      list(
+        T_diff = 6, df_diff = 2L,
+        eigenvalues = if (gamma == "unbiased") c(0.8, 1.4) else c(0.7, 1.2)
+      )
+    },
+    infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
+                              param = 4.0, truncate_negative = TRUE) {
+      list(
+        p_value = sum(eigvals) / 10, df = df, chi2_source = chi2_source,
+        method = method, param = param, chi2_equiv = chi2_source,
+        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        lambdas_reference = eigvals
+      )
+    },
+    .package = "magmaan"
+  )
+  fit <- list(estimator = "ML")
+  res <- fmg_nested(
+    fit, fit, data = matrix(1:8, ncol = 2),
+    tests = c("SB", "SB_UG")
+  )
+  expect_equal(calls, c("empirical", "unbiased"))
+  expect_equal(res$label, c("sb_ml", "sb_ug_ml"))
+  expect_equal(res$ug, c(FALSE, TRUE))
+  expect_equal(res$eigenvalues[[1]], c(0.7, 1.2))
+  expect_equal(res$eigenvalues[[2]], c(0.8, 1.4))
 })

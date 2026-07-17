@@ -1174,13 +1174,18 @@ golden `parTable()` fixtures.
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
   table. Complete-data ML pairs additionally accept an explicit biased `_rls`
   base: `T_RLS,H0 - T_RLS,H1` is evaluated at the two ML estimates and fed
-  through the same restriction-map spectrum. Unsuffixed nested names remain ML
-  for compatibility; `_ug` stays undefined for differences, and FIML/ML2S
-  reject `_rls`. The R workflow checks the source statistic directly and the
-  transformed tails against `semTests::pvalues_nested(method = "2000")` (the
-  independently assembled restriction spectra agree within 7e-4 on the fixed
-  example). This is an asymptotically equivalent RLS comparator, not an RLS
-  estimator or casewise RLS score-flip method.
+  through the same restriction-map spectrum. The `_ug` suffix selects the
+  grouped, mean-structure-aware Browne/Du-Bentler finite-sample Gamma
+  correction; unsuffixed nested names remain ML for compatibility, while
+  FIML/ML2S reject both `_ug` and `_rls`. Continuous ULS/GLS/WLS pairs use the
+  estimator's quadratic-form difference and the continuous-moment sandwich
+  restriction map; ULS defaults to normal-theory Gamma, GLS/WLS to empirical
+  Gamma, and WLS requires its caller-supplied fitting weight. Their FMG rows
+  use the `_ls` base suffix. The R workflow checks source statistics directly
+  and all biased/unbiased ML plus continuous GLS/ULS transformed tails against
+  `semTests::pvalues_nested(method = "2000")`. This is an asymptotically
+  equivalent RLS comparator, not an RLS estimator or casewise RLS score-flip
+  method.
   FIML convention note (2026-06-30): lavaan's public
   `lavTestLRT(method = "satorra.2000")` default is delta/scaled-shifted with
   the lavaan `WLS.V`/Gamma convention above. `convention = "lavaan"` matches

@@ -204,6 +204,36 @@ explicit per-group intercept labels plus `factor ~ c(0, NA)*1` latent-mean rows
 when an exact metric→scalar test is needed; the fits then match lavaan exactly.
 This is a `spec::build` lavaanify gap, not a nested-test gap.
 
+## Nested unbiased Gamma and continuous LS (2026-07-17)
+
+The complete-data restriction map now accepts
+`gamma = "unbiased"` and `fmg_nested(..., tests = "*_ug_*")`. For each group,
+the covariance block applies the Browne/Du--Bentler finite-sample coefficients
+to empirical Gamma, `Gamma_NT(S)`, and `vech(S)vech(S)'`; mean-structured
+models additionally retain `S` in the mean block and scale the empirical
+mean--covariance cross-block by `N/(N-2)`. The implementation rejects any
+group with `N <= 3`, where the correction is undefined.
+
+Continuous ULS/GLS/WLS pairs now use the same Satorra-2000 restriction solver
+with the estimator-specific parameter-space sandwich:
+
+```text
+A1 = Delta' W Delta
+B1 = Delta' W Gamma W Delta
+```
+
+The exact or delta restriction is formed in H1's equality-reduced parameter
+space. ULS defaults to `Gamma_NT(S)`, matching lavaan's normal-theory robust
+default; GLS/WLS default to empirical Gamma, and WLS requires the original
+fitting weight. These tests use the LS quadratic-form difference and `_ls` FMG
+labels, not the separate observed-profile LRT construction.
+
+The opt-in `semTests/tools/magmaan-validation.R` gate independently fits both
+implementations and checks the complete shared transform family. On the fixed
+Holzinger--Swineford gate, maximum spectrum differences are about `5.3e-7` for
+single-group biased/unbiased ML, `6.5e-6` for multigroup mean-structured
+biased/unbiased ML, `1.3e-7` for nested GLS, and `5.4e-7` for nested ULS.
+
 ## Missing-data FIML/ML2S lavaan convention (2026-06-30)
 
 The FIML empirical missing-data route now exposes two finite-sample moment

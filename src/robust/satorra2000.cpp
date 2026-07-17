@@ -13,6 +13,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/data/raw_data.hpp"
 
 #include "../detail_linalg.hpp"
 #include "detail_vech.hpp"
@@ -124,6 +125,52 @@ Eigen::MatrixXd apply_V_augmented_columns(
   out.bottomRows(cols.rows() - mu_dim) =
       apply_V_columns(inv_sigma, cols.bottomRows(cols.rows() - mu_dim));
   return out;
+}
+
+post_expected<Eigen::MatrixXd> browne_unbiased_gamma(
+    const Eigen::Ref<const Eigen::MatrixXd>& D_rows,
+    const Eigen::Ref<const Eigen::MatrixXd>& Xc,
+    Eigen::Index mu_dim, std::int32_t n_g,
+    std::size_t group) {
+  if (n_g <= 3) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "compute_satorra2000: unbiased Browne/Du-Bentler Gamma requires "
+        "n_g > 3 in group " + std::to_string(group)));
+  }
+  const double N = static_cast<double>(n_g);
+  const Eigen::Index p = Xc.cols();
+  const Eigen::Index pstar = detail::vech_len(p);
+  Eigen::MatrixXd Gamma =
+      (D_rows.transpose() * D_rows) / N;
+  const auto cov_rows = D_rows.rightCols(pstar);
+  const Eigen::MatrixXd S = (Xc.transpose() * Xc) / N;
+  auto gamma_nt_or = data::gamma_nt(S);
+  if (!gamma_nt_or.has_value()) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "compute_satorra2000: Gamma_NT(sample covariance) failed for "
+        "unbiased Gamma in group " + std::to_string(group) + ": " +
+        gamma_nt_or.error().detail));
+  }
+  const Eigen::VectorXd s = detail::vech_lower(S);
+  const double a = N * (N - 1.0) / ((N - 2.0) * (N - 3.0));
+  const double b = N / ((N - 2.0) * (N - 3.0));
+  const double c = 2.0 / (N - 1.0);
+  const Eigen::MatrixXd gamma_cov =
+      (cov_rows.transpose() * cov_rows) / N;
+  Gamma.bottomRightCorner(pstar, pstar) =
+      a * gamma_cov - b * ((*gamma_nt_or) - c * (s * s.transpose()));
+
+  if (mu_dim > 0) {
+    Gamma.topLeftCorner(p, p) = S;
+    const Eigen::MatrixXd cross =
+        (Xc.transpose() * cov_rows) / N * (N / (N - 2.0));
+    Gamma.topRightCorner(p, pstar) = cross;
+    Gamma.bottomLeftCorner(pstar, p) = cross.transpose();
+  }
+  Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+  return Gamma;
 }
 
 }  // namespace
@@ -372,7 +419,21 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
       // n_g - 1, but the choice cancels in the scaling factor c = tr(C^-1 S)/m
       // as long as S and the test statistic T agree; standardize on the n
       // divisor everywhere.
-      if (computation == GammaComputation::Streaming) {
+      if (gamma == GammaSource::Unbiased) {
+        auto gamma_u_or =
+            browne_unbiased_gamma(D_rows, Xc, gr.mu_dim, gr.n_g, g);
+        if (!gamma_u_or.has_value()) {
+          return std::unexpected(gamma_u_or.error());
+        }
+        if (computation == GammaComputation::Dense) {
+          dense_gamma.push_back(std::move(*gamma_u_or));
+          dense_dstack.push_back(std::sqrt(gr.weight) * D_g);
+          q_total += gr.mu_dim + pstar;
+        } else {
+          S.noalias() +=
+              gr.weight * (D_g.transpose() * (*gamma_u_or) * D_g);
+        }
+      } else if (computation == GammaComputation::Streaming) {
         const Eigen::MatrixXd U_rows = D_rows * D_g;           // n_g × m
         const double scale = gr.weight / static_cast<double>(gr.n_g);
         S.noalias() += scale * (U_rows.transpose() * U_rows);

@@ -444,6 +444,30 @@ continuous_ls_chisq(data::SampleStats samp,
                     const Estimates& est,
                     const gmm::Weight& weight);
 
+// Satorra-2000 restriction-map difference test for two nested continuous
+// moment-quadratic fits (ULS/GLS/caller-weighted WLS). The H1 estimation weight
+// is shared by both models, while `gamma` selects empirical raw-data moments or
+// the normal-theory moment covariance at the sample covariance. The sandwich,
+// exact/delta restriction, and generalized eigensolve are all carried out in
+// H1's equality-reduced parameter space.
+post_expected<robust::LRSatorra2000Result>
+lr_test_satorra2000_continuous_ls(
+    spec::LatentStructure pt_H1,
+    const model::MatrixRep& rep_H1,
+    const data::SampleStats& samp,
+    const Estimates& est_H1,
+    spec::LatentStructure pt_H0,
+    const model::MatrixRep& rep_H0,
+    const Estimates& est_H0,
+    const gmm::Weight& weight,
+    const data::RawData& raw,
+    double T_H0,
+    double T_H1,
+    int df_H0,
+    int df_H1,
+    robust::GammaSource gamma = robust::GammaSource::Empirical,
+    robust::SatorraAMethod a_method = robust::SatorraAMethod::Exact);
+
 // Non-robust (information-inverse) standard errors for a continuous
 // moment-quadratic fit: the npar × npar LS information `Σ_b n_b·Δ_bᵀ W_b Δ_b`,
 // with `Δ_b` the model-moment Jacobian and `W_b` the estimator weight (empty

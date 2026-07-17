@@ -88,6 +88,7 @@ struct SatorraGroup {
 
 enum class GammaSource {
   Empirical,  // Γ̂ from raw data — Satorra-Bentler / MLR
+  Unbiased,   // Browne/Du-Bentler finite-sample correction of empirical Γ̂
   NT          // Γ_NT(Σ̂)         — sanity check: all eigvals → 1
 };
 

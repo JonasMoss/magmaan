@@ -170,8 +170,10 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   case), or a list of per-group matrices in the same block order the fit was
 #'   built with. Ordinal DWLS/WLS pairs take the `magmaan_ordinal_data` object
 #'   used for fitting. FIML pairs use `fit_H1$raw_data` and do not accept `data`.
-#' @param gamma `"empirical"` (default, empirical Gamma-hat) or `"NT"`
-#'   (normal-theory sanity-check path where all eigenvalues collapse to 1).
+#' @param gamma `"empirical"` (default, empirical Gamma-hat), `"unbiased"`
+#'   (the Browne/Du-Bentler finite-sample correction for complete-data ML), or
+#'   `"NT"` (normal-theory sanity-check path where all eigenvalues collapse to
+#'   1).
 #' @param method `"restriction_map"` (default), `"lavaan_sb2001"`, or
 #'   `"lavaan_sb2010"`.
 #' @param A.method `"exact"` (default, exact parameter-nesting restriction)
@@ -204,13 +206,15 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   or `FALSE` keeps the raw saturated-H1 reference. `TRUE` applies the
 #'   frontier condition-cap defaults. A list may set `condition_max`,
 #'   `min_eigenvalue`, and optional `covariance` / `information` sublists.
-#' @param weight Ordinal nested tests only: `"DWLS"`, `"WLS"`, or `"ULS"`.
-#'   Defaults to `fit_H1$estimator`.
+#' @param weight For ordinal nested tests, `"DWLS"`, `"WLS"`, or `"ULS"`.
+#'   For continuous WLS, the explicit fitting weight matrix (or per-group list
+#'   of matrices). Continuous ULS/GLS rebuild their own weights and reject this
+#'   argument.
 #'
 #' @return A list of class `magmaan_nested_test`.
 #' @export
 robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
-                              gamma = c("empirical", "NT"),
+                              gamma = c("empirical", "unbiased", "NT"),
                               method = c("restriction_map",
                                          "lavaan_sb2001",
                                          "lavaan_sb2010"),
@@ -275,6 +279,20 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   if (xor(ordinal_H1, ordinal_H0) || xor(mixed_ordinal_H1, mixed_ordinal_H0)) {
     stop("robust_nested_lrt(): mixed ordinal/non-ordinal model pairs are not ",
          "supported; fit both models with the same estimator.", call. = FALSE)
+  }
+  estimator_H1 <- fit_estimator(fit_H1)
+  estimator_H0 <- fit_estimator(fit_H0)
+  # ML2S estimator labels encode the Stage-2 weight and are validated by the
+  # dedicated branch below; keep its more specific same-weight diagnostic.
+  if (!ml2s_H1 && !identical(estimator_H1, estimator_H0)) {
+    stop("robust_nested_lrt(): fit_H1 and fit_H0 use different estimators ('",
+         estimator_H1, "' versus '", estimator_H0, "').", call. = FALSE)
+  }
+  if (identical(gamma, "unbiased") &&
+      (ml2s_H1 || fiml_H1 || ordinal_H1 || mixed_ordinal_H1 ||
+       !identical(estimator_H1, "ML"))) {
+    stop("robust_nested_lrt(): gamma = 'unbiased' is available only for ",
+         "complete-data normal-theory ML pairs.", call. = FALSE)
   }
   if (ml2s_H1) {
     if (h1_ref_requested) {
@@ -367,6 +385,11 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   if (h1_ref_requested) {
     stop("robust_nested_lrt(): `h1_reference_regularization` is only ",
          "available for direct FIML nested tests.", call. = FALSE)
+  }
+  if (identical(gamma, "unbiased") &&
+      !identical(method, "restriction_map")) {
+    stop("robust_nested_lrt(): gamma = 'unbiased' is available only for ",
+         "method = 'restriction_map'.", call. = FALSE)
   }
   if (identical(ud_method, "2001")) {
     stop("robust_nested_lrt(): ud_method = '2001' (the U0-U1 difference ",
@@ -482,6 +505,31 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   T_H0 <- infer_chi2_stat(fit_sample_stats(fit_H0), fit_H0$fmin)
   df_H0 <- infer_df_stat(fit_H0$partable, fit_sample_stats(fit_H0))
 
+  if (estimator_H1 %in% c("ULS", "GLS", "WLS")) {
+    if (!identical(method, "restriction_map")) {
+      stop("robust_nested_lrt(): continuous ULS/GLS/WLS nested tests support ",
+           "method = 'restriction_map' only.", call. = FALSE)
+    }
+    if (identical(gamma, "unbiased")) {
+      stop("robust_nested_lrt(): gamma = 'unbiased' is available only for ",
+           "complete-data normal-theory ML pairs.", call. = FALSE)
+    }
+    res <- infer_continuous_ls_lr_test_satorra2000(
+      fit_H1, fit_H0, X_per_group,
+      T_H1 = T_H1, df_H1 = df_H1,
+      T_H0 = T_H0, df_H0 = df_H0,
+      weight = weight, gamma = gamma, a_method = A.method
+    )
+    res$gamma <- gamma
+    res$method <- method
+    res$A.method <- A.method
+    res$convention <- convention
+    res$computation <- "continuous_ls_sandwich"
+    res$weight <- estimator_H1
+    class(res) <- c("magmaan_nested_test", "list")
+    return(res)
+  }
+
   res <- switch(method,
     restriction_map = infer_lr_test_satorra2000(
         fit_H1, fit_H0, X_per_group,
@@ -514,7 +562,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
 #'   `"satorra.bentler.2001"`, `"satorra.bentler.2010"`) or the canonical
 #'   robust nested-LRT method names.
 #' @export
-nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT"),
+nestedTest <- function(fit_H1, fit_H0, data = NULL,
+                       gamma = c("empirical", "unbiased", "NT"),
                        method = c("satorra.2000",
                                   "satorra.bentler.2001",
                                   "satorra.bentler.2010",

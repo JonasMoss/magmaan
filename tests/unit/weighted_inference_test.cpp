@@ -1189,6 +1189,55 @@ TEST_CASE("continuous_ls_profile_lrt raw and supplied Gamma agree") {
   CHECK(by_raw->spectrum_size == by_raw->eigvals.size());
 }
 
+TEST_CASE("continuous LS Satorra-2000 nested restriction map is exposed") {
+  auto fx = one_factor_fixture();
+  auto fp0 = magmaan::parse::Parser::parse(
+      "f =~ x1 + a*x2 + a*x3 + x4");
+  REQUIRE(fp0.has_value());
+  auto pt0 = magmaan::spec::build(*fp0);
+  REQUIRE(pt0.has_value());
+  auto rep0 = magmaan::model::build_matrix_rep(*pt0);
+  REQUIRE(rep0.has_value());
+
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est1 = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  auto est0 = magmaan::test::fit_gmm(
+      *pt0, *rep0, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est1.has_value());
+  REQUIRE(est0.has_value());
+
+  auto empirical = magmaan::estimate::lr_test_satorra2000_continuous_ls(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0,
+      magmaan::estimate::gmm::Weight{}, fx.raw,
+      7.0, 4.0, 3, 2, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta);
+  auto normal = magmaan::estimate::lr_test_satorra2000_continuous_ls(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0,
+      magmaan::estimate::gmm::Weight{}, fx.raw,
+      7.0, 4.0, 3, 2, magmaan::robust::GammaSource::NT,
+      magmaan::robust::SatorraAMethod::Delta);
+  REQUIRE(empirical.has_value());
+  REQUIRE(normal.has_value());
+  CHECK(empirical->df_diff == 1);
+  CHECK(empirical->T_diff == doctest::Approx(3.0));
+  CHECK(empirical->eigenvalues.size() == 1);
+  CHECK(empirical->eigenvalues.allFinite());
+  CHECK(normal->eigenvalues.size() == 1);
+  CHECK(normal->eigenvalues.allFinite());
+
+  auto unbiased = magmaan::estimate::lr_test_satorra2000_continuous_ls(
+      fx.pt, fx.rep, fx.samp, *est1, *pt0, *rep0, *est0,
+      magmaan::estimate::gmm::Weight{}, fx.raw,
+      7.0, 4.0, 3, 2, magmaan::robust::GammaSource::Unbiased,
+      magmaan::robust::SatorraAMethod::Delta);
+  REQUIRE_FALSE(unbiased.has_value());
+  CHECK(unbiased.error().detail.find("unbiased Gamma") != std::string::npos);
+}
+
 TEST_CASE("ml_profile_rmsea covariance-only raw and supplied Gamma agree") {
   auto fx = one_factor_fixture();
   const magmaan::optim::OptimOptions opt{
