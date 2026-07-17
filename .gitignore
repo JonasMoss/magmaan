@@ -36,6 +36,8 @@ docs/research/human_notes/
 *.dylib
 *.dll
 *.exe
+__pycache__/
+*.pyc
 .vscode/
 .idea/
 *.swp
