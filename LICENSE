@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This repository vendors third-party sources under third_party/, each retaining
-its own license:
-
-  third_party/port/ — PORT optimizer routines (Bell Labs, via AMPL/ASL and
-  Fermi-LAT), BSD-3-Clause. See third_party/port/LICENSE-AMPL,
-  third_party/port/LICENSE-fermi-lat, and third_party/port/README.md.

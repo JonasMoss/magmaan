@@ -70,6 +70,10 @@ AddressSanitizer + UBSan. `just` wraps the usual loops: `just build`,
 
 magmaan is released under the [MIT License](LICENSE).
 
+Vendored third-party sources under `third_party/` (PORT, BSD-3-Clause;
+QUADPACK, public domain) keep their own terms, recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 Vendored third-party sources under `third_party/` keep their own licenses (see
 each subdirectory's `LICENSE-*` and `README.md`). A handful of test fixtures
 embed well-known public SEM teaching datasets (Holzinger-Swineford,
