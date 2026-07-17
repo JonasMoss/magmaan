@@ -110,29 +110,34 @@ stopifnot(identical(fmg_nested(fit, fit_h0_complete, data = df,
                     "sb_ml"))
 cat("Nested complete-data biased/unbiased ML/RLS FMG workflow: ok\n")
 
-# Continuous ULS/GLS model pairs use the estimator's quadratic-form difference
-# and the same restriction-map spectrum. ULS defaults to normal-theory Gamma,
-# matching lavaan; GLS defaults to empirical Gamma.
-for (estimator in c("ULS", "GLS")) {
+# Continuous ULS/GLS/WLS model pairs use the estimator's quadratic-form
+# difference and the same restriction-map spectrum. ULS defaults to
+# normal-theory Gamma, matching lavaan; GLS/WLS default to empirical Gamma.
+# WLS fit objects do not retain their caller-supplied weight, so pass it again.
+W_adf <- solve(magmaan_core$robust_empirical_gamma(
+  as.matrix(df[, paste0("x", 1:9)])
+))
+for (estimator in c("ULS", "GLS", "WLS")) {
   spec_h1_ls <- model_spec(model)
   spec_h0_ls <- model_spec(model_h0_complete)
+  weight_ls <- if (identical(estimator, "WLS")) W_adf else NULL
   fit_h1_ls <- magmaan(
     spec_h1_ls, df_to_data(df, spec_h1_ls, scaling = "n-1"),
-    estimator = estimator, se = "none", test = "none"
+    estimator = estimator, W = weight_ls, se = "none", test = "none"
   )
   fit_h0_ls <- magmaan(
     spec_h0_ls, df_to_data(df, spec_h0_ls, scaling = "n-1"),
-    estimator = estimator, se = "none", test = "none"
+    estimator = estimator, W = weight_ls, se = "none", test = "none"
   )
   tab_nested_ls <- fmg_nested(
     fit_h1_ls, fit_h0_ls, data = df,
-    tests = c("sb", "peba2"), A.method = "delta"
+    tests = c("sb", "peba2"), A.method = "delta", weight = weight_ls
   )
   stopifnot(identical(tab_nested_ls$label, c("sb_ls", "peba2_ls")))
   stopifnot(all(tab_nested_ls$base == "ls"),
             all(is.finite(tab_nested_ls$p_value)))
 }
-cat("Nested continuous ULS/GLS FMG workflow: ok\n")
+cat("Nested continuous ULS/GLS/WLS FMG workflow: ok\n")
 
 # ---- FIML (missing-data) FMG: first-principles UGamma spectrum --------------
 # magmaan computes the missing-data UGamma spectrum from its own saturated-model

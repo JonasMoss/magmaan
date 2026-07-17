@@ -232,7 +232,8 @@ The opt-in `semTests/tools/magmaan-validation.R` gate independently fits both
 implementations and checks the complete shared transform family. On the fixed
 Holzinger--Swineford gate, maximum spectrum differences are about `5.3e-7` for
 single-group biased/unbiased ML, `6.5e-6` for multigroup mean-structured
-biased/unbiased ML, `1.3e-7` for nested GLS, and `5.4e-7` for nested ULS.
+biased/unbiased ML, `1.3e-7` for nested GLS, `5.4e-7` for nested ULS, and
+`5.7e-7` for nested full WLS using lavaan's exact fitting weight.
 
 ## Missing-data FIML/ML2S lavaan convention (2026-06-30)
 
