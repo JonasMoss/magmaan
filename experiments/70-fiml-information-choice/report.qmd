@@ -1,0 +1,238 @@
+---
+title: "Which information matrix should FIML use?"
+subtitle: "A focused magmaan/lavaan validation, not a new general simulation result"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(
+  if (nzchar(override)) override else character(),
+  file.path("results", c("overnight", "pilot", "smoke")))
+available <- roots[vapply(roots, function(path)
+  file.exists(file.path(path, "metadata.csv")), logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke --lavaan-parity`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+meta_frame <- read_result("metadata.csv")
+meta <- setNames(meta_frame$value, meta_frame$key)
+cells <- read_result("cell_method_summary.csv")
+failures <- read_result("information_failures.csv")
+parity <- read_result("lavaan_parity.csv")
+projection <- read_result("runtime_projection.csv")
+profile <- meta[["profile"]]
+reps <- as.integer(meta[["reps_per_cell"]])
+is_overnight <- identical(profile, "overnight") &&
+  as.integer(meta[["cells"]]) == 48L && reps >= 200000L
+
+correct <- subset(cells, specification == "correct")
+ranked <- aggregate(
+  cbind(
+    coverage_error = abs(correct$coverage_true - 0.95),
+    se_ratio_error = abs(correct$se_sd_ratio - 1)
+  ),
+  list(method = correct$method), mean, na.rm = TRUE)
+ranked <- ranked[order(
+  ranked$coverage_error, ranked$se_ratio_error), , drop = FALSE]
+```
+
+## Question
+
+For continuous FIML, should standard errors use the structured expected Fisher
+information, the analytic observed-H1 approximation, or the full observed
+Hessian? Does the answer change when the covariance is model based versus an
+empirical-score sandwich?
+
+This is an implementation-facing validation and a small extension, not an
+attempt to rediscover the main result of Savalei (2010). That paper already
+showed that expected information is inconsistent under general MAR and
+recommended observed information. The local questions are whether magmaan
+reproduces lavaan's three computational conventions, whether observed-H1 is a
+stable analytic substitute for the full Hessian, and whether the same-meat
+sandwich behaves as expected under nonnormality and structural
+misspecification.
+
+## Short answer
+
+`r if (is_overnight) {
+  sprintf(
+    "Across the completed 48-cell, %d-replication design, %s had the smallest mean absolute 95%%-coverage error in the correctly specified cells (%.3f percentage points); its mean absolute SE/SD error was %.3f. These are local implementation results, interpreted alongside—not instead of—the existing theory and simulations.",
+    reps, ranked$method[[1L]], 100 * ranked$coverage_error[[1L]],
+    ranked$se_ratio_error[[1L]])
+} else {
+  sprintf(
+    "The %s run (%d replications per cell) validates the pipeline and estimates runtime, but it is not large enough to choose a default. The overnight result is still required before using finite-sample differences as evidence.",
+    profile, reps)
+}`
+
+`r if (nrow(parity)) {
+  sprintf(
+    "The optional lavaan sentinel passed %d/%d parameter-level SE comparisons; max |difference| = %.4g.",
+    sum(parity$pass), nrow(parity), max(parity$abs_difference))
+} else {
+  "The lavaan sentinel was not requested for this run."
+}`
+
+## Evidence
+
+The design has 48 cells:
+
+- multivariate normal versus elliptical multivariate \(t_5\), both with the
+  same population covariance;
+- correct two-factor CFA versus an omitted 0.25 cross-loading;
+- complete data, 30% MCAR, and 30% MAR driven by always-observed factor
+  markers;
+- \(N = 150, 300, 600, 1200\).
+
+Two parameters are followed: a free loading and the factor covariance. Every
+replication is fit once. The three information matrices are then combined with
+either their inverse (model covariance) or the identical empirical
+outer-product-of-scores meat (sandwich covariance). Thus the three sandwich
+columns differ only in their bread.
+
+```{r correct-ranking}
+display <- ranked
+display$coverage_error <- 100 * display$coverage_error
+knitr::kable(
+  display, digits = 3, row.names = FALSE,
+  col.names = c(
+    "Method", "Mean |coverage - 95%| (pp)", "Mean |SE/SD - 1|"),
+  caption = paste(
+    "Cell-averaged calibration in correctly specified cells.",
+    if (is_overnight) "Inferential run." else "Diagnostic run only.")
+)
+```
+
+```{r mechanism-table}
+by_mechanism <- aggregate(
+  cbind(coverage_true, se_sd_ratio) ~
+    missingness + distribution + method,
+  data = correct, mean, na.rm = TRUE)
+by_mechanism$coverage_true <- 100 * by_mechanism$coverage_true
+knitr::kable(
+  by_mechanism, digits = 3, row.names = FALSE,
+  col.names = c(
+    "Missingness", "Distribution", "Method",
+    "Mean coverage (%)", "Mean SE/SD"),
+  caption = "Correctly specified cells by missingness and distribution."
+)
+```
+
+For misspecified cells, the population pseudo-true parameter is not assumed
+known. Coverage is therefore centered on the leave-one-out cell mean, which
+tests whether an SE estimates sampling variation around the pseudo-limit
+without conflating that question with pseudo-target calibration.
+
+```{r misspec-table}
+misspec <- subset(cells, specification == "omitted_crossloading")
+misspec_summary <- aggregate(
+  cbind(coverage_centered, se_sd_ratio) ~
+    missingness + distribution + method,
+  data = misspec, mean, na.rm = TRUE)
+misspec_summary$coverage_centered <- 100 * misspec_summary$coverage_centered
+knitr::kable(
+  misspec_summary, digits = 3, row.names = FALSE,
+  col.names = c(
+    "Missingness", "Distribution", "Method",
+    "Centered coverage (%)", "Mean SE/SD"),
+  caption = "Misspecified cells, centered on a leave-one-out empirical target."
+)
+```
+
+```{r failure-table}
+failure_display <- aggregate(
+  inversion_failure_rate ~ information,
+  data = failures, FUN = max)
+knitr::kable(
+  failure_display, digits = 4, row.names = FALSE,
+  col.names = c("Information", "Worst cell inversion-failure rate"),
+  caption = "Information-matrix stability; failures are retained as outcomes."
+)
+```
+
+The measured worker time was
+`r sprintf("%.3f", projection$mean_worker_seconds_per_rep)` seconds per
+replication. On the configured
+`r projection$assumed_cores` cores, the 48 \(\times\) 200,000 profile projects to
+`r sprintf("%.2f", projection$projected_hours_with_15pct_overhead)` hours,
+including a 15% scheduling and I/O allowance.
+
+## Sanity checks
+
+The optional sentinel regenerates a spread of simulation cells and compares
+all six parameter SEs against explicit lavaan settings:
+
+| magmaan label | lavaan information | lavaan observed information | lavaan SE |
+|---|---|---|---|
+| expected model | `expected` | `hessian` | `standard` |
+| expected sandwich | `expected` | `hessian` | `robust.huber.white` |
+| observed-H1 model | `observed` | `h1` | `standard` |
+| observed-H1 sandwich | `observed` | `h1` | `robust.huber.white` |
+| observed-Hessian model | `observed` | `hessian` | `standard` |
+| observed-Hessian sandwich | `observed` | `hessian` | `robust.huber.white` |
+
+The C++ unit tests independently establish that expected-pattern FIML
+information reduces to complete-data expected ML when no values are missing,
+that raw and cached-pattern calls agree exactly, and that the full analytic
+observed Hessian matches its finite-difference diagnostic.
+
+## Caveats
+
+The elliptical \(t_5\) condition stresses fourth moments but not skewness.
+The MAR mechanism is deliberately legible rather than exhaustive. There are
+only six indicators, one kind of structural misspecification, and two focal
+parameters. Accordingly, this run can validate magmaan's choice and expose
+finite-sample stability problems; it cannot supersede the broader literature.
+
+Expected-information standard errors are theoretically restricted to complete
+data or MCAR under the relevant model assumptions. The observed-H1 versus full
+observed-Hessian comparison is the genuinely useful finite-sample part of this
+run. Under misspecification, a model-based inverse is not made robust merely by
+choosing an observed bread; the empirical sandwich is the relevant comparison.
+
+Ordinal/polychoric estimation is outside this experiment. Its sparse-table,
+threshold, correlation, and estimated-weight issues require a separate design.
+
+## Reproduce
+
+```bash
+# Fast structural check plus the independent lavaan oracle
+Rscript run_experiment.R --smoke --lavaan-parity --cores 4
+
+# Timing and failure-rate pilot
+Rscript run_experiment.R --pilot --lavaan-parity --cores 8
+
+# Checkpointed machine-sized run (9.6 million fits)
+Rscript run_experiment.R --overnight --lavaan-parity --cores 8
+```
+
+The runner uses deterministic replication seeds, atomic per-chunk checkpoints,
+strict manifest/code-hash validation, progress/ETA messages, and automatic
+resume. Use a new `--results-dir` after changing code or design settings.
+
+## References
+
+Savalei, V. (2010). Expected versus observed information in SEM with incomplete
+normal and nonnormal data. *Psychological Methods, 15*(4), 352--367.
+[doi:10.1037/a0020143](https://doi.org/10.1037/a0020143).
+
+Savalei, V., & Rosseel, Y. (2022). Computational options for standard errors
+and test statistics with incomplete normal and nonnormal data in SEM.
+*Structural Equation Modeling, 29*(2), 163--181.
+[doi:10.1080/10705511.2021.1877548](https://doi.org/10.1080/10705511.2021.1877548).
+
+Yuan, K.-H., & Bentler, P. M. (2000). Three likelihood-based methods for mean
+and covariance structure analysis with nonnormal missing data.
+*Sociological Methodology, 30*, 165--200.
+[doi:10.1111/0081-1750.00078](https://doi.org/10.1111/0081-1750.00078).
