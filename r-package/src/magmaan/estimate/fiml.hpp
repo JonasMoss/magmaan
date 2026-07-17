@@ -326,6 +326,50 @@ fiml_extras(spec::LatentStructure pt,
             const FIMLPack& pack,
             const FIMLH1& h1);
 
+// Expected FIML information in theta space. For each observed-data pattern,
+// this uses the conditional Gaussian Fisher information
+//
+//   I_ab = n_r { dmu_a' Sigma_oo^-1 dmu_b
+//                + 1/2 tr(Sigma_oo^-1 dSigma_a
+//                         Sigma_oo^-1 dSigma_b) }.
+//
+// It is lavaan's `information = "expected"` convention. Unlike the observed
+// Hessian below, it contains neither realized pattern moments nor the
+// second-order chain-rule curvature of the structural moment map.
+post_expected<Eigen::MatrixXd>
+fiml_expected_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          FIML discrepancy = {});
+
+post_expected<Eigen::MatrixXd>
+fiml_expected_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack);
+
+// Observed-H1 FIML information in theta space: the realized observed-pattern
+// moment Hessian, evaluated at the model-implied moments and projected through
+// the first-order eta Jacobian Delta. This is lavaan's
+// `information = "observed", observed.information = "h1"` convention. It
+// differs from `fiml_observed_information` by omitting the residual-contracted
+// second derivatives of eta(theta).
+post_expected<Eigen::MatrixXd>
+fiml_observed_h1_information(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            FIML discrepancy = {});
+
+post_expected<Eigen::MatrixXd>
+fiml_observed_h1_information(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            const FIMLPack& pack);
+
 // Observed FIML information matrix — the npar × npar `−∂²logl/∂θ²` for a
 // continuous raw-data FIML fit, computed as `(N/2)·H` where `H` is the
 // analytic Hessian of the per-observation-averaged deviance: the per-pattern

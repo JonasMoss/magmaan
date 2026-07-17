@@ -6147,6 +6147,79 @@ Rcpp::List infer_fiml_observed_vcov(Rcpp::List fit) {
       Rcpp::_["se"] = Rcpp::wrap(magmaan::inference::se(*vcov_or)));
 }
 
+// infer_fiml_information_vcov() compares the three FIML information
+// conventions exposed by lavaan: expected Fisher, observed H1, and the full
+// observed Hessian. Each convention is paired with both its model-based
+// covariance and the same empirical-score sandwich covariance. The latter is
+// V_model (Σ_i s_i s_i') V_model, which also preserves the equality-constraint
+// tangent projection already folded into V_model.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_information_vcov(Rcpp::List fit) {
+  if (!fit.containsElementNamed("raw_data")) {
+    Rcpp::stop(
+        "magmaan: infer_fiml_information_vcov() requires a FIML fit "
+        "with $raw_data");
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+
+  auto scores_or = magmaan::estimate::fiml::fiml_casewise_deviance_scores(
+      ctx.pt, ctx.rep, raw, pack, est);
+  if (!scores_or.has_value()) stop_post(scores_or.error());
+  Eigen::MatrixXd meat =
+      0.25 * (scores_or->transpose() * (*scores_or));
+  meat = 0.5 * (meat + meat.transpose()).eval();
+
+  auto expected_or = magmaan::estimate::fiml::fiml_expected_information(
+      ctx.pt, ctx.rep, raw, est, pack);
+  if (!expected_or.has_value()) stop_post(expected_or.error());
+  auto observed_h1_or =
+      magmaan::estimate::fiml::fiml_observed_h1_information(
+          ctx.pt, ctx.rep, raw, est, pack);
+  if (!observed_h1_or.has_value()) stop_post(observed_h1_or.error());
+  auto observed_hessian_or =
+      magmaan::estimate::fiml::fiml_observed_information(
+          ctx.pt, ctx.rep, raw, est, pack);
+  if (!observed_hessian_or.has_value()) stop_post(observed_hessian_or.error());
+
+  const auto summarize = [&](const Eigen::MatrixXd& information) {
+    auto model_vcov_or =
+        magmaan::inference::vcov(information, ctx.pt, est.theta);
+    if (!model_vcov_or.has_value()) {
+      const auto& error = model_vcov_or.error();
+      return Rcpp::List::create(
+          Rcpp::_["ok"] = false,
+          Rcpp::_["error"] =
+              std::string(post_error_kind(error.kind)) + ": " + error.detail,
+          Rcpp::_["information"] = Rcpp::wrap(information));
+    }
+    Eigen::MatrixXd sandwich_vcov =
+        (*model_vcov_or) * meat * (*model_vcov_or);
+    sandwich_vcov =
+        0.5 * (sandwich_vcov + sandwich_vcov.transpose()).eval();
+    return Rcpp::List::create(
+        Rcpp::_["ok"] = true,
+        Rcpp::_["error"] = R_NilValue,
+        Rcpp::_["information"] = Rcpp::wrap(information),
+        Rcpp::_["vcov_model"] = Rcpp::wrap(*model_vcov_or),
+        Rcpp::_["se_model"] =
+            Rcpp::wrap(magmaan::inference::se(*model_vcov_or)),
+        Rcpp::_["vcov_sandwich"] = Rcpp::wrap(sandwich_vcov),
+        Rcpp::_["se_sandwich"] =
+            Rcpp::wrap(magmaan::inference::se(sandwich_vcov)));
+  };
+
+  return Rcpp::List::create(
+      Rcpp::_["expected"] = summarize(*expected_or),
+      Rcpp::_["observed_h1"] = summarize(*observed_h1_or),
+      Rcpp::_["observed_hessian"] = summarize(*observed_hessian_or),
+      Rcpp::_["score_crossproducts"] = Rcpp::wrap(meat));
+}
+
 // estimate_fiml_robust_mlr() — mirrors estimate::fiml::fiml_robust_mlr().
 // Computes observed-pattern sandwich SEs plus Yuan-Bentler/Mplus scaled-test
 // traces for a FIML fit carrying $raw_data.

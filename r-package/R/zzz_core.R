@@ -204,6 +204,8 @@ inference_information_observed_fd <- infer_information_observed_fd
 inference_information_observed_analytic <- infer_information_observed_analytic
 inference_fiml_observed_vcov <- infer_fiml_observed_vcov
 fiml_observed_vcov <- infer_fiml_observed_vcov
+inference_fiml_information_vcov <- infer_fiml_information_vcov
+fiml_information_vcov <- infer_fiml_information_vcov
 inference_information_cross_products <- infer_information_cross_products
 inference_vcov <- infer_vcov
 inference_vcov_partable <- infer_vcov_partable
@@ -405,6 +407,7 @@ magmaan_core <- local({
       "inference_information_observed_fd",
       "inference_information_observed_analytic",
       "inference_fiml_observed_vcov",
+      "inference_fiml_information_vcov",
       "inference_information_cross_products",
       "inference_vcov",
       "inference_vcov_partable",
