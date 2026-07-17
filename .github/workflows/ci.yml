@@ -18,6 +18,39 @@ jobs:
       - name: Check layering
         run: bash tests/tools/check_layering.sh
 
+  r-boundary:
+    name: R boundary + vendor sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check vendored C++ sources
+        run: |
+          bash dev/vendor-cpp.sh
+          status="$(git status --porcelain -- r-package/src)"
+          if [ -n "$status" ]; then
+            printf '%s\n' "$status"
+            exit 1
+          fi
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: r-package
+          extra-packages: any::testthat
+          needs: check
+
+      - name: Install R package
+        run: R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+
+      - name: Test FMG and nested-test contracts
+        run: |
+          Rscript -e 'testthat::test_file("r-package/tests/testthat/test-fmg.R", package = "magmaan")'
+          Rscript -e 'testthat::test_file("r-package/tests/testthat/test-nested-test.R", package = "magmaan")'
+
   build-test:
     name: build + ctest (Linux, clang)
     runs-on: ubuntu-latest

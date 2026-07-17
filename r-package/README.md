@@ -111,26 +111,38 @@ family:
   `fit$raw_data`, so FMG calls normally do not need a separate `data` argument.
   Sample-stat-only fits can still pass complete raw `data =` explicitly.
 - Current support is complete-data ML and continuous ULS/GLS/WLS for single-
-  and multi-group fits, including mean structures, plus FIML/missing-data fits
-  with retained `fit$raw_data`. Continuous LS uses its standard quadratic-form
-  statistic and accepts `gamma = "empirical"` (default) or `"normal"`; WLS also
-  requires the fitting `weight =` because fit objects do not retain a
-  caller-supplied matrix. Covariance scaling remains explicit:
+  and multi-group fits, including mean structures, plus FIML/missing-data and
+  ML2S fits. Continuous LS uses its standard quadratic-form statistic and
+  accepts `gamma = "empirical"` (default) or `"normal"`; WLS also requires the
+  fitting `weight =` because fit objects do not retain a caller-supplied matrix.
+  Covariance scaling remains explicit:
   `df_to_data(..., scaling = "n-1")` matches lavaan's continuous-LS convention,
   while magmaan's data-frame default is `"n"`. Under FIML only the ML/LRT base
   and biased Gamma are defined; explicit `_rls` and `_ug` labels are rejected.
   FIML uses saturated H1 information for the U projector metric. Listwise-
   deleted input is supported only after it has become complete-data sample
-  moments through `df_to_data(..., missing = "listwise")`.
+  moments through `df_to_data(..., missing = "listwise")`. ML2S uses the
+  Stage-2 ML statistic and cached spectrum attached to the fit; like FIML, it
+  rejects explicit `_rls` and `_ug` labels.
 - Nested FIML model-pair tests are available through
   `nestedTest(..., method = "restriction_map")` / `robust_nested_lrt()` when
-  both fits are FIML fits from the same raw-data shape and mask. Complete-data
-  SB2001/SB2010 compatibility methods, caller-supplied `data =`, and mixed
-  FIML/complete-data pairs are rejected for this path.
+  both fits are FIML fits from the same raw-data shape and mask. The
+  `satorra.bentler.2001` and `satorra.bentler.2010` compatibility methods are
+  available too. FIML takes raw data from the fit; caller-supplied `data =`,
+  unbiased/paired Gamma, and mixed FIML/complete-data pairs are rejected.
+- ML2S model pairs support the restriction-map nested test across the NT, ULS,
+  DWLS, ADF/WLS, and DLS Stage-2 weights. Scalar SB2001/SB2010 compatibility
+  methods are NT-only, and unbiased/paired Gamma is not defined for ML2S.
 - Complete-data ML restriction-map pairs accept both empirical and
   Browne/Du--Bentler unbiased Gamma (`gamma = "unbiased"` or `_ug` FMG
   labels). The correction is group- and mean-structure-aware; it remains
   undefined for FIML, ordinal, and continuous least-squares pairs.
+  `robust_nested_lrt(..., gamma = "both")` obtains both spectra in one shared
+  streaming pass: `eigenvalues` and all scalar test summaries use empirical
+  Gamma, while `eigenvalues_unbiased` holds the auxiliary unbiased spectrum.
+  `fmg_nested()` selects this paired path automatically when a request mixes
+  empirical and `_ug` tests. Numerical backend diagnostics are retained in
+  `attr(result, "warnings")`.
 - Continuous ULS/GLS/WLS restriction-map pairs are available through
   `nestedTest()` / `robust_nested_lrt()` and `fmg_nested()`. ULS defaults to
   normal-theory Gamma, while GLS/WLS default to empirical Gamma; WLS requires
@@ -140,8 +152,10 @@ family:
   `fmg_nested_mixed_ordinal()` for all-ordinal and mixed-ordinal LS pairs.
 - The test-name grammar mirrors semTests-style labels:
   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, and
-  `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. The default
-  source statistic is RLS; bare `peba` and `pols` use parameter 2.
+  `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. Single-model
+  complete-data tests default to RLS; nested complete-data tests default to the
+  ML/LRT difference; ordinal and continuous-LS tests use their LS statistic.
+  Bare `peba` and `pols` use parameter 2.
 
 ## Ordinal LS boundary
 

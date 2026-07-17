@@ -13,9 +13,7 @@ execute:
 ---
 
 ```{r setup}
-override <- Sys.getenv("STUDY2_RESULTS_DIR", unset = "")
-roots <- if (nzchar(override)) override else
-  file.path("results", c("full", "pilot", "smoke"))
+roots <- file.path("results", c("full", "pilot", "smoke"))
 available <- roots[vapply(roots, function(path)
   file.exists(file.path(path, "metadata.csv")), logical(1))]
 if (!length(available)) {
@@ -42,10 +40,10 @@ is_full <- identical(profile, "full") && n_cells == 189L && reps >= 2000L
 
 ## Question
 
-Can native magmaan reproduce the 189-cell weak-invariance Type-I comparison in
-Study 2 of Foldnes, Moss and Grønneberg (2026), now that the complete-data
-Satorra-2000 path supports both the biased and Browne/Du-Bentler unbiased Gamma
-spectra? Can semTests be reduced from the simulation engine to a small
+Can native magmaan reproduce the 189-cell Satorra-2000 weak-invariance Type-I
+comparison in Study 2 of Foldnes, Grønneberg and Moss (2026), now that the
+complete-data path supports both the empirical and Browne/Du-Bentler unbiased
+Gamma spectra? Can semTests be reduced from the simulation engine to a small
 correctness sentinel?
 
 ## Short answer
@@ -86,7 +84,7 @@ knitr::kable(
     "Acceptable cells (%)", "Below 2.5% (%)", "Above 7.5% (%)"),
   caption = paste(
     "Selected Study 2 methods.",
-    if (is_full) "Directly comparable with published Table 9."
+    if (is_full) "Comparable with the overlapping Satorra-2000 rows in published Table 9."
     else "Smoke/pilot rates are Monte Carlo diagnostics only.")
 )
 ```
@@ -98,10 +96,11 @@ Vale--Maurelli, independent-generator, and piecewise-linear conditions
 (skewness/excess kurtosis 2/7 and 3/21). The full design therefore has 189
 cells.
 
-All 38 primary methods use the Satorra (2000) difference spectrum and the
-moment-tangent (`delta`) restriction used by semTests and the published
-simulation: uncorrected ML/RLS plus nine robust families crossed with ML/RLS
-bases and biased/unbiased Gamma. The Satorra--Bentler 2001 approximation is
+The 38 methods reproduced here are the Satorra (2000) subset of the published
+comparison. They use the moment-tangent (`delta`) restriction used by semTests
+and the published simulation: uncorrected ML/RLS plus nine robust families
+crossed with ML/RLS bases and empirical/unbiased Gamma. The paper also retained
+the Satorra--Bentler 2001 approximation as an additional comparator; it is
 intentionally outside this replication.
 
 ```{r generator-table}
@@ -190,9 +189,16 @@ Rscript run_experiment.R --pilot --cores 8 --semtests-parity
 Rscript run_experiment.R --full --cores 16 --semtests-parity
 ```
 
-The target article is Foldnes, Moss and Grønneberg (2026), *Penalized
+The target article is Foldnes, Grønneberg and Moss (2026), *Penalized
 eigenvalue block averaging: Extension to nested model comparison and Monte
 Carlo evaluations*, Behavior Research Methods 58:107,
 [doi:10.3758/s13428-026-02968-4](https://doi.org/10.3758/s13428-026-02968-4).
-The restriction-map construction follows Satorra (2000), *Scaled and adjusted
-restricted tests in multi-sample analysis of moment structures*.
+The restriction-map construction follows Satorra, A. (2000), *Scaled and
+adjusted restricted tests in multi-sample analysis of moment structures*, in
+R. D. H. Heijmans, D. S. G. Pollock, and A. Satorra (Eds.), *Innovations in
+Multivariate Statistical Analysis: A Festschrift for Heinz Neudecker*
+(pp. 233--247), Kluwer Academic Publishers. The unbiased Gamma correction
+follows Du, H., and Bentler, P. M. (2022), *40-Year Old Unbiased Distribution
+Free Estimator Reliably Improves SEM Statistics for Nonnormal Data*,
+*Structural Equation Modeling*, 29(6), 872--887,
+[doi:10.1080/10705511.2022.2063870](https://doi.org/10.1080/10705511.2022.2063870).

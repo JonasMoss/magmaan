@@ -174,7 +174,8 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #' @param gamma `"empirical"` (default, empirical Gamma-hat), `"unbiased"`
 #'   (the Browne/Du-Bentler finite-sample correction for complete-data ML),
 #'   `"both"` (both spectra in one shared streaming pass; the unbiased spectrum
-#'   is returned as `eigenvalues_unbiased`), or `"NT"` (normal-theory
+#'   is returned as `eigenvalues_unbiased`; complete-data ML restriction-map
+#'   pairs with `computation = "streaming"` only), or `"NT"` (normal-theory
 #'   sanity-check path where all eigenvalues collapse to 1).
 #' @param method `"restriction_map"` (default), `"lavaan_sb2001"`, or
 #'   `"lavaan_sb2010"`.
