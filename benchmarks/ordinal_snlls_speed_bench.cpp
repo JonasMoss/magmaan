@@ -845,6 +845,25 @@ TimedFitResult run_timed_estimate(Row base, int reps, Fn&& fn,
   return {.row = base, .have_estimate = true, .estimate = std::move(last)};
 }
 
+OrdinalStats dwls_stats_from_lazy_workspace(
+    const magmaan::data::OrdinalWorkspace& workspace) {
+  OrdinalStats stats;
+  stats.R = workspace.moments.R;
+  stats.thresholds = workspace.moments.thresholds;
+  stats.threshold_ov = workspace.moments.threshold_ov;
+  stats.threshold_level = workspace.moments.threshold_level;
+  stats.n_obs = workspace.moments.n_obs;
+  stats.n_levels = workspace.moments.n_levels;
+  stats.ov_names = workspace.moments.ov_names;
+  stats.NACOV.reserve(workspace.gamma_cache.blocks.size());
+  stats.W_dwls.reserve(workspace.gamma_cache.blocks.size());
+  for (const auto& block : workspace.gamma_cache.blocks) {
+    stats.NACOV.push_back(block.diagonal.asDiagonal());
+    stats.W_dwls.push_back(block.diagonal.cwiseInverse().asDiagonal());
+  }
+  return stats;
+}
+
 struct DesignCell {
   bool mixed = false;
   bool invariance = false;
@@ -1955,6 +1974,58 @@ int main(int argc, char** argv) {
 
         if (estimator == OrdinalEstimatorKind::ULS ||
             estimator == OrdinalEstimatorKind::DWLS) {
+          if (estimator == OrdinalEstimatorKind::DWLS) {
+            Row row = parameterized_base;
+            row.estimator = estimator_name(estimator);
+            row.path = "full_bounded_e2e_lazy";
+            row.construction = "lazy_workspace";
+            row.stats_ms = quiet_nan();
+            row.moments_ms = quiet_nan();
+            row.starts_ms = quiet_nan();
+            row.cache_setup_ms = quiet_nan();
+            row.weight_setup_ms = quiet_nan();
+            CacheFlags last_flags;
+            auto result = run_timed_estimate(
+                row, reps,
+                [&](Estimates &last, std::string &error) {
+                  auto workspace =
+                      magmaan::data::ordinal_workspace_from_integer_data(
+                          {data}, plan);
+                  if (!workspace.has_value()) {
+                    error = workspace.error().detail;
+                    return false;
+                  }
+                  auto starts = magmaan::estimate::ordinal_start_values(
+                      pt, rep, workspace->moments, {});
+                  if (!starts.has_value()) {
+                    error = starts.error().detail;
+                    return false;
+                  }
+                  last_flags = cache_flags(&workspace->gamma_cache);
+                  auto lazy_stats =
+                      dwls_stats_from_lazy_workspace(*workspace);
+                  auto fit = magmaan::estimate::fit_ordinal_bounded(
+                      pt, rep, lazy_stats, {},
+                      magmaan::estimate::OrdinalWeightKind::DWLS, *starts,
+                      Backend::NloptLbfgs, opts, bounded_parameterization);
+                  if (!fit.has_value()) {
+                    error = fit.error().detail;
+                    return false;
+                  }
+                  last = *fit;
+                  return true;
+                },
+                have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+                have_full_bounded ? &full_bounded_ref : nullptr);
+            row = result.row;
+            row.cache_blocks = last_flags.block_count;
+            row.cache_has_diagonal = last_flags.has_diagonal;
+            row.cache_has_full = last_flags.has_full;
+            row.cache_has_dwls_weight = last_flags.has_dwls_weight;
+            row.cache_has_wls_weight = last_flags.has_wls_weight;
+            write_row(out, row);
+          }
+
           Row row = parameterized_base;
           row.estimator = estimator_name(estimator);
           row.path = "snlls_e2e_lazy";
