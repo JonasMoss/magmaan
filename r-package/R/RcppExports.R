@@ -365,6 +365,10 @@ infer_fiml_observed_vcov <- function(fit) {
     .Call(`_magmaan_infer_fiml_observed_vcov`, fit)
 }
 
+infer_fiml_information_vcov <- function(fit) {
+    .Call(`_magmaan_infer_fiml_information_vcov`, fit)
+}
+
 estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
     .Call(`_magmaan_estimate_fiml_robust_mlr`, fit, h_step)
 }

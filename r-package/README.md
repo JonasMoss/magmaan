@@ -42,6 +42,12 @@ Convenience helpers are limited to R-side composition:
   reliability `1 - mean(Var(Z | y)) / Var(Z)`.
   `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
   attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
+- FIML methods work can compare all three lavaan information conventions with
+  `magmaan_core$inference_fiml_information_vcov(fit)`. It returns expected
+  Fisher, observed-H1, and full observed-Hessian information; each carries a
+  model-based covariance and an empirical-score sandwich covariance built
+  from the same meat. This is a diagnostic primitive and does not change
+  `vcov(fit, regime = "model" | "robust")` defaults.
 
 Low-level functions such as `compat_lavaan_lavaanify()`,
 `model_matrix_rep()`, `estimate_fit()`, `estimate_*()`,

@@ -44,6 +44,7 @@ fit_s3 <- magmaan(
 )
 fiml_model <- magmaan_core$fiml_observed_vcov(fit_s3)
 fiml_robust <- magmaan_core$estimate_fiml_robust_mlr(fit_s3)
+fiml_information <- magmaan_core$inference_fiml_information_vcov(fit_s3)
 V_model <- vcov(fit_s3, regime = "model")
 V_robust <- vcov(fit_s3, regime = "robust")
 stopifnot(is.matrix(V_model), is.matrix(V_robust))
@@ -51,6 +52,17 @@ stopifnot(nrow(V_model) == fit_s3$npar, ncol(V_model) == fit_s3$npar)
 stopifnot(nrow(V_robust) == fit_s3$npar, ncol(V_robust) == fit_s3$npar)
 stopifnot(max(abs(V_model - fiml_model$vcov)) < 1e-10)
 stopifnot(max(abs(V_robust - fiml_robust$vcov)) < 1e-10)
+stopifnot(identical(
+  names(fiml_information),
+  c("expected", "observed_h1", "observed_hessian",
+    "score_crossproducts")))
+stopifnot(all(vapply(
+  fiml_information[c("expected", "observed_h1", "observed_hessian")],
+  function(x) isTRUE(x$ok), logical(1))))
+stopifnot(max(abs(
+  fiml_information$observed_hessian$vcov_model - V_model)) < 1e-10)
+stopifnot(max(abs(
+  fiml_information$observed_hessian$vcov_sandwich - V_robust)) < 1e-10)
 stopifnot(all(is.finite(fiml_model$se)))
 stopifnot(all(is.finite(fiml_robust$se)))
 stopifnot(is.nan(fiml_robust$scaling_factor))

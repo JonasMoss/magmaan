@@ -1435,6 +1435,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_fiml_information_vcov
+Rcpp::List infer_fiml_information_vcov(Rcpp::List fit);
+RcppExport SEXP _magmaan_infer_fiml_information_vcov(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_fiml_information_vcov(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_fiml_robust_mlr
 Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step);
 RcppExport SEXP _magmaan_estimate_fiml_robust_mlr(SEXP fitSEXP, SEXP h_stepSEXP) {
@@ -3767,6 +3778,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
     {"_magmaan_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaan_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaan_infer_fiml_observed_vcov", (DL_FUNC) &_magmaan_infer_fiml_observed_vcov, 1},
+    {"_magmaan_infer_fiml_information_vcov", (DL_FUNC) &_magmaan_infer_fiml_information_vcov, 1},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
     {"_magmaan_fiml_fit_measures_impl", (DL_FUNC) &_magmaan_fiml_fit_measures_impl, 2},
     {"_magmaan_infer_ml2s_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ml2s_casewise_influence_ij_fit, 4},

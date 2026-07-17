@@ -157,7 +157,8 @@ Eigen::MatrixXd deterministic_z(Eigen::Index n, Eigen::Index p) {
 magmaan::data::RawData
 model_missing_raw(const BuiltModel& built,
                   const Eigen::Ref<const Eigen::VectorXd>& theta,
-                  const std::vector<Eigen::Index>& n_per_group) {
+                  const std::vector<Eigen::Index>& n_per_group,
+                  bool introduce_missing = true) {
   auto truth = built.ev.sigma(theta);
   REQUIRE(truth.has_value());
   REQUIRE(truth->sigma.size() == n_per_group.size());
@@ -174,19 +175,21 @@ model_missing_raw(const BuiltModel& built,
     Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M =
         Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(
             X.rows(), X.cols());
-    for (Eigen::Index r = 0; r < X.rows(); ++r) {
-      if (r % 5 == 0) {
-        const Eigen::Index c = (r + static_cast<Eigen::Index>(b)) % p;
-        M(r, c) = 0;
-        X(r, c) = std::numeric_limits<double>::quiet_NaN();
-      } else if (r % 11 == 0 && p > 2) {
-        const Eigen::Index c = (r + 2 + static_cast<Eigen::Index>(b)) % p;
-        M(r, c) = 0;
-        X(r, c) = std::numeric_limits<double>::quiet_NaN();
+    if (introduce_missing) {
+      for (Eigen::Index r = 0; r < X.rows(); ++r) {
+        if (r % 5 == 0) {
+          const Eigen::Index c = (r + static_cast<Eigen::Index>(b)) % p;
+          M(r, c) = 0;
+          X(r, c) = std::numeric_limits<double>::quiet_NaN();
+        } else if (r % 11 == 0 && p > 2) {
+          const Eigen::Index c = (r + 2 + static_cast<Eigen::Index>(b)) % p;
+          M(r, c) = 0;
+          X(r, c) = std::numeric_limits<double>::quiet_NaN();
+        }
       }
     }
     raw.X.push_back(std::move(X));
-    raw.mask.push_back(std::move(M));
+    if (introduce_missing) raw.mask.push_back(std::move(M));
   }
   return raw;
 }
@@ -465,6 +468,56 @@ TEST_CASE("fiml_observed_information: analytic matches FD multi-group") {
   const auto raw = model_missing_raw(built, theta0, {70, 90});
   check_fiml_observed_information_analytic_vs_fd(built, raw,
                                                  perturbed_theta(theta0));
+}
+
+TEST_CASE("fiml_expected_information reduces to complete-data expected ML") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta.setConstant(0.55);
+  const auto raw =
+      model_missing_raw(built, theta, {180}, /*introduce_missing=*/false);
+  magmaan::estimate::Estimates est;
+  est.theta = theta;
+
+  auto fiml_info = magmaan::estimate::fiml::fiml_expected_information(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE(fiml_info.has_value());
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto ml_info = magmaan::inference::information_expected(
+      *built.pt, *built.rep, *samp, est);
+  REQUIRE(ml_info.has_value());
+
+  const double scale = std::max(1.0, ml_info->cwiseAbs().maxCoeff());
+  CHECK((*fiml_info - *ml_info).cwiseAbs().maxCoeff() / scale < 1e-10);
+}
+
+TEST_CASE("FIML expected and observed-H1 information reuse the pattern pack") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta.setConstant(0.55);
+  const auto raw = model_missing_raw(built, theta, {160});
+  magmaan::estimate::Estimates est;
+  est.theta = perturbed_theta(theta);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+
+  auto expected_raw = magmaan::estimate::fiml::fiml_expected_information(
+      *built.pt, *built.rep, raw, est);
+  auto expected_pack = magmaan::estimate::fiml::fiml_expected_information(
+      *built.pt, *built.rep, raw, est, *pack);
+  REQUIRE(expected_raw.has_value());
+  REQUIRE(expected_pack.has_value());
+  CHECK(*expected_raw == *expected_pack);
+
+  auto h1_raw = magmaan::estimate::fiml::fiml_observed_h1_information(
+      *built.pt, *built.rep, raw, est);
+  auto h1_pack = magmaan::estimate::fiml::fiml_observed_h1_information(
+      *built.pt, *built.rep, raw, est, *pack);
+  REQUIRE(h1_raw.has_value());
+  REQUIRE(h1_pack.has_value());
+  CHECK(*h1_raw == *h1_pack);
+  CHECK((*h1_raw - h1_raw->transpose()).cwiseAbs().maxCoeff() < 1e-9);
 }
 
 TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero gradient") {
