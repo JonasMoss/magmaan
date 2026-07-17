@@ -230,6 +230,53 @@ std::string make_repeated_model_syntax(int q, int categories,
   return syntax.str();
 }
 
+// Full-SEM variant: the measurement block, residual covariances, thresholds,
+// and delta scaling match make_repeated_model_syntax exactly, but a recursive
+// structural block replaces the free factor correlations that lavaanify would
+// otherwise add among four exogenous latents. At matched q the two families
+// differ only in the structural block, so the profiling comparison isolates it.
+std::string make_sem_model_syntax(int q, int categories,
+                                  OrdinalThresholdMode threshold_mode) {
+  const int p = 4 * q;
+  std::ostringstream syntax;
+  for (int f = 0; f < 4; ++f) {
+    syntax << "f" << (f + 1) << " =~ ";
+    for (int j = 1; j <= q; ++j) {
+      if (j > 1) syntax << " + ";
+      syntax << "x" << (f * q + j);
+    }
+    syntax << "\n";
+  }
+  syntax << "f2 ~ f1\n";
+  syntax << "f3 ~ f1 + f2\n";
+  syntax << "f4 ~ f3\n";
+  for (int j = 1; j <= q; ++j) {
+    syntax << "x" << j << " ~~ x" << (q + j) << "\n";
+    syntax << "x" << (2 * q + j) << " ~~ x" << (3 * q + j) << "\n";
+  }
+
+  const int n_threshold = categories - 1;
+  for (int j = 1; j <= p; ++j) {
+    syntax << "x" << j << " | ";
+    for (int k = 1; k <= n_threshold; ++k) {
+      if (k > 1) syntax << " + ";
+      if (threshold_mode == OrdinalThresholdMode::FixedOrConstrained &&
+          j == 1 && k == 1) {
+        syntax << "0*";
+      } else if (threshold_mode == OrdinalThresholdMode::LinearMap &&
+                 j <= 2 && k == 1) {
+        syntax << "a*";
+      }
+      syntax << "t" << k;
+    }
+    syntax << "\n";
+  }
+  for (int j = 1; j <= p; ++j) {
+    syntax << "x" << j << " ~*~ 1*x" << j << "\n";
+  }
+  return syntax.str();
+}
+
 // Two-group threshold-invariance variant: every threshold row carries a
 // per-(variable, level) label, and single labels in a multi-group build
 // impose cross-group equality — the structured-H case the joint profiled
@@ -370,17 +417,36 @@ Eigen::MatrixXd mixed_residual_chol(int q, double residual_cov) {
   return llt.matrixL();
 }
 
-Eigen::MatrixXd simulate_repeated_ordinal(int n, int q, int categories,
-                                          const std::string& balance, int seed,
-                                          double loading = 0.7,
-                                          double factor_cor = 0.3,
-                                          double residual_var = 1.0,
-                                          double residual_cov = 0.2) {
+// Recursive structural block over the four factors: f2 ~ f1, f3 ~ f1 + f2,
+// f4 ~ f3. Returns (I - B)^-1, so eta = (I - B)^-1 z carries the implied latent
+// covariance under unit disturbances. It plays the same role as the equicorrelated
+// factor_L of the repeated design, which keeps the two families comparable.
+Eigen::MatrixXd sem_factor_transform() {
+  Eigen::MatrixXd b = Eigen::MatrixXd::Zero(4, 4);
+  b(1, 0) = 0.5;  // f2 ~ f1
+  b(2, 0) = 0.3;  // f3 ~ f1
+  b(2, 1) = 0.4;  // f3 ~ f2
+  b(3, 2) = 0.5;  // f4 ~ f3
+  // The block is recursive, so B is strictly lower triangular and nilpotent
+  // (B^4 = 0). The Neumann series is then exact and needs no LU solve.
+  const Eigen::MatrixXd b2 = b * b;
+  return Eigen::MatrixXd::Identity(4, 4) + b + b2 + b2 * b;
+}
+
+// Shared core: `factor_L` maps four standard normals to the latent vector, so
+// the caller picks the structural story (equicorrelated or recursive) while the
+// measurement burden, residuals, and thresholds stay identical.
+Eigen::MatrixXd simulate_repeated_ordinal_core(int n, int q, int categories,
+                                               const std::string& balance,
+                                               int seed,
+                                               const Eigen::MatrixXd& factor_L,
+                                               double loading,
+                                               double residual_var,
+                                               double residual_cov) {
   std::mt19937 rng(static_cast<std::mt19937::result_type>(seed));
   std::normal_distribution<double> norm(0.0, 1.0);
   const int p = 4 * q;
   const auto thresholds = thresholds_for_categories(categories, balance);
-  const Eigen::MatrixXd factor_L = equicor_chol(4, factor_cor);
   const Eigen::MatrixXd resid_L =
       repeated_residual_chol(q, residual_var, residual_cov);
 
@@ -403,6 +469,30 @@ Eigen::MatrixXd simulate_repeated_ordinal(int n, int q, int categories,
     }
   }
   return x;
+}
+
+Eigen::MatrixXd simulate_repeated_ordinal(int n, int q, int categories,
+                                          const std::string& balance, int seed,
+                                          double loading = 0.7,
+                                          double factor_cor = 0.3,
+                                          double residual_var = 1.0,
+                                          double residual_cov = 0.2) {
+  return simulate_repeated_ordinal_core(n, q, categories, balance, seed,
+                                        equicor_chol(4, factor_cor), loading,
+                                        residual_var, residual_cov);
+}
+
+// Same measurement burden as the repeated design with the free factor
+// correlations replaced by a recursive structural block, so a speedup
+// comparison at matched q isolates the structural block.
+Eigen::MatrixXd simulate_sem_ordinal(int n, int q, int categories,
+                                     const std::string& balance, int seed,
+                                     double loading = 0.7,
+                                     double residual_var = 1.0,
+                                     double residual_cov = 0.2) {
+  return simulate_repeated_ordinal_core(n, q, categories, balance, seed,
+                                        sem_factor_transform(), loading,
+                                        residual_var, residual_cov);
 }
 
 Eigen::MatrixXd simulate_repeated_mixed(int n, int q, int categories,
@@ -758,6 +848,7 @@ TimedFitResult run_timed_estimate(Row base, int reps, Fn&& fn,
 struct DesignCell {
   bool mixed = false;
   bool invariance = false;
+  bool sem = false;
   std::string design;
   std::string case_id;
   int n = 0;
@@ -778,6 +869,24 @@ std::vector<DesignCell> make_design(bool smoke, int seed_base, int max_q) {
     if (smoke && q == 3) continue;
     out.push_back({.design = "kreiberg_scaling",
                    .case_id = "kreiberg_q" + std::to_string(q),
+                   .n = smoke ? 500 : 2000,
+                   .q = q,
+                   .categories = 5,
+                   .threshold_balance = "symmetric",
+                   .threshold_mode = OrdinalThresholdMode::FreeIdentity,
+                   .seed = seed_base + offset});
+    ++offset;
+  }
+
+  // Full-SEM family: same measurement burden as kreiberg_scaling at matched q,
+  // recursive structural block instead of free factor correlations. Stride 2
+  // spans the same range at half the cells, which is enough to compare the
+  // profiling win against kreiberg_scaling without doubling the grid.
+  const int sem_max_q = smoke ? std::min(4, capped_max_q) : capped_max_q;
+  for (int q = 2; q <= sem_max_q; q += 2) {
+    out.push_back({.sem = true,
+                   .design = "sem_scaling",
+                   .case_id = "sem_q" + std::to_string(q),
                    .n = smoke ? 500 : 2000,
                    .q = q,
                    .categories = 5,
@@ -1518,11 +1627,17 @@ int main(int argc, char** argv) {
     }
 
     const int p = 4 * cell.q;
-    const Eigen::MatrixXd data = simulate_repeated_ordinal(
-        cell.n, cell.q, cell.categories, cell.threshold_balance, cell.seed);
+    const Eigen::MatrixXd data =
+        cell.sem ? simulate_sem_ordinal(cell.n, cell.q, cell.categories,
+                                        cell.threshold_balance, cell.seed)
+                 : simulate_repeated_ordinal(cell.n, cell.q, cell.categories,
+                                             cell.threshold_balance,
+                                             cell.seed);
     const std::string syntax =
-        make_repeated_model_syntax(cell.q, cell.categories,
-                                   cell.threshold_mode);
+        cell.sem ? make_sem_model_syntax(cell.q, cell.categories,
+                                         cell.threshold_mode)
+                 : make_repeated_model_syntax(cell.q, cell.categories,
+                                              cell.threshold_mode);
 
     magmaan::spec::LatentStructure pt;
     magmaan::model::MatrixRep rep;
