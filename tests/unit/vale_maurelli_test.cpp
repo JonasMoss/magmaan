@@ -96,6 +96,22 @@ TEST_CASE("Vale-Maurelli solves the pairwise polynomial covariance equation") {
   CHECK(*cov_or == doctest::Approx(0.30).epsilon(1e-10));
 }
 
+TEST_CASE("Vale-Maurelli brackets small positive roots from zero") {
+  Eigen::VectorXd skew = Eigen::VectorXd::Constant(2, 2.0);
+  Eigen::VectorXd kurt = Eigen::VectorXd::Constant(2, 7.0);
+  const Eigen::MatrixXd target = corr2(0.20);
+
+  auto cal_or = magmaan::sim::calibrate_vale_maurelli(target, skew, kurt);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  CHECK(cal_or->intermediate_corr(0, 1) > 0.0);
+  auto cov_or = magmaan::sim::fleishman_covariance(
+      cal_or->coefficients[0], cal_or->coefficients[1],
+      cal_or->intermediate_corr(0, 1));
+  REQUIRE(cov_or.has_value());
+  CHECK(*cov_or == doctest::Approx(0.20).epsilon(1e-10));
+}
+
 TEST_CASE("Fleishman coefficient solve covers Rhemtulla nonnormal target") {
   auto coef_or = magmaan::sim::fit_fleishman_coefficients(2.0, 7.0);
   if (!coef_or.has_value()) MESSAGE(coef_or.error().detail);
