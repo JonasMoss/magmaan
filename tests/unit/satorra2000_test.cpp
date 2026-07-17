@@ -406,6 +406,23 @@ TEST_CASE("compute_satorra2000: mean-augmented self-consistency and oracle") {
   for (Eigen::Index k = 0; k < nt->eigenvalues.size(); ++k) {
     CHECK(nt->eigenvalues(k) == doctest::Approx(1.0).epsilon(1e-10));
   }
+
+  // (4) Browne/Du-Bentler Gamma is independent of the computation strategy.
+  auto ug_strm = compute_satorra2000({gr}, A_alpha, GammaSource::Unbiased,
+                                     GammaComputation::Streaming);
+  auto ug_matz = compute_satorra2000({gr}, A_alpha, GammaSource::Unbiased,
+                                     GammaComputation::Materialized);
+  auto ug_dens = compute_satorra2000({gr}, A_alpha, GammaSource::Unbiased,
+                                     GammaComputation::Dense);
+  REQUIRE(ug_strm.has_value());
+  REQUIRE(ug_matz.has_value());
+  REQUIRE(ug_dens.has_value());
+  for (Eigen::Index k = 0; k < ug_strm->eigenvalues.size(); ++k) {
+    CHECK(ug_matz->eigenvalues(k) ==
+          doctest::Approx(ug_strm->eigenvalues(k)).epsilon(1e-12));
+    CHECK(ug_dens->eigenvalues(k) ==
+          doctest::Approx(ug_strm->eigenvalues(k)).epsilon(1e-8));
+  }
 }
 
 // A purely covariance restriction on the mean-augmented saturated model must
@@ -446,15 +463,36 @@ TEST_CASE("compute_satorra2000: cov-only restriction is invariant to mean "
 
   using magmaan::robust::compute_satorra2000;
   using magmaan::robust::GammaSource;
-  auto r_cov = compute_satorra2000({cov}, A_cov, GammaSource::Empirical);
-  auto r_aug = compute_satorra2000({aug}, A_aug, GammaSource::Empirical);
-  REQUIRE(r_cov.has_value());
-  REQUIRE(r_aug.has_value());
-  REQUIRE(r_cov->eigenvalues.size() == r_aug->eigenvalues.size());
-  for (Eigen::Index k = 0; k < r_cov->eigenvalues.size(); ++k) {
-    CHECK(r_aug->eigenvalues(k)
-          == doctest::Approx(r_cov->eigenvalues(k)).epsilon(1e-10));
+  for (const auto gamma :
+       {GammaSource::Empirical, GammaSource::Unbiased}) {
+    auto r_cov = compute_satorra2000({cov}, A_cov, gamma);
+    auto r_aug = compute_satorra2000({aug}, A_aug, gamma);
+    REQUIRE(r_cov.has_value());
+    REQUIRE(r_aug.has_value());
+    REQUIRE(r_cov->eigenvalues.size() == r_aug->eigenvalues.size());
+    for (Eigen::Index k = 0; k < r_cov->eigenvalues.size(); ++k) {
+      CHECK(r_aug->eigenvalues(k)
+            == doctest::Approx(r_cov->eigenvalues(k)).epsilon(1e-10));
+    }
   }
+}
+
+TEST_CASE("compute_satorra2000: unbiased Gamma requires four observations") {
+  Eigen::MatrixXd X(3, 2);
+  X << -1.0, 0.0,
+        0.0, 1.0,
+        1.0, -1.0;
+  const Eigen::VectorXd mean = X.colwise().mean();
+  const Eigen::MatrixXd Xc = X.rowwise() - mean.transpose();
+  const Eigen::MatrixXd S = (Xc.transpose() * Xc) / 3.0;
+  magmaan::robust::SatorraGroup gr{
+      Eigen::MatrixXd::Identity(3, 3), S, X, mean, 1.0, 3};
+  Eigen::MatrixXd A(1, 3);
+  A << 0.0, 1.0, 0.0;
+  auto out = magmaan::robust::compute_satorra2000(
+      {gr}, A, magmaan::robust::GammaSource::Unbiased);
+  CHECK_FALSE(out.has_value());
+  CHECK(out.error().detail.find("requires n_g > 3") != std::string::npos);
 }
 
 TEST_CASE("restriction_alpha_delta_from_jacobians finds moment-column restrictions") {

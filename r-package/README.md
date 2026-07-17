@@ -127,11 +127,17 @@ family:
   both fits are FIML fits from the same raw-data shape and mask. Complete-data
   SB2001/SB2010 compatibility methods, caller-supplied `data =`, and mixed
   FIML/complete-data pairs are rejected for this path.
+- Complete-data ML restriction-map pairs accept both empirical and
+  Browne/Du--Bentler unbiased Gamma (`gamma = "unbiased"` or `_ug` FMG
+  labels). The correction is group- and mean-structure-aware; it remains
+  undefined for FIML, ordinal, and continuous least-squares pairs.
+- Continuous ULS/GLS/WLS restriction-map pairs are available through
+  `nestedTest()` / `robust_nested_lrt()` and `fmg_nested()`. ULS defaults to
+  normal-theory Gamma, while GLS/WLS default to empirical Gamma; WLS requires
+  the original fitting `weight =`. Their canonical FMG labels use the `_ls`
+  base suffix.
 - Nested FMG convenience wrappers are `fmg_nested_ordinal()` and
   `fmg_nested_mixed_ordinal()` for all-ordinal and mixed-ordinal LS pairs.
-  Continuous ULS/GLS/WLS nested FMG is not exposed: the existing continuous-LS
-  profile LRT is a misspecification/observed-profile construction, not the
-  Satorra-2000 restriction-map spectrum required by this family.
 - The test-name grammar mirrors semTests-style labels:
   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, and
   `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. The default

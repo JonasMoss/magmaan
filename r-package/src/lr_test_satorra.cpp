@@ -21,14 +21,20 @@
 #include "internal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 
 namespace {
 
 magmaan::robust::GammaSource parse_gamma(const std::string& s) {
   if (s == "NT" || s == "nt") return magmaan::robust::GammaSource::NT;
+  if (s == "unbiased" || s == "UG" || s == "ug" ||
+      s == "browne" || s == "du_bentler") {
+    return magmaan::robust::GammaSource::Unbiased;
+  }
   return magmaan::robust::GammaSource::Empirical;
 }
 
@@ -205,6 +211,64 @@ const FimlH1* fiml_h1_ptr_from_fit(Rcpp::List fit) {
   void* addr = R_ExternalPtrAddr(xp);
   if (addr == nullptr) Rcpp::stop("magmaan: fit$fiml_h1 is null");
   return static_cast<const FimlH1*>(addr);
+}
+
+magmaan::estimate::gmm::Weight continuous_ls_weight_from_arg(
+    const magmaanr::Ctx& ctx,
+    const magmaan::estimate::Estimates& est,
+    const std::string& estimator,
+    SEXP weight) {
+  if (estimator == "ULS") {
+    if (!Rf_isNull(weight)) {
+      Rcpp::stop("magmaan: continuous ULS nested tests do not accept `weight`");
+    }
+    return {};
+  }
+  if (estimator == "GLS") {
+    if (!Rf_isNull(weight)) {
+      Rcpp::stop("magmaan: continuous GLS nested tests rebuild the fitted "
+                 "normal-theory weight; omit `weight`");
+    }
+    auto ev_or = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+    if (!ev_or.has_value()) magmaanr::stop_model(ev_or.error());
+    auto w_or = magmaan::estimate::gmm::normal_theory_weight(
+        *ev_or, ctx.samp, est.theta);
+    if (!w_or.has_value()) magmaanr::stop_fit(w_or.error());
+    return std::move(*w_or);
+  }
+  if (estimator != "WLS") {
+    Rcpp::stop("magmaan: continuous-LS nested tests require ULS, GLS, or WLS "
+               "fits (got estimator '%s')", estimator);
+  }
+  if (Rf_isNull(weight)) {
+    Rcpp::stop("magmaan: continuous WLS nested tests require the explicit "
+               "fitting `weight`");
+  }
+  magmaan::estimate::gmm::Weight out;
+  const std::size_t n_blocks = ctx.samp.S.size();
+  out.reserve(n_blocks);
+  if (Rf_isMatrix(weight)) {
+    if (n_blocks != 1) {
+      Rcpp::stop("magmaan: WLS weights must be a list of %d matrices for a "
+                 "multi-group model", static_cast<int>(n_blocks));
+    }
+    out.push_back(
+        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(weight)));
+  } else if (TYPEOF(weight) == VECSXP) {
+    Rcpp::List weights(weight);
+    if (static_cast<std::size_t>(weights.size()) != n_blocks) {
+      Rcpp::stop("magmaan: WLS weights list has length %d but the model has "
+                 "%d group(s)", static_cast<int>(weights.size()),
+                 static_cast<int>(n_blocks));
+    }
+    for (R_xlen_t b = 0; b < weights.size(); ++b) {
+      out.push_back(Rcpp::as<Eigen::MatrixXd>(
+          Rcpp::NumericMatrix(weights[b])));
+    }
+  } else {
+    Rcpp::stop("magmaan: WLS `weight` must be a matrix or list of matrices");
+  }
+  return out;
 }
 
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
@@ -481,9 +545,9 @@ void validate_same_fiml_raw(const magmaan::data::RawData& h1,
 // pre-computed to avoid a redundant SE pass inside the test).
 //
 // `gamma` is `"empirical"` (default — empirical Γ̂ from the casewise outer
-// products, matches lavaan's `estimator = "MLR"` / `"MLM"`) or `"NT"`
-// (normal-theory Γ_NT, a sanity-check path where all λⱼ → 1 and
-// `T_scaled == T_diff`).
+// products, matches lavaan's `estimator = "MLR"` / `"MLM"`), `"unbiased"`
+// (Browne/Du-Bentler finite-sample correction), or `"NT"` (normal-theory
+// Γ_NT, a sanity-check path where all λⱼ → 1 and `T_scaled == T_diff`).
 //
 // [[Rcpp::export]]
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
@@ -548,6 +612,67 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
   const magmaan::robust::LRSatorra2000Result& r = *r_or;
 
   return satorra2000_to_list(r);
+}
+
+// infer_continuous_ls_lr_test_satorra2000() — estimator-specific
+// Satorra-2000 restriction-map test for continuous ULS/GLS/WLS fits.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_continuous_ls_lr_test_satorra2000(
+    Rcpp::List fit_H1,
+    Rcpp::List fit_H0,
+    Rcpp::List X_per_group,
+    double T_H1,
+    int df_H1,
+    double T_H0,
+    int df_H0,
+    SEXP weight = R_NilValue,
+    std::string gamma = "empirical",
+    std::string a_method = "exact") {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 =
+      magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 =
+      magmaanr::est_from_fit(fit_H0);
+  const std::string estimator_H1 = fit_H1.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H1["estimator"])
+      : "";
+  const std::string estimator_H0 = fit_H0.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit_H0["estimator"])
+      : "";
+  if (estimator_H1 != estimator_H0) {
+    Rcpp::stop("infer_continuous_ls_lr_test_satorra2000: H1/H0 estimators "
+               "differ ('%s' versus '%s')", estimator_H1, estimator_H0);
+  }
+  if (gamma == "unbiased" || gamma == "UG" || gamma == "ug") {
+    Rcpp::stop("infer_continuous_ls_lr_test_satorra2000: unbiased Gamma is "
+               "available only for normal-theory ML");
+  }
+  if (ctx_H1.samp.S.size() != ctx_H0.samp.S.size() ||
+      ctx_H1.samp.n_obs != ctx_H0.samp.n_obs) {
+    Rcpp::stop("infer_continuous_ls_lr_test_satorra2000: H1/H0 sample "
+               "statistics have different block structure");
+  }
+  for (std::size_t b = 0; b < ctx_H1.samp.S.size(); ++b) {
+    if (!ctx_H1.samp.S[b].isApprox(ctx_H0.samp.S[b], 1e-12)) {
+      Rcpp::stop("infer_continuous_ls_lr_test_satorra2000: H1/H0 sample "
+                 "covariances differ in block %d", static_cast<int>(b + 1));
+    }
+  }
+
+  magmaan::data::RawData raw = raw_from_group_list(
+      X_per_group, ctx_H1.samp.S.size(),
+      "infer_continuous_ls_lr_test_satorra2000");
+  magmaan::estimate::gmm::Weight w = continuous_ls_weight_from_arg(
+      ctx_H1, est_H1, estimator_H1, weight);
+  auto r_or = magmaan::estimate::lr_test_satorra2000_continuous_ls(
+      std::move(ctx_H1.pt), ctx_H1.rep, ctx_H1.samp, est_H1,
+      std::move(ctx_H0.pt), ctx_H0.rep, est_H0,
+      w, raw, T_H0, T_H1, df_H0, df_H1,
+      parse_gamma(gamma), parse_a_method(a_method));
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return satorra2000_to_list(*r_or);
 }
 
 // infer_fiml_lr_test_satorra2000() — FIML/missing-data restriction-map nested

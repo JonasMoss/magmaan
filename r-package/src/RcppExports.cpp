@@ -2222,6 +2222,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_continuous_ls_lr_test_satorra2000
+Rcpp::List infer_continuous_ls_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, SEXP weight, std::string gamma, std::string a_method);
+RcppExport SEXP _magmaan_infer_continuous_ls_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP weightSEXP, SEXP gammaSEXP, SEXP a_methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< double >::type T_H1(T_H1SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H1(df_H1SEXP);
+    Rcpp::traits::input_parameter< double >::type T_H0(T_H0SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H0(df_H0SEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type a_method(a_methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_lr_test_satorra2000(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, weight, gamma, a_method));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_fiml_lr_test_satorra2000
 Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string gamma, std::string a_method, double h_step, std::string ud_method, std::string convention, std::string computation, SEXP h1_reference_regularization);
 RcppExport SEXP _magmaan_infer_fiml_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP h_stepSEXP, SEXP ud_methodSEXP, SEXP conventionSEXP, SEXP computationSEXP, SEXP h1_reference_regularizationSEXP) {
@@ -3801,6 +3821,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_noniterative_cfa_constrained_impl", (DL_FUNC) &_magmaan_noniterative_cfa_constrained_impl, 5},
     {"_magmaan_noniterative_cfa_scalar_impl", (DL_FUNC) &_magmaan_noniterative_cfa_scalar_impl, 6},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
+    {"_magmaan_infer_continuous_ls_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_continuous_ls_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},
     {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 9},
     {"_magmaan_infer_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ordinal_lr_test_satorra2000, 9},

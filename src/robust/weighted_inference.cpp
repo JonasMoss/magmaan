@@ -2938,4 +2938,136 @@ continuous_ls_param_space_sandwich(spec::LatentStructure pt,
   return weighted_param_space_sandwich(*blocks);
 }
 
+post_expected<robust::LRSatorra2000Result>
+lr_test_satorra2000_continuous_ls(
+    spec::LatentStructure pt_H1,
+    const model::MatrixRep& rep_H1,
+    const data::SampleStats& samp,
+    const Estimates& est_H1,
+    spec::LatentStructure pt_H0,
+    const model::MatrixRep& rep_H0,
+    const Estimates& est_H0,
+    const gmm::Weight& weight,
+    const data::RawData& raw,
+    double T_H0,
+    double T_H1,
+    int df_H0,
+    int df_H1,
+    robust::GammaSource gamma,
+    robust::SatorraAMethod a_method) {
+  const int df_diff = df_H0 - df_H1;
+  if (df_diff < 0) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_continuous_ls: df_H0 - df_H1 is negative; "
+        "H1 must be the less-restricted model"));
+  }
+  if (gamma == robust::GammaSource::Unbiased) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_continuous_ls: unbiased Gamma is defined only "
+        "for normal-theory ML, not continuous least squares"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt_H1, rep_H1, samp);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt_H0, rep_H0, samp);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con1 = build_eq_constraints(pt_H1);
+  if (!con1.has_value()) return std::unexpected(con1.error());
+  auto con0 = build_eq_constraints(pt_H0);
+  if (!con0.has_value()) return std::unexpected(con0.error());
+
+  auto delta_alpha = [&](const spec::LatentStructure& pt,
+                         const model::MatrixRep& rep,
+                         const Estimates& est,
+                         const EqConstraints& con,
+                         const char* who) -> post_expected<Eigen::MatrixXd> {
+    auto ev_or = model::ModelEvaluator::build(pt, rep);
+    if (!ev_or.has_value()) {
+      return std::unexpected(model_to_post(ev_or.error()));
+    }
+    auto eval = ev_or->evaluate(est.theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(model_to_post(eval.error()));
+    }
+    if (auto v = validate_moment_shapes(samp, eval->moments);
+        !v.has_value()) {
+      return std::unexpected(v.error());
+    }
+    const auto layout = make_layout(samp, eval->moments);
+    Eigen::Index rows = 0;
+    for (Eigen::Index n : layout.block_rows) rows += n;
+    Eigen::MatrixXd D = Eigen::MatrixXd::Zero(rows, est.theta.size());
+    Eigen::Index off = 0;
+    for (std::size_t b = 0; b < samp.S.size(); ++b) {
+      auto Jb = continuous_moment_jacobian_block(
+          layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+      if (!Jb.has_value()) return std::unexpected(Jb.error());
+      D.middleRows(off, Jb->rows()) = *Jb;
+      off += Jb->rows();
+    }
+    if (con.Kmat.rows() != D.cols()) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          std::string(who) +
+              ": equality-constraint basis does not match moment Jacobian"));
+    }
+    return Eigen::MatrixXd(D * con.Kmat);
+  };
+
+  auto D1_or = delta_alpha(pt_H1, rep_H1, est_H1, *con1,
+                           "lr_test_satorra2000_continuous_ls H1");
+  if (!D1_or.has_value()) return std::unexpected(D1_or.error());
+
+  Eigen::MatrixXd A_alpha;
+  if (a_method == robust::SatorraAMethod::Exact) {
+    auto restr_or = robust::restriction_alpha_from_K(*con1, *con0);
+    if (!restr_or.has_value()) return std::unexpected(restr_or.error());
+    A_alpha = std::move(restr_or->A);
+  } else {
+    auto D0_or = delta_alpha(pt_H0, rep_H0, est_H0, *con0,
+                             "lr_test_satorra2000_continuous_ls H0");
+    if (!D0_or.has_value()) return std::unexpected(D0_or.error());
+    auto A_or = robust::restriction_alpha_delta_from_jacobians(
+        *D1_or, *D0_or, df_diff);
+    if (!A_or.has_value()) return std::unexpected(A_or.error());
+    A_alpha = std::move(*A_or);
+  }
+  if (A_alpha.rows() != df_diff) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_continuous_ls: derived restriction rank " +
+            std::to_string(A_alpha.rows()) +
+            " does not match df_H0 - df_H1 = " + std::to_string(df_diff)));
+  }
+
+  post_expected<robust::ParamSpaceSandwich> sw_or =
+      gamma == robust::GammaSource::NT
+          ? continuous_ls_param_space_sandwich(
+                pt_H1, rep_H1, samp, est_H1, weight,
+                robust::WeightMoments::Unstructured)
+          : continuous_ls_param_space_sandwich(
+                pt_H1, rep_H1, samp, est_H1, weight, raw);
+  if (!sw_or.has_value()) return std::unexpected(sw_or.error());
+  if (con1->Kmat.rows() != sw_or->A1.rows()) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_continuous_ls: H1 sandwich dimension does not "
+        "match equality-constraint basis"));
+  }
+  Eigen::MatrixXd A1 =
+      con1->Kmat.transpose() * sw_or->A1 * con1->Kmat;
+  Eigen::MatrixXd B1 =
+      con1->Kmat.transpose() * sw_or->B1 * con1->Kmat;
+  A1 = 0.5 * (A1 + A1.transpose()).eval();
+  B1 = 0.5 * (B1 + B1.transpose()).eval();
+  auto sd_or = robust::compute_satorra2000_from_sandwich(A1, B1, A_alpha);
+  if (!sd_or.has_value()) return std::unexpected(sd_or.error());
+  return robust::lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+}
+
 }  // namespace magmaan::estimate

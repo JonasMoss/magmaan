@@ -87,8 +87,8 @@ model_h0_complete <- "visual  =~ x1 + a*x2 + a*x3
                       speed   =~ x7 + x8 + x9"
 fit_h0_complete <- magmaan(model_h0_complete, df, estimator = "ML",
                            se = "none", test = "none")
-nested_tests <- c("std_ml", "std_rls", "sb_ml", "ss_rls", "mv_ml",
-                  "peba4_rls", "pall_ml", "all_ml")
+nested_tests <- c("std_ml", "std_rls", "sb_ml", "sb_ug_ml", "ss_rls",
+                  "peba4_rls", "peba4_ug_rls", "pall_ml", "all_ml")
 tab_nested <- fmg_nested(fit, fit_h0_complete, data = df,
                          tests = nested_tests)
 rls_manual <-
@@ -99,16 +99,40 @@ rls_manual <-
 stopifnot(inherits(tab_nested, "magmaan_fmg_tests"))
 stopifnot(identical(tab_nested$label, nested_tests))
 stopifnot(identical(tab_nested$base,
-                    c("ml", "rls", "ml", "rls", "ml", "rls", "ml", "ml")))
+                    c("ml", "rls", "ml", "ml", "rls", "rls", "rls",
+                      "ml", "ml")))
 stopifnot(max(abs(tab_nested$base_statistic[tab_nested$base == "rls"] -
                   rls_manual)) < 1e-10)
+stopifnot(identical(tab_nested$ug,
+                    grepl("_ug_", tab_nested$label, fixed = TRUE)))
 stopifnot(identical(fmg_nested(fit, fit_h0_complete, data = df,
                               tests = "sb")$label,
                     "sb_ml"))
-stopifnot(grepl("unbiased", tryCatch(
-  fmg_nested(fit, fit_h0_complete, data = df, tests = "peba4_ug_rls"),
-  error = conditionMessage)))
-cat("Nested complete-data ML/RLS FMG workflow: ok\n")
+cat("Nested complete-data biased/unbiased ML/RLS FMG workflow: ok\n")
+
+# Continuous ULS/GLS model pairs use the estimator's quadratic-form difference
+# and the same restriction-map spectrum. ULS defaults to normal-theory Gamma,
+# matching lavaan; GLS defaults to empirical Gamma.
+for (estimator in c("ULS", "GLS")) {
+  spec_h1_ls <- model_spec(model)
+  spec_h0_ls <- model_spec(model_h0_complete)
+  fit_h1_ls <- magmaan(
+    spec_h1_ls, df_to_data(df, spec_h1_ls, scaling = "n-1"),
+    estimator = estimator, se = "none", test = "none"
+  )
+  fit_h0_ls <- magmaan(
+    spec_h0_ls, df_to_data(df, spec_h0_ls, scaling = "n-1"),
+    estimator = estimator, se = "none", test = "none"
+  )
+  tab_nested_ls <- fmg_nested(
+    fit_h1_ls, fit_h0_ls, data = df,
+    tests = c("sb", "peba2"), A.method = "delta"
+  )
+  stopifnot(identical(tab_nested_ls$label, c("sb_ls", "peba2_ls")))
+  stopifnot(all(tab_nested_ls$base == "ls"),
+            all(is.finite(tab_nested_ls$p_value)))
+}
+cat("Nested continuous ULS/GLS FMG workflow: ok\n")
 
 # ---- FIML (missing-data) FMG: first-principles UGamma spectrum --------------
 # magmaan computes the missing-data UGamma spectrum from its own saturated-model
@@ -273,8 +297,9 @@ if (requireNamespace("semTests", quietly = TRUE) &&
                         meanstructure = FALSE)
   lav_h0 <- lavaan::sem(model_h0_complete, df, estimator = "MLM",
                         meanstructure = FALSE)
-  nested_parity_tests <- c("std_ml", "std_rls", "sb_ml", "ss_rls",
-                           "peba4_rls", "pall_ml", "all_ml")
+  nested_parity_tests <- c("std_ml", "std_rls", "sb_ml", "sb_ug_ml",
+                           "ss_rls", "peba4_rls", "peba4_ug_rls",
+                           "pall_ml", "all_ml")
   pv_nested_m <- stats::setNames(tab_nested$p_value[
     match(nested_parity_tests, tab_nested$label)], nested_parity_tests)
   pv_nested_s <- stats::setNames(vapply(nested_parity_tests, function(test) {
