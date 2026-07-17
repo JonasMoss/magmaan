@@ -299,6 +299,10 @@ study2_one_rep <- function(cell, rep_id, sampler, specs, seed,
     if (length(x) <= 1L || !is.finite(mean(x)) || mean(x) == 0) return(0)
     stats::sd(x) / mean(x)
   }
+  nested_warnings <- unique(c(nested$warnings, attr(result, "warnings")))
+  nested_warnings <- nested_warnings[
+    !is.na(nested_warnings) & nzchar(nested_warnings)
+  ]
   row <- data.frame(
     rep = as.integer(rep_id),
     fit_ok = TRUE,
@@ -306,7 +310,7 @@ study2_one_rep <- function(cell, rep_id, sampler, specs, seed,
     fit_error = "",
     nested_error = "",
     fit_warnings = paste(fits$warnings, collapse = " | "),
-    nested_warnings = paste(nested$warnings, collapse = " | "),
+    nested_warnings = paste(nested_warnings, collapse = " | "),
     draw_seconds = draw_seconds,
     fit_seconds = fit_seconds,
     nested_seconds = nested_seconds,

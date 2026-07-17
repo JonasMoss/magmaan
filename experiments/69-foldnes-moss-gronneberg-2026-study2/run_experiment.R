@@ -110,6 +110,14 @@ parse_args <- function(args) {
     stop("run sizes, cores, and shard coordinates must be positive",
          call. = FALSE)
   }
+  if (length(out$seed_base) != 1L || !is.finite(out$seed_base)) {
+    stop("--seed-base must be finite", call. = FALSE)
+  }
+  if (!is.null(out$max_cells) &&
+      (length(out$max_cells) != 1L ||
+       is.na(out$max_cells) || out$max_cells < 1L)) {
+    stop("--max-cells must be positive", call. = FALSE)
+  }
   if (out$shard_index > out$shard_count) {
     stop("--shard-index must be in 1..--shard-count", call. = FALSE)
   }
@@ -120,6 +128,12 @@ parse_args <- function(args) {
          call. = FALSE)
   }
   out
+}
+
+first_nonempty <- function(..., default) {
+  values <- as.character(unlist(list(...), use.names = FALSE))
+  values <- values[!is.na(values) & nzchar(values)]
+  if (length(values)) values[[1L]] else default
 }
 
 filter_design <- function(grid, cfg) {
@@ -376,8 +390,11 @@ for (k in seq_len(nrow(grid))) {
       } else if (inherits(details, "error")) {
         conditionMessage(details)
       } else {
-        details$row$fit_error %||% details$row$nested_error %||%
-          "magmaan sentinel replication failed"
+        first_nonempty(
+          details$row$fit_error,
+          details$row$nested_error,
+          default = "magmaan sentinel replication failed"
+        )
       }
       data.frame(
         cell_id = cell$cell_id, p = cell$p, groups = cell$groups,

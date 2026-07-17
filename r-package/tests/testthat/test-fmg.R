@@ -93,7 +93,10 @@ test_that("mixed-ordinal nested FMG composes the existing nested spectrum", {
   local_mocked_bindings(
     robust_nested_lrt = function(fit_H1, fit_H0, data = NULL, ...) {
       calls$data <- data
-      list(T_diff = 4.5, df_diff = 2L, eigenvalues = c(0.8, 1.2))
+      list(
+        T_diff = 4.5, df_diff = 2L, eigenvalues = c(0.8, 1.2),
+        warnings = "mixed-ordinal numerical warning"
+      )
     },
     infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
                               param = 4.0, truncate_negative = TRUE) {
@@ -118,6 +121,7 @@ test_that("mixed-ordinal nested FMG composes the existing nested spectrum", {
   expect_equal(res$label, "peba2_ls")
   expect_equal(res$base_statistic, 4.5)
   expect_equal(res$eigenvalues[[1]], c(0.8, 1.2))
+  expect_equal(attr(res, "warnings"), "mixed-ordinal numerical warning")
 })
 
 test_that("generic nested FMG uses the continuous-LS restriction spectrum", {
@@ -126,7 +130,10 @@ test_that("generic nested FMG uses the continuous-LS restriction spectrum", {
   local_mocked_bindings(
     robust_nested_lrt = function(fit_H1, fit_H0, data = NULL, gamma, ...) {
       calls$gamma <- gamma
-      list(T_diff = 5, df_diff = 2L, eigenvalues = c(0.7, 1.3))
+      list(
+        T_diff = 5, df_diff = 2L, eigenvalues = c(0.7, 1.3),
+        warnings = "continuous-LS numerical warning"
+      )
     },
     infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
                               param = 4.0, truncate_negative = TRUE) {
@@ -145,6 +152,7 @@ test_that("generic nested FMG uses the continuous-LS restriction spectrum", {
   expect_equal(res$label, "sb_ls")
   expect_equal(res$base, "ls")
   expect_equal(res$eigenvalues[[1]], c(0.7, 1.3))
+  expect_equal(attr(res, "warnings"), "continuous-LS numerical warning")
 })
 
 test_that("nested ML FMG selects biased and unbiased spectra per test", {
@@ -155,7 +163,12 @@ test_that("nested ML FMG selects biased and unbiased spectra per test", {
       list(
         T_diff = 6, df_diff = 2L,
         eigenvalues = if (gamma == "unbiased") c(0.8, 1.4) else c(0.7, 1.2),
-        eigenvalues_unbiased = if (gamma == "both") c(0.8, 1.4) else numeric()
+        eigenvalues_unbiased = if (gamma == "both") c(0.8, 1.4) else numeric(),
+        warnings = if (gamma == "both") {
+          c("paired numerical warning", "paired numerical warning")
+        } else {
+          character()
+        }
       )
     },
     infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
@@ -179,4 +192,5 @@ test_that("nested ML FMG selects biased and unbiased spectra per test", {
   expect_equal(res$ug, c(FALSE, TRUE))
   expect_equal(res$eigenvalues[[1]], c(0.7, 1.2))
   expect_equal(res$eigenvalues[[2]], c(0.8, 1.4))
+  expect_equal(attr(res, "warnings"), "paired numerical warning")
 })

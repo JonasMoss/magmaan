@@ -81,3 +81,44 @@ test_that("non-NT ML2S scalar SB methods are rejected", {
     "NT-only"
   )
 })
+
+test_that("paired Gamma is rejected outside complete-data streaming ML", {
+  raw <- structure(list(), class = "magmaan_fiml_data")
+  h1 <- list(estimator = "ML2S", raw_data = raw)
+  h0 <- list(estimator = "ML2S", raw_data = raw)
+
+  expect_error(
+    robust_nested_lrt(h1, h0, gamma = "both"),
+    "available only for complete-data normal-theory ML"
+  )
+})
+
+test_that("paired Gamma printing names both spectra and scalar semantics", {
+  result <- structure(
+    list(
+      method = "restriction_map",
+      computation = "streaming",
+      gamma = "both",
+      T_diff = 5,
+      T_scaled = 4.5,
+      T_adjusted = 4.6,
+      df_diff = 2,
+      adjust_d0 = 1.8,
+      scaled_shifted = list(chi2_adj = 4.4, df = 2, pvalue = 0.11),
+      p_unscaled = 0.08,
+      p_scaled = 0.10,
+      p_adjusted = 0.09,
+      p_mixture = 0.095,
+      eigenvalues = c(0.8, 1.2),
+      eigenvalues_unbiased = c(0.9, 1.3),
+      scale_c = 1,
+      warnings = character()
+    ),
+    class = c("magmaan_nested_test", "list")
+  )
+
+  output <- paste(capture.output(print(result)), collapse = "\n")
+  expect_match(output, "Empirical eigenvalues")
+  expect_match(output, "Unbiased eigenvalues")
+  expect_match(output, "scalar statistics use empirical Gamma")
+})

@@ -292,15 +292,30 @@ TEST_CASE("compute_satorra2000: Dense matches Streaming, multi-group") {
   auto dense_or = magmaan::robust::compute_satorra2000(
       groups, A_alpha, magmaan::robust::GammaSource::Empirical,
       magmaan::robust::GammaComputation::Dense);
+  auto unbiased_or = magmaan::robust::compute_satorra2000(
+      groups, A_alpha, magmaan::robust::GammaSource::Unbiased,
+      magmaan::robust::GammaComputation::Streaming);
+  auto paired_or = magmaan::robust::compute_satorra2000(
+      groups, A_alpha, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::GammaComputation::Streaming,
+      /*also_unbiased=*/true);
   REQUIRE(strm_or.has_value());
   REQUIRE(dense_or.has_value());
+  REQUIRE(unbiased_or.has_value());
+  REQUIRE(paired_or.has_value());
   REQUIRE(strm_or->eigenvalues.size() == 2);
   REQUIRE(dense_or->eigenvalues.size() == 2);
+  REQUIRE(unbiased_or->eigenvalues.size() == 2);
+  REQUIRE(paired_or->eigenvalues_unbiased.size() == 2);
   INFO("streaming = ", strm_or->eigenvalues.transpose());
   INFO("dense     = ", dense_or->eigenvalues.transpose());
   for (Eigen::Index k = 0; k < 2; ++k) {
     CHECK(dense_or->eigenvalues(k)
           == doctest::Approx(strm_or->eigenvalues(k)).epsilon(1e-9));
+    CHECK(paired_or->eigenvalues(k)
+          == doctest::Approx(strm_or->eigenvalues(k)).epsilon(1e-12));
+    CHECK(paired_or->eigenvalues_unbiased(k)
+          == doctest::Approx(unbiased_or->eigenvalues(k)).epsilon(1e-12));
   }
 }
 
@@ -502,6 +517,38 @@ TEST_CASE("compute_satorra2000: unbiased Gamma requires four observations") {
       {gr}, A, magmaan::robust::GammaSource::Unbiased);
   CHECK_FALSE(out.has_value());
   CHECK(out.error().detail.find("requires n_g > 3") != std::string::npos);
+}
+
+TEST_CASE("compute_satorra2000: paired Gamma enforces its computation contract") {
+  Eigen::MatrixXd X(3, 2);
+  X << -1.0, 0.0,
+        0.0, 1.0,
+        1.0, -1.0;
+  const Eigen::VectorXd mean = X.colwise().mean();
+  const Eigen::MatrixXd Xc = X.rowwise() - mean.transpose();
+  const Eigen::MatrixXd S = (Xc.transpose() * Xc) / 3.0;
+  magmaan::robust::SatorraGroup gr{
+      Eigen::MatrixXd::Identity(3, 3), S, X, mean, 1.0, 3};
+  Eigen::MatrixXd A(1, 3);
+  A << 0.0, 1.0, 0.0;
+
+  const auto wrong_source = magmaan::robust::compute_satorra2000(
+      {gr}, A, magmaan::robust::GammaSource::Unbiased,
+      magmaan::robust::GammaComputation::Streaming,
+      /*also_unbiased=*/true);
+  const auto wrong_computation = magmaan::robust::compute_satorra2000(
+      {gr}, A, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::GammaComputation::Dense,
+      /*also_unbiased=*/true);
+
+  CHECK_FALSE(wrong_source.has_value());
+  CHECK_FALSE(wrong_computation.has_value());
+  CHECK(wrong_source.error().detail.find(
+            "requires empirical Gamma with the streaming computation") !=
+        std::string::npos);
+  CHECK(wrong_computation.error().detail.find(
+            "requires empirical Gamma with the streaming computation") !=
+        std::string::npos);
 }
 
 TEST_CASE("restriction_alpha_delta_from_jacobians finds moment-column restrictions") {
