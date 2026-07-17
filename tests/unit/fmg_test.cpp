@@ -56,6 +56,21 @@ TEST_CASE("FMG exact and classical approximations collapse for equal lambdas") {
   }
 }
 
+TEST_CASE("FMG scaled-F handles the one-eigenvalue limiting denominator") {
+  Eigen::VectorXd eig(1);
+  eig << 2.0648089155981557;
+  const double chi2 = 0.325443757;
+
+  const auto r = magmaan::robust::frontier::fmg_test(
+      chi2, 1, eig,
+      magmaan::robust::frontier::FmgOptions{
+          .method = magmaan::robust::frontier::FmgMethod::ScaledF});
+
+  const double expected =
+      magmaan::inference::chi2_pvalue(chi2 / eig(0), 1);
+  CHECK(r.p_value == doctest::Approx(expected).epsilon(1e-12));
+}
+
 TEST_CASE("FMG mean-variance-adjusted matches the Satterthwaite formula") {
   // Distinct eigenvalues so df_adj != df. Satterthwaite refers
   // T * (sum lambda) / (sum lambda^2) to a chi-square with fractional

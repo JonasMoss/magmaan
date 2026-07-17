@@ -261,6 +261,7 @@ robust_pairwise_casewise_contributions <- infer_pairwise_casewise_contributions
 robust_empirical_gamma <- infer_empirical_gamma
 robust_empirical_gamma_with_means <- infer_empirical_gamma_with_means
 robust_gamma_nt <- infer_gamma_nt
+robust_continuous_ls <- infer_continuous_ls_robust
 robust_ordinal <- infer_ordinal_robust
 robust_ordinal_ij <- infer_ordinal_robust_ij
 robust_mixed_ordinal <- infer_mixed_ordinal_robust
@@ -461,6 +462,7 @@ magmaan_core <- local({
       "robust_empirical_gamma",
       "robust_empirical_gamma_with_means",
       "robust_gamma_nt",
+      "robust_continuous_ls",
       "robust_ordinal",
       "robust_ordinal_ij",
       "robust_mixed_ordinal",
@@ -743,6 +745,7 @@ magmaan_core <- local({
       "fit_gls_pairwise_impl",
       "infer_empirical_gamma",
       "infer_gamma_nt",
+      "infer_continuous_ls_robust",
       "infer_ordinal_robust",
       "infer_mixed_ordinal_robust",
       "infer_mixed_ordinal_robust_ij",

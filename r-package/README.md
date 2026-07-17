@@ -98,7 +98,7 @@ FMG single-model goodness-of-fit tests are exposed as a post-fit inference
 family:
 
 - `fmg_tests(fit, tests = ...)` returns one row per requested test with the
-  p-value, df, source statistic (`base = "ml"` or `"rls"`), method, parameter,
+  p-value, df, source statistic (`base = "ml"`, `"rls"`, or `"ls"`), method, parameter,
   UG flag, chi-square-equivalent diagnostic, truncation count, and list-columns
   for the UGamma spectrum and method-specific lambda vectors.
 - `fit_measures(fit, fmg = TRUE)` attaches the default FMG table to the
@@ -110,20 +110,28 @@ family:
   `fit_ml(model, df_to_data(...))` retain the listwise-complete raw blocks in
   `fit$raw_data`, so FMG calls normally do not need a separate `data` argument.
   Sample-stat-only fits can still pass complete raw `data =` explicitly.
-- Current support is complete-data ML for single- and multi-group fits,
-  including mean structures, plus FIML/missing-data fits with retained
-  `fit$raw_data`. Under FIML only the ML/LRT base and biased Gamma are defined;
-  explicit `_rls` and `_ug` labels are rejected. FIML defaults to saturated H1
-  information for the U projector metric, and
-  `h1_information = "structured"` swaps only that metric to model-implied H1
-  curvature while keeping the same saturated-moment Gamma. Listwise-deleted
-  input is supported only after it has become complete-data sample moments
-  through `df_to_data(..., missing = "listwise")`.
+- Current support is complete-data ML and continuous ULS/GLS/WLS for single-
+  and multi-group fits, including mean structures, plus FIML/missing-data fits
+  with retained `fit$raw_data`. Continuous LS uses its standard quadratic-form
+  statistic and accepts `gamma = "empirical"` (default) or `"normal"`; WLS also
+  requires the fitting `weight =` because fit objects do not retain a
+  caller-supplied matrix. Covariance scaling remains explicit:
+  `df_to_data(..., scaling = "n-1")` matches lavaan's continuous-LS convention,
+  while magmaan's data-frame default is `"n"`. Under FIML only the ML/LRT base
+  and biased Gamma are defined; explicit `_rls` and `_ug` labels are rejected.
+  FIML uses saturated H1 information for the U projector metric. Listwise-
+  deleted input is supported only after it has become complete-data sample
+  moments through `df_to_data(..., missing = "listwise")`.
 - Nested FIML model-pair tests are available through
   `nestedTest(..., method = "restriction_map")` / `robust_nested_lrt()` when
   both fits are FIML fits from the same raw-data shape and mask. Complete-data
   SB2001/SB2010 compatibility methods, caller-supplied `data =`, and mixed
   FIML/complete-data pairs are rejected for this path.
+- Nested FMG convenience wrappers are `fmg_nested_ordinal()` and
+  `fmg_nested_mixed_ordinal()` for all-ordinal and mixed-ordinal LS pairs.
+  Continuous ULS/GLS/WLS nested FMG is not exposed: the existing continuous-LS
+  profile LRT is a misspecification/observed-profile construction, not the
+  Satorra-2000 restriction-map spectrum required by this family.
 - The test-name grammar mirrors semTests-style labels:
   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, and
   `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. The default

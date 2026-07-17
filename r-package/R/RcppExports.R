@@ -441,6 +441,10 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaan_inference_score_tests`, fit, weight, h_step)
 }
 
+infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "expected", gamma = "empirical") {
+    .Call(`_magmaan_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma)
+}
+
 infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight = NULL, eig_tol = 1e-10) {
     .Call(`_magmaan_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol)
 }

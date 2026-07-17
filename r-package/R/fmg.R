@@ -274,6 +274,7 @@
 .fmg_resolve_default_tests <- function(fit, tests) {
   if (!is.null(tests)) return(tests)
   if (.fmg_is_ml2s(fit)) return(.fmg_default_tests_ml2s())
+  if (.fmg_is_continuous_ls(fit)) return(.fmg_default_tests_ordinal())
   if (.fmg_is_fiml(fit)) .fmg_default_tests_fiml() else .fmg_default_tests()
 }
 
@@ -351,6 +352,11 @@
 
 .fmg_is_ml2s <- function(fit) {
   grepl("^ML2S(_|$)", .fmg_fit_estimator(fit))
+}
+
+.fmg_is_continuous_ls <- function(fit) {
+  !isTRUE(fit$ordinal) && !isTRUE(fit$mixed_ordinal) &&
+    .fmg_fit_estimator(fit) %in% c("ULS", "GLS", "WLS")
 }
 
 .fmg_default_tests_ml2s <- function() {
@@ -446,6 +452,26 @@
   c("SB", "pEBA2", "pEBA4", "pEBA6", "pOLS")
 }
 
+.fmg_adjust_specs_continuous_ls <- function(specs) {
+  lapply(specs, function(s) {
+    if (isTRUE(s$ug)) {
+      stop("fmg_tests(): the unbiased Du-Bentler Gamma is available only for ",
+           "complete-data normal-theory ML fits (test '", s$input, "').",
+           call. = FALSE)
+    }
+    if (identical(s$base, "rls") && isTRUE(s$base_explicit)) {
+      stop("fmg_tests(): a continuous least-squares fit has no RLS ",
+           "(browne.residual.nt.model) base; drop the `_rls` suffix to use ",
+           "the estimator's standard quadratic-form statistic (test '",
+           s$input, "').", call. = FALSE)
+    }
+    s$base <- "ls"
+    s$canonical <- sub("_(rls|ml)$", "_ls", s$canonical)
+    if (!grepl("_ls$", s$canonical)) s$canonical <- paste0(s$canonical, "_ls")
+    s
+  })
+}
+
 .fmg_adjust_specs_ordinal <- function(specs, caller = "fmg_tests_ordinal") {
   lapply(specs, function(s) {
     if (isTRUE(s$ug)) {
@@ -492,6 +518,14 @@
          lambdas_reference = res$lambdas_reference)
   })
   .fmg_rows_to_df(rows)
+}
+
+.fmg_result_rows_continuous_ls <- function(fit, X, specs, weight = NULL,
+                                           gamma = "empirical") {
+  spectrum <- infer_continuous_ls_robust(
+    fit, X, weight = weight, gamma = gamma
+  )
+  .fmg_result_rows_ordinal(spectrum, specs)
 }
 
 .fmg_adjust_specs_nested <- function(specs, allow_rls = FALSE,
@@ -634,6 +668,30 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
   .fmg_result_rows_ordinal(spectrum, specs)
 }
 
+#' @rdname fmg_nested_ordinal
+#' @param mixed_stats The mixed continuous/ordinal sample statistics used for
+#'   both fits (the object from `data_mixed_ordinal_stats_from_df()`).
+#' @export
+fmg_nested_mixed_ordinal <- function(
+    fit_H1, fit_H0, mixed_stats, tests = NULL,
+    weight = "", A.method = c("delta", "exact")) {
+  A.method <- match.arg(A.method)
+  tests <- tests %||% .fmg_default_tests_ordinal()
+  specs <- .fmg_adjust_specs_ordinal(
+    lapply(tests, .fmg_parse_test),
+    caller = "fmg_nested_mixed_ordinal"
+  )
+  nested <- robust_nested_lrt(
+    fit_H1, fit_H0, data = mixed_stats, gamma = "empirical",
+    method = "restriction_map", A.method = A.method,
+    weight = if (nzchar(weight)) weight else NULL
+  )
+  spectrum <- list(chisq_standard = nested$T_diff,
+                   df = nested$df_diff,
+                   eigvals = nested$eigenvalues)
+  .fmg_result_rows_ordinal(spectrum, specs)
+}
+
 #' Foldnes-Moss-Gronneberg diagnostics for a nested continuous/FIML/ML2S pair.
 #'
 #' Applies the FMG eigenvalue-tail transforms to the Satorra-2000
@@ -663,6 +721,17 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
     identical(.fmg_fit_estimator(fit_H0), "ML") &&
     !.fmg_is_fiml(fit_H1) && !.fmg_is_fiml(fit_H0) &&
     !.fmg_is_ml2s(fit_H1) && !.fmg_is_ml2s(fit_H0)
+  supported_pair <- complete_ml ||
+    (.fmg_is_fiml(fit_H1) && .fmg_is_fiml(fit_H0)) ||
+    (.fmg_is_ml2s(fit_H1) && .fmg_is_ml2s(fit_H0))
+  if (!supported_pair) {
+    stop("fmg_nested(): this entry point supports complete-data ML, FIML, ",
+         "and ML2S pairs. Continuous ULS/GLS/WLS nested FMG needs a ",
+         "least-squares restriction-map spectrum, which is not yet available ",
+         "in the C++ core; ordinal and mixed-ordinal pairs use the dedicated ",
+         "fmg_nested_ordinal() and fmg_nested_mixed_ordinal() wrappers.",
+         call. = FALSE)
+  }
   specs <- .fmg_adjust_specs_nested(lapply(tests, .fmg_parse_test),
                                     allow_rls = complete_ml,
                                     caller = "fmg_nested")
@@ -683,10 +752,10 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 
 #' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics.
 #'
-#' Computes FMG p-values and diagnostics for a complete-data ML fit or a FIML
-#' (missing-data) fit. Complete-data fits must carry complete raw data, as fits
-#' from `magmaan(..., data.frame, estimator = "ML")` or `fit_ml(model,
-#' df_to_data(...))` do, or callers can pass complete raw `data` explicitly.
+#' Computes FMG p-values and diagnostics for a complete-data ML or continuous
+#' ULS/GLS/WLS fit, or a FIML (missing-data) fit. Complete-data fits must carry
+#' complete raw data, as fits from `magmaan(..., data.frame)` do, or callers can
+#' pass complete raw `data` explicitly.
 #'
 #' FIML fits (`fit_fiml()` / `magmaan(..., estimator = "FIML")`, single- or
 #' multi-group) are supported: the missing-data UGamma spectrum is computed
@@ -702,18 +771,25 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #' attached to the fit (`fit$ml2s`), and the eigenvalue-tail transforms are
 #' applied to that triple. As under FIML, `_ug` and `_rls` are rejected.
 #'
-#' @param fit A fitted magmaan ML (complete-data), FIML, or ML2S model.
+#' @param fit A fitted magmaan ML, continuous ULS/GLS/WLS, FIML, or ML2S model.
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
 #'   recommended defaults (complete-data or FIML-appropriate). Recognised types:
 #'   `std`, `sb`, `ss`, `mv`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` and `_ml` / `_rls` (complete-data only).
 #' @param data Optional complete raw data (complete-data fits only). Usually
 #'   unnecessary for new fits that retain `$raw_data`.
+#' @param weight The explicit fitting weight for a continuous WLS fit. Ignored
+#'   for ML, ULS, and GLS. Magmaan fit objects do not retain caller-supplied WLS
+#'   weights.
+#' @param gamma For continuous ULS/GLS/WLS fits, either `"empirical"` (the
+#'   default raw-data fourth-moment covariance) or `"normal"` (the
+#'   normal-theory moment covariance at the fitted sample covariance).
 #'
 #' @return A data frame with scalar diagnostics plus list-columns for the raw
 #'   UGamma spectrum and the method-specific lambda vectors.
 #' @export
-fmg_tests <- function(fit, tests = NULL, data = NULL) {
+fmg_tests <- function(fit, tests = NULL, data = NULL, weight = NULL,
+                      gamma = c("empirical", "normal")) {
   tests <- .fmg_resolve_default_tests(fit, tests)
   specs <- lapply(tests, .fmg_parse_test)
   # ML2S must be checked before FIML: a two-stage fit also carries a
@@ -734,12 +810,26 @@ fmg_tests <- function(fit, tests = NULL, data = NULL) {
     specs <- .fmg_adjust_specs_fiml(specs)
     return(.fmg_result_rows_fiml(fit, specs))
   }
+  if (.fmg_is_continuous_ls(fit)) {
+    gamma <- match.arg(gamma)
+    specs <- .fmg_adjust_specs_continuous_ls(specs)
+    X <- .fmg_raw_from_fit_or_data(fit, data, caller = "fmg_tests")
+    .fmg_validate_complete_raw(fit, X, caller = "fmg_tests")
+    return(.fmg_result_rows_continuous_ls(
+      fit, X, specs, weight = weight, gamma = gamma
+    ))
+  }
   estimator <- .fmg_fit_estimator(fit)
   if (!identical(estimator, "ML")) {
-    stop("fmg_tests(): FMG via this entry point requires a complete-data ML or ",
-         "FIML fit (got estimator = '", estimator, "'). For ordinal/polychoric ",
-         "least-squares fits use fmg_tests_ordinal(fit, ordinal_stats) or ",
+    stop("fmg_tests(): FMG via this entry point requires a complete-data ML, ",
+         "continuous ULS/GLS/WLS, or FIML fit (got estimator = '", estimator,
+         "'). For ordinal/polychoric least-squares fits use ",
+         "fmg_tests_ordinal(fit, ordinal_stats) or ",
          "fmg_tests_mixed_ordinal(fit, mixed_stats).", call. = FALSE)
+  }
+  if (!is.null(weight)) {
+    stop("fmg_tests(): `weight` is used only for continuous WLS fits.",
+         call. = FALSE)
   }
   X <- .fmg_raw_from_fit_or_data(fit, data, caller = "fmg_tests")
   .fmg_validate_complete_raw(fit, X, caller = "fmg_tests")
@@ -753,6 +843,9 @@ fmg_tests <- function(fit, tests = NULL, data = NULL) {
 #'
 #' @param fit A fitted magmaan model.
 #' @param data Optional complete raw data. If omitted, `fit$raw_data` is used.
+#' @param weight Optional explicit continuous-WLS fitting weight, passed to
+#'   [fmg_tests()].
+#' @param gamma Continuous-LS moment-covariance source, passed to [fmg_tests()].
 #' @param tests Character vector of semTests-style test names. Recognised types:
 #'   `std`, `sb`, `ss`, `mv`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` (unbiased Gamma-hat) and `_ml` / `_rls` (base
@@ -761,8 +854,11 @@ fmg_tests <- function(fit, tests = NULL, data = NULL) {
 #' @return A named numeric vector of p-values; names are the canonical test
 #'   labels (e.g. `peba4_rls`, `sb_ug_rls`), matching `semTests::pvalues()`.
 #' @export
-fmg_pvalues <- function(fit, data = NULL, tests = NULL) {
-  tab <- fmg_tests(fit, tests = tests, data = data)
+fmg_pvalues <- function(fit, data = NULL, tests = NULL, weight = NULL,
+                        gamma = c("empirical", "normal")) {
+  tab <- fmg_tests(
+    fit, tests = tests, data = data, weight = weight, gamma = gamma
+  )
   out <- tab$p_value
   names(out) <- tab$label
   out

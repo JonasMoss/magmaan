@@ -41,3 +41,88 @@ test_that("ML2S weighted fits use the cached ML2S FMG spectrum", {
   expect_equal(res$base, "ml")
   expect_equal(res$eigenvalues[[1]], c(0.5, 1.25))
 })
+
+test_that("continuous least-squares fits use the C++ robust spectrum", {
+  calls <- new.env(parent = emptyenv())
+  calls$weight <- NULL
+
+  local_mocked_bindings(
+    infer_continuous_ls_robust = function(fit, raw_data, weight = NULL,
+                                          bread = "expected",
+                                          gamma = "empirical") {
+      calls$weight <- weight
+      calls$gamma <- gamma
+      list(df = 2L, eigvals = c(0.75, 1.25), chisq_standard = 6)
+    },
+    infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
+                              param = 4.0, truncate_negative = TRUE) {
+      list(
+        p_value = 0.31, df = df, chi2_source = chi2_source,
+        method = method, param = param, chi2_equiv = chi2_source,
+        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        lambdas_reference = eigvals
+      )
+    },
+    .package = "magmaan"
+  )
+
+  fit <- list(
+    estimator = "WLS",
+    raw_data = matrix(seq_len(6), nrow = 3),
+    nobs = 3L
+  )
+  W <- diag(2)
+  res <- fmg_tests(fit, tests = "SB", weight = W, gamma = "normal")
+
+  expect_equal(calls$weight, W)
+  expect_equal(calls$gamma, "normal")
+  expect_equal(res$label, "sb_ls")
+  expect_equal(res$base, "ls")
+  expect_equal(res$base_statistic, 6)
+  expect_equal(res$eigenvalues[[1]], c(0.75, 1.25))
+  expect_error(fmg_tests(fit, tests = "SB_UG", weight = W),
+               "only for complete-data normal-theory ML")
+  expect_error(fmg_tests(fit, tests = "SB_RLS", weight = W),
+               "has no RLS")
+})
+
+test_that("mixed-ordinal nested FMG composes the existing nested spectrum", {
+  calls <- new.env(parent = emptyenv())
+  calls$data <- NULL
+
+  local_mocked_bindings(
+    robust_nested_lrt = function(fit_H1, fit_H0, data = NULL, ...) {
+      calls$data <- data
+      list(T_diff = 4.5, df_diff = 2L, eigenvalues = c(0.8, 1.2))
+    },
+    infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
+                              param = 4.0, truncate_negative = TRUE) {
+      list(
+        p_value = 0.27, df = df, chi2_source = chi2_source,
+        method = method, param = param, chi2_equiv = chi2_source,
+        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        lambdas_reference = eigvals
+      )
+    },
+    .package = "magmaan"
+  )
+
+  stats <- structure(list(marker = TRUE),
+                     class = "magmaan_mixed_ordinal_data")
+  res <- fmg_nested_mixed_ordinal(
+    list(estimator = "DWLS"), list(estimator = "DWLS"), stats,
+    tests = "pEBA2", weight = "DWLS"
+  )
+
+  expect_identical(calls$data, stats)
+  expect_equal(res$label, "peba2_ls")
+  expect_equal(res$base_statistic, 4.5)
+  expect_equal(res$eigenvalues[[1]], c(0.8, 1.2))
+})
+
+test_that("generic nested FMG rejects continuous LS instead of using ML geometry", {
+  expect_error(
+    fmg_nested(list(estimator = "ULS"), list(estimator = "ULS")),
+    "least-squares restriction-map spectrum"
+  )
+})

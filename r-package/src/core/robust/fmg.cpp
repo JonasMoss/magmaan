@@ -122,8 +122,13 @@ double scaled_f_pvalue(double chi2, const Eigen::Ref<const Eigen::VectorXd>& lam
   double c = nan();
   if (denom > 0.0) {
     d1 = s1 * (s1 * s1 * s2 - 2.0 * s2 * s2 + 4.0 * s1 * s3) / denom;
-    const double d2_denom = s3 * s1 - s2 * s2;
-    d2 = (d2_denom > 0.0)
+    const double d2_left = s3 * s1;
+    const double d2_right = s2 * s2;
+    const double d2_denom = d2_left - d2_right;
+    const double d2_tol =
+        16.0 * std::numeric_limits<double>::epsilon() *
+        std::max({1.0, std::abs(d2_left), std::abs(d2_right)});
+    d2 = (d2_denom > d2_tol)
              ? (s1 * s1 * s2 + 2.0 * s2 * s2) / d2_denom + 6.0
              : std::numeric_limits<double>::infinity();
     if (d2 < 6.0) d2 = std::numeric_limits<double>::infinity();
