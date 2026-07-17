@@ -281,10 +281,15 @@ solve_intermediate_corr(const FleishmanCoefficients& left,
                               : std::numeric_limits<double>::quiet_NaN();
   };
 
-  const double lo0 = -options.rho_bound;
-  const double hi0 = options.rho_bound;
-  double lo = lo0;
-  double hi = hi0;
+  if (std::abs(target) <= options.correlation_tol) return 0.0;
+
+  // Fleishman covariances need not be monotone across the entire (-1, 1)
+  // interval when the quadratic terms are nonzero. In particular, both
+  // endpoints can lie above a small positive target even though rho = 0 gives
+  // covariance zero and the wanted positive root lies in (0, 1). Bracket on
+  // the target's side of zero, where zero supplies the known opposite sign.
+  double lo = target > 0.0 ? 0.0 : -options.rho_bound;
+  double hi = target > 0.0 ? options.rho_bound : 0.0;
   double flo = f_at(lo);
   double fhi = f_at(hi);
   if (!std::isfinite(flo) || !std::isfinite(fhi) || flo * fhi > 0.0) {
