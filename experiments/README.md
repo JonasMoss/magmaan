@@ -83,6 +83,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 66 | [fiml-score-flip-probe](66-fiml-score-flip-probe/report.qmd) | probe | active | Can nuisance-effective and pattern-standardized score flips rescue small-sample nested FIML tests in the published FIML--FMG design? |
 | 67 | [fiml-flip-stress](67-fiml-flip-stress/report.qmd) | probe | active | Across generator family, sample size, missingness mechanism, and restriction rank, where do direct-FIML effective and standardized score flips remain calibrated? |
 | 68 | [score-test-calibration-drivers](68-score-test-calibration-drivers/report.qmd) | probe | active | What governs the calibration of the mean-scaled (Satorra–Bentler) non-normal score test — restriction df, structural information geometry, or eigenvalue-spectrum dispersion — and how do the spectrum-aware and sign-flip variants compare? |
+| 69 | [foldnes-moss-gronneberg-2026-study2](69-foldnes-moss-gronneberg-2026-study2/report.qmd) | replication | active | Can native magmaan reproduce the 189-cell Study 2 weak-invariance Type-I comparison, including the unbiased-Gamma variants, with semTests retained only as a parity sentinel? |
 
 ## Archived
 

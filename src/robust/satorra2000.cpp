@@ -179,10 +179,19 @@ post_expected<SatorraDiffResult>
 compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     const Eigen::MatrixXd&           A_alpha,
                     GammaSource                      gamma,
-                    GammaComputation                 computation) {
+                    GammaComputation                 computation,
+                    bool                             also_unbiased) {
   if (groups.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "compute_satorra2000: groups vector is empty"));
+  }
+  if (also_unbiased &&
+      (gamma != GammaSource::Empirical ||
+       computation != GammaComputation::Streaming)) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "compute_satorra2000: also_unbiased requires empirical Gamma with "
+        "the streaming computation"));
   }
   const Eigen::Index r1 = A_alpha.cols();
   const Eigen::Index m  = A_alpha.rows();
@@ -193,6 +202,7 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
     deg.C = Eigen::MatrixXd::Zero(0, 0);
     deg.S = Eigen::MatrixXd::Zero(0, 0);
     deg.eigenvalues    = Eigen::VectorXd::Zero(0);
+    deg.eigenvalues_unbiased = Eigen::VectorXd::Zero(0);
     deg.trace_CinvS    = 0.0;
     deg.trace_CinvS_sq = 0.0;
     deg.trace_signed   = 0.0;
@@ -331,6 +341,8 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   //       u_gi = D_gᵀ · (d_gi − s_g)       (m-vector)
   //       S += weight_g / (n_g − 1) · Σᵢ u_gi · u_giᵀ
   Eigen::MatrixXd S = Eigen::MatrixXd::Zero(m, m);
+  Eigen::MatrixXd S_unbiased =
+      also_unbiased ? Eigen::MatrixXd::Zero(m, m) : Eigen::MatrixXd();
   std::vector<std::string> warnings;
 
   // Dense-path scratch: the Dense computation forms the full block-diagonal
@@ -437,6 +449,15 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         const Eigen::MatrixXd U_rows = D_rows * D_g;           // n_g × m
         const double scale = gr.weight / static_cast<double>(gr.n_g);
         S.noalias() += scale * (U_rows.transpose() * U_rows);
+        if (also_unbiased) {
+          auto gamma_u_or =
+              browne_unbiased_gamma(D_rows, Xc, gr.mu_dim, gr.n_g, g);
+          if (!gamma_u_or.has_value()) {
+            return std::unexpected(gamma_u_or.error());
+          }
+          S_unbiased.noalias() +=
+              gr.weight * (D_g.transpose() * (*gamma_u_or) * D_g);
+        }
       } else if (computation == GammaComputation::Materialized) {
         const Eigen::MatrixXd Gamma_hat =
             (D_rows.transpose() * D_rows) / static_cast<double>(gr.n_g);
@@ -574,6 +595,42 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   out.trace_signed   = out.trace_CinvS;
   out.spectrum_rank  = static_cast<int>(eig.size());
   out.warnings       = std::move(warnings);
+  if (also_unbiased) {
+    S_unbiased = 0.5 * (S_unbiased + S_unbiased.transpose()).eval();
+    if (auto ok = require_psd_matrix(
+            S_unbiased, "compute_satorra2000: unbiased reduced S matrix");
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges_u(
+        S_unbiased, out.C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+    if (ges_u.info() != Eigen::Success) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "compute_satorra2000: unbiased generalised eigensolver failed"));
+    }
+    Eigen::VectorXd eig_u = ges_u.eigenvalues();
+    if (!eig_u.allFinite()) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "compute_satorra2000: unbiased eigensolver returned non-finite "
+          "eigenvalues"));
+    }
+    const double clip_u =
+        1e-12 * std::max(1.0, eig_u.cwiseAbs().maxCoeff());
+    for (Eigen::Index k = 0; k < eig_u.size(); ++k) {
+      if (eig_u(k) < 0.0) {
+        if (eig_u(k) < -clip_u) {
+          out.warnings.emplace_back(
+              "compute_satorra2000: unbiased eigenvalue " +
+              std::to_string(eig_u(k)) + " below clip threshold " +
+              std::to_string(-clip_u) + " — clipped to 0");
+        }
+        eig_u(k) = 0.0;
+      }
+    }
+    out.eigenvalues_unbiased = std::move(eig_u);
+  }
   return out;
 }
 

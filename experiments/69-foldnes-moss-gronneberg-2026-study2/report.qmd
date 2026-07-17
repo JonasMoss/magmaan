@@ -1,0 +1,198 @@
+---
+title: "Can magmaan reproduce FMG Study 2?"
+subtitle: "Weak-invariance Type-I calibration with semTests as a sentinel"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("STUDY2_RESULTS_DIR", unset = "")
+roots <- if (nzchar(override)) override else
+  file.path("results", c("full", "pilot", "smoke"))
+available <- roots[vapply(roots, function(path)
+  file.exists(file.path(path, "metadata.csv")), logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke --semtests-parity`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+meta_frame <- read_result("metadata.csv")
+meta <- setNames(meta_frame$value, meta_frame$key)
+calibration <- read_result("calibration_summary.csv")
+generator_calibration <- read_result("generator_calibration.csv")
+generator_summary <- read_result("generator_summary.csv")
+cells <- read_result("cell_summary.csv")
+timing <- read_result("timing_summary.csv")
+failures <- read_result("failures.csv")
+warnings <- read_result("warnings.csv")
+parity <- read_result("semtests_parity.csv")
+profile <- meta[["profile"]]
+reps <- as.integer(meta[["reps"]])
+n_cells <- as.integer(meta[["cells"]])
+is_full <- identical(profile, "full") && n_cells == 189L && reps >= 2000L
+```
+
+## Question
+
+Can native magmaan reproduce the 189-cell weak-invariance Type-I comparison in
+Study 2 of Foldnes, Moss and Grønneberg (2026), now that the complete-data
+Satorra-2000 path supports both the biased and Browne/Du-Bentler unbiased Gamma
+spectra? Can semTests be reduced from the simulation engine to a small
+correctness sentinel?
+
+## Short answer
+
+`r if (is_full) {
+  winner <- calibration$paper_label[[which.min(calibration$rmse_percentage_points)]]
+  sprintf("Yes for the completed design: %s has the lowest magmaan cell-RMSE (%.3f percentage points), across %d cells with %d replications each. The run had %d failed and %d warning-bearing replications.", winner, min(calibration$rmse_percentage_points), n_cells, reps, nrow(failures), nrow(warnings))
+} else {
+  sprintf("The native pipeline is operational on the %s profile (%d cells, %d replications per cell), including all 38 method variants. This run is a structural/timing check, not a replication result; the 189 x 2000 run remains required for paper-level Type-I conclusions.", profile, n_cells, reps)
+}`
+
+`r if (nrow(parity) && any(is.finite(parity$abs_diff))) {
+  comparable <- is.finite(parity$abs_diff)
+  sprintf("The optional semTests sentinel passed %d/%d comparable p-values; max |delta p| = %.3g.", sum(parity$pass[comparable]), sum(comparable), max(parity$abs_diff[comparable]))
+} else if (nrow(parity)) {
+  "The optional semTests sentinel was requested, but it produced no comparable p-values; inspect semtests_parity.csv."
+} else {
+  "The optional semTests sentinel was not requested in this run."
+}`
+
+## Evidence
+
+```{r calibration-table}
+primary <- c(
+  "pebad_ug_ml", "pebad_b_ml", "ss_b_rls", "peba6_ug_ml",
+  "ss_b_ml", "sb_b_ml", "std_ml", "std_rls")
+tab <- calibration[match(primary, calibration$method_id), c(
+  "paper_label", "pooled_rejection", "rmse_percentage_points",
+  "mad_percentage_points", "acceptable_percent",
+  "below_2_5_percent", "above_7_5_percent")]
+tab$pooled_rejection <- 100 * tab$pooled_rejection
+knitr::kable(
+  tab,
+  digits = 3,
+  row.names = FALSE,
+  col.names = c(
+    "Method", "Pooled rejection (%)", "Cell RMSE (pp)", "Cell MAD (pp)",
+    "Acceptable cells (%)", "Below 2.5% (%)", "Above 7.5% (%)"),
+  caption = paste(
+    "Selected Study 2 methods.",
+    if (is_full) "Directly comparable with published Table 9."
+    else "Smoke/pilot rates are Monte Carlo diagnostics only.")
+)
+```
+
+The design uses the paper's null loading sequence, one-factor weak-invariance
+comparison, group-level sample sizes 400/800/2000, dimensions 5/10/20, and
+2/4/8 groups. The seven generators are normal plus moderate and severe
+Vale--Maurelli, independent-generator, and piecewise-linear conditions
+(skewness/excess kurtosis 2/7 and 3/21). The full design therefore has 189
+cells.
+
+All 38 primary methods use the Satorra (2000) difference spectrum and the
+moment-tangent (`delta`) restriction used by semTests and the published
+simulation: uncorrected ML/RLS plus nine robust families crossed with ML/RLS
+bases and biased/unbiased Gamma. The Satorra--Bentler 2001 approximation is
+intentionally outside this replication.
+
+```{r generator-table}
+generator_view <- generator_summary[order(
+  generator_summary$median_max_abs_excess_kurtosis_error,
+  decreasing = TRUE), ]
+generator_view <- head(generator_view, 8L)
+knitr::kable(
+  generator_view[, c(
+    "p", "groups", "n_group", "distribution",
+    "mean_achieved_skewness", "mean_achieved_excess_kurtosis",
+    "median_max_abs_correlation_error",
+    "median_max_relative_variance_error")],
+  digits = 4, row.names = FALSE,
+  col.names = c(
+    "p", "Groups", "n/group", "Generator", "Mean skewness",
+    "Mean excess kurtosis", "Median max |corr error|",
+    "Median max relative variance error"),
+  caption = "Most difficult observed generator cells by kurtosis error."
+)
+```
+
+The generator calibration file separately records intermediate
+correlation/root conditioning, setup cost, cache use, and analytic correlation
+error where the generator exposes it. In this run,
+`r sum(generator_calibration$calibration_ok)` of
+`r nrow(generator_calibration)` distinct dimension-by-generator calibrations
+passed their structural checks.
+
+```{r parity-table}
+if (nrow(parity) && any(is.finite(parity$abs_diff))) {
+  comparable <- subset(parity, is.finite(abs_diff))
+  by_cell <- do.call(rbind, lapply(split(comparable, comparable$cell_id),
+    function(x) data.frame(
+      p = x$p[[1L]], groups = x$groups[[1L]], n_group = x$n_group[[1L]],
+      distribution = x$distribution[[1L]], df = x$df[[1L]],
+      checks = nrow(x), passed = sum(x$pass),
+      max_abs_delta_p = max(x$abs_diff))))
+  knitr::kable(
+    by_cell, digits = 7, row.names = FALSE,
+    col.names = c("p", "Groups", "n/group", "Distribution", "df",
+                  "Checks", "Passed", "Max |delta p|"),
+    caption = "semTests sentinel: first replication in a spread of cells.")
+}
+```
+
+```{r timing-table}
+timing_primary <- subset(timing, phase == "replication_total")
+timing_tab <- aggregate(
+  timing_primary$median_seconds,
+  list(p = timing_primary$p, groups = timing_primary$groups,
+       distribution = timing_primary$distribution),
+  median, na.rm = TRUE)
+names(timing_tab)[[4L]] <- "median_seconds"
+timing_tab <- timing_tab[order(
+  timing_tab$median_seconds, decreasing = TRUE), ]
+knitr::kable(
+  head(timing_tab, 8L), digits = 3, row.names = FALSE,
+  col.names = c("p", "Groups", "Distribution", "Median seconds/rep"),
+  caption = "Slowest observed p x group x generator corners.")
+```
+
+## Caveats
+
+`r if (is_full) {
+  "This is a direct design replication, but exact agreement with the published rejection rates is not expected: magmaan replaces lavaan fitting and the original generator implementations while targeting the same population moments and test definitions. Monte Carlo uncertainty at 2000 replications is about 0.49 percentage points at a 5% rejection rate."
+} else {
+  sprintf("This %s run has only %d replications per cell. Rejection rates, RMSE rankings, and apparent winners are not inferential evidence. Its valid claims are that every design layer runs, the requested methods are finite, failures/warnings are recorded, and the optional oracle slice agrees.", profile, reps)
+}`
+
+The sentinel is deliberately sparse: it checks implementation parity, not
+simulation validity. Generator calibration, achieved moments, convergence,
+warning counts, cellwise Monte Carlo standard errors, and resumable raw
+checkpoints remain separate diagnostics in `results/`.
+
+## Reproduce
+
+```bash
+# Cheap structural run plus the independent R oracle
+Rscript run_experiment.R --smoke --semtests-parity
+
+# Speed/calibration pilot: all seven distributions at three geometry corners
+Rscript run_experiment.R --pilot --cores 8 --semtests-parity
+
+# Exact 189-cell, 2000-replication Study 2 design
+Rscript run_experiment.R --full --cores 16 --semtests-parity
+```
+
+The target article is Foldnes, Moss and Grønneberg (2026), *Penalized
+eigenvalue block averaging: Extension to nested model comparison and Monte
+Carlo evaluations*, Behavior Research Methods 58:107,
+[doi:10.3758/s13428-026-02968-4](https://doi.org/10.3758/s13428-026-02968-4).
+The restriction-map construction follows Satorra (2000), *Scaled and adjusted
+restricted tests in multi-sample analysis of moment structures*.

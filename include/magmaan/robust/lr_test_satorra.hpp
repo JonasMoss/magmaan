@@ -33,6 +33,7 @@ struct Satorra2000Options {
   SatorraAMethod   a_method    = SatorraAMethod::Exact;
   GammaSource      gamma       = GammaSource::Empirical;
   GammaComputation computation = GammaComputation::Streaming;
+  bool             also_unbiased = false;
 };
 
 struct H1ReferenceRegularizationOptions {
@@ -195,6 +196,7 @@ struct LRSatorra2000Result {
   double           p_unscaled;
 
   Eigen::VectorXd  eigenvalues;    // length m, ascending
+  Eigen::VectorXd  eigenvalues_unbiased; // optional paired Γ_UG spectrum
 
   double           scale_c;        // ĉ = Σλ/m
   double           T_scaled;

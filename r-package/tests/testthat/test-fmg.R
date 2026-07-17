@@ -154,7 +154,8 @@ test_that("nested ML FMG selects biased and unbiased spectra per test", {
       calls <<- c(calls, gamma)
       list(
         T_diff = 6, df_diff = 2L,
-        eigenvalues = if (gamma == "unbiased") c(0.8, 1.4) else c(0.7, 1.2)
+        eigenvalues = if (gamma == "unbiased") c(0.8, 1.4) else c(0.7, 1.2),
+        eigenvalues_unbiased = if (gamma == "both") c(0.8, 1.4) else numeric()
       )
     },
     infer_fmg_test = function(chi2_source, df, eigvals, method = "peba",
@@ -173,7 +174,7 @@ test_that("nested ML FMG selects biased and unbiased spectra per test", {
     fit, fit, data = matrix(1:8, ncol = 2),
     tests = c("SB", "SB_UG")
   )
-  expect_equal(calls, c("empirical", "unbiased"))
+  expect_equal(calls, "both")
   expect_equal(res$label, c("sb_ml", "sb_ug_ml"))
   expect_equal(res$ug, c(FALSE, TRUE))
   expect_equal(res$eigenvalues[[1]], c(0.7, 1.2))

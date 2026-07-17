@@ -788,13 +788,14 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
   need_unbiased <- any(vapply(specs, function(s) isTRUE(s$ug), logical(1)))
   nested_biased <- if (need_biased) {
     robust_nested_lrt(
-      fit_H1, fit_H0, data = data, gamma = "empirical",
+      fit_H1, fit_H0, data = data,
+      gamma = if (need_unbiased) "both" else "empirical",
       method = "restriction_map", A.method = A.method
     )
   } else {
     NULL
   }
-  nested_unbiased <- if (need_unbiased) {
+  nested_unbiased <- if (need_unbiased && !need_biased) {
     robust_nested_lrt(
       fit_H1, fit_H0, data = data, gamma = "unbiased",
       method = "restriction_map", A.method = A.method
@@ -817,7 +818,11 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
                      NULL
                    },
                    eigvals_unbiased = if (need_unbiased) {
-                     nested_unbiased$eigenvalues
+                     if (need_biased) {
+                       nested_biased$eigenvalues_unbiased
+                     } else {
+                       nested_unbiased$eigenvalues
+                     }
                    } else {
                      NULL
                    })

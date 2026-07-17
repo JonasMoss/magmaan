@@ -171,9 +171,10 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   built with. Ordinal DWLS/WLS pairs take the `magmaan_ordinal_data` object
 #'   used for fitting. FIML pairs use `fit_H1$raw_data` and do not accept `data`.
 #' @param gamma `"empirical"` (default, empirical Gamma-hat), `"unbiased"`
-#'   (the Browne/Du-Bentler finite-sample correction for complete-data ML), or
-#'   `"NT"` (normal-theory sanity-check path where all eigenvalues collapse to
-#'   1).
+#'   (the Browne/Du-Bentler finite-sample correction for complete-data ML),
+#'   `"both"` (both spectra in one shared streaming pass; the unbiased spectrum
+#'   is returned as `eigenvalues_unbiased`), or `"NT"` (normal-theory
+#'   sanity-check path where all eigenvalues collapse to 1).
 #' @param method `"restriction_map"` (default), `"lavaan_sb2001"`, or
 #'   `"lavaan_sb2010"`.
 #' @param A.method `"exact"` (default, exact parameter-nesting restriction)
@@ -214,7 +215,7 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #' @return A list of class `magmaan_nested_test`.
 #' @export
 robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
-                              gamma = c("empirical", "unbiased", "NT"),
+                              gamma = c("empirical", "unbiased", "NT", "both"),
                               method = c("restriction_map",
                                          "lavaan_sb2001",
                                          "lavaan_sb2010"),
@@ -293,6 +294,15 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
        !identical(estimator_H1, "ML"))) {
     stop("robust_nested_lrt(): gamma = 'unbiased' is available only for ",
          "complete-data normal-theory ML pairs.", call. = FALSE)
+  }
+  if (identical(gamma, "both") &&
+      (ml2s_H1 || fiml_H1 || ordinal_H1 || mixed_ordinal_H1 ||
+       !identical(estimator_H1, "ML") ||
+       !identical(method, "restriction_map") ||
+       !identical(computation, "streaming"))) {
+    stop("robust_nested_lrt(): gamma = 'both' is available only for ",
+         "complete-data normal-theory ML restriction-map pairs with ",
+         "computation = 'streaming'.", call. = FALSE)
   }
   if (ml2s_H1) {
     if (h1_ref_requested) {
@@ -563,7 +573,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
 #'   robust nested-LRT method names.
 #' @export
 nestedTest <- function(fit_H1, fit_H0, data = NULL,
-                       gamma = c("empirical", "unbiased", "NT"),
+                       gamma = c("empirical", "unbiased", "NT", "both"),
                        method = c("satorra.2000",
                                   "satorra.bentler.2001",
                                   "satorra.bentler.2010",

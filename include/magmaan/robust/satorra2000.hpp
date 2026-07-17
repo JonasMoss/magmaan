@@ -101,6 +101,7 @@ struct SatorraDiffResult {
   Eigen::MatrixXd          C;                 // m × m
   Eigen::MatrixXd          S;                 // m × m
   Eigen::VectorXd          eigenvalues;       // length m, ascending
+  Eigen::VectorXd          eigenvalues_unbiased; // optional paired Γ_UG spectrum
   double                   trace_CinvS;       // = Σ λⱼ
   double                   trace_CinvS_sq;    // = Σ λⱼ²
   double                   trace_signed = 0.0;
@@ -118,11 +119,15 @@ struct SatorraDiffResult {
 //   • non-PD Σ_g for any group (V undefined).
 //
 // `m == 0` (no actual restriction) short-circuits with all-zero outputs.
+// With empirical streaming Gamma, `also_unbiased = true` reuses the same
+// restriction map, expected-information solve, and casewise moment rows to
+// return the Browne/Du-Bentler spectrum in `eigenvalues_unbiased`.
 post_expected<SatorraDiffResult>
 compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     const Eigen::MatrixXd&           A_alpha,
                     GammaSource                      gamma = GammaSource::Empirical,
-                    GammaComputation                 computation = GammaComputation::Streaming);
+                    GammaComputation                 computation = GammaComputation::Streaming,
+                    bool                             also_unbiased = false);
 
 // Positive quadratic-form spectrum for a profile-Hessian contrast.
 //
