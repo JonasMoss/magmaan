@@ -461,6 +461,8 @@ Rcpp::List satorra2000_to_list(const magmaan::robust::LRSatorra2000Result& r) {
       Rcpp::_["df_diff"]     = r.df_diff,
       Rcpp::_["p_unscaled"]  = r.p_unscaled,
       Rcpp::_["eigenvalues"] = Rcpp::wrap(r.eigenvalues),
+      Rcpp::_["eigenvalues_unbiased"] =
+          Rcpp::wrap(r.eigenvalues_unbiased),
       Rcpp::_["scale_c"]     = r.scale_c,
       Rcpp::_["T_scaled"]    = r.T_scaled,
       Rcpp::_["p_scaled"]    = r.p_scaled,
@@ -546,8 +548,9 @@ void validate_same_fiml_raw(const magmaan::data::RawData& h1,
 //
 // `gamma` is `"empirical"` (default — empirical Γ̂ from the casewise outer
 // products, matches lavaan's `estimator = "MLR"` / `"MLM"`), `"unbiased"`
-// (Browne/Du-Bentler finite-sample correction), or `"NT"` (normal-theory
-// Γ_NT, a sanity-check path where all λⱼ → 1 and `T_scaled == T_diff`).
+// (Browne/Du-Bentler finite-sample correction), `"both"` (paired empirical and
+// unbiased spectra from one streaming pass), or `"NT"` (normal-theory Γ_NT, a
+// sanity-check path where all λⱼ → 1 and `T_scaled == T_diff`).
 //
 // [[Rcpp::export]]
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
@@ -607,7 +610,8 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
       magmaan::robust::Satorra2000Options{
           .a_method = parse_a_method(a_method),
           .gamma = parse_gamma(gamma),
-          .computation = parse_gamma_computation(computation)});
+          .computation = parse_gamma_computation(computation),
+          .also_unbiased = gamma == "both"});
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   const magmaan::robust::LRSatorra2000Result& r = *r_or;
 

@@ -1605,6 +1605,7 @@ LRSatorra2000Result degenerate_result(double T_diff) {
   out.df_diff     = 0;
   out.p_unscaled  = 1.0;
   out.eigenvalues = Eigen::VectorXd::Zero(0);
+  out.eigenvalues_unbiased = Eigen::VectorXd::Zero(0);
   out.scale_c     = 1.0;
   out.T_scaled    = T_diff;
   out.p_scaled    = 1.0;
@@ -1787,6 +1788,7 @@ lr_test_satorra2000(double                  T_diff,
   out.T_diff      = T_diff;
   out.df_diff     = static_cast<int>(sd.eigenvalues.size());
   out.eigenvalues = sd.eigenvalues;
+  out.eigenvalues_unbiased = sd.eigenvalues_unbiased;
   out.warnings    = sd.warnings;
 
   if (out.df_diff <= 0) {
@@ -2052,7 +2054,8 @@ lr_test_satorra2000_from_data(
 
   // ── 4. Run the core then the p-value wrap ───────────────────────────────
   auto sd_or = compute_satorra2000(groups, A_alpha, options.gamma,
-                                   options.computation);
+                                   options.computation,
+                                   options.also_unbiased);
   if (!sd_or.has_value()) {
     return std::unexpected(sd_or.error());
   }

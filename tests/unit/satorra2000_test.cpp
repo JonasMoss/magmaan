@@ -417,11 +417,20 @@ TEST_CASE("compute_satorra2000: mean-augmented self-consistency and oracle") {
   REQUIRE(ug_strm.has_value());
   REQUIRE(ug_matz.has_value());
   REQUIRE(ug_dens.has_value());
+  auto paired = compute_satorra2000(
+      {gr}, A_alpha, GammaSource::Empirical, GammaComputation::Streaming,
+      /*also_unbiased=*/true);
+  REQUIRE(paired.has_value());
+  REQUIRE(paired->eigenvalues_unbiased.size() == ug_strm->eigenvalues.size());
   for (Eigen::Index k = 0; k < ug_strm->eigenvalues.size(); ++k) {
     CHECK(ug_matz->eigenvalues(k) ==
           doctest::Approx(ug_strm->eigenvalues(k)).epsilon(1e-12));
     CHECK(ug_dens->eigenvalues(k) ==
           doctest::Approx(ug_strm->eigenvalues(k)).epsilon(1e-8));
+    CHECK(paired->eigenvalues(k) ==
+          doctest::Approx(strm->eigenvalues(k)).epsilon(1e-12));
+    CHECK(paired->eigenvalues_unbiased(k) ==
+          doctest::Approx(ug_strm->eigenvalues(k)).epsilon(1e-12));
   }
 }
 
