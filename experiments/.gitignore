@@ -1,6 +1,7 @@
 **/resources/
 **/.quarto/
 **/report.html
+**/report.pdf
 **/report_files/
 **/results/*
 !**/results/
