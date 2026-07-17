@@ -2,5 +2,3 @@
 report.html
 report_files/
 resources/
-*
-!.gitignore
