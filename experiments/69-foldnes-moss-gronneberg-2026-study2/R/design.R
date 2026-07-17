@@ -1,4 +1,4 @@
-# Foldnes, Moss and Gronneberg (2026), Study 2: weak-invariance Type-I
+# Foldnes, Gronneberg and Moss (2026), Study 2: weak-invariance Type-I
 # design. Constants are transcribed from the article and its OSF supplement.
 
 study2_distributions <- c(

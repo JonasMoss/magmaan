@@ -18,10 +18,10 @@ source(experiment_path("R", "summaries.R"))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--full] [options]\n\n",
-  "Native magmaan replication of Foldnes, Moss and Gronneberg (2026),\n",
+  "Native magmaan replication of Foldnes, Gronneberg and Moss (2026),\n",
   "Study 2 weak-invariance Type-I calibration. The primary run uses the\n",
   "Satorra-2000/delta restriction map used by semTests; method 2001 is out of\n",
-  "scope. All 38 Study 2 method variants include biased/unbiased Gamma and\n",
+  "scope. All 38 Satorra-2000 variants include empirical/unbiased Gamma and\n",
   "ML/RLS bases.\n\n",
   "Profiles:\n",
   "  --smoke       4 structural cells x 1 rep (default).\n",
@@ -36,7 +36,9 @@ usage <- function() cat(
   "  --semtests-parity       Compare rep 1 in a spread of selected cells.\n",
   "  --semtests-max-cells N  Maximum sentinel cells (default 3).\n\n",
   "Chunks are atomic and resumable when the manifest and code hash match.\n",
-  "Use a distinct --results-dir when changing any run setting.\n", sep = "")
+  "Use a distinct --results-dir when changing any run setting.\n",
+  "Shards are standalone partial runs; aggregation is not implemented.\n",
+  sep = "")
 
 parse_args <- function(args) {
   out <- list(

@@ -214,6 +214,18 @@ models additionally retain `S` in the mean block and scale the empirical
 mean--covariance cross-block by `N/(N-2)`. The implementation rejects any
 group with `N <= 3`, where the correction is undefined.
 
+When both spectra are needed, `robust_nested_lrt(..., gamma = "both")` reuses
+the same empirical streaming pass. Its `eigenvalues` and scalar summaries are
+the empirical-Gamma result; `eigenvalues_unbiased` is the paired auxiliary
+spectrum. `fmg_nested()` requests this form automatically for mixed empirical
+and `_ug` test sets and preserves backend diagnostics in
+`attr(result, "warnings")`. The deterministic
+`tests/unit/satorra2000_test.cpp` gate compares the paired and separate
+computations for unequal-size multigroup data and checks the invalid-source and
+invalid-computation guards. The R-facing semantics and warning propagation are
+covered by `r-package/tests/testthat/test-fmg.R` and
+`r-package/tests/testthat/test-nested-test.R`.
+
 Continuous ULS/GLS/WLS pairs now use the same Satorra-2000 restriction solver
 with the estimator-specific parameter-space sandwich:
 
