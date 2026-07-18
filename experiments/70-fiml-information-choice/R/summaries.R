@@ -104,6 +104,9 @@ fiml_information_summaries <- function(raw, grid) {
     for (cell_id in unique(replication$cell_id)) {
       block <- replication[
         replication$cell_id == cell_id, , drop = FALSE]
+      attempted <- block$fit_ok
+      attempts <- sum(attempted)
+      inversion_failures <- sum(attempted & !block[[ok_name]])
       j <- j + 1L
       information_failures[[j]] <- data.frame(
         cell_id = cell_id,
@@ -112,8 +115,10 @@ fiml_information_summaries <- function(raw, grid) {
         missingness = block$missingness[[1L]],
         n = block$n[[1L]],
         information = key,
-        reps = nrow(block),
-        inversion_failure_rate = mean(!block[[ok_name]]),
+        fit_attempts = attempts,
+        inversion_failures = inversion_failures,
+        inversion_failure_rate = if (attempts)
+          inversion_failures / attempts else NA_real_,
         stringsAsFactors = FALSE
       )
     }
