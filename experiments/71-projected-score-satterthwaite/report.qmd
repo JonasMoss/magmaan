@@ -6,6 +6,7 @@ format:
     toc: true
     number-sections: false
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -50,19 +51,31 @@ labels <- c(
   fmg_mv_rls = "FMG mean+variance RLS",
   fmg_peba4_rls = "FMG pEBA4-RLS")
 methods$label <- unname(labels[methods$method])
-primary_names <- c(
+score_names <- c(
   "score_chisq_centered",
+  "score_chisq_raw",
+  "hotelling_gaussian",
   "satterthwaite_normal_unprojected",
   "satterthwaite_normal_projected",
   "satterthwaite_oracle_projected",
+  "satterthwaite_empirical_unprojected",
   "satterthwaite_empirical_projected")
-primary <- methods[methods$method %in% primary_names, , drop = FALSE]
-method_error <- aggregate(
-  abs(rejection_rate - .05) ~ method,
-  data = primary, FUN = mean, na.rm = TRUE)
-names(method_error)[[2L]] <- "mean_absolute_error"
+context_names <- c("fmg_sb_rls", "fmg_mv_rls", "fmg_peba4_rls")
+score_results <- methods[methods$method %in% score_names, , drop = FALSE]
+context_results <- methods[methods$method %in% context_names, , drop = FALSE]
+n_cells <- length(unique(methods$cell_id))
+method_error <- do.call(rbind, lapply(
+  split(score_results, score_results$method),
+  function(x) data.frame(
+    method = x$method[[1L]],
+    valid_cells = sum(is.finite(x$rejection_rate)),
+    mean_rejection = mean(x$rejection_rate, na.rm = TRUE),
+    mean_absolute_error = mean(abs(x$rejection_rate - .05), na.rm = TRUE),
+    stringsAsFactors = FALSE)))
+eligible <- method_error$valid_cells == n_cells
 best_method <- method_error[
-  which.min(method_error$mean_absolute_error), , drop = FALSE]
+  which(eligible)[which.min(method_error$mean_absolute_error[eligible])],
+  , drop = FALSE]
 rate <- function(method, distribution, n) {
   row <- methods[
     methods$method == method & methods$distribution == distribution &
@@ -75,13 +88,32 @@ mae <- function(method) {
   if (nrow(row) != 1L) return(NA_real_)
   100 * row$mean_absolute_error[[1L]]
 }
-primary$size_percent <- 100 * primary$rejection_rate
-primary$condition <- paste(primary$distribution, paste0("N=", primary$n))
-primary_wide <- reshape(
-  primary[c("method", "condition", "size_percent")],
-  idvar = "method", timevar = "condition", direction = "wide")
-names(primary_wide) <- sub("size_percent.", "", names(primary_wide), fixed = TRUE)
-primary_wide$method <- unname(labels[primary_wide$method])
+wide_sizes <- function(x, method_order) {
+  x$size_percent <- 100 * x$rejection_rate
+  x$condition <- paste(x$distribution, paste0("N=", x$n))
+  out <- reshape(
+    x[c("method", "condition", "size_percent")],
+    idvar = "method", timevar = "condition", direction = "wide")
+  names(out) <- sub("size_percent.", "", names(out), fixed = TRUE)
+  out <- out[match(method_order, out$method), , drop = FALSE]
+  out <- out[!is.na(out$method), , drop = FALSE]
+  out$method <- unname(labels[out$method])
+  out
+}
+score_wide <- wide_sizes(score_results, score_names)
+context_wide <- wide_sizes(context_results, context_names)
+score_calibration_display <- method_error
+score_calibration_display$method <-
+  unname(labels[score_calibration_display$method])
+score_calibration_display$mean_rejection <-
+  100 * score_calibration_display$mean_rejection
+score_calibration_display$mean_absolute_error <-
+  100 * score_calibration_display$mean_absolute_error
+names(score_calibration_display) <- c(
+  "Method", "Valid cells", "Mean rejection (%)", "Mean absolute error (pp)")
+score_calibration_display <- score_calibration_display[
+  order(score_calibration_display[["Mean absolute error (pp)"]]), ,
+  drop = FALSE]
 
 reference_display <- reference[
   c("distribution", "shape_unprojected", "shape_projected",
@@ -114,17 +146,19 @@ names(diagnostic_display) <- c(
 ## Question
 
 For a goodness-of-fit score that is already sandwich-studentized and therefore
-has a pivotal \(\chi_q^2\) limit, can the randomness of its empirical meat be
-summarized by a projected Satterthwaite degree of freedom? More concretely:
-does that heavier finite-sample reference improve Type-I error at low \(N\)
-without giving up the simple numerator
-\[
-Q=n\bar\psi^\mathsf{T}\widehat B_c^{-1}\bar\psi?
-\]
+has a pivotal $\chi_q^2$ limit, can the randomness of its empirical meat be
+summarized by a projected Satterthwaite degree of freedom? More concretely,
+does that heavier finite-sample reference improve Type-I error at low $N$
+without giving up the simple numerator?
+
+$$
+Q_c=n\bar\psi^\mathsf{T}\widehat B_c^{-1}\bar\psi.
+$$
 
 This is not a conventional SEM likelihood-ratio-mixture exercise. The target
-statistic \(Q\) is the robust score quadratic itself; SB, mean-and-variance, and
-pEBA rows are included only as familiar context.
+statistic $Q_c$ is the robust score quadratic itself, and its asymptotic null
+is pivotal. SB, mean-and-variance, and pEBA rows are included only as familiar
+context.
 
 ## Short answer
 
@@ -158,59 +192,138 @@ The decisive comparison is deliberately split in two. The fixed
 normal-reference shape asks whether the proposed working-model denominator is
 useful and cheap. The DGP-specific oracle asks whether the same approximation
 could work with the correct score moments. The empirical row asks whether
-estimating those third and fourth moments in the same low-\(N\) sample destroys
+estimating those third and fourth moments in the same low-$N$ sample destroys
 the gain. If the oracle helps but the empirical version does not, the idea
 generalizes mathematically but misses the simplicity/performance selling point.
 
 ## Evidence
 
-### Construction
+### Common robust-score numerator
 
-For each case, let \(\psi_i\in\mathbb R^q\) be the model-centred saturated
+For each case, let $\psi_i\in\mathbb R^q$ be the model-centred saturated
 covariance contribution after projection into magmaan's
-expected-information residual basis. Here \(p=5\), so the correctly specified
-one-factor model has \(q=5\) residual score directions. The centered empirical
-meat is
-\[
-\widehat B_c={1\over n-1}\sum_{i=1}^n
-  (\psi_i-\bar\psi)(\psi_i-\bar\psi)^\mathsf{T},
-\qquad
-Q=n\bar\psi^\mathsf{T}\widehat B_c^{-1}\bar\psi.
-\]
-Under the null and ordinary sandwich regularity conditions,
-\(Q\Rightarrow\chi_q^2\): the limit is pivotal.
+expected-information residual basis. Here $p=5$, so the correctly specified
+one-factor model has $q=5$ residual score directions. Define
 
-Whiten the centered score as \(z=B^{-1/2}(\psi-E\psi)\), and write the
-first-order fluctuation of its meat as
-\[
+$$
+\bar\psi=\frac{1}{n}\sum_{i=1}^n\psi_i,\qquad
+\widehat B_c=\frac{1}{n-1}\sum_{i=1}^n
+  (\psi_i-\bar\psi)(\psi_i-\bar\psi)^\mathsf{T},
+$$
+
+and the raw outer-product meat
+
+$$
+\widehat B_r=\frac{1}{n}\sum_{i=1}^n\psi_i\psi_i^\mathsf{T}.
+$$
+
+The two sandwich quadratics actually computed are
+
+$$
+Q_c=n\bar\psi^\mathsf{T}\widehat B_c^{-1}\bar\psi,\qquad
+Q_r=n\bar\psi^\mathsf{T}\widehat B_r^{-1}\bar\psi.
+$$
+
+Under the null and ordinary sandwich regularity conditions,
+$Q_c\Rightarrow\chi_q^2$ and $Q_r\Rightarrow\chi_q^2$. Thus every score
+calibration below retains a pivotal asymptotic null; the experiment asks only
+whether a different finite-sample reference improves its low-$N$ behavior.
+
+### The eight pivotal-score alternatives
+
+For any effective meat degree of freedom $\eta>q-1$, define the common
+Hotelling/Satterthwaite tail
+
+$$
+F_\eta(Q_c)=\frac{\eta-q+1}{\eta q}Q_c,\qquad
+p_\eta=\Pr\!\left\{F_{q,\,\eta-q+1}\ge F_\eta(Q_c)\right\}.
+$$
+
+The report compares every score alternative generated by the experiment:
+
+| Report label | Quadratic | Null reference or denominator rule | What it isolates |
+|---|---:|---|---|
+| Robust score chi-square (centered meat) | $Q_c$ | $\chi_q^2$ | The ordinary sandwich-robust score test and main baseline. |
+| Robust score chi-square (raw OPG) | $Q_r$ | $\chi_q^2$ | The uncentered-OPG convention; it audits numerator leakage into the meat. |
+| Ordinary Hotelling ($\eta=n-1$) | $Q_c$ | $p_\eta$ with $\eta=n-1$ | Treats the score vectors as Gaussian. This is a finite-sample benchmark, not an exact reference for quadratic SEM scores. |
+| Normal-reference Satterthwaite, unprojected | $Q_c$ | $\eta=(n-1)s_{\mathrm{N},H}$ | Estimates meat variability from a large, independent normal-data reference without numerator projection. |
+| Normal-reference Satterthwaite, projected | $Q_c$ | $\eta=(n-1)s_{\mathrm{N},H^\perp}$ | The cheap proposed rule: one fixed normal-working shape after projection. |
+| DGP-oracle Satterthwaite, projected | $Q_c$ | $\eta=(n-1)s_{\mathrm{DGP},H^\perp}$ | Uses a large, independent draw from the true DGP; infeasible, but tests whether the approximation can work with the right moments. |
+| Empirical Satterthwaite, unprojected | $Q_c$ | $\eta=(n-1)\widehat s_H$ | Estimates the unprojected third/fourth-score-moment shape in the test sample. |
+| Empirical Satterthwaite, projected | $Q_c$ | $\eta=(n-1)\widehat s_{H^\perp}$ | Estimates the projected shape in the test sample; potentially adaptive, but no longer especially simple. |
+
+The first two rows are the two chi-square calibrations and differ only in
+whether the empirical meat is centered. The remaining six use the same
+attractive numerator and centered sandwich denominator---hence the same
+quadratic $Q_c$---and change only the finite-sample reference degree of freedom.
+
+### Where the Satterthwaite denominator comes from
+
+Whiten the centered score as
+$z=B^{-1/2}\{\psi-E(\psi)\}$ and write the first-order meat fluctuation as
+
+$$
 H=zz^\mathsf{T}-I_q.
-\]
-The part linearly predictable from the numerator is removed:
-\[
+$$
+
+The projected version removes the part linearly predictable from the
+numerator:
+
+$$
 \operatorname{vec}(H^\perp)
 =\operatorname{vec}(H)
 -\operatorname{Cov}\{\operatorname{vec}(H),z\}z.
-\]
-Matching its Frobenius variation to a \(q\)-variate Wishart meat gives
-\[
-s={q(q+1)\over E\lVert H^\perp\rVert_F^2},
+$$
+
+Matching Frobenius variation to a $q$-variate Wishart meat gives the two shape
+constants
+
+$$
+s_H=\frac{q(q+1)}{E\lVert H\rVert_F^2},\qquad
+s_{H^\perp}=\frac{q(q+1)}{E\lVert H^\perp\rVert_F^2},
 \qquad
 \eta_n=(n-1)s.
-\]
-The proposed tail is then
-\[
-{\,\eta_n-q+1\,\over \eta_n q}Q
-\ \dot\sim\ F_{q,\,\eta_n-q+1}.
-\]
-Leaving \(H\) unprojected is the diagnostic that tells us whether the clean
-numerator--denominator orthogonalization is doing real work.
+$$
+
+“Unprojected” versus “projected” chooses $H$ versus $H^\perp$.
+“Normal-reference,” “DGP-oracle,” and “empirical” say where the expectation in
+the matching formula is estimated: a large normal-data reference, a large
+true-DGP reference, or the current test sample. Projection is the part intended
+to preserve the clean numerator--denominator separation.
+
+### The three FMG contextual comparators
+
+The FMG rows deliberately do **not** belong to the pivotal-score family. They
+start from the working-model residual quadratic
+
+$$
+T_{\mathrm{RLS}}=n\lVert\bar\psi\rVert^2,
+\qquad
+T_{\mathrm{RLS}}\ \Rightarrow\
+\sum_{j=1}^q\lambda_j\chi_{1,j}^2,
+$$
+
+whose limiting weights $\lambda_1,\ldots,\lambda_q$ depend on the
+$U\Gamma$ spectrum. They answer the conventional nonpivotal-mixture question
+and are shown only to orient the low-$N$ results:
+
+| Report label | Calibration of $T_{\mathrm{RLS}}$ |
+|---|---|
+| FMG SB-RLS | Mean scaling: $c=(\sum_j\lambda_j)/q$, then compare $T_{\mathrm{RLS}}/c$ with $\chi_q^2$. |
+| FMG mean+variance RLS | Satterthwaite spectrum match: compare $T_{\mathrm{RLS}}(\sum_j\lambda_j)/(\sum_j\lambda_j^2)$ with $\chi_\nu^2$, where $\nu=(\sum_j\lambda_j)^2/\sum_j\lambda_j^2$. |
+| FMG pEBA4-RLS | Sort the spectrum into four blocks, replace each block by its mean, shrink those block means halfway toward the global mean, and evaluate the resulting weighted-$\chi^2$ tail. |
+
+These are useful comparators, but success here would not establish the
+pivotal robust-score proposal that motivated the experiment.
+
+### Design
 
 The design crosses multivariate normal data with one moderate
 Vale–Maurelli condition (marginal skewness 2, excess kurtosis 7), holding the
 population covariance and the true one-factor model fixed, at
-\(N=30,50,100,200\). Large independent reference draws estimate the
+$N=30,50,100,200$. Large independent reference draws estimate the
 normal-working and DGP-oracle shape constants; the same-sample empirical
-version estimates \(s\) in every replication.
+version estimates $s$ in every replication.
 
 ```{r shape-table}
 knitr::kable(
@@ -222,28 +335,34 @@ knitr::kable(
 
 The VM projected shape is only
 `r sprintf("%.4f", reference$shape_projected[reference$distribution == "vm"])`.
-Even at \(n=200\), this implies
-\(\eta_n=\)
+Even at $n=200$, this implies $\eta_n=$
 `r sprintf("%.2f", 199 * reference$shape_projected[reference$distribution == "vm"])`,
-below the \(q-1=4\) existence boundary for the inverse-Wishart/Hotelling
+below the $q-1=4$ existence boundary for the inverse-Wishart/Hotelling
 reference. Consequently the DGP-oracle p-value is unavailable in every VM cell,
-not merely unstable at \(n=30\). By contrast, the normal-reference projected
+not merely unstable at $n=30$. By contrast, the normal-reference projected
 shape is
 `r sprintf("%.3f", reference$shape_projected[reference$distribution == "normal"])`;
-it exists at all four sample sizes but produces a much too heavy low-\(n\) tail.
+it exists at all four sample sizes but produces a much too heavy low-$n$ tail.
 
 ### Null rejection
 
-```{r size-table}
+```{r score-size-table}
 ordered <- c(
   "method", "normal N=30", "normal N=50", "normal N=100", "normal N=200",
   "vm N=30", "vm N=50", "vm N=100", "vm N=200")
-ordered <- intersect(ordered, names(primary_wide))
+score_ordered <- intersect(ordered, names(score_wide))
 knitr::kable(
-  primary_wide[ordered], digits = 1, row.names = FALSE,
+  score_wide[score_ordered], digits = 1, row.names = FALSE,
   caption = sprintf(
-    "Null rejection percentages at alpha=.05 (%d replications per cell).",
+    "All pivotal-score null rejection percentages at alpha=.05 (%d replications per cell). NA means that eta did not exceed q-1.",
     reps))
+```
+
+```{r score-calibration-table}
+knitr::kable(
+  score_calibration_display,
+  digits = c(NA, 0, 2, 2), row.names = FALSE,
+  caption = "Across-cell calibration summary for all pivotal-score alternatives. An eight-cell mean absolute error is comparable only when Valid cells = 8.")
 ```
 
 Across the eight cells, ordinary Hotelling has mean absolute size error
@@ -254,18 +373,20 @@ same-sample projected plug-in,
 normal-reference projection, and
 `r sprintf("%.2f", mae("score_chisq_centered"))` for centered-meat chi-square.
 The empirical projected row is therefore interesting as a self-normalized
-finite-sample rule, but not as an estimate of the population shape: at \(n=30\)
+finite-sample rule, but not as an estimate of the population shape: at $n=30$
 its median VM shape is
 `r sprintf("%.3f", diagnostics$median_shape_empirical_projected[
   diagnostics$distribution == "vm" & diagnostics$n == 30])`,
 roughly two orders of magnitude above the independent reference.
 
 The following diagnostics are as important as size in this probe. The raw OPG
-contains the rank-one \(\bar\psi\bar\psi^\mathsf{T}\) numerator term; its
+contains the rank-one $\bar\psi\bar\psi^\mathsf{T}$ numerator term; its
 quadratic therefore obeys the exact identity
-\[
-Q_{\rm raw}={nQ_c\over n-1+Q_c}
-\]
+
+$$
+Q_{\mathrm{raw}}=\frac{nQ_c}{n-1+Q_c}
+$$
+
 and shrinks relative to the centered-meat statistic. The
 condition number and estimated shape show whether a nominal improvement costs
 an unstable denominator.
@@ -276,25 +397,32 @@ knitr::kable(
   caption = "Centering, conditioning, and same-sample score-shape diagnostics.")
 ```
 
-The FMG SB-RLS, mean-and-variance RLS, and pEBA4-RLS rows are retained in
-`method_summary.csv`. They calibrate the nonpivotal working-model quadratic and
-answer a different asymptotic question, so they are not promoted into the
-primary table.
+For completeness, here are the three nonpivotal FMG contextual rows from the
+same simulated samples:
+
+```{r context-size-table}
+context_ordered <- intersect(ordered, names(context_wide))
+knitr::kable(
+  context_wide[context_ordered], digits = 1, row.names = FALSE,
+  caption = sprintf(
+    "Context only: FMG calibrations of the nonpivotal RLS quadratic, as null rejection percentages at alpha=.05 (%d replications per cell).",
+    reps))
+```
 
 ## Caveats
 
-- The projected \(H\) used here is the fixed-geometry score contribution. It
+- The projected $H$ used here is the fixed-geometry score contribution. It
   does not yet include the full influence of re-estimating the SEM nuisance
   parameters and residual basis inside the meat. A promising result would
   justify deriving that full fitted-nuisance influence; a null result does not
   rule it out.
 - The DGP-oracle row is intentionally infeasible. It is an upper-bound
   diagnostic, not a proposed method. It also depends on eighth-order raw-data
-  moments because the SEM score is quadratic and \(H^2\) is quartic in that
+  moments because the SEM score is quadratic and $H^2$ is quartic in that
   score; reference variability is therefore a result, not just Monte Carlo
   clutter.
 - Same-sample third- and fourth-moment estimates can be noisy exactly where the
-  correction is supposed to help. Shape failures and \(\eta_n\le q-1\) appear
+  correction is supposed to help. Shape failures and $\eta_n\le q-1$ appear
   as unavailable p-values rather than being silently truncated.
 - This first probe has one model, one non-normal law, and Type-I error only.
   Power, nested restrictions, heterogeneous marginal shapes, missing data, and
