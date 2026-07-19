@@ -1,0 +1,263 @@
+---
+title: "How far does ordinary Hotelling carry robust SEM goodness of fit?"
+subtitle: "Residual rank, sample-to-rank ratio, and one severe nonnormal model"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(
+  if (nzchar(override)) override else character(),
+  file.path("results", c("full", "probe", "smoke")))
+available <- roots[vapply(
+  roots,
+  function(path) file.exists(file.path(path, "metadata.csv")),
+  logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+meta_frame <- read_result("metadata.csv")
+meta <- setNames(meta_frame$value, meta_frame$key)
+methods <- read_result("method_summary.csv")
+diagnostics <- read_result("diagnostics_summary.csv")
+failures <- read_result("failures.csv")
+profile <- meta[["profile"]]
+reps <- as.integer(meta[["reps_per_cell"]])
+is_evidence <- profile %in% c("probe", "full") && reps >= 300L
+
+labels <- c(
+  score_chisq_centered = "Centered robust score: chi-square",
+  score_hotelling = "Centered robust score: Hotelling",
+  score_chisq_raw = "Raw-OPG score: chi-square",
+  rls_chisq = "Working RLS: chi-square",
+  fmg_sb_rls = "Working RLS: SB",
+  fmg_mv_rls = "Working RLS: mean + variance",
+  fmg_peba4_rls = "Working RLS: pEBA4")
+methods$label <- unname(labels[methods$method])
+methods$distribution_label <- ifelse(
+  methods$distribution == "vm", "Vale–Maurelli", "Normal")
+
+summary_by_method <- do.call(rbind, lapply(
+  split(
+    methods,
+    interaction(methods$distribution, methods$method, drop = TRUE)),
+  function(x) data.frame(
+    distribution = x$distribution[[1L]],
+    method = x$method[[1L]],
+    label = x$label[[1L]],
+    mean_size = mean(x$rejection_rate),
+    mean_absolute_error = mean(abs(x$rejection_rate - .05)),
+    minimum = min(x$rejection_rate),
+    maximum = max(x$rejection_rate),
+    stringsAsFactors = FALSE)))
+row.names(summary_by_method) <- NULL
+summary_by_method$Distribution <- ifelse(
+  summary_by_method$distribution == "vm", "Vale–Maurelli", "Normal")
+summary_by_method$Method <- summary_by_method$label
+
+pick <- function(method, distribution, column = "mean_absolute_error") {
+  summary_by_method[
+    summary_by_method$method == method &
+      summary_by_method$distribution == distribution,
+    column][[1L]]
+}
+hot_mae <- mean(summary_by_method[
+  summary_by_method$method == "score_hotelling",
+  "mean_absolute_error"])
+chisq_mae <- mean(summary_by_method[
+  summary_by_method$method == "score_chisq_centered",
+  "mean_absolute_error"])
+hot_better_cells <- with(
+  reshape(
+    methods[methods$method %in% c(
+      "score_chisq_centered", "score_hotelling"), ],
+    idvar = c(
+      "cell_id", "p", "q", "n", "n_over_q", "distribution"),
+    timevar = "method", direction = "wide"),
+  sum(
+    abs(rejection_rate.score_hotelling - .05) <
+      abs(rejection_rate.score_chisq_centered - .05),
+    na.rm = TRUE))
+score_cells <- length(unique(methods$cell_id))
+hot_normal_range <- range(methods$rejection_rate[
+  methods$method == "score_hotelling" &
+    methods$distribution == "normal"])
+hot_vm_range <- range(methods$rejection_rate[
+  methods$method == "score_hotelling" &
+    methods$distribution == "vm"])
+max_identity_error <- max(
+  diagnostics$max_raw_opg_identity_error, na.rm = TRUE)
+```
+
+## Question
+
+Does the ordinary Hotelling reference improve the already-pivotal centered
+robust goodness-of-fit score beyond the original five-degree-of-freedom case,
+as residual rank and the sample-to-rank ratio change? The practical competitor
+is the established route: leave the working RLS score nonpivotal and correct
+its weighted-chi-square limit with SB, mean-and-variance, or pEBA4.
+
+## Short answer
+
+`r if (!is_evidence) {
+  sprintf("This is a %s run with only %d replications per cell; it verifies the grid and identities but cannot rank calibration.", profile, reps)
+} else if (hot_mae < chisq_mae) {
+  sprintf("Ordinary Hotelling generalized strongly in this grid: its average cellwise absolute size error was %.2f percentage points, versus %.2f for the centered-score chi-square, and it was closer to 5%% in %d of %d cells.", 100 * hot_mae, 100 * chisq_mae, hot_better_cells, score_cells)
+} else {
+  sprintf("Ordinary Hotelling did not generalize uniformly: its average cellwise absolute size error was %.2f percentage points, versus %.2f for the centered-score chi-square, and it was closer to 5%% in only %d of %d cells.", 100 * hot_mae, 100 * chisq_mae, hot_better_cells, score_cells)
+}`
+`r if (is_evidence) sprintf(" It is not exact: Hotelling size ranged from %.1f%% to %.1f%% under normality and %.1f%% to %.1f%% under severe Vale–Maurelli nonnormality. Its mean absolute errors were %.2f/%.2f points under normal/VM, compared with %.2f/%.2f for pEBA4-RLS.", 100 * hot_normal_range[[1L]], 100 * hot_normal_range[[2L]], 100 * hot_vm_range[[1L]], 100 * hot_vm_range[[2L]], 100 * pick("score_hotelling", "normal"), 100 * pick("score_hotelling", "vm"), 100 * pick("fmg_peba4_rls", "normal"), 100 * pick("fmg_peba4_rls", "vm"))`
+
+## Evidence
+
+Let \(\psi_i\in\mathbb R^q\) be the model-centred saturated covariance
+contribution after projection off the fitted model tangent, and let
+
+$$
+\widehat B_c
+=\frac{1}{n-1}\sum_{i=1}^n
+  (\psi_i-\bar\psi)(\psi_i-\bar\psi)^\mathsf T,\qquad
+Q_c=n\bar\psi^\mathsf T\widehat B_c^{-1}\bar\psi .
+$$
+
+The ordinary robust score uses \(Q_c\Rightarrow\chi_q^2\). Ordinary Hotelling
+retains exactly the same numerator and centered sandwich denominator but uses
+
+$$
+\frac{n-q}{q(n-1)}Q_c\ \dot\sim\ F_{q,n-q}.
+$$
+
+The experiment crosses \(q=2,5,9,20\) with \(n=30,60,120,240\). The panel
+therefore shows both an ordinary sample-size transition and the dangerous
+low-\(n/q\) boundary.
+
+```{r size-plot, fig.width=9, fig.height=5.6}
+shown <- c(
+  "score_chisq_centered", "score_hotelling",
+  "fmg_sb_rls", "fmg_mv_rls", "fmg_peba4_rls")
+plot_data <- methods[methods$method %in% shown, ]
+plot_data$label <- factor(
+  plot_data$label, levels = unname(labels[shown]))
+colours <- c("#1B6CA8", "#D1495B", "#4D8B31", "#7A5195", "#C17C00")
+old_par <- par(
+  mfrow = c(2, length(unique(plot_data$q))),
+  mar = c(3.2, 3.4, 2.1, .8),
+  oma = c(2.2, 2.3, .3, .3), las = 1)
+on.exit(par(old_par), add = TRUE)
+ymax <- .20
+for (distribution in c("normal", "vm")) {
+  for (rank in sort(unique(plot_data$q))) {
+    panel <- plot_data[
+      plot_data$distribution == distribution & plot_data$q == rank, ]
+    xlim <- range(panel$n_over_q)
+    plot(
+      xlim, c(0, ymax), type = "n", log = "x",
+      xlab = "", ylab = "", axes = FALSE,
+      main = sprintf("%s, q = %d",
+        ifelse(distribution == "vm", "VM", "Normal"), rank))
+    rect(
+      xlim[[1L]], .025, xlim[[2L]], .075,
+      col = adjustcolor("grey70", alpha.f = .22), border = NA)
+    abline(h = .05, lty = 2, col = "grey35")
+    axis(1)
+    axis(2)
+    box()
+    for (k in seq_along(shown)) {
+      rows <- panel[panel$method == shown[[k]], ]
+      rows <- rows[order(rows$n_over_q), ]
+      displayed <- pmin(rows$rejection_rate, ymax)
+      lines(
+        rows$n_over_q, displayed,
+        type = "b", pch = 19, cex = .6, lwd = 1.1,
+        col = colours[[k]])
+      clipped <- rows$rejection_rate > ymax
+      if (any(clipped)) {
+        points(
+          rows$n_over_q[clipped], displayed[clipped],
+          pch = 17, cex = .8, col = colours[[k]])
+      }
+    }
+    if (distribution == "normal" && rank == min(plot_data$q)) {
+      legend(
+        "topright", legend = unname(labels[shown]), col = colours,
+        lty = 1, pch = 19, cex = .48, bty = "n")
+    }
+  }
+}
+mtext("Sample-to-score-rank ratio n/q (log scale)", side = 1, outer = TRUE)
+mtext("Null rejection at 5%", side = 2, outer = TRUE)
+```
+
+Values above 20% are clipped to the panel ceiling and marked by triangles; the
+summary table retains their actual values.
+
+The cellwise summary keeps nonnormality separate and reports dispersion rather
+than hiding opposite errors in one pooled rejection rate.
+
+```{r method-summary}
+show_summary <- summary_by_method[
+  summary_by_method$method %in% shown,
+  c(
+    "Distribution", "Method", "mean_size",
+    "mean_absolute_error", "minimum", "maximum")]
+show_summary <- show_summary[
+  order(
+    match(show_summary$Distribution, c("Normal", "Vale–Maurelli")),
+    match(show_summary$Method, unname(labels[shown]))), ]
+names(show_summary) <- c(
+  "Distribution", "Method", "Mean Size",
+  "Mean Absolute Error", "Minimum", "Maximum")
+knitr::kable(show_summary, digits = 3, row.names = FALSE)
+```
+
+### What every alternative is
+
+| Alternative | Statistic | Reference |
+|---|---:|---|
+| Centered robust score: chi-square | \(Q_c\) | \(\chi_q^2\), the asymptotically pivotal baseline |
+| Centered robust score: Hotelling | \(Q_c\) | \(F_{q,n-q}\) after the displayed finite-sample rescaling |
+| Raw-OPG score: chi-square | \(Q_r=n\bar\psi^\mathsf T\widehat B_r^{-1}\bar\psi\) | \(\chi_q^2\), with \(\widehat B_r=n^{-1}\sum_i\psi_i\psi_i^\mathsf T\) |
+| Working RLS: chi-square | \(T_{\mathrm{RLS}}=n\lVert\bar\psi\rVert^2\) | Naive \(\chi_q^2\) |
+| Working RLS: SB | \(T_{\mathrm{RLS}}\) | Mean-scaled weighted-chi-square approximation |
+| Working RLS: mean + variance | \(T_{\mathrm{RLS}}\) | First-two-moment Satterthwaite approximation |
+| Working RLS: pEBA4 | \(T_{\mathrm{RLS}}\) | Four leading estimated eigenvalues plus a penalized tail |
+
+The raw-OPG row is an identity audit, not independent corroboration:
+
+$$
+Q_r=\frac{nQ_c}{n-1+Q_c}.
+$$
+
+The largest numerical error in that identity was
+`r format(max_identity_error, scientific = TRUE, digits = 3)`.
+
+## Caveats
+
+- `r if (is_evidence) sprintf("With %s replications per cell, a true 5%% rejection rate has Monte Carlo standard error about %.2f percentage points.", format(reps, big.mark = ","), 100 * sqrt(.05 * .95 / reps)) else sprintf("Only %d replications per cell were run; rejection rates are not evidence.", reps)`
+- The nonnormal arm is one severe homogeneous Vale–Maurelli model with marginal
+  skewness 3 and excess kurtosis 21. Directional kurtosis, misspecification,
+  mean structures, missingness, and multigroup nested restrictions are outside
+  this experiment.
+- Hotelling is exact for iid Gaussian score vectors, not for quadratic SEM
+  scores after fitting nuisance parameters. Here it is deliberately treated as
+  a simple finite-sample benchmark.
+
+## Reproduce
+
+```sh
+Rscript experiments/72-hotelling-robust-gof-grid/run_experiment.R --smoke
+Rscript experiments/72-hotelling-robust-gof-grid/run_experiment.R --probe
+quarto render experiments/72-hotelling-robust-gof-grid/report.qmd
+```

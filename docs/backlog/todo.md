@@ -94,6 +94,23 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   of the meat, or if the much simpler ordinary-Hotelling reference is
   replicated for nested robust scores; either route must report
   reference-moment convergence and `eta <= q-1` failures.
+  Experiment 72 now supplies the broader ordinary-Hotelling GOF gate:
+  `q=2/5/9/20` crossed with `n=30/60/120/240`, normal and severe
+  Vale--Maurelli data, and 2,000 replications per cell. Hotelling was closer to
+  5% than the centered-score chi-square in all 32 cells. Its mean absolute size
+  error was 1.59 percentage points under normality and 1.12 under VM, versus
+  15.39 and 13.20 points for the chi-square reference; the remaining range
+  (4.9--11.1% normal, 2.5--6.1% VM) says useful finite-sample approximation,
+  not exactness. FMG pEBA4-RLS remained the strongest analytic comparator:
+  better under normality (0.73-point error) but worse under VM (1.72 points).
+  Do not count the raw-OPG chi-square as a second success: its rank-one
+  shrinkage produced zero rejection in the most under-sampled cell. A local
+  exact tail replay of the saved direct-sandwich p-values from experiments
+  62/63/66 moved their overall nested-score rejection from
+  3.60/4.94/4.09% to 2.59/3.50/2.97%, so keep the nested-score claim separate;
+  ordinary Hotelling compounds that statistic's existing conservatism. The
+  next publication-grade GOF gate, if needed, is a qualitatively different
+  nonnormal generator or directional kurtosis, not a denser `n/q` grid.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
