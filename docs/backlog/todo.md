@@ -104,11 +104,16 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   not exactness. FMG pEBA4-RLS remained the strongest analytic comparator:
   better under normality (0.73-point error) but worse under VM (1.72 points).
   Do not count the raw-OPG chi-square as a second success: its rank-one
-  shrinkage produced zero rejection in the most under-sampled cell. A local
-  exact tail replay of the saved direct-sandwich p-values from experiments
-  62/63/66 moved their overall nested-score rejection from
-  3.60/4.94/4.09% to 2.59/3.50/2.97%, so keep the nested-score claim separate;
-  ordinary Hotelling compounds that statistic's existing conservatism. The
+  shrinkage produced zero rejection in the most under-sampled cell. The first
+  nested-score replay used the wrong linear map for the core's raw OPG.
+  Correctly using
+  `F=(n-q)Q_raw/[q(n-Q_raw)]` moves direct-sandwich rejection from 4.84% to
+  5.00% in experiment 62's dimension audit, 4.94% to 5.19% in experiment 63,
+  and 4.09% to 4.48% in experiment 66. Thus ordinary Hotelling does not
+  compound nested-score conservatism in those saved audits; the earlier
+  2.59/3.50/2.97% replay was an algebra error. Keep the nested-score claim
+  separate from the GOF grid because its score meat is raw rather than centered
+  and its finite-sample behavior is still design-specific. The
   next publication-grade GOF gate, if needed, is a qualitatively different
   nonnormal generator or directional kurtosis, not a denser `n/q` grid.
   The focused published-DGP follow-up (experiment 63) adds an important negative
@@ -164,6 +169,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   measurement-invariance tests.** Experiment 61's continuous studentized-Wald
   path is motivated by Chung and Romano: raw observations need not be exactly
   exchangeable when the recomputed test statistic is asymptotically pivotal.
+  Its focused robust-score arm (`p=9`, partial loading rank `q=1/4/8`) confirms
+  that the same idea is computationally viable with one restricted fit per
+  permutation, but supplies no reason to replace the Wald pivot. In the
+  500-replication heterogeneous-VM sensitivity pooled over q, score-permutation
+  rejection was 3.87% at `N=60` and 5.80% at `N=240`, versus 4.87% at both
+  sample sizes for the fully recomputed sandwich Wald; pEBA4 was already
+  4.40/4.73% and score-SB 5.13/5.33%. The unpermuted sandwich Wald remained
+  badly liberal (32.53/13.47%). “Permutation Hotelling” is exactly the same
+  rank test as permutation `Q_raw`, not a new method: the runner asserts
+  equality in every replication. Do not build a separate Hotelling
+  randomization API. Retain the score pivot as a simple H0-only comparator and
+  the Wald permutation as the current continuous default.
   Ordinal DWLS/WLSMV is a separate question, not an automatic extension. A
   relabelled sample changes thresholds, polychoric/polyserial moments, their
   estimated NACOV, and possibly the pooled pseudo-true model; first establish
