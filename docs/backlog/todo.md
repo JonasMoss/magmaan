@@ -62,6 +62,26 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
   inverse; gate any proposal on null size, matched-null power, and meat
   conditioning rather than one aggregate rejection rate.
+  Experiment 71 now supplies the first projected-Satterthwaite gate for the
+  centered-meat pivotal GOF score. In a true five-indicator one-factor model
+  (`df=5`, n=30/50/100/200), the centered-meat chi-square was liberal at low n
+  (0.138 normal and 0.113 moderate VM at n=30), but matching the independently
+  estimated score-meat fluctuation to a projected Wishart reference
+  over-corrected badly: the normal-reference projected test rejected
+  0.002/0.000, and the VM oracle effective df was at most `q-1` even at n=200.
+  The latter needs eighth-order raw-data moments and remained visibly unstable
+  across five independent 100,000-case references. Ordinary Hotelling
+  (`eta=n-1`) was the simple winner in this gate; the same-sample projected
+  plug-in looked competitive but estimated a shape orders of magnitude above
+  the independent VM reference, so do not interpret that size as validation of
+  the derivation. Also do not treat the raw-OPG chi-square's apparent
+  calibration as independent evidence: algebraically
+  `Q_raw = n Q_centered / (n - 1 + Q_centered)`, so its low-n shrinkage is
+  mechanically tied to the numerator. Do not promote the fixed-geometry
+  projected Satterthwaite formula. A follow-up is justified only if it derives
+  the full fitted-nuisance influence of the meat, or if the much simpler
+  ordinary-Hotelling reference is replicated for nested robust scores; either
+  route must report reference-moment convergence and `eta <= q-1` failures.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
