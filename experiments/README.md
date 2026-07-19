@@ -85,6 +85,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 68 | [score-test-calibration-drivers](68-score-test-calibration-drivers/report.qmd) | probe | active | What governs the calibration of the mean-scaled (Satorra–Bentler) non-normal score test — restriction df, structural information geometry, or eigenvalue-spectrum dispersion — and how do the spectrum-aware and sign-flip variants compare? |
 | 69 | [foldnes-moss-gronneberg-2026-study2](69-foldnes-moss-gronneberg-2026-study2/report.qmd) | replication | complete | Can native magmaan express the 189-cell Study 2 weak-invariance Type-I comparison, including the unbiased-Gamma variants, with semTests retained only as a parity sentinel? |
 | 70 | [fiml-information-choice](70-fiml-information-choice/report.qmd) | benchmark | active | For continuous FIML, how do expected Fisher, observed-H1, and full observed-Hessian information compare for model-based and same-meat sandwich SE calibration under complete, MCAR, MAR, nonnormal, and misspecified cells? |
+| 71 | [projected-score-satterthwaite](71-projected-score-satterthwaite/report.qmd) | probe | active | Can a projected Satterthwaite effective denominator improve low-N calibration of an already-pivotal robust SEM goodness-of-fit score without sacrificing simplicity or stability? |
 
 ## Archived
 
