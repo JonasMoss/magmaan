@@ -77,11 +77,23 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   the derivation. Also do not treat the raw-OPG chi-square's apparent
   calibration as independent evidence: algebraically
   `Q_raw = n Q_centered / (n - 1 + Q_centered)`, so its low-n shrinkage is
-  mechanically tied to the numerator. Do not promote the fixed-geometry
-  projected Satterthwaite formula. A follow-up is justified only if it derives
-  the full fitted-nuisance influence of the meat, or if the much simpler
-  ordinary-Hotelling reference is replicated for nested robust scores; either
-  route must report reference-moment convergence and `eta <= q-1` failures.
+  mechanically tied to the numerator. The VM transition follow-up
+  (`n=200/400/600/800/1200`, 2,500 disjoint target/donor pairs per cell)
+  rules out beneficial same-sample coupling as the explanation for the
+  empirical projected row: replacing each target's shape by an identically
+  distributed independent-replication shape changed rejection by at most 0.24
+  percentage points and with no consistent sign. Both empirical rules remained
+  conservative near 3%, whereas ordinary Hotelling and the unadjusted centered
+  score had transition-grid mean absolute size errors of 0.22 and 0.39 points.
+  Moment convergence is the actual failure: at `n=1200` the median empirical
+  shape was still 12.6 times the fixed VM reference (`eta` about 101 versus 8),
+  and the fixed-oracle Hotelling tail rejected zero times wherever it existed.
+  Do not promote either the fixed-geometry formula or its empirical plug-in,
+  and do not extend this shape-matching route with more sample-size grids. A
+  follow-up is justified only if it derives the full fitted-nuisance influence
+  of the meat, or if the much simpler ordinary-Hotelling reference is
+  replicated for nested robust scores; either route must report
+  reference-moment convergence and `eta <= q-1` failures.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null

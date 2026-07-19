@@ -17,16 +17,18 @@ set_single_threaded_math()
 source(experiment_path("R", "engine.R"))
 
 usage <- function() cat(
-  "Usage: Rscript run_experiment.R [--smoke|--pilot] [options]\n\n",
+  "Usage: Rscript run_experiment.R [--smoke|--pilot|--transition] [options]\n\n",
   "Projected Satterthwaite-Hotelling calibration for pivotal SEM GOF scores.\n\n",
   "Profiles:\n",
   "  --smoke          5 reps/cell, 1 x reference n=5,000 (default).\n",
   "  --pilot          500 reps/cell, 5 x reference n=100,000.\n\n",
+  "  --transition     VM n=200/400/600/800/1200, 5,000 reps/cell;\n",
+  "                   disjoint halves give 2,500 independent shape pairs.\n\n",
   "Options:\n",
   "  --reps N         Override replications per cell.\n",
   "  --reference-n N  Override score-shape reference size.\n",
   "  --reference-reps N  Override independent reference repetitions.\n",
-  "  --n CSV          Sample sizes (default 30,50,100,200).\n",
+  "  --n CSV          Override profile sample sizes.\n",
   "  --cores N        Parallel workers (default at most 4).\n",
   "  --seed-base N    Deterministic seed base.\n",
   "  --results-dir P  Output directory.\n",
@@ -35,7 +37,7 @@ usage <- function() cat(
 parse_args <- function(args) {
   out <- list(
     mode = "smoke", reps = NULL, reference_n = NULL, reference_reps = NULL,
-    n = c(30L, 50L, 100L, 200L),
+    n = NULL,
     cores = min(4L, max(1L, parallel::detectCores() - 2L)),
     seed_base = 20260719L, results_dir = NULL)
   i <- 1L
@@ -55,6 +57,8 @@ parse_args <- function(args) {
       out$mode <- "smoke"
     } else if (a == "--pilot") {
       out$mode <- "pilot"
+    } else if (a == "--transition") {
+      out$mode <- "transition"
     } else if (a == "--reps") {
       out$reps <- as.integer(take())
     } else if (a == "--reference-n") {
@@ -74,18 +78,34 @@ parse_args <- function(args) {
     }
     i <- i + 1L
   }
-  if (is.null(out$reps)) out$reps <- if (out$mode == "pilot") 500L else 5L
+  if (is.null(out$reps)) {
+    out$reps <- switch(
+      out$mode, pilot = 500L, transition = 5000L, smoke = 5L)
+  }
   if (is.null(out$reference_n)) {
-    out$reference_n <- if (out$mode == "pilot") 100000L else 5000L
+    out$reference_n <-
+      if (out$mode %in% c("pilot", "transition")) 100000L else 5000L
   }
   if (is.null(out$reference_reps)) {
-    out$reference_reps <- if (out$mode == "pilot") 5L else 1L
+    out$reference_reps <-
+      if (out$mode %in% c("pilot", "transition")) 5L else 1L
+  }
+  if (is.null(out$n)) {
+    out$n <- if (out$mode == "transition") {
+      c(200L, 400L, 600L, 800L, 1200L)
+    } else {
+      c(30L, 50L, 100L, 200L)
+    }
   }
   if (out$reps < 1L || out$reference_n < 1000L ||
       out$reference_reps < 1L ||
       any(!is.finite(out$n)) || any(out$n < 10L) ||
       out$cores < 1L || out$seed_base < 0L) {
     stop("invalid numeric option", call. = FALSE)
+  }
+  if (out$mode == "transition" && out$reps < 2L) {
+    stop("transition profile needs at least two replications per cell",
+         call. = FALSE)
   }
   out
 }
@@ -99,7 +119,8 @@ pop <- pss_population()
 spec <- pss_model_spec(pop$p)
 samplers <- pss_calibrate_samplers(pop, skew = 2, exkurt = 7)
 design <- expand.grid(
-  distribution = c("normal", "vm"), n = opt$n,
+  distribution = if (opt$mode == "transition") "vm" else c("normal", "vm"),
+  n = opt$n,
   stringsAsFactors = FALSE)
 design$q <- pop$df
 design$cell_id <- seq_len(nrow(design))
@@ -127,11 +148,19 @@ write_csv(reference_summary, file.path(results, "reference_summary.csv"))
 
 run_cell <- function(k) {
   cell <- design[k, , drop = FALSE]
-  rows <- lapply(seq_len(opt$reps), function(rep_id) {
-    pss_one_rep(
+  rows <- vector("list", opt$reps)
+  progress_every <- max(1L, opt$reps %/% 10L)
+  for (rep_id in seq_len(opt$reps)) {
+    rows[[rep_id]] <- pss_one_rep(
       cell, rep_id, spec, samplers[[cell$distribution]],
-      reference_summary, opt$seed_base)
-  })
+      reference_summary, opt$seed_base,
+      run_fmg = opt$mode != "transition")
+    if (rep_id %% progress_every == 0L || rep_id == opt$reps) {
+      cat(sprintf(
+        "[%d/%d] %-6s n=%4d progress=%d/%d\n",
+        k, nrow(design), cell$distribution, cell$n, rep_id, opt$reps))
+    }
+  }
   out <- do.call(rbind, rows)
   cat(sprintf(
     "[%d/%d] %-6s n=%3d fit=%d/%d score=%d/%d\n",
@@ -150,6 +179,9 @@ if (.Platform$OS.type != "windows" && opt$cores > 1L) {
 raw <- do.call(rbind, pieces)
 raw <- raw[order(raw$cell_id, raw$rep), , drop = FALSE]
 row.names(raw) <- NULL
+if (opt$mode == "transition") {
+  raw <- pss_attach_independent_shape_pairs(raw)
+}
 
 write_csv(design, file.path(results, "design.csv"))
 write_csv(raw, file.path(results, "replications.csv"))
@@ -157,8 +189,14 @@ write_csv(pss_summarize_methods(raw), file.path(results, "method_summary.csv"))
 write_csv(
   pss_summarize_diagnostics(raw),
   file.path(results, "diagnostics_summary.csv"))
+if (opt$mode == "transition") {
+  write_csv(
+    pss_summarize_independent_pairs(raw),
+    file.path(results, "pairing_summary.csv"))
+}
+has_fmg_failure <- !is.na(raw$fmg_ok) & !raw$fmg_ok
 failures <- raw[
-  !raw$fit_ok | !raw$score_ok | !raw$fmg_ok,
+  !raw$fit_ok | !raw$score_ok | has_fmg_failure,
   intersect(
     c("cell_id", "distribution", "n", "rep", "fit_ok", "score_ok", "fmg_ok",
       "fit_error", "score_error", "fmg_error"),
@@ -174,11 +212,19 @@ write_metadata(
     reference_n = opt$reference_n,
     reference_reps = opt$reference_reps,
     sample_sizes = paste(opt$n, collapse = ","),
-    distributions = "normal,vale_maurelli",
+    distributions = if (opt$mode == "transition") {
+      "vale_maurelli"
+    } else {
+      "normal,vale_maurelli"
+    },
     vm_skewness = 2,
     vm_excess_kurtosis = 7,
     q = pop$df,
     alpha = 0.05,
+    independent_shape_pairing =
+      if (opt$mode == "transition") "disjoint_replication_halves" else "none",
+    independent_pairs_per_cell =
+      if (opt$mode == "transition") floor(opt$reps / 2L) else 0L,
     seed_base = opt$seed_base,
     cores = opt$cores,
     elapsed_seconds = round(proc.time()[["elapsed"]] - wall_begin, 3),
