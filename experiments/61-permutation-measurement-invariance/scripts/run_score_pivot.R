@@ -23,6 +23,10 @@ usage <- function() {
     "  --smoke             1 replication, 9 permutations (default).\n",
     "  --probe             100 replications, 99 permutations.\n",
     "  --sensitivity       500 replications, 99 permutations.\n",
+    "  --allocation-gate   1:3 VM gate: 500 replications, 99 permutations.\n",
+    "  --allocation-reverse  3:1 mirror of the allocation gate.\n",
+    "  --mixture-gate      1:3 VM analytic gate: 2000 reps, no permutations.\n",
+    "  --power-gate        Local 1/sqrt(N) loading alternative, both mirrors.\n",
     "  --full              1000 replications, 199 permutations.\n\n",
     "Options:\n",
     "  --reps N            Override replications per cell.\n",
@@ -30,8 +34,10 @@ usage <- function() {
     "  --cores N           Parallel replication workers.\n",
     "  --seed-base N       Base seed. Default: 20260719.\n",
     "  --q L               Restriction ranks. Default: 1,4,8.\n",
-    "  --n-total L         Balanced total sample sizes. Default: 60,120,240.\n",
+    "  --n-total L         Total sample sizes. Default: 60,120,240.\n",
     "  --regimes L         exchangeable_normal,heterogeneous_vm.\n",
+    "  --allocations L     1:1, 1:3, or 3:1. Default: 1:1.\n",
+    "  --local-strength X  Local loading shift multiplier. Default: 1.\n",
     "  --max-cells N       Run the first N selected cells.\n",
     "  --no-wald           Skip the fully recomputed sandwich-Wald comparator.\n",
     "  --results-dir PATH  Output root. Default: results.\n\n",
@@ -45,9 +51,9 @@ parse_args <- function(args) {
   out <- list(
     mode = "smoke", reps = NULL, permutations = NULL,
     cores = max(1L, parallel::detectCores() - 1L),
-    seed_base = 20260719, q = c(1L, 4L, 8L),
-    n_total = c(60L, 120L, 240L),
-    regimes = c("exchangeable_normal", "heterogeneous_vm"),
+    seed_base = 20260719, q = NULL, n_total = NULL,
+    regimes = NULL, allocations = NULL,
+    local_strength = 1,
     max_cells = NULL, include_wald = TRUE,
     results_dir = experiment_path("results", script = dirname(script_path())))
   i <- 1L
@@ -65,6 +71,10 @@ parse_args <- function(args) {
     } else if (a == "--smoke") out$mode <- "smoke"
     else if (a == "--probe") out$mode <- "probe"
     else if (a == "--sensitivity") out$mode <- "sensitivity"
+    else if (a == "--allocation-gate") out$mode <- "allocation"
+    else if (a == "--allocation-reverse") out$mode <- "allocation-reverse"
+    else if (a == "--mixture-gate") out$mode <- "mixture"
+    else if (a == "--power-gate") out$mode <- "power"
     else if (a == "--full") out$mode <- "full"
     else if (a == "--reps") out$reps <- as.integer(take())
     else if (a == "--permutations") out$permutations <- as.integer(take())
@@ -74,6 +84,10 @@ parse_args <- function(args) {
     else if (a == "--n-total") {
       out$n_total <- as.integer(parse_csv_numeric(take()))
     } else if (a == "--regimes") out$regimes <- parse_csv_arg(take())
+    else if (a == "--allocations") out$allocations <- parse_csv_arg(take())
+    else if (a == "--local-strength") {
+      out$local_strength <- as.numeric(take())
+    }
     else if (a == "--max-cells") out$max_cells <- as.integer(take())
     else if (a == "--no-wald") out$include_wald <- FALSE
     else if (a == "--results-dir") out$results_dir <- take()
@@ -85,9 +99,41 @@ parse_args <- function(args) {
     smoke = c(reps = 1L, permutations = 9L),
     probe = c(reps = 100L, permutations = 99L),
     sensitivity = c(reps = 500L, permutations = 99L),
+    allocation = c(reps = 500L, permutations = 99L),
+    `allocation-reverse` = c(reps = 500L, permutations = 99L),
+    mixture = c(reps = 2000L, permutations = 0L),
+    power = c(reps = 500L, permutations = 99L),
     full = c(reps = 1000L, permutations = 199L))
   for (nm in names(defaults)) {
     if (is.null(out[[nm]])) out[[nm]] <- defaults[[nm]]
+  }
+  if (out$mode %in% c("allocation", "allocation-reverse")) {
+    if (is.null(out$q)) out$q <- c(4L, 8L)
+    if (is.null(out$n_total)) out$n_total <- c(120L, 240L, 480L, 960L)
+    if (is.null(out$regimes)) out$regimes <- "heterogeneous_vm"
+    if (is.null(out$allocations)) {
+      out$allocations <- if (out$mode == "allocation") "1:3" else "3:1"
+    }
+  } else if (out$mode == "mixture") {
+    if (is.null(out$q)) out$q <- c(4L, 8L)
+    if (is.null(out$n_total)) {
+      out$n_total <- c(480L, 960L, 1920L, 3840L)
+    }
+    if (is.null(out$regimes)) out$regimes <- "heterogeneous_vm"
+    if (is.null(out$allocations)) out$allocations <- "1:3"
+    out$include_wald <- FALSE
+  } else if (out$mode == "power") {
+    if (is.null(out$q)) out$q <- c(4L, 8L)
+    if (is.null(out$n_total)) out$n_total <- c(120L, 240L, 480L, 960L)
+    if (is.null(out$regimes)) out$regimes <- "heterogeneous_vm"
+    if (is.null(out$allocations)) out$allocations <- c("1:3", "3:1")
+  } else {
+    if (is.null(out$q)) out$q <- c(1L, 4L, 8L)
+    if (is.null(out$n_total)) out$n_total <- c(60L, 120L, 240L)
+    if (is.null(out$regimes)) {
+      out$regimes <- c("exchangeable_normal", "heterogeneous_vm")
+    }
+    if (is.null(out$allocations)) out$allocations <- "1:1"
   }
   if (any(!out$q %in% c(1L, 4L, 8L))) {
     stop("--q must be drawn from 1,4,8", call. = FALSE)
@@ -99,10 +145,25 @@ parse_args <- function(args) {
   if (any(!out$regimes %in% allowed_regimes)) {
     stop("unknown regime in --regimes", call. = FALSE)
   }
-  positive <- c("reps", "permutations", "cores")
+  allowed_allocations <- c("1:1", "1:3", "3:1")
+  if (any(!out$allocations %in% allowed_allocations)) {
+    stop("unknown allocation in --allocations", call. = FALSE)
+  }
+  if (any(out$allocations %in% c("1:3", "3:1")) &&
+      any(out$n_total %% 4L != 0L)) {
+    stop("unequal allocation requires total N divisible by four",
+         call. = FALSE)
+  }
+  positive <- c("reps", "cores")
   if (any(vapply(out[positive], function(x) is.na(x) || x < 1L,
                  logical(1)))) {
-    stop("reps, permutations, and cores must be positive", call. = FALSE)
+    stop("reps and cores must be positive", call. = FALSE)
+  }
+  if (is.na(out$permutations) || out$permutations < 0L) {
+    stop("permutations must be non-negative", call. = FALSE)
+  }
+  if (!is.finite(out$local_strength) || out$local_strength <= 0) {
+    stop("local strength must be finite and positive", call. = FALSE)
   }
   out
 }
@@ -110,15 +171,27 @@ parse_args <- function(args) {
 score_pivot_cells <- function(cfg) {
   cells <- expand.grid(
     q = cfg$q, n_total = cfg$n_total, regime = cfg$regimes,
+    allocation = cfg$allocations,
     KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
-  cells <- cells[order(match(cells$regime, cfg$regimes),
+  cells <- cells[order(match(cells$allocation, cfg$allocations),
+                       match(cells$regime, cfg$regimes),
                        cells$n_total, cells$q), , drop = FALSE]
   cells$cell_id <- seq_len(nrow(cells))
   cells$p <- 9L
-  cells$n_group <- cells$n_total %/% 2L
+  cells$n1 <- ifelse(
+    cells$allocation == "1:1", cells$n_total %/% 2L,
+    ifelse(cells$allocation == "1:3",
+           cells$n_total %/% 4L, 3L * cells$n_total %/% 4L))
+  cells$n2 <- cells$n_total - cells$n1
   cells$n_over_q <- cells$n_total / cells$q
-  cells <- cells[, c("cell_id", "p", "q", "n_total", "n_group",
-                     "n_over_q", "regime")]
+  cells$truth <- if (cfg$mode == "power") "local_alternative" else "null"
+  cells$local_strength <- if (cfg$mode == "power") cfg$local_strength else 0
+  cells$delta <- if (cfg$mode == "power") {
+    cfg$local_strength / sqrt(cells$n_total)
+  } else 0
+  cells <- cells[, c("cell_id", "p", "q", "n_total", "n1", "n2",
+                     "allocation", "n_over_q", "regime", "truth",
+                     "local_strength", "delta")]
   if (!is.null(cfg$max_cells)) cells <- head(cells, cfg$max_cells)
   if (!nrow(cells)) stop("no score-pivot cells selected", call. = FALSE)
   cells
@@ -133,8 +206,9 @@ decorate_score_rows <- function(rows, cell, cfg) {
 
 summarize_score_cell <- function(x, alpha = .05) {
   p_columns <- grep("^p_", names(x), value = TRUE)
-  ans <- x[1L, c("cell_id", "p", "q", "n_total", "n_group",
-                  "n_over_q", "regime"), drop = FALSE]
+  ans <- x[1L, c("cell_id", "p", "q", "n_total", "n1", "n2",
+                  "allocation", "n_over_q", "regime", "truth",
+                  "local_strength", "delta"), drop = FALSE]
   ans$reps <- nrow(x)
   ans$observed_score_ok <- sum(x$observed_score_ok)
   ans$observed_wald_ok <- if (all(is.na(x$observed_wald_ok))) {
@@ -156,10 +230,12 @@ summarize_score_cell <- function(x, alpha = .05) {
     } else NA_real_
     ans[[paste0("n_", suffix)]] <- length(usable)
   }
-  ans$median_valid_score_permutation_fraction <- stats::median(
-    x$n_permutation_score / x$permutations_requested, na.rm = TRUE)
-  ans$median_valid_wald_permutation_fraction <- stats::median(
-    x$n_permutation_wald / x$permutations_requested, na.rm = TRUE)
+  ans$median_valid_score_permutation_fraction <-
+    if (all(x$permutations_requested == 0L)) NA_real_ else stats::median(
+      x$n_permutation_score / x$permutations_requested, na.rm = TRUE)
+  ans$median_valid_wald_permutation_fraction <-
+    if (all(x$permutations_requested == 0L)) NA_real_ else stats::median(
+      x$n_permutation_wald / x$permutations_requested, na.rm = TRUE)
   identity_error <- x$permutation_rank_identity_error[
     is.finite(x$permutation_rank_identity_error)]
   ans$max_permutation_rank_identity_error <- if (length(identity_error)) {
@@ -169,6 +245,20 @@ summarize_score_cell <- function(x, alpha = .05) {
   }
   ans$median_simulation_seconds <- stats::median(
     x$simulation_seconds, na.rm = TRUE)
+  ans$median_observed_score_seconds <- stats::median(
+    x$observed_score_seconds, na.rm = TRUE)
+  ans$median_observed_wald_seconds <- stats::median(
+    x$observed_wald_seconds, na.rm = TRUE)
+  ans$median_permutation_score_seconds <- stats::median(
+    x$permutation_score_seconds, na.rm = TRUE)
+  ans$median_permutation_wald_seconds <- stats::median(
+    x$permutation_wald_seconds, na.rm = TRUE)
+  ans$median_score_eigen_mean <- stats::median(
+    x$score_eigen_mean, na.rm = TRUE)
+  ans$median_score_eigen_cv <- stats::median(
+    x$score_eigen_cv, na.rm = TRUE)
+  ans$median_score_eigen_ratio <- stats::median(
+    x$score_eigen_ratio, na.rm = TRUE)
   ans$median_observed_seconds <- stats::median(
     x$observed_seconds, na.rm = TRUE)
   ans$median_permutation_seconds <- stats::median(
@@ -180,9 +270,9 @@ summarize_score_cell <- function(x, alpha = .05) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 cells <- score_pivot_cells(cfg)
-pop <- score_pivot_population()
 message("Calibrating exchangeable-normal and heterogeneous-VM samplers...")
-samplers <- score_pivot_calibrate_samplers(pop)
+null_pop <- score_pivot_population()
+null_samplers <- score_pivot_calibrate_samplers(null_pop)
 path <- file.path(cfg$results_dir, paste0("score-pivot-", cfg$mode))
 dir.create(path, recursive = TRUE, showWarnings = FALSE)
 replication_path <- file.path(path, "replications.csv")
@@ -190,9 +280,10 @@ if (file.exists(replication_path)) unlink(replication_path)
 write_csv(cells, file.path(path, "manifest.csv"))
 write_csv(
   data.frame(
-    schema_version = 1L, mode = cfg$mode, reps = cfg$reps,
+    schema_version = 3L, mode = cfg$mode, reps = cfg$reps,
     permutations = cfg$permutations, cores = cfg$cores,
-    seed_base = cfg$seed_base, include_wald = cfg$include_wald),
+    seed_base = cfg$seed_base, local_strength = cfg$local_strength,
+    include_wald = cfg$include_wald),
   file.path(path, "run_config.csv"))
 
 message(sprintf(
@@ -203,7 +294,14 @@ summaries <- vector("list", nrow(cells))
 for (i in seq_len(nrow(cells))) {
   cell <- cells[i, , drop = FALSE]
   specs <- score_pivot_specs(cell$q[[1L]], cell$p[[1L]])
-  sampler <- samplers[[cell$regime[[1L]]]]
+  if (cell$truth[[1L]] == "local_alternative") {
+    pop <- score_pivot_population(
+      p = cell$p[[1L]], q = cell$q[[1L]], delta = cell$delta[[1L]])
+    sampler <- score_pivot_calibrate_samplers(pop)[[cell$regime[[1L]]]]
+  } else {
+    pop <- null_pop
+    sampler <- null_samplers[[cell$regime[[1L]]]]
+  }
   worker <- function(rep_id) {
     score_pivot_replication(
       rep_id, cell, specs, sampler, pop, cfg$permutations,
@@ -223,8 +321,9 @@ for (i in seq_len(nrow(cells))) {
   total_elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))
   eta <- (total_elapsed / i) * (nrow(cells) - i)
   message(sprintf(
-    "  [%d/%d] %s q=%d N=%d: score %d/%d, median %.2fs/rep; ETA %.1f min",
-    i, nrow(cells), cell$regime, cell$q, cell$n_total,
+    "  [%d/%d] %s %s q=%d N=%d (%d,%d): score %d/%d, median %.2fs/rep; ETA %.1f min",
+    i, nrow(cells), cell$regime, cell$allocation, cell$q, cell$n_total,
+    cell$n1, cell$n2,
     sum(rows$observed_score_ok), nrow(rows),
     stats::median(rows$total_seconds, na.rm = TRUE),
     max(0, eta) / 60))
@@ -247,7 +346,9 @@ write_metadata(
     mode = cfg$mode, reps = cfg$reps,
     permutations = cfg$permutations, cores = cfg$cores,
     seed_base = cfg$seed_base, q = cfg$q, n_total = cfg$n_total,
-    regimes = cfg$regimes, include_wald = cfg$include_wald,
+    regimes = cfg$regimes, allocations = cfg$allocations,
+    local_strength = cfg$local_strength,
+    include_wald = cfg$include_wald,
     elapsed_minutes = round(
       as.numeric(difftime(Sys.time(), started, units = "mins")), 3),
     score_hotelling_permutation_identity =

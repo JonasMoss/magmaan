@@ -1,18 +1,29 @@
 # Focused fully recomputed permutation probe for pivotal robust nested scores.
 
-score_pivot_population <- function(p = 9L) {
+score_pivot_population <- function(p = 9L, q = 0L, delta = 0) {
   p <- as.integer(p)
   if (p != 9L) stop("score-pivot probe is fixed at p = 9", call. = FALSE)
-  lambda <- c(1, .78, .72, .83, .68, .75, .80, .70, .76)
+  q <- as.integer(q)
+  delta <- as.numeric(delta)
+  if (q < 0L || q > p - 1L || !is.finite(delta)) {
+    stop("alternative q/delta is invalid", call. = FALSE)
+  }
+  lambda_1 <- c(1, .78, .72, .83, .68, .75, .80, .70, .76)
+  lambda_2 <- lambda_1
+  if (q > 0L && delta != 0) {
+    selected <- seq.int(2L, q + 1L)
+    lambda_2[selected] <- lambda_2[selected] + delta
+  }
   theta_1 <- c(.55, .62, .70, .58, .76, .67, .61, .73, .65)
   theta_2 <- theta_1 * c(1.35, .80, 1.25, .75, 1.40, .85, 1.20, .90, 1.30)
   phi <- c(1, 1.45)
-  sigma_1 <- phi[[1L]] * tcrossprod(lambda) + diag(theta_1)
-  sigma_2 <- phi[[2L]] * tcrossprod(lambda) + diag(theta_2)
+  sigma_1 <- phi[[1L]] * tcrossprod(lambda_1) + diag(theta_1)
+  sigma_2 <- phi[[2L]] * tcrossprod(lambda_2) + diag(theta_2)
   list(
-    p = p, ov = paste0("x", seq_len(p)), lambda = lambda,
+    p = p, ov = paste0("x", seq_len(p)),
+    lambda = list(lambda_1, lambda_2),
     theta = list(theta_1, theta_2), phi = phi,
-    Sigma = list(sigma_1, sigma_2))
+    Sigma = list(sigma_1, sigma_2), alternative_q = q, delta = delta)
 }
 
 score_pivot_syntax <- function(p, q = 0L) {
@@ -61,9 +72,14 @@ score_pivot_calibrate_samplers <- function(pop, skew = 2, exkurt = 7) {
   list(exchangeable_normal = normal, heterogeneous_vm = vm)
 }
 
-score_pivot_draw <- function(sampler, n_group, seed, ov) {
-  n_group <- as.integer(n_group)
+score_pivot_draw <- function(sampler, group_sizes, seed, ov) {
+  group_sizes <- as.integer(group_sizes)
+  if (length(group_sizes) != 2L || anyNA(group_sizes) ||
+      any(group_sizes < 2L)) {
+    stop("group_sizes must contain two integers of at least two", call. = FALSE)
+  }
   blocks <- lapply(seq_len(2L), function(g) {
+    n_group <- group_sizes[[g]]
     block_seed <- as.integer((seed + g * 1000003) %%
                                (.Machine$integer.max - 1L))
     if (sampler$kind == "normal") {
@@ -139,6 +155,7 @@ score_pivot_contrast <- function(fit, q) {
 
 score_pivot_statistic <- function(X1, X2, specs, include_wald = TRUE) {
   n_total <- nrow(X1) + nrow(X2)
+  score_started <- proc.time()[["elapsed"]]
   score <- tryCatch({
     fit0 <- score_pivot_fit(specs$H0, X1, X2)
     test <- magmaan::nested_score_test(
@@ -161,15 +178,25 @@ score_pivot_statistic <- function(X1, X2, specs, include_wald = TRUE) {
       p_sb = test$p_mean_scaled,
       p_mv = p_fmg("mv"),
       p_peba4 = test$p_peba4,
-      p_all = test$p_mixture)
+      p_all = test$p_mixture,
+      eigen_mean = mean(test$eigenvalues),
+      eigen_cv = if (length(test$eigenvalues) > 1L) {
+        stats::sd(test$eigenvalues) / mean(test$eigenvalues)
+      } else 0,
+      eigen_ratio = max(test$eigenvalues) / min(test$eigenvalues))
   }, error = function(e) {
     list(ok = FALSE, error = conditionMessage(e), statistic = NA_real_,
          p_chisq = NA_real_, p_hotelling = NA_real_, p_sb = NA_real_,
-         p_mv = NA_real_, p_peba4 = NA_real_, p_all = NA_real_)
+         p_mv = NA_real_, p_peba4 = NA_real_, p_all = NA_real_,
+         eigen_mean = NA_real_, eigen_cv = NA_real_,
+         eigen_ratio = NA_real_)
   })
+  score_seconds <- proc.time()[["elapsed"]] - score_started
 
   wald <- list(ok = NA, error = "", statistic = NA_real_, p_chisq = NA_real_)
+  wald_seconds <- 0
   if (isTRUE(include_wald)) {
+    wald_started <- proc.time()[["elapsed"]]
     wald <- tryCatch({
       fit1 <- score_pivot_fit(specs$H1, X1, X2)
       R <- score_pivot_contrast(fit1, specs$q)
@@ -186,8 +213,11 @@ score_pivot_statistic <- function(X1, X2, specs, include_wald = TRUE) {
       list(ok = FALSE, error = conditionMessage(e),
            statistic = NA_real_, p_chisq = NA_real_)
     })
+    wald_seconds <- proc.time()[["elapsed"]] - wald_started
   }
-  list(score = score, wald = wald)
+  list(
+    score = score, wald = wald,
+    score_seconds = score_seconds, wald_seconds = wald_seconds)
 }
 
 score_pivot_permutation <- function(X1, X2, specs, observed, permutations,
@@ -236,7 +266,11 @@ score_pivot_permutation <- function(X1, X2, specs, observed, permutations,
   list(
     p_score = p_score, p_hotelling = p_hotelling, p_wald = p_wald,
     n_score = length(score_stat), n_wald = length(wald_stat),
-    rank_identity_error = rank_identity_error)
+    rank_identity_error = rank_identity_error,
+    score_seconds = sum(vapply(
+      draws, function(x) x$score_seconds, numeric(1))),
+    wald_seconds = sum(vapply(
+      draws, function(x) x$wald_seconds, numeric(1))))
 }
 
 score_pivot_empty_replication <- function(rep_id, seed, error = "") {
@@ -248,12 +282,17 @@ score_pivot_empty_replication <- function(rep_id, seed, error = "") {
     p_score_chisq = NA_real_, p_score_hotelling = NA_real_,
     p_score_sb = NA_real_, p_score_mv = NA_real_,
     p_score_peba4 = NA_real_, p_score_all = NA_real_,
+    score_eigen_mean = NA_real_, score_eigen_cv = NA_real_,
+    score_eigen_ratio = NA_real_,
     p_wald_chisq = NA_real_,
     p_permutation_score = NA_real_,
     p_permutation_hotelling = NA_real_,
     p_permutation_wald = NA_real_,
     n_permutation_score = 0L, n_permutation_wald = 0L,
     permutation_rank_identity_error = NA_real_,
+    observed_score_seconds = NA_real_, observed_wald_seconds = NA_real_,
+    permutation_score_seconds = NA_real_,
+    permutation_wald_seconds = NA_real_,
     simulation_seconds = NA_real_, observed_seconds = NA_real_,
     permutation_seconds = NA_real_, total_seconds = NA_real_,
     stringsAsFactors = FALSE)
@@ -266,7 +305,7 @@ score_pivot_replication <- function(rep_id, cell, specs, sampler, pop,
   started <- proc.time()[["elapsed"]]
   simulation_started <- proc.time()[["elapsed"]]
   X <- tryCatch(
-    score_pivot_draw(sampler, cell$n_group, seed, pop$ov),
+    score_pivot_draw(sampler, c(cell$n1, cell$n2), seed, pop$ov),
     error = function(e) e)
   simulation_seconds <- proc.time()[["elapsed"]] - simulation_started
   if (inherits(X, "error")) {
@@ -286,6 +325,8 @@ score_pivot_replication <- function(rep_id, cell, specs, sampler, pop,
   out$observed_wald_ok <- observed$wald$ok
   out$error_score <- observed$score$error
   out$error_wald <- observed$wald$error
+  out$observed_score_seconds <- observed$score_seconds
+  out$observed_wald_seconds <- observed$wald_seconds
   out$simulation_seconds <- simulation_seconds
   out$observed_seconds <- observed_seconds
   if (!observed$score$ok) {
@@ -301,7 +342,18 @@ score_pivot_replication <- function(rep_id, cell, specs, sampler, pop,
   out$p_score_mv <- observed$score$p_mv
   out$p_score_peba4 <- observed$score$p_peba4
   out$p_score_all <- observed$score$p_all
+  out$score_eigen_mean <- observed$score$eigen_mean
+  out$score_eigen_cv <- observed$score$eigen_cv
+  out$score_eigen_ratio <- observed$score$eigen_ratio
   out$p_wald_chisq <- observed$wald$p_chisq
+
+  if (permutations < 1L) {
+    out$permutation_seconds <- 0
+    out$permutation_score_seconds <- 0
+    out$permutation_wald_seconds <- 0
+    out$total_seconds <- proc.time()[["elapsed"]] - started
+    return(out)
+  }
 
   permutation_started <- proc.time()[["elapsed"]]
   perm <- tryCatch(
@@ -319,6 +371,8 @@ score_pivot_replication <- function(rep_id, cell, specs, sampler, pop,
     out$n_permutation_score <- perm$n_score
     out$n_permutation_wald <- perm$n_wald
     out$permutation_rank_identity_error <- perm$rank_identity_error
+    out$permutation_score_seconds <- perm$score_seconds
+    out$permutation_wald_seconds <- perm$wald_seconds
   }
   out$total_seconds <- proc.time()[["elapsed"]] - started
   out

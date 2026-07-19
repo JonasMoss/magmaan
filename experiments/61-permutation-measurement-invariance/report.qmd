@@ -73,6 +73,26 @@ score_sensitivity <- if (file.exists(
       stringsAsFactors = FALSE))
 } else NULL
 
+read_score_arm <- function(stem) {
+  path <- file.path("results", stem)
+  if (!file.exists(file.path(path, "summary.csv"))) return(NULL)
+  list(
+    path = path,
+    summary = read.csv(
+      file.path(path, "summary.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE),
+    replications = read.csv(
+      file.path(path, "replications.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE),
+    config = read.csv(
+      file.path(path, "run_config.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE))
+}
+score_allocation <- read_score_arm("score-pivot-allocation")
+score_allocation_reverse <- read_score_arm("score-pivot-allocation-reverse")
+score_mixture <- read_score_arm("score-pivot-mixture")
+score_power <- read_score_arm("score-pivot-power")
+
 rejection_rate <- function(x, column, n_total = NULL,
                            regime = NULL) {
   if (!is.null(n_total)) x <- x[x$n_total == n_total, , drop = FALSE]
@@ -95,6 +115,105 @@ if (!is.null(score_run)) {
   wald_control_size <- rejection_rate(
     score_rep, "p_permutation_wald", regime = "exchangeable_normal")
 }
+if (!is.null(score_allocation) && !is.null(score_allocation_reverse)) {
+  allocation_arms <- list(
+    `1:3` = score_allocation$replications,
+    `3:1` = score_allocation_reverse$replications)
+  allocation_size <- function(allocation, column, n) {
+    rejection_rate(
+      allocation_arms[[allocation]], column, n_total = n)
+  }
+  allocation_summary <- rbind(
+    score_allocation$summary, score_allocation_reverse$summary)
+  permutation_time_ratio <- with(
+    allocation_summary,
+    median_permutation_score_seconds / median_permutation_wald_seconds)
+  allocation_identity_error <- max(
+    allocation_summary$max_permutation_rank_identity_error, na.rm = TRUE)
+}
+if (!is.null(score_mixture)) {
+  mixture_size <- function(column, n) {
+    rejection_rate(score_mixture$replications, column, n_total = n)
+  }
+}
+if (!is.null(score_power) && !is.null(score_allocation) &&
+    !is.null(score_allocation_reverse)) {
+  power_null <- rbind(
+    score_allocation$replications,
+    score_allocation_reverse$replications)
+  power_rep <- score_power$replications
+  power_methods <- c(
+    p_permutation_score = "Permutation robust score",
+    p_permutation_wald = "Permutation sandwich Wald",
+    p_score_sb = "Effective score: SB",
+    p_score_peba4 = "Effective score: pEBA4",
+    p_score_all = "Effective score: numerical mixture")
+  randomized_matched_power <- function(null_p, alternative_p, alpha = .05) {
+    null_p <- null_p[is.finite(null_p)]
+    alternative_p <- alternative_p[is.finite(alternative_p)]
+    target <- alpha * length(null_p)
+    critical <- sort(null_p)[ceiling(target)]
+    n_below <- sum(null_p < critical)
+    boundary_probability <-
+      (target - n_below) / sum(null_p == critical)
+    mean(alternative_p < critical) +
+      boundary_probability * mean(alternative_p == critical)
+  }
+  matched_power_cell <- function(allocation, column, n, q) {
+    keep_null <- power_null$allocation == allocation &
+      power_null$n_total == n & power_null$q == q
+    keep_power <- power_rep$allocation == allocation &
+      power_rep$n_total == n & power_rep$q == q
+    randomized_matched_power(
+      power_null[[column]][keep_null],
+      power_rep[[column]][keep_power])
+  }
+  matched_power <- function(allocation, column, n) {
+    mean(vapply(
+      c(4L, 8L), function(q) {
+        matched_power_cell(allocation, column, n, q)
+      }, numeric(1)))
+  }
+  overall_matched_power <- function(column) {
+    mean(unlist(lapply(c("1:3", "3:1"), function(allocation) {
+      vapply(c(120L, 240L, 480L, 960L), function(n) {
+        matched_power(allocation, column, n)
+      }, numeric(1))
+    })))
+  }
+  power_columns <- names(power_methods)
+  power_key <- interaction(
+    power_rep$allocation, power_rep$n_total, power_rep$q, drop = TRUE)
+  null_key <- interaction(
+    power_null$allocation, power_null$n_total, power_null$q, drop = TRUE)
+  power_cells <- split(power_rep[, power_columns], power_key)
+  null_cells <- split(power_null[, power_columns], null_key)
+  null_cells <- null_cells[names(power_cells)]
+  bootstrap_matched_power <- function(null_cell, power_cell) {
+    out <- vapply(seq_along(power_columns), function(j) {
+      randomized_matched_power(null_cell[[j]], power_cell[[j]])
+    }, numeric(1))
+    names(out) <- power_columns
+    out
+  }
+  one_power_bootstrap <- function() {
+    cell_power <- mapply(function(null_cell, power_cell) {
+      null_cell <- null_cell[
+        sample.int(nrow(null_cell), replace = TRUE), , drop = FALSE]
+      power_cell <- power_cell[
+        sample.int(nrow(power_cell), replace = TRUE), , drop = FALSE]
+      bootstrap_matched_power(null_cell, power_cell)
+    }, null_cells, power_cells, SIMPLIFY = TRUE)
+    rowMeans(cell_power)
+  }
+  set.seed(919)
+  power_bootstrap <- t(replicate(2000L, one_power_bootstrap()))
+  score_minus_comparator <- sweep(
+    power_bootstrap[, -1L, drop = FALSE], 1L,
+    power_bootstrap[, 1L], function(comparator, score) score - comparator)
+  power_bootstrap_intervals <- apply(
+    score_minus_comparator, 2L, stats::quantile, c(.025, .975))
+}
 ```
 
 ## Question
@@ -107,61 +226,161 @@ inside the permutation test?
 ## Short answer
 
 ```{r score-short-answer, results='asis'}
-if (is.null(score_run) || is.null(score_sensitivity)) {
-  cat("The score-pivot arm has not been run. Execute the score-pivot probe and ",
-      "sensitivity commands under **Reproduce**.\n")
+if (is.null(score_run) || is.null(score_allocation) ||
+    is.null(score_allocation_reverse) || is.null(score_mixture) ||
+    is.null(score_power)) {
+  cat("The score-pivot allocation, mixture, and power gates have not all run. ",
+      "Execute their commands under **Reproduce**.\n")
 } else {
   cat(sprintf(
-    "The robust score is a viable permutation pivot, but it did **not** beat the existing studentized Wald permutation. In the 500-replication heterogeneous-VM sensitivity, pooled rejection over $q=1,4,8$ was %.1f%% at $N=60$ and %.1f%% at $N=240$ for the score permutation, versus %.1f%% and %.1f%% for the Wald permutation. The analytical pEBA4 score was already at %.1f%% and %.1f%%, and score-SB at %.1f%% and %.1f%%. The unpermuted sandwich Wald was badly liberal (%.1f%% and %.1f%%). In the exchangeable-normal control, the score/Wald permutation sizes were %.1f%%/%.1f%%.",
-    100 * sensitivity_size("p_permutation_score", 60),
-    100 * sensitivity_size("p_permutation_score", 240),
-    100 * sensitivity_size("p_permutation_wald", 60),
-    100 * sensitivity_size("p_permutation_wald", 240),
-    100 * sensitivity_size("p_score_peba4", 60),
-    100 * sensitivity_size("p_score_peba4", 240),
-    100 * sensitivity_size("p_score_sb", 60),
-    100 * sensitivity_size("p_score_sb", 240),
-    100 * sensitivity_size("p_wald_chisq", 60),
-    100 * sensitivity_size("p_wald_chisq", 240),
+    "The unequal-allocation gate reverses the balanced-grid verdict: the robust score is the better permutation pivot in this DGP. Pooled over $q=4,8$, score-permutation rejection was %.1f/%.1f/%.1f/%.1f%% for $N=120/240/480/960$ under $1{:}3$, and %.1f/%.1f/%.1f/%.1f%% after reversing the allocation to $3{:}1$. Wald permutation was orientation-sensitive: %.1f%% versus %.1f%% at $N=120$, converging only later. The score route cost %.1f%% more permutation time on average, so its win is calibration rather than speed. In the exchangeable-normal control, the score/Wald permutation sizes were %.1f%%/%.1f%%.",
+    100 * allocation_size("1:3", "p_permutation_score", 120),
+    100 * allocation_size("1:3", "p_permutation_score", 240),
+    100 * allocation_size("1:3", "p_permutation_score", 480),
+    100 * allocation_size("1:3", "p_permutation_score", 960),
+    100 * allocation_size("3:1", "p_permutation_score", 120),
+    100 * allocation_size("3:1", "p_permutation_score", 240),
+    100 * allocation_size("3:1", "p_permutation_score", 480),
+    100 * allocation_size("3:1", "p_permutation_score", 960),
+    100 * allocation_size("1:3", "p_permutation_wald", 120),
+    100 * allocation_size("3:1", "p_permutation_wald", 120),
+    100 * mean(permutation_time_ratio - 1),
     100 * score_control_size, 100 * wald_control_size))
   cat(sprintf(
-    " “Permutation Hotelling” is not another method: its p-value equalled the permutation score p-value in every replication (maximum numerical difference %.1g), because it is a monotone transform of the same quadratic.\n",
-    score_identity_error))
+    " Under the common-sign local loading alternative $\\delta_N=5/\\sqrt{N}$, empirically 5%%-size-matched power averaged %.1f%% for score permutation, %.1f%% for SB, %.1f%% for pEBA4, %.1f%% for the numerical mixture, and %.1f%% for Wald permutation. The score's roughly one-point edge over the analytical score corrections was not resolved by a stratified bootstrap; its pooled %.1f-point edge over Wald was, but that average hides a strong allocation-direction reversal.",
+    100 * overall_matched_power("p_permutation_score"),
+    100 * overall_matched_power("p_score_sb"),
+    100 * overall_matched_power("p_score_peba4"),
+    100 * overall_matched_power("p_score_all"),
+    100 * overall_matched_power("p_permutation_wald"),
+    100 * (overall_matched_power("p_permutation_score") -
+      overall_matched_power("p_permutation_wald"))))
+  cat(sprintf(
+    " The numerical limiting-mixture tail converged very slowly—%.1f%% at $N=480$ and %.1f%% even at $N=3840$—while SB reached %.1f%% and pEBA4 %.1f%% at the latter endpoint. MV and the numerical mixture made virtually identical decisions, so this is primarily slow finite-sample convergence to the mixture law, not MV tail-approximation error. “Permutation Hotelling” remained exactly the score permutation (maximum p-value difference %.1g).\n",
+    100 * mixture_size("p_score_all", 480),
+    100 * mixture_size("p_score_all", 3840),
+    100 * mixture_size("p_score_sb", 3840),
+    100 * mixture_size("p_score_peba4", 3840),
+    allocation_identity_error))
 }
 ```
 
 ## Evidence
 
 ```{r score-evidence}
-if (!is.null(score_sensitivity)) {
+if (!is.null(score_allocation) && !is.null(score_allocation_reverse)) {
   method_labels <- c(
     p_permutation_score = "Permutation robust score",
     p_permutation_wald = "Permutation sandwich Wald",
-    p_score_chisq = "Robust score: chi-square",
-    p_score_hotelling = "Robust score: Hotelling",
     p_score_sb = "Effective score: SB",
     p_score_peba4 = "Effective score: pEBA4",
+    p_score_all = "Effective score: numerical mixture",
     p_wald_chisq = "Sandwich Wald: chi-square")
-  score_table <- data.frame(Method = unname(method_labels))
-  for (n in c(60L, 240L)) {
-    score_table[[paste0("N = ", n, " (%)")]] <- round(
-      100 * vapply(names(method_labels), sensitivity_size,
-                   numeric(1), n = n), 1)
-  }
+  score_table <- do.call(rbind, lapply(names(allocation_arms), function(a) {
+    tab <- data.frame(
+      Allocation = a, Method = unname(method_labels),
+      stringsAsFactors = FALSE)
+    for (n in c(120L, 240L, 480L, 960L)) {
+      tab[[paste0("N=", n)]] <- round(
+        100 * vapply(names(method_labels), function(method) {
+          allocation_size(a, method, n)
+        }, numeric(1)), 1)
+    }
+    tab
+  }))
   knitr::kable(
     score_table, row.names = FALSE,
     caption = paste0(
       "Heterogeneous Vale–Maurelli null rejection at 5%, pooled equally over ",
-      "q = 1, 4, 8; 500 replications per q and 99 label permutations."))
+      "q = 4, 8; 500 replications per q and 99 label permutations."))
 }
 ```
 
-The sensitivity contains 1,500 replications at each displayed sample size. The
-score-permutation rates have exact binomial 95% intervals of 2.9--5.0% at
-$N=60$ and 4.7--7.1% at $N=240$; the apparent decrease with $N$ in the
-initial 100-replication grid was therefore Monte Carlo noise. All 3,000
-sensitivity replications and all their requested permutations produced usable
-score and Wald statistics.
+Across the two allocation directions, the score-permutation size was
+4.9%, 5.0%, 5.0%, and 5.5% over the four sample sizes. All 8,000
+replications and all 792,000 score permutations were usable; 791,998 of
+792,000 Wald permutations were usable.
+The balanced sensitivity had looked less distinctive; unequal allocation is
+the diagnostic setting because it exposes the Wald permutation's directional
+finite-sample error.
+
+### Local power after size matching
+
+```{r power-evidence}
+if (!is.null(score_power) && !is.null(score_allocation) &&
+    !is.null(score_allocation_reverse)) {
+  power_table <- do.call(rbind, lapply(c("1:3", "3:1"), function(allocation) {
+    tab <- data.frame(
+      Allocation = allocation, Method = unname(power_methods),
+      stringsAsFactors = FALSE)
+    for (n in c(120L, 240L, 480L, 960L)) {
+      tab[[paste0("N=", n)]] <- round(
+        100 * vapply(names(power_methods), function(method) {
+          matched_power(allocation, method, n)
+        }, numeric(1)), 1)
+    }
+    tab
+  }))
+  knitr::kable(
+    power_table, row.names = FALSE,
+    caption = paste0(
+      "Empirically 5%-size-matched power under the local loading shift ",
+      "$\\delta_N = 5/\\sqrt{N}$, pooled equally over $q = 4, 8$; 500 null and ",
+      "500 alternative replications per q-cell."))
+}
+```
+
+Size matching uses the empirical null distribution separately for every
+method, allocation, $N$, and $q$. If the 5% empirical quantile is tied—as it
+often is for the 99-permutation p-values—the boundary is randomized so the
+calibration sample rejects exactly 5% in expectation. This prevents liberal or
+conservative null behavior from masquerading as power.
+
+The score permutation is practically tied with SB, pEBA4, and the numerical
+mixture after that correction. A stratified two-stage bootstrap that resampled
+both the 500 null and 500 alternative draws in every cell put the score-minus-
+comparator intervals at $-0.6$ to $3.0$ percentage points for SB, $-0.7$ to
+$3.0$ for pEBA4, and $-0.4$ to $3.3$ for the numerical mixture. Its pooled
+advantage over Wald was 4.3 points (95% interval 2.6 to 6.3), but the table
+shows why this is not a universal efficiency claim: Wald wins throughout the
+$1{:}3$ arm and loses much more sharply throughout the $3{:}1$ mirror.
+
+The bounded conclusion is therefore to retain the score permutation as a
+calibration method, not to advertise a power gain. Its attractive numerator and
+pivotal randomization reference avoid dependence on a slowly attained mixture
+law; SB and pEBA4 remain simpler, competitive analytical defaults in this DGP.
+
+### Slow convergence to the mixture law
+
+```{r mixture-evidence}
+if (!is.null(score_mixture)) {
+  mixture_labels <- c(
+    p_score_chisq = "Robust score: chi-square",
+    p_score_hotelling = "Robust score: Hotelling",
+    p_score_sb = "Effective score: SB",
+    p_score_mv = "Effective score: MV",
+    p_score_peba4 = "Effective score: pEBA4",
+    p_score_all = "Effective score: numerical mixture")
+  mixture_table <- data.frame(Method = unname(mixture_labels))
+  for (n in c(480L, 960L, 1920L, 3840L)) {
+    mixture_table[[paste0("N=", n)]] <- round(
+      100 * vapply(names(mixture_labels), mixture_size,
+                   numeric(1), n = n), 1)
+  }
+  knitr::kable(
+    mixture_table, row.names = FALSE,
+    caption = paste0(
+      "Analytical null rejection at 5% under 1:3 heterogeneous VM, pooled ",
+      "equally over q = 4, 8; 2,000 replications per q."))
+}
+```
+
+MV and the numerical mixture disagreed on at most 0.05% of decisions at any
+sample size. The numerical tail therefore does not rescue the finite-sample
+statistic merely by avoiding a mixture approximation. Its rejection rate
+increases from 2.9% to 4.3% as the limiting spectrum stabilizes, while the
+simpler SB and pEBA4 corrections happen to compensate most of that slow
+convergence.
 
 ### The statistic and the rank identity
 
@@ -210,8 +429,9 @@ based on ranks.
   “Permutation Hotelling” is recorded only as an asserted rank-identity
   sentinel.
 - **Wald comparators:** analytical sandwich Wald and the existing fully
-  recomputed sandwich-Wald label permutation. The latter, not the score
-  permutation, was the most stable method in this focused null probe.
+  recomputed sandwich-Wald label permutation. The Wald permutation was
+  direction-sensitive under unequal allocation; the score permutation was the
+  stable method in this focused null probe.
 
 ## Original Wald-arm status
 
@@ -332,6 +552,11 @@ chart, and strict versus scalar.
 - The asymptotic argument requires regular estimation under the pooled mixture.
   Exchangeable controls diagnose implementation errors, while the heterogeneous
   nulls test the scientifically relevant departure from raw exchangeability.
+- The score-pivot extension covers one one-factor VM null and one aligned,
+  common-sign local loading alternative. The size-matched result supports its
+  calibration rationale but does not establish a power advantage or a broad
+  method ranking. Sparse, mixed-sign, ordinal, and model-misspecified
+  alternatives remain outside this bounded gate.
 - The ordinary permutation LRT is intentionally not studentized. It is exact in
   the exchangeable controls and is the literature baseline, but it does not
   inherit the Chung--Romano guarantee under heterogeneous nuisance
@@ -346,6 +571,10 @@ Rscript scripts/run_score_pivot.R --smoke
 Rscript scripts/run_score_pivot.R --probe --cores 10
 Rscript scripts/run_score_pivot.R --sensitivity \
   --regimes heterogeneous_vm --n-total 60,240 --cores 10
+Rscript scripts/run_score_pivot.R --allocation-gate --cores 10
+Rscript scripts/run_score_pivot.R --allocation-reverse --cores 10
+Rscript scripts/run_score_pivot.R --mixture-gate --cores 10
+Rscript scripts/run_score_pivot.R --power-gate --local-strength 5 --cores 10
 Rscript calibrate_alternatives.R --smoke
 Rscript run_experiment.R --study reference --modal --cores 10
 Rscript run_experiment.R --study imbalance --modal --cores 10
