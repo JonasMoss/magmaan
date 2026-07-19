@@ -171,16 +171,37 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   exchangeable when the recomputed test statistic is asymptotically pivotal.
   Its focused robust-score arm (`p=9`, partial loading rank `q=1/4/8`) confirms
   that the same idea is computationally viable with one restricted fit per
-  permutation, but supplies no reason to replace the Wald pivot. In the
-  500-replication heterogeneous-VM sensitivity pooled over q, score-permutation
-  rejection was 3.87% at `N=60` and 5.80% at `N=240`, versus 4.87% at both
-  sample sizes for the fully recomputed sandwich Wald; pEBA4 was already
-  4.40/4.73% and score-SB 5.13/5.33%. The unpermuted sandwich Wald remained
-  badly liberal (32.53/13.47%). “Permutation Hotelling” is exactly the same
-  rank test as permutation `Q_raw`, not a new method: the runner asserts
-  equality in every replication. Do not build a separate Hotelling
-  randomization API. Retain the score pivot as a simple H0-only comparator and
-  the Wald permutation as the current continuous default.
+  permutation. The balanced result alone was ambiguous, but the decisive
+  unequal-allocation mirror favors the score pivot. With heterogeneous VM,
+  `q=4/8`, 500 replications per cell, and `N=120/240/480/960`,
+  score-permutation rejection was 4.9/5.3/5.1/5.7% under `1:3` and
+  4.9/4.6/4.9/5.2% under `3:1`. Wald permutation was direction-sensitive:
+  3.2% versus 6.3% at `N=120`, and did not settle near 5% in both directions
+  until the larger samples. The score route cost about 12% more permutation
+  time, so its win is calibration rather than speed. The analytical
+  limiting-mixture reference converged extremely slowly: in a separate
+  2,000-replication-per-q `1:3` ladder its rejection was
+  2.9/3.3/3.8/4.3% at `N=480/960/1920/3840`. MV made virtually identical
+  decisions, so the problem is finite-sample convergence to the mixture law,
+  not chiefly MV tail approximation; SB reached 5.0% and pEBA4 4.8% at the
+  largest endpoint by compensating that error. “Permutation Hotelling” remains
+  exactly the same rank test as permutation `Q_raw`; do not build a separate
+  Hotelling randomization API. The continuous score pivot also clears its
+  bounded power gate, but as a calibration method rather than an efficiency
+  win. Under the common-sign local loading shift `delta_N = 5 / sqrt(N)`,
+  using method/cell-specific empirical-null thresholds with randomized
+  boundaries, its power averaged 31.3% over both allocations, `q=4/8`, and the
+  four sample sizes. SB, pEBA4, and the numerical mixture were
+  30.2%/30.6%/30.3%; stratified bootstrap intervals for their roughly one-point
+  deficits all included zero. Wald permutation averaged 27.0%, but its power
+  beat score in every `1:3` cell and lost much more in every `3:1` mirror, so
+  the pooled gap is allocation sensitivity rather than a universal score
+  efficiency result. Retain the score permutation as the principled pivotal
+  route when slow mixture convergence makes analytical calibration doubtful;
+  retain SB/pEBA4 as simpler, competitive analytical defaults. Freeze the
+  broad continuous grid here. Promotion from experiment code would now require
+  a clean asymptotic argument and a deliberately small confirmatory alternative
+  design, not more null cells or a claim of superior power.
   Ordinal DWLS/WLSMV is a separate question, not an automatic extension. A
   relabelled sample changes thresholds, polychoric/polyserial moments, their
   estimated NACOV, and possibly the pooled pseudo-true model; first establish
