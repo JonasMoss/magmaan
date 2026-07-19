@@ -193,12 +193,13 @@ pss_summarize_reference <- function(reference_shapes) {
 }
 
 pss_one_rep <- function(cell, rep_id, spec, sampler, reference_shapes,
-                        seed_base) {
+                        seed_base, run_fmg = TRUE) {
   seed <- as.integer(seed_base + cell$cell_id * 100000L + rep_id)
   base <- data.frame(
     cell_id = cell$cell_id, distribution = cell$distribution, n = cell$n,
     q = cell$q, rep = rep_id, seed = seed,
-    fit_ok = FALSE, score_ok = FALSE, fmg_ok = FALSE,
+    fit_ok = FALSE, score_ok = FALSE,
+    fmg_ok = if (run_fmg) FALSE else NA,
     fit_error = "", score_error = "", fmg_error = "",
     fit_seconds = NA_real_, score_seconds = NA_real_, fmg_seconds = NA_real_,
     q_centered = NA_real_, q_raw = NA_real_, q_raw_centered_ratio = NA_real_,
@@ -329,22 +330,75 @@ pss_one_rep <- function(cell, rep_id, spec, sampler, reference_shapes,
       score$qc$statistic, score$q, score$eta_empirical_projected)
   }
 
-  fmg_begin <- proc.time()[["elapsed"]]
-  fmg <- tryCatch(
-    magmaan::fmg_tests(
-      fit, tests = c("sb_rls", "mv_rls", "peba4_rls"), data = X),
-    error = function(e) e)
-  base$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin
-  if (inherits(fmg, "error")) {
-    base$fmg_error <- conditionMessage(fmg)
-  } else {
-    base$fmg_ok <- TRUE
-    for (label in c("sb_rls", "mv_rls", "peba4_rls")) {
-      row <- which(fmg$label == label)
-      if (length(row) == 1L) p[[paste0("p_fmg_", label)]] <- fmg$p_value[[row]]
+  if (run_fmg) {
+    fmg_begin <- proc.time()[["elapsed"]]
+    fmg <- tryCatch(
+      magmaan::fmg_tests(
+        fit, tests = c("sb_rls", "mv_rls", "peba4_rls"), data = X),
+      error = function(e) e)
+    base$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin
+    if (inherits(fmg, "error")) {
+      base$fmg_error <- conditionMessage(fmg)
+    } else {
+      base$fmg_ok <- TRUE
+      for (label in c("sb_rls", "mv_rls", "peba4_rls")) {
+        row <- which(fmg$label == label)
+        if (length(row) == 1L) {
+          p[[paste0("p_fmg_", label)]] <- fmg$p_value[[row]]
+        }
+      }
     }
   }
   cbind(base, as.data.frame(as.list(p)))
+}
+
+pss_attach_independent_shape_pairs <- function(raw) {
+  raw$pair_role <- "unused"
+  raw$independent_shape_donor_rep <- NA_integer_
+  raw$shape_independent_projected <- NA_real_
+  raw$eta_independent_projected <- NA_real_
+  raw$eta_independent_projected_available <- NA
+
+  matched <- c(
+    "score_chisq_centered",
+    "hotelling_gaussian",
+    "satterthwaite_oracle_projected",
+    "satterthwaite_empirical_projected")
+  for (method in matched) {
+    raw[[paste0("p_", method, "_matched")]] <- NA_real_
+  }
+  raw$p_satterthwaite_independent_projected <- NA_real_
+
+  cell_rows <- split(seq_len(nrow(raw)), raw$cell_id)
+  for (indices in cell_rows) {
+    indices <- indices[order(raw$rep[indices])]
+    n_pairs <- length(indices) %/% 2L
+    if (!n_pairs) next
+    target <- indices[seq_len(n_pairs)]
+    donor <- indices[n_pairs + seq_len(n_pairs)]
+    raw$pair_role[target] <- "target"
+    raw$pair_role[donor] <- "shape_donor"
+    raw$independent_shape_donor_rep[target] <- raw$rep[donor]
+    raw$shape_independent_projected[target] <-
+      raw$shape_empirical_projected[donor]
+    raw$eta_independent_projected[target] <-
+      (raw$n[target] - 1) * raw$shape_independent_projected[target]
+    raw$eta_independent_projected_available[target] <-
+      is.finite(raw$eta_independent_projected[target]) &
+      raw$eta_independent_projected[target] > raw$q[target] - 1
+
+    for (method in matched) {
+      source <- paste0("p_", method)
+      destination <- paste0(source, "_matched")
+      raw[[destination]][target] <- raw[[source]][target]
+    }
+    raw$p_satterthwaite_independent_projected[target] <- mapply(
+      pss_hotelling_p,
+      statistic = raw$q_centered[target],
+      q = raw$q[target],
+      eta = raw$eta_independent_projected[target])
+  }
+  raw
 }
 
 pss_wilson <- function(rejected, n, z = 1.95996398454005) {
@@ -381,6 +435,76 @@ pss_summarize_methods <- function(raw) {
   out[order(out$cell_id, out$method), , drop = FALSE]
 }
 
+pss_summarize_independent_pairs <- function(raw) {
+  required <- c(
+    "p_satterthwaite_empirical_projected_matched",
+    "p_satterthwaite_independent_projected",
+    "eta_empirical_projected", "eta_independent_projected")
+  if (!all(required %in% names(raw))) {
+    stop("independent shape pairs have not been attached", call. = FALSE)
+  }
+  pieces <- split(raw[raw$pair_role == "target", , drop = FALSE],
+                  raw$cell_id[raw$pair_role == "target"])
+  out <- do.call(rbind, lapply(pieces, function(x) {
+    same_p <- x$p_satterthwaite_empirical_projected_matched
+    independent_p <- x$p_satterthwaite_independent_projected
+    valid <- is.finite(same_p) & is.finite(independent_p)
+    same_reject <- same_p[valid] <= .05
+    independent_reject <- independent_p[valid] <= .05
+    difference <- as.numeric(same_reject) - as.numeric(independent_reject)
+    n_valid <- sum(valid)
+    paired_se <- if (n_valid > 1L) {
+      stats::sd(difference) / sqrt(n_valid)
+    } else {
+      NA_real_
+    }
+    safe_cor <- function(a, b) {
+      keep <- is.finite(a) & is.finite(b)
+      if (sum(keep) > 2L &&
+          stats::sd(a[keep]) > 0 && stats::sd(b[keep]) > 0) {
+        stats::cor(a[keep], b[keep])
+      } else {
+        NA_real_
+      }
+    }
+    data.frame(
+      x[1L, c("cell_id", "distribution", "n", "q")],
+      n_pairs = n_valid,
+      rejection_same_sample =
+        if (n_valid) mean(same_reject) else NA_real_,
+      rejection_independent =
+        if (n_valid) mean(independent_reject) else NA_real_,
+      rejection_difference =
+        if (n_valid) mean(difference) else NA_real_,
+      difference_se = paired_se,
+      same_only = if (n_valid) {
+        sum(same_reject & !independent_reject)
+      } else {
+        0L
+      },
+      independent_only = if (n_valid) {
+        sum(!same_reject & independent_reject)
+      } else {
+        0L
+      },
+      median_shape_same = stats::median(
+        x$shape_empirical_projected, na.rm = TRUE),
+      median_shape_independent = stats::median(
+        x$shape_independent_projected, na.rm = TRUE),
+      median_eta_same = stats::median(
+        x$eta_empirical_projected, na.rm = TRUE),
+      median_eta_independent = stats::median(
+        x$eta_independent_projected, na.rm = TRUE),
+      cor_q_eta_same = safe_cor(
+        x$q_centered, x$eta_empirical_projected),
+      cor_q_eta_independent = safe_cor(
+        x$q_centered, x$eta_independent_projected),
+      stringsAsFactors = FALSE)
+  }))
+  row.names(out) <- NULL
+  out
+}
+
 pss_summarize_diagnostics <- function(raw) {
   columns <- c(
     "q_centered", "q_raw", "q_raw_centered_ratio", "rls_statistic",
@@ -389,6 +513,8 @@ pss_summarize_diagnostics <- function(raw) {
     "shape_empirical_unprojected", "shape_empirical_projected",
     "projection_fraction_empirical", "eta_empirical_unprojected",
     "eta_empirical_projected", "fit_seconds", "score_seconds", "fmg_seconds")
+  optional <- c("shape_independent_projected", "eta_independent_projected")
+  columns <- c(columns, optional[optional %in% names(raw)])
   pieces <- split(raw, raw$cell_id)
   out <- do.call(rbind, lapply(pieces, function(x) {
     base <- x[1L, c("cell_id", "distribution", "n", "q")]
@@ -399,6 +525,8 @@ pss_summarize_diagnostics <- function(raw) {
         if (length(values)) stats::median(values) else NA_real_
       base[[paste0("p90_", column)]] <-
         if (length(values)) unname(stats::quantile(values, .9, type = 8)) else NA_real_
+      base[[paste0("p10_", column)]] <-
+        if (length(values)) unname(stats::quantile(values, .1, type = 8)) else NA_real_
     }
     base$fit_success <- mean(x$fit_ok)
     base$score_success <- mean(x$score_ok)
@@ -407,6 +535,10 @@ pss_summarize_diagnostics <- function(raw) {
       x$eta_empirical_unprojected_available, na.rm = TRUE)
     base$eta_empirical_projected_availability <- mean(
       x$eta_empirical_projected_available, na.rm = TRUE)
+    if ("eta_independent_projected_available" %in% names(x)) {
+      base$eta_independent_projected_availability <- mean(
+        x$eta_independent_projected_available, na.rm = TRUE)
+    }
     base
   }))
   row.names(out) <- NULL

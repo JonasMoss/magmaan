@@ -1,6 +1,6 @@
 ---
 title: "Can a projected Satterthwaite denominator calibrate pivotal SEM scores?"
-subtitle: "A low-N goodness-of-fit probe with normal and Vale–Maurelli data"
+subtitle: "Low-N calibration and a Vale–Maurelli moment-convergence transition"
 format:
   html:
     toc: true
@@ -38,6 +38,35 @@ profile <- meta[["profile"]]
 reps <- as.integer(meta[["reps_per_cell"]])
 is_pilot <- identical(profile, "pilot") && reps >= 500L
 
+transition_override <-
+  Sys.getenv("MAGMAAN_TRANSITION_RESULTS", unset = "")
+transition_roots <- c(
+  if (nzchar(transition_override)) transition_override else character(),
+  file.path("results", "transition"))
+transition_available <- transition_roots[vapply(
+  transition_roots,
+  function(path) {
+    all(file.exists(file.path(
+      path,
+      c("metadata.csv", "method_summary.csv", "diagnostics_summary.csv",
+        "pairing_summary.csv", "reference_summary.csv"))))
+  },
+  logical(1))]
+has_transition <- length(transition_available) > 0L
+if (has_transition) {
+  transition_root <- transition_available[[1L]]
+  read_transition <- function(name) read.csv(
+    file.path(transition_root, name),
+    stringsAsFactors = FALSE, check.names = FALSE)
+  transition_meta_frame <- read_transition("metadata.csv")
+  transition_meta <-
+    setNames(transition_meta_frame$value, transition_meta_frame$key)
+  transition_methods <- read_transition("method_summary.csv")
+  transition_diagnostics <- read_transition("diagnostics_summary.csv")
+  transition_pairs <- read_transition("pairing_summary.csv")
+  transition_reference <- read_transition("reference_summary.csv")
+}
+
 labels <- c(
   score_chisq_centered = "Robust score chi-square (centered meat)",
   score_chisq_raw = "Robust score chi-square (raw OPG)",
@@ -47,6 +76,11 @@ labels <- c(
   satterthwaite_oracle_projected = "DGP-oracle Satterthwaite, projected",
   satterthwaite_empirical_unprojected = "Empirical Satterthwaite, unprojected",
   satterthwaite_empirical_projected = "Empirical Satterthwaite, projected",
+  score_chisq_centered_matched = "Robust score chi-square",
+  hotelling_gaussian_matched = "Ordinary Hotelling",
+  satterthwaite_oracle_projected_matched = "Fixed DGP-oracle projected",
+  satterthwaite_empirical_projected_matched = "Same-sample projected",
+  satterthwaite_independent_projected = "Independent-replication projected",
   fmg_sb_rls = "FMG SB-RLS",
   fmg_mv_rls = "FMG mean+variance RLS",
   fmg_peba4_rls = "FMG pEBA4-RLS")
@@ -141,6 +175,92 @@ names(diagnostic_display) <- c(
   "median meat condition", "median projected shape",
   "projected eta available (%)",
   "fit success (%)", "score success (%)")
+
+if (has_transition) {
+  transition_rate <- function(method, n) {
+    row <- transition_methods[
+      transition_methods$method == method & transition_methods$n == n,
+      , drop = FALSE]
+    if (nrow(row) != 1L) return(NA_real_)
+    100 * row$rejection_rate[[1L]]
+  }
+  transition_n <- sort(unique(transition_methods$n))
+  transition_size_display <- data.frame(
+    N = transition_n,
+    `Robust score` = vapply(
+      transition_n,
+      function(n) transition_rate("score_chisq_centered_matched", n),
+      numeric(1)),
+    `Ordinary Hotelling` = vapply(
+      transition_n,
+      function(n) transition_rate("hotelling_gaussian_matched", n),
+      numeric(1)),
+    `Same-sample projected` = vapply(
+      transition_n,
+      function(n) {
+        transition_rate("satterthwaite_empirical_projected_matched", n)
+      },
+      numeric(1)),
+    `Independent projected` = vapply(
+      transition_n,
+      function(n) {
+        transition_rate("satterthwaite_independent_projected", n)
+      },
+      numeric(1)),
+    `Fixed oracle projected` = vapply(
+      transition_n,
+      function(n) {
+        transition_rate("satterthwaite_oracle_projected_matched", n)
+      },
+      numeric(1)),
+    check.names = FALSE)
+  vm_shape <- transition_reference$shape_projected[
+    transition_reference$distribution == "vm"]
+  transition_mechanism_display <- transition_pairs[
+    c("n", "median_shape_same", "median_eta_same",
+      "rejection_difference", "cor_q_eta_same",
+      "cor_q_eta_independent")]
+  transition_mechanism_display <-
+    transition_mechanism_display[
+      order(transition_mechanism_display$n), , drop = FALSE]
+  transition_mechanism_display$oracle_eta <-
+    (transition_mechanism_display$n - 1) * vm_shape
+  transition_mechanism_display$rejection_difference <-
+    100 * transition_mechanism_display$rejection_difference
+  names(transition_mechanism_display) <- c(
+    "N", "Median empirical shape", "Median empirical eta",
+    "Size difference (pp)",
+    "cor(Q, eta), same", "cor(Q, eta), independent", "Fixed-oracle eta")
+  transition_pair_reps <-
+    min(transition_pairs$n_pairs, na.rm = TRUE)
+  transition_mae <- function(method) {
+    rates <- vapply(
+      transition_n, function(n) transition_rate(method, n), numeric(1))
+    mean(abs(rates - 5), na.rm = TRUE)
+  }
+  transition_same_mae <-
+    transition_mae("satterthwaite_empirical_projected_matched")
+  transition_independent_mae <-
+    transition_mae("satterthwaite_independent_projected")
+  transition_hotelling_mae <-
+    transition_mae("hotelling_gaussian_matched")
+  transition_score_mae <-
+    transition_mae("score_chisq_centered_matched")
+  transition_max_pair_difference <-
+    100 * max(abs(transition_pairs$rejection_difference), na.rm = TRUE)
+  transition_last_n <- max(transition_n)
+  transition_last_same <- transition_rate(
+    "satterthwaite_empirical_projected_matched", transition_last_n)
+  transition_last_independent <- transition_rate(
+    "satterthwaite_independent_projected", transition_last_n)
+  transition_last_shape <- transition_pairs$median_shape_same[
+    transition_pairs$n == transition_last_n]
+  transition_last_shape_ratio <- transition_last_shape / vm_shape
+  transition_last_eta <- transition_pairs$median_eta_same[
+    transition_pairs$n == transition_last_n]
+  transition_q <- unique(transition_methods$q)
+  transition_boundary_n <- 1 + (transition_q - 1) / vm_shape
+}
 ```
 
 ## Question
@@ -149,7 +269,9 @@ For a goodness-of-fit score that is already sandwich-studentized and therefore
 has a pivotal $\chi_q^2$ limit, can the randomness of its empirical meat be
 summarized by a projected Satterthwaite degree of freedom? More concretely,
 does that heavier finite-sample reference improve Type-I error at low $N$
-without giving up the simple numerator?
+without giving up the simple numerator? If the same-sample empirical version
+looks good, is it estimating the intended population denominator, or is its
+success caused by dependence between $Q_c$ and $\widehat s$?
 
 $$
 Q_c=n\bar\psi^\mathsf{T}\widehat B_c^{-1}\bar\psi.
@@ -188,13 +310,33 @@ context.
   ""
 }`
 
-The decisive comparison is deliberately split in two. The fixed
+`r if (has_transition) {
+  sprintf(
+    "In the VM transition run (%d independent pairs per sample size), mean absolute size error over N=%s was %.2f percentage points for the same-sample projected rule, %.2f after replacing its shape by an independent replication's identically distributed estimate, and %.2f for ordinary Hotelling.",
+    transition_pair_reps, paste(transition_n, collapse = "/"),
+    transition_same_mae, transition_independent_mae,
+    transition_hotelling_mae)
+} else {
+  "The VM transition and independent-shape pairing have not been run in this checkout; run the transition profile before interpreting the empirical rule as self-normalization."
+}`
+
+`r if (has_transition) {
+  sprintf(
+    "Severing same-sample dependence changed rejection by at most %.2f percentage points and with no consistent sign. The empirical projected rule therefore does not owe its behavior to coupling with Q: both versions remain conservative (%.1f%% and %.1f%% at N=%d), while ordinary Hotelling and the unadjusted robust score have transition-grid mean absolute errors of only %.2f and %.2f points.",
+    transition_max_pair_difference,
+    transition_last_same, transition_last_independent, transition_last_n,
+    transition_hotelling_mae, transition_score_mae)
+} else {
+  ""
+}`
+
+The decisive comparison is deliberately split in three. The fixed
 normal-reference shape asks whether the proposed working-model denominator is
 useful and cheap. The DGP-specific oracle asks whether the same approximation
-could work with the correct score moments. The empirical row asks whether
-estimating those third and fourth moments in the same low-$N$ sample destroys
-the gain. If the oracle helps but the empirical version does not, the idea
-generalizes mathematically but misses the simplicity/performance selling point.
+could work with the correct score moments. Finally, the disjoint-replication
+pairing gives the same $Q_c$ either its own $\widehat s$ or an independent
+estimate with the same marginal distribution. That last comparison isolates
+same-sample dependence from plug-in bias.
 
 ## Evidence
 
@@ -229,7 +371,7 @@ $Q_c\Rightarrow\chi_q^2$ and $Q_r\Rightarrow\chi_q^2$. Thus every score
 calibration below retains a pivotal asymptotic null; the experiment asks only
 whether a different finite-sample reference improves its low-$N$ behavior.
 
-### The eight pivotal-score alternatives
+### The original eight pivotal-score alternatives
 
 For any effective meat degree of freedom $\eta>q-1$, define the common
 Hotelling/Satterthwaite tail
@@ -397,6 +539,67 @@ knitr::kable(
   caption = "Centering, conditioning, and same-sample score-shape diagnostics.")
 ```
 
+### VM transition: severing same-sample dependence
+
+The follow-up uses VM samples at $N=200,400,600,800,1200$. Within each cell,
+the first half of the independent replications supply target quadratics
+$Q_{c,i}$ and their own shapes $\widehat s_i$; the second half supply disjoint
+shape estimates $\widehat s_i^\star$. It compares
+
+$$
+p_{\mathrm{same},i}
+=p_{(n-1)\widehat s_i}(Q_{c,i}),\qquad
+p_{\mathrm{ind},i}
+=p_{(n-1)\widehat s_i^\star}(Q_{c,i}).
+$$
+
+Thus the two rules use exactly the same target $Q_c$, and
+$\widehat s_i^\star$ has the same marginal sampling distribution as
+$\widehat s_i$, but only the first can benefit from within-sample dependence.
+This independent-replication row is a diagnostic ninth alternative, not a
+practical procedure requiring a second dataset.
+
+```{r transition-size-table}
+if (has_transition) {
+  knitr::kable(
+    transition_size_display, digits = 1, row.names = FALSE,
+    caption = sprintf(
+      "VM null rejection percentages at alpha=.05 on the same %d target replications per sample size. NA marks eta <= q-1.",
+      transition_pair_reps))
+}
+```
+
+```{r transition-mechanism-table}
+if (has_transition) {
+  knitr::kable(
+    transition_mechanism_display,
+    digits = c(0, 3, 1, 2, 2, 2, 2),
+    row.names = FALSE,
+    caption = paste(
+      "Shape and dependence diagnostics on the paired target replications.",
+      "Size difference is same-sample minus independent; positive values",
+      "mean that same-sample coupling increases rejection."))
+}
+```
+
+`r if (has_transition) {
+  sprintf(
+    "The fixed VM shape is %.4f, so its Hotelling reference first crosses the eta > q-1 existence boundary at approximately N=%.0f. The same-sample and independent columns estimate the same finite-sample shape distribution; any systematic size separation between them therefore identifies coupling with Q rather than ordinary plug-in bias.",
+    vm_shape, transition_boundary_n)
+} else {
+  "Run the transition profile to populate the independent-pairing tables."
+}`
+
+`r if (has_transition) {
+  sprintf(
+    "There is no systematic same-versus-independent separation. The more important failure is moment convergence: at N=%d the median empirical shape is still %.4f, %.1f times the fixed VM reference, giving median eta %.1f rather than %.1f. The empirical rule is therefore a very slowly changing, biased finite-sample calibration; it is not tracking the intended DGP-oracle denominator.",
+    transition_last_n, transition_last_shape,
+    transition_last_shape_ratio, transition_last_eta,
+    (transition_last_n - 1) * vm_shape)
+} else {
+  ""
+}`
+
 For completeness, here are the three nonpivotal FMG contextual rows from the
 same simulated samples:
 
@@ -424,6 +627,10 @@ knitr::kable(
 - Same-sample third- and fourth-moment estimates can be noisy exactly where the
   correction is supposed to help. Shape failures and $\eta_n\le q-1$ appear
   as unavailable p-values rather than being silently truncated.
+- The independent-replication comparison identifies dependence because its
+  donor shape comes from a disjoint Monte Carlo replication. It is not a
+  deployable two-sample method, and it does not derive the full joint
+  finite-sample law of $(Q_c,\widehat s)$.
 - This first probe has one model, one non-normal law, and Type-I error only.
   Power, nested restrictions, heterogeneous marginal shapes, missing data, and
   higher-dimensional GOF are follow-ups, not conclusions from this run.
@@ -434,5 +641,6 @@ knitr::kable(
 Rscript experiments/71-projected-score-satterthwaite/run_experiment.R --help
 Rscript experiments/71-projected-score-satterthwaite/run_experiment.R --smoke
 Rscript experiments/71-projected-score-satterthwaite/run_experiment.R --pilot
+Rscript experiments/71-projected-score-satterthwaite/run_experiment.R --transition
 quarto render experiments/71-projected-score-satterthwaite/report.qmd
 ```
