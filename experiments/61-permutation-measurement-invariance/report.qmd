@@ -1,5 +1,5 @@
 ---
-title: "Studentized permutation Wald tests for measurement invariance"
+title: "Pivotal permutation tests for measurement invariance"
 bibliography: references.bib
 format:
   html:
@@ -39,9 +39,181 @@ profiles <- paste(vapply(runs, function(x)
           x$config$reps[[1L]], x$config$permutations[[1L]]), character(1)),
   collapse = "; ")
 is_smoke <- any(vapply(runs, `[[`, character(1), "profile") == "smoke")
+
+choose_score_run <- function() {
+  candidates <- file.path(
+    "results", paste0("score-pivot-", c("full", "probe", "smoke")))
+  found <- candidates[file.exists(file.path(candidates, "summary.csv"))]
+  if (!length(found)) return(NULL)
+  path <- found[[1L]]
+  list(
+    profile = sub("^score-pivot-", "", basename(path)),
+    path = path,
+    summary = read.csv(file.path(path, "summary.csv"), check.names = FALSE,
+                       stringsAsFactors = FALSE),
+    replications = read.csv(
+      file.path(path, "replications.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE),
+    config = read.csv(file.path(path, "run_config.csv"), check.names = FALSE,
+                      stringsAsFactors = FALSE))
+}
+score_run <- choose_score_run()
+sensitivity_path <- file.path("results", "score-pivot-sensitivity")
+score_sensitivity <- if (file.exists(
+    file.path(sensitivity_path, "summary.csv"))) {
+  list(
+    summary = read.csv(
+      file.path(sensitivity_path, "summary.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE),
+    replications = read.csv(
+      file.path(sensitivity_path, "replications.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE),
+    config = read.csv(
+      file.path(sensitivity_path, "run_config.csv"), check.names = FALSE,
+      stringsAsFactors = FALSE))
+} else NULL
+
+rejection_rate <- function(x, column, n_total = NULL,
+                           regime = NULL) {
+  if (!is.null(n_total)) x <- x[x$n_total == n_total, , drop = FALSE]
+  if (!is.null(regime)) x <- x[x$regime == regime, , drop = FALSE]
+  p <- x[[column]]
+  mean(p[is.finite(p)] <= .05)
+}
+if (!is.null(score_sensitivity)) {
+  sensitivity_rep <- score_sensitivity$replications
+  sensitivity_size <- function(column, n) {
+    rejection_rate(sensitivity_rep, column, n_total = n)
+  }
+}
+if (!is.null(score_run)) {
+  score_rep <- score_run$replications
+  score_identity_error <- max(
+    score_rep$permutation_rank_identity_error, na.rm = TRUE)
+  score_control_size <- rejection_rate(
+    score_rep, "p_permutation_score", regime = "exchangeable_normal")
+  wald_control_size <- rejection_rate(
+    score_rep, "p_permutation_wald", regime = "exchangeable_normal")
+}
 ```
 
-## Result status
+## Question
+
+Can the fully recomputed sandwich robust score serve as the pivotal statistic
+for a group-label permutation test when the two groups are not exchangeable?
+And does applying the ordinary-Hotelling reference to that score buy anything
+inside the permutation test?
+
+## Short answer
+
+```{r score-short-answer, results='asis'}
+if (is.null(score_run) || is.null(score_sensitivity)) {
+  cat("The score-pivot arm has not been run. Execute the score-pivot probe and ",
+      "sensitivity commands under **Reproduce**.\n")
+} else {
+  cat(sprintf(
+    "The robust score is a viable permutation pivot, but it did **not** beat the existing studentized Wald permutation. In the 500-replication heterogeneous-VM sensitivity, pooled rejection over $q=1,4,8$ was %.1f%% at $N=60$ and %.1f%% at $N=240$ for the score permutation, versus %.1f%% and %.1f%% for the Wald permutation. The analytical pEBA4 score was already at %.1f%% and %.1f%%, and score-SB at %.1f%% and %.1f%%. The unpermuted sandwich Wald was badly liberal (%.1f%% and %.1f%%). In the exchangeable-normal control, the score/Wald permutation sizes were %.1f%%/%.1f%%.",
+    100 * sensitivity_size("p_permutation_score", 60),
+    100 * sensitivity_size("p_permutation_score", 240),
+    100 * sensitivity_size("p_permutation_wald", 60),
+    100 * sensitivity_size("p_permutation_wald", 240),
+    100 * sensitivity_size("p_score_peba4", 60),
+    100 * sensitivity_size("p_score_peba4", 240),
+    100 * sensitivity_size("p_score_sb", 60),
+    100 * sensitivity_size("p_score_sb", 240),
+    100 * sensitivity_size("p_wald_chisq", 60),
+    100 * sensitivity_size("p_wald_chisq", 240),
+    100 * score_control_size, 100 * wald_control_size))
+  cat(sprintf(
+    " “Permutation Hotelling” is not another method: its p-value equalled the permutation score p-value in every replication (maximum numerical difference %.1g), because it is a monotone transform of the same quadratic.\n",
+    score_identity_error))
+}
+```
+
+## Evidence
+
+```{r score-evidence}
+if (!is.null(score_sensitivity)) {
+  method_labels <- c(
+    p_permutation_score = "Permutation robust score",
+    p_permutation_wald = "Permutation sandwich Wald",
+    p_score_chisq = "Robust score: chi-square",
+    p_score_hotelling = "Robust score: Hotelling",
+    p_score_sb = "Effective score: SB",
+    p_score_peba4 = "Effective score: pEBA4",
+    p_wald_chisq = "Sandwich Wald: chi-square")
+  score_table <- data.frame(Method = unname(method_labels))
+  for (n in c(60L, 240L)) {
+    score_table[[paste0("N = ", n, " (%)")]] <- round(
+      100 * vapply(names(method_labels), sensitivity_size,
+                   numeric(1), n = n), 1)
+  }
+  knitr::kable(
+    score_table, row.names = FALSE,
+    caption = paste0(
+      "Heterogeneous Vale–Maurelli null rejection at 5%, pooled equally over ",
+      "q = 1, 4, 8; 500 replications per q and 99 label permutations."))
+}
+```
+
+The sensitivity contains 1,500 replications at each displayed sample size. The
+score-permutation rates have exact binomial 95% intervals of 2.9--5.0% at
+$N=60$ and 4.7--7.1% at $N=240$; the apparent decrease with $N$ in the
+initial 100-replication grid was therefore Monte Carlo noise. All 3,000
+sensitivity replications and all their requested permutations produced usable
+score and Wald statistics.
+
+### The statistic and the rank identity
+
+Let $z_i(\widehat\theta_0)$ be the nuisance-orthogonal released-score row,
+$u=\sum_i z_i$, and
+
+$$
+  B_r=\sum_{i=1}^n z_i z_i^\top,\qquad
+  Q_r=u^\top B_r^{-1}u.
+$$
+
+The ordinary robust score compares the asymptotically pivotal $Q_r$ with
+$\chi_q^2$. Writing $Q_c$ for the same numerator studentized by the
+unbiased *centered* score covariance gives the exact rank-one identity
+
+$$
+  Q_r=\frac{nQ_c}{n-1+Q_c},\qquad
+  F=\frac{n-q}{q(n-1)}Q_c
+   =\frac{(n-q)Q_r}{q(n-Q_r)}.
+$$
+
+The map from $Q_r$ to its Hotelling tail is strictly decreasing for fixed
+$(n,q)$. Consequently
+
+$$
+ \mathbf 1\{Q_r^\pi\ge Q_r\}
+ =
+ \mathbf 1\{p_H(Q_r^\pi)\le p_H(Q_r)\},
+$$
+
+so recomputing either representation after each label permutation yields
+exactly the same Monte Carlo p-value. Hotelling remains a distinct
+*analytical* finite-sample reference, but cannot improve a permutation test
+based on ranks.
+
+### Alternatives compared
+
+- **Robust-score asymptotics:** raw-OPG sandwich $Q_r$ against
+  $\chi_q^2$, or the algebraically centered version against ordinary
+  Hotelling $F_{q,n-q}$.
+- **Non-robust effective-score corrections:** mean-scaled
+  Satorra--Bentler, mean-and-variance adjusted, pEBA4, and the numerical
+  weighted-$\chi^2$ mixture tail. These are score tests, not robust LRT
+  mixture limits.
+- **Randomization:** fully recomputed robust-score label permutation.
+  “Permutation Hotelling” is recorded only as an asserted rank-identity
+  sentinel.
+- **Wald comparators:** analytical sandwich Wald and the existing fully
+  recomputed sandwich-Wald label permutation. The latter, not the score
+  permutation, was the most stable method in this focused null probe.
+
+## Original Wald-arm status
 
 This render uses `r profiles`.
 
@@ -52,7 +224,7 @@ if (is_smoke) cat(
   "permutation rejection columns cannot estimate rejection rates at 0.05.\n")
 ```
 
-## Scientific question
+## Original Wald arm
 
 Does a fully refitted Wald statistic, studentized with a freshly estimated
 empirical sandwich covariance after every group-label permutation, provide
@@ -170,6 +342,10 @@ chart, and strict versus scalar.
 
 ```sh
 Rscript run_experiment.R --smoke
+Rscript scripts/run_score_pivot.R --smoke
+Rscript scripts/run_score_pivot.R --probe --cores 10
+Rscript scripts/run_score_pivot.R --sensitivity \
+  --regimes heterogeneous_vm --n-total 60,240 --cores 10
 Rscript calibrate_alternatives.R --smoke
 Rscript run_experiment.R --study reference --modal --cores 10
 Rscript run_experiment.R --study imbalance --modal --cores 10
