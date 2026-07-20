@@ -7727,13 +7727,29 @@ score_flip_multiplier_from_string(const std::string& multiplier) {
   using Multiplier = magmaan::inference::frontier::ScoreFlipMultiplier;
   if (multiplier == "rademacher") return Multiplier::Rademacher;
   if (multiplier == "mammen") return Multiplier::Mammen;
+  if (multiplier == "two-point") return Multiplier::TwoPoint;
   if (multiplier == "gaussian") return Multiplier::Gaussian;
   if (multiplier == "centered-exponential") {
     return Multiplier::CenteredExponential;
   }
   Rcpp::stop("magmaan: score_flip_test multiplier must be 'rademacher', "
-             "'mammen', 'gaussian', or 'centered-exponential'");
+             "'mammen', 'two-point', 'gaussian', or "
+             "'centered-exponential'");
   return Multiplier::Rademacher;
+}
+
+magmaan::inference::frontier::ScoreFlipMultiplierStudentization
+score_flip_multiplier_studentization_from_string(
+    const std::string& studentization) {
+  using Studentization =
+      magmaan::inference::frontier::ScoreFlipMultiplierStudentization;
+  if (studentization == "none") return Studentization::None;
+  if (studentization == "weighted-meat") {
+    return Studentization::WeightedMeat;
+  }
+  Rcpp::stop("magmaan: score_flip_test multiplier studentization must be "
+             "'none' or 'weighted-meat'");
+  return Studentization::None;
 }
 
 Rcpp::List score_flip_result_to_r(
@@ -7750,6 +7766,16 @@ Rcpp::List score_flip_result_to_r(
       Rcpp::_ ["mc_se_basic"] = out.mc_se_basic,
       Rcpp::_ ["mc_se_effective"] = out.mc_se_effective,
       Rcpp::_ ["mc_se_standardized"] = out.mc_se_standardized,
+      Rcpp::_ ["statistic_multiplier_studentized"] =
+          out.statistic_multiplier_studentized,
+      Rcpp::_ ["p_multiplier_studentized"] =
+          out.p_multiplier_studentized,
+      Rcpp::_ ["mc_se_multiplier_studentized"] =
+          out.mc_se_multiplier_studentized,
+      Rcpp::_ ["multiplier_studentized_min_eigenvalue"] =
+          out.multiplier_studentized_min_eigenvalue,
+      Rcpp::_ ["multiplier_studentized_max_condition"] =
+          out.multiplier_studentized_max_condition,
       Rcpp::_ ["p_chisq"] = out.p_chisq,
       Rcpp::_ ["scaling_factor"] = out.scaling_factor,
       Rcpp::_ ["statistic_mean_scaled"] = out.statistic_mean_scaled,
@@ -7783,11 +7809,18 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
                                      SEXP raw, int n_flips = 999,
                                      double seed = 1.0,
                                      std::string calibration = "all",
-                                     std::string multiplier = "rademacher") {
+                                     std::string multiplier = "rademacher",
+                                     double two_point_skewness = 1.0,
+                                     bool center_multiplier_scores = false,
+                                     std::string multiplier_studentization =
+                                         "none") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
   const auto multiplier_kind =
       score_flip_multiplier_from_string(multiplier);
+  const auto multiplier_studentization_kind =
+      score_flip_multiplier_studentization_from_string(
+          multiplier_studentization);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -7805,6 +7838,10 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
   options.seed = static_cast<std::uint64_t>(seed);
   options.calibration = calibration_kind;
   options.multiplier = multiplier_kind;
+  options.two_point_skewness = two_point_skewness;
+  options.center_multiplier_scores = center_multiplier_scores;
+  options.multiplier_studentization =
+      multiplier_studentization_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (est1 == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
@@ -7828,11 +7865,17 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
 Rcpp::List inference_score_flip_test_model(
     SEXP partable_H1, Rcpp::List fit_H0, SEXP raw, int n_flips = 999,
     double seed = 1.0, std::string calibration = "all",
-    std::string multiplier = "rademacher") {
+    std::string multiplier = "rademacher",
+    double two_point_skewness = 1.0,
+    bool center_multiplier_scores = false,
+    std::string multiplier_studentization = "none") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
   const auto multiplier_kind =
       score_flip_multiplier_from_string(multiplier);
+  const auto multiplier_studentization_kind =
+      score_flip_multiplier_studentization_from_string(
+          multiplier_studentization);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -7854,6 +7897,10 @@ Rcpp::List inference_score_flip_test_model(
   options.seed = static_cast<std::uint64_t>(seed);
   options.calibration = calibration_kind;
   options.multiplier = multiplier_kind;
+  options.two_point_skewness = two_point_skewness;
+  options.center_multiplier_scores = center_multiplier_scores;
+  options.multiplier_studentization =
+      multiplier_studentization_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (estimator == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);

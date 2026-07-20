@@ -4,8 +4,8 @@
 #' mean-zero, unit-variance multipliers on individual likelihood-score
 #' contributions. Rademacher signs are the default and support the basic,
 #' nuisance-effective, and flip-specifically standardized references. Mammen,
-#' Gaussian, and centered-exponential weights are experimental diagnostics for
-#' the nuisance-effective reference.
+#' tunable two-point, Gaussian, and centered-exponential weights are
+#' experimental diagnostics for the nuisance-effective reference.
 #'
 #' @param fit_H1 Less-restricted complete-data ML or direct-FIML fit, or a
 #'   `magmaan_model_spec` for the less-restricted model. Supplying the model
@@ -17,28 +17,43 @@
 #'   observed-data sample stored on both fits, so this argument must be omitted.
 #' @param n_flips Number of random multiplier transformations.
 #' @param seed Non-negative deterministic integer seed.
-#' @param multiplier Multiplier distribution. Non-Rademacher choices require
-#'   `calibration = "effective"`.
+#' @param multiplier Multiplier distribution. Non-Rademacher resampling
+#'   requires `calibration = "effective"`.
+#' @param two_point_skewness Non-negative third moment for
+#'   `multiplier = "two-point"`. The corresponding fourth moment is the
+#'   minimum possible value, `1 + two_point_skewness^2`; zero gives a
+#'   Rademacher law and one gives Mammen's law.
+#' @param center_multiplier_scores Whether to center effective-score
+#'   contributions within information strata before applying multipliers.
+#' @param multiplier_studentization Optional `"weighted-meat"` bootstrap-t
+#'   diagnostic using the per-draw meat
+#'   `sum(w_i^2 u_i u_i')`. `"none"` retains the expected-information metric.
 #' @param calibration Which randomization references to compute. `"effective"`
 #'   skips the basic and flip-specific covariance calculations;
 #'   `"effective-standardized"` adds the standardized reference; `"all"`
 #'   preserves the original three-reference result. `"asymptotic"` draws no
-#'   signs and is used by [nested_score_test()].
+#'   multipliers and is used by [nested_score_test()].
 #'
 #' @return A list of class `magmaan_score_flip_test`. In addition to the three
 #'   p-values it includes the mean-scaled and exact-mixture score references,
 #'   the direct sandwich-studentized score statistic and p-value, flip-variance
-#'   displacement diagnostics, and elapsed seconds for setup, resampling,
-#'   flip standardization, and the asymptotic comparators.
+#'   displacement diagnostics, optional multiplier-studentized output, and
+#'   elapsed seconds for setup, resampling, flip standardization, and the
+#'   asymptotic comparators.
 #' @export
 score_flip_test <- function(fit_H1, fit_H0, data = NULL,
                             n_flips = 999L, seed = 1,
                             calibration = c("all", "effective-standardized",
                                             "effective", "asymptotic"),
-                            multiplier = c("rademacher", "mammen", "gaussian",
-                                           "centered-exponential")) {
+                            multiplier = c("rademacher", "mammen", "two-point",
+                                           "gaussian", "centered-exponential"),
+                            two_point_skewness = 1,
+                            center_multiplier_scores = FALSE,
+                            multiplier_studentization = c("none",
+                                                          "weighted-meat")) {
   calibration <- match.arg(calibration)
   multiplier <- match.arg(multiplier)
+  multiplier_studentization <- match.arg(multiplier_studentization)
   h1_is_model <- inherits(fit_H1, "magmaan_model_spec")
   estimator_H0 <- toupper(fit_H0$estimator %||% "ML")
   estimator_H1 <- if (h1_is_model) estimator_H0 else
@@ -56,7 +71,27 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
   }
   if (multiplier != "rademacher" &&
       !calibration %in% c("effective", "asymptotic")) {
-    stop("score_flip_test(): non-Rademacher multipliers require `calibration = \"effective\"`",
+    stop("score_flip_test(): non-Rademacher resampling requires `calibration = \"effective\"`",
+         call. = FALSE)
+  }
+  two_point_skewness <- as.numeric(two_point_skewness)
+  if (length(two_point_skewness) != 1L ||
+      !is.finite(two_point_skewness) ||
+      two_point_skewness < 0 || two_point_skewness > 1e6) {
+    stop("score_flip_test(): `two_point_skewness` must be finite and in [0, 1e6]",
+         call. = FALSE)
+  }
+  if (!is.logical(center_multiplier_scores) ||
+      length(center_multiplier_scores) != 1L ||
+      is.na(center_multiplier_scores)) {
+    stop("score_flip_test(): `center_multiplier_scores` must be TRUE or FALSE",
+         call. = FALSE)
+  }
+  center_multiplier_scores <- isTRUE(center_multiplier_scores)
+  if ((center_multiplier_scores ||
+       multiplier_studentization != "none") &&
+      calibration != "effective") {
+    stop("score_flip_test(): multiplier centering and studentization require `calibration = \"effective\"`",
          call. = FALSE)
   }
   seed <- as.numeric(seed)[1L]
@@ -92,13 +127,20 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
   }
   out <- if (h1_is_model) {
     magmaan_core$inference_score_flip_test_model(
-      fit_H1$partable, fit_H0, raw, n_flips, seed, calibration, multiplier)
+      fit_H1$partable, fit_H0, raw, n_flips, seed, calibration, multiplier,
+      two_point_skewness, center_multiplier_scores,
+      multiplier_studentization)
   } else {
     magmaan_core$inference_score_flip_test(
-      fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier)
+      fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier,
+      two_point_skewness, center_multiplier_scores,
+      multiplier_studentization)
   }
   out$calibration <- calibration
   out$multiplier <- multiplier
+  out$two_point_skewness <- two_point_skewness
+  out$center_multiplier_scores <- center_multiplier_scores
+  out$multiplier_studentization <- multiplier_studentization
   class(out) <- c("magmaan_score_flip_test", "list")
   out
 }
@@ -134,8 +176,16 @@ nested_score_test <- function(fit_H1, fit_H0, data = NULL) {
 
 #' @export
 print.magmaan_score_flip_test <- function(x, ...) {
-  label <- if (!identical(x$multiplier %||% "rademacher", "rademacher")) {
-    paste(x$multiplier, "multiplier score test")
+  centered_label <- if (isTRUE(x$center_multiplier_scores)) "centered " else ""
+  label <- if (!identical(x$multiplier_studentization %||% "none", "none")) {
+    paste0(centered_label, x$multiplier %||% "rademacher",
+           " weighted-meat multiplier score test")
+  } else if (!identical(x$multiplier %||% "rademacher", "rademacher")) {
+    if (identical(x$multiplier, "two-point")) {
+      paste0(centered_label,
+             sprintf("two-point (skewness %.3g) multiplier score test",
+                     x$two_point_skewness))
+    } else paste0(centered_label, x$multiplier, " multiplier score test")
   } else switch(x$calibration %||% "all",
     effective = "effective sign-flip score test",
     `effective-standardized` = "standardized sign-flip score test",

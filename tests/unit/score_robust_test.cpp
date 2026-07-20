@@ -1643,12 +1643,72 @@ TEST_CASE("frontier score flips: affine ML pair is deterministic and standardize
   REQUIRE(gaussian.has_value());
   CHECK(std::abs(gaussian->p_effective - gaussian->p_mixture) < 0.04);
 
+  auto mammen_opts = effective_opts;
+  mammen_opts.multiplier =
+      inf::frontier::ScoreFlipMultiplier::Mammen;
+  auto mammen = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, mammen_opts);
+  REQUIRE(mammen.has_value());
+
+  auto two_point_opts = mammen_opts;
+  two_point_opts.multiplier =
+      inf::frontier::ScoreFlipMultiplier::TwoPoint;
+  two_point_opts.two_point_skewness = 1.0;
+  auto two_point_mammen = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, two_point_opts);
+  REQUIRE(two_point_mammen.has_value());
+  CHECK(two_point_mammen->p_effective == mammen->p_effective);
+
+  two_point_opts.two_point_skewness = 0.75;
+  auto two_point = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, two_point_opts);
+  REQUIRE(two_point.has_value());
+  CHECK(two_point->p_effective >= 1.0 / 128.0);
+  CHECK(two_point->p_effective <= 1.0);
+
+  auto centered_opts = mammen_opts;
+  centered_opts.center_multiplier_scores = true;
+  auto centered = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, centered_opts);
+  REQUIRE(centered.has_value());
+  CHECK(centered->p_effective >= 1.0 / 128.0);
+  CHECK(centered->p_effective <= 1.0);
+
+  auto studentized_opts = mammen_opts;
+  studentized_opts.multiplier_studentization =
+      inf::frontier::ScoreFlipMultiplierStudentization::WeightedMeat;
+  auto studentized = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, studentized_opts);
+  REQUIRE(studentized.has_value());
+  CHECK(studentized->statistic_multiplier_studentized ==
+        doctest::Approx(studentized->statistic_sandwich));
+  CHECK(studentized->p_multiplier_studentized >= 1.0 / 128.0);
+  CHECK(studentized->p_multiplier_studentized <= 1.0);
+  CHECK(studentized->p_value == studentized->p_multiplier_studentized);
+  CHECK(studentized->mc_se_multiplier_studentized >= 0.0);
+  CHECK(studentized->multiplier_studentized_min_eigenvalue > 0.0);
+  CHECK(studentized->multiplier_studentized_max_condition >= 1.0);
+
+  auto invalid_skewness_opts = two_point_opts;
+  invalid_skewness_opts.two_point_skewness = -0.1;
+  auto invalid_skewness = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0,
+      invalid_skewness_opts);
+  CHECK_FALSE(invalid_skewness.has_value());
+
   auto unsupported_opts = opts;
   unsupported_opts.multiplier =
       inf::frontier::ScoreFlipMultiplier::Mammen;
   auto unsupported = inf::frontier::score_flip_test(
       h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, unsupported_opts);
   CHECK_FALSE(unsupported.has_value());
+
+  auto unsupported_centering_opts = opts;
+  unsupported_centering_opts.center_multiplier_scores = true;
+  auto unsupported_centering = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0,
+      unsupported_centering_opts);
+  CHECK_FALSE(unsupported_centering.has_value());
 
   auto asymptotic_opts = opts;
   asymptotic_opts.n_flips = 0;
@@ -1792,6 +1852,17 @@ TEST_CASE("frontier FIML score flips: all-observed patterns equal complete ML") 
   CHECK((fiml->eigvals - complete->eigvals).norm() < 1e-9);
   CHECK(fiml->mean_variance_relative_shift ==
         doctest::Approx(complete->mean_variance_relative_shift).epsilon(1e-9));
+
+  opts.calibration = inf::frontier::ScoreFlipCalibration::Effective;
+  opts.multiplier = inf::frontier::ScoreFlipMultiplier::Mammen;
+  opts.center_multiplier_scores = true;
+  auto complete_centered = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw_ml, *est0, opts);
+  REQUIRE(complete_centered.has_value());
+  auto fiml_centered = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw_fiml, *pack, *est0, opts);
+  REQUIRE(fiml_centered.has_value());
+  CHECK(fiml_centered->p_effective == complete_centered->p_effective);
 }
 
 TEST_CASE("frontier FIML score flips: missing-pattern correction is reproducible") {

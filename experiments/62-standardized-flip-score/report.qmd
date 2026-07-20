@@ -18,13 +18,15 @@ files <- file.path("results", c(
   "dimension_summary.csv", "sandwich_power_replications.csv",
   "dimension_sandwich_summary.csv", "multiplier_probe_summary.csv",
   "multiplier_probe_replications.csv", "multiplier_probe_moments.csv",
-  "multiplier_probe_metadata.csv"))
+  "multiplier_probe_metadata.csv", "multiplier_refine_summary.csv",
+  "multiplier_refine_replications.csv", "multiplier_refine_moments.csv",
+  "multiplier_refine_metadata.csv"))
 if (any(!file.exists(files))) {
   stop(paste(
     "missing results; run run_experiment.R, run_expansion.R --probe,",
     "run_expansion.R --power, --power-sandwich, and --stress,",
     "run_dimension.R --big and --sandwich,",
-    "run_multiplier_probe.R --probe, and run_timing.R"))
+    "run_multiplier_probe.R --probe and --refine, and run_timing.R"))
 }
 s <- read.csv(files[[2L]])
 r <- read.csv(files[[3L]]); r_all_ok <- r$ok; r <- r[r$ok, , drop = FALSE]
@@ -40,6 +42,10 @@ multiplier_summary <- read.csv(files[[13L]])
 multiplier_reps <- read.csv(files[[14L]])
 multiplier_moments <- read.csv(files[[15L]])
 multiplier_metadata <- read.csv(files[[16L]])
+refine_summary <- read.csv(files[[17L]])
+refine_reps <- read.csv(files[[18L]])
+refine_moments <- read.csv(files[[19L]])
+refine_metadata <- read.csv(files[[20L]])
 
 # The one-flip replay uses the same deterministic cells and replications as the
 # original power grid; merge only the new asymptotic sandwich result.
@@ -177,6 +183,36 @@ multiplier_overall <- vapply(
 names(multiplier_overall) <- names(multiplier_cols)
 names(multiplier_moments) <- c(
   "multiplier", "mean", "variance", "third moment", "fourth moment")
+refine_cols <- c(
+  `two-point gamma=0.50` = "rejection_two_point_0_50",
+  `two-point gamma=0.75` = "rejection_two_point_0_75",
+  `two-point gamma=0.90` = "rejection_two_point_0_90",
+  Mammen = "rejection_two_point_1_00",
+  `centered Mammen` = "rejection_mammen_centered",
+  `weighted-meat Mammen` = "rejection_mammen_weighted_meat",
+  `centered weighted-meat` =
+    "rejection_mammen_centered_weighted_meat",
+  sandwich = "rejection_sandwich",
+  pEBA4 = "rejection_peba4")
+refine_table <- refine_summary[
+  c("n_total", "distribution", "heterogeneity", unname(refine_cols))]
+names(refine_table) <- c("N", "copula", "geometry", names(refine_cols))
+refine_overall <- vapply(
+  unname(refine_cols),
+  function(v) mean(refine_summary[[v]], na.rm = TRUE),
+  numeric(1L))
+names(refine_overall) <- names(refine_cols)
+refine_rank <- data.frame(
+  method = names(refine_cols),
+  rejection = unname(refine_overall),
+  minimum = vapply(
+    unname(refine_cols), function(v) min(refine_summary[[v]]), numeric(1L)),
+  maximum = vapply(
+    unname(refine_cols), function(v) max(refine_summary[[v]]), numeric(1L)),
+  mean_absolute_error = vapply(
+    unname(refine_cols),
+    function(v) mean(abs(refine_summary[[v]] - .05)), numeric(1L)))
+refine_rank <- refine_rank[order(refine_rank$mean_absolute_error), ]
 
 # Matched-empirical-null (size-adjusted) power.
 power_methods <- intersect(names(method_labels), names(power))
@@ -540,10 +576,71 @@ fourth moment makes the conditional reference far too heavy-tailed here.
 This does not validate Mammen as a default. Unlike Rademacher it is a multiplier
 bootstrap, not an exact sign randomization, and the current flip-specific
 nuisance standardization relies on $w_i^2=1$. The implementation therefore
-allows non-Rademacher laws only for the nuisance-effective statistic. The
-bounded next iteration is Mammen versus robust sandwich and pEBA4 on a small
-normal/$t$/skew grid, with more null replications and matched-null power; there
-is no reason to expand Gaussian or centered exponential further.
+allows non-Rademacher laws only for the nuisance-effective statistic.
+
+### Refining Mammen
+
+The first result suggests three distinct mechanisms.
+
+First, the zero-mean, unit-variance two-point family can be indexed by its third
+moment $\gamma$. If
+
+$$
+b_\gamma = \frac{\gamma + \sqrt{\gamma^2+4}}{2}, \qquad
+a_\gamma = -b_\gamma^{-1},
+$$
+
+and $P(w=a_\gamma)=b_\gamma^2/(1+b_\gamma^2)$, then
+$E(w^3)=\gamma$ and $E(w^4)=1+\gamma^2$. This is the smallest possible fourth
+moment at a given third moment. Rademacher is $\gamma=0$ and Mammen is
+$\gamma=1$, so intermediate values test whether Mammen's remaining
+conservatism is simply too much multiplier tail thickness.
+
+Second, the restricted-fit scores have zero population mean under the null but
+their tested-direction sample sum is the observed signal. A multiplier
+empirical process can impose the null by replacing each row in information
+stratum $s$ with
+$\tilde u_{is}=\hat u_{is}-\bar u_s$ before multiplication. This retains
+Mammen's moment matching and changes no observed numerator.
+
+Third, a bootstrap-$t$ attempt replaces the fixed metric in each draw with
+$\hat B^\ast=\sum_i w_i^2\tilde u_i\tilde u_i^\top$ and compares it with the
+observed raw-OPG sandwich statistic. This is more invasive: it changes both
+the resampled numerator law and its studentizer.
+
+The same eight cells, observations, seeds, 200 replications, and 499 draws give:
+
+```{r multiplier-refine-rank}
+knitr::kable(refine_rank, digits = 3)
+```
+
+The mechanism is unusually clear. Moving along the two-point moment boundary
+interpolates smoothly: $\gamma=.75$ remains liberal,
+`r sprintf("%.3f", refine_overall[["two-point gamma=0.75"]])`, while
+$\gamma=.90$ lands at
+`r sprintf("%.3f", refine_overall[["two-point gamma=0.90"]])`. But this is a
+tuned compromise and its cell rates still range from
+`r sprintf("%.3f", min(refine_summary$rejection_two_point_0_90))` to
+`r sprintf("%.3f", max(refine_summary$rejection_two_point_0_90))`.
+
+Score recentering is the stronger hypothesis. Centered Mammen averages
+`r sprintf("%.3f", refine_overall[["centered Mammen"]])` with cell rates
+`r sprintf("%.3f", min(refine_summary$rejection_mammen_centered))`--`r sprintf("%.3f", max(refine_summary$rejection_mammen_centered))`;
+it retains $\gamma=1$ rather than selecting a moment from these same cells.
+The weighted-meat idea fails in this form: uncentered and centered variants
+reject
+`r sprintf("%.3f", refine_overall[["weighted-meat Mammen"]])` and
+`r sprintf("%.3f", refine_overall[["centered weighted-meat"]])`. Their p-values
+correlate only about
+`r sprintf("%.2f", cor(refine_reps$p_two_point_1_00,
+                       refine_reps$p_mammen_weighted_meat))`
+with fixed-metric Mammen, confirming that this is not a small correction.
+
+Promote none of these yet. Carry only raw Mammen, centered Mammen, direct
+sandwich, and pEBA4 into an independent small normal/$t$/skew confirmation with
+more null replications, then use method-specific null thresholds for power.
+The $\gamma=.90$ arm is useful as a mechanism check but should not become a
+calibration constant selected on the discovery cells.
 
 ## Timing
 
@@ -577,10 +674,10 @@ knitr::kable(timing_499, digits = 3)
 - Keep `p_standardized` as a cheap resampling option, but it is not better
   calibrated than the score-base asymptotics and is more strained by a severe
   copula.
-- Keep Mammen multipliers as the only resampling correction worth a bounded
-  follow-up. This gate improves the badly liberal Rademacher reference, but its
-  average 3.7% rejection is mildly conservative and does not establish
-  generality outside the deliberately hard 8-df cells.
+- Carry centered Mammen into the bounded confirmation. It preserves Mammen's
+  third-moment match and improves rejection from 3.7% to 4.9%, with less
+  cell-to-cell variation than tuning the multiplier to $\gamma=.90$. Do not
+  treat this discovery-grid result as a default.
 - Do not compare nominal power without comparing null size. The matched-null
   table is a forced size comparison, not evidence that a nominal reference is
   valid.
@@ -634,6 +731,7 @@ Rscript experiments/62-standardized-flip-score/run_expansion.R --stress
 Rscript experiments/62-standardized-flip-score/run_dimension.R --big
 Rscript experiments/62-standardized-flip-score/run_dimension.R --sandwich
 Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --probe
+Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --refine
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```

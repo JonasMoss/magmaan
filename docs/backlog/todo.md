@@ -65,14 +65,25 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   intended numerical checksum against score-ALL (2.4% versus 2.7% rejection;
   mean absolute p-value gap 0.015), while centered exponential weights were
   much too conservative at 0.7%. Mammen's two-point weights were the only
-  plausible correction, averaging 3.7% with cell rates 1.5--5.0%. Keep this as
-  a bounded follow-up, not a default: Mammen is a multiplier bootstrap without
-  exact sign-randomization validity, is currently effective-score-only because
-  flip-specific standardization uses `w_i^2=1`, and was tested only where the
-  Rademacher method was already known to fail. The next small grid should
-  compare Mammen, direct sandwich, and pEBA4 under normal/t5/skew data with more
-  null replications and matched-null power; do not carry Gaussian or centered
-  exponential forward. In parallel, the next bounded analytic question remains
+  plausible initial correction, averaging 3.7% with cell rates 1.5--5.0%.
+  The immediate mechanism probe is now complete on the same cells. The
+  minimum-kurtosis two-point family
+  (`Ew^3=gamma`, `Ew^4=1+gamma^2`) interpolated smoothly: gamma=.75 remained
+  liberal at 6.1%, while gamma=.90 reached 4.8% but drifted from 3.9% at N=60
+  to 5.6% at N=200. Within-information-stratum recentering was better:
+  centered Mammen averaged 4.9%, ranged 3.5--6.0% across cells, and retained
+  the theoretically motivated `Ew^3=1` rather than selecting a moment on the
+  discovery grid. Per-draw `sum(w_i^2 u_i u_i')` studentization failed,
+  rejecting 9.1% without and 16.4% with recentering; do not carry it forward.
+  Keep centered Mammen as a bounded follow-up, not a default: it is still a
+  multiplier bootstrap without exact sign-randomization validity, is
+  effective-score-only because flip-specific standardization uses `w_i^2=1`,
+  and has only been tested where Rademacher was already known to fail. The next
+  independent small grid should compare raw/centered Mammen, direct sandwich,
+  and pEBA4 under normal/t5/skew data with more null replications and
+  matched-null power; retain gamma=.90 only as a mechanism check, and drop
+  Gaussian, centered exponential, and weighted-meat arms. In parallel, the
+  next bounded analytic question remains
   shrinkage of `G'B1G` itself, spanning SB's common-eigenvalue trace,
   pEBA-style spectral shrinkage, and the raw sandwich inverse. Gate either
   proposal on null size, matched-null power, and meat conditioning rather than

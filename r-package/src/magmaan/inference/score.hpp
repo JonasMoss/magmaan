@@ -458,19 +458,19 @@ score_tests_robust_joint(spec::LatentStructure pt,
                          const Estimates& est,
                          const RobustScoreOptions& options = {});
 
-// Random sign-flip calibration of an affine nested-model score test. H1 and H0
+// Random multiplier calibration of an affine nested-model score test. H1 and H0
 // must share the same ambient parameter slots, with H0's tangent space nested
 // inside H1's. Complete-data ML uses per-group expected information; FIML uses
 // the corresponding observed-pattern conditional Fisher information. In both
-// cases the signs act on individual likelihood-score contributions and the
-// pattern/group strata only compress the flip-specific nuisance covariance.
-// `n_flips` counts random Rademacher transformations; the observed identity is
-// included separately in the Monte Carlo rank denominator.
+// cases the weights act on individual likelihood-score contributions and the
+// pattern/group strata define nuisance covariance and optional score centering.
+// `n_flips` counts random transformations; the observed statistic is included
+// separately in the Monte Carlo rank denominator.
 enum class ScoreFlipCalibration {
   // Observed nuisance-effective score and asymptotic references only. No
-  // Rademacher transformations are drawn and n_flips is ignored.
+  // multiplier transformations are drawn and n_flips is ignored.
   AsymptoticOnly,
-  // Nuisance-effective Rademacher reference only.
+  // Nuisance-effective multiplier reference only.
   Effective,
   // Effective and flip-specifically standardized Rademacher references.
   EffectiveStandardized,
@@ -486,8 +486,16 @@ enum class ScoreFlipCalibration {
 enum class ScoreFlipMultiplier {
   Rademacher,
   Mammen,
+  // Minimum-fourth-moment two-point law indexed by ScoreFlipOptions'
+  // two_point_skewness.
+  TwoPoint,
   Gaussian,
   CenteredExponential,
+};
+
+enum class ScoreFlipMultiplierStudentization {
+  None,
+  WeightedMeat,
 };
 
 struct ScoreFlipOptions {
@@ -495,6 +503,19 @@ struct ScoreFlipOptions {
   std::uint64_t seed = 1;
   ScoreFlipCalibration calibration = ScoreFlipCalibration::All;
   ScoreFlipMultiplier multiplier = ScoreFlipMultiplier::Rademacher;
+  // For TwoPoint, the non-negative third moment gamma. Its fourth moment is
+  // the minimum compatible value 1 + gamma^2; gamma = 0 is Rademacher and
+  // gamma = 1 is Mammen.
+  double two_point_skewness = 1.0;
+  // Center effective-score rows within their information stratum before
+  // applying multipliers. The observed statistic remains evaluated at the
+  // original restricted-fit score.
+  bool center_multiplier_scores = false;
+  // Optional bootstrap-t diagnostic. Each resample uses
+  // sum_i w_i^2 u_i u_i' as its meat and is compared with the observed
+  // raw-OPG sandwich score statistic.
+  ScoreFlipMultiplierStudentization multiplier_studentization =
+      ScoreFlipMultiplierStudentization::None;
   // Deterministic verification path for tiny samples. Enumerates every
   // non-identity sign vector and ignores n_flips/seed; capped at n <= 20.
   bool exact_enumeration = false;
@@ -509,10 +530,20 @@ struct ScoreFlipTestResult {
   double p_basic = 1.0;
   double p_effective = 1.0;
   double p_standardized = 1.0;
-  double p_value = 1.0;  // recommended alias: p_standardized
+  double p_value = 1.0;  // selected resampling/asymptotic reference
   double mc_se_basic = 0.0;
   double mc_se_effective = 0.0;
   double mc_se_standardized = 0.0;
+  double statistic_multiplier_studentized =
+      std::numeric_limits<double>::quiet_NaN();
+  double p_multiplier_studentized =
+      std::numeric_limits<double>::quiet_NaN();
+  double mc_se_multiplier_studentized =
+      std::numeric_limits<double>::quiet_NaN();
+  double multiplier_studentized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double multiplier_studentized_max_condition =
+      std::numeric_limits<double>::quiet_NaN();
 
   double p_chisq = 1.0;
   double scaling_factor = 1.0;

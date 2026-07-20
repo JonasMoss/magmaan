@@ -11,16 +11,19 @@ source(file.path(script_dir, "R", "expansion_design.R"))
 set_single_threaded_math()
 
 usage <- function() cat(
-  "Usage: Rscript run_multiplier_probe.R [--smoke|--probe] [options]\n\n",
+  "Usage: Rscript run_multiplier_probe.R [--smoke|--probe|--refine] [options]\n\n",
   "Focused multiplier-score replay of the difficult q=8 severe-copula cells.\n\n",
   "Profiles:\n",
   "  --smoke          One cell, 4 replications, 39 multipliers (default).\n",
   "  --probe          Eight cells, 200 replications, 499 multipliers.\n\n",
+  "  --refine         Two-point moment curve plus centered/studentized Mammen.\n\n",
   "Options:\n",
   "  --reps N         Override replications per cell.\n",
   "  --multipliers N  Override multiplier draws per method and replication.\n",
   "  --weights L      Comma-separated rademacher,mammen,gaussian,\n",
   "                   centered-exponential.\n",
+  "  --gammas L       Two-point third moments for --refine. Default:\n",
+  "                   0.5,0.75,0.9,1.\n",
   "  --n-total L      Comma-separated total N values. Default: 60,200.\n",
   "  --cores N        Parallel cell workers.\n",
   "  --seed-base N    Deterministic seed base. Default: 20260713.\n",
@@ -33,6 +36,7 @@ opts <- list(
   mode = "smoke", reps = NULL, multipliers = NULL,
   weights = c("rademacher", "mammen", "gaussian",
               "centered-exponential"),
+  gammas = c(0.5, 0.75, 0.9, 1),
   n_total = c(60L, 200L),
   cores = max(1L, parallel::detectCores() - 2L),
   seed_base = 20260713L, max_cells = NULL, results_dir = NULL)
@@ -52,9 +56,11 @@ while (i <= length(args)) {
     quit(status = 0L)
   } else if (a == "--smoke") opts$mode <- "smoke"
   else if (a == "--probe") opts$mode <- "probe"
+  else if (a == "--refine") opts$mode <- "refine"
   else if (a == "--reps") opts$reps <- as.integer(take())
   else if (a == "--multipliers") opts$multipliers <- as.integer(take())
   else if (a == "--weights") opts$weights <- parse_csv(take())
+  else if (a == "--gammas") opts$gammas <- as.numeric(parse_csv(take()))
   else if (a == "--n-total") opts$n_total <- as.integer(parse_csv(take()))
   else if (a == "--cores") opts$cores <- as.integer(take())
   else if (a == "--seed-base") opts$seed_base <- as.integer(take())
@@ -71,6 +77,10 @@ allowed_weights <- c(
   "rademacher", "mammen", "gaussian", "centered-exponential")
 if (!length(opts$weights) || any(!opts$weights %in% allowed_weights)) {
   stop("--weights contains an unknown multiplier law", call. = FALSE)
+}
+if (!length(opts$gammas) || any(!is.finite(opts$gammas)) ||
+    any(opts$gammas < 0) || any(opts$gammas > 1e6)) {
+  stop("--gammas must be finite and non-negative", call. = FALSE)
 }
 if (anyNA(c(opts$reps, opts$multipliers, opts$cores)) ||
     any(c(opts$reps, opts$multipliers, opts$cores) < 1L)) {
@@ -100,14 +110,49 @@ grid$cell_id <- seq_len(nrow(grid))
 if (!nrow(grid)) stop("no multiplier-probe cells selected", call. = FALSE)
 
 specs <- flip_expansion_specs(8L)
-column_for <- function(weight) {
-  paste0("p_", gsub("-", "_", weight, fixed = TRUE))
+safe_name <- function(x) {
+  gsub(".", "_", gsub("-", "_", x, fixed = TRUE), fixed = TRUE)
 }
-time_column_for <- function(weight) {
-  paste0("seconds_", gsub("-", "_", weight, fixed = TRUE))
+column_for <- function(arm) paste0("p_", safe_name(arm))
+time_column_for <- function(arm) paste0("seconds_", safe_name(arm))
+if (opts$mode == "refine") {
+  gamma_labels <- format(opts$gammas, trim = TRUE, scientific = FALSE)
+  arm_specs <- data.frame(
+    arm = paste0("two_point_", gamma_labels),
+    multiplier = "two-point",
+    two_point_skewness = opts$gammas,
+    center = FALSE,
+    studentization = "none",
+    third_moment = opts$gammas,
+    fourth_moment = 1 + opts$gammas^2,
+    stringsAsFactors = FALSE)
+  arm_specs <- rbind(
+    arm_specs,
+    data.frame(
+      arm = c("mammen_centered", "mammen_weighted_meat",
+              "mammen_centered_weighted_meat"),
+      multiplier = "mammen", two_point_skewness = 1,
+      center = c(TRUE, FALSE, TRUE),
+      studentization = c("none", "weighted-meat", "weighted-meat"),
+      third_moment = 1, fourth_moment = 2,
+      stringsAsFactors = FALSE))
+} else {
+  moment_lookup <- data.frame(
+    multiplier = c(
+      "rademacher", "mammen", "gaussian", "centered-exponential"),
+    third_moment = c(0, 1, 0, 2),
+    fourth_moment = c(1, 2, 3, 9),
+    stringsAsFactors = FALSE)
+  arm_specs <- data.frame(
+    arm = opts$weights, multiplier = opts$weights,
+    two_point_skewness = 1, center = FALSE,
+    studentization = "none", stringsAsFactors = FALSE)
+  arm_specs <- merge(
+    arm_specs, moment_lookup, by = "multiplier", sort = FALSE)
+  arm_specs <- arm_specs[match(opts$weights, arm_specs$arm), ]
 }
-p_columns <- vapply(opts$weights, column_for, character(1))
-time_columns <- vapply(opts$weights, time_column_for, character(1))
+p_columns <- vapply(arm_specs$arm, column_for, character(1))
+time_columns <- vapply(arm_specs$arm, time_column_for, character(1))
 
 empty_rep <- function(rep_id, error) {
   out <- data.frame(
@@ -141,18 +186,22 @@ one_rep <- function(cell, rep_id) {
 
   multiplier_seed <-
     opts$seed_base + cell$stress_cell_id * 1000000L + rep_id
-  tests <- vector("list", length(opts$weights))
-  names(tests) <- opts$weights
-  elapsed <- setNames(rep(NA_real_, length(opts$weights)), opts$weights)
-  for (weight in opts$weights) {
+  tests <- vector("list", nrow(arm_specs))
+  names(tests) <- arm_specs$arm
+  elapsed <- setNames(rep(NA_real_, nrow(arm_specs)), arm_specs$arm)
+  for (j in seq_len(nrow(arm_specs))) {
+    arm <- arm_specs[j, ]
     multiplier_started <- proc.time()[["elapsed"]]
-    tests[[weight]] <- tryCatch(
+    tests[[arm$arm]] <- tryCatch(
       score_flip_test(
         specs$configural, fit0, data = dat, n_flips = opts$multipliers,
         seed = multiplier_seed, calibration = "effective",
-        multiplier = weight),
+        multiplier = arm$multiplier,
+        two_point_skewness = arm$two_point_skewness,
+        center_multiplier_scores = arm$center,
+        multiplier_studentization = arm$studentization),
       error = function(e) e)
-    elapsed[[weight]] <- proc.time()[["elapsed"]] - multiplier_started
+    elapsed[[arm$arm]] <- proc.time()[["elapsed"]] - multiplier_started
   }
   errors <- vapply(
     tests, function(x) {
@@ -179,15 +228,21 @@ one_rep <- function(cell, rep_id) {
     statistic_effective = reference$statistic_effective,
     statistic_sandwich = reference$statistic_sandwich,
     sandwich_condition = reference$sandwich_condition,
-    gaussian_all_abs_gap = if ("gaussian" %in% names(tests)) {
-      abs(tests$gaussian$p_effective - reference$p_mixture)
+    gaussian_all_abs_gap = if (any(arm_specs$multiplier == "gaussian")) {
+      gaussian_arm <- arm_specs$arm[arm_specs$multiplier == "gaussian"][[1L]]
+      abs(tests[[gaussian_arm]]$p_effective - reference$p_mixture)
     } else NA_real_,
     fit_seconds = fit_seconds,
     total_seconds = proc.time()[["elapsed"]] - started,
     stringsAsFactors = FALSE)
-  for (weight in opts$weights) {
-    out[[column_for(weight)]] <- tests[[weight]]$p_effective
-    out[[time_column_for(weight)]] <- elapsed[[weight]]
+  for (j in seq_len(nrow(arm_specs))) {
+    arm <- arm_specs[j, ]
+    test <- tests[[arm$arm]]
+    out[[column_for(arm$arm)]] <-
+      if (arm$studentization == "weighted-meat") {
+        test$p_multiplier_studentized
+      } else test$p_effective
+    out[[time_column_for(arm$arm)]] <- elapsed[[arm$arm]]
   }
   out
 }
@@ -206,7 +261,7 @@ run_cell <- function(k) {
 
 cat(sprintf(
   "multiplier probe: %d cells x %d reps x %d draws x %d laws; %d cores\n",
-  nrow(grid), opts$reps, opts$multipliers, length(opts$weights), opts$cores))
+  nrow(grid), opts$reps, opts$multipliers, nrow(arm_specs), opts$cores))
 started <- proc.time()[["elapsed"]]
 if (.Platform$OS.type != "windows" && opts$cores > 1L && nrow(grid) > 1L) {
   pieces <- parallel::mclapply(
@@ -221,7 +276,9 @@ if (.Platform$OS.type != "windows" && opts$cores > 1L && nrow(grid) > 1L) {
   })
 }
 raw <- do.call(rbind, pieces)
-prefix <- if (opts$mode == "smoke") "multiplier_smoke" else "multiplier_probe"
+prefix <- switch(
+  opts$mode, smoke = "multiplier_smoke", probe = "multiplier_probe",
+  refine = "multiplier_refine")
 write.csv(
   raw, file.path(results_dir, paste0(prefix, "_replications.csv")),
   row.names = FALSE)
@@ -241,11 +298,11 @@ summarize_cell <- function(x) {
       ok$sandwich_condition, na.rm = TRUE),
     median_fit_ms = 1000 * stats::median(ok$fit_seconds, na.rm = TRUE),
     median_total_ms = 1000 * stats::median(ok$total_seconds, na.rm = TRUE))
-  for (weight in opts$weights) {
-    out[[paste0("rejection_", gsub("-", "_", weight, fixed = TRUE))]] <-
-      safe_mean(ok[[column_for(weight)]] < .05)
-    out[[paste0("median_", gsub("-", "_", weight, fixed = TRUE), "_ms")]] <-
-      1000 * stats::median(ok[[time_column_for(weight)]], na.rm = TRUE)
+  for (arm in arm_specs$arm) {
+    out[[paste0("rejection_", safe_name(arm))]] <-
+      safe_mean(ok[[column_for(arm)]] < .05)
+    out[[paste0("median_", safe_name(arm), "_ms")]] <-
+      1000 * stats::median(ok[[time_column_for(arm)]], na.rm = TRUE)
   }
   out
 }
@@ -257,23 +314,28 @@ write.csv(
   summary, file.path(results_dir, paste0(prefix, "_summary.csv")),
   row.names = FALSE)
 
-moments <- data.frame(
-  multiplier = c(
-    "rademacher", "mammen", "gaussian", "centered-exponential"),
-  mean = 0, variance = 1,
-  third_moment = c(0, 1, 0, 2),
-  fourth_moment = c(1, 2, 3, 9))
+moments <- if (opts$mode == "refine") {
+  transform(
+    arm_specs, mean = 0, variance = 1,
+    weighted_meat = studentization == "weighted-meat")
+} else {
+  data.frame(
+    multiplier = arm_specs$multiplier,
+    mean = 0, variance = 1,
+    third_moment = arm_specs$third_moment,
+    fourth_moment = arm_specs$fourth_moment)
+}
 write.csv(
-  moments[moments$multiplier %in% opts$weights, ],
+  moments,
   file.path(results_dir, paste0(prefix, "_moments.csv")),
   row.names = FALSE)
 metadata <- data.frame(
   key = c(
-    "mode", "cells", "reps", "multipliers", "weights", "cores",
+    "mode", "cells", "reps", "multipliers", "arms", "cores",
     "seed_base", "elapsed_seconds", "magmaan_version", "R_version"),
   value = c(
     opts$mode, nrow(grid), opts$reps, opts$multipliers,
-    paste(opts$weights, collapse = ","), opts$cores, opts$seed_base,
+    paste(arm_specs$arm, collapse = ","), opts$cores, opts$seed_base,
     proc.time()[["elapsed"]] - started,
     as.character(packageVersion("magmaan")), R.version.string))
 write.csv(
