@@ -2332,18 +2332,33 @@ double multiplier_uniform_open(std::mt19937_64& rng) {
   return (static_cast<double>(rng() >> 11U) + 0.5) * scale;
 }
 
+double draw_two_point_multiplier(std::mt19937_64& rng, double skewness) {
+  if (skewness == 1.0) {
+    constexpr double sqrt5 = 2.2360679774997896964;
+    constexpr double negative = (1.0 - sqrt5) / 2.0;
+    constexpr double positive = (1.0 + sqrt5) / 2.0;
+    constexpr double p_negative = (sqrt5 + 1.0) / (2.0 * sqrt5);
+    return multiplier_uniform_open(rng) < p_negative ? negative : positive;
+  }
+  const double positive =
+      0.5 * (skewness + std::hypot(skewness, 2.0));
+  const double negative = -1.0 / positive;
+  const double positive_squared = positive * positive;
+  const double p_negative =
+      positive_squared / (1.0 + positive_squared);
+  return multiplier_uniform_open(rng) < p_negative ? negative : positive;
+}
+
 double draw_score_multiplier(std::mt19937_64& rng,
-                             ScoreFlipMultiplier multiplier) {
+                             ScoreFlipMultiplier multiplier,
+                             double two_point_skewness) {
   switch (multiplier) {
     case ScoreFlipMultiplier::Rademacher:
       return (rng() & 1ULL) == 0ULL ? -1.0 : 1.0;
-    case ScoreFlipMultiplier::Mammen: {
-      constexpr double sqrt5 = 2.2360679774997896964;
-      constexpr double negative = (1.0 - sqrt5) / 2.0;
-      constexpr double positive = (1.0 + sqrt5) / 2.0;
-      constexpr double p_negative = (sqrt5 + 1.0) / (2.0 * sqrt5);
-      return multiplier_uniform_open(rng) < p_negative ? negative : positive;
-    }
+    case ScoreFlipMultiplier::Mammen:
+      return draw_two_point_multiplier(rng, 1.0);
+    case ScoreFlipMultiplier::TwoPoint:
+      return draw_two_point_multiplier(rng, two_point_skewness);
     case ScoreFlipMultiplier::Gaussian: {
       constexpr double two_pi = 6.2831853071795864769;
       const double u1 = multiplier_uniform_open(rng);
@@ -2377,11 +2392,28 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   const bool include_standardized =
       options.calibration == ScoreFlipCalibration::All ||
       options.calibration == ScoreFlipCalibration::EffectiveStandardized;
+  const bool multiplier_studentized =
+      options.multiplier_studentization ==
+      ScoreFlipMultiplierStudentization::WeightedMeat;
   if (resample &&
       options.multiplier != ScoreFlipMultiplier::Rademacher &&
       options.calibration != ScoreFlipCalibration::Effective) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: non-Rademacher multipliers require effective calibration"));
+  }
+  if (options.multiplier == ScoreFlipMultiplier::TwoPoint &&
+      (!std::isfinite(options.two_point_skewness) ||
+       options.two_point_skewness < 0.0 ||
+       options.two_point_skewness > 1e6)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: two-point skewness must be finite and in [0, 1e6]"));
+  }
+  if ((options.center_multiplier_scores || multiplier_studentized) &&
+      (!resample ||
+       options.calibration != ScoreFlipCalibration::Effective)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: multiplier centering and weighted-meat "
+        "studentization require effective calibration"));
   }
   if (options.exact_enumeration &&
       options.multiplier != ScoreFlipMultiplier::Rademacher) {
@@ -2522,11 +2554,39 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   }
   const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
   const Eigen::MatrixXd effective_rows = scores * G;
+  Eigen::MatrixXd multiplier_rows = effective_rows;
+  if (options.center_multiplier_scores) {
+    Eigen::MatrixXd stratum_sums = Eigen::MatrixXd::Zero(
+        static_cast<Eigen::Index>(strata.per_case.size()), df);
+    for (Eigen::Index row = 0; row < multiplier_rows.rows(); ++row) {
+      const Eigen::Index stratum = static_cast<Eigen::Index>(
+          strata.row_stratum[static_cast<std::size_t>(row)]);
+      stratum_sums.row(stratum) += multiplier_rows.row(row);
+    }
+    for (Eigen::Index row = 0; row < multiplier_rows.rows(); ++row) {
+      const std::size_t stratum =
+          strata.row_stratum[static_cast<std::size_t>(row)];
+      multiplier_rows.row(row) -=
+          stratum_sums.row(static_cast<Eigen::Index>(stratum)) /
+          static_cast<double>(strata.n_obs[stratum]);
+    }
+  }
 
   const Eigen::VectorXd u_eff_obs = effective_rows.colwise().sum().transpose();
   auto t_eff_obs = flip_quadratic(u_eff_obs, V_identity,
                                   "score_flip_test observed effective");
   if (!t_eff_obs.has_value()) return std::unexpected(t_eff_obs.error());
+
+  std::optional<FlipQuadratic> t_multiplier_studentized_obs;
+  if (multiplier_studentized) {
+    const Eigen::MatrixXd observed_meat =
+        effective_rows.transpose() * effective_rows;
+    auto t = flip_quadratic(
+        u_eff_obs, observed_meat,
+        "score_flip_test observed multiplier-studentized");
+    if (!t.has_value()) return std::unexpected(t.error());
+    t_multiplier_studentized_obs.emplace(std::move(*t));
+  }
 
   std::optional<Eigen::MatrixXd> basic_rows;
   std::optional<FlipQuadratic> t_basic_obs;
@@ -2568,6 +2628,7 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   int exceed_basic = 0;
   int exceed_effective = 0;
   int exceed_standardized = 0;
+  int exceed_multiplier_studentized = 0;
   double min_variance_eigenvalue = include_standardized
       ? t_std_obs->min_eigenvalue
       : std::numeric_limits<double>::quiet_NaN();
@@ -2576,6 +2637,12 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
       : std::numeric_limits<double>::quiet_NaN();
   double variance_relative_shift_sum = 0.0;
   double max_variance_relative_shift = 0.0;
+  double multiplier_studentized_min_eigenvalue = multiplier_studentized
+      ? t_multiplier_studentized_obs->min_eigenvalue
+      : std::numeric_limits<double>::quiet_NaN();
+  double multiplier_studentized_max_condition = multiplier_studentized
+      ? t_multiplier_studentized_obs->condition
+      : std::numeric_limits<double>::quiet_NaN();
   double resampling_score_seconds = 0.0;
   double resampling_standardization_seconds = 0.0;
   const Eigen::Index total_n = scores.rows();
@@ -2591,6 +2658,9 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
     Eigen::VectorXd ub;
     if (include_basic) ub = Eigen::VectorXd::Zero(df);
     Eigen::VectorXd ue = Eigen::VectorXd::Zero(df);
+    Eigen::MatrixXd multiplier_meat;
+    if (multiplier_studentized)
+      multiplier_meat = Eigen::MatrixXd::Zero(df, df);
     std::vector<std::int64_t> sign_sum;
     if (include_standardized)
       sign_sum.assign(strata.per_case.size(), 0);
@@ -2598,14 +2668,22 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
       const double multiplier = options.exact_enumeration
           ? (((static_cast<std::uint64_t>(bflip) >> row) & 1ULL) == 0ULL
                  ? -1.0 : 1.0)
-          : draw_score_multiplier(rng, options.multiplier);
+          : draw_score_multiplier(
+                rng, options.multiplier, options.two_point_skewness);
       const std::size_t stratum =
           strata.row_stratum[static_cast<std::size_t>(row)];
       if (include_standardized)
         sign_sum[stratum] += static_cast<std::int64_t>(multiplier);
       if (include_basic)
         ub.noalias() += multiplier * basic_rows->row(row).transpose();
-      ue.noalias() += multiplier * effective_rows.row(row).transpose();
+      const Eigen::VectorXd multiplier_row =
+          multiplier_rows.row(row).transpose();
+      ue.noalias() += multiplier * multiplier_row;
+      if (multiplier_studentized) {
+        multiplier_meat.noalias() +=
+            (multiplier * multiplier) *
+            (multiplier_row * multiplier_row.transpose());
+      }
     }
     auto te = flip_quadratic(ue, V_identity, "score_flip_test effective flip");
     if (!te.has_value()) return std::unexpected(te.error());
@@ -2614,6 +2692,14 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
       auto t = flip_quadratic(ub, V_identity, "score_flip_test basic flip");
       if (!t.has_value()) return std::unexpected(t.error());
       tb.emplace(std::move(*t));
+    }
+    std::optional<FlipQuadratic> tm;
+    if (multiplier_studentized) {
+      auto t = flip_quadratic(
+          ue, multiplier_meat,
+          "score_flip_test multiplier weighted-meat");
+      if (!t.has_value()) return std::unexpected(t.error());
+      tm.emplace(std::move(*t));
     }
     const auto score_end = Clock::now();
     resampling_score_seconds +=
@@ -2637,6 +2723,15 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
     }
     if (include_basic && tb->statistic >= t_basic_obs->statistic) ++exceed_basic;
     if (te->statistic >= t_eff_obs->statistic) ++exceed_effective;
+    if (multiplier_studentized) {
+      if (tm->statistic >= t_multiplier_studentized_obs->statistic) {
+        ++exceed_multiplier_studentized;
+      }
+      multiplier_studentized_min_eigenvalue = std::min(
+          multiplier_studentized_min_eigenvalue, tm->min_eigenvalue);
+      multiplier_studentized_max_condition = std::max(
+          multiplier_studentized_max_condition, tm->condition);
+    }
     if (include_standardized) {
       if (ts->statistic >= t_std_obs->statistic) ++exceed_standardized;
       min_variance_eigenvalue =
@@ -2678,12 +2773,30 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
       ? (options.exact_enumeration
              ? 0.0 : flip_mc_se(out.p_standardized, n_resamples))
       : nan;
+  out.statistic_multiplier_studentized = multiplier_studentized
+      ? t_multiplier_studentized_obs->statistic : nan;
+  out.p_multiplier_studentized = multiplier_studentized
+      ? (1.0 + static_cast<double>(exceed_multiplier_studentized)) / denom
+      : nan;
+  out.mc_se_multiplier_studentized = multiplier_studentized
+      ? (options.exact_enumeration
+             ? 0.0
+             : flip_mc_se(out.p_multiplier_studentized, n_resamples))
+      : nan;
+  out.multiplier_studentized_min_eigenvalue =
+      multiplier_studentized
+          ? multiplier_studentized_min_eigenvalue : nan;
+  out.multiplier_studentized_max_condition =
+      multiplier_studentized
+          ? multiplier_studentized_max_condition : nan;
   out.p_chisq = chi2_pvalue(out.statistic_effective, out.df);
   out.scaling_factor = asymptotic->scaling_factor;
   out.statistic_mean_scaled = asymptotic->mi_scaled;
   out.p_mean_scaled = asymptotic->p_value;
   out.p_mixture = asymptotic->p_mixture;
-  out.p_value = include_standardized ? out.p_standardized
+  out.p_value = multiplier_studentized
+      ? out.p_multiplier_studentized
+      : include_standardized ? out.p_standardized
       : resample ? out.p_effective : out.p_mixture;
   out.statistic_sandwich = asymptotic->mi_sandwich;
   out.p_sandwich = asymptotic->p_sandwich;
