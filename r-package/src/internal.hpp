@@ -271,7 +271,7 @@ inline magmaan::compat::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::Dat
       composite_info_from_folded_df(df);
   SEXP expanded = Rf_getAttrib(df, Rf_install(expanded_partable_attr));
   if (!Rf_isNull(expanded)) {
-    if (!Rf_isFrame(expanded)) {
+    if (!Rf_isDataFrame(expanded)) {
       Rcpp::stop("magmaan: `%s` attribute must be a data.frame",
                  expanded_partable_attr);
     }

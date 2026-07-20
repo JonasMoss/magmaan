@@ -58,10 +58,25 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   The direct efficient-meat sandwich comparator is now exposed and confirms the
   opposite finite-sample failure mode: full inversion is conservative and can
   be poorly conditioned even though its asymptotic reference is pivotal. The
-  next bounded method question is shrinkage of `G'B1G` itself, spanning SB's
-  common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
-  inverse; gate any proposal on null size, matched-null power, and meat
-  conditioning rather than one aggregate rejection rate.
+  first multiplier-law replay now targets experiment 62's eight difficult
+  8-df severe-copula cells (N=60/200, homogeneous/geometry, VM/PL; 200
+  replications and 499 draws). It exactly reproduced the old Rademacher
+  p-values and their 12.4% average rejection. Gaussian weights supplied the
+  intended numerical checksum against score-ALL (2.4% versus 2.7% rejection;
+  mean absolute p-value gap 0.015), while centered exponential weights were
+  much too conservative at 0.7%. Mammen's two-point weights were the only
+  plausible correction, averaging 3.7% with cell rates 1.5--5.0%. Keep this as
+  a bounded follow-up, not a default: Mammen is a multiplier bootstrap without
+  exact sign-randomization validity, is currently effective-score-only because
+  flip-specific standardization uses `w_i^2=1`, and was tested only where the
+  Rademacher method was already known to fail. The next small grid should
+  compare Mammen, direct sandwich, and pEBA4 under normal/t5/skew data with more
+  null replications and matched-null power; do not carry Gaussian or centered
+  exponential forward. In parallel, the next bounded analytic question remains
+  shrinkage of `G'B1G` itself, spanning SB's common-eigenvalue trace,
+  pEBA-style spectral shrinkage, and the raw sandwich inverse. Gate either
+  proposal on null size, matched-null power, and meat conditioning rather than
+  one aggregate rejection rate.
   Experiment 71 now supplies the first projected-Satterthwaite gate for the
   centered-meat pivotal GOF score. In a true five-indicator one-factor model
   (`df=5`, n=30/50/100/200), the centered-meat chi-square was liberal at low n

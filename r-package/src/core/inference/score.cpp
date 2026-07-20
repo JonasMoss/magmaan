@@ -2324,6 +2324,38 @@ double flip_mc_se(double p, int n_flips) {
   return std::sqrt(p * (1.0 - p) / static_cast<double>(n_flips + 1));
 }
 
+double multiplier_uniform_open(std::mt19937_64& rng) {
+  // The upper 53 bits give an exactly representable open-unit variate and keep
+  // the diagnostic streams independent of standard-library distribution
+  // implementations.
+  constexpr double scale = 1.0 / 9007199254740992.0;  // 2^-53
+  return (static_cast<double>(rng() >> 11U) + 0.5) * scale;
+}
+
+double draw_score_multiplier(std::mt19937_64& rng,
+                             ScoreFlipMultiplier multiplier) {
+  switch (multiplier) {
+    case ScoreFlipMultiplier::Rademacher:
+      return (rng() & 1ULL) == 0ULL ? -1.0 : 1.0;
+    case ScoreFlipMultiplier::Mammen: {
+      constexpr double sqrt5 = 2.2360679774997896964;
+      constexpr double negative = (1.0 - sqrt5) / 2.0;
+      constexpr double positive = (1.0 + sqrt5) / 2.0;
+      constexpr double p_negative = (sqrt5 + 1.0) / (2.0 * sqrt5);
+      return multiplier_uniform_open(rng) < p_negative ? negative : positive;
+    }
+    case ScoreFlipMultiplier::Gaussian: {
+      constexpr double two_pi = 6.2831853071795864769;
+      const double u1 = multiplier_uniform_open(rng);
+      const double u2 = multiplier_uniform_open(rng);
+      return std::sqrt(-2.0 * std::log(u1)) * std::cos(two_pi * u2);
+    }
+    case ScoreFlipMultiplier::CenteredExponential:
+      return -std::log(multiplier_uniform_open(rng)) - 1.0;
+  }
+  return 0.0;
+}
+
 }  // namespace
 
 post_expected<ScoreFlipTestResult>
@@ -2345,6 +2377,17 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   const bool include_standardized =
       options.calibration == ScoreFlipCalibration::All ||
       options.calibration == ScoreFlipCalibration::EffectiveStandardized;
+  if (resample &&
+      options.multiplier != ScoreFlipMultiplier::Rademacher &&
+      options.calibration != ScoreFlipCalibration::Effective) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: non-Rademacher multipliers require effective calibration"));
+  }
+  if (options.exact_enumeration &&
+      options.multiplier != ScoreFlipMultiplier::Rademacher) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: exact enumeration is Rademacher-only"));
+  }
   if (resample && !options.exact_enumeration && options.n_flips < 1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: n_flips must be positive"));
@@ -2552,17 +2595,17 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
     if (include_standardized)
       sign_sum.assign(strata.per_case.size(), 0);
     for (Eigen::Index row = 0; row < total_n; ++row) {
-      const double sign = options.exact_enumeration
+      const double multiplier = options.exact_enumeration
           ? (((static_cast<std::uint64_t>(bflip) >> row) & 1ULL) == 0ULL
                  ? -1.0 : 1.0)
-          : ((rng() & 1ULL) == 0ULL ? -1.0 : 1.0);
+          : draw_score_multiplier(rng, options.multiplier);
       const std::size_t stratum =
           strata.row_stratum[static_cast<std::size_t>(row)];
       if (include_standardized)
-        sign_sum[stratum] += static_cast<std::int64_t>(sign);
+        sign_sum[stratum] += static_cast<std::int64_t>(multiplier);
       if (include_basic)
-        ub.noalias() += sign * basic_rows->row(row).transpose();
-      ue.noalias() += sign * effective_rows.row(row).transpose();
+        ub.noalias() += multiplier * basic_rows->row(row).transpose();
+      ue.noalias() += multiplier * effective_rows.row(row).transpose();
     }
     auto te = flip_quadratic(ue, V_identity, "score_flip_test effective flip");
     if (!te.has_value()) return std::unexpected(te.error());

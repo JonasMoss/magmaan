@@ -16,13 +16,15 @@ files <- file.path("results", c(
   "expansion_metadata.csv", "timing_summary.csv", "power_summary.csv",
   "power_replications.csv", "power_metadata.csv", "stress_summary.csv",
   "dimension_summary.csv", "sandwich_power_replications.csv",
-  "dimension_sandwich_summary.csv"))
+  "dimension_sandwich_summary.csv", "multiplier_probe_summary.csv",
+  "multiplier_probe_replications.csv", "multiplier_probe_moments.csv",
+  "multiplier_probe_metadata.csv"))
 if (any(!file.exists(files))) {
   stop(paste(
     "missing results; run run_experiment.R, run_expansion.R --probe,",
     "run_expansion.R --power, --power-sandwich, and --stress,",
     "run_dimension.R --big and --sandwich,",
-    "and run_timing.R"))
+    "run_multiplier_probe.R --probe, and run_timing.R"))
 }
 s <- read.csv(files[[2L]])
 r <- read.csv(files[[3L]]); r_all_ok <- r$ok; r <- r[r$ok, , drop = FALSE]
@@ -34,6 +36,10 @@ stress <- read.csv(files[[9L]])
 dim_summary <- read.csv(files[[10L]])
 sandwich_power <- read.csv(files[[11L]])
 dim_sandwich <- read.csv(files[[12L]])
+multiplier_summary <- read.csv(files[[13L]])
+multiplier_reps <- read.csv(files[[14L]])
+multiplier_moments <- read.csv(files[[15L]])
+multiplier_metadata <- read.csv(files[[16L]])
 
 # The one-flip replay uses the same deterministic cells and replications as the
 # original power grid; merge only the new asymptotic sandwich result.
@@ -148,6 +154,29 @@ dim_sandwich_table <- aggregate(
 by_ndf <- aggregate(
   r[c("reject_effective", "reject_standardized", "changed_to_accept")],
   r[c("n_total", "df")], mean)
+
+# Multiplier-law sanity check on the q=8 severe-copula cells where Rademacher
+# effective flips were most liberal. All rows use the same data and seeds as
+# the original stress block.
+multiplier_cols <- c(
+  Rademacher = "rejection_rademacher",
+  Mammen = "rejection_mammen",
+  Gaussian = "rejection_gaussian",
+  `centered exponential` = "rejection_centered_exponential",
+  sandwich = "rejection_sandwich",
+  pEBA4 = "rejection_peba4",
+  ALL = "rejection_all")
+multiplier_table <- multiplier_summary[
+  c("n_total", "distribution", "heterogeneity", unname(multiplier_cols))]
+names(multiplier_table) <- c(
+  "N", "copula", "geometry", names(multiplier_cols))
+multiplier_overall <- vapply(
+  unname(multiplier_cols),
+  function(v) mean(multiplier_summary[[v]], na.rm = TRUE),
+  numeric(1L))
+names(multiplier_overall) <- names(multiplier_cols)
+names(multiplier_moments) <- c(
+  "multiplier", "mean", "variance", "third moment", "fourth moment")
 
 # Matched-empirical-null (size-adjusted) power.
 power_methods <- intersect(names(method_labels), names(power))
@@ -452,6 +481,70 @@ tenths of a percentage point for four and eight, and it does not fully repair th
 liberal 8-df test. At $N=200$ the changes are negligible. Standardize by default
 because it is nearly free, but do not read it as a small-sample correction.
 
+## Changing the multiplier law
+
+The effective score reference does not mathematically require the multiplier to
+be a sign. For fixed fitted score rows, draw independent weights with
+$E(w_i)=0$ and $E(w_i^2)=1$ and recompute
+
+$$
+T^\ast =
+\left(n^{-1/2}\sum_i w_i\hat u_i\right)^\top
+\hat V^{-1}
+\left(n^{-1/2}\sum_i w_i\hat u_i\right).
+$$
+
+The first two moments preserve the conditional covariance, while the third and
+fourth moments control finite-sample skewness and tail thickness. We replayed
+only the eight 8-df severe-copula cells where Rademacher effective flips had
+performed poorly, using the original observations and random seeds, 200
+replications per cell, and 499 draws per law. The alternatives were:
+
+- Rademacher signs, the existing symmetric two-point law and the only option
+  with a sign-randomization interpretation;
+- Mammen's asymmetric two-point law, which matches a nonzero third moment while
+  keeping a modest fourth moment;
+- standard Gaussian weights, whose conditional quadratic-form law converges
+  exactly to score-ALL for the fitted score geometry;
+- centered unit-rate exponential weights, an intentionally highly skewed and
+  heavy-tailed stress case.
+
+```{r multiplier-moments}
+knitr::kable(multiplier_moments, digits = 0)
+```
+
+```{r multiplier-null}
+knitr::kable(multiplier_table, digits = 3)
+```
+
+Rademacher replayed the old effective-flip p-values exactly and remained badly
+liberal: its rejection rate averaged
+`r sprintf("%.3f", multiplier_overall[["Rademacher"]])`. Gaussian weights
+averaged `r sprintf("%.3f", multiplier_overall[["Gaussian"]])`, close to ALL's
+`r sprintf("%.3f", multiplier_overall[["ALL"]])`; their mean absolute p-value
+gap was
+`r sprintf("%.3f", mean(multiplier_reps$gaussian_all_abs_gap, na.rm = TRUE))`.
+That is the intended numerical checksum and shows that changing weights is
+changing the finite multiplier reference, not the observed numerator or fitted
+score geometry.
+
+Mammen is the only promising alternative in this small gate. It reduced average
+rejection to `r sprintf("%.3f", multiplier_overall[["Mammen"]])`, with cell
+rates between
+`r sprintf("%.3f", min(multiplier_summary$rejection_mammen))` and
+`r sprintf("%.3f", max(multiplier_summary$rejection_mammen))`. Centered
+exponential weights went much too far, averaging
+`r sprintf("%.3f", multiplier_overall[["centered exponential"]])`; their large
+fourth moment makes the conditional reference far too heavy-tailed here.
+
+This does not validate Mammen as a default. Unlike Rademacher it is a multiplier
+bootstrap, not an exact sign randomization, and the current flip-specific
+nuisance standardization relies on $w_i^2=1$. The implementation therefore
+allows non-Rademacher laws only for the nuisance-effective statistic. The
+bounded next iteration is Mammen versus robust sandwich and pEBA4 on a small
+normal/$t$/skew grid, with more null replications and matched-null power; there
+is no reason to expand Gaussian or centered exponential further.
+
 ## Timing
 
 Cost is a few milliseconds and linear in the number of flips. At 499 flips,
@@ -484,6 +577,10 @@ knitr::kable(timing_499, digits = 3)
 - Keep `p_standardized` as a cheap resampling option, but it is not better
   calibrated than the score-base asymptotics and is more strained by a severe
   copula.
+- Keep Mammen multipliers as the only resampling correction worth a bounded
+  follow-up. This gate improves the badly liberal Rademacher reference, but its
+  average 3.7% rejection is mildly conservative and does not establish
+  generality outside the deliberately hard 8-df cells.
 - Do not compare nominal power without comparing null size. The matched-null
   table is a forced size comparison, not evidence that a nominal reference is
   valid.
@@ -520,6 +617,11 @@ fine ranking.
 Score flipping here is a frontier method for affine, complete-data ML models. The
 results do not automatically transfer to FIML, ordinal, estimated-weight,
 clustered, boundary, or nonlinear-constraint tests.
+The multiplier-law replay is narrower still: it covers only effective-score
+calibration at 8 df in the severe complete-data copula block. Its 200
+replications give a single-cell Monte Carlo standard error of about 1.5
+percentage points near 0.05, so cell differences smaller than that are not
+rankings.
 
 ## Reproduce
 
@@ -531,6 +633,7 @@ Rscript experiments/62-standardized-flip-score/run_expansion.R --power-sandwich
 Rscript experiments/62-standardized-flip-score/run_expansion.R --stress
 Rscript experiments/62-standardized-flip-score/run_dimension.R --big
 Rscript experiments/62-standardized-flip-score/run_dimension.R --sandwich
+Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --probe
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```

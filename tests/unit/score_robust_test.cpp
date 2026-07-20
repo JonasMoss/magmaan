@@ -1613,6 +1613,43 @@ TEST_CASE("frontier score flips: affine ML pair is deterministic and standardize
   CHECK(effective->resampling_standardization_seconds == 0.0);
   CHECK(std::isnan(effective->mean_variance_relative_shift));
 
+  for (const auto multiplier : {
+           inf::frontier::ScoreFlipMultiplier::Mammen,
+           inf::frontier::ScoreFlipMultiplier::Gaussian,
+           inf::frontier::ScoreFlipMultiplier::CenteredExponential}) {
+    auto multiplier_opts = effective_opts;
+    multiplier_opts.multiplier = multiplier;
+    auto m1 = inf::frontier::score_flip_test(
+        h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, multiplier_opts);
+    if (!m1.has_value()) MESSAGE(m1.error().detail);
+    REQUIRE(m1.has_value());
+    auto m2 = inf::frontier::score_flip_test(
+        h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, multiplier_opts);
+    REQUIRE(m2.has_value());
+    CHECK(m1->p_effective == m2->p_effective);
+    CHECK(m1->p_effective >= 1.0 / 128.0);
+    CHECK(m1->p_effective <= 1.0);
+    CHECK(m1->statistic_effective ==
+          doctest::Approx(effective->statistic_effective));
+    CHECK((m1->eigvals - effective->eigvals).norm() < 1e-12);
+  }
+
+  auto gaussian_opts = effective_opts;
+  gaussian_opts.multiplier =
+      inf::frontier::ScoreFlipMultiplier::Gaussian;
+  gaussian_opts.n_flips = 8191;
+  auto gaussian = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, gaussian_opts);
+  REQUIRE(gaussian.has_value());
+  CHECK(std::abs(gaussian->p_effective - gaussian->p_mixture) < 0.04);
+
+  auto unsupported_opts = opts;
+  unsupported_opts.multiplier =
+      inf::frontier::ScoreFlipMultiplier::Mammen;
+  auto unsupported = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, *samp, raw, *est0, unsupported_opts);
+  CHECK_FALSE(unsupported.has_value());
+
   auto asymptotic_opts = opts;
   asymptotic_opts.n_flips = 0;
   asymptotic_opts.calibration =
