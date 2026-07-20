@@ -477,10 +477,23 @@ enum class ScoreFlipCalibration {
   All,
 };
 
+// Multiplier law for the nuisance-effective score reference. Every law has
+// mean zero and variance one. Rademacher retains the sign-randomization
+// interpretation and is the only law supported by exact enumeration or the
+// flip-specific nuisance standardization; the other laws are multiplier
+// bootstrap diagnostics for the effective statistic.
+enum class ScoreFlipMultiplier {
+  Rademacher,
+  Mammen,
+  Gaussian,
+  CenteredExponential,
+};
+
 struct ScoreFlipOptions {
   int n_flips = 999;
   std::uint64_t seed = 1;
   ScoreFlipCalibration calibration = ScoreFlipCalibration::All;
+  ScoreFlipMultiplier multiplier = ScoreFlipMultiplier::Rademacher;
   // Deterministic verification path for tiny samples. Enumerates every
   // non-identity sign vector and ignores n_flips/seed; capped at n <= 20.
   bool exact_enumeration = false;

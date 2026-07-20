@@ -1,9 +1,11 @@
-#' Standardized sign-flip score test for affine nested ML/FIML models.
+#' Multiplier score test for affine nested ML/FIML models.
 #'
 #' Calibrates the restrictions separating `fit_H0` from `fit_H1` by random
-#' Rademacher transformations of individual likelihood-score contributions.
-#' The result carries basic, nuisance-effective, and flip-specifically
-#' standardized references; `p_value` selects the standardized result.
+#' mean-zero, unit-variance multipliers on individual likelihood-score
+#' contributions. Rademacher signs are the default and support the basic,
+#' nuisance-effective, and flip-specifically standardized references. Mammen,
+#' Gaussian, and centered-exponential weights are experimental diagnostics for
+#' the nuisance-effective reference.
 #'
 #' @param fit_H1 Less-restricted complete-data ML or direct-FIML fit, or a
 #'   `magmaan_model_spec` for the less-restricted model. Supplying the model
@@ -13,9 +15,10 @@
 #'   slots, estimator, and observations.
 #' @param data Raw fitting data for complete-data ML. Direct FIML uses the
 #'   observed-data sample stored on both fits, so this argument must be omitted.
-#' @param n_flips Number of random sign transformations, excluding the observed
-#'   identity.
+#' @param n_flips Number of random multiplier transformations.
 #' @param seed Non-negative deterministic integer seed.
+#' @param multiplier Multiplier distribution. Non-Rademacher choices require
+#'   `calibration = "effective"`.
 #' @param calibration Which randomization references to compute. `"effective"`
 #'   skips the basic and flip-specific covariance calculations;
 #'   `"effective-standardized"` adds the standardized reference; `"all"`
@@ -31,8 +34,11 @@
 score_flip_test <- function(fit_H1, fit_H0, data = NULL,
                             n_flips = 999L, seed = 1,
                             calibration = c("all", "effective-standardized",
-                                            "effective", "asymptotic")) {
+                                            "effective", "asymptotic"),
+                            multiplier = c("rademacher", "mammen", "gaussian",
+                                           "centered-exponential")) {
   calibration <- match.arg(calibration)
+  multiplier <- match.arg(multiplier)
   h1_is_model <- inherits(fit_H1, "magmaan_model_spec")
   estimator_H0 <- toupper(fit_H0$estimator %||% "ML")
   estimator_H1 <- if (h1_is_model) estimator_H0 else
@@ -45,7 +51,12 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
   n_flips <- as.integer(n_flips)[1L]
   if (is.na(n_flips) ||
       (calibration != "asymptotic" && n_flips < 1L) || n_flips < 0L) {
-    stop("score_flip_test(): `n_flips` must be non-negative and positive when signs are drawn",
+    stop("score_flip_test(): `n_flips` must be non-negative and positive when multipliers are drawn",
+         call. = FALSE)
+  }
+  if (multiplier != "rademacher" &&
+      !calibration %in% c("effective", "asymptotic")) {
+    stop("score_flip_test(): non-Rademacher multipliers require `calibration = \"effective\"`",
          call. = FALSE)
   }
   seed <- as.numeric(seed)[1L]
@@ -81,12 +92,13 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
   }
   out <- if (h1_is_model) {
     magmaan_core$inference_score_flip_test_model(
-      fit_H1$partable, fit_H0, raw, n_flips, seed, calibration)
+      fit_H1$partable, fit_H0, raw, n_flips, seed, calibration, multiplier)
   } else {
     magmaan_core$inference_score_flip_test(
-      fit_H1, fit_H0, raw, n_flips, seed, calibration)
+      fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier)
   }
   out$calibration <- calibration
+  out$multiplier <- multiplier
   class(out) <- c("magmaan_score_flip_test", "list")
   out
 }
@@ -122,7 +134,9 @@ nested_score_test <- function(fit_H1, fit_H0, data = NULL) {
 
 #' @export
 print.magmaan_score_flip_test <- function(x, ...) {
-  label <- switch(x$calibration %||% "all",
+  label <- if (!identical(x$multiplier %||% "rademacher", "rademacher")) {
+    paste(x$multiplier, "multiplier score test")
+  } else switch(x$calibration %||% "all",
     effective = "effective sign-flip score test",
     `effective-standardized` = "standardized sign-flip score test",
     asymptotic = "nested score test (no sign calibration)",

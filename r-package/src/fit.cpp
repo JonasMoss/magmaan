@@ -7722,6 +7722,20 @@ score_flip_calibration_from_string(const std::string& calibration,
   return calibration_kind;
 }
 
+magmaan::inference::frontier::ScoreFlipMultiplier
+score_flip_multiplier_from_string(const std::string& multiplier) {
+  using Multiplier = magmaan::inference::frontier::ScoreFlipMultiplier;
+  if (multiplier == "rademacher") return Multiplier::Rademacher;
+  if (multiplier == "mammen") return Multiplier::Mammen;
+  if (multiplier == "gaussian") return Multiplier::Gaussian;
+  if (multiplier == "centered-exponential") {
+    return Multiplier::CenteredExponential;
+  }
+  Rcpp::stop("magmaan: score_flip_test multiplier must be 'rademacher', "
+             "'mammen', 'gaussian', or 'centered-exponential'");
+  return Multiplier::Rademacher;
+}
+
 Rcpp::List score_flip_result_to_r(
     const magmaan::inference::frontier::ScoreFlipTestResult& out) {
   return Rcpp::List::create(
@@ -7768,9 +7782,12 @@ Rcpp::List score_flip_result_to_r(
 Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
                                      SEXP raw, int n_flips = 999,
                                      double seed = 1.0,
-                                     std::string calibration = "all") {
+                                     std::string calibration = "all",
+                                     std::string multiplier = "rademacher") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
+  const auto multiplier_kind =
+      score_flip_multiplier_from_string(multiplier);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -7787,6 +7804,7 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
   options.n_flips = n_flips;
   options.seed = static_cast<std::uint64_t>(seed);
   options.calibration = calibration_kind;
+  options.multiplier = multiplier_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (est1 == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
@@ -7809,9 +7827,12 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
 // [[Rcpp::export]]
 Rcpp::List inference_score_flip_test_model(
     SEXP partable_H1, Rcpp::List fit_H0, SEXP raw, int n_flips = 999,
-    double seed = 1.0, std::string calibration = "all") {
+    double seed = 1.0, std::string calibration = "all",
+    std::string multiplier = "rademacher") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
+  const auto multiplier_kind =
+      score_flip_multiplier_from_string(multiplier);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -7832,6 +7853,7 @@ Rcpp::List inference_score_flip_test_model(
   options.n_flips = n_flips;
   options.seed = static_cast<std::uint64_t>(seed);
   options.calibration = calibration_kind;
+  options.multiplier = multiplier_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (estimator == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
