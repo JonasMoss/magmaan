@@ -20,13 +20,18 @@ files <- file.path("results", c(
   "multiplier_probe_replications.csv", "multiplier_probe_moments.csv",
   "multiplier_probe_metadata.csv", "multiplier_refine_summary.csv",
   "multiplier_refine_replications.csv", "multiplier_refine_moments.csv",
-  "multiplier_refine_metadata.csv"))
+  "multiplier_refine_metadata.csv", "multiplier_confirm_summary.csv",
+  "multiplier_confirm_replications.csv", "multiplier_confirm_moments.csv",
+  "multiplier_confirm_metadata.csv", "multiplier_power_summary.csv",
+  "multiplier_power_replications.csv", "multiplier_power_moments.csv",
+  "multiplier_power_metadata.csv"))
 if (any(!file.exists(files))) {
   stop(paste(
     "missing results; run run_experiment.R, run_expansion.R --probe,",
     "run_expansion.R --power, --power-sandwich, and --stress,",
     "run_dimension.R --big and --sandwich,",
-    "run_multiplier_probe.R --probe and --refine, and run_timing.R"))
+    "run_multiplier_probe.R --probe, --refine, --confirm, and",
+    "--confirm-power, and run_timing.R"))
 }
 s <- read.csv(files[[2L]])
 r <- read.csv(files[[3L]]); r_all_ok <- r$ok; r <- r[r$ok, , drop = FALSE]
@@ -46,6 +51,14 @@ refine_summary <- read.csv(files[[17L]])
 refine_reps <- read.csv(files[[18L]])
 refine_moments <- read.csv(files[[19L]])
 refine_metadata <- read.csv(files[[20L]])
+confirm_summary <- read.csv(files[[21L]])
+confirm_reps <- read.csv(files[[22L]])
+confirm_moments <- read.csv(files[[23L]])
+confirm_metadata <- read.csv(files[[24L]])
+multiplier_power_summary <- read.csv(files[[25L]])
+multiplier_power_reps <- read.csv(files[[26L]])
+multiplier_power_moments <- read.csv(files[[27L]])
+multiplier_power_metadata <- read.csv(files[[28L]])
 
 # The one-flip replay uses the same deterministic cells and replications as the
 # original power grid; merge only the new asymptotic sandwich result.
@@ -214,6 +227,34 @@ refine_rank <- data.frame(
     function(v) mean(abs(refine_summary[[v]] - .05)), numeric(1L)))
 refine_rank <- refine_rank[order(refine_rank$mean_absolute_error), ]
 
+# Independent centered-Mammen confirmation.
+confirm_cols <- c(
+  `raw Mammen` = "rejection_mammen",
+  `centered Mammen` = "rejection_mammen_centered",
+  sandwich = "rejection_sandwich",
+  pEBA4 = "rejection_peba4")
+confirm_rank <- data.frame(
+  method = names(confirm_cols),
+  rejection = vapply(
+    unname(confirm_cols),
+    function(v) mean(confirm_summary[[v]], na.rm = TRUE), numeric(1L)),
+  N60 = vapply(
+    unname(confirm_cols),
+    function(v) mean(confirm_summary[[v]][confirm_summary$n_total == 60L]),
+    numeric(1L)),
+  N200 = vapply(
+    unname(confirm_cols),
+    function(v) mean(confirm_summary[[v]][confirm_summary$n_total == 200L]),
+    numeric(1L)),
+  minimum = vapply(
+    unname(confirm_cols), function(v) min(confirm_summary[[v]]), numeric(1L)),
+  maximum = vapply(
+    unname(confirm_cols), function(v) max(confirm_summary[[v]]), numeric(1L)),
+  mean_absolute_error = vapply(
+    unname(confirm_cols),
+    function(v) mean(abs(confirm_summary[[v]] - .05)), numeric(1L)))
+confirm_rank <- confirm_rank[order(confirm_rank$mean_absolute_error), ]
+
 # Matched-empirical-null (size-adjusted) power.
 power_methods <- intersect(names(method_labels), names(power))
 empirical_critical <- function(x, alpha = .05) {
@@ -250,6 +291,62 @@ power_show_cols <- function(tab) intersect(c(
   "score: SB", "score: MV",
   "score: pEBA4", "LR: SB", "LR: MV", "LR: pEBA4"), names(tab))
 
+# The focused multiplier power gate uses the independent confirmation null,
+# cell-specific critical p-values, and the same four surviving methods.
+confirm_reps <- confirm_reps[confirm_reps$ok, , drop = FALSE]
+multiplier_power_reps <-
+  multiplier_power_reps[multiplier_power_reps$ok, , drop = FALSE]
+confirm_power_cols <- c(
+  `raw Mammen` = "p_mammen",
+  `centered Mammen` = "p_mammen_centered",
+  sandwich = "p_sandwich",
+  pEBA4 = "p_peba4")
+confirm_keys <- c(
+  "df", "n_total", "balance", "heterogeneity", "distribution")
+confirm_power_cells <- unique(multiplier_power_reps[
+  c(confirm_keys, "alternative", "effect")])
+matched_multiplier_power <- do.call(
+  rbind, lapply(seq_len(nrow(confirm_power_cells)), function(i) {
+    cell <- confirm_power_cells[i, , drop = FALSE]
+    null_match <- rep(TRUE, nrow(confirm_reps))
+    power_match <- rep(TRUE, nrow(multiplier_power_reps))
+    for (key in confirm_keys) {
+      null_match <- null_match & confirm_reps[[key]] == cell[[key]]
+      power_match <-
+        power_match & multiplier_power_reps[[key]] == cell[[key]]
+    }
+    power_match <-
+      power_match &
+      multiplier_power_reps$alternative == cell$alternative &
+      multiplier_power_reps$effect == cell$effect
+    do.call(rbind, lapply(names(confirm_power_cols), function(method) {
+      value <- confirm_power_cols[[method]]
+      critical <- empirical_critical(confirm_reps[[value]][null_match])
+      data.frame(
+        cell, method = method, critical = critical,
+        null_size = mean(confirm_reps[[value]][null_match] < critical),
+        nominal_power =
+          mean(multiplier_power_reps[[value]][power_match] < .05),
+        calibrated_power =
+          mean(multiplier_power_reps[[value]][power_match] < critical))
+    }))
+  }))
+matched_power_overall <- aggregate(
+  matched_multiplier_power[
+    c("null_size", "nominal_power", "calibrated_power")],
+  matched_multiplier_power["method"], mean)
+matched_power_overall <- matched_power_overall[
+  match(names(confirm_power_cols), matched_power_overall$method), ]
+names(matched_power_overall) <- c(
+  "method", "matched null size", "nominal power", "matched-null power")
+matched_power_cells <- reshape(
+  matched_multiplier_power[
+    c(confirm_keys, "method", "calibrated_power")],
+  idvar = confirm_keys, timevar = "method", direction = "wide")
+centered_raw_power_difference <-
+  matched_power_cells$`calibrated_power.centered Mammen` -
+  matched_power_cells$`calibrated_power.raw Mammen`
+
 # Timing.
 timing_ms <- timing
 for (name in grep("seconds$", names(timing), value = TRUE))
@@ -270,6 +367,9 @@ mixture `ALL`), each applied to two base statistics: the score/Lagrange-multipli
 statistic, and the Satorra-2000 likelihood-ratio statistic that lavaan and Mplus
 use by default. We also include the direct sandwich-studentized score statistic
 $u^\top(G^\top\hat B G)^{-1}u$, whose asymptotic reference is $\chi_q^2$.
+The focused follow-up asks whether Mammen multiplier weights, with score rows
+recentered to impose the resampling null, improve the effective-score
+resampling reference without losing matched-null power.
 
 ## Short answer
 
@@ -295,6 +395,14 @@ between LM and LR bases. The revised conclusion is about regularization, not a
 universally winning base or transform: score-SB is trace shrinkage, ALL is a
 noisy plug-in mixture, and direct sandwich inversion is asymptotically clean but
 finite-sample fragile.
+
+Centered Mammen is the promising resampling repair. In a fresh 12-cell
+normal/$t_5$/skew confirmation it rejects 5.2% overall, versus 4.5% for raw
+Mammen, 3.8% for direct sandwich, and 5.3% for pEBA4. After cellwise
+empirical-null calibration, its sparse-alternative power is 35.6%, essentially
+the same as raw Mammen's 35.3% and pEBA4's 36.0%. This is evidence for
+recentering rather than tuned multiplier moments, but only for complete-data
+affine ML at eight restrictions; it is not yet a general default.
 
 ## Score base helps, but the transform still matters
 
@@ -636,11 +744,86 @@ correlate only about
                        refine_reps$p_mammen_weighted_meat))`
 with fixed-metric Mammen, confirming that this is not a small correction.
 
-Promote none of these yet. Carry only raw Mammen, centered Mammen, direct
-sandwich, and pEBA4 into an independent small normal/$t$/skew confirmation with
-more null replications, then use method-specific null thresholds for power.
-The $\gamma=.90$ arm is useful as a mechanism check but should not become a
-calibration constant selected on the discovery cells.
+The independent gate therefore carries only raw Mammen, centered Mammen, direct
+sandwich, and pEBA4 into a small normal/$t$/skew confirmation with more null
+replications, followed by method-specific null thresholds for power. The
+$\gamma=.90$ arm remains a mechanism check rather than a calibration constant
+selected on the discovery cells.
+
+### Independent confirmation and matched power
+
+The confirmation uses a fresh seed base and 500 null replications in each of
+12 cells: $q=8$, $N=60/200$, homogeneous or difficult information geometry,
+and normal, $t_5$, or independently skewed innovations. The four alternatives
+carried forward are deliberately distinct:
+
+- **raw Mammen** multiplies the fitted efficient-score rows by the unmodified
+  zero-mean, unit-variance Mammen two-point weights
+  ($Ew^3=1$, $Ew^4=2$);
+- **centered Mammen** first subtracts the score-row mean within each information
+  stratum, imposing the multiplier null while leaving the observed numerator
+  unchanged, then uses the same Mammen weights;
+- **sandwich** uses the direct efficient-meat quadratic with a
+  $\chi^2_q$ reference, so it is asymptotically pivotal but requires a noisy
+  matrix inverse;
+- **pEBA4** is the analytic score-spectrum approximation with order-four
+  eigenvalue shrinkage; it is neither a multiplier test nor direct sandwich
+  studentization.
+
+```{r multiplier-confirm}
+knitr::kable(confirm_rank, digits = 3)
+```
+
+Centered Mammen confirms at
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen_centered))` overall,
+with $N=60/200$ rates of
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen_centered[
+  confirm_summary$n_total == 60L]))` and
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen_centered[
+  confirm_summary$n_total == 200L]))`. Its cell range is
+`r sprintf("%.3f", min(confirm_summary$rejection_mammen_centered))`--`r sprintf("%.3f", max(confirm_summary$rejection_mammen_centered))`.
+Raw Mammen remains mildly conservative at
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen))`; sandwich is more
+conservative at `r sprintf("%.3f", mean(confirm_summary$rejection_sandwich))`;
+and pEBA4 is
+`r sprintf("%.3f", mean(confirm_summary$rejection_peba4))`. At 500
+replications the single-cell Monte Carlo standard error is about 0.010 near
+0.05, so the isolated 0.068 centered-Mammen cell is not evidence of a separate
+failure regime.
+
+The bounded power gate uses 300 fresh replications per matched cell. The
+alternative increases the first tested group-2 loading by 0.50; it is therefore
+a sparse loading-noninvariance alternative, not a broad power ranking. For each
+method and cell, the critical p-value is the largest cutoff whose rejection
+rate in the independent 500-replication null cell is no greater than 0.05.
+
+```{r multiplier-matched-power}
+knitr::kable(matched_power_overall, digits = 3)
+```
+
+After this forced size alignment, centered Mammen has power
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "centered Mammen"])`, versus
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "raw Mammen"])` for raw Mammen and
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "pEBA4"])` for pEBA4. Centering changes
+cellwise matched power by
+`r sprintf("%+.3f", mean(centered_raw_power_difference))` on average, with a
+range of
+`r sprintf("%+.3f", min(centered_raw_power_difference))` to
+`r sprintf("%+.3f", max(centered_raw_power_difference))`. Thus its null-size
+improvement is not purchased with a detectable power penalty in this gate.
+The direct sandwich remains lower at
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "sandwich"])`.
+
+This is enough to retain centered Mammen as the promising resampling candidate,
+but not enough to call it generally valid. The empirical cutoffs themselves
+have finite-null Monte Carlo error, all cells are complete-data affine ML at
+$q=8$, and Mammen weighting has no exact sign-randomization interpretation.
+The next useful step is theory and transport to FIML/ordinal score strata,
+not another large complete-data null grid.
 
 ## Timing
 
@@ -674,10 +857,11 @@ knitr::kable(timing_499, digits = 3)
 - Keep `p_standardized` as a cheap resampling option, but it is not better
   calibrated than the score-base asymptotics and is more strained by a severe
   copula.
-- Carry centered Mammen into the bounded confirmation. It preserves Mammen's
-  third-moment match and improves rejection from 3.7% to 4.9%, with less
-  cell-to-cell variation than tuning the multiplier to $\gamma=.90$. Do not
-  treat this discovery-grid result as a default.
+- Retain centered Mammen as the experimental resampling candidate. Its
+  independent null rate is 5.2% overall (5.4% at $N=60$, 4.9% at $N=200$),
+  and its 35.6% matched-null power is indistinguishable from raw Mammen's 35.3%
+  and pEBA4's 36.0%. This supports score recentering, not a tuned
+  $\gamma=.90$ multiplier, but does not yet justify a default.
 - Do not compare nominal power without comparing null size. The matched-null
   table is a forced size comparison, not evidence that a nominal reference is
   valid.
@@ -714,11 +898,14 @@ fine ranking.
 Score flipping here is a frontier method for affine, complete-data ML models. The
 results do not automatically transfer to FIML, ordinal, estimated-weight,
 clustered, boundary, or nonlinear-constraint tests.
-The multiplier-law replay is narrower still: it covers only effective-score
-calibration at 8 df in the severe complete-data copula block. Its 200
-replications give a single-cell Monte Carlo standard error of about 1.5
-percentage points near 0.05, so cell differences smaller than that are not
-rankings.
+The multiplier-law discovery replay is narrower still: it covers only
+effective-score calibration at 8 df in the severe complete-data copula block.
+Its 200 replications give a single-cell Monte Carlo standard error of about 1.5
+percentage points near 0.05. The independent confirmation broadens the
+generators but remains complete-data affine ML at 8 df; its 500 null
+replications give a single-cell error of about 1.0 percentage point. The
+matched-power cutoffs are estimated rather than known, so their null-sample
+uncertainty is not reflected in the 300-replication alternative rates.
 
 ## Reproduce
 
@@ -732,6 +919,8 @@ Rscript experiments/62-standardized-flip-score/run_dimension.R --big
 Rscript experiments/62-standardized-flip-score/run_dimension.R --sandwich
 Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --probe
 Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --refine
+Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --confirm
+Rscript experiments/62-standardized-flip-score/run_multiplier_probe.R --confirm-power
 Rscript experiments/62-standardized-flip-score/run_timing.R
 quarto render experiments/62-standardized-flip-score/report.qmd
 ```

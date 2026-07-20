@@ -75,19 +75,29 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   the theoretically motivated `Ew^3=1` rather than selecting a moment on the
   discovery grid. Per-draw `sum(w_i^2 u_i u_i')` studentization failed,
   rejecting 9.1% without and 16.4% with recentering; do not carry it forward.
-  Keep centered Mammen as a bounded follow-up, not a default: it is still a
-  multiplier bootstrap without exact sign-randomization validity, is
-  effective-score-only because flip-specific standardization uses `w_i^2=1`,
-  and has only been tested where Rademacher was already known to fail. The next
-  independent small grid should compare raw/centered Mammen, direct sandwich,
-  and pEBA4 under normal/t5/skew data with more null replications and
-  matched-null power; retain gamma=.90 only as a mechanism check, and drop
-  Gaussian, centered exponential, and weighted-meat arms. In parallel, the
-  next bounded analytic question remains
-  shrinkage of `G'B1G` itself, spanning SB's common-eigenvalue trace,
-  pEBA-style spectral shrinkage, and the raw sandwich inverse. Gate either
-  proposal on null size, matched-null power, and meat conditioning rather than
-  one aggregate rejection rate.
+  The independent confirmation is now complete on 12 fresh `q=8` cells
+  crossing N=60/200, homogeneous/geometry information, and normal/t5/skew
+  generators, with 500 null replications per cell. Centered Mammen rejected
+  5.2% overall (5.4% at N=60, 4.9% at N=200; cell range 3.8--6.8%), versus
+  4.5% for raw Mammen, 3.8% for direct sandwich, and 5.3% for pEBA4. A matched
+  sparse loading-shift gate (`effect=.50`, 300 independent alternatives per
+  cell) used each method's own empirical-null cutoff: centered Mammen had 35.6%
+  power, raw Mammen 35.3%, pEBA4 36.0%, and sandwich 31.2%; the centered-minus-
+  raw difference was only +0.4 percentage points and ranged -1.0 to +1.7
+  points across cells. Score recentering therefore survives without a visible
+  power cost, whereas gamma=.90 remains only a discovery-grid mechanism check
+  and Gaussian, centered-exponential, and weighted-meat arms stay dropped.
+  Keep centered Mammen experimental rather than default: it is a multiplier
+  bootstrap without exact sign-randomization validity and is still
+  effective-score-only because flip-specific standardization uses `w_i^2=1`.
+  Do not spend another large grid on complete-data `q=8` calibration. The next
+  useful work is an asymptotic argument for recentered estimated-nuisance score
+  rows, an explicit stratum policy for FIML and ordinal/categorical scores, and
+  a near-singular nuisance-information gate. In parallel, the bounded analytic
+  question remains shrinkage of `G'B1G` itself, spanning SB's
+  common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
+  inverse. Gate either proposal on null size, matched-null power, and meat
+  conditioning rather than one aggregate rejection rate.
   Experiment 71 now supplies the first projected-Satterthwaite gate for the
   centered-meat pivotal GOF score. In a true five-indicator one-factor model
   (`df=5`, n=30/50/100/200), the centered-meat chi-square was liberal at low n
