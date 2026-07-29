@@ -116,6 +116,19 @@ to express the covariance cone. R exposes the explicit frontier entry point as
 diagnostics; ordinary interior information-matrix inference is not yet promoted
 as valid at a rank-deficient component solution.
 
+The advisory continuous-corpus audit in
+`tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper
+model/data summaries by ordinary NTML and PSD-ML. Six ordinary solutions had
+inadmissible primitive covariance matrices; all six were repaired, while the
+other 91 PSD refits reproduced ordinary estimates to a maximum absolute
+parameter difference of \(3.21\times 10^{-6}\). The cases include negligible-fit
+Heywood repairs, observationally equivalent covariance decompositions, and one
+materially different growth-model optimum. This evidence supports ordinary
+lavaan-compatible NTML plus the post-fit audit as the core default, with an
+explicit warm PSD refit as the methods-development policy. It does not support
+silent automatic replacement or ordinary boundary inference. The full decision
+record is `docs/research/notes/psd_ml_corpus_audit.tex`.
+
 ## Implemented Capabilities
 
 ### Parser, lavaanify, and matrix representation
