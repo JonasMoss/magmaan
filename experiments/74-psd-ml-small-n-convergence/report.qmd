@@ -1,0 +1,233 @@
+---
+title: "Does covariance-honest ML improve small-sample convergence?"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+roots <- file.path("results", c("full", "pilot", "smoke"))
+available <- roots[vapply(
+  roots,
+  function(path) file.exists(file.path(path, "metadata.csv")),
+  logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+raw <- read_result("raw.csv")
+summary <- read_result("summary.csv")
+paired <- read_result("paired.csv")
+metadata_frame <- read_result("metadata.csv")
+metadata <- setNames(metadata_frame$value, metadata_frame$key)
+profile <- metadata[["profile"]]
+reps <- as.integer(metadata[["reps"]])
+
+method_labels <- c(
+  `ml-lbfgs` = "Ordinary ML, L-BFGS",
+  `ml-slsqp` = "Ordinary ML, SLSQP",
+  `psd-ml-slsqp` = "PSD-ML, SLSQP"
+)
+
+rate_at <- function(n, method, field) {
+  x <- summary[summary$n == n & summary$method == method, field]
+  if (length(x) == 1L) x else NA_real_
+}
+fmt_pct <- function(x) sprintf("%.1f%%", 100 * x)
+fmt_num <- function(x, digits = 3L) formatC(
+  x, format = "f", digits = digits)
+
+low <- raw[raw$n < 50L, ]
+pair_rates <- function(baseline) {
+  left <- low[low$method == baseline, ]
+  right <- low[low$method == "psd-ml-slsqp", ]
+  x <- merge(
+    left, right,
+    by = c("n", "rep", "seed"),
+    suffixes = c("_baseline", "_psd")
+  )
+  c(
+    convergence_rescue = mean(!x$audit_converged_baseline &
+                                x$audit_converged_psd),
+    convergence_harm = mean(x$audit_converged_baseline &
+                              !x$audit_converged_psd),
+    usability_rescue = mean(!x$usable_baseline & x$usable_psd),
+    usability_harm = mean(x$usable_baseline & !x$usable_psd)
+  )
+}
+lbfgs_pair <- pair_rates("ml-lbfgs")
+slsqp_pair <- pair_rates("ml-slsqp")
+
+display_n <- intersect(c(10L, 20L, 50L, 100L), summary$n)
+beta_rows <- lapply(
+  split(raw, interaction(raw$n, raw$method, drop = TRUE)),
+  function(x) {
+    beta <- x$beta_hat[x$audit_converged & is.finite(x$beta_hat)]
+    data.frame(
+      n = x$n[[1L]],
+      method = x$method[[1L]],
+      beta_median = if (length(beta)) median(beta) else NA_real_,
+      beta_abs_q99 = if (length(beta)) {
+        as.numeric(quantile(abs(beta), 0.99, names = FALSE))
+      } else {
+        NA_real_
+      },
+      stringsAsFactors = FALSE
+    )
+  }
+)
+beta_summary <- do.call(rbind, beta_rows)
+display <- summary[summary$n %in% display_n, c(
+  "n", "method", "audit_convergence_rate", "admissible_rate",
+  "usable_rate", "covariance_boundary_rate",
+  "median_elapsed_ms")]
+display <- merge(
+  display, beta_summary,
+  by = c("n", "method"), all.x = TRUE, sort = FALSE)
+display <- display[order(display$n, display$method), ]
+display$method <- unname(method_labels[display$method])
+display$median_elapsed_ms <- NULL
+names(display) <- c(
+  "N", "Method", "Converged", "Admissible",
+  "Converged + Admissible", "Non-interior Covariance",
+  "Median Beta", "99th Percentile |Beta|")
+for (field in c("Converged", "Admissible", "Converged + Admissible",
+                "Non-interior Covariance")) {
+  display[[field]] <- vapply(display[[field]], fmt_pct, character(1))
+}
+display$`Median Beta` <- round(display$`Median Beta`, 3L)
+display$`99th Percentile |Beta|` <-
+  round(display$`99th Percentile |Beta|`, 3L)
+
+is_evidence <- profile %in% c("pilot", "full") && reps >= 200L
+psd_all_admissible <- all(
+  raw$admissible[
+    raw$method == "psd-ml-slsqp" & raw$audit_converged])
+psd_rejected_nonadmissible <- sum(
+  raw$method == "psd-ml-slsqp" & raw$returned &
+    !raw$audit_converged & !raw$admissible)
+n10_psd_convergence <- rate_at(10L, "psd-ml-slsqp",
+                               "audit_convergence_rate")
+n10_ml_convergence <- rate_at(10L, "ml-lbfgs",
+                              "audit_convergence_rate")
+n10_psd_boundary <- rate_at(10L, "psd-ml-slsqp",
+                            "covariance_boundary_rate")
+n10_psd <- raw[
+  raw$n == 10L & raw$method == "psd-ml-slsqp" &
+    raw$audit_converged, ]
+n10_beta_median <- median(n10_psd$beta_hat, na.rm = TRUE)
+n10_beta_q99 <- as.numeric(
+  quantile(abs(n10_psd$beta_hat), 0.99, na.rm = TRUE))
+n10_beta_max <- max(abs(n10_psd$beta_hat), na.rm = TRUE)
+short_answer <- if (!is_evidence) {
+  sprintf(
+    paste(
+      "This is a %s run with %d replications per sample size.",
+      "It validates the comparison but is too small for a convergence",
+      "conclusion."
+    ),
+    profile, reps
+  )
+} else {
+  sprintf(
+    paste(
+      "PSD-ML substantially improves numerical convergence: at N = 10,",
+      "%.1f%% passed the common convergence audit versus %.1f%% for",
+      "ordinary ML. Across N < 50 it rescued %.1f%% of ordinary-ML",
+      "failures and lost %.1f%% of ordinary-ML successes. Holding SLSQP",
+      "fixed, the rescue and harm rates were %.1f%% and %.1f%%, so the",
+      "gain is not merely an optimizer switch. It is not a small-sample",
+      "cure, however: %.1f%% of N = 10 PSD fits were on a covariance",
+      "boundary; beta had median %.3f but a 99th absolute percentile of",
+      "%.2f and maximum of %.1f (population value 0.25)."
+    ),
+    100 * n10_psd_convergence,
+    100 * n10_ml_convergence,
+    100 * lbfgs_pair[["convergence_rescue"]],
+    100 * lbfgs_pair[["convergence_harm"]],
+    100 * slsqp_pair[["convergence_rescue"]],
+    100 * slsqp_pair[["convergence_harm"]],
+    100 * n10_psd_boundary,
+    n10_beta_median,
+    n10_beta_q99,
+    n10_beta_max
+  )
+}
+admissibility_sentence <- if (psd_all_admissible) {
+  "Every audit-converged PSD-ML fit was covariance-admissible."
+} else {
+  paste(
+    "At least one audit-converged PSD-ML fit failed the primitive covariance",
+    "audit; inspect the raw results."
+  )
+}
+```
+
+## Question
+
+On the six-indicator small-sample SEM used by
+[De Jonckere and Rosseel (2022)](https://doi.org/10.1080/10705511.2021.1982716)
+and [Ernst and colleagues (2023)](https://doi.org/10.1007/s11336-022-09891-5),
+does covariance-honest normal-theory ML converge more reliably than ordinary
+normal-theory ML?
+
+## Short answer
+
+`r short_answer` `r admissibility_sentence`
+
+## Evidence
+
+Every method saw the same generated dataset and the same model start. A fit is
+called converged only when its returned solution passes the common
+projected-gradient audit. The stricter combined column additionally requires
+the fitted primitive covariance matrices to be positive semidefinite. The
+non-interior column means that the smallest primitive-covariance eigenvalue is
+at or below \(10^{-6}\); for ordinary ML this includes estimates beyond the
+covariance cone, whereas PSD-ML can only reach its boundary. The beta summaries
+are conditional on convergence and expose the heavy tails that a binary
+convergence rate hides.
+
+```{r evidence-table}
+knitr::kable(display, row.names = FALSE)
+```
+
+The ordinary-SLSQP row is an attribution control. Comparing PSD-ML only with
+ordinary L-BFGS would combine a changed model class with a changed optimizer.
+Comparing the two SLSQP rows holds the optimizer fixed.
+
+## Caveats
+
+This experiment studies one correctly specified, six-indicator Gaussian SEM.
+It uses magmaan's current FABIN starting values rather than the all-ones starts
+of the original bounded-estimation study. The current `r profile` run has
+`r reps` rather than the published 10,000 replications per sample size, and
+uses the common optimizer audit rather than requiring an additional successful
+standard-error calculation. It can establish whether PSD-ML helps this known
+convergence stress design; it cannot establish a general prevalence or
+small-sample inference result.
+
+Rank-boundary solutions are valid members of the PSD model class, but ordinary
+interior information-matrix inference does not apply there. In the full run,
+`r psd_rejected_nonadmissible` additional PSD solver return was rejected by
+the terminal audit; it had a singular implied covariance and extreme
+parameters. Solver return codes are therefore not used as the convergence
+verdict.
+
+## Reproduce
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --pilot
+Rscript run_experiment.R --full
+quarto render report.qmd
+```

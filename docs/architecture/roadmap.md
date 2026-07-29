@@ -129,6 +129,18 @@ explicit warm PSD refit as the methods-development policy. It does not support
 silent automatic replacement or ordinary boundary inference. The full decision
 record is `docs/research/notes/psd_ml_corpus_audit.tex`.
 
+The paired small-sample convergence benchmark
+`experiments/74-psd-ml-small-n-convergence/` uses the six-indicator SEM and
+sample-size grid shared by De Jonckere--Rosseel and Ernst et al. In the
+1,000-replication run, audit convergence at \(N=10\) was 54.1% for ordinary
+L-BFGS NTML and 96.8% for direct PSD-ML. Against ordinary SLSQP on the same
+datasets, PSD-ML still rescued 47.2% and harmed 0.4%, so the improvement is not
+just a backend change. The qualification is substantive: 86.1% of the
+\(N=10\) PSD fits lay on a covariance boundary, and weakly identified raw
+structural coefficients retained extreme tails. PSD-ML therefore repairs
+optimizer and admissibility failures but does not turn very-small-sample
+boundary fits into regular estimates or justify ordinary interior inference.
+
 ## Implemented Capabilities
 
 ### Parser, lavaanify, and matrix representation
