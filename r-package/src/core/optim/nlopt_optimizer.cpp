@@ -115,7 +115,8 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
                     int n_evals, double fmin, Eigen::VectorXd theta,
                     const ObjectiveFn& f, const Eigen::VectorXd& lower,
                     const Eigen::VectorXd& upper,
-                    const std::string& invalid_args_detail) {
+                    const std::string& invalid_args_detail,
+                    const ConstrainedScalarProblem* constrained_prob) {
   switch (rc) {
     case NLOPT_OUT_OF_MEMORY:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -133,7 +134,11 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
         n_evals, fmin));
   }
 
-  TerminalAudit a = audit_terminal_iterate(f, theta, fmin, lower, upper);
+  TerminalAudit a =
+      constrained_prob
+          ? audit_equality_constrained_terminal_iterate(
+                *constrained_prob, theta, fmin, lower, upper)
+          : audit_terminal_iterate(f, theta, fmin, lower, upper);
 
   OptimStatus opt_status = OptimStatus::Converged;
   switch (rc) {
@@ -267,7 +272,8 @@ NloptOptimizer::minimize(Objective f,
   return finish_nlopt_result(
       rc, algo_name, n_evals, fmin, std::move(theta), f, lower, upper,
       "invalid arguments (BOBYQA requires finite bounds; check that "
-      "lower/upper aren't all ±infinity)");
+      "lower/upper aren't all ±infinity)",
+      nullptr);
 }
 
 fit_expected<OptimOutput>
@@ -357,7 +363,8 @@ NloptOptimizer::minimize_constrained(const ConstrainedScalarProblem& prob,
   return finish_nlopt_result(
       rc, algo_name, n_evals, fmin, std::move(theta), prob.objective.f,
       lower, upper, "invalid arguments (check SLSQP constraint dimensions, "
-      "constraint tolerances, and bounds)");
+      "constraint tolerances, and bounds)",
+      &prob);
 }
 
 fit_expected<OptimOutput>

@@ -310,21 +310,25 @@ solve_ipopt(const ConstrainedScalarProblem& prob,
 
   TerminalAudit audit;
   double grad_inf = -1.0;
-  if (m == 0 && std::isfinite(f_final)) {
-    audit = audit_terminal_iterate(prob.objective.f, x_final, f_final,
-                                   lower, upper);
+  if (std::isfinite(f_final)) {
+    audit =
+        m == 0
+            ? audit_terminal_iterate(
+                  prob.objective.f, x_final, f_final, lower, upper)
+            : audit_equality_constrained_terminal_iterate(
+                  prob, x_final, f_final, lower, upper);
     grad_inf = audit.grad_inf_norm;
   }
 
   if (!clean_success && !acceptable_success) {
-    const bool salvage_unconstrained =
-        m == 0 && std::isfinite(f_final) && audit.stationary &&
+    const bool salvage_stationary =
+        std::isfinite(f_final) && audit.stationary &&
         (status == Search_Direction_Becomes_Too_Small ||
          status == Maximum_Iterations_Exceeded ||
          status == Maximum_CpuTime_Exceeded ||
          static_cast<int>(status) == kMaximumWallTimeExceededCode ||
          status == Feasible_Point_Found);
-    if (salvage_unconstrained) {
+    if (salvage_stationary) {
       opt_status = OptimStatus::LineSearchSalvaged;
     } else {
       return std::unexpected(make_err(status_error_kind(status),

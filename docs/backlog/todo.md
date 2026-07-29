@@ -71,6 +71,12 @@ when they next change.
   severe tails. A later boundary-inference/stabilization study should compare
   the covariance cone alone with data-driven wide bounds or another explicit
   regularizer; it must report parameter risk, not convergence alone.
+  Equality-constrained terminal auditing now uses primal feasibility and the
+  Lagrangian KKT residual, and the experiment runner records the KKT residual,
+  raw gradient, equality violation, and constraint-Jacobian rank. Refresh the
+  full 1,000-replication artifact under that audit before promoting its exact
+  rates to a manuscript; targeted replay already confirmed that the two
+  solver-success/audit-rejected PSD cases remain nonstationary.
   Before promoting or benchmarking it broadly, add finite-difference gates for
   the complete lifted objective/constraint Jacobian, explicit shared-covariance
   general-linear/nonlinear-equality cases, and multi-group and mean-structure

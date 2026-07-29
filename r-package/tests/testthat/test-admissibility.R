@@ -76,6 +76,12 @@ test_that("frontier PSD ML returns an ordinary admissible R fit", {
   expect_true(fit$converged)
   expect_true(fit$diagnostics$admissibility$admissible)
   expect_true(fit$diagnostics$admissibility$covariance_matrices_psd)
+  expect_true(fit$audit$constrained)
+  expect_true(fit$audit$stationary)
+  expect_lte(fit$audit$constraint_violation_inf, 1e-6)
+  expect_gte(fit$audit$constraint_jacobian_rank, 1L)
+  expect_true(is.finite(fit$audit$raw_grad_inf_norm))
+  expect_lte(fit$audit$grad_inf_norm, fit$audit$stationarity_rhs)
   expect_equal(nrow(fit$partable),
                nrow(model_spec("f =~ x1 + x2 + x3")$partable))
 })

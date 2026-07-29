@@ -60,4 +60,21 @@ TerminalAudit audit_terminal_iterate(
     const Eigen::VectorXd& upper,
     TerminalAuditOptions   opts = {});
 
+// Equality-constrained companion. It recomputes the objective gradient,
+// equality residuals, and constraint Jacobian, then audits the
+// box-projected Lagrangian gradient grad f(x) + J_h(x)' lambda.
+//
+// `constraint_lower == constraint_upper` is required. Rank-deficient
+// Jacobians are handled with a rank-revealing complete orthogonal
+// decomposition. With active box bounds, the multiplier fit uses the
+// interior coordinates and then applies the ordinary one-sided bound KKT
+// signs; this is conservative when equality multipliers are non-unique.
+TerminalAudit audit_equality_constrained_terminal_iterate(
+    const ConstrainedScalarProblem& prob,
+    const Eigen::VectorXd&          x,
+    double                          reported_f,
+    const Eigen::VectorXd&          lower,
+    const Eigen::VectorXd&          upper,
+    TerminalAuditOptions            opts = {});
+
 }  // namespace magmaan::optim

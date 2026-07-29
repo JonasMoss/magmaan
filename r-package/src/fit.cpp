@@ -1011,11 +1011,17 @@ Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
   return Rcpp::List::create(
       Rcpp::_["stationary"]       = a.stationary,
       Rcpp::_["grad_inf_norm"]    = a.grad_inf_norm,
+      Rcpp::_["raw_grad_inf_norm"] = a.raw_grad_inf_norm,
       Rcpp::_["grad_scaled_inf"]  = a.grad_scaled_inf,
       Rcpp::_["stationarity_rhs"] = a.stationarity_rhs,
       Rcpp::_["f_recomputed"]     = a.f_recomputed,
       Rcpp::_["f_consistent"]     = a.f_consistent,
       Rcpp::_["f_finite"]         = a.f_finite,
+      Rcpp::_["constrained"]       = a.constrained,
+      Rcpp::_["constraint_violation_inf"] =
+          a.constraint_violation_inf,
+      Rcpp::_["constraint_jacobian_rank"] =
+          a.constraint_jacobian_rank,
       Rcpp::_["active_set"]       = active,
       Rcpp::_["advisory_status"]  = advisory);
 }

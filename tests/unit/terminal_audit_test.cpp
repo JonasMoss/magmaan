@@ -9,6 +9,8 @@
 #include "magmaan/optim/terminal_audit.hpp"
 
 using magmaan::optim::audit_terminal_iterate;
+using magmaan::optim::audit_equality_constrained_terminal_iterate;
+using magmaan::optim::ConstrainedScalarProblem;
 using magmaan::optim::ObjectiveFn;
 using magmaan::optim::OptimStatus;
 using magmaan::optim::TerminalAudit;
@@ -47,6 +49,8 @@ TEST_CASE("terminal_audit — quadratic at optimum is stationary") {
   CHECK(a.f_finite);
   CHECK(a.f_recomputed == doctest::Approx(0.0));
   CHECK(a.grad_inf_norm == doctest::Approx(0.0));
+  CHECK(a.raw_grad_inf_norm == doctest::Approx(0.0));
+  CHECK_FALSE(a.constrained);
   CHECK(a.advisory_status == OptimStatus::Converged);
   CHECK(a.f_consistent);  // 0 vs 0
   CHECK(a.active_set.size() == 3u);
@@ -108,6 +112,7 @@ TEST_CASE("terminal_audit — at lower bound with outward gradient is stationary
   TerminalAudit a = audit_terminal_iterate(f, x, /*reported_f=*/0.5, lo, up);
   CHECK(a.stationary);
   CHECK(a.grad_inf_norm == doctest::Approx(0.0));  // outward component zeroed
+  CHECK(a.raw_grad_inf_norm == doctest::Approx(1.0));
   REQUIRE(a.active_set.size() == 1u);
   CHECK(a.active_set[0] == -1);
   CHECK(a.advisory_status == OptimStatus::Converged);
@@ -131,6 +136,123 @@ TEST_CASE("terminal_audit — at lower bound with inward gradient is non-station
   REQUIRE(a.active_set.size() == 1u);
   CHECK(a.active_set[0] == -1);  // still on the bound
   CHECK(a.advisory_status == OptimStatus::Unknown);
+}
+
+TEST_CASE("terminal_audit — equality KKT removes the constraint-normal gradient") {
+  ConstrainedScalarProblem prob;
+  prob.objective.n_param = 2;
+  prob.objective.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.objective.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2.0 * x;
+    return x.squaredNorm();
+  };
+  prob.n_constraint = 1;
+  prob.h = [](const Eigen::VectorXd& x) {
+    Eigen::VectorXd h(1);
+    h(0) = x.sum();
+    return h;
+  };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    return Eigen::MatrixXd::Ones(1, 2);
+  };
+  prob.constraint_lower = Eigen::VectorXd::Constant(1, 2.0);
+  prob.constraint_upper = prob.constraint_lower;
+
+  Eigen::VectorXd x(2);
+  x << 1.0, 1.0;
+  const TerminalAudit raw = audit_terminal_iterate(
+      prob.objective.f, x, 2.0, unbounded_lower(2), unbounded_upper(2));
+  const TerminalAudit kkt = audit_equality_constrained_terminal_iterate(
+      prob, x, 2.0, unbounded_lower(2), unbounded_upper(2));
+
+  CHECK_FALSE(raw.stationary);
+  CHECK(kkt.stationary);
+  CHECK(kkt.constrained);
+  CHECK(kkt.raw_grad_inf_norm == doctest::Approx(2.0));
+  CHECK(kkt.grad_inf_norm == doctest::Approx(0.0).scale(1.0));
+  CHECK(kkt.constraint_violation_inf == doctest::Approx(0.0));
+  CHECK(kkt.constraint_jacobian_rank == 1);
+  CHECK(kkt.advisory_status == OptimStatus::Converged);
+}
+
+TEST_CASE("terminal_audit — equality KKT rejects a feasible tangent displacement") {
+  ConstrainedScalarProblem prob;
+  prob.objective.n_param = 2;
+  prob.objective.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.objective.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2.0 * x;
+    return x.squaredNorm();
+  };
+  prob.n_constraint = 1;
+  prob.h = [](const Eigen::VectorXd& x) {
+    return Eigen::VectorXd::Constant(1, x.sum());
+  };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    return Eigen::MatrixXd::Ones(1, 2);
+  };
+  prob.constraint_lower = Eigen::VectorXd::Constant(1, 2.0);
+  prob.constraint_upper = prob.constraint_lower;
+
+  Eigen::VectorXd x(2);
+  x << 0.5, 1.5;
+  const TerminalAudit a = audit_equality_constrained_terminal_iterate(
+      prob, x, 2.5, unbounded_lower(2), unbounded_upper(2));
+  CHECK_FALSE(a.stationary);
+  CHECK(a.constraint_violation_inf == doctest::Approx(0.0));
+  CHECK(a.grad_inf_norm == doctest::Approx(1.0));
+}
+
+TEST_CASE("terminal_audit — equality KKT requires primal feasibility") {
+  ConstrainedScalarProblem prob;
+  prob.objective.n_param = 2;
+  prob.objective.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.objective.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2.0 * x;
+    return x.squaredNorm();
+  };
+  prob.n_constraint = 1;
+  prob.h = [](const Eigen::VectorXd& x) {
+    return Eigen::VectorXd::Constant(1, x.sum());
+  };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    return Eigen::MatrixXd::Ones(1, 2);
+  };
+  prob.constraint_lower = Eigen::VectorXd::Constant(1, 2.0);
+  prob.constraint_upper = prob.constraint_lower;
+
+  Eigen::VectorXd x(2);
+  x << 1.0, 1.0 + 1e-5;
+  const TerminalAudit a = audit_equality_constrained_terminal_iterate(
+      prob, x, x.squaredNorm(), unbounded_lower(2), unbounded_upper(2));
+  CHECK_FALSE(a.stationary);
+  CHECK(a.constraint_violation_inf == doctest::Approx(1e-5));
+  CHECK(a.grad_inf_norm < 1e-3);
+}
+
+TEST_CASE("terminal_audit — equality KKT handles a rank-deficient Jacobian") {
+  ConstrainedScalarProblem prob;
+  prob.objective.n_param = 2;
+  prob.objective.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.objective.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2.0 * x;
+    return x.squaredNorm();
+  };
+  prob.n_constraint = 2;
+  prob.h = [](const Eigen::VectorXd& x) {
+    return Eigen::VectorXd::Constant(2, x.sum());
+  };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    return Eigen::MatrixXd::Ones(2, 2);
+  };
+  prob.constraint_lower = Eigen::VectorXd::Constant(2, 2.0);
+  prob.constraint_upper = prob.constraint_lower;
+
+  Eigen::VectorXd x = Eigen::VectorXd::Ones(2);
+  const TerminalAudit a = audit_equality_constrained_terminal_iterate(
+      prob, x, 2.0, unbounded_lower(2), unbounded_upper(2));
+  CHECK(a.stationary);
+  CHECK(a.constraint_jacobian_rank == 1);
+  CHECK(a.grad_inf_norm == doctest::Approx(0.0).scale(1.0));
 }
 
 TEST_CASE("terminal_audit — non-finite objective produces Unknown") {

@@ -112,9 +112,13 @@ analytic objective and link Jacobians use the sparse rank-two derivative of
 elsewhere: NLopt SLSQP is the required default and IPOPT is an optional
 cross-check. Partable `<`/`>` rows remain unsupported, but they are not needed
 to express the covariance cone. R exposes the explicit frontier entry point as
-`frontier_fit_ml_psd()`. Boundary fits are reported by the existing covariance
-diagnostics; ordinary interior information-matrix inference is not yet promoted
-as valid at a rank-deficient component solution.
+`frontier_fit_ml_psd()`. Equality-constrained scalar backends finalize with a
+primal-feasibility plus Lagrangian-stationarity KKT audit rather than applying
+the unconstrained objective-gradient test to a constrained solution. R exposes
+the KKT residual, raw objective-gradient norm, equality violation, and
+constraint-Jacobian rank under `fit$audit`. Boundary fits are reported by the
+existing covariance diagnostics; ordinary interior information-matrix
+inference is not yet promoted as valid at a rank-deficient component solution.
 
 The advisory continuous-corpus audit in
 `tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper
@@ -140,6 +144,11 @@ just a backend change. The qualification is substantive: 86.1% of the
 structural coefficients retained extreme tails. PSD-ML therefore repairs
 optimizer and admissibility failures but does not turn very-small-sample
 boundary fits into regular estimates or justify ordinary interior inference.
+That stored full run predates the constrained-KKT terminal audit. Targeted
+replay found that its two PSD solver-success/audit-rejected cases remain
+nonstationary under the correct KKT calculation; the experiment runner now
+records the additional KKT telemetry, and a complete refresh remains required
+before publication.
 
 ## Implemented Capabilities
 

@@ -138,6 +138,13 @@ audit_converged <- function(fit) {
     identical(fit$audit$advisory_status, "converged")
 }
 
+audit_number <- function(fit, name) {
+  if (!is.list(fit) || !is.list(fit$audit)) return(NA_real_)
+  value <- fit$audit[[name]]
+  if (is.null(value) || length(value) != 1L) return(NA_real_)
+  as.numeric(value)
+}
+
 admissible <- function(fit) {
   is.list(fit) && is.list(fit$diagnostics) &&
     is.list(fit$diagnostics$admissibility) &&
@@ -214,6 +221,14 @@ fit_row <- function(method, model, data, n, rep, seed, kappa_s,
     beta_hat = beta_hat,
     beta_error = beta_hat - beta,
     fmin = if (ok) as.numeric(fit$fmin) else NA_real_,
+    stationarity_inf =
+      if (ok) audit_number(fit, "grad_inf_norm") else NA_real_,
+    raw_gradient_inf =
+      if (ok) audit_number(fit, "raw_grad_inf_norm") else NA_real_,
+    constraint_violation_inf =
+      if (ok) audit_number(fit, "constraint_violation_inf") else NA_real_,
+    constraint_jacobian_rank =
+      if (ok) audit_number(fit, "constraint_jacobian_rank") else NA_real_,
     iterations = if (ok) as.integer(fit$iterations) else NA_integer_,
     f_evals = if (ok) as.integer(fit$f_evals) else NA_integer_,
     elapsed_ms = elapsed_ms,
