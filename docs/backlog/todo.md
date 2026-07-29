@@ -35,13 +35,23 @@ when they next change.
   checks all pass, fixed-zero reduced-LISREL structure, a shared residual
   variance, an optional SLSQP/IPOPT interior cross-check, and the R result
   contract.
+  Experiment 73 supplies the first timing panel for ordinary L-BFGS, direct
+  PSD-SLSQP, and an ordinary-audit/warm-refit policy. On its deterministic
+  interior CFA scaling cases, direct PSD fitting cost about 2.5x/6.9x/59x
+  ordinary NTML at 3/6/12 indicators; an independent `p=12` replay gave 60x.
+  Audit-first stayed at approximately 1.0x whenever the ordinary solution was
+  admissible, while its five deliberately inadmissible fixtures cost about
+  2.2x--3.6x because both fits ran. A three-repetition `p=24` direction probe
+  reached roughly 711x and is not yet formal evidence. Treat audit-first as the
+  practical policy for now, and make a structure-aware lift for diagonal,
+  block-diagonal, and sparse covariance patterns the next performance target.
   Before promoting or benchmarking it broadly, add finite-difference gates for
   the complete lifted objective/constraint Jacobian, explicit shared-covariance
   general-linear/nonlinear-equality cases, and multi-group and mean-structure
-  cases. Then run the
-  backend timing/robustness panel; massive simulation grids can wait until
-  these deterministic cases are settled. Decide separately whether original
-  theta-space box bounds should be compiled as additional lifted constraints.
+  cases. Then rerun the backend timing/robustness panel with IPOPT available;
+  massive simulation grids can wait until these deterministic cases are
+  settled. Decide separately whether original theta-space box bounds should be
+  compiled as additional lifted constraints.
 
 - **L — extend covariance-honest estimation and boundary inference only on
   demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
