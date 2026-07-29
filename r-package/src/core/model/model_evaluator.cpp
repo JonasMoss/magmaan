@@ -459,6 +459,50 @@ ModelEvaluator::evaluate(Eigen::Ref<const Eigen::VectorXd> theta,
   return out;
 }
 
+model_expected<Evaluation>
+ModelEvaluator::evaluate_with_covariance_overrides(
+    Eigen::Ref<const Eigen::VectorXd> theta,
+    const CovarianceOverrides& overrides,
+    bool with_sigma_jacobian,
+    bool with_mu_jacobian) const {
+  if (overrides.theta.size() != blocks_.size() ||
+      overrides.psi.size() != blocks_.size()) {
+    return std::unexpected(make_err(
+        ModelError::Kind::UnknownVariable,
+        "covariance override block count does not match ModelEvaluator"));
+  }
+  if (auto e = assemble(theta); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  for (std::size_t b = 0; b < blocks_.size(); ++b) {
+    auto& bs = blocks_[b];
+    const auto& theta_b = overrides.theta[b];
+    const auto& psi_b = overrides.psi[b];
+    if (theta_b.rows() != bs.p || theta_b.cols() != bs.p ||
+        psi_b.rows() != bs.m || psi_b.cols() != bs.m) {
+      return std::unexpected(make_err(
+          ModelError::Kind::UnknownVariable,
+          "covariance override dimensions do not match block " +
+              std::to_string(b)));
+    }
+    if (!theta_b.allFinite() || !psi_b.allFinite()) {
+      return std::unexpected(make_err(
+          ModelError::Kind::UnknownVariable,
+          "covariance override contains non-finite values in block " +
+              std::to_string(b)));
+    }
+    bs.Theta = theta_b;
+    bs.Psi = psi_b;
+  }
+  compute_intermediates(true, true);
+
+  Evaluation out;
+  out.moments = current_moments();
+  if (with_sigma_jacobian) out.J_sigma = current_dsigma_dtheta();
+  if (with_mu_jacobian) out.J_mu = current_dmu_dtheta();
+  return out;
+}
+
 model_expected<AssembledMatrices>
 ModelEvaluator::assembled(Eigen::Ref<const Eigen::VectorXd> theta) const {
   // Reuse sigma() for the assembly path — it leaves all the per-block

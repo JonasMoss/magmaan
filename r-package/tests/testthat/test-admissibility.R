@@ -54,6 +54,32 @@ test_that("Heywood solution warns once without changing convergence", {
   expect_match(printed, "covariance-admissible: FALSE")
 })
 
+test_that("frontier PSD ML returns an ordinary admissible R fit", {
+  S <- matrix(c(
+    1.0, 0.7, 0.7,
+    0.7, 1.0, 0.3,
+    0.7, 0.3, 1.0
+  ), 3L, 3L, byrow = TRUE)
+  n <- 8L
+  H <- stats::contr.helmert(n)[, 1:3, drop = FALSE]
+  Q <- sweep(H, 2L, sqrt(colSums(H^2)), "/")
+  X <- sqrt(n) * Q %*% chol(S)
+  dat <- as.data.frame(X)
+  names(dat) <- c("x1", "x2", "x3")
+
+  fit <- expect_no_warning(frontier_fit_ml_psd(
+    "f =~ x1 + x2 + x3", dat,
+    control = list(max_iter = 5000L, gtol = 1e-8)
+  ))
+
+  expect_type(fit, "list")
+  expect_true(fit$converged)
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_true(fit$diagnostics$admissibility$covariance_matrices_psd)
+  expect_equal(nrow(fit$partable),
+               nrow(model_spec("f =~ x1 + x2 + x3")$partable))
+})
+
 test_that("FIML fits run the same covariance admissibility audit", {
   set.seed(23)
   n <- 100L

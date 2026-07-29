@@ -27,6 +27,30 @@ when they next change.
   those experiments next change. Ordinal and native FC-SEM fits remain outside
   the ordinary `MatrixRep` finalizer and need a separate attachment decision.
 
+- **M — harden the frontier PSD-ML slice after the correctness seed.**
+  `estimate::frontier::fit_ml_psd` and R's `frontier_fit_ml_psd()` now solve
+  complete-data ML with Cholesky-lifted `Theta`/`Psi` blocks through SLSQP; the
+  compact gates cover an interior ordinary-ML equivalence, a deterministic
+  negative-residual Heywood case, a joint-indefinite 3x3 `Psi` whose pairwise
+  checks all pass, fixed-zero reduced-LISREL structure, a shared residual
+  variance, an optional SLSQP/IPOPT interior cross-check, and the R result
+  contract.
+  Before promoting or benchmarking it broadly, add finite-difference gates for
+  the complete lifted objective/constraint Jacobian, explicit shared-covariance
+  general-linear/nonlinear-equality cases, and multi-group and mean-structure
+  cases. Then run the
+  backend timing/robustness panel; massive simulation grids can wait until
+  these deterministic cases are settled. Decide separately whether original
+  theta-space box bounds should be compiled as additional lifted constraints.
+
+- **L — extend covariance-honest estimation and boundary inference only on
+  demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
+  ordinal, two-level, and native FC-SEM need estimator-specific lifted
+  objectives rather than a nominal switch. At singular-but-PSD component
+  solutions, ordinary inverse-information SEs/tests are nonregular; add an
+  explicit boundary-aware inference policy before exposing automatic
+  post-fit inference from the constrained estimator.
+
 - **M/L — broaden and harden standardized score flips.** The frontier slice
   supports affine nested complete-data ML and direct-FIML pairs and is exercised
   by experiments 62 and 66. Its production probe path can now take H1 as a

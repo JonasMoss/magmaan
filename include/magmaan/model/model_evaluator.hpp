@@ -30,6 +30,16 @@ struct Evaluation {
   Eigen::MatrixXd J_mu;
 };
 
+// Per-block primitive covariance matrices supplied by a caller that needs to
+// evaluate the same LISREL model on an alternative covariance
+// parameterization.  The frontier PSD-constrained estimator uses this to
+// replace Θ and Ψ by Cholesky products while leaving the partable parameter
+// vector, Λ, B, ν, and α unchanged.
+struct CovarianceOverrides {
+  std::vector<Eigen::MatrixXd> theta;
+  std::vector<Eigen::MatrixXd> psi;
+};
+
 // Per-block assembled LISREL matrices at a given θ, plus the derived
 // intermediates (A = (I−B)⁻¹, LamA = Λ A, Mid = A Ψ Aᵀ). Consumers that
 // need to differentiate Σ analytically (observed-info SE) build their
@@ -124,6 +134,18 @@ class ModelEvaluator {
   evaluate(Eigen::Ref<const Eigen::VectorXd> theta,
            bool with_sigma_jacobian,
            bool with_mu_jacobian) const;
+
+  // As evaluate(), but replace every assembled primitive covariance matrix by
+  // the corresponding caller-supplied matrix before forming Σ and its
+  // Jacobian. J_sigma still contains the formal direct columns for partable Θ
+  // and Ψ parameters; a transformed estimator can zero those columns and add
+  // the Jacobian of its alternative covariance coordinates.
+  model_expected<Evaluation>
+  evaluate_with_covariance_overrides(
+      Eigen::Ref<const Eigen::VectorXd> theta,
+      const CovarianceOverrides& overrides,
+      bool with_sigma_jacobian,
+      bool with_mu_jacobian) const;
 
   // Per-block Λ, Ψ, Θ, B at θ along with the derived A, LamA, Mid.
   // Returned by value (copies of the internal buffers) so the caller can

@@ -81,10 +81,10 @@ covariance row and column to zero. Singular-but-PSD component matrices are
 valid covariance matrices, although they are boundary cases with nonregular
 inference.
 
-Core estimation remains lavaan-compatible and does not yet constrain the
-optimizer to this full covariance domain. Instead, continuous ML, LS, FIML,
-two-level, and related ordinary `MatrixRep` paths finalize with an
-estimator-neutral admissibility audit. It records
+Core estimation remains lavaan-compatible and does not constrain the optimizer
+to this full covariance domain. Continuous ML, LS, FIML, two-level, and related
+ordinary `MatrixRep` paths instead finalize with an estimator-neutral
+admissibility audit. It records
 per-block minimum eigenvalues and PSD/PD status for `Theta` and `Psi`, source
 partable rows, negative variance rows, defined correlations outside
 `[-1, 1]`, and the implied-`Sigma` PD result. The audit does not change
@@ -92,8 +92,25 @@ optimizer convergence or discard the estimate. R exposes it at
 `fit$diagnostics$admissibility`, emits one concise warning for an inadmissible
 high-level fit, and prints covariance admissibility separately from
 convergence. Opt-in `variance_bounds` remain a diagonal Heywood barrier, not a
-joint PSD constraint. A future constrained frontier estimator must preserve
-this original-entry partable semantics and provide boundary-aware inference.
+joint PSD constraint.
+
+`estimate::frontier::fit_ml_psd` is the first covariance-honest estimator. For
+complete-data normal-theory ML it gives every non-structural-zero part of
+`Theta_b` and `Psi_b` an internal lower-triangular factor and evaluates the
+likelihood only at `L_b L_b'`. Equality constraints link every lifted entry
+back to the original affine-reduced partable parameter, so fixed cells,
+structural zeros, shared labels, and linear/nonlinear equality constraints
+retain their ordinary semantics and the returned parameter count is unchanged.
+Zero fixed variances are removed from the factor support, consistently forcing
+their covariance rows and columns to zero without a degenerate Cholesky
+diagonal constraint. The analytic objective and link Jacobians feed the same
+backend-neutral constrained scalar problem used elsewhere: NLopt SLSQP is the
+required default and IPOPT is an optional cross-check. Partable `<`/`>` rows
+remain unsupported, but they are not needed to express the covariance cone.
+R exposes the explicit frontier entry point as `frontier_fit_ml_psd()`.
+Boundary fits are reported by the existing covariance diagnostics; ordinary
+interior information-matrix inference is not yet promoted as valid at a
+rank-deficient component solution.
 
 ## Implemented Capabilities
 

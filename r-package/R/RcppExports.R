@@ -41,6 +41,10 @@ fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL
     .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
+frontier_fit_ml_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    .Call(`_magmaan_frontier_fit_ml_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol)
+}
+
 frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
     .Call(`_magmaan_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
 }
