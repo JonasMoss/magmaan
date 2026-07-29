@@ -61,6 +61,16 @@ when they next change.
   automatic fallback before there is a boundary-inference policy and a concrete
   R consumer. The runner is `tests/checks/psd_ml_corpus/`; the decision record
   is `docs/research/notes/psd_ml_corpus_audit.tex`.
+  The De Jonckere--Rosseel / Ernst small-\(N\) benchmark now supplies the
+  convergence stress evidence (`experiments/74-psd-ml-small-n-convergence/`):
+  at \(N=10\), direct PSD-ML audit-converged in 96.8% of 1,000 replications
+  versus 54.1% for ordinary L-BFGS NTML. The same-SLSQP comparison still
+  strongly favors PSD-ML, ruling out a backend-only explanation. Do not
+  promote it to an automatic small-sample cure: 86.1% of the \(N=10\) PSD
+  fits were rank-boundary solutions and the raw structural coefficient had
+  severe tails. A later boundary-inference/stabilization study should compare
+  the covariance cone alone with data-driven wide bounds or another explicit
+  regularizer; it must report parameter risk, not convergence alone.
   Before promoting or benchmarking it broadly, add finite-difference gates for
   the complete lifted objective/constraint Jacobian, explicit shared-covariance
   general-linear/nonlinear-equality cases, and multi-group and mean-structure

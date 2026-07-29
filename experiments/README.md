@@ -88,6 +88,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 71 | [projected-score-satterthwaite](71-projected-score-satterthwaite/report.qmd) | probe | active | Can a projected Satterthwaite effective denominator improve calibration of an already-pivotal robust SEM goodness-of-fit score, and is the empirical rule's apparent success genuine self-normalization or moment-estimation bias? |
 | 72 | [hotelling-robust-gof-grid](72-hotelling-robust-gof-grid/report.qmd) | probe | active | Does the ordinary-Hotelling reference improve a centered pivotal SEM goodness-of-fit score across residual rank and sample-to-rank ratio, relative to its chi-square limit and SB/MV/pEBA4 corrections of the working RLS score? |
 | 73 | [psd-ml-timing](73-psd-ml-timing/report.qmd) | benchmark | active | What does covariance-honest complete-data NTML cost when run directly or only after an ordinary fit fails its covariance audit? |
+| 74 | [psd-ml-small-n-convergence](74-psd-ml-small-n-convergence/report.qmd) | benchmark | complete | On the De Jonckere–Rosseel / Ernst small-N SEM design, does covariance-honest NTML converge more reliably than ordinary NTML? |
 
 ## Archived
 
