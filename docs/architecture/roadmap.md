@@ -95,22 +95,26 @@ convergence. Opt-in `variance_bounds` remain a diagonal Heywood barrier, not a
 joint PSD constraint.
 
 `estimate::frontier::fit_ml_psd` is the first covariance-honest estimator. For
-complete-data normal-theory ML it gives every non-structural-zero part of
-`Theta_b` and `Psi_b` an internal lower-triangular factor and evaluates the
-likelihood only at `L_b L_b'`. Equality constraints link every lifted entry
-back to the original affine-reduced partable parameter, so fixed cells,
-structural zeros, shared labels, and linear/nonlinear equality constraints
-retain their ordinary semantics and the returned parameter count is unchanged.
-Zero fixed variances are removed from the factor support, consistently forcing
-their covariance rows and columns to zero without a degenerate Cholesky
-diagonal constraint. The analytic objective and link Jacobians feed the same
-backend-neutral constrained scalar problem used elsewhere: NLopt SLSQP is the
-required default and IPOPT is an optional cross-check. Partable `<`/`>` rows
-remain unsupported, but they are not needed to express the covariance cone.
-R exposes the explicit frontier entry point as `frontier_fit_ml_psd()`.
-Boundary fits are reported by the existing covariance diagnostics; ordinary
-interior information-matrix inference is not yet promoted as valid at a
-rank-deficient component solution.
+complete-data normal-theory ML it compiles each `Theta_b` and `Psi_b` covariance
+graph, splitting structurally disconnected variables into separate
+lower-triangular factors, and evaluates the likelihood only at the resulting
+block-diagonal collection of `L_c L_c'`. Thus a diagonal residual covariance
+uses scalar square factors rather than a dense residual Cholesky factor;
+correlated or fully free components retain the joint PSD restriction. Equality
+constraints link every lifted within-component entry back to the original
+affine-reduced partable parameter, so fixed cells, structural zeros, shared
+labels, and linear/nonlinear equality constraints retain their ordinary
+semantics and the returned parameter count is unchanged. Zero fixed variances
+are removed from the factor support, consistently forcing their covariance rows
+and columns to zero without a degenerate Cholesky diagonal constraint. The
+analytic objective and link Jacobians use the sparse rank-two derivative of
+`L_c L_c'` and feed the same backend-neutral constrained scalar problem used
+elsewhere: NLopt SLSQP is the required default and IPOPT is an optional
+cross-check. Partable `<`/`>` rows remain unsupported, but they are not needed
+to express the covariance cone. R exposes the explicit frontier entry point as
+`frontier_fit_ml_psd()`. Boundary fits are reported by the existing covariance
+diagnostics; ordinary interior information-matrix inference is not yet promoted
+as valid at a rank-deficient component solution.
 
 ## Implemented Capabilities
 

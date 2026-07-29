@@ -42,9 +42,15 @@ when they next change.
   Audit-first stayed at approximately 1.0x whenever the ordinary solution was
   admissible, while its five deliberately inadmissible fixtures cost about
   2.2x--3.6x because both fits ran. A three-repetition `p=24` direction probe
-  reached roughly 711x and is not yet formal evidence. Treat audit-first as the
-  practical policy for now, and make a structure-aware lift for diagonal,
-  block-diagonal, and sparse covariance patterns the next performance target.
+  reached roughly 711x and is not formal evidence. The first performance repair
+  now compiles the structural covariance graph into independent Cholesky
+  components and evaluates both the lifted objective and link Jacobian with
+  sparse rank-two formulas. The matched 30-repetition rerun reduced direct-PSD
+  overhead to about 1.8x/2.3x/3.7x ordinary NTML at 3/6/12 indicators, cutting
+  the `p=12` PSD time by 15x; the directional `p=24` ratio fell to about 5.0x.
+  Audit-first remains the practical policy. If more speed is needed, the next
+  target is analytical elimination of duplicate original covariance coordinates
+  and their links when no fixed/shared/general-equality semantics require them.
   Before promoting or benchmarking it broadly, add finite-difference gates for
   the complete lifted objective/constraint Jacobian, explicit shared-covariance
   general-linear/nonlinear-equality cases, and multi-group and mean-structure

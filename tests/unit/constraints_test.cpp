@@ -580,6 +580,39 @@ TEST_CASE("frontier fit_ml_psd preserves shared covariance parameters") {
   CHECK(constrained->diagnostics.admissibility.admissible);
 }
 
+TEST_CASE("frontier fit_ml_psd separates covariance-connected components") {
+  SampleStats samp;
+  Eigen::Matrix3d S;
+  S << 1.0, 0.66, 0.48,
+       0.66, 1.0, 0.42,
+       0.48, 0.42, 1.0;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(300);
+
+  auto pt = must_lavaanify(
+      "f =~ x1 + x2 + x3\n"
+      "x1 ~~ x2");
+  const auto rep = build_matrix_rep(pt).value();
+  auto x0 = magmaan::estimate::simple_start_values(pt, rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto ordinary = magmaan::estimate::fit_ml(pt, rep, samp, *x0);
+  REQUIRE(ordinary.has_value());
+  REQUIRE(ordinary->diagnostics.admissibility.admissible);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto constrained = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, ordinary->theta,
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(constrained.has_value(), "component PSD fit failed: "
+      << (constrained.has_value() ? std::string{}
+                                  : constrained.error().detail));
+  CHECK(constrained->fmin ==
+        doctest::Approx(ordinary->fmin).epsilon(1e-7));
+  CHECK((constrained->theta - ordinary->theta).cwiseAbs().maxCoeff() < 1e-5);
+  CHECK(constrained->diagnostics.admissibility.admissible);
+}
+
 TEST_CASE("frontier fit_ml_psd handles reduced-LISREL structural zeros") {
   SampleStats samp;
   Eigen::Matrix2d S;
