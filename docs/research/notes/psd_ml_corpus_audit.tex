@@ -1,0 +1,156 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+
+\title{Covariance-Honest ML on the Continuous SEM Corpus}
+\author{}
+\date{29 July 2026}
+
+\newcommand{\Cov}{\operatorname{Cov}}
+
+\begin{document}
+\maketitle
+
+\section*{Decision summary}
+
+Keep ordinary normal-theory maximum likelihood (NTML) as the core,
+lavaan-compatible estimator.  Retain the post-fit covariance audit and expose
+positive-semidefinite ML (PSD-ML) as an explicit frontier refit.  Do not make
+direct PSD-ML or automatic refitting the default.  Promote a small,
+geometry-diverse subset of the corpus findings to deterministic regression
+tests; do not place the full corpus scan in continuous integration.
+
+This decision follows from a 97-case audit.  Ordinary NTML was
+covariance-admissible in 91 cases.  In those cases, PSD-ML changed no parameter
+by more than \(3.21\times 10^{-6}\), and the maximum absolute objective change
+was \(7.18\times 10^{-12}\).  Six ordinary fits were inadmissible.  All 97
+PSD-ML refits converged and were admissible.
+
+\section*{Scope}
+
+The audit used the checked-in continuous model and summary-statistic fixtures
+for Little, Newsom, Geiser, the retained Mplus tranche, the Kline--Guo
+invariance cases, and the first paper-corpus case.  The private raw-data corpus
+was not required.  Each case was re-estimated by ordinary complete-data NTML,
+audited for positive semidefiniteness of the primitive LISREL covariance
+matrices \(\Theta\) and \(\Psi\), and warm-refitted by PSD-ML.
+
+The Geiser files are GLS/ULS oracle fixtures.  Their model and data summaries
+were deliberately re-estimated by NTML for this question.  The audit therefore
+describes the NTML behavior of those model--data combinations, not the
+published Geiser estimator.
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+Corpus surface & Cases & Inadmissible ordinary NTML \\
+\midrule
+Little       & 37 & 4 \\
+Geiser       & 28 & 2 \\
+Newsom       & 21 & 0 \\
+Mplus        &  6 & 0 \\
+Kline--Guo   &  4 & 0 \\
+Paper corpus &  1 & 0 \\
+\midrule
+Total        & 97 & 6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This is a selected validation surface, not a prevalence sample.  The observed
+rate \(6/97\) must not be reported as the frequency of improper SEM solutions
+in applied work.
+
+\section*{Differing cases}
+
+Let \(\Delta f=f_{\mathrm{PSD}}-f_{\mathrm{ordinary}}\).  The last column below
+puts the objective change on the ordinary likelihood-ratio scale.
+
+\begin{center}
+\small
+\begin{tabular}{llllr}
+\toprule
+Source & Case & Failing block & Minimum eigenvalue & \(2N\Delta f\) \\
+\midrule
+Little & two-indicator CFA       & \(\Theta\) & \(-0.001186\) & \(0.0006\) \\
+Little & four-wave model 3a      & \(\Psi\)   & \(-0.011344\) & \(0\) \\
+Little & four-wave model 3b      & \(\Psi\)   & \(-0.017695\) & \(0\) \\
+Little & linear growth model 4c  & \(\Psi\)   & \(-0.020951\) & \(27.41\) \\
+Geiser & second-order CFA        & \(\Psi\)   & \(-0.098807\) & \(0.0067\) \\
+Geiser & quadratic growth        & \(\Psi\)   & \(-0.000476\) & \(0.914\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Classical boundary repair.}
+The Little two-indicator CFA estimated the residual variance of
+\texttt{Glad} as \(-0.001186\).  PSD-ML put it at zero.  The Geiser
+second-order CFA estimated the disturbance variance of \texttt{KFT\_N} as
+\(-0.098807\); PSD-ML put it at \(1.15\times 10^{-7}\).  Both repairs had
+negligible likelihood cost.
+
+\paragraph{Same fit, different decomposition.}
+In Little models 3a and 3b, the latent level--slope covariance implied a
+correlation exceeding one.  The level factor loads only on the first wave
+there, so its variance and the first-wave residual variance are not separately
+identified by the observed covariance matrix.  PSD-ML transferred
+approximately \(0.03175\) from the first-wave residual variance to the level
+variance, reached the PSD boundary, and left the objective unchanged.
+
+\paragraph{Materially different fit.}
+Little model 4c estimated the slope variance as \(-0.02092\).  Under PSD-ML it
+became \(0.00365\), the level variance moved from \(0.216\) to \(0.823\), and
+the first-wave residual variance moved from \(0.475\) to zero.  The resulting
+likelihood-ratio-scale cost was \(27.41\).  This is the clearest corpus example
+in which covariance honesty changes both the substantive estimates and model
+fit.
+
+\paragraph{Joint covariance geometry.}
+The Geiser quadratic-growth case had positive factor variances but an
+indefinite joint growth-factor covariance matrix.  PSD-ML moved the solution
+to the boundary with a likelihood-ratio-scale cost of \(0.914\).  This case
+guards a feature that separate nonnegative-variance bounds do not express.
+
+\section*{Action}
+
+\begin{enumerate}
+\item Keep the current ordinary-fit warning and structured audit.  It catches
+the exact cases for which the admissible model differs.
+\item Keep PSD-ML opt-in.  Automatic replacement would silently change the
+estimand or choose among observationally equivalent decompositions, and
+boundary inference is not yet regularized.
+\item Treat ``ordinary fit, audit, explicit warm PSD refit'' as the recommended
+methods-development workflow.  A convenience policy wrapper is useful only
+when a concrete R consumer asks for it; it is not needed to validate the
+estimator.
+\item Promote four deterministic regression geometries: Little model 3a for
+same-fit reallocation, Little model 4c for a material constrained optimum,
+Geiser second-order CFA for a negative structural disturbance, and Geiser
+quadratic growth for a joint covariance violation.  Prefer compact extracted
+summary fixtures over running the complete corpus in the default suite.
+\item Prioritize finite-difference derivative gates plus multi-group,
+mean-structure, and equality-constraint coverage before expanding PSD-ML to
+FIML or weighted least-squares estimators.
+\end{enumerate}
+
+\section*{Reproduction}
+
+The advisory runner is
+\path{tests/checks/psd_ml_corpus/psd_ml_corpus_audit.R}.  It writes the
+case-level audit, parameter changes, corpus counts, failures, and metadata
+under its ignored \path{results/} directory.
+
+\begin{verbatim}
+just -f tests/checks/psd_ml_corpus/justfile audit
+\end{verbatim}
+
+The recorded run used magmaan 0.0.1 at source commit
+\texttt{7e7f00d0}.  Ordinal, mixed, FIML, multilevel, and native
+factor--composite estimators remain outside this audit because the current
+covariance-honest estimator is complete-data NTML only.
+
+\end{document}

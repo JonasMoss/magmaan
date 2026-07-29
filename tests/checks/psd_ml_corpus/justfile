@@ -1,0 +1,8 @@
+default:
+    @just --list
+
+audit:
+    Rscript psd_ml_corpus_audit.R
+
+audit-first:
+    Rscript psd_ml_corpus_audit.R --audit-first

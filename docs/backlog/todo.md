@@ -51,13 +51,27 @@ when they next change.
   Audit-first remains the practical policy. If more speed is needed, the next
   target is analytical elimination of duplicate original covariance coordinates
   and their links when no fixed/shared/general-equality semantics require them.
+  The advisory continuous-corpus audit now covers 97 checked-in Little, Newsom,
+  Geiser, Mplus, Kline/Guo, and paper model/data summaries. Ordinary NTML was
+  covariance-inadmissible in six: four Little and two Geiser cases. All 97
+  PSD-ML refits converged and were admissible; the 91 interior cases agreed with
+  ordinary NTML to \(3.21\times 10^{-6}\) in the parameters and
+  \(7.18\times 10^{-12}\) in the objective. Keep ordinary NTML plus its audit as
+  the core default and PSD-ML as an explicit warm refit. Do not add silent
+  automatic fallback before there is a boundary-inference policy and a concrete
+  R consumer. The runner is `tests/checks/psd_ml_corpus/`; the decision record
+  is `docs/research/notes/psd_ml_corpus_audit.tex`.
   Before promoting or benchmarking it broadly, add finite-difference gates for
   the complete lifted objective/constraint Jacobian, explicit shared-covariance
   general-linear/nonlinear-equality cases, and multi-group and mean-structure
-  cases. Then rerun the backend timing/robustness panel with IPOPT available;
-  massive simulation grids can wait until these deterministic cases are
-  settled. Decide separately whether original theta-space box bounds should be
-  compiled as additional lifted constraints.
+  cases. Promote compact extracted summaries for four corpus geometries: the
+  Little same-fit level/residual reallocation, the materially changed Little
+  linear-growth fit, the Geiser second-order negative disturbance, and the
+  Geiser joint-indefinite quadratic growth covariance. Do not put the full
+  97-case scan in default CI. Then rerun the backend timing/robustness panel
+  with IPOPT available; massive simulation grids can wait until these
+  deterministic cases are settled. Decide separately whether original
+  theta-space box bounds should be compiled as additional lifted constraints.
 
 - **L — extend covariance-honest estimation and boundary inference only on
   demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
