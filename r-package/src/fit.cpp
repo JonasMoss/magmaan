@@ -1023,6 +1023,44 @@ Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
 // Convert FitDiagnostics (L2, expanded θ) to an R sub-list. Surfaced as
 // `fit$diagnostics`. Active-bound indices are converted 0-based → 1-based at
 // the R boundary so they index `theta`/`partable` rows directly in R.
+Rcpp::List covariance_blocks_to_r(
+    const std::vector<magmaan::estimate::CovarianceBlockDiagnostics>& blocks) {
+  Rcpp::List out(static_cast<R_xlen_t>(blocks.size()));
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& d = blocks[b];
+    Rcpp::IntegerVector rows(d.covariance_rows.begin(),
+                             d.covariance_rows.end());
+    Rcpp::IntegerVector negative(d.negative_variance_rows.begin(),
+                                 d.negative_variance_rows.end());
+    Rcpp::IntegerVector correlation(d.invalid_correlation_rows.begin(),
+                                    d.invalid_correlation_rows.end());
+    for (R_xlen_t i = 0; i < rows.size(); ++i) rows[i] += 1;
+    for (R_xlen_t i = 0; i < negative.size(); ++i) negative[i] += 1;
+    for (R_xlen_t i = 0; i < correlation.size(); ++i) correlation[i] += 1;
+    out[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+        Rcpp::_["block"] = d.block + 1,
+        Rcpp::_["min_eigenvalue"] = d.min_eigenvalue,
+        Rcpp::_["finite"] = d.finite,
+        Rcpp::_["psd"] = d.psd,
+        Rcpp::_["positive_definite"] = d.positive_definite,
+        Rcpp::_["covariance_rows"] = rows,
+        Rcpp::_["negative_variance_rows"] = negative,
+        Rcpp::_["invalid_correlation_rows"] = correlation);
+  }
+  return out;
+}
+
+Rcpp::List admissibility_to_r(
+    const magmaan::estimate::AdmissibilityDiagnostics& d) {
+  return Rcpp::List::create(
+      Rcpp::_["checked"] = d.checked,
+      Rcpp::_["covariance_matrices_psd"] = d.covariance_matrices_psd,
+      Rcpp::_["implied_sigma_pd"] = d.implied_sigma_pd,
+      Rcpp::_["admissible"] = d.admissible,
+      Rcpp::_["theta"] = covariance_blocks_to_r(d.theta_blocks),
+      Rcpp::_["psi"] = covariance_blocks_to_r(d.psi_blocks));
+}
+
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
   Rcpp::LogicalVector sigma_pd(static_cast<R_xlen_t>(d.sigma_pd_per_block.size()));
   for (std::size_t b = 0; b < d.sigma_pd_per_block.size(); ++b)
@@ -1045,6 +1083,7 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["nl_eq_satisfied"]        = d.nl_eq_satisfied,
       Rcpp::_["active_bounds_lower"]    = at_lo,
       Rcpp::_["active_bounds_upper"]    = at_up,
+      Rcpp::_["admissibility"]          = admissibility_to_r(d.admissibility),
       Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);
 }
 

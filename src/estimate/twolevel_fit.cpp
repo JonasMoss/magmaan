@@ -100,8 +100,8 @@ fit_ml_twolevel(spec::LatentStructure pt, const model::MatrixRep& rep,
                 out->f_evals,         out->g_evals,     out->status,
                 out->grad_inf_norm,   std::move(out->audit)};
   est.diagnostics =
-      finalize_fit_diagnostics(est.theta, ev, *con, NonlinearEqConstraints{},
-                               bounds);
+      finalize_fit_diagnostics(est.theta, pt, ev, *con,
+                               NonlinearEqConstraints{}, bounds);
   return est;
 }
 

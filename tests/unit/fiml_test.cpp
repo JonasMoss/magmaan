@@ -553,13 +553,16 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
     FAIL(est.error().detail);
     return;
   }
+  const auto& fitted = *est;
+  CHECK(fitted.diagnostics.admissibility.checked);
+  CHECK(fitted.diagnostics.admissibility.admissible);
 
   magmaan::estimate::fiml::FIML fiml;
   auto cache = fiml.prepare(raw);
   REQUIRE(cache.has_value());
   auto ev = magmaan::model::ModelEvaluator::build(*built.pt, *built.rep);
   REQUIRE(ev.has_value());
-  auto eval = ev->evaluate(est->theta, true, true);
+  auto eval = ev->evaluate(fitted.theta, true, true);
   REQUIRE(eval.has_value());
   auto vg = fiml.value_gradient(raw, *cache, eval->moments,
                                 eval->J_sigma, eval->J_mu);

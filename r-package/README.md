@@ -23,7 +23,10 @@ Convenience helpers are limited to R-side composition:
   Fit lists include `optimizer_status` and `grad_norm` so methods work can
   distinguish clean stationary convergence from usable but salvaged or singular
   optimizer exits. The `converged` boolean is true only for the clean
-  stationary case.
+  stationary case. Continuous normal-theory fits also expose the post-fit
+  reduced-LISREL covariance audit at
+  `fit$diagnostics$admissibility`; `print()` reports its overall status and an
+  inadmissible high-level fit emits one warning without changing `converged`.
 - `compute_defined(model, fit, vcov)` evaluates `:=` rows after fitting. The
   caller supplies the covariance matrix explicitly, so expected/observed/robust
   covariance choices stay visible.

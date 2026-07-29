@@ -40,6 +40,24 @@ reason the test exists; unresolved work still belongs in the backlog.
 The notes below are cross-subsystem, oracle-dependent fixes. Full root-cause
 write-ups live in the commits that introduced each guard.
 
+**Convergence was returned without covariance admissibility.**
+Regression: complete-data ML/LS checked the final implied observed `Sigma`
+only, FIML did not run the shared L2 finalizer, and R exposed no structured
+answer to whether the assembled reduced-LISREL `Theta` and `Psi` were
+covariance matrices. A converged Heywood solution could therefore have PD
+observed moments while carrying a negative residual variance, with no
+high-level warning; positive variances and valid pairwise correlations also
+could hide a higher-dimensional joint PSD failure.
+Guard: `tests/unit/fit_diagnostics_test.cpp` separates observed-`Sigma` PD from
+component PSD with deterministic negative-residual and three-factor joint-PSD
+cases; `tests/unit/fiml_test.cpp` requires fitted FIML estimates to carry the
+same audit; `r-package/tests/testthat/test-admissibility.R` checks the R schema,
+single warning, unchanged convergence flag, source partable rows, FIML path,
+and printed status.
+Scope: fitting remains unconstrained for lavaan compatibility. A future
+frontier covariance-domain optimizer needs boundary-aware inference; ordinal
+and native FC-SEM fits do not yet run this ordinary MatrixRep finalizer.
+
 **FIML fit measures used complete-data ML plumbing.**
 Regression: the R `fit_measures()` wrapper treated FIML fits like complete-data
 ML by deriving `chisq = 2N*fmin` and calling the sample-statistics baseline
