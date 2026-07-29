@@ -31,13 +31,16 @@ n_eff <- nrow(X)
 mask <- !is.na(X)
 storage.mode(mask) <- "logical"
 
-# Run magmaan's saturated EM.
-mag <- magmaan_core$estimate_saturated_em_moments(list(X = X, mask = mask))
+# Run both saturated-EM implementations with the same strict parameter-update
+# tolerance so this is a stopping-rule-aligned parity comparison.
+mag <- magmaan_core$estimate_saturated_em_moments(
+  list(X = X, mask = mask),
+  control = list(h1_em_param_tol = 1e-12))
 stopifnot(length(mag$mean) == 1L,
           length(mag$cov) == 1L,
           mag$n_obs == n_eff)
 
-# Run lavaan's saturated EM at a tight tolerance for parity comparison.
+# Run lavaan's saturated EM at the same tight tolerance.
 # (lavaan 0.7 renamed the 0.6-era lav_data_missing_patterns /
 # lav_mvnorm_missing_h1_estimate_moments internals.)
 mp <- lavaan:::lav_data_mi_patterns(X)
