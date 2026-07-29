@@ -152,7 +152,7 @@ evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
       bounds.lower, bounds.upper, audit_opts);
 
   FitDiagnostics diagnostics = finalize_fit_diagnostics(
-      theta_full, prelude.ev, prelude.con, prelude.nl, bounds,
+      theta_full, pt, prelude.ev, prelude.con, prelude.nl, bounds,
       /*snlls_profile_fallback_flag=*/false);
 
   // `iterations = 0`, `f_evals = 1`, `g_evals = 1` are the documented

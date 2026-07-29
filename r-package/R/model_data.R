@@ -2000,6 +2000,51 @@ finalize_fcsem_fit <- function(fit, spec, missing) {
   fit
 }
 
+.admissibility_block_reason <- function(blocks, symbol) {
+  if (!is.list(blocks) || !length(blocks)) return(character())
+  bad <- Filter(function(x) is.list(x) && identical(x$psd, FALSE), blocks)
+  if (!length(bad)) return(character())
+  ids <- vapply(bad, function(x) as.integer(x$block %||% NA_integer_),
+                integer(1L))
+  rows <- sort(unique(unlist(lapply(
+    bad, function(x) as.integer(x$covariance_rows %||% integer())),
+    use.names = FALSE)))
+  detail <- paste0(symbol, " block", if (length(ids) == 1L) "" else "s",
+                   " ", paste(ids, collapse = ", "), " not PSD")
+  if (length(rows)) {
+    detail <- paste0(detail, " (partable rows ",
+                     paste(rows, collapse = ", "), ")")
+  }
+  detail
+}
+
+.warn_fit_admissibility <- function(fit) {
+  admissibility <- fit$diagnostics$admissibility
+  if (!is.list(admissibility) || !isTRUE(admissibility$checked) ||
+      !identical(admissibility$admissible, FALSE)) {
+    return(invisible(fit))
+  }
+
+  reasons <- character()
+  if (!isTRUE(admissibility$implied_sigma_pd)) {
+    reasons <- c(reasons, "implied Sigma not positive definite")
+  }
+  reasons <- c(
+    reasons,
+    .admissibility_block_reason(admissibility$theta, "Theta"),
+    .admissibility_block_reason(admissibility$psi, "Psi")
+  )
+  if (!length(reasons)) reasons <- "covariance admissibility checks failed"
+  warning(
+    "magmaan: post-fit solution is not covariance-admissible: ",
+    paste(reasons, collapse = "; "),
+    ". Convergence status is unchanged; inspect ",
+    "fit$diagnostics$admissibility.",
+    call. = FALSE
+  )
+  invisible(fit)
+}
+
 finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
   fit$model <- spec
   fit$syntax <- spec$syntax
@@ -2017,6 +2062,7 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
   fit$group_var <- spec$group_var %||% fit$group_var %||% ""
   fit$group_labels <- spec$group_labels %||% fit$group_labels %||% character()
   class(fit) <- c("magmaan_fit", "list")
+  .warn_fit_admissibility(fit)
   fit
 }
 
@@ -2024,6 +2070,12 @@ print.magmaan_fit <- function(x, ...) {
   cat("magmaan fit (estimate only)\n")
   cat("  estimator: ", x$estimator %||% "unknown", "\n", sep = "")
   cat("  converged: ", if (isTRUE(x$converged)) "TRUE" else "FALSE", "\n", sep = "")
+  admissibility <- x$diagnostics$admissibility
+  if (is.list(admissibility) && isTRUE(admissibility$checked)) {
+    cat("  covariance-admissible: ",
+        if (isTRUE(admissibility$admissible)) "TRUE" else "FALSE",
+        "\n", sep = "")
+  }
   cat("  free parameters: ", x$npar %||% length(x$theta), "\n", sep = "")
   cat("  observations: ", x$ntotal %||% sum(x$nobs), "\n", sep = "")
   cat("  groups: ", x$ngroups %||% length(x$nobs), "\n", sep = "")

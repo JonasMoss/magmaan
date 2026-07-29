@@ -33,6 +33,7 @@ namespace {
 // MatrixRep in thread_local statics so the evaluator's references outlive
 // the helper return.
 struct ModelBits {
+  const magmaan::spec::LatentStructure* pt;
   ModelEvaluator         ev;
   EqConstraints          con;
   NonlinearEqConstraints nl;
@@ -55,7 +56,8 @@ ModelBits build_bits(std::string_view src) {
   auto con_or = build_eq_constraints(s_pt, /*allow_nonlinear=*/true);
   REQUIRE(con_or.has_value());
   auto nl_built = build_nl_constraints(s_pt);
-  return ModelBits{std::move(*ev), std::move(*con_or), std::move(nl_built)};
+  return ModelBits{&s_pt, std::move(*ev), std::move(*con_or),
+                   std::move(nl_built)};
 }
 
 // Build a θ at which Σ(θ) is PD: latent-variance positive, residuals
@@ -77,7 +79,7 @@ TEST_CASE("finalize_fit_diagnostics: clean 1F CFA, no constraints, no bounds") {
   Bounds empty_bounds;  // .empty() == true
 
   FitDiagnostics d = finalize_fit_diagnostics(
-      theta, bits.ev, bits.con, bits.nl, empty_bounds);
+      theta, *bits.pt, bits.ev, bits.con, bits.nl, empty_bounds);
 
   CHECK(d.sigma_pd_all);
   CHECK(d.sigma_pd_per_block.size() == 1u);
@@ -89,6 +91,14 @@ TEST_CASE("finalize_fit_diagnostics: clean 1F CFA, no constraints, no bounds") {
   CHECK(d.nl_eq_satisfied);
   CHECK(d.active_bounds_full.at_lower.empty());
   CHECK(d.active_bounds_full.at_upper.empty());
+  CHECK(d.admissibility.checked);
+  CHECK(d.admissibility.covariance_matrices_psd);
+  CHECK(d.admissibility.implied_sigma_pd);
+  CHECK(d.admissibility.admissible);
+  REQUIRE(d.admissibility.theta_blocks.size() == 1u);
+  REQUIRE(d.admissibility.psi_blocks.size() == 1u);
+  CHECK(d.admissibility.theta_blocks[0].psd);
+  CHECK(d.admissibility.psi_blocks[0].psd);
   CHECK_FALSE(d.snlls_profile_fallback);
 }
 
@@ -106,7 +116,7 @@ TEST_CASE("finalize_fit_diagnostics: linear equality constraint residual ≈ 0 b
 
   Bounds empty_bounds;
   FitDiagnostics d = finalize_fit_diagnostics(
-      theta, bits.ev, bits.con, bits.nl, empty_bounds);
+      theta, *bits.pt, bits.ev, bits.con, bits.nl, empty_bounds);
 
   CHECK(d.lin_eq_residual_inf < 1e-12);
   CHECK(d.lin_eq_satisfied);
@@ -128,7 +138,7 @@ TEST_CASE("finalize_fit_diagnostics: active lower bound is reported") {
   b.lower[0] = 0.0;
 
   FitDiagnostics d = finalize_fit_diagnostics(
-      theta, bits.ev, bits.con, bits.nl, b);
+      theta, *bits.pt, bits.ev, bits.con, bits.nl, b);
 
   REQUIRE(d.active_bounds_full.at_lower.size() == 1u);
   CHECK(d.active_bounds_full.at_lower[0] == 0);
@@ -144,9 +154,85 @@ TEST_CASE("finalize_fit_diagnostics: non-PD Σ at a bad θ is detected") {
   Bounds empty_bounds;
 
   FitDiagnostics d = finalize_fit_diagnostics(
-      theta, bits.ev, bits.con, bits.nl, empty_bounds);
+      theta, *bits.pt, bits.ev, bits.con, bits.nl, empty_bounds);
 
   CHECK_FALSE(d.sigma_pd_all);
+  CHECK_FALSE(d.admissibility.admissible);
   // We don't assert per-block strictly: the contract is just "the test
   // surfaces the issue", which `sigma_pd_all=false` does cleanly.
+}
+
+TEST_CASE("finalize_fit_diagnostics: negative residual variance is inadmissible "
+          "even when implied Sigma is PD") {
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  auto theta = pd_theta(bits.ev);
+  const auto locs = bits.ev.param_locations();
+
+  Eigen::Index target = -1;
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    if (locs[k].mat == magmaan::model::MatId::Theta &&
+        locs[k].row == locs[k].col) {
+      target = static_cast<Eigen::Index>(k);
+      break;
+    }
+  }
+  REQUIRE(target >= 0);
+  theta(target) = -0.25;
+
+  FitDiagnostics d = finalize_fit_diagnostics(
+      theta, *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+
+  CHECK(d.sigma_pd_all);
+  CHECK(d.admissibility.checked);
+  CHECK_FALSE(d.admissibility.covariance_matrices_psd);
+  CHECK_FALSE(d.admissibility.admissible);
+  REQUIRE(d.admissibility.theta_blocks.size() == 1u);
+  const auto& block = d.admissibility.theta_blocks[0];
+  CHECK_FALSE(block.psd);
+  CHECK(block.min_eigenvalue == doctest::Approx(-0.25));
+  REQUIRE(block.negative_variance_rows.size() == 1u);
+  const auto row = static_cast<std::size_t>(block.negative_variance_rows[0]);
+  CHECK((*bits.pt).op[row] == magmaan::parse::Op::Covariance);
+  CHECK((*bits.pt).lhs_var[row] == (*bits.pt).rhs_var[row]);
+}
+
+TEST_CASE("finalize_fit_diagnostics: joint latent PSD failure is detected "
+          "despite valid pairwise correlations") {
+  auto bits = build_bits(
+      "f1 =~ x1 + x2\n"
+      "f2 =~ x3 + x4\n"
+      "f3 =~ x5 + x6\n"
+      "f1 ~~ f2\n"
+      "f1 ~~ f3\n"
+      "f2 ~~ f3");
+  Eigen::VectorXd theta =
+      Eigen::VectorXd::Ones(static_cast<Eigen::Index>(bits.ev.n_free()));
+  const auto locs = bits.ev.param_locations();
+
+  int covariance = 0;
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& loc = locs[k];
+    if (loc.mat == magmaan::model::MatId::Theta &&
+        loc.row == loc.col) {
+      theta(static_cast<Eigen::Index>(k)) = 5.0;
+    } else if (loc.mat == magmaan::model::MatId::Psi &&
+               loc.row != loc.col) {
+      theta(static_cast<Eigen::Index>(k)) =
+          (covariance++ == 2) ? -0.9 : 0.9;
+    }
+  }
+  REQUIRE(covariance == 3);
+
+  FitDiagnostics d = finalize_fit_diagnostics(
+      theta, *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+
+  CHECK(d.sigma_pd_all);
+  CHECK_FALSE(d.admissibility.admissible);
+  REQUIRE(d.admissibility.psi_blocks.size() == 1u);
+  const auto& block = d.admissibility.psi_blocks[0];
+  CHECK_FALSE(block.psd);
+  CHECK(block.min_eigenvalue < -0.1);
+  CHECK(block.negative_variance_rows.empty());
+  CHECK(block.invalid_correlation_rows.empty());
+  CHECK(block.covariance_rows.size() >= 6u);
 }

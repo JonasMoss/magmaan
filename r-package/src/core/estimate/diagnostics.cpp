@@ -3,26 +3,155 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <utility>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/estimate/bounds.hpp"          // active_bounds
 #include "magmaan/estimate/constraints.hpp"     // EqConstraints
 #include "magmaan/estimate/nl_constraints.hpp"  // NonlinearEqConstraints
+#include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"    // sigma, ImpliedMoments
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::estimate {
 
+namespace {
+
+double matrix_scale(const Eigen::MatrixXd& M) {
+  if (M.size() == 0 || !M.allFinite()) return 1.0;
+  return std::max(1.0, M.cwiseAbs().maxCoeff());
+}
+
+CovarianceBlockDiagnostics
+audit_covariance_block(const Eigen::MatrixXd& M, model::MatId mat,
+                       std::int32_t block,
+                       const spec::LatentStructure* pt,
+                       const model::MatrixRep& rep,
+                       DiagnosticsOptions opts) {
+  CovarianceBlockDiagnostics out;
+  out.block = block;
+
+  if (M.rows() == 0 || M.cols() != M.rows() || !M.allFinite()) {
+    out.finite = false;
+    out.psd = false;
+    out.positive_definite = false;
+    out.min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  } else {
+    const Eigen::MatrixXd Sym = 0.5 * (M + M.transpose());
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(
+        Sym, Eigen::EigenvaluesOnly);
+    if (eig.info() != Eigen::Success || !eig.eigenvalues().allFinite()) {
+      out.finite = false;
+      out.psd = false;
+      out.positive_definite = false;
+      out.min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+    } else {
+      out.min_eigenvalue = eig.eigenvalues().minCoeff();
+      const double tol = opts.covariance_eigen_tol * matrix_scale(Sym);
+      out.psd = out.min_eigenvalue >= -tol;
+      out.positive_definite = out.min_eigenvalue > tol;
+    }
+  }
+
+  if (pt == nullptr || rep.cell_for_row.size() != pt->size() ||
+      M.rows() == 0 || M.cols() != M.rows()) {
+    return out;
+  }
+
+  double diag_scale = 1.0;
+  if (M.diagonal().size() > 0 && M.diagonal().allFinite()) {
+    diag_scale = std::max(1.0, M.diagonal().cwiseAbs().maxCoeff());
+  }
+  const double variance_tol = opts.variance_tol * diag_scale;
+
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    const model::Cell& cell = rep.cell_for_row[i];
+    if (!cell.used || cell.mat != mat || cell.block != block ||
+        cell.row < 0 || cell.col < 0 || cell.row >= M.rows() ||
+        cell.col >= M.cols()) {
+      continue;
+    }
+    const auto row = static_cast<std::int32_t>(i);
+    out.covariance_rows.push_back(row);
+    if (cell.row == cell.col) {
+      const double variance = M(cell.row, cell.col);
+      if (!std::isfinite(variance) || variance < -variance_tol) {
+        out.negative_variance_rows.push_back(row);
+      }
+      continue;
+    }
+
+    const double va = M(cell.row, cell.row);
+    const double vb = M(cell.col, cell.col);
+    const double covariance = M(cell.row, cell.col);
+    if (!std::isfinite(va) || !std::isfinite(vb) ||
+        !std::isfinite(covariance)) {
+      out.invalid_correlation_rows.push_back(row);
+      continue;
+    }
+    // A correlation is defined only for strictly positive variances. Zero
+    // variance paired with nonzero covariance is caught by the joint PSD test.
+    if (va > variance_tol && vb > variance_tol) {
+      const double correlation = covariance / std::sqrt(va * vb);
+      if (!std::isfinite(correlation) ||
+          std::abs(correlation) > 1.0 + opts.correlation_tol) {
+        out.invalid_correlation_rows.push_back(row);
+      }
+    }
+  }
+  return out;
+}
+
+AdmissibilityDiagnostics
+audit_admissibility(const Eigen::VectorXd& theta_full,
+                    const spec::LatentStructure* pt,
+                    const model::ModelEvaluator& ev,
+                    bool implied_sigma_pd,
+                    DiagnosticsOptions opts) {
+  AdmissibilityDiagnostics out;
+  out.implied_sigma_pd = implied_sigma_pd;
+
+  auto matrices = ev.assembled(theta_full);
+  if (!matrices.has_value()) return out;
+
+  out.checked = true;
+  out.covariance_matrices_psd = true;
+  const model::MatrixRep& rep = ev.matrix_rep();
+  out.theta_blocks.reserve(matrices->blocks.size());
+  out.psi_blocks.reserve(matrices->blocks.size());
+  for (std::size_t b = 0; b < matrices->blocks.size(); ++b) {
+    const auto block = static_cast<std::int32_t>(b);
+    auto theta = audit_covariance_block(
+        matrices->blocks[b].Theta, model::MatId::Theta, block, pt, rep, opts);
+    if (!theta.psd) out.covariance_matrices_psd = false;
+    out.theta_blocks.push_back(std::move(theta));
+
+    if (matrices->blocks[b].Psi.size() > 0) {
+      auto psi = audit_covariance_block(
+          matrices->blocks[b].Psi, model::MatId::Psi, block, pt, rep, opts);
+      if (!psi.psd) out.covariance_matrices_psd = false;
+      out.psi_blocks.push_back(std::move(psi));
+    }
+  }
+  out.admissible =
+      out.checked && out.covariance_matrices_psd && out.implied_sigma_pd;
+  return out;
+}
+
 FitDiagnostics
-finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,
-                         const model::ModelEvaluator&  ev,
-                         const EqConstraints&          con,
-                         const NonlinearEqConstraints& nl,
-                         const Bounds&                 bounds,
-                         bool                          snlls_profile_fallback_flag,
-                         DiagnosticsOptions            opts) {
+finalize_fit_diagnostics_impl(const Eigen::VectorXd&        theta_full,
+                              const spec::LatentStructure*  pt,
+                              const model::ModelEvaluator&  ev,
+                              const EqConstraints&          con,
+                              const NonlinearEqConstraints& nl,
+                              const Bounds&                 bounds,
+                              bool snlls_profile_fallback_flag,
+                              DiagnosticsOptions opts) {
   FitDiagnostics d;
   d.snlls_profile_fallback = snlls_profile_fallback_flag;
 
@@ -50,6 +179,9 @@ finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,
     }
     d.sigma_pd_all = all_pd;
   }
+
+  d.admissibility =
+      audit_admissibility(theta_full, pt, ev, d.sigma_pd_all, opts);
 
   // --- Linear equality constraint residual ------------------------------
   // The K-reparameterization enforces `A_eq · θ = b_eq` by construction
@@ -90,6 +222,35 @@ finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,
   }
 
   return d;
+}
+
+}  // namespace
+
+FitDiagnostics
+finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,
+                         const model::ModelEvaluator&  ev,
+                         const EqConstraints&          con,
+                         const NonlinearEqConstraints& nl,
+                         const Bounds&                 bounds,
+                         bool                          snlls_profile_fallback_flag,
+                         DiagnosticsOptions            opts) {
+  return finalize_fit_diagnostics_impl(
+      theta_full, nullptr, ev, con, nl, bounds,
+      snlls_profile_fallback_flag, opts);
+}
+
+FitDiagnostics
+finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,
+                         const spec::LatentStructure&  pt,
+                         const model::ModelEvaluator&  ev,
+                         const EqConstraints&          con,
+                         const NonlinearEqConstraints& nl,
+                         const Bounds&                 bounds,
+                         bool                          snlls_profile_fallback_flag,
+                         DiagnosticsOptions            opts) {
+  return finalize_fit_diagnostics_impl(
+      theta_full, &pt, ev, con, nl, bounds,
+      snlls_profile_fallback_flag, opts);
 }
 
 }  // namespace magmaan::estimate

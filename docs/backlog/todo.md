@@ -15,22 +15,17 @@ semantics · **XL** statistical design/research track before implementation.
 
 Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
-`spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
+`spectral_truncate` follow-up moved to [speculative.md](speculative.md)). The
+post-fit covariance-admissibility audit is now part of the architecture
+contract and fitted-result schema; experiment-specific simulation checkpoints
+should copy `fit$diagnostics$admissibility$admissible` into their result rows
+when they next change.
 
-- **M — distinguish convergence from post-fit admissibility.** The completed
-  continuous-FIML information experiment exposed rare converged solutions with
-  negative observed residual variances and extreme estimate/SE tails. The
-  established oracle warns for the same fits, while the current high-level R
-  path returns them without an admissibility diagnostic. Add an
-  estimator-neutral post-fit check that records affected parameter rows and
-  distinguishes at least negative observed/latent variances, non-positive-
-  definite latent covariance blocks, and correlations outside `[-1, 1]`.
-  Propagate the structured result through the fitted object and emit one
-  concise R warning without reclassifying optimizer convergence or silently
-  dropping the solution. Gate complete-data ML and FIML against oracle warning
-  fixtures, including a deterministic Heywood case. Simulation checkpoints
-  must record the admissibility flag so reports can show both all-converged and
-  conditional-on-admissible summaries without post-hoc magnitude cutoffs.
+- **S — complete covariance-admissibility validation plumbing.** Add a
+  deterministic lavaan warning-status fixture for an improper complete-data
+  solution, and thread the audit flag into simulation result checkpoints when
+  those experiments next change. Ordinal and native FC-SEM fits remain outside
+  the ordinary `MatrixRep` finalizer and need a separate attachment decision.
 
 - **M/L — broaden and harden standardized score flips.** The frontier slice
   supports affine nested complete-data ML and direct-FIML pairs and is exercised

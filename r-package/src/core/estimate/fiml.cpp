@@ -23,6 +23,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/optim/optimizers.hpp"
@@ -6790,6 +6791,11 @@ fit_fiml_impl(spec::LatentStructure pt,
     }
     return out;
   };
+  auto finalize = [&](Estimates est) {
+    est.diagnostics = finalize_fit_diagnostics(
+        est.theta, pt, ev, con, nl, Bounds{});
+    return est;
+  };
 
   auto eval_at = [&](const Eigen::VectorXd& x,
                      Eigen::VectorXd& grad) -> double {
@@ -6884,9 +6890,10 @@ fit_fiml_impl(spec::LatentStructure pt,
       out_or = run_fiml_scalar(prob, x0);
     }
     if (!out_or.has_value()) return std::unexpected(out_or.error());
-    return Estimates{prob.expand(out_or->x), out_or->fmin, out_or->iterations,
-                     out_or->f_evals, out_or->g_evals, out_or->status,
-                     out_or->grad_inf_norm, std::move(out_or->audit)};
+    return finalize(Estimates{
+        prob.expand(out_or->x), out_or->fmin, out_or->iterations,
+        out_or->f_evals, out_or->g_evals, out_or->status,
+        out_or->grad_inf_norm, std::move(out_or->audit)});
   }
 
   if (con.n_alpha == 0) {
@@ -6903,7 +6910,7 @@ fit_fiml_impl(spec::LatentStructure pt,
     }
     Eigen::VectorXd scratch(theta.size());
     const double f = eval_at(theta, scratch);
-    return Estimates{std::move(theta), f, 0};
+    return finalize(Estimates{std::move(theta), f, 0});
   }
 
   optim::ScalarProblem prob_a;
@@ -6932,9 +6939,10 @@ fit_fiml_impl(spec::LatentStructure pt,
     out_or = run_fiml_scalar(prob_a, alpha0);
   }
   if (!out_or.has_value()) return std::unexpected(out_or.error());
-  return Estimates{con.expand(out_or->x), out_or->fmin, out_or->iterations,
-                   out_or->f_evals, out_or->g_evals, out_or->status,
-                   out_or->grad_inf_norm, std::move(out_or->audit)};
+  return finalize(Estimates{
+      con.expand(out_or->x), out_or->fmin, out_or->iterations,
+      out_or->f_evals, out_or->g_evals, out_or->status,
+      out_or->grad_inf_norm, std::move(out_or->audit)});
 }
 
 }  // namespace

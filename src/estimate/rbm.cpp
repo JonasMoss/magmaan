@@ -691,7 +691,7 @@ void fill_common_result(RBMResult& result, const RBMContext& ctx,
   result.penalty_per_observation = parts.penalty_per_observation;
   result.penalized_fmin = result.estimates.fmin + parts.penalty_per_observation;
   result.estimates.diagnostics = finalize_fit_diagnostics(
-      theta, *ctx.ev, ctx.con, ctx.nl, bounds);
+      theta, ctx.pt, *ctx.ev, ctx.con, ctx.nl, bounds);
 
   Admissibility ad = assess_admissibility(ctx, theta, bounds, opts);
   result.admissible = ad.admissible;

@@ -37,7 +37,9 @@ struct Bounds {
 // parameters (Ψ-diagonals and Θ-diagonals — `~~` rows with `lhs == rhs`) get
 // `lower = 0`, `upper = +inf`; every other free parameter stays unbounded.
 // Pure preventive Heywood barrier — keeps the optimizer out of the
-// negative-variance region so the implied Σ stays PD. Needs no sample data.
+// negative-diagonal region. This is a complete PSD condition only for
+// diagonal covariance blocks; it does not jointly constrain correlated Ψ/Θ
+// blocks or by itself guarantee that implied Σ is PD. Needs no sample data.
 //
 // Multi-group invariance models share a θ index across rows; if any sharing
 // row is a variance diagonal, the shared θ index gets the lower=0 bound.

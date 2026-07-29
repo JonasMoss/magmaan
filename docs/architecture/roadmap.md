@@ -37,6 +37,64 @@ The lavaanified model contract is the triple:
 from `LavaanParTable`, which is the compatibility format used by R bindings and
 golden `parTable()` fixtures.
 
+### Admissible covariance-model contract
+
+For each group, the continuous complete-data model uses the reduced-LISREL
+system
+
+```text
+eta = alpha + B eta + zeta
+y   = nu + Lambda eta + epsilon
+```
+
+with `Cov(zeta) = Psi`, `Cov(epsilon) = Theta`, and
+`Cov(zeta, epsilon) = 0`. Writing `A = (I - B)^-1`,
+
+```text
+P     = Cov(eta) = A Psi A'
+Sigma = Cov(y)   = Lambda A Psi A' Lambda' + Theta.
+```
+
+The statistical model's admissible parameter space requires, in every group,
+`Psi` and `Theta` symmetric positive semidefinite, `I - B` nonsingular, and
+the implied observed `Sigma` positive definite wherever an ordinary Gaussian
+density is evaluated. For moment-only estimators, positive-semidefinite
+`Sigma` is a covariance matrix, but downstream inverse-based normal-theory
+methods still require positive definiteness. Fixed cells, structural zeros,
+shared parameters, and equality constraints remain restrictions on the
+original LISREL entries.
+
+In pure CFA, `B = 0`, so `Psi` is the latent covariance itself. With structural
+regressions, `Psi` is the innovation/disturbance covariance and the derived
+latent covariance `P = A Psi A'` is automatically positive semidefinite when
+`Psi` is. `B` is a regression matrix and has no PSD requirement; recursive
+models make `I - B` nonsingular by construction, while cyclic models need that
+condition checked explicitly. Traditional LISREL's separate exogenous
+covariance `Phi` and endogenous disturbance covariance are the diagonal
+blocks of the reduced system's `Psi`; if cross-block covariances are ever
+allowed, the complete joint innovation block must be PSD.
+
+PSD is the model requirement, not merely nonnegative diagonal entries. It
+implies the fitted Cauchy bounds on every covariance and all higher-order
+joint restrictions. In particular, a zero variance forces its entire
+covariance row and column to zero. Singular-but-PSD component matrices are
+valid covariance matrices, although they are boundary cases with nonregular
+inference.
+
+Core estimation remains lavaan-compatible and does not yet constrain the
+optimizer to this full covariance domain. Instead, continuous ML, LS, FIML,
+two-level, and related ordinary `MatrixRep` paths finalize with an
+estimator-neutral admissibility audit. It records
+per-block minimum eigenvalues and PSD/PD status for `Theta` and `Psi`, source
+partable rows, negative variance rows, defined correlations outside
+`[-1, 1]`, and the implied-`Sigma` PD result. The audit does not change
+optimizer convergence or discard the estimate. R exposes it at
+`fit$diagnostics$admissibility`, emits one concise warning for an inadmissible
+high-level fit, and prints covariance admissibility separately from
+convergence. Opt-in `variance_bounds` remain a diagonal Heywood barrier, not a
+joint PSD constraint. A future constrained frontier estimator must preserve
+this original-entry partable semantics and provide boundary-aware inference.
+
 ## Implemented Capabilities
 
 ### Parser, lavaanify, and matrix representation

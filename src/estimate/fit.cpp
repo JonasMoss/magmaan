@@ -615,9 +615,11 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
 // lives outside the anonymous namespaces only because both anon blocks
 // (220-431, 506-543) bracket their own compose_* helpers; placing it here
 // keeps it callable from all the fit_* entry points below.
-static void attach_diagnostics(Estimates& est, const Prelude& pre,
+static void attach_diagnostics(Estimates& est,
+                               const spec::LatentStructure& pt,
+                               const Prelude& pre,
                                const Bounds& bounds) {
-  est.diagnostics = finalize_fit_diagnostics(est.theta, pre.ev, pre.con,
+  est.diagnostics = finalize_fit_diagnostics(est.theta, pt, pre.ev, pre.con,
                                              pre.nl, bounds);
 }
 
@@ -626,7 +628,8 @@ namespace {
 enum class FisherStepKind { Full, SchurSnlls };
 
 fit_expected<Estimates>
-compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
+compose_fisher_ml(const spec::LatentStructure& pt, const Prelude& pre,
+                  const SampleStats& samp,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
                   OptimOptions opts, FisherStepKind step_kind);
 
@@ -642,7 +645,7 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds,
                          backend, opts);
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, bounds);
+  attach_diagnostics(*est, pt, *pre, bounds);
   return est;
 }
 
@@ -657,7 +660,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds,
                          backend, opts);
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, bounds);
+  attach_diagnostics(*est, pt, *pre, bounds);
   return est;
 }
 
@@ -741,7 +744,7 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, W, bounds,
                          backend, opts);
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, bounds);
+  attach_diagnostics(*est, pt, *pre, bounds);
   return est;
 }
 
@@ -759,7 +762,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
                                opts, "fit_ml");
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, bounds);
+  attach_diagnostics(*est, pt, *pre, bounds);
   return est;
 }
 
@@ -781,7 +784,7 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
                                      bounds, backend, opts,
                                      "fit_ml_constrained");
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, bounds);
+  attach_diagnostics(*est, pt, *pre, bounds);
   return est;
 }
 
@@ -799,7 +802,7 @@ fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
                                      bounds, backend, opts,
                                      "fit_gmm_constrained");
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, bounds);
+  attach_diagnostics(*est, pt, *pre, bounds);
   return est;
 }
 
@@ -944,7 +947,7 @@ fit_gmm_fitted_weight_impl(spec::LatentStructure pt,
   if (!converged && last.optimizer_status == optim::OptimStatus::Converged) {
     last.optimizer_status = optim::OptimStatus::BudgetExhausted;
   }
-  attach_diagnostics(last, *pre, bounds);
+  attach_diagnostics(last, pt, *pre, bounds);
   return last;
 }
 
@@ -2053,7 +2056,7 @@ fit_ml_fisher(spec::LatentStructure pt, const model::MatrixRep& rep,
               Bounds bounds, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_fisher_ml(*pre, samp, x0, bounds, opts,
+  return compose_fisher_ml(pt, *pre, samp, x0, bounds, opts,
                            FisherStepKind::Full);
 }
 
@@ -2063,7 +2066,7 @@ fit_ml_fisher_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
                     Bounds bounds, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher_snlls");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_fisher_ml(*pre, samp, x0, bounds, opts,
+  return compose_fisher_ml(pt, *pre, samp, x0, bounds, opts,
                            FisherStepKind::SchurSnlls);
 }
 
@@ -2508,7 +2511,8 @@ solve_fisher_direction_schur(const Eigen::MatrixXd& H,
 }
 
 fit_expected<Estimates>
-compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
+compose_fisher_ml(const spec::LatentStructure& pt, const Prelude& pre,
+                  const SampleStats& samp,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
                   OptimOptions opts, FisherStepKind step_kind) {
   const model::ModelEvaluator& ev = pre.ev;
@@ -2714,7 +2718,7 @@ compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
     est.n_linear =
         static_cast<std::int32_t>(snlls_split.alpha_cols.size());
   }
-  attach_diagnostics(est, pre, bounds);
+  attach_diagnostics(est, pt, pre, bounds);
   return est;
 }
 
@@ -3009,7 +3013,7 @@ compose_irls_outer(const spec::LatentStructure& pt, const Prelude& pre,
   est.n_linear               = snlls_n_linear;
   est.n_alpha_solve_fast     = snlls_n_alpha_fast;
   est.n_alpha_solve_fallback = snlls_n_alpha_fallback;
-  attach_diagnostics(est, pre, bounds);
+  attach_diagnostics(est, pt, pre, bounds);
   return est;
 }
 
@@ -3046,7 +3050,7 @@ fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!est.has_value()) return est;
   // SNLLS has no box bounds on the nonlinear block; attach_diagnostics
   // reads `bounds.empty()` correctly and reports no active bounds.
-  attach_diagnostics(*est, *pre, Bounds{});
+  attach_diagnostics(*est, pt, *pre, Bounds{});
   return est;
 }
 
@@ -3060,7 +3064,7 @@ fit_snlls_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!W.has_value()) return std::unexpected(W.error());
   auto est = compose_snlls(pt, pre->ev, samp, x0, *W, backend, opts);
   if (!est.has_value()) return est;
-  attach_diagnostics(*est, *pre, Bounds{});
+  attach_diagnostics(*est, pt, *pre, Bounds{});
   return est;
 }
 
