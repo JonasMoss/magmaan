@@ -10,6 +10,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -211,6 +212,466 @@ struct FcSemPrelude {
   EqConstraints          con;
   NonlinearEqConstraints nl;
 };
+
+enum class LiftCovarianceKind { Theta, Psi };
+
+struct LiftLink {
+  Eigen::Index full_vech_row = 0;
+  Eigen::Index active_row = -1;
+  Eigen::Index active_col = -1;
+
+  bool lifted() const noexcept {
+    return active_row >= 0 && active_col >= 0;
+  }
+};
+
+struct LiftBlock {
+  std::size_t block = 0;
+  LiftCovarianceKind kind = LiftCovarianceKind::Theta;
+  Eigen::Index dim = 0;
+  std::vector<Eigen::Index> active;
+  Eigen::VectorXd c0;
+  Eigen::MatrixXd D;
+  Eigen::Index lift_offset = 0;
+  std::vector<LiftLink> links;
+
+  Eigen::Index active_dim() const noexcept {
+    return static_cast<Eigen::Index>(active.size());
+  }
+  Eigen::Index n_lift() const noexcept {
+    const Eigen::Index q = active_dim();
+    return detail::vech_len(q);
+  }
+};
+
+struct PsdLiftLayout {
+  Eigen::Index n_alpha = 0;
+  Eigen::Index n_lift = 0;
+  Eigen::Index n_link = 0;
+  std::vector<LiftBlock> blocks;
+};
+
+Eigen::MatrixXd lower_from_x(const Eigen::VectorXd& x, Eigen::Index offset,
+                             Eigen::Index q) {
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(q, q);
+  Eigen::Index k = offset;
+  for (Eigen::Index c = 0; c < q; ++c) {
+    for (Eigen::Index r = c; r < q; ++r) {
+      L(r, c) = x(k++);
+    }
+  }
+  return L;
+}
+
+fit_expected<PsdLiftLayout>
+build_psd_lift_layout(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const EqConstraints& con) {
+  constexpr double structural_tol = 1e-12;
+  PsdLiftLayout out;
+  out.n_alpha = con.n_alpha;
+
+  std::vector<Eigen::Index> theta_block(rep.dims.size(), -1);
+  std::vector<Eigen::Index> psi_block(rep.dims.size(), -1);
+  out.blocks.reserve(2 * rep.dims.size());
+  for (std::size_t b = 0; b < rep.dims.size(); ++b) {
+    for (const LiftCovarianceKind kind :
+         {LiftCovarianceKind::Theta, LiftCovarianceKind::Psi}) {
+      const Eigen::Index dim =
+          kind == LiftCovarianceKind::Theta
+              ? rep.dims[b].n_observed
+              : rep.dims[b].n_latent;
+      if (dim == 0) continue;
+      LiftBlock block;
+      block.block = b;
+      block.kind = kind;
+      block.dim = dim;
+      block.c0 = Eigen::VectorXd::Zero(detail::vech_len(dim));
+      block.D = Eigen::MatrixXd::Zero(detail::vech_len(dim), con.n_alpha);
+      const Eigen::Index index =
+          static_cast<Eigen::Index>(out.blocks.size());
+      if (kind == LiftCovarianceKind::Theta) {
+        theta_block[b] = index;
+      } else {
+        psi_block[b] = index;
+      }
+      out.blocks.push_back(std::move(block));
+    }
+  }
+
+  // Primitive covariance cells are affine in the original partable
+  // parameters. Build that map directly from MatrixRep instead of asking the
+  // full evaluator to assemble arbitrary basis points: a basis point in B can
+  // make I-B singular even though Θ/Ψ themselves are perfectly well defined.
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const model::Cell& cell = rep.cell_for_row[i];
+    if (!cell.used ||
+        (cell.mat != model::MatId::Theta &&
+         cell.mat != model::MatId::Psi)) {
+      continue;
+    }
+    const std::size_t b = static_cast<std::size_t>(cell.block);
+    const Eigen::Index block_index =
+        cell.mat == model::MatId::Theta ? theta_block[b] : psi_block[b];
+    if (block_index < 0) continue;
+    auto& block = out.blocks[static_cast<std::size_t>(block_index)];
+    const Eigen::Index r = std::max<Eigen::Index>(cell.row, cell.col);
+    const Eigen::Index c = std::min<Eigen::Index>(cell.row, cell.col);
+    const Eigen::Index row = detail::vech_index(block.dim, r, c);
+    if (pt.free[i] > 0) {
+      const Eigen::Index k = pt.free[i] - 1;
+      block.c0(row) = con.theta0(k);
+      if (con.n_alpha > 0) block.D.row(row) = con.K().row(k);
+    } else {
+      block.c0(row) =
+          std::isfinite(pt.fixed_value[i]) ? pt.fixed_value[i] : 0.0;
+    }
+  }
+
+  for (auto& block : out.blocks) {
+    std::vector<Eigen::Index> active_position(
+        static_cast<std::size_t>(block.dim), -1);
+    for (Eigen::Index i = 0; i < block.dim; ++i) {
+      const Eigen::Index row = detail::vech_index(block.dim, i, i);
+      const bool variable =
+          block.D.cols() > 0 &&
+          block.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
+      const double fixed = block.c0(row);
+      if (!variable && fixed < -structural_tol) {
+        return std::unexpected(fit_err(
+            FitError::Kind::NumericIssue,
+            "fit_ml_psd: a primitive covariance matrix has a fixed negative "
+            "diagonal entry"));
+      }
+      if (variable || std::abs(fixed) > structural_tol) {
+        active_position[static_cast<std::size_t>(i)] =
+            static_cast<Eigen::Index>(block.active.size());
+        block.active.push_back(i);
+      }
+    }
+
+    block.lift_offset = out.n_lift;
+    out.n_lift += block.n_lift();
+    for (Eigen::Index c = 0; c < block.dim; ++c) {
+      for (Eigen::Index r = c; r < block.dim; ++r) {
+        const Eigen::Index row = detail::vech_index(block.dim, r, c);
+        const Eigen::Index ar =
+            active_position[static_cast<std::size_t>(r)];
+        const Eigen::Index ac =
+            active_position[static_cast<std::size_t>(c)];
+        if (ar >= 0 && ac >= 0) {
+          block.links.push_back(LiftLink{row, ar, ac});
+          ++out.n_link;
+          continue;
+        }
+        const bool variable =
+            block.D.cols() > 0 &&
+            block.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
+        if (variable) {
+          block.links.push_back(LiftLink{row, -1, -1});
+          ++out.n_link;
+        } else if (std::abs(block.c0(row)) > structural_tol) {
+          return std::unexpected(fit_err(
+              FitError::Kind::NumericIssue,
+              "fit_ml_psd: a fixed nonzero covariance touches a "
+              "structural-zero variance"));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+model::CovarianceOverrides
+covariance_overrides_from_x(const model::MatrixRep& rep,
+                            const PsdLiftLayout& layout,
+                            const Eigen::VectorXd& x) {
+  model::CovarianceOverrides out;
+  out.theta.reserve(rep.dims.size());
+  out.psi.reserve(rep.dims.size());
+  for (const auto& dims : rep.dims) {
+    out.theta.push_back(Eigen::MatrixXd::Zero(
+        dims.n_observed, dims.n_observed));
+    out.psi.push_back(Eigen::MatrixXd::Zero(
+        dims.n_latent, dims.n_latent));
+  }
+  for (const auto& block : layout.blocks) {
+    const Eigen::Index q = block.active_dim();
+    const Eigen::MatrixXd L = lower_from_x(
+        x, layout.n_alpha + block.lift_offset, q);
+    const Eigen::MatrixXd C = L * L.transpose();
+    Eigen::MatrixXd& target =
+        block.kind == LiftCovarianceKind::Theta
+            ? out.theta[block.block]
+            : out.psi[block.block];
+    for (Eigen::Index j = 0; j < q; ++j) {
+      for (Eigen::Index i = 0; i < q; ++i) {
+        target(block.active[static_cast<std::size_t>(i)],
+               block.active[static_cast<std::size_t>(j)]) = C(i, j);
+      }
+    }
+  }
+  return out;
+}
+
+fit_expected<Eigen::VectorXd>
+psd_lift_start(const PsdLiftLayout& layout,
+               const EqConstraints& con,
+               const Eigen::VectorXd& theta_start,
+               double eigen_floor) {
+  if (!(eigen_floor > 0.0) || !std::isfinite(eigen_floor)) {
+    return std::unexpected(fit_err(
+        FitError::Kind::InvalidStartValues,
+        "fit_ml_psd: start_eigen_floor must be positive and finite"));
+  }
+  Eigen::VectorXd x(layout.n_alpha + layout.n_lift);
+  const Eigen::VectorXd alpha = con.contract(theta_start);
+  x.head(layout.n_alpha) = alpha;
+
+  for (const auto& block : layout.blocks) {
+    const Eigen::Index q = block.active_dim();
+    if (q == 0) continue;
+    const Eigen::VectorXd c = block.c0 + block.D * alpha;
+    Eigen::MatrixXd C = Eigen::MatrixXd::Zero(q, q);
+    for (Eigen::Index j = 0; j < q; ++j) {
+      for (Eigen::Index i = j; i < q; ++i) {
+        const Eigen::Index row = detail::vech_index(
+            block.dim, block.active[static_cast<std::size_t>(i)],
+            block.active[static_cast<std::size_t>(j)]);
+        C(i, j) = c(row);
+        C(j, i) = c(row);
+      }
+    }
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(C);
+    if (eig.info() != Eigen::Success) {
+      return std::unexpected(fit_err(
+          FitError::Kind::InvalidStartValues,
+          "fit_ml_psd: eigendecomposition failed while projecting the "
+          "covariance start"));
+    }
+    const Eigen::VectorXd values =
+        eig.eigenvalues().array().max(eigen_floor);
+    const Eigen::MatrixXd projected =
+        eig.eigenvectors() * values.asDiagonal() *
+        eig.eigenvectors().transpose();
+    Eigen::LLT<Eigen::MatrixXd> llt(projected);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(fit_err(
+          FitError::Kind::InvalidStartValues,
+          "fit_ml_psd: Cholesky factorization failed after projecting the "
+          "covariance start"));
+    }
+    const Eigen::MatrixXd L = llt.matrixL();
+    Eigen::Index k = layout.n_alpha + block.lift_offset;
+    for (Eigen::Index col = 0; col < q; ++col) {
+      for (Eigen::Index row = col; row < q; ++row) {
+        x(k++) = L(row, col);
+      }
+    }
+  }
+  return x;
+}
+
+optim::ScalarProblem
+psd_ml_problem(const model::ModelEvaluator& ev,
+               const model::MatrixRep& rep,
+               const EqConstraints& con,
+               const PsdLiftLayout& layout,
+               const SampleStats& samp,
+               MlCache cache) {
+  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
+  const auto locations = ev.param_locations();
+  std::vector<Eigen::Index> sigma_offset(rep.dims.size() + 1, 0);
+  for (std::size_t b = 0; b < rep.dims.size(); ++b) {
+    sigma_offset[b + 1] =
+        sigma_offset[b] + detail::vech_len(rep.dims[b].n_observed);
+  }
+
+  optim::ScalarProblem prob;
+  prob.n_param = n_x;
+  prob.expand = [&con, n_alpha = layout.n_alpha](const Eigen::VectorXd& x) {
+    return con.expand(x.head(n_alpha));
+  };
+  prob.f = [&ev, &rep, &con, &layout, samp, cache = std::move(cache),
+            locations, sigma_offset, n_x](
+               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    if (x.size() != n_x || !x.allFinite()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    const Eigen::VectorXd alpha = x.head(layout.n_alpha);
+    const Eigen::VectorXd theta = con.expand(alpha);
+
+    // LamA depends on Λ and B but not on the primitive covariances. Snapshot it
+    // from the ordinary assembly, then evaluate the likelihood after replacing
+    // Θ and Ψ by the PSD Cholesky products.
+    auto assembled = ev.assembled(theta);
+    if (!assembled.has_value()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    const model::CovarianceOverrides overrides =
+        covariance_overrides_from_x(rep, layout, x);
+    auto eval = ev.evaluate_with_covariance_overrides(
+        theta, overrides, true, true);
+    if (!eval.has_value()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+
+    // The ordinary evaluator's non-covariance derivatives are exactly the
+    // derivatives needed here, now evaluated at lifted Ψ. Direct Θ/Ψ partable
+    // columns do not enter the objective; their semantics are enforced by the
+    // equality links below.
+    Eigen::MatrixXd J_theta = std::move(eval->J_sigma);
+    for (Eigen::Index k = 0;
+         k < static_cast<Eigen::Index>(locations.size()); ++k) {
+      const auto mat = locations[static_cast<std::size_t>(k)].mat;
+      if (mat == model::MatId::Theta || mat == model::MatId::Psi) {
+        J_theta.col(k).setZero();
+      }
+    }
+    Eigen::MatrixXd J =
+        Eigen::MatrixXd::Zero(J_theta.rows(), n_x);
+    if (layout.n_alpha > 0) {
+      J.leftCols(layout.n_alpha).noalias() = J_theta * con.K();
+    }
+
+    for (const auto& block : layout.blocks) {
+      const Eigen::Index q = block.active_dim();
+      if (q == 0) continue;
+      const Eigen::MatrixXd L = lower_from_x(
+          x, layout.n_alpha + block.lift_offset, q);
+      Eigen::Index local_col = 0;
+      for (Eigen::Index lc = 0; lc < q; ++lc) {
+        for (Eigen::Index lr = lc; lr < q; ++lr, ++local_col) {
+          Eigen::MatrixXd E = Eigen::MatrixXd::Zero(q, q);
+          E(lr, lc) = 1.0;
+          const Eigen::MatrixXd dC_active =
+              E * L.transpose() + L * E.transpose();
+          Eigen::MatrixXd dC = Eigen::MatrixXd::Zero(block.dim, block.dim);
+          for (Eigen::Index j = 0; j < q; ++j) {
+            for (Eigen::Index i = 0; i < q; ++i) {
+              dC(block.active[static_cast<std::size_t>(i)],
+                 block.active[static_cast<std::size_t>(j)]) =
+                  dC_active(i, j);
+            }
+          }
+          Eigen::MatrixXd dSigma;
+          if (block.kind == LiftCovarianceKind::Theta) {
+            dSigma = std::move(dC);
+          } else {
+            const Eigen::MatrixXd& LamA =
+                assembled->blocks[block.block].LamA;
+            dSigma = LamA * dC * LamA.transpose();
+          }
+          J.col(layout.n_alpha + block.lift_offset + local_col)
+              .segment(sigma_offset[block.block],
+                       detail::vech_len(dSigma.rows())) =
+              detail::vech_lower(dSigma);
+        }
+      }
+    }
+
+    Eigen::MatrixXd J_mu;
+    if (eval->J_mu.size() > 0) {
+      J_mu = Eigen::MatrixXd::Zero(eval->J_mu.rows(), n_x);
+      if (layout.n_alpha > 0) {
+        J_mu.leftCols(layout.n_alpha).noalias() =
+            eval->J_mu * con.K();
+      }
+    }
+    auto vg = ml_value_gradient(samp, cache, eval->moments, J, J_mu);
+    if (!vg.has_value()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    grad = 0.5 * vg->gradient;
+    return 0.5 * vg->value;
+  };
+  return prob;
+}
+
+struct PsdConstraintCallbacks {
+  optim::ConstraintFn h;
+  optim::ConstraintJacFn jacobian;
+  Eigen::Index n_constraint = 0;
+};
+
+PsdConstraintCallbacks
+psd_constraint_callbacks(const EqConstraints& con,
+                         const NonlinearEqConstraints& nl,
+                         const PsdLiftLayout& layout) {
+  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
+  const Eigen::Index n_constraint = layout.n_link + nl.m();
+
+  PsdConstraintCallbacks out;
+  out.n_constraint = n_constraint;
+  out.h = [&con, &nl, &layout, n_constraint](
+              const Eigen::VectorXd& x) {
+    const Eigen::VectorXd alpha = x.head(layout.n_alpha);
+    Eigen::VectorXd h(n_constraint);
+    Eigen::Index out_row = 0;
+    for (const auto& block : layout.blocks) {
+      const Eigen::VectorXd c = block.c0 + block.D * alpha;
+      const Eigen::Index q = block.active_dim();
+      const Eigen::MatrixXd L = lower_from_x(
+          x, layout.n_alpha + block.lift_offset, q);
+      const Eigen::MatrixXd LLt = L * L.transpose();
+      for (const auto& link : block.links) {
+        h(out_row++) =
+            c(link.full_vech_row) -
+            (link.lifted()
+                 ? LLt(link.active_row, link.active_col)
+                 : 0.0);
+      }
+    }
+    if (nl.active()) {
+      h.tail(nl.m()) = nl.h(con.expand(alpha));
+    }
+    return h;
+  };
+  out.jacobian = [&con, &nl, &layout, n_constraint, n_x](
+                     const Eigen::VectorXd& x) {
+    const Eigen::VectorXd alpha = x.head(layout.n_alpha);
+    Eigen::MatrixXd J = Eigen::MatrixXd::Zero(n_constraint, n_x);
+    Eigen::Index out_row = 0;
+    for (const auto& block : layout.blocks) {
+      const Eigen::Index q = block.active_dim();
+      const Eigen::MatrixXd L = lower_from_x(
+          x, layout.n_alpha + block.lift_offset, q);
+      for (const auto& link : block.links) {
+        if (layout.n_alpha > 0) {
+          J.row(out_row).head(layout.n_alpha) =
+              block.D.row(link.full_vech_row);
+        }
+        if (link.lifted()) {
+          Eigen::Index local_col = 0;
+          for (Eigen::Index lc = 0; lc < q; ++lc) {
+            for (Eigen::Index lr = lc; lr < q; ++lr, ++local_col) {
+              double d = 0.0;
+              if (link.active_row == lr) {
+                d += L(link.active_col, lc);
+              }
+              if (link.active_col == lr) {
+                d += L(link.active_row, lc);
+              }
+              J(out_row,
+                layout.n_alpha + block.lift_offset + local_col) = -d;
+            }
+          }
+        }
+        ++out_row;
+      }
+    }
+    if (nl.active()) {
+      J.block(out_row, 0, nl.m(), layout.n_alpha).noalias() =
+          nl.jacobian(con.expand(alpha)) * con.K();
+    }
+    return J;
+  };
+  return out;
+}
 
 fit_expected<Prelude>
 prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
@@ -786,6 +1247,65 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
                                      "fit_ml_constrained");
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  return est;
+}
+
+fit_expected<Estimates>
+fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
+           const SampleStats& samp, const Eigen::VectorXd& x0,
+           Backend backend, OptimOptions opts, PsdFitOptions psd_opts) {
+  if (!(psd_opts.feasibility_tol > 0.0) ||
+      !std::isfinite(psd_opts.feasibility_tol)) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        "fit_ml_psd: feasibility_tol must be positive and finite"));
+  }
+  auto pre = prelude(pt, rep, samp, x0, "fit_ml_psd");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, x0, psd_opts.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto cache = ml_prepare(samp);
+  if (!cache.has_value()) return std::unexpected(cache.error());
+
+  const optim::ScalarProblem prob =
+      psd_ml_problem(pre->ev, rep, pre->con, *layout, samp,
+                     std::move(*cache));
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  auto result = run_scalar_constrained(
+      prob, constraints.h, constraints.jacobian,
+      constraints.n_constraint, *start, Bounds{}, backend, opts,
+      "fit_ml_psd");
+  if (!result.has_value()) return std::unexpected(result.error());
+
+  const Eigen::VectorXd residual = constraints.h(result->x);
+  const double max_residual =
+      residual.size() > 0 ? residual.cwiseAbs().maxCoeff() : 0.0;
+  if (!std::isfinite(max_residual) ||
+      max_residual > psd_opts.feasibility_tol) {
+    return std::unexpected(FitError{
+        FitError::Kind::OptimizerNonConvergence,
+        "fit_ml_psd: optimizer returned a covariance-link residual of " +
+            std::to_string(max_residual) +
+            ", above feasibility_tol " +
+            std::to_string(psd_opts.feasibility_tol),
+        result->iterations, result->fmin});
+  }
+
+  Estimates est{
+      pre->con.expand(result->x.head(layout->n_alpha)),
+      result->fmin,
+      result->iterations,
+      result->f_evals,
+      result->g_evals,
+      result->status,
+      result->grad_inf_norm,
+      std::move(result->audit)};
+  attach_diagnostics(est, pt, *pre, Bounds{});
   return est;
 }
 

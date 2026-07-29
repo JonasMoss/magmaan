@@ -513,6 +513,178 @@ TEST_CASE("frontier fit_ml_constrained appends a programmatic scalar equality") 
   CHECK(con->fmin >= est.fmin - 1e-10);
 }
 
+TEST_CASE("frontier fit_ml_psd agrees with ordinary ML on an interior CFA") {
+  const auto samp = fixture_samp_3();
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3");
+  const auto rep = build_matrix_rep(pt).value();
+  auto ordinary = magmaan::test::fit(pt, rep, samp);
+  REQUIRE(ordinary.has_value());
+  REQUIRE(ordinary->diagnostics.admissibility.admissible);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto constrained = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, ordinary->theta,
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(constrained.has_value(), "PSD ML fit failed: "
+      << (constrained.has_value() ? std::string{}
+                                  : constrained.error().detail));
+  CHECK(constrained->fmin ==
+        doctest::Approx(ordinary->fmin).epsilon(1e-7));
+  CHECK((constrained->theta - ordinary->theta).cwiseAbs().maxCoeff() < 1e-5);
+  CHECK(constrained->diagnostics.admissibility.admissible);
+
+#ifdef MAGMAAN_WITH_IPOPT
+  auto ipopt = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, ordinary->theta,
+      magmaan::estimate::Backend::Ipopt, opts);
+  REQUIRE_MESSAGE(ipopt.has_value(), "IPOPT PSD ML fit failed: "
+      << (ipopt.has_value() ? std::string{} : ipopt.error().detail));
+  CHECK(ipopt->fmin == doctest::Approx(constrained->fmin).epsilon(1e-7));
+  CHECK((ipopt->theta - constrained->theta).cwiseAbs().maxCoeff() < 1e-5);
+#endif
+}
+
+TEST_CASE("frontier fit_ml_psd preserves shared covariance parameters") {
+  const auto samp = fixture_samp_3();
+  auto pt = must_lavaanify(
+      "f =~ x1 + x2 + x3\n"
+      "x1 ~~ a*x1\n"
+      "x2 ~~ a*x2");
+  const auto rep = build_matrix_rep(pt).value();
+  auto x0 = magmaan::estimate::simple_start_values(pt, rep, samp, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 5000;
+  auto constrained = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, *x0, magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(constrained.has_value(), "shared-covariance PSD fit failed: "
+      << (constrained.has_value() ? std::string{}
+                                  : constrained.error().detail));
+  std::vector<Eigen::Index> residual_variances;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto& cell = rep.cell_for_row[i];
+    if (cell.used && cell.mat == MatId::Theta &&
+        cell.row == cell.col && pt.free[i] > 0) {
+      residual_variances.push_back(pt.free[i] - 1);
+    }
+  }
+  REQUIRE(residual_variances.size() == 3);
+  const Eigen::Index k1 = residual_variances[0];
+  const Eigen::Index k2 = residual_variances[1];
+  REQUIRE(pt.eq_groups[static_cast<std::size_t>(k1)] ==
+          pt.eq_groups[static_cast<std::size_t>(k2)]);
+  CHECK(constrained->theta(k1) ==
+        doctest::Approx(constrained->theta(k2)).epsilon(1e-10));
+  CHECK(constrained->diagnostics.admissibility.admissible);
+}
+
+TEST_CASE("frontier fit_ml_psd handles reduced-LISREL structural zeros") {
+  SampleStats samp;
+  Eigen::Matrix2d S;
+  S << 2.0, 0.8,
+       0.8, 1.5;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(300);
+
+  auto pt = must_lavaanify("y ~ x");
+  const auto rep = build_matrix_rep(pt).value();
+  REQUIRE(rep.form == magmaan::model::RepForm::Reduced);
+  auto x0 = magmaan::estimate::simple_start_values(pt, rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto ordinary = magmaan::estimate::fit_ml(pt, rep, samp, *x0);
+  REQUIRE(ordinary.has_value());
+  REQUIRE(ordinary->diagnostics.admissibility.admissible);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 3000;
+  auto constrained = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, ordinary->theta,
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(constrained.has_value(), "structural PSD fit failed: "
+      << (constrained.has_value() ? std::string{}
+                                  : constrained.error().detail));
+  CHECK(constrained->fmin ==
+        doctest::Approx(ordinary->fmin).epsilon(1e-7));
+  CHECK((constrained->theta - ordinary->theta).cwiseAbs().maxCoeff() < 1e-5);
+  CHECK(constrained->diagnostics.admissibility.admissible);
+}
+
+TEST_CASE("frontier fit_ml_psd replaces a negative residual Heywood optimum") {
+  SampleStats samp;
+  Eigen::Matrix3d S;
+  S << 1.0, 0.7, 0.7,
+       0.7, 1.0, 0.3,
+       0.7, 0.3, 1.0;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(200);
+
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3");
+  const auto rep = build_matrix_rep(pt).value();
+  auto x0 = magmaan::estimate::simple_start_values(pt, rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto ordinary = magmaan::estimate::fit_ml(pt, rep, samp, *x0);
+  REQUIRE(ordinary.has_value());
+  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 5000;
+  opts.gtol = 1e-8;
+  auto constrained = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, ordinary->theta,
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(constrained.has_value(), "PSD Heywood fit failed: "
+      << (constrained.has_value() ? std::string{}
+                                  : constrained.error().detail));
+  CHECK(constrained->diagnostics.admissibility.admissible);
+  CHECK(constrained->fmin > ordinary->fmin + 1e-6);
+}
+
+TEST_CASE("frontier fit_ml_psd enforces joint 3x3 Psi PSD") {
+  // Every 2x2 principal submatrix of Psi has correlation magnitude .9, but
+  // the full sign pattern has one negative eigenvalue. Adding fixed
+  // Theta=.9I keeps the observed sample covariance positive definite.
+  SampleStats samp;
+  Eigen::Matrix3d S;
+  S << 1.9,  0.9,  0.9,
+       0.9,  1.9, -0.9,
+       0.9, -0.9,  1.9;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(500);
+
+  auto pt = must_lavaanify(
+      "f1 =~ 1*x1\n"
+      "f2 =~ 1*x2\n"
+      "f3 =~ 1*x3\n"
+      "x1 ~~ 0.9*x1\n"
+      "x2 ~~ 0.9*x2\n"
+      "x3 ~~ 0.9*x3");
+  const auto rep = build_matrix_rep(pt).value();
+  auto x0 = magmaan::estimate::simple_start_values(pt, rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto ordinary = magmaan::estimate::fit_ml(pt, rep, samp, *x0);
+  REQUIRE(ordinary.has_value());
+  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+  REQUIRE(ordinary->diagnostics.admissibility.psi_blocks.size() == 1);
+  CHECK(ordinary->diagnostics.admissibility.psi_blocks[0]
+            .negative_variance_rows.empty());
+  CHECK(ordinary->diagnostics.admissibility.psi_blocks[0]
+            .invalid_correlation_rows.empty());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 5000;
+  opts.gtol = 1e-8;
+  auto constrained = magmaan::estimate::frontier::fit_ml_psd(
+      pt, rep, samp, ordinary->theta,
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(constrained.has_value(), "joint-Psi PSD fit failed: "
+      << (constrained.has_value() ? std::string{}
+                                  : constrained.error().detail));
+  CHECK(constrained->diagnostics.admissibility.admissible);
+  CHECK(constrained->fmin > ordinary->fmin + 1e-6);
+}
+
 TEST_CASE("frontier profile_lrt_parameter_ml reports the ordinary df-1 LR statistic") {
   auto samp = fixture_samp_3();
   auto pt = must_lavaanify("f =~ x1 + x2 + x3");

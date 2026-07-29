@@ -141,6 +141,16 @@ struct ExtraNonlinearEqConstraints {
   bool active() const noexcept { return n_constraint > 0; }
 };
 
+// Controls for the frontier covariance-honest ML parameterization. The
+// optimizer drives internal Cholesky factors for every non-structural-zero
+// part of Θ and Ψ and links them exactly to the ordinary partable parameters.
+// `start_eigen_floor` is used only to construct a valid objective start; it is
+// not a lower bound at the solution, where PSD boundary points remain allowed.
+struct PsdFitOptions {
+  double start_eigen_floor = 1e-6;
+  double feasibility_tol = 1e-6;
+};
+
 // Scalar function used by profile-LR helpers. `value(theta)` returns g(θ).
 // `gradient(theta)` may be left empty; the implementation then uses a central
 // finite-difference fallback in θ-space.
@@ -258,6 +268,19 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
                    ExtraNonlinearEqConstraints extra, Bounds bounds = {},
                    Backend backend = Backend::NloptSlsqp,
                    OptimOptions opts = {});
+
+// Complete-data normal-theory ML over the LISREL-honest parameter space:
+// every primitive covariance block Θ_b and Ψ_b is positive semidefinite, while
+// the implied Σ_b remains positive definite through the ordinary ML domain.
+// The returned θ has the original partable dimension and semantics; Cholesky
+// variables are internal. Partable linear/nonlinear equality constraints are
+// honored. Explicit box bounds are intentionally not part of this first
+// frontier slice because they live in θ-space, not the lifted coordinates.
+fit_expected<Estimates>
+fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
+           const SampleStats& samp, const Eigen::VectorXd& x0,
+           Backend backend = Backend::NloptSlsqp,
+           OptimOptions opts = {}, PsdFitOptions psd_opts = {});
 
 // Profile-LR test of H0: g(θ) = target against the already-fitted unrestricted
 // ML estimate. This is intentionally only the ordinary χ²_1 reference; robust

@@ -1307,6 +1307,28 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
   attach_complete_raw_data(fit, data)
 }
 
+# Frontier complete-data ML over PSD primitive LISREL covariance matrices.
+# The returned fit retains the ordinary partable parameterization; the
+# Cholesky factors used by the optimizer are intentionally not exposed as
+# model parameters.
+frontier_fit_ml_psd <- function(
+    model, data, optimizer = "nlopt-slsqp", control = NULL,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
+    missing = c("listwise", "error")) {
+  missing <- match.arg(missing)
+  if (is.character(model) && length(model) == 1L) {
+    model <- model_spec(model)
+  }
+  if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
+  fit <- frontier_fit_ml_psd_impl(
+    partable_arg(model), sample_stats_arg(data),
+    optimizer = optimizer, control = control,
+    start_eigen_floor = start_eigen_floor,
+    feasibility_tol = feasibility_tol
+  )
+  attach_complete_raw_data(fit, data)
+}
+
 # Normal-theory ML via local Fisher scoring. This is a damped expected-
 # information step on the true ML objective, not a frozen GLS inner solve.
 fit_ml_fisher <- function(model, data, control = NULL, bounds = NULL) {
