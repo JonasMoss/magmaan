@@ -186,14 +186,23 @@ normal-theory ML?
 ## Evidence
 
 Every method saw the same generated dataset and the same model start. A fit is
-called converged only when its returned solution passes the common
-projected-gradient audit. The stricter combined column additionally requires
+called converged only when its returned solution passes the optimizer terminal
+audit: the box-projected objective gradient for ordinary ML and the
+equality-KKT Lagrangian residual plus primal feasibility for lifted PSD-ML.
+The stricter combined column additionally requires
 the fitted primitive covariance matrices to be positive semidefinite. The
 non-interior column means that the smallest primitive-covariance eigenvalue is
 at or below \(10^{-6}\); for ordinary ML this includes estimates beyond the
 covariance cone, whereas PSD-ML can only reach its boundary. The beta summaries
 are conditional on convergence and expose the heavy tails that a binary
 convergence rate hides.
+
+The stored full run predates the equality-KKT audit added on 2026-07-30.
+Targeted replay confirmed that its two solver-success/audit-rejected PSD fits
+remain nonstationary under the KKT check, including the singular extreme-scale
+case. A future full refresh will record the KKT residual, raw objective
+gradient, constraint violation, and constraint-Jacobian rank now emitted by
+the runner; exact publication claims should use that refreshed artifact.
 
 ```{r evidence-table}
 knitr::kable(display, row.names = FALSE)
@@ -210,9 +219,10 @@ It uses magmaan's current FABIN starting values rather than the all-ones starts
 of the original bounded-estimation study. The current `r profile` run has
 `r reps` rather than the published 10,000 replications per sample size, and
 uses the common optimizer audit rather than requiring an additional successful
-standard-error calculation. It can establish whether PSD-ML helps this known
-convergence stress design; it cannot establish a general prevalence or
-small-sample inference result.
+standard-error calculation. The stored full artifact used the pre-KKT
+projected-gradient implementation noted above. It can establish whether PSD-ML
+helps this known convergence stress design; it cannot establish a general
+prevalence or small-sample inference result.
 
 Rank-boundary solutions are valid members of the PSD model class, but ordinary
 interior information-matrix inference does not apply there. In the full run,

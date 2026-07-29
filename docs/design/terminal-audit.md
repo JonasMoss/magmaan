@@ -28,13 +28,14 @@ plain structs carried on the fit record, with R-side surfacing as nested
 ## Principle
 
 **Optimizers propose; the audit disposes.** Classification of the returned
-iterate is by *geometry* (first-order stationarity via projected gradient),
-not by the backend's return code. The two layers separate concerns that the
-old code conflated:
+iterate is by *geometry* (first-order stationarity via a projected gradient
+or equality-constrained KKT residual), not by the backend's return code. The
+two layers separate concerns that the old code conflated:
 
 - **L1 — Optimizer Terminal Audit** lives in `src/optim/`. Operates in
-  **driven coordinates** — the reduced/profiled space the optimizer actually
-  minimized over. Answers "is this point first-order stationary?"
+  **driven coordinates** — the reduced/profiled/lifted space the optimizer
+  actually minimized over. Answers "is this point primal-feasible and
+  first-order stationary for the problem the backend solved?"
 - **L2 — Fit Finalization Audit** lives in `src/estimate/`. Operates on
   **expanded full θ**. Answers "is this fit usable for downstream inference?"
 
@@ -46,8 +47,9 @@ active-bound set on full θ).
 ## L1: optimizer terminal audit
 
 **Files:**
-- `include/magmaan/optim/terminal_audit.hpp` — declaration of the free
-  function `audit_terminal_iterate`.
+- `include/magmaan/optim/terminal_audit.hpp` — declarations of the
+  `audit_terminal_iterate` and
+  `audit_equality_constrained_terminal_iterate` free functions.
 - `include/magmaan/optim/problem.hpp` — `TerminalAudit` and
   `TerminalAuditOptions` structs (placed alongside `OptimResult` because they
   are part of the optimizer-output contract).
@@ -63,13 +65,37 @@ TerminalAudit audit_terminal_iterate(
     const Eigen::VectorXd& lower,
     const Eigen::VectorXd& upper,
     TerminalAuditOptions   opts = {});
+
+TerminalAudit audit_equality_constrained_terminal_iterate(
+    const ConstrainedScalarProblem& prob,
+    const Eigen::VectorXd&          x,
+    double                          reported_f,
+    const Eigen::VectorXd&          lower,
+    const Eigen::VectorXd&          upper,
+    TerminalAuditOptions            opts = {});
 ```
 
 The audit recomputes `f(x, grad)` at the returned `x`, builds a projected
-gradient infinity-norm against the (possibly ±∞) bounds, applies a RELATIVE
-stationarity test `‖Pg‖∞ ≤ tol · (1 + |f|)`, records an active-set readout
-in driven coordinates, and produces an *advisory* `OptimStatus` (it never
-overrides the wrapper's actual returned status).
+gradient infinity-norm against the (possibly ±∞) bounds, applies the configured
+absolute or relative stationarity test, records an active-set readout in
+driven coordinates, and produces an *advisory* `OptimStatus`.
+
+For equality-constrained scalar problems, the companion audit additionally
+recomputes \(h(x)\) and \(J_h(x)\), solves the rank-revealing least-squares
+multiplier problem, and tests
+
+```text
+|| project_box(grad f(x) + J_h(x)' lambda) ||_inf
+```
+
+together with primal equality feasibility. Rank-deficient constraint
+Jacobians are allowed and their numerical rank is recorded. With active box
+bounds, multipliers are fitted from interior coordinates before the one-sided
+bound KKT signs are applied; when multipliers are non-unique this is
+conservative. This constrained audit is essential for nonlinear `==` models
+and for PSD-ML's Cholesky lift, whose covariance links are nonlinear
+equalities even though the resulting primitive covariance matrices are PSD by
+construction.
 
 ### Options
 
@@ -81,6 +107,7 @@ struct TerminalAuditOptions {
   double stationarity_tol  = 1e-6;
   double active_bound_tol  = 1e-12;
   double f_consistency_rel = 1e-6;
+  double constraint_tol    = 1e-6;
 };
 ```
 
@@ -126,6 +153,9 @@ struct TerminalAuditOptions {
   *last-tried* iterate in `x` rather than the *best-found* one. Relative
   because the same floating-point noise that motivates the audit also
   applies here.
+- `constraint_tol` is the maximum equality residual accepted by the
+  constrained audit. It certifies the returned point; it does not control the
+  optimizer's search tolerance.
 
 ### Promotion policy (v1)
 
@@ -148,8 +178,9 @@ point, surface that — but this is a semantics-change separate from v1.
 
 | Backend | File | Soft-failure sites that now audit |
 |---|---|---|
-| `NloptOptimizer` (NLopt C API) | `src/optim/nlopt_optimizer.cpp` | `MAXEVAL/MAXTIME`; `FORCED_STOP`; generic `FAILURE`; `ROUNDOFF_LIMITED` (kept as salvaged regardless, audit fills `grad_inf_norm`) |
+| `NloptOptimizer` (NLopt C API) | `src/optim/nlopt_optimizer.cpp` | `MAXEVAL/MAXTIME`; `FORCED_STOP`; generic `FAILURE`; `ROUNDOFF_LIMITED` (kept as salvaged regardless, audit fills `grad_inf_norm`); SLSQP equality problems use the KKT audit |
 | `PortOptimizer` (PORT `drmngb`) | `src/optim/port_optimizer.cpp` | IV(1)=8 noisy; IV(1)=9 false convergence; IV(1)=10 budget; IV(1)≥11 other; IV(1)=7 singular keeps `SingularConvergence` |
+| `IpoptOptimizer` | `src/optim/ipopt_optimizer.cpp` | unconstrained problems use projected gradients; equality-constrained problems use the same KKT audit and may salvage stationary budget/small-step stops |
 
 Every success path also calls the audit so `OptimResult::grad_inf_norm` has
 a single source of truth (the bespoke projected-gradient loops are gone).
@@ -226,12 +257,17 @@ R boundary so they index `theta` / `partable` rows directly.
 
 ```
 fit$audit$
-  stationary       (logical)   geometric verdict
-  grad_inf_norm    (numeric)   projected ‖g‖∞ at the iterate
-  stationarity_rhs (numeric)   the tol · (1 + |f|) it was compared against
+  stationary       (logical)   geometric + primal-feasibility verdict
+  grad_inf_norm    (numeric)   projected objective/Lagrangian gradient norm
+  raw_grad_inf_norm (numeric)  unprojected objective-gradient norm
+  grad_scaled_inf  (numeric)   scale-aware version of grad_inf_norm
+  stationarity_rhs (numeric)   configured absolute/relative comparison RHS
   f_recomputed     (numeric)   f at x, recomputed by the audit
   f_consistent     (logical)   |f_recomputed - reported| ≤ rel·(1+|reported|)
   f_finite         (logical)
+  constrained      (logical)   equality-KKT audit ran
+  constraint_violation_inf (numeric) max primal equality residual
+  constraint_jacobian_rank (integer) numerical rank of J_h(x)
   active_set       (integer)   in DRIVEN coords: {-1, 0, +1}
   advisory_status  (character) "converged" / "line_search_salvaged" / ...
 

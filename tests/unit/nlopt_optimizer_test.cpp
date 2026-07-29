@@ -119,6 +119,9 @@ TEST_CASE("NloptOptimizer/SLSQP — enforces a nonlinear equality constraint") {
   CHECK(std::abs(out->theta_hat(0) -
                  out->theta_hat(1) * out->theta_hat(1)) < 1e-7);
   CHECK(out->fmin < 0.1);
+  CHECK(out->audit.constrained);
+  CHECK(out->audit.constraint_violation_inf <= 1e-6);
+  CHECK(out->audit.stationary);
 }
 
 TEST_CASE("NloptOptimizer/SLSQP — constrained path accepts equal nonzero targets") {
@@ -149,6 +152,50 @@ TEST_CASE("NloptOptimizer/SLSQP — constrained path accepts equal nonzero targe
       Eigen::VectorXd::Constant(1,  inf));
   REQUIRE(out.has_value());
   CHECK(out->theta_hat(0) == doctest::Approx(2.0).epsilon(1e-8));
+  CHECK(out->audit.constrained);
+  CHECK(out->audit.stationary);
+  CHECK(out->audit.raw_grad_inf_norm ==
+        doctest::Approx(2.0).epsilon(1e-8));
+  CHECK(out->audit.grad_inf_norm ==
+        doctest::Approx(0.0).scale(1.0));
+}
+
+TEST_CASE("NloptOptimizer/SLSQP — KKT audit salvages a constrained optimum "
+          "at the evaluation budget") {
+  ScalarProblem obj;
+  obj.n_param = 1;
+  obj.expand = [](const Eigen::VectorXd& x) { return x; };
+  obj.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    grad = x;
+    return 0.5 * x.squaredNorm();
+  };
+
+  ConstrainedScalarProblem prob;
+  prob.objective = obj;
+  prob.n_constraint = 1;
+  prob.constraint_lower = Eigen::VectorXd::Constant(1, 2.0);
+  prob.constraint_upper = prob.constraint_lower;
+  prob.h = [](const Eigen::VectorXd& x) { return x; };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    return Eigen::MatrixXd::Identity(1, 1);
+  };
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1;
+  const double inf = std::numeric_limits<double>::infinity();
+  auto out = NloptOptimizer{opts}.minimize_constrained(
+      prob, Eigen::VectorXd::Constant(1, 2.0),
+      Eigen::VectorXd::Constant(1, -inf),
+      Eigen::VectorXd::Constant(1,  inf));
+  REQUIRE(out.has_value());
+  CHECK(out->audit.constrained);
+  CHECK(out->audit.stationary);
+  CHECK(out->audit.constraint_violation_inf ==
+        doctest::Approx(0.0));
+  CHECK(out->audit.raw_grad_inf_norm ==
+        doctest::Approx(2.0));
+  CHECK(out->audit.grad_inf_norm ==
+        doctest::Approx(0.0).scale(1.0));
 }
 
 TEST_CASE("NloptOptimizer/SLSQP — constrained path rejects inequalities") {

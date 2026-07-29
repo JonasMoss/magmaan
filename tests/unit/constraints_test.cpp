@@ -476,6 +476,9 @@ TEST_CASE("fit: nonlinear equality constraints accept the NLopt SLSQP backend") 
 
   auto nl = build_nl_constraints(pt);
   CHECK(std::abs(nl.h(est.theta)(0)) < 1e-5);
+  CHECK(est.audit.constrained);
+  CHECK(est.audit.constraint_violation_inf <= 1e-6);
+  CHECK(est.audit.stationary);
 }
 
 TEST_CASE("frontier fit_ml_constrained appends a programmatic scalar equality") {
@@ -533,6 +536,9 @@ TEST_CASE("frontier fit_ml_psd agrees with ordinary ML on an interior CFA") {
         doctest::Approx(ordinary->fmin).epsilon(1e-7));
   CHECK((constrained->theta - ordinary->theta).cwiseAbs().maxCoeff() < 1e-5);
   CHECK(constrained->diagnostics.admissibility.admissible);
+  CHECK(constrained->audit.constrained);
+  CHECK(constrained->audit.constraint_violation_inf <= 1e-6);
+  CHECK(constrained->audit.stationary);
 
 #ifdef MAGMAAN_WITH_IPOPT
   auto ipopt = magmaan::estimate::frontier::fit_ml_psd(
@@ -542,6 +548,9 @@ TEST_CASE("frontier fit_ml_psd agrees with ordinary ML on an interior CFA") {
       << (ipopt.has_value() ? std::string{} : ipopt.error().detail));
   CHECK(ipopt->fmin == doctest::Approx(constrained->fmin).epsilon(1e-7));
   CHECK((ipopt->theta - constrained->theta).cwiseAbs().maxCoeff() < 1e-5);
+  CHECK(ipopt->audit.constrained);
+  CHECK(ipopt->audit.constraint_violation_inf <= 1e-6);
+  CHECK(ipopt->audit.stationary);
 #endif
 }
 
@@ -672,6 +681,9 @@ TEST_CASE("frontier fit_ml_psd replaces a negative residual Heywood optimum") {
                                   : constrained.error().detail));
   CHECK(constrained->diagnostics.admissibility.admissible);
   CHECK(constrained->fmin > ordinary->fmin + 1e-6);
+  CHECK(constrained->audit.constrained);
+  CHECK(constrained->audit.constraint_violation_inf <= 1e-6);
+  CHECK(constrained->audit.stationary);
 }
 
 TEST_CASE("frontier fit_ml_psd enforces joint 3x3 Psi PSD") {

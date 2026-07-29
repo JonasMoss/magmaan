@@ -168,6 +168,9 @@ struct TerminalAuditOptions {
   // (1 + |reported_f|). This catches "backend left last-tried point, not
   // best" — a gross-divergence detector, not a precision measurement.
   double f_consistency_rel = 1e-6;
+  // Maximum equality-constraint residual accepted by the constrained audit.
+  // This certifies a returned point rather than controlling the search.
+  double constraint_tol    = 1e-6;
 };
 
 // What the audit found. Plain struct, carried up via `OptimOutput` /
@@ -175,7 +178,13 @@ struct TerminalAuditOptions {
 // produces a `FitError` — observation only.
 struct TerminalAudit {
   bool        stationary       = false;
+  // Infinity norm used for the stationarity verdict: the box-projected
+  // objective gradient for an unconstrained problem and the box-projected
+  // Lagrangian gradient for an equality-constrained problem.
   double      grad_inf_norm    = -1.0;   // -1 sentinel = could not compute
+  // Unprojected objective-gradient norm before bounds or equality normals
+  // are accounted for. It may be large at a constrained optimum.
+  double      raw_grad_inf_norm = -1.0;
   // Scale-aware projected-gradient norm: max_i |Pg_i| · max(|x_i|, 1) /
   // max(|f|, 1). Always populated when `grad_inf_norm` is, regardless of
   // the StationarityMode the boolean verdict was taken under. Lets the
@@ -186,6 +195,11 @@ struct TerminalAudit {
   double      f_recomputed     = std::numeric_limits<double>::quiet_NaN();
   bool        f_consistent     = false;
   bool        f_finite         = false;
+  // Equality-constrained audit telemetry. Negative numeric sentinels mean no
+  // constrained audit ran.
+  bool         constrained                  = false;
+  double       constraint_violation_inf     = -1.0;
+  std::int32_t constraint_jacobian_rank     = -1;
   // Active set in DRIVEN coordinates (size matches optimizer's x):
   // {-1 = at lower, 0 = interior, +1 = at upper}. Distinct from L2's
   // `active_bounds_full`, which indexes the expanded θ.
