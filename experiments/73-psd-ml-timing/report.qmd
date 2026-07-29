@@ -32,6 +32,9 @@ metadata <- setNames(metadata_frame$value, metadata_frame$key)
 summary <- read_result("case_summary.csv")
 validation <- read_result("validation.csv")
 failures <- read_result("failures.csv")
+baseline <- read.csv(
+  file.path("results", "dense_lift_baseline.csv"),
+  stringsAsFactors = FALSE, check.names = FALSE)
 
 profile <- metadata[["profile"]]
 repeats <- as.integer(metadata[["repeats"]])
@@ -46,6 +49,16 @@ largest <- interior[which.max(interior$p), ]
 fallback_count <- sum(!summary$ordinary_admissible)
 all_valid <- nrow(failures) == 0L &&
   all(validation$pass)
+comparison <- merge(
+  baseline, summary,
+  by = c("case_id", "p", "ordinary_admissible"),
+  suffixes = c("_dense", "_structured"))
+comparison$psd_speedup <-
+  comparison$psd_median_ms_dense /
+  comparison$psd_median_ms_structured
+scaling_comparison <- comparison[
+  grepl("^interior_cfa_", comparison$case_id), ]
+p12_comparison <- scaling_comparison[scaling_comparison$p == 12L, ]
 
 display <- summary[, c(
   "case_id", "p", "ordinary_admissible",
@@ -74,7 +87,7 @@ covariance audit, and refit only inadmissible cases?
 `r if (!is_evidence) {
   sprintf("This is a %s timing run with %d repetitions per case. It validates the runner but is too small for performance conclusions.", profile, repeats)
 } else {
-  sprintf("Across the interior CFA scaling cases, direct PSD fitting took a median %.1fx as long as ordinary NTML. The audit-first policy cost %.2fx ordinary NTML when the first fit was admissible, while the deliberately inadmissible fixtures cost %.1fx because they required both fits. At p=%d, the direct PSD/ordinary ratio was %.1fx.", median_psd_ratio, median_audit_interior, median_audit_bad, largest$p, largest$psd_over_ordinary)
+  sprintf("After compiling covariance structure, direct PSD fitting took a median %.1fx as long as ordinary NTML across the interior CFA scaling cases. At p=12, PSD time fell %.1fx and its overhead dropped from %.1fx to %.1fx ordinary NTML. The audit-first policy cost %.2fx ordinary NTML when the first fit was admissible, while the deliberately inadmissible fixtures cost %.1fx because they required both fits.", median_psd_ratio, p12_comparison$psd_speedup, p12_comparison$psd_over_ordinary_dense, p12_comparison$psd_over_ordinary_structured, median_audit_interior, median_audit_bad)
 }`
 `r if (all_valid) sprintf(" All %d deliberately inadmissible cases were detected by the ordinary audit and repaired by PSD-ML; all final fits were admissible.", fallback_count) else " At least one validation or final-fit check failed; inspect the CSV outputs before interpreting timings."`
 
@@ -95,33 +108,33 @@ a near-boundary uniqueness, a classical Heywood solution, jointly indefinite
 latent and residual covariance matrices, a negative structural disturbance,
 and an equality-constrained interior control.
 
-```{r timing-plot, fig.width=8, fig.height=4.8}
-plot_rows <- summary[order(summary$p, summary$case_id), ]
-x <- seq_len(nrow(plot_rows))
+The frozen baseline is the same 30-repetition pilot from commit `ee156162`,
+before covariance-structure compilation. It was collected on the same host
+with the same runner and fit policies.
+
+```{r timing-plot, fig.width=7, fig.height=4.6}
+plot_rows <- scaling_comparison[order(scaling_comparison$p), ]
 ymax <- max(
-  plot_rows$psd_over_ordinary,
-  plot_rows$audit_over_ordinary,
+  plot_rows$psd_over_ordinary_dense,
+  plot_rows$psd_over_ordinary_structured,
   na.rm = TRUE)
-old_par <- par(mar = c(8, 4, 1, 1))
+old_par <- par(mar = c(4, 4, 1, 1))
 on.exit(par(old_par), add = TRUE)
 plot(
-  x, plot_rows$psd_over_ordinary,
-  log = "y", pch = 16, col = "#B33A3A", xaxt = "n",
-  xlab = "", ylab = "Time ratio versus ordinary NTML",
+  plot_rows$p, plot_rows$psd_over_ordinary_dense,
+  log = "xy", type = "b", pch = 16, col = "#B33A3A",
+  xlab = "Indicators", ylab = "Direct PSD / ordinary NTML time",
   ylim = c(0.8, ymax * 1.15))
-points(
-  x, plot_rows$audit_over_ordinary,
-  pch = 17, col = "#245A9B")
+lines(
+  plot_rows$p, plot_rows$psd_over_ordinary_structured,
+  type = "b", pch = 17, col = "#245A9B")
 abline(h = 1, lty = 2, col = "grey40")
-axis(
-  1, at = x,
-  labels = gsub("_", " ", plot_rows$case_id, fixed = TRUE),
-  las = 2, cex.axis = .75)
+axis(1, at = plot_rows$p)
 legend(
   "topleft",
-  legend = c("PSD direct", "Audit then PSD if needed"),
+  legend = c("Dense lift baseline", "Structure-compiled lift"),
   pch = c(16, 17), col = c("#B33A3A", "#245A9B"),
-  bty = "n")
+  lty = 1, bty = "n")
 ```
 
 ## Caveats
@@ -134,8 +147,11 @@ continuous LS/GMM weight families are not included.
 
 The timing panel deliberately exposes dimension scaling, but it is not a
 textbook-corpus benchmark. The results show that the present implementation
-scales poorly with indicator count and motivate a more structure-aware
-formulation, but cannot establish the numerical reliability of an alternative.
+still becomes relatively more expensive with indicator count, although the
+previous timing cliff is gone. A separate ten-repetition `p=24` direction
+probe put direct PSD at about 5.0 times ordinary NTML, down from roughly 711
+times under the dense baseline. The ordinary `p=24` control ended with a soft
+line-search-salvaged status, so that row is not part of the formal comparison.
 
 ## Reproduce
 

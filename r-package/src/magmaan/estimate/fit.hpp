@@ -143,8 +143,9 @@ struct ExtraNonlinearEqConstraints {
 };
 
 // Controls for the frontier covariance-honest ML parameterization. The
-// optimizer drives internal Cholesky factors for every non-structural-zero
-// part of Θ and Ψ and links them exactly to the ordinary partable parameters.
+// optimizer drives internal Cholesky factors for every covariance-connected
+// component of Θ and Ψ and links them exactly to the ordinary partable
+// parameters.
 // `start_eigen_floor` is used only to construct a valid objective start; it is
 // not a lower bound at the solution, where PSD boundary points remain allowed.
 struct PsdFitOptions {

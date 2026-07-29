@@ -263,6 +263,30 @@ Eigen::MatrixXd lower_from_x(const Eigen::VectorXd& x, Eigen::Index offset,
   return L;
 }
 
+LiftBlock component_shell(const LiftBlock& covariance) {
+  LiftBlock out;
+  out.block = covariance.block;
+  out.kind = covariance.kind;
+  out.dim = covariance.dim;
+  return out;
+}
+
+void compact_link_affine_map(LiftBlock& block,
+                             const LiftBlock& covariance) {
+  const Eigen::Index n =
+      static_cast<Eigen::Index>(block.links.size());
+  block.c0 = Eigen::VectorXd::Zero(n);
+  block.D = Eigen::MatrixXd::Zero(n, covariance.D.cols());
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::Index row =
+        block.links[static_cast<std::size_t>(i)].full_vech_row;
+    block.c0(i) = covariance.c0(row);
+    if (covariance.D.cols() > 0) {
+      block.D.row(i) = covariance.D.row(row);
+    }
+  }
+}
+
 fit_expected<PsdLiftLayout>
 build_psd_lift_layout(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
@@ -271,9 +295,10 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
   PsdLiftLayout out;
   out.n_alpha = con.n_alpha;
 
+  std::vector<LiftBlock> covariance_maps;
   std::vector<Eigen::Index> theta_block(rep.dims.size(), -1);
   std::vector<Eigen::Index> psi_block(rep.dims.size(), -1);
-  out.blocks.reserve(2 * rep.dims.size());
+  covariance_maps.reserve(2 * rep.dims.size());
   for (std::size_t b = 0; b < rep.dims.size(); ++b) {
     for (const LiftCovarianceKind kind :
          {LiftCovarianceKind::Theta, LiftCovarianceKind::Psi}) {
@@ -289,13 +314,13 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
       block.c0 = Eigen::VectorXd::Zero(detail::vech_len(dim));
       block.D = Eigen::MatrixXd::Zero(detail::vech_len(dim), con.n_alpha);
       const Eigen::Index index =
-          static_cast<Eigen::Index>(out.blocks.size());
+          static_cast<Eigen::Index>(covariance_maps.size());
       if (kind == LiftCovarianceKind::Theta) {
         theta_block[b] = index;
       } else {
         psi_block[b] = index;
       }
-      out.blocks.push_back(std::move(block));
+      covariance_maps.push_back(std::move(block));
     }
   }
 
@@ -314,7 +339,8 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
     const Eigen::Index block_index =
         cell.mat == model::MatId::Theta ? theta_block[b] : psi_block[b];
     if (block_index < 0) continue;
-    auto& block = out.blocks[static_cast<std::size_t>(block_index)];
+    auto& block =
+        covariance_maps[static_cast<std::size_t>(block_index)];
     const Eigen::Index r = std::max<Eigen::Index>(cell.row, cell.col);
     const Eigen::Index c = std::min<Eigen::Index>(cell.row, cell.col);
     const Eigen::Index row = detail::vech_index(block.dim, r, c);
@@ -328,15 +354,17 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
     }
   }
 
-  for (auto& block : out.blocks) {
+  for (const auto& covariance : covariance_maps) {
     std::vector<Eigen::Index> active_position(
-        static_cast<std::size_t>(block.dim), -1);
-    for (Eigen::Index i = 0; i < block.dim; ++i) {
-      const Eigen::Index row = detail::vech_index(block.dim, i, i);
+        static_cast<std::size_t>(covariance.dim), -1);
+    std::vector<Eigen::Index> active;
+    for (Eigen::Index i = 0; i < covariance.dim; ++i) {
+      const Eigen::Index row =
+          detail::vech_index(covariance.dim, i, i);
       const bool variable =
-          block.D.cols() > 0 &&
-          block.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
-      const double fixed = block.c0(row);
+          covariance.D.cols() > 0 &&
+          covariance.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
+      const double fixed = covariance.c0(row);
       if (!variable && fixed < -structural_tol) {
         return std::unexpected(fit_err(
             FitError::Kind::NumericIssue,
@@ -345,38 +373,101 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
       }
       if (variable || std::abs(fixed) > structural_tol) {
         active_position[static_cast<std::size_t>(i)] =
-            static_cast<Eigen::Index>(block.active.size());
-        block.active.push_back(i);
+            static_cast<Eigen::Index>(active.size());
+        active.push_back(i);
       }
     }
 
-    block.lift_offset = out.n_lift;
-    out.n_lift += block.n_lift();
-    for (Eigen::Index c = 0; c < block.dim; ++c) {
-      for (Eigen::Index r = c; r < block.dim; ++r) {
-        const Eigen::Index row = detail::vech_index(block.dim, r, c);
+    LiftBlock zero_links = component_shell(covariance);
+    for (Eigen::Index c = 0; c < covariance.dim; ++c) {
+      for (Eigen::Index r = c; r < covariance.dim; ++r) {
+        const Eigen::Index row =
+            detail::vech_index(covariance.dim, r, c);
         const Eigen::Index ar =
             active_position[static_cast<std::size_t>(r)];
         const Eigen::Index ac =
             active_position[static_cast<std::size_t>(c)];
-        if (ar >= 0 && ac >= 0) {
-          block.links.push_back(LiftLink{row, ar, ac});
-          ++out.n_link;
-          continue;
-        }
+        if (ar >= 0 && ac >= 0) continue;
         const bool variable =
-            block.D.cols() > 0 &&
-            block.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
+            covariance.D.cols() > 0 &&
+            covariance.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
         if (variable) {
-          block.links.push_back(LiftLink{row, -1, -1});
+          zero_links.links.push_back(LiftLink{row, -1, -1});
           ++out.n_link;
-        } else if (std::abs(block.c0(row)) > structural_tol) {
+        } else if (std::abs(covariance.c0(row)) > structural_tol) {
           return std::unexpected(fit_err(
               FitError::Kind::NumericIssue,
               "fit_ml_psd: a fixed nonzero covariance touches a "
               "structural-zero variance"));
         }
       }
+    }
+    if (!zero_links.links.empty()) {
+      zero_links.lift_offset = out.n_lift;
+      compact_link_affine_map(zero_links, covariance);
+      out.blocks.push_back(std::move(zero_links));
+    }
+
+    const Eigen::Index n_active =
+        static_cast<Eigen::Index>(active.size());
+    std::vector<std::vector<Eigen::Index>> adjacency(
+        static_cast<std::size_t>(n_active));
+    for (Eigen::Index ac = 0; ac < n_active; ++ac) {
+      for (Eigen::Index ar = ac + 1; ar < n_active; ++ar) {
+        const Eigen::Index row = detail::vech_index(
+            covariance.dim,
+            active[static_cast<std::size_t>(ar)],
+            active[static_cast<std::size_t>(ac)]);
+        const bool variable =
+            covariance.D.cols() > 0 &&
+            covariance.D.row(row).cwiseAbs().maxCoeff() > structural_tol;
+        if (!variable && std::abs(covariance.c0(row)) <= structural_tol) {
+          continue;
+        }
+        adjacency[static_cast<std::size_t>(ar)].push_back(ac);
+        adjacency[static_cast<std::size_t>(ac)].push_back(ar);
+      }
+    }
+
+    std::vector<bool> visited(static_cast<std::size_t>(n_active), false);
+    for (Eigen::Index seed = 0; seed < n_active; ++seed) {
+      if (visited[static_cast<std::size_t>(seed)]) continue;
+      std::vector<Eigen::Index> stack{seed};
+      std::vector<Eigen::Index> component_position;
+      visited[static_cast<std::size_t>(seed)] = true;
+      while (!stack.empty()) {
+        const Eigen::Index node = stack.back();
+        stack.pop_back();
+        component_position.push_back(node);
+        for (const Eigen::Index neighbor :
+             adjacency[static_cast<std::size_t>(node)]) {
+          if (visited[static_cast<std::size_t>(neighbor)]) continue;
+          visited[static_cast<std::size_t>(neighbor)] = true;
+          stack.push_back(neighbor);
+        }
+      }
+      std::sort(component_position.begin(), component_position.end());
+
+      LiftBlock block = component_shell(covariance);
+      for (const Eigen::Index position : component_position) {
+        block.active.push_back(
+            active[static_cast<std::size_t>(position)]);
+      }
+      block.lift_offset = out.n_lift;
+      out.n_lift += block.n_lift();
+      const Eigen::Index q = block.active_dim();
+      for (Eigen::Index c = 0; c < q; ++c) {
+        for (Eigen::Index r = c; r < q; ++r) {
+          const Eigen::Index row = detail::vech_index(
+              block.dim,
+              block.active[static_cast<std::size_t>(r)],
+              block.active[static_cast<std::size_t>(c)]);
+          block.links.push_back(LiftLink{row, r, c});
+          ++out.n_link;
+        }
+      }
+      compact_link_affine_map(block, covariance);
+      out.blocks.push_back(std::move(block));
     }
   }
   return out;
@@ -433,14 +524,12 @@ psd_lift_start(const PsdLiftLayout& layout,
     if (q == 0) continue;
     const Eigen::VectorXd c = block.c0 + block.D * alpha;
     Eigen::MatrixXd C = Eigen::MatrixXd::Zero(q, q);
-    for (Eigen::Index j = 0; j < q; ++j) {
-      for (Eigen::Index i = j; i < q; ++i) {
-        const Eigen::Index row = detail::vech_index(
-            block.dim, block.active[static_cast<std::size_t>(i)],
-            block.active[static_cast<std::size_t>(j)]);
-        C(i, j) = c(row);
-        C(j, i) = c(row);
-      }
+    for (Eigen::Index k = 0;
+         k < static_cast<Eigen::Index>(block.links.size()); ++k) {
+      const auto& link = block.links[static_cast<std::size_t>(k)];
+      if (!link.lifted()) continue;
+      C(link.active_row, link.active_col) = c(k);
+      C(link.active_col, link.active_row) = c(k);
     }
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(C);
     if (eig.info() != Eigen::Success) {
@@ -545,25 +634,32 @@ psd_ml_problem(const model::ModelEvaluator& ev,
       Eigen::Index local_col = 0;
       for (Eigen::Index lc = 0; lc < q; ++lc) {
         for (Eigen::Index lr = lc; lr < q; ++lr, ++local_col) {
-          Eigen::MatrixXd E = Eigen::MatrixXd::Zero(q, q);
-          E(lr, lc) = 1.0;
-          const Eigen::MatrixXd dC_active =
-              E * L.transpose() + L * E.transpose();
-          Eigen::MatrixXd dC = Eigen::MatrixXd::Zero(block.dim, block.dim);
-          for (Eigen::Index j = 0; j < q; ++j) {
-            for (Eigen::Index i = 0; i < q; ++i) {
-              dC(block.active[static_cast<std::size_t>(i)],
-                 block.active[static_cast<std::size_t>(j)]) =
-                  dC_active(i, j);
-            }
-          }
           Eigen::MatrixXd dSigma;
           if (block.kind == LiftCovarianceKind::Theta) {
-            dSigma = std::move(dC);
+            dSigma = Eigen::MatrixXd::Zero(
+                rep.dims[block.block].n_observed,
+                rep.dims[block.block].n_observed);
+            const Eigen::Index full_lr =
+                block.active[static_cast<std::size_t>(lr)];
+            for (Eigen::Index j = 0; j < q; ++j) {
+              const Eigen::Index full_j =
+                  block.active[static_cast<std::size_t>(j)];
+              dSigma(full_lr, full_j) += L(j, lc);
+              dSigma(full_j, full_lr) += L(j, lc);
+            }
           } else {
             const Eigen::MatrixXd& LamA =
                 assembled->blocks[block.block].LamA;
-            dSigma = LamA * dC * LamA.transpose();
+            const Eigen::VectorXd a = LamA.col(
+                block.active[static_cast<std::size_t>(lr)]);
+            Eigen::VectorXd v =
+                Eigen::VectorXd::Zero(LamA.rows());
+            for (Eigen::Index j = 0; j < q; ++j) {
+              v += L(j, lc) * LamA.col(
+                  block.active[static_cast<std::size_t>(j)]);
+            }
+            dSigma =
+                a * v.transpose() + v * a.transpose();
           }
           J.col(layout.n_alpha + block.lift_offset + local_col)
               .segment(sigma_offset[block.block],
@@ -618,9 +714,11 @@ psd_constraint_callbacks(const EqConstraints& con,
       const Eigen::MatrixXd L = lower_from_x(
           x, layout.n_alpha + block.lift_offset, q);
       const Eigen::MatrixXd LLt = L * L.transpose();
-      for (const auto& link : block.links) {
+      for (Eigen::Index k = 0;
+           k < static_cast<Eigen::Index>(block.links.size()); ++k) {
+        const auto& link = block.links[static_cast<std::size_t>(k)];
         h(out_row++) =
-            c(link.full_vech_row) -
+            c(k) -
             (link.lifted()
                  ? LLt(link.active_row, link.active_col)
                  : 0.0);
@@ -640,25 +738,25 @@ psd_constraint_callbacks(const EqConstraints& con,
       const Eigen::Index q = block.active_dim();
       const Eigen::MatrixXd L = lower_from_x(
           x, layout.n_alpha + block.lift_offset, q);
-      for (const auto& link : block.links) {
+      for (Eigen::Index k = 0;
+           k < static_cast<Eigen::Index>(block.links.size()); ++k) {
+        const auto& link = block.links[static_cast<std::size_t>(k)];
         if (layout.n_alpha > 0) {
           J.row(out_row).head(layout.n_alpha) =
-              block.D.row(link.full_vech_row);
+              block.D.row(k);
         }
         if (link.lifted()) {
-          Eigen::Index local_col = 0;
-          for (Eigen::Index lc = 0; lc < q; ++lc) {
-            for (Eigen::Index lr = lc; lr < q; ++lr, ++local_col) {
-              double d = 0.0;
-              if (link.active_row == lr) {
-                d += L(link.active_col, lc);
-              }
-              if (link.active_col == lr) {
-                d += L(link.active_row, lc);
-              }
-              J(out_row,
-                layout.n_alpha + block.lift_offset + local_col) = -d;
-            }
+          const Eigen::Index max_lc =
+              std::min(link.active_row, link.active_col);
+          for (Eigen::Index lc = 0; lc <= max_lc; ++lc) {
+            const Eigen::Index row_col = layout.n_alpha +
+                block.lift_offset +
+                detail::vech_index(q, link.active_row, lc);
+            const Eigen::Index col_col = layout.n_alpha +
+                block.lift_offset +
+                detail::vech_index(q, link.active_col, lc);
+            J(out_row, row_col) -= L(link.active_col, lc);
+            J(out_row, col_col) -= L(link.active_row, lc);
           }
         }
         ++out_row;
