@@ -111,9 +111,17 @@ is_evidence <- profile %in% c("pilot", "full") && reps >= 200L
 psd_all_admissible <- all(
   raw$admissible[
     raw$method == "psd-ml-slsqp" & raw$audit_converged])
-psd_rejected_nonadmissible <- sum(
-  raw$method == "psd-ml-slsqp" & raw$returned &
-    !raw$audit_converged & !raw$admissible)
+psd_returned <- raw[
+  raw$method == "psd-ml-slsqp" & raw$returned, ]
+psd_solver_rejected <- raw[
+  raw$method == "psd-ml-slsqp" & raw$solver_converged &
+    !raw$audit_converged, ]
+psd_max_constraint_violation <- max(
+  psd_returned$constraint_violation_inf, na.rm = TRUE)
+psd_max_constraint_violation_label <- format(
+  psd_max_constraint_violation, scientific = TRUE, digits = 3)
+psd_rejected_kkt <- range(
+  psd_solver_rejected$stationarity_inf, na.rm = TRUE)
 n10_psd_convergence <- rate_at(10L, "psd-ml-slsqp",
                                "audit_convergence_rate")
 n10_ml_convergence <- rate_at(10L, "ml-lbfgs",
@@ -197,12 +205,12 @@ covariance cone, whereas PSD-ML can only reach its boundary. The beta summaries
 are conditional on convergence and expose the heavy tails that a binary
 convergence rate hides.
 
-The stored full run predates the equality-KKT audit added on 2026-07-30.
-Targeted replay confirmed that its two solver-success/audit-rejected PSD fits
-remain nonstationary under the KKT check, including the singular extreme-scale
-case. A future full refresh will record the KKT residual, raw objective
-gradient, constraint violation, and constraint-Jacobian rank now emitted by
-the runner; exact publication claims should use that refreshed artifact.
+The full artifact was refreshed after the equality-KKT audit was added on
+2026-07-30. All returned PSD fits have finite KKT, raw-gradient,
+constraint-violation, and constraint-Jacobian-rank telemetry. Their largest
+equality violation was `r psd_max_constraint_violation_label`, so equality
+feasibility was numerically tight. The refresh reproduced the 96.8% versus
+54.1% \(N=10\) headline exactly.
 
 ```{r evidence-table}
 knitr::kable(display, row.names = FALSE)
@@ -219,17 +227,17 @@ It uses magmaan's current FABIN starting values rather than the all-ones starts
 of the original bounded-estimation study. The current `r profile` run has
 `r reps` rather than the published 10,000 replications per sample size, and
 uses the common optimizer audit rather than requiring an additional successful
-standard-error calculation. The stored full artifact used the pre-KKT
-projected-gradient implementation noted above. It can establish whether PSD-ML
-helps this known convergence stress design; it cannot establish a general
-prevalence or small-sample inference result.
+standard-error calculation. It can establish whether PSD-ML helps this known
+convergence stress design; it cannot establish a general prevalence or
+small-sample inference result.
 
 Rank-boundary solutions are valid members of the PSD model class, but ordinary
 interior information-matrix inference does not apply there. In the full run,
-`r psd_rejected_nonadmissible` additional PSD solver return was rejected by
-the terminal audit; it had a singular implied covariance and extreme
-parameters. Solver return codes are therefore not used as the convergence
-verdict.
+`r nrow(psd_solver_rejected)` clean PSD solver returns were rejected by the
+terminal audit. Both were covariance-admissible and equality-feasible, but
+their KKT residuals were `r fmt_num(psd_rejected_kkt[[1L]])` and
+`r fmt_num(psd_rejected_kkt[[2L]])`, rather than at the \(10^{-3}\) audit
+scale. Solver return codes are therefore not used as the convergence verdict.
 
 ## Reproduce
 
