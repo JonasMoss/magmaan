@@ -1,0 +1,325 @@
+---
+title: "Does PSD-ML reach the same maximum from different starts?"
+subtitle: "A multistart basin audit for the small-N SEM"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(
+  if (nzchar(override)) override else character(),
+  file.path("results", c("pilot", "smoke")))
+available <- roots[vapply(
+  roots,
+  function(path) file.exists(file.path(path, "metadata.csv")),
+  logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+metadata_frame <- read_result("metadata.csv")
+metadata <- setNames(metadata_frame$value, metadata_frame$key)
+screen <- read_result("screen.csv")
+datasets <- read_result("dataset_summary.csv")
+classification <- read_result("classification_summary.csv")
+starts <- read_result("start_summary.csv")
+candidates <- read_result("confirmation_candidates.csv")
+has_confirmation <- file.exists(file.path(root, "confirmation_summary.csv"))
+confirmation <- if (has_confirmation) {
+  read_result("confirmation_summary.csv")
+} else {
+  data.frame()
+}
+has_profiles <- file.exists(file.path(root, "profile_summary.csv"))
+profiles <- if (has_profiles) {
+  read_result("profile_summary.csv")
+} else {
+  data.frame()
+}
+
+profile <- metadata[["profile"]]
+core <- classification[classification$scope == "random_core", ]
+is_evidence <- profile == "pilot" &&
+  as.integer(metadata[["core_reps"]]) >= 100L
+fmt_pct <- function(x) sprintf("%.1f%%", 100 * x)
+
+screen_rows <- lapply(split(screen, screen$n), function(x) {
+  data.frame(
+    N = x$n[[1L]],
+    Screened = nrow(x),
+    `Default KKT + admissible` = fmt_pct(mean(x$eligible)),
+    `Default covariance boundary` = fmt_pct(mean(x$covariance_boundary)),
+    check.names = FALSE
+  )
+})
+screen_display <- do.call(rbind, screen_rows)
+
+core_display <- core[, c(
+  "n", "datasets", "default_best_rate", "ordinary_warm_best_rate",
+  "competing_basin_rate", "different_parameter_rate",
+  "different_moment_rate", "start_sensitive_rate",
+  "best_boundary_rate", "max_default_gap"
+)]
+names(core_display) <- c(
+  "N", "Datasets", "Default hits best", "Ordinary warm hits best",
+  "Competing basins", "Same fit/different parameters",
+  "Equal objective/different moments", "Start-sensitive eligibility",
+  "Best solution on boundary", "Maximum default objective gap"
+)
+for (field in c(
+  "Default hits best", "Ordinary warm hits best", "Competing basins",
+  "Same fit/different parameters", "Equal objective/different moments",
+  "Start-sensitive eligibility", "Best solution on boundary"
+)) {
+  core_display[[field]] <- vapply(
+    core_display[[field]], fmt_pct, character(1)
+  )
+}
+core_display$`Maximum default objective gap` <- format(
+  core_display$`Maximum default objective gap`,
+  scientific = TRUE, digits = 3
+)
+
+start_core <- starts[starts$scope == "random_core", c(
+  "n", "start_family", "attempts", "eligible_rate", "best_hit_rate",
+  "median_elapsed_ms", "median_f_evals"
+)]
+start_core$eligible_rate <- vapply(
+  start_core$eligible_rate, fmt_pct, character(1))
+start_core$best_hit_rate <- vapply(
+  start_core$best_hit_rate, fmt_pct, character(1))
+names(start_core) <- c(
+  "N", "Start family", "Attempts", "Eligible", "Hits best attained",
+  "Median time (ms)", "Median objective evaluations"
+)
+
+default_miss <- sum(
+  datasets$random_core & !datasets$default_best
+)
+core_n <- sum(datasets$random_core)
+upper <- if (core_n) {
+  stats::binom.test(default_miss, core_n, alternative = "less")$conf.int[[2L]]
+} else {
+  NA_real_
+}
+competing <- sum(
+  datasets$random_core &
+    datasets$objective_basin_class == "competing"
+)
+different_moments <- sum(
+  datasets$random_core &
+    datasets$best_equivalence_class ==
+      "equal-objective-different-moments"
+)
+different_parameters <- sum(
+  datasets$random_core &
+    datasets$best_equivalence_class ==
+      "same-fit-different-parameters"
+)
+candidate_n <- nrow(candidates)
+confirmed_display <- if (has_confirmation) {
+  do.call(rbind, lapply(sort(unique(datasets$n)), function(n_value) {
+    core_n_value <- sum(datasets$random_core & datasets$n == n_value)
+    initial_n <- sum(
+      datasets$random_core & datasets$n == n_value &
+        datasets$objective_basin_class == "competing"
+    )
+    confirmed_n <- sum(
+      confirmation$random_core & confirmation$n == n_value &
+        confirmation$persistent_competing
+    )
+    data.frame(
+      N = n_value,
+      `Random-core datasets` = core_n_value,
+      `Initial competing basins` = initial_n,
+      `Persistent after tight restart` = confirmed_n,
+      `Persistent rate` = fmt_pct(confirmed_n / core_n_value),
+      check.names = FALSE
+    )
+  }))
+} else {
+  data.frame()
+}
+profile_display <- if (has_profiles) {
+  do.call(rbind, lapply(sort(unique(profiles$n)), function(n_value) {
+    subset <- profiles[profiles$n == n_value, ]
+    multiple <- sum(subset$local_envelope_minima >= 2L)
+    data.frame(
+      N = n_value,
+      `Profiled cases` = nrow(subset),
+      `At least two envelope minima` = multiple,
+      `Rate among targeted cases` = fmt_pct(multiple / nrow(subset)),
+      check.names = FALSE
+    )
+  }))
+} else {
+  data.frame()
+}
+short_answer <- if (!is_evidence) {
+  sprintf(
+    paste(
+      "This is a %s run. It validates the multistart machinery but is too",
+      "small for a basin-frequency conclusion."
+    ),
+    profile
+  )
+} else {
+  sprintf(
+    paste(
+      "Across the %d-dataset random core, the default start missed the",
+      "best attained admissible KKT objective %d times (one-sided 95%%",
+      "upper bound %.1f%%). We found %d datasets with competing stationary",
+      "objective basins, %d with equal best objectives but different",
+      "implied moments, and %d with the same fit but distinct parameter",
+      "representatives. %d enriched or random-core datasets require the",
+      "separate confirmation stage."
+    ),
+    core_n, default_miss, 100 * upper, competing, different_moments,
+    different_parameters, candidate_n
+  )
+}
+if (is_evidence && has_confirmation) {
+  confirmed_total <- sum(
+    confirmation$random_core & confirmation$persistent_competing
+  )
+  short_answer <- paste0(
+    short_answer,
+    sprintf(
+      " Tight 20,000-iteration restarts retained competing basins in %d ",
+      confirmed_total
+    ),
+    "random-core datasets."
+  )
+}
+if (is_evidence && has_profiles) {
+  multiple_profiles <- sum(profiles$local_envelope_minima >= 2L)
+  short_answer <- paste0(
+    short_answer,
+    sprintf(
+      " Of %d targeted beta profiles, %d had at least two local minima ",
+      nrow(profiles), multiple_profiles
+    ),
+    "in the feasible lower envelope."
+  )
+}
+```
+
+## Question
+
+Does covariance-honest complete-data ML converge to the same likelihood
+maximum from a reasonable portfolio of standard, warm, restart, and perturbed
+starts?
+
+## Short answer
+
+`r short_answer`
+
+“Best attained” means the smallest objective among the admissible,
+KKT-stationary solutions found by the prespecified portfolio. It is not a
+claim that a global maximum has been proved.
+
+## Screen
+
+The screen independently generates the \(N=10,20,50\) datasets and runs the
+standard PSD-SLSQP fit once. A random core supports frequency statements.
+Every default failure and the largest-\(|\hat\beta|\) estimates are added only
+as diagnostic enrichment.
+
+```{r screen-table}
+knitr::kable(screen_display, row.names = FALSE)
+```
+
+## Basin audit
+
+Objective values, original partable parameters, and implied moments are
+clustered separately. This distinguishes an inferior stationary basin from an
+observationally equivalent parameter representative. Start-sensitive
+eligibility is another axis: it is possible for some starts to fail even when
+all successful starts reach one objective basin.
+
+```{r core-table}
+knitr::kable(core_display, row.names = FALSE)
+```
+
+The objective-equivalence threshold is
+\(10^{-6}\max(1,|F_\star|)\), with raw gaps retained for sensitivity checks.
+Parameter and implied-moment equivalence use scaled distances of \(10^{-4}\)
+and \(10^{-6}\), respectively.
+
+## Start families
+
+```{r start-table}
+knitr::kable(start_core, row.names = FALSE)
+```
+
+The ordinary-ML fit is used only as a source of starting values. An
+inadmissible ordinary estimate is not treated as a candidate solution in the
+PSD model class.
+
+## Confirmation boundary
+
+Only competing objective basins or equal-objective/different-moment cases are
+written to `confirmation_candidates.csv`. They receive high-budget restarts
+and a bidirectional profile over the structural coefficient before being
+described as evidence of multiple maxima. IPOPT remains an optional backend
+cross-check from the near-solution representatives; the pilot did not require
+it after experiment 74 established its non-finite-callback failure mode. The
+base runner deliberately does not launch adaptive confirmation automatically.
+
+```{r confirmation-results}
+if (has_confirmation) {
+  cat(
+    "One representative from each initial cluster was restarted with a ",
+    "20,000-iteration budget and tighter tolerances. The table reports ",
+    "persistence against the original 100-dataset random core at each N.\n\n",
+    sep = ""
+  )
+  print(knitr::kable(confirmed_display, row.names = FALSE))
+}
+```
+
+All initially flagged equal-objective/different-moment cases collapsed under
+the tight restart. They are therefore treated as numerical convergence
+artifacts, not distinct fitted distributions.
+
+```{r profile-results}
+if (has_profiles) {
+  cat(
+    "\nThe beta-profile tier targeted persistent random-core cases, ",
+    "prioritizing default misses with the largest objective gaps. ",
+    "It is diagnostic and intentionally not a frequency sample.\n\n",
+    sep = ""
+  )
+  print(knitr::kable(profile_display, row.names = FALSE))
+}
+```
+
+## Caveats
+
+This experiment concerns one correctly specified two-factor Gaussian SEM and
+one explicit start portfolio. Failure to find competing basins is evidence
+about that design, not a general proof of globality for SEM likelihoods.
+Boundary maxima are retained without regularization because they belong to
+the specified PSD model class.
+
+## Reproduce
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --pilot
+Rscript run_confirmation.R
+Rscript run_profiles.R
+quarto render report.qmd
+```

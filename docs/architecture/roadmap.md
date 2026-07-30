@@ -143,13 +143,22 @@ would require a principled finite-domain formulation, not merely looser
 convergence tolerances.
 
 The terminal audit establishes feasible KKT stationarity, not global
-optimality. Experiment 75's fixed design therefore treats the smallest
-objective found across a prespecified multistart portfolio as “best attained,”
-never as a proved global maximum. It clusters objective values, original
-partable estimates, and implied moments separately so Cholesky
-representation, observational equivalence, and genuinely inferior stationary
-basins are not conflated. Boundary estimates are retained: stabilization would
-change the estimator and remains outside this PSD-ML validation track.
+optimality. Experiment 75 therefore treats the smallest objective found across
+a prespecified multistart portfolio as “best attained,” never as a proved
+global maximum. In its 100-dataset random cores, the default PSD fit hit that
+reference in 76%, 94%, and 100% at \(N=10,20,50\). Most misses were already
+admissible KKT points: 22% and 5% at \(N=10,20\), respectively. Initial
+competing-objective rates were 51%, 23%, and 6%; tight representative restarts
+retained distinct clusters in 44, 20, and 3 datasets. All flagged
+equal-objective/different-moment cases collapsed under the tighter solve, while
+bidirectional fixed-\(\beta\) profiles showed at least two feasible-envelope
+minima in 9 of 13 targeted persistent cases. Thus a successful one-start KKT
+return is not a globality certificate in the tiny-\(N\) design. The audit
+clusters objective values, original partable estimates, and implied moments
+separately so Cholesky representation, observational equivalence, and genuinely
+inferior stationary basins are not conflated. Boundary estimates are retained:
+stabilization would change the estimator and remains outside this PSD-ML
+validation track.
 
 The advisory continuous-corpus audit in
 `tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper
