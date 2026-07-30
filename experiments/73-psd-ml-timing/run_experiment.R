@@ -18,16 +18,16 @@ suppressPackageStartupMessages(library(magmaan))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--full] [options]\n\n",
-  "Time complete-data normal-theory ML under three execution policies:\n",
-  "ordinary L-BFGS, direct PSD-constrained SLSQP, and ordinary ML followed\n",
-  "by a warm-started PSD refit only when the covariance audit fails.\n\n",
+  "Time complete-data normal-theory ML under ordinary, direct-PSD, and\n",
+  "audit-then-refit policies. SLSQP is always included; --include-ipopt\n",
+  "adds matched direct and audit-triggered IPOPT policies.\n\n",
   "Profiles:\n",
   "  --smoke   4 sentinel cases x 3 repetitions (default)\n",
   "  --pilot   9 cases through p=12 x 30 repetitions\n",
   "  --full    10 cases through p=24 x 100 repetitions\n\n",
   "Options:\n",
   "  --repeats N --warmups N --seed-base N\n",
-  "  --cases ID1,ID2 --results-dir PATH\n",
+  "  --cases ID1,ID2 --results-dir PATH --include-ipopt\n",
   sep = "")
 
 parse_args <- function(args) {
@@ -37,7 +37,8 @@ parse_args <- function(args) {
     warmups = NULL,
     seed_base = 20260729L,
     cases = NULL,
-    results_dir = NULL
+    results_dir = NULL,
+    include_ipopt = FALSE
   )
   i <- 1L
   take <- function() {
@@ -60,6 +61,7 @@ parse_args <- function(args) {
     else if (arg == "--seed-base") out$seed_base <- as.integer(take())
     else if (arg == "--cases") out$cases <- parse_csv_arg(take())
     else if (arg == "--results-dir") out$results_dir <- take()
+    else if (arg == "--include-ipopt") out$include_ipopt <- TRUE
     else stop("unknown argument: ", arg, call. = FALSE)
     i <- i + 1L
   }
@@ -256,10 +258,11 @@ ordinary_fit <- function(fixture) {
   ))
 }
 
-psd_fit <- function(fixture, model = fixture$model_object) {
+psd_fit <- function(fixture, model = fixture$model_object,
+                    optimizer = "nlopt-slsqp") {
   suppressWarnings(frontier_fit_ml_psd(
     model, fixture$data_object,
-    optimizer = "nlopt-slsqp",
+    optimizer = optimizer,
     control = list(max_iter = 5000L, gtol = 1e-8)
   ))
 }
@@ -285,6 +288,7 @@ run_policy <- function(policy, fixture) {
       ordinary
     },
     psd_direct = psd_fit(fixture),
+    psd_direct_ipopt = psd_fit(fixture, optimizer = "ipopt"),
     audit_then_psd = {
       ordinary <- ordinary_fit(fixture)
       ordinary_admissible <-
@@ -294,6 +298,19 @@ run_policy <- function(policy, fixture) {
       } else {
         fallback_used <- TRUE
         psd_fit(fixture, with_fit_start(fixture$model_object, ordinary))
+      }
+    },
+    audit_then_psd_ipopt = {
+      ordinary <- ordinary_fit(fixture)
+      ordinary_admissible <-
+        isTRUE(ordinary$diagnostics$admissibility$admissible)
+      if (ordinary_admissible) {
+        ordinary
+      } else {
+        fallback_used <- TRUE
+        psd_fit(
+          fixture, with_fit_start(fixture$model_object, ordinary),
+          optimizer = "ipopt")
       }
     },
     stop("unknown policy: ", policy, call. = FALSE)
@@ -389,7 +406,7 @@ median_or_na <- function(x) {
 
 summarize_timings <- function(timings, fixtures) {
   keys <- unique(timings[c("case_id", "family", "geometry", "p", "n")])
-  policies <- c("ordinary", "psd_direct", "audit_then_psd")
+  policies <- unique(timings$policy)
   rows <- lapply(seq_len(nrow(keys)), function(i) {
     key <- keys[i, ]
     case <- timings[timings$case_id == key$case_id, , drop = FALSE]
@@ -407,6 +424,10 @@ summarize_timings <- function(timings, fixtures) {
       )
     })
     names(values) <- policies
+    metric <- function(policy, name) {
+      value <- values[[policy]]
+      if (is.null(value)) NA_real_ else unname(value[[name]])
+    }
     ordinary_ms <- values$ordinary[["median_ms"]]
     ordinary_rows <- case[
       case$policy == "ordinary" & !nzchar(case$error), , drop = FALSE]
@@ -425,19 +446,40 @@ summarize_timings <- function(timings, fixtures) {
         values$psd_direct[["median_iterations"]],
       audit_fallback_rate =
         values$audit_then_psd[["fallback_rate"]],
+      psd_ipopt_median_ms =
+        metric("psd_direct_ipopt", "median_ms"),
+      audit_ipopt_median_ms =
+        metric("audit_then_psd_ipopt", "median_ms"),
+      psd_ipopt_over_ordinary =
+        metric("psd_direct_ipopt", "median_ms") / ordinary_ms,
+      audit_ipopt_over_ordinary =
+        metric("audit_then_psd_ipopt", "median_ms") / ordinary_ms,
+      psd_ipopt_median_iterations =
+        metric("psd_direct_ipopt", "median_iterations"),
+      audit_ipopt_fallback_rate =
+        metric("audit_then_psd_ipopt", "fallback_rate"),
       ordinary_success_rate = mean(ordinary_rows$converged),
       psd_success_rate = values$psd_direct[["success_rate"]],
       audit_success_rate = values$audit_then_psd[["success_rate"]],
+      psd_ipopt_success_rate =
+        metric("psd_direct_ipopt", "success_rate"),
+      audit_ipopt_success_rate =
+        metric("audit_then_psd_ipopt", "success_rate"),
       stringsAsFactors = FALSE
     )
   })
   do.call(rbind, rows)
 }
 
-validation_rows <- function(fixtures) {
+validation_rows <- function(fixtures, include_ipopt = FALSE) {
   do.call(rbind, lapply(fixtures, function(fixture) {
     ordinary <- ordinary_fit(fixture)
     psd <- psd_fit(fixture)
+    psd_ipopt <- if (include_ipopt) {
+      psd_fit(fixture, optimizer = "ipopt")
+    } else {
+      NULL
+    }
     data.frame(
       case_id = fixture$case_id,
       expected_ordinary_admissible =
@@ -449,7 +491,18 @@ validation_rows <- function(fixtures) {
       psd_admissible = psd$diagnostics$admissibility$admissible,
       ordinary_fmin = ordinary$fmin,
       psd_fmin = psd$fmin,
+      psd_ipopt_converged =
+        if (include_ipopt) psd_ipopt$converged else NA,
+      psd_ipopt_admissible = if (include_ipopt) {
+        psd_ipopt$diagnostics$admissibility$admissible
+      } else {
+        NA
+      },
+      psd_ipopt_fmin =
+        if (include_ipopt) psd_ipopt$fmin else NA_real_,
       fmin_difference = psd$fmin - ordinary$fmin,
+      psd_backend_fmin_difference =
+        if (include_ipopt) psd_ipopt$fmin - psd$fmin else NA_real_,
       max_theta_difference = if (length(psd$theta) == length(ordinary$theta)) {
         max(abs(psd$theta - ordinary$theta))
       } else {
@@ -494,7 +547,11 @@ write_metadata(
     seed_base = cfg$seed_base,
     cases = paste(selected, collapse = ","),
     ordinary_optimizer = "nlopt-lbfgs",
-    psd_optimizer = "nlopt-slsqp",
+    psd_optimizers = if (cfg$include_ipopt) {
+      "nlopt-slsqp,ipopt"
+    } else {
+      "nlopt-slsqp"
+    },
     timing_scope = "prebuilt model and sample statistics; fit call only",
     timer_batch_target_seconds = 0.05,
     timer_batch_max = 1024L
@@ -503,6 +560,10 @@ write_metadata(
 )
 
 policies <- c("ordinary", "psd_direct", "audit_then_psd")
+if (cfg$include_ipopt) {
+  policies <- c(
+    policies, "psd_direct_ipopt", "audit_then_psd_ipopt")
+}
 cat(sprintf(
   "Profile %s: %d cases x %d policies x %d repetitions\n",
   cfg$profile, length(fixtures), length(policies), cfg$repeats))
@@ -548,14 +609,23 @@ for (case_index in seq_along(fixtures)) {
 }
 timings <- do.call(rbind, rows)
 summary <- summarize_timings(timings, fixtures)
-validation <- validation_rows(fixtures)
+validation <- validation_rows(fixtures, cfg$include_ipopt)
+ipopt_pass <- if (cfg$include_ipopt) {
+  with(
+    validation,
+    psd_ipopt_converged & psd_ipopt_admissible &
+      abs(psd_backend_fmin_difference) < 1e-6
+  )
+} else {
+  rep(TRUE, nrow(validation))
+}
 validation$pass <- with(
   validation,
   ordinary_converged &
     ordinary_admissible == expected_ordinary_admissible &
     psd_converged & psd_admissible &
     (!expected_ordinary_admissible | abs(fmin_difference) < 1e-7)
-)
+) & ipopt_pass
 
 write_csv(timings, file.path(results, "timings.csv"))
 write_csv(summary, file.path(results, "case_summary.csv"))

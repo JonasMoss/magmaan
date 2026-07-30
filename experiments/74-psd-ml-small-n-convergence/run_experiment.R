@@ -27,7 +27,10 @@ usage <- function() cat(
   "  --full    published N grid; 1000 replications\n\n",
   "Options:\n",
   "  --reps N --n-values 10,20,50 --seed-base N --max-iter N\n",
-  "  --methods ml-lbfgs,ml-slsqp,psd-ml-slsqp --results-dir PATH\n",
+  paste0(
+    "  --methods ml-lbfgs,ml-slsqp,psd-ml-slsqp,psd-ml-ipopt ",
+    "--results-dir PATH\n"
+  ),
   "  --progress-every N\n",
   sep = "")
 
@@ -91,7 +94,8 @@ parse_args <- function(args) {
   if (is.null(out$reps)) out$reps <- defaults$reps
   if (is.null(out$n_values)) out$n_values <- defaults$n_values
 
-  allowed <- c("ml-lbfgs", "ml-slsqp", "psd-ml-slsqp")
+  allowed <- c(
+    "ml-lbfgs", "ml-slsqp", "psd-ml-slsqp", "psd-ml-ipopt")
   if (!length(out$methods) || any(!out$methods %in% allowed)) {
     stop("methods must be selected from: ", paste(allowed, collapse = ", "),
          call. = FALSE)
@@ -186,6 +190,8 @@ fit_method <- function(method, model, data, control) {
       model, data, optimizer = "nlopt-slsqp", control = control),
     `psd-ml-slsqp` = frontier_fit_ml_psd(
       model, data, optimizer = "nlopt-slsqp", control = control),
+    `psd-ml-ipopt` = frontier_fit_ml_psd(
+      model, data, optimizer = "ipopt", control = control),
     stop("unknown method: ", method, call. = FALSE)
   )
 }
@@ -330,6 +336,14 @@ make_pairs <- function(raw) {
   if (all(c("ml-slsqp", "psd-ml-slsqp") %in% raw$method)) {
     pairs[[length(pairs) + 1L]] <-
       pair_summary(raw, "ml-slsqp", "psd-ml-slsqp")
+  }
+  if (all(c("ml-lbfgs", "psd-ml-ipopt") %in% raw$method)) {
+    pairs[[length(pairs) + 1L]] <-
+      pair_summary(raw, "ml-lbfgs", "psd-ml-ipopt")
+  }
+  if (all(c("psd-ml-slsqp", "psd-ml-ipopt") %in% raw$method)) {
+    pairs[[length(pairs) + 1L]] <-
+      pair_summary(raw, "psd-ml-slsqp", "psd-ml-ipopt")
   }
   if (length(pairs)) do.call(rbind, pairs) else data.frame()
 }

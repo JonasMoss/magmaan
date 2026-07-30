@@ -12,7 +12,10 @@ execute:
 ---
 
 ```{r setup}
-roots <- file.path("results", c("full", "pilot", "smoke"))
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(
+  if (nzchar(override)) override else character(),
+  file.path("results", c("full", "pilot", "smoke")))
 available <- roots[vapply(
   roots,
   function(path) file.exists(file.path(path, "metadata.csv")),
@@ -34,7 +37,8 @@ reps <- as.integer(metadata[["reps"]])
 method_labels <- c(
   `ml-lbfgs` = "Ordinary ML, L-BFGS",
   `ml-slsqp` = "Ordinary ML, SLSQP",
-  `psd-ml-slsqp` = "PSD-ML, SLSQP"
+  `psd-ml-slsqp` = "PSD-ML, SLSQP",
+  `psd-ml-ipopt` = "PSD-ML, IPOPT"
 )
 
 rate_at <- function(n, method, field) {
@@ -46,25 +50,26 @@ fmt_num <- function(x, digits = 3L) formatC(
   x, format = "f", digits = digits)
 
 low <- raw[raw$n < 50L, ]
-pair_rates <- function(baseline) {
+pair_rates <- function(baseline, alternative = "psd-ml-slsqp") {
   left <- low[low$method == baseline, ]
-  right <- low[low$method == "psd-ml-slsqp", ]
+  right <- low[low$method == alternative, ]
   x <- merge(
     left, right,
     by = c("n", "rep", "seed"),
-    suffixes = c("_baseline", "_psd")
+    suffixes = c("_baseline", "_alternative")
   )
   c(
     convergence_rescue = mean(!x$audit_converged_baseline &
-                                x$audit_converged_psd),
+                                x$audit_converged_alternative),
     convergence_harm = mean(x$audit_converged_baseline &
-                              !x$audit_converged_psd),
-    usability_rescue = mean(!x$usable_baseline & x$usable_psd),
-    usability_harm = mean(x$usable_baseline & !x$usable_psd)
+                              !x$audit_converged_alternative),
+    usability_rescue = mean(!x$usable_baseline & x$usable_alternative),
+    usability_harm = mean(x$usable_baseline & !x$usable_alternative)
   )
 }
 lbfgs_pair <- pair_rates("ml-lbfgs")
 slsqp_pair <- pair_rates("ml-slsqp")
+has_ipopt <- "psd-ml-ipopt" %in% raw$method
 
 display_n <- intersect(c(10L, 20L, 50L, 100L), summary$n)
 beta_rows <- lapply(
@@ -94,11 +99,10 @@ display <- merge(
   by = c("n", "method"), all.x = TRUE, sort = FALSE)
 display <- display[order(display$n, display$method), ]
 display$method <- unname(method_labels[display$method])
-display$median_elapsed_ms <- NULL
 names(display) <- c(
   "N", "Method", "Converged", "Admissible",
   "Converged + Admissible", "Non-interior Covariance",
-  "Median Beta", "99th Percentile |Beta|")
+  "Median Time (ms)", "Median Beta", "99th Percentile |Beta|")
 for (field in c("Converged", "Admissible", "Converged + Admissible",
                 "Non-interior Covariance")) {
   display[[field]] <- vapply(display[[field]], fmt_pct, character(1))
@@ -106,11 +110,12 @@ for (field in c("Converged", "Admissible", "Converged + Admissible",
 display$`Median Beta` <- round(display$`Median Beta`, 3L)
 display$`99th Percentile |Beta|` <-
   round(display$`99th Percentile |Beta|`, 3L)
+display$`Median Time (ms)` <- round(display$`Median Time (ms)`, 1L)
 
 is_evidence <- profile %in% c("pilot", "full") && reps >= 200L
 psd_all_admissible <- all(
   raw$admissible[
-    raw$method == "psd-ml-slsqp" & raw$audit_converged])
+    grepl("^psd-ml-", raw$method) & raw$audit_converged])
 psd_returned <- raw[
   raw$method == "psd-ml-slsqp" & raw$returned, ]
 psd_solver_rejected <- raw[
@@ -169,6 +174,31 @@ short_answer <- if (!is_evidence) {
     n10_beta_max
   )
 }
+ipopt_sentence <- if (has_ipopt) {
+  ipopt_n10 <- summary[
+    summary$n == 10L & summary$method == "psd-ml-ipopt", ]
+  slsqp_n10 <- summary[
+    summary$n == 10L & summary$method == "psd-ml-slsqp", ]
+  ipopt_n10_pair <- paired[
+    paired$n == 10L &
+      paired$baseline == "psd-ml-slsqp" &
+      paired$alternative == "psd-ml-ipopt", ]
+  sprintf(
+    paste(
+      "In the IPOPT cross-check at N = 10, PSD-SLSQP was usable in %.1f%%",
+      "of replications versus %.1f%% for IPOPT. Relative to PSD-SLSQP,",
+      "IPOPT rescued %.1f%% but harmed %.1f%% and cost a median %.1fx as",
+      "much."
+    ),
+    100 * slsqp_n10$usable_rate,
+    100 * ipopt_n10$usable_rate,
+    100 * ipopt_n10_pair$usability_rescue_rate,
+    100 * ipopt_n10_pair$usability_harm_rate,
+    ipopt_n10_pair$median_time_ratio
+  )
+} else {
+  ""
+}
 admissibility_sentence <- if (psd_all_admissible) {
   "Every audit-converged PSD-ML fit was covariance-admissible."
 } else {
@@ -189,7 +219,7 @@ normal-theory ML?
 
 ## Short answer
 
-`r short_answer` `r admissibility_sentence`
+`r short_answer` `r admissibility_sentence` `r ipopt_sentence`
 
 ## Evidence
 
@@ -220,6 +250,8 @@ The ordinary-SLSQP row is an attribution control. Comparing PSD-ML only with
 ordinary L-BFGS would combine a changed model class with a changed optimizer.
 Comparing the two SLSQP rows holds the optimizer fixed.
 
+`r if (has_ipopt) "The IPOPT row is a backend robustness cross-check, not another model class. Most IPOPT failures in the N = 10 panel had status Invalid_Number_Detected, consistent with the interior-point path reaching a singular observed-covariance or structural-transform domain where the ML callback is non-finite. The current adapter does not identify which callback rejected the point. NLopt SLSQP can reject such a point with an infinite objective and shorten its step; IPOPT requires a finite smooth callback over its bounded search domain. Returned IPOPT fits nevertheless satisfied the lifted equalities to numerical tolerance." else ""`
+
 ## Caveats
 
 This experiment studies one correctly specified, six-indicator Gaussian SEM.
@@ -247,5 +279,7 @@ From this directory:
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R --pilot
 Rscript run_experiment.R --full
+Rscript run_experiment.R --pilot --reps 200 --n-values 10 \
+  --methods ml-lbfgs,ml-slsqp,psd-ml-slsqp,psd-ml-ipopt
 quarto render report.qmd
 ```

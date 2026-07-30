@@ -45,6 +45,26 @@ inadmissible <- summary[!summary$ordinary_admissible, ]
 median_psd_ratio <- median(interior$psd_over_ordinary)
 median_audit_interior <- median(interior$audit_over_ordinary)
 median_audit_bad <- median(inadmissible$audit_over_ordinary)
+has_ipopt <- "psd_ipopt_median_ms" %in% names(summary) &&
+  any(is.finite(summary$psd_ipopt_median_ms))
+median_ipopt_ratio <- if (has_ipopt) {
+  median(interior$psd_ipopt_over_ordinary, na.rm = TRUE)
+} else {
+  NA_real_
+}
+median_ipopt_over_slsqp <- if (has_ipopt) {
+  median(
+    interior$psd_ipopt_median_ms / interior$psd_median_ms,
+    na.rm = TRUE
+  )
+} else {
+  NA_real_
+}
+median_audit_ipopt_bad <- if (has_ipopt) {
+  median(inadmissible$audit_ipopt_over_ordinary, na.rm = TRUE)
+} else {
+  NA_real_
+}
 largest <- interior[which.max(interior$p), ]
 fallback_count <- sum(!summary$ordinary_admissible)
 all_valid <- nrow(failures) == 0L &&
@@ -60,18 +80,31 @@ scaling_comparison <- comparison[
   grepl("^interior_cfa_", comparison$case_id), ]
 p12_comparison <- scaling_comparison[scaling_comparison$p == 12L, ]
 
-display <- summary[, c(
+display_fields <- c(
   "case_id", "p", "ordinary_admissible",
   "ordinary_median_ms", "psd_median_ms", "audit_median_ms",
-  "psd_over_ordinary", "audit_over_ordinary")]
-names(display) <- c(
+  "psd_over_ordinary", "audit_over_ordinary")
+display_names <- c(
   "Case", "p", "Ordinary Admissible",
   "Ordinary (ms)", "PSD Direct (ms)", "Audit Policy (ms)",
   "PSD / Ordinary", "Audit / Ordinary")
+if (has_ipopt) {
+  display_fields <- c(
+    display_fields,
+    "psd_ipopt_median_ms", "audit_ipopt_median_ms",
+    "psd_ipopt_over_ordinary", "audit_ipopt_over_ordinary"
+  )
+  display_names <- c(
+    display_names,
+    "PSD IPOPT (ms)", "Audit IPOPT (ms)",
+    "IPOPT / Ordinary", "Audit IPOPT / Ordinary"
+  )
+}
+display <- summary[, display_fields]
+names(display) <- display_names
 display$Case <- gsub("_", " ", display$Case, fixed = TRUE)
-numeric_columns <- c(
-  "Ordinary (ms)", "PSD Direct (ms)", "Audit Policy (ms)",
-  "PSD / Ordinary", "Audit / Ordinary")
+numeric_columns <- setdiff(
+  names(display), c("Case", "p", "Ordinary Admissible"))
 display[numeric_columns] <- lapply(
   display[numeric_columns], function(x) round(x, 2L))
 ```
@@ -90,6 +123,7 @@ covariance audit, and refit only inadmissible cases?
   sprintf("After compiling covariance structure, direct PSD fitting took a median %.1fx as long as ordinary NTML across the interior CFA scaling cases. At p=12, PSD time fell %.1fx and its overhead dropped from %.1fx to %.1fx ordinary NTML. The audit-first policy cost %.2fx ordinary NTML when the first fit was admissible, while the deliberately inadmissible fixtures cost %.1fx because they required both fits.", median_psd_ratio, p12_comparison$psd_speedup, p12_comparison$psd_over_ordinary_dense, p12_comparison$psd_over_ordinary_structured, median_audit_interior, median_audit_bad)
 }`
 `r if (all_valid) sprintf(" All %d deliberately inadmissible cases were detected by the ordinary audit and repaired by PSD-ML; all final fits were admissible.", fallback_count) else " At least one validation or final-fit check failed; inspect the CSV outputs before interpreting timings."`
+`r if (has_ipopt) sprintf(" IPOPT reached the same deterministic optima, but direct IPOPT was %.1fx ordinary NTML and %.1fx PSD-SLSQP across the interior cases; audit-triggered IPOPT was %.1fx ordinary NTML on the inadmissible cases.", median_ipopt_ratio, median_ipopt_over_slsqp, median_audit_ipopt_bad) else ""`
 
 ## Evidence
 
@@ -140,10 +174,11 @@ legend(
 ## Caveats
 
 This is a deterministic engineering benchmark, not an estimate of the
-prevalence of improper SEM solutions. It measures the current PSD estimator
-with the one constrained backend available on the benchmark host. The current
-frontier estimator covers complete-data normal-theory ML only; FIML and the
-continuous LS/GMM weight families are not included.
+prevalence of improper SEM solutions. The current frontier estimator covers
+complete-data normal-theory ML only; FIML and the continuous LS/GMM weight
+families are not included.
+
+`r if (has_ipopt) "The IPOPT rows use its limited-memory Hessian mode and create a fresh interior-point problem for every fit. For these small dense lifted SEMs, sparse KKT setup and factorization overhead dominate; the comparison does not claim that every IPOPT formulation or linear-solver build has the same cost." else "IPOPT is opt-in and was not included in this artifact."`
 
 The timing panel deliberately exposes dimension scaling, but it is not a
 textbook-corpus benchmark. The results show that the present implementation
@@ -161,5 +196,6 @@ From this directory:
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R --pilot
 Rscript run_experiment.R --full
+Rscript run_experiment.R --pilot --include-ipopt
 quarto render report.qmd
 ```
