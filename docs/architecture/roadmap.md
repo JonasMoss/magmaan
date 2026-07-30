@@ -127,6 +127,21 @@ stacking. Deterministic exact-model fits separately gate shared off-diagonal
 covariances, nonlinear equalities, independent multi-group blocks, and agreement
 with ordinary interior mean-structure ML.
 
+The optional IPOPT backend has now been measured against the required SLSQP
+backend in experiments 73 and 74. It agrees on the deterministic admissible
+optima but is roughly 40 times slower backend-to-backend on the small interior
+CFA panel, and it returned fewer usable fits in the paired \(N=10\) stress
+cell. Most failures were `Invalid_Number_Detected`. This is consistent with a
+known formulation/backend mismatch: the lifted primitive covariances remain
+PSD along the IPOPT path, but the complete-data ML callback can still be
+non-finite when the implied observed covariance or \(I-B\) transform becomes
+singular. The current adapter does not retain callback-stage failure telemetry.
+NLopt treats the resulting infinite objective as a rejected trial point;
+IPOPT's smooth finite-callback contract does not. IPOPT therefore remains an
+optional cross-check rather than a candidate default. Changing that conclusion
+would require a principled finite-domain formulation, not merely looser
+convergence tolerances.
+
 The advisory continuous-corpus audit in
 `tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper
 model/data summaries by ordinary NTML and PSD-ML. Six ordinary solutions had

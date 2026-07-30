@@ -93,8 +93,24 @@ when they next change.
      fit, the Geiser second-order negative disturbance, and the Geiser
      joint-indefinite quadratic growth covariance. The full 97-case scan
      remains advisory and outside default CI.
-  3. Rerun the backend timing/robustness panel with IPOPT available; massive
-     simulation grids can wait until the deterministic cases are settled.
+  3. **Completed 2026-07-30.** The opt-in IPOPT extensions to experiments 73
+     and 74 compare the same lifted model across backends. In the
+     30-repetition deterministic panel, SLSQP and IPOPT reached the same
+     admissible optima in all nine cases, but direct IPOPT cost a median 75.7x
+     ordinary NTML across the interior CFA cases, versus 2.37x for
+     PSD-SLSQP—about 40x slower backend-to-backend. In the paired
+     200-replication \(N=10\) stress cell, PSD-SLSQP was usable in 95.0% versus
+     81.5% for IPOPT; IPOPT rescued 0.5% and harmed 14.0% relative to SLSQP at
+     a median 57x time ratio. Thirty-one of its 37 failed returns were
+     `Invalid_Number_Detected`, consistent with a formulation/backend mismatch:
+     complete-data ML can be non-finite at singular observed-covariance or
+     structural-transform trial points, NLopt can reject those points with an
+     infinite objective, and IPOPT expects smooth finite callbacks throughout
+     its bounded domain. Keep IPOPT as an optional deterministic cross-check,
+     not a production PSD-ML default. Before reconsidering it, prototype a
+     principled finite-domain formulation and reuse solver/factorization setup;
+     exact Lagrangian Hessians plus callback-stage and reliable IPOPT iteration
+     telemetry are secondary follow-ups.
   4. Study boundary parameter risk and stabilization: compare ordinary ML,
      the covariance cone alone, and deliberately wide data-driven bounds or
      another explicit regularizer, reporting bias, RMSE, coefficient tails,
