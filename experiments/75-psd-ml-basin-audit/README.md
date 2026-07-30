@@ -166,6 +166,26 @@ The raw table has one row per dataset and start. A dataset summary table holds
 the cluster assignments and best-attained comparisons. A cluster-membership
 table retains the representative starts used by the confirmation stage.
 
+## Execution stages
+
+The experiment is deliberately split so the prespecified frequency sample is
+not changed after inspecting the results:
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --pilot
+Rscript run_confirmation.R
+Rscript run_profiles.R
+quarto render report.qmd
+```
+
+The base runner writes the screen, replay, clustering, and candidate tables.
+`run_confirmation.R` tightly restarts one representative from every suspicious
+objective or implied-moment cluster. `run_profiles.R` then profiles a small,
+explicitly targeted subset of persistent random-core cases; those profiles
+support geometric interpretation and are not used for population-frequency
+claims. All three runners accept `--results-dir`.
+
 ## Profiles and stopping rule
 
 - **Smoke:** 30 screened datasets per \(N\), 10 random-core datasets per

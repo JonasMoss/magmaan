@@ -115,20 +115,28 @@ when they next change.
      principled finite-domain formulation and reuse solver/factorization setup;
      exact Lagrangian Hessians plus callback-stage and reliable IPOPT iteration
      telemetry are secondary follow-ups.
-  4. **Design fixed 2026-07-30; implementation remains.** Experiment 75
-     (`experiments/75-psd-ml-basin-audit/`) is a self-contained multistart
-     basin audit on the \(N=10,20,50\) stress cells. Its pilot screens 1,000
-     datasets per \(N\), replays a 100-dataset random core plus every default
-     failure and 25 extreme estimates, and compares at most 13 default, warm,
-     restart, and deterministic perturbed starts. The reference is explicitly
-     the best attained admissible KKT point, not a claimed global oracle.
-     Objective, partable, and implied-moment clustering distinguish inferior
-     stationary basins from same-fit parameter multiplicity; only suspicious
-     datasets receive high-budget, IPOPT, and beta-profile confirmation.
-  5. After the basin audit, decide whether PSD-ML remains an explicit repair
-     method or gains an audit-and-refit convenience workflow. Keep silent
-     automatic fallback out of scope until boundary inference has an explicit
-     policy. Parameter-space bounds or penalties remain a separate
+  4. **Completed 2026-07-30.** Experiment 75
+     (`experiments/75-psd-ml-basin-audit/`) implements the self-contained
+     multistart audit on the \(N=10,20,50\) stress cells. The pilot screened
+     1,000 datasets per cell and replayed the prespecified 100-dataset random
+     core plus default failures and extreme estimates with at most 13 starts.
+     In the random cores, the default fit reached the best attained admissible
+     KKT objective in 76%, 94%, and 100%; 22% and 5% at \(N=10,20\) were
+     eligible but inferior stationary points rather than mere failed returns.
+     Initial competing-basin rates were 51%, 23%, and 6%. Tight
+     20,000-iteration representative restarts retained competing clusters in
+     44, 20, and 3 of the 100 random-core datasets. All three initially flagged
+     equal-objective/different-moment cases collapsed under that restart.
+     Bidirectional fixed-\(\beta\) profiles found at least two minima in the
+     feasible lower envelope for 9 of 13 targeted persistent cases. These are
+     competing feasible KKT basins and strong local-maximum evidence, not a
+     proof that the best attained member is global. Small-\(N\) convergence
+     reports must therefore separate return/KKT success from basin hit.
+  5. Decide whether the methods-developer R helper should expose an optional,
+     deterministic multistart audit/refit workflow. Do not silently replace a
+     one-start PSD fit: the experiment shows that a successful KKT return is
+     not a globality certificate, while boundary inference still needs an
+     explicit policy. Parameter-space bounds or penalties remain a separate
      speculative estimator project.
 
 - **L — extend covariance-honest estimation and boundary inference only on
