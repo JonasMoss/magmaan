@@ -138,7 +138,12 @@ materially different growth-model optimum. This evidence supports ordinary
 lavaan-compatible NTML plus the post-fit audit as the core default, with an
 explicit warm PSD refit as the methods-development policy. It does not support
 silent automatic replacement or ordinary boundary inference. The full decision
-record is `docs/research/notes/psd_ml_corpus_audit.tex`.
+record is `docs/research/notes/psd_ml_corpus_audit.tex`. A compact generated
+fixture at `tests/fixtures/psd_ml/corpus_geometries.json` promotes four
+geometry-diverse cases to default regression coverage without running the
+complete scan: same-fit covariance reallocation, a materially different
+constrained optimum, a negative structural disturbance, and a joint-indefinite
+covariance whose individual variances are positive.
 
 The paired small-sample convergence benchmark
 `experiments/74-psd-ml-small-n-convergence/` uses the six-indicator SEM and

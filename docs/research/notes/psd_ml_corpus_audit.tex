@@ -127,11 +127,13 @@ boundary inference is not yet regularized.
 methods-development workflow.  A convenience policy wrapper is useful only
 when a concrete R consumer asks for it; it is not needed to validate the
 estimator.
-\item Promote four deterministic regression geometries: Little model 3a for
-same-fit reallocation, Little model 4c for a material constrained optimum,
-Geiser second-order CFA for a negative structural disturbance, and Geiser
-quadratic growth for a joint covariance violation.  Prefer compact extracted
-summary fixtures over running the complete corpus in the default suite.
+\item Completed 2026-07-30: four deterministic regression geometries are
+promoted in \path{tests/fixtures/psd_ml/corpus_geometries.json}: Little
+model 3a for same-fit reallocation, Little model 4c for a material constrained
+optimum, Geiser second-order CFA for a negative structural disturbance, and
+Geiser quadratic growth for a joint covariance violation.  The default suite
+uses this compact extracted summary fixture rather than running the complete
+corpus.
 \item Prioritize finite-difference derivative gates plus multi-group,
 mean-structure, and equality-constraint coverage before expanding PSD-ML to
 FIML or weighted least-squares estimators.
