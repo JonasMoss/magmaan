@@ -138,17 +138,19 @@ The paired small-sample convergence benchmark
 sample-size grid shared by De Jonckere--Rosseel and Ernst et al. In the
 1,000-replication run, audit convergence at \(N=10\) was 54.1% for ordinary
 L-BFGS NTML and 96.8% for direct PSD-ML. Against ordinary SLSQP on the same
-datasets, PSD-ML still rescued 47.2% and harmed 0.4%, so the improvement is not
+datasets, PSD-ML still rescued 47.1% and harmed 0.4%, so the improvement is not
 just a backend change. The qualification is substantive: 86.1% of the
 \(N=10\) PSD fits lay on a covariance boundary, and weakly identified raw
 structural coefficients retained extreme tails. PSD-ML therefore repairs
 optimizer and admissibility failures but does not turn very-small-sample
 boundary fits into regular estimates or justify ordinary interior inference.
-That stored full run predates the constrained-KKT terminal audit. Targeted
-replay found that its two PSD solver-success/audit-rejected cases remain
-nonstationary under the correct KKT calculation; the experiment runner now
-records the additional KKT telemetry, and a complete refresh remains required
-before publication.
+The full 1,000-replication artifact was refreshed under the constrained-KKT
+terminal audit on 2026-07-30. It reproduced the \(N=10\) 96.8% versus 54.1%
+headline exactly. Every returned PSD fit had finite KKT telemetry and equality
+violation at most \(1.46\times 10^{-9}\); the two clean solver returns rejected
+by the audit were covariance-admissible and equality-feasible but had KKT
+residuals 0.851 and 24.744. The result is therefore not an artifact of applying
+an unconstrained gradient test to constrained solutions.
 
 ## Implemented Capabilities
 

@@ -73,21 +73,35 @@ when they next change.
   regularizer; it must report parameter risk, not convergence alone.
   Equality-constrained terminal auditing now uses primal feasibility and the
   Lagrangian KKT residual, and the experiment runner records the KKT residual,
-  raw gradient, equality violation, and constraint-Jacobian rank. Refresh the
-  full 1,000-replication artifact under that audit before promoting its exact
-  rates to a manuscript; targeted replay already confirmed that the two
-  solver-success/audit-rejected PSD cases remain nonstationary.
-  Before promoting or benchmarking it broadly, add finite-difference gates for
-  the complete lifted objective/constraint Jacobian, explicit shared-covariance
-  general-linear/nonlinear-equality cases, and multi-group and mean-structure
-  cases. Promote compact extracted summaries for four corpus geometries: the
-  Little same-fit level/residual reallocation, the materially changed Little
-  linear-growth fit, the Geiser second-order negative disturbance, and the
-  Geiser joint-indefinite quadratic growth covariance. Do not put the full
-  97-case scan in default CI. Then rerun the backend timing/robustness panel
-  with IPOPT available; massive simulation grids can wait until these
-  deterministic cases are settled. Decide separately whether original
-  theta-space box bounds should be compiled as additional lifted constraints.
+  raw gradient, equality violation, and constraint-Jacobian rank. The full
+  1,000-replication artifact was refreshed under that audit on 2026-07-30 and
+  reproduced the \(N=10\) 96.8% versus 54.1% headline exactly. The two clean
+  PSD solver returns rejected by the audit were equality-feasible and
+  covariance-admissible but genuinely nonstationary.
+
+  Ordered PSD-ML follow-up queue:
+
+  1. Add finite-difference gates for the complete lifted objective and
+     constraint Jacobian, plus explicit shared-covariance,
+     general-linear/nonlinear-equality, multi-group, and mean-structure cases.
+  2. Promote compact extracted summaries for four corpus geometries: the
+     Little same-fit level/residual reallocation, the materially changed Little
+     linear-growth fit, the Geiser second-order negative disturbance, and the
+     Geiser joint-indefinite quadratic growth covariance. Do not put the full
+     97-case scan in default CI.
+  3. Rerun the backend timing/robustness panel with IPOPT available; massive
+     simulation grids can wait until the deterministic cases are settled.
+  4. Study boundary parameter risk and stabilization: compare ordinary ML,
+     the covariance cone alone, and deliberately wide data-driven bounds or
+     another explicit regularizer, reporting bias, RMSE, coefficient tails,
+     boundary frequency, and convergence.
+  5. Only after the boundary study, decide whether PSD-ML remains an explicit
+     repair method or gains an audit-and-refit convenience workflow. Keep
+     silent automatic fallback out of scope until boundary inference has an
+     explicit policy.
+
+  Decide separately whether original theta-space box bounds should be compiled
+  as additional lifted constraints.
 
 - **L — extend covariance-honest estimation and boundary inference only on
   demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
