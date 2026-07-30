@@ -42,6 +42,7 @@ function(magmaan_add_test_target target label)
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS=1
     DOCTEST_CONFIG_USE_STD_HEADERS=1
     JSON_NOEXCEPTION=1
+    MAGMAAN_ENABLE_TEST_PROBES=1
     MAGMAAN_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 
   doctest_discover_tests(${target}
@@ -98,6 +99,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ipopt_optimizer_test.cpp
   unit/port_optimizer_test.cpp
   unit/optimizer_crosscheck_test.cpp
+  unit/psd_ml_test.cpp
   unit/ls_path_test.cpp
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp

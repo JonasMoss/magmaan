@@ -32,6 +32,7 @@
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/partable.hpp"
 
+#include "detail_psd_probe.hpp"
 #include "detail_vech.hpp"
 
 // Convenience composers: package the data → objective → constraints →
@@ -825,6 +826,93 @@ prelude_fcsem(spec::LatentStructure& pt, const Eigen::VectorXd& x0,
 }
 
 }  // namespace
+
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace psd_test {
+
+fit_expected<PsdDerivativeProbe>
+psd_ml_derivative_probe(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const SampleStats& samp,
+                        const Eigen::VectorXd& theta_start,
+                        double finite_difference_step,
+                        frontier::PsdFitOptions options) {
+  if (!(finite_difference_step > 0.0) ||
+      !std::isfinite(finite_difference_step)) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        "psd_ml_derivative_probe: finite_difference_step must be positive "
+        "and finite"));
+  }
+  auto pre = prelude(pt, rep, samp, theta_start,
+                     "psd_ml_derivative_probe");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, theta_start, options.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto cache = ml_prepare(samp);
+  if (!cache.has_value()) return std::unexpected(cache.error());
+
+  const optim::ScalarProblem objective =
+      psd_ml_problem(pre->ev, rep, pre->con, *layout, samp,
+                     std::move(*cache));
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+
+  PsdDerivativeProbe out;
+  out.x = *start;
+  out.n_alpha = layout->n_alpha;
+  out.n_lift = layout->n_lift;
+  out.objective = objective.f(out.x, out.analytic_gradient);
+  out.constraints = constraints.h(out.x);
+  out.analytic_constraint_jacobian = constraints.jacobian(out.x);
+  if (!std::isfinite(out.objective) ||
+      !out.analytic_gradient.allFinite() ||
+      !out.constraints.allFinite() ||
+      !out.analytic_constraint_jacobian.allFinite()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        "psd_ml_derivative_probe: analytic callback was non-finite"));
+  }
+
+  out.finite_difference_gradient =
+      Eigen::VectorXd::Zero(out.x.size());
+  out.finite_difference_constraint_jacobian =
+      Eigen::MatrixXd::Zero(out.constraints.size(), out.x.size());
+  for (Eigen::Index k = 0; k < out.x.size(); ++k) {
+    const double h = finite_difference_step *
+        std::max(1.0, std::abs(out.x(k)));
+    Eigen::VectorXd xp = out.x;
+    Eigen::VectorXd xm = out.x;
+    xp(k) += h;
+    xm(k) -= h;
+
+    Eigen::VectorXd scratch_p;
+    Eigen::VectorXd scratch_m;
+    const double fp = objective.f(xp, scratch_p);
+    const double fm = objective.f(xm, scratch_m);
+    const Eigen::VectorXd hp = constraints.h(xp);
+    const Eigen::VectorXd hm = constraints.h(xm);
+    if (!std::isfinite(fp) || !std::isfinite(fm) ||
+        !hp.allFinite() || !hm.allFinite()) {
+      return std::unexpected(fit_err(
+          FitError::Kind::NumericIssue,
+          "psd_ml_derivative_probe: finite-difference callback was "
+          "non-finite"));
+    }
+    out.finite_difference_gradient(k) = (fp - fm) / (2.0 * h);
+    if (out.constraints.size() > 0) {
+      out.finite_difference_constraint_jacobian.col(k) =
+          (hp - hm) / (2.0 * h);
+    }
+  }
+  return out;
+}
+
+}  // namespace psd_test
+#endif
 
 namespace {
 
