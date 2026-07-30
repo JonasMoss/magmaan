@@ -68,9 +68,13 @@ when they next change.
   strongly favors PSD-ML, ruling out a backend-only explanation. Do not
   promote it to an automatic small-sample cure: 86.1% of the \(N=10\) PSD
   fits were rank-boundary solutions and the raw structural coefficient had
-  severe tails. A later boundary-inference/stabilization study should compare
-  the covariance cone alone with data-driven wide bounds or another explicit
-  regularizer; it must report parameter risk, not convergence alone.
+  severe tails. Those tails are not themselves an optimizer defect: if a
+  boundary solution is the constrained likelihood maximum, PSD-ML should
+  report it. Bayesian or penalized stabilization is a separate project already
+  recorded in [speculative.md](speculative.md). The next validation question is
+  instead whether the returned KKT point is the best attained maximum across a
+  reasonable start portfolio, and whether equal-objective solutions have the
+  same implied moments.
   Equality-constrained terminal auditing now uses primal feasibility and the
   Lagrangian KKT residual, and the experiment runner records the KKT residual,
   raw gradient, equality violation, and constraint-Jacobian rank. The full
@@ -111,17 +115,21 @@ when they next change.
      principled finite-domain formulation and reuse solver/factorization setup;
      exact Lagrangian Hessians plus callback-stage and reliable IPOPT iteration
      telemetry are secondary follow-ups.
-  4. Study boundary parameter risk and stabilization: compare ordinary ML,
-     the covariance cone alone, and deliberately wide data-driven bounds or
-     another explicit regularizer, reporting bias, RMSE, coefficient tails,
-     boundary frequency, and convergence.
-  5. Only after the boundary study, decide whether PSD-ML remains an explicit
-     repair method or gains an audit-and-refit convenience workflow. Keep
-     silent automatic fallback out of scope until boundary inference has an
-     explicit policy.
-
-  Decide separately whether original theta-space box bounds should be compiled
-  as additional lifted constraints.
+  4. **Design fixed 2026-07-30; implementation remains.** Experiment 75
+     (`experiments/75-psd-ml-basin-audit/`) is a self-contained multistart
+     basin audit on the \(N=10,20,50\) stress cells. Its pilot screens 1,000
+     datasets per \(N\), replays a 100-dataset random core plus every default
+     failure and 25 extreme estimates, and compares at most 13 default, warm,
+     restart, and deterministic perturbed starts. The reference is explicitly
+     the best attained admissible KKT point, not a claimed global oracle.
+     Objective, partable, and implied-moment clustering distinguish inferior
+     stationary basins from same-fit parameter multiplicity; only suspicious
+     datasets receive high-budget, IPOPT, and beta-profile confirmation.
+  5. After the basin audit, decide whether PSD-ML remains an explicit repair
+     method or gains an audit-and-refit convenience workflow. Keep silent
+     automatic fallback out of scope until boundary inference has an explicit
+     policy. Parameter-space bounds or penalties remain a separate
+     speculative estimator project.
 
 - **L — extend covariance-honest estimation and boundary inference only on
   demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,

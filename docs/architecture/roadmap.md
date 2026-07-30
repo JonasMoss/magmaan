@@ -142,6 +142,15 @@ optional cross-check rather than a candidate default. Changing that conclusion
 would require a principled finite-domain formulation, not merely looser
 convergence tolerances.
 
+The terminal audit establishes feasible KKT stationarity, not global
+optimality. Experiment 75's fixed design therefore treats the smallest
+objective found across a prespecified multistart portfolio as “best attained,”
+never as a proved global maximum. It clusters objective values, original
+partable estimates, and implied moments separately so Cholesky
+representation, observational equivalence, and genuinely inferior stationary
+basins are not conflated. Boundary estimates are retained: stabilization would
+change the estimator and remains outside this PSD-ML validation track.
+
 The advisory continuous-corpus audit in
 `tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper
 model/data summaries by ordinary NTML and PSD-ML. Six ordinary solutions had
