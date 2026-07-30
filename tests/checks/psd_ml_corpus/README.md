@@ -16,3 +16,15 @@ ordinary post-fit audit. Generated CSV files stay under `results/`.
 
 The interpretation and July 2026 decision record are in
 `docs/research/notes/psd_ml_corpus_audit.tex`.
+
+Four geometry-diverse findings are also checked in as the compact default-suite
+fixture `tests/fixtures/psd_ml/corpus_geometries.json`, exercised by
+`tests/unit/psd_ml_corpus_test.cpp`. Regenerate that slice from the two source
+fixtures after installing the current package:
+
+```sh
+Rscript tests/tools/regen_psd_ml_corpus_geometries.R
+```
+
+This regeneration runs only the four promoted cases; it does not replace the
+full advisory audit.

@@ -86,11 +86,13 @@ when they next change.
      covariance coordinates, general-linear/nonlinear equalities,
      multi-group blocks, and mean structures. Deterministic exact-model fits
      cover each geometry in `tests/unit/psd_ml_test.cpp`.
-  2. Promote compact extracted summaries for four corpus geometries: the
-     Little same-fit level/residual reallocation, the materially changed Little
-     linear-growth fit, the Geiser second-order negative disturbance, and the
-     Geiser joint-indefinite quadratic growth covariance. Do not put the full
-     97-case scan in default CI.
+  2. **Completed 2026-07-30.** The 10.8 KB
+     `tests/fixtures/psd_ml/corpus_geometries.json` slice and
+     `tests/unit/psd_ml_corpus_test.cpp` now gate the Little same-fit
+     level/residual reallocation, the materially changed Little linear-growth
+     fit, the Geiser second-order negative disturbance, and the Geiser
+     joint-indefinite quadratic growth covariance. The full 97-case scan
+     remains advisory and outside default CI.
   3. Rerun the backend timing/robustness panel with IPOPT available; massive
      simulation grids can wait until the deterministic cases are settled.
   4. Study boundary parameter risk and stabilization: compare ordinary ML,
