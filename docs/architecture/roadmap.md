@@ -119,6 +119,13 @@ the KKT residual, raw objective-gradient norm, equality violation, and
 constraint-Jacobian rank under `fit$audit`. Boundary fits are reported by the
 existing covariance diagnostics; ordinary interior information-matrix
 inference is not yet promoted as valid at a rank-deficient component solution.
+The production lifted-objective compiler has a private derivative-probe seam
+used only by regression tests. Central finite differences now gate the complete
+lifted ML gradient and equality Jacobian for mean structures, shared covariance
+coordinates, general linear and nonlinear equalities, and multi-group block
+stacking. Deterministic exact-model fits separately gate shared off-diagonal
+covariances, nonlinear equalities, independent multi-group blocks, and agreement
+with ordinary interior mean-structure ML.
 
 The advisory continuous-corpus audit in
 `tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper

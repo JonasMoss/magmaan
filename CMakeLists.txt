@@ -217,6 +217,7 @@ endif()
 # Tests
 # ---------------------------------------------------------------------------
 if(MAGMAAN_BUILD_TESTS)
+  target_compile_definitions(magmaan PRIVATE MAGMAAN_ENABLE_TEST_PROBES=1)
   enable_testing()
   add_subdirectory(tests)
 endif()

@@ -81,9 +81,11 @@ when they next change.
 
   Ordered PSD-ML follow-up queue:
 
-  1. Add finite-difference gates for the complete lifted objective and
-     constraint Jacobian, plus explicit shared-covariance,
-     general-linear/nonlinear-equality, multi-group, and mean-structure cases.
+  1. **Completed 2026-07-30.** Central finite-difference gates now exercise
+     the production lifted objective and constraint Jacobian for shared
+     covariance coordinates, general-linear/nonlinear equalities,
+     multi-group blocks, and mean structures. Deterministic exact-model fits
+     cover each geometry in `tests/unit/psd_ml_test.cpp`.
   2. Promote compact extracted summaries for four corpus geometries: the
      Little same-fit level/residual reallocation, the materially changed Little
      linear-growth fit, the Geiser second-order negative disturbance, and the

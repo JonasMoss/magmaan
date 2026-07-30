@@ -1,0 +1,36 @@
+#pragma once
+
+#include <Eigen/Core>
+
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/expected.hpp"
+
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace magmaan::estimate::psd_test {
+
+// Private production-compiler seam for derivative regression tests. The probe
+// evaluates the same lifted objective and equality callbacks used by
+// fit_ml_psd() at its projected start, then independently central-differences
+// both callbacks in lifted coordinates.
+struct PsdDerivativeProbe {
+  Eigen::VectorXd x;
+  double objective = 0.0;
+  Eigen::VectorXd analytic_gradient;
+  Eigen::VectorXd finite_difference_gradient;
+  Eigen::VectorXd constraints;
+  Eigen::MatrixXd analytic_constraint_jacobian;
+  Eigen::MatrixXd finite_difference_constraint_jacobian;
+  Eigen::Index n_alpha = 0;
+  Eigen::Index n_lift = 0;
+};
+
+fit_expected<PsdDerivativeProbe>
+psd_ml_derivative_probe(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::SampleStats& samp,
+                        const Eigen::VectorXd& theta_start,
+                        double finite_difference_step = 1e-6,
+                        frontier::PsdFitOptions options = {});
+
+}  // namespace magmaan::estimate::psd_test
+#endif
