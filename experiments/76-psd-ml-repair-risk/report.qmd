@@ -1,0 +1,249 @@
+---
+title: "What does covariance-honest NTML repair?"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(
+  if (nzchar(override)) override else character(),
+  file.path("results", c("full", "pilot", "smoke")))
+available <- roots[vapply(
+  roots,
+  function(path) file.exists(file.path(path, "metadata.csv")),
+  logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+corpus <- read_result("corpus_anatomy.csv")
+changes <- read_result("corpus_parameter_changes.csv")
+raw <- read_result("risk_raw.csv")
+pairs <- read_result("risk_pairs.csv")
+method_summary <- read_result("risk_method_summary.csv")
+pair_summary <- read_result("risk_pair_summary.csv")
+metadata_frame <- read_result("metadata.csv")
+metadata <- setNames(metadata_frame$value, metadata_frame$key)
+profile <- metadata[["profile"]]
+reps <- as.integer(metadata[["reps"]])
+is_evidence <- profile %in% c("pilot", "full") && reps >= 200L
+
+fmt_pct <- function(x) sprintf("%.1f%%", 100 * x)
+fmt_num <- function(x, digits = 3L) formatC(
+  x, format = "f", digits = digits)
+
+ordinary_bad <- sum(!pairs$ordinary_admissible)
+all_psd_usable <- all(pairs$psd_usable)
+repaired <- pairs[pairs$both_analysis_ok & !pairs$ordinary_admissible, ]
+mean_repaired_psi <- mean(repaired$psi_error_improvement)
+mean_repaired_sigma <- mean(repaired$sigma_error_improvement)
+mean_repaired_kl <- mean(repaired$kl_improvement)
+rate_repaired_psi <- mean(repaired$psi_error_improvement > 1e-10)
+rate_repaired_sigma <- mean(repaired$sigma_error_improvement > 1e-10)
+rate_repaired_kl <- mean(repaired$kl_improvement > 1e-10)
+median_time_ratio <- median(pairs$time_ratio, na.rm = TRUE)
+
+short_answer <- if (!is_evidence) {
+  sprintf(
+    paste(
+      "This is a %s validation run with %d replications per cell.",
+      "It verifies the design and report, but it is not the prespecified",
+      "risk pilot."
+    ), profile, reps)
+} else {
+  sprintf(
+    paste(
+      "Across %d generated datasets, ordinary NTML left the primitive",
+      "covariance domain %d times; every warm PSD refit was KKT-converged",
+      "and admissible. Conditional on an ordinary inadmissible estimate,",
+      "PSD-ML reduced mean relative error by %.4f for Psi and %.4f for",
+      "Sigma, and reduced mean population KL loss by %.4f. It improved",
+      "all three losses in %.1f%%, %.1f%%, and %.1f%% of repaired datasets,",
+      "respectively. The median PSD/ordinary fit-time ratio was %.2f."
+    ),
+    nrow(pairs), ordinary_bad,
+    mean_repaired_psi, mean_repaired_sigma, mean_repaired_kl,
+    100 * rate_repaired_psi, 100 * rate_repaired_sigma,
+    100 * rate_repaired_kl, median_time_ratio)
+}
+
+corpus_display <- corpus[, c(
+  "set", "id", "geometry", "ordinary_psi_min", "psd_psi_min",
+  "lr_scale_increase", "max_abs_parameter_change",
+  "implied_sigma_relative_distance")]
+names(corpus_display) <- c(
+  "Set", "Case", "Geometry", "Ordinary min eig(Psi)",
+  "PSD min eig(Psi)", "LR-scale cost", "Max parameter change",
+  "Relative implied-Sigma change")
+for (field in names(corpus_display)[4:8]) {
+  corpus_display[[field]] <- format(
+    corpus_display[[field]], digits = 4L, scientific = TRUE)
+}
+
+display_n <- sort(unique(pair_summary$n))
+display_lambda <- sort(unique(pair_summary$lambda_min))
+positive_lambda <- display_lambda[display_lambda > 0]
+lambda_offset <- if (length(positive_lambda)) min(positive_lambda) / 2 else 1
+lambda_coordinate <- function(x) log10(x + lambda_offset)
+risk_display <- pair_summary[, c(
+  "n", "lambda_min", "ordinary_inadmissible_rate",
+  "psd_boundary_rate", "repaired_mean_psi_error_improvement",
+  "repaired_mean_sigma_error_improvement",
+  "repaired_mean_kl_improvement", "median_time_ratio")]
+names(risk_display) <- c(
+  "N", "lambda", "Ordinary inadmissible", "PSD boundary",
+  "Psi error improvement", "Sigma error improvement",
+  "KL improvement", "Time ratio")
+risk_display$`Ordinary inadmissible` <- vapply(
+  risk_display$`Ordinary inadmissible`, fmt_pct, character(1))
+risk_display$`PSD boundary` <- vapply(
+  risk_display$`PSD boundary`, fmt_pct, character(1))
+for (field in c("Psi error improvement", "Sigma error improvement",
+                "KL improvement", "Time ratio")) {
+  risk_display[[field]] <- round(risk_display[[field]], 4L)
+}
+```
+
+## Question
+
+When ordinary complete-data normal-theory ML estimates an indefinite primitive
+LISREL covariance, what does an explicit covariance-honest refit change? In a
+controlled Gaussian model generated from a genuinely PSD population, does the
+repair improve estimation risk near the covariance boundary?
+
+## Short answer
+
+`r short_answer`
+
+This is an estimation experiment. The objective difference is descriptive and
+is not assigned a p-value or likelihood-ratio reference distribution.
+
+## Repair anatomy
+
+```{r corpus-table}
+knitr::kable(corpus_display, align = "lllrrrrr")
+```
+
+The four deterministic cases show that “an improper solution” is not a single
+phenomenon. The first Little model permits a nontrivial reallocation between
+residual and latent level variance with effectively unchanged likelihood and
+implied observed covariance. Its linear-growth companion pays a substantial
+fit cost and moves the fitted observed covariance materially. The Geiser
+second-order disturbance is repaired at negligible likelihood cost, whereas
+the jointly indefinite quadratic-growth covariance produces an intermediate
+change despite all individual variances being positive.
+
+The LR-scale cost is $2N(F_{PSD}-F_{ordinary})$. It is shown only to make the
+size of the likelihood sacrifice legible; it is not a test statistic in this
+report.
+
+## Controlled covariance path
+
+The risk design fixes indicator residual variance at $0.2$ and varies the
+smallest eigenvalue of a three-dimensional latent covariance:
+
+\[
+  \operatorname{eig}(\Psi)=(1,0.4,\lambda_{min}),\qquad
+  \Sigma=\Psi+0.2I.
+\]
+
+Consequently, the observed Gaussian likelihood remains regular even when the
+primitive latent covariance is exactly singular. Ordinary NTML is saturated in
+the observed covariance; PSD-ML changes it only when the implied primitive
+estimate would leave the covariance domain.
+
+```{r inadmissibility-plot, fig.width=7.5, fig.height=4.8}
+colors <- grDevices::hcl.colors(length(display_n), "Dark 3")
+plot(
+  range(lambda_coordinate(display_lambda)), c(0, 1), type = "n",
+  xlab = expression(lambda[min]),
+  ylab = "Proportion",
+  main = "When does ordinary NTML leave the PSD domain?",
+  xaxt = "n")
+axis(1, at = lambda_coordinate(display_lambda),
+     labels = format(display_lambda, scientific = FALSE, trim = TRUE))
+for (i in seq_along(display_n)) {
+  x <- pair_summary[pair_summary$n == display_n[[i]], ]
+  lines(lambda_coordinate(x$lambda_min), x$ordinary_inadmissible_rate,
+        type = "b", pch = 14L + i, col = colors[[i]], lwd = 2)
+}
+legend("topright", legend = paste0("N = ", display_n),
+       col = colors, pch = 15L + seq_along(display_n), lwd = 2,
+       bty = "n")
+```
+
+The horizontal coordinate is $\log_{10}(\lambda+c)$, with $c$ equal to half
+the smallest positive grid value, so the exact zero boundary remains visible.
+At the exact population boundary, the constrained estimate may itself land either on the
+boundary or in the interior. The fitted rank is therefore a description of the
+sample solution, not a rank-selection claim.
+
+```{r risk-table}
+knitr::kable(risk_display, align = "rrrrrrrr")
+```
+
+Positive error improvements favor PSD-ML and are calculated conditional on the
+ordinary estimate being inadmissible. `NA` cells indicate that no repair was
+triggered in that cell. When ordinary NTML is already admissible, the paired
+solutions agree to numerical precision.
+
+## Population KL loss
+
+```{r kl-plot, fig.width=8, fig.height=7}
+old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 2.5, 1))
+on.exit(par(old_par), add = TRUE)
+method_colors <- c(ordinary = "#B23A48", psd = "#246A73")
+for (n_value in display_n) {
+  x <- method_summary[method_summary$n == n_value, ]
+  ylim <- range(x$mean_population_kl, finite = TRUE)
+  plot(
+    range(lambda_coordinate(display_lambda)), ylim, type = "n", xaxt = "n",
+    xlab = expression(lambda[min]), ylab = "Mean population KL",
+    main = paste0("N = ", n_value))
+  axis(1, at = lambda_coordinate(display_lambda),
+       labels = format(display_lambda, scientific = FALSE, trim = TRUE))
+  for (method in c("ordinary", "psd")) {
+    z <- x[x$method == method, ]
+    lines(lambda_coordinate(z$lambda_min), z$mean_population_kl, type = "b",
+          pch = if (method == "ordinary") 16 else 17,
+          col = method_colors[[method]], lwd = 2)
+  }
+  if (n_value == display_n[[1L]]) {
+    legend("topright", legend = c("Ordinary", "PSD"),
+           col = method_colors, pch = c(16, 17), lwd = 2, bty = "n")
+  }
+}
+```
+
+The constraint is beneficial where the ordinary estimate violates a true
+population restriction. As sample size grows or the population moves inward,
+ordinary inadmissibility becomes rare and the two estimators coincide. The
+experiment therefore supports an audit-first policy, not unconditional silent
+replacement of ordinary NTML.
+
+## Numerical checks and limits
+
+- The run contains `r nrow(pairs)` paired datasets and
+  `r nrow(raw)` fitted-result rows.
+- `r if (all_psd_usable) "Every PSD refit passed the KKT and covariance-admissibility audits." else "At least one PSD refit failed; inspect the raw results."`
+- Ordinary and PSD estimates both returned for
+  `r fmt_pct(mean(pairs$both_analysis_ok))` of datasets.
+- The median warm-PSD/ordinary time ratio was
+  `r fmt_num(median_time_ratio, 2L)`.
+
+This deliberately transparent model does not represent the full difficulties
+of a latent SEM with estimated loadings, structural regressions, equality
+links, or competing likelihood basins. Those geometries are represented by the
+four repair cases and prior validation experiments, but the risk conclusion is
+limited to this controlled DGP. No inferential coverage or hypothesis-testing
+claim is made.
