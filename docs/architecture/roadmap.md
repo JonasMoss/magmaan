@@ -178,6 +178,23 @@ complete scan: same-fit covariance reallocation, a materially different
 constrained optimum, a negative structural disturbance, and a joint-indefinite
 covariance whose individual variances are positive.
 
+Experiment 76 (`experiments/76-psd-ml-repair-risk/`) turns those four
+geometries into a compact repair-anatomy panel and adds a controlled
+near-boundary risk path. The Gaussian DGP fixes three unit-loading,
+single-indicator residual variances at 0.2 and varies the eigenvalues of the
+latent covariance as `(1, 0.4, lambda_min)`, so the observed covariance remains
+uniformly positive definite even at the primitive boundary. In the
+prespecified 4,000-dataset pilot, ordinary NTML was covariance-inadmissible in
+1,540 datasets; all 4,000 ordinary-warm PSD refits were KKT-converged and
+admissible. Conditional on an ordinary inadmissible estimate, PSD-ML reduced
+mean relative error by 0.00462 for the primitive covariance and 0.00367 for the
+implied observed covariance, and reduced mean population Gaussian KL loss by
+0.0354. Every repaired dataset improved on all three losses in this transparent
+design. The median warm-PSD/ordinary time ratio was 1.20. These are
+model-specific risk results, not an inferential or universal dominance claim;
+they support the explicit audit/refit policy and show why fitted boundary rank
+must remain descriptive rather than being treated as automatic rank selection.
+
 The paired small-sample convergence benchmark
 `experiments/74-psd-ml-small-n-convergence/` uses the six-indicator SEM and
 sample-size grid shared by De Jonckere--Rosseel and Ernst et al. In the

@@ -71,10 +71,10 @@ when they next change.
   severe tails. Those tails are not themselves an optimizer defect: if a
   boundary solution is the constrained likelihood maximum, PSD-ML should
   report it. Bayesian or penalized stabilization is a separate project already
-  recorded in [speculative.md](speculative.md). The next validation question is
-  instead whether the returned KKT point is the best attained maximum across a
-  reasonable start portfolio, and whether equal-objective solutions have the
-  same implied moments.
+  recorded in [speculative.md](speculative.md). The subsequent validation
+  question was whether the returned KKT point was the best attained maximum
+  across a reasonable start portfolio, and whether equal-objective solutions
+  had the same implied moments.
   Equality-constrained terminal auditing now uses primal feasibility and the
   Lagrangian KKT residual, and the experiment runner records the KKT residual,
   raw gradient, equality violation, and constraint-Jacobian rank. The full
@@ -132,7 +132,21 @@ when they next change.
      competing feasible KKT basins and strong local-maximum evidence, not a
      proof that the best attained member is global. Small-\(N\) convergence
      reports must therefore separate return/KKT success from basin hit.
-  5. **Possible compact-multistart follow-up.** Design and validate a smaller
+  5. **Completed 2026-07-31.** Experiment 76
+     (`experiments/76-psd-ml-repair-risk/`) supplies a four-case repair-anatomy
+     panel and a controlled primitive-boundary risk path without extending to
+     another estimator. Its 4,000-dataset pilot keeps the observed covariance
+     safely PD while varying the smallest latent-covariance eigenvalue over
+     `0,.001,.01,.05,.20`. Ordinary NTML was inadmissible 1,540 times; every
+     ordinary-warm PSD refit was KKT-converged and admissible. Conditional on
+     those repairs, PSD-ML improved primitive-covariance error,
+     implied-covariance error, and population Gaussian KL loss in all 1,540
+     datasets, with mean improvements 0.00462, 0.00367, and 0.0354 and a median
+     PSD/ordinary time ratio of 1.20. Treat this as transparent model-specific
+     risk evidence for audit-first refitting, not a dominance theorem or an
+     inferential result. The pilot is sufficiently decisive for this design;
+     do not run the 1,000-replication full profile absent a new precision need.
+  6. **Possible compact-multistart follow-up.** Design and validate a smaller
      deterministic portfolio on fresh held-out replications before exposing an
      optional methods-developer R audit/refit helper. In experiment 75's pilot,
      the cumulative best-attained hit rates at \(N=10,20,50\) were
