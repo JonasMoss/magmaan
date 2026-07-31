@@ -148,6 +148,23 @@ when they next change.
      needs an explicit policy. Parameter-space bounds or penalties remain a
      separate speculative estimator project.
 
+- **XL — covariance-honest SEM paper and optional uniform parameter
+  inference.** The independent exploratory paper project is
+  `papers/covariance-honest-sem/`. Its required contribution is the existing
+  complete-data NTML estimator, admissibility contract, corpus evidence,
+  small-sample convergence study, and basin audit; boundary-aware inference is
+  explicitly optional. If inference proceeds, keep the first claim to correctly
+  specified complete-data Gaussian NTML with a unique locally identified
+  optimum and positive-definite implied observed covariance. Target coverage
+  that is uniform across interior points, PSD-boundary rank strata, and
+  local-to-boundary eigenvalue sequences, rather than merely plugging an
+  estimated active set into pointwise cone asymptotics. First map the SEM
+  parameter space and NTML local expansion into the assumptions of the recent
+  proximal/uniform constrained-extremum results. Only then implement a compact
+  comparison of ordinary Wald, plug-in cone, ordinary and directional
+  bootstrap, and proximal/local-quadratic confidence sets. Full
+  profile-likelihood intervals and likelihood-ratio tests remain deferred.
+
 - **L — extend covariance-honest estimation and boundary inference only on
   demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
   ordinal, two-level, and native FC-SEM need estimator-specific lifted
