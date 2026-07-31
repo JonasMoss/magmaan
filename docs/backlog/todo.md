@@ -132,12 +132,21 @@ when they next change.
      competing feasible KKT basins and strong local-maximum evidence, not a
      proof that the best attained member is global. Small-\(N\) convergence
      reports must therefore separate return/KKT success from basin hit.
-  5. Decide whether the methods-developer R helper should expose an optional,
-     deterministic multistart audit/refit workflow. Do not silently replace a
-     one-start PSD fit: the experiment shows that a successful KKT return is
-     not a globality certificate, while boundary inference still needs an
-     explicit policy. Parameter-space bounds or penalties remain a separate
-     speculative estimator project.
+  5. **Possible compact-multistart follow-up.** Design and validate a smaller
+     deterministic portfolio on fresh held-out replications before exposing an
+     optional methods-developer R audit/refit helper. In experiment 75's pilot,
+     the cumulative best-attained hit rates at \(N=10,20,50\) were
+     76%/94%/100% for the default alone, 90%/97%/100% after adding the PSD
+     restart and one moderate perturbation, 99%/100%/100% after eight starts,
+     and 100%/100%/100% after nine. The eight-start portfolio cost roughly
+     nine one-start fits but only 10--11 ms for this small model. These are
+     in-sample portfolio-selection numbers, not a production guarantee; the
+     next experiment should freeze a compact ordering, evaluate likelihood/AIC
+     gaps and parameter changes out of sample, and measure scaling on larger
+     models. Do not silently replace a one-start PSD fit: a successful KKT
+     return is not a globality certificate, while boundary inference still
+     needs an explicit policy. Parameter-space bounds or penalties remain a
+     separate speculative estimator project.
 
 - **L — extend covariance-honest estimation and boundary inference only on
   demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
