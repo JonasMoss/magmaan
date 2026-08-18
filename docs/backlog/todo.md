@@ -315,6 +315,10 @@ when they next change.
   .048/.040/.046/.050 (pooled .046). Score pEBA4 was mildly conservative
   (pooled .0365), LRT pEBA4 mildly liberal (.0565), while MLR and robust Wald
   were clearly liberal (.1165/.113 pooled; MLR reached .206 under skewed MCAR).
+  A 100-dataset same-data oracle on these exact four null cells matched lavaan
+  `estimator="MLR", missing="ml"` with zero df/decision mismatches and maximum
+  absolute differences `1.9e-5` in p, `4.8e-5` in the scaling factor, and
+  `4.8e-4` in the trace components, so the MLR result is not a magmaan artifact.
   Matched-null power left LRT pEBA4 (.583), effective flips (.573), and score
   pEBA4 (.548) close enough to retain as the next three-method shortlist. The
   run took 25.9 seconds on four workers with no fit/test failures. The next

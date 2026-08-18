@@ -16,6 +16,27 @@ saturated fits converged; the LRT spectrum, score, flip, and Wald computations
 had no reported failures. The MLR p-value was non-finite in three extremely
 small-p power replications, while every other recorded method remained finite.
 
+## MLR provenance and oracle
+
+The `lrt_mlr` arm calls the dedicated
+`magmaan_core$estimate_fiml_robust_mlr(fit)` binding; it is not assembled from
+the FMG table in experiment code. The binding delegates to C++
+`estimate::fiml::fiml_robust_mlr`: observed-pattern casewise scores form the
+Huber--White meat, the analytic observed FIML Hessian is the bread, and the
+Mplus/Yuan--Bentler test uses
+`trace_ugamma = trace_ugamma_h1 - trace_ugamma_h0`,
+`c = trace_ugamma / df`, and `chisq_scaled = chisq / c`.
+
+`validate_mlr_lavaan.R` established the result again on this exact pilot model.
+It fit magmaan FIML plus the post-fit MLR function and lavaan
+`sem(..., estimator="MLR", missing="ml")` to the same 100 null datasets across
+all four distribution/missingness cells. There were zero df or .05-decision
+mismatches. Maximum absolute differences were `2.6e-7` for the unscaled LRT,
+`.00166` for the scaled statistic, `1.9e-5` for its p-value, `4.8e-5` for the
+scaling factor, and `4.8e-4` for the H1/H0 trace components. The oracle run took
+9.4 seconds. Thus the pilot's MLR over-rejection is also lavaan's MLR result,
+not an experiment-local reconstruction or a magmaan implementation artifact.
+
 ## Null calibration
 
 The effective multiplier score was the cleanest result: its four cellwise
