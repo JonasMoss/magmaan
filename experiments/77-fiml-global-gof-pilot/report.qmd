@@ -19,6 +19,9 @@ summary <- read_result("method_summary")
 size_adjusted <- read_result("size_adjusted_power_pooled")
 metadata <- read_result("metadata")
 meta <- setNames(metadata$value, metadata$key)
+parity_path <- file.path(result_dir, "mlr_lavaan_parity_summary.csv")
+parity <- if (file.exists(parity_path)) read.csv(
+  parity_path, stringsAsFactors = FALSE) else NULL
 ```
 
 ## Purpose
@@ -61,10 +64,29 @@ This run used `r meta[["reps"]]` replications per cell and
 are intentionally wide: the run is for eliminating obviously broken options
 and choosing the next iteration, not for a final calibration claim.
 
+## MLR oracle
+
+`p_lrt_mlr` is not reconstructed in the experiment. It comes from magmaan's
+dedicated `estimate_fiml_robust_mlr()` binding, which computes the
+Yuan--Bentler/Mplus FIML statistic from the model-vs-saturated LRT and the H1
+minus H0 trace correction. The companion validation script fits lavaan with
+`estimator = "MLR", missing = "ml"` on the identical generated data.
+
+```{r parity}
+if (!is.null(parity)) {
+  show_parity <- parity[, c("metric", "n", "max_abs_difference",
+                            "mean_abs_difference")]
+  knitr::kable(show_parity, digits = 7, row.names = FALSE)
+} else {
+  cat("Run `validate_mlr_lavaan.R` to populate the same-data oracle table.")
+}
+```
+
 ## Reproduce
 
 ```sh
 Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --smoke
 Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --pilot
+Rscript experiments/77-fiml-global-gof-pilot/validate_mlr_lavaan.R
 quarto render experiments/77-fiml-global-gof-pilot/report.qmd
 ```
