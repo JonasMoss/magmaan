@@ -1,0 +1,70 @@
+---
+title: "Five-minute FIML global-GOF pilot"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
+result_dir <- file.path(script_dir, "results", "pilot")
+read_result <- function(name) read.csv(
+  file.path(result_dir, paste0(name, ".csv")), stringsAsFactors = FALSE)
+summary <- read_result("method_summary")
+size_adjusted <- read_result("size_adjusted_power_pooled")
+metadata <- read_result("metadata")
+meta <- setNames(metadata$value, metadata$key)
+```
+
+## Purpose
+
+This is a deliberately narrow bridge experiment. The restricted model is a
+five-variable independence covariance model, and the less-restricted model
+frees every observed covariance and is therefore saturated. Consequently the
+existing affine nested-score machinery is, in this design, a genuine global
+goodness-of-fit score test. This lets us screen score, multiplier, Wald, and
+likelihood-ratio constructions before implementing a general nonlinear-SEM
+global-score API.
+
+The eight cells cross normal versus standardized log-normal margins, complete
+data versus 30% MCAR on four variables, and a true null versus a Gaussian-copula
+correlation of .35 between the first two variables. The first variable is always
+observed. Each model has 10 degrees of freedom.
+
+## Results
+
+```{r table}
+show <- summary[, c("truth", "distribution", "missing_rate", "method",
+                    "valid", "rejection_rate", "ci_lower", "ci_upper")]
+show$missing_rate <- sprintf("%.0f%%", 100 * show$missing_rate)
+show$rejection_rate <- sprintf("%.3f", show$rejection_rate)
+show$ci <- sprintf("[%.3f, %.3f]", show$ci_lower, show$ci_upper)
+show$ci_lower <- show$ci_upper <- NULL
+knitr::kable(show, row.names = FALSE)
+```
+
+```{r adjusted-power}
+size_adjusted$size_adjusted_power <- sprintf(
+  "%.3f", size_adjusted$size_adjusted_power)
+knitr::kable(size_adjusted, row.names = FALSE,
+             col.names = c("method", "mean size-adjusted power"))
+```
+
+This run used `r meta[["reps"]]` replications per cell and
+`r meta[["flips"]]` multiplier draws. Its wall time was
+`r sprintf("%.1f", as.numeric(meta[["wall_seconds"]]))` seconds. The intervals
+are intentionally wide: the run is for eliminating obviously broken options
+and choosing the next iteration, not for a final calibration claim.
+
+## Reproduce
+
+```sh
+Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --smoke
+Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --pilot
+quarto render experiments/77-fiml-global-gof-pilot/report.qmd
+```
