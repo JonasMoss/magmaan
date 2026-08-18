@@ -307,6 +307,21 @@ when they next change.
   and its finite-sample behavior is still design-specific. The
   next publication-grade GOF gate, if needed, is a qualitatively different
   nonnormal generator or directional kurtosis, not a denser `n/q` grid.
+  Experiment 77 adds a direct-FIML global-GOF bridge in which a five-variable
+  independence model is nested affinely in the saturated covariance model, so
+  the existing nested score/flip machinery is exactly a global GOF test. Across
+  normal/skewed margins, complete/30%-MCAR data, `n=120`, 10 df, and 500 null
+  replications per cell, effective multiplier rejection was
+  .048/.040/.046/.050 (pooled .046). Score pEBA4 was mildly conservative
+  (pooled .0365), LRT pEBA4 mildly liberal (.0565), while MLR and robust Wald
+  were clearly liberal (.1165/.113 pooled; MLR reached .206 under skewed MCAR).
+  Matched-null power left LRT pEBA4 (.583), effective flips (.573), and score
+  pEBA4 (.548) close enough to retain as the next three-method shortlist. The
+  run took 25.9 seconds on four workers with no fit/test failures. The next
+  bounded step is a general H0 saturated-moment score projection for latent SEM,
+  not more independence-model cells: it must test whether score pEBA4 and
+  effective multipliers avoid the saturated-H1 failure in the current FIML-FMG
+  paper design. Keep MLR and robust Wald only as negative controls there.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
