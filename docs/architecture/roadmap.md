@@ -249,10 +249,22 @@ fits returned; 11,424 were audit-stationary and every one was admissible. The
 block boundary cells. All 2,353 eligible stationary/admissible interior pairs
 passed the prespecified objective and fitted-moment agreement gates. The pilot
 also exposed the terminal-link amplification defect described above before the
-final replay. The remaining Experiment 78 work is the focused multi-group and
-misspecification cells, weight conditioning, missing-data, categorical, and
-targeted multistart/corpus tranches rather than more replication of this
-continuous structural panel.
+final replay.
+
+The second continuous tranche expands that panel to 29 cells with a
+misspecified two-factor model, two grouped anchor/boundary cells carrying a
+shared residual variance and a general linear equality, and fixed-WLS weight
+condition numbers `1, 1e4, 1e8`. Across 24,000 attempts, 23,506 returned and
+all returned objectives recomputed correctly. Every one of the 13,125
+audit-stationary covariance-honest fits was admissible; all 900 stationary
+misspecified fits retained nonzero discrepancy, all 1,797 returned grouped fits
+honored their equalities to at most `4.44e-16`, and all 3,253 eligible interior
+pairs passed agreement. Conditioning is the first sharp computational limit:
+ordinary fixed WLS returned in `100%, 3%, 0%` of the three cells, while PSD WLS
+returned throughout but was audit-stationary in `100%, 100%, 8%`. The weights
+retained the requested spectra and full effective ranks. The remaining
+Experiment 78 work is missing-data, categorical, and targeted multistart/corpus
+validation rather than more replication of the continuous structural panel.
 
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible

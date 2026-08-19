@@ -27,7 +27,7 @@ usage <- function() cat(
   "continuous pilot geometries or all-family smoke anchors.\n\n",
   "Profile:\n",
   "  --smoke             two deterministic replications per planned smoke cell\n\n",
-  "  --pilot             100 replications per continuous one-axis pilot cell\n\n",
+  "  --pilot             100 replications per continuous stress cell\n\n",
   "Options:\n",
   "  --reps N            override profile replications\n",
   "  --families CSV      subset the registered estimator families\n",

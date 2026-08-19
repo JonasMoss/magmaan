@@ -9,6 +9,18 @@ model_syntax <- function(structure = "one_factor") {
       "x2 ~~ x3",
       sep = "\n"
     ),
+    two_factor_misspecified = paste(
+      "f1 =~ x1 + x2 + x3",
+      "f2 =~ x4 + x5 + x6",
+      "f1 ~~ f2",
+      sep = "\n"
+    ),
+    two_group_one_factor = paste(
+      "f =~ x1 + c(l2_g1,l2_g2)*x2 + c(l3_g1,l3_g2)*x3 + x4",
+      "x1 ~~ c(theta_x1,theta_x1)*x1",
+      "l2_g1 + l3_g1 == 1.60",
+      sep = "\n"
+    ),
     latent_regression = paste(
       "fy =~ y1 + y2 + y3",
       "fx =~ x1 + x2 + x3",
@@ -21,17 +33,27 @@ model_syntax <- function(structure = "one_factor") {
 
 geometry_row <- function(geometry, structure, stress_axis,
                          target_min_eigenvalue, theta_min, psi_min,
-                         n_ratio, n_free) {
+                         n_ratio, n_free, data_structure = structure,
+                         n_groups = 1L, fit_plan = "full",
+                         weight_condition_target = NA_real_,
+                         misspecified = FALSE) {
+  n <- as.integer(round(n_ratio * n_free))
   data.frame(
     geometry = geometry,
     structure = structure,
+    data_structure = data_structure,
     stress_axis = stress_axis,
     target_min_eigenvalue = target_min_eigenvalue,
     theta_min = theta_min,
     psi_min = psi_min,
     n_ratio = n_ratio,
     n_free = n_free,
-    n = as.integer(round(n_ratio * n_free)),
+    n_groups = as.integer(n_groups),
+    n = n,
+    n_per_group = as.integer(round(n / n_groups)),
+    fit_plan = fit_plan,
+    weight_condition_target = weight_condition_target,
+    misspecified = misspecified,
     stringsAsFactors = FALSE
   )
 }
@@ -79,6 +101,28 @@ pilot_geometry_catalog <- function() {
       "latent_regression", "psi_boundary", target, 0.35, target, 10, 19
     )
   }))
+  rows[[length(rows) + 1L]] <- geometry_row(
+    "cfa2_misspecified", "two_factor_misspecified", "misspecification",
+    0.20, 0.20, 0.20, 10, 19, data_structure = "two_factor",
+    misspecified = TRUE
+  )
+  rows[[length(rows) + 1L]] <- geometry_row(
+    "two_group_anchor", "two_group_one_factor", "multi_group",
+    0.20, 0.20, 1, 10, 22, data_structure = "two_group_one_factor",
+    n_groups = 2L
+  )
+  rows[[length(rows) + 1L]] <- geometry_row(
+    "two_group_theta_0p001", "two_group_one_factor", "multi_group_boundary",
+    0.001, 0.001, 1, 10, 22, data_structure = "two_group_one_factor",
+    n_groups = 2L
+  )
+  rows <- c(rows, lapply(c(1, 1e4, 1e8), function(condition) {
+    geometry_row(
+      paste0("fixed_wls_kappa_", format(condition, scientific = TRUE)),
+      "one_factor", "weight_conditioning", 0.20, 0.20, 1, 10, 12,
+      fit_plan = "fixed_wls", weight_condition_target = condition
+    )
+  }))
   do.call(rbind, rows)
 }
 
@@ -115,17 +159,57 @@ rmvn_psd <- function(n, covariance) {
   matrix(stats::rnorm(n * nrow(covariance)), nrow = n) %*% t(root)
 }
 
-simulate_one_factor_data <- function(n, theta_min) {
-  eta <- stats::rnorm(n)
-  loadings <- c(1.0, 0.85, 0.75, 0.90)
-  residual_variances <- c(theta_min, 0.45, 0.55, 0.35)
-  means <- c(0.20, -0.10, 0.40, 0.80)
+simulate_one_factor_data <- function(n, theta_min,
+                                     loadings = c(1.0, 0.85, 0.75, 0.90),
+                                     residual_variances = NULL,
+                                     means = c(0.20, -0.10, 0.40, 0.80),
+                                     latent_variance = 1) {
+  eta <- stats::rnorm(n, sd = sqrt(latent_variance))
+  residual_variances <- residual_variances %||%
+    c(theta_min, 0.45, 0.55, 0.35)
   errors <- matrix(stats::rnorm(n * 4L), nrow = n, ncol = 4L)
   errors <- sweep(errors, 2L, sqrt(residual_variances), "*")
   out <- sweep(tcrossprod(eta, loadings) + errors, 2L, means, "+")
   out <- as.data.frame(out)
   names(out) <- paste0("x", seq_len(4L))
   out
+}
+
+two_group_population_moments <- function(theta_min) {
+  loadings <- list(
+    c(1.0, 0.85, 0.75, 0.90),
+    c(1.0, 0.85, 0.70, 0.95)
+  )
+  residuals <- list(
+    c(theta_min, 0.45, 0.55, 0.35),
+    c(theta_min, 0.50, 0.40, 0.60)
+  )
+  latent_variances <- c(1.0, 1.25)
+  means <- list(
+    c(0.20, -0.10, 0.40, 0.80),
+    c(-0.15, 0.25, 0.10, 0.55)
+  )
+  list(
+    sigma = Map(function(lambda, theta, psi) {
+      tcrossprod(lambda) * psi + diag(theta)
+    }, loadings, residuals, latent_variances),
+    mu = means,
+    loadings = loadings,
+    residuals = residuals,
+    latent_variances = latent_variances
+  )
+}
+
+simulate_two_group_one_factor_data <- function(n_per_group, theta_min) {
+  population <- two_group_population_moments(theta_min)
+  Map(function(lambda, residuals, means, latent_variance) {
+    simulate_one_factor_data(
+      n_per_group, theta_min, loadings = lambda,
+      residual_variances = residuals, means = means,
+      latent_variance = latent_variance
+    )
+  }, population$loadings, population$residuals, population$mu,
+  population$latent_variances)
 }
 
 simulate_two_factor_data <- function(n, theta_min, psi_min) {
@@ -161,13 +245,13 @@ simulate_latent_regression_data <- function(n, psi_min) {
 }
 
 population_moments <- function(context) {
-  if (identical(context$structure, "one_factor")) {
+  if (identical(context$data_structure, "one_factor")) {
     lambda <- c(1.0, 0.85, 0.75, 0.90)
     sigma <- tcrossprod(lambda) +
       diag(c(context$theta_min, 0.45, 0.55, 0.35))
     return(list(sigma = sigma, mu = c(0.20, -0.10, 0.40, 0.80)))
   }
-  if (identical(context$structure, "two_factor")) {
+  if (identical(context$data_structure, "two_factor")) {
     psi <- matrix(
       c(1, 1 - context$psi_min, 1 - context$psi_min, 1), 2L, 2L
     )
@@ -181,7 +265,7 @@ population_moments <- function(context) {
       mu = c(0.20, -0.10, 0.40, 0.80, -0.30, 0.10)
     ))
   }
-  if (identical(context$structure, "latent_regression")) {
+  if (identical(context$data_structure, "latent_regression")) {
     latent_covariance <- matrix(
       c(0.36 + context$psi_min, 0.60, 0.60, 1), 2L, 2L
     )
@@ -194,13 +278,16 @@ population_moments <- function(context) {
       mu = c(0.30, -0.10, 0.20, 0.50, 0, -0.20)
     ))
   }
-  stop("unknown structure: ", context$structure, call. = FALSE)
+  if (identical(context$data_structure, "two_group_one_factor")) {
+    return(two_group_population_moments(context$theta_min)[c("sigma", "mu")])
+  }
+  stop("unknown data structure: ", context$data_structure, call. = FALSE)
 }
 
 simulate_geometry_data <- function(context, seed) {
   set.seed(seed)
   switch(
-    context$structure,
+    context$data_structure,
     one_factor = simulate_one_factor_data(context$n, context$theta_min),
     two_factor = simulate_two_factor_data(
       context$n, context$theta_min, context$psi_min
@@ -208,7 +295,10 @@ simulate_geometry_data <- function(context, seed) {
     latent_regression = simulate_latent_regression_data(
       context$n, context$psi_min
     ),
-    stop("unknown structure: ", context$structure, call. = FALSE)
+    two_group_one_factor = simulate_two_group_one_factor_data(
+      context$n_per_group, context$theta_min
+    ),
+    stop("unknown data structure: ", context$data_structure, call. = FALSE)
   )
 }
 
@@ -238,6 +328,12 @@ mixed_ordinalize <- function(data) {
 }
 
 continuous_spec <- function(structure = "one_factor") {
+  if (identical(structure, "two_group_one_factor")) {
+    return(model_spec(
+      model_syntax(structure), meanstructure = TRUE,
+      group = "group", group_labels = c("g1", "g2")
+    ))
+  }
   model_spec(model_syntax(structure), meanstructure = TRUE)
 }
 
@@ -256,10 +352,13 @@ mixed_spec <- function(parameterization = "delta") {
 }
 
 fixed_wls_weight <- function(sample_stats, condition = 100) {
-  p <- nrow(sample_stats$S[[1L]])
-  q <- if (length(sample_stats$mean) && length(sample_stats$mean[[1L]])) p else 0L
-  q <- q + p * (p + 1L) / 2L
-  list(diag(exp(seq(log(1), log(condition), length.out = q))))
+  lapply(seq_along(sample_stats$S), function(block) {
+    p <- nrow(sample_stats$S[[block]])
+    q <- if (length(sample_stats$mean) &&
+             length(sample_stats$mean[[block]])) p else 0L
+    q <- q + p * (p + 1L) / 2L
+    diag(exp(seq(log(1), log(condition), length.out = q)))
+  })
 }
 
 task_grid <- function(profile, reps, families = NULL, geometries = NULL) {
