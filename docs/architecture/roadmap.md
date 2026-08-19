@@ -142,6 +142,19 @@ cover the lifted fixed-weight gradient and link Jacobian by central finite
 differences, ordinary/PSD agreement at interior ULS, GLS, and nonidentity-WLS
 optima, a ULS negative-residual repair, and the three R result contracts.
 
+`estimate::frontier::fit_gmm_fitted_weight_psd` now reuses the same PSD
+fixed-weight inner solve in the existing expected-information fixed-point loop.
+At outer iterate `theta_k`, the model-implied normal-theory weight `W(theta_k)`
+is held fixed throughout the constrained inner optimization and refreshed only
+between solves; the algorithm does not differentiate through the weight. The
+reported objective is reevaluated with `W(theta_hat)` after the outer loop. R
+exposes the policy as `frontier_fit_gmm_fitted_weight_psd()` and labels it
+`expected_information_fixed_point`. Focused gates establish ordinary/PSD
+agreement at an interior misspecified fixed point, a nontrivial first weight
+update, final-weight objective consistency, negative-residual repair, and the R
+result contract. Empirical WLS/DWLS/DLS updates need raw-data weight builders
+and are not implied by this sample-statistics-only policy.
+
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible
 optima but is roughly 40 times slower backend-to-backend on the small interior

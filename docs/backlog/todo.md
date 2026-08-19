@@ -182,8 +182,10 @@ when they next change.
 - **M/L — extend covariance-honest point estimation estimator by estimator.**
   The lift is now internally estimator-neutral and the first non-ML slice is
   landed: `fit_gmm_psd` covers continuous ULS and caller-fixed WLS/ADF weights,
-  while `fit_gls_psd` builds the ordinary sample-based GLS weight once. R has
-  explicit ULS/GLS/WLS frontier wrappers. The correctness seed finite-differences
+  `fit_gls_psd` builds the ordinary sample-based GLS weight once, and
+  `fit_gmm_fitted_weight_psd` refreshes the expected-information weight between
+  PSD inner solves. R has explicit ULS/GLS/WLS and fitted-weight frontier
+  wrappers. The correctness seed finite-differences
   the lifted fixed-weight objective and links, checks ordinary/PSD interior
   agreement for all three objectives, repairs one exact-fit ULS Heywood case,
   and gates the R result schema. Before making comparative claims, design the
@@ -195,10 +197,14 @@ when they next change.
 
   Ordered computational queue (point estimation only):
 
-  1. **M — fitted/iterated continuous GMM weights.** Reuse the PSD fixed-weight
-     inner solve in the existing outer weight-update loop. Specify whether each
-     method freezes the weight within an inner solve or differentiates through
-     it; do not treat those as the same estimator.
+  1. **Done 2026-08-19 — expected-information fitted/iterated continuous GMM.**
+     `fit_gmm_fitted_weight_psd` reuses the PSD fixed-weight inner solve in the
+     existing outer loop, freezes `W(theta_k)` throughout each inner solve, and
+     refreshes it only between solves. It reevaluates the terminal objective
+     under `W(theta_hat)` and has C++/R reduction, update, objective-consistency,
+     and repair gates. Empirical WLS/DWLS/fixed-`a` DLS updates remain separate:
+     they need raw-data weight builders and an explicit estimated-weight policy,
+     not a new value of the current sample-statistics enum.
   2. **M/L — FIML.** Feed lifted moments and Jacobians into the existing
      patternwise likelihood/cache. Define the likelihood domain per observed
      pattern (`Sigma_oo` PD), preserve the fixed-x missingness policy, and gate
