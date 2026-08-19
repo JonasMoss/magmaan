@@ -149,6 +149,47 @@ test_that("frontier PSD ordinal fit preserves the Stage-1 polychorics", {
   expect_equal(stats$R, original_R, tolerance = 0)
 })
 
+test_that("frontier PSD mixed ordinal fit preserves Stage-1 moments", {
+  set.seed(44)
+  n <- 280L
+  eta <- rnorm(n)
+  latent_1 <- 0.85 * eta + rnorm(n, sd = 0.6)
+  latent_2 <- 0.72 * eta + rnorm(n, sd = 0.7)
+  dat <- data.frame(
+    x1 = ordered(cut(latent_1, c(-Inf, -0.55, 0.45, Inf),
+                     labels = FALSE)),
+    x2 = ordered(cut(latent_2, c(-Inf, -0.45, 0.55, Inf),
+                     labels = FALSE)),
+    x3 = 0.78 * eta + rnorm(n, sd = 0.68) + 0.2,
+    x4 = 0.62 * eta + rnorm(n, sd = 0.8) - 0.1
+  )
+  spec <- model_spec(
+    "f =~ x1 + x2 + x3 + x4",
+    ordered = c("x1", "x2"), meanstructure = TRUE
+  )
+  stats <- magmaan_core$data_mixed_ordinal_stats_from_df(dat, spec)
+  original_R <- stats$R
+  original_moments <- stats$moments
+
+  fit <- expect_no_warning(frontier_fit_mixed_ordinal_psd(
+    spec, stats, estimator = "DWLS",
+    control = list(max_iter = 5000L, gtol = 1e-8)
+  ))
+
+  expect_true(fit$converged)
+  expect_true(fit$mixed_ordinal)
+  expect_identical(fit$estimator, "DWLS")
+  expect_identical(fit$covariance_policy, "psd")
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_true(fit$audit$constrained)
+  expect_equal(lapply(fit$mixed_ordinal_stats$R, unname),
+               lapply(original_R, unname), tolerance = 0)
+  expect_equal(fit$mixed_ordinal_stats$moments,
+               original_moments, tolerance = 0)
+  expect_equal(stats$R, original_R, tolerance = 0)
+  expect_equal(stats$moments, original_moments, tolerance = 0)
+})
+
 test_that("frontier PSD continuous LS wrappers preserve covariance admissibility", {
   set.seed(29)
   n <- 160L

@@ -305,6 +305,10 @@ fit_wls_mixed_ordinal_impl <- function(partable, mixed_stats, optimizer = NULL, 
     .Call(`_magmaan_fit_wls_mixed_ordinal_impl`, partable, mixed_stats, optimizer, control, bounds)
 }
 
+frontier_fit_mixed_ordinal_psd_impl <- function(partable, mixed_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    .Call(`_magmaan_frontier_fit_mixed_ordinal_psd_impl`, partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol)
+}
+
 fit_uls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_uls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
 }

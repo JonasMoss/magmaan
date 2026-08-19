@@ -1282,6 +1282,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_fit_mixed_ordinal_psd_impl
+Rcpp::List frontier_fit_mixed_ordinal_psd_impl(SEXP partable, Rcpp::List mixed_stats, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double start_eigen_floor, double feasibility_tol);
+RcppExport SEXP _magmaan_frontier_fit_mixed_ordinal_psd_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
+    Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_mixed_ordinal_psd_impl(partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_uls_snlls_impl
 Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_uls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
@@ -3907,6 +3925,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_pairwise_ordinal_composite_nested_impl", (DL_FUNC) &_magmaan_frontier_pairwise_ordinal_composite_nested_impl, 7},
     {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 5},
     {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 5},
+    {"_magmaan_frontier_fit_mixed_ordinal_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_mixed_ordinal_psd_impl, 8},
     {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 5},
     {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 5},
     {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 6},

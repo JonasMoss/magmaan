@@ -497,6 +497,24 @@ fit_ordinal_psd(spec::LatentStructure pt,
                     OrdinalParameterization::Delta,
                 PsdFitOptions psd_opts = {});
 
+// Mixed continuous/ordinal ULS/DWLS/WLS over covariance-honest primitive SEM
+// blocks. Stage-1 thresholds, continuous moments, polyserial/polychoric
+// associations, and NACOV-derived weights are consumed unchanged; PSD is
+// enforced only on the fitted Theta and Psi blocks.
+fit_expected<Estimates>
+fit_mixed_ordinal_psd(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    const Eigen::VectorXd& x0,
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    OrdinalParameterization parameterization =
+        OrdinalParameterization::Delta,
+    PsdFitOptions psd_opts = {});
+
 // All-ordinal LS refit with caller-supplied nonlinear equality constraints in
 // the prepared free-parameter vector. This uses the same full ordinal
 // threshold + polychoric moment stack as `ordinal_ls_objective`; it is the
