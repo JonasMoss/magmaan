@@ -125,11 +125,25 @@ FMG corrections, not merely beating MLR.
 
 Each entry is the proportion of finite p-values below .05. Method-specific
 finite denominators and numerical diagnostics are reported in the appendix.
+The method closest to the nominal .05 rate is bold in each row; exact ties are
+all bold.
 
 ```{r all-cells-table}
 all_cells <- cell_table[, c(
   "model", "generator", "missingness", names(method_columns))]
-knitr::kable(all_cells, digits = 3, row.names = FALSE)
+cell_rates <- as.matrix(all_cells[, names(method_columns)])
+cell_error <- abs(cell_rates - .05)
+best_error <- apply(cell_error, 1L, min)
+for (method in names(method_columns)) {
+  value <- cell_rates[, method]
+  rendered <- sprintf("%.3f", value)
+  is_winner <- abs(cell_error[, method] - best_error) < 1e-12
+  rendered[is_winner] <- paste0("<strong>", rendered[is_winner], "</strong>")
+  all_cells[[method]] <- rendered
+}
+knitr::kable(
+  all_cells, row.names = FALSE, escape = FALSE,
+  align = c("l", "l", "l", rep("r", length(method_columns))))
 ```
 
 The multiplier remains near .05 across most model and observation combinations.
