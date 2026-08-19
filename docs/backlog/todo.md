@@ -267,13 +267,20 @@ when they next change.
   fit until an explicit boundary-aware policy is available.
 
 - **L — execute the broader covariance-honest point-estimation stress track.**
-  Implement this as one independent experiment leaf,
-  `experiments/78-psd-estimator-stress/`, so the common structural geometries,
-  paired ordinary/PSD fits, selective restart logic, and result schema live in
-  one place. Do not form a full Cartesian product. Start with one anchor cell
-  per estimator and vary one stress axis at a time; add interactions only for
-  prespecified risky pairs or failures seen in the pilot. This is computational
-  validation, not an inference, coverage, or estimator-ranking study.
+  The independent `experiments/78-psd-estimator-stress/` leaf now owns the
+  common structural geometries, paired ordinary/PSD fits, selective restart
+  logic, and result schema. Its first two-replication smoke completed 128 fit
+  attempts across eight registered families: all 126 returned fits matched an
+  independently recomputed objective, all 70 returned PSD fits were
+  covariance-admissible, all 28 ML2S Stage-1 fingerprints were unchanged, and
+  both non-PD CatML sentinels were rejected as intended. Checkpoint/resume,
+  task subsetting, metadata, paired summaries, and the smoke report are live.
+  This validates the harness, not stochastic performance. Next expand the
+  structural and one-axis pilot cells below. Do not form a full Cartesian
+  product: start with one anchor cell per estimator and vary one stress axis at
+  a time; add interactions only for prespecified risky pairs or failures seen
+  in the pilot. This is computational validation, not an inference, coverage,
+  or estimator-ranking study.
 
   The common structural panel is:
 
