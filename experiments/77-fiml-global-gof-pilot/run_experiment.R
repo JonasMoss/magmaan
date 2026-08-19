@@ -12,9 +12,9 @@ set_single_threaded_math()
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot] [options]\n\n",
-  "Five-minute FIML global-GOF pilot.\n\n",
-  "  --smoke          8 cells, 1 replication, 19 flips (default).\n",
-  "  --pilot          8 cells, 500 replications, 199 flips.\n",
+  "FIML global-GOF stress grid.\n\n",
+  "  --smoke          70 cells, 1 replication, 19 flips (default).\n",
+  "  --pilot          70 cells, 500 replications, 199 flips.\n",
   "  --reps N         Override replications per cell.\n",
   "  --flips N        Override multiplier draws per replication.\n",
   "  --cores N        Parallel cell workers.\n",
@@ -67,8 +67,8 @@ stopifnot(max(specs$H1$partable$free) == max(specs$H0$partable$free),
 run_cell <- function(index) {
   cell <- as.list(grid[index, , drop = FALSE])
   message(sprintf(
-    "  cell %d: %s, missing %.0f%%, %s",
-    cell$cell_id, cell$distribution, 100 * cell$missing_rate, cell$truth))
+    "  cell %d: %s, %s, %s",
+    cell$cell_id, cell$distribution, cell$missingness, cell$truth))
   rows <- lapply(seq_len(opts$reps), function(rep_id) {
     out <- tryCatch(
       pilot_one_rep(cell, rep_id, specs, opts$flips, opts$seed_base),
@@ -79,7 +79,9 @@ run_cell <- function(index) {
           score_ok = FALSE, fit_h1_ok = FALSE, wald_ok = FALSE,
           error_h0 = paste0("replication: ", conditionMessage(e)),
           error_lrt = "", error_score = "", error_h1 = "", error_wald = "",
-          realized_missing = NA_real_, h0_seconds = NA_real_,
+          realized_missing = NA_real_, realized_missing_eligible = NA_real_,
+          complete_r12 = NA_real_, observed_r12 = NA_real_,
+          h0_seconds = NA_real_,
           lrt_seconds = NA_real_, score_seconds = NA_real_,
           h1_seconds = NA_real_, wald_seconds = NA_real_,
           total_seconds = NA_real_, score_df = NA_integer_,
@@ -117,6 +119,7 @@ write_csv(summaries$summary, file.path(results, "method_summary.csv"))
 write_metadata(file.path(results, "metadata.csv"), list(
   mode = opts$mode, reps = opts$reps, flips = opts$flips,
   cores = opts$cores, n = opts$n, p = opts$p,
+  cells = nrow(grid), scenarios = length(unique(grid$scenario_id)),
   seed_base = opts$seed_base, wall_seconds = wall_seconds,
   replication_failures = sum(!raw$fit_h0_ok),
   lrt_failures = sum(raw$fit_h0_ok & !raw$lrt_ok),
@@ -131,20 +134,38 @@ pooled$rejection_rate <- pooled$rejected / pooled$valid
 pooled <- pooled[order(pooled$truth, pooled$method), ]
 write_csv(pooled, file.path(results, "pooled_summary.csv"))
 
+region_summary <- aggregate(
+  cbind(valid, rejected) ~ analysis_region + truth + method,
+  data = summaries$summary, FUN = sum)
+region_summary$rejection_rate <-
+  region_summary$rejected / region_summary$valid
+region_summary <- region_summary[
+  order(region_summary$analysis_region, region_summary$truth,
+        region_summary$method), ]
+write_csv(region_summary, file.path(results, "region_summary.csv"))
+
+diagnostics <- aggregate(
+  cbind(realized_missing, realized_missing_eligible, complete_r12,
+        observed_r12, fit_h0_ok, lrt_ok, score_ok, fit_h1_ok, wald_ok) ~
+    scenario_id + distribution + missingness + analysis_region + truth,
+  data = raw, FUN = function(x) mean(as.numeric(x), na.rm = TRUE))
+write_csv(diagnostics, file.path(results, "design_diagnostics.csv"))
+
 # Diagnostic size-adjusted power: for each distribution/missingness/method,
 # use the empirical fifth percentile of its null p-values as the rejection
 # cutoff in the matched power cell. These cutoffs are unavailable in practice;
 # they only compare detection after removing each method's size distortion.
+key_columns <- c(
+  "scenario_id", "distribution", "distribution_label", "missingness",
+  "missingness_label", "analysis_region", "null_contract", "method")
 keys <- unique(summaries$long[
-  summaries$long$truth == "null",
-  c("distribution", "missing_rate", "method")])
+  summaries$long$truth == "null", key_columns])
 size_adjusted <- do.call(rbind, lapply(seq_len(nrow(keys)), function(index) {
   key <- keys[index, ]
   take <- function(truth) {
     x <- summaries$long[
       summaries$long$truth == truth &
-        summaries$long$distribution == key$distribution &
-        summaries$long$missing_rate == key$missing_rate &
+        summaries$long$scenario_id == key$scenario_id &
         summaries$long$method == key$method,
       "p_value"]
     x[is.finite(x)]
@@ -170,9 +191,51 @@ size_adjusted_pooled <- size_adjusted_pooled[
 write_csv(size_adjusted_pooled,
           file.path(results, "size_adjusted_power_pooled.csv"))
 
+size_adjusted_region <- aggregate(
+  cbind(raw_power, size_adjusted_power) ~ analysis_region + method,
+  size_adjusted, mean)
+write_csv(size_adjusted_region,
+          file.path(results, "size_adjusted_power_by_region.csv"))
+
+primary_regions <- c("Gaussian reference", "finite-moment robustness")
+scorecard <- do.call(rbind, lapply(unique(summaries$summary$method),
+  function(method) {
+    null <- summaries$summary[
+      summaries$summary$truth == "null" &
+        summaries$summary$method == method, ]
+    primary <- null[null$analysis_region %in% primary_regions, ]
+    detection <- size_adjusted[
+      size_adjusted$method == method &
+        size_adjusted$analysis_region %in% primary_regions, ]
+    data.frame(
+      method = method,
+      primary_null_cells = nrow(primary),
+      primary_mean_abs_size_error = mean(abs(primary$rejection_rate - 0.05),
+                                         na.rm = TRUE),
+      primary_worst_abs_size_error = max(abs(primary$rejection_rate - 0.05),
+                                         na.rm = TRUE),
+      primary_min_size = min(primary$rejection_rate, na.rm = TRUE),
+      primary_max_size = max(primary$rejection_rate, na.rm = TRUE),
+      primary_near_nominal_fraction = mean(
+        primary$rejection_rate >= 0.025 & primary$rejection_rate <= 0.075,
+        na.rm = TRUE),
+      primary_raw_power = mean(detection$raw_power, na.rm = TRUE),
+      primary_size_adjusted_power = mean(
+        detection$size_adjusted_power, na.rm = TRUE),
+      all_null_mean_abs_size_error = mean(abs(null$rejection_rate - 0.05),
+                                          na.rm = TRUE),
+      stringsAsFactors = FALSE)
+  }))
+scorecard <- scorecard[order(
+  scorecard$primary_mean_abs_size_error,
+  -scorecard$primary_size_adjusted_power), ]
+write_csv(scorecard, file.path(results, "method_scorecard.csv"))
+
 cat(sprintf("wall_seconds=%.1f failures=%d/%d\n", wall_seconds,
             sum(!raw$fit_h0_ok), nrow(raw)))
 print(pooled[, c("truth", "method", "valid", "rejection_rate")],
       row.names = FALSE, digits = 3)
 cat("\nMean size-adjusted power over distribution/missingness cells:\n")
 print(size_adjusted_pooled, row.names = FALSE, digits = 3)
+cat("\nPrimary-region scorecard (ordered by calibration):\n")
+print(scorecard, row.names = FALSE, digits = 3)

@@ -89,6 +89,9 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 72 | [hotelling-robust-gof-grid](72-hotelling-robust-gof-grid/report.qmd) | probe | active | Does the ordinary-Hotelling reference improve a centered pivotal SEM goodness-of-fit score across residual rank and sample-to-rank ratio, relative to its chi-square limit and SB/MV/pEBA4 corrections of the working RLS score? |
 | 73 | [psd-ml-timing](73-psd-ml-timing/report.qmd) | benchmark | active | What does covariance-honest complete-data NTML cost when run directly or only after an ordinary fit fails its covariance audit? |
 | 74 | [psd-ml-small-n-convergence](74-psd-ml-small-n-convergence/report.qmd) | benchmark | complete | On the De Jonckere–Rosseel / Ernst small-N SEM design, does covariance-honest NTML converge more reliably than ordinary NTML? |
+| 75 | [psd-ml-basin-audit](75-psd-ml-basin-audit/report.qmd) | benchmark | active | When PSD-ML returns an admissible KKT-stationary solution, how often does a multistart portfolio find a materially better basin? |
+| 76 | [psd-ml-repair-risk](76-psd-ml-repair-risk/report.qmd) | benchmark | active | What does PSD-ML repair when ordinary NTML leaves the primitive covariance domain, and what is its near-boundary estimation risk? |
+| 77 | [fiml-global-gof-pilot](77-fiml-global-gof-pilot/report.qmd) | probe | active | Across finite-moment stress, MAR, and explicit contract violations, do effective multiplier or spectrum-aware scores calibrate global FIML GOF better than Yuan–Bentler MLR? |
 
 ## Archived
 
