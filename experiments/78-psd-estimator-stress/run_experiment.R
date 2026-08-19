@@ -22,18 +22,19 @@ source(experiment_path("R", "fitters.R"))
 source(experiment_path("R", "summaries.R"))
 
 usage <- function() cat(
-  "Usage: Rscript run_experiment.R [--smoke] [options]\n\n",
+  "Usage: Rscript run_experiment.R [--smoke|--pilot] [options]\n\n",
   "Exercise ordinary and covariance-honest point estimators across the\n",
-  "continuous, missing-data, ordinal, mixed, and CatML smoke anchors.\n\n",
+  "continuous pilot geometries or all-family smoke anchors.\n\n",
   "Profile:\n",
   "  --smoke             two deterministic replications per planned smoke cell\n\n",
+  "  --pilot             100 replications per continuous one-axis pilot cell\n\n",
   "Options:\n",
-  "  --reps N            override smoke replications\n",
+  "  --reps N            override profile replications\n",
   "  --families CSV      subset the registered estimator families\n",
-  "  --geometries CSV    subset interior,theta_near_boundary\n",
+  "  --geometries CSV    subset geometry IDs listed by --dry-run-plan\n",
   "  --seed-base N       deterministic seed base (default 20260819)\n",
   "  --max-iter N        optimizer iteration cap (default 5000)\n",
-  "  --results-dir PATH  output directory (default results/smoke)\n",
+  "  --results-dir PATH  output directory (default results/<profile>)\n",
   "  --resume            retain completed task checkpoints\n",
   "  --progress-every N  progress interval in tasks (default 1)\n",
   "  --dry-run-plan      print the task grid without fitting\n",
@@ -43,7 +44,7 @@ usage <- function() cat(
 parse_args <- function(args) {
   out <- list(
     profile = "smoke",
-    reps = 2L,
+    reps = NULL,
     families = NULL,
     geometries = NULL,
     seed_base = 20260819L,
@@ -66,8 +67,11 @@ parse_args <- function(args) {
     if (arg %in% c("-h", "--help")) {
       usage()
       quit(save = "no", status = 0L)
-    } else if (arg == "--smoke") out$profile <- "smoke"
-    else if (arg == "--reps") out$reps <- as.integer(take())
+    } else if (arg == "--smoke") {
+      out$profile <- "smoke"
+    } else if (arg == "--pilot") {
+      out$profile <- "pilot"
+    } else if (arg == "--reps") out$reps <- as.integer(take())
     else if (arg == "--families") out$families <- parse_csv_arg(take())
     else if (arg == "--geometries") out$geometries <- parse_csv_arg(take())
     else if (arg == "--seed-base") out$seed_base <- as.integer(take())
@@ -79,6 +83,9 @@ parse_args <- function(args) {
     else stop("unknown argument: ", arg, call. = FALSE)
     i <- i + 1L
   }
+  if (is.null(out$reps)) {
+    out$reps <- if (identical(out$profile, "pilot")) 100L else 2L
+  }
   ints <- c(out$reps, out$seed_base, out$max_iter, out$progress_every)
   if (anyNA(ints) || any(ints < 1L)) {
     stop("reps, seed-base, max-iter, and progress-every must be positive",
@@ -88,7 +95,7 @@ parse_args <- function(args) {
 }
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
-design <- task_grid(args$reps, args$families, args$geometries)
+design <- task_grid(args$profile, args$reps, args$families, args$geometries)
 design$seed <- mapply(
   function(geometry, rep) simulation_seed(args$seed_base, geometry, rep),
   design$geometry, design$rep
@@ -107,6 +114,8 @@ paths <- list(
   checkpoint = file.path(out_dir, "checkpoint.csv"),
   pairs = file.path(out_dir, "pairs.csv"),
   summary = file.path(out_dir, "summary.csv"),
+  cells = file.path(out_dir, "cells.csv"),
+  pair_summary = file.path(out_dir, "pair_summary.csv"),
   invariants = file.path(out_dir, "invariants.csv"),
   metadata = file.path(out_dir, "metadata.csv")
 )
@@ -132,7 +141,7 @@ if (args$resume && file.exists(paths$raw)) {
 control <- list(max_iter = args$max_iter, gtol = 1e-8)
 pending <- design[!design$task_id %in% completed, , drop = FALSE]
 message(
-  "PSD estimator smoke: ", nrow(design), " task(s), ", nrow(pending),
+  "PSD estimator ", args$profile, ": ", nrow(design), " task(s), ", nrow(pending),
   " pending, ", args$reps, " replication(s)"
 )
 started <- proc.time()[["elapsed"]]
@@ -170,16 +179,32 @@ raw <- utils::read.csv(paths$raw, stringsAsFactors = FALSE, check.names = FALSE)
 raw <- raw[raw$task_id %in% design$task_id, , drop = FALSE]
 pairs <- pair_results(raw)
 summary <- family_summary(raw)
-invariants <- invariant_summary(raw)
+cells <- pilot_cell_summary(raw)
+pair_summary <- pilot_pair_summary(pairs)
+invariants <- invariant_summary(raw, pairs)
 write_csv(pairs, paths$pairs)
 write_csv(summary, paths$summary)
+write_csv(cells, paths$cells)
+write_csv(pair_summary, paths$pair_summary)
 write_csv(invariants, paths$invariants)
+elapsed_seconds <- proc.time()[["elapsed"]] - started
+if (args$resume && !nrow(pending) && file.exists(paths$metadata)) {
+  previous_metadata <- utils::read.csv(
+    paths$metadata, stringsAsFactors = FALSE
+  )
+  previous_elapsed <- suppressWarnings(as.numeric(
+    previous_metadata$value[previous_metadata$key == "elapsed_seconds"]
+  ))
+  if (length(previous_elapsed) == 1L && is.finite(previous_elapsed)) {
+    elapsed_seconds <- previous_elapsed
+  }
+}
 write_metadata(
   paths$metadata,
   values = list(
     experiment = "78-psd-estimator-stress",
     profile = args$profile,
-    evidence = FALSE,
+    evidence = identical(args$profile, "pilot") && args$reps >= 100L,
     reps = args$reps,
     seed_base = args$seed_base,
     max_iter = args$max_iter,
@@ -187,7 +212,7 @@ write_metadata(
     geometries = unique(design$geometry),
     tasks = nrow(design),
     fit_rows = nrow(raw),
-    elapsed_seconds = proc.time()[["elapsed"]] - started,
+    elapsed_seconds = elapsed_seconds,
     git_head = git_scalar(c("rev-parse", "HEAD")),
     git_dirty = git_dirty()
   ),
@@ -199,7 +224,8 @@ for (path in unlist(paths)) message("  ", path)
 violations <- sum(invariants$violations)
 if (violations > 0L) {
   print(invariants, row.names = FALSE)
-  stop("smoke validation found ", violations, " hard invariant violation(s)",
+  stop(args$profile, " validation found ", violations,
+       " hard invariant violation(s)",
        call. = FALSE)
 }
-message("All hard smoke invariants passed.")
+message("All hard ", args$profile, " invariants passed.")

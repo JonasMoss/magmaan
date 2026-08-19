@@ -1125,6 +1125,64 @@ TEST_CASE("PSD ULS GLS and fixed WLS agree with ordinary interior fits") {
   }
 }
 
+TEST_CASE("PSD GLS returns partable coordinates consistent with the lifted "
+          "objective at a correlated-block boundary") {
+  BuildOptions options;
+  options.meanstructure = true;
+  auto pt = lavaanify(
+      "f1 =~ x1 + x2 + x3\n"
+      "f2 =~ x4 + x5 + x6\n"
+      "f1 ~~ f2\n"
+      "x2 ~~ x3",
+      options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Matrix<double, 6, 6> covariance;
+  covariance <<
+      1.4780822086515963, 0.7820138639921522, 0.6799936128875861,
+      0.8001566842797329, 0.7238561136915184, 0.5732154037753231,
+      0.7820138639921522, 1.1421289924063813, 1.0542375008919023,
+      0.7247704811754810, 0.6862924495683695, 0.5210496246794960,
+      0.6799936128875861, 1.0542375008919023, 0.9790523029136921,
+      0.6352027891786074, 0.6049906208326654, 0.4632850720491671,
+      0.8001566842797329, 0.7247704811754810, 0.6352027891786074,
+      1.4910079335332045, 0.9035995483468404, 0.6960476520429647,
+      0.7238561136915184, 0.6862924495683695, 0.6049906208326654,
+      0.9035995483468404, 1.4249630822804975, 0.6390272656690954,
+      0.5732154037753231, 0.5210496246794960, 0.4632850720491671,
+      0.6960476520429647, 0.6390272656690954, 0.7783811295077183;
+  SampleStats samp = sample_stats(covariance, 200);
+  Eigen::Matrix<double, 6, 1> mean;
+  mean << 0.2477432415246395, -0.0644821064009598,
+          0.4276882415743550, 0.7981008193581799,
+         -0.2447040551029371, 0.1127414554112749;
+  samp.mean.push_back(mean);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+
+  auto psd = magmaan::estimate::frontier::fit_gls_psd(
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
+  REQUIRE_MESSAGE(psd.has_value(), "PSD GLS boundary fit failed: "
+      << (psd.has_value() ? std::string{} : psd.error().detail));
+
+  auto ev = magmaan::model::ModelEvaluator::build(pt, *rep);
+  REQUIRE(ev.has_value());
+  auto weight = magmaan::estimate::gmm::normal_theory_weight(
+      *ev, samp, *start);
+  REQUIRE(weight.has_value());
+  auto problem = magmaan::estimate::gmm::residuals(
+      *ev, samp, psd->theta, *weight);
+  REQUIRE(problem.has_value());
+  auto scalar = magmaan::optim::scalarize(*problem);
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(psd->theta.size());
+  const double recomputed = scalar.f(psd->theta, gradient);
+
+  CHECK(std::isfinite(recomputed));
+  CHECK(recomputed == doctest::Approx(psd->fmin).epsilon(1e-8));
+  CHECK(psd->diagnostics.admissibility.admissible);
+}
+
 TEST_CASE("PSD ULS replaces an exact-fit negative-residual solution") {
   auto pt = lavaanify("f =~ x1 + x2 + x3");
   auto rep = build_matrix_rep(pt);

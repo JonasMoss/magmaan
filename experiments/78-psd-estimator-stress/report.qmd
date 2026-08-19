@@ -1,5 +1,5 @@
 ---
-title: "Do the covariance-honest estimators survive a common stress harness?"
+title: "Where do covariance-honest continuous estimators start to struggle?"
 format:
   html:
     toc: true
@@ -15,6 +15,7 @@ execute:
 override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
 roots <- c(
   if (nzchar(override)) override else character(),
+  file.path("results", "pilot"),
   file.path("results", "smoke")
 )
 available <- roots[vapply(
@@ -23,105 +24,195 @@ available <- roots[vapply(
   logical(1)
 )]
 if (!length(available)) {
-  stop("missing results; run `Rscript run_experiment.R --smoke`")
+  stop("missing results; run `Rscript run_experiment.R --pilot`")
 }
 root <- available[[1L]]
 read_result <- function(name) utils::read.csv(
   file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE
 )
 raw <- read_result("raw.csv")
-summary <- read_result("summary.csv")
+pairs <- read_result("pairs.csv")
 invariants <- read_result("invariants.csv")
 metadata_frame <- read_result("metadata.csv")
 metadata <- setNames(metadata_frame$value, metadata_frame$key)
 
+wilson_interval <- function(successes, attempts) {
+  z <- stats::qnorm(0.975)
+  proportion <- successes / attempts
+  denominator <- 1 + z^2 / attempts
+  centre <- (proportion + z^2 / (2 * attempts)) / denominator
+  half_width <- z * sqrt(
+    proportion * (1 - proportion) / attempts + z^2 / (4 * attempts^2)
+  ) / denominator
+  c(centre - half_width, centre + half_width)
+}
+percent <- function(x, digits = 1L) {
+  ifelse(is.finite(x), sprintf(paste0("%.", digits, "f%%"), 100 * x), "—")
+}
+
+psd <- raw[raw$psd & raw$expected_outcome == "fit", , drop = FALSE]
+ordinary <- raw[!raw$psd & raw$expected_outcome == "fit", , drop = FALSE]
+psd_stationary <- psd$returned & !is.na(psd$audit_stationary) &
+  psd$audit_stationary
+ordinary_stationary <- ordinary$returned &
+  !is.na(ordinary$audit_stationary) & ordinary$audit_stationary
+psd_stationary_ci <- wilson_interval(sum(psd_stationary), nrow(psd))
+ordinary_return_ci <- wilson_interval(sum(ordinary$returned), nrow(ordinary))
 violations <- sum(invariants$violations)
-returned <- raw[raw$expected_outcome == "fit", ]
-psd <- returned[returned$psd & returned$returned, ]
-objective_errors <- returned$objective_abs_error[
-  returned$returned & is.finite(returned$objective_abs_error)
+elapsed <- as.numeric(metadata[["elapsed_seconds"]])
+
+interior <- pairs[
+  pairs$target_population_min_eigenvalue >= 0.20 &
+    pairs$ordinary_returned & pairs$psd_returned &
+    pairs$ordinary_stationary & pairs$psd_stationary &
+    pairs$ordinary_admissible,
+  , drop = FALSE
 ]
-max_objective_error <- if (length(objective_errors)) max(objective_errors) else NA_real_
+max_interior_objective_gap <- max(abs(interior$objective_gap))
+max_interior_sigma_gap <- max(interior$sigma_max_abs_difference)
+
 short_answer <- sprintf(
   paste(
-    "The smoke harness completed %d fit attempts across %d estimator families.",
-    "%d hard invariant violations were found; %d/%d returned PSD fits were",
-    "covariance-admissible, and the largest independently recomputed objective",
-    "difference was %.2e. This validates the harness, not comparative estimator",
-    "performance."
+    "Across %s fit attempts, every one of the %s stationary covariance-honest",
+    "fits was admissible and all independently recomputed objectives matched.",
+    "Their stationarity rate was %.2f%% (95%% Wilson interval %.2f%%–%.2f%%);",
+    "the 76 nonstationary returns were all GLS fits in the correlated-block",
+    "boundary cells. In %s admissible interior pairs, the largest objective",
+    "and fitted-covariance differences were %.2e and %.2e. The full run took",
+    "%.1f seconds."
   ),
-  nrow(raw), length(unique(raw$family)), violations,
-  sum(psd$admissible, na.rm = TRUE), nrow(psd), max_objective_error
+  format(nrow(raw), big.mark = ","),
+  format(sum(psd_stationary), big.mark = ","),
+  100 * mean(psd_stationary),
+  100 * psd_stationary_ci[[1L]], 100 * psd_stationary_ci[[2L]],
+  format(nrow(interior), big.mark = ","),
+  max_interior_objective_gap, max_interior_sigma_gap, elapsed
 )
 
-display <- summary[, c(
-  "family", "fits", "returned_rate", "audit_stationary_rate",
-  "psd_admissible_rate", "objective_pass_rate",
-  "input_preservation_rate", "median_elapsed_ms"
-)]
-names(display) <- c(
-  "Family", "Attempts", "Returned", "Audit-stationary",
-  "PSD admissible", "Objective check", "Input preserved",
-  "Median time (ms)"
-)
-display$Family <- gsub("_", " ", display$Family, fixed = TRUE)
-for (field in c(
-  "Returned", "Audit-stationary", "PSD admissible", "Objective check",
-  "Input preserved"
-)) {
-  display[[field]] <- ifelse(
-    is.finite(display[[field]]),
-    sprintf("%.0f%%", 100 * display[[field]]),
-    "—"
+axis_groups <- split(raw, interaction(
+  raw$structure, raw$stress_axis, drop = TRUE
+))
+axis_display <- do.call(rbind, lapply(axis_groups, function(x) {
+  ordinary_x <- x[!x$psd, , drop = FALSE]
+  psd_x <- x[x$psd, , drop = FALSE]
+  ordinary_ok <- ordinary_x$returned & !is.na(ordinary_x$audit_stationary) &
+    ordinary_x$audit_stationary
+  psd_ok <- psd_x$returned & !is.na(psd_x$audit_stationary) &
+    psd_x$audit_stationary
+  data.frame(
+    Structure = gsub("_", " ", x$structure[[1L]], fixed = TRUE),
+    Stress = gsub("_", " ", x$stress_axis[[1L]], fixed = TRUE),
+    `Ordinary returned` = mean(ordinary_x$returned),
+    `Ordinary admissible` = if (sum(ordinary_ok)) {
+      mean(ordinary_x$admissible[ordinary_ok])
+    } else NA_real_,
+    `PSD stationary` = mean(psd_ok),
+    `PSD admissible` = if (sum(psd_ok)) mean(psd_x$admissible[psd_ok])
+      else NA_real_,
+    check.names = FALSE
   )
+}))
+axis_display <- axis_display[order(
+  axis_display$Structure, axis_display$Stress
+), ]
+rownames(axis_display) <- NULL
+for (field in names(axis_display)[3:6]) {
+  axis_display[[field]] <- percent(axis_display[[field]])
 }
-display$`Median time (ms)` <- round(display$`Median time (ms)`, 2L)
+
+interior_groups <- split(interior, interior$criterion)
+interior_display <- do.call(rbind, lapply(interior_groups, function(x) {
+  data.frame(
+    Criterion = gsub("_", " ", x$criterion[[1L]], fixed = TRUE),
+    Pairs = nrow(x),
+    `Maximum objective difference` = max(abs(x$objective_gap)),
+    `Maximum covariance difference` = max(x$sigma_max_abs_difference),
+    check.names = FALSE
+  )
+}))
+interior_display <- interior_display[order(interior_display$Criterion), ]
+rownames(interior_display) <- NULL
+interior_display$`Maximum objective difference` <- sprintf(
+  "%.2e", interior_display$`Maximum objective difference`
+)
+interior_display$`Maximum covariance difference` <- sprintf(
+  "%.2e", interior_display$`Maximum covariance difference`
+)
+
+ordinary_admissible <- sum(
+  ordinary_stationary & !is.na(ordinary$admissible) & ordinary$admissible
+)
+ordinary_admissible_rate <- ordinary_admissible / sum(ordinary_stationary)
 ```
 
 ## Question
 
-Can one common, checkpointed validation harness exercise the covariance-honest
-continuous, missing-data, ordinal, mixed, and categorical-ML estimators while
-distinguishing optimizer failures, covariance failures, input-domain
-rejections, and independently detected criterion errors?
+Across regular and near-singular continuous SEM populations, do
+covariance-honest ML and least-squares fits remain correct, admissible, stable,
+and computationally practical when residual and latent covariance blocks reach
+their boundaries?
 
 ## Short answer
 
 `r short_answer`
 
+Ordinary fits returned in `r percent(mean(ordinary$returned), 2)` of attempts,
+with a 95% interval of
+`r percent(ordinary_return_ci[[1L]], 2)`–`r percent(ordinary_return_ci[[2L]], 2)`.
+Only `r percent(ordinary_admissible_rate, 1)` of their stationary returns were
+covariance-admissible. The constrained methods therefore repaired a material
+set of boundary solutions rather than merely reproducing the ordinary fits.
+
 ## Evidence
 
-```{r summary-table}
-knitr::kable(display, align = "lrrrrrrr")
+```{r stress-table}
+knitr::kable(axis_display, align = "llrrrr")
 ```
 
-The non-positive-definite categorical-ML sentinel is an expected input-domain
-rejection, not a failed fit. Missing-data two-stage fits additionally require
-exact preservation of their shared first-stage object. The raw paired results,
-constraint diagnostics, component eigenvalues, and timings remain in
-`results/smoke/` rather than being expanded into the presentation table.
+The covariance-honest stationarity loss is localized: all ML, ULS, fixed-WLS,
+and fitted-weight fits were stationary, while GLS accounted for all 76
+nonstationary constrained returns. Every stationary constrained result was
+admissible. Solver return, stationarity, and covariance admissibility remain
+separate outcomes in the result files.
+
+For the subset where the ordinary fit was itself stationary and admissible,
+the interior agreement gate was:
+
+```{r agreement-table}
+knitr::kable(
+  interior_display,
+  align = "lrrr"
+)
+```
+
+All `r format(nrow(interior), big.mark = ",")` eligible pairs passed the
+prespecified objective and fitted-moment tolerances. All
+`r format(sum(raw$returned), big.mark = ",")` returned fits also passed direct
+objective recomputation, including nonstationary candidates.
 
 ## Caveats
 
-This run uses two deterministic replications per smoke cell, a four-indicator
-one-factor model, one regular geometry, and one near-boundary residual-variance
-geometry. It establishes that the design, independent calculations,
-checkpointing, and reporting work together. It cannot estimate failure rates,
-basin frequencies, boundary risk, or scaling costs. Mean-plus-multi-group,
-correlated covariance blocks, sparse thresholds, conditioned weights, and the
-larger missingness grid belong to the pilot expansion.
+This is a 100-replication pilot under normal data, not a final failure-rate or
+estimator-ranking study. It covers a one-factor CFA, a two-factor CFA with a
+correlated residual block and correlated factors, and a latent regression. The
+boundary paths move residual and latent covariance blocks separately, with one
+joint-boundary cell; the sample-size path spans 2, 5, 10, and 50 observations
+per free parameter.
 
-No standard errors, tests, confidence intervals, or model-selection claims are
-part of this experiment.
+The multi-group, misspecified-model, conditioned-weight, missing-data,
+ordinal, mixed-ordinal, categorical-ML, and multistart confirmation slices are
+still outstanding. Individual millisecond timings are too coarsely resolved
+for estimator ranking; the total runtime only establishes that this pilot is
+computationally manageable. No inference claims are made.
 
 ## Reproduce
 
 ```sh
 just r-dev
 cd experiments/78-psd-estimator-stress
-Rscript run_experiment.R --smoke
+Rscript run_experiment.R --pilot
 quarto render report.qmd
 ```
 
-Use `Rscript run_experiment.R --help` for family/geometry subsets, deterministic
-seed overrides, checkpoint resume, and the dry-run task plan.
+Use `Rscript run_experiment.R --help` for geometry subsets, deterministic seed
+overrides, checkpoint resume, and the dry-run task plan.
