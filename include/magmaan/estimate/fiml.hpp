@@ -469,6 +469,17 @@ fiml_casewise_deviance_scores(const spec::LatentStructure& pt,
                               const FIMLPack& pack,
                               const Estimates& est);
 
+// Casewise observed-pattern deviance gradients in saturated moment space,
+// evaluated at caller-supplied moments. Columns are block-stacked covariance
+// vechs followed by block-stacked means, matching ModelEvaluator's J_sigma and
+// J_mu row layouts. `include_means` requires one p-vector per covariance block.
+// This is the direct likelihood-score ingredient for global curved-model
+// multiplier tests; it does not run the saturated H1 EM estimator.
+post_expected<Eigen::MatrixXd>
+fiml_saturated_casewise_deviance_scores(
+    const RawData& raw, const FIMLPack& pack,
+    const model::ImpliedMoments& moments, bool include_means);
+
 post_expected<FIMLScoreMeatBread>
 fiml_score_meat_bread(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,

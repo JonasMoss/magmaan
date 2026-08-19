@@ -324,9 +324,12 @@ when they next change.
   `t(3)` or MNAR. An expanded 875-dataset same-data oracle had zero
   finite/non-finite, df, or .05-decision mismatches against lavaan MLR (five
   paired non-finite p-values; maximum finite p difference .000281). Before a
-  general claim, rerun a reduced primary grid at larger `n`, then implement the
-  general H0 saturated-moment score projection and repeat the comparison in a
-  latent SEM. Keep MLR as the target, effective multipliers as the lead, score
+  general claim, rerun a reduced primary grid at larger `n` and repeat the
+  comparison in a latent SEM. The general H0 saturated-score projection now
+  exists as `inference::frontier::global_score_flip_test`: direct saturated
+  observed-data scores are projected off the fitted SEM tangent in the
+  pattern-conditional Fisher metric, with no H1 fit or per-draw refit. Keep MLR
+  as the target, effective multipliers as the lead, score
   SB/pEBA4 as analytic alternatives, and LRT pEBA4/robust Wald as comparators.
   Experiment 77's third iteration now preflights that latent-SEM panel without
   pretending the projection exists: one-factor, two-factor, orthogonal
@@ -337,9 +340,10 @@ when they next change.
   bifactor fits, so that tolerance or its prespecified failure handling is a
   blocker for the large comparison. On four local workers the current
   null-plus-one-power panel projects to about 1.2, 6.0, and 23.8 minutes for
-  100, 500, and 2,000 reps/cell, excluding the still-unimplemented general
+  100, 500, and 2,000 reps/cell, excluding the then-unimplemented general
   projected-score and multiplier cost. The model/generator budget is therefore
-  acceptable; the next work remains the projection and matched power DGPs, not
+  acceptable; the next work is to measure the shipped projection cost, run its
+  reduced null gate, and add matched power DGPs, not
   a large run of the incomplete method panel.
   The subsequent 1,000-rep null run completed all 40 cells (40,000 attempts) in
   541 seconds on four workers: 39,985 FIML fits converged, 39,894 MLR p-values
@@ -351,6 +355,15 @@ when they next change.
   including 797 bifactor fits. This makes the general multiplier comparator
   and explicit rank diagnostics the next scientific step; the existing FMG
   family is a useful comparator, not a solved replacement.
+  Iteration 05 now gates that comparator on the full 40-cell design: all 120
+  three-rep smoke calls returned finite 199-draw global multiplier p-values,
+  every numerical df matched the prespecified model df, and mean test cost was
+  .0219 seconds (maximum .209). Including fitting/MLR/FMG, the measured panel
+  projects to about 7.2 minutes for 500 null replications per cell and 14.4
+  minutes for 1,000 on four workers; null plus matched power doubles those
+  figures. The next scientific gate is 100--500 null replications per cell and
+  prespecified sparse/diffuse power alternatives, with FMG rank failures kept
+  as failures rather than recoded non-rejections.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null

@@ -145,6 +145,85 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
   out
 }
 
+#' Global curved-SEM multiplier score test.
+#'
+#' Tests a fitted continuous ML/FIML model against its local saturated
+#' mean/covariance alternative. Direct casewise saturated likelihood scores
+#' are projected off the fitted model's moment tangent before multiplier
+#' calibration, so `df` is the saturated moment dimension minus the tangent
+#' rank. This is the general goodness-of-fit counterpart to
+#' [score_flip_test()], which instead releases specified affine restrictions.
+#'
+#' @param fit A fitted continuous ML or FIML `magmaan` model.
+#' @param data Raw fitting data for complete-data ML. FIML uses `fit$raw_data`.
+#' @inheritParams score_flip_test
+#' @return A `magmaan_global_score_flip_test` list containing the effective
+#'   multiplier result, asymptotic comparators, and saturated/tangent geometry
+#'   diagnostics.
+#' @export
+global_score_flip_test <- function(
+    fit, data = NULL, n_flips = 999L, seed = 1,
+    multiplier = c("rademacher", "mammen", "two-point", "gaussian",
+                   "centered-exponential"),
+    two_point_skewness = 1, center_multiplier_scores = FALSE,
+    multiplier_studentization = c("none", "weighted-meat")) {
+  multiplier <- match.arg(multiplier)
+  multiplier_studentization <- match.arg(multiplier_studentization)
+  estimator <- toupper(fit$estimator %||% "ML")
+  if (!estimator %in% c("ML", "FIML")) {
+    stop("global_score_flip_test(): `fit` must use ML or FIML", call. = FALSE)
+  }
+  n_flips <- as.integer(n_flips)[1L]
+  if (is.na(n_flips) || n_flips < 1L) {
+    stop("global_score_flip_test(): `n_flips` must be positive", call. = FALSE)
+  }
+  seed <- as.numeric(seed)[1L]
+  if (!is.finite(seed) || seed < 0 || seed != floor(seed)) {
+    stop("global_score_flip_test(): `seed` must be a non-negative integer",
+         call. = FALSE)
+  }
+  two_point_skewness <- as.numeric(two_point_skewness)
+  if (length(two_point_skewness) != 1L ||
+      !is.finite(two_point_skewness) || two_point_skewness < 0 ||
+      two_point_skewness > 1e6) {
+    stop("global_score_flip_test(): `two_point_skewness` must be finite and in [0, 1e6]",
+         call. = FALSE)
+  }
+  if (!is.logical(center_multiplier_scores) ||
+      length(center_multiplier_scores) != 1L ||
+      is.na(center_multiplier_scores)) {
+    stop("global_score_flip_test(): `center_multiplier_scores` must be TRUE or FALSE",
+         call. = FALSE)
+  }
+  if (estimator == "FIML") {
+    if (!missing(data) && !is.null(data)) {
+      stop("global_score_flip_test(): FIML uses `fit$raw_data`; omit `data`",
+           call. = FALSE)
+    }
+    if (is.null(fit$raw_data)) {
+      stop("global_score_flip_test(): FIML fit does not carry `raw_data`",
+           call. = FALSE)
+    }
+    raw <- fit$raw_data
+  } else {
+    if (missing(data) || is.null(data)) {
+      stop("global_score_flip_test(): complete-data ML requires `data`",
+           call. = FALSE)
+    }
+    raw <- raw_data_arg(fit, data)
+    if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  }
+  out <- magmaan_core$inference_global_score_flip_test(
+      fit, raw, n_flips, seed, multiplier, two_point_skewness,
+      isTRUE(center_multiplier_scores), multiplier_studentization)
+  out$multiplier <- multiplier
+  out$two_point_skewness <- two_point_skewness
+  out$center_multiplier_scores <- isTRUE(center_multiplier_scores)
+  out$multiplier_studentization <- multiplier_studentization
+  class(out) <- c("magmaan_global_score_flip_test", "list")
+  out
+}
+
 #' Nuisance-effective nested score test without random sign calibration.
 #'
 #' Computes the same nuisance-orthogonalized observed score and robust

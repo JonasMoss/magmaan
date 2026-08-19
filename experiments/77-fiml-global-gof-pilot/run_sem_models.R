@@ -15,6 +15,7 @@ usage <- function() cat(
   "Small-rep native VM/IG FIML timing pilot for four compact SEMs.\n\n",
   "  --reps N             Replications per cell (default 10).\n",
   "  --n N                Sample size (default 120).\n",
+  "  --flips N            Global-score multiplier draws (default 199).\n",
   "  --cores N            Parallel cell workers (default up to 4).\n",
   "  --models CSV         Model ids (default all four).\n",
   "  --distributions CSV  Default normal,vm1,ig1,vm2,ig2.\n",
@@ -24,7 +25,7 @@ usage <- function() cat(
   "  --help               Show this help.\n", sep = "")
 
 opts <- list(
-  reps = 10L, n = 120L,
+  reps = 10L, n = 120L, flips = 199L,
   cores = min(4L, max(1L, parallel::detectCores() - 2L)),
   models = NULL,
   distributions = c("normal", "vm1", "ig1", "vm2", "ig2"),
@@ -42,6 +43,7 @@ while (i <= length(args)) {
   if (arg %in% c("-h", "--help")) { usage(); quit(save = "no", status = 0L) }
   else if (arg == "--reps") opts$reps <- as.integer(take())
   else if (arg == "--n") opts$n <- as.integer(take())
+  else if (arg == "--flips") opts$flips <- as.integer(take())
   else if (arg == "--cores") opts$cores <- as.integer(take())
   else if (arg == "--models") opts$models <- parse_csv_arg(take())
   else if (arg == "--distributions") {
@@ -53,7 +55,7 @@ while (i <= length(args)) {
   else stop("unknown argument: ", arg, call. = FALSE)
   i <- i + 1L
 }
-stopifnot(opts$reps > 0L, opts$n >= 80L, opts$cores > 0L,
+stopifnot(opts$reps > 0L, opts$n >= 80L, opts$flips > 0L, opts$cores > 0L,
           opts$seed_base >= 0L)
 
 models <- sem_model_catalog()
@@ -115,14 +117,15 @@ empty_rep <- function(cell, rep_id, seed) {
     model_label = cell$model_label, distribution = cell$distribution,
     missingness = cell$missingness, p = cell$p,
     expected_df = cell$expected_df, n = cell$n, rep = rep_id, seed = seed,
-    fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE,
-    fit_error = "", fmg_error = "", mlr_error = "",
+    fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
+    fit_error = "", fmg_error = "", mlr_error = "", flip_error = "",
     realized_missing_eligible = NA_real_, fitted_df = NA_integer_,
     npar = NA_integer_, fit_seconds = NA_real_, fmg_seconds = NA_real_,
-    mlr_seconds = NA_real_, total_seconds = NA_real_,
+    mlr_seconds = NA_real_, flip_seconds = NA_real_, total_seconds = NA_real_,
     p_lrt_naive = NA_real_, p_lrt_mlr = NA_real_, p_lrt_sb = NA_real_,
     p_lrt_ss = NA_real_, p_lrt_peba4 = NA_real_, p_lrt_all = NA_real_,
-    flip_status = "blocked: general FIML saturated-moment projection not shipped",
+    p_flip_effective = NA_real_, flip_statistic = NA_real_,
+    flip_df = NA_integer_, flip_tangent_rank = NA_integer_,
     stringsAsFactors = FALSE)
 }
 
@@ -202,6 +205,24 @@ one_rep <- function(cell, rep_id) {
     out$mlr_ok <- is.finite(out$p_lrt_mlr)
     if (!out$mlr_ok) out$mlr_error <- "MLR p-value is non-finite"
   }
+
+  flip_begin <- proc.time()[["elapsed"]]
+  flip <- tryCatch(
+    magmaan::global_score_flip_test(
+      fit, n_flips = opts$flips, seed = seed + 900001L,
+      multiplier = "rademacher"),
+    error = function(e) e)
+  out$flip_seconds <- proc.time()[["elapsed"]] - flip_begin
+  if (inherits(flip, "error")) {
+    out$flip_error <- conditionMessage(flip)
+  } else {
+    out$p_flip_effective <- flip$p_effective
+    out$flip_statistic <- flip$statistic_effective
+    out$flip_df <- as.integer(flip$df)
+    out$flip_tangent_rank <- as.integer(flip$tangent_rank)
+    out$flip_ok <- is.finite(out$p_flip_effective)
+    if (!out$flip_ok) out$flip_error <- "global flip p-value is non-finite"
+  }
   out$total_seconds <- proc.time()[["elapsed"]] - begin
   out
 }
@@ -215,8 +236,8 @@ run_cell <- function(index) {
   }))
 }
 
-cat(sprintf("cells=%d reps=%d n=%d cores=%d\n", nrow(grid), opts$reps,
-            opts$n, opts$cores))
+cat(sprintf("cells=%d reps=%d n=%d flips=%d cores=%d\n", nrow(grid),
+            opts$reps, opts$n, opts$flips, opts$cores))
 wall_begin <- proc.time()[["elapsed"]]
 if (.Platform$OS.type != "windows" && opts$cores > 1L) {
   pieces <- parallel::mclapply(
@@ -243,10 +264,12 @@ timing <- do.call(rbind, lapply(split(seq_len(nrow(raw)), group_id), function(ii
     fit_seconds = mean_or_na(z$fit_seconds),
     fmg_seconds = mean_or_na(z$fmg_seconds),
     mlr_seconds = mean_or_na(z$mlr_seconds),
+    flip_seconds = mean_or_na(z$flip_seconds),
     total_seconds = mean_or_na(z$total_seconds),
     fit_success_rate = mean(z$fit_ok),
     fmg_success_rate = mean(z$fmg_ok),
     mlr_finite_rate = mean(z$mlr_ok),
+    flip_success_rate = mean(z$flip_ok),
     stringsAsFactors = FALSE)
 }))
 row.names(timing) <- NULL
@@ -276,7 +299,8 @@ projection <- do.call(rbind, lapply(c(100L, 500L, 2000L), function(reps) {
 }))
 write_csv(projection, file.path(results, "timing_projection.csv"))
 write_metadata(file.path(results, "metadata.csv"), list(
-  reps = opts$reps, n = opts$n, cores = opts$cores, cells = nrow(grid),
+  reps = opts$reps, n = opts$n, flips = opts$flips,
+  cores = opts$cores, cells = nrow(grid),
   distributions = opts$distributions, missingness = opts$missingness,
   models = names(models), seed_base = opts$seed_base,
   setup_seconds = setup_seconds, runtime_wall_seconds = wall_seconds,
@@ -284,13 +308,14 @@ write_metadata(file.path(results, "metadata.csv"), list(
   observed_parallel_speedup = observed_speedup,
   fit_failures = sum(!raw$fit_ok), fmg_failures = sum(!raw$fmg_ok),
   mlr_nonfinite_or_failures = sum(!raw$mlr_ok),
-  flip_status = unique(raw$flip_status)), packages = "magmaan")
+  flip_failures = sum(!raw$flip_ok)), packages = "magmaan")
 
 cat(sprintf(
   "setup=%.1fs runtime_wall=%.1fs observed_speedup=%.2fx failures=%d/%d\n",
   setup_seconds, wall_seconds, observed_speedup, sum(!raw$fit_ok), nrow(raw)))
 print(timing[, c("model_id", "distribution", "missingness", "total_seconds",
-                 "fit_success_rate", "fmg_success_rate", "mlr_finite_rate")],
+                 "fit_success_rate", "fmg_success_rate", "mlr_finite_rate",
+                 "flip_success_rate")],
       row.names = FALSE, digits = 3)
 cat("\nProjected wall time for null-only and doubled null-plus-power panels:\n")
 print(projection[, c("panel", "reps_per_cell", "total_replications",

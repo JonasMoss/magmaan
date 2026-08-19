@@ -38,6 +38,17 @@ stopifnot(
 
 print(a)
 
+global_a <- global_score_flip_test(h1, dat, n_flips = 63, seed = 23)
+global_b <- global_score_flip_test(h1, dat, n_flips = 63, seed = 23)
+stopifnot(
+  inherits(global_a, "magmaan_global_score_flip_test"),
+  global_a$df == 2L,
+  global_a$saturated_moment_dim == 10L,
+  global_a$tangent_rank == 8L,
+  identical(global_a$p_effective, global_b$p_effective),
+  identical(global_a$p_value, global_a$p_effective)
+)
+
 effective <- score_flip_test(
   h1, h0, dat, n_flips = 63, seed = 17, calibration = "effective")
 score <- nested_score_test(h1, h0, dat)
@@ -75,6 +86,7 @@ fs <- nested_score_test(f1, f0)
 f1_model <- model_spec(
   "f =~ x1 + a*x2 + b*x3 + x4", meanstructure = TRUE)
 fs_model <- nested_score_test(f1_model, f0)
+fg <- global_score_flip_test(f1, n_flips = 63, seed = 29)
 stopifnot(
   identical(fa$p_basic, fb$p_basic),
   identical(fa$p_effective, fb$p_effective),
@@ -86,5 +98,10 @@ stopifnot(
   is.finite(fs$p_peba4),
   abs(fs$statistic_effective - fa$statistic_effective) < 1e-8,
   abs(fs_model$statistic_effective - fs$statistic_effective) < 1e-8,
-  abs(fs_model$p_peba4 - fs$p_peba4) < 1e-12
+  abs(fs_model$p_peba4 - fs$p_peba4) < 1e-12,
+  inherits(fg, "magmaan_global_score_flip_test"),
+  fg$df == 2L,
+  fg$saturated_moment_dim == 14L,
+  fg$tangent_rank == 12L,
+  is.finite(fg$p_effective)
 )

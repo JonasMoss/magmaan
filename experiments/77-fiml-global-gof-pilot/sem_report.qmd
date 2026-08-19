@@ -20,6 +20,11 @@ replications <- read_result("replications")
 design <- read_result("design")
 metadata <- read_result("metadata")
 meta <- setNames(metadata$value, metadata$key)
+flip_smoke_dir <- file.path(script_dir, "results", "sem-global-flip-smoke")
+flip_smoke <- if (file.exists(file.path(flip_smoke_dir, "replications.csv"))) {
+  read.csv(file.path(flip_smoke_dir, "replications.csv"),
+           stringsAsFactors = FALSE)
+} else NULL
 
 generator_labels <- c(
   normal = "Normal", vm1 = "VM moderate", ig1 = "IG moderate",
@@ -190,8 +195,9 @@ per cell.
 
 Each dataset is fitted once by FIML. The report compares the dedicated
 Yuan--Bentler/Mplus MLR statistic with FMG SB, SS, pEBA(4), and `all`
-corrections. The general effective multiplier statistic is not yet available
-for these curved latent-SEM-versus-saturated hypotheses.
+corrections. The saved 40,000-fit run predates the general effective multiplier
+statistic; a separate implementation smoke below runs that statistic on the
+same 40-cell design.
 
 ```{r health-table}
 health <- data.frame(
@@ -259,25 +265,63 @@ for the one-factor CFA, .389 for the two-factor CFA, .539 for the bifactor, and
 .268 for the growth model. The bifactor is the hardest model both statistically
 and numerically, but removing it would not rescue MLR.
 
-## Runtime and next method
+## Global effective multiplier implementation
+
+The general test is now implemented. At the fitted null moments it forms each
+case's direct saturated observed-data likelihood score, builds the
+pattern-conditional Fisher metric, and projects the score off the fitted SEM's
+local moment tangent. The tested dimension is the saturated mean/covariance
+dimension minus the tangent rank. Multiplier draws only reweight the projected
+case rows: neither a saturated model nor the null SEM is refitted.
+
+```{r flip-smoke}
+if (!is.null(flip_smoke)) {
+  flip_timing <- aggregate(
+    flip_seconds ~ model_label + missingness, flip_smoke, mean)
+  flip_timing$missingness <- ifelse(
+    flip_timing$missingness == "complete", "Complete", "30% MCAR")
+  names(flip_timing) <- c("model", "observation", "mean flip seconds")
+  knitr::kable(flip_timing, digits = 3, row.names = FALSE)
+} else {
+  cat("Run the global-flip smoke command below to populate this table.")
+}
+```
+
+The 3-replication, 40-cell smoke made 120 global-test calls with 199
+Rademacher draws each. All 120 returned finite p-values, and every computed df
+matched the model's prespecified df. The mean call cost was 0.022 seconds; by
+model and observation mechanism it ranged from about 0.003 seconds for the
+small CFA/growth cases to 0.053 seconds for the bifactor. The full smoke,
+including fitting, MLR, FMG, and the new multiplier test, took 2.6 seconds on
+four workers.
+
+These three replications per cell are an implementation and timing gate, not a
+calibration result. They project to about 7.2 minutes for 500 null replications
+per cell and 14.4 minutes for 1,000; a matched null-plus-power panel doubles
+those figures.
+
+## Runtime and next experiment
 
 The 40,000-fit run took 541 seconds (9.0 minutes) on four workers. Severe
 nonnormal bifactor/MCAR cells dominate the slow tail. At the observed rate, one
 matched power panel would approximately double the run to 18 minutes at 1,000
 replications per cell.
 
-The missing comparator is a general effective multiplier GOF test. It would
-project casewise saturated observed-data scores into the $df$-dimensional
-complement of the fitted SEM tangent, then obtain the reference distribution by
-reweighting those projected rows. It would fit the null SEM once, not refit a
-saturated model for every multiplier draw. The immediate implementation gate is
-an exact complete-data reduction plus an independent saturated-EM
-moment-influence construction under FIML.
+The next experiment can now compare the multiplier test directly with MLR and
+FMG on this panel. Before another 40,000-fit run, the useful gate is roughly
+100--500 null replications per cell, followed by matched sparse and diffuse
+misspecification mechanisms. The saturated-EM moment-influence construction
+remains valuable as an independent validation route for the missing-data
+projection rather than as the production statistic.
 
 ## Reproduce
 
 ```sh
 Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 1000 \
+  --flips 199 \
   --results-dir experiments/77-fiml-global-gof-pilot/results/sem-model-1000
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 3 \
+  --flips 199 \
+  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-global-flip-smoke
 quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
 ```

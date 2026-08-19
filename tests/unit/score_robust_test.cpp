@@ -1865,6 +1865,135 @@ TEST_CASE("frontier FIML score flips: all-observed patterns equal complete ML") 
   CHECK(fiml_centered->p_effective == complete_centered->p_effective);
 }
 
+TEST_CASE("frontier global score flip uses the curved SEM complement") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260820u);
+  auto raw_masked = gaussian_cfa_raw(rng, 180, 0);
+  auto raw_complete = raw_masked;
+  raw_complete.mask.clear();
+  magmaan::optim::OptimOptions fit_opts;
+  fit_opts.max_iter = 1000;
+  auto est = magmaan::test::fit_fiml(h.pt, h.rep, raw_masked, fit_opts);
+  REQUIRE(est.has_value());
+  auto pack_masked = magmaan::estimate::fiml::fiml_pack(raw_masked);
+  auto pack_complete = magmaan::estimate::fiml::fiml_pack(raw_complete);
+  REQUIRE(pack_masked.has_value());
+  REQUIRE(pack_complete.has_value());
+
+  inf::frontier::GlobalScoreFlipOptions opts;
+  opts.resampling.n_flips = 127;
+  opts.resampling.seed = 812;
+  auto masked = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw_masked, *pack_masked, *est, opts);
+  if (!masked.has_value()) MESSAGE(masked.error().detail);
+  REQUIRE(masked.has_value());
+  auto complete = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw_complete, *pack_complete, *est, opts);
+  if (!complete.has_value()) MESSAGE(complete.error().detail);
+  REQUIRE(complete.has_value());
+
+  CHECK(masked->saturated_moment_dim == 14);
+  CHECK(masked->tangent_rank == 12);
+  CHECK(masked->flip.df == 2);
+  CHECK(masked->flip.n_flips == 127);
+  CHECK(masked->flip.p_value == masked->flip.p_effective);
+  CHECK(masked->flip.statistic_effective ==
+        doctest::Approx(complete->flip.statistic_effective).epsilon(1e-9));
+  CHECK(masked->flip.p_effective == complete->flip.p_effective);
+  CHECK((masked->flip.eigvals - complete->flip.eigvals).norm() < 1e-9);
+  CHECK(std::isnan(masked->flip.statistic_basic));
+  CHECK(std::isnan(masked->flip.statistic_standardized));
+  CHECK(masked->tangent_min_singular_value > 0.0);
+  CHECK(masked->tangent_condition >= 1.0);
+  CHECK(std::isfinite(masked->flip.nuisance_stationarity_norm));
+}
+
+TEST_CASE("frontier global score flip supports covariance-only complete ML") {
+  auto h = build("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260822u);
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(
+      rng, 180, four_indicator_sample_cov(), 8.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+
+  inf::frontier::GlobalScoreFlipOptions opts;
+  opts.resampling.n_flips = 63;
+  opts.resampling.seed = 611;
+  auto result = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, *samp, raw, *est, opts);
+  if (!result.has_value()) MESSAGE(result.error().detail);
+  REQUIRE(result.has_value());
+  CHECK(result->saturated_moment_dim == 10);
+  CHECK(result->tangent_rank == 8);
+  CHECK(result->flip.df == 2);
+  CHECK(result->flip.n_flips == 63);
+  CHECK(std::isfinite(result->flip.p_effective));
+
+  auto wrong_raw = raw;
+  wrong_raw.X.front()(0, 0) += 0.5;
+  auto mismatch = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, *samp, wrong_raw, *est, opts);
+  CHECK_FALSE(mismatch.has_value());
+}
+
+TEST_CASE("frontier global FIML score flip is reproducible with missing patterns") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260821u);
+  const auto raw = gaussian_cfa_raw(rng, 220, 3);
+  magmaan::optim::OptimOptions fit_opts;
+  fit_opts.max_iter = 1200;
+  auto est = magmaan::test::fit_fiml(h.pt, h.rep, raw, fit_opts);
+  REQUIRE(est.has_value());
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  REQUIRE(pack->cache.patterns.size() > 1);
+
+  auto evaluator = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(evaluator.has_value());
+  auto evaluation = evaluator->evaluate(est->theta, true, true);
+  REQUIRE(evaluation.has_value());
+  auto saturated_scores =
+      magmaan::estimate::fiml::fiml_saturated_casewise_deviance_scores(
+          raw, *pack, evaluation->moments, true);
+  auto model_scores =
+      magmaan::estimate::fiml::fiml_casewise_deviance_scores(
+          h.pt, h.rep, raw, *pack, *est);
+  REQUIRE(saturated_scores.has_value());
+  REQUIRE(model_scores.has_value());
+  Eigen::MatrixXd Delta(saturated_scores->cols(), est->theta.size());
+  Delta.topRows(evaluation->J_sigma.rows()) = evaluation->J_sigma;
+  Delta.bottomRows(evaluation->J_mu.rows()) = evaluation->J_mu;
+  CHECK((*saturated_scores * Delta - *model_scores).norm() <
+        1e-9 * (1.0 + model_scores->norm()));
+
+  inf::frontier::GlobalScoreFlipOptions opts;
+  opts.resampling.n_flips = 127;
+  opts.resampling.seed = 917;
+  opts.resampling.multiplier =
+      inf::frontier::ScoreFlipMultiplier::Mammen;
+  opts.resampling.center_multiplier_scores = true;
+  auto a = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  if (!a.has_value()) MESSAGE(a.error().detail);
+  REQUIRE(a.has_value());
+  auto b = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  REQUIRE(b.has_value());
+
+  CHECK(a->flip.df == 2);
+  CHECK(a->flip.p_effective == b->flip.p_effective);
+  CHECK(a->flip.statistic_effective ==
+        doctest::Approx(b->flip.statistic_effective));
+  CHECK(a->flip.p_effective >= 1.0 / 128.0);
+  CHECK(a->flip.p_effective <= 1.0);
+  CHECK(std::isfinite(a->flip.p_mixture));
+  CHECK(a->flip.sandwich_available);
+  CHECK(std::isfinite(a->flip.p_sandwich));
+}
+
 TEST_CASE("frontier FIML score flips: missing-pattern correction is reproducible") {
   auto h1 = build_mean("f =~ x1 + a*x2 + b*x3 + x4");
   auto h0 = build_mean("f =~ x1 + a*x2 + b*x3 + x4\na == b");

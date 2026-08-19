@@ -1873,6 +1873,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// inference_global_score_flip_test
+Rcpp::List inference_global_score_flip_test(Rcpp::List fit, SEXP raw, int n_flips, double seed, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization);
+RcppExport SEXP _magmaan_inference_global_score_flip_test(SEXP fitSEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< int >::type n_flips(n_flipsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< std::string >::type multiplier(multiplierSEXP);
+    Rcpp::traits::input_parameter< double >::type two_point_skewness(two_point_skewnessSEXP);
+    Rcpp::traits::input_parameter< bool >::type center_multiplier_scores(center_multiplier_scoresSEXP);
+    Rcpp::traits::input_parameter< std::string >::type multiplier_studentization(multiplier_studentizationSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_global_score_flip_test(fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_z_test
 Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se);
 RcppExport SEXP _magmaan_infer_z_test(SEXP fitSEXP, SEXP seSEXP) {
@@ -3833,6 +3851,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
     {"_magmaan_inference_score_flip_test", (DL_FUNC) &_magmaan_inference_score_flip_test, 10},
     {"_magmaan_inference_score_flip_test_model", (DL_FUNC) &_magmaan_inference_score_flip_test_model, 10},
+    {"_magmaan_inference_global_score_flip_test", (DL_FUNC) &_magmaan_inference_global_score_flip_test, 8},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},
