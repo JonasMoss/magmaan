@@ -14,182 +14,146 @@ execute:
 
 ```{r setup}
 script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
-result_dir <- file.path(script_dir, "results", "sem-model-1000")
+result_dir <- file.path(script_dir, "results", "sem-global-flip-500")
 read_result <- function(name) read.csv(
   file.path(result_dir, paste0(name, ".csv")), stringsAsFactors = FALSE)
 replications <- read_result("replications")
 design <- read_result("design")
 metadata <- read_result("metadata")
 meta <- setNames(metadata$value, metadata$key)
-flip_gate_dir <- file.path(script_dir, "results", "sem-global-flip-500")
-flip_gate <- if (file.exists(file.path(flip_gate_dir, "replications.csv"))) {
-  read.csv(file.path(flip_gate_dir, "replications.csv"),
-           stringsAsFactors = FALSE)
-} else NULL
 
+model_order <- c(
+  "one_factor_6", "two_factor_fmg_10", "bifactor_12", "linear_growth_5")
+model_labels <- c(
+  one_factor_6 = "One-factor CFA",
+  two_factor_fmg_10 = "Two-factor CFA",
+  bifactor_12 = "Bifactor",
+  linear_growth_5 = "Linear growth")
+generator_order <- c("normal", "vm1", "ig1", "vm2", "ig2")
 generator_labels <- c(
   normal = "Normal", vm1 = "VM moderate", ig1 = "IG moderate",
   vm2 = "VM severe", ig2 = "IG severe")
+missingness_labels <- c(complete = "Complete", mcar_30 = "30% MCAR")
 method_columns <- c(
-  "Yuan--Bentler MLR" = "p_lrt_mlr", "FMG SB" = "p_lrt_sb",
-  "FMG SS" = "p_lrt_ss", "FMG pEBA(4)" = "p_lrt_peba4",
+  "Effective multiplier" = "p_flip_effective",
+  "Yuan--Bentler MLR" = "p_lrt_mlr",
+  "FMG SB" = "p_lrt_sb",
+  "FMG SS" = "p_lrt_ss",
+  "FMG pEBA(4)" = "p_lrt_peba4",
   "FMG all" = "p_lrt_all")
-
-summarize_p <- function(data, column) {
-  p <- data[[column]]
-  c(n = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE))
-}
 
 group_vars <- c("model_id", "distribution", "missingness")
 group_id <- interaction(
   replications[group_vars], drop = TRUE, lex.order = TRUE)
-cell_size <- do.call(rbind, lapply(
-  split(seq_len(nrow(replications)), group_id), function(ii) {
-    z <- replications[ii, , drop = FALSE]
-    do.call(rbind, lapply(names(method_columns), function(method) {
-      p <- z[[method_columns[[method]]]]
-      data.frame(
-        z[1L, group_vars, drop = FALSE], method = method,
-        finite = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE),
-        stringsAsFactors = FALSE)
-    }))
-  }))
+cell_rows <- split(seq_len(nrow(replications)), group_id)
 
-scorecard <- do.call(rbind, lapply(
-  split(cell_size, cell_size$method), function(z) {
-    data.frame(
-      method = z$method[[1L]], finite = sum(z$finite),
-      mean_cell_rejection = mean(z$rejection),
-      mean_abs_size_error = mean(abs(z$rejection - .05)),
-      min_cell_rejection = min(z$rejection),
-      max_cell_rejection = max(z$rejection),
-      fraction_025_075 = mean(z$rejection >= .025 & z$rejection <= .075),
-      stringsAsFactors = FALSE)
-  }))
-
-dgp_rows <- unique(replications[, c("distribution", "missingness")])
-generator_size <- do.call(rbind, lapply(seq_len(nrow(dgp_rows)), function(i) {
-  z <- replications[
-    replications$distribution == dgp_rows$distribution[[i]] &
-      replications$missingness == dgp_rows$missingness[[i]], , drop = FALSE]
-  mlr <- summarize_p(z, "p_lrt_mlr")
-  ss <- summarize_p(z, "p_lrt_ss")
-  all <- summarize_p(z, "p_lrt_all")
-  data.frame(
-    generator = generator_labels[[dgp_rows$distribution[[i]]]],
-    observation = if (dgp_rows$missingness[[i]] == "complete")
-      "Complete" else "30% MCAR",
-    mlr_n = mlr[["n"]], mlr_rejection = mlr[["rejection"]],
-    ss_n = ss[["n"]], ss_rejection = ss[["rejection"]],
-    all_n = all[["n"]], all_rejection = all[["rejection"]],
-    stringsAsFactors = FALSE)
+cell_table <- do.call(rbind, lapply(cell_rows, function(ii) {
+  z <- replications[ii, , drop = FALSE]
+  out <- data.frame(
+    model_id = z$model_id[[1L]],
+    model = unname(model_labels[[z$model_id[[1L]]]]),
+    distribution = z$distribution[[1L]],
+    generator = unname(generator_labels[[z$distribution[[1L]]]]),
+    missingness_id = z$missingness[[1L]],
+    missingness = unname(missingness_labels[[z$missingness[[1L]]]]),
+    stringsAsFactors = FALSE, check.names = FALSE)
+  for (method in names(method_columns)) {
+    p_value <- z[[method_columns[[method]]]]
+    out[[method]] <- mean(p_value < .05, na.rm = TRUE)
+  }
+  out
 }))
-generator_size$generator <- factor(
-  generator_size$generator, levels = unname(generator_labels))
-generator_size$observation <- factor(
-  generator_size$observation, levels = c("Complete", "30% MCAR"))
-generator_size <- generator_size[order(
-  generator_size$generator, generator_size$observation), ]
+cell_table$model_id <- factor(cell_table$model_id, levels = model_order)
+cell_table$distribution <- factor(
+  cell_table$distribution, levels = generator_order)
+cell_table$missingness_id <- factor(
+  cell_table$missingness_id, levels = c("complete", "mcar_30"))
+cell_table <- cell_table[order(
+  cell_table$model_id, cell_table$distribution, cell_table$missingness_id), ]
+row.names(cell_table) <- NULL
 
-model_rows <- unique(replications[, c("model_id", "model_label")])
-model_size <- do.call(rbind, lapply(seq_len(nrow(model_rows)), function(i) {
-  z <- replications[replications$model_id == model_rows$model_id[[i]], ]
-  mlr <- summarize_p(z, "p_lrt_mlr")
-  ss <- summarize_p(z, "p_lrt_ss")
-  all <- summarize_p(z, "p_lrt_all")
+scorecard <- do.call(rbind, lapply(names(method_columns), function(method) {
+  rejection <- cell_table[[method]]
+  p_value <- replications[[method_columns[[method]]]]
   data.frame(
-    model = model_rows$model_label[[i]],
-    mlr_n = mlr[["n"]], mlr_rejection = mlr[["rejection"]],
-    ss_n = ss[["n"]], ss_rejection = ss[["rejection"]],
-    all_n = all[["n"]], all_rejection = all[["rejection"]],
+    method = method,
+    finite = sum(is.finite(p_value)),
+    mean_cell_rejection = mean(rejection),
+    mean_abs_size_error = mean(abs(rejection - .05)),
+    min_cell_rejection = min(rejection),
+    max_cell_rejection = max(rejection),
+    cells_in_band = sum(rejection >= .025 & rejection <= .075),
     stringsAsFactors = FALSE)
 }))
 
-gate_method_columns <- c(
-  "Effective multiplier" = "p_flip_effective",
-  "FMG SS" = "p_lrt_ss", "FMG all" = "p_lrt_all",
-  "Yuan--Bentler MLR" = "p_lrt_mlr", "FMG SB" = "p_lrt_sb",
-  "FMG pEBA(4)" = "p_lrt_peba4")
-
-if (!is.null(flip_gate)) {
-  gate_group_id <- interaction(
-    flip_gate[group_vars], drop = TRUE, lex.order = TRUE)
-  gate_cell_size <- do.call(rbind, lapply(
-    split(seq_len(nrow(flip_gate)), gate_group_id), function(ii) {
-      z <- flip_gate[ii, , drop = FALSE]
-      do.call(rbind, lapply(names(gate_method_columns), function(method) {
-        p <- z[[gate_method_columns[[method]]]]
-        data.frame(
-          z[1L, group_vars, drop = FALSE], method = method,
-          finite = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE),
-          stringsAsFactors = FALSE)
-      }))
-    }))
-  gate_scorecard <- do.call(rbind, lapply(
-    split(gate_cell_size, gate_cell_size$method), function(z) {
-      data.frame(
-        method = z$method[[1L]], finite = sum(z$finite),
-        mean_cell_rejection = mean(z$rejection),
-        mean_abs_size_error = mean(abs(z$rejection - .05)),
-        min_cell_rejection = min(z$rejection),
-        max_cell_rejection = max(z$rejection),
-        fraction_025_075 = mean(
-          z$rejection >= .025 & z$rejection <= .075),
-        stringsAsFactors = FALSE)
-    }))
-  gate_scorecard <- gate_scorecard[match(
-    names(gate_method_columns), gate_scorecard$method), ]
-
-  gate_dgp <- unique(flip_gate[, c("distribution", "missingness")])
-  gate_generator_size <- do.call(rbind, lapply(
-    seq_len(nrow(gate_dgp)), function(i) {
-      z <- flip_gate[
-        flip_gate$distribution == gate_dgp$distribution[[i]] &
-          flip_gate$missingness == gate_dgp$missingness[[i]], , drop = FALSE]
-      flip <- summarize_p(z, "p_flip_effective")
-      mlr <- summarize_p(z, "p_lrt_mlr")
-      ss <- summarize_p(z, "p_lrt_ss")
-      all <- summarize_p(z, "p_lrt_all")
-      data.frame(
-        generator = generator_labels[[gate_dgp$distribution[[i]]]],
-        observation = if (gate_dgp$missingness[[i]] == "complete")
-          "Complete" else "30% MCAR",
-        flip_n = flip[["n"]], flip_rejection = flip[["rejection"]],
-        ss_rejection = ss[["rejection"]], all_rejection = all[["rejection"]],
-        mlr_rejection = mlr[["rejection"]], stringsAsFactors = FALSE)
-    }))
-  gate_generator_size$generator <- factor(
-    gate_generator_size$generator, levels = unname(generator_labels))
-  gate_generator_size$observation <- factor(
-    gate_generator_size$observation, levels = c("Complete", "30% MCAR"))
-  gate_generator_size <- gate_generator_size[order(
-    gate_generator_size$generator, gate_generator_size$observation), ]
-
-  flip_gate$nominal_geometry <- flip_gate$flip_ok &
-    flip_gate$flip_df == flip_gate$expected_df
-  gate_geometry <- aggregate(
-    cbind(flip_ok, nominal_geometry) ~ model_label, flip_gate, sum)
-  gate_geometry$fit_ok <- as.integer(table(factor(
-    flip_gate$model_label[flip_gate$fit_ok], levels = gate_geometry$model_label)))
-  gate_geometry$attempted <- as.integer(table(factor(
-    flip_gate$model_label, levels = gate_geometry$model_label)))
-}
+replications$nominal_geometry <- replications$flip_ok &
+  replications$flip_df == replications$expected_df
+geometry <- aggregate(
+  cbind(fit_ok, flip_ok, nominal_geometry) ~ model_label,
+  replications, sum)
+geometry$attempted <- as.integer(table(factor(
+  replications$model_label, levels = geometry$model_label)))
 ```
 
-## Question
+The question is deliberately narrow: how well calibrated are global
+goodness-of-fit tests when correctly specified, ordinary latent-variable models
+are fitted by FIML to normal, Vale--Maurelli, and independent-generator data,
+with and without MCAR missingness? All entries below are Type-I rejection rates
+at $\alpha=.05$. The design has 40 cells, $n=120$, and 500 replications per
+cell.
 
-How well calibrated are Yuan--Bentler/Mplus MLR and the
-Foldnes--Moss--Grønneberg (FMG) eigenvalue-tail corrections when correctly
-specified, ordinary latent-variable models are fitted by FIML to normal,
-Vale--Maurelli, and independent-generator data, with and without MCAR
-missingness?
+## Headline result
 
-Every fitted model is exactly correct in its population. All rejection rates
-are therefore Type-I error rates. This report contains no $t$ distributions,
-lognormal margins, contamination, MAR, MNAR, or power conditions; those belong
-to an earlier affine screening experiment.
+```{r headline-table}
+headline <- scorecard[, c(
+  "method", "mean_cell_rejection", "mean_abs_size_error",
+  "min_cell_rejection", "max_cell_rejection", "cells_in_band")]
+names(headline) <- c(
+  "method", "mean size", "mean |size-.05|", "minimum", "maximum",
+  "cells in [.025,.075]")
+knitr::kable(headline, digits = 3, row.names = FALSE)
+```
 
-## Models
+The effective multiplier is the clear winner. Its mean rejection across the 40
+null cells is .058, its mean absolute size error is .016, and 33/40 cells lie
+in the practical [.025,.075] band. FMG `all` averages .065 but reaches .155;
+FMG SS averages .072 and reaches .173. Yuan--Bentler MLR averages .364 and
+reaches .930. The multiplier is therefore improving materially on the strongest
+FMG corrections, not merely beating MLR.
+
+## All 40 design cells
+
+Each entry is the proportion of finite p-values below .05. Method-specific
+finite denominators and numerical diagnostics are reported in the appendix.
+
+```{r all-cells-table}
+all_cells <- cell_table[, c(
+  "model", "generator", "missingness", names(method_columns))]
+knitr::kable(all_cells, digits = 3, row.names = FALSE)
+```
+
+The multiplier remains near .05 across most model and observation combinations.
+Its most liberal cell is the bifactor under severe complete-data VM (.122), and
+its most conservative is the bifactor under normal MCAR (.018). VM is generally
+harder than IG despite matched marginal moments. MLR is liberal even under the
+normal reference and deteriorates sharply with nonnormality; FMG SS and `all`
+occupy the middle ground.
+
+## Model specifications
+
+```{r model-table}
+model_table <- unique(design[, c(
+  "model_id", "model_label", "p", "expected_df")])
+model_table$free_parameters <- c(18L, 31L, 48L, 10L)[match(
+  model_table$model_id, model_order)]
+model_table$model_id <- factor(model_table$model_id, levels = model_order)
+model_table <- model_table[order(model_table$model_id), ]
+model_table$model <- unname(model_labels[as.character(model_table$model_id)])
+model_table <- model_table[, c(
+  "model", "p", "free_parameters", "expected_df")]
+names(model_table) <- c("model", "observed variables", "free parameters", "df")
+knitr::kable(model_table, row.names = FALSE)
+```
 
 1. **One-factor CFA, six indicators.** The population is
    $x_j=\lambda_j f+\varepsilon_j$, with
@@ -225,17 +189,77 @@ to an earlier affine screening experiment.
    and freely estimates the growth means, latent variance/covariance terms,
    and residual variances.
 
-```{r model-table}
-model_table <- unique(design[, c(
-  "model_id", "model_label", "p", "expected_df")])
-model_table$free_parameters <- c(18L, 31L, 48L, 10L)[match(
-  model_table$model_id,
-  c("one_factor_6", "two_factor_fmg_10", "bifactor_12", "linear_growth_5"))]
-model_table <- model_table[, c(
-  "model_label", "p", "free_parameters", "expected_df")]
-names(model_table) <- c("model", "observed variables", "free parameters", "df")
-knitr::kable(model_table, row.names = FALSE)
-```
+## Methods
+
+Each dataset is fitted once by FIML and passed to six global-fit calibrations:
+
+- **Effective multiplier:** the projected saturated-score test described below,
+  using 199 Rademacher draws.
+- **Yuan--Bentler/Mplus MLR:** the dedicated robust FIML likelihood-ratio
+  statistic.
+- **FMG corrections:** SB, SS, pEBA(4), and `all`, computed from the estimated
+  eigenvalue spectrum of the null statistic.
+
+### Effective multiplier
+
+This is a global score test of the fitted SEM against the local saturated
+mean-and-covariance model. It is not a robust standard error and it does not
+rescale the ordinary likelihood-ratio statistic.
+
+Let the saturated moment vector be
+
+$$
+\eta =
+\begin{pmatrix}
+\operatorname{vech}(\Sigma) \\
+\mu
+\end{pmatrix}
+\in \mathbb{R}^{m}.
+$$
+
+At the restricted estimate $\widehat\theta$, the method evaluates each case's
+direct saturated observed-data score $s_i$. Under FIML, this is the likelihood
+score for the variables actually observed for that case; missing values are not
+filled in.
+
+Let $\Delta=\partial\eta(\theta)/\partial\theta^{\mathsf T}$ be the local model
+tangent, with affine equality constraints incorporated. If $K$ spans that
+tangent, $D$ spans its Euclidean complement, and $I$ is the saturated-moment
+Fisher information summed over observed-data patterns, define
+
+$$
+G=D-K(K^{\mathsf T}IK)^{-1}K^{\mathsf T}ID.
+$$
+
+Then $K^{\mathsf T}IG=0$, so $z_i=G^{\mathsf T}s_i$ retains only saturated
+directions not locally explained by the SEM. The observed statistic is
+
+$$
+u=\sum_{i=1}^{n}z_i,
+\qquad
+V=G^{\mathsf T}IG,
+\qquad
+T=u^{\mathsf T}V^{-1}u.
+$$
+
+Its dimension is $d=m-\operatorname{rank}(\Delta)$, ordinarily the model df.
+For multiplier draw $b$, independent $w_{ib}\in\{-1,+1\}$ give
+
+$$
+u_b=\sum_{i=1}^{n}w_{ib}z_i,
+\qquad
+T_b=u_b^{\mathsf T}V^{-1}u_b,
+\qquad
+\widehat p=
+\frac{1+\sum_{b=1}^{B}\mathbf{1}(T_b\geq T)}{B+1}.
+$$
+
+Here $B=199$, so the p-value grid has width $1/200$. The fitted moments,
+projection, and Fisher metric stay fixed: every draw is only a weighted score
+sum and a small quadratic form. Neither the null SEM nor a saturated alternative
+is refitted. Unlike MLR's scalar adjustment of a likelihood-ratio statistic,
+the multiplier reference retains casewise, direction-specific score variation
+after removing the SEM tangent.
 
 ## VM and IG generators
 
@@ -265,278 +289,54 @@ and marginal skewness/kurtosis but different multivariate higher-order
 dependence.
 
 Each generator is observed completely or with 30% MCAR on every variable except
-the first indicator/wave, which is always observed. The factorial design has
-$4\times5\times2=40$ true-null cells, all at $n=120$, with 1,000 replications
-per cell.
+the first indicator or wave, which is always observed.
 
-## Methods and denominators
+## Appendix: numerical and computational details {.appendix}
 
-Each dataset is fitted once by FIML. The report compares the dedicated
-Yuan--Bentler/Mplus MLR statistic with FMG SB, SS, pEBA(4), and `all`
-corrections. The 40,000-fit run gives the most precise MLR/FMG baseline. A
-matched 20,000-fit gate adds the general effective multiplier statistic with
-199 Rademacher draws per fit on the same 40-cell design.
+### Method-specific denominators
 
-```{r health-table}
-health <- data.frame(
-  quantity = c("Attempted", "FIML converged", "MLR finite", "FMG call returned"),
-  result = c(
-    nrow(replications), sum(replications$fit_ok), sum(replications$mlr_ok),
-    sum(replications$fmg_ok)))
-knitr::kable(health, row.names = FALSE)
-```
-
-Fifteen FIML fits did not converge. Among otherwise converged fits, 91 MLR
-p-values were non-finite and 829 FMG calls hit the projected `U Gamma` rank
-guard. The bifactor accounted for 797 of the FMG rank failures. Rejection rates
-below use finite, method-specific denominators; failures are not silently
+Rejection rates use finite, method-specific denominators. Failures are not
 counted as non-rejections.
 
-## Overall null calibration
-
-```{r scorecard-table}
-show_scorecard <- scorecard[, c(
-  "method", "finite", "mean_cell_rejection", "mean_abs_size_error",
-  "min_cell_rejection", "max_cell_rejection", "fraction_025_075")]
-names(show_scorecard) <- c(
-  "method", "finite p-values", "mean cell size", "mean |size-.05|",
-  "minimum", "maximum", "fraction in [.025,.075]")
-knitr::kable(show_scorecard, digits = 3, row.names = FALSE)
+```{r denominator-table}
+denominators <- scorecard[, c("method", "finite")]
+denominators$non_finite <- nrow(replications) - denominators$finite
+names(denominators) <- c("method", "finite p-values", "non-finite or no fit")
+knitr::kable(denominators, row.names = FALSE)
 ```
 
-MLR is severely liberal: its mean rejection across the 40 cells is .366 and it
-ranges from .062 to .932. FMG `all` is much better at .066 on average, but its
-.022--.168 range is not uniformly satisfactory. SS behaves similarly overall;
-SB and pEBA(4) remain clearly liberal.
+### Convergence and tangent rank
 
-## VM versus IG
-
-```{r generator-results}
-show_generator <- generator_size
-names(show_generator) <- c(
-  "generator", "observation", "MLR n", "MLR rejection",
-  "SS n", "SS rejection", "all n", "all rejection")
-knitr::kable(show_generator, digits = 3, row.names = FALSE)
+```{r geometry-table}
+show_geometry <- geometry[, c(
+  "model_label", "attempted", "fit_ok", "flip_ok", "nominal_geometry")]
+names(show_geometry) <- c(
+  "model", "attempted", "FIML converged", "finite multiplier",
+  "nominal tangent rank")
+knitr::kable(show_geometry, row.names = FALSE)
 ```
 
-At identical marginal moments, VM is consistently harder than IG. MLR rises
-from .294/.440 under moderate VM (complete/MCAR) to .556/.689 under severe VM;
-the corresponding IG rates are .232/.381 and .318/.493. Marginal skewness and
-kurtosis alone therefore do not explain calibration.
+Nine of 20,000 FIML fits did not converge. Every converged fit produced a finite
+multiplier p-value. In 25 of the 19,991 finite calls, however, the model Jacobian
+lost numerical rank and raised the tested df above its prespecified value.
+Nineteen occurred in the two-factor CFA under MCAR, two in that model under
+VM1/complete data, and four in the one-factor VM2/MCAR cell.
 
-FMG `all` is close to .05 for all complete-data generator conditions. With
-MCAR it rises to .099 under moderate VM and .127 under severe VM, compared with
-.063 and .055 under IG. Keeping VM and IG separate is consequently essential.
-
-## Results by model
-
-```{r model-results}
-show_model <- model_size
-names(show_model) <- c(
-  "model", "MLR n", "MLR rejection", "SS n", "SS rejection",
-  "all n", "all rejection")
-knitr::kable(show_model, digits = 3, row.names = FALSE)
-```
-
-The MLR problem is not confined to one unusual model. Pooled rejection is .264
-for the one-factor CFA, .389 for the two-factor CFA, .539 for the bifactor, and
-.268 for the growth model. The bifactor is the hardest model both statistically
-and numerically, but removing it would not rescue MLR.
-
-## What the effective multiplier test does
-
-This is a global score test of the fitted SEM against the local saturated
-mean-and-covariance model. It is not a robust standard error and it does not
-rescale the ordinary likelihood-ratio statistic.
-
-Let the saturated moment vector be
-
-$$
-\eta =
-\begin{pmatrix}
-\operatorname{vech}(\Sigma) \\
-\mu
-\end{pmatrix}
-\in \mathbb{R}^{m}.
-$$
-
-For $p$ observed variables with an estimated mean structure,
-$m=p(p+1)/2+p$. At the restricted estimate $\widehat\theta$, the test evaluates
-the direct saturated observed-data score contribution $s_i$ for every case.
-Under FIML, $s_i$ is the likelihood score for the variables actually observed
-for case $i$; missing values are neither filled in nor assigned artificial
-residuals.
-
-### Remove the fitted model tangent
-
-The model occupies only a curved subspace of the saturated moment space. Its
-local tangent is the column space of
-
-$$
-\Delta
-=
-\left.
-\frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}
-\right|_{\widehat\theta},
-$$
-
-after incorporating any affine equality constraints. Write $r$ for the
-numerical rank of $\Delta$. Let $K$ span the model tangent and let $D$ span its
-Euclidean complement. If $I$ is the saturated-moment Fisher information,
-formed by summing the appropriate conditional information over observed-data
-patterns, define
-
-$$
-G
-=
-D-K(K^{\mathsf T}IK)^{-1}K^{\mathsf T}ID.
-$$
-
-This adjustment makes $K^{\mathsf T}IG=0$: the columns of $G$ describe the
-saturated directions that remain after removing changes locally explainable by
-the fitted SEM. Each case contributes the nuisance-effective score
-
-$$
-z_i=G^{\mathsf T}s_i,
-$$
-
-and the observed quadratic statistic is
-
-$$
-u=\sum_{i=1}^{n}z_i,
-\qquad
-V=G^{\mathsf T}IG,
-\qquad
-T=u^{\mathsf T}V^{-1}u.
-$$
-
-The tested dimension is
-
-$$
-d=m-r.
-$$
-
-At a regular fit this is the ordinary model df. A discrepancy is useful rather
-than cosmetic: it means the fitted model Jacobian has lost numerical rank. The
-rank diagnostic reported below therefore accompanies every multiplier result.
-
-### Construct the multiplier reference
-
-For draw $b$, generate independent Rademacher weights
-$w_{ib}\in\{-1,+1\}$ and form
-
-$$
-u_b=\sum_{i=1}^{n}w_{ib}z_i,
-\qquad
-T_b=u_b^{\mathsf T}V^{-1}u_b.
-$$
-
-With $B$ random draws, the finite Monte Carlo p-value is
-
-$$
-\widehat p
-=
-\frac{1+\sum_{b=1}^{B}\mathbf{1}(T_b\geq T)}{B+1}.
-$$
-
-The experiment uses $B=199$, giving a p-value grid of width $1/200$. The fitted
-moments, tangent projection, and Fisher metric are held fixed. A draw requires
-only a weighted sum of the saved casewise scores and a small quadratic form;
-neither the null SEM nor a saturated alternative is refitted.
-
-The practical contrast with Yuan--Bentler MLR is therefore sharp. MLR reduces
-the nonnormal correction to a scalar adjustment of a likelihood-ratio
-statistic. The effective multiplier instead retains the casewise,
-direction-specific score variation after the SEM tangent has been removed and
-uses random reweighting to obtain its reference distribution. The null results
-below evaluate whether that extra structure buys usable calibration.
-
-## Global multiplier null gate
-
-```{r gate-scorecard}
-if (!is.null(flip_gate)) {
-  show_gate_scorecard <- gate_scorecard[, c(
-    "method", "finite", "mean_cell_rejection", "mean_abs_size_error",
-    "min_cell_rejection", "max_cell_rejection", "fraction_025_075")]
-  names(show_gate_scorecard) <- c(
-    "method", "finite p-values", "mean cell size", "mean |size-.05|",
-    "minimum", "maximum", "fraction in [.025,.075]")
-  knitr::kable(show_gate_scorecard, digits = 3, row.names = FALSE)
-} else {
-  cat("Run the 500-replication global-flip command below to populate this table.")
-}
-```
-
-The effective multiplier is the clear winner in the matched gate. Its mean
-rejection across the 40 null cells is .058, its mean absolute size error is
-.016, and 33/40 cells lie in the practical [.025,.075] band. FMG SS and `all`
-average .072 and .065 but have larger cellwise errors and maxima of .173 and
-.155. MLR averages .364 and reaches .930. Thus the flip is not merely beating
-MLR; it also materially improves on the strongest FMG analytic corrections.
-
-```{r gate-generator}
-if (!is.null(flip_gate)) {
-  show_gate_generator <- gate_generator_size
-  names(show_gate_generator) <- c(
-    "generator", "observation", "flip n", "effective multiplier",
-    "FMG SS", "FMG all", "MLR")
-  knitr::kable(show_gate_generator, digits = 3, row.names = FALSE)
-}
-```
-
-The multiplier remains close to nominal under both generator families and
-both observation mechanisms. Pooled over models, its rejection ranges from
-.037 under normal MCAR to .085 under severe complete-data VM. Severe VM is the
-remaining visible stress point; severe IG is .061 complete and .072 under
-MCAR, confirming again that matching marginal skewness and kurtosis does not
-match multivariate difficulty.
-
-### Numerical geometry and failures
-
-```{r gate-geometry}
-if (!is.null(flip_gate)) {
-  show_geometry <- gate_geometry[, c(
-    "model_label", "attempted", "fit_ok", "flip_ok", "nominal_geometry")]
-  names(show_geometry) <- c(
-    "model", "attempted", "FIML converged", "finite flip",
-    "nominal tangent rank")
-  knitr::kable(show_geometry, row.names = FALSE)
-}
-```
-
-Nine of 20,000 FIML fits did not converge. Every converged fit produced a
-finite multiplier p-value. In 25 of the 19,991 finite calls, however, the local
-model Jacobian lost numerical rank, raising the tested df above its
-prespecified value. These cases were concentrated in the two-factor CFA under
-MCAR (19 cases), with two additional two-factor VM1/complete cases and four
-one-factor VM2/MCAR cases. They are reported as non-nominal geometry rather
-than hidden as successful ordinary tests.
-
-The all-finite scorecard above is deliberately conservative about this
-diagnostic: 16/25 rank-anomalous calls rejected. Requiring the nominal tangent
+Sixteen of the 25 rank-anomalous calls rejected. Requiring the nominal tangent
 rank leaves 19,966 calls and changes mean cell rejection only from .0584 to
-.0577, with the same 33/40 cells in the practical band. Future power runs
-should fail closed on a non-nominal rank and report that denominator
-separately.
+.0577, with the same 33/40 cells in [.025,.075]. The anomaly does not drive the
+headline result, but future power work should treat it as a separate fail-closed
+denominator.
 
-## Runtime and next experiment
+### Runtime and next experiment
 
-The 20,000-fit multiplier gate took 446 seconds (7.4 minutes) on four workers,
-including FIML, MLR, FMG, and 199 multiplier draws. The measured parallel
-speedup was 3.68. The mean multiplier call itself was about 0.022 seconds; the
-large bifactor/MCAR cells dominate the slow tail.
+The 20,000-fit panel took 446 seconds (7.4 minutes) on four workers, including
+FIML, MLR, FMG, and 199 multiplier draws. The observed parallel speedup was
+3.68. The next scientific experiment is a matched power panel with prespecified
+sparse and diffuse SEM misspecifications, reporting raw and size-adjusted power
+plus the same finite and tangent-rank denominators.
 
-This null gate is strong enough to proceed. The next scientific experiment is
-a matched power panel with prespecified sparse and diffuse SEM
-misspecifications, retaining the same four models and VM/IG mechanisms. It
-should report raw power together with size-adjusted power, finite denominators,
-and tangent-rank failures. A later 1,000--2,000-replication null confirmation
-can sharpen the seven edge-cell estimates; it is no longer needed to decide
-whether the flip deserves the power experiment. The saturated-EM
-moment-influence construction remains an independent validation route for the
-missing-data projection rather than the production statistic.
-
-## Reproduce
+### Reproduce
 
 ```sh
 Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 500 \
