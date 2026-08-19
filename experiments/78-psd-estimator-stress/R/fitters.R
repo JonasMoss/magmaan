@@ -18,6 +18,13 @@ deserialize_numeric <- function(x) {
   as.numeric(strsplit(x, ";", fixed = TRUE)[[1L]])
 }
 
+serialized_max_abs_difference <- function(a, b) {
+  a <- deserialize_numeric(a)
+  b <- deserialize_numeric(b)
+  if (!length(a) || length(a) != length(b)) return(NA_real_)
+  max(abs(a - b))
+}
+
 component_summary <- function(fit) {
   empty <- list(
     checked = NA, covariance_psd = NA, implied_pd = NA, admissible = NA,
@@ -72,11 +79,17 @@ base_result_row <- function(context, method, role, pair_id, criterion,
     task_id = context$task_id,
     family = context$family,
     geometry = context$geometry,
+    structure = context$structure,
+    stress_axis = context$stress_axis,
     parameterization = context$parameterization,
     n = context$n,
+    n_ratio = context$n_ratio,
+    n_free = context$n_free,
     rep = context$rep,
     seed = context$seed,
+    target_population_min_eigenvalue = context$target_min_eigenvalue,
     theta_population_min = context$theta_min,
+    psi_population_min = context$psi_min,
     method = method,
     role = role,
     pair_id = pair_id,
@@ -103,6 +116,8 @@ base_result_row <- function(context, method, role, pair_id, criterion,
     theta_values = "",
     sigma_values = "",
     mu_values = "",
+    sigma_population_max_abs_error = NA_real_,
+    mu_population_max_abs_error = NA_real_,
     iterations = NA_integer_,
     f_evals = NA_integer_,
     g_evals = NA_integer_,
@@ -160,6 +175,12 @@ fit_record <- function(context, method, role, pair_id, criterion, psd,
   row$min_implied_sigma_eigenvalue <- implied$sigma_min
   row$sigma_values <- implied$sigma_values
   row$mu_values <- implied$mu_values
+  row$sigma_population_max_abs_error <- serialized_max_abs_difference(
+    row$sigma_values, context$population_sigma_values
+  )
+  row$mu_population_max_abs_error <- serialized_max_abs_difference(
+    row$mu_values, context$population_mu_values
+  )
   row$theta_values <- serialize_numeric(fit$theta)
   row$fmin <- scalar_or_na(fit$fmin)
   row$iterations <- as.integer(scalar_or_na(fit$iterations))
@@ -193,7 +214,7 @@ fit_record <- function(context, method, role, pair_id, criterion, psd,
 }
 
 run_continuous_task <- function(context, data, control) {
-  spec <- continuous_spec()
+  spec <- continuous_spec(context$structure)
   stats <- magmaan_core$data_sample_stats_from_raw(as.matrix(data))
   fixed_weight <- fixed_wls_weight(stats)
   include_mean <- length(stats$mean) && length(stats$mean[[1L]])
@@ -454,7 +475,10 @@ run_catml_nonpd_task <- function(context, data, control) {
 run_task <- function(task, seed_base, control) {
   context <- as.list(task)
   context$seed <- simulation_seed(seed_base, context$geometry, context$rep)
-  data <- simulate_cfa_data(context$n, context$theta_min, context$seed)
+  population <- population_moments(context)
+  context$population_sigma_values <- serialize_numeric(population$sigma)
+  context$population_mu_values <- serialize_numeric(population$mu)
+  data <- simulate_geometry_data(context, context$seed)
   results <- switch(
     context$family,
     continuous = run_continuous_task(context, data, control),

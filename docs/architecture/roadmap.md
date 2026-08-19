@@ -103,9 +103,15 @@ correlated or fully free components retain the joint PSD restriction. Equality
 constraints link every lifted within-component entry back to the original
 affine-reduced partable parameter, so fixed cells, structural zeros, shared
 labels, and linear/nonlinear equality constraints retain their ordinary
-semantics and the returned parameter count is unchanged. Zero fixed variances
-are removed from the factor support, consistently forcing their covariance rows
-and columns to zero without a degenerate Cholesky diagonal constraint. The
+semantics and the returned parameter count is unchanged. Finalization projects
+the affine-reduced coordinates back onto the terminal covariance links and
+recomputes the objective there before exposing the ordinary partable-shaped
+result. This prevents small feasible-link residuals from being amplified by
+poorly scaled loadings into an implied covariance different from the one the
+lifted optimizer evaluated. A correlated-residual/two-factor GLS boundary
+regression gates this round trip. Zero fixed variances are removed from the
+factor support, consistently forcing their covariance rows and columns to zero
+without a degenerate Cholesky diagonal constraint. The
 analytic objective and link Jacobians use the sparse rank-two derivative of
 `L_c L_c'` and feed the same backend-neutral constrained scalar problem used
 elsewhere: NLopt SLSQP is the required default and IPOPT is an optional
@@ -231,6 +237,22 @@ all 28 ML2S Stage-1 checks were unchanged, and both CatML domain sentinels were
 rejected as intended. These counts validate the harness only; stochastic rates,
 larger structural geometries, conditioning, basin behavior, and scaling remain
 the planned pilot work.
+
+The first evidence-bearing Experiment 78 tranche now covers 23 sparse
+continuous complete-data cells with 100 replications each: the one-factor
+residual boundary and sample-size axes, correlated residual and latent
+covariance blocks varied separately plus one joint-boundary cell, and a latent
+regression disturbance boundary. Across 20,700 attempts, 20,406 returned and
+all passed independent objective recomputation. All 11,500 covariance-honest
+fits returned; 11,424 were audit-stationary and every one was admissible. The
+76 nonstationary covariance-honest returns were all GLS fits in correlated-
+block boundary cells. All 2,353 eligible stationary/admissible interior pairs
+passed the prespecified objective and fitted-moment agreement gates. The pilot
+also exposed the terminal-link amplification defect described above before the
+final replay. The remaining Experiment 78 work is the focused multi-group and
+misspecification cells, weight conditioning, missing-data, categorical, and
+targeted multistart/corpus tranches rather than more replication of this
+continuous structural panel.
 
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible

@@ -275,12 +275,27 @@ when they next change.
   covariance-admissible, all 28 ML2S Stage-1 fingerprints were unchanged, and
   both non-PD CatML sentinels were rejected as intended. Checkpoint/resume,
   task subsetting, metadata, paired summaries, and the smoke report are live.
-  This validates the harness, not stochastic performance. Next expand the
-  structural and one-axis pilot cells below. Do not form a full Cartesian
-  product: start with one anchor cell per estimator and vary one stress axis at
-  a time; add interactions only for prespecified risky pairs or failures seen
-  in the pilot. This is computational validation, not an inference, coverage,
-  or estimator-ranking study.
+  This validates the harness, not stochastic performance.
+
+  The first 100-replication pilot tranche is also complete for continuous
+  complete-data estimation. It covers 23 sparse one-axis cells over the
+  one-factor, correlated-block two-factor, and latent-regression structures,
+  including the `0.20, 0.05, 0.01, 0.001, 0` covariance-eigenvalue sequence,
+  one joint boundary, and sample-size ratios `2, 5, 10, 50`. Its 20,700
+  attempts produced 20,406 returned fits with no independent-objective
+  failures. All 11,424 audit-stationary covariance-honest fits were admissible;
+  the 76 nonstationary constrained returns were confined to GLS in the
+  correlated-block boundary cells. All 2,353 eligible interior pairs passed
+  the objective and fitted-moment agreement gates. A terminal covariance-link
+  round-trip defect revealed by the first run is fixed and promoted to a C++
+  correlated-block GLS regression test.
+
+  Next add the focused two-group and misspecified continuous cells and the
+  `1, 1e4, 1e8` weight-conditioning slice, then move through FIML/ML2S and the
+  categorical families below. Do not form a full Cartesian product: vary one
+  stress axis at a time and add interactions only for prespecified risky pairs
+  or failures seen in the pilot. This is computational validation, not an
+  inference, coverage, or estimator-ranking study.
 
   The common structural panel is:
 

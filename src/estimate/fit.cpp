@@ -12,6 +12,7 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/QR>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -506,6 +507,53 @@ covariance_overrides_from_x(const model::MatrixRep& rep,
     }
   }
   return out;
+}
+
+fit_expected<Eigen::VectorXd>
+project_alpha_to_psd_links(const PsdLiftLayout& layout,
+                           const Eigen::VectorXd& x) {
+  if (x.size() != layout.n_alpha + layout.n_lift || !x.allFinite()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        "PSD lift finalization received invalid driven coordinates"));
+  }
+  if (layout.n_link == 0) return x.head(layout.n_alpha);
+
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(
+      layout.n_link, layout.n_alpha);
+  Eigen::VectorXd target(layout.n_link);
+  Eigen::Index out_row = 0;
+  for (const auto& block : layout.blocks) {
+    const Eigen::Index q = block.active_dim();
+    const Eigen::MatrixXd L = lower_from_x(
+        x, layout.n_alpha + block.lift_offset, q);
+    const Eigen::MatrixXd LLt = L * L.transpose();
+    for (Eigen::Index k = 0;
+         k < static_cast<Eigen::Index>(block.links.size()); ++k) {
+      const auto& link = block.links[static_cast<std::size_t>(k)];
+      if (layout.n_alpha > 0) A.row(out_row) = block.D.row(k);
+      target(out_row) =
+          (link.lifted() ? LLt(link.active_row, link.active_col) : 0.0) -
+          block.c0(k);
+      ++out_row;
+    }
+  }
+
+  Eigen::VectorXd alpha = x.head(layout.n_alpha);
+  if (layout.n_alpha > 0) {
+    const Eigen::CompleteOrthogonalDecomposition<Eigen::MatrixXd> cod(A);
+    alpha += cod.solve(target - A * alpha);
+  }
+  const Eigen::VectorXd residual = A * alpha - target;
+  const double scale = std::max(1.0, target.cwiseAbs().maxCoeff());
+  if (!alpha.allFinite() || !residual.allFinite() ||
+      residual.cwiseAbs().maxCoeff() > 1e-10 * scale) {
+    return std::unexpected(fit_err(
+        FitError::Kind::OptimizerNonConvergence,
+        "PSD lift finalization could not round-trip the terminal covariance "
+        "links into ordinary partable coordinates"));
+  }
+  return alpha;
 }
 
 fit_expected<Eigen::VectorXd>
@@ -1852,9 +1900,55 @@ drive_psd_problem(const optim::ScalarProblem& prob,
         result->iterations, result->fmin});
   }
 
+  auto alpha = project_alpha_to_psd_links(layout, result->x);
+  if (!alpha.has_value()) return std::unexpected(alpha.error());
+  Eigen::VectorXd roundtrip_x = result->x;
+  roundtrip_x.head(layout.n_alpha) = *alpha;
+  const Eigen::VectorXd roundtrip_residual = constraints.h(roundtrip_x);
+  const double roundtrip_max_residual = roundtrip_residual.size() > 0
+      ? roundtrip_residual.cwiseAbs().maxCoeff()
+      : 0.0;
+  if (!std::isfinite(roundtrip_max_residual) ||
+      roundtrip_max_residual > psd_opts.feasibility_tol) {
+    return std::unexpected(FitError{
+        FitError::Kind::OptimizerNonConvergence,
+        std::string(who) +
+            ": terminal covariance links could not be represented in the "
+            "returned partable coordinates",
+        result->iterations, result->fmin});
+  }
+  Eigen::VectorXd roundtrip_gradient = Eigen::VectorXd::Zero(prob.n_param);
+  const double roundtrip_fmin = prob.f(roundtrip_x, roundtrip_gradient);
+  if (!std::isfinite(roundtrip_fmin)) {
+    return std::unexpected(FitError{
+        FitError::Kind::NumericIssue,
+        std::string(who) +
+            ": terminal partable-coordinate round trip produced a non-finite "
+            "objective",
+        result->iterations, result->fmin});
+  }
+  optim::ConstrainedScalarProblem roundtrip_problem;
+  roundtrip_problem.objective = prob;
+  roundtrip_problem.h = constraints.h;
+  roundtrip_problem.J_h = constraints.jacobian;
+  roundtrip_problem.n_constraint = constraints.n_constraint;
+  roundtrip_problem.constraint_lower =
+      Eigen::VectorXd::Zero(constraints.n_constraint);
+  roundtrip_problem.constraint_upper =
+      Eigen::VectorXd::Zero(constraints.n_constraint);
+  const double infinity = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower = driven_bounds.empty()
+      ? Eigen::VectorXd::Constant(prob.n_param, -infinity)
+      : driven_bounds.lower;
+  const Eigen::VectorXd upper = driven_bounds.empty()
+      ? Eigen::VectorXd::Constant(prob.n_param, infinity)
+      : driven_bounds.upper;
+  result->audit = optim::audit_equality_constrained_terminal_iterate(
+      roundtrip_problem, roundtrip_x, roundtrip_fmin, lower, upper);
+
   Estimates est{
-      pre.con.expand(result->x.head(layout.n_alpha)),
-      result->fmin,
+      pre.con.expand(*alpha),
+      roundtrip_fmin,
       result->iterations,
       result->f_evals,
       result->g_evals,
