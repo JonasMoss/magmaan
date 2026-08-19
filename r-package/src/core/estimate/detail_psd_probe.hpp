@@ -4,6 +4,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/expected.hpp"
 
 #ifdef MAGMAAN_ENABLE_TEST_PROBES
@@ -58,6 +59,18 @@ psd_fiml_derivative_probe(spec::LatentStructure pt,
                           const Eigen::VectorXd& theta_start,
                           double finite_difference_step = 1e-6,
                           frontier::PsdFitOptions options = {});
+
+fit_expected<PsdDerivativeProbe>
+psd_ordinal_derivative_probe(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Eigen::VectorXd& theta_start,
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    OrdinalParameterization parameterization =
+        OrdinalParameterization::Delta,
+    double finite_difference_step = 1e-6,
+    frontier::PsdFitOptions options = {});
 
 }  // namespace magmaan::estimate::psd_test
 #endif

@@ -5770,6 +5770,63 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                             parameterization_name.c_str());
 }
 
+// All-ordinal ULS/DWLS/WLS with PSD primitive LISREL covariance matrices.
+// The polychoric matrix and fixed stage-2 weights are passed through unchanged.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_ordinal_psd_impl(
+    SEXP partable, Rcpp::List ordinal_stats,
+    std::string estimator = "DWLS",
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
+    double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6) {
+  const std::string parameterization_name =
+      ordinal_parameterization_attr(partable);
+  const auto parameterization =
+      ordinal_parameterization_from_string(parameterization_name);
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_ordinal_psd");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.pt.group_equal = group_equal_attr(partable);
+  ctx.names = std::move(parsed.names);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  auto prep_or = magmaan::estimate::prepare_ordinal_partable(
+      ctx.pt, stats, parameterization, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  ctx.samp.S = stats.R;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty()
+      ? std::vector<std::string>{}
+      : ctx.rep.ov_names[0];
+  ctx.meanstructure = false;
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull()
+          ? magmaan::estimate::Backend::NloptSlsqp
+          : backend_from_optimizer_arg(optimizer);
+  magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.start_eigen_floor = start_eigen_floor;
+  psd_opts.feasibility_tol = feasibility_tol;
+  auto fit_or = magmaan::estimate::frontier::fit_ordinal_psd(
+      ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
+      ordinal_weight_from_estimator(estimator, "frontier_fit_ordinal_psd"),
+      x0, backend, optim_opts_from(control), parameterization, psd_opts);
+  if (!fit_or.has_value()) stop_fit(fit_or.error());
+  const magmaan::estimate::Estimates est = std::move(*fit_or);
+  Rcpp::List out = ordinal_fit_result(
+      ctx, stats, est, &starts, estimator.c_str(),
+      parameterization_name.c_str());
+  out["covariance_policy"] = "psd";
+  return out;
+}
+
 // [[Rcpp::export]]
 Rcpp::List fit_ordinal_stage2_impl(SEXP partable, Rcpp::List ordinal_stats,
                                    std::string stage2_weight = "dwls",

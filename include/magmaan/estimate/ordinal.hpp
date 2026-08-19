@@ -479,6 +479,24 @@ ordinal_ls_objective(spec::LatentStructure pt,
                      OrdinalParameterization parameterization =
                          OrdinalParameterization::Delta);
 
+// All-ordinal ULS/DWLS/WLS over covariance-honest primitive SEM blocks. The
+// estimated thresholds, polychoric matrix, and NACOV weights are consumed
+// unchanged; PSD is enforced only on the fitted Θ and Ψ blocks through the
+// internal Cholesky lift. Both delta and theta ordinal parameterizations use
+// the ordinary prepared partable coordinates on return.
+fit_expected<Estimates>
+fit_ordinal_psd(spec::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const data::OrdinalStats& stats,
+                Bounds bounds,
+                OrdinalWeightKind weights,
+                const Eigen::VectorXd& x0,
+                Backend backend = Backend::NloptSlsqp,
+                optim::OptimOptions opts = {},
+                OrdinalParameterization parameterization =
+                    OrdinalParameterization::Delta,
+                PsdFitOptions psd_opts = {});
+
 // All-ordinal LS refit with caller-supplied nonlinear equality constraints in
 // the prepared free-parameter vector. This uses the same full ordinal
 // threshold + polychoric moment stack as `ordinal_ls_objective`; it is the

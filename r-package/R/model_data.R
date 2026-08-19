@@ -1855,6 +1855,25 @@ fit_uls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                        control = control, bounds = b)
 }
 
+# Frontier all-ordinal ULS/DWLS/WLS over PSD primitive LISREL covariance
+# matrices. The supplied polychorics and ordinal weights are retained exactly;
+# the PSD policy applies only to the fitted model covariance blocks.
+frontier_fit_ordinal_psd <- function(
+    model, data, estimator = c("DWLS", "WLS", "ULS"),
+    optimizer = "nlopt-slsqp", control = NULL, bounds = NULL,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+  estimator <- match.arg(toupper(as.character(estimator)[1L]),
+                         c("DWLS", "WLS", "ULS"))
+  pt <- augment_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "frontier_fit_ordinal_psd")
+  frontier_fit_ordinal_psd_impl(
+    pt, data, estimator = estimator, optimizer = optimizer,
+    control = control, bounds = b,
+    start_eigen_floor = start_eigen_floor,
+    feasibility_tol = feasibility_tol
+  )
+}
+
 ordinal_stage2_weight_blocks <- function(data,
                                          stage2_weight = c("dwls", "wls", "uls",
                                                            "nt", "gls", "dls",

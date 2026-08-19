@@ -116,6 +116,39 @@ test_that("frontier PSD FIML repairs a missing-data Heywood solution", {
   expect_true(anyNA(fit$raw_data$X[[1L]]))
 })
 
+test_that("frontier PSD ordinal fit preserves the Stage-1 polychorics", {
+  set.seed(43)
+  n <- 260L
+  eta <- rnorm(n)
+  latent <- cbind(
+    eta + rnorm(n, sd = 0.65),
+    0.8 * eta + rnorm(n, sd = 0.7),
+    0.7 * eta + rnorm(n, sd = 0.75)
+  )
+  dat <- as.data.frame(apply(latent, 2L, function(x) {
+    ordered(cut(x, c(-Inf, -0.5, 0.5, Inf), labels = FALSE))
+  }))
+  names(dat) <- c("x1", "x2", "x3")
+  spec <- model_spec("f =~ x1 + x2 + x3", ordered = names(dat))
+  stats <- magmaan_core$data_ordinal_stats_from_df(dat, spec)
+  original_R <- stats$R
+
+  fit <- expect_no_warning(frontier_fit_ordinal_psd(
+    spec, stats, estimator = "DWLS",
+    control = list(max_iter = 5000L, gtol = 1e-8)
+  ))
+
+  expect_true(fit$converged)
+  expect_true(fit$ordinal)
+  expect_identical(fit$estimator, "DWLS")
+  expect_identical(fit$covariance_policy, "psd")
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_true(fit$audit$constrained)
+  expect_equal(unname(fit$polychoric[[1L]]),
+               unname(original_R[[1L]]), tolerance = 0)
+  expect_equal(stats$R, original_R, tolerance = 0)
+})
+
 test_that("frontier PSD continuous LS wrappers preserve covariance admissibility", {
   set.seed(29)
   n <- 160L
