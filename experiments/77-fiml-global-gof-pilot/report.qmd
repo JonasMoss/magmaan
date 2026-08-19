@@ -26,6 +26,17 @@ meta <- setNames(metadata$value, metadata$key)
 parity_path <- file.path(result_dir, "mlr_lavaan_parity_summary.csv")
 parity <- if (file.exists(parity_path)) read.csv(
   parity_path, stringsAsFactors = FALSE) else NULL
+sem_result_dir <- file.path(script_dir, "results", "sem-model-smoke")
+sem_paths <- file.path(sem_result_dir, c(
+  "design.csv", "replications.csv", "timing_projection.csv", "metadata.csv"))
+sem_available <- all(file.exists(sem_paths))
+if (sem_available) {
+  sem_design <- read.csv(sem_paths[[1L]], stringsAsFactors = FALSE)
+  sem_replications <- read.csv(sem_paths[[2L]], stringsAsFactors = FALSE)
+  sem_projection <- read.csv(sem_paths[[3L]], stringsAsFactors = FALSE)
+  sem_metadata <- read.csv(sem_paths[[4L]], stringsAsFactors = FALSE)
+  sem_meta <- setNames(sem_metadata$value, sem_metadata$key)
+}
 
 method_labels <- c(
   lrt_naive = "ordinary LR", lrt_mlr = "Yuan--Bentler MLR",
@@ -219,11 +230,62 @@ if (!is.null(parity)) {
 }
 ```
 
+## Next-stage latent-SEM timing smoke
+
+The next design replaces the affine independence bridge with four ordinary,
+compact SEM populations and native independent-generator implementations. It
+crosses normal data, VM and IG generators at target marginal
+skewness/excess-kurtosis `(2, 7)` and `(3, 21)`, and complete versus 30% MCAR
+observation. This smoke run is null-only: it checks that the DGPs, FIML fits,
+MLR, and FMG post-fit tests execute, and estimates the cost of a later run.
+
+```{r sem-model-smoke}
+if (sem_available) {
+  model_table <- unique(sem_design[, c(
+    "model_label", "p", "expected_df")])
+  names(model_table) <- c("model", "observed variables", "df")
+  knitr::kable(model_table, row.names = FALSE)
+
+  health <- data.frame(
+    quantity = c("FIML converged", "FMG finite", "MLR finite"),
+    result = sprintf("%d/%d", c(
+      sum(sem_replications$fit_ok), sum(sem_replications$fmg_ok),
+      sum(sem_replications$mlr_ok)), nrow(sem_replications)))
+  knitr::kable(health, row.names = FALSE)
+
+  projection_show <- sem_projection[, c(
+    "panel", "reps_per_cell", "total_replications", "projected_wall_seconds")]
+  projection_show$projected_wall_minutes <-
+    projection_show$projected_wall_seconds / 60
+  projection_show$projected_wall_seconds <- NULL
+  names(projection_show) <- c(
+    "panel", "reps/cell", "total fits", "projected wall minutes")
+  knitr::kable(projection_show, digits = 2, row.names = FALSE)
+} else {
+  cat("Run `run_sem_models.R` to populate the timing smoke tables.")
+}
+```
+
+All FIML fits converged in the retained 10-rep-per-cell smoke. The one-factor,
+two-factor, and growth FMG calls were complete. The bifactor accounted for all
+12 FMG failures: its strict projected-rank guard rejected eigenvalues of about
+`1e-6` to `1e-4` that should be numerically projected out. Two MLR p-values
+were non-finite. Thus the design runs, but the bifactor FMG rank tolerance is a
+real preflight issue to resolve or prespecify before a large comparison.
+
+The projections use the observed four-worker speedup and include only current
+null-model fitting plus MLR/FMG post-processing. They do not include the general
+FIML saturated-moment score projection or the effective multiplier test: that
+latent-SEM extension is not yet shipped and must not be represented by the
+affine bridge statistic. The doubled panel is a simple cost projection for one
+matched power condition, not an implemented power DGP.
+
 ## Reproduce
 
 ```sh
 Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --smoke
 Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --pilot
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R
 Rscript experiments/77-fiml-global-gof-pilot/validate_mlr_lavaan.R
 quarto render experiments/77-fiml-global-gof-pilot/report.qmd
 ```

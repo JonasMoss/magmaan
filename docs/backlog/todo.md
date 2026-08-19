@@ -328,6 +328,19 @@ when they next change.
   general H0 saturated-moment score projection and repeat the comparison in a
   latent SEM. Keep MLR as the target, effective multipliers as the lead, score
   SB/pEBA4 as analytic alternatives, and LRT pEBA4/robust Wald as comparators.
+  Experiment 77's third iteration now preflights that latent-SEM panel without
+  pretending the projection exists: one-factor, two-factor, orthogonal
+  bifactor, and linear-growth populations crossed with native normal/VM/IG
+  generators and complete/30% MCAR data. At `n=120`, all 400 ten-rep smoke
+  fits converged and 398 MLR results were finite. FMG was complete for the
+  other three models but its strict projected-rank guard rejected 12/100
+  bifactor fits, so that tolerance or its prespecified failure handling is a
+  blocker for the large comparison. On four local workers the current
+  null-plus-one-power panel projects to about 1.2, 6.0, and 23.8 minutes for
+  100, 500, and 2,000 reps/cell, excluding the still-unimplemented general
+  projected-score and multiplier cost. The model/generator budget is therefore
+  acceptable; the next work remains the projection and matched power DGPs, not
+  a large run of the incomplete method panel.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
