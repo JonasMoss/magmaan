@@ -73,6 +73,21 @@ implied_summary <- function(fit) {
   )
 }
 
+two_group_equality_violation <- function(fit) {
+  partable <- fit$partable
+  if (!is.data.frame(partable) ||
+      !all(c("label", "est") %in% names(partable))) return(NA_real_)
+  estimates <- function(label) {
+    as.numeric(partable$est[partable$label == label])
+  }
+  l2_g1 <- estimates("l2_g1")
+  l3_g1 <- estimates("l3_g1")
+  theta_x1 <- estimates("theta_x1")
+  if (length(l2_g1) != 1L || length(l3_g1) != 1L ||
+      length(theta_x1) != 2L) return(NA_real_)
+  max(abs(l2_g1 + l3_g1 - 1.60), diff(range(theta_x1)))
+}
+
 base_result_row <- function(context, method, role, pair_id, criterion,
                             psd, expected_outcome) {
   data.frame(
@@ -80,16 +95,20 @@ base_result_row <- function(context, method, role, pair_id, criterion,
     family = context$family,
     geometry = context$geometry,
     structure = context$structure,
+    data_structure = context$data_structure,
     stress_axis = context$stress_axis,
     parameterization = context$parameterization,
     n = context$n,
     n_ratio = context$n_ratio,
     n_free = context$n_free,
+    n_groups = context$n_groups,
+    n_per_group = context$n_per_group,
     rep = context$rep,
     seed = context$seed,
     target_population_min_eigenvalue = context$target_min_eigenvalue,
     theta_population_min = context$theta_min,
     psi_population_min = context$psi_min,
+    misspecified = context$misspecified,
     method = method,
     role = role,
     pair_id = pair_id,
@@ -113,6 +132,10 @@ base_result_row <- function(context, method, role, pair_id, criterion,
     objective_recomputed = NA_real_,
     objective_abs_error = NA_real_,
     objective_ok = NA,
+    weight_condition_target = NA_real_,
+    weight_condition_actual = NA_real_,
+    weight_effective_rank = NA_integer_,
+    weight_dimension = NA_integer_,
     theta_values = "",
     sigma_values = "",
     mu_values = "",
@@ -190,6 +213,9 @@ fit_record <- function(context, method, role, pair_id, criterion, psd,
   row$equality_violation_inf <- scalar_or_na(
     fit$audit$constraint_violation_inf
   )
+  if (identical(context$structure, "two_group_one_factor")) {
+    row$equality_violation_inf <- two_group_equality_violation(fit)
+  }
   if (is.function(objective_call)) {
     recomputed <- tryCatch(objective_call(fit), error = function(e) NA_real_)
     row$objective_recomputed <- as.numeric(recomputed)
@@ -215,10 +241,30 @@ fit_record <- function(context, method, role, pair_id, criterion, psd,
 
 run_continuous_task <- function(context, data, control) {
   spec <- continuous_spec(context$structure)
-  stats <- magmaan_core$data_sample_stats_from_raw(as.matrix(data))
-  fixed_weight <- fixed_wls_weight(stats)
-  include_mean <- length(stats$mean) && length(stats$mean[[1L]])
-  gls_weight <- list(normal_theory_weight(stats$S[[1L]], include_mean))
+  raw_blocks <- if (is.list(data) && !is.data.frame(data)) {
+    lapply(data, as.matrix)
+  } else {
+    as.matrix(data)
+  }
+  stats <- magmaan_core$data_sample_stats_from_raw(raw_blocks)
+  fixed_condition <- if (is.finite(context$weight_condition_target)) {
+    context$weight_condition_target
+  } else 100
+  fixed_weight <- fixed_wls_weight(stats, fixed_condition)
+  weight_eigenvalues <- unlist(lapply(fixed_weight, function(weight) {
+    eigen(weight, symmetric = TRUE, only.values = TRUE)$values
+  }))
+  weight_tolerance <- max(weight_eigenvalues) *
+    max(vapply(fixed_weight, nrow, integer(1))) * .Machine$double.eps
+  fixed_weight_diagnostics <- list(
+    target = fixed_condition,
+    actual = max(weight_eigenvalues) / min(weight_eigenvalues),
+    rank = sum(weight_eigenvalues > weight_tolerance),
+    dimension = length(weight_eigenvalues)
+  )
+  include_mean <- length(stats$mean) && all(lengths(stats$mean) > 0L)
+  gls_weight <- lapply(stats$S, normal_theory_weight,
+                       include_mean = include_mean)
   definitions <- list(
     list("ml", "ordinary", "ml", "ml", FALSE,
          function() magmaan_core$fit_ml(spec, stats, optimizer = "nlopt-lbfgs", control = control),
@@ -248,16 +294,29 @@ run_continuous_task <- function(context, data, control) {
          function() frontier_fit_gmm_fitted_weight_psd(spec, stats, optimizer = "nlopt-slsqp", control = control),
          function(fit) {
            implied <- magmaan_core$model_implied(fit)
-           weights <- list(normal_theory_weight(implied$sigma[[1L]], include_mean))
+           weights <- lapply(implied$sigma, normal_theory_weight,
+                             include_mean = include_mean)
            quadratic_objective(stats, implied, weights)
          })
   )
+  if (identical(context$fit_plan, "fixed_wls")) {
+    definitions <- definitions[vapply(definitions, function(d) {
+      identical(d[[4L]], "fixed_wls")
+    }, logical(1))]
+  }
   lapply(definitions, function(d) {
     pair_id <- if (nzchar(d[[3L]])) paste(context$task_id, d[[3L]], sep = "::") else ""
-    fit_record(
+    result <- fit_record(
       context, d[[1L]], d[[2L]], pair_id, d[[4L]], d[[5L]], d[[6L]], d[[7L]],
       input_object = stats
     )
+    if (identical(d[[4L]], "fixed_wls")) {
+      result$row$weight_condition_target <- fixed_weight_diagnostics$target
+      result$row$weight_condition_actual <- fixed_weight_diagnostics$actual
+      result$row$weight_effective_rank <- fixed_weight_diagnostics$rank
+      result$row$weight_dimension <- fixed_weight_diagnostics$dimension
+    }
+    result
   })
 }
 
@@ -476,8 +535,12 @@ run_task <- function(task, seed_base, control) {
   context <- as.list(task)
   context$seed <- simulation_seed(seed_base, context$geometry, context$rep)
   population <- population_moments(context)
-  context$population_sigma_values <- serialize_numeric(population$sigma)
-  context$population_mu_values <- serialize_numeric(population$mu)
+  context$population_sigma_values <- serialize_numeric(
+    unlist(population$sigma, use.names = FALSE)
+  )
+  context$population_mu_values <- serialize_numeric(
+    unlist(population$mu, use.names = FALSE)
+  )
   data <- simulate_geometry_data(context, context$seed)
   results <- switch(
     context$family,

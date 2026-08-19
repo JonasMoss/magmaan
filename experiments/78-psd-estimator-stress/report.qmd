@@ -61,6 +61,58 @@ ordinary_return_ci <- wilson_interval(sum(ordinary$returned), nrow(ordinary))
 violations <- sum(invariants$violations)
 elapsed <- as.numeric(metadata[["elapsed_seconds"]])
 
+conditioning <- raw[
+  raw$stress_axis == "weight_conditioning",
+  , drop = FALSE
+]
+conditioning_groups <- split(conditioning, interaction(
+  conditioning$weight_condition_target, conditioning$method, drop = TRUE
+))
+conditioning_display <- do.call(rbind, lapply(conditioning_groups, function(x) {
+  stationary <- x$returned & !is.na(x$audit_stationary) & x$audit_stationary
+  data.frame(
+    `Weight condition` = format(x$weight_condition_actual[[1L]], scientific = TRUE),
+    Estimator = if (x$psd[[1L]]) "PSD WLS" else "ordinary WLS",
+    Returned = percent(mean(x$returned)),
+    Stationary = percent(mean(stationary)),
+    `Admissible among stationary` = if (sum(stationary)) {
+      percent(mean(x$admissible[stationary]))
+    } else "—",
+    check.names = FALSE
+  )
+}))
+conditioning_display <- conditioning_display[order(
+  as.numeric(conditioning_display$`Weight condition`),
+  conditioning_display$Estimator
+), ]
+rownames(conditioning_display) <- NULL
+
+two_group <- raw[raw$structure == "two_group_one_factor", , drop = FALSE]
+misspecified <- raw[raw$misspecified, , drop = FALSE]
+two_group_equality_max <- max(
+  two_group$equality_violation_inf[two_group$returned]
+)
+misspecified_stationary <- misspecified$returned &
+  !is.na(misspecified$audit_stationary) & misspecified$audit_stationary
+misspecified_min_fmin <- min(misspecified$fmin[misspecified_stationary])
+
+conditioning_stationarity <- function(method, condition) {
+  x <- conditioning[
+    conditioning$method == method &
+      conditioning$weight_condition_target == condition,
+    , drop = FALSE
+  ]
+  mean(x$returned & !is.na(x$audit_stationary) & x$audit_stationary)
+}
+conditioning_return <- function(method, condition) {
+  x <- conditioning[
+    conditioning$method == method &
+      conditioning$weight_condition_target == condition,
+    , drop = FALSE
+  ]
+  mean(x$returned)
+}
+
 interior <- pairs[
   pairs$target_population_min_eigenvalue >= 0.20 &
     pairs$ordinary_returned & pairs$psd_returned &
@@ -74,19 +126,24 @@ max_interior_sigma_gap <- max(interior$sigma_max_abs_difference)
 short_answer <- sprintf(
   paste(
     "Across %s fit attempts, every one of the %s stationary covariance-honest",
-    "fits was admissible and all independently recomputed objectives matched.",
-    "Their stationarity rate was %.2f%% (95%% Wilson interval %.2f%%–%.2f%%);",
-    "the 76 nonstationary returns were all GLS fits in the correlated-block",
-    "boundary cells. In %s admissible interior pairs, the largest objective",
-    "and fitted-covariance differences were %.2e and %.2e. The full run took",
-    "%.1f seconds."
+    "fits was admissible and every returned objective recomputed correctly.",
+    "The grouped fits honored both equalities to %.2e, and all %s stationary",
+    "misspecified-model fits retained nonzero discrepancy (minimum %.2e).",
+    "Fixed-WLS conditioning was the clear limit: at condition numbers 1, 1e4,",
+    "and 1e8, ordinary return rates were %.0f%%, %.0f%%, and %.0f%%, while PSD",
+    "stationarity rates were %.0f%%, %.0f%%, and %.0f%%."
   ),
   format(nrow(raw), big.mark = ","),
   format(sum(psd_stationary), big.mark = ","),
-  100 * mean(psd_stationary),
-  100 * psd_stationary_ci[[1L]], 100 * psd_stationary_ci[[2L]],
-  format(nrow(interior), big.mark = ","),
-  max_interior_objective_gap, max_interior_sigma_gap, elapsed
+  two_group_equality_max,
+  format(sum(misspecified_stationary), big.mark = ","),
+  misspecified_min_fmin,
+  100 * conditioning_return("wls", 1),
+  100 * conditioning_return("wls", 1e4),
+  100 * conditioning_return("wls", 1e8),
+  100 * conditioning_stationarity("psd_wls", 1),
+  100 * conditioning_stationarity("psd_wls", 1e4),
+  100 * conditioning_stationarity("psd_wls", 1e8)
 )
 
 axis_groups <- split(raw, interaction(
@@ -143,14 +200,23 @@ ordinary_admissible <- sum(
   ordinary_stationary & !is.na(ordinary$admissible) & ordinary$admissible
 )
 ordinary_admissible_rate <- ordinary_admissible / sum(ordinary_stationary)
+psd_nonstationary <- psd[
+  psd$returned & !is.na(psd$audit_stationary) & !psd$audit_stationary,
+  , drop = FALSE
+]
+nonstationary_by_method <- sort(table(psd_nonstationary$method), decreasing = TRUE)
+nonstationary_description <- paste(
+  paste0(names(nonstationary_by_method), " (", as.integer(nonstationary_by_method), ")"),
+  collapse = " and "
+)
 ```
 
 ## Question
 
-Across regular and near-singular continuous SEM populations, do
-covariance-honest ML and least-squares fits remain correct, admissible, stable,
-and computationally practical when residual and latent covariance blocks reach
-their boundaries?
+Across regular, grouped, misspecified, and near-singular continuous SEM
+populations, do covariance-honest ML and least-squares fits remain correct,
+admissible, stable, and computationally practical as covariance blocks and
+fixed weights become ill-conditioned?
 
 ## Short answer
 
@@ -162,6 +228,9 @@ with a 95% interval of
 Only `r percent(ordinary_admissible_rate, 1)` of their stationary returns were
 covariance-admissible. The constrained methods therefore repaired a material
 set of boundary solutions rather than merely reproducing the ordinary fits.
+The overall covariance-honest stationarity rate was
+`r percent(mean(psd_stationary), 2)` (95% Wilson interval
+`r percent(psd_stationary_ci[[1L]], 2)`–`r percent(psd_stationary_ci[[2L]], 2)`).
 
 ## Evidence
 
@@ -169,11 +238,11 @@ set of boundary solutions rather than merely reproducing the ordinary fits.
 knitr::kable(axis_display, align = "llrrrr")
 ```
 
-The covariance-honest stationarity loss is localized: all ML, ULS, fixed-WLS,
-and fitted-weight fits were stationary, while GLS accounted for all 76
-nonstationary constrained returns. Every stationary constrained result was
-admissible. Solver return, stationarity, and covariance admissibility remain
-separate outcomes in the result files.
+The covariance-honest stationarity loss is localized: the
+`r format(nrow(psd_nonstationary), big.mark = ",")` returned candidates that
+failed the audit were `r nonstationary_description`. Every stationary
+constrained result was admissible. Solver return, stationarity, and covariance
+admissibility remain separate outcomes in the result files.
 
 For the subset where the ordinary fit was itself stationary and admissible,
 the interior agreement gate was:
@@ -190,19 +259,38 @@ prespecified objective and fitted-moment tolerances. All
 `r format(sum(raw$returned), big.mark = ",")` returned fits also passed direct
 objective recomputation, including nonstationary candidates.
 
+The targeted fixed-WLS slice separates return from stationarity sharply:
+
+```{r conditioning-table}
+knitr::kable(conditioning_display, align = "llrrr")
+```
+
+All recorded weights had the requested condition number and full effective
+rank. Thus the deterioration at `1e8` is optimizer/geometry behavior, not a
+silently rank-truncated weight. The two-group panel contributed
+`r format(nrow(two_group), big.mark = ",")` attempts at the anchor and residual
+boundary; `r format(sum(two_group$returned), big.mark = ",")` returned, with a
+maximum fitted equality violation of `r sprintf("%.2e", two_group_equality_max)`.
+The misspecified panel returned and was stationary in all
+`r format(sum(misspecified_stationary), big.mark = ",")` attempts, so ordinary
+and constrained agreement is not confined to exact-fit populations.
+
 ## Caveats
 
 This is a 100-replication pilot under normal data, not a final failure-rate or
-estimator-ranking study. It covers a one-factor CFA, a two-factor CFA with a
-correlated residual block and correlated factors, and a latent regression. The
-boundary paths move residual and latent covariance blocks separately, with one
-joint-boundary cell; the sample-size path spans 2, 5, 10, and 50 observations
-per free parameter.
+estimator-ranking study. Its 29 cells cover a one-factor CFA, a two-factor CFA
+with correlated residual and factor blocks, a latent regression, a deliberately
+misspecified two-factor CFA, and a two-group CFA with a shared residual variance
+plus one general linear equality. The boundary paths move residual and latent
+covariance blocks separately, with one joint-boundary cell; the sample-size
+path spans 2, 5, 10, and 50 observations per free parameter.
 
-The multi-group, misspecified-model, conditioned-weight, missing-data,
-ordinal, mixed-ordinal, categorical-ML, and multistart confirmation slices are
-still outstanding. Individual millisecond timings are too coarsely resolved
-for estimator ranking; the total runtime only establishes that this pilot is
+Missing-data, ordinal, mixed-ordinal, categorical-ML, and multistart
+confirmation slices are still outstanding. The conditioning result is specific
+to this diagonal fixed-weight spectrum and the current optimizers; it does not
+establish a universal condition-number cutoff. Individual millisecond timings
+are too coarsely resolved for estimator ranking; the total runtime of
+`r sprintf("%.1f", elapsed)` seconds only establishes that this pilot is
 computationally manageable. No inference claims are made.
 
 ## Reproduce

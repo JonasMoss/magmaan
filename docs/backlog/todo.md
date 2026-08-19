@@ -290,12 +290,25 @@ when they next change.
   round-trip defect revealed by the first run is fixed and promoted to a C++
   correlated-block GLS regression test.
 
-  Next add the focused two-group and misspecified continuous cells and the
-  `1, 1e4, 1e8` weight-conditioning slice, then move through FIML/ML2S and the
-  categorical families below. Do not form a full Cartesian product: vary one
-  stress axis at a time and add interactions only for prespecified risky pairs
-  or failures seen in the pilot. This is computational validation, not an
-  inference, coverage, or estimator-ranking study.
+  The second continuous tranche adds a misspecified two-factor model, anchor
+  and near-boundary two-group models with a shared residual variance plus one
+  general linear equality, and fixed-WLS weights with realized condition
+  numbers `1, 1e4, 1e8`. Across the resulting 29 cells, 23,506 of 24,000 fits
+  returned and every returned objective passed independent recomputation. All
+  13,125 audit-stationary covariance-honest fits were admissible, all 900
+  stationary misspecified fits had nonzero discrepancy, all 1,797 returned
+  grouped fits honored both equalities to at most `4.44e-16`, and all 3,253
+  eligible interior pairs passed the agreement gates. Weight conditioning is
+  the first sharp limit: ordinary fixed WLS returned in `100%, 3%, 0%` of the
+  `1, 1e4, 1e8` cells; PSD WLS returned throughout but was stationary in
+  `100%, 100%, 8%`. The weights retained their requested spectra and full
+  effective ranks, ruling out silent rank truncation as the explanation.
+
+  Next move through FIML/ML2S and the categorical families below. Do not form a
+  full Cartesian product: vary one stress axis at a time and add interactions
+  only for prespecified risky pairs or failures seen in the pilot. This is
+  computational validation, not an inference, coverage, or estimator-ranking
+  study.
 
   The common structural panel is:
 

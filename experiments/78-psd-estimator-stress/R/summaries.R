@@ -47,16 +47,22 @@ pair_results <- function(raw) {
       family = ordinary$family,
       geometry = ordinary$geometry,
       structure = ordinary$structure,
+      data_structure = ordinary$data_structure,
       stress_axis = ordinary$stress_axis,
       parameterization = ordinary$parameterization,
       n = ordinary$n,
       n_ratio = ordinary$n_ratio,
+      n_groups = ordinary$n_groups,
       rep = ordinary$rep,
       seed = ordinary$seed,
       target_population_min_eigenvalue =
         ordinary$target_population_min_eigenvalue,
       pair_id = ordinary$pair_id,
       criterion = ordinary$criterion,
+      weight_condition_target = ordinary$weight_condition_target,
+      weight_condition_actual = ordinary$weight_condition_actual,
+      weight_effective_rank = ordinary$weight_effective_rank,
+      weight_dimension = ordinary$weight_dimension,
       ordinary_fmin = ordinary$fmin,
       psd_fmin = psd$fmin,
       ordinary_returned = ordinary$returned,
@@ -65,6 +71,8 @@ pair_results <- function(raw) {
       psd_stationary = psd$audit_stationary,
       ordinary_admissible = ordinary$admissible,
       psd_admissible = psd$admissible,
+      ordinary_equality_violation = ordinary$equality_violation_inf,
+      psd_equality_violation = psd$equality_violation_inf,
       psd_boundary = psd$primitive_boundary,
       objective_gap = if (ordinary$returned && psd$returned) {
         psd$fmin - ordinary$fmin
@@ -107,8 +115,13 @@ pilot_cell_summary <- function(raw) {
       psd = x$psd[[1L]],
       n = x$n[[1L]],
       n_ratio = x$n_ratio[[1L]],
+      n_groups = x$n_groups[[1L]],
       target_population_min_eigenvalue =
         x$target_population_min_eigenvalue[[1L]],
+      weight_condition_target = x$weight_condition_target[[1L]],
+      weight_condition_actual = x$weight_condition_actual[[1L]],
+      weight_effective_rank = x$weight_effective_rank[[1L]],
+      weight_dimension = x$weight_dimension[[1L]],
       attempts = nrow(x),
       returned_rate = mean(returned),
       returned_ci_low = return_ci[[1L]],
@@ -155,8 +168,13 @@ pilot_pair_summary <- function(pairs) {
       criterion = x$criterion[[1L]],
       n = x$n[[1L]],
       n_ratio = x$n_ratio[[1L]],
+      n_groups = x$n_groups[[1L]],
       target_population_min_eigenvalue =
         x$target_population_min_eigenvalue[[1L]],
+      weight_condition_target = x$weight_condition_target[[1L]],
+      weight_condition_actual = x$weight_condition_actual[[1L]],
+      weight_effective_rank = x$weight_effective_rank[[1L]],
+      weight_dimension = x$weight_dimension[[1L]],
       pairs = nrow(x),
       comparable_rate = mean(comparable),
       ordinary_admissible_rate = safe_rate(x$ordinary_admissible[comparable]),
@@ -219,6 +237,29 @@ invariant_summary <- function(raw, pairs = pair_results(raw)) {
     , drop = FALSE
   ]
   domain <- raw[raw$expected_outcome == "domain_rejection", , drop = FALSE]
+  fixed_weight <- raw[
+    raw$criterion == "fixed_wls",
+    , drop = FALSE
+  ]
+  weight_spectrum_ok <- is.finite(fixed_weight$weight_condition_target) &
+    is.finite(fixed_weight$weight_condition_actual) &
+    abs(log(fixed_weight$weight_condition_actual) -
+          log(fixed_weight$weight_condition_target)) <= 1e-10 &
+    !is.na(fixed_weight$weight_effective_rank) &
+    fixed_weight$weight_effective_rank == fixed_weight$weight_dimension
+  two_group <- raw[
+    raw$structure == "two_group_one_factor" & raw$returned,
+    , drop = FALSE
+  ]
+  two_group_equality_ok <- is.finite(two_group$equality_violation_inf) &
+    two_group$equality_violation_inf <= 1e-7
+  misspecified <- raw[
+    raw$misspecified & raw$returned &
+      !is.na(raw$audit_stationary) & raw$audit_stationary,
+    , drop = FALSE
+  ]
+  misspecified_nonzero <- is.finite(misspecified$fmin) &
+    misspecified$fmin > 1e-8
   interior_pairs <- pairs[
     pairs$target_population_min_eigenvalue >= 0.20 &
       pairs$ordinary_returned & pairs$psd_returned &
@@ -237,11 +278,15 @@ invariant_summary <- function(raw, pairs = pair_results(raw)) {
       "input_object_is_unchanged",
       "ml2s_stage1_is_unchanged",
       "expected_domain_rejection",
+      "fixed_weight_spectrum_recorded",
+      "two_group_equalities_hold",
+      "misspecified_discrepancy_is_nonzero",
       "interior_pair_agreement"
     ),
     checked = c(
       nrow(accepted_psd), nrow(returned), nrow(input_checked),
-      nrow(stage1_checked), nrow(domain), nrow(interior_pairs)
+      nrow(stage1_checked), nrow(domain), nrow(fixed_weight),
+      nrow(two_group), nrow(misspecified), nrow(interior_pairs)
     ),
     violations = c(
       sum(is.na(accepted_psd$admissible) | !accepted_psd$admissible),
@@ -250,6 +295,9 @@ invariant_summary <- function(raw, pairs = pair_results(raw)) {
       sum(is.na(stage1_checked$stage1_unchanged) |
             !stage1_checked$stage1_unchanged),
       sum(is.na(domain$expected_outcome_ok) | !domain$expected_outcome_ok),
+      sum(is.na(weight_spectrum_ok) | !weight_spectrum_ok),
+      sum(is.na(two_group_equality_ok) | !two_group_equality_ok),
+      sum(is.na(misspecified_nonzero) | !misspecified_nonzero),
       sum(is.na(agreement_ok) | !agreement_ok)
     ),
     stringsAsFactors = FALSE
