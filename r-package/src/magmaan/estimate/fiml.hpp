@@ -769,6 +769,30 @@ two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
 
 namespace frontier {
 
+// Raw-data FIML over PSD primitive LISREL covariance matrices. The optimizer
+// works in an internal Cholesky lift and returns the ordinary partable-shaped
+// parameter vector; every observed-pattern covariance must remain positive
+// definite for the likelihood to be finite.
+fit_expected<Estimates>
+fit_fiml_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const RawData& raw,
+             const Eigen::VectorXd& x0,
+             FIML discrepancy = {},
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
+fit_expected<Estimates>
+fit_fiml_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const RawData& raw,
+             const Eigen::VectorXd& x0,
+             const FIMLPack& pack,
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
 fit_expected<Estimates>
 fit_fiml_constrained(spec::LatentStructure pt,
                      const model::MatrixRep& rep,

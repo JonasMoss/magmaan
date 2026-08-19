@@ -862,6 +862,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_fit_fiml_psd_impl
+Rcpp::List frontier_fit_fiml_psd_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
+RcppExport SEXP _magmaan_frontier_fit_fiml_psd_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
+    Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_psd_impl(partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // saturated_em_moments_impl
 Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step, Rcpp::Nullable<Rcpp::List> control);
 RcppExport SEXP _magmaan_saturated_em_moments_impl(SEXP raw_dataSEXP, SEXP h_stepSEXP, SEXP controlSEXP) {
@@ -3844,6 +3860,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fcsem_fit_measures_impl", (DL_FUNC) &_magmaan_fcsem_fit_measures_impl, 1},
     {"_magmaan_fcsem_standardized_rows_impl", (DL_FUNC) &_magmaan_fcsem_standardized_rows_impl, 2},
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
+    {"_magmaan_frontier_fit_fiml_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_fiml_psd_impl, 6},
     {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 3},
     {"_magmaan_regularize_saturated_stage1_impl", (DL_FUNC) &_magmaan_regularize_saturated_stage1_impl, 2},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},

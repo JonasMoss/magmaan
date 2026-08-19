@@ -5022,6 +5022,60 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   return out;
 }
 
+// Raw-data FIML with PSD primitive LISREL covariance matrices. The Cholesky
+// lift is internal; the returned fit retains the ordinary partable parameters.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_fiml_psd_impl(
+    SEXP partable, SEXP raw_data,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_fiml_psd");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty())
+    Rcpp::stop("magmaan: model has no observed variables");
+
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  if (auto e = magmaan::estimate::fiml::validate_fiml_fixed_x_missing_policy(
+          ctx.pt, raw); !e.has_value()) {
+    stop_fit(e.error());
+  }
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
+  ctx.samp = pack_or->start_stats;
+  ctx.ov_names = ctx.rep.ov_names[0];
+  ctx.meanstructure = has_meanstructure(ctx.pt);
+  if (!ctx.meanstructure) ctx.samp.mean.clear();
+
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull()
+          ? magmaan::estimate::Backend::NloptSlsqp
+          : fiml_backend_from_optimizer_arg(optimizer);
+  magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.start_eigen_floor = start_eigen_floor;
+  psd_opts.feasibility_tol = feasibility_tol;
+  auto e_or = magmaan::estimate::fiml::frontier::fit_fiml_psd(
+      ctx.pt, ctx.rep, raw, x0, *pack_or, backend, optim_opts_from(control),
+      psd_opts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  Rcpp::List out = fiml_fit_result(ctx, raw, est, &starts);
+  out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
+  out["covariance_policy"] = "psd";
+  return out;
+}
+
 // saturated_em_moments_impl() — Stage-1 of the Savalei-Bentler (2009) two-stage
 // missing-data path. Takes raw data only (no `partable`/spec needed because the
 // saturated model has no structural restrictions) and returns the per-block EM

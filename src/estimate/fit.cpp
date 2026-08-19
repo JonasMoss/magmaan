@@ -1,4 +1,5 @@
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/fiml.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -724,6 +725,48 @@ psd_ml_problem(const model::ModelEvaluator& ev,
   return prob;
 }
 
+optim::ScalarProblem
+psd_fiml_problem(const model::ModelEvaluator& ev,
+                 const model::MatrixRep& rep,
+                 const EqConstraints& con,
+                 const PsdLiftLayout& layout,
+                 const data::RawData& raw,
+                 const fiml::FIMLCache& cache,
+                 fiml::FIML discrepancy) {
+  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
+  const auto locations = ev.param_locations();
+  const auto sigma_offset = psd_sigma_offsets(rep);
+
+  optim::ScalarProblem prob;
+  prob.n_param = n_x;
+  prob.expand = [&con, n_alpha = layout.n_alpha](const Eigen::VectorXd& x) {
+    return con.expand(x.head(n_alpha));
+  };
+  prob.f = [&ev, &rep, &con, &layout, &raw, &cache, discrepancy,
+            locations, sigma_offset, n_x](
+               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    if (x.size() != n_x || !x.allFinite()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    auto eval = psd_lifted_evaluation(
+        ev, rep, con, layout, locations, sigma_offset, x, true, true);
+    if (!eval.has_value()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    auto vg = discrepancy.value_gradient(
+        raw, cache, eval->moments, eval->J_sigma, eval->J_mu);
+    if (!vg.has_value()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    grad = 0.5 * vg->gradient;
+    return 0.5 * vg->value;
+  };
+  return prob;
+}
+
 fit_expected<optim::GmmProblem>
 psd_gmm_problem(const model::ModelEvaluator& ev,
                 const model::MatrixRep& rep,
@@ -1023,6 +1066,37 @@ psd_gmm_derivative_probe(spec::LatentStructure pt,
   return probe_callbacks(objective, constraints, *start, layout->n_alpha,
                          layout->n_lift, finite_difference_step,
                          "psd_gmm_derivative_probe");
+}
+
+fit_expected<PsdDerivativeProbe>
+psd_fiml_derivative_probe(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::RawData& raw,
+                          const fiml::FIMLPack& pack,
+                          const Eigen::VectorXd& theta_start,
+                          double finite_difference_step,
+                          frontier::PsdFitOptions options) {
+  if (auto ok = validate_probe_step(
+          finite_difference_step, "psd_fiml_derivative_probe");
+      !ok.has_value()) return std::unexpected(ok.error());
+  if (auto ok = fiml::validate_fiml_fixed_x_missing_policy(pt, raw);
+      !ok.has_value()) return std::unexpected(ok.error());
+  auto pre = prelude(pt, rep, pack.start_stats, theta_start,
+                     "psd_fiml_derivative_probe");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, theta_start, options.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+
+  const optim::ScalarProblem objective = psd_fiml_problem(
+      pre->ev, rep, pre->con, *layout, raw, pack.cache, fiml::FIML{});
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  return probe_callbacks(objective, constraints, *start, layout->n_alpha,
+                         layout->n_lift, finite_difference_step,
+                         "psd_fiml_derivative_probe");
 }
 
 }  // namespace psd_test
@@ -1445,6 +1519,36 @@ drive_psd_problem(const optim::ScalarProblem& prob,
 }
 
 fit_expected<Estimates>
+fit_fiml_psd_impl(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::RawData& raw,
+                  const Eigen::VectorXd& x0,
+                  const fiml::FIMLPack& pack,
+                  fiml::FIML discrepancy,
+                  Backend backend, OptimOptions opts,
+                  const frontier::PsdFitOptions& psd_opts,
+                  const char* who) {
+  if (auto ok = fiml::validate_fiml_fixed_x_missing_policy(pt, raw);
+      !ok.has_value()) return std::unexpected(ok.error());
+  if (auto ok = validate_psd_fit_options(psd_opts, who);
+      !ok.has_value()) return std::unexpected(ok.error());
+  auto pre = prelude(pt, rep, pack.start_stats, x0, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, x0, psd_opts.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+
+  const optim::ScalarProblem prob = psd_fiml_problem(
+      pre->ev, rep, pre->con, *layout, raw, pack.cache, discrepancy);
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  return drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
+                           backend, opts, psd_opts, who);
+}
+
+fit_expected<Estimates>
 compose_fisher_ml(const spec::LatentStructure& pt, const Prelude& pre,
                   const SampleStats& samp,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
@@ -1581,6 +1685,32 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   return est;
+}
+
+fit_expected<Estimates>
+fiml::frontier::fit_fiml_psd(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::RawData& raw,
+                             const Eigen::VectorXd& x0,
+                             fiml::FIML discrepancy,
+                             Backend backend, OptimOptions opts,
+                             estimate::frontier::PsdFitOptions psd_opts) {
+  auto pack = fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(pack.error());
+  return fit_fiml_psd_impl(std::move(pt), rep, raw, x0, *pack, discrepancy,
+                           backend, opts, psd_opts, "fit_fiml_psd");
+}
+
+fit_expected<Estimates>
+fiml::frontier::fit_fiml_psd(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::RawData& raw,
+                             const Eigen::VectorXd& x0,
+                             const fiml::FIMLPack& pack,
+                             Backend backend, OptimOptions opts,
+                             estimate::frontier::PsdFitOptions psd_opts) {
+  return fit_fiml_psd_impl(std::move(pt), rep, raw, x0, pack, fiml::FIML{},
+                           backend, opts, psd_opts, "fit_fiml_psd");
 }
 
 namespace frontier {

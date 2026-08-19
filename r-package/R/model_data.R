@@ -1570,6 +1570,30 @@ fit_fiml <- function(model, data,
                 optimizer = optimizer, control = control)
 }
 
+# Frontier raw-data FIML over PSD primitive LISREL covariance matrices.
+# Inference for boundary solutions is intentionally outside this estimator's
+# current validation contract.
+frontier_fit_fiml_psd <- function(
+    model, data, optimizer = "nlopt-slsqp", control = NULL,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+  if (is.character(model) && length(model) == 1L) {
+    model <- model_spec(model, meanstructure = TRUE)
+  } else if (inherits(model, "magmaan_model_spec") &&
+             !.model_spec_has_meanstructure(model)) {
+    model <- .rebuild_model_spec(
+      model, overrides = list(meanstructure = TRUE),
+      caller = "frontier_fit_fiml_psd"
+    )
+  }
+  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
+  frontier_fit_fiml_psd_impl(
+    partable_arg(model), fiml_data_arg(data),
+    optimizer = optimizer, control = control,
+    start_eigen_floor = start_eigen_floor,
+    feasibility_tol = feasibility_tol
+  )
+}
+
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                      bounds = NULL, h_step = 1e-4, stage1 = NULL,
                      stage1_regularization = NULL,

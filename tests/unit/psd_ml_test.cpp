@@ -3,16 +3,19 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
 
 #include "../../src/estimate/detail_psd_probe.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/start_values.hpp"
@@ -66,6 +69,50 @@ OptimOptions strict_options() {
   out.ftol = 1e-13;
   out.gtol = 1e-8;
   return out;
+}
+
+Eigen::MatrixXd standardized_design(Eigen::Index n, Eigen::Index p) {
+  Eigen::MatrixXd Z(n, p);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index c = 0; c < p; ++c) {
+      const double rr = static_cast<double>(r + 1);
+      const double cc = static_cast<double>(c + 1);
+      Z(r, c) = std::sin(0.37 * rr * cc) +
+                std::cos(0.19 * (rr + 1.0) * (cc + 2.0));
+    }
+  }
+  Z.rowwise() -= Z.colwise().mean();
+  Eigen::LLT<Eigen::MatrixXd> llt((Z.transpose() * Z) /
+                                  static_cast<double>(n));
+  REQUIRE(llt.info() == Eigen::Success);
+  return Z * llt.matrixU().solve(
+                 Eigen::MatrixXd::Identity(p, p));
+}
+
+magmaan::data::RawData raw_with_covariance(
+    const Eigen::MatrixXd& covariance, const Eigen::VectorXd& mean,
+    Eigen::Index n, bool introduce_missing) {
+  Eigen::LLT<Eigen::MatrixXd> llt(covariance);
+  REQUIRE(llt.info() == Eigen::Success);
+  Eigen::MatrixXd X =
+      (standardized_design(n, covariance.rows()) *
+       llt.matrixL().transpose()).rowwise() + mean.transpose();
+  magmaan::data::RawData raw;
+  raw.X.push_back(std::move(X));
+  if (introduce_missing) {
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask =
+        Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(
+            n, covariance.cols());
+    for (Eigen::Index r = 0; r < n; ++r) {
+      if (r % 11 == 0) {
+        const Eigen::Index c = (r / 11) % covariance.cols();
+        mask(r, c) = 0;
+        raw.X[0](r, c) = std::numeric_limits<double>::quiet_NaN();
+      }
+    }
+    raw.mask.push_back(std::move(mask));
+  }
+  return raw;
 }
 
 void check_psd_terminal(const magmaan::estimate::Estimates& fit) {
@@ -289,6 +336,137 @@ TEST_CASE("PSD ML mean-structure fit agrees with ordinary interior ML") {
   check_psd_terminal(*fit);
   CHECK(fit->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
   CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+}
+
+TEST_CASE("PSD FIML derivatives and all-observed reduction agree with ML") {
+  BuildOptions options;
+  options.meanstructure = true;
+  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4", options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Vector4d loadings;
+  loadings << 1.0, 0.8, 0.65, 0.9;
+  Eigen::Vector4d residuals;
+  residuals << 0.5, 0.6, 0.7, 0.55;
+  const Eigen::Matrix4d covariance =
+      one_factor_covariance(loadings, residuals, 1.2);
+  Eigen::Vector4d mean;
+  mean << 0.4, -0.2, 0.7, 1.1;
+  auto raw = raw_with_covariance(covariance, mean, 300, false);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto start = simple_start_values(pt, *rep, pack->start_stats, {});
+  REQUIRE(start.has_value());
+
+  auto probe = magmaan::estimate::psd_test::psd_fiml_derivative_probe(
+      pt, *rep, raw, *pack, *start);
+  REQUIRE_MESSAGE(probe.has_value(), "PSD FIML derivative probe failed: "
+      << (probe.has_value() ? std::string{} : probe.error().detail));
+  CHECK((probe->analytic_gradient -
+         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 4e-6);
+  CHECK((probe->analytic_constraint_jacobian -
+         probe->finite_difference_constraint_jacobian)
+            .cwiseAbs().maxCoeff() < 3e-7);
+
+  auto ml = magmaan::estimate::frontier::fit_ml_psd(
+      pt, *rep, pack->start_stats, *start, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE(ml.has_value());
+  auto ordinary_fiml = magmaan::estimate::fit_fiml(
+      pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
+      strict_options());
+  REQUIRE(ordinary_fiml.has_value());
+  auto fiml = magmaan::estimate::fiml::frontier::fit_fiml_psd(
+      pt, *rep, raw, *start, magmaan::estimate::fiml::FIML{},
+      Backend::NloptSlsqp, strict_options());
+  REQUIRE_MESSAGE(fiml.has_value(), "all-observed PSD FIML failed: "
+      << (fiml.has_value() ? std::string{} : fiml.error().detail));
+  check_psd_terminal(*fiml);
+  CHECK(fiml->fmin == doctest::Approx(ordinary_fiml->fmin).epsilon(1e-8));
+  CHECK((fiml->theta - ordinary_fiml->theta).cwiseAbs().maxCoeff() < 2e-5);
+  CHECK((fiml->theta - ml->theta).cwiseAbs().maxCoeff() < 2e-5);
+}
+
+TEST_CASE("PSD FIML agrees with an interior missing-data fit") {
+  BuildOptions options;
+  options.meanstructure = true;
+  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4", options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Vector4d loadings;
+  loadings << 1.0, 0.82, 0.68, 0.9;
+  Eigen::Vector4d residuals;
+  residuals << 0.55, 0.65, 0.75, 0.6;
+  Eigen::Vector4d mean;
+  mean << 0.3, -0.1, 0.6, 1.0;
+  auto raw = raw_with_covariance(
+      one_factor_covariance(loadings, residuals, 1.15), mean, 500, true);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto start = simple_start_values(pt, *rep, pack->start_stats, {});
+  REQUIRE(start.has_value());
+
+  auto probe = magmaan::estimate::psd_test::psd_fiml_derivative_probe(
+      pt, *rep, raw, *pack, *start);
+  REQUIRE(probe.has_value());
+  CHECK((probe->analytic_gradient -
+         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 5e-6);
+
+  auto ordinary = magmaan::estimate::fit_fiml(
+      pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
+      strict_options());
+  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary FIML failed: "
+      << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+  REQUIRE(ordinary->diagnostics.admissibility.admissible);
+  auto psd = magmaan::estimate::fiml::frontier::fit_fiml_psd(
+      pt, *rep, raw, ordinary->theta, *pack, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE_MESSAGE(psd.has_value(), "interior PSD FIML failed: "
+      << (psd.has_value() ? std::string{} : psd.error().detail));
+  check_psd_terminal(*psd);
+  CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+  CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 3e-5);
+}
+
+TEST_CASE("PSD FIML repairs a missing-data negative-residual solution") {
+  BuildOptions options;
+  options.meanstructure = true;
+  auto pt = lavaanify("f =~ x1 + x2 + x3", options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Matrix3d covariance;
+  covariance << 1.0, 0.7, 0.7,
+                0.7, 1.0, 0.3,
+                0.7, 0.3, 1.0;
+  auto raw = raw_with_covariance(
+      covariance, Eigen::Vector3d::Zero(), 600, false);
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask =
+      Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(
+          raw.X[0].rows(), raw.X[0].cols());
+  mask(0, 0) = 0;
+  raw.X[0](0, 0) = std::numeric_limits<double>::quiet_NaN();
+  raw.mask.push_back(std::move(mask));
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto start = simple_start_values(pt, *rep, pack->start_stats, {});
+  REQUIRE(start.has_value());
+
+  auto ordinary = magmaan::estimate::fit_fiml(
+      pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
+      strict_options());
+  REQUIRE(ordinary.has_value());
+  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+
+  auto psd = magmaan::estimate::fiml::frontier::fit_fiml_psd(
+      pt, *rep, raw, ordinary->theta, *pack, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE_MESSAGE(psd.has_value(), "PSD FIML repair failed: "
+      << (psd.has_value() ? std::string{} : psd.error().detail));
+  check_psd_terminal(*psd);
+  CHECK(psd->fmin > ordinary->fmin + 1e-7);
 }
 
 TEST_CASE("PSD fixed-weight GMM objective and equality Jacobian match central "

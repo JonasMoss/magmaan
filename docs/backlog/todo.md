@@ -205,11 +205,18 @@ when they next change.
      and repair gates. Empirical WLS/DWLS/fixed-`a` DLS updates remain separate:
      they need raw-data weight builders and an explicit estimated-weight policy,
      not a new value of the current sample-statistics enum.
-  2. **M/L — FIML.** Feed lifted moments and Jacobians into the existing
-     patternwise likelihood/cache. Define the likelihood domain per observed
-     pattern (`Sigma_oo` PD), preserve the fixed-x missingness policy, and gate
-     the all-observed reduction to PSD-NTML before broader missing-pattern
-     validation.
+  2. **Done 2026-08-19 — FIML.**
+     `estimate::fiml::frontier::fit_fiml_psd` feeds the lifted moments and
+     analytic Jacobians through the existing immutable pattern cache and
+     observed-pattern likelihood. Every `Sigma_oo` must be PD, and the existing
+     fixed-x missingness policy remains authoritative. Focused C++ gates cover
+     central-difference derivatives, all-observed reduction to PSD-NTML and
+     ordinary FIML, agreement at an interior missing-data optimum, and repair
+     of a missing-data negative-residual solution; the exported
+     `frontier_fit_fiml_psd()` wrapper gates the R fit schema and retained raw
+     missingness. Broader missing-pattern/corpus, timing, and basin validation
+     remain part of the future estimator-specific validation discussion, and
+     boundary inference remains explicitly out of scope.
   3. **L — two-level ML.** Feed lifted within/between moments into the cluster
      likelihood and require `Sigma_W` and every observed
      `Sigma_W + d Sigma_B` combination to be PD. The current two-level composer
