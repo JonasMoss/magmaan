@@ -37,49 +37,191 @@ pilot_specs <- function(p = 5L) {
   )
 }
 
-pilot_design <- function(n = 120L, p = 5L) {
-  out <- expand.grid(
-    distribution = c("normal", "skewed"),
-    missing_rate = c(0, 0.30),
-    truth = c("null", "power"),
-    KEEP.OUT.ATTRS = FALSE,
+pilot_distribution_catalog <- function() {
+  data.frame(
+    distribution = c(
+      "normal", "t8", "t5", "lognormal_08", "lognormal_12",
+      "contaminated_05x6", "t3"),
+    distribution_label = c(
+      "Gaussian", "t(8)", "t(5)", "log-normal, g=0.8",
+      "log-normal, g=1.2", "5% row-scale contamination (x6)", "t(3)"),
+    distribution_class = c(
+      "Gaussian reference", "elliptical heavy tail", "elliptical heavy tail",
+      "skewed finite moments", "skewed finite moments",
+      "finite-moment contamination", "infinite fourth moment"),
+    fourth_moment = c(
+      "finite", "finite", "finite", "finite", "finite", "finite",
+      "infinite"),
     stringsAsFactors = FALSE
   )
+}
+
+pilot_missingness_catalog <- function() {
+  data.frame(
+    missingness = c(
+      "complete", "mcar_30", "mar_tail_30", "mar_monotone_30",
+      "mnar_tail_30"),
+    missingness_label = c(
+      "complete", "30% MCAR", "30% MAR on observed x1",
+      "30% monotone MAR dropout", "30% self-masked MNAR"),
+    missingness_class = c(
+      "complete", "MCAR", "MAR", "MAR monotone", "MNAR"),
+    missing_rate = c(0, 0.30, 0.30, 0.30, 0.30),
+    stringsAsFactors = FALSE
+  )
+}
+
+pilot_analysis_region <- function(distribution, missingness, fourth_moment) {
+  if (identical(missingness, "mnar_tail_30")) return("ignorability failure")
+  if (identical(fourth_moment, "infinite")) return("moment boundary")
+  if (grepl("^mar_", missingness) && !identical(distribution, "normal")) {
+    return("MAR pseudo-ML stress")
+  }
+  if (!identical(distribution, "normal")) return("finite-moment robustness")
+  "Gaussian reference"
+}
+
+pilot_design <- function(n = 120L, p = 5L) {
+  distributions <- pilot_distribution_catalog()
+  missingness <- pilot_missingness_catalog()
+  index <- expand.grid(
+    distribution_id = seq_len(nrow(distributions)),
+    missingness_id = seq_len(nrow(missingness)),
+    KEEP.OUT.ATTRS = FALSE
+  )
+  scenarios <- cbind(
+    distributions[index$distribution_id, , drop = FALSE],
+    missingness[index$missingness_id, , drop = FALSE])
+  row.names(scenarios) <- NULL
+  scenarios$scenario_id <- seq_len(nrow(scenarios))
+  scenarios$analysis_region <- mapply(
+    pilot_analysis_region, scenarios$distribution, scenarios$missingness,
+    scenarios$fourth_moment, USE.NAMES = FALSE)
+  scenarios$null_contract <- ifelse(
+    scenarios$analysis_region %in%
+      c("Gaussian reference", "finite-moment robustness"),
+    "primary robustness target", ifelse(
+      scenarios$analysis_region == "MAR pseudo-ML stress",
+      "common-use stress", "deliberate contract violation"))
+
+  out <- scenarios[rep(seq_len(nrow(scenarios)), each = 2L), , drop = FALSE]
+  out$truth <- rep(c("null", "power"), times = nrow(scenarios))
   out$n <- as.integer(n)
   out$p <- as.integer(p)
   out$df <- as.integer(p * (p - 1L) / 2L)
+  out$alternative_rho <- ifelse(out$truth == "power", 0.35, 0)
   out$cell_id <- seq_len(nrow(out))
+  row.names(out) <- NULL
   out
+}
+
+pilot_standardized_lognormal <- function(z, g) {
+  y <- exp(g * z)
+  centre <- exp(g^2 / 2)
+  scale <- sqrt((exp(g^2) - 1) * exp(g^2))
+  (y - centre) / scale
+}
+
+pilot_draw_complete <- function(cell) {
+  p <- as.integer(cell$p)
+  correlation <- diag(p)
+  if (identical(cell$truth, "power")) {
+    correlation[1L, 2L] <- correlation[2L, 1L] <- cell$alternative_rho
+  }
+  Z <- matrix(stats::rnorm(cell$n * p), cell$n, p) %*% chol(correlation)
+  if (identical(cell$distribution, "normal")) return(Z)
+  if (identical(cell$distribution, "lognormal_08")) {
+    return(pilot_standardized_lognormal(Z, 0.8))
+  }
+  if (identical(cell$distribution, "lognormal_12")) {
+    return(pilot_standardized_lognormal(Z, 1.2))
+  }
+  if (cell$distribution %in% c("t8", "t5", "t3")) {
+    degrees <- as.numeric(sub("^t", "", cell$distribution))
+    row_scale <- sqrt(stats::rchisq(cell$n, degrees) / degrees)
+    return(sweep(Z, 1L, row_scale, "/") * sqrt((degrees - 2) / degrees))
+  }
+  if (identical(cell$distribution, "contaminated_05x6")) {
+    row_scale <- ifelse(stats::runif(cell$n) < 0.05, 6, 1)
+    variance_scale <- sqrt(0.95 + 0.05 * 6^2)
+    return(sweep(Z, 1L, row_scale / variance_scale, "*"))
+  }
+  stop("unknown pilot distribution: ", cell$distribution, call. = FALSE)
+}
+
+pilot_missingness_driver <- function(x) {
+  scale <- stats::sd(x)
+  if (!is.finite(scale) || scale <= sqrt(.Machine$double.eps)) {
+    return(rep(0, length(x)))
+  }
+  pmax(-6, pmin(6, (x - mean(x)) / scale))
+}
+
+pilot_logit_intercept <- function(linear_predictor, target, monotone_p = NULL) {
+  objective <- function(intercept) {
+    probability <- stats::plogis(intercept + linear_predictor)
+    expected <- if (is.null(monotone_p)) {
+      mean(probability)
+    } else {
+      mean(vapply(seq_len(monotone_p - 1L), function(step) {
+        mean(1 - (1 - probability)^step)
+      }, numeric(1L)))
+    }
+    expected - target
+  }
+  stats::uniroot(objective, interval = c(-30, 30), tol = 1e-10)$root
+}
+
+pilot_apply_missingness <- function(X, cell) {
+  n <- nrow(X)
+  p <- ncol(X)
+  mechanism <- cell$missingness
+  if (identical(mechanism, "complete")) return(X)
+
+  mask <- matrix(FALSE, n, p - 1L)
+  if (identical(mechanism, "mcar_30")) {
+    mask[] <- stats::runif(n * (p - 1L)) < cell$missing_rate
+  } else if (identical(mechanism, "mar_tail_30")) {
+    eta <- 1.25 * pilot_missingness_driver(X[, 1L])
+    intercept <- pilot_logit_intercept(eta, cell$missing_rate)
+    probability <- stats::plogis(intercept + eta)
+    mask[] <- stats::runif(n * (p - 1L)) < probability
+  } else if (identical(mechanism, "mar_monotone_30")) {
+    eta <- 1.25 * pilot_missingness_driver(X[, 1L])
+    intercept <- pilot_logit_intercept(
+      eta, cell$missing_rate, monotone_p = p)
+    probability <- stats::plogis(intercept + eta)
+    dropped <- rep(FALSE, n)
+    for (column in seq_len(p - 1L)) {
+      dropped <- dropped | (stats::runif(n) < probability)
+      mask[, column] <- dropped
+    }
+  } else if (identical(mechanism, "mnar_tail_30")) {
+    for (column in seq_len(p - 1L)) {
+      eta <- 1.25 * pilot_missingness_driver(X[, column + 1L])
+      intercept <- pilot_logit_intercept(eta, cell$missing_rate)
+      probability <- stats::plogis(intercept + eta)
+      mask[, column] <- stats::runif(n) < probability
+    }
+  } else {
+    stop("unknown pilot missingness mechanism: ", mechanism, call. = FALSE)
+  }
+
+  eligible <- X[, -1L, drop = FALSE]
+  eligible[mask] <- NA_real_
+  X[, -1L] <- eligible
+  X
 }
 
 pilot_draw <- function(cell, seed) {
   set.seed(seed)
-  p <- cell$p
-  correlation <- diag(p)
-  if (identical(cell$truth, "power")) {
-    correlation[1L, 2L] <- correlation[2L, 1L] <- 0.35
-  }
-  Z <- matrix(stats::rnorm(cell$n * p), cell$n, p) %*% chol(correlation)
-  X <- if (identical(cell$distribution, "normal")) {
-    Z
-  } else {
-    # Standardized log-normal margins: pronounced skew/kurtosis while the null
-    # remains exact because the Gaussian copula is independent in null cells.
-    a <- 0.8
-    Y <- exp(a * Z)
-    centre <- exp(a^2 / 2)
-    scale <- sqrt((exp(a^2) - 1) * exp(a^2))
-    (Y - centre) / scale
-  }
-  colnames(X) <- pilot_variables(p)
-  if (cell$missing_rate > 0) {
-    mask <- matrix(
-      stats::runif(cell$n * (p - 1L)) < cell$missing_rate,
-      cell$n, p - 1L
-    )
-    X[, -1L][mask] <- NA_real_
-  }
-  as.data.frame(X)
+  X_complete <- pilot_draw_complete(cell)
+  complete_r12 <- stats::cor(X_complete[, 1L], X_complete[, 2L])
+  X <- pilot_apply_missingness(X_complete, cell)
+  colnames(X) <- pilot_variables(cell$p)
+  out <- as.data.frame(X)
+  attr(out, "complete_r12") <- complete_r12
+  out
 }
 
 pilot_restriction_matrix <- function(fit, p) {
@@ -115,11 +257,18 @@ pilot_one_rep <- function(cell, rep_id, specs, flips, seed_base) {
   seed <- seed_base + cell$cell_id * 100003L + rep_id
   data <- pilot_draw(cell, seed)
   realized_missing <- mean(is.na(as.matrix(data)))
+  realized_missing_eligible <- mean(is.na(as.matrix(data[, -1L, drop = FALSE])))
+  complete_r12 <- attr(data, "complete_r12")
+  observed_r12 <- suppressWarnings(stats::cor(
+    data[[1L]], data[[2L]], use = "complete.obs"))
   base <- data.frame(
     rep = rep_id, fit_h0_ok = FALSE, lrt_ok = FALSE, score_ok = FALSE,
     fit_h1_ok = FALSE, wald_ok = FALSE, error_h0 = "", error_lrt = "",
     error_score = "", error_h1 = "", error_wald = "",
-    realized_missing = realized_missing, h0_seconds = NA_real_,
+    realized_missing = realized_missing,
+    realized_missing_eligible = realized_missing_eligible,
+    complete_r12 = complete_r12, observed_r12 = observed_r12,
+    h0_seconds = NA_real_,
     lrt_seconds = NA_real_, score_seconds = NA_real_, h1_seconds = NA_real_,
     wald_seconds = NA_real_, total_seconds = NA_real_,
     score_df = NA_integer_, score_eigen_min = NA_real_,
@@ -243,10 +392,15 @@ pilot_wilson <- function(rejected, n, z = 1.95996398454005) {
 }
 
 pilot_method_summary <- function(raw) {
+  design_columns <- intersect(c(
+    "cell_id", "scenario_id", "distribution", "distribution_label",
+    "distribution_class", "fourth_moment", "missingness",
+    "missingness_label", "missingness_class", "missing_rate",
+    "analysis_region", "null_contract", "truth", "alternative_rho",
+    "n", "p", "df", "rep"), names(raw))
   long <- do.call(rbind, lapply(pilot_p_columns, function(column) {
     data.frame(
-      raw[c("cell_id", "distribution", "missing_rate", "truth", "n", "p",
-            "df", "rep")],
+      raw[design_columns],
       method = sub("^p_", "", column), p_value = raw[[column]],
       stringsAsFactors = FALSE
     )
@@ -257,9 +411,9 @@ pilot_method_summary <- function(raw) {
     n <- sum(valid)
     rejected <- sum(x$p_value[valid] <= 0.05)
     ci <- pilot_wilson(rejected, n)
+    summary_columns <- setdiff(design_columns, "rep")
     data.frame(
-      x[1L, c("cell_id", "distribution", "missing_rate", "truth", "n", "p",
-               "df", "method")],
+      x[1L, c(summary_columns, "method")],
       valid = n, rejected = rejected,
       rejection_rate = if (n) rejected / n else NA_real_,
       ci_lower = ci[["lower"]], ci_upper = ci[["upper"]],

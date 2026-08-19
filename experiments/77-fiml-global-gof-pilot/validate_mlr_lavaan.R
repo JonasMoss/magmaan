@@ -50,6 +50,10 @@ grid <- grid[grid$truth == "null", , drop = FALSE]
 specs <- pilot_specs(opts$p)
 
 one_rep <- function(cell, rep_id) {
+  scalar_or_na <- function(x) {
+    if (!length(x)) return(NA_real_)
+    as.numeric(x[[1L]])
+  }
   seed <- opts$seed_base + cell$cell_id * 100003L + rep_id
   data <- pilot_draw(cell, seed)
   fit_magmaan <- magmaan::magmaan(
@@ -61,7 +65,7 @@ one_rep <- function(cell, rep_id) {
   }
   mag <- magmaan::magmaan_core$estimate_fiml_robust_mlr(fit_magmaan)
 
-  missing <- if (cell$missing_rate > 0) "ml" else "listwise"
+  missing <- if (identical(cell$missingness, "complete")) "listwise" else "ml"
   fit_lavaan <- lavaan::sem(
     pilot_model_syntax(cell$p, restricted = TRUE), data = data,
     estimator = "MLR", missing = missing, meanstructure = TRUE,
@@ -72,17 +76,21 @@ one_rep <- function(cell, rep_id) {
   lav_test <- lavaan::lavInspect(fit_lavaan, "test")$yuan.bentler.mplus
   if (is.null(lav_test)) stop("lavaan returned no yuan.bentler.mplus test",
                               call. = FALSE)
-  lav_chisq <- as.numeric(lav_test$scaled.test.stat)
-  lav_scaled <- as.numeric(lav_test$stat)
-  lav_p <- as.numeric(lav_test$pvalue)
-  lav_scale <- as.numeric(lav_test$scaling.factor)
-  lav_trace <- as.numeric(lav_test$trace.UGamma)
-  lav_h1 <- as.numeric(attr(lav_test$stat, "h1"))
-  lav_h0 <- as.numeric(attr(lav_test$stat, "h0"))
+  lav_chisq <- scalar_or_na(lav_test$scaled.test.stat)
+  lav_scaled <- scalar_or_na(lav_test$stat)
+  lav_p <- scalar_or_na(lav_test$pvalue)
+  lav_scale <- scalar_or_na(lav_test$scaling.factor)
+  lav_trace <- scalar_or_na(lav_test$trace.UGamma)
+  lav_h1 <- scalar_or_na(attr(lav_test$stat, "h1"))
+  lav_h0 <- scalar_or_na(attr(lav_test$stat, "h0"))
   mag_p <- stats::pchisq(mag$chisq_scaled, mag$df, lower.tail = FALSE)
+  p_finite_mismatch <- is.finite(mag_p) != is.finite(lav_p)
+  decision_mismatch <- p_finite_mismatch || (
+    is.finite(mag_p) && ((mag_p <= 0.05) != (lav_p <= 0.05)))
 
   data.frame(
     cell_id = cell$cell_id, distribution = cell$distribution,
+    missingness = cell$missingness, analysis_region = cell$analysis_region,
     missing_rate = cell$missing_rate, rep = rep_id,
     magmaan_chisq = mag$chisq, lavaan_chisq = lav_chisq,
     diff_chisq = mag$chisq - lav_chisq,
@@ -98,14 +106,14 @@ one_rep <- function(cell, rep_id) {
     magmaan_h0 = mag$trace_ugamma_h0, lavaan_h0 = lav_h0,
     diff_h0 = mag$trace_ugamma_h0 - lav_h0,
     magmaan_df = mag$df, lavaan_df = as.integer(lav_test$df),
-    decision_mismatch = (mag_p <= 0.05) != (lav_p <= 0.05),
+    p_finite_mismatch = p_finite_mismatch,
+    decision_mismatch = decision_mismatch,
     stringsAsFactors = FALSE)
 }
 
 run_cell <- function(index) {
   cell <- as.list(grid[index, , drop = FALSE])
-  message(sprintf("  %s, missing %.0f%%", cell$distribution,
-                  100 * cell$missing_rate))
+  message(sprintf("  %s, %s", cell$distribution, cell$missingness))
   do.call(rbind, lapply(seq_len(opts$reps), function(rep_id) {
     one_rep(cell, rep_id)
   }))
@@ -136,8 +144,32 @@ summary <- do.call(rbind, lapply(metrics, function(metric) {
     stringsAsFactors = FALSE)
 }))
 summary$decision_mismatches <- sum(rows$decision_mismatch)
+summary$p_finite_mismatches <- sum(rows$p_finite_mismatch)
+summary$nonfinite_pairs <- sum(
+  !is.finite(rows$magmaan_p) & !is.finite(rows$lavaan_p))
 summary$df_mismatches <- sum(rows$magmaan_df != rows$lavaan_df)
 summary$wall_seconds <- wall_seconds
+
+absolute_tolerance <- c(
+  chisq = 1e-4, scaled = 5e-3, p = 5e-4, scale = 1e-3,
+  trace = 1e-3, h1 = 1e-3, h0 = 1e-3)
+relative_tolerance <- c(
+  chisq = 0, scaled = 5e-4, p = 0, scale = 0,
+  trace = 5e-4, h1 = 1e-4, h0 = 0)
+finite_p_pair <- is.finite(rows$magmaan_p) & is.finite(rows$lavaan_p)
+metric_within_tolerance <- vapply(metrics, function(metric) {
+  mag_value <- rows[[paste0("magmaan_", metric)]]
+  lav_value <- rows[[paste0("lavaan_", metric)]]
+  comparable <- is.finite(mag_value) & is.finite(lav_value)
+  required <- if (identical(metric, "chisq")) rep(TRUE, nrow(rows))
+    else finite_p_pair
+  if (any(required & !comparable)) return(FALSE)
+  difference <- abs(mag_value[required] - lav_value[required])
+  bound <- absolute_tolerance[[metric]] +
+    relative_tolerance[[metric]] * abs(lav_value[required])
+  all(difference <= bound)
+}, logical(1L))
+summary$within_tolerance <- metric_within_tolerance[summary$metric]
 
 write_csv(rows, file.path(results, "mlr_lavaan_parity.csv"))
 write_csv(summary, file.path(results, "mlr_lavaan_parity_summary.csv"))
@@ -147,11 +179,9 @@ write_metadata(file.path(results, "mlr_lavaan_parity_metadata.csv"), list(
 ), packages = c("magmaan", "lavaan"))
 
 print(summary, row.names = FALSE, digits = 4)
-tolerance <- c(chisq = 1e-4, scaled = 5e-3, p = 1e-4, scale = 1e-3,
-               trace = 1e-3, h1 = 1e-3, h0 = 1e-3)
-within_tolerance <- summary$max_abs_difference <= tolerance[summary$metric]
 if (any(rows$magmaan_df != rows$lavaan_df) || any(rows$decision_mismatch) ||
-    !all(within_tolerance)) {
+    any(rows$p_finite_mismatch) ||
+    !all(metric_within_tolerance)) {
   stop("MLR lavaan parity gate failed", call. = FALSE)
 }
 cat(sprintf("PASS: %d same-data magmaan/lavaan MLR comparisons in %.1f s\n",

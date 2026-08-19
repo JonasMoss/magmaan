@@ -309,23 +309,25 @@ when they next change.
   nonnormal generator or directional kurtosis, not a denser `n/q` grid.
   Experiment 77 adds a direct-FIML global-GOF bridge in which a five-variable
   independence model is nested affinely in the saturated covariance model, so
-  the existing nested score/flip machinery is exactly a global GOF test. Across
-  normal/skewed margins, complete/30%-MCAR data, `n=120`, 10 df, and 500 null
-  replications per cell, effective multiplier rejection was
-  .048/.040/.046/.050 (pooled .046). Score pEBA4 was mildly conservative
-  (pooled .0365), LRT pEBA4 mildly liberal (.0565), while MLR and robust Wald
-  were clearly liberal (.1165/.113 pooled; MLR reached .206 under skewed MCAR).
-  A 100-dataset same-data oracle on these exact four null cells matched lavaan
-  `estimator="MLR", missing="ml"` with zero df/decision mismatches and maximum
-  absolute differences `1.9e-5` in p, `4.8e-5` in the scaling factor, and
-  `4.8e-4` in the trace components, so the MLR result is not a magmaan artifact.
-  Matched-null power left LRT pEBA4 (.583), effective flips (.573), and score
-  pEBA4 (.548) close enough to retain as the next three-method shortlist. The
-  run took 25.9 seconds on four workers with no fit/test failures. The next
-  bounded step is a general H0 saturated-moment score projection for latent SEM,
-  not more independence-model cells: it must test whether score pEBA4 and
-  effective multipliers avoid the saturated-H1 failure in the current FIML-FMG
-  paper design. Keep MLR and robust Wald only as negative controls there.
+  the existing nested score/flip machinery is exactly a global GOF test. Its
+  second iteration crosses seven outcome laws (Gaussian, finite-moment heavy
+  tail/skew/contamination, and `t(3)`) with complete, MCAR, two MAR, and MNAR
+  mechanisms, explicitly separating 14 primary robustness scenarios from
+  common-use MAR stress and deliberate moment/ignorability violations. At
+  `n=120`, 10 df, and 500 null replications per scenario, the effective
+  multiplier was nominal in every primary cell (.032--.068; mean absolute size
+  error .009) and retained the highest primary size-adjusted power (.423).
+  Score SB was the strongest simple analytic alternative (size .016--.060;
+  adjusted power .391). MLR ranged from .068 to .829 in the same primary cells,
+  pooling to .078 under Gaussian reference mechanisms and .317 under
+  finite-moment nonnormality; the extreme result therefore does not depend on
+  `t(3)` or MNAR. An expanded 875-dataset same-data oracle had zero
+  finite/non-finite, df, or .05-decision mismatches against lavaan MLR (five
+  paired non-finite p-values; maximum finite p difference .000281). Before a
+  general claim, rerun a reduced primary grid at larger `n`, then implement the
+  general H0 saturated-moment score projection and repeat the comparison in a
+  latent SEM. Keep MLR as the target, effective multipliers as the lead, score
+  SB/pEBA4 as analytic alternatives, and LRT pEBA4/robust Wald as comparators.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null

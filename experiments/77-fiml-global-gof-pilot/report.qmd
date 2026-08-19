@@ -1,5 +1,5 @@
 ---
-title: "Five-minute FIML global-GOF pilot"
+title: "FIML global-GOF stress grid"
 format:
   html:
     toc: true
@@ -15,62 +15,199 @@ script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
 result_dir <- file.path(script_dir, "results", "pilot")
 read_result <- function(name) read.csv(
   file.path(result_dir, paste0(name, ".csv")), stringsAsFactors = FALSE)
+design <- read_result("design")
 summary <- read_result("method_summary")
-size_adjusted <- read_result("size_adjusted_power_pooled")
+scorecard <- read_result("method_scorecard")
+region_summary <- read_result("region_summary")
+adjusted_region <- read_result("size_adjusted_power_by_region")
+diagnostics <- read_result("design_diagnostics")
 metadata <- read_result("metadata")
 meta <- setNames(metadata$value, metadata$key)
 parity_path <- file.path(result_dir, "mlr_lavaan_parity_summary.csv")
 parity <- if (file.exists(parity_path)) read.csv(
   parity_path, stringsAsFactors = FALSE) else NULL
+
+method_labels <- c(
+  lrt_naive = "ordinary LR", lrt_mlr = "Yuan--Bentler MLR",
+  lrt_peba4 = "LR pEBA(4)", score_peba4 = "score pEBA(4)",
+  score_sb = "score SB",
+  flip_effective = "effective multiplier score",
+  wald_robust = "robust Wald")
+shortlist <- names(method_labels)
+label_methods <- function(x) unname(method_labels[x])
+format_rate <- function(x) sprintf("%.3f", x)
 ```
 
-## Purpose
+## Question and boundary
 
-This is a deliberately narrow bridge experiment. The restricted model is a
-five-variable independence covariance model, and the less-restricted model
-frees every observed covariance and is therefore saturated. Consequently the
-existing affine nested-score machinery is, in this design, a genuine global
-goodness-of-fit score test. This lets us screen score, multiplier, Wald, and
-likelihood-ratio constructions before implementing a general nonlinear-SEM
-global-score API.
+Can the usual Yuan--Bentler/Mplus FIML statistic remain adequately calibrated
+across practically recognizable forms of nonnormality and missingness, and do
+the eigenvalue-matched or multiplier alternatives offer a useful replacement?
 
-The eight cells cross normal versus standardized log-normal margins, complete
-data versus 30% MCAR on four variables, and a true null versus a Gaussian-copula
-correlation of .35 between the first two variables. The first variable is always
-observed. Each model has 10 degrees of freedom.
+The restricted model is a five-variable independence covariance model. The
+less-restricted model frees all observed covariances and is saturated. The
+existing affine nested-score machinery is therefore a genuine global
+goodness-of-fit test *for this design*. It is a screening bridge: the result
+does not establish that the score constructions already work as global tests
+for nonlinear latent-variable restrictions.
 
-## Results
+Every power cell sets a latent Gaussian/copula correlation of .35 between
+`x1` and `x2`; null cells set it to zero. `x1` is always observed, and missing
+rates refer to the remaining four variables.
 
-```{r table}
-show <- summary[, c("truth", "distribution", "missing_rate", "method",
-                    "valid", "rejection_rate", "ci_lower", "ci_upper")]
-show$missing_rate <- sprintf("%.0f%%", 100 * show$missing_rate)
-show$rejection_rate <- sprintf("%.3f", show$rejection_rate)
-show$ci <- sprintf("[%.3f, %.3f]", show$ci_lower, show$ci_upper)
-show$ci_lower <- show$ci_upper <- NULL
-knitr::kable(show, row.names = FALSE)
+## Stress grid
+
+Seven outcome laws are crossed factorially with five observation mechanisms
+and with null versus power, for `r nrow(design)` cells:
+
+```{r design-table}
+distribution_table <- unique(design[, c(
+  "distribution_label", "distribution_class", "fourth_moment")])
+names(distribution_table) <- c("outcome law", "stress type", "fourth moment")
+knitr::kable(distribution_table, row.names = FALSE)
+
+missingness_table <- unique(design[, c(
+  "missingness_label", "missingness_class", "missing_rate")])
+missingness_table$missing_rate <- sprintf(
+  "%.0f%%", 100 * missingness_table$missing_rate)
+names(missingness_table) <- c("observation mechanism", "class", "target")
+knitr::kable(missingness_table, row.names = FALSE)
 ```
+
+The interpretation strata are intentional:
+
+```{r region-counts}
+scenarios <- unique(design[, c("scenario_id", "analysis_region",
+                               "null_contract")])
+region_counts <- aggregate(
+  scenario_id ~ analysis_region + null_contract, scenarios, length)
+names(region_counts) <- c("analysis region", "interpretation", "scenarios")
+knitr::kable(region_counts, row.names = FALSE)
+```
+
+- **Gaussian reference** and **finite-moment robustness** are the primary
+  calibration comparison. The latter contains non-Gaussian complete and MCAR
+  cases with finite fourth moments.
+- **MAR pseudo-ML stress** represents common applied use: nonnormal outcomes
+  with ignorable, covariate-driven missingness. It is not treated as a blanket
+  distribution-free guarantee of normal-theory FIML.
+- **Moment boundary** uses a `t(3)` law, for which the fourth moment required by
+  sandwich-style asymptotics does not exist.
+- **Ignorability failure** is self-masked MNAR. Rejection there diagnoses
+  sensitivity to a violated missingness model, not a failed promise of a robust
+  statistic.
+
+## Primary calibration scorecard
+
+The scorecard below uses only the
+`r sum(scenarios$null_contract == "primary robustness target")` primary null
+scenarios. “Near nominal” means a
+cell rejection rate between .025 and .075; it is a descriptive band, not a
+formal equivalence test.
+
+```{r scorecard-table}
+show_scorecard <- scorecard[scorecard$method %in% shortlist, c(
+  "method", "primary_mean_abs_size_error", "primary_worst_abs_size_error",
+  "primary_min_size", "primary_max_size", "primary_near_nominal_fraction",
+  "primary_raw_power", "primary_size_adjusted_power")]
+show_scorecard$method <- label_methods(show_scorecard$method)
+show_scorecard[-1L] <- lapply(show_scorecard[-1L], format_rate)
+names(show_scorecard) <- c(
+  "method", "mean |size-.05|", "worst |size-.05|", "min size", "max size",
+  "fraction near .05", "raw power", "size-adjusted power")
+knitr::kable(show_scorecard, row.names = FALSE)
+```
+
+The effective multiplier is the only shortlisted method inside the descriptive
+near-nominal band in every primary cell. Its primary size ranges from
+`r format_rate(scorecard$primary_min_size[scorecard$method == "flip_effective"])`
+to
+`r format_rate(scorecard$primary_max_size[scorecard$method == "flip_effective"])`,
+with mean absolute size error
+`r format_rate(scorecard$primary_mean_abs_size_error[scorecard$method == "flip_effective"])`.
+The best simple analytic score correction is score SB; score pEBA(4) is more
+conservative.
+
+## Where calibration changes
+
+Pooling is shown separately by interpretation stratum so deliberate contract
+violations cannot drive the headline comparison.
+
+```{r region-calibration}
+region_null <- region_summary[
+  region_summary$truth == "null" & region_summary$method %in% shortlist,
+  c("analysis_region", "method", "rejection_rate")]
+region_null$method <- label_methods(region_null$method)
+region_wide <- reshape(region_null, idvar = "analysis_region",
+                       timevar = "method", direction = "wide")
+names(region_wide) <- sub("^rejection_rate\\.", "", names(region_wide))
+region_wide[-1L] <- lapply(region_wide[-1L], format_rate)
+names(region_wide)[1L] <- "analysis region"
+knitr::kable(region_wide, row.names = FALSE)
+```
+
+In the primary finite-moment nonnormal region, MLR rejection is
+`r format_rate(region_summary$rejection_rate[region_summary$truth == "null" & region_summary$analysis_region == "finite-moment robustness" & region_summary$method == "lrt_mlr"])`,
+versus
+`r format_rate(region_summary$rejection_rate[region_summary$truth == "null" & region_summary$analysis_region == "finite-moment robustness" & region_summary$method == "flip_effective"])`
+for the effective multiplier score. The MLR contrast therefore does not rely on
+the `t(3)` or MNAR cells.
+
+## Detection after matching empirical size
+
+For each scenario and method, the diagnostic cutoff is the empirical fifth
+percentile of null p-values; that cutoff is then applied to the matched power
+cell. It is unavailable in practice and should only be read as a detection
+comparison after removing observed size distortion.
 
 ```{r adjusted-power}
-size_adjusted$size_adjusted_power <- sprintf(
-  "%.3f", size_adjusted$size_adjusted_power)
-knitr::kable(size_adjusted, row.names = FALSE,
-             col.names = c("method", "mean size-adjusted power"))
+power_show <- adjusted_region[adjusted_region$method %in% shortlist, ]
+power_show$method <- label_methods(power_show$method)
+power_show$raw_power <- format_rate(power_show$raw_power)
+power_show$size_adjusted_power <- format_rate(
+  power_show$size_adjusted_power)
+names(power_show) <- c(
+  "analysis region", "method", "raw power", "size-adjusted power")
+knitr::kable(power_show, row.names = FALSE)
 ```
+
+The alternative is held fixed on the latent Gaussian scale, not on the
+observed Pearson-correlation scale. The following diagnostic makes the
+resulting signal variation visible rather than attributing all power variation
+to the test:
+
+```{r signal-diagnostics}
+signal <- diagnostics[diagnostics$truth == "power", ]
+signal <- aggregate(
+  cbind(complete_r12, observed_r12, realized_missing_eligible) ~
+    distribution + missingness, signal, mean)
+signal$complete_r12 <- format_rate(signal$complete_r12)
+signal$observed_r12 <- format_rate(signal$observed_r12)
+signal$realized_missing_eligible <- format_rate(
+  signal$realized_missing_eligible)
+names(signal) <- c(
+  "outcome law", "mechanism", "pre-missing r12", "observed r12",
+  "eligible missing fraction")
+knitr::kable(signal, row.names = FALSE)
+```
+
+## Run health
 
 This run used `r meta[["reps"]]` replications per cell and
 `r meta[["flips"]]` multiplier draws. Its wall time was
-`r sprintf("%.1f", as.numeric(meta[["wall_seconds"]]))` seconds. The intervals
-are intentionally wide: the run is for eliminating obviously broken options
-and choosing the next iteration, not for a final calibration claim.
+`r sprintf("%.1f", as.numeric(meta[["wall_seconds"]]))` seconds. Restricted-fit,
+LR, score, and Wald failures were respectively `r meta[["replication_failures"]]`,
+`r meta[["lrt_failures"]]`, `r meta[["score_failures"]]`, and
+`r meta[["wald_failures"]]`.
 
 ## MLR oracle
 
-`p_lrt_mlr` is not reconstructed in the experiment. It comes from magmaan's
-dedicated `estimate_fiml_robust_mlr()` binding, which computes the
-Yuan--Bentler/Mplus FIML statistic from the model-vs-saturated LRT and the H1
-minus H0 trace correction. The companion validation script fits lavaan with
-`estimator = "MLR", missing = "ml"` on the identical generated data.
+`p_lrt_mlr` comes from magmaan's dedicated
+`estimate_fiml_robust_mlr()` binding. It computes the
+Yuan--Bentler/Mplus FIML statistic from the model-versus-saturated LR statistic
+and the H1-minus-H0 trace correction. The companion validation script fits
+lavaan with `estimator = "MLR"` on the identical generated data. This checks
+implementation parity; it does not validate the statistic's calibration.
 
 ```{r parity}
 if (!is.null(parity)) {
