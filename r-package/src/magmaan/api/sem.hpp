@@ -457,6 +457,13 @@ Result<inference::frontier::ScoreFlipTestResult>
 score_flip_test(const Model &h1, const Fit &h0, const data::RawData &raw,
                 inference::frontier::ScoreFlipOptions options = {});
 
+// Global curved-model goodness-of-fit counterpart: tests one ML/FIML fit
+// against the local saturated moment model without fitting H1.
+Result<inference::frontier::GlobalScoreFlipTestResult>
+global_score_flip_test(
+    const Fit &fit, const data::RawData &raw,
+    inference::frontier::GlobalScoreFlipOptions options = {});
+
 } // namespace frontier
 
 Result<measures::ResidualMoments> residuals(const Fit &fit);

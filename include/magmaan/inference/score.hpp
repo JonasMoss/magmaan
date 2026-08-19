@@ -571,6 +571,51 @@ struct ScoreFlipTestResult {
   double total_seconds = 0.0;
 };
 
+// Global goodness-of-fit score flip for a curved SEM against the local
+// saturated mean/covariance model. The direct saturated likelihood scores are
+// projected off the fitted model's moment tangent using observed-pattern
+// conditional Fisher information. This is deliberately an effective-score
+// test: the affine pair's basic/flip-specific-standardized variants do not
+// have a distinct global-model interpretation.
+struct GlobalScoreFlipOptions {
+  ScoreFlipOptions resampling;
+
+  GlobalScoreFlipOptions() {
+    resampling.calibration = ScoreFlipCalibration::Effective;
+  }
+};
+
+struct GlobalScoreFlipTestResult {
+  ScoreFlipTestResult flip;
+  int saturated_moment_dim = 0;
+  int tangent_rank = 0;
+  double tangent_min_singular_value = 0.0;
+  double tangent_condition = 1.0;
+};
+
+post_expected<GlobalScoreFlipTestResult>
+global_score_flip_test(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const SampleStats& samp,
+                       const RawData& raw,
+                       const Estimates& est,
+                       const GlobalScoreFlipOptions& options = {});
+
+post_expected<GlobalScoreFlipTestResult>
+global_score_flip_test(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const FIMLPack& pack,
+                       const Estimates& est,
+                       const GlobalScoreFlipOptions& options = {});
+
+post_expected<GlobalScoreFlipTestResult>
+global_score_flip_test(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       const GlobalScoreFlipOptions& options = {});
+
 post_expected<ScoreFlipTestResult>
 score_flip_test(spec::LatentStructure pt_H1,
                 const model::MatrixRep& rep_H1,

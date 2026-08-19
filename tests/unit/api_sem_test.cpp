@@ -577,6 +577,17 @@ TEST_CASE("api frontier score flips support a nested FIML pair") {
   CHECK(std::isfinite(score->p_mixture));
   CHECK(std::isnan(score->p_effective));
   CHECK((score->eigvals - flip->eigvals).norm() < 1e-10);
+
+  magmaan::inference::frontier::GlobalScoreFlipOptions global_options;
+  global_options.resampling.n_flips = 31;
+  global_options.resampling.seed = 20260820;
+  const auto global = magmaan::api::frontier::global_score_flip_test(
+      *h1_fit, raw, global_options);
+  REQUIRE_OK(global);
+  CHECK(global->flip.df == 2);
+  CHECK(global->saturated_moment_dim == 14);
+  CHECK(global->tangent_rank == 12);
+  CHECK(std::isfinite(global->flip.p_effective));
 }
 
 TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {

@@ -693,6 +693,22 @@ an unconstrained gradient test to constrained solutions.
   a separate independent dense per-case nuisance-adjustment oracle matches the
   production group-sufficient covariance formula over every sign vector in a
   two-group n=5 construction. The R surface remains Monte Carlo-only.
+- `inference::frontier::global_score_flip_test` is the curved-model global-GOF
+  extension for continuous ML/FIML. It evaluates direct casewise saturated
+  likelihood scores at the fitted model moments, builds the conditional Fisher
+  metric for each observed-data pattern, and projects the scores off the local
+  SEM moment tangent. The tested dimension is therefore the saturated
+  mean/covariance dimension minus the numerical tangent rank; no saturated H1
+  fit and no refit per multiplier draw is required. Complete data and an
+  all-observed FIML mask are unit-gated to the same statistic and multiplier
+  ranks, while a separate missing-pattern gate exercises stratum centering.
+  The first production contract is effective/asymptotic calibration only,
+  random-X, affine equality constraints, no active bounds, and a required mean
+  structure when observations are missing. `api::frontier` and the R
+  `global_score_flip_test()` wrapper expose the result together with saturated
+  dimension, tangent-rank, singular-value, conditioning, stationarity, and
+  runtime diagnostics. The saturated-EM moment-influence construction remains
+  an independent validation route rather than the statistic's implementation.
   Experiment 62's 300-replication
   probe found the basic test extremely conservative, effective flips close to
   nominal, and standardization a small improvement concentrated at n=30; the

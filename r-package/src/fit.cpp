@@ -7879,6 +7879,16 @@ Rcpp::List score_flip_result_to_r(
       Rcpp::_ ["total_seconds"] = out.total_seconds);
 }
 
+Rcpp::List global_score_flip_result_to_r(
+    const magmaan::inference::frontier::GlobalScoreFlipTestResult& out) {
+  Rcpp::List result = score_flip_result_to_r(out.flip);
+  result["saturated_moment_dim"] = out.saturated_moment_dim;
+  result["tangent_rank"] = out.tangent_rank;
+  result["tangent_min_singular_value"] = out.tangent_min_singular_value;
+  result["tangent_condition"] = out.tangent_condition;
+  return result;
+}
+
 }  // namespace
 
 // [[Rcpp::export]]
@@ -7993,6 +8003,53 @@ Rcpp::List inference_score_flip_test_model(
   }
   if (!out.has_value()) stop_post(out.error());
   return score_flip_result_to_r(*out);
+}
+
+// [[Rcpp::export]]
+Rcpp::List inference_global_score_flip_test(
+    Rcpp::List fit, SEXP raw, int n_flips = 999, double seed = 1.0,
+    std::string multiplier = "rademacher",
+    double two_point_skewness = 1.0,
+    bool center_multiplier_scores = false,
+    std::string multiplier_studentization = "none") {
+  if (n_flips < 1) {
+    Rcpp::stop("magmaan: global_score_flip_test n_flips must be positive");
+  }
+  if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
+    Rcpp::stop("magmaan: global_score_flip_test seed must be an integer in [0, 2^53-1]");
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"]) : "ML";
+  if (estimator != "ML" && estimator != "FIML") {
+    Rcpp::stop("magmaan: global_score_flip_test requires an ML or FIML fit");
+  }
+  magmaan::data::RawData rd = estimator == "FIML"
+      ? fiml_raw_from_arg(ctx.rep, raw)
+      : complete_raw_from_arg(ctx.rep, raw);
+  magmaan::inference::frontier::GlobalScoreFlipOptions options;
+  options.resampling.n_flips = n_flips;
+  options.resampling.seed = static_cast<std::uint64_t>(seed);
+  options.resampling.multiplier =
+      score_flip_multiplier_from_string(multiplier);
+  options.resampling.two_point_skewness = two_point_skewness;
+  options.resampling.center_multiplier_scores = center_multiplier_scores;
+  options.resampling.multiplier_studentization =
+      score_flip_multiplier_studentization_from_string(
+          multiplier_studentization);
+  magmaan::post_expected<
+      magmaan::inference::frontier::GlobalScoreFlipTestResult> out;
+  if (estimator == "FIML") {
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit, rd, owned_pack);
+    out = magmaan::inference::frontier::global_score_flip_test(
+        std::move(ctx.pt), ctx.rep, rd, pack, est_from_fit(fit), options);
+  } else {
+    out = magmaan::inference::frontier::global_score_flip_test(
+        std::move(ctx.pt), ctx.rep, ctx.samp, rd, est_from_fit(fit), options);
+  }
+  if (!out.has_value()) stop_post(out.error());
+  return global_score_flip_result_to_r(*out);
 }
 
 // infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from
