@@ -141,7 +141,7 @@ struct ExtraNonlinearEqConstraints {
   bool active() const noexcept { return n_constraint > 0; }
 };
 
-// Controls for the frontier covariance-honest ML parameterization. The
+// Controls for the frontier covariance-honest parameterization. The
 // optimizer drives internal Cholesky factors for every covariance-connected
 // component of Θ and Ψ and links them exactly to the ordinary partable
 // parameters.
@@ -282,6 +282,25 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
            const SampleStats& samp, const Eigen::VectorXd& x0,
            Backend backend = Backend::NloptSlsqp,
            OptimOptions opts = {}, PsdFitOptions psd_opts = {});
+
+// Fixed-weight moment-quadratic estimation over the same LISREL-honest
+// covariance domain. Empty `weight` gives ULS; a caller-supplied fixed weight
+// gives WLS/ADF/DWLS on the continuous [mean; vech(covariance)] moment stack.
+// The returned parameter vector retains the ordinary partable coordinates.
+fit_expected<Estimates>
+fit_gmm_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
+            const SampleStats& samp, const Eigen::VectorXd& x0,
+            gmm::Weight weight = {},
+            Backend backend = Backend::NloptSlsqp,
+            OptimOptions opts = {}, PsdFitOptions psd_opts = {});
+
+// Normal-theory GLS specialization: constructs the ordinary sample-based,
+// fixed GLS weight once, then solves the covariance-honest GMM problem.
+fit_expected<Estimates>
+fit_gls_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
+            const SampleStats& samp, const Eigen::VectorXd& x0,
+            Backend backend = Backend::NloptSlsqp,
+            OptimOptions opts = {}, PsdFitOptions psd_opts = {});
 
 // Profile-LR test of H0: g(θ) = target against the already-fitted unrestricted
 // ML estimate. This is intentionally only the ordinary χ²_1 reference; robust

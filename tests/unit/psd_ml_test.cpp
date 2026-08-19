@@ -289,3 +289,133 @@ TEST_CASE("PSD ML mean-structure fit agrees with ordinary interior ML") {
   CHECK(fit->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
   CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
 }
+
+TEST_CASE("PSD fixed-weight GMM objective and equality Jacobian match central "
+          "finite differences") {
+  BuildOptions options;
+  options.meanstructure = true;
+  auto pt = lavaanify(
+      "f =~ 1*x1 + a*x2 + b*x3\n"
+      "x1 ~~ v*x1\n"
+      "x2 ~~ v*x2\n"
+      "a + b == 1.6\n"
+      "a == b^2",
+      options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Matrix3d covariance;
+  covariance << 1.8, 0.72, 0.55,
+                0.72, 1.5, 0.46,
+                0.55, 0.46, 1.3;
+  auto samp = sample_stats(covariance, 300);
+  Eigen::Vector3d mean;
+  mean << 0.4, -0.2, 0.7;
+  samp.mean.push_back(mean);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+
+  magmaan::estimate::gmm::Weight weight;
+  Eigen::VectorXd diagonal(9);
+  diagonal << 0.7, 1.1, 1.4, 0.8, 1.2, 1.6, 0.9, 1.3, 1.7;
+  weight.push_back(diagonal.asDiagonal());
+  auto probe = magmaan::estimate::psd_test::psd_gmm_derivative_probe(
+      pt, *rep, samp, *start, weight);
+  REQUIRE_MESSAGE(probe.has_value(), "PSD GMM derivative probe failed: "
+      << (probe.has_value() ? std::string{} : probe.error().detail));
+  CHECK((probe->analytic_gradient -
+         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
+  CHECK((probe->analytic_constraint_jacobian -
+         probe->finite_difference_constraint_jacobian)
+            .cwiseAbs().maxCoeff() < 3e-7);
+}
+
+TEST_CASE("PSD ULS GLS and fixed WLS agree with ordinary interior fits") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Vector4d loadings;
+  loadings << 1.0, 0.8, 0.65, 0.9;
+  Eigen::Vector4d residuals;
+  residuals << 0.5, 0.6, 0.7, 0.55;
+  auto samp = sample_stats(
+      one_factor_covariance(loadings, residuals, 1.2), 500);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+
+  magmaan::estimate::gmm::Weight weight;
+  SUBCASE("ULS") {
+    auto ordinary = magmaan::estimate::fit_gmm(
+        pt, *rep, samp, *start, {}, {}, Backend::NloptLbfgs,
+        strict_options());
+    REQUIRE(ordinary.has_value());
+    auto psd = magmaan::estimate::frontier::fit_gmm_psd(
+        pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
+        strict_options());
+    REQUIRE_MESSAGE(psd.has_value(), "PSD ULS failed: "
+        << (psd.has_value() ? std::string{} : psd.error().detail));
+    check_psd_terminal(*psd);
+    CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+    CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+  }
+  SUBCASE("GLS") {
+    auto ordinary = magmaan::estimate::fit_gls(
+        pt, *rep, samp, *start, {}, Backend::NloptLbfgs,
+        strict_options());
+    REQUIRE(ordinary.has_value());
+    auto psd = magmaan::estimate::frontier::fit_gls_psd(
+        pt, *rep, samp, ordinary->theta, Backend::NloptSlsqp,
+        strict_options());
+    REQUIRE_MESSAGE(psd.has_value(), "PSD GLS failed: "
+        << (psd.has_value() ? std::string{} : psd.error().detail));
+    check_psd_terminal(*psd);
+    CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+    CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+  }
+  SUBCASE("fixed WLS") {
+    Eigen::VectorXd diagonal = Eigen::VectorXd::LinSpaced(10, 0.6, 1.8);
+    weight.push_back(diagonal.asDiagonal());
+    auto ordinary = magmaan::estimate::fit_gmm(
+        pt, *rep, samp, *start, weight, {}, Backend::NloptLbfgs,
+        strict_options());
+    REQUIRE(ordinary.has_value());
+    auto psd = magmaan::estimate::frontier::fit_gmm_psd(
+        pt, *rep, samp, ordinary->theta, weight, Backend::NloptSlsqp,
+        strict_options());
+    REQUIRE_MESSAGE(psd.has_value(), "PSD fixed WLS failed: "
+        << (psd.has_value() ? std::string{} : psd.error().detail));
+    check_psd_terminal(*psd);
+    CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+    CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+  }
+}
+
+TEST_CASE("PSD ULS replaces an exact-fit negative-residual solution") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Matrix3d covariance;
+  covariance << 1.0, 0.7, 0.7,
+                0.7, 1.0, 0.3,
+                0.7, 0.3, 1.0;
+  auto samp = sample_stats(covariance, 8);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+
+  auto ordinary = magmaan::estimate::fit_gmm(
+      pt, *rep, samp, *start, {}, {}, Backend::NloptLbfgs,
+      strict_options());
+  REQUIRE(ordinary.has_value());
+  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+  CHECK(ordinary->fmin < 1e-12);
+
+  auto psd = magmaan::estimate::frontier::fit_gmm_psd(
+      pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE_MESSAGE(psd.has_value(), "PSD ULS repair failed: "
+      << (psd.has_value() ? std::string{} : psd.error().detail));
+  check_psd_terminal(*psd);
+  CHECK(psd->fmin > ordinary->fmin + 1e-6);
+}
