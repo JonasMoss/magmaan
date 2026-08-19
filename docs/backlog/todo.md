@@ -341,6 +341,16 @@ when they next change.
   projected-score and multiplier cost. The model/generator budget is therefore
   acceptable; the next work remains the projection and matched power DGPs, not
   a large run of the incomplete method panel.
+  The subsequent 1,000-rep null run completed all 40 cells (40,000 attempts) in
+  541 seconds on four workers: 39,985 FIML fits converged, 39,894 MLR p-values
+  were finite, and 39,156 FMG calls returned. MLR's mean cell rejection was
+  .366 (range .062--.932). FMG `all` was materially better at .066 but still
+  ranged .022--.168, with its liberal tail concentrated in severe nonnormal
+  MCAR cells; SS was similar at .073, while SB and pEBA(4) remained clearly
+  liberal. The FMG projected-rank guard rejected 829 otherwise-converged fits,
+  including 797 bifactor fits. This makes the general multiplier comparator
+  and explicit rank diagnostics the next scientific step; the existing FMG
+  family is a useful comparator, not a solved replacement.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
