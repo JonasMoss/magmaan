@@ -155,6 +155,20 @@ update, final-weight objective consistency, negative-residual repair, and the R
 result contract. Empirical WLS/DWLS/DLS updates need raw-data weight builders
 and are not implied by this sample-statistics-only policy.
 
+`estimate::fiml::frontier::fit_fiml_psd` applies the same covariance lift to
+raw-data FIML. It reuses `FIMLPack` unchanged, evaluates the existing
+observed-pattern likelihood and analytic gradient on lifted moments, and keeps
+the ordinary fixed-x missingness policy. Primitive `Theta`/`Psi` blocks stay
+PSD by construction, while each pattern-specific observed covariance
+`Sigma_oo` must be PD for its likelihood contribution to be finite. The raw-only
+and retained-pack C++ overloads return ordinary partable coordinates; R exposes
+`frontier_fit_fiml_psd()` and marks the result with
+`covariance_policy = "psd"`. Focused gates cover lifted central differences,
+all-observed reduction to PSD-NTML and ordinary FIML, an interior missing-data
+fit, a missing-data negative-residual repair, and the R result contract.
+Inference at a rank-deficient component solution is not part of this surface's
+current validation contract.
+
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible
 optima but is roughly 40 times slower backend-to-backend on the small interior
@@ -1169,6 +1183,11 @@ an unconstrained gradient test to constrained solutions.
 - Direct observed-pattern ML over raw continuous data with missingness masks.
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
+- The explicit frontier `fit_fiml_psd()` path evaluates that same cached
+  objective on Cholesky-lifted primitive covariance blocks and exposes the thin
+  R wrapper `frontier_fit_fiml_psd()`. It preserves ordinary FIML's fixed-x
+  missingness rules and returned partable parameterization; boundary inference
+  is deliberately not claimed.
 - `fit_fiml()` defaults to NLopt L-BFGS with an SLSQP retry when the L-BFGS
   run fails or returns a non-clean optimizer status; explicit `nlopt-lbfgs` and
   `nlopt-slsqp` remain available for diagnostics and parity checks.

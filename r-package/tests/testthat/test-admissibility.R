@@ -86,6 +86,36 @@ test_that("frontier PSD ML returns an ordinary admissible R fit", {
                nrow(model_spec("f =~ x1 + x2 + x3")$partable))
 })
 
+test_that("frontier PSD FIML repairs a missing-data Heywood solution", {
+  S <- matrix(c(
+    1.0, 0.7, 0.7,
+    0.7, 1.0, 0.3,
+    0.7, 0.3, 1.0
+  ), 3L, 3L, byrow = TRUE)
+  n <- 80L
+  H <- stats::contr.helmert(n)[, 1:3, drop = FALSE]
+  Q <- sweep(H, 2L, sqrt(colSums(H^2)), "/")
+  X <- sqrt(n) * Q %*% chol(S)
+  dat <- as.data.frame(X)
+  names(dat) <- c("x1", "x2", "x3")
+  dat$x1[1L] <- NA_real_
+
+  fit <- expect_no_warning(frontier_fit_fiml_psd(
+    "f =~ x1 + x2 + x3", dat,
+    control = list(max_iter = 5000L, gtol = 1e-8)
+  ))
+
+  expect_true(fit$converged)
+  expect_true(fit$fiml)
+  expect_identical(fit$estimator, "FIML")
+  expect_identical(fit$covariance_policy, "psd")
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_true(fit$audit$constrained)
+  expect_true(fit$audit$stationary)
+  expect_lte(fit$audit$constraint_violation_inf, 1e-6)
+  expect_true(anyNA(fit$raw_data$X[[1L]]))
+})
+
 test_that("frontier PSD continuous LS wrappers preserve covariance admissibility", {
   set.seed(29)
   n <- 160L

@@ -6,6 +6,14 @@
 #include "magmaan/expected.hpp"
 
 #ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace magmaan::data {
+struct RawData;
+}
+
+namespace magmaan::estimate::fiml {
+struct FIMLPack;
+}
+
 namespace magmaan::estimate::psd_test {
 
 // Private production-compiler seam for derivative regression tests. The probe
@@ -40,6 +48,15 @@ psd_gmm_derivative_probe(spec::LatentStructure pt,
                          const gmm::Weight& weight = {},
                          double finite_difference_step = 1e-6,
                          frontier::PsdFitOptions options = {});
+
+fit_expected<PsdDerivativeProbe>
+psd_fiml_derivative_probe(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::RawData& raw,
+                          const fiml::FIMLPack& pack,
+                          const Eigen::VectorXd& theta_start,
+                          double finite_difference_step = 1e-6,
+                          frontier::PsdFitOptions options = {});
 
 }  // namespace magmaan::estimate::psd_test
 #endif
