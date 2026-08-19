@@ -23,8 +23,12 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                                        stage1 = NULL,
                                        stage1_regularization = NULL,
                                        stage2_weight = "nt",
-                                       dls_a = 0.5) {
+                                       dls_a = 0.5,
+                                       covariance_policy = c("ordinary", "psd"),
+                                       start_eigen_floor = 1e-6,
+                                       feasibility_tol = 1e-6) {
   kind <- match.arg(kind)
+  covariance_policy <- match.arg(covariance_policy)
   stage2_weight <- match.arg(stage2_weight,
                              c("nt", "uls", "dwls", "adf", "dls", "wls"))
   if (identical(stage2_weight, "wls")) stage2_weight <- "adf"
@@ -58,6 +62,10 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   nobs <- as.integer(em$n_obs)
 
   sample_stats <- list(S = cov_list, mean = mean_list, nobs = nobs)
+  if (identical(covariance_policy, "psd") && !is.null(bounds)) {
+    stop("estimate_two_stage_em: PSD Stage 2 does not accept theta-space bounds",
+         call. = FALSE)
+  }
   b <- bounds_arg(bounds, partable, sample_stats, "estimate_two_stage_em")
 
   # A non-NT Stage-2 weight defines a *weighted* Stage-2 estimator (DWLS / ADF /
@@ -66,7 +74,24 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   # lavaan robust.two.stage path.
   weighted_stage2 <- identical(kind, "ml") && !identical(stage2_weight, "nt")
 
-  fit <- if (weighted_stage2) {
+  fit <- if (identical(covariance_policy, "psd") && weighted_stage2) {
+    W <- two_stage_stage2_weight_blocks_impl(em, stage2_weight = stage2_weight,
+                                             dls_a = dls_a)
+    frontier_fit_wls_psd_impl(
+      partable, sample_stats, W = W, optimizer = optimizer, control = control,
+      start_eigen_floor = start_eigen_floor,
+      feasibility_tol = feasibility_tol)
+  } else if (identical(covariance_policy, "psd") && identical(kind, "ml")) {
+    frontier_fit_ml_psd_impl(
+      partable, sample_stats, optimizer = optimizer, control = control,
+      start_eigen_floor = start_eigen_floor,
+      feasibility_tol = feasibility_tol)
+  } else if (identical(covariance_policy, "psd") && identical(kind, "gls")) {
+    frontier_fit_gls_psd_impl(
+      partable, sample_stats, optimizer = optimizer, control = control,
+      start_eigen_floor = start_eigen_floor,
+      feasibility_tol = feasibility_tol)
+  } else if (weighted_stage2) {
     W <- two_stage_stage2_weight_blocks_impl(em, stage2_weight = stage2_weight,
                                              dls_a = dls_a)
     fit_wls_impl(partable, sample_stats, W = W, optimizer = optimizer,
@@ -85,6 +110,7 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                    else paste0("ML2S_", toupper(stage2_weight))
   fit$stage2_weight <- stage2_weight
   fit$stage2_dls_a <- dls_a
+  if (identical(covariance_policy, "psd")) fit$covariance_policy <- "psd"
   fit$stage1 <- list(
     mean = em$mean, cov = em$cov, n_obs = em$n_obs,
     warnings = em$warnings,
@@ -96,7 +122,7 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
     fit$stage1_regularization <- stage1_regularization_diagnostics
   }
   fit$raw_data <- raw_data
-  if (identical(kind, "ml")) {
+  if (identical(kind, "ml") && identical(covariance_policy, "ordinary")) {
     correction <- estimate_two_stage_em_ml_inference(
       fit, raw_data, h_step = h_step,
       stage2_weight = stage2_weight, dls_a = dls_a)

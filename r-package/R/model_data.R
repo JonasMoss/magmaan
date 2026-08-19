@@ -1609,6 +1609,35 @@ fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
   fit
 }
 
+# Frontier ML2S point estimation with PSD primitive LISREL covariance blocks.
+# Stage-1 saturated EM moments and any caller-supplied regularization are
+# retained exactly. Boundary-aware inference is intentionally not automatic.
+frontier_fit_ml2s_psd <- function(
+    model, data, optimizer = "nlopt-slsqp", control = NULL,
+    h_step = 1e-4, stage1 = NULL, stage1_regularization = NULL,
+    stage2_weight = "nt", dls_a = 0.5,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+  if (is.character(model) && length(model) == 1L) {
+    model <- model_spec(model, meanstructure = TRUE)
+  } else if (inherits(model, "magmaan_model_spec") &&
+             !.model_spec_has_meanstructure(model)) {
+    model <- .rebuild_model_spec(
+      model, overrides = list(meanstructure = TRUE),
+      caller = "frontier_fit_ml2s_psd"
+    )
+  }
+  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
+  fit <- estimate_two_stage_em_impl(
+    partable_arg(model), fiml_data_arg(data), kind = "ml", h_step = h_step,
+    optimizer = optimizer, control = control, stage1 = stage1,
+    stage1_regularization = stage1_regularization,
+    stage2_weight = stage2_weight, dls_a = dls_a,
+    covariance_policy = "psd", start_eigen_floor = start_eigen_floor,
+    feasibility_tol = feasibility_tol)
+  if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
+  fit
+}
+
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_uls")
@@ -1872,6 +1901,19 @@ frontier_fit_ordinal_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
+}
+
+# Frontier categorical ML: normal-theory ML applied to the Stage-1
+# polychoric correlation matrix, with saturated thresholds and PSD primitive
+# model covariance blocks. The input polychoric matrix must itself be PD.
+frontier_fit_catml_psd <- function(
+    model, data, optimizer = "nlopt-slsqp", control = NULL,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+  pt <- augment_ordinal_partable(model, data)
+  frontier_fit_catml_psd_impl(
+    pt, data, optimizer = optimizer, control = control,
+    start_eigen_floor = start_eigen_floor,
+    feasibility_tol = feasibility_tol)
 }
 
 ordinal_stage2_weight_blocks <- function(data,

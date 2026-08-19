@@ -169,6 +169,17 @@ fit, a missing-data negative-residual repair, and the R result contract.
 Inference at a rank-deficient component solution is not part of this surface's
 current validation contract.
 
+`estimate::fiml::frontier::fit_ml2s_psd` completes the missing-data two-stage
+composition without altering Stage 1. The saturated FIML/EM means,
+covariances, and ACOV-derived weights remain ordinary estimated objects. The
+NT Stage-2 member calls `fit_ml_psd`; ULS, DWLS, ADF, and fixed-`a` DLS build
+their existing weight once and call `fit_gmm_psd`. The raw overload performs
+the same deterministic saturated-EM build. R exposes
+`frontier_fit_ml2s_psd()`, preserves `stage1` and `raw_data`, and deliberately
+omits the ordinary ML2S covariance/test correction because boundary inference
+has no automatic policy. Focused gates cover all five fixed Stage-2 policies,
+interior reduction, unchanged Stage 1, and an improper-solution repair.
+
 `estimate::frontier::fit_ordinal_psd` and `fit_mixed_ordinal_psd` now compose
 the same lift with the existing all-ordinal and mixed continuous/ordinal
 ULS/DWLS/WLS residual engines after their respective partable preparation.
@@ -187,9 +198,24 @@ Focused gates cover central-difference gradients in delta and theta
 coordinates, interior ULS/DWLS/WLS reduction to the ordinary estimators,
 unchanged Stage-1 moments, ULS acceptance of indefinite Stage-1 association
 matrices, and repair of an otherwise exact mixed fit with an improper
-continuous residual variance. CatML remains a separate inverse/log-determinant
-computational domain; inference at fitted covariance boundaries is out of
-scope.
+continuous residual variance.
+
+The separate inverse/log-determinant categorical-ML domain is now implemented
+as `estimate::frontier::fit_catml` and `fit_catml_psd`. This is
+limited-information cML: normal-theory ML applied to the Stage-1 polychoric
+correlation matrix under a saturated threshold structure, not a
+full-information ordinal likelihood. The implied covariance is standardized
+to a correlation matrix with an analytic Jacobian before the ML value/gradient
+is evaluated. Because the sample polychoric log determinant is part of the
+criterion, a non-PD Stage-1 matrix is an explicit domain error and is never
+silently projected. The PSD variant constrains fitted primitive `Theta`/`Psi`
+blocks and retains the input polychorics and thresholds exactly. R exposes
+`frontier_fit_catml_psd()` with explicit `covariance_policy` and Stage-1 policy
+labels. Derivative, interior-reduction, domain-error, unchanged-Stage-1, and
+R-schema gates cover this slice; broader boundary-geometry validation remains
+deferred. Inference at fitted covariance boundaries remains out
+of scope. PSD two-level ML and native FC-SEM are not part of the supported
+covariance-honest extension.
 
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible
