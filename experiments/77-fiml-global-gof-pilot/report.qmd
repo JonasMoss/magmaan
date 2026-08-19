@@ -236,21 +236,67 @@ if (!is.null(parity)) {
 }
 ```
 
-## Next-stage latent-SEM timing smoke
+## Representative latent-SEM design
 
 The next design replaces the affine independence bridge with four ordinary,
-compact SEM populations and native independent-generator implementations. It
-crosses normal data, VM and IG generators at target marginal
-skewness/excess-kurtosis `(2, 7)` and `(3, 21)`, and complete versus 30% MCAR
-observation. This smoke run is null-only: it checks that the DGPs, FIML fits,
-MLR, and FMG post-fit tests execute, and estimates the cost of a later run.
+compact SEM populations. Every fitted model is exactly correct in the
+population, so rejection in this section is Type-I error rather than power.
+
+### Population models
+
+1. **One-factor CFA, six indicators.** The population is
+   $x_j=\lambda_j f+\varepsilon_j$, with
+   $\lambda=(1,.8,.9,.7,1.1,.85)$, $\operatorname{Var}(f)=1$, and unique
+   variances $(.5,.6,.55,.65,.5,.6)$. Indicator means are zero. The fitted CFA
+   uses ordinary marker-variable identification and freely estimates indicator
+   means, unique variances, the factor variance, and the remaining loadings.
+
+2. **Correlated two-factor CFA, ten indicators.** Indicators 1--5 load only on
+   factor 1 with loadings $(.4,.5,.6,.8,.4)$; indicators 6--10 load only on
+   factor 2 with loadings $(.4,.7,.6,.4,.8)$. Both factor variances are one and
+   their correlation is .5. Unique variances are $1-\lambda_j^2$, giving unit
+   marginal variances, and all means are zero. This is the compact
+   Foldnes--Moss--Grønneberg-style measurement model.
+
+3. **Orthogonal bifactor model, twelve indicators.** Every indicator has a .6
+   loading on the general factor. Three mutually orthogonal specific factors
+   each cover a four-item block, with blockwise loadings .5, .4, and .45.
+   General and specific factor variances are one and all factor covariances are
+   zero. Unique variances are $1-.6^2-\lambda_{S,j}^2$ and indicator means are
+   zero. The fitted model uses `std.lv` identification and freely estimates all
+   general/specific loadings, unique variances, and means.
+
+4. **Five-wave linear growth model.** For times $t=0,1,2,3,4$,
+   $y_t=i+t s+\varepsilon_t$. The intercept/slope means are $(1,.2)$ and their
+   covariance matrix is
+   $\left[\begin{smallmatrix}1&.1\\.1&.1\end{smallmatrix}\right]$; each wave
+   has residual variance .5. The fitted model fixes the time scores and freely
+   estimates the two growth means, three latent variance/covariance terms, and
+   five residual variances.
 
 ```{r sem-model-smoke}
 if (sem_available) {
-  model_table <- unique(sem_design[, c(
-    "model_label", "p", "expected_df")])
-  names(model_table) <- c("model", "observed variables", "df")
+  model_table <- unique(sem_design[, c("model_id", "model_label", "p",
+                                       "expected_df")])
+  model_table$free_parameters <- c(18L, 31L, 48L, 10L)[match(
+    model_table$model_id,
+    c("one_factor_6", "two_factor_fmg_10", "bifactor_12", "linear_growth_5"))]
+  model_table <- model_table[, c(
+    "model_label", "p", "free_parameters", "expected_df")]
+  names(model_table) <- c("model", "observed variables", "free parameters", "df")
   knitr::kable(model_table, row.names = FALSE)
+
+  generator_table <- data.frame(
+    code = c("normal", "vm1", "ig1", "vm2", "ig2"),
+    generator = c(
+      "Multivariate normal", "Vale--Maurelli / Fleishman (VM)",
+      "Independent generator (IG)", "Vale--Maurelli / Fleishman (VM)",
+      "Independent generator (IG)"),
+    marginal_skewness = c(0, 2, 2, 3, 3),
+    marginal_excess_kurtosis = c(0, 7, 7, 21, 21),
+    severity = c("reference", "moderate", "moderate", "severe", "severe"),
+    stringsAsFactors = FALSE)
+  knitr::kable(generator_table, row.names = FALSE)
 
   health <- data.frame(
     quantity = c("FIML converged", "FMG call returned", "MLR finite"),
@@ -271,6 +317,20 @@ if (sem_available) {
   cat("Run `run_sem_models.R` to populate the timing smoke tables.")
 }
 ```
+
+**VM** is the Vale--Maurelli/Fleishman polynomial construction: magmaan solves
+an intermediate Gaussian correlation matrix and applies calibrated marginal
+polynomials so the generated covariance and requested marginal skewness and
+excess kurtosis agree with the SEM population targets. **IG** is the
+Foldnes--Olsson independent-generator construction: independent Pearson-family
+nonnormal generators are calibrated and mixed through a symmetric covariance
+root. VM and IG therefore share the same marginal moments and target covariance
+but induce different multivariate higher-order dependence. This is the intended
+comparison; `vm1` versus `ig1` and `vm2` versus `ig2` are not duplicate DGPs.
+
+Each generator is crossed with complete data and 30% MCAR on every variable
+except the first indicator/wave, which is always observed. Thus the design has
+$4\times5\times2=40$ true-null cells at $n=120$.
 
 All FIML fits converged in the retained 10-rep-per-cell smoke. The one-factor,
 two-factor, and growth FMG calls were complete. The bifactor accounted for all
@@ -313,6 +373,7 @@ if (sem1000_available) {
       do.call(rbind, lapply(names(p_columns), function(method) {
         p <- z[[p_columns[[method]]]]
         data.frame(
+          z[1L, group_vars, drop = FALSE],
           method = method, finite = sum(is.finite(p)),
           rejection = mean(p < .05, na.rm = TRUE),
           stringsAsFactors = FALSE)
@@ -333,6 +394,41 @@ if (sem1000_available) {
     "method", "finite p-values", "mean cell size", "mean |size-.05|",
     "minimum", "maximum", "fraction in [.025,.075]")
   knitr::kable(calibration1000, digits = 3, row.names = FALSE)
+
+  generator_labels <- c(
+    normal = "Normal", vm1 = "VM moderate", ig1 = "IG moderate",
+    vm2 = "VM severe", ig2 = "IG severe")
+  dgp_rows <- unique(sem1000[, c("distribution", "missingness")])
+  generator_size <- do.call(rbind, lapply(seq_len(nrow(dgp_rows)), function(i) {
+    z <- sem1000[
+      sem1000$distribution == dgp_rows$distribution[[i]] &
+        sem1000$missingness == dgp_rows$missingness[[i]], , drop = FALSE]
+    summarize_p <- function(column) {
+      p <- z[[column]]
+      c(n = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE))
+    }
+    mlr <- summarize_p("p_lrt_mlr")
+    ss <- summarize_p("p_lrt_ss")
+    all <- summarize_p("p_lrt_all")
+    data.frame(
+      generator = generator_labels[[dgp_rows$distribution[[i]]]],
+      missingness = if (dgp_rows$missingness[[i]] == "complete")
+        "Complete" else "30% MCAR",
+      mlr_n = mlr[["n"]], mlr_rejection = mlr[["rejection"]],
+      ss_n = ss[["n"]], ss_rejection = ss[["rejection"]],
+      all_n = all[["n"]], all_rejection = all[["rejection"]],
+      stringsAsFactors = FALSE)
+  }))
+  generator_size$generator <- factor(
+    generator_size$generator, levels = unname(generator_labels))
+  generator_size$missingness <- factor(
+    generator_size$missingness, levels = c("Complete", "30% MCAR"))
+  generator_size <- generator_size[order(
+    generator_size$generator, generator_size$missingness), ]
+  names(generator_size) <- c(
+    "generator", "observation", "MLR n", "MLR rejection",
+    "SS n", "SS rejection", "all n", "all rejection")
+  knitr::kable(generator_size, digits = 3, row.names = FALSE)
 } else {
   cat("Run `run_sem_models.R --reps 1000` to populate this table.")
 }
@@ -347,6 +443,15 @@ average, but its .022--.168 range shows that it is not a uniform solution; its
 largest failures were also severe nonnormal MCAR cells. All rates use finite
 method-specific denominators rather than treating numerical failures as
 non-rejections.
+
+The generator-specific table makes the substantive contrast visible. MLR
+rejection increases from .294/.440 under moderate VM (complete/MCAR) to
+.556/.689 under severe VM. The corresponding IG rates are .232/.381 and
+.318/.493. VM is harder than IG at the same marginal moments, so marginal
+skewness and kurtosis alone do not explain the failure. FMG `all` is near .05
+for all complete-data generators, but rises to .099/.127 under moderate/severe
+VM with MCAR; IG is appreciably better at .063/.055. The new report therefore
+keeps VM and IG separate rather than pooling them into a generic nonnormal arm.
 
 ## Reproduce
 
