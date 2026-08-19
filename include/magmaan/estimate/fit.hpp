@@ -302,6 +302,18 @@ fit_gls_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
             Backend backend = Backend::NloptSlsqp,
             OptimOptions opts = {}, PsdFitOptions psd_opts = {});
 
+// Iterated expected-information GMM over the covariance-honest domain. At
+// outer iterate theta_k, W(theta_k) is frozen while fit_gmm_psd solves the
+// inner problem; derivatives through the weight update are intentionally not
+// part of this fixed-point policy.
+fit_expected<Estimates>
+fit_gmm_fitted_weight_psd(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Eigen::VectorXd& x0,
+    GmmFittedWeightOptions fitted_opts = {},
+    Backend backend = Backend::NloptSlsqp,
+    OptimOptions opts = {}, PsdFitOptions psd_opts = {});
+
 // Profile-LR test of H0: g(θ) = target against the already-fitted unrestricted
 // ML estimate. This is intentionally only the ordinary χ²_1 reference; robust
 // Satorra scaling and small-sample/Bartlett factors are separate policies.

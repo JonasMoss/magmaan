@@ -104,6 +104,9 @@ test_that("frontier PSD continuous LS wrappers preserve covariance admissibility
     WLS = frontier_fit_wls_psd(
       model, dat, W = diag(seq(0.7, 1.7, length.out = 6L)),
       control = control
+    ),
+    GMM_FITTED_WEIGHT = frontier_fit_gmm_fitted_weight_psd(
+      model, dat, control = control
     )
   )
   for (estimator in names(fits)) {
@@ -116,6 +119,11 @@ test_that("frontier PSD continuous LS wrappers preserve covariance admissibility
                 info = estimator)
     expect_identical(fit$estimator, estimator)
   }
+  expect_identical(
+    fits$GMM_FITTED_WEIGHT$weight_policy,
+    "expected_information_fixed_point"
+  )
+  expect_gt(fits$GMM_FITTED_WEIGHT$iterations, 1L)
 })
 
 test_that("FIML fits run the same covariance admissibility audit", {

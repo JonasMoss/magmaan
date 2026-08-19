@@ -2487,6 +2487,48 @@ Rcpp::List frontier_fit_wls_psd_impl(
       "frontier_fit_wls_psd", "WLS");
 }
 
+// Expected-information fitted-weight GMM over PSD primitive LISREL covariance
+// matrices. Each inner solve freezes W(theta_k); the outer loop refreshes it.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_gmm_fitted_weight_psd_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    int max_outer = 20,
+    double theta_tol = 1e-7,
+    double fmin_tol = 1e-10,
+    double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_gmm_fitted_weight_psd");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(
+      std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull()
+          ? magmaan::estimate::Backend::NloptSlsqp
+          : backend_from_optimizer_arg(optimizer);
+  magmaan::estimate::frontier::GmmFittedWeightOptions fitted_opts;
+  fitted_opts.max_outer = max_outer;
+  fitted_opts.theta_tol = theta_tol;
+  fitted_opts.fmin_tol = fmin_tol;
+  magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.start_eigen_floor = start_eigen_floor;
+  psd_opts.feasibility_tol = feasibility_tol;
+
+  auto e_or = magmaan::estimate::frontier::fit_gmm_fitted_weight_psd(
+      ctx.pt, ctx.rep, ctx.samp, x0, fitted_opts, backend,
+      optim_opts_from(control), psd_opts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  Rcpp::List out = fit_result(
+      ctx, est, &starts, "GMM_FITTED_WEIGHT");
+  out["weight_policy"] = "expected_information_fixed_point";
+  return out;
+}
+
 namespace {
 
 double nan_if_not_finite(double x) {

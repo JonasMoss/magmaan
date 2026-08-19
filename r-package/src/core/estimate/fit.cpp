@@ -1738,6 +1738,82 @@ build_fitted_weight(const model::ModelEvaluator& ev, const SampleStats& samp,
       std::string(who) + ": unknown fitted-weight kind"));
 }
 
+using FittedWeightSolveFn = std::function<fit_expected<Estimates>(
+    const Eigen::VectorXd&, const gmm::Weight&)>;
+
+fit_expected<Estimates>
+run_fitted_weight_loop(const model::ModelEvaluator& ev,
+                       const SampleStats& samp,
+                       const Eigen::VectorXd& x0,
+                       GmmFittedWeightOptions fitted_opts,
+                       const FittedWeightSolveFn& solve,
+                       const char* who) {
+  Eigen::VectorXd theta = x0;
+  Estimates last;
+  bool have_last = false;
+  bool converged = false;
+  double prev_fmin = std::numeric_limits<double>::infinity();
+  int total_f_evals = 0;
+  int total_g_evals = 0;
+  int outer_iter = 0;
+
+  for (int k = 0; k < fitted_opts.max_outer; ++k) {
+    auto w = build_fitted_weight(ev, samp, theta, fitted_opts.kind, who);
+    if (!w.has_value()) return std::unexpected(w.error());
+
+    auto est = solve(theta, *w);
+    if (!est.has_value()) return std::unexpected(est.error());
+
+    Estimates candidate = std::move(*est);
+    total_f_evals += candidate.f_evals;
+    total_g_evals += candidate.g_evals;
+    outer_iter = k + 1;
+
+    const double step = inf_norm(candidate.theta - theta);
+    const double theta_scale = std::max(1.0, inf_norm(theta));
+    const double f_change = std::abs(candidate.fmin - prev_fmin);
+    const double f_scale =
+        std::max({1.0, std::abs(candidate.fmin), std::abs(prev_fmin)});
+
+    theta = candidate.theta;
+    last = std::move(candidate);
+    have_last = true;
+
+    if (step <= fitted_opts.theta_tol * theta_scale &&
+        (k == 0 || f_change <= fitted_opts.fmin_tol * f_scale)) {
+      converged = true;
+      break;
+    }
+    prev_fmin = last.fmin;
+  }
+
+  if (!have_last) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": fitted-weight loop did not run"));
+  }
+
+  auto w_final = build_fitted_weight(
+      ev, samp, last.theta, fitted_opts.kind, who);
+  if (!w_final.has_value()) return std::unexpected(w_final.error());
+  auto prob_final_or = gmm::residuals(ev, samp, last.theta, *w_final);
+  if (!prob_final_or.has_value()) {
+    return std::unexpected(prob_final_or.error());
+  }
+  const optim::ScalarProblem prob_final = optim::scalarize(*prob_final_or);
+  Eigen::VectorXd grad(last.theta.size());
+  last.fmin = prob_final.f(last.theta, grad);
+  ++total_f_evals;
+  ++total_g_evals;
+
+  last.iterations = outer_iter;
+  last.f_evals = total_f_evals;
+  last.g_evals = total_g_evals;
+  if (!converged && last.optimizer_status == optim::OptimStatus::Converged) {
+    last.optimizer_status = optim::OptimStatus::BudgetExhausted;
+  }
+  return last;
+}
+
 fit_expected<gmm::Weight>
 profile_fitted_weight_at(const spec::LatentStructure& pt,
                          const model::MatrixRep& rep,
@@ -1769,74 +1845,22 @@ fit_gmm_fitted_weight_impl(spec::LatentStructure pt,
   auto pre = prelude(pt, rep, samp, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
 
-  Eigen::VectorXd theta = x0;
-  Estimates last;
-  bool have_last = false;
-  bool converged = false;
-  double prev_fmin = std::numeric_limits<double>::infinity();
-  int total_f_evals = 0;
-  int total_g_evals = 0;
-  int outer_iter = 0;
-
-  for (int k = 0; k < fitted_opts.max_outer; ++k) {
-    auto w = build_fitted_weight(pre->ev, samp, theta, fitted_opts.kind, who);
-    if (!w.has_value()) return std::unexpected(w.error());
-
-    auto prob_or = gmm::residuals(pre->ev, samp, theta, *w);
+  FittedWeightSolveFn solve =
+      [&pre, &samp, &extra, &bounds, backend, opts, who](
+          const Eigen::VectorXd& theta,
+          const gmm::Weight& weight) -> fit_expected<Estimates> {
+    auto prob_or = gmm::residuals(pre->ev, samp, theta, weight);
     if (!prob_or.has_value()) return std::unexpected(prob_or.error());
     const optim::ScalarProblem prob = optim::scalarize(*prob_or);
-
-    auto est = compose_scalar_ml_extra(prob, pre->con, pre->nl, extra,
-                                       theta, bounds, backend, opts, who);
-    if (!est.has_value()) return std::unexpected(est.error());
-
-    Estimates candidate = std::move(*est);
-    total_f_evals += candidate.f_evals;
-    total_g_evals += candidate.g_evals;
-    outer_iter = k + 1;
-
-    const double step = inf_norm(candidate.theta - theta);
-    const double theta_scale = std::max(1.0, inf_norm(theta));
-    const double f_change = std::abs(candidate.fmin - prev_fmin);
-    const double f_scale =
-        std::max({1.0, std::abs(candidate.fmin), std::abs(prev_fmin)});
-
-    theta = candidate.theta;
-    last = std::move(candidate);
-    have_last = true;
-
-    if (step <= fitted_opts.theta_tol * theta_scale &&
-        (k == 0 || f_change <= fitted_opts.fmin_tol * f_scale)) {
-      converged = true;
-      break;
-    }
-    prev_fmin = last.fmin;
-  }
-
-  if (!have_last) {
-    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-        std::string(who) + ": fitted-weight loop did not run"));
-  }
-
-  auto w_final =
-      build_fitted_weight(pre->ev, samp, last.theta, fitted_opts.kind, who);
-  if (!w_final.has_value()) return std::unexpected(w_final.error());
-  auto prob_final_or = gmm::residuals(pre->ev, samp, last.theta, *w_final);
-  if (!prob_final_or.has_value()) return std::unexpected(prob_final_or.error());
-  const optim::ScalarProblem prob_final = optim::scalarize(*prob_final_or);
-  Eigen::VectorXd grad(last.theta.size());
-  last.fmin = prob_final.f(last.theta, grad);
-  ++total_f_evals;
-  ++total_g_evals;
-
-  last.iterations = outer_iter;
-  last.f_evals = total_f_evals;
-  last.g_evals = total_g_evals;
-  if (!converged && last.optimizer_status == optim::OptimStatus::Converged) {
-    last.optimizer_status = optim::OptimStatus::BudgetExhausted;
-  }
-  attach_diagnostics(last, pt, *pre, bounds);
-  return last;
+    return compose_scalar_ml_extra(prob, pre->con, pre->nl, extra,
+                                   theta, bounds, backend, opts,
+                                   who);
+  };
+  auto est = run_fitted_weight_loop(
+      pre->ev, samp, x0, fitted_opts, solve, who);
+  if (!est.has_value()) return std::unexpected(est.error());
+  attach_diagnostics(*est, pt, *pre, bounds);
+  return est;
 }
 
 Eigen::VectorXd
@@ -2031,6 +2055,37 @@ fit_gmm_fitted_weight(spec::LatentStructure pt, const model::MatrixRep& rep,
       std::move(pt), rep, samp, x0, ExtraNonlinearEqConstraints{},
       fitted_opts, std::move(bounds), backend, opts,
       "fit_gmm_fitted_weight");
+}
+
+fit_expected<Estimates>
+fit_gmm_fitted_weight_psd(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Eigen::VectorXd& x0,
+    GmmFittedWeightOptions fitted_opts,
+    Backend backend, OptimOptions opts, PsdFitOptions psd_opts) {
+  constexpr const char* who = "fit_gmm_fitted_weight_psd";
+  if (auto ok = validate_fitted_weight_options(fitted_opts, who);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = validate_psd_fit_options(psd_opts, who);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto pre = prelude(pt, rep, samp, x0, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+
+  FittedWeightSolveFn solve =
+      [&pt, &rep, &samp, backend, opts, psd_opts](
+          const Eigen::VectorXd& theta,
+          const gmm::Weight& weight) -> fit_expected<Estimates> {
+    return fit_gmm_psd(pt, rep, samp, theta, weight, backend, opts, psd_opts);
+  };
+  auto est = run_fitted_weight_loop(
+      pre->ev, samp, x0, fitted_opts, solve, who);
+  if (!est.has_value()) return std::unexpected(est.error());
+  attach_diagnostics(*est, pt, *pre, Bounds{});
+  return est;
 }
 
 fit_expected<Estimates>

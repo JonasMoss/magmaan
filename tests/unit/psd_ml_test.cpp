@@ -17,6 +17,7 @@
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/optim/optimizers.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -415,6 +416,102 @@ TEST_CASE("PSD ULS replaces an exact-fit negative-residual solution") {
       pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
       strict_options());
   REQUIRE_MESSAGE(psd.has_value(), "PSD ULS repair failed: "
+      << (psd.has_value() ? std::string{} : psd.error().detail));
+  check_psd_terminal(*psd);
+  CHECK(psd->fmin > ordinary->fmin + 1e-6);
+}
+
+TEST_CASE("PSD fitted-weight GMM matches the ordinary interior fixed point") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Vector4d loadings;
+  loadings << 1.0, 0.82, 0.68, 0.9;
+  Eigen::Vector4d residuals;
+  residuals << 0.55, 0.65, 0.6, 0.5;
+  Eigen::Matrix4d covariance =
+      one_factor_covariance(loadings, residuals, 1.1);
+  covariance(0, 1) += 0.12;
+  covariance(1, 0) += 0.12;
+  covariance(2, 3) -= 0.08;
+  covariance(3, 2) -= 0.08;
+  auto samp = sample_stats(covariance, 450);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+
+  magmaan::estimate::frontier::GmmFittedWeightOptions fitted_opts;
+  fitted_opts.max_outer = 30;
+  fitted_opts.theta_tol = 1e-8;
+  fitted_opts.fmin_tol = 1e-11;
+  auto ordinary = magmaan::estimate::frontier::fit_gmm_fitted_weight(
+      pt, *rep, samp, *start, fitted_opts, {}, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary fitted-weight GMM failed: "
+      << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+  REQUIRE(ordinary->diagnostics.admissibility.admissible);
+
+  auto psd = magmaan::estimate::frontier::fit_gmm_fitted_weight_psd(
+      pt, *rep, samp, *start, fitted_opts, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE_MESSAGE(psd.has_value(), "PSD fitted-weight GMM failed: "
+      << (psd.has_value() ? std::string{} : psd.error().detail));
+  check_psd_terminal(*psd);
+  CHECK(psd->iterations > 1);
+  CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(2e-7));
+  CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 5e-5);
+
+  auto ev = magmaan::model::ModelEvaluator::build(pt, *rep);
+  REQUIRE(ev.has_value());
+  auto final_weight = magmaan::estimate::gmm::expected_information_weight(
+      *ev, samp, psd->theta);
+  REQUIRE(final_weight.has_value());
+  auto final_problem = magmaan::estimate::gmm::residuals(
+      *ev, samp, psd->theta, *final_weight);
+  REQUIRE(final_problem.has_value());
+  const auto final_objective = magmaan::optim::scalarize(*final_problem);
+  Eigen::VectorXd final_gradient(psd->theta.size());
+  CHECK(psd->fmin == doctest::Approx(
+      final_objective.f(psd->theta, final_gradient)).epsilon(1e-12));
+
+  auto one_step_opts = fitted_opts;
+  one_step_opts.max_outer = 1;
+  auto one_step = magmaan::estimate::frontier::fit_gmm_fitted_weight_psd(
+      pt, *rep, samp, *start, one_step_opts, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE(one_step.has_value());
+  CHECK(one_step->optimizer_status ==
+        magmaan::optim::OptimStatus::BudgetExhausted);
+  CHECK((one_step->theta - psd->theta).cwiseAbs().maxCoeff() > 1e-6);
+}
+
+TEST_CASE("PSD fitted-weight GMM repairs a negative-residual fixed point") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Matrix3d covariance;
+  covariance << 1.0, 0.7, 0.7,
+                0.7, 1.0, 0.3,
+                0.7, 0.3, 1.0;
+  auto samp = sample_stats(covariance, 80);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+
+  magmaan::estimate::frontier::GmmFittedWeightOptions fitted_opts;
+  fitted_opts.max_outer = 30;
+  fitted_opts.theta_tol = 1e-8;
+  fitted_opts.fmin_tol = 1e-11;
+  auto ordinary = magmaan::estimate::frontier::fit_gmm_fitted_weight(
+      pt, *rep, samp, *start, fitted_opts, {}, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE(ordinary.has_value());
+  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+
+  auto psd = magmaan::estimate::frontier::fit_gmm_fitted_weight_psd(
+      pt, *rep, samp, ordinary->theta, fitted_opts,
+      Backend::NloptSlsqp, strict_options());
+  REQUIRE_MESSAGE(psd.has_value(), "PSD fitted-weight repair failed: "
       << (psd.has_value() ? std::string{} : psd.error().detail));
   check_psd_terminal(*psd);
   CHECK(psd->fmin > ordinary->fmin + 1e-6);
