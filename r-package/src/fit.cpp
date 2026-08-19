@@ -2399,6 +2399,96 @@ Rcpp::List frontier_fit_ml_psd_impl(
 
 namespace {
 
+enum class PsdGmmKind { Uls, Gls, Wls };
+
+Rcpp::List frontier_fit_gmm_psd_common(
+    SEXP partable, Rcpp::List sample_stats, SEXP W,
+    Rcpp::Nullable<Rcpp::String> optimizer,
+    Rcpp::Nullable<Rcpp::List> control,
+    double start_eigen_floor, double feasibility_tol,
+    PsdGmmKind kind, const char* call, const char* estimator) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, call);
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(
+      std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull()
+          ? magmaan::estimate::Backend::NloptSlsqp
+          : backend_from_optimizer_arg(optimizer);
+  magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.start_eigen_floor = start_eigen_floor;
+  psd_opts.feasibility_tol = feasibility_tol;
+
+  magmaan::fit_expected<magmaan::estimate::Estimates> fit_or;
+  if (kind == PsdGmmKind::Gls) {
+    fit_or = magmaan::estimate::frontier::fit_gls_psd(
+        ctx.pt, ctx.rep, ctx.samp, x0, backend, optim_opts_from(control),
+        psd_opts);
+  } else {
+    magmaan::estimate::gmm::Weight weight;
+    if (kind == PsdGmmKind::Wls) {
+      weight = wls_from_arg(W, ctx.samp.S.size());
+    }
+    fit_or = magmaan::estimate::frontier::fit_gmm_psd(
+        ctx.pt, ctx.rep, ctx.samp, x0, std::move(weight), backend,
+        optim_opts_from(control), psd_opts);
+  }
+  if (!fit_or.has_value()) stop_fit(fit_or.error());
+  const magmaan::estimate::Estimates est = std::move(*fit_or);
+  return fit_result(ctx, est, &starts, estimator);
+}
+
+}  // namespace
+
+// Continuous ULS over PSD primitive LISREL covariance matrices.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_uls_psd_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6) {
+  return frontier_fit_gmm_psd_common(
+      partable, sample_stats, R_NilValue, optimizer, control,
+      start_eigen_floor, feasibility_tol, PsdGmmKind::Uls,
+      "frontier_fit_uls_psd", "ULS");
+}
+
+// Normal-theory GLS over PSD primitive LISREL covariance matrices.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_gls_psd_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6) {
+  return frontier_fit_gmm_psd_common(
+      partable, sample_stats, R_NilValue, optimizer, control,
+      start_eigen_floor, feasibility_tol, PsdGmmKind::Gls,
+      "frontier_fit_gls_psd", "GLS");
+}
+
+// Caller-fixed WLS/ADF over PSD primitive LISREL covariance matrices.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_wls_psd_impl(
+    SEXP partable, Rcpp::List sample_stats, SEXP W,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6) {
+  return frontier_fit_gmm_psd_common(
+      partable, sample_stats, W, optimizer, control,
+      start_eigen_floor, feasibility_tol, PsdGmmKind::Wls,
+      "frontier_fit_wls_psd", "WLS");
+}
+
+namespace {
+
 double nan_if_not_finite(double x) {
   return std::isfinite(x) ? x : std::numeric_limits<double>::quiet_NaN();
 }

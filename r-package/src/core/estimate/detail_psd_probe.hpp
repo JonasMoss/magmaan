@@ -10,9 +10,9 @@
 namespace magmaan::estimate::psd_test {
 
 // Private production-compiler seam for derivative regression tests. The probe
-// evaluates the same lifted objective and equality callbacks used by
-// fit_ml_psd() at its projected start, then independently central-differences
-// both callbacks in lifted coordinates.
+// evaluates a production lifted objective and equality callbacks at its
+// projected start, then independently central-differences both callbacks in
+// lifted coordinates.
 struct PsdDerivativeProbe {
   Eigen::VectorXd x;
   double objective = 0.0;
@@ -32,6 +32,15 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
                         const Eigen::VectorXd& theta_start,
                         double finite_difference_step = 1e-6,
                         frontier::PsdFitOptions options = {});
+
+fit_expected<PsdDerivativeProbe>
+psd_gmm_derivative_probe(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const data::SampleStats& samp,
+                         const Eigen::VectorXd& theta_start,
+                         const gmm::Weight& weight = {},
+                         double finite_difference_step = 1e-6,
+                         frontier::PsdFitOptions options = {});
 
 }  // namespace magmaan::estimate::psd_test
 #endif

@@ -368,7 +368,7 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
       if (!variable && fixed < -structural_tol) {
         return std::unexpected(fit_err(
             FitError::Kind::NumericIssue,
-            "fit_ml_psd: a primitive covariance matrix has a fixed negative "
+            "PSD lift: a primitive covariance matrix has a fixed negative "
             "diagonal entry"));
       }
       if (variable || std::abs(fixed) > structural_tol) {
@@ -397,7 +397,7 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
         } else if (std::abs(covariance.c0(row)) > structural_tol) {
           return std::unexpected(fit_err(
               FitError::Kind::NumericIssue,
-              "fit_ml_psd: a fixed nonzero covariance touches a "
+              "PSD lift: a fixed nonzero covariance touches a "
               "structural-zero variance"));
         }
       }
@@ -513,7 +513,7 @@ psd_lift_start(const PsdLiftLayout& layout,
   if (!(eigen_floor > 0.0) || !std::isfinite(eigen_floor)) {
     return std::unexpected(fit_err(
         FitError::Kind::InvalidStartValues,
-        "fit_ml_psd: start_eigen_floor must be positive and finite"));
+        "PSD lift: start_eigen_floor must be positive and finite"));
   }
   Eigen::VectorXd x(layout.n_alpha + layout.n_lift);
   const Eigen::VectorXd alpha = con.contract(theta_start);
@@ -535,7 +535,7 @@ psd_lift_start(const PsdLiftLayout& layout,
     if (eig.info() != Eigen::Success) {
       return std::unexpected(fit_err(
           FitError::Kind::InvalidStartValues,
-          "fit_ml_psd: eigendecomposition failed while projecting the "
+          "PSD lift: eigendecomposition failed while projecting the "
           "covariance start"));
     }
     const Eigen::VectorXd values =
@@ -547,7 +547,7 @@ psd_lift_start(const PsdLiftLayout& layout,
     if (llt.info() != Eigen::Success) {
       return std::unexpected(fit_err(
           FitError::Kind::InvalidStartValues,
-          "fit_ml_psd: Cholesky factorization failed after projecting the "
+          "PSD lift: Cholesky factorization failed after projecting the "
           "covariance start"));
     }
     const Eigen::MatrixXd L = llt.matrixL();
@@ -561,57 +561,61 @@ psd_lift_start(const PsdLiftLayout& layout,
   return x;
 }
 
-optim::ScalarProblem
-psd_ml_problem(const model::ModelEvaluator& ev,
-               const model::MatrixRep& rep,
-               const EqConstraints& con,
-               const PsdLiftLayout& layout,
-               const SampleStats& samp,
-               MlCache cache) {
-  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
-  const auto locations = ev.param_locations();
+std::vector<Eigen::Index>
+psd_sigma_offsets(const model::MatrixRep& rep) {
   std::vector<Eigen::Index> sigma_offset(rep.dims.size() + 1, 0);
   for (std::size_t b = 0; b < rep.dims.size(); ++b) {
     sigma_offset[b + 1] =
         sigma_offset[b] + detail::vech_len(rep.dims[b].n_observed);
   }
+  return sigma_offset;
+}
 
-  optim::ScalarProblem prob;
-  prob.n_param = n_x;
-  prob.expand = [&con, n_alpha = layout.n_alpha](const Eigen::VectorXd& x) {
-    return con.expand(x.head(n_alpha));
-  };
-  prob.f = [&ev, &rep, &con, &layout, samp, cache = std::move(cache),
-            locations, sigma_offset, n_x](
-               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
-    if (x.size() != n_x || !x.allFinite()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
-    }
-    const Eigen::VectorXd alpha = x.head(layout.n_alpha);
-    const Eigen::VectorXd theta = con.expand(alpha);
+fit_expected<model::Evaluation>
+psd_lifted_evaluation(
+    const model::ModelEvaluator& ev, const model::MatrixRep& rep,
+    const EqConstraints& con, const PsdLiftLayout& layout,
+    const std::vector<model::ParamLocation>& locations,
+    const std::vector<Eigen::Index>& sigma_offset,
+    const Eigen::VectorXd& x, bool with_sigma_jacobian,
+    bool with_mu_jacobian) {
+  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
+  if (x.size() != n_x || !x.allFinite()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        "PSD lift received a non-finite or incorrectly sized coordinate vector"));
+  }
+  const Eigen::VectorXd alpha = x.head(layout.n_alpha);
+  const Eigen::VectorXd theta = con.expand(alpha);
 
-    // LamA depends on Λ and B but not on the primitive covariances. Snapshot it
-    // from the ordinary assembly, then evaluate the likelihood after replacing
-    // Θ and Ψ by the PSD Cholesky products.
-    auto assembled = ev.assembled(theta);
-    if (!assembled.has_value()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
+  model::AssembledMatrices assembled;
+  if (with_sigma_jacobian) {
+    auto assembled_or = ev.assembled(theta);
+    if (!assembled_or.has_value()) {
+      return std::unexpected(fit_err(
+          FitError::Kind::NonPositiveDefiniteSigma,
+          "PSD lift failed to assemble the structural model: " +
+              assembled_or.error().detail));
     }
-    const model::CovarianceOverrides overrides =
-        covariance_overrides_from_x(rep, layout, x);
-    auto eval = ev.evaluate_with_covariance_overrides(
-        theta, overrides, true, true);
-    if (!eval.has_value()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
-    }
+    assembled = std::move(*assembled_or);
+  }
 
+  const model::CovarianceOverrides overrides =
+      covariance_overrides_from_x(rep, layout, x);
+  auto eval = ev.evaluate_with_covariance_overrides(
+      theta, overrides, with_sigma_jacobian, with_mu_jacobian);
+  if (!eval.has_value()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NonPositiveDefiniteSigma,
+        "PSD lift failed to evaluate the implied moments: " +
+            eval.error().detail));
+  }
+
+  if (with_sigma_jacobian) {
     // The ordinary evaluator's non-covariance derivatives are exactly the
     // derivatives needed here, now evaluated at lifted Ψ. Direct Θ/Ψ partable
     // columns do not enter the objective; their semantics are enforced by the
-    // equality links below.
+    // equality links.
     Eigen::MatrixXd J_theta = std::move(eval->J_sigma);
     for (Eigen::Index k = 0;
          k < static_cast<Eigen::Index>(locations.size()); ++k) {
@@ -620,8 +624,7 @@ psd_ml_problem(const model::ModelEvaluator& ev,
         J_theta.col(k).setZero();
       }
     }
-    Eigen::MatrixXd J =
-        Eigen::MatrixXd::Zero(J_theta.rows(), n_x);
+    Eigen::MatrixXd J = Eigen::MatrixXd::Zero(J_theta.rows(), n_x);
     if (layout.n_alpha > 0) {
       J.leftCols(layout.n_alpha).noalias() = J_theta * con.K();
     }
@@ -649,17 +652,15 @@ psd_ml_problem(const model::ModelEvaluator& ev,
             }
           } else {
             const Eigen::MatrixXd& LamA =
-                assembled->blocks[block.block].LamA;
+                assembled.blocks[block.block].LamA;
             const Eigen::VectorXd a = LamA.col(
                 block.active[static_cast<std::size_t>(lr)]);
-            Eigen::VectorXd v =
-                Eigen::VectorXd::Zero(LamA.rows());
+            Eigen::VectorXd v = Eigen::VectorXd::Zero(LamA.rows());
             for (Eigen::Index j = 0; j < q; ++j) {
               v += L(j, lc) * LamA.col(
                   block.active[static_cast<std::size_t>(j)]);
             }
-            dSigma =
-                a * v.transpose() + v * a.transpose();
+            dSigma = a * v.transpose() + v * a.transpose();
           }
           J.col(layout.n_alpha + block.lift_offset + local_col)
               .segment(sigma_offset[block.block],
@@ -668,16 +669,51 @@ psd_ml_problem(const model::ModelEvaluator& ev,
         }
       }
     }
+    eval->J_sigma = std::move(J);
+  }
 
-    Eigen::MatrixXd J_mu;
-    if (eval->J_mu.size() > 0) {
-      J_mu = Eigen::MatrixXd::Zero(eval->J_mu.rows(), n_x);
-      if (layout.n_alpha > 0) {
-        J_mu.leftCols(layout.n_alpha).noalias() =
-            eval->J_mu * con.K();
-      }
+  if (with_mu_jacobian && eval->J_mu.size() > 0) {
+    Eigen::MatrixXd J_mu =
+        Eigen::MatrixXd::Zero(eval->J_mu.rows(), n_x);
+    if (layout.n_alpha > 0) {
+      J_mu.leftCols(layout.n_alpha).noalias() = eval->J_mu * con.K();
     }
-    auto vg = ml_value_gradient(samp, cache, eval->moments, J, J_mu);
+    eval->J_mu = std::move(J_mu);
+  }
+  return std::move(*eval);
+}
+
+optim::ScalarProblem
+psd_ml_problem(const model::ModelEvaluator& ev,
+               const model::MatrixRep& rep,
+               const EqConstraints& con,
+               const PsdLiftLayout& layout,
+               const SampleStats& samp,
+               MlCache cache) {
+  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
+  const auto locations = ev.param_locations();
+  const auto sigma_offset = psd_sigma_offsets(rep);
+
+  optim::ScalarProblem prob;
+  prob.n_param = n_x;
+  prob.expand = [&con, n_alpha = layout.n_alpha](const Eigen::VectorXd& x) {
+    return con.expand(x.head(n_alpha));
+  };
+  prob.f = [&ev, &rep, &con, &layout, samp, cache = std::move(cache),
+            locations, sigma_offset, n_x](
+               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    if (x.size() != n_x || !x.allFinite()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    auto eval = psd_lifted_evaluation(
+        ev, rep, con, layout, locations, sigma_offset, x, true, true);
+    if (!eval.has_value()) {
+      grad = Eigen::VectorXd::Zero(n_x);
+      return std::numeric_limits<double>::infinity();
+    }
+    auto vg = ml_value_gradient(samp, cache, eval->moments, eval->J_sigma,
+                                eval->J_mu);
     if (!vg.has_value()) {
       grad = Eigen::VectorXd::Zero(n_x);
       return std::numeric_limits<double>::infinity();
@@ -686,6 +722,33 @@ psd_ml_problem(const model::ModelEvaluator& ev,
     return 0.5 * vg->value;
   };
   return prob;
+}
+
+fit_expected<optim::GmmProblem>
+psd_gmm_problem(const model::ModelEvaluator& ev,
+                const model::MatrixRep& rep,
+                const EqConstraints& con,
+                const PsdLiftLayout& layout,
+                const SampleStats& samp,
+                const Eigen::VectorXd& start,
+                const gmm::Weight& weight) {
+  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
+  const auto locations = ev.param_locations();
+  const auto sigma_offset = psd_sigma_offsets(rep);
+  gmm::MomentEvaluationFn evaluate =
+      [&ev, &rep, &con, &layout, locations, sigma_offset](
+          const Eigen::VectorXd& x, bool with_sigma_jacobian,
+          bool with_mu_jacobian) -> fit_expected<model::Evaluation> {
+    return psd_lifted_evaluation(
+        ev, rep, con, layout, locations, sigma_offset, x,
+        with_sigma_jacobian, with_mu_jacobian);
+  };
+  optim::ExpandFn expand = [&con, n_alpha = layout.n_alpha](
+                               const Eigen::VectorXd& x) {
+    return con.expand(x.head(n_alpha));
+  };
+  return gmm::residuals(std::move(evaluate), n_x, samp, start, weight,
+                        std::move(expand));
 }
 
 struct PsdConstraintCallbacks {
@@ -830,41 +893,18 @@ prelude_fcsem(spec::LatentStructure& pt, const Eigen::VectorXd& x0,
 #ifdef MAGMAAN_ENABLE_TEST_PROBES
 namespace psd_test {
 
+namespace {
+
 fit_expected<PsdDerivativeProbe>
-psd_ml_derivative_probe(spec::LatentStructure pt,
-                        const model::MatrixRep& rep,
-                        const SampleStats& samp,
-                        const Eigen::VectorXd& theta_start,
-                        double finite_difference_step,
-                        frontier::PsdFitOptions options) {
-  if (!(finite_difference_step > 0.0) ||
-      !std::isfinite(finite_difference_step)) {
-    return std::unexpected(fit_err(
-        FitError::Kind::NumericIssue,
-        "psd_ml_derivative_probe: finite_difference_step must be positive "
-        "and finite"));
-  }
-  auto pre = prelude(pt, rep, samp, theta_start,
-                     "psd_ml_derivative_probe");
-  if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
-  if (!layout.has_value()) return std::unexpected(layout.error());
-  auto start = psd_lift_start(
-      *layout, pre->con, theta_start, options.start_eigen_floor);
-  if (!start.has_value()) return std::unexpected(start.error());
-  auto cache = ml_prepare(samp);
-  if (!cache.has_value()) return std::unexpected(cache.error());
-
-  const optim::ScalarProblem objective =
-      psd_ml_problem(pre->ev, rep, pre->con, *layout, samp,
-                     std::move(*cache));
-  const PsdConstraintCallbacks constraints =
-      psd_constraint_callbacks(pre->con, pre->nl, *layout);
-
+probe_callbacks(const optim::ScalarProblem& objective,
+                const PsdConstraintCallbacks& constraints,
+                const Eigen::VectorXd& start,
+                Eigen::Index n_alpha, Eigen::Index n_lift,
+                double finite_difference_step, const char* who) {
   PsdDerivativeProbe out;
-  out.x = *start;
-  out.n_alpha = layout->n_alpha;
-  out.n_lift = layout->n_lift;
+  out.x = start;
+  out.n_alpha = n_alpha;
+  out.n_lift = n_lift;
   out.objective = objective.f(out.x, out.analytic_gradient);
   out.constraints = constraints.h(out.x);
   out.analytic_constraint_jacobian = constraints.jacobian(out.x);
@@ -874,11 +914,10 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
       !out.analytic_constraint_jacobian.allFinite()) {
     return std::unexpected(fit_err(
         FitError::Kind::NumericIssue,
-        "psd_ml_derivative_probe: analytic callback was non-finite"));
+        std::string(who) + ": analytic callback was non-finite"));
   }
 
-  out.finite_difference_gradient =
-      Eigen::VectorXd::Zero(out.x.size());
+  out.finite_difference_gradient = Eigen::VectorXd::Zero(out.x.size());
   out.finite_difference_constraint_jacobian =
       Eigen::MatrixXd::Zero(out.constraints.size(), out.x.size());
   for (Eigen::Index k = 0; k < out.x.size(); ++k) {
@@ -899,8 +938,8 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
         !hp.allFinite() || !hm.allFinite()) {
       return std::unexpected(fit_err(
           FitError::Kind::NumericIssue,
-          "psd_ml_derivative_probe: finite-difference callback was "
-          "non-finite"));
+          std::string(who) +
+              ": finite-difference callback was non-finite"));
     }
     out.finite_difference_gradient(k) = (fp - fm) / (2.0 * h);
     if (out.constraints.size() > 0) {
@@ -909,6 +948,81 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
     }
   }
   return out;
+}
+
+fit_expected<void>
+validate_probe_step(double finite_difference_step, const char* who) {
+  if (!(finite_difference_step > 0.0) ||
+      !std::isfinite(finite_difference_step)) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        std::string(who) +
+            ": finite_difference_step must be positive and finite"));
+  }
+  return {};
+}
+
+}  // namespace
+
+fit_expected<PsdDerivativeProbe>
+psd_ml_derivative_probe(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const SampleStats& samp,
+                        const Eigen::VectorXd& theta_start,
+                        double finite_difference_step,
+                        frontier::PsdFitOptions options) {
+  if (auto ok = validate_probe_step(
+          finite_difference_step, "psd_ml_derivative_probe");
+      !ok.has_value()) return std::unexpected(ok.error());
+  auto pre = prelude(pt, rep, samp, theta_start,
+                     "psd_ml_derivative_probe");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, theta_start, options.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto cache = ml_prepare(samp);
+  if (!cache.has_value()) return std::unexpected(cache.error());
+
+  const optim::ScalarProblem objective =
+      psd_ml_problem(pre->ev, rep, pre->con, *layout, samp,
+                     std::move(*cache));
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  return probe_callbacks(objective, constraints, *start, layout->n_alpha,
+                         layout->n_lift, finite_difference_step,
+                         "psd_ml_derivative_probe");
+}
+
+fit_expected<PsdDerivativeProbe>
+psd_gmm_derivative_probe(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const SampleStats& samp,
+                         const Eigen::VectorXd& theta_start,
+                         const gmm::Weight& weight,
+                         double finite_difference_step,
+                         frontier::PsdFitOptions options) {
+  if (auto ok = validate_probe_step(
+          finite_difference_step, "psd_gmm_derivative_probe");
+      !ok.has_value()) return std::unexpected(ok.error());
+  auto pre = prelude(pt, rep, samp, theta_start,
+                     "psd_gmm_derivative_probe");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, theta_start, options.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto gmm_prob = psd_gmm_problem(
+      pre->ev, rep, pre->con, *layout, samp, *start, weight);
+  if (!gmm_prob.has_value()) return std::unexpected(gmm_prob.error());
+  const optim::ScalarProblem objective = optim::scalarize(*gmm_prob);
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  return probe_callbacks(objective, constraints, *start, layout->n_alpha,
+                         layout->n_lift, finite_difference_step,
+                         "psd_gmm_derivative_probe");
 }
 
 }  // namespace psd_test
@@ -1274,6 +1388,62 @@ namespace {
 
 enum class FisherStepKind { Full, SchurSnlls };
 
+fit_expected<void>
+validate_psd_fit_options(const frontier::PsdFitOptions& psd_opts,
+                         const char* who) {
+  if (!(psd_opts.feasibility_tol > 0.0) ||
+      !std::isfinite(psd_opts.feasibility_tol)) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        std::string(who) +
+            ": feasibility_tol must be positive and finite"));
+  }
+  return {};
+}
+
+fit_expected<Estimates>
+drive_psd_problem(const optim::ScalarProblem& prob,
+                  const spec::LatentStructure& pt,
+                  const Prelude& pre,
+                  const PsdLiftLayout& layout,
+                  const PsdConstraintCallbacks& constraints,
+                  const Eigen::VectorXd& start,
+                  Backend backend, OptimOptions opts,
+                  const frontier::PsdFitOptions& psd_opts,
+                  const char* who) {
+  auto result = run_scalar_constrained(
+      prob, constraints.h, constraints.jacobian,
+      constraints.n_constraint, start, Bounds{}, backend, opts, who);
+  if (!result.has_value()) return std::unexpected(result.error());
+
+  const Eigen::VectorXd residual = constraints.h(result->x);
+  const double max_residual =
+      residual.size() > 0 ? residual.cwiseAbs().maxCoeff() : 0.0;
+  if (!std::isfinite(max_residual) ||
+      max_residual > psd_opts.feasibility_tol) {
+    return std::unexpected(FitError{
+        FitError::Kind::OptimizerNonConvergence,
+        std::string(who) +
+            ": optimizer returned a covariance-link residual of " +
+            std::to_string(max_residual) +
+            ", above feasibility_tol " +
+            std::to_string(psd_opts.feasibility_tol),
+        result->iterations, result->fmin});
+  }
+
+  Estimates est{
+      pre.con.expand(result->x.head(layout.n_alpha)),
+      result->fmin,
+      result->iterations,
+      result->f_evals,
+      result->g_evals,
+      result->status,
+      result->grad_inf_norm,
+      std::move(result->audit)};
+  attach_diagnostics(est, pt, pre, Bounds{});
+  return est;
+}
+
 fit_expected<Estimates>
 compose_fisher_ml(const spec::LatentStructure& pt, const Prelude& pre,
                   const SampleStats& samp,
@@ -1439,12 +1609,8 @@ fit_expected<Estimates>
 fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
            const SampleStats& samp, const Eigen::VectorXd& x0,
            Backend backend, OptimOptions opts, PsdFitOptions psd_opts) {
-  if (!(psd_opts.feasibility_tol > 0.0) ||
-      !std::isfinite(psd_opts.feasibility_tol)) {
-    return std::unexpected(fit_err(
-        FitError::Kind::NumericIssue,
-        "fit_ml_psd: feasibility_tol must be positive and finite"));
-  }
+  if (auto ok = validate_psd_fit_options(psd_opts, "fit_ml_psd");
+      !ok.has_value()) return std::unexpected(ok.error());
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_psd");
   if (!pre.has_value()) return std::unexpected(pre.error());
 
@@ -1461,37 +1627,52 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
                      std::move(*cache));
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
-  auto result = run_scalar_constrained(
-      prob, constraints.h, constraints.jacobian,
-      constraints.n_constraint, *start, Bounds{}, backend, opts,
-      "fit_ml_psd");
-  if (!result.has_value()) return std::unexpected(result.error());
+  return drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
+                           backend, opts, psd_opts, "fit_ml_psd");
+}
 
-  const Eigen::VectorXd residual = constraints.h(result->x);
-  const double max_residual =
-      residual.size() > 0 ? residual.cwiseAbs().maxCoeff() : 0.0;
-  if (!std::isfinite(max_residual) ||
-      max_residual > psd_opts.feasibility_tol) {
-    return std::unexpected(FitError{
-        FitError::Kind::OptimizerNonConvergence,
-        "fit_ml_psd: optimizer returned a covariance-link residual of " +
-            std::to_string(max_residual) +
-            ", above feasibility_tol " +
-            std::to_string(psd_opts.feasibility_tol),
-        result->iterations, result->fmin});
+fit_expected<Estimates>
+fit_gmm_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
+            const SampleStats& samp, const Eigen::VectorXd& x0,
+            gmm::Weight weight, Backend backend, OptimOptions opts,
+            PsdFitOptions psd_opts) {
+  if (auto ok = validate_psd_fit_options(psd_opts, "fit_gmm_psd");
+      !ok.has_value()) return std::unexpected(ok.error());
+  auto pre = prelude(pt, rep, samp, x0, "fit_gmm_psd");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, x0, psd_opts.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto gmm_prob = psd_gmm_problem(
+      pre->ev, rep, pre->con, *layout, samp, *start, weight);
+  if (!gmm_prob.has_value()) return std::unexpected(gmm_prob.error());
+  const optim::ScalarProblem prob = optim::scalarize(*gmm_prob);
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  return drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
+                           backend, opts, psd_opts, "fit_gmm_psd");
+}
+
+fit_expected<Estimates>
+fit_gls_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
+            const SampleStats& samp, const Eigen::VectorXd& x0,
+            Backend backend, OptimOptions opts, PsdFitOptions psd_opts) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(e.error());
   }
-
-  Estimates est{
-      pre->con.expand(result->x.head(layout->n_alpha)),
-      result->fmin,
-      result->iterations,
-      result->f_evals,
-      result->g_evals,
-      result->status,
-      result->grad_inf_norm,
-      std::move(result->audit)};
-  attach_diagnostics(est, pt, *pre, Bounds{});
-  return est;
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::InvalidStartValues,
+        "fit_gls_psd: ModelEvaluator::build failed: " +
+            ev.error().detail));
+  }
+  auto weight = gmm::normal_theory_weight(*ev, samp, x0);
+  if (!weight.has_value()) return std::unexpected(weight.error());
+  return fit_gmm_psd(std::move(pt), rep, samp, x0, std::move(*weight),
+                     backend, opts, psd_opts);
 }
 
 fit_expected<Estimates>

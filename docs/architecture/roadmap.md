@@ -94,12 +94,11 @@ high-level fit, and prints covariance admissibility separately from
 convergence. Opt-in `variance_bounds` remain a diagonal Heywood barrier, not a
 joint PSD constraint.
 
-`estimate::frontier::fit_ml_psd` is the first covariance-honest estimator. For
-complete-data normal-theory ML it compiles each `Theta_b` and `Psi_b` covariance
-graph, splitting structurally disconnected variables into separate
-lower-triangular factors, and evaluates the likelihood only at the resulting
-block-diagonal collection of `L_c L_c'`. Thus a diagonal residual covariance
-uses scalar square factors rather than a dense residual Cholesky factor;
+The frontier covariance-honest estimators compile each `Theta_b` and `Psi_b`
+covariance graph, splitting structurally disconnected variables into separate
+lower-triangular factors, and evaluate the estimator objective only at the
+resulting block-diagonal collection of `L_c L_c'`. Thus a diagonal residual
+covariance uses scalar square factors rather than a dense residual Cholesky factor;
 correlated or fully free components retain the joint PSD restriction. Equality
 constraints link every lifted within-component entry back to the original
 affine-reduced partable parameter, so fixed cells, structural zeros, shared
@@ -126,6 +125,22 @@ coordinates, general linear and nonlinear equalities, and multi-group block
 stacking. Deterministic exact-model fits separately gate shared off-diagonal
 covariances, nonlinear equalities, independent multi-group blocks, and agreement
 with ordinary interior mean-structure ML.
+
+The covariance lift now exposes an estimator-neutral implied-moment/Jacobian
+callback internally. `estimate::frontier::fit_gmm_psd` applies any caller-fixed
+continuous moment weight to that callback: an empty weight is ULS, while a
+fixed supplied weight covers WLS, ADF, and diagonal-WLS objectives over the
+ordinary `[mean; vech(covariance)]` moment stack. The
+`estimate::frontier::fit_gls_psd` specialization constructs the same
+sample-based normal-theory GLS weight as ordinary `fit_gls` and then uses the
+fixed-weight path. R exposes these explicitly as `frontier_fit_uls_psd()`,
+`frontier_fit_gls_psd()`, and `frontier_fit_wls_psd()`. They deliberately use
+the constrained scalar backends rather than Ceres or SNLLS: the exact partable
+links are nonlinear in the Cholesky coordinates, so preserving the specialized
+least-squares algorithms would require a separate formulation. Focused gates
+cover the lifted fixed-weight gradient and link Jacobian by central finite
+differences, ordinary/PSD agreement at interior ULS, GLS, and nonidentity-WLS
+optima, a ULS negative-residual repair, and the three R result contracts.
 
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible

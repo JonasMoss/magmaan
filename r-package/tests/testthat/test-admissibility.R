@@ -86,6 +86,38 @@ test_that("frontier PSD ML returns an ordinary admissible R fit", {
                nrow(model_spec("f =~ x1 + x2 + x3")$partable))
 })
 
+test_that("frontier PSD continuous LS wrappers preserve covariance admissibility", {
+  set.seed(29)
+  n <- 160L
+  eta <- rnorm(n)
+  dat <- data.frame(
+    x1 = eta + rnorm(n, sd = 0.7),
+    x2 = 0.8 * eta + rnorm(n, sd = 0.8),
+    x3 = 0.65 * eta + rnorm(n, sd = 0.75)
+  )
+  model <- "f =~ x1 + x2 + x3"
+  control <- list(max_iter = 5000L, gtol = 1e-8)
+
+  fits <- list(
+    ULS = frontier_fit_uls_psd(model, dat, control = control),
+    GLS = frontier_fit_gls_psd(model, dat, control = control),
+    WLS = frontier_fit_wls_psd(
+      model, dat, W = diag(seq(0.7, 1.7, length.out = 6L)),
+      control = control
+    )
+  )
+  for (estimator in names(fits)) {
+    fit <- fits[[estimator]]
+    expect_true(fit$converged, info = estimator)
+    expect_true(fit$diagnostics$admissibility$admissible, info = estimator)
+    expect_true(fit$audit$constrained, info = estimator)
+    expect_true(fit$audit$stationary, info = estimator)
+    expect_true(fit$audit$constraint_violation_inf <= 1e-6,
+                info = estimator)
+    expect_identical(fit$estimator, estimator)
+  }
+})
+
 test_that("FIML fits run the same covariance admissibility audit", {
   set.seed(23)
   n <- 100L

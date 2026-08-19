@@ -179,13 +179,58 @@ when they next change.
   bootstrap, and proximal/local-quadratic confidence sets. Full
   profile-likelihood intervals and likelihood-ratio tests remain deferred.
 
-- **L — extend covariance-honest estimation and boundary inference only on
-  demand.** The current slice is complete-data ML. FIML, continuous LS/GMM,
-  ordinal, two-level, and native FC-SEM need estimator-specific lifted
-  objectives rather than a nominal switch. At singular-but-PSD component
-  solutions, ordinary inverse-information SEs/tests are nonregular; add an
-  explicit boundary-aware inference policy before exposing automatic
-  post-fit inference from the constrained estimator.
+- **M/L — extend covariance-honest point estimation estimator by estimator.**
+  The lift is now internally estimator-neutral and the first non-ML slice is
+  landed: `fit_gmm_psd` covers continuous ULS and caller-fixed WLS/ADF weights,
+  while `fit_gls_psd` builds the ordinary sample-based GLS weight once. R has
+  explicit ULS/GLS/WLS frontier wrappers. The correctness seed finite-differences
+  the lifted fixed-weight objective and links, checks ordinary/PSD interior
+  agreement for all three objectives, repairs one exact-fit ULS Heywood case,
+  and gates the R result schema. Before making comparative claims, design the
+  broader validation strategy explicitly: choose estimator-specific improper
+  cases, interior and boundary geometries, weight conditioning, mean/multi-group
+  coverage, corpus scope, timing, convergence/basin reporting, and independent
+  reductions. Keep this as a future discussion rather than silently inheriting
+  the NTML studies.
+
+  Ordered computational queue (point estimation only):
+
+  1. **M — fitted/iterated continuous GMM weights.** Reuse the PSD fixed-weight
+     inner solve in the existing outer weight-update loop. Specify whether each
+     method freezes the weight within an inner solve or differentiates through
+     it; do not treat those as the same estimator.
+  2. **M/L — FIML.** Feed lifted moments and Jacobians into the existing
+     patternwise likelihood/cache. Define the likelihood domain per observed
+     pattern (`Sigma_oo` PD), preserve the fixed-x missingness policy, and gate
+     the all-observed reduction to PSD-NTML before broader missing-pattern
+     validation.
+  3. **L — two-level ML.** Feed lifted within/between moments into the cluster
+     likelihood and require `Sigma_W` and every observed
+     `Sigma_W + d Sigma_B` combination to be PD. The current two-level composer
+     rejects user equality constraints, so internal link constraints and later
+     user-constraint support need an explicit composition design.
+  4. **L — ordinal and mixed-ordinal ULS/DWLS/WLS.** Apply the lift after ordinal
+     partable preparation, cover both delta/theta parameterizations, retain
+     threshold and scale semantics, and distinguish moment-only PSD acceptance
+     from inverse/log-determinant CatML domains. Decide how the ordinary
+     covariance-admissibility diagnostics attach to prepared ordinal fits.
+  5. **L — native FC-SEM.** First give `FcSemEvaluator` a primitive-covariance
+     ownership/override contract and transformed Jacobian seam comparable to
+     `ModelEvaluator`; only then add covariance-honest objectives.
+  6. **L/XL — recover specialized algorithms where warranted.** The landed
+     continuous slice scalarizes the least-squares objective for SLSQP/IPOPT.
+     Ceres and the current SNLLS/Golub–Pereyra paths cannot accept the nonlinear
+     Cholesky-link equalities by a nominal switch. A fast PSD-SNLLS or direct
+     elimination formulation is a separate computational project and should be
+     justified by scaling evidence.
+  7. **S — robust-estimator naming and dispatch.** MLM/MLR/MLMV-style complete-
+     data variants share the NTML point estimate, so they need no new point-fit
+     optimizer; document and dispatch them to PSD-NTML when only estimation is
+     requested. Missing-data robust ML instead depends on the PSD-FIML item.
+
+  At singular-but-PSD component solutions, ordinary inverse-information
+  SEs/tests are nonregular. Keep inference outside every automatic constrained
+  fit until an explicit boundary-aware policy is available.
 
 - **M/L — broaden and harden standardized score flips.** The frontier slice
   supports affine nested complete-data ML and direct-FIML pairs and is exercised

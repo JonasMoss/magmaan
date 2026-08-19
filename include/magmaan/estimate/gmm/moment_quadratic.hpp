@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include <Eigen/Core>
@@ -26,6 +27,22 @@ namespace magmaan::estimate::gmm {
 // Per-block weight, aligned to the stacked [mean ; vech(cov)] moment vector
 // of each block. Empty ⇒ identity weight (ULS). Each entry is symmetric PD.
 using Weight = std::vector<Eigen::MatrixXd>;
+
+// Estimator-neutral implied-moment callback. Transformed parameterizations
+// such as the frontier PSD lift use this overload to supply moments and their
+// Jacobians in the coordinates actually driven by the optimizer.
+using MomentEvaluationFn = std::function<fit_expected<model::Evaluation>(
+    const Eigen::VectorXd&, bool with_sigma_jacobian,
+    bool with_mu_jacobian)>;
+
+// Build the same moment-quadratic problem as the ModelEvaluator overload below,
+// but from a caller-supplied implied-moment evaluator. `x0` fixes the moment
+// layout, `n_param` is the driven-coordinate dimension, and `expand` maps those
+// coordinates back to the ordinary full parameter vector.
+fit_expected<optim::GmmProblem>
+residuals(MomentEvaluationFn evaluate, Eigen::Index n_param,
+          const data::SampleStats& samp, const Eigen::VectorXd& x0,
+          const Weight& weight, optim::ExpandFn expand);
 
 // Build the moment-quadratic least-squares problem F(θ) = ½‖r̃(θ)‖².
 // `theta0` is evaluated once to fix the moment layout (block dimensions +

@@ -310,11 +310,12 @@ weighted_jacobian(const SampleStats& s, const model::ImpliedMoments& m,
 }  // namespace
 
 fit_expected<optim::GmmProblem>
-residuals(const model::ModelEvaluator& ev, const data::SampleStats& samp,
-          const Eigen::VectorXd& theta0, const Weight& weight) {
-  auto eval0 = ev.evaluate(theta0, false, false);
+residuals(MomentEvaluationFn evaluate, Eigen::Index n_param,
+          const data::SampleStats& samp, const Eigen::VectorXd& x0,
+          const Weight& weight, optim::ExpandFn expand) {
+  auto eval0 = evaluate(x0, false, false);
   if (!eval0.has_value()) {
-    return std::unexpected(model_err(eval0.error(), "gmm::residuals: theta0"));
+    return std::unexpected(eval0.error());
   }
   if (auto ok = validate_common_shapes(samp, eval0->moments, "gmm::residuals");
       !ok.has_value()) {
@@ -351,30 +352,30 @@ residuals(const model::ModelEvaluator& ev, const data::SampleStats& samp,
 
   optim::GmmProblem prob;
   prob.n_resid = layout.n_rows;
-  prob.n_param = static_cast<Eigen::Index>(ev.n_free());
-  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
-  prob.r = [&ev, samp, layout, factors](
+  prob.n_param = n_param;
+  prob.expand  = std::move(expand);
+  prob.r = [evaluate, samp, layout, factors](
                const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
-    auto e = ev.evaluate(x, false, false);
+    auto e = evaluate(x, false, false);
     if (!e.has_value()) {
-      return std::unexpected(model_err(e.error(), "gmm residual evaluate"));
+      return std::unexpected(e.error());
     }
     return weighted_residuals(samp, e->moments, layout, factors);
   };
-  prob.J = [&ev, samp, layout, factors](
+  prob.J = [evaluate, samp, layout, factors](
                const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
-    auto e = ev.evaluate(x, true, layout.has_means);
+    auto e = evaluate(x, true, layout.has_means);
     if (!e.has_value()) {
-      return std::unexpected(model_err(e.error(), "gmm jacobian evaluate"));
+      return std::unexpected(e.error());
     }
     return weighted_jacobian(samp, e->moments, e->J_sigma, e->J_mu, layout,
                              factors);
   };
-  prob.eval = [&ev, samp, layout, factors](
+  prob.eval = [evaluate, samp, layout, factors](
                   const Eigen::VectorXd& x) -> fit_expected<optim::LsEvaluation> {
-    auto e = ev.evaluate(x, true, layout.has_means);
+    auto e = evaluate(x, true, layout.has_means);
     if (!e.has_value()) {
-      return std::unexpected(model_err(e.error(), "gmm evaluate"));
+      return std::unexpected(e.error());
     }
     auto r = weighted_residuals(samp, e->moments, layout, factors);
     if (!r.has_value()) return std::unexpected(r.error());
@@ -384,6 +385,24 @@ residuals(const model::ModelEvaluator& ev, const data::SampleStats& samp,
     return optim::LsEvaluation{std::move(*r), std::move(*J)};
   };
   return prob;
+}
+
+fit_expected<optim::GmmProblem>
+residuals(const model::ModelEvaluator& ev, const data::SampleStats& samp,
+          const Eigen::VectorXd& theta0, const Weight& weight) {
+  MomentEvaluationFn evaluate = [&ev](const Eigen::VectorXd& x,
+                                      bool with_sigma_jacobian,
+                                      bool with_mu_jacobian)
+      -> fit_expected<model::Evaluation> {
+    auto e = ev.evaluate(x, with_sigma_jacobian, with_mu_jacobian);
+    if (!e.has_value()) {
+      return std::unexpected(model_err(e.error(), "gmm evaluate"));
+    }
+    return std::move(*e);
+  };
+  return residuals(std::move(evaluate),
+                   static_cast<Eigen::Index>(ev.n_free()), samp, theta0,
+                   weight, [](const Eigen::VectorXd& x) { return x; });
 }
 
 fit_expected<Weight>
