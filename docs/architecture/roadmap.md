@@ -709,6 +709,13 @@ an unconstrained gradient test to constrained solutions.
   dimension, tangent-rank, singular-value, conditioning, stationarity, and
   runtime diagnostics. The saturated-EM moment-influence construction remains
   an independent validation route rather than the statistic's implementation.
+  Experiment 77's 20,000-fit representative-SEM null gate found mean cell
+  rejection .058 across 40 normal/VM/IG complete/MCAR cells (range
+  .018--.122; 33/40 in [.025,.075]). Twenty-five finite calls lost numerical
+  tangent rank and were strongly rejection-prone; downstream experiments must
+  therefore report the prespecified-rank denominator separately and fail closed
+  on non-nominal geometry rather than treating a finite p-value alone as full
+  test success.
   Experiment 62's 300-replication
   probe found the basic test extremely conservative, effective flips close to
   nominal, and standardization a small improvement concentrated at n=30; the

@@ -361,9 +361,18 @@ when they next change.
   .0219 seconds (maximum .209). Including fitting/MLR/FMG, the measured panel
   projects to about 7.2 minutes for 500 null replications per cell and 14.4
   minutes for 1,000 on four workers; null plus matched power doubles those
-  figures. The next scientific gate is 100--500 null replications per cell and
-  prespecified sparse/diffuse power alternatives, with FMG rank failures kept
-  as failures rather than recoded non-rejections.
+  figures. Iteration 06 completed the 500-replication gate (20,000 attempts) in
+  446 seconds. The effective multiplier's mean cell rejection was .058, mean
+  absolute size error .016, and range .018--.122, with 33/40 cells in
+  [.025,.075]. It materially improved on FMG `all` (.065 mean, .018--.155,
+  27/40 in-band), SS (.072 mean, .024--.173, 24/40 in-band), and MLR (.364
+  mean, .068--.930). Nine FIML fits failed; every converged fit yielded a
+  finite flip. Twenty-five of 19,991 finite calls had a numerically deficient
+  tangent rank and 16 rejected, but requiring the prespecified rank changed
+  mean cell rejection only from .0584 to .0577. Treat that geometry diagnostic
+  as a separate fail-closed denominator. The next scientific gate is now the
+  prespecified sparse/diffuse power panel with raw and size-adjusted power;
+  another larger null run is for publication precision, not method triage.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
