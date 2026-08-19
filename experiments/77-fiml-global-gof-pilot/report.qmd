@@ -37,6 +37,12 @@ if (sem_available) {
   sem_metadata <- read.csv(sem_paths[[4L]], stringsAsFactors = FALSE)
   sem_meta <- setNames(sem_metadata$value, sem_metadata$key)
 }
+sem1000_path <- file.path(
+  script_dir, "results", "sem-model-1000", "replications.csv")
+sem1000_available <- file.exists(sem1000_path)
+if (sem1000_available) {
+  sem1000 <- read.csv(sem1000_path, stringsAsFactors = FALSE)
+}
 
 method_labels <- c(
   lrt_naive = "ordinary LR", lrt_mlr = "Yuan--Bentler MLR",
@@ -247,7 +253,7 @@ if (sem_available) {
   knitr::kable(model_table, row.names = FALSE)
 
   health <- data.frame(
-    quantity = c("FIML converged", "FMG finite", "MLR finite"),
+    quantity = c("FIML converged", "FMG call returned", "MLR finite"),
     result = sprintf("%d/%d", c(
       sum(sem_replications$fit_ok), sum(sem_replications$fmg_ok),
       sum(sem_replications$mlr_ok)), nrow(sem_replications)))
@@ -280,12 +286,76 @@ latent-SEM extension is not yet shipped and must not be represented by the
 affine bridge statistic. The doubled panel is a simple cost projection for one
 matched power condition, not an implemented power DGP.
 
+## Representative-SEM null run
+
+The retained follow-up uses the same 40 null cells with 1,000 replications per
+cell. It remains a null-calibration run: no power condition and no general
+multiplier statistic have been added yet.
+
+```{r sem-model-1000}
+if (sem1000_available) {
+  health1000 <- data.frame(
+    quantity = c("FIML converged", "FMG call returned", "MLR finite"),
+    result = sprintf("%d/%d", c(
+      sum(sem1000$fit_ok), sum(sem1000$fmg_ok), sum(sem1000$mlr_ok)),
+      nrow(sem1000)))
+  knitr::kable(health1000, row.names = FALSE)
+
+  p_columns <- c(
+    "Yuan--Bentler MLR" = "p_lrt_mlr", "FMG SB" = "p_lrt_sb",
+    "FMG SS" = "p_lrt_ss", "FMG pEBA(4)" = "p_lrt_peba4",
+    "FMG all" = "p_lrt_all")
+  group_vars <- c("model_id", "distribution", "missingness")
+  group_id <- interaction(sem1000[group_vars], drop = TRUE, lex.order = TRUE)
+  cell_size <- do.call(rbind, lapply(
+    split(seq_len(nrow(sem1000)), group_id), function(ii) {
+      z <- sem1000[ii, , drop = FALSE]
+      do.call(rbind, lapply(names(p_columns), function(method) {
+        p <- z[[p_columns[[method]]]]
+        data.frame(
+          method = method, finite = sum(is.finite(p)),
+          rejection = mean(p < .05, na.rm = TRUE),
+          stringsAsFactors = FALSE)
+      }))
+    }))
+  calibration1000 <- do.call(rbind, lapply(
+    split(cell_size, cell_size$method), function(z) {
+      data.frame(
+        method = z$method[[1L]], finite = sum(z$finite),
+        mean_cell_rejection = mean(z$rejection),
+        mean_abs_size_error = mean(abs(z$rejection - .05)),
+        min_cell_rejection = min(z$rejection),
+        max_cell_rejection = max(z$rejection),
+        fraction_025_075 = mean(z$rejection >= .025 & z$rejection <= .075),
+        stringsAsFactors = FALSE)
+    }))
+  names(calibration1000) <- c(
+    "method", "finite p-values", "mean cell size", "mean |size-.05|",
+    "minimum", "maximum", "fraction in [.025,.075]")
+  knitr::kable(calibration1000, digits = 3, row.names = FALSE)
+} else {
+  cat("Run `run_sem_models.R --reps 1000` to populate this table.")
+}
+```
+
+The run took 541 seconds on four workers. Fifteen FIML fits did not converge.
+Among otherwise converged fits, 91 MLR p-values were non-finite and 829 FMG
+calls hit the projected `U Gamma` rank guard; 797 of those FMG failures were in
+the bifactor model. MLR averaged .366 rejection across the 40 cells and reached
+.932 in the severe-VM bifactor MCAR cell. FMG `all` was much better at .066 on
+average, but its .022--.168 range shows that it is not a uniform solution; its
+largest failures were also severe nonnormal MCAR cells. All rates use finite
+method-specific denominators rather than treating numerical failures as
+non-rejections.
+
 ## Reproduce
 
 ```sh
 Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --smoke
 Rscript experiments/77-fiml-global-gof-pilot/run_experiment.R --pilot
 Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 1000 \
+  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-model-1000
 Rscript experiments/77-fiml-global-gof-pilot/validate_mlr_lavaan.R
 quarto render experiments/77-fiml-global-gof-pilot/report.qmd
 ```
