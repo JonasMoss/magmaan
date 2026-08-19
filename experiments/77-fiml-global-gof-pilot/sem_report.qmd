@@ -1,0 +1,283 @@
+---
+title: "FIML goodness of fit in representative SEMs"
+subtitle: "Vale--Maurelli and independent-generator null study"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
+result_dir <- file.path(script_dir, "results", "sem-model-1000")
+read_result <- function(name) read.csv(
+  file.path(result_dir, paste0(name, ".csv")), stringsAsFactors = FALSE)
+replications <- read_result("replications")
+design <- read_result("design")
+metadata <- read_result("metadata")
+meta <- setNames(metadata$value, metadata$key)
+
+generator_labels <- c(
+  normal = "Normal", vm1 = "VM moderate", ig1 = "IG moderate",
+  vm2 = "VM severe", ig2 = "IG severe")
+method_columns <- c(
+  "Yuan--Bentler MLR" = "p_lrt_mlr", "FMG SB" = "p_lrt_sb",
+  "FMG SS" = "p_lrt_ss", "FMG pEBA(4)" = "p_lrt_peba4",
+  "FMG all" = "p_lrt_all")
+
+summarize_p <- function(data, column) {
+  p <- data[[column]]
+  c(n = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE))
+}
+
+group_vars <- c("model_id", "distribution", "missingness")
+group_id <- interaction(
+  replications[group_vars], drop = TRUE, lex.order = TRUE)
+cell_size <- do.call(rbind, lapply(
+  split(seq_len(nrow(replications)), group_id), function(ii) {
+    z <- replications[ii, , drop = FALSE]
+    do.call(rbind, lapply(names(method_columns), function(method) {
+      p <- z[[method_columns[[method]]]]
+      data.frame(
+        z[1L, group_vars, drop = FALSE], method = method,
+        finite = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE),
+        stringsAsFactors = FALSE)
+    }))
+  }))
+
+scorecard <- do.call(rbind, lapply(
+  split(cell_size, cell_size$method), function(z) {
+    data.frame(
+      method = z$method[[1L]], finite = sum(z$finite),
+      mean_cell_rejection = mean(z$rejection),
+      mean_abs_size_error = mean(abs(z$rejection - .05)),
+      min_cell_rejection = min(z$rejection),
+      max_cell_rejection = max(z$rejection),
+      fraction_025_075 = mean(z$rejection >= .025 & z$rejection <= .075),
+      stringsAsFactors = FALSE)
+  }))
+
+dgp_rows <- unique(replications[, c("distribution", "missingness")])
+generator_size <- do.call(rbind, lapply(seq_len(nrow(dgp_rows)), function(i) {
+  z <- replications[
+    replications$distribution == dgp_rows$distribution[[i]] &
+      replications$missingness == dgp_rows$missingness[[i]], , drop = FALSE]
+  mlr <- summarize_p(z, "p_lrt_mlr")
+  ss <- summarize_p(z, "p_lrt_ss")
+  all <- summarize_p(z, "p_lrt_all")
+  data.frame(
+    generator = generator_labels[[dgp_rows$distribution[[i]]]],
+    observation = if (dgp_rows$missingness[[i]] == "complete")
+      "Complete" else "30% MCAR",
+    mlr_n = mlr[["n"]], mlr_rejection = mlr[["rejection"]],
+    ss_n = ss[["n"]], ss_rejection = ss[["rejection"]],
+    all_n = all[["n"]], all_rejection = all[["rejection"]],
+    stringsAsFactors = FALSE)
+}))
+generator_size$generator <- factor(
+  generator_size$generator, levels = unname(generator_labels))
+generator_size$observation <- factor(
+  generator_size$observation, levels = c("Complete", "30% MCAR"))
+generator_size <- generator_size[order(
+  generator_size$generator, generator_size$observation), ]
+
+model_rows <- unique(replications[, c("model_id", "model_label")])
+model_size <- do.call(rbind, lapply(seq_len(nrow(model_rows)), function(i) {
+  z <- replications[replications$model_id == model_rows$model_id[[i]], ]
+  mlr <- summarize_p(z, "p_lrt_mlr")
+  ss <- summarize_p(z, "p_lrt_ss")
+  all <- summarize_p(z, "p_lrt_all")
+  data.frame(
+    model = model_rows$model_label[[i]],
+    mlr_n = mlr[["n"]], mlr_rejection = mlr[["rejection"]],
+    ss_n = ss[["n"]], ss_rejection = ss[["rejection"]],
+    all_n = all[["n"]], all_rejection = all[["rejection"]],
+    stringsAsFactors = FALSE)
+}))
+```
+
+## Question
+
+How well calibrated are Yuan--Bentler/Mplus MLR and the
+Foldnes--Moss--Grønneberg (FMG) eigenvalue-tail corrections when correctly
+specified, ordinary latent-variable models are fitted by FIML to normal,
+Vale--Maurelli, and independent-generator data, with and without MCAR
+missingness?
+
+Every fitted model is exactly correct in its population. All rejection rates
+are therefore Type-I error rates. This report contains no $t$ distributions,
+lognormal margins, contamination, MAR, MNAR, or power conditions; those belong
+to an earlier affine screening experiment.
+
+## Models
+
+1. **One-factor CFA, six indicators.** The population is
+   $x_j=\lambda_j f+\varepsilon_j$, with
+   $\lambda=(1,.8,.9,.7,1.1,.85)$, $\operatorname{Var}(f)=1$, and unique
+   variances $(.5,.6,.55,.65,.5,.6)$. Indicator means are zero. The fitted CFA
+   uses marker-variable identification and freely estimates means, unique
+   variances, the factor variance, and the remaining loadings.
+
+2. **Correlated two-factor CFA, ten indicators.** Indicators 1--5 load only on
+   factor 1 with loadings $(.4,.5,.6,.8,.4)$; indicators 6--10 load only on
+   factor 2 with loadings $(.4,.7,.6,.4,.8)$. Factor variances are one and the
+   factor correlation is .5. Unique variances are $1-\lambda_j^2$, giving unit
+   marginal variances, and all means are zero.
+
+3. **Orthogonal bifactor model, twelve indicators.** Every indicator loads .6
+   on a general factor. Three orthogonal specific factors each cover four
+   indicators, with blockwise loadings .5, .4, and .45. All factor variances are
+   one; unique variances are $1-.6^2-\lambda_{S,j}^2$ and means are zero. The
+   fitted model uses `std.lv` identification.
+
+4. **Five-wave linear growth model.** At $t=0,1,2,3,4$,
+   $y_t=i+t s+\varepsilon_t$. The intercept/slope means are $(1,.2)$, their
+   covariance matrix is
+   $\left[\begin{smallmatrix}1&.1\\.1&.1\end{smallmatrix}\right]$, and each
+   residual variance is .5. The fitted model fixes the time scores and freely
+   estimates the growth means, latent variance/covariance terms, and residual
+   variances.
+
+```{r model-table}
+model_table <- unique(design[, c(
+  "model_id", "model_label", "p", "expected_df")])
+model_table$free_parameters <- c(18L, 31L, 48L, 10L)[match(
+  model_table$model_id,
+  c("one_factor_6", "two_factor_fmg_10", "bifactor_12", "linear_growth_5"))]
+model_table <- model_table[, c(
+  "model_label", "p", "free_parameters", "expected_df")]
+names(model_table) <- c("model", "observed variables", "free parameters", "df")
+knitr::kable(model_table, row.names = FALSE)
+```
+
+## VM and IG generators
+
+```{r generator-table}
+generator_table <- data.frame(
+  code = c("normal", "vm1", "ig1", "vm2", "ig2"),
+  generator = c(
+    "Multivariate normal", "Vale--Maurelli / Fleishman (VM)",
+    "Independent generator (IG)", "Vale--Maurelli / Fleishman (VM)",
+    "Independent generator (IG)"),
+  marginal_skewness = c(0, 2, 2, 3, 3),
+  marginal_excess_kurtosis = c(0, 7, 7, 21, 21),
+  severity = c("reference", "moderate", "moderate", "severe", "severe"),
+  stringsAsFactors = FALSE)
+knitr::kable(generator_table, row.names = FALSE)
+```
+
+**VM** is the Vale--Maurelli/Fleishman construction. Magmaan solves an
+intermediate Gaussian correlation matrix and applies calibrated marginal
+polynomials to recover the SEM population covariance and requested marginal
+moments.
+
+**IG** is the Foldnes--Olsson independent-generator construction. Independent
+Pearson-family nonnormal generators are calibrated and mixed through a
+symmetric covariance root. VM and IG therefore have the same target covariance
+and marginal skewness/kurtosis but different multivariate higher-order
+dependence.
+
+Each generator is observed completely or with 30% MCAR on every variable except
+the first indicator/wave, which is always observed. The factorial design has
+$4\times5\times2=40$ true-null cells, all at $n=120$, with 1,000 replications
+per cell.
+
+## Methods and denominators
+
+Each dataset is fitted once by FIML. The report compares the dedicated
+Yuan--Bentler/Mplus MLR statistic with FMG SB, SS, pEBA(4), and `all`
+corrections. The general effective multiplier statistic is not yet available
+for these curved latent-SEM-versus-saturated hypotheses.
+
+```{r health-table}
+health <- data.frame(
+  quantity = c("Attempted", "FIML converged", "MLR finite", "FMG call returned"),
+  result = c(
+    nrow(replications), sum(replications$fit_ok), sum(replications$mlr_ok),
+    sum(replications$fmg_ok)))
+knitr::kable(health, row.names = FALSE)
+```
+
+Fifteen FIML fits did not converge. Among otherwise converged fits, 91 MLR
+p-values were non-finite and 829 FMG calls hit the projected `U Gamma` rank
+guard. The bifactor accounted for 797 of the FMG rank failures. Rejection rates
+below use finite, method-specific denominators; failures are not silently
+counted as non-rejections.
+
+## Overall null calibration
+
+```{r scorecard-table}
+show_scorecard <- scorecard[, c(
+  "method", "finite", "mean_cell_rejection", "mean_abs_size_error",
+  "min_cell_rejection", "max_cell_rejection", "fraction_025_075")]
+names(show_scorecard) <- c(
+  "method", "finite p-values", "mean cell size", "mean |size-.05|",
+  "minimum", "maximum", "fraction in [.025,.075]")
+knitr::kable(show_scorecard, digits = 3, row.names = FALSE)
+```
+
+MLR is severely liberal: its mean rejection across the 40 cells is .366 and it
+ranges from .062 to .932. FMG `all` is much better at .066 on average, but its
+.022--.168 range is not uniformly satisfactory. SS behaves similarly overall;
+SB and pEBA(4) remain clearly liberal.
+
+## VM versus IG
+
+```{r generator-results}
+show_generator <- generator_size
+names(show_generator) <- c(
+  "generator", "observation", "MLR n", "MLR rejection",
+  "SS n", "SS rejection", "all n", "all rejection")
+knitr::kable(show_generator, digits = 3, row.names = FALSE)
+```
+
+At identical marginal moments, VM is consistently harder than IG. MLR rises
+from .294/.440 under moderate VM (complete/MCAR) to .556/.689 under severe VM;
+the corresponding IG rates are .232/.381 and .318/.493. Marginal skewness and
+kurtosis alone therefore do not explain calibration.
+
+FMG `all` is close to .05 for all complete-data generator conditions. With
+MCAR it rises to .099 under moderate VM and .127 under severe VM, compared with
+.063 and .055 under IG. Keeping VM and IG separate is consequently essential.
+
+## Results by model
+
+```{r model-results}
+show_model <- model_size
+names(show_model) <- c(
+  "model", "MLR n", "MLR rejection", "SS n", "SS rejection",
+  "all n", "all rejection")
+knitr::kable(show_model, digits = 3, row.names = FALSE)
+```
+
+The MLR problem is not confined to one unusual model. Pooled rejection is .264
+for the one-factor CFA, .389 for the two-factor CFA, .539 for the bifactor, and
+.268 for the growth model. The bifactor is the hardest model both statistically
+and numerically, but removing it would not rescue MLR.
+
+## Runtime and next method
+
+The 40,000-fit run took 541 seconds (9.0 minutes) on four workers. Severe
+nonnormal bifactor/MCAR cells dominate the slow tail. At the observed rate, one
+matched power panel would approximately double the run to 18 minutes at 1,000
+replications per cell.
+
+The missing comparator is a general effective multiplier GOF test. It would
+project casewise saturated observed-data scores into the $df$-dimensional
+complement of the fitted SEM tangent, then obtain the reference distribution by
+reweighting those projected rows. It would fit the null SEM once, not refit a
+saturated model for every multiplier draw. The immediate implementation gate is
+an exact complete-data reduction plus an independent saturated-EM
+moment-influence construction under FIML.
+
+## Reproduce
+
+```sh
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 1000 \
+  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-model-1000
+quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
+```
