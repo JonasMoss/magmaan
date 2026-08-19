@@ -5,6 +5,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -212,10 +213,17 @@ to an earlier affine screening experiment.
 4. **Five-wave linear growth model.** At $t=0,1,2,3,4$,
    $y_t=i+t s+\varepsilon_t$. The intercept/slope means are $(1,.2)$, their
    covariance matrix is
-   $\left[\begin{smallmatrix}1&.1\\.1&.1\end{smallmatrix}\right]$, and each
-   residual variance is .5. The fitted model fixes the time scores and freely
-   estimates the growth means, latent variance/covariance terms, and residual
-   variances.
+
+   $$
+   \begin{pmatrix}
+   1 & 0.1 \\
+   0.1 & 0.1
+   \end{pmatrix},
+   $$
+
+   and each residual variance is .5. The fitted model fixes the time scores
+   and freely estimates the growth means, latent variance/covariance terms,
+   and residual variances.
 
 ```{r model-table}
 model_table <- unique(design[, c(
@@ -335,14 +343,113 @@ for the one-factor CFA, .389 for the two-factor CFA, .539 for the bifactor, and
 .268 for the growth model. The bifactor is the hardest model both statistically
 and numerically, but removing it would not rescue MLR.
 
-## Global effective multiplier implementation
+## What the effective multiplier test does
 
-The general test is now implemented. At the fitted null moments it forms each
-case's direct saturated observed-data likelihood score, builds the
-pattern-conditional Fisher metric, and projects the score off the fitted SEM's
-local moment tangent. The tested dimension is the saturated mean/covariance
-dimension minus the tangent rank. Multiplier draws only reweight the projected
-case rows: neither a saturated model nor the null SEM is refitted.
+This is a global score test of the fitted SEM against the local saturated
+mean-and-covariance model. It is not a robust standard error and it does not
+rescale the ordinary likelihood-ratio statistic.
+
+Let the saturated moment vector be
+
+$$
+\eta =
+\begin{pmatrix}
+\operatorname{vech}(\Sigma) \\
+\mu
+\end{pmatrix}
+\in \mathbb{R}^{m}.
+$$
+
+For $p$ observed variables with an estimated mean structure,
+$m=p(p+1)/2+p$. At the restricted estimate $\widehat\theta$, the test evaluates
+the direct saturated observed-data score contribution $s_i$ for every case.
+Under FIML, $s_i$ is the likelihood score for the variables actually observed
+for case $i$; missing values are neither filled in nor assigned artificial
+residuals.
+
+### Remove the fitted model tangent
+
+The model occupies only a curved subspace of the saturated moment space. Its
+local tangent is the column space of
+
+$$
+\Delta
+=
+\left.
+\frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}
+\right|_{\widehat\theta},
+$$
+
+after incorporating any affine equality constraints. Write $r$ for the
+numerical rank of $\Delta$. Let $K$ span the model tangent and let $D$ span its
+Euclidean complement. If $I$ is the saturated-moment Fisher information,
+formed by summing the appropriate conditional information over observed-data
+patterns, define
+
+$$
+G
+=
+D-K(K^{\mathsf T}IK)^{-1}K^{\mathsf T}ID.
+$$
+
+This adjustment makes $K^{\mathsf T}IG=0$: the columns of $G$ describe the
+saturated directions that remain after removing changes locally explainable by
+the fitted SEM. Each case contributes the nuisance-effective score
+
+$$
+z_i=G^{\mathsf T}s_i,
+$$
+
+and the observed quadratic statistic is
+
+$$
+u=\sum_{i=1}^{n}z_i,
+\qquad
+V=G^{\mathsf T}IG,
+\qquad
+T=u^{\mathsf T}V^{-1}u.
+$$
+
+The tested dimension is
+
+$$
+d=m-r.
+$$
+
+At a regular fit this is the ordinary model df. A discrepancy is useful rather
+than cosmetic: it means the fitted model Jacobian has lost numerical rank. The
+rank diagnostic reported below therefore accompanies every multiplier result.
+
+### Construct the multiplier reference
+
+For draw $b$, generate independent Rademacher weights
+$w_{ib}\in\{-1,+1\}$ and form
+
+$$
+u_b=\sum_{i=1}^{n}w_{ib}z_i,
+\qquad
+T_b=u_b^{\mathsf T}V^{-1}u_b.
+$$
+
+With $B$ random draws, the finite Monte Carlo p-value is
+
+$$
+\widehat p
+=
+\frac{1+\sum_{b=1}^{B}\mathbf{1}(T_b\geq T)}{B+1}.
+$$
+
+The experiment uses $B=199$, giving a p-value grid of width $1/200$. The fitted
+moments, tangent projection, and Fisher metric are held fixed. A draw requires
+only a weighted sum of the saved casewise scores and a small quadratic form;
+neither the null SEM nor a saturated alternative is refitted.
+
+The practical contrast with Yuan--Bentler MLR is therefore sharp. MLR reduces
+the nonnormal correction to a scalar adjustment of a likelihood-ratio
+statistic. The effective multiplier instead retains the casewise,
+direction-specific score variation after the SEM tangent has been removed and
+uses random reweighting to obtain its reference distribution. The null results
+below evaluate whether that extra structure buys usable calibration.
 
 ## Global multiplier null gate
 
