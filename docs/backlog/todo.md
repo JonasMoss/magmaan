@@ -188,12 +188,9 @@ when they next change.
   wrappers. The correctness seed finite-differences
   the lifted fixed-weight objective and links, checks ordinary/PSD interior
   agreement for all three objectives, repairs one exact-fit ULS Heywood case,
-  and gates the R result schema. Before making comparative claims, design the
-  broader validation strategy explicitly: choose estimator-specific improper
-  cases, interior and boundary geometries, weight conditioning, mean/multi-group
-  coverage, corpus scope, timing, convergence/basin reporting, and independent
-  reductions. Keep this as a future discussion rather than silently inheriting
-  the NTML studies.
+  and gates the R result schema. The broader stress program is specified below;
+  it reuses NTML only as an anchor rather than silently copying the much larger
+  experiments 73--76 onto every estimator.
 
   Ordered computational queue (point estimation only). PSD two-level ML and
   native FC-SEM are deliberately outside this extension: they are independent
@@ -268,6 +265,132 @@ when they next change.
   At singular-but-PSD component solutions, ordinary inverse-information
   SEs/tests are nonregular. Keep inference outside every automatic constrained
   fit until an explicit boundary-aware policy is available.
+
+- **L — execute the broader covariance-honest point-estimation stress track.**
+  Implement this as one independent experiment leaf,
+  `experiments/78-psd-estimator-stress/`, so the common structural geometries,
+  paired ordinary/PSD fits, selective restart logic, and result schema live in
+  one place. Do not form a full Cartesian product. Start with one anchor cell
+  per estimator and vary one stress axis at a time; add interactions only for
+  prespecified risky pairs or failures seen in the pilot. This is computational
+  validation, not an inference, coverage, or estimator-ranking study.
+
+  The common structural panel is:
+
+  1. an interior one-factor CFA with diagonal `Theta`;
+  2. a two-factor CFA with a correlated-residual block and correlated `Psi`, so
+     joint PSD rather than diagonal nonnegativity is material;
+  3. a latent regression with a disturbance variance approaching the boundary
+     and an observed mean structure;
+  4. a focused two-group version with shared covariance coordinates and one
+     general equality, used only at the anchor and near-boundary settings.
+
+  For each applicable model, vary the target smallest primitive-covariance
+  eigenvalue over `0.20, 0.05, 0.01, 0.001, 0`, and use sample-size-to-free-
+  parameter ratios near `2, 5, 10, 50`; for categorical cells use
+  `N = max(100, round(ratio * n_free))`. Construct the populations on a
+  standardized scale so the eigenvalue sequence is comparable. The
+  zero-eigenvalue population remains valid only when the implied observed
+  covariance is PD. Move `Theta` and `Psi` toward the boundary one at a time,
+  plus one joint-boundary interaction, so failure rates can be attributed to
+  the owning block. Add one misspecified model per data family to ensure the
+  constrained fit is not validated only at exact fit. Normal data are the
+  baseline; skewed/heavy-tailed draws appear only in the empirical-ADF/DWLS/DLS
+  weight slice, where higher moments affect the computation.
+
+  Estimator-specific slices are mandatory rather than crossed indiscriminately:
+
+  - **Continuous complete data:** ML is the anchor; pair ordinary/PSD ULS, GLS,
+    one fixed nonidentity WLS weight, and fitted expected-information GMM.
+    Separately perturb weight condition number over roughly `1, 1e4, 1e8` and
+    record the effective rank/conditioning actually used.
+  - **FIML:** cross complete, monotone MCAR, fragmented MCAR, and covariate-
+    driven MAR patterns at approximately 20% and 40% missingness. Record the
+    number and smallest frequency of observed patterns. The all-observed cell
+    must reduce to the complete-data ML anchor.
+  - **ML2S:** reuse the identical saturated-EM object for ordinary and PSD
+    Stage 2 and exercise NT, ULS, DWLS, ADF, and fixed-`a` DLS in the anchor
+    cells. Use NT plus the worst-conditioned empirical weight in the expanded
+    missingness grid. Hash Stage-1 means, covariances, ACOV, warnings, and
+    regularization diagnostics before fitting and require exact preservation.
+  - **Ordinal and mixed ordinal:** cross 2/3/5 categories, balanced versus
+    sparse thresholds, delta/theta parameterizations, and all-ordinal versus a
+    50% ordinal mixed panel. Run ULS throughout; add DWLS/WLS on the anchor,
+    sparse-threshold, and worst-conditioned NACOV cells. Record polychoric/
+    polyserial and weight spectra separately from fitted-model covariance
+    geometry.
+  - **CatML:** use only PD polychoric inputs, stratified as well-conditioned,
+    near-singular, and barely-PD, under its supported delta parameterization.
+    A paired non-PD sentinel must be rejected as an expected Stage-1 domain
+    outcome and must not be counted as optimizer failure or repaired. Recompute
+    the correlation-standardized ML criterion independently from the returned
+    implied covariance.
+
+  Every fit row must retain the dataset seed and design identifiers; ordinary
+  and PSD return codes; solver convergence; the common terminal audit and KKT
+  residual; equality violation; objective and an independently recomputed
+  objective; minimum eigenvalue/rank for every primitive block and implied
+  observed covariance; boundary status; parameter and implied-moment error;
+  Stage-1-domain status/fingerprint where applicable; objective/gradient
+  evaluations; elapsed time; and optimizer/backend version. Summaries must keep
+  **solver return**, **audit-stationary**, **covariance-admissible**, and
+  **best-attained basin** rates separate. Report paired medians and tail
+  quantiles, not only aggregate success rates, and attach binomial intervals to
+  stochastic rates.
+
+  Use four validation layers:
+
+  1. **Deterministic sentinels:** add focused C++ fixtures for any structural
+     geometry not already covered (especially mean-plus-multi-group and CatML
+     boundary geometry). Hard gates are zero Stage-1 mutation, exact expected
+     domain classification, finite audit telemetry, and covariance
+     admissibility for every accepted PSD fit.
+  2. **Smoke:** two fixed seeds per planned cell, used to validate checkpoint,
+     resume, pairing, objective recomputation, and report generation. Smoke
+     results are never scientific evidence.
+  3. **Pilot:** 100 replications per one-axis cell. Interior ordinary/PSD pairs
+     must agree to `1e-8 * (1 + abs(F))` in objective and `1e-5` in fitted
+     moments; parameter comparisons use `1e-4` only in the same prepared chart.
+     Any exceedance is inspected rather than averaged away. Any accepted but
+     inadmissible PSD fit, Stage-1 mutation, or objective-recomputation failure
+     is a correctness defect.
+  4. **Targeted confirmation:** expand only cells with a material failure-rate,
+     boundary-risk, conditioning, basin, or timing signal to at least 500
+     replications. Replay a stratified 20-dataset core per flagged cell plus all
+     default failures, nonstationary returns, boundary fits, and extreme
+     estimates with a frozen compact start portfolio. A better feasible KKT
+     objective gap above `1e-6 * (1 + abs(F))` is reported as a competing basin,
+     not silently substituted or called an optimizer failure.
+
+  Keep corpus breadth in a separate advisory
+  `tests/checks/psd_estimator_corpus/` runner rather than letting experiment 78
+  depend on the tests leaf. Reuse the 97 continuous sample-statistic summaries
+  for LS/GMM where applicable, the 17 FIML fixtures plus the two raw-data bfi
+  parity cases, the 20 ordinal and two mixed-ordinal fixtures, and the existing
+  real-data ordinal parity case. CatML runs only on corpus cases whose estimated
+  polychoric matrix is PD; its domain exclusions are tabulated separately.
+  This runner may promote a small deterministic failure slice into default CI,
+  as the existing PSD-ML corpus audit does, but the full scan remains local.
+
+  The independent checks are criterion-specific: lavaan/ordinary magmaan parity
+  only where they estimate the same interior problem; direct value
+  recomputation for every family; FIML-to-ML and all-observed NT-ML2S-to-ML
+  reductions; groupwise objective additivity; and unchanged Stage-1 objects for
+  ML2S, ordinal, mixed, and CatML. SLSQP is the production path. Use IPOPT only
+  on a small regular interior cross-check because experiments 73--74 already
+  show that its non-finite callback handling is a poor match to the lifted ML
+  formulation. Promote each newly discovered deterministic failure to the
+  smallest suitable unit/golden fixture, and keep the stochastic/corpus scan
+  advisory.
+
+  The pilot report must end with estimator-by-estimator decisions: validated
+  domain, expected rejections, numerical weak spots, basin evidence, median and
+  upper-tail PSD/ordinary cost, and whether specialized PSD algorithms are
+  justified. Treat a median cost above 5x on regular models with at most 12
+  indicators, super-quadratic empirical scaling, or materially worse audited
+  convergence as a trigger to profile the formulation; it is not by itself a
+  correctness failure. Keep two-level ML, native FC-SEM, and all inference out
+  of this track.
 
 - **M/L — broaden and harden standardized score flips.** The frontier slice
   supports affine nested complete-data ML and direct-FIML pairs and is exercised
