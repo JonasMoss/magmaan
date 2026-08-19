@@ -497,6 +497,32 @@ fit_ordinal_psd(spec::LatentStructure pt,
                     OrdinalParameterization::Delta,
                 PsdFitOptions psd_opts = {});
 
+// Categorical ML (cML): fit the SEM correlation structure with the ordinary
+// normal-theory ML discrepancy, using the Stage-1 polychoric correlation
+// matrix as input. Thresholds are saturated Stage-1 quantities and therefore
+// remain at their supplied start values. The sample polychoric matrix must be
+// positive definite because the criterion contains its log determinant.
+// This is limited-information cML, not a full-information ordinal likelihood.
+fit_expected<Estimates>
+fit_catml(spec::LatentStructure pt,
+          const model::MatrixRep& rep,
+          const data::OrdinalStats& stats,
+          const Eigen::VectorXd& x0,
+          Backend backend = Backend::NloptLbfgs,
+          optim::OptimOptions opts = {});
+
+// The covariance-honest cML counterpart. Primitive Theta/Psi blocks are PSD
+// by construction; the fitted observed correlation matrix remains in the ML
+// positive-definite domain. Stage-1 polychorics are consumed unchanged.
+fit_expected<Estimates>
+fit_catml_psd(spec::LatentStructure pt,
+              const model::MatrixRep& rep,
+              const data::OrdinalStats& stats,
+              const Eigen::VectorXd& x0,
+              Backend backend = Backend::NloptSlsqp,
+              optim::OptimOptions opts = {},
+              PsdFitOptions psd_opts = {});
+
 // Mixed continuous/ordinal ULS/DWLS/WLS over covariance-honest primitive SEM
 // blocks. Stage-1 thresholds, continuous moments, polyserial/polychoric
 // associations, and NACOV-derived weights are consumed unchanged; PSD is

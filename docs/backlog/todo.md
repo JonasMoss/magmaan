@@ -195,7 +195,10 @@ when they next change.
   reductions. Keep this as a future discussion rather than silently inheriting
   the NTML studies.
 
-  Ordered computational queue (point estimation only):
+  Ordered computational queue (point estimation only). PSD two-level ML and
+  native FC-SEM are deliberately outside this extension: they are independent
+  large architecture projects, not blockers for the supported MatrixRep
+  estimator family.
 
   1. **Done 2026-08-19 — expected-information fitted/iterated continuous GMM.**
      `fit_gmm_fitted_weight_psd` reuses the PSD fixed-weight inner solve in the
@@ -217,12 +220,16 @@ when they next change.
      missingness. Broader missing-pattern/corpus, timing, and basin validation
      remain part of the future estimator-specific validation discussion, and
      boundary inference remains explicitly out of scope.
-  3. **L — two-level ML.** Feed lifted within/between moments into the cluster
-     likelihood and require `Sigma_W` and every observed
-     `Sigma_W + d Sigma_B` combination to be PD. The current two-level composer
-     rejects user equality constraints, so internal link constraints and later
-     user-constraint support need an explicit composition design.
-  4. **Partly done 2026-08-19 — ordinal and mixed-ordinal ULS/DWLS/WLS.**
+  3. **Done 2026-08-19 — ML2S.**
+     `estimate::fiml::frontier::fit_ml2s_psd` consumes the saturated EM moments
+     unchanged. Its NT member dispatches Stage 2 to `fit_ml_psd`; ULS, DWLS,
+     ADF, and fixed-`a` DLS freeze the existing Stage-2 weight and dispatch to
+     `fit_gmm_psd`. The raw overload builds the same ordinary saturated first
+     stage. Focused gates cover all five interior reductions, unchanged EM
+     moments, and repair of an improper Stage-2 solution. R exposes
+     `frontier_fit_ml2s_psd()` and retains the Stage-1/raw objects, but does not
+     attach ordinary ML2S inference at a possible covariance boundary.
+  4. **Done 2026-08-19 — ordinal and mixed-ordinal ULS/DWLS/WLS.**
      `estimate::frontier::fit_ordinal_psd` and `fit_mixed_ordinal_psd` apply the
      lift after their ordinary partable preparation for ULS, DWLS, and WLS,
      cover delta/theta, preserve threshold/scale and continuous-moment
@@ -234,12 +241,19 @@ when they next change.
      ordinary estimator for all three weights, indefinite Stage-1 association
      matrices remain accepted by ULS, an improper mixed residual solution is
      repaired, and both R wrappers retain their original Stage-1 objects.
-     Remaining here is the separate inverse/log-determinant CatML domain.
      Broader conditioning, multi-group, timing, and basin validation remains
      part of the future estimator-specific validation discussion.
-  5. **L — native FC-SEM.** First give `FcSemEvaluator` a primitive-covariance
-     ownership/override contract and transformed Jacobian seam comparable to
-     `ModelEvaluator`; only then add covariance-honest objectives.
+  5. **Done 2026-08-19 — categorical ML.**
+     `estimate::frontier::fit_catml` and `fit_catml_psd` implement the
+     limited-information cML criterion: the normal-theory ML discrepancy on
+     the Stage-1 polychoric correlation matrix under a saturated threshold
+     structure. The analytic correlation-standardization Jacobian is shared by
+     the ordinary and lifted objectives. The input polychoric matrix must be PD
+     because its inverse/log determinant domain is intrinsic; it is rejected,
+     never projected. The PSD fit constrains only fitted primitive covariance
+     blocks. Central-difference, interior-reduction, non-PD-input, unchanged-
+     Stage-1, and R-schema gates cover the slice. Broader boundary-geometry
+     cases remain part of the future estimator-specific validation discussion.
   6. **L/XL — recover specialized algorithms where warranted.** The landed
      continuous slice scalarizes the least-squares objective for SLSQP/IPOPT.
      Ceres and the current SNLLS/Golub–Pereyra paths cannot accept the nonlinear

@@ -214,6 +214,12 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
 - The high-level `magmaan()` helper dispatches to the same all-ordinal or
   mixed path for `estimator = "DWLS"` / `"WLS"` when `ordered =` is supplied
   with a data frame.
+- Covariance-honest research fits are explicit. Use
+  `frontier_fit_ml2s_psd()` for saturated-EM Stage 1 followed by PSD ML or a
+  fixed ULS/DWLS/ADF/DLS Stage 2, and `frontier_fit_catml_psd()` for
+  normal-theory ML on a positive-definite Stage-1 polychoric matrix. Both
+  preserve their Stage-1 objects; neither attaches automatic boundary
+  inference.
 - Experimental robust moment builders are opt-in on the data step:
   `magmaan_core$data_ordinal_stats_from_df(..., robust = "h_weighted")`,
   `robust = "dpd"`, or `robust = "huber_residual"`. The raw primitive

@@ -116,6 +116,35 @@ test_that("frontier PSD FIML repairs a missing-data Heywood solution", {
   expect_true(anyNA(fit$raw_data$X[[1L]]))
 })
 
+test_that("frontier PSD ML2S retains Stage 1 and omits boundary inference", {
+  set.seed(42)
+  n <- 220L
+  eta <- rnorm(n)
+  dat <- data.frame(
+    x1 = eta + rnorm(n, sd = 0.65),
+    x2 = 0.8 * eta + rnorm(n, sd = 0.7),
+    x3 = 0.7 * eta + rnorm(n, sd = 0.75)
+  )
+  dat$x2[seq(7L, n, by = 13L)] <- NA_real_
+
+  fit <- expect_no_warning(frontier_fit_ml2s_psd(
+    "f =~ x1 + x2 + x3", dat,
+    control = list(max_iter = 5000L, gtol = 1e-8)
+  ))
+
+  expect_true(fit$converged)
+  expect_identical(fit$estimator, "ML2S")
+  expect_identical(fit$stage2_weight, "nt")
+  expect_identical(fit$covariance_policy, "psd")
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_true(fit$audit$constrained)
+  expect_true(fit$audit$stationary)
+  expect_true(is.list(fit$stage1))
+  expect_true(anyNA(fit$raw_data$X[[1L]]))
+  expect_false("ml2s" %in% names(fit))
+  expect_false("vcov" %in% names(fit))
+})
+
 test_that("frontier PSD ordinal fit preserves the Stage-1 polychorics", {
   set.seed(43)
   n <- 260L
@@ -142,6 +171,39 @@ test_that("frontier PSD ordinal fit preserves the Stage-1 polychorics", {
   expect_true(fit$ordinal)
   expect_identical(fit$estimator, "DWLS")
   expect_identical(fit$covariance_policy, "psd")
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_true(fit$audit$constrained)
+  expect_equal(unname(fit$polychoric[[1L]]),
+               unname(original_R[[1L]]), tolerance = 0)
+  expect_equal(stats$R, original_R, tolerance = 0)
+})
+
+test_that("frontier PSD catML consumes a PD polychoric matrix unchanged", {
+  set.seed(45)
+  n <- 300L
+  eta <- rnorm(n)
+  latent <- cbind(
+    eta + rnorm(n, sd = 0.65),
+    0.8 * eta + rnorm(n, sd = 0.7),
+    0.7 * eta + rnorm(n, sd = 0.75)
+  )
+  dat <- as.data.frame(apply(latent, 2L, function(x) {
+    ordered(cut(x, c(-Inf, -0.5, 0.5, Inf), labels = FALSE))
+  }))
+  names(dat) <- c("x1", "x2", "x3")
+  spec <- model_spec("f =~ x1 + x2 + x3", ordered = names(dat))
+  stats <- magmaan_core$data_ordinal_stats_from_df(dat, spec)
+  original_R <- stats$R
+
+  fit <- expect_no_warning(frontier_fit_catml_psd(
+    spec, stats, control = list(max_iter = 5000L, gtol = 1e-8)
+  ))
+
+  expect_true(fit$converged)
+  expect_true(fit$ordinal)
+  expect_identical(fit$estimator, "CATML")
+  expect_identical(fit$covariance_policy, "psd")
+  expect_identical(fit$stage1_policy, "unchanged_polychoric")
   expect_true(fit$diagnostics$admissibility$admissible)
   expect_true(fit$audit$constrained)
   expect_equal(unname(fit$polychoric[[1L]]),

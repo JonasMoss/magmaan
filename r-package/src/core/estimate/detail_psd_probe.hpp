@@ -73,6 +73,15 @@ psd_ordinal_derivative_probe(
     frontier::PsdFitOptions options = {});
 
 fit_expected<PsdDerivativeProbe>
+psd_catml_derivative_probe(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Eigen::VectorXd& theta_start,
+    double finite_difference_step = 1e-6,
+    frontier::PsdFitOptions options = {});
+
+fit_expected<PsdDerivativeProbe>
 psd_mixed_ordinal_derivative_probe(
     spec::LatentStructure pt,
     const model::MatrixRep& rep,

@@ -291,6 +291,74 @@ TEST_CASE("PSD ordinal ULS accepts an indefinite estimated polychoric matrix") {
   CHECK(stats.R[0].isApprox(original_R, 0.0));
 }
 
+TEST_CASE("PSD catML derivatives agree with central differences and the "
+          "interior ordinary fit") {
+  auto pt = ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d correlation;
+  correlation << 1.0, 0.56, 0.48,
+                 0.56, 1.0, 0.336,
+                 0.48, 0.336, 1.0;
+  auto stats = ordinal_stats(correlation);
+  const Eigen::MatrixXd original_R = stats.R[0];
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+
+  auto probe = magmaan::estimate::psd_test::psd_catml_derivative_probe(
+      pt, *rep, stats, *start);
+  REQUIRE_MESSAGE(probe.has_value(), "PSD catML derivative probe failed: "
+      << (probe.has_value() ? std::string{} : probe.error().detail));
+  CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+            .cwiseAbs().maxCoeff() < 4e-6);
+  CHECK((probe->analytic_constraint_jacobian -
+         probe->finite_difference_constraint_jacobian)
+            .cwiseAbs().maxCoeff() < 3e-7);
+
+  auto ordinary = magmaan::estimate::frontier::fit_catml(
+      pt, *rep, stats, *start, Backend::NloptLbfgs, strict_options());
+  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary catML fit failed: "
+      << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+  auto fit = magmaan::estimate::frontier::fit_catml_psd(
+      pt, *rep, stats, ordinary->theta, Backend::NloptSlsqp,
+      strict_options());
+  REQUIRE_MESSAGE(fit.has_value(), "PSD catML fit failed: "
+      << (fit.has_value() ? std::string{} : fit.error().detail));
+  if (!fit.has_value()) return;
+  check_psd_terminal(*fit);
+  CHECK(std::abs(fit->fmin - ordinary->fmin) < 1e-8);
+  CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-4);
+  CHECK(stats.R[0].isApprox(original_R, 0.0));
+}
+
+TEST_CASE("PSD catML rejects a non-PD polychoric matrix without repairing it") {
+  auto pt = ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d indefinite;
+  indefinite << 1.0, 0.9, 0.7,
+                0.9, 1.0, 0.3,
+                0.7, 0.3, 1.0;
+  REQUIRE(indefinite.determinant() < 0.0);
+  auto stats = ordinal_stats(indefinite);
+  const Eigen::MatrixXd original_R = stats.R[0];
+  Eigen::Matrix3d start_R;
+  start_R << 1.0, 0.4, 0.3,
+             0.4, 1.0, 0.2,
+             0.3, 0.2, 1.0;
+  auto start_stats = ordinal_stats(start_R);
+  auto start = magmaan::estimate::ordinal_start_values(
+      pt, *rep, start_stats, {});
+  REQUIRE(start.has_value());
+
+  auto fit = magmaan::estimate::frontier::fit_catml_psd(
+      pt, *rep, stats, *start, Backend::NloptSlsqp, strict_options());
+  REQUIRE_FALSE(fit.has_value());
+  CHECK(fit.error().kind ==
+        magmaan::FitError::Kind::NonPositiveDefiniteSample);
+  CHECK(stats.R[0].isApprox(original_R, 0.0));
+}
+
 TEST_CASE("PSD mixed ordinal delta and theta Jacobians match central finite "
           "differences") {
   auto pt = mixed_ordinal_one_factor();
@@ -699,6 +767,130 @@ TEST_CASE("PSD ML mean-structure fit agrees with ordinary interior ML") {
   check_psd_terminal(*fit);
   CHECK(fit->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
   CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+}
+
+TEST_CASE("PSD ML2S composes unchanged EM moments with every Stage-2 weight") {
+  BuildOptions options;
+  options.meanstructure = true;
+  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4", options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+
+  Eigen::Vector4d loadings;
+  loadings << 1.0, 0.82, 0.68, 0.9;
+  Eigen::Vector4d residuals;
+  residuals << 0.55, 0.65, 0.75, 0.6;
+  Eigen::Vector4d mean;
+  mean << 0.3, -0.1, 0.6, 1.0;
+  auto raw = raw_with_covariance(
+      one_factor_covariance(loadings, residuals, 1.15), mean, 360, true);
+  auto stage1 = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE_MESSAGE(stage1.has_value(), "ML2S Stage 1 failed: "
+      << (stage1.has_value() ? std::string{} : stage1.error().detail));
+  const auto original_cov = stage1->cov;
+  const auto original_mean = stage1->mean;
+  SampleStats sample;
+  sample.S = stage1->cov;
+  sample.mean = stage1->mean;
+  sample.n_obs = stage1->n_obs;
+  auto start = simple_start_values(pt, *rep, sample, {});
+  REQUIRE(start.has_value());
+  double nt_fmin = std::numeric_limits<double>::quiet_NaN();
+  Eigen::VectorXd nt_theta;
+
+  for (const auto weight : {
+           magmaan::estimate::fiml::TwoStageWeight::Nt,
+           magmaan::estimate::fiml::TwoStageWeight::Uls,
+           magmaan::estimate::fiml::TwoStageWeight::Dwls,
+           magmaan::estimate::fiml::TwoStageWeight::Adf,
+           magmaan::estimate::fiml::TwoStageWeight::Dls}) {
+    magmaan::fit_expected<magmaan::estimate::Estimates> ordinary;
+    if (weight == magmaan::estimate::fiml::TwoStageWeight::Nt) {
+      ordinary = magmaan::estimate::fit_ml(
+          pt, *rep, sample, *start, {}, Backend::NloptLbfgs,
+          strict_options());
+    } else {
+      auto W = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+          *stage1, weight, {});
+      REQUIRE_MESSAGE(W.has_value(), "ML2S Stage-2 weight failed: "
+          << (W.has_value() ? std::string{} : W.error().detail));
+      ordinary = magmaan::estimate::fit_gmm(
+          pt, *rep, sample, *start, *W, {}, Backend::NloptLbfgs,
+          strict_options());
+    }
+    REQUIRE_MESSAGE(ordinary.has_value(), "ordinary ML2S Stage 2 failed: "
+        << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+
+    auto fit = magmaan::estimate::fiml::frontier::fit_ml2s_psd(
+        pt, *rep, *stage1, ordinary->theta, weight, {},
+        Backend::NloptSlsqp, strict_options());
+    REQUIRE_MESSAGE(fit.has_value(), "PSD ML2S Stage 2 failed: "
+        << (fit.has_value() ? std::string{} : fit.error().detail));
+    if (!fit.has_value()) return;
+    check_psd_terminal(*fit);
+    CHECK(std::abs(fit->fmin - ordinary->fmin) < 2e-7);
+    CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 5e-4);
+    if (weight == magmaan::estimate::fiml::TwoStageWeight::Nt) {
+      nt_fmin = fit->fmin;
+      nt_theta = fit->theta;
+    }
+  }
+  REQUIRE(stage1->cov.size() == original_cov.size());
+  REQUIRE(stage1->mean.size() == original_mean.size());
+  for (std::size_t b = 0; b < original_cov.size(); ++b) {
+    CHECK(stage1->cov[b].isApprox(original_cov[b], 0.0));
+    CHECK(stage1->mean[b].isApprox(original_mean[b], 0.0));
+  }
+  REQUIRE(nt_theta.size() == start->size());
+  auto raw_fit = magmaan::estimate::fiml::frontier::fit_ml2s_psd(
+      pt, *rep, raw, nt_theta, 1e-4,
+      magmaan::estimate::fiml::TwoStageWeight::Nt, {},
+      Backend::NloptSlsqp, strict_options());
+  REQUIRE_MESSAGE(raw_fit.has_value(), "raw PSD ML2S overload failed: "
+      << (raw_fit.has_value() ? std::string{} : raw_fit.error().detail));
+  CHECK(std::abs(raw_fit->fmin - nt_fmin) < 1e-8);
+  CHECK((raw_fit->theta - nt_theta).cwiseAbs().maxCoeff() < 2e-5);
+}
+
+TEST_CASE("PSD ML2S repairs an improper Stage-2 solution without changing "
+          "Stage 1") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d covariance;
+  covariance << 1.0, 0.70, 0.70,
+                0.70, 1.0, 0.30,
+                0.70, 0.30, 1.0;
+  REQUIRE(covariance.determinant() > 0.0);
+  magmaan::estimate::fiml::SaturatedMoments stage1;
+  stage1.cov.push_back(covariance);
+  stage1.mean.push_back(Eigen::Vector3d::Zero());
+  stage1.n_obs.push_back(400);
+  const Eigen::MatrixXd original_cov = stage1.cov[0];
+  SampleStats sample;
+  sample.S = stage1.cov;
+  sample.mean = stage1.mean;
+  sample.n_obs = stage1.n_obs;
+  auto start = simple_start_values(pt, *rep, sample, {});
+  REQUIRE(start.has_value());
+
+  auto ordinary = magmaan::estimate::fit_ml(
+      pt, *rep, sample, *start, {}, Backend::NloptLbfgs, strict_options());
+  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary ML2S repair seed failed: "
+      << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+  REQUIRE(ordinary->fmin < 1e-8);
+  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+
+  auto fit = magmaan::estimate::fiml::frontier::fit_ml2s_psd(
+      pt, *rep, stage1, ordinary->theta,
+      magmaan::estimate::fiml::TwoStageWeight::Nt, {},
+      Backend::NloptSlsqp, strict_options());
+  REQUIRE_MESSAGE(fit.has_value(), "PSD ML2S repair failed: "
+      << (fit.has_value() ? std::string{} : fit.error().detail));
+  if (!fit.has_value()) return;
+  check_psd_terminal(*fit);
+  CHECK(fit->fmin > ordinary->fmin + 1e-6);
+  CHECK(stage1.cov[0].isApprox(original_cov, 0.0));
 }
 
 TEST_CASE("PSD FIML derivatives and all-observed reduction agree with ML") {

@@ -782,6 +782,33 @@ fit_fiml_psd(spec::LatentStructure pt,
              optim::OptimOptions opts = {},
              estimate::frontier::PsdFitOptions psd_opts = {});
 
+// PSD-preserving Stage 2 for ML2S. Stage 1 is the ordinary saturated FIML/EM
+// estimate and is not projected or otherwise changed. `Nt` uses the ordinary
+// normal-theory likelihood on those moments; ULS/DWLS/ADF/DLS use their fixed
+// Stage-2 moment-quadratic weights. Inference is deliberately separate.
+fit_expected<Estimates>
+fit_ml2s_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const SaturatedMoments& stage1,
+             const Eigen::VectorXd& x0,
+             TwoStageWeight weight = TwoStageWeight::Nt,
+             TwoStageDlsOptions dls = {},
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
+fit_expected<Estimates>
+fit_ml2s_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const RawData& raw,
+             const Eigen::VectorXd& x0,
+             double h_step = 1e-4,
+             TwoStageWeight weight = TwoStageWeight::Nt,
+             TwoStageDlsOptions dls = {},
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
 fit_expected<Estimates>
 fit_fiml_psd(spec::LatentStructure pt,
              const model::MatrixRep& rep,
