@@ -2686,7 +2686,8 @@ Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
                                       const Eigen::MatrixXd& J_sigma,
                                       const Eigen::MatrixXd& J_mu,
                                       const Eigen::VectorXd& theta,
-                                      OrdinalParameterization param) {
+                                      OrdinalParameterization param,
+                                      const Eigen::MatrixXd* J_theta = nullptr) {
   Eigen::MatrixXd out(mixed_moment_rows(stats), J_sigma.cols());
   Eigen::Index out_off = 0;
   Eigen::Index sigma_off = 0;
@@ -2705,11 +2706,21 @@ Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
         const double sii = moments.sigma[b](ov, ov);
         const double inv_sd = 1.0 / std::sqrt(sii);
         const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
-        if (fr > 0) Jb(row, fr - 1) += inv_sd;
+        if (fr > 0) {
+          if (J_theta != nullptr) {
+            Jb.row(row) += inv_sd * J_theta->row(fr - 1);
+          } else {
+            Jb(row, fr - 1) += inv_sd;
+          }
+        }
         Jb.row(row) += (-0.5 * it(k) * inv_sd / sii) *
                        J_sigma.row(sigma_off + vech_index(p, ov, ov));
       } else if (fr > 0) {
-        Jb(row, fr - 1) = 1.0;
+        if (J_theta != nullptr) {
+          Jb.row(row) = J_theta->row(fr - 1);
+        } else {
+          Jb(row, fr - 1) = 1.0;
+        }
       }
       ++row;
     }
@@ -3330,12 +3341,13 @@ mixed_ordinal_jacobian(const data::MixedOrdinalStats& stats,
                        const Eigen::MatrixXd& J_mu,
                        const std::vector<Eigen::MatrixXd>& factors,
                        const Eigen::VectorXd& theta,
-                       OrdinalParameterization param) {
+                       OrdinalParameterization param,
+                       const Eigen::MatrixXd* J_theta = nullptr) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
   Eigen::MatrixXd Jfull =
       mixed_moment_jacobian(stats, layout, moments, J_sigma, J_mu, theta,
-                            param);
+                            param, J_theta);
   Eigen::MatrixXd out(Jfull.rows(), Jfull.cols());
   Eigen::Index off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
@@ -8998,6 +9010,14 @@ struct TransformedOrdinalState {
   TransformedOrdinalEvaluationFn evaluate;
 };
 
+struct TransformedMixedOrdinalState {
+  data::MixedOrdinalStats stats;
+  ThresholdLayout layout;
+  std::vector<Eigen::MatrixXd> factors;
+  OrdinalParameterization parameterization;
+  TransformedOrdinalEvaluationFn evaluate;
+};
+
 FitError transformed_error(FitError error, const char* callback) {
   error.detail = std::string("ordinal_ls_problem_transformed: ") + callback +
                  ": " + error.detail;
@@ -9081,6 +9101,100 @@ ordinal_ls_problem_transformed(
         state->stats, state->layout, transformed->evaluation.moments,
         transformed->evaluation.J_sigma, state->factors, transformed->theta,
         state->parameterization, transformed->evaluation.J_mu,
+        &transformed->J_theta);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+  return prob;
+}
+
+fit_expected<optim::GmmProblem>
+mixed_ordinal_ls_problem_transformed(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Eigen::VectorXd& x0,
+    Eigen::Index n_param,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization,
+    TransformedOrdinalEvaluationFn evaluate,
+    optim::ExpandFn expand) {
+  constexpr const char* who = "mixed_ordinal_ls_problem_transformed";
+  if (!evaluate || !expand || n_param < 0 || x0.size() != n_param) {
+    return std::unexpected(make_err(
+        FitError::Kind::InvalidStartValues,
+        std::string(who) + ": invalid transformed-coordinate contract"));
+  }
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto factors = weight_factors(stats, weights);
+  if (!factors.has_value()) return std::unexpected(factors.error());
+
+  auto transformed_error = [](FitError error, const char* callback) {
+    error.detail = std::string("mixed_ordinal_ls_problem_transformed: ") +
+                   callback + ": " + error.detail;
+    return error;
+  };
+  auto start_eval = evaluate(x0, false);
+  if (!start_eval.has_value()) {
+    return std::unexpected(transformed_error(start_eval.error(), "start"));
+  }
+  auto r0 = mixed_ordinal_residuals(
+      stats, *layout, start_eval->evaluation.moments, *factors,
+      start_eval->theta, parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  auto state = std::make_shared<TransformedMixedOrdinalState>(
+      TransformedMixedOrdinalState{stats, std::move(*layout),
+                                   std::move(*factors), parameterization,
+                                   std::move(evaluate)});
+
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = n_param;
+  prob.expand = std::move(expand);
+  prob.r = [state, transformed_error](const Eigen::VectorXd& x)
+      -> fit_expected<Eigen::VectorXd> {
+    auto transformed = state->evaluate(x, false);
+    if (!transformed.has_value()) {
+      return std::unexpected(
+          transformed_error(transformed.error(), "residual"));
+    }
+    return mixed_ordinal_residuals(
+        state->stats, state->layout, transformed->evaluation.moments,
+        state->factors, transformed->theta, state->parameterization);
+  };
+  prob.J = [state, transformed_error](const Eigen::VectorXd& x)
+      -> fit_expected<Eigen::MatrixXd> {
+    auto transformed = state->evaluate(x, true);
+    if (!transformed.has_value()) {
+      return std::unexpected(
+          transformed_error(transformed.error(), "jacobian"));
+    }
+    return mixed_ordinal_jacobian(
+        state->stats, state->layout, transformed->evaluation.moments,
+        transformed->evaluation.J_sigma, transformed->evaluation.J_mu,
+        state->factors, transformed->theta, state->parameterization,
+        &transformed->J_theta);
+  };
+  prob.eval = [state, transformed_error](const Eigen::VectorXd& x)
+      -> fit_expected<optim::LsEvaluation> {
+    auto transformed = state->evaluate(x, true);
+    if (!transformed.has_value()) {
+      return std::unexpected(
+          transformed_error(transformed.error(), "evaluate"));
+    }
+    auto r = mixed_ordinal_residuals(
+        state->stats, state->layout, transformed->evaluation.moments,
+        state->factors, transformed->theta, state->parameterization);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J = mixed_ordinal_jacobian(
+        state->stats, state->layout, transformed->evaluation.moments,
+        transformed->evaluation.J_sigma, transformed->evaluation.J_mu,
+        state->factors, transformed->theta, state->parameterization,
         &transformed->J_theta);
     if (!J.has_value()) return std::unexpected(J.error());
     return optim::LsEvaluation{std::move(*r), std::move(*J)};

@@ -39,4 +39,18 @@ ordinal_ls_problem_transformed(
     TransformedOrdinalEvaluationFn evaluate,
     optim::ExpandFn expand);
 
+// Mixed continuous/ordinal counterpart over thresholds, continuous means and
+// variances, and pairwise covariance/polyserial/polychoric associations.
+fit_expected<optim::GmmProblem>
+mixed_ordinal_ls_problem_transformed(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Eigen::VectorXd& x0,
+    Eigen::Index n_param,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization,
+    TransformedOrdinalEvaluationFn evaluate,
+    optim::ExpandFn expand);
+
 }  // namespace magmaan::estimate::detail_ordinal

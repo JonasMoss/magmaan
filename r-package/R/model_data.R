@@ -1916,6 +1916,25 @@ fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                              control = control, bounds = b)
 }
 
+# Frontier mixed continuous/ordinal ULS/DWLS/WLS over PSD primitive LISREL
+# covariance matrices. The supplied thresholds, continuous moments,
+# polyserial/polychoric associations, and fixed weights are retained exactly.
+frontier_fit_mixed_ordinal_psd <- function(
+    model, data, estimator = c("DWLS", "WLS", "ULS"),
+    optimizer = "nlopt-slsqp", control = NULL, bounds = NULL,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+  estimator <- match.arg(toupper(as.character(estimator)[1L]),
+                         c("DWLS", "WLS", "ULS"))
+  pt <- augment_mixed_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "frontier_fit_mixed_ordinal_psd")
+  frontier_fit_mixed_ordinal_psd_impl(
+    pt, data, estimator = estimator, optimizer = optimizer,
+    control = control, bounds = b,
+    start_eigen_floor = start_eigen_floor,
+    feasibility_tol = feasibility_tol
+  )
+}
+
 magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     cluster = NULL,
                     ordered = NULL, parameterization = "delta",

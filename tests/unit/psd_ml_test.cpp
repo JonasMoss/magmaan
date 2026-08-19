@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <random>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -89,6 +90,38 @@ LatentStructure ordinal_one_factor() {
       "x1 | t11 + t12\n"
       "x2 | t21 + t22\n"
       "x3 | t31 + t32");
+}
+
+LatentStructure mixed_ordinal_one_factor() {
+  BuildOptions options;
+  options.meanstructure = true;
+  return lavaanify(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t11 + t12\n"
+      "x2 | t21 + t22\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2",
+      options);
+}
+
+magmaan::data::MixedOrdinalStats mixed_ordinal_stats() {
+  std::mt19937 rng(20260819);
+  std::normal_distribution<double> normal(0.0, 1.0);
+  Eigen::MatrixXd X(480, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = normal(rng);
+    const double y1 = 0.82 * eta + 0.58 * normal(rng);
+    const double y2 = 0.74 * eta + 0.67 * normal(rng);
+    X(i, 0) = 1.0 + (y1 > -0.65) + (y1 > 0.45);
+    X(i, 1) = 1.0 + (y2 > -0.5) + (y2 > 0.55);
+    X(i, 2) = 0.76 * eta + 0.66 * normal(rng) + 0.25;
+    X(i, 3) = 0.63 * eta + 0.78 * normal(rng) - 0.15;
+  }
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data(
+      {X}, {{1, 1, 0, 0}});
+  REQUIRE_MESSAGE(stats.has_value(), "mixed stats failed: "
+      << (stats.has_value() ? std::string{} : stats.error().detail));
+  return std::move(*stats);
 }
 
 OptimOptions strict_options() {
@@ -256,6 +289,202 @@ TEST_CASE("PSD ordinal ULS accepts an indefinite estimated polychoric matrix") {
   if (!fit.has_value()) return;
   CHECK(fit->diagnostics.admissibility.admissible);
   CHECK(stats.R[0].isApprox(original_R, 0.0));
+}
+
+TEST_CASE("PSD mixed ordinal delta and theta Jacobians match central finite "
+          "differences") {
+  auto pt = mixed_ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  const auto stats = mixed_ordinal_stats();
+  auto start = magmaan::estimate::mixed_ordinal_start_values(
+      pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+
+  for (const auto parameterization : {
+           magmaan::estimate::OrdinalParameterization::Delta,
+           magmaan::estimate::OrdinalParameterization::Theta}) {
+    auto probe =
+        magmaan::estimate::psd_test::psd_mixed_ordinal_derivative_probe(
+            pt, *rep, stats, *start,
+            magmaan::estimate::OrdinalWeightKind::DWLS,
+            parameterization);
+    REQUIRE_MESSAGE(probe.has_value(),
+        "PSD mixed ordinal derivative probe failed: "
+            << (probe.has_value() ? std::string{} : probe.error().detail));
+    REQUIRE(probe->n_lift > 0);
+    CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+              .cwiseAbs().maxCoeff() < 8e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
+  }
+}
+
+TEST_CASE("PSD mixed ordinal ULS DWLS and WLS agree at an interior fit") {
+  auto pt = mixed_ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  auto stats = mixed_ordinal_stats();
+  const Eigen::MatrixXd original_R = stats.R[0];
+  const Eigen::VectorXd original_moments = stats.moments[0];
+  auto start = magmaan::estimate::mixed_ordinal_start_values(
+      pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+
+  auto options = strict_options();
+  options.max_iter = 10000;
+  for (const auto parameterization : {
+           magmaan::estimate::OrdinalParameterization::Delta,
+           magmaan::estimate::OrdinalParameterization::Theta}) {
+    for (const auto weights : {
+             magmaan::estimate::OrdinalWeightKind::ULS,
+             magmaan::estimate::OrdinalWeightKind::DWLS,
+             magmaan::estimate::OrdinalWeightKind::WLS}) {
+      auto ordinary = magmaan::estimate::fit_mixed_ordinal_bounded(
+          pt, *rep, stats, {}, weights, *start, Backend::NloptLbfgs,
+          options, parameterization);
+      REQUIRE_MESSAGE(ordinary.has_value(), "ordinary mixed fit failed: "
+          << (ordinary.has_value() ? std::string{}
+                                   : ordinary.error().detail));
+      if (!ordinary.has_value()) return;
+      auto fit = magmaan::estimate::frontier::fit_mixed_ordinal_psd(
+          pt, *rep, stats, {}, weights, ordinary->theta,
+          Backend::NloptSlsqp, options, parameterization);
+      REQUIRE_MESSAGE(fit.has_value(), "PSD mixed fit failed: "
+          << (fit.has_value() ? std::string{} : fit.error().detail));
+      if (!fit.has_value()) return;
+      check_psd_terminal(*fit);
+      CHECK(std::abs(fit->fmin - ordinary->fmin) < 2e-7);
+      CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 5e-4);
+      CHECK(stats.R[0].isApprox(original_R, 0.0));
+      CHECK(stats.moments[0].isApprox(original_moments, 0.0));
+    }
+  }
+}
+
+TEST_CASE("PSD mixed ordinal ULS accepts an indefinite Stage-1 association "
+          "matrix") {
+  auto pt = mixed_ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  auto stats = mixed_ordinal_stats();
+  Eigen::Matrix4d target;
+  target << 1.0, 0.9, 0.7, 0.0,
+            0.9, 1.0, 0.3, 0.0,
+            0.7, 0.3, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0;
+  REQUIRE(target.determinant() < 0.0);
+  stats.R[0] = target;
+  stats.moments[0].segment(6, 2).setOnes();
+  stats.moments[0].segment(8, 6) << 0.9, 0.7, 0.0, 0.3, 0.0, 0.0;
+  const Eigen::MatrixXd original_R = stats.R[0];
+  const Eigen::VectorXd original_moments = stats.moments[0];
+  auto start = magmaan::estimate::mixed_ordinal_start_values(
+      pt, *rep, mixed_ordinal_stats(), {});
+  REQUIRE(start.has_value());
+
+  auto options = strict_options();
+  options.max_iter = 10000;
+  auto fit = magmaan::estimate::frontier::fit_mixed_ordinal_psd(
+      pt, *rep, stats, {}, magmaan::estimate::OrdinalWeightKind::ULS,
+      *start, Backend::NloptSlsqp, options);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "indefinite-association PSD mixed fit failed: "
+          << (fit.has_value() ? std::string{} : fit.error().detail));
+  if (!fit.has_value()) return;
+  check_psd_terminal(*fit);
+  CHECK(stats.R[0].isApprox(original_R, 0.0));
+  CHECK(stats.moments[0].isApprox(original_moments, 0.0));
+}
+
+TEST_CASE("PSD mixed ordinal ULS repairs an improper continuous residual") {
+  std::mt19937 rng(20260820);
+  std::normal_distribution<double> normal(0.0, 1.0);
+  Eigen::MatrixXd X(420, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    X(i, 0) = normal(rng);
+    X(i, 1) = normal(rng);
+    X(i, 2) = normal(rng);
+    const double z = normal(rng);
+    X(i, 3) = 1.0 + (z > -0.5) + (z > 0.5);
+  }
+  auto stats_or = magmaan::data::mixed_ordinal_stats_from_data(
+      {X}, {{0, 0, 0, 1}});
+  REQUIRE(stats_or.has_value());
+  auto stats = std::move(*stats_or);
+  REQUIRE(stats.moments[0].size() == 14);
+
+  Eigen::Matrix4d target;
+  target << 1.0, 0.70, 0.70, 0.49,
+            0.70, 1.0, 0.30, 0.21,
+            0.70, 0.30, 1.0, 0.21,
+            0.49, 0.21, 0.21, 1.0;
+  stats.R[0] = target;
+  stats.mean[0].setZero();
+  stats.moments[0].segment(2, 3).setZero();
+  stats.moments[0].segment(5, 3).setOnes();
+  stats.moments[0].segment(8, 6) <<
+      0.70, 0.70, 0.49, 0.30, 0.21, 0.21;
+  stats.NACOV[0].setIdentity();
+  stats.W_dwls[0].setIdentity();
+  stats.W_wls[0].setIdentity();
+  const Eigen::MatrixXd original_R = stats.R[0];
+  const Eigen::VectorXd original_moments = stats.moments[0];
+
+  BuildOptions build_options;
+  build_options.meanstructure = true;
+  auto pt = lavaanify(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x4 | t1 + t2\n"
+      "x4 ~*~ 1*x4",
+      build_options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  auto start = magmaan::estimate::mixed_ordinal_start_values(
+      pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+
+  auto options = strict_options();
+  options.max_iter = 10000;
+  magmaan::estimate::Bounds unbounded;
+  unbounded.lower = Eigen::VectorXd::Constant(
+      start->size(), -std::numeric_limits<double>::infinity());
+  unbounded.upper = Eigen::VectorXd::Constant(
+      start->size(), std::numeric_limits<double>::infinity());
+  auto ordinary = magmaan::estimate::fit_mixed_ordinal_bounded(
+      pt, *rep, stats, unbounded,
+      magmaan::estimate::OrdinalWeightKind::ULS,
+      *start, Backend::NloptLbfgs, options);
+  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary mixed repair seed failed: "
+      << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+  REQUIRE(ordinary->fmin < 1e-9);
+
+  auto prepared = pt;
+  auto prep = magmaan::estimate::prepare_mixed_ordinal_partable(
+      prepared, stats, magmaan::estimate::OrdinalParameterization::Delta,
+      nullptr);
+  REQUIRE(prep.has_value());
+  auto evaluator = magmaan::model::ModelEvaluator::build(prepared, *rep);
+  REQUIRE(evaluator.has_value());
+  auto constraints = build_eq_constraints(prepared, true);
+  REQUIRE(constraints.has_value());
+  const auto ordinary_diagnostics = magmaan::estimate::finalize_fit_diagnostics(
+      ordinary->theta, prepared, *evaluator, *constraints,
+      build_nl_constraints(prepared), {});
+  REQUIRE_FALSE(ordinary_diagnostics.admissibility.admissible);
+
+  auto fit = magmaan::estimate::frontier::fit_mixed_ordinal_psd(
+      pt, *rep, stats, unbounded,
+      magmaan::estimate::OrdinalWeightKind::ULS,
+      ordinary->theta, Backend::NloptSlsqp, options);
+  REQUIRE_MESSAGE(fit.has_value(), "PSD mixed ordinal repair failed: "
+      << (fit.has_value() ? std::string{} : fit.error().detail));
+  if (!fit.has_value()) return;
+  check_psd_terminal(*fit);
+  CHECK(fit->fmin > ordinary->fmin + 1e-6);
+  CHECK(stats.R[0].isApprox(original_R, 0.0));
+  CHECK(stats.moments[0].isApprox(original_moments, 0.0));
 }
 
 TEST_CASE("PSD ML lifted objective and equality Jacobian match central "

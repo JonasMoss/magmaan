@@ -953,6 +953,49 @@ psd_ordinal_problem(const Prelude& pre,
       });
 }
 
+fit_expected<optim::GmmProblem>
+psd_mixed_ordinal_problem(
+    const Prelude& pre,
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const PsdLiftLayout& layout,
+    const Eigen::VectorXd& start,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization) {
+  const auto locations = pre.ev.param_locations();
+  const auto sigma_offsets = psd_sigma_offsets(rep);
+  detail_ordinal::TransformedOrdinalEvaluationFn evaluate =
+      [&ev = pre.ev, &rep, &con = pre.con, &layout,
+       locations, sigma_offsets](const Eigen::VectorXd& x,
+                                 bool with_jacobian)
+      -> fit_expected<detail_ordinal::TransformedOrdinalEvaluation> {
+    auto evaluation = psd_lifted_evaluation(
+        ev, rep, con, layout, locations, sigma_offsets, x,
+        with_jacobian, with_jacobian);
+    if (!evaluation.has_value()) {
+      return std::unexpected(evaluation.error());
+    }
+    detail_ordinal::TransformedOrdinalEvaluation out;
+    out.evaluation = std::move(*evaluation);
+    out.theta = con.expand(x.head(layout.n_alpha));
+    if (with_jacobian) {
+      out.J_theta = Eigen::MatrixXd::Zero(out.theta.size(), x.size());
+      if (layout.n_alpha > 0) {
+        out.J_theta.leftCols(layout.n_alpha) = con.K();
+      }
+    }
+    return out;
+  };
+  return detail_ordinal::mixed_ordinal_ls_problem_transformed(
+      pt, rep, stats, start, layout.n_alpha + layout.n_lift, weights,
+      parameterization, std::move(evaluate),
+      [&con = pre.con, n_alpha = layout.n_alpha](
+          const Eigen::VectorXd& x) {
+        return con.expand(x.head(n_alpha));
+      });
+}
+
 fit_expected<FcSemPrelude>
 prelude_fcsem(spec::LatentStructure& pt, const Eigen::VectorXd& x0,
               const char* who) {
@@ -1172,6 +1215,46 @@ psd_ordinal_derivative_probe(
       *layout, pre->con, theta_start, options.start_eigen_floor);
   if (!start.has_value()) return std::unexpected(start.error());
   auto gmm_problem = psd_ordinal_problem(
+      *pre, pt, rep, stats, *layout, *start, weights, parameterization);
+  if (!gmm_problem.has_value()) {
+    return std::unexpected(gmm_problem.error());
+  }
+  const optim::ScalarProblem objective = optim::scalarize(*gmm_problem);
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  return probe_callbacks(objective, constraints, *start, layout->n_alpha,
+                         layout->n_lift, finite_difference_step, who);
+}
+
+fit_expected<PsdDerivativeProbe>
+psd_mixed_ordinal_derivative_probe(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Eigen::VectorXd& theta_start,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization,
+    double finite_difference_step,
+    frontier::PsdFitOptions options) {
+  constexpr const char* who = "psd_mixed_ordinal_derivative_probe";
+  if (auto ok = validate_probe_step(finite_difference_step, who);
+      !ok.has_value()) return std::unexpected(ok.error());
+  if (auto ok = prepare_mixed_ordinal_partable(
+          pt, stats, parameterization, nullptr); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  SampleStats sample;
+  sample.S = stats.R;
+  sample.mean = stats.mean;
+  sample.n_obs = stats.n_obs;
+  auto pre = prelude(pt, rep, sample, theta_start, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, theta_start, options.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto gmm_problem = psd_mixed_ordinal_problem(
       *pre, pt, rep, stats, *layout, *start, weights, parameterization);
   if (!gmm_problem.has_value()) {
     return std::unexpected(gmm_problem.error());
@@ -1953,6 +2036,110 @@ fit_ordinal_psd(spec::LatentStructure pt,
     return std::unexpected(ordinal_problem.error());
   }
   const optim::ScalarProblem problem = optim::scalarize(*ordinal_problem);
+  const PsdConstraintCallbacks constraints =
+      psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  auto result = drive_psd_problem(
+      problem, pt, *pre, *layout, constraints, *start, driven_bounds, bounds,
+      backend, opts, psd_opts, who);
+  if (!result.has_value()) return std::unexpected(result.error());
+
+  if (pre->con.active() && !pure_merge) {
+    constexpr double tol = 1e-6;
+    for (Eigen::Index k = 0; k < result->theta.size(); ++k) {
+      if (result->theta(k) < bounds.lower(k) - tol ||
+          result->theta(k) > bounds.upper(k) + tol) {
+        return std::unexpected(fit_err(
+            FitError::Kind::NumericIssue,
+            std::string(who) + ": general-linear equality drove parameter " +
+                std::to_string(k) + " past its bound"));
+      }
+    }
+  }
+  return result;
+}
+
+fit_expected<Estimates>
+fit_mixed_ordinal_psd(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    const Eigen::VectorXd& x0,
+    Backend backend,
+    OptimOptions opts,
+    OrdinalParameterization parameterization,
+    PsdFitOptions psd_opts) {
+  constexpr const char* who = "fit_mixed_ordinal_psd";
+  if (auto ok = validate_psd_fit_options(psd_opts, who); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = prepare_mixed_ordinal_partable(
+          pt, stats, parameterization, nullptr); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::InvalidStartValues,
+        std::string(who) + ": x0 size does not match prepared partable"));
+  }
+  if (bounds.empty()) {
+    auto ordinary_bounds = bounds_from_partable(pt);
+    if (!ordinary_bounds.has_value()) {
+      return std::unexpected(fit_err(
+          FitError::Kind::NumericIssue,
+          std::string(who) + ": bounds_from_partable failed: " +
+              ordinary_bounds.error().detail));
+    }
+    bounds = std::move(*ordinary_bounds);
+  }
+  if (bounds.lower.size() != x0.size() ||
+      bounds.upper.size() != x0.size()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        std::string(who) + ": bounds size mismatch"));
+  }
+
+  SampleStats sample;
+  sample.S = stats.R;
+  sample.mean = stats.mean;
+  sample.n_obs = stats.n_obs;
+  auto pre = prelude(pt, rep, sample, x0, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto start = psd_lift_start(
+      *layout, pre->con, x0, psd_opts.start_eigen_floor);
+  if (!start.has_value()) return std::unexpected(start.error());
+
+  Bounds alpha_bounds;
+  const bool pure_merge = pre->con.active() && !pre->con.group.empty();
+  if (!pre->con.active()) {
+    alpha_bounds = bounds;
+  } else if (pure_merge) {
+    alpha_bounds = optim::fold_alpha_bounds(pre->con, bounds);
+  }
+  Bounds driven_bounds;
+  const Eigen::Index n_driven = layout->n_alpha + layout->n_lift;
+  if (!alpha_bounds.empty()) {
+    driven_bounds.lower = Eigen::VectorXd::Constant(
+        n_driven, -std::numeric_limits<double>::infinity());
+    driven_bounds.upper = Eigen::VectorXd::Constant(
+        n_driven, std::numeric_limits<double>::infinity());
+    driven_bounds.lower.head(layout->n_alpha) = alpha_bounds.lower;
+    driven_bounds.upper.head(layout->n_alpha) = alpha_bounds.upper;
+    start->head(layout->n_alpha) =
+        start->head(layout->n_alpha)
+            .cwiseMax(alpha_bounds.lower)
+            .cwiseMin(alpha_bounds.upper);
+  }
+
+  auto mixed_problem = psd_mixed_ordinal_problem(
+      *pre, pt, rep, stats, *layout, *start, weights, parameterization);
+  if (!mixed_problem.has_value()) {
+    return std::unexpected(mixed_problem.error());
+  }
+  const optim::ScalarProblem problem = optim::scalarize(*mixed_problem);
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
   auto result = drive_psd_problem(
