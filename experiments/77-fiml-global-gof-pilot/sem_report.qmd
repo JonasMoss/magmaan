@@ -20,9 +20,9 @@ replications <- read_result("replications")
 design <- read_result("design")
 metadata <- read_result("metadata")
 meta <- setNames(metadata$value, metadata$key)
-flip_smoke_dir <- file.path(script_dir, "results", "sem-global-flip-smoke")
-flip_smoke <- if (file.exists(file.path(flip_smoke_dir, "replications.csv"))) {
-  read.csv(file.path(flip_smoke_dir, "replications.csv"),
+flip_gate_dir <- file.path(script_dir, "results", "sem-global-flip-500")
+flip_gate <- if (file.exists(file.path(flip_gate_dir, "replications.csv"))) {
+  read.csv(file.path(flip_gate_dir, "replications.csv"),
            stringsAsFactors = FALSE)
 } else NULL
 
@@ -103,6 +103,76 @@ model_size <- do.call(rbind, lapply(seq_len(nrow(model_rows)), function(i) {
     all_n = all[["n"]], all_rejection = all[["rejection"]],
     stringsAsFactors = FALSE)
 }))
+
+gate_method_columns <- c(
+  "Effective multiplier" = "p_flip_effective",
+  "FMG SS" = "p_lrt_ss", "FMG all" = "p_lrt_all",
+  "Yuan--Bentler MLR" = "p_lrt_mlr", "FMG SB" = "p_lrt_sb",
+  "FMG pEBA(4)" = "p_lrt_peba4")
+
+if (!is.null(flip_gate)) {
+  gate_group_id <- interaction(
+    flip_gate[group_vars], drop = TRUE, lex.order = TRUE)
+  gate_cell_size <- do.call(rbind, lapply(
+    split(seq_len(nrow(flip_gate)), gate_group_id), function(ii) {
+      z <- flip_gate[ii, , drop = FALSE]
+      do.call(rbind, lapply(names(gate_method_columns), function(method) {
+        p <- z[[gate_method_columns[[method]]]]
+        data.frame(
+          z[1L, group_vars, drop = FALSE], method = method,
+          finite = sum(is.finite(p)), rejection = mean(p < .05, na.rm = TRUE),
+          stringsAsFactors = FALSE)
+      }))
+    }))
+  gate_scorecard <- do.call(rbind, lapply(
+    split(gate_cell_size, gate_cell_size$method), function(z) {
+      data.frame(
+        method = z$method[[1L]], finite = sum(z$finite),
+        mean_cell_rejection = mean(z$rejection),
+        mean_abs_size_error = mean(abs(z$rejection - .05)),
+        min_cell_rejection = min(z$rejection),
+        max_cell_rejection = max(z$rejection),
+        fraction_025_075 = mean(
+          z$rejection >= .025 & z$rejection <= .075),
+        stringsAsFactors = FALSE)
+    }))
+  gate_scorecard <- gate_scorecard[match(
+    names(gate_method_columns), gate_scorecard$method), ]
+
+  gate_dgp <- unique(flip_gate[, c("distribution", "missingness")])
+  gate_generator_size <- do.call(rbind, lapply(
+    seq_len(nrow(gate_dgp)), function(i) {
+      z <- flip_gate[
+        flip_gate$distribution == gate_dgp$distribution[[i]] &
+          flip_gate$missingness == gate_dgp$missingness[[i]], , drop = FALSE]
+      flip <- summarize_p(z, "p_flip_effective")
+      mlr <- summarize_p(z, "p_lrt_mlr")
+      ss <- summarize_p(z, "p_lrt_ss")
+      all <- summarize_p(z, "p_lrt_all")
+      data.frame(
+        generator = generator_labels[[gate_dgp$distribution[[i]]]],
+        observation = if (gate_dgp$missingness[[i]] == "complete")
+          "Complete" else "30% MCAR",
+        flip_n = flip[["n"]], flip_rejection = flip[["rejection"]],
+        ss_rejection = ss[["rejection"]], all_rejection = all[["rejection"]],
+        mlr_rejection = mlr[["rejection"]], stringsAsFactors = FALSE)
+    }))
+  gate_generator_size$generator <- factor(
+    gate_generator_size$generator, levels = unname(generator_labels))
+  gate_generator_size$observation <- factor(
+    gate_generator_size$observation, levels = c("Complete", "30% MCAR"))
+  gate_generator_size <- gate_generator_size[order(
+    gate_generator_size$generator, gate_generator_size$observation), ]
+
+  flip_gate$nominal_geometry <- flip_gate$flip_ok &
+    flip_gate$flip_df == flip_gate$expected_df
+  gate_geometry <- aggregate(
+    cbind(flip_ok, nominal_geometry) ~ model_label, flip_gate, sum)
+  gate_geometry$fit_ok <- as.integer(table(factor(
+    flip_gate$model_label[flip_gate$fit_ok], levels = gate_geometry$model_label)))
+  gate_geometry$attempted <- as.integer(table(factor(
+    flip_gate$model_label, levels = gate_geometry$model_label)))
+}
 ```
 
 ## Question
@@ -195,9 +265,9 @@ per cell.
 
 Each dataset is fitted once by FIML. The report compares the dedicated
 Yuan--Bentler/Mplus MLR statistic with FMG SB, SS, pEBA(4), and `all`
-corrections. The saved 40,000-fit run predates the general effective multiplier
-statistic; a separate implementation smoke below runs that statistic on the
-same 40-cell design.
+corrections. The 40,000-fit run gives the most precise MLR/FMG baseline. A
+matched 20,000-fit gate adds the general effective multiplier statistic with
+199 Rademacher draws per fit on the same 40-cell design.
 
 ```{r health-table}
 health <- data.frame(
@@ -274,54 +344,97 @@ local moment tangent. The tested dimension is the saturated mean/covariance
 dimension minus the tangent rank. Multiplier draws only reweight the projected
 case rows: neither a saturated model nor the null SEM is refitted.
 
-```{r flip-smoke}
-if (!is.null(flip_smoke)) {
-  flip_timing <- aggregate(
-    flip_seconds ~ model_label + missingness, flip_smoke, mean)
-  flip_timing$missingness <- ifelse(
-    flip_timing$missingness == "complete", "Complete", "30% MCAR")
-  names(flip_timing) <- c("model", "observation", "mean flip seconds")
-  knitr::kable(flip_timing, digits = 3, row.names = FALSE)
+## Global multiplier null gate
+
+```{r gate-scorecard}
+if (!is.null(flip_gate)) {
+  show_gate_scorecard <- gate_scorecard[, c(
+    "method", "finite", "mean_cell_rejection", "mean_abs_size_error",
+    "min_cell_rejection", "max_cell_rejection", "fraction_025_075")]
+  names(show_gate_scorecard) <- c(
+    "method", "finite p-values", "mean cell size", "mean |size-.05|",
+    "minimum", "maximum", "fraction in [.025,.075]")
+  knitr::kable(show_gate_scorecard, digits = 3, row.names = FALSE)
 } else {
-  cat("Run the global-flip smoke command below to populate this table.")
+  cat("Run the 500-replication global-flip command below to populate this table.")
 }
 ```
 
-The 3-replication, 40-cell smoke made 120 global-test calls with 199
-Rademacher draws each. All 120 returned finite p-values, and every computed df
-matched the model's prespecified df. The mean call cost was 0.022 seconds; by
-model and observation mechanism it ranged from about 0.003 seconds for the
-small CFA/growth cases to 0.053 seconds for the bifactor. The full smoke,
-including fitting, MLR, FMG, and the new multiplier test, took 2.6 seconds on
-four workers.
+The effective multiplier is the clear winner in the matched gate. Its mean
+rejection across the 40 null cells is .058, its mean absolute size error is
+.016, and 33/40 cells lie in the practical [.025,.075] band. FMG SS and `all`
+average .072 and .065 but have larger cellwise errors and maxima of .173 and
+.155. MLR averages .364 and reaches .930. Thus the flip is not merely beating
+MLR; it also materially improves on the strongest FMG analytic corrections.
 
-These three replications per cell are an implementation and timing gate, not a
-calibration result. They project to about 7.2 minutes for 500 null replications
-per cell and 14.4 minutes for 1,000; a matched null-plus-power panel doubles
-those figures.
+```{r gate-generator}
+if (!is.null(flip_gate)) {
+  show_gate_generator <- gate_generator_size
+  names(show_gate_generator) <- c(
+    "generator", "observation", "flip n", "effective multiplier",
+    "FMG SS", "FMG all", "MLR")
+  knitr::kable(show_gate_generator, digits = 3, row.names = FALSE)
+}
+```
+
+The multiplier remains close to nominal under both generator families and
+both observation mechanisms. Pooled over models, its rejection ranges from
+.037 under normal MCAR to .085 under severe complete-data VM. Severe VM is the
+remaining visible stress point; severe IG is .061 complete and .072 under
+MCAR, confirming again that matching marginal skewness and kurtosis does not
+match multivariate difficulty.
+
+### Numerical geometry and failures
+
+```{r gate-geometry}
+if (!is.null(flip_gate)) {
+  show_geometry <- gate_geometry[, c(
+    "model_label", "attempted", "fit_ok", "flip_ok", "nominal_geometry")]
+  names(show_geometry) <- c(
+    "model", "attempted", "FIML converged", "finite flip",
+    "nominal tangent rank")
+  knitr::kable(show_geometry, row.names = FALSE)
+}
+```
+
+Nine of 20,000 FIML fits did not converge. Every converged fit produced a
+finite multiplier p-value. In 25 of the 19,991 finite calls, however, the local
+model Jacobian lost numerical rank, raising the tested df above its
+prespecified value. These cases were concentrated in the two-factor CFA under
+MCAR (19 cases), with two additional two-factor VM1/complete cases and four
+one-factor VM2/MCAR cases. They are reported as non-nominal geometry rather
+than hidden as successful ordinary tests.
+
+The all-finite scorecard above is deliberately conservative about this
+diagnostic: 16/25 rank-anomalous calls rejected. Requiring the nominal tangent
+rank leaves 19,966 calls and changes mean cell rejection only from .0584 to
+.0577, with the same 33/40 cells in the practical band. Future power runs
+should fail closed on a non-nominal rank and report that denominator
+separately.
 
 ## Runtime and next experiment
 
-The 40,000-fit run took 541 seconds (9.0 minutes) on four workers. Severe
-nonnormal bifactor/MCAR cells dominate the slow tail. At the observed rate, one
-matched power panel would approximately double the run to 18 minutes at 1,000
-replications per cell.
+The 20,000-fit multiplier gate took 446 seconds (7.4 minutes) on four workers,
+including FIML, MLR, FMG, and 199 multiplier draws. The measured parallel
+speedup was 3.68. The mean multiplier call itself was about 0.022 seconds; the
+large bifactor/MCAR cells dominate the slow tail.
 
-The next experiment can now compare the multiplier test directly with MLR and
-FMG on this panel. Before another 40,000-fit run, the useful gate is roughly
-100--500 null replications per cell, followed by matched sparse and diffuse
-misspecification mechanisms. The saturated-EM moment-influence construction
-remains valuable as an independent validation route for the missing-data
-projection rather than as the production statistic.
+This null gate is strong enough to proceed. The next scientific experiment is
+a matched power panel with prespecified sparse and diffuse SEM
+misspecifications, retaining the same four models and VM/IG mechanisms. It
+should report raw power together with size-adjusted power, finite denominators,
+and tangent-rank failures. A later 1,000--2,000-replication null confirmation
+can sharpen the seven edge-cell estimates; it is no longer needed to decide
+whether the flip deserves the power experiment. The saturated-EM
+moment-influence construction remains an independent validation route for the
+missing-data projection rather than the production statistic.
 
 ## Reproduce
 
 ```sh
-Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 1000 \
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 500 \
   --flips 199 \
-  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-model-1000
-Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 3 \
-  --flips 199 \
-  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-global-flip-smoke
+  --cores 4 \
+  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-global-flip-500
 quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
 ```

@@ -118,6 +118,7 @@ empty_rep <- function(cell, rep_id, seed) {
     missingness = cell$missingness, p = cell$p,
     expected_df = cell$expected_df, n = cell$n, rep = rep_id, seed = seed,
     fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
+    flip_nominal_geometry = FALSE,
     fit_error = "", fmg_error = "", mlr_error = "", flip_error = "",
     realized_missing_eligible = NA_real_, fitted_df = NA_integer_,
     npar = NA_integer_, fit_seconds = NA_real_, fmg_seconds = NA_real_,
@@ -221,6 +222,8 @@ one_rep <- function(cell, rep_id) {
     out$flip_df <- as.integer(flip$df)
     out$flip_tangent_rank <- as.integer(flip$tangent_rank)
     out$flip_ok <- is.finite(out$p_flip_effective)
+    out$flip_nominal_geometry <- isTRUE(out$flip_ok) &&
+      identical(out$flip_df, as.integer(cell$expected_df))
     if (!out$flip_ok) out$flip_error <- "global flip p-value is non-finite"
   }
   out$total_seconds <- proc.time()[["elapsed"]] - begin
@@ -270,6 +273,7 @@ timing <- do.call(rbind, lapply(split(seq_len(nrow(raw)), group_id), function(ii
     fmg_success_rate = mean(z$fmg_ok),
     mlr_finite_rate = mean(z$mlr_ok),
     flip_success_rate = mean(z$flip_ok),
+    flip_nominal_geometry_rate = mean(z$flip_nominal_geometry),
     stringsAsFactors = FALSE)
 }))
 row.names(timing) <- NULL
@@ -308,14 +312,16 @@ write_metadata(file.path(results, "metadata.csv"), list(
   observed_parallel_speedup = observed_speedup,
   fit_failures = sum(!raw$fit_ok), fmg_failures = sum(!raw$fmg_ok),
   mlr_nonfinite_or_failures = sum(!raw$mlr_ok),
-  flip_failures = sum(!raw$flip_ok)), packages = "magmaan")
+  flip_failures = sum(!raw$flip_ok),
+  flip_non_nominal_geometry = sum(raw$flip_ok & !raw$flip_nominal_geometry)),
+  packages = "magmaan")
 
 cat(sprintf(
   "setup=%.1fs runtime_wall=%.1fs observed_speedup=%.2fx failures=%d/%d\n",
   setup_seconds, wall_seconds, observed_speedup, sum(!raw$fit_ok), nrow(raw)))
 print(timing[, c("model_id", "distribution", "missingness", "total_seconds",
                  "fit_success_rate", "fmg_success_rate", "mlr_finite_rate",
-                 "flip_success_rate")],
+                 "flip_success_rate", "flip_nominal_geometry_rate")],
       row.names = FALSE, digits = 3)
 cat("\nProjected wall time for null-only and doubled null-plus-power panels:\n")
 print(projection[, c("panel", "reps_per_cell", "total_replications",
