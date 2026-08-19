@@ -217,6 +217,21 @@ deferred. Inference at fitted covariance boundaries remains out
 of scope. PSD two-level ML and native FC-SEM are not part of the supported
 covariance-honest extension.
 
+Experiment 78 (`experiments/78-psd-estimator-stress/`) now supplies the common
+cross-estimator validation harness. Its first smoke profile covers continuous
+ML/ULS/GLS/fixed-WLS/fitted-weight GMM, FIML, all five ML2S Stage-2 policies,
+ordinal and mixed delta/theta LS, CatML, a near-residual-boundary geometry, and
+an expected non-PD CatML input rejection. Each returned criterion is recomputed
+independently in R, input objects are fingerprinted before and after fitting,
+ML2S shares one fingerprinted saturated-EM object, and ordinary/PSD pairs retain
+comparable parameter, implied-moment, convergence, eigenvalue, and timing rows.
+The two-replication smoke produced 128 attempts: all 126 returned fits passed
+their independent objective check, all 70 returned PSD fits were admissible,
+all 28 ML2S Stage-1 checks were unchanged, and both CatML domain sentinels were
+rejected as intended. These counts validate the harness only; stochastic rates,
+larger structural geometries, conditioning, basin behavior, and scaling remain
+the planned pilot work.
+
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible
 optima but is roughly 40 times slower backend-to-backend on the small interior

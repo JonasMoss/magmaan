@@ -1,0 +1,127 @@
+---
+title: "Do the covariance-honest estimators survive a common stress harness?"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(
+  if (nzchar(override)) override else character(),
+  file.path("results", "smoke")
+)
+available <- roots[vapply(
+  roots,
+  function(path) file.exists(file.path(path, "metadata.csv")),
+  logical(1)
+)]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) utils::read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE
+)
+raw <- read_result("raw.csv")
+summary <- read_result("summary.csv")
+invariants <- read_result("invariants.csv")
+metadata_frame <- read_result("metadata.csv")
+metadata <- setNames(metadata_frame$value, metadata_frame$key)
+
+violations <- sum(invariants$violations)
+returned <- raw[raw$expected_outcome == "fit", ]
+psd <- returned[returned$psd & returned$returned, ]
+objective_errors <- returned$objective_abs_error[
+  returned$returned & is.finite(returned$objective_abs_error)
+]
+max_objective_error <- if (length(objective_errors)) max(objective_errors) else NA_real_
+short_answer <- sprintf(
+  paste(
+    "The smoke harness completed %d fit attempts across %d estimator families.",
+    "%d hard invariant violations were found; %d/%d returned PSD fits were",
+    "covariance-admissible, and the largest independently recomputed objective",
+    "difference was %.2e. This validates the harness, not comparative estimator",
+    "performance."
+  ),
+  nrow(raw), length(unique(raw$family)), violations,
+  sum(psd$admissible, na.rm = TRUE), nrow(psd), max_objective_error
+)
+
+display <- summary[, c(
+  "family", "fits", "returned_rate", "audit_stationary_rate",
+  "psd_admissible_rate", "objective_pass_rate",
+  "input_preservation_rate", "median_elapsed_ms"
+)]
+names(display) <- c(
+  "Family", "Attempts", "Returned", "Audit-stationary",
+  "PSD admissible", "Objective check", "Input preserved",
+  "Median time (ms)"
+)
+display$Family <- gsub("_", " ", display$Family, fixed = TRUE)
+for (field in c(
+  "Returned", "Audit-stationary", "PSD admissible", "Objective check",
+  "Input preserved"
+)) {
+  display[[field]] <- ifelse(
+    is.finite(display[[field]]),
+    sprintf("%.0f%%", 100 * display[[field]]),
+    "—"
+  )
+}
+display$`Median time (ms)` <- round(display$`Median time (ms)`, 2L)
+```
+
+## Question
+
+Can one common, checkpointed validation harness exercise the covariance-honest
+continuous, missing-data, ordinal, mixed, and categorical-ML estimators while
+distinguishing optimizer failures, covariance failures, input-domain
+rejections, and independently detected criterion errors?
+
+## Short answer
+
+`r short_answer`
+
+## Evidence
+
+```{r summary-table}
+knitr::kable(display, align = "lrrrrrrr")
+```
+
+The non-positive-definite categorical-ML sentinel is an expected input-domain
+rejection, not a failed fit. Missing-data two-stage fits additionally require
+exact preservation of their shared first-stage object. The raw paired results,
+constraint diagnostics, component eigenvalues, and timings remain in
+`results/smoke/` rather than being expanded into the presentation table.
+
+## Caveats
+
+This run uses two deterministic replications per smoke cell, a four-indicator
+one-factor model, one regular geometry, and one near-boundary residual-variance
+geometry. It establishes that the design, independent calculations,
+checkpointing, and reporting work together. It cannot estimate failure rates,
+basin frequencies, boundary risk, or scaling costs. Mean-plus-multi-group,
+correlated covariance blocks, sparse thresholds, conditioned weights, and the
+larger missingness grid belong to the pilot expansion.
+
+No standard errors, tests, confidence intervals, or model-selection claims are
+part of this experiment.
+
+## Reproduce
+
+```sh
+just r-dev
+cd experiments/78-psd-estimator-stress
+Rscript run_experiment.R --smoke
+quarto render report.qmd
+```
+
+Use `Rscript run_experiment.R --help` for family/geometry subsets, deterministic
+seed overrides, checkpoint resume, and the dry-run task plan.
