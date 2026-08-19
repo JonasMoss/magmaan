@@ -169,6 +169,23 @@ fit, a missing-data negative-residual repair, and the R result contract.
 Inference at a rank-deficient component solution is not part of this surface's
 current validation contract.
 
+`estimate::frontier::fit_ordinal_psd` now composes the same lift with the
+existing all-ordinal ULS/DWLS/WLS residual engine after ordinal partable
+preparation. The transformed-coordinate seam supplies both the lifted implied-
+moment Jacobian and the ordinary threshold-coordinate Jacobian, so the existing
+delta, theta, released-scale, threshold, and mean formulas remain the single
+implementation. The Stage-1 thresholds, estimated polychoric matrix, and fixed
+DWLS/WLS weights are not projected or otherwise repaired; even an indefinite
+polychoric matrix remains a valid ULS moment target. Only the fitted primitive
+`Theta`/`Psi` blocks are constrained to be PSD. The returned vector and R
+partable retain ordinary prepared coordinates, and the R entry point
+`frontier_fit_ordinal_psd()` labels the covariance policy explicitly. Focused
+gates cover central-difference gradients in delta and theta coordinates, exact
+interior ULS/DWLS/WLS fits, unchanged Stage-1 polychorics, and ULS acceptance of
+an indefinite estimated correlation matrix. Mixed ordinal and CatML remain
+separate computational domains; inference at fitted covariance boundaries is
+out of scope.
+
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible
 optima but is roughly 40 times slower backend-to-backend on the small interior

@@ -222,11 +222,20 @@ when they next change.
      `Sigma_W + d Sigma_B` combination to be PD. The current two-level composer
      rejects user equality constraints, so internal link constraints and later
      user-constraint support need an explicit composition design.
-  4. **L — ordinal and mixed-ordinal ULS/DWLS/WLS.** Apply the lift after ordinal
-     partable preparation, cover both delta/theta parameterizations, retain
-     threshold and scale semantics, and distinguish moment-only PSD acceptance
-     from inverse/log-determinant CatML domains. Decide how the ordinary
-     covariance-admissibility diagnostics attach to prepared ordinal fits.
+  4. **Partly done 2026-08-19 — ordinal and mixed-ordinal ULS/DWLS/WLS.**
+     `estimate::frontier::fit_ordinal_psd` now applies the lift after
+     all-ordinal partable preparation for ULS, DWLS, and WLS, covers both
+     delta/theta parameterizations, preserves threshold/scale semantics, and
+     returns the prepared ordinary parameter vector with covariance diagnostics.
+     The estimated polychoric matrix and fixed NACOV-derived weights are
+     consumed unchanged, including an indefinite-polychoric ULS gate: PSD is a
+     fitted-model constraint, not a silent Stage-1 repair. Central differences
+     gate the transformed threshold plus covariance Jacobian; exact interior
+     fits gate all three weights and the R wrapper retains the original
+     polychorics. Remaining here: mixed continuous/ordinal ULS/DWLS/WLS and the
+     separate inverse/log-determinant CatML domain. Broader improper-case,
+     conditioning, multi-group, timing, and basin validation remains part of
+     the future estimator-specific validation discussion.
   5. **L — native FC-SEM.** First give `FcSemEvaluator` a primitive-covariance
      ownership/override contract and transformed Jacobian seam comparable to
      `ModelEvaluator`; only then add covariance-honest objectives.

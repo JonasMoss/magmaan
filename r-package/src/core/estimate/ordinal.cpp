@@ -43,6 +43,7 @@
 #include "magmaan/parse/op.hpp"
 
 #include "detail_second_order.hpp"
+#include "detail_ordinal_psd.hpp"
 
 namespace magmaan::estimate {
 
@@ -2311,7 +2312,8 @@ Eigen::MatrixXd ordinal_moment_jacobian_block(
     const Eigen::MatrixXd& J_mu,
     std::size_t b,
     Eigen::Index sigma_off,
-    Eigen::Index mu_off) {
+    Eigen::Index mu_off,
+    const Eigen::MatrixXd* J_theta = nullptr) {
   const bool theta_param = param == OrdinalParameterization::Theta;
   const Eigen::Index p = stats.R[b].rows();
   const Eigen::Index nth = stats.thresholds[b].size();
@@ -2344,7 +2346,13 @@ Eigen::MatrixXd ordinal_moment_jacobian_block(
       const double mu = have_mu ? moments.mu[b](ov) : 0.0;
       const double a = it(k) - mu;
       const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-      if (fr > 0) Jb(k, fr - 1) += delta;
+      if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(k) += delta * J_theta->row(fr - 1);
+        } else {
+          Jb(k, fr - 1) += delta;
+        }
+      }
       if (have_jmu) Jb.row(k) -= delta * J_mu.row(mu_off + ov);
       if (std_i) {
         Jb.row(k) += (-0.5 * a * delta * delta * delta) *
@@ -2372,7 +2380,13 @@ Eigen::MatrixXd ordinal_moment_jacobian_block(
       const double mu = have_mu ? moments.mu[b](ov) : 0.0;
       const double a = it(k) - mu;
       const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-      if (fr > 0) Jb(k, fr - 1) += inv_sd;
+      if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(k) += inv_sd * J_theta->row(fr - 1);
+        } else {
+          Jb(k, fr - 1) += inv_sd;
+        }
+      }
       if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
       Jb.row(k) += (-0.5 * a * inv_sd / sii) *
                    J_sigma.row(sigma_off + vech_index(p, ov, ov));
@@ -2381,7 +2395,13 @@ Eigen::MatrixXd ordinal_moment_jacobian_block(
   } else {
     for (Eigen::Index k = 0; k < nth; ++k) {
       const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-      if (fr > 0) Jb(k, fr - 1) = 1.0;
+      if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(k) = J_theta->row(fr - 1);
+        } else {
+          Jb(k, fr - 1) = 1.0;
+        }
+      }
     }
     Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
   }
@@ -2396,7 +2416,8 @@ ordinal_jacobian(const data::OrdinalStats& stats,
                  const std::vector<Eigen::MatrixXd>& factors,
                  const Eigen::VectorXd& theta,
                  OrdinalParameterization param,
-                 const Eigen::MatrixXd& J_mu = Eigen::MatrixXd()) {
+                 const Eigen::MatrixXd& J_mu = Eigen::MatrixXd(),
+                 const Eigen::MatrixXd* J_theta = nullptr) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
   Eigen::Index n_total = 0;
@@ -2412,7 +2433,7 @@ ordinal_jacobian(const data::OrdinalStats& stats,
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::MatrixXd Jb = ordinal_moment_jacobian_block(
         stats, layout, moments, J_sigma, theta, param, J_mu, b, sigma_off,
-        mu_off);
+        mu_off, J_theta);
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
     out.block(out_off, 0, Jb.rows(), Jb.cols()) =
@@ -8965,6 +8986,110 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
 }
 
 }  // namespace frontier
+
+namespace detail_ordinal {
+
+namespace {
+
+struct TransformedOrdinalState {
+  data::OrdinalStats stats;
+  ThresholdLayout layout;
+  std::vector<Eigen::MatrixXd> factors;
+  OrdinalParameterization parameterization;
+  TransformedOrdinalEvaluationFn evaluate;
+};
+
+FitError transformed_error(FitError error, const char* callback) {
+  error.detail = std::string("ordinal_ls_problem_transformed: ") + callback +
+                 ": " + error.detail;
+  return error;
+}
+
+}  // namespace
+
+fit_expected<optim::GmmProblem>
+ordinal_ls_problem_transformed(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    const Eigen::VectorXd& x0,
+    Eigen::Index n_param,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization,
+    TransformedOrdinalEvaluationFn evaluate,
+    optim::ExpandFn expand) {
+  if (!evaluate || !expand || n_param < 0 || x0.size() != n_param) {
+    return std::unexpected(make_err(
+        FitError::Kind::InvalidStartValues,
+        "ordinal_ls_problem_transformed: invalid transformed-coordinate contract"));
+  }
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  auto factors = weight_factors(stats, weights);
+  if (!factors.has_value()) return std::unexpected(factors.error());
+
+  auto start_eval = evaluate(x0, false);
+  if (!start_eval.has_value()) {
+    return std::unexpected(transformed_error(start_eval.error(), "start"));
+  }
+  auto r0 = ordinal_residuals(stats, *layout, start_eval->evaluation.moments,
+                              *factors, start_eval->theta,
+                              parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  auto state = std::make_shared<TransformedOrdinalState>(
+      TransformedOrdinalState{stats, std::move(*layout), std::move(*factors),
+                              parameterization, std::move(evaluate)});
+
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = n_param;
+  prob.expand = std::move(expand);
+  prob.r = [state](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+    auto transformed = state->evaluate(x, false);
+    if (!transformed.has_value()) {
+      return std::unexpected(transformed_error(transformed.error(), "residual"));
+    }
+    return ordinal_residuals(
+        state->stats, state->layout, transformed->evaluation.moments,
+        state->factors, transformed->theta, state->parameterization);
+  };
+  prob.J = [state](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+    auto transformed = state->evaluate(x, true);
+    if (!transformed.has_value()) {
+      return std::unexpected(transformed_error(transformed.error(), "jacobian"));
+    }
+    return ordinal_jacobian(
+        state->stats, state->layout, transformed->evaluation.moments,
+        transformed->evaluation.J_sigma, state->factors, transformed->theta,
+        state->parameterization, transformed->evaluation.J_mu,
+        &transformed->J_theta);
+  };
+  prob.eval =
+      [state](const Eigen::VectorXd& x) -> fit_expected<optim::LsEvaluation> {
+    auto transformed = state->evaluate(x, true);
+    if (!transformed.has_value()) {
+      return std::unexpected(transformed_error(transformed.error(), "evaluate"));
+    }
+    auto r = ordinal_residuals(
+        state->stats, state->layout, transformed->evaluation.moments,
+        state->factors, transformed->theta, state->parameterization);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J = ordinal_jacobian(
+        state->stats, state->layout, transformed->evaluation.moments,
+        transformed->evaluation.J_sigma, state->factors, transformed->theta,
+        state->parameterization, transformed->evaluation.J_mu,
+        &transformed->J_theta);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+  return prob;
+}
+
+}  // namespace detail_ordinal
 
 namespace {
 

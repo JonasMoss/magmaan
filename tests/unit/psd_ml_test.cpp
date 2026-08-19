@@ -11,12 +11,15 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/LU>
 
 #include "../../src/estimate/detail_psd_probe.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -61,6 +64,31 @@ SampleStats sample_stats(Eigen::MatrixXd covariance,
   out.S.push_back(std::move(covariance));
   out.n_obs.push_back(n);
   return out;
+}
+
+magmaan::data::OrdinalStats ordinal_stats(Eigen::Matrix3d correlation) {
+  magmaan::data::OrdinalStats out;
+  out.R.push_back(std::move(correlation));
+  Eigen::VectorXd thresholds(6);
+  thresholds << -0.5, 0.5, -0.4, 0.6, -0.6, 0.4;
+  out.thresholds.push_back(std::move(thresholds));
+  out.threshold_ov.push_back({0, 0, 1, 1, 2, 2});
+  out.threshold_level.push_back({1, 2, 1, 2, 1, 2});
+  out.NACOV.push_back(Eigen::MatrixXd::Identity(9, 9));
+  out.W_dwls.push_back(Eigen::MatrixXd::Identity(9, 9));
+  out.W_wls.push_back(Eigen::MatrixXd::Identity(9, 9));
+  out.n_obs.push_back(400);
+  out.n_levels.push_back({3, 3, 3});
+  out.ov_names.push_back({"x1", "x2", "x3"});
+  return out;
+}
+
+LatentStructure ordinal_one_factor() {
+  return lavaanify(
+      "f =~ 1*x1 + l2*x2 + l3*x3\n"
+      "x1 | t11 + t12\n"
+      "x2 | t21 + t22\n"
+      "x3 | t31 + t32");
 }
 
 OptimOptions strict_options() {
@@ -123,6 +151,112 @@ void check_psd_terminal(const magmaan::estimate::Estimates& fit) {
 }
 
 }  // namespace
+
+TEST_CASE("PSD ordinal delta and theta Jacobians match central finite "
+          "differences") {
+  auto pt = ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d correlation;
+  correlation << 1.0, 0.56, 0.48,
+                 0.56, 1.0, 0.336,
+                 0.48, 0.336, 1.0;
+  const auto stats = ordinal_stats(correlation);
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+
+  for (const auto parameterization : {
+           magmaan::estimate::OrdinalParameterization::Delta,
+           magmaan::estimate::OrdinalParameterization::Theta}) {
+    auto probe = magmaan::estimate::psd_test::psd_ordinal_derivative_probe(
+        pt, *rep, stats, *start,
+        magmaan::estimate::OrdinalWeightKind::DWLS, parameterization);
+    REQUIRE_MESSAGE(probe.has_value(),
+        "PSD ordinal derivative probe failed: "
+            << (probe.has_value() ? std::string{} : probe.error().detail));
+    REQUIRE(probe->n_lift > 0);
+    CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+              .cwiseAbs().maxCoeff() < 5e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
+  }
+}
+
+TEST_CASE("PSD ordinal ULS DWLS and WLS consume polychorics unchanged") {
+  auto pt = ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d correlation;
+  correlation << 1.0, 0.56, 0.48,
+                 0.56, 1.0, 0.336,
+                 0.48, 0.336, 1.0;
+  auto stats = ordinal_stats(correlation);
+  const Eigen::MatrixXd original_R = stats.R[0];
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+
+  for (const auto parameterization : {
+           magmaan::estimate::OrdinalParameterization::Delta,
+           magmaan::estimate::OrdinalParameterization::Theta}) {
+    for (const auto weights : {
+             magmaan::estimate::OrdinalWeightKind::ULS,
+             magmaan::estimate::OrdinalWeightKind::DWLS,
+             magmaan::estimate::OrdinalWeightKind::WLS}) {
+      auto ordinary = magmaan::estimate::fit_ordinal_bounded(
+          pt, *rep, stats, {}, weights, *start, Backend::NloptLbfgs,
+          strict_options(), parameterization);
+      REQUIRE_MESSAGE(ordinary.has_value(), "ordinary ordinal fit failed: "
+          << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+      if (!ordinary.has_value()) return;
+      auto fit = magmaan::estimate::frontier::fit_ordinal_psd(
+          pt, *rep, stats, {}, weights, *start, Backend::NloptSlsqp,
+          strict_options(), parameterization);
+      REQUIRE_MESSAGE(fit.has_value(), "PSD ordinal fit failed: "
+          << (fit.has_value() ? std::string{} : fit.error().detail));
+      if (!fit.has_value()) return;
+      check_psd_terminal(*fit);
+      CHECK(fit->fmin < 1e-9);
+      CHECK(fit->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-7));
+      CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-4);
+      CHECK(stats.R[0].isApprox(original_R, 0.0));
+    }
+  }
+}
+
+TEST_CASE("PSD ordinal ULS accepts an indefinite estimated polychoric matrix") {
+  auto pt = ordinal_one_factor();
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d indefinite;
+  indefinite << 1.0, 0.9, 0.7,
+                0.9, 1.0, 0.3,
+                0.7, 0.3, 1.0;
+  REQUIRE(indefinite.determinant() < 0.0);
+  auto stats = ordinal_stats(indefinite);
+  const Eigen::MatrixXd original_R = stats.R[0];
+
+  Eigen::Matrix3d start_R;
+  start_R << 1.0, 0.4, 0.3,
+             0.4, 1.0, 0.2,
+             0.3, 0.2, 1.0;
+  const auto start_stats = ordinal_stats(start_R);
+  auto start = magmaan::estimate::ordinal_start_values(
+      pt, *rep, start_stats, {});
+  REQUIRE(start.has_value());
+  auto options = strict_options();
+  options.max_iter = 20000;
+  options.ftol = 1e-10;
+  options.gtol = 1e-6;
+  auto fit = magmaan::estimate::frontier::fit_ordinal_psd(
+      pt, *rep, stats, {}, magmaan::estimate::OrdinalWeightKind::ULS,
+      *start, Backend::NloptSlsqp, options);
+  REQUIRE_MESSAGE(fit.has_value(), "indefinite-polychoric PSD fit failed: "
+      << (fit.has_value() ? std::string{} : fit.error().detail));
+  if (!fit.has_value()) return;
+  CHECK(fit->diagnostics.admissibility.admissible);
+  CHECK(stats.R[0].isApprox(original_R, 0.0));
+}
 
 TEST_CASE("PSD ML lifted objective and equality Jacobian match central "
           "finite differences") {

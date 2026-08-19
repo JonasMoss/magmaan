@@ -285,6 +285,10 @@ fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, cont
     .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }
 
+frontier_fit_ordinal_psd_impl <- function(partable, ordinal_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    .Call(`_magmaan_frontier_fit_ordinal_psd_impl`, partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol)
+}
+
 fit_ordinal_stage2_impl <- function(partable, ordinal_stats, stage2_weight = "dwls", dls_a = 0.5, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_ordinal_stage2_impl`, partable, ordinal_stats, stage2_weight, dls_a, optimizer, control, bounds)
 }
