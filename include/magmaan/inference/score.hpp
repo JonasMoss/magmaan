@@ -616,6 +616,23 @@ global_score_flip_test(spec::LatentStructure pt,
                        const Estimates& est,
                        const GlobalScoreFlipOptions& options = {});
 
+// Two-stage normal-theory counterpart. The observed saturated score is the
+// Stage-2 ML score at the fitted model, while multiplier rows are obtained by
+// propagating the Stage-1 saturated-EM casewise moment influence through the
+// same fitted-model normal-theory metric. `sm` must be the unregularized
+// Stage-1 moments corresponding to `raw`; estimated/non-NT Stage-2 weights are
+// intentionally outside this contract.
+post_expected<GlobalScoreFlipTestResult>
+global_score_flip_test_ml2s(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const RawData& raw,
+    const FIMLPack& pack,
+    const estimate::fiml::FIMLH1& h1,
+    const estimate::fiml::SaturatedMoments& sm,
+    const Estimates& est,
+    const GlobalScoreFlipOptions& options = {});
+
 post_expected<ScoreFlipTestResult>
 score_flip_test(spec::LatentStructure pt_H1,
                 const model::MatrixRep& rep_H1,

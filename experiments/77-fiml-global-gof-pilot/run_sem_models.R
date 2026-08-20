@@ -12,12 +12,13 @@ set_single_threaded_math()
 
 usage <- function() cat(
   "Usage: Rscript run_sem_models.R [options]\n\n",
-  "Small-rep native VM/IG FIML timing pilot for four compact SEMs.\n\n",
+  "Paired native VM/IG FIML/ML2S pilot for five compact SEMs.\n\n",
   "  --reps N             Replications per cell (default 10).\n",
   "  --n N                Sample size (default 120).\n",
   "  --flips N            Global-score multiplier draws (default 199).\n",
   "  --cores N            Parallel cell workers (default up to 4).\n",
-  "  --models CSV         Model ids (default all four).\n",
+  "  --models CSV         Model ids (default all five).\n",
+  "  --estimators CSV     Default FIML,ML2S.\n",
   "  --distributions CSV  Default normal,vm1,ig1,vm2,ig2.\n",
   "  --missingness CSV    Default complete,mcar_30.\n",
   "  --seed-base N        Deterministic seed base.\n",
@@ -27,7 +28,7 @@ usage <- function() cat(
 opts <- list(
   reps = 10L, n = 120L, flips = 199L,
   cores = min(4L, max(1L, parallel::detectCores() - 2L)),
-  models = NULL,
+  models = NULL, estimators = c("FIML", "ML2S"),
   distributions = c("normal", "vm1", "ig1", "vm2", "ig2"),
   missingness = c("complete", "mcar_30"),
   seed_base = 20260820L, results_dir = NULL)
@@ -46,6 +47,7 @@ while (i <= length(args)) {
   else if (arg == "--flips") opts$flips <- as.integer(take())
   else if (arg == "--cores") opts$cores <- as.integer(take())
   else if (arg == "--models") opts$models <- parse_csv_arg(take())
+  else if (arg == "--estimators") opts$estimators <- toupper(parse_csv_arg(take()))
   else if (arg == "--distributions") {
     opts$distributions <- parse_csv_arg(take())
   } else if (arg == "--missingness") {
@@ -69,7 +71,9 @@ models <- models[opts$models]
 allowed_distributions <- c("normal", "vm1", "ig1", "vm2", "ig2")
 allowed_missingness <- c("complete", "mcar_30")
 stopifnot(all(opts$distributions %in% allowed_distributions),
-          all(opts$missingness %in% allowed_missingness))
+          all(opts$missingness %in% allowed_missingness),
+          length(opts$estimators) > 0L,
+          all(opts$estimators %in% c("FIML", "ML2S")))
 
 results <- opts$results_dir %||%
   file.path(script_dir, "results", "sem-model-smoke")
@@ -109,13 +113,16 @@ grid$p <- vapply(grid$model_id, function(id) models[[id]]$p, integer(1L))
 grid$expected_df <- vapply(
   grid$model_id, function(id) models[[id]]$expected_df, integer(1L))
 grid$n <- opts$n
-write_csv(grid, file.path(results, "design.csv"))
+design <- grid[rep(seq_len(nrow(grid)), each = length(opts$estimators)), , drop = FALSE]
+design$estimator <- rep(opts$estimators, times = nrow(grid))
+row.names(design) <- NULL
+write_csv(design, file.path(results, "design.csv"))
 
-empty_rep <- function(cell, rep_id, seed) {
+empty_rep <- function(cell, rep_id, seed, estimator) {
   data.frame(
     cell_id = cell$cell_id, model_id = cell$model_id,
     model_label = cell$model_label, distribution = cell$distribution,
-    missingness = cell$missingness, p = cell$p,
+    missingness = cell$missingness, estimator = estimator, p = cell$p,
     expected_df = cell$expected_df, n = cell$n, rep = rep_id, seed = seed,
     fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
     flip_nominal_geometry = FALSE,
@@ -133,13 +140,15 @@ empty_rep <- function(cell, rep_id, seed) {
 one_rep <- function(cell, rep_id) {
   begin <- proc.time()[["elapsed"]]
   seed <- sem_seed(opts$seed_base + cell$cell_id * 100003L + rep_id)
-  out <- empty_rep(cell, rep_id, seed)
   model <- models[[cell$model_id]]
   sampler <- samplers[[paste(cell$model_id, cell$distribution, sep = "::")]]
   if (inherits(sampler, "error")) {
-    out$fit_error <- paste0("generator calibration: ", conditionMessage(sampler))
-    out$total_seconds <- proc.time()[["elapsed"]] - begin
-    return(out)
+    return(do.call(rbind, lapply(opts$estimators, function(estimator) {
+      out <- empty_rep(cell, rep_id, seed, estimator)
+      out$fit_error <- paste0("generator calibration: ", conditionMessage(sampler))
+      out$total_seconds <- proc.time()[["elapsed"]] - begin
+      out
+    })))
   }
   X <- tryCatch({
     draw <- sem_draw(model, sampler, cell$n, seed)
@@ -147,87 +156,121 @@ one_rep <- function(cell, rep_id) {
     sem_apply_missingness(draw, cell$missingness)
   }, error = function(e) e)
   if (inherits(X, "error")) {
-    out$fit_error <- paste0("draw: ", conditionMessage(X))
-    out$total_seconds <- proc.time()[["elapsed"]] - begin
-    return(out)
+    return(do.call(rbind, lapply(opts$estimators, function(estimator) {
+      out <- empty_rep(cell, rep_id, seed, estimator)
+      out$fit_error <- paste0("draw: ", conditionMessage(X))
+      out$total_seconds <- proc.time()[["elapsed"]] - begin
+      out
+    })))
   }
-  out$realized_missing_eligible <-
-    mean(is.na(X[, -1L, drop = FALSE]))
-
-  fit_begin <- proc.time()[["elapsed"]]
-  fit <- tryCatch(magmaan::magmaan(
-    model$spec, as.data.frame(X), estimator = "FIML",
-    optimizer = "nlopt-lbfgs-slsqp-fallback",
-    control = list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8),
-    se = "none", test = "none"), error = function(e) e)
-  out$fit_seconds <- proc.time()[["elapsed"]] - fit_begin
-  if (inherits(fit, "error") || !isTRUE(fit$converged)) {
-    out$fit_error <- if (inherits(fit, "error")) conditionMessage(fit)
-      else "FIML fit did not converge"
-    out$total_seconds <- proc.time()[["elapsed"]] - begin
-    return(out)
-  }
-  out$fit_ok <- TRUE
-  if (length(fit$npar) == 1L) out$npar <- as.integer(fit$npar)
-
-  fmg_begin <- proc.time()[["elapsed"]]
-  fmg <- tryCatch(
-    magmaan::fmg_tests(fit, tests = c("SB", "SS", "pEBA4", "all")),
+  realized_missing <- mean(is.na(X[, -1L, drop = FALSE]))
+  control <- list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)
+  fd <- tryCatch(magmaan::df_to_fiml_data(as.data.frame(X), model$spec),
+                 error = function(e) e)
+  em_begin <- proc.time()[["elapsed"]]
+  em <- if (inherits(fd, "error")) fd else tryCatch(
+    magmaan::magmaan_core$estimate_saturated_em_moments(fd, control = control),
     error = function(e) e)
-  out$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin
-  if (inherits(fmg, "error")) {
-    out$fmg_error <- conditionMessage(fmg)
-  } else {
-    key <- sub("_ml$", "", fmg$label)
-    lookup <- stats::setNames(fmg$p_value, key)
-    out$fitted_df <- as.integer(fmg$df[[1L]])
-    out$p_lrt_naive <- stats::pchisq(
-      fmg$base_statistic[[1L]], fmg$df[[1L]], lower.tail = FALSE)
-    value_or_na <- function(name) {
-      if (name %in% names(lookup)) unname(lookup[[name]]) else NA_real_
+  em_seconds <- proc.time()[["elapsed"]] - em_begin
+
+  one_estimator <- function(estimator) {
+    estimator_begin <- proc.time()[["elapsed"]]
+    out <- empty_rep(cell, rep_id, seed, estimator)
+    out$realized_missing_eligible <- realized_missing
+    if (inherits(em, "error")) {
+      out$fit_error <- paste0("Stage-1 EM: ", conditionMessage(em))
+      out$total_seconds <- proc.time()[["elapsed"]] - estimator_begin +
+        em_seconds / length(opts$estimators)
+      return(out)
     }
-    out$p_lrt_sb <- value_or_na("sb")
-    out$p_lrt_ss <- value_or_na("ss")
-    out$p_lrt_peba4 <- value_or_na("peba4")
-    out$p_lrt_all <- value_or_na("all")
-    out$fmg_ok <- TRUE
-  }
 
-  mlr_begin <- proc.time()[["elapsed"]]
-  mlr <- tryCatch(
-    magmaan::magmaan_core$estimate_fiml_robust_mlr(fit),
-    error = function(e) e)
-  out$mlr_seconds <- proc.time()[["elapsed"]] - mlr_begin
-  if (inherits(mlr, "error")) {
-    out$mlr_error <- conditionMessage(mlr)
-  } else {
-    out$p_lrt_mlr <- stats::pchisq(
-      mlr$chisq_scaled, mlr$df, lower.tail = FALSE)
-    out$mlr_ok <- is.finite(out$p_lrt_mlr)
-    if (!out$mlr_ok) out$mlr_error <- "MLR p-value is non-finite"
-  }
+    fit_begin <- proc.time()[["elapsed"]]
+    fit <- tryCatch({
+      if (estimator == "FIML") {
+        value <- magmaan::magmaan_core$fit_fiml(
+          model$spec, fd, optimizer = "nlopt-lbfgs-slsqp-fallback",
+          control = control)
+        value$stage1 <- em
+        value
+      } else {
+        magmaan::magmaan_core$fit_ml2s(
+          model$spec, fd, optimizer = "nlopt-lbfgs-slsqp-fallback",
+          control = control, stage1 = em)
+      }
+    }, error = function(e) e)
+    out$fit_seconds <- proc.time()[["elapsed"]] - fit_begin
+    if (inherits(fit, "error") || !isTRUE(fit$converged)) {
+      out$fit_error <- if (inherits(fit, "error")) conditionMessage(fit)
+        else paste(estimator, "fit did not converge")
+      out$total_seconds <- proc.time()[["elapsed"]] - estimator_begin +
+        em_seconds / length(opts$estimators)
+      return(out)
+    }
+    out$fit_ok <- TRUE
+    if (length(fit$npar) == 1L) out$npar <- as.integer(fit$npar)
 
-  flip_begin <- proc.time()[["elapsed"]]
-  flip <- tryCatch(
-    magmaan::global_score_flip_test(
-      fit, n_flips = opts$flips, seed = seed + 900001L,
-      multiplier = "rademacher"),
-    error = function(e) e)
-  out$flip_seconds <- proc.time()[["elapsed"]] - flip_begin
-  if (inherits(flip, "error")) {
-    out$flip_error <- conditionMessage(flip)
-  } else {
-    out$p_flip_effective <- flip$p_effective
-    out$flip_statistic <- flip$statistic_effective
-    out$flip_df <- as.integer(flip$df)
-    out$flip_tangent_rank <- as.integer(flip$tangent_rank)
-    out$flip_ok <- is.finite(out$p_flip_effective)
-    out$flip_nominal_geometry <- isTRUE(out$flip_ok) &&
-      identical(out$flip_df, as.integer(cell$expected_df))
-    if (!out$flip_ok) out$flip_error <- "global flip p-value is non-finite"
+    fmg_begin <- proc.time()[["elapsed"]]
+    fmg <- tryCatch(
+      magmaan::fmg_tests(fit, tests = c("SB", "SS", "pEBA4", "all")),
+      error = function(e) e)
+    out$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin
+    if (inherits(fmg, "error")) {
+      out$fmg_error <- conditionMessage(fmg)
+    } else {
+      key <- sub("_ml$", "", fmg$label)
+      lookup <- stats::setNames(fmg$p_value, key)
+      out$fitted_df <- as.integer(fmg$df[[1L]])
+      out$p_lrt_naive <- stats::pchisq(
+        fmg$base_statistic[[1L]], fmg$df[[1L]], lower.tail = FALSE)
+      value_or_na <- function(name) {
+        if (name %in% names(lookup)) unname(lookup[[name]]) else NA_real_
+      }
+      out$p_lrt_sb <- value_or_na("sb")
+      out$p_lrt_ss <- value_or_na("ss")
+      out$p_lrt_peba4 <- value_or_na("peba4")
+      out$p_lrt_all <- value_or_na("all")
+      out$fmg_ok <- TRUE
+    }
+
+    mlr_begin <- proc.time()[["elapsed"]]
+    scalar <- if (estimator == "FIML") tryCatch(
+      magmaan::magmaan_core$estimate_fiml_robust_mlr(fit),
+      error = function(e) e) else fit$ml2s
+    out$mlr_seconds <- proc.time()[["elapsed"]] - mlr_begin
+    if (inherits(scalar, "error") || is.null(scalar)) {
+      out$mlr_error <- if (inherits(scalar, "error")) conditionMessage(scalar)
+        else "scaled two-stage statistic is unavailable"
+    } else {
+      out$p_lrt_mlr <- stats::pchisq(
+        scalar$chisq_scaled, scalar$df, lower.tail = FALSE)
+      out$mlr_ok <- is.finite(out$p_lrt_mlr)
+      if (!out$mlr_ok) out$mlr_error <- "scaled p-value is non-finite"
+    }
+
+    flip_begin <- proc.time()[["elapsed"]]
+    flip <- tryCatch(
+      magmaan::global_score_flip_test(
+        fit, n_flips = opts$flips, seed = seed + 900001L,
+        multiplier = "rademacher"),
+      error = function(e) e)
+    out$flip_seconds <- proc.time()[["elapsed"]] - flip_begin
+    if (inherits(flip, "error")) {
+      out$flip_error <- conditionMessage(flip)
+    } else {
+      out$p_flip_effective <- flip$p_effective
+      out$flip_statistic <- flip$statistic_effective
+      out$flip_df <- as.integer(flip$df)
+      out$flip_tangent_rank <- as.integer(flip$tangent_rank)
+      out$flip_ok <- is.finite(out$p_flip_effective)
+      out$flip_nominal_geometry <- isTRUE(out$flip_ok) &&
+        identical(out$flip_df, as.integer(cell$expected_df))
+      if (!out$flip_ok) out$flip_error <- "global flip p-value is non-finite"
+    }
+    out$total_seconds <- proc.time()[["elapsed"]] - estimator_begin +
+      em_seconds / length(opts$estimators)
+    out
   }
-  out$total_seconds <- proc.time()[["elapsed"]] - begin
-  out
+  do.call(rbind, lapply(opts$estimators, one_estimator))
 }
 
 run_cell <- function(index) {
@@ -254,8 +297,8 @@ row.names(raw) <- NULL
 wall_seconds <- proc.time()[["elapsed"]] - wall_begin
 write_csv(raw, file.path(results, "replications.csv"))
 
-group_vars <- c("model_id", "model_label", "distribution", "missingness",
-                "p", "expected_df")
+group_vars <- c("model_id", "model_label", "estimator", "distribution",
+                "missingness", "p", "expected_df")
 group_id <- interaction(raw[group_vars], drop = TRUE, lex.order = TRUE)
 mean_or_na <- function(x) {
   if (all(is.na(x))) NA_real_ else mean(as.numeric(x), na.rm = TRUE)
@@ -291,8 +334,9 @@ projection <- do.call(rbind, lapply(c(100L, 500L, 2000L), function(reps) {
       max(1, observed_speedup)
     data.frame(
       panel = panel, reps_per_cell = reps,
-      cells = nrow(grid) * scenario_multiplier,
-      total_replications = reps * nrow(grid) * scenario_multiplier,
+      cells = nrow(grid) * length(opts$estimators) * scenario_multiplier,
+      total_replications = reps * nrow(grid) * length(opts$estimators) *
+        scenario_multiplier,
       projected_setup_seconds = setup_seconds,
       projected_runtime_seconds = projected_runtime,
       projected_wall_seconds = setup_seconds + projected_runtime,
@@ -304,9 +348,10 @@ projection <- do.call(rbind, lapply(c(100L, 500L, 2000L), function(reps) {
 write_csv(projection, file.path(results, "timing_projection.csv"))
 write_metadata(file.path(results, "metadata.csv"), list(
   reps = opts$reps, n = opts$n, flips = opts$flips,
-  cores = opts$cores, cells = nrow(grid),
+  cores = opts$cores, cells = nrow(grid) * length(opts$estimators),
   distributions = opts$distributions, missingness = opts$missingness,
-  models = names(models), seed_base = opts$seed_base,
+  models = names(models), estimators = opts$estimators,
+  seed_base = opts$seed_base,
   setup_seconds = setup_seconds, runtime_wall_seconds = wall_seconds,
   runtime_cpu_seconds = runtime_cpu_seconds,
   observed_parallel_speedup = observed_speedup,
@@ -320,6 +365,7 @@ cat(sprintf(
   "setup=%.1fs runtime_wall=%.1fs observed_speedup=%.2fx failures=%d/%d\n",
   setup_seconds, wall_seconds, observed_speedup, sum(!raw$fit_ok), nrow(raw)))
 print(timing[, c("model_id", "distribution", "missingness", "total_seconds",
+                 "estimator",
                  "fit_success_rate", "fmg_success_rate", "mlr_finite_rate",
                  "flip_success_rate", "flip_nominal_geometry_rate")],
       row.names = FALSE, digits = 3)

@@ -72,6 +72,39 @@ sem_model_bifactor <- function() {
   )
 }
 
+sem_model_three_factor_15 <- function() {
+  loadings <- list(
+    c(0.80, 0.70, 0.60, 0.50, 0.40),
+    c(0.75, 0.65, 0.55, 0.45, 0.80),
+    c(0.70, 0.60, 0.50, 0.40, 0.75))
+  p <- sum(lengths(loadings))
+  Lambda <- matrix(0, p, 3L)
+  blocks <- split(seq_len(p), rep(seq_along(loadings), lengths(loadings)))
+  for (factor in seq_along(loadings)) {
+    Lambda[blocks[[factor]], factor] <- loadings[[factor]]
+  }
+  Phi <- matrix(c(
+    1.00, 0.30, 0.40,
+    0.30, 1.00, 0.50,
+    0.40, 0.50, 1.00), 3L, 3L)
+  residual <- 1 - rowSums(Lambda^2)
+  ov <- paste0("x", seq_len(p))
+  syntax <- paste(vapply(seq_along(blocks), function(factor) {
+    paste0("f", factor, " =~ ", paste(ov[blocks[[factor]]], collapse = " + "))
+  }, character(1L)), collapse = "\n")
+  list(
+    model_id = "three_factor_15",
+    model_label = "Three-factor CFA (15 indicators)",
+    p = p,
+    expected_df = 87L,
+    ov = ov,
+    mu = rep(0, p),
+    Sigma = Lambda %*% Phi %*% t(Lambda) + diag(residual),
+    spec = magmaan::model_spec(
+      syntax, std_lv = TRUE, meanstructure = TRUE, fixed_x = FALSE)
+  )
+}
+
 sem_model_growth <- function() {
   time <- 0:4
   Lambda <- cbind(1, time)
@@ -99,7 +132,7 @@ sem_model_growth <- function() {
 sem_model_catalog <- function() {
   out <- list(
     sem_model_one_factor(), sem_model_two_factor_fmg(),
-    sem_model_bifactor(), sem_model_growth())
+    sem_model_bifactor(), sem_model_three_factor_15(), sem_model_growth())
   names(out) <- vapply(out, `[[`, character(1L), "model_id")
   for (model in out) {
     if (length(model$mu) != model$p ||

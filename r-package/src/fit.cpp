@@ -8411,10 +8411,11 @@ Rcpp::List inference_global_score_flip_test(
   Ctx ctx = ctx_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit["estimator"]) : "ML";
-  if (estimator != "ML" && estimator != "FIML") {
-    Rcpp::stop("magmaan: global_score_flip_test requires an ML or FIML fit");
+  if (estimator != "ML" && estimator != "FIML" && estimator != "ML2S") {
+    Rcpp::stop("magmaan: global_score_flip_test requires an ML, FIML, or "
+               "normal-theory ML2S fit");
   }
-  magmaan::data::RawData rd = estimator == "FIML"
+  magmaan::data::RawData rd = estimator == "FIML" || estimator == "ML2S"
       ? fiml_raw_from_arg(ctx.rep, raw)
       : complete_raw_from_arg(ctx.rep, raw);
   magmaan::inference::frontier::GlobalScoreFlipOptions options;
@@ -8429,7 +8430,29 @@ Rcpp::List inference_global_score_flip_test(
           multiplier_studentization);
   magmaan::post_expected<
       magmaan::inference::frontier::GlobalScoreFlipTestResult> out;
-  if (estimator == "FIML") {
+  if (estimator == "ML2S") {
+    if (fit.containsElementNamed("stage1_regularization") &&
+        !Rf_isNull(fit["stage1_regularization"])) {
+      Rcpp::stop("magmaan: global_score_flip_test does not support regularized "
+                 "Stage-1 ML2S fits");
+    }
+    const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+        ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+    if (stage2_weight != "nt" && stage2_weight != "NT") {
+      Rcpp::stop("magmaan: global_score_flip_test supports only the fixed "
+                 "normal-theory ML2S Stage-2 weight");
+    }
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit, rd, owned_pack);
+    std::unique_ptr<FimlH1> owned_h1;
+    const FimlH1& h1 = fiml_h1_for_fit(fit, rd, pack, owned_h1);
+    std::unique_ptr<SaturatedMoments> owned_sm;
+    const SaturatedMoments& sm =
+        fiml_saturated_for_fit(fit, rd, pack, h1, owned_sm);
+    out = magmaan::inference::frontier::global_score_flip_test_ml2s(
+        std::move(ctx.pt), ctx.rep, rd, pack, h1, sm, est_from_fit(fit),
+        options);
+  } else if (estimator == "FIML") {
     std::unique_ptr<FimlPack> owned_pack;
     const FimlPack& pack = fiml_pack_for_fit(fit, rd, owned_pack);
     out = magmaan::inference::frontier::global_score_flip_test(

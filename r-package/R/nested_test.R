@@ -147,15 +147,19 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
 
 #' Global curved-SEM multiplier score test.
 #'
-#' Tests a fitted continuous ML/FIML model against its local saturated
-#' mean/covariance alternative. Direct casewise saturated likelihood scores
-#' are projected off the fitted model's moment tangent before multiplier
-#' calibration, so `df` is the saturated moment dimension minus the tangent
-#' rank. This is the general goodness-of-fit counterpart to
+#' Tests a fitted continuous ML, FIML, or normal-theory ML2S model against its
+#' local saturated mean/covariance alternative. ML/FIML use direct saturated
+#' likelihood scores. ML2S uses the Stage-2 saturated score for the observed
+#' gate and propagates Stage-1 EM casewise moment influence through the fitted
+#' normal-theory metric for multiplier calibration. In each case `df` is the
+#' saturated moment dimension minus the tangent rank. This is the general
+#' goodness-of-fit counterpart to
 #' [score_flip_test()], which instead releases specified affine restrictions.
 #'
-#' @param fit A fitted continuous ML or FIML `magmaan` model.
-#' @param data Raw fitting data for complete-data ML. FIML uses `fit$raw_data`.
+#' @param fit A fitted continuous ML, FIML, or normal-theory ML2S `magmaan`
+#'   model.
+#' @param data Raw fitting data for complete-data ML. FIML and ML2S use
+#'   `fit$raw_data`.
 #' @inheritParams score_flip_test
 #' @return A `magmaan_global_score_flip_test` list containing the effective
 #'   multiplier result, asymptotic comparators, and saturated/tangent geometry
@@ -170,8 +174,9 @@ global_score_flip_test <- function(
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
   estimator <- toupper(fit$estimator %||% "ML")
-  if (!estimator %in% c("ML", "FIML")) {
-    stop("global_score_flip_test(): `fit` must use ML or FIML", call. = FALSE)
+  if (!estimator %in% c("ML", "FIML", "ML2S")) {
+    stop("global_score_flip_test(): `fit` must use ML, FIML, or normal-theory ML2S",
+         call. = FALSE)
   }
   n_flips <- as.integer(n_flips)[1L]
   if (is.na(n_flips) || n_flips < 1L) {
@@ -195,13 +200,18 @@ global_score_flip_test <- function(
     stop("global_score_flip_test(): `center_multiplier_scores` must be TRUE or FALSE",
          call. = FALSE)
   }
-  if (estimator == "FIML") {
+  if (estimator %in% c("FIML", "ML2S")) {
     if (!missing(data) && !is.null(data)) {
-      stop("global_score_flip_test(): FIML uses `fit$raw_data`; omit `data`",
+      stop("global_score_flip_test(): FIML/ML2S uses `fit$raw_data`; omit `data`",
            call. = FALSE)
     }
     if (is.null(fit$raw_data)) {
-      stop("global_score_flip_test(): FIML fit does not carry `raw_data`",
+      stop("global_score_flip_test(): FIML/ML2S fit does not carry `raw_data`",
+           call. = FALSE)
+    }
+    if (estimator == "ML2S" &&
+        !is.null(fit$stage1_regularization)) {
+      stop("global_score_flip_test(): regularized Stage-1 ML2S is not supported",
            call. = FALSE)
     }
     raw <- fit$raw_data
