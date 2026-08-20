@@ -8219,6 +8219,29 @@ score_flip_multiplier_studentization_from_string(
   return Studentization::None;
 }
 
+magmaan::inference::frontier::ScoreFlipSensitivity
+score_flip_sensitivity_from_string(const std::string& sensitivity) {
+  using Sensitivity =
+      magmaan::inference::frontier::ScoreFlipSensitivity;
+  if (sensitivity == "expected") {
+    return Sensitivity::ExpectedInformation;
+  }
+  if (sensitivity == "observed") {
+    return Sensitivity::ObservedInformation;
+  }
+  Rcpp::stop("magmaan: score_flip_test sensitivity must be 'expected' or "
+             "'observed'");
+  return Sensitivity::ExpectedInformation;
+}
+
+const char* score_flip_sensitivity_string(
+    magmaan::inference::frontier::ScoreFlipSensitivity sensitivity) {
+  using Sensitivity =
+      magmaan::inference::frontier::ScoreFlipSensitivity;
+  return sensitivity == Sensitivity::ObservedInformation
+      ? "observed" : "expected";
+}
+
 Rcpp::List score_flip_result_to_r(
     const magmaan::inference::frontier::ScoreFlipTestResult& out) {
   return Rcpp::List::create(
@@ -8256,6 +8279,8 @@ Rcpp::List score_flip_result_to_r(
       Rcpp::_ ["eigenvalues"] = Rcpp::wrap(out.eigvals),
       Rcpp::_ ["n_flips"] = out.n_flips,
       Rcpp::_ ["seed"] = static_cast<double>(out.seed),
+      Rcpp::_ ["sensitivity"] =
+          score_flip_sensitivity_string(out.sensitivity),
       Rcpp::_ ["nuisance_stationarity_norm"] = out.nuisance_stationarity_norm,
       Rcpp::_ ["min_variance_eigenvalue"] = out.min_variance_eigenvalue,
       Rcpp::_ ["max_variance_condition"] = out.max_variance_condition,
@@ -8290,7 +8315,8 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
                                      double two_point_skewness = 1.0,
                                      bool center_multiplier_scores = false,
                                      std::string multiplier_studentization =
-                                         "none") {
+                                         "none",
+                                     std::string sensitivity = "expected") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
   const auto multiplier_kind =
@@ -8298,6 +8324,8 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
   const auto multiplier_studentization_kind =
       score_flip_multiplier_studentization_from_string(
           multiplier_studentization);
+  const auto sensitivity_kind =
+      score_flip_sensitivity_from_string(sensitivity);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -8319,6 +8347,7 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
   options.center_multiplier_scores = center_multiplier_scores;
   options.multiplier_studentization =
       multiplier_studentization_kind;
+  options.sensitivity = sensitivity_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (est1 == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
@@ -8345,7 +8374,8 @@ Rcpp::List inference_score_flip_test_model(
     std::string multiplier = "rademacher",
     double two_point_skewness = 1.0,
     bool center_multiplier_scores = false,
-    std::string multiplier_studentization = "none") {
+    std::string multiplier_studentization = "none",
+    std::string sensitivity = "expected") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
   const auto multiplier_kind =
@@ -8353,6 +8383,8 @@ Rcpp::List inference_score_flip_test_model(
   const auto multiplier_studentization_kind =
       score_flip_multiplier_studentization_from_string(
           multiplier_studentization);
+  const auto sensitivity_kind =
+      score_flip_sensitivity_from_string(sensitivity);
   if (!std::isfinite(seed) || seed < 0.0 || seed > 9007199254740991.0) {
     Rcpp::stop("magmaan: score_flip_test seed must be an integer in [0, 2^53-1]");
   }
@@ -8378,6 +8410,7 @@ Rcpp::List inference_score_flip_test_model(
   options.center_multiplier_scores = center_multiplier_scores;
   options.multiplier_studentization =
       multiplier_studentization_kind;
+  options.sensitivity = sensitivity_kind;
   magmaan::post_expected<magmaan::inference::frontier::ScoreFlipTestResult> out;
   if (estimator == "FIML") {
     magmaan::data::RawData rd = fiml_raw_from_arg(h1.rep, raw);
@@ -8401,7 +8434,8 @@ Rcpp::List inference_global_score_flip_test(
     std::string multiplier = "rademacher",
     double two_point_skewness = 1.0,
     bool center_multiplier_scores = false,
-    std::string multiplier_studentization = "none") {
+    std::string multiplier_studentization = "none",
+    std::string sensitivity = "expected") {
   if (n_flips < 1) {
     Rcpp::stop("magmaan: global_score_flip_test n_flips must be positive");
   }
@@ -8428,6 +8462,8 @@ Rcpp::List inference_global_score_flip_test(
   options.resampling.multiplier_studentization =
       score_flip_multiplier_studentization_from_string(
           multiplier_studentization);
+  options.resampling.sensitivity =
+      score_flip_sensitivity_from_string(sensitivity);
   magmaan::post_expected<
       magmaan::inference::frontier::GlobalScoreFlipTestResult> out;
   if (estimator == "ML2S") {

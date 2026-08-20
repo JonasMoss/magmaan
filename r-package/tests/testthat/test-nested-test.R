@@ -122,3 +122,26 @@ test_that("paired Gamma printing names both spectra and scalar semantics", {
   expect_match(output, "Unbiased eigenvalues")
   expect_match(output, "scalar statistics use empirical Gamma")
 })
+
+test_that("observed score sensitivity enforces its supported calibration", {
+  h0 <- list(estimator = "FIML")
+  h1 <- list(estimator = "FIML")
+
+  expect_error(
+    score_flip_test(h1, h0, sensitivity = "observed"),
+    "supports only effective or asymptotic"
+  )
+  expect_error(
+    score_flip_test(
+      h1, h0, calibration = "effective", sensitivity = "observed",
+      center_multiplier_scores = TRUE
+    ),
+    "does not support within-stratum"
+  )
+  expect_error(
+    global_score_flip_test(
+      list(estimator = "ML2S"), sensitivity = "observed"
+    ),
+    "not defined for ML2S"
+  )
+})

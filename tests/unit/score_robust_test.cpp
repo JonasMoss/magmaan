@@ -1932,6 +1932,16 @@ TEST_CASE("frontier global score flip supports covariance-only complete ML") {
   CHECK(result->flip.n_flips == 63);
   CHECK(std::isfinite(result->flip.p_effective));
 
+  opts.resampling.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::ObservedInformation;
+  auto observed = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, *samp, raw, *est, opts);
+  if (!observed.has_value()) MESSAGE(observed.error().detail);
+  REQUIRE(observed.has_value());
+  CHECK(observed->flip.sensitivity ==
+        inf::frontier::ScoreFlipSensitivity::ObservedInformation);
+  CHECK(std::isfinite(observed->flip.statistic_effective));
+
   auto wrong_raw = raw;
   wrong_raw.X.front()(0, 0) += 0.5;
   auto mismatch = inf::frontier::global_score_flip_test(
@@ -1958,16 +1968,28 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
   auto saturated_scores =
       magmaan::estimate::fiml::fiml_saturated_casewise_deviance_scores(
           raw, *pack, evaluation->moments, true);
+  auto saturated_observed =
+      magmaan::estimate::fiml::fiml_saturated_observed_information(
+          raw, *pack, evaluation->moments, true);
   auto model_scores =
       magmaan::estimate::fiml::fiml_casewise_deviance_scores(
           h.pt, h.rep, raw, *pack, *est);
   REQUIRE(saturated_scores.has_value());
+  REQUIRE(saturated_observed.has_value());
   REQUIRE(model_scores.has_value());
   Eigen::MatrixXd Delta(saturated_scores->cols(), est->theta.size());
   Delta.topRows(evaluation->J_sigma.rows()) = evaluation->J_sigma;
   Delta.bottomRows(evaluation->J_mu.rows()) = evaluation->J_mu;
   CHECK((*saturated_scores * Delta - *model_scores).norm() <
         1e-9 * (1.0 + model_scores->norm()));
+  auto observed_h1 =
+      magmaan::estimate::fiml::fiml_observed_h1_information(
+          h.pt, h.rep, raw, *est, *pack);
+  REQUIRE(observed_h1.has_value());
+  const Eigen::MatrixXd projected_observed =
+      Delta.transpose() * (*saturated_observed) * Delta;
+  CHECK((projected_observed - *observed_h1).norm() <
+        1e-9 * (1.0 + observed_h1->norm()));
 
   inf::frontier::GlobalScoreFlipOptions opts;
   opts.resampling.n_flips = 127;
@@ -1992,6 +2014,20 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
   CHECK(std::isfinite(a->flip.p_mixture));
   CHECK(a->flip.sandwich_available);
   CHECK(std::isfinite(a->flip.p_sandwich));
+
+  opts.resampling.center_multiplier_scores = false;
+  opts.resampling.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::ObservedInformation;
+  auto corrected = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  if (!corrected.has_value()) MESSAGE(corrected.error().detail);
+  REQUIRE(corrected.has_value());
+  CHECK(corrected->flip.sensitivity ==
+        inf::frontier::ScoreFlipSensitivity::ObservedInformation);
+  CHECK(std::isfinite(corrected->flip.statistic_effective));
+  CHECK(std::isfinite(corrected->flip.p_effective));
+  CHECK(corrected->flip.statistic_effective !=
+        doctest::Approx(a->flip.statistic_effective).epsilon(1e-12));
 }
 
 TEST_CASE("frontier global ML2S score flip uses Stage-1 EM influence") {
@@ -2114,6 +2150,29 @@ TEST_CASE("frontier FIML score flips: missing-pattern correction is reproducible
   CHECK(std::isfinite(a->p_mixture));
   CHECK(a->sandwich_available);
   CHECK(std::isfinite(a->p_sandwich));
+
+  opts.calibration = inf::frontier::ScoreFlipCalibration::Effective;
+  opts.multiplier = inf::frontier::ScoreFlipMultiplier::Mammen;
+  opts.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::ObservedInformation;
+  auto corrected_a = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw, *pack, *est0, opts);
+  if (!corrected_a.has_value()) MESSAGE(corrected_a.error().detail);
+  REQUIRE(corrected_a.has_value());
+  auto corrected_b = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw, *pack, *est0, opts);
+  REQUIRE(corrected_b.has_value());
+  CHECK(corrected_a->sensitivity ==
+        inf::frontier::ScoreFlipSensitivity::ObservedInformation);
+  CHECK(corrected_a->p_effective == corrected_b->p_effective);
+  CHECK(corrected_a->statistic_effective ==
+        doctest::Approx(corrected_b->statistic_effective));
+  CHECK(std::isfinite(corrected_a->p_mixture));
+
+  opts.calibration = inf::frontier::ScoreFlipCalibration::All;
+  auto unsupported = inf::frontier::score_flip_test(
+      h1.pt, h1.rep, h0.pt, h0.rep, raw, *pack, *est0, opts);
+  CHECK_FALSE(unsupported.has_value());
 }
 
 TEST_CASE("frontier score flips: grouped variance matches dense case oracle") {

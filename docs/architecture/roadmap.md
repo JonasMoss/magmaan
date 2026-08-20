@@ -847,8 +847,16 @@ an unconstrained gradient test to constrained solutions.
   model-plus-H0 route: the latter uses H1's tangent without fitting H1. The R
   `nested_score_test()` convenience selects the zero-resampling route and
   reports score pEBA4 as its primary p-value alongside SB, exact-mixture, and
-  direct-sandwich diagnostics. Direct FIML reuses the H0 fit's raw data and
-  cached missingness pack. The current contract rejects
+  direct-sandwich diagnostics. `ScoreFlipOptions::sensitivity` additionally
+  exposes an opt-in observed-information correction. It replaces the expected
+  metric in both the nuisance projection
+  `G_A = D - K(K'AK)^-1K'AD` and the score quadratic/mixture bread with the
+  realized likelihood Hessian. This is the pseudo-true/MAR path when
+  information equality fails; the historical expected-information
+  construction remains the default comparator. Observed sensitivity is
+  effective/asymptotic-only and deliberately forbids within-pattern centering,
+  whose conditional means need not vanish under MAR. Direct FIML reuses the H0
+  fit's raw data and cached missingness pack. The current contract rejects
   fixed-X rows, nonlinear/inequality constraints, boundary null fits, and
   estimators other than complete ML or direct FIML.
   The C++ frontier option additionally has a deterministic verification-only
@@ -863,7 +871,10 @@ an unconstrained gradient test to constrained solutions.
   normal-theory two-stage counterpart. The ML/FIML path evaluates direct
   casewise saturated likelihood scores at the fitted model moments, builds the
   conditional Fisher metric for each observed-data pattern, and projects the
-  scores off the local SEM moment tangent. The tested dimension is therefore
+  scores off the local SEM moment tangent. Its opt-in observed-sensitivity
+  variant instead uses the analytic realized saturated-moment Hessian at the
+  restricted fitted moments; a projection identity is unit-gated against the
+  existing structural observed-H1 information. The tested dimension is therefore
   the saturated mean/covariance dimension minus the numerical tangent rank; no saturated H1
   fit and no refit per multiplier draw is required. Complete data and an
   all-observed FIML mask are unit-gated to the same statistic and multiplier
