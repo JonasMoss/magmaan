@@ -849,9 +849,10 @@ an unconstrained gradient test to constrained solutions.
   reports score pEBA4 as its primary p-value alongside SB, exact-mixture, and
   direct-sandwich diagnostics. `ScoreFlipOptions::sensitivity` additionally
   exposes an opt-in observed-information correction. It replaces the expected
-  metric in both the nuisance projection
-  `G_A = D - K(K'AK)^-1K'AD` and the score quadratic/mixture bread with the
-  realized likelihood Hessian. This is the pseudo-true/MAR path when
+  metric in the nuisance projection
+  `G_A = D - K(K'AK)^-1K'AD` with the realized likelihood Hessian while
+  retaining expected information as a stable common quadratic metric. This is
+  the pseudo-true/MAR path when
   information equality fails; the historical expected-information
   construction remains the default comparator. Observed sensitivity is
   effective/asymptotic-only and deliberately forbids within-pattern centering,
@@ -873,7 +874,7 @@ an unconstrained gradient test to constrained solutions.
   conditional Fisher metric for each observed-data pattern, and projects the
   scores off the local SEM moment tangent. Its opt-in observed-sensitivity
   variant instead uses the analytic realized saturated-moment Hessian at the
-  restricted fitted moments; a projection identity is unit-gated against the
+  restricted fitted moments for the tangent projection; a projection identity is unit-gated against the
   existing structural observed-H1 information. The tested dimension is therefore
   the saturated mean/covariance dimension minus the numerical tangent rank; no saturated H1
   fit and no refit per multiplier draw is required. Complete data and an

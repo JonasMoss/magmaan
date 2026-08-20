@@ -27,8 +27,9 @@
 #'   contributions within information strata before applying multipliers.
 #' @param sensitivity Nuisance sensitivity (bread). `"expected"` preserves
 #'   the original pattern-conditional normal-theory construction;
-#'   `"observed"` uses the realized likelihood Hessian and supplies the
-#'   pseudo-true/MAR correction when information equality need not hold.
+#'   `"observed"` uses the realized likelihood Hessian for the nuisance
+#'   projection and supplies the pseudo-true/MAR correction when information
+#'   equality need not hold. The score quadratic retains the expected metric.
 #' @param multiplier_studentization Optional `"weighted-meat"` bootstrap-t
 #'   diagnostic using the per-draw meat
 #'   `sum(w_i^2 u_i u_i')`. `"none"` retains the expected-information metric.
