@@ -6861,12 +6861,6 @@ fit_fiml_impl(spec::LatentStructure pt,
     }
     return out;
   };
-  auto finalize = [&](Estimates est) {
-    est.diagnostics = finalize_fit_diagnostics(
-        est.theta, pt, ev, con, nl, Bounds{});
-    return est;
-  };
-
   auto eval_at = [&](const Eigen::VectorXd& x,
                      Eigen::VectorXd& grad) -> double {
     auto eval = ev.evaluate(x, true, true);
@@ -6887,6 +6881,22 @@ fit_fiml_impl(spec::LatentStructure pt,
     // the observed-Hessian paths (analytic and FD) differentiate them.
     grad = 0.5 * vg->gradient;
     return 0.5 * vg->value;
+  };
+
+  auto finalize = [&](Estimates est) {
+    est.diagnostics = finalize_fit_diagnostics(
+        est.theta, pt, ev, con, nl, Bounds{});
+    if (!extra.active()) {
+      Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+      const double value = eval_at(est.theta, gradient);
+      if (!std::isfinite(value)) {
+        gradient.setConstant(std::numeric_limits<double>::quiet_NaN());
+      }
+      est.diagnostics.geometric_stationarity =
+          audit_geometric_stationarity(
+              est.theta, gradient, pt, ev, con, nl, Bounds{});
+    }
+    return est;
   };
 
   auto run_fiml_scalar = [&](const optim::ScalarProblem& prob,

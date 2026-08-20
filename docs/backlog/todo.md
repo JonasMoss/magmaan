@@ -270,9 +270,10 @@ when they next change.
   The independent `experiments/78-psd-estimator-stress/` leaf now owns the
   common structural geometries, paired ordinary/PSD fits, selective restart
   logic, and result schema. Its first two-replication smoke completed 128 fit
-  attempts across eight registered families: all 126 returned fits matched an
-  independently recomputed objective, all 70 returned PSD fits were
-  covariance-admissible, all 28 ML2S Stage-1 fingerprints were unchanged, and
+  attempts across eight registered families: all 125 returned fits matched an
+  independently recomputed objective and completed both geometric projections,
+  all 69 cone-stationary PSD fits were covariance-admissible, all 28 ML2S
+  Stage-1 fingerprints were unchanged, and
   both non-PD CatML sentinels were rejected as intended. Checkpoint/resume,
   task subsetting, metadata, paired summaries, and the smoke report are live.
   This validates the harness, not stochastic performance.
@@ -283,7 +284,8 @@ when they next change.
   including the `0.20, 0.05, 0.01, 0.001, 0` covariance-eigenvalue sequence,
   one joint boundary, and sample-size ratios `2, 5, 10, 50`. Its 20,700
   attempts produced 20,406 returned fits with no independent-objective
-  failures. All 11,424 audit-stationary covariance-honest fits were admissible;
+  failures. All 11,424 driven/lifted-audit-stationary covariance-honest fits
+  were admissible;
   the 76 nonstationary constrained returns were confined to GLS in the
   correlated-block boundary cells. All 2,353 eligible interior pairs passed
   the objective and fitted-moment agreement gates. A terminal covariance-link
@@ -295,20 +297,26 @@ when they next change.
   general linear equality, and fixed-WLS weights with realized condition
   numbers `1, 1e4, 1e8`. Across the resulting 29 cells, 23,506 of 24,000 fits
   returned and every returned objective passed independent recomputation. All
-  13,125 audit-stationary covariance-honest fits were admissible, all 900
-  stationary misspecified fits had nonzero discrepancy, all 1,797 returned
+  13,082 of 13,297 returned covariance-honest fits passed the common PSD-cone
+  audit and every one was admissible, all 893 cone-stationary misspecified fits
+  had nonzero discrepancy, all 1,797 returned
   grouped fits honored both equalities to at most `4.44e-16`, and all 3,253
   eligible interior pairs passed the agreement gates. Weight conditioning is
   the first sharp limit: ordinary fixed WLS returned in `100%, 3%, 0%` of the
-  `1, 1e4, 1e8` cells; PSD WLS returned throughout but was stationary in
-  `100%, 100%, 8%`. The weights retained their requested spectra and full
-  effective ranks, ruling out silent rank truncation as the explanation.
+  `1, 1e4, 1e8` cells; PSD WLS returned throughout but was cone-stationary in
+  `100%, 100%, 6%`, compared with `100%, 100%, 8%` under the lifted audit. The
+  PSD normal cone converted 2,824 ambient failures into stationary fits; 43
+  returns passed the lifted audit but failed the common cone audit, with no
+  reverse cases. All 23,506 returned fits had finite common-coordinate
+  gradients and completed both normal projections. The weights retained their
+  requested spectra and full effective ranks, ruling out silent rank
+  truncation as the explanation.
 
-  Next move through FIML/ML2S and the categorical families below. Do not form a
-  full Cartesian product: vary one stress axis at a time and add interactions
-  only for prespecified risky pairs or failures seen in the pilot. This is
-  computational validation, not an inference, coverage, or estimator-ranking
-  study.
+  Next move from their existing deterministic smoke anchors to calibrated
+  FIML/ML2S and categorical stress slices. Do not form a full Cartesian
+  product: vary one stress axis at a time and add interactions only for
+  prespecified risky pairs or failures seen in the pilot. This is computational
+  validation, not an inference, coverage, or estimator-ranking study.
 
   The common structural panel is:
 
@@ -362,14 +370,16 @@ when they next change.
     implied covariance.
 
   Every fit row must retain the dataset seed and design identifiers; ordinary
-  and PSD return codes; solver convergence; the common terminal audit and KKT
-  residual; equality violation; objective and an independently recomputed
+  and PSD return codes; solver convergence; the driven/lifted terminal audit,
+  common full-model ambient and PSD-cone residuals; equality violation;
+  objective and an independently recomputed
   objective; minimum eigenvalue/rank for every primitive block and implied
   observed covariance; boundary status; parameter and implied-moment error;
   Stage-1-domain status/fingerprint where applicable; objective/gradient
   evaluations; elapsed time; and optimizer/backend version. Summaries must keep
-  **solver return**, **audit-stationary**, **covariance-admissible**, and
-  **best-attained basin** rates separate. Report paired medians and tail
+  **solver return**, **driven/lifted stationary**, **cone stationary**,
+  **covariance-admissible**, and **best-attained basin** rates separate.
+  Report paired medians and tail
   quantiles, not only aggregate success rates, and attach binomial intervals to
   stochastic rates.
 
@@ -2657,18 +2667,19 @@ work lives in [`speculative.md`](speculative.md). Open work:
   (`tests/unit/terminal_audit_test.cpp`), so the experiment is one option flip
   away once the data exists; see `docs/design/terminal-audit.md` "Tolerance
   calibration".
-- **M/L.** Decouple terminal audits from optimizer coordinate systems so every
-  fit result can be re-audited uniformly after any method-specific massage. The
-  first concrete gap is SNLLS: `fit_snlls` / `fit_snlls_gls` convergence is
-  audited in the profiled outer beta coordinates, relying on the inner alpha
-  least-squares solve for the eliminated block. Add a post-hoc full-theta audit
-  path, probably by generalizing `evaluate_at()`, so paper and benchmark harnesses
-  can compare Full and SNLLS under the same expanded-theta KKT projected-gradient
-  check. Record both verdicts (`profiled_beta_stationary` and
-  `full_theta_stationary`) plus objective/gradient norms, inner-solve
-  rank/conditioning, active bounds, and profile fallback diagnostics. Do not make
-  the full-theta audit a default hard gate until the SNLLS corpora and verifier
-  track show how often it differs from the expected profiled verdict.
+- **M/L.** Finish decoupling terminal audits from optimizer coordinates. The
+  common full-model audit now records ambient equality/bound stationarity and
+  true primitive-PSD-cone stationarity under the model-Frobenius metric-dual L2
+  norm for ML, fixed/fitted-weight GMM/LS, FIML, ML2S Stage 2,
+  ordinal/mixed ordinal, CatML,
+  and their PSD variants. It is additive and leaves the driven/lavaan-compatible
+  `fit$audit` untouched. Remaining: give `fit_snlls` / `fit_snlls_gls` a
+  full-`theta` gradient that includes the eliminated alpha block, include
+  normals from `ExtraNonlinearEqConstraints`, and decide whether residual-only
+  specialized paths should rebuild a scalar terminal objective. Record profile
+  rank/conditioning and fallback diagnostics alongside both verdicts. Do not
+  make the common audit a hard return gate until the stress/corpus verifier
+  track shows how often it differs from the driven verdict.
 - **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS, Ceres
   trust-region, Ceres dense BFGS, and SNLLS only on semantically appropriate
   cases; include shallow or Heywood-prone LS cases so bounds and conditioning stay

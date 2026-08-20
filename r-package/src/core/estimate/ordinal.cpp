@@ -27,6 +27,7 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -9385,6 +9386,26 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
                    out->grad_inf_norm, std::move(out->audit)};
 }
 
+void attach_ordinal_geometric_diagnostics(
+    Estimates& est,
+    const spec::LatentStructure& pt,
+    const model::ModelEvaluator& ev,
+    const EqConstraints& con,
+    const Bounds& bounds,
+    const optim::GmmProblem& full_theta_problem) {
+  const NonlinearEqConstraints nl = build_nl_constraints(pt);
+  est.diagnostics = finalize_fit_diagnostics(
+      est.theta, pt, ev, con, nl, bounds);
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+  const optim::ScalarProblem scalar = optim::scalarize(full_theta_problem);
+  const double value = scalar.f(est.theta, gradient);
+  if (!std::isfinite(value)) {
+    gradient.setConstant(std::numeric_limits<double>::quiet_NaN());
+  }
+  est.diagnostics.geometric_stationarity = audit_geometric_stationarity(
+      est.theta, gradient, pt, ev, con, nl, bounds);
+}
+
 fit_expected<Estimates>
 solve_ordinal_ls_extra(const optim::GmmProblem& prob,
                        const Eigen::VectorXd& x0,
@@ -10908,8 +10929,12 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                             factors, x, parameterization, eval->J_mu);
   };
 
-  return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
-                          "fit_ordinal_bounded");
+  auto est = solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                              "fit_ordinal_bounded");
+  if (!est.has_value()) return est;
+  attach_ordinal_geometric_diagnostics(
+      *est, pt, ev, con, bounds, prob);
+  return est;
 }
 
 fit_expected<Estimates>
@@ -11491,8 +11516,12 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                                   eval->J_mu, factors, x, parameterization);
   };
 
-  return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
-                          "fit_mixed_ordinal_bounded");
+  auto est = solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                              "fit_mixed_ordinal_bounded");
+  if (!est.has_value()) return est;
+  attach_ordinal_geometric_diagnostics(
+      *est, pt, ev, con, bounds, prob);
+  return est;
 }
 
 fit_expected<Estimates>

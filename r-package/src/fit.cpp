@@ -1067,6 +1067,35 @@ Rcpp::List admissibility_to_r(
       Rcpp::_["psi"] = covariance_blocks_to_r(d.psi_blocks));
 }
 
+Rcpp::List geometric_stationarity_to_r(
+    const magmaan::estimate::GeometricStationarityDiagnostics& d) {
+  return Rcpp::List::create(
+      Rcpp::_["checked"] = d.checked,
+      Rcpp::_["metric"] = "model_frobenius",
+      Rcpp::_["gradient_finite"] = d.gradient_finite,
+      Rcpp::_["feasible"] = d.feasible,
+      Rcpp::_["covariance_feasible"] = d.covariance_feasible,
+      Rcpp::_["ambient_stationary"] = d.ambient_stationary,
+      Rcpp::_["ambient_residual_inf"] = d.ambient_residual_inf,
+      Rcpp::_["ambient_residual_l2"] = d.ambient_residual_l2,
+      Rcpp::_["cone_stationary"] = d.cone_stationary,
+      Rcpp::_["cone_residual_inf"] = d.cone_residual_inf,
+      Rcpp::_["cone_residual_l2"] = d.cone_residual_l2,
+      Rcpp::_["raw_gradient_inf"] = d.raw_gradient_inf,
+      Rcpp::_["stationarity_tol"] = d.stationarity_tol,
+      Rcpp::_["covariance_eigen_tol"] = d.covariance_eigen_tol,
+      Rcpp::_["covariance_active_blocks"] = d.covariance_active_blocks,
+      Rcpp::_["covariance_nullity"] = d.covariance_nullity,
+      Rcpp::_["ambient_projection_converged"] =
+          d.ambient_projection_converged,
+      Rcpp::_["cone_projection_converged"] =
+          d.cone_projection_converged,
+      Rcpp::_["ambient_projection_iterations"] =
+          d.ambient_projection_iterations,
+      Rcpp::_["cone_projection_iterations"] =
+          d.cone_projection_iterations);
+}
+
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
   Rcpp::LogicalVector sigma_pd(static_cast<R_xlen_t>(d.sigma_pd_per_block.size()));
   for (std::size_t b = 0; b < d.sigma_pd_per_block.size(); ++b)
@@ -1090,6 +1119,8 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["active_bounds_lower"]    = at_lo,
       Rcpp::_["active_bounds_upper"]    = at_up,
       Rcpp::_["admissibility"]          = admissibility_to_r(d.admissibility),
+      Rcpp::_["geometric_stationarity"] =
+          geometric_stationarity_to_r(d.geometric_stationarity),
       Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);
 }
 

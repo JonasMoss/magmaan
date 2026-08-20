@@ -120,6 +120,21 @@ base_result_row <- function(context, method, role, pair_id, criterion,
     solver_converged = FALSE,
     audit_stationary = NA,
     audit_status = "",
+    geometric_checked = NA,
+    geometric_gradient_finite = NA,
+    geometric_feasible = NA,
+    geometric_covariance_feasible = NA,
+    ambient_stationary = NA,
+    ambient_residual_inf = NA_real_,
+    ambient_residual_l2 = NA_real_,
+    ambient_projection_converged = NA,
+    ambient_projection_iterations = NA_integer_,
+    cone_stationary = NA,
+    cone_residual_inf = NA_real_,
+    cone_residual_l2 = NA_real_,
+    cone_projection_converged = NA,
+    cone_projection_iterations = NA_integer_,
+    covariance_nullity = NA_integer_,
     admissible = NA,
     covariance_psd = NA,
     implied_sigma_pd = NA,
@@ -186,6 +201,34 @@ fit_record <- function(context, method, role, pair_id, criterion, psd,
   row$solver_converged <- isTRUE(fit$converged)
   row$audit_stationary <- logical_or_na(fit$audit$stationary)
   row$audit_status <- as.character(fit$audit$advisory_status %||% "")
+  geometric <- fit$diagnostics$geometric_stationarity %||% list()
+  row$geometric_checked <- logical_or_na(geometric$checked)
+  row$geometric_gradient_finite <- logical_or_na(geometric$gradient_finite)
+  row$geometric_feasible <- logical_or_na(geometric$feasible)
+  row$geometric_covariance_feasible <- logical_or_na(
+    geometric$covariance_feasible
+  )
+  row$ambient_stationary <- logical_or_na(geometric$ambient_stationary)
+  row$ambient_residual_inf <- scalar_or_na(geometric$ambient_residual_inf)
+  row$ambient_residual_l2 <- scalar_or_na(geometric$ambient_residual_l2)
+  row$ambient_projection_converged <- logical_or_na(
+    geometric$ambient_projection_converged
+  )
+  row$ambient_projection_iterations <- as.integer(scalar_or_na(
+    geometric$ambient_projection_iterations
+  ))
+  row$cone_stationary <- logical_or_na(geometric$cone_stationary)
+  row$cone_residual_inf <- scalar_or_na(geometric$cone_residual_inf)
+  row$cone_residual_l2 <- scalar_or_na(geometric$cone_residual_l2)
+  row$cone_projection_converged <- logical_or_na(
+    geometric$cone_projection_converged
+  )
+  row$cone_projection_iterations <- as.integer(scalar_or_na(
+    geometric$cone_projection_iterations
+  ))
+  row$covariance_nullity <- as.integer(
+    scalar_or_na(geometric$covariance_nullity)
+  )
   components <- component_summary(fit)
   row$admissible <- components$admissible
   row$covariance_psd <- components$covariance_psd

@@ -921,6 +921,34 @@ psd_ml_problem(const model::ModelEvaluator& ev,
 }
 
 optim::ScalarProblem
+full_fiml_problem(const model::ModelEvaluator& ev,
+                  const data::RawData& raw,
+                  const fiml::FIMLCache& cache,
+                  fiml::FIML discrepancy) {
+  optim::ScalarProblem prob;
+  prob.n_param = static_cast<Eigen::Index>(ev.n_free());
+  prob.expand = [](const Eigen::VectorXd& theta) { return theta; };
+  prob.f = [&ev, &raw, &cache, discrepancy](
+               const Eigen::VectorXd& theta, Eigen::VectorXd& gradient) {
+    auto evaluation = ev.evaluate(theta, true, true);
+    if (!evaluation.has_value()) {
+      gradient = Eigen::VectorXd::Zero(theta.size());
+      return std::numeric_limits<double>::infinity();
+    }
+    auto value_gradient = discrepancy.value_gradient(
+        raw, cache, evaluation->moments, evaluation->J_sigma,
+        evaluation->J_mu);
+    if (!value_gradient.has_value()) {
+      gradient = Eigen::VectorXd::Zero(theta.size());
+      return std::numeric_limits<double>::infinity();
+    }
+    gradient = 0.5 * value_gradient->gradient;
+    return 0.5 * value_gradient->value;
+  };
+  return prob;
+}
+
+optim::ScalarProblem
 psd_fiml_problem(const model::ModelEvaluator& ev,
                  const model::MatrixRep& rep,
                  const EqConstraints& con,
@@ -1146,6 +1174,37 @@ psd_ordinal_problem(const Prelude& pre,
 }
 
 fit_expected<optim::GmmProblem>
+full_ordinal_problem(const Prelude& pre,
+                     const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Eigen::VectorXd& start,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization) {
+  detail_ordinal::TransformedOrdinalEvaluationFn evaluate =
+      [&ev = pre.ev](const Eigen::VectorXd& theta, bool with_jacobian)
+      -> fit_expected<detail_ordinal::TransformedOrdinalEvaluation> {
+    auto evaluation = ev.evaluate(
+        theta, with_jacobian, with_jacobian);
+    if (!evaluation.has_value()) {
+      return std::unexpected(model_to_fit(
+          evaluation.error(), "full_ordinal_problem"));
+    }
+    detail_ordinal::TransformedOrdinalEvaluation out;
+    out.evaluation = std::move(*evaluation);
+    out.theta = theta;
+    if (with_jacobian) {
+      out.J_theta = Eigen::MatrixXd::Identity(theta.size(), theta.size());
+    }
+    return out;
+  };
+  return detail_ordinal::ordinal_ls_problem_transformed(
+      pt, rep, stats, start, start.size(), weights, parameterization,
+      std::move(evaluate),
+      [](const Eigen::VectorXd& theta) { return theta; });
+}
+
+fit_expected<optim::GmmProblem>
 psd_mixed_ordinal_problem(
     const Prelude& pre,
     const spec::LatentStructure& pt,
@@ -1186,6 +1245,38 @@ psd_mixed_ordinal_problem(
           const Eigen::VectorXd& x) {
         return con.expand(x.head(n_alpha));
       });
+}
+
+fit_expected<optim::GmmProblem>
+full_mixed_ordinal_problem(
+    const Prelude& pre,
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Eigen::VectorXd& start,
+    OrdinalWeightKind weights,
+    OrdinalParameterization parameterization) {
+  detail_ordinal::TransformedOrdinalEvaluationFn evaluate =
+      [&ev = pre.ev](const Eigen::VectorXd& theta, bool with_jacobian)
+      -> fit_expected<detail_ordinal::TransformedOrdinalEvaluation> {
+    auto evaluation = ev.evaluate(
+        theta, with_jacobian, with_jacobian);
+    if (!evaluation.has_value()) {
+      return std::unexpected(model_to_fit(
+          evaluation.error(), "full_mixed_ordinal_problem"));
+    }
+    detail_ordinal::TransformedOrdinalEvaluation out;
+    out.evaluation = std::move(*evaluation);
+    out.theta = theta;
+    if (with_jacobian) {
+      out.J_theta = Eigen::MatrixXd::Identity(theta.size(), theta.size());
+    }
+    return out;
+  };
+  return detail_ordinal::mixed_ordinal_ls_problem_transformed(
+      pt, rep, stats, start, start.size(), weights, parameterization,
+      std::move(evaluate),
+      [](const Eigen::VectorXd& theta) { return theta; });
 }
 
 fit_expected<FcSemPrelude>
@@ -1851,6 +1942,35 @@ static void attach_diagnostics(Estimates& est,
                                              pre.nl, bounds);
 }
 
+static void attach_geometric_stationarity(
+    Estimates& est,
+    const spec::LatentStructure& pt,
+    const Prelude& pre,
+    const Bounds& bounds,
+    const optim::ScalarProblem& full_theta_problem) {
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+  const double value = full_theta_problem.f(est.theta, gradient);
+  if (!std::isfinite(value)) {
+    gradient.setConstant(std::numeric_limits<double>::quiet_NaN());
+  }
+  est.diagnostics.geometric_stationarity = audit_geometric_stationarity(
+      est.theta, gradient, pt, pre.ev, pre.con, pre.nl, bounds);
+}
+
+static void attach_gmm_geometric_stationarity(
+    Estimates& est,
+    const spec::LatentStructure& pt,
+    const Prelude& pre,
+    const SampleStats& samp,
+    const Eigen::VectorXd& layout_point,
+    const gmm::Weight& weight,
+    const Bounds& bounds) {
+  auto problem = gmm::residuals(pre.ev, samp, layout_point, weight);
+  if (!problem.has_value()) return;
+  attach_geometric_stationarity(
+      est, pt, pre, bounds, optim::scalarize(*problem));
+}
+
 namespace {
 
 enum class FisherStepKind { Full, SchurSnlls };
@@ -1985,8 +2105,15 @@ fit_fiml_psd_impl(spec::LatentStructure pt,
       pre->ev, rep, pre->con, *layout, raw, pack.cache, discrepancy);
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
-  return drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
-                           Bounds{}, Bounds{}, backend, opts, psd_opts, who);
+  auto est = drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
+                               Bounds{}, Bounds{}, backend, opts, psd_opts,
+                               who);
+  if (!est.has_value()) return est;
+  const optim::ScalarProblem full_problem = full_fiml_problem(
+      pre->ev, raw, pack.cache, discrepancy);
+  attach_geometric_stationarity(
+      *est, pt, *pre, Bounds{}, full_problem);
+  return est;
 }
 
 fit_expected<Estimates>
@@ -2008,6 +2135,8 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                          backend, opts);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  attach_gmm_geometric_stationarity(
+      *est, pt, *pre, samp, x0, weight, bounds);
   return est;
 }
 
@@ -2023,6 +2152,8 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
                          backend, opts);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  attach_gmm_geometric_stationarity(
+      *est, pt, *pre, samp, x0, *W, bounds);
   return est;
 }
 
@@ -2107,6 +2238,8 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
                          backend, opts);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  attach_gmm_geometric_stationarity(
+      *est, pt, *pre, samp, x0, W, bounds);
   return est;
 }
 
@@ -2125,6 +2258,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
                                opts, "fit_ml");
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
   return est;
 }
 
@@ -2246,9 +2380,16 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
                      std::move(*cache));
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
-  return drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
-                           Bounds{}, Bounds{}, backend, opts, psd_opts,
-                           "fit_ml_psd");
+  auto est = drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
+                               Bounds{}, Bounds{}, backend, opts, psd_opts,
+                               "fit_ml_psd");
+  if (!est.has_value()) return est;
+  auto full_problem = estimate::ml_objective(pre->ev, samp);
+  if (full_problem.has_value()) {
+    attach_geometric_stationarity(
+        *est, pt, *pre, Bounds{}, *full_problem);
+  }
+  return est;
 }
 
 fit_expected<Estimates>
@@ -2271,9 +2412,13 @@ fit_gmm_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
   const optim::ScalarProblem prob = optim::scalarize(*gmm_prob);
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
-  return drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
-                           Bounds{}, Bounds{}, backend, opts, psd_opts,
-                           "fit_gmm_psd");
+  auto est = drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
+                               Bounds{}, Bounds{}, backend, opts, psd_opts,
+                               "fit_gmm_psd");
+  if (!est.has_value()) return est;
+  attach_gmm_geometric_stationarity(
+      *est, pt, *pre, samp, x0, weight, Bounds{});
+  return est;
 }
 
 fit_expected<Estimates>
@@ -2375,6 +2520,12 @@ fit_ordinal_psd(spec::LatentStructure pt,
       }
     }
   }
+  auto full_problem = full_ordinal_problem(
+      *pre, pt, rep, stats, result->theta, weights, parameterization);
+  if (full_problem.has_value()) {
+    attach_geometric_stationarity(
+        *result, pt, *pre, bounds, optim::scalarize(*full_problem));
+  }
   return result;
 }
 
@@ -2407,6 +2558,8 @@ fit_catml(spec::LatentStructure pt,
                                   backend, opts, who);
   if (!result.has_value()) return std::unexpected(result.error());
   attach_diagnostics(*result, pt, *pre, Bounds{});
+  attach_geometric_stationarity(
+      *result, pt, *pre, Bounds{}, problem);
   return result;
 }
 
@@ -2447,8 +2600,18 @@ fit_catml_psd(spec::LatentStructure pt,
       pre->ev, rep, pre->con, *layout, sample, std::move(*cache), who);
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
-  return drive_psd_problem(problem, pt, *pre, *layout, constraints, *start,
-                           Bounds{}, Bounds{}, backend, opts, psd_opts, who);
+  auto result = drive_psd_problem(
+      problem, pt, *pre, *layout, constraints, *start, Bounds{}, Bounds{},
+      backend, opts, psd_opts, who);
+  if (!result.has_value()) return result;
+  auto full_cache = ml_prepare(sample);
+  if (full_cache.has_value()) {
+    const optim::ScalarProblem full_problem = catml_problem(
+        pre->ev, sample, std::move(*full_cache), who);
+    attach_geometric_stationarity(
+        *result, pt, *pre, Bounds{}, full_problem);
+  }
+  return result;
 }
 
 fit_expected<Estimates>
@@ -2551,6 +2714,12 @@ fit_mixed_ordinal_psd(
                 std::to_string(k) + " past its bound"));
       }
     }
+  }
+  auto full_problem = full_mixed_ordinal_problem(
+      *pre, pt, rep, stats, result->theta, weights, parameterization);
+  if (full_problem.has_value()) {
+    attach_geometric_stationarity(
+        *result, pt, *pre, bounds, optim::scalarize(*full_problem));
   }
   return result;
 }
@@ -2759,6 +2928,14 @@ fit_gmm_fitted_weight_impl(spec::LatentStructure pt,
       pre->ev, samp, x0, fitted_opts, solve, who);
   if (!est.has_value()) return std::unexpected(est.error());
   attach_diagnostics(*est, pt, *pre, bounds);
+  if (!extra.active()) {
+    auto final_weight = build_fitted_weight(
+        pre->ev, samp, est->theta, fitted_opts.kind, who);
+    if (final_weight.has_value()) {
+      attach_gmm_geometric_stationarity(
+          *est, pt, *pre, samp, est->theta, *final_weight, bounds);
+    }
+  }
   return est;
 }
 
@@ -2984,6 +3161,12 @@ fit_gmm_fitted_weight_psd(
       pre->ev, samp, x0, fitted_opts, solve, who);
   if (!est.has_value()) return std::unexpected(est.error());
   attach_diagnostics(*est, pt, *pre, Bounds{});
+  auto final_weight = build_fitted_weight(
+      pre->ev, samp, est->theta, fitted_opts.kind, who);
+  if (final_weight.has_value()) {
+    attach_gmm_geometric_stationarity(
+        *est, pt, *pre, samp, est->theta, *final_weight, Bounds{});
+  }
   return est;
 }
 

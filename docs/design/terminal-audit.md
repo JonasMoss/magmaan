@@ -37,12 +37,15 @@ two layers separate concerns that the old code conflated:
   actually minimized over. Answers "is this point primal-feasible and
   first-order stationary for the problem the backend solved?"
 - **L2 — Fit Finalization Audit** lives in `src/estimate/`. Operates on
-  **expanded full θ**. Answers "is this fit usable for downstream inference?"
+  **expanded full θ**. It records admissibility and feasibility, and—when the
+  fit path supplies the ordinary full-`theta` objective gradient—audits the
+  same terminal differential against the model's covariance-cone geometry.
 
 Two coordinate systems, two questions, one fit record. L1's stationarity
 verdict is what `fit$audit$stationary` reports; L2 records what
-SE/χ²/robust-correction code needs (implied-Σ PD per group, equality residual,
-active-bound set on full θ).
+SE/χ²/robust-correction code needs and exposes the cross-method stationarity
+comparison at `fit$diagnostics$geometric_stationarity`. The latter is
+additive: it never overwrites the lavaan-compatible L1 result.
 
 ## L1: optimizer terminal audit
 
@@ -247,6 +250,55 @@ L2 never blocks a fit. It records what downstream consumers need:
   bound has a one-sided derivative, and the standard info-matrix SE for it
   is not valid. Downstream `magmaan_se()` etc. can flag or fall back.
 
+### Common-coordinate covariance-cone stationarity
+
+The lifted Cholesky audit and an ordinary partable-coordinate audit are not
+the same first-order question at a singular covariance boundary. For the
+scalar analogue (v=ell^2), an inward objective gradient at (v=0) becomes
+zero after differentiating through (ell=0). Consequently, equality KKT in
+the lifted chart can declare the terminal point stationary even though a
+feasible first-order direction exists in the original covariance variable.
+
+`audit_geometric_stationarity()` avoids that chart singularity. It receives
+the analytic objective gradient in ordinary full-`theta` coordinates and
+computes two normal-cone projection residuals:
+
+1. **Ambient residual:** linear-equality normals, nonlinear-equality tangent
+   normals, and active box-bound normals.
+2. **Cone residual:** the same normals plus
+   $-D_b^*(U_{0b} H_b U_{0b}^{\mathsf T})$, $H_b \succeq 0$, for every
+   singular primitive covariance block. Here $U_{0b}$ spans the numerical
+   null space of $\Theta_b$ or $\Psi_b$, and $D_b^*$ maps a covariance
+   differential back to full model coordinates.
+
+The cone residual is therefore the distance of the objective differential
+from the KKT normal cone of the original PSD-constrained model. At a
+positive-definite point every covariance null space is empty, so it reduces
+exactly to the ambient equality/bound residual.
+
+A scalar residual requires a metric. The declared default is
+`model_frobenius`: the product Frobenius metric induced by the assembled
+LISREL matrices. Symmetric off-diagonal covariance entries have weight two,
+and shared coordinates accumulate every matrix occurrence. This is invariant
+to orthogonal changes of basis inside covariance blocks and avoids privileging
+the Cholesky chart. It is not invariant to arbitrary changes of measurement
+units; such invariance is neither claimed nor numerically possible without a
+separate scale convention.
+
+The stationarity verdict thresholds the metric-dual L2 distance, which is
+unchanged by isometric changes of model coordinates. The coordinatewise
+infinity residual is also retained as a familiar diagnostic, but it does not
+drive the verdict because it depends on the selected basis. Both residuals use
+the same half-discrepancy objective scale and numerical `1e-3` default as the
+L1 audit; this common number does not make the L2 and infinity-norm criteria
+identical. Feasibility uses the original
+equalities, bounds, and PSD blocks. The multiplier projection is observation
+only and never changes fit return semantics. Complete-data ML/GMM/LS, FIML,
+PSD FIML, ML2S through its ML/GMM Stage 2, ordinal/mixed-ordinal LS, and CatML
+fit paths supply full-model gradients. Profiled SNLLS and extra callback
+constraints remain unchecked until their eliminated/extra constraint normals
+are available in the common representation.
+
 ## R schema
 
 Surfacing happens in `r-package/src/fit.cpp` via two helpers
@@ -281,6 +333,16 @@ fit$diagnostics$
   nl_eq_satisfied         (logical)
   active_bounds_lower     (integer)   1-based θ indices (Heywood detector)
   active_bounds_upper     (integer)
+  geometric_stationarity  (list)
+    checked               (logical)
+    metric                (character) "model_frobenius"
+    ambient_stationary    (logical)   equality/bound geometry only
+    ambient_residual_inf  (numeric)
+    ambient_residual_l2   (numeric)   metric-dual norm; drives verdict
+    cone_stationary       (logical)   adds primitive PSD normal cones
+    cone_residual_inf     (numeric)
+    cone_residual_l2      (numeric)   metric-dual norm; drives verdict
+    covariance_nullity    (integer)   summed active null-space dimension
   snlls_profile_fallback  (logical)
 ```
 
@@ -288,8 +350,10 @@ fit$diagnostics$
 `OptimStatus::Converged`). Existing R consumers
 (`r-package/R/model_data.R:1300` print method; paper harness
 `harness-benchmark.R`, `harness-sim-benchmark.R`) keep working bit-for-bit.
-New code reads `fit$audit$stationary` for the geometric verdict and
-`fit$optimizer_status` for the refined status string.
+Compatibility code reads `fit$audit$stationary` for the driven-coordinate
+lavaan-style verdict and `fit$optimizer_status` for the refined status
+string. Cross-method studies read
+`fit$diagnostics$geometric_stationarity$cone_stationary`.
 
 **Two coordinate systems, two active-set readouts.** `fit$audit$active_set`
 is in the driven (reduced/profiled) coordinates the optimizer minimized
@@ -328,7 +392,7 @@ fixed by tolerance tuning.
 
 1. **Symmetric downgrade.** If a backend reports `Converged` but the audit
    says non-stationary, v1 keeps the reported status. The
-   `fit$audit$stationary` field records the geometric verdict for
+   `fit$audit$stationary` field records the driven-coordinate verdict for
    consumers. A separate semantics-change PR can flip this once a survey
    pass confirms no surprise.
 2. **`allFit`-style cross-backend agreement** (Layer 3).

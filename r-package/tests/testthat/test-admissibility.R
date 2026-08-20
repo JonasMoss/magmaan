@@ -21,6 +21,16 @@ test_that("complete-data fits expose structured covariance admissibility", {
   expect_true(a$theta[[1L]]$psd)
   expect_true(a$psi[[1L]]$psd)
   expect_true(all(a$theta[[1L]]$covariance_rows >= 1L))
+  g <- fit$diagnostics$geometric_stationarity
+  expect_true(g$checked)
+  expect_identical(g$metric, "model_frobenius")
+  expect_true(g$gradient_finite)
+  expect_true(g$ambient_projection_converged)
+  expect_true(g$cone_projection_converged)
+  expect_true(is.finite(g$ambient_residual_l2))
+  expect_true(is.finite(g$cone_residual_l2))
+  expect_true(g$ambient_stationary)
+  expect_true(g$cone_stationary)
 })
 
 test_that("Heywood solution warns once without changing convergence", {
@@ -78,6 +88,8 @@ test_that("frontier PSD ML returns an ordinary admissible R fit", {
   expect_true(fit$diagnostics$admissibility$covariance_matrices_psd)
   expect_true(fit$audit$constrained)
   expect_true(fit$audit$stationary)
+  expect_true(fit$diagnostics$geometric_stationarity$checked)
+  expect_true(fit$diagnostics$geometric_stationarity$cone_stationary)
   expect_lte(fit$audit$constraint_violation_inf, 1e-6)
   expect_gte(fit$audit$constraint_jacobian_rank, 1L)
   expect_true(is.finite(fit$audit$raw_grad_inf_norm))
@@ -112,6 +124,7 @@ test_that("frontier PSD FIML repairs a missing-data Heywood solution", {
   expect_true(fit$diagnostics$admissibility$admissible)
   expect_true(fit$audit$constrained)
   expect_true(fit$audit$stationary)
+  expect_true(fit$diagnostics$geometric_stationarity$checked)
   expect_lte(fit$audit$constraint_violation_inf, 1e-6)
   expect_true(anyNA(fit$raw_data$X[[1L]]))
 })

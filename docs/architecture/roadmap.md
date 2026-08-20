@@ -124,6 +124,22 @@ the KKT residual, raw objective-gradient norm, equality violation, and
 constraint-Jacobian rank under `fit$audit`. Boundary fits are reported by the
 existing covariance diagnostics; ordinary interior information-matrix
 inference is not yet promoted as valid at a rank-deficient component solution.
+
+Fit finalization also carries an additive common-coordinate stationarity
+diagnostic at `fit$diagnostics$geometric_stationarity`. It evaluates the
+analytic objective differential in ordinary full-model coordinates under the
+product Frobenius metric, thresholds the metric-dual L2 distance, first against
+equality/bound normals and then against the true primitive PSD normal cones
+obtained from the null spaces of singular
+`Theta`/`Psi` blocks. This removes the Cholesky-chart degeneracy at a
+rank-deficient boundary and makes ordinary and PSD fits directly comparable,
+while preserving `fit$audit` unchanged for driven-coordinate/lavaan-compatible
+inspection. The cone residual equals the ambient residual in the
+positive-definite interior. The common audit is wired for continuous ML and
+fixed/fitted-weight GMM/LS, FIML, their PSD counterparts, ML2S Stage 2,
+ordinary and PSD ordinal/mixed-ordinal LS, and CatML. Profiled SNLLS and fits
+with extra callback constraints remain explicitly unchecked.
+
 The production lifted-objective compiler has a private derivative-probe seam
 used only by regression tests. Central finite differences now gate the complete
 lifted ML gradient and equality Jacobian for mean structures, shared covariance
@@ -231,8 +247,9 @@ an expected non-PD CatML input rejection. Each returned criterion is recomputed
 independently in R, input objects are fingerprinted before and after fitting,
 ML2S shares one fingerprinted saturated-EM object, and ordinary/PSD pairs retain
 comparable parameter, implied-moment, convergence, eigenvalue, and timing rows.
-The two-replication smoke produced 128 attempts: all 126 returned fits passed
-their independent objective check, all 70 returned PSD fits were admissible,
+The current two-replication smoke produced 128 attempts: all 125 returned fits
+passed their independent objective and geometric-projection checks, all 69
+cone-stationary PSD fits were admissible,
 all 28 ML2S Stage-1 checks were unchanged, and both CatML domain sentinels were
 rejected as intended. These counts validate the harness only; stochastic rates,
 larger structural geometries, conditioning, basin behavior, and scaling remain
@@ -244,7 +261,8 @@ residual boundary and sample-size axes, correlated residual and latent
 covariance blocks varied separately plus one joint-boundary cell, and a latent
 regression disturbance boundary. Across 20,700 attempts, 20,406 returned and
 all passed independent objective recomputation. All 11,500 covariance-honest
-fits returned; 11,424 were audit-stationary and every one was admissible. The
+fits returned; 11,424 were driven/lifted-audit stationary and every one was
+admissible. The
 76 nonstationary covariance-honest returns were all GLS fits in correlated-
 block boundary cells. All 2,353 eligible stationary/admissible interior pairs
 passed the prespecified objective and fitted-moment agreement gates. The pilot
@@ -255,16 +273,23 @@ The second continuous tranche expands that panel to 29 cells with a
 misspecified two-factor model, two grouped anchor/boundary cells carrying a
 shared residual variance and a general linear equality, and fixed-WLS weight
 condition numbers `1, 1e4, 1e8`. Across 24,000 attempts, 23,506 returned and
-all returned objectives recomputed correctly. Every one of the 13,125
-audit-stationary covariance-honest fits was admissible; all 900 stationary
-misspecified fits retained nonzero discrepancy, all 1,797 returned grouped fits
+all returned objectives recomputed correctly. The common audit classified
+13,082 of 13,297 returned covariance-honest fits as cone-stationary, and every
+one was admissible; all 893 cone-stationary misspecified fits retained nonzero
+discrepancy, all 1,797 returned grouped fits
 honored their equalities to at most `4.44e-16`, and all 3,253 eligible interior
 pairs passed agreement. Conditioning is the first sharp computational limit:
 ordinary fixed WLS returned in `100%, 3%, 0%` of the three cells, while PSD WLS
-returned throughout but was audit-stationary in `100%, 100%, 8%`. The weights
-retained the requested spectra and full effective ranks. The remaining
-Experiment 78 work is missing-data, categorical, and targeted multistart/corpus
-validation rather than more replication of the continuous structural panel.
+returned throughout but was cone-stationary in `100%, 100%, 6%` (versus
+`100%, 100%, 8%` under the lifted audit). Across the full panel, 2,824 PSD
+returns required the PSD normal cone to pass relative to the ambient audit; 43
+passed the lifted audit but not the common cone audit, with no reverse cases.
+All 23,506 returned fits had finite gradients and completed both normal
+projections. The weights retained the requested spectra and full effective
+ranks. The remaining Experiment 78 work is calibrated missing-data/categorical
+stress and targeted multistart/corpus validation rather than more replication
+of the continuous structural panel; those estimator families already have
+smoke anchors.
 
 The optional IPOPT backend has now been measured against the required SLSQP
 backend in experiments 73 and 74. It agrees on the deterministic admissible

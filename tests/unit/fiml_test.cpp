@@ -556,6 +556,7 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
   const auto& fitted = *est;
   CHECK(fitted.diagnostics.admissibility.checked);
   CHECK(fitted.diagnostics.admissibility.admissible);
+  CHECK(fitted.diagnostics.geometric_stationarity.checked);
 
   magmaan::estimate::fiml::FIML fiml;
   auto cache = fiml.prepare(raw);

@@ -79,6 +79,52 @@ struct AdmissibilityDiagnostics {
   std::vector<CovarianceBlockDiagnostics> psi_blocks;
 };
 
+// First-order stationarity in the ordinary full-model representation. Unlike
+// `optim::TerminalAudit`, this diagnostic never sees optimizer-driven or
+// Cholesky coordinates. It measures the objective differential against the
+// tangent/normal geometry of the original linear equalities, nonlinear-
+// equality tangent space, box bounds, and primitive PSD covariance cones.
+//
+// The scalar residual still needs a metric. `model_frobenius` is the product
+// Frobenius metric induced by the LISREL matrices: symmetric off-diagonal
+// covariance entries receive weight 2, ordinary matrix/vector entries weight
+// 1, and repeated/shared coordinates accumulate their contributions. This is
+// invariant to a change of parameter basis when the metric is transformed
+// with the model map, and to orthogonal changes of basis within covariance
+// blocks. It is deliberately not advertised as invariant to arbitrary changes
+// of measurement units.
+struct GeometricStationarityDiagnostics {
+  bool checked = false;
+  bool gradient_finite = false;
+  bool feasible = false;
+  bool covariance_feasible = false;
+
+  // Equality/bound normal cone only. This is the common-full-model companion
+  // to the driven/lavaan-compatible audit and excludes PSD normal multipliers.
+  // The stationary verdict thresholds the metric-dual L2 residual; the
+  // coordinatewise infinity norm is retained only as a familiar readout.
+  bool ambient_stationary = false;
+  double ambient_residual_inf = -1.0;
+  double ambient_residual_l2 = -1.0;
+
+  // Equality/bound normals plus the true PSD-cone normals in the null spaces
+  // of singular primitive covariance blocks.
+  bool cone_stationary = false;
+  double cone_residual_inf = -1.0;
+  double cone_residual_l2 = -1.0;
+
+  double raw_gradient_inf = -1.0;
+  double stationarity_tol = 1e-3;
+  double covariance_eigen_tol = 1e-8;
+  std::int32_t covariance_active_blocks = 0;
+  std::int32_t covariance_nullity = 0;
+
+  bool ambient_projection_converged = false;
+  bool cone_projection_converged = false;
+  std::int32_t ambient_projection_iterations = 0;
+  std::int32_t cone_projection_iterations = 0;
+};
+
 struct FitDiagnostics {
   // Implied Σ Cholesky per group; `sigma_pd_all` is the && over the vector.
   // ML/GLS need PD; ULS only needs finite. Empty when the evaluator could
@@ -106,6 +152,11 @@ struct FitDiagnostics {
   // Covariance-domain audit on the assembled reduced-LISREL matrices.
   AdmissibilityDiagnostics admissibility;
 
+  // Additive common-coordinate / PSD-cone stationarity diagnostic. It remains
+  // unchecked on fit paths that have not supplied an ordinary full-θ
+  // objective gradient; `fit$audit` is never overwritten.
+  GeometricStationarityDiagnostics geometric_stationarity;
+
   // SNLLS-only: did the gp expand take the affine fallback `θ₀ + K_β·β`
   // because `profiled(β)` returned an error? v1 leaves this `false` —
   // wiring it requires a flag on `GpProblem`. Recorded here so consumers
@@ -131,6 +182,29 @@ struct DiagnosticsOptions {
   double variance_tol         = 1e-8;
   double correlation_tol      = 1e-8;
 };
+
+struct GeometricStationarityOptions {
+  double stationarity_tol = 1e-3;
+  double covariance_eigen_tol = 1e-8;
+  double equality_tol = 1e-6;
+  double active_bound_tol = 1e-8;
+  double projection_tol = 1e-11;
+  std::int32_t projection_max_iter = 20000;
+};
+
+// Audit a terminal full-θ objective gradient against the original model
+// geometry. This is public so research code can recompute the geometric audit
+// with alternative gradients or tolerances without rerunning an optimizer.
+GeometricStationarityDiagnostics
+audit_geometric_stationarity(
+    const Eigen::VectorXd& theta_full,
+    const Eigen::VectorXd& gradient_full,
+    const spec::LatentStructure& pt,
+    const model::ModelEvaluator& ev,
+    const EqConstraints& con,
+    const NonlinearEqConstraints& nl,
+    const Bounds& bounds,
+    GeometricStationarityOptions opts = {});
 
 // Build a FitDiagnostics from an expanded θ and the prelude bits the fit
 // path already carried. Never errors — every check that cannot be performed

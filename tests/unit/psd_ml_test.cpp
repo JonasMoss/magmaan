@@ -178,6 +178,8 @@ magmaan::data::RawData raw_with_covariance(
 
 void check_psd_terminal(const magmaan::estimate::Estimates& fit) {
   CHECK(fit.diagnostics.admissibility.admissible);
+  CHECK(fit.diagnostics.geometric_stationarity.checked);
+  CHECK(fit.diagnostics.geometric_stationarity.cone_stationary);
   CHECK(fit.audit.constrained);
   CHECK(fit.audit.constraint_violation_inf <= 1e-6);
   CHECK(fit.audit.stationary);
