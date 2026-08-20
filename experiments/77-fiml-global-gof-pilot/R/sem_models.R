@@ -207,13 +207,20 @@ sem_draw <- function(model, sampler, n, seed) {
 
 sem_apply_missingness <- function(X, mechanism, rate = 0.30) {
   if (identical(mechanism, "complete")) return(X)
-  if (!identical(mechanism, "mcar_30")) {
-    stop("unknown SEM missingness mechanism: ", mechanism, call. = FALSE)
+  if (identical(mechanism, "mar_30")) {
+    masked <- sb2005_mar(
+      as.data.frame(X), rate = rate, predictors = 1:2, calibrate = TRUE)
+    out <- as.matrix(masked$data)
+    storage.mode(out) <- "double"
+    return(out)
   }
-  mask <- matrix(stats::runif(nrow(X) * (ncol(X) - 1L)) < rate,
-                 nrow(X), ncol(X) - 1L)
-  eligible <- X[, -1L, drop = FALSE]
-  eligible[mask] <- NA_real_
-  X[, -1L] <- eligible
-  X
+  if (identical(mechanism, "mcar_30")) {
+    mask <- matrix(stats::runif(nrow(X) * (ncol(X) - 1L)) < rate,
+                   nrow(X), ncol(X) - 1L)
+    eligible <- X[, -1L, drop = FALSE]
+    eligible[mask] <- NA_real_
+    X[, -1L] <- eligible
+    return(X)
+  }
+  stop("unknown SEM missingness mechanism: ", mechanism, call. = FALSE)
 }

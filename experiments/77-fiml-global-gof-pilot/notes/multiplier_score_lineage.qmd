@@ -24,18 +24,19 @@ The short conclusion is:
 
 > With fixed casewise contributions, multiplying every contribution by an
 > independent Rademacher variable is algebraically identical to sign flipping
-> it. Thus the effective Rademacher procedure in experiment 77 is both a
+> it. Thus experiment 77's retained Rademacher comparator is both a
 > sign-flipped-score procedure and a multiplier score bootstrap. The substantial
 > differences lie in the inferential framework: the allowed weight laws, the
 > construction of the reference distribution, centering and studentization,
 > and whether validity comes from finite-sample group invariance or only from a
 > conditional central limit theorem.
 
-For experiment 77, **Rademacher multiplier calibration of a nuisance-effective
-global score test** is the safest primary description. "Equivalently, we sign
-flip the projected casewise score contributions" is a useful algebraic
-explanation, but **exact sign-randomization test** would overstate the available
-finite-sample justification under nonnormal FIML data.
+Experiment 77 now uses **Mammen multiplier calibration of an
+observed-sensitivity nuisance-effective global score test** as its primary FIML
+procedure. The former expected-information Rademacher construction is retained
+as a comparator. Only that comparator is algebraically a sign flip. Neither
+construction is an exact finite-sample randomization test under nonnormal FIML
+data.
 
 ## What experiment 77 computes
 
@@ -62,26 +63,26 @@ $$
 
 be the local SEM tangent, after incorporating affine equality constraints. Let
 $K$ be an orthonormal basis for $\operatorname{col}(\Delta)$ and $D$ an
-orthonormal basis for its Euclidean complement. If $I$ is the saturated-moment
-working Fisher information, define
+orthonormal basis for its Euclidean complement. If $A$ is the realized
+observed-data saturated-moment sensitivity, define
 
 $$
-G
-=D-K(K^{\mathsf T}IK)^{-1}K^{\mathsf T}ID.
+G_A
+=D-K(K^{\mathsf T}AK)^{-1}K^{\mathsf T}AD.
 $$
 
 The construction ensures
 
 $$
-K^{\mathsf T}IG=0.
+K^{\mathsf T}AG_A=0.
 $$
 
-Thus the columns of $G$ represent saturated directions made orthogonal, in the
-working information metric, to changes locally explained by the fitted SEM. The
+Thus the columns of $G_A$ represent saturated directions made orthogonal, in
+the sensitivity metric, to changes locally explained by the fitted SEM. The
 casewise effective contributions and their sum are
 
 $$
-z_i=G^{\mathsf T}s_i,
+z_i=G_A^{\mathsf T}s_i,
 \qquad
 u=\sum_{i=1}^n z_i.
 $$
@@ -89,7 +90,7 @@ $$
 With
 
 $$
-V=G^{\mathsf T}IG,
+V=G_A^{\mathsf T}IG_A,
 $$
 
 the observed statistic is
@@ -108,11 +109,12 @@ $$
 
 is ordinarily the SEM model degrees of freedom.
 
-For draw $b$, experiment 77 generates independent Rademacher variables
-$\xi_{ib}\in\{-1,+1\}$ and computes
+For draw $b$, the primary FIML procedure generates independent Mammen
+multipliers $w_{ib}$ with mean zero, variance one, and third moment one, and
+computes
 
 $$
-u_b=\sum_{i=1}^n \xi_{ib}z_i,
+u_b=\sum_{i=1}^n w_{ib}z_i,
 \qquad
 T_b=u_b^{\mathsf T}V^{-1}u_b.
 $$
@@ -124,9 +126,15 @@ $$
 =\frac{1+\sum_{b=1}^B\mathbf 1(T_b\geq T)}{B+1}.
 $$
 
-The fitted moments, tangent projection, and metric $V$ remain fixed. No
+Here $I$ is the positive-definite pattern-conditional Gaussian Fisher metric.
+The nuisance sensitivity $A$ and the common quadratic metric have distinct
+roles. Multiplier validity requires the first-order effective rows to use $A$
+and permits any fixed positive-definite limiting quadratic. The fitted moments,
+tangent projection, and metric $V$ remain fixed. No
 saturated model and no bootstrap SEM is fitted. Experiment 77 uses $B=199$, so
-the p-value grid has width $1/200$.
+the p-value grid has width $1/200$. The legacy comparator substitutes the
+pattern-conditional Fisher information $I$ for $A$ and uses Rademacher
+multipliers.
 
 ## Why the nuisance projection appears
 
@@ -161,9 +169,9 @@ The expression in parentheses is the nuisance-effective score contribution.
 It is the score-test/C(alpha) construction of @neyman1959 and the effective
 score developed pedagogically by @hall_mathiason1990. In experiment 77, the
 tested coordinates are the saturated directions $D$, the nuisance coordinates
-are the SEM tangent $K$, and the working information $I$ supplies the
-sensitivity blocks. The matrix $G$ is exactly the coordinate-free version of
-the subtraction above.
+are the SEM tangent $K$, and the observed-data Hessian supplies the sensitivity
+blocks. The matrix $G_A$ is exactly the coordinate-free version of the
+subtraction above.
 
 This correction matters for resampling. At a restricted optimum the **sum** of
 the nuisance score is zero, so using the raw tested score or the effective score
@@ -329,17 +337,17 @@ $$
 
 The distinction is asymptotically negligible under the null but can matter in
 small samples. Centering also makes explicit that the bootstrap reference is a
-null reference while the observed numerator remains unchanged. Experiment 77
-uses the raw projected rows by default; its API provides optional within-pattern
-centering for diagnostics.
+null reference while the observed numerator remains unchanged. The corrected
+FIML procedure uses the observed-sensitivity effective rows without separate
+within-pattern centering. The legacy API retains centering as a diagnostic.
 
 ### Studentization
 
-Experiment 77 holds $V=G^{\mathsf T}IG$ fixed across multiplier draws. This
+Experiment 77 holds $V=G_A^{\mathsf T}IG_A$ fixed across multiplier draws. This
 matches the multidimensional Hemerik--Goeman--Finos construction, which permits
 a common convergent quadratic metric. It deliberately lets the resampling
 distribution reproduce the weighted-chi-square spectrum induced by mismatch
-between the working information and the empirical score covariance.
+between the sensitivity metric and the empirical score covariance.
 
 A score-bootstrap variant may instead studentize the perturbed score with a
 draw-specific covariance or "meat." One simple version defines
@@ -431,13 +439,13 @@ exact finite-sample sign test.
 
 Recommended wording is:
 
-> We use Rademacher multiplier calibration of the nuisance-effective saturated
-> score. Algebraically, each multiplier draw sign flips the projected casewise
-> score contributions. The construction adapts the effective score-flipping
-> test of Hemerik, Goeman, and Finos (2020) to the local saturated complement of
-> a fitted SEM and is closely related to estimating-function and score wild
-> bootstraps. We use "multiplier" rather than "exact sign-randomization" because
-> validity under the nonnormal FIML design is asymptotic rather than based on
-> finite-sample sign invariance.
+> We use Mammen multiplier calibration of observed-sensitivity
+> nuisance-effective saturated scores. The realized observed-data Hessian
+> removes the fitted SEM tangent, and the multipliers reproduce the conditional
+> law of the resulting casewise score sum. The construction belongs to the
+> estimating-function and score wild-bootstrap lineage. We retain the
+> expected-information Rademacher version as an ablation, where each draw is
+> algebraically a sign flip. Validity under the nonnormal FIML design is
+> asymptotic rather than based on finite-sample sign invariance.
 
 ## References
