@@ -1,6 +1,6 @@
 ---
-title: "FIML goodness of fit in representative SEMs"
-subtitle: "Vale--Maurelli and independent-generator null study"
+title: "FIML and two-stage goodness of fit in representative SEMs"
+subtitle: "Score-spectrum, multiplier, and discrepancy calibrations under complete, MCAR, and MAR sampling"
 format:
   html:
     toc: true
@@ -14,7 +14,12 @@ execute:
 
 ```{r setup}
 script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
-result_dir <- file.path(script_dir, "results", "sem-global-flip-500")
+result_dir <- Sys.getenv(
+  "MAGMAAN_SEM_RESULT_DIR",
+  unset = file.path(
+    script_dir, "results", "sem-paired-corrected-score-n200-500"
+  )
+)
 read_result <- function(name) read.csv(
   file.path(result_dir, paste0(name, ".csv")), stringsAsFactors = FALSE)
 replications <- read_result("replications")
@@ -23,31 +28,40 @@ metadata <- read_result("metadata")
 meta <- setNames(metadata$value, metadata$key)
 
 model_order <- c(
-  "one_factor_6", "two_factor_fmg_10", "bifactor_12", "linear_growth_5")
+  "one_factor_6", "two_factor_fmg_10", "bifactor_12", "three_factor_15",
+  "linear_growth_5")
 model_labels <- c(
   one_factor_6 = "One-factor CFA",
   two_factor_fmg_10 = "Two-factor CFA",
   bifactor_12 = "Bifactor",
+  three_factor_15 = "Three-factor CFA",
   linear_growth_5 = "Linear growth")
+estimator_order <- c("FIML", "ML2S")
 generator_order <- c("normal", "vm1", "ig1", "vm2", "ig2")
 generator_labels <- c(
   normal = "Normal", vm1 = "VM moderate", ig1 = "IG moderate",
   vm2 = "VM severe", ig2 = "IG severe")
-missingness_labels <- c(complete = "Complete", mcar_30 = "30% MCAR")
+missingness_labels <- c(
+  complete = "Complete", mcar_30 = "30% MCAR", mar_30 = "30% MAR")
 method_columns <- c(
-  "Effective multiplier" = "p_flip_effective",
-  "Yuan--Bentler MLR" = "p_lrt_mlr",
-  "FMG SB" = "p_lrt_sb",
-  "FMG SS" = "p_lrt_ss",
-  "FMG pEBA(4)" = "p_lrt_peba4",
-  "FMG all" = "p_lrt_all")
+  "Corrected multiplier" = "p_flip_corrected",
+  "Legacy multiplier" = "p_flip_effective",
+  "Scalar robust" = "p_lrt_mlr",
+  "LR/D FMG SB" = "p_lrt_sb",
+  "LR/D FMG SS" = "p_lrt_ss",
+  "LR/D FMG pEBA(4)" = "p_lrt_peba4",
+  "LR/D FMG all" = "p_lrt_all",
+  "Score FMG SB" = "p_score_sb",
+  "Score FMG SS" = "p_score_ss",
+  "Score FMG pEBA(4)" = "p_score_peba4",
+  "Score FMG all" = "p_score_all")
 
-group_vars <- c("model_id", "distribution", "missingness")
+group_vars <- c("model_id", "distribution", "missingness", "estimator")
 group_id <- interaction(
   replications[group_vars], drop = TRUE, lex.order = TRUE)
 cell_rows <- split(seq_len(nrow(replications)), group_id)
 
-cell_table <- do.call(rbind, lapply(cell_rows, function(ii) {
+cell_estimator_table <- do.call(rbind, lapply(cell_rows, function(ii) {
   z <- replications[ii, , drop = FALSE]
   out <- data.frame(
     model_id = z$model_id[[1L]],
@@ -56,6 +70,7 @@ cell_table <- do.call(rbind, lapply(cell_rows, function(ii) {
     generator = unname(generator_labels[[z$distribution[[1L]]]]),
     missingness_id = z$missingness[[1L]],
     missingness = unname(missingness_labels[[z$missingness[[1L]]]]),
+    estimator = z$estimator[[1L]],
     stringsAsFactors = FALSE, check.names = FALSE)
   for (method in names(method_columns)) {
     p_value <- z[[method_columns[[method]]]]
@@ -63,65 +78,118 @@ cell_table <- do.call(rbind, lapply(cell_rows, function(ii) {
   }
   out
 }))
-cell_table$model_id <- factor(cell_table$model_id, levels = model_order)
-cell_table$distribution <- factor(
-  cell_table$distribution, levels = generator_order)
-cell_table$missingness_id <- factor(
-  cell_table$missingness_id, levels = c("complete", "mcar_30"))
-cell_table <- cell_table[order(
-  cell_table$model_id, cell_table$distribution, cell_table$missingness_id), ]
-row.names(cell_table) <- NULL
+cell_estimator_table$model_id <- factor(
+  cell_estimator_table$model_id, levels = model_order)
+cell_estimator_table$distribution <- factor(
+  cell_estimator_table$distribution, levels = generator_order)
+cell_estimator_table$missingness_id <- factor(
+  cell_estimator_table$missingness_id,
+  levels = c("complete", "mcar_30", "mar_30"))
+cell_estimator_table$estimator <- factor(
+  cell_estimator_table$estimator, levels = estimator_order)
+cell_estimator_table <- cell_estimator_table[order(
+  cell_estimator_table$model_id, cell_estimator_table$distribution,
+  cell_estimator_table$missingness_id, cell_estimator_table$estimator), ]
+row.names(cell_estimator_table) <- NULL
 
-scorecard <- do.call(rbind, lapply(names(method_columns), function(method) {
-  rejection <- cell_table[[method]]
-  p_value <- replications[[method_columns[[method]]]]
-  data.frame(
-    method = method,
-    finite = sum(is.finite(p_value)),
-    mean_cell_rejection = mean(rejection),
-    mean_abs_size_error = mean(abs(rejection - .05)),
-    min_cell_rejection = min(rejection),
-    max_cell_rejection = max(rejection),
-    cells_in_band = sum(rejection >= .025 & rejection <= .075),
-    stringsAsFactors = FALSE)
+cell_key <- unique(cell_estimator_table[, c(
+  "model_id", "model", "distribution", "generator", "missingness_id",
+  "missingness")])
+cell_table <- cell_key
+wide_method_columns <- character()
+for (estimator in estimator_order) {
+  source <- cell_estimator_table[
+    as.character(cell_estimator_table$estimator) == estimator, ]
+  source_key <- interaction(
+    source[c("model_id", "distribution", "missingness_id")],
+    drop = TRUE, lex.order = TRUE)
+  target_key <- interaction(
+    cell_table[c("model_id", "distribution", "missingness_id")],
+    drop = TRUE, lex.order = TRUE)
+  index <- match(target_key, source_key)
+  for (method in names(method_columns)) {
+    display_method <- if (method == "Scalar robust") {
+      if (estimator == "FIML") "Yuan--Bentler MLR" else "Scaled ML2S"
+    } else method
+    column <- paste(estimator, display_method, sep = " / ")
+    cell_table[[column]] <- source[[method]][index]
+    wide_method_columns <- c(wide_method_columns, column)
+  }
+}
+
+scorecard <- do.call(rbind, lapply(estimator_order, function(estimator) {
+  z <- cell_estimator_table[
+    as.character(cell_estimator_table$estimator) == estimator, ]
+  raw <- replications[replications$estimator == estimator, ]
+  do.call(rbind, lapply(names(method_columns), function(method) {
+    rejection <- z[[method]]
+    p_value <- raw[[method_columns[[method]]]]
+    display_method <- if (method == "Scalar robust") {
+      if (estimator == "FIML") "Yuan--Bentler MLR" else "Scaled ML2S"
+    } else method
+    finite_rejection <- rejection[is.finite(rejection)]
+    data.frame(
+      estimator = estimator, method = display_method,
+      attempted = nrow(raw),
+      finite = sum(is.finite(p_value)),
+      mean_cell_rejection = if (length(finite_rejection)) {
+        mean(finite_rejection)
+      } else NA_real_,
+      mean_abs_size_error = if (length(finite_rejection)) {
+        mean(abs(finite_rejection - .05))
+      } else NA_real_,
+      min_cell_rejection = if (length(finite_rejection)) {
+        min(finite_rejection)
+      } else NA_real_,
+      max_cell_rejection = if (length(finite_rejection)) {
+        max(finite_rejection)
+      } else NA_real_,
+      cells_in_band = sum(
+        rejection >= .025 & rejection <= .075, na.rm = TRUE),
+      stringsAsFactors = FALSE)
+  }))
 }))
 
 replications$nominal_geometry <- replications$flip_ok &
   replications$flip_df == replications$expected_df
+replications$corrected_nominal_geometry <-
+  replications$flip_corrected_ok &
+  replications$flip_corrected_df == replications$expected_df
 geometry <- aggregate(
-  cbind(fit_ok, flip_ok, nominal_geometry) ~ model_label,
+  cbind(fit_ok, flip_ok, nominal_geometry, flip_corrected_ok,
+        corrected_nominal_geometry) ~ estimator + model_label,
   replications, sum)
-geometry$attempted <- as.integer(table(factor(
-  replications$model_label, levels = geometry$model_label)))
+geometry$attempted <- vapply(seq_len(nrow(geometry)), function(i) {
+  sum(replications$estimator == geometry$estimator[[i]] &
+        replications$model_label == geometry$model_label[[i]])
+}, integer(1L))
 ```
 
 The question is deliberately narrow: how well calibrated are global
 goodness-of-fit tests when correctly specified, ordinary latent-variable models
-are fitted by FIML to normal, Vale--Maurelli, and independent-generator data,
-with and without MCAR missingness? All entries below are Type-I rejection rates
-at $\alpha=.05$. The design has 40 cells, $n=120$, and 500 replications per
-cell.
+are fitted by FIML or normal-theory two-stage ML (ML2S) to normal,
+Vale--Maurelli, and independent-generator data under complete sampling, MCAR,
+and observed-predictor MAR? All entries below are Type-I rejection rates at
+$\alpha=.05$. The paired design has 75 data-generating cells, $n=200$, and 500
+replications per cell; FIML and ML2S are fitted to the same generated datasets.
 
 ## Headline result
 
 ```{r headline-table}
 headline <- scorecard[, c(
-  "method", "mean_cell_rejection", "mean_abs_size_error",
+  "estimator", "method", "mean_cell_rejection", "mean_abs_size_error",
   "min_cell_rejection", "max_cell_rejection", "cells_in_band")]
 names(headline) <- c(
-  "method", "mean size", "mean |size-.05|", "minimum", "maximum",
+  "estimator", "method", "mean size", "mean |size-.05|", "minimum", "maximum",
   "cells in [.025,.075]")
 knitr::kable(headline, digits = 3, row.names = FALSE)
 ```
 
-The effective multiplier is the clear winner. Its mean rejection across the 40
-null cells is .058, its mean absolute size error is .016, and 33/40 cells lie
-in the practical [.025,.075] band. FMG `all` averages .065 but reaches .155;
-FMG SS averages .072 and reaches .173. Yuan--Bentler MLR averages .364 and
-reaches .930. The multiplier is therefore improving materially on the strongest
-FMG corrections, not merely beating MLR.
+Each row is one estimator--calibration combination. The summary therefore
+separates whether a calibration works from whether it is attached to FIML or
+to the two-stage estimate.
 
-## All 40 design cells
+## All 75 design cells
 
 Each entry is the proportion of finite p-values below .05. Method-specific
 finite denominators and numerical diagnostics are reported in the appendix.
@@ -130,35 +198,35 @@ all bold.
 
 ```{r all-cells-table}
 all_cells <- cell_table[, c(
-  "model", "generator", "missingness", names(method_columns))]
-cell_rates <- as.matrix(all_cells[, names(method_columns)])
+  "model", "generator", "missingness", wide_method_columns)]
+cell_rates <- as.matrix(all_cells[, wide_method_columns])
 cell_error <- abs(cell_rates - .05)
-best_error <- apply(cell_error, 1L, min)
-for (method in names(method_columns)) {
+best_error <- apply(cell_error, 1L, min, na.rm = TRUE)
+for (method in wide_method_columns) {
   value <- cell_rates[, method]
   rendered <- sprintf("%.3f", value)
-  is_winner <- abs(cell_error[, method] - best_error) < 1e-12
+  rendered[!is.finite(value)] <- "---"
+  is_winner <- is.finite(cell_error[, method]) &
+    abs(cell_error[, method] - best_error) < 1e-12
   rendered[is_winner] <- paste0("<strong>", rendered[is_winner], "</strong>")
   all_cells[[method]] <- rendered
 }
 knitr::kable(
   all_cells, row.names = FALSE, escape = FALSE,
-  align = c("l", "l", "l", rep("r", length(method_columns))))
+  align = c("l", "l", "l", rep("r", length(wide_method_columns))))
 ```
 
-The multiplier remains near .05 across most model and observation combinations.
-Its most liberal cell is the bifactor under severe complete-data VM (.122), and
-its most conservative is the bifactor under normal MCAR (.018). VM is generally
-harder than IG despite matched marginal moments. MLR is liberal even under the
-normal reference and deteriorates sharply with nonnormality; FMG SS and `all`
-occupy the middle ground.
+The bold entry is the calibration closest to .05 in that data-generating cell,
+across both estimators; exact ties are all bold. The table is intentionally
+wide so the paired FIML and ML2S results can be compared without splitting the
+design across panels.
 
 ## Model specifications
 
 ```{r model-table}
 model_table <- unique(design[, c(
   "model_id", "model_label", "p", "expected_df")])
-model_table$free_parameters <- c(18L, 31L, 48L, 10L)[match(
+model_table$free_parameters <- c(18L, 31L, 48L, 48L, 10L)[match(
   model_table$model_id, model_order)]
 model_table$model_id <- factor(model_table$model_id, levels = model_order)
 model_table <- model_table[order(model_table$model_id), ]
@@ -203,27 +271,32 @@ knitr::kable(model_table, row.names = FALSE)
    and freely estimates the growth means, latent variance/covariance terms,
    and residual variances.
 
-5. **Three-factor CFA, fifteen indicators (paired extension).** Five indicators
+5. **Three-factor CFA, fifteen indicators.** Five indicators
    load on each of three correlated factors. Within-factor loadings range from
    .4 to .8; factor correlations are .3, .4, and .5; residual variances give
    unit indicator variances. The fitted model uses `std.lv` identification and
    freely estimates 15 loadings, 15 residual variances, 15 means, and three
    factor covariances: 48 parameters against 135 saturated moments, hence 87
-   df. This model is implemented in the runner but is not part of the 500-rep
-   FIML table above.
+   df.
 
 ## Methods
 
-Each dataset is fitted once by FIML and passed to six global-fit calibrations:
+Each generated dataset is fitted by both FIML and ML2S. FIML is passed to
+eleven global-fit calibrations, including both multiplier constructions. ML2S
+is passed to the ten calibrations for which a two-stage construction exists:
 
-- **Effective multiplier:** the projected saturated-score test described below,
-  using 199 Rademacher draws.
-- **Yuan--Bentler/Mplus MLR:** the dedicated robust FIML likelihood-ratio
-  statistic.
-- **FMG corrections:** SB, SS, pEBA(4), and `all`, computed from the estimated
-  eigenvalue spectrum of the null statistic.
+- **Corrected multiplier:** the FIML projected saturated-score test described
+  below, using the realized observed-data sensitivity and 199 Mammen draws.
+- **Legacy multiplier:** the original expected-information projection with 199
+  Rademacher draws. This remains the multiplier construction used for ML2S.
+- **Scalar robust:** Yuan--Bentler/Mplus MLR for FIML and the scaled two-stage
+  statistic for ML2S.
+- **LR/discrepancy FMG:** SB, SS, pEBA(4), and `all`, computed from the robust
+  eigenvalue spectrum of the FIML likelihood-ratio or ML2S Stage-2 discrepancy.
+- **Score FMG:** the same four spectrum transforms applied to the global
+  projected score statistic and its own robust eigenvalues.
 
-### Effective multiplier
+### Corrected effective multiplier
 
 This is a global score test of the fitted SEM against the local saturated
 mean-and-covariance model. It is not a robust standard error and it does not
@@ -249,26 +322,30 @@ filled in.
 
 Let $\Delta=\partial\eta(\theta)/\partial\theta^{\mathsf T}$ be the local model
 tangent, with affine equality constraints incorporated. If $K$ spans that
-tangent, $D$ spans its Euclidean complement, and $I$ is the saturated-moment
-Fisher information summed over observed-data patterns, define
+tangent, $D$ spans its Euclidean complement, and $A$ is the realized
+observed-data sensitivity, define
 
 $$
-G=D-K(K^{\mathsf T}IK)^{-1}K^{\mathsf T}ID.
+G_A=D-K(K^{\mathsf T}AK)^{-1}K^{\mathsf T}AD.
 $$
 
-Then $K^{\mathsf T}IG=0$, so $z_i=G^{\mathsf T}s_i$ retains only saturated
+Then $K^{\mathsf T}AG_A=0$, so $z_i=G_A^{\mathsf T}s_i$ retains only saturated
 directions not locally explained by the SEM. The observed statistic is
 
 $$
 u=\sum_{i=1}^{n}z_i,
 \qquad
-V=G^{\mathsf T}IG,
+V=G_A^{\mathsf T}IG_A,
 \qquad
 T=u^{\mathsf T}V^{-1}u.
 $$
 
 Its dimension is $d=m-\operatorname{rank}(\Delta)$, ordinarily the model df.
-For multiplier draw $b$, independent $w_{ib}\in\{-1,+1\}$ give
+For multiplier draw $b$, the corrected procedure uses independent Mammen
+weights with values $(1-\sqrt 5)/2$ and $(1+\sqrt 5)/2$ and respective
+probabilities $(\sqrt 5+1)/(2\sqrt 5)$ and
+$(\sqrt 5-1)/(2\sqrt 5)$. These weights satisfy
+$E(w_{ib})=0$, $E(w_{ib}^2)=1$, and $E(w_{ib}^3)=1$. Each draw gives
 
 $$
 u_b=\sum_{i=1}^{n}w_{ib}z_i,
@@ -279,14 +356,23 @@ T_b=u_b^{\mathsf T}V^{-1}u_b,
 \frac{1+\sum_{b=1}^{B}\mathbf{1}(T_b\geq T)}{B+1}.
 $$
 
+Here $I$ is the positive-definite pattern-conditional Gaussian Fisher metric.
+The realized Hessian $A$ is required for the nuisance correction, while
+multiplier validity permits a separate fixed positive-definite quadratic.
 Here $B=199$, so the p-value grid has width $1/200$. The fitted moments,
-projection, and Fisher metric stay fixed: every draw is only a weighted score
+projection, and quadratic metric stay fixed. Every draw is only a weighted score
 sum and a small quadratic form. Neither the null SEM nor a saturated alternative
 is refitted. Unlike MLR's scalar adjustment of a likelihood-ratio statistic,
 the multiplier reference retains casewise, direction-specific score variation
 after removing the SEM tangent.
 
-For two-stage ML, the gate is constructed from the two stages rather than
+The retained legacy comparator also replaces $A$ by $I$ in the nuisance
+projection and uses Rademacher weights. A separate scalar
+MAR diagnostic found that the sensitivity choice accounted for the material
+calibration change. Mammen and Rademacher weights were much closer once the
+effective rows used the observed-data sensitivity.
+
+For two-stage ML, the legacy gate is constructed from the two stages rather than
 borrowing the FIML likelihood scores. Let $\widehat\eta_S$ be the saturated EM
 moment estimate, $\phi_i$ its casewise influence rows, and
 $W(\widehat\theta)$ the fitted normal-theory Stage-2 metric. The observed
@@ -298,26 +384,16 @@ influence rather than direct FIML scores. On complete data this construction
 reproduces the ordinary ML observed statistic and multiplier p-value; its
 robust spectrum is first-order equivalent because it retains moment influence
 rather than raw likelihood-score rows.
+An observed-sensitivity two-stage analogue has not been defined, so the
+corrected multiplier is unavailable for ML2S.
 
-## Paired ML2S and larger-model extension
+## Paired estimators and the larger model
 
-The runner now draws each dataset once, builds the saturated EM stage once, and
-fits both FIML and normal-theory two-stage ML to that shared input. It also adds
-the 15-indicator CFA above. A three-rep smoke over all five models, five
-generators, and two missingness conditions produced 300/300 converged fits,
-300/300 finite multiplier p-values, and 300/300 nominal multiplier df. Those
-replications establish executability only; they are far too few to estimate
-Type-I error.
-
-The larger model is not intrinsically too large: its median total time remained
-below a second for both estimators. The caution is a heavy runtime tail for
-two-stage ML at $n=120$ under nonnormal MCAR. In a separate five-rep timing
-pass, the ML2S median was .26 seconds but its 90th percentile was 13.0 seconds
-and its maximum was 153 seconds, driven mainly by Stage-2 optimization. A
-500-rep paired null panel should therefore be chunked and checkpointed and
-budgeted in hours, not extrapolated from the median. The existing four-model
-FIML result remains the only calibration result in this report until that
-paired run is complete.
+The runner draws each dataset once, builds the saturated EM stage once, and fits
+both FIML and normal-theory two-stage ML to that shared input. The 15-indicator
+CFA is included in the same factorial panel as the four smaller models. Pairing
+removes Monte Carlo differences in the generated samples when the two
+estimators are compared.
 
 ## VM and IG generators
 
@@ -346,8 +422,12 @@ symmetric covariance root. VM and IG therefore have the same target covariance
 and marginal skewness/kurtosis but different multivariate higher-order
 dependence.
 
-Each generator is observed completely or with 30% MCAR on every variable except
-the first indicator or wave, which is always observed.
+Each generator is observed completely, with 30% MCAR on every variable except
+the first indicator or wave, or with a calibrated 30% MAR mechanism. The MAR
+arm keeps the first two variables observed and makes missingness elsewhere
+depend on them. Under nonnormal MAR it is deliberately a pseudo-ML stress arm:
+normal-theory FIML and saturated normal EM need not target the population
+moments even when the SEM covariance structure is correct.
 
 ## Appendix: numerical and computational details {.appendix}
 
@@ -357,9 +437,11 @@ Rejection rates use finite, method-specific denominators. Failures are not
 counted as non-rejections.
 
 ```{r denominator-table}
-denominators <- scorecard[, c("method", "finite")]
-denominators$non_finite <- nrow(replications) - denominators$finite
-names(denominators) <- c("method", "finite p-values", "non-finite or no fit")
+denominators <- scorecard[, c("estimator", "method", "attempted", "finite")]
+denominators$non_finite <- denominators$attempted - denominators$finite
+names(denominators) <- c(
+  "estimator", "method", "attempted", "finite p-values",
+  "non-finite or no fit")
 knitr::kable(denominators, row.names = FALSE)
 ```
 
@@ -367,49 +449,33 @@ knitr::kable(denominators, row.names = FALSE)
 
 ```{r geometry-table}
 show_geometry <- geometry[, c(
-  "model_label", "attempted", "fit_ok", "flip_ok", "nominal_geometry")]
+  "estimator", "model_label", "attempted", "fit_ok", "flip_ok",
+  "nominal_geometry", "flip_corrected_ok",
+  "corrected_nominal_geometry")]
 names(show_geometry) <- c(
-  "model", "attempted", "FIML converged", "finite multiplier",
-  "nominal tangent rank")
+  "estimator", "model", "attempted", "converged", "finite multiplier",
+  "nominal tangent rank", "finite corrected multiplier",
+  "corrected nominal tangent rank")
 knitr::kable(show_geometry, row.names = FALSE)
 ```
 
-Nine of 20,000 FIML fits did not converge. Every converged fit produced a finite
-multiplier p-value. In 25 of the 19,991 finite calls, however, the model Jacobian
-lost numerical rank and raised the tested df above its prespecified value.
-Nineteen occurred in the two-factor CFA under MCAR, two in that model under
-VM1/complete data, and four in the one-factor VM2/MCAR cell.
-
-Sixteen of the 25 rank-anomalous calls rejected. Requiring the nominal tangent
-rank leaves 19,966 calls and changes mean cell rejection only from .0584 to
-.0577, with the same 33/40 cells in [.025,.075]. The anomaly does not drive the
-headline result, but future power work should treat it as a separate fail-closed
-denominator.
+The table separates convergence, finite multiplier output, and the numerical
+tangent-rank gate for both multiplier constructions. Corrected entries are
+available only for FIML. These diagnostics must be interpreted with the
+method-specific denominators above after the paired run completes.
 
 ### Runtime and next experiment
 
-The 20,000-fit panel took 446 seconds (7.4 minutes) on four workers, including
-FIML, MLR, FMG, and 199 multiplier draws. The observed parallel speedup was
-3.68. The next scientific experiment is a matched power panel with prespecified
-sparse and diffuse SEM misspecifications, reporting raw and size-adjusted power
-plus the same finite and tangent-rank denominators.
+The runner records fit, FMG, legacy-multiplier, corrected-multiplier, and total
+times separately. Its timing projection uses the observed parallel speedup and
+must be regenerated from the completed paired null panel before planning a
+matched-power continuation.
 
 ### Reproduce
 
 ```sh
-Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 500 \
-  --flips 199 \
-  --cores 4 \
-  --estimators FIML \
-  --models one_factor_6,two_factor_fmg_10,bifactor_12,linear_growth_5 \
-  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-global-flip-500
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 500 --n 200 \
+  --flips 199 --cores 10 --chunk-size 25 \
+  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-paired-corrected-score-n200-500
 quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
-```
-
-For the paired extension, first use a bounded smoke:
-
-```sh
-Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 3 \
-  --flips 199 --cores 4 \
-  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-paired-smoke
 ```

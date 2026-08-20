@@ -7,6 +7,7 @@ script_dir <- if (length(script_arg)) {
   dirname(normalizePath(sub("^--file=", "", script_arg[[1L]])))
 } else normalizePath(".")
 source(file.path(script_dir, "..", "_support", "R", "helpers.R"))
+source(file.path(script_dir, "..", "_support", "R", "missingness.R"))
 source(file.path(script_dir, "R", "sem_models.R"))
 set_single_threaded_math()
 
@@ -17,20 +18,21 @@ usage <- function() cat(
   "  --n N                Sample size (default 120).\n",
   "  --flips N            Global-score multiplier draws (default 199).\n",
   "  --cores N            Parallel cell workers (default up to 4).\n",
+  "  --chunk-size N       Replications per resumable chunk (default 25).\n",
   "  --models CSV         Model ids (default all five).\n",
   "  --estimators CSV     Default FIML,ML2S.\n",
   "  --distributions CSV  Default normal,vm1,ig1,vm2,ig2.\n",
-  "  --missingness CSV    Default complete,mcar_30.\n",
+  "  --missingness CSV    Default complete,mcar_30,mar_30.\n",
   "  --seed-base N        Deterministic seed base.\n",
   "  --results-dir P      Output directory.\n",
   "  --help               Show this help.\n", sep = "")
 
 opts <- list(
-  reps = 10L, n = 120L, flips = 199L,
+  reps = 10L, n = 120L, flips = 199L, chunk_size = 25L,
   cores = min(4L, max(1L, parallel::detectCores() - 2L)),
   models = NULL, estimators = c("FIML", "ML2S"),
   distributions = c("normal", "vm1", "ig1", "vm2", "ig2"),
-  missingness = c("complete", "mcar_30"),
+  missingness = c("complete", "mcar_30", "mar_30"),
   seed_base = 20260820L, results_dir = NULL)
 args <- commandArgs(TRUE)
 i <- 1L
@@ -46,6 +48,7 @@ while (i <= length(args)) {
   else if (arg == "--n") opts$n <- as.integer(take())
   else if (arg == "--flips") opts$flips <- as.integer(take())
   else if (arg == "--cores") opts$cores <- as.integer(take())
+  else if (arg == "--chunk-size") opts$chunk_size <- as.integer(take())
   else if (arg == "--models") opts$models <- parse_csv_arg(take())
   else if (arg == "--estimators") opts$estimators <- toupper(parse_csv_arg(take()))
   else if (arg == "--distributions") {
@@ -58,6 +61,7 @@ while (i <= length(args)) {
   i <- i + 1L
 }
 stopifnot(opts$reps > 0L, opts$n >= 80L, opts$flips > 0L, opts$cores > 0L,
+          opts$chunk_size > 0L,
           opts$seed_base >= 0L)
 
 models <- sem_model_catalog()
@@ -69,7 +73,7 @@ if (length(unknown_models)) {
 }
 models <- models[opts$models]
 allowed_distributions <- c("normal", "vm1", "ig1", "vm2", "ig2")
-allowed_missingness <- c("complete", "mcar_30")
+allowed_missingness <- c("complete", "mcar_30", "mar_30")
 stopifnot(all(opts$distributions %in% allowed_distributions),
           all(opts$missingness %in% allowed_missingness),
           length(opts$estimators) > 0L,
@@ -118,6 +122,34 @@ design$estimator <- rep(opts$estimators, times = nrow(grid))
 row.names(design) <- NULL
 write_csv(design, file.path(results, "design.csv"))
 
+config_path <- file.path(results, "run_config.csv")
+code_hash <- paste(unname(tools::md5sum(c(
+  file.path(script_dir, "run_sem_models.R"),
+  file.path(script_dir, "R", "sem_models.R"),
+  file.path(script_dir, "..", "_support", "R", "missingness.R")))),
+  collapse = ":")
+run_config <- data.frame(
+  reps = opts$reps, n = opts$n, flips = opts$flips,
+  chunk_size = opts$chunk_size, estimators = paste(opts$estimators, collapse = ","),
+  models = paste(names(models), collapse = ","),
+  distributions = paste(opts$distributions, collapse = ","),
+  missingness = paste(opts$missingness, collapse = ","),
+  seed_base = opts$seed_base, code_hash = code_hash,
+  stringsAsFactors = FALSE)
+if (file.exists(config_path)) {
+  old_config <- read.csv(config_path, stringsAsFactors = FALSE,
+                         check.names = FALSE)
+  if (!identical(as.character(old_config[1L, names(run_config)]),
+                 as.character(run_config[1L, ]))) {
+    stop("existing result configuration differs; choose a new --results-dir",
+         call. = FALSE)
+  }
+} else {
+  write_csv(run_config, config_path)
+}
+raw_dir <- file.path(results, "raw")
+dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
+
 empty_rep <- function(cell, rep_id, seed, estimator) {
   data.frame(
     cell_id = cell$cell_id, model_id = cell$model_id,
@@ -125,15 +157,23 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
     missingness = cell$missingness, estimator = estimator, p = cell$p,
     expected_df = cell$expected_df, n = cell$n, rep = rep_id, seed = seed,
     fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
-    flip_nominal_geometry = FALSE,
+    flip_corrected_ok = FALSE, flip_nominal_geometry = FALSE,
+    flip_corrected_nominal_geometry = FALSE,
     fit_error = "", fmg_error = "", mlr_error = "", flip_error = "",
+    flip_corrected_error = "",
     realized_missing_eligible = NA_real_, fitted_df = NA_integer_,
     npar = NA_integer_, fit_seconds = NA_real_, fmg_seconds = NA_real_,
-    mlr_seconds = NA_real_, flip_seconds = NA_real_, total_seconds = NA_real_,
+    mlr_seconds = NA_real_, flip_seconds = NA_real_,
+    flip_corrected_seconds = NA_real_, total_seconds = NA_real_,
     p_lrt_naive = NA_real_, p_lrt_mlr = NA_real_, p_lrt_sb = NA_real_,
     p_lrt_ss = NA_real_, p_lrt_peba4 = NA_real_, p_lrt_all = NA_real_,
-    p_flip_effective = NA_real_, flip_statistic = NA_real_,
+    p_flip_effective = NA_real_, p_flip_corrected = NA_real_,
+    p_score_sb = NA_real_,
+    p_score_ss = NA_real_, p_score_peba4 = NA_real_,
+    p_score_all = NA_real_, flip_statistic = NA_real_,
     flip_df = NA_integer_, flip_tangent_rank = NA_integer_,
+    flip_corrected_statistic = NA_real_, flip_corrected_df = NA_integer_,
+    flip_corrected_tangent_rank = NA_integer_,
     stringsAsFactors = FALSE)
 }
 
@@ -258,6 +298,15 @@ one_rep <- function(cell, rep_id) {
       out$flip_error <- conditionMessage(flip)
     } else {
       out$p_flip_effective <- flip$p_effective
+      score_fmg <- function(method, param = 4) tryCatch(
+        magmaan:::infer_fmg_test(
+          flip$statistic_effective, flip$df, flip$eigenvalues,
+          method = method, param = param)$p_value,
+        error = function(e) NA_real_)
+      out$p_score_sb <- flip$p_mean_scaled
+      out$p_score_ss <- score_fmg("ss")
+      out$p_score_peba4 <- score_fmg("peba", 4)
+      out$p_score_all <- flip$p_mixture
       out$flip_statistic <- flip$statistic_effective
       out$flip_df <- as.integer(flip$df)
       out$flip_tangent_rank <- as.integer(flip$tangent_rank)
@@ -266,6 +315,34 @@ one_rep <- function(cell, rep_id) {
         identical(out$flip_df, as.integer(cell$expected_df))
       if (!out$flip_ok) out$flip_error <- "global flip p-value is non-finite"
     }
+
+    if (estimator == "FIML") {
+      corrected_begin <- proc.time()[["elapsed"]]
+      corrected <- tryCatch(
+        magmaan::global_score_flip_test(
+          fit, n_flips = opts$flips, seed = seed + 900001L,
+          multiplier = "mammen", sensitivity = "observed"),
+        error = function(e) e)
+      out$flip_corrected_seconds <-
+        proc.time()[["elapsed"]] - corrected_begin
+      if (inherits(corrected, "error")) {
+        out$flip_corrected_error <- conditionMessage(corrected)
+      } else {
+        out$p_flip_corrected <- corrected$p_effective
+        out$flip_corrected_statistic <- corrected$statistic_effective
+        out$flip_corrected_df <- as.integer(corrected$df)
+        out$flip_corrected_tangent_rank <-
+          as.integer(corrected$tangent_rank)
+        out$flip_corrected_ok <- is.finite(out$p_flip_corrected)
+        out$flip_corrected_nominal_geometry <-
+          isTRUE(out$flip_corrected_ok) &&
+          identical(out$flip_corrected_df, as.integer(cell$expected_df))
+        if (!out$flip_corrected_ok) {
+          out$flip_corrected_error <-
+            "corrected global multiplier p-value is non-finite"
+        }
+      }
+    }
     out$total_seconds <- proc.time()[["elapsed"]] - estimator_begin +
       em_seconds / length(opts$estimators)
     out
@@ -273,26 +350,56 @@ one_rep <- function(cell, rep_id) {
   do.call(rbind, lapply(opts$estimators, one_estimator))
 }
 
-run_cell <- function(index) {
-  cell <- as.list(grid[index, , drop = FALSE])
-  message(sprintf("  cell %d: %s, %s, %s", cell$cell_id, cell$model_id,
-                  cell$distribution, cell$missingness))
-  do.call(rbind, lapply(seq_len(opts$reps), function(rep_id) {
+chunk_rows <- do.call(rbind, lapply(seq_len(nrow(grid)), function(index) {
+  starts <- seq.int(1L, opts$reps, by = opts$chunk_size)
+  data.frame(
+    grid_index = index, first_rep = starts,
+    last_rep = pmin(opts$reps, starts + opts$chunk_size - 1L))
+}))
+
+run_chunk <- function(task_index) {
+  task <- chunk_rows[task_index, ]
+  cell <- as.list(grid[task$grid_index, , drop = FALSE])
+  chunk_path <- file.path(raw_dir, sprintf(
+    "cell_%03d_reps_%05d_%05d.csv", cell$cell_id,
+    task$first_rep, task$last_rep))
+  expected_reps <- seq.int(task$first_rep, task$last_rep)
+  expected_rows <- length(expected_reps) * length(opts$estimators)
+  if (file.exists(chunk_path)) {
+    old <- tryCatch(read.csv(chunk_path, stringsAsFactors = FALSE,
+                             check.names = FALSE), error = function(e) NULL)
+    valid <- !is.null(old) && nrow(old) == expected_rows &&
+      identical(sort(unique(old$rep)), expected_reps) &&
+      identical(sort(unique(old$estimator)), sort(opts$estimators)) &&
+      all(old$cell_id == cell$cell_id)
+    if (valid) return(old)
+    stop("invalid existing result chunk: ", chunk_path, call. = FALSE)
+  }
+  if (task_index == 1L || task_index %% 25L == 0L) {
+    message(sprintf("  chunk %d/%d: cell %d, reps %d-%d", task_index,
+                    nrow(chunk_rows), cell$cell_id, task$first_rep,
+                    task$last_rep))
+  }
+  out <- do.call(rbind, lapply(expected_reps, function(rep_id) {
     one_rep(cell, rep_id)
   }))
+  write_csv(out, chunk_path)
+  out
 }
 
-cat(sprintf("cells=%d reps=%d n=%d flips=%d cores=%d\n", nrow(grid),
-            opts$reps, opts$n, opts$flips, opts$cores))
+cat(sprintf("cells=%d chunks=%d reps=%d n=%d flips=%d cores=%d\n", nrow(grid),
+            nrow(chunk_rows), opts$reps, opts$n, opts$flips, opts$cores))
 wall_begin <- proc.time()[["elapsed"]]
 if (.Platform$OS.type != "windows" && opts$cores > 1L) {
   pieces <- parallel::mclapply(
-    seq_len(nrow(grid)), run_cell,
-    mc.cores = min(opts$cores, nrow(grid)), mc.preschedule = FALSE)
+    seq_len(nrow(chunk_rows)), run_chunk,
+    mc.cores = min(opts$cores, nrow(chunk_rows)), mc.preschedule = FALSE)
 } else {
-  pieces <- lapply(seq_len(nrow(grid)), run_cell)
+  pieces <- lapply(seq_len(nrow(chunk_rows)), run_chunk)
 }
 raw <- do.call(rbind, pieces)
+raw <- raw[order(raw$cell_id, raw$rep,
+                 match(raw$estimator, opts$estimators)), ]
 row.names(raw) <- NULL
 wall_seconds <- proc.time()[["elapsed"]] - wall_begin
 write_csv(raw, file.path(results, "replications.csv"))
@@ -311,12 +418,20 @@ timing <- do.call(rbind, lapply(split(seq_len(nrow(raw)), group_id), function(ii
     fmg_seconds = mean_or_na(z$fmg_seconds),
     mlr_seconds = mean_or_na(z$mlr_seconds),
     flip_seconds = mean_or_na(z$flip_seconds),
+    flip_corrected_seconds = mean_or_na(z$flip_corrected_seconds),
     total_seconds = mean_or_na(z$total_seconds),
     fit_success_rate = mean(z$fit_ok),
     fmg_success_rate = mean(z$fmg_ok),
     mlr_finite_rate = mean(z$mlr_ok),
     flip_success_rate = mean(z$flip_ok),
     flip_nominal_geometry_rate = mean(z$flip_nominal_geometry),
+    flip_corrected_success_rate = if (z$estimator[[1L]] == "FIML") {
+      mean(z$flip_corrected_ok)
+    } else NA_real_,
+    flip_corrected_nominal_geometry_rate =
+      if (z$estimator[[1L]] == "FIML") {
+        mean(z$flip_corrected_nominal_geometry)
+      } else NA_real_,
     stringsAsFactors = FALSE)
 }))
 row.names(timing) <- NULL
@@ -348,6 +463,7 @@ projection <- do.call(rbind, lapply(c(100L, 500L, 2000L), function(reps) {
 write_csv(projection, file.path(results, "timing_projection.csv"))
 write_metadata(file.path(results, "metadata.csv"), list(
   reps = opts$reps, n = opts$n, flips = opts$flips,
+  chunk_size = opts$chunk_size,
   cores = opts$cores, cells = nrow(grid) * length(opts$estimators),
   distributions = opts$distributions, missingness = opts$missingness,
   models = names(models), estimators = opts$estimators,
@@ -358,7 +474,12 @@ write_metadata(file.path(results, "metadata.csv"), list(
   fit_failures = sum(!raw$fit_ok), fmg_failures = sum(!raw$fmg_ok),
   mlr_nonfinite_or_failures = sum(!raw$mlr_ok),
   flip_failures = sum(!raw$flip_ok),
-  flip_non_nominal_geometry = sum(raw$flip_ok & !raw$flip_nominal_geometry)),
+  flip_non_nominal_geometry = sum(raw$flip_ok & !raw$flip_nominal_geometry),
+  flip_corrected_failures = sum(
+    raw$estimator == "FIML" & !raw$flip_corrected_ok),
+  flip_corrected_non_nominal_geometry = sum(
+    raw$estimator == "FIML" & raw$flip_corrected_ok &
+      !raw$flip_corrected_nominal_geometry)),
   packages = "magmaan")
 
 cat(sprintf(
@@ -367,7 +488,9 @@ cat(sprintf(
 print(timing[, c("model_id", "distribution", "missingness", "total_seconds",
                  "estimator",
                  "fit_success_rate", "fmg_success_rate", "mlr_finite_rate",
-                 "flip_success_rate", "flip_nominal_geometry_rate")],
+                 "flip_success_rate", "flip_nominal_geometry_rate",
+                 "flip_corrected_success_rate",
+                 "flip_corrected_nominal_geometry_rate")],
       row.names = FALSE, digits = 3)
 cat("\nProjected wall time for null-only and doubled null-plus-power panels:\n")
 print(projection[, c("panel", "reps_per_cell", "total_replications",
