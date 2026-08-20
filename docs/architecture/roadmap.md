@@ -858,11 +858,13 @@ an unconstrained gradient test to constrained solutions.
   production group-sufficient covariance formula over every sign vector in a
   two-group n=5 construction. The R surface remains Monte Carlo-only.
 - `inference::frontier::global_score_flip_test` is the curved-model global-GOF
-  extension for continuous ML/FIML. It evaluates direct casewise saturated
-  likelihood scores at the fitted model moments, builds the conditional Fisher
-  metric for each observed-data pattern, and projects the scores off the local
-  SEM moment tangent. The tested dimension is therefore the saturated
-  mean/covariance dimension minus the numerical tangent rank; no saturated H1
+  extension for continuous ML/FIML, with
+  `inference::frontier::global_score_flip_test_ml2s` providing the
+  normal-theory two-stage counterpart. The ML/FIML path evaluates direct
+  casewise saturated likelihood scores at the fitted model moments, builds the
+  conditional Fisher metric for each observed-data pattern, and projects the
+  scores off the local SEM moment tangent. The tested dimension is therefore
+  the saturated mean/covariance dimension minus the numerical tangent rank; no saturated H1
   fit and no refit per multiplier draw is required. Complete data and an
   all-observed FIML mask are unit-gated to the same statistic and multiplier
   ranks, while a separate missing-pattern gate exercises stratum centering.
@@ -871,8 +873,17 @@ an unconstrained gradient test to constrained solutions.
   structure when observations are missing. `api::frontier` and the R
   `global_score_flip_test()` wrapper expose the result together with saturated
   dimension, tangent-rank, singular-value, conditioning, stationarity, and
-  runtime diagnostics. The saturated-EM moment-influence construction remains
-  an independent validation route rather than the statistic's implementation.
+  runtime diagnostics. ML2S instead evaluates the observed Stage-2 saturated
+  score at the fitted model and propagates the Stage-1 saturated-EM casewise
+  moment influence through the same fixed fitted-model NT metric and tangent
+  projection. It deliberately supports only the unregularized, fixed-NT
+  Stage-2 estimator: estimated/non-NT weights would require their additional
+  weight-influence channel. Complete-data ML2S is unit-gated to the ordinary ML
+  observed statistic and multiplier rank/p-value, while its asymptotic
+  spectrum is only first-order equivalent because it uses centered moment
+  influence rather than raw likelihood-score rows. The R
+  `global_score_flip_test()` wrapper dispatches `estimator = "ML2S"` to this
+  route and rejects regularized or non-NT two-stage fits.
   Experiment 77's 20,000-fit representative-SEM null gate found mean cell
   rejection .058 across 40 normal/VM/IG complete/MCAR cells (range
   .018--.122; 33/40 in [.025,.075]). Twenty-five finite calls lost numerical

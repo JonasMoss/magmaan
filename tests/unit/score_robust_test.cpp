@@ -1994,6 +1994,89 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
   CHECK(std::isfinite(a->flip.p_sandwich));
 }
 
+TEST_CASE("frontier global ML2S score flip uses Stage-1 EM influence") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260824u);
+  const auto raw = gaussian_cfa_raw(rng, 220, 3);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(sm.has_value());
+  magmaan::data::SampleStats stage2;
+  stage2.S = sm->cov;
+  stage2.mean = sm->mean;
+  stage2.n_obs = sm->n_obs;
+  auto est = magmaan::test::fit(h.pt, h.rep, stage2);
+  REQUIRE(est.has_value());
+
+  inf::frontier::GlobalScoreFlipOptions opts;
+  opts.resampling.n_flips = 127;
+  opts.resampling.seed = 1109;
+  opts.resampling.multiplier = inf::frontier::ScoreFlipMultiplier::Mammen;
+  opts.resampling.center_multiplier_scores = true;
+  auto a = inf::frontier::global_score_flip_test_ml2s(
+      h.pt, h.rep, raw, *pack, *h1, *sm, *est, opts);
+  if (!a.has_value()) MESSAGE(a.error().detail);
+  REQUIRE(a.has_value());
+  auto b = inf::frontier::global_score_flip_test_ml2s(
+      h.pt, h.rep, raw, *pack, *h1, *sm, *est, opts);
+  REQUIRE(b.has_value());
+
+  CHECK(a->saturated_moment_dim == 14);
+  CHECK(a->tangent_rank == 12);
+  CHECK(a->flip.df == 2);
+  CHECK(a->flip.n_flips == 127);
+  CHECK(a->flip.p_effective == b->flip.p_effective);
+  CHECK(a->flip.statistic_effective ==
+        doctest::Approx(b->flip.statistic_effective));
+  CHECK(a->flip.p_effective >= 1.0 / 128.0);
+  CHECK(a->flip.p_effective <= 1.0);
+  CHECK(std::isfinite(a->flip.p_mixture));
+  CHECK(a->flip.sandwich_available);
+  CHECK(std::isfinite(a->flip.nuisance_stationarity_norm));
+}
+
+TEST_CASE("frontier global ML2S score flip reduces to complete-data ML") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260825u);
+  auto raw = gaussian_cfa_raw(rng, 240, 0);
+  raw.mask.clear();
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(sm.has_value());
+  magmaan::data::SampleStats stage2;
+  stage2.S = sm->cov;
+  stage2.mean = sm->mean;
+  stage2.n_obs = sm->n_obs;
+  auto est = magmaan::test::fit(h.pt, h.rep, stage2);
+  REQUIRE(est.has_value());
+
+  inf::frontier::GlobalScoreFlipOptions opts;
+  opts.resampling.n_flips = 63;
+  opts.resampling.seed = 1217;
+  auto ml = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, stage2, raw, *est, opts);
+  REQUIRE(ml.has_value());
+  auto ml2s = inf::frontier::global_score_flip_test_ml2s(
+      h.pt, h.rep, raw, *pack, *h1, *sm, *est, opts);
+  if (!ml2s.has_value()) MESSAGE(ml2s.error().detail);
+  REQUIRE(ml2s.has_value());
+
+  CHECK(ml2s->flip.df == ml->flip.df);
+  CHECK(ml2s->flip.statistic_effective ==
+        doctest::Approx(ml->flip.statistic_effective).epsilon(1e-8));
+  CHECK(ml2s->flip.p_effective == ml->flip.p_effective);
+  // The observed gate and multiplier rank reduce exactly. The asymptotic
+  // spectrum is only first-order equivalent because ML2S propagates centered
+  // sample-moment influence rather than retaining raw likelihood-score rows.
+  CHECK((ml2s->flip.eigvals - ml->flip.eigvals).norm() < 0.05);
+}
+
 TEST_CASE("frontier FIML score flips: missing-pattern correction is reproducible") {
   auto h1 = build_mean("f =~ x1 + a*x2 + b*x3 + x4");
   auto h0 = build_mean("f =~ x1 + a*x2 + b*x3 + x4\na == b");

@@ -623,6 +623,15 @@ when they next change.
   as a separate fail-closed denominator. The next scientific gate is now the
   prespecified sparse/diffuse power panel with raw and size-adjusted power;
   another larger null run is for publication precision, not method triage.
+  The 2026-08-20 paired extension adds the ML2S global multiplier and a
+  15-indicator correlated three-factor CFA (48 free parameters, 87 df). A
+  three-rep normal/VM/IG complete/MCAR smoke produced 300/300 converged paired
+  FIML/ML2S fits, finite multiplier p-values, and prespecified tangent df.
+  However, a five-rep p=15 timing audit found a heavy ML2S Stage-2 optimizer
+  tail under MCAR (median total .26 s, 90th percentile 13.0 s, maximum 153 s).
+  Before the 500-rep paired null/power panel, add chunk/checkpoint support or a
+  per-replicate timeout/retry policy and decide whether p=15 should use a
+  modestly larger n; do not project the full run from median cost alone.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null

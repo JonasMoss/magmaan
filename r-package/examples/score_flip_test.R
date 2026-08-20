@@ -87,6 +87,10 @@ f1_model <- model_spec(
   "f =~ x1 + a*x2 + b*x3 + x4", meanstructure = TRUE)
 fs_model <- nested_score_test(f1_model, f0)
 fg <- global_score_flip_test(f1, n_flips = 63, seed = 29)
+m2 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
+              estimator = "ML2S", se = "none", test = "none")
+mg_a <- global_score_flip_test(m2, n_flips = 63, seed = 31)
+mg_b <- global_score_flip_test(m2, n_flips = 63, seed = 31)
 stopifnot(
   identical(fa$p_basic, fb$p_basic),
   identical(fa$p_effective, fb$p_effective),
@@ -103,5 +107,11 @@ stopifnot(
   fg$df == 2L,
   fg$saturated_moment_dim == 14L,
   fg$tangent_rank == 12L,
-  is.finite(fg$p_effective)
+  is.finite(fg$p_effective),
+  inherits(mg_a, "magmaan_global_score_flip_test"),
+  mg_a$df == 2L,
+  mg_a$saturated_moment_dim == 14L,
+  mg_a$tangent_rank == 12L,
+  identical(mg_a$p_effective, mg_b$p_effective),
+  is.finite(mg_a$p_mixture)
 )

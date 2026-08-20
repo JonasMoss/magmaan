@@ -3345,6 +3345,386 @@ global_score_flip_test(spec::LatentStructure pt,
 }
 
 post_expected<GlobalScoreFlipTestResult>
+global_score_flip_test_ml2s(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const RawData& raw,
+    const estimate::fiml::FIMLPack& pack,
+    const estimate::fiml::FIMLH1& h1,
+    const estimate::fiml::SaturatedMoments& sm,
+    const Estimates& est,
+    const GlobalScoreFlipOptions& global_options) {
+  using Clock = std::chrono::steady_clock;
+  const auto total_begin = Clock::now();
+  const ScoreFlipOptions& options = global_options.resampling;
+  const bool resample =
+      options.calibration != ScoreFlipCalibration::AsymptoticOnly;
+  const bool multiplier_studentized =
+      options.multiplier_studentization ==
+      ScoreFlipMultiplierStudentization::WeightedMeat;
+  if (options.calibration != ScoreFlipCalibration::Effective &&
+      options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: only effective or asymptotic calibration is supported"));
+  }
+  if (options.multiplier == ScoreFlipMultiplier::TwoPoint &&
+      (!std::isfinite(options.two_point_skewness) ||
+       options.two_point_skewness < 0.0 ||
+       options.two_point_skewness > 1e6)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: two-point skewness must be finite and in [0, 1e6]"));
+  }
+  if (resample && !options.exact_enumeration && options.n_flips < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: n_flips must be positive"));
+  }
+  if (options.exact_enumeration &&
+      options.multiplier != ScoreFlipMultiplier::Rademacher) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: exact enumeration is Rademacher-only"));
+  }
+  if (!resample &&
+      (options.exact_enumeration || options.center_multiplier_scores ||
+       multiplier_studentized)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: multiplier diagnostics require resampling"));
+  }
+  if (pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: only affine equality constraints are supported"));
+  }
+  if (std::any_of(pt.exo.begin(), pt.exo.end(),
+                  [](std::int8_t value) { return value != 0; })) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: fixed-X models are not supported"));
+  }
+  if (est.diagnostics.active_bounds_full.any_active()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: boundary fits are not supported"));
+  }
+  if (est.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: estimate and model parameter counts differ"));
+  }
+
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev = build_eval(pt, rep);
+  if (!ev.has_value()) return std::unexpected(ev.error());
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+
+  const std::size_t n_blocks = raw.X.size();
+  if (n_blocks == 0 || sm.mean.size() != n_blocks ||
+      sm.cov.size() != n_blocks || sm.n_obs.size() != n_blocks ||
+      eval->moments.sigma.size() != n_blocks ||
+      eval->moments.mu.size() != n_blocks ||
+      pack.cache.block_p.size() != n_blocks ||
+      pack.cache.sigma_offsets.size() != n_blocks ||
+      pack.cache.mu_offsets.size() != n_blocks) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: inconsistent Stage-1/model block layout"));
+  }
+
+  Eigen::Index moment_dim = 0;
+  Eigen::Index total_rows = 0;
+  std::vector<Eigen::Index> moment_offsets(n_blocks + 1, 0);
+  std::vector<Eigen::Index> row_offsets(n_blocks + 1, 0);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index q = p + p * (p + 1) / 2;
+    if (p <= 0 || raw.X[b].rows() <= 0 || pack.cache.block_p[b] != p ||
+        sm.n_obs[b] != raw.X[b].rows() || sm.mean[b].size() != p ||
+        sm.cov[b].rows() != p || sm.cov[b].cols() != p ||
+        eval->moments.mu[b].size() != p ||
+        eval->moments.sigma[b].rows() != p ||
+        eval->moments.sigma[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "global_score_flip_test_ml2s: malformed block " +
+              std::to_string(b)));
+    }
+    moment_dim += q;
+    total_rows += raw.X[b].rows();
+    moment_offsets[b + 1] = moment_dim;
+    row_offsets[b + 1] = total_rows;
+  }
+  if (eval->J_mu.cols() != est.theta.size() ||
+      eval->J_sigma.cols() != est.theta.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: model Jacobian has incompatible columns"));
+  }
+
+  auto influence = estimate::fiml::saturated_em_moment_influence(
+      raw, pack, h1, sm);
+  if (!influence.has_value()) return std::unexpected(influence.error());
+  if (influence->rows() != total_rows || influence->cols() != moment_dim) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: Stage-1 influence has incompatible shape"));
+  }
+
+  Eigen::MatrixXd information = Eigen::MatrixXd::Zero(moment_dim, moment_dim);
+  Eigen::MatrixXd Delta_full =
+      Eigen::MatrixXd::Zero(moment_dim, est.theta.size());
+  Eigen::VectorXd score_full = Eigen::VectorXd::Zero(moment_dim);
+  Eigen::MatrixXd score_rows =
+      Eigen::MatrixXd::Zero(total_rows, moment_dim);
+  std::vector<std::size_t> row_stratum;
+  row_stratum.reserve(static_cast<std::size_t>(total_rows));
+  std::vector<std::int64_t> n_obs;
+  n_obs.reserve(n_blocks);
+
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index ps = p * (p + 1) / 2;
+    const Eigen::Index q = p + ps;
+    const Eigen::Index off = moment_offsets[b];
+    const Eigen::Index row_off = row_offsets[b];
+    const Eigen::Index nb = raw.X[b].rows();
+    const Eigen::MatrixXd Sigma =
+        0.5 * (eval->moments.sigma[b] +
+               eval->moments.sigma[b].transpose());
+    auto mean_weight = invert_symmetric(
+        Sigma, "global_score_flip_test_ml2s fitted covariance");
+    if (!mean_weight.has_value()) return std::unexpected(mean_weight.error());
+    auto gamma = data::gamma_nt(Sigma);
+    if (!gamma.has_value()) return std::unexpected(gamma.error());
+    auto covariance_weight = invert_symmetric(
+        *gamma, "global_score_flip_test_ml2s fitted NT Gamma");
+    if (!covariance_weight.has_value()) {
+      return std::unexpected(covariance_weight.error());
+    }
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(q, q);
+    W.topLeftCorner(p, p) = *mean_weight;
+    W.bottomRightCorner(ps, ps) = *covariance_weight;
+    information.block(off, off, q, q) = static_cast<double>(nb) * W;
+
+    const Eigen::Index mu_off = pack.cache.mu_offsets[b];
+    const Eigen::Index sigma_off = pack.cache.sigma_offsets[b];
+    if (mu_off + p > eval->J_mu.rows() ||
+        sigma_off + ps > eval->J_sigma.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "global_score_flip_test_ml2s: model Jacobian block offsets are invalid"));
+    }
+    Delta_full.block(off, 0, p, est.theta.size()) =
+        eval->J_mu.block(mu_off, 0, p, est.theta.size());
+    Delta_full.block(off + p, 0, ps, est.theta.size()) =
+        eval->J_sigma.block(sigma_off, 0, ps, est.theta.size());
+
+    const Eigen::VectorXd mean_residual =
+        sm.mean[b] - eval->moments.mu[b];
+    const Eigen::MatrixXd second_residual =
+        sm.cov[b] + mean_residual * mean_residual.transpose() - Sigma;
+    Eigen::VectorXd residual(q);
+    residual.head(p) = mean_residual;
+    Eigen::Index k = p;
+    for (Eigen::Index col = 0; col < p; ++col) {
+      for (Eigen::Index row = col; row < p; ++row) {
+        residual(k++) = second_residual(row, col);
+      }
+    }
+    score_full.segment(off, q).noalias() =
+        static_cast<double>(nb) * (W * residual);
+    score_rows.block(row_off, off, nb, q).noalias() =
+        static_cast<double>(nb) *
+        influence->block(row_off, off, nb, q) * W;
+    for (Eigen::Index row = 0; row < nb; ++row) row_stratum.push_back(b);
+    n_obs.push_back(nb);
+  }
+
+  auto constraints = build_eq_constraints(pt);
+  if (!constraints.has_value()) return std::unexpected(constraints.error());
+  const Eigen::MatrixXd Delta = Delta_full * constraints->K();
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      Delta, Eigen::ComputeFullU | Eigen::ComputeThinV);
+  svd.setThreshold(1e-9);
+  const Eigen::Index tangent_rank = svd.rank();
+  const Eigen::Index df = moment_dim - tangent_rank;
+  if (df < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: fitted model has no testable saturated complement"));
+  }
+  const Eigen::MatrixXd K = svd.matrixU().leftCols(tangent_rank);
+  const Eigen::MatrixXd D = svd.matrixU().rightCols(df);
+  const double tangent_max = tangent_rank > 0
+      ? svd.singularValues()(0) : 0.0;
+  const double tangent_min = tangent_rank > 0
+      ? svd.singularValues()(tangent_rank - 1) : 0.0;
+
+  Eigen::MatrixXd G = D;
+  if (tangent_rank > 0) {
+    auto Ainv = invert_symmetric(
+        K.transpose() * information * K,
+        "global_score_flip_test_ml2s tangent information");
+    if (!Ainv.has_value()) return std::unexpected(Ainv.error());
+    G.noalias() -= K * ((*Ainv) * (K.transpose() * information * D));
+  }
+  Eigen::MatrixXd V_identity = G.transpose() * information * G;
+  V_identity = 0.5 * (V_identity + V_identity.transpose());
+  const Eigen::MatrixXd effective_rows = score_rows * G;
+  Eigen::MatrixXd multiplier_rows = effective_rows;
+  if (options.center_multiplier_scores) {
+    Eigen::MatrixXd sums = Eigen::MatrixXd::Zero(
+        static_cast<Eigen::Index>(n_blocks), df);
+    for (Eigen::Index row = 0; row < total_rows; ++row) {
+      sums.row(static_cast<Eigen::Index>(
+          row_stratum[static_cast<std::size_t>(row)])) +=
+          multiplier_rows.row(row);
+    }
+    for (Eigen::Index row = 0; row < total_rows; ++row) {
+      const std::size_t stratum =
+          row_stratum[static_cast<std::size_t>(row)];
+      multiplier_rows.row(row) -=
+          sums.row(static_cast<Eigen::Index>(stratum)) /
+          static_cast<double>(n_obs[stratum]);
+    }
+  }
+  const Eigen::VectorXd u_obs = G.transpose() * score_full;
+  auto t_obs = flip_quadratic(
+      u_obs, V_identity, "global_score_flip_test_ml2s observed effective");
+  if (!t_obs.has_value()) return std::unexpected(t_obs.error());
+  std::optional<FlipQuadratic> t_studentized_obs;
+  if (multiplier_studentized) {
+    auto value = flip_quadratic(
+        u_obs, effective_rows.transpose() * effective_rows,
+        "global_score_flip_test_ml2s observed multiplier-studentized");
+    if (!value.has_value()) return std::unexpected(value.error());
+    t_studentized_obs.emplace(std::move(*value));
+  }
+  const auto setup_end = Clock::now();
+
+  if (resample && options.exact_enumeration && total_rows > 20) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: exact enumeration is capped at n <= 20"));
+  }
+  const int n_resamples = !resample ? 0 : options.exact_enumeration
+      ? static_cast<int>((std::uint64_t{1} << total_rows) - 1ULL)
+      : options.n_flips;
+  std::mt19937_64 rng(options.seed);
+  int exceed = 0;
+  int exceed_studentized = 0;
+  double studentized_min = multiplier_studentized
+      ? t_studentized_obs->min_eigenvalue
+      : std::numeric_limits<double>::quiet_NaN();
+  double studentized_condition = multiplier_studentized
+      ? t_studentized_obs->condition
+      : std::numeric_limits<double>::quiet_NaN();
+  double resampling_seconds = 0.0;
+  for (int bflip = 0; bflip < n_resamples; ++bflip) {
+    const auto flip_begin = Clock::now();
+    Eigen::VectorXd u = Eigen::VectorXd::Zero(df);
+    Eigen::MatrixXd meat;
+    if (multiplier_studentized) meat = Eigen::MatrixXd::Zero(df, df);
+    for (Eigen::Index row = 0; row < total_rows; ++row) {
+      const double multiplier = options.exact_enumeration
+          ? (((static_cast<std::uint64_t>(bflip) >> row) & 1ULL) == 0ULL
+                 ? -1.0 : 1.0)
+          : draw_score_multiplier(
+                rng, options.multiplier, options.two_point_skewness);
+      const Eigen::VectorXd contribution =
+          multiplier_rows.row(row).transpose();
+      u.noalias() += multiplier * contribution;
+      if (multiplier_studentized) {
+        meat.noalias() += (multiplier * multiplier) *
+            (contribution * contribution.transpose());
+      }
+    }
+    auto t = flip_quadratic(
+        u, V_identity, "global_score_flip_test_ml2s effective flip");
+    if (!t.has_value()) return std::unexpected(t.error());
+    if (t->statistic >= t_obs->statistic) ++exceed;
+    if (multiplier_studentized) {
+      auto ts = flip_quadratic(
+          u, meat, "global_score_flip_test_ml2s multiplier weighted-meat");
+      if (!ts.has_value()) return std::unexpected(ts.error());
+      if (ts->statistic >= t_studentized_obs->statistic) {
+        ++exceed_studentized;
+      }
+      studentized_min = std::min(studentized_min, ts->min_eigenvalue);
+      studentized_condition =
+          std::max(studentized_condition, ts->condition);
+    }
+    resampling_seconds +=
+        std::chrono::duration<double>(Clock::now() - flip_begin).count();
+  }
+
+  const auto asymptotic_begin = Clock::now();
+  const Eigen::MatrixXd B1 = score_rows.transpose() * score_rows;
+  auto asymptotic = score_for_subspace_robust(
+      {}, score_full, information, information, B1, K, D);
+  if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
+  const double asymptotic_seconds = std::chrono::duration<double>(
+      Clock::now() - asymptotic_begin).count();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double denom = static_cast<double>(n_resamples + 1);
+  ScoreFlipTestResult flip;
+  flip.df = static_cast<int>(df);
+  flip.statistic_basic = nan;
+  flip.statistic_effective = t_obs->statistic;
+  flip.statistic_standardized = nan;
+  flip.p_basic = nan;
+  flip.p_effective = resample
+      ? (1.0 + static_cast<double>(exceed)) / denom : nan;
+  flip.p_standardized = nan;
+  flip.mc_se_basic = nan;
+  flip.mc_se_effective = resample
+      ? (options.exact_enumeration
+             ? 0.0 : flip_mc_se(flip.p_effective, n_resamples))
+      : nan;
+  flip.mc_se_standardized = nan;
+  flip.statistic_multiplier_studentized = multiplier_studentized
+      ? t_studentized_obs->statistic : nan;
+  flip.p_multiplier_studentized = multiplier_studentized
+      ? (1.0 + static_cast<double>(exceed_studentized)) / denom : nan;
+  flip.mc_se_multiplier_studentized = multiplier_studentized
+      ? (options.exact_enumeration
+             ? 0.0
+             : flip_mc_se(flip.p_multiplier_studentized, n_resamples))
+      : nan;
+  flip.multiplier_studentized_min_eigenvalue = studentized_min;
+  flip.multiplier_studentized_max_condition = studentized_condition;
+  flip.p_chisq = chi2_pvalue(flip.statistic_effective, flip.df);
+  flip.scaling_factor = asymptotic->scaling_factor;
+  flip.statistic_mean_scaled = asymptotic->mi_scaled;
+  flip.p_mean_scaled = asymptotic->p_value;
+  flip.p_mixture = asymptotic->p_mixture;
+  flip.p_value = multiplier_studentized
+      ? flip.p_multiplier_studentized
+      : resample ? flip.p_effective : flip.p_mixture;
+  flip.statistic_sandwich = asymptotic->mi_sandwich;
+  flip.p_sandwich = asymptotic->p_sandwich;
+  flip.sandwich_available = asymptotic->sandwich_available;
+  flip.sandwich_min_eigenvalue = asymptotic->sandwich_min_eigenvalue;
+  flip.sandwich_condition = asymptotic->sandwich_condition;
+  flip.eigvals = std::move(asymptotic->eigvals);
+  flip.n_flips = n_resamples;
+  flip.seed = options.seed;
+  flip.nuisance_stationarity_norm = tangent_rank > 0
+      ? (K.transpose() * score_full).lpNorm<Eigen::Infinity>() : 0.0;
+  flip.min_variance_eigenvalue = t_obs->min_eigenvalue;
+  flip.max_variance_condition = t_obs->condition;
+  flip.mean_variance_relative_shift = nan;
+  flip.max_variance_relative_shift = nan;
+  flip.setup_seconds =
+      std::chrono::duration<double>(setup_end - total_begin).count();
+  flip.resampling_score_seconds = resampling_seconds;
+  flip.resampling_standardization_seconds = 0.0;
+  flip.asymptotic_seconds = asymptotic_seconds;
+  flip.total_seconds =
+      std::chrono::duration<double>(Clock::now() - total_begin).count();
+
+  GlobalScoreFlipTestResult out;
+  out.flip = std::move(flip);
+  out.saturated_moment_dim = static_cast<int>(moment_dim);
+  out.tangent_rank = static_cast<int>(tangent_rank);
+  out.tangent_min_singular_value = tangent_min;
+  out.tangent_condition = tangent_rank > 0
+      ? tangent_max / tangent_min : 1.0;
+  return out;
+}
+
+post_expected<GlobalScoreFlipTestResult>
 global_score_flip_test(spec::LatentStructure pt,
                        const model::MatrixRep& rep,
                        const SampleStats& samp,
