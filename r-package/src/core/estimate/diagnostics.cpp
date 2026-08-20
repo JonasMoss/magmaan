@@ -10,6 +10,7 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 
 #include "magmaan/estimate/bounds.hpp"          // active_bounds
 #include "magmaan/estimate/constraints.hpp"     // EqConstraints
@@ -21,6 +22,270 @@
 namespace magmaan::estimate {
 
 namespace {
+
+constexpr double sqrt_two = 1.4142135623730950488;
+
+Eigen::VectorXd symmetric_svec(const Eigen::MatrixXd& matrix) {
+  const Eigen::Index q = matrix.rows();
+  Eigen::VectorXd out(q * (q + 1) / 2);
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < q; ++c) {
+    for (Eigen::Index r = c; r < q; ++r) {
+      out(k++) = r == c ? matrix(r, c) : sqrt_two * matrix(r, c);
+    }
+  }
+  return out;
+}
+
+Eigen::MatrixXd symmetric_unsvec(const Eigen::VectorXd& values,
+                                 Eigen::Index q) {
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(q, q);
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < q; ++c) {
+    for (Eigen::Index r = c; r < q; ++r) {
+      const double value = r == c ? values(k++) : values(k++) / sqrt_two;
+      out(r, c) = value;
+      out(c, r) = value;
+    }
+  }
+  return out;
+}
+
+struct PsdProjectionSegment {
+  Eigen::Index offset = 0;
+  Eigen::Index dim = 0;
+};
+
+struct NormalProjectionSystem {
+  std::vector<Eigen::VectorXd> columns;
+  Eigen::Index n_free = 0;
+  Eigen::Index n_nonnegative = 0;
+  std::vector<PsdProjectionSegment> psd_segments;
+};
+
+struct NormalProjectionResult {
+  Eigen::VectorXd residual;
+  bool converged = false;
+  std::int32_t iterations = 0;
+};
+
+Eigen::VectorXd project_normal_variables(
+    Eigen::VectorXd values,
+    const NormalProjectionSystem& system) {
+  if (system.n_nonnegative > 0) {
+    values.segment(system.n_free, system.n_nonnegative) =
+        values.segment(system.n_free, system.n_nonnegative)
+            .cwiseMax(0.0);
+  }
+  for (const auto& segment : system.psd_segments) {
+    const Eigen::Index len = segment.dim * (segment.dim + 1) / 2;
+    Eigen::MatrixXd matrix = symmetric_unsvec(
+        values.segment(segment.offset, len), segment.dim);
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(matrix);
+    if (eig.info() != Eigen::Success || !eig.eigenvalues().allFinite()) {
+      values.segment(segment.offset, len).setZero();
+      continue;
+    }
+    const Eigen::VectorXd clipped = eig.eigenvalues().cwiseMax(0.0);
+    matrix = eig.eigenvectors() * clipped.asDiagonal() *
+             eig.eigenvectors().transpose();
+    values.segment(segment.offset, len) = symmetric_svec(matrix);
+  }
+  return values;
+}
+
+NormalProjectionResult solve_normal_projection(
+    const Eigen::VectorXd& gradient,
+    const Eigen::VectorXd& metric,
+    const NormalProjectionSystem& system,
+    GeometricStationarityOptions opts) {
+  NormalProjectionResult out;
+  const Eigen::Index n = gradient.size();
+  const Eigen::Index m = static_cast<Eigen::Index>(system.columns.size());
+  const Eigen::VectorXd inverse_sqrt_metric =
+      metric.array().sqrt().inverse().matrix();
+  const Eigen::VectorXd a =
+      inverse_sqrt_metric.array() * gradient.array();
+  if (m == 0) {
+    out.residual = a;
+    out.converged = true;
+    return out;
+  }
+
+  Eigen::MatrixXd B(n, m);
+  for (Eigen::Index j = 0; j < m; ++j) {
+    B.col(j) = system.columns[static_cast<std::size_t>(j)];
+  }
+  const Eigen::MatrixXd C = inverse_sqrt_metric.asDiagonal() * B;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      C, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  const double largest = svd.singularValues().size() > 0
+      ? svd.singularValues()(0)
+      : 0.0;
+  if (!(largest > 0.0) || !std::isfinite(largest)) {
+    out.residual = a;
+    out.converged = true;
+    return out;
+  }
+  if (system.n_nonnegative == 0 && system.psd_segments.empty()) {
+    const Eigen::VectorXd y = svd.solve(-a);
+    out.residual = a + C * y;
+    out.converged = y.allFinite() && out.residual.allFinite();
+    out.iterations = 1;
+    return out;
+  }
+  const double step = 1.0 / (largest * largest);
+  Eigen::VectorXd y = Eigen::VectorXd::Zero(m);
+  Eigen::VectorXd z = y;
+  double momentum = 1.0;
+  double objective = 0.5 * a.squaredNorm();
+
+  for (std::int32_t iter = 1; iter <= opts.projection_max_iter; ++iter) {
+    const Eigen::VectorXd residual_z = a + C * z;
+    Eigen::VectorXd candidate = project_normal_variables(
+        z - step * (C.transpose() * residual_z), system);
+    Eigen::VectorXd residual_candidate = a + C * candidate;
+    double candidate_objective = 0.5 * residual_candidate.squaredNorm();
+
+    // Monotone restart keeps the accelerated projection stable when the
+    // equality-normal subspace is rank deficient or multipliers are not
+    // unique.
+    if (candidate_objective > objective) {
+      z = y;
+      const Eigen::VectorXd residual_y = a + C * y;
+      candidate = project_normal_variables(
+          y - step * (C.transpose() * residual_y), system);
+      residual_candidate = a + C * candidate;
+      candidate_objective = 0.5 * residual_candidate.squaredNorm();
+      momentum = 1.0;
+    }
+
+    const Eigen::VectorXd previous = y;
+    const double change = (candidate - previous).cwiseAbs().maxCoeff();
+    const double scale = std::max(1.0, candidate.cwiseAbs().maxCoeff());
+    y = std::move(candidate);
+    objective = candidate_objective;
+    out.iterations = iter;
+    if (change <= opts.projection_tol * scale) {
+      out.converged = true;
+      break;
+    }
+
+    const double next_momentum =
+        0.5 * (1.0 + std::sqrt(1.0 + 4.0 * momentum * momentum));
+    z = y + ((momentum - 1.0) / next_momentum) * (y - previous);
+    momentum = next_momentum;
+  }
+  out.residual = a + C * y;
+  return out;
+}
+
+Eigen::VectorXd model_frobenius_metric(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    Eigen::Index npar) {
+  Eigen::VectorXd metric = Eigen::VectorXd::Zero(npar);
+  if (rep.cell_for_row.size() != pt.size()) {
+    metric.setOnes();
+    return metric;
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] <= 0) continue;
+    const Eigen::Index k = pt.free[i] - 1;
+    if (k < 0 || k >= npar) continue;
+    const model::Cell& cell = rep.cell_for_row[i];
+    if (!cell.used) continue;
+    const bool symmetric_off_diagonal =
+        (cell.mat == model::MatId::Theta ||
+         cell.mat == model::MatId::Psi) && cell.row != cell.col;
+    metric(k) += symmetric_off_diagonal ? 2.0 : 1.0;
+  }
+  for (Eigen::Index k = 0; k < npar; ++k) {
+    if (!(metric(k) > 0.0) || !std::isfinite(metric(k))) metric(k) = 1.0;
+  }
+  return metric;
+}
+
+Eigen::VectorXd covariance_adjoint(
+    const Eigen::MatrixXd& normal,
+    model::MatId mat,
+    std::int32_t block,
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    Eigen::Index npar) {
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(npar);
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] <= 0) continue;
+    const model::Cell& cell = rep.cell_for_row[i];
+    if (!cell.used || cell.mat != mat || cell.block != block) continue;
+    const Eigen::Index k = pt.free[i] - 1;
+    if (k < 0 || k >= npar || cell.row < 0 || cell.col < 0 ||
+        cell.row >= normal.rows() || cell.col >= normal.cols()) continue;
+    out(k) += cell.row == cell.col
+        ? normal(cell.row, cell.col)
+        : 2.0 * normal(cell.row, cell.col);
+  }
+  return out;
+}
+
+void append_equalities_and_bounds(
+    NormalProjectionSystem& system,
+    const Eigen::VectorXd& theta,
+    const EqConstraints& con,
+    const NonlinearEqConstraints& nl,
+    const Bounds& bounds,
+    GeometricStationarityOptions opts) {
+  if (con.active() && con.A_eq.cols() == theta.size()) {
+    for (Eigen::Index r = 0; r < con.A_eq.rows(); ++r) {
+      system.columns.push_back(con.A_eq.row(r).transpose());
+      ++system.n_free;
+    }
+  }
+  if (nl.active() && nl.npar == theta.size()) {
+    const Eigen::MatrixXd J = nl.jacobian(theta);
+    if (J.cols() == theta.size() && J.allFinite()) {
+      for (Eigen::Index r = 0; r < J.rows(); ++r) {
+        system.columns.push_back(J.row(r).transpose());
+        ++system.n_free;
+      }
+    }
+  }
+  if (bounds.empty() || bounds.lower.size() != theta.size() ||
+      bounds.upper.size() != theta.size()) return;
+  std::vector<Eigen::VectorXd> nonnegative;
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    const bool at_lower = std::isfinite(bounds.lower(k)) &&
+        theta(k) - bounds.lower(k) <= opts.active_bound_tol;
+    const bool at_upper = std::isfinite(bounds.upper(k)) &&
+        bounds.upper(k) - theta(k) <= opts.active_bound_tol;
+    Eigen::VectorXd basis = Eigen::VectorXd::Zero(theta.size());
+    if (at_lower && at_upper) {
+      basis(k) = 1.0;
+      system.columns.insert(
+          system.columns.begin() + system.n_free, std::move(basis));
+      ++system.n_free;
+    } else if (at_lower || at_upper) {
+      basis(k) = at_lower ? -1.0 : 1.0;
+      nonnegative.push_back(std::move(basis));
+    }
+  }
+  system.columns.insert(system.columns.end(), nonnegative.begin(),
+                        nonnegative.end());
+  system.n_nonnegative =
+      static_cast<Eigen::Index>(nonnegative.size());
+}
+
+bool bounds_feasible(const Eigen::VectorXd& theta, const Bounds& bounds,
+                     double tol) {
+  if (bounds.empty()) return true;
+  if (bounds.lower.size() != theta.size() ||
+      bounds.upper.size() != theta.size()) return false;
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    if (theta(k) < bounds.lower(k) - tol ||
+        theta(k) > bounds.upper(k) + tol) return false;
+  }
+  return true;
+}
 
 double matrix_scale(const Eigen::MatrixXd& M) {
   if (M.size() == 0 || !M.allFinite()) return 1.0;
@@ -225,6 +490,157 @@ finalize_fit_diagnostics_impl(const Eigen::VectorXd&        theta_full,
 }
 
 }  // namespace
+
+GeometricStationarityDiagnostics
+audit_geometric_stationarity(
+    const Eigen::VectorXd& theta_full,
+    const Eigen::VectorXd& gradient_full,
+    const spec::LatentStructure& pt,
+    const model::ModelEvaluator& ev,
+    const EqConstraints& con,
+    const NonlinearEqConstraints& nl,
+    const Bounds& bounds,
+    GeometricStationarityOptions opts) {
+  GeometricStationarityDiagnostics out;
+  out.stationarity_tol = opts.stationarity_tol;
+  out.covariance_eigen_tol = opts.covariance_eigen_tol;
+  out.checked = theta_full.size() == gradient_full.size() &&
+      theta_full.size() == pt.n_free();
+  if (!out.checked) return out;
+
+  out.gradient_finite = gradient_full.allFinite();
+  if (!theta_full.allFinite() || !out.gradient_finite) return out;
+  out.raw_gradient_inf = gradient_full.size() > 0
+      ? gradient_full.cwiseAbs().maxCoeff()
+      : 0.0;
+
+  bool equality_feasible = true;
+  if (con.active()) {
+    equality_feasible = con.A_eq.cols() == theta_full.size() &&
+        con.b_eq.size() == con.A_eq.rows();
+    if (equality_feasible && con.A_eq.rows() > 0) {
+      equality_feasible =
+          (con.A_eq * theta_full - con.b_eq).cwiseAbs().maxCoeff() <=
+          opts.equality_tol;
+    }
+  }
+  if (nl.active()) {
+    equality_feasible = equality_feasible && nl.npar == theta_full.size();
+    if (equality_feasible) {
+      const Eigen::VectorXd h = nl.h(theta_full);
+      equality_feasible = h.allFinite() &&
+          (h.size() == 0 ||
+           h.cwiseAbs().maxCoeff() <= opts.equality_tol);
+    }
+  }
+  const bool box_feasible =
+      bounds_feasible(theta_full, bounds, opts.equality_tol);
+
+  NormalProjectionSystem ambient_system;
+  append_equalities_and_bounds(
+      ambient_system, theta_full, con, nl, bounds, opts);
+  const Eigen::VectorXd metric = model_frobenius_metric(
+      pt, ev.matrix_rep(), theta_full.size());
+  const NormalProjectionResult ambient = solve_normal_projection(
+      gradient_full, metric, ambient_system, opts);
+  out.ambient_projection_converged = ambient.converged;
+  out.ambient_projection_iterations = ambient.iterations;
+  if (ambient.residual.allFinite()) {
+    out.ambient_residual_inf = ambient.residual.size() > 0
+        ? ambient.residual.cwiseAbs().maxCoeff()
+        : 0.0;
+    out.ambient_residual_l2 = ambient.residual.norm();
+  }
+
+  NormalProjectionSystem cone_system = ambient_system;
+  auto matrices = ev.assembled(theta_full);
+  if (!matrices.has_value()) return out;
+
+  out.covariance_feasible = true;
+  const model::MatrixRep& rep = ev.matrix_rep();
+  for (std::size_t b = 0; b < matrices->blocks.size(); ++b) {
+    const auto inspect_block = [&](const Eigen::MatrixXd& raw,
+                                   model::MatId mat) {
+      if (raw.size() == 0) return;
+      if (raw.rows() != raw.cols() || !raw.allFinite()) {
+        out.covariance_feasible = false;
+        return;
+      }
+      const Eigen::MatrixXd covariance = 0.5 * (raw + raw.transpose());
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(covariance);
+      if (eig.info() != Eigen::Success || !eig.eigenvalues().allFinite()) {
+        out.covariance_feasible = false;
+        return;
+      }
+      const double tolerance =
+          opts.covariance_eigen_tol * matrix_scale(covariance);
+      if (eig.eigenvalues().minCoeff() < -tolerance) {
+        out.covariance_feasible = false;
+        return;
+      }
+
+      std::vector<Eigen::Index> null_indices;
+      for (Eigen::Index j = 0; j < eig.eigenvalues().size(); ++j) {
+        if (eig.eigenvalues()(j) <= tolerance) null_indices.push_back(j);
+      }
+      if (null_indices.empty()) return;
+
+      const Eigen::Index q =
+          static_cast<Eigen::Index>(null_indices.size());
+      Eigen::MatrixXd null_basis(covariance.rows(), q);
+      for (Eigen::Index j = 0; j < q; ++j) {
+        null_basis.col(j) = eig.eigenvectors().col(
+            null_indices[static_cast<std::size_t>(j)]);
+      }
+      const Eigen::Index offset =
+          static_cast<Eigen::Index>(cone_system.columns.size());
+      for (Eigen::Index c = 0; c < q; ++c) {
+        for (Eigen::Index r = c; r < q; ++r) {
+          Eigen::MatrixXd basis = Eigen::MatrixXd::Zero(q, q);
+          if (r == c) {
+            basis(r, c) = 1.0;
+          } else {
+            basis(r, c) = 1.0 / sqrt_two;
+            basis(c, r) = 1.0 / sqrt_two;
+          }
+          const Eigen::MatrixXd normal =
+              null_basis * basis * null_basis.transpose();
+          cone_system.columns.push_back(-covariance_adjoint(
+              normal, mat, static_cast<std::int32_t>(b), pt, rep,
+              theta_full.size()));
+        }
+      }
+      cone_system.psd_segments.push_back({offset, q});
+      ++out.covariance_active_blocks;
+      out.covariance_nullity += static_cast<std::int32_t>(q);
+    };
+
+    inspect_block(matrices->blocks[b].Theta, model::MatId::Theta);
+    inspect_block(matrices->blocks[b].Psi, model::MatId::Psi);
+  }
+
+  out.feasible = equality_feasible && box_feasible &&
+      out.covariance_feasible;
+  out.ambient_stationary = equality_feasible && box_feasible &&
+      out.ambient_projection_converged &&
+      out.ambient_residual_l2 >= 0.0 &&
+      out.ambient_residual_l2 <= opts.stationarity_tol;
+
+  const NormalProjectionResult cone = solve_normal_projection(
+      gradient_full, metric, cone_system, opts);
+  out.cone_projection_converged = cone.converged;
+  out.cone_projection_iterations = cone.iterations;
+  if (cone.residual.allFinite()) {
+    out.cone_residual_inf = cone.residual.size() > 0
+        ? cone.residual.cwiseAbs().maxCoeff()
+        : 0.0;
+    out.cone_residual_l2 = cone.residual.norm();
+  }
+  out.cone_stationary = out.feasible && out.cone_projection_converged &&
+      out.cone_residual_l2 >= 0.0 &&
+      out.cone_residual_l2 <= opts.stationarity_tol;
+  return out;
+}
 
 FitDiagnostics
 finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,

@@ -16,6 +16,7 @@
 #include "magmaan/spec/build.hpp"
 
 using magmaan::estimate::Bounds;
+using magmaan::estimate::audit_geometric_stationarity;
 using magmaan::estimate::build_eq_constraints;
 using magmaan::estimate::build_nl_constraints;
 using magmaan::estimate::DiagnosticsOptions;
@@ -235,4 +236,84 @@ TEST_CASE("finalize_fit_diagnostics: joint latent PSD failure is detected "
   CHECK(block.negative_variance_rows.empty());
   CHECK(block.invalid_correlation_rows.empty());
   CHECK(block.covariance_rows.size() >= 6u);
+}
+
+TEST_CASE("geometric stationarity uses the primitive PSD normal cone") {
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  Eigen::VectorXd theta = pd_theta(bits.ev);
+  const auto locations = bits.ev.param_locations();
+  Eigen::Index variance = -1;
+  for (std::size_t k = 0; k < locations.size(); ++k) {
+    if (locations[k].mat == magmaan::model::MatId::Theta &&
+        locations[k].row == locations[k].col) {
+      variance = static_cast<Eigen::Index>(k);
+      break;
+    }
+  }
+  REQUIRE(variance >= 0);
+  theta(variance) = 0.0;
+
+  Eigen::VectorXd outward = Eigen::VectorXd::Zero(theta.size());
+  outward(variance) = 2.0;
+  const auto stationary = audit_geometric_stationarity(
+      theta, outward, *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+
+  CHECK(stationary.checked);
+  CHECK(stationary.feasible);
+  CHECK(stationary.covariance_feasible);
+  CHECK_FALSE(stationary.ambient_stationary);
+  CHECK(stationary.ambient_residual_inf == doctest::Approx(2.0));
+  CHECK(stationary.cone_stationary);
+  CHECK(stationary.cone_residual_inf == doctest::Approx(0.0).scale(1.0));
+  CHECK(stationary.covariance_active_blocks == 1);
+  CHECK(stationary.covariance_nullity == 1);
+
+  Eigen::VectorXd inward = -outward;
+  const auto nonstationary = audit_geometric_stationarity(
+      theta, inward, *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  CHECK(nonstationary.feasible);
+  CHECK_FALSE(nonstationary.ambient_stationary);
+  CHECK_FALSE(nonstationary.cone_stationary);
+  CHECK(nonstationary.cone_residual_inf == doctest::Approx(2.0));
+}
+
+TEST_CASE("geometric stationarity reduces to the ambient audit in the "
+          "positive-definite interior") {
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  const Eigen::VectorXd theta = pd_theta(bits.ev);
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(theta.size());
+
+  const auto d = audit_geometric_stationarity(
+      theta, gradient, *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+
+  CHECK(d.checked);
+  CHECK(d.feasible);
+  CHECK(d.ambient_stationary);
+  CHECK(d.cone_stationary);
+  CHECK(d.ambient_residual_inf == doctest::Approx(d.cone_residual_inf));
+  CHECK(d.covariance_active_blocks == 0);
+  CHECK(d.covariance_nullity == 0);
+}
+
+TEST_CASE("geometric stationarity thresholds the metric-dual L2 norm") {
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  const Eigen::VectorXd theta = pd_theta(bits.ev);
+  const auto locations = bits.ev.param_locations();
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(theta.size());
+  int loading_gradients = 0;
+  for (std::size_t k = 0; k < locations.size(); ++k) {
+    if (locations[k].mat != magmaan::model::MatId::Lambda) continue;
+    gradient(static_cast<Eigen::Index>(k)) = 8e-4;
+    if (++loading_gradients == 2) break;
+  }
+  REQUIRE(loading_gradients == 2);
+
+  const auto d = audit_geometric_stationarity(
+      theta, gradient, *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+
+  CHECK(d.ambient_residual_inf < d.stationarity_tol);
+  CHECK(d.ambient_residual_l2 > d.stationarity_tol);
+  CHECK_FALSE(d.ambient_stationary);
+  CHECK(d.cone_residual_l2 == doctest::Approx(d.ambient_residual_l2));
+  CHECK_FALSE(d.cone_stationary);
 }

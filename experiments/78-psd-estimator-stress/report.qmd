@@ -52,11 +52,15 @@ percent <- function(x, digits = 1L) {
 
 psd <- raw[raw$psd & raw$expected_outcome == "fit", , drop = FALSE]
 ordinary <- raw[!raw$psd & raw$expected_outcome == "fit", , drop = FALSE]
-psd_stationary <- psd$returned & !is.na(psd$audit_stationary) &
+psd_lifted_stationary <- psd$returned & !is.na(psd$audit_stationary) &
   psd$audit_stationary
-ordinary_stationary <- ordinary$returned &
+ordinary_driven_stationary <- ordinary$returned &
   !is.na(ordinary$audit_stationary) & ordinary$audit_stationary
-psd_stationary_ci <- wilson_interval(sum(psd_stationary), nrow(psd))
+psd_cone_stationary <- psd$returned & psd$geometric_checked &
+  !is.na(psd$cone_stationary) & psd$cone_stationary
+ordinary_cone_stationary <- ordinary$returned & ordinary$geometric_checked &
+  !is.na(ordinary$cone_stationary) & ordinary$cone_stationary
+psd_cone_stationary_ci <- wilson_interval(sum(psd_cone_stationary), nrow(psd))
 ordinary_return_ci <- wilson_interval(sum(ordinary$returned), nrow(ordinary))
 violations <- sum(invariants$violations)
 elapsed <- as.numeric(metadata[["elapsed_seconds"]])
@@ -69,14 +73,17 @@ conditioning_groups <- split(conditioning, interaction(
   conditioning$weight_condition_target, conditioning$method, drop = TRUE
 ))
 conditioning_display <- do.call(rbind, lapply(conditioning_groups, function(x) {
-  stationary <- x$returned & !is.na(x$audit_stationary) & x$audit_stationary
+  lifted <- x$returned & !is.na(x$audit_stationary) & x$audit_stationary
+  cone <- x$returned & x$geometric_checked &
+    !is.na(x$cone_stationary) & x$cone_stationary
   data.frame(
     `Weight condition` = format(x$weight_condition_actual[[1L]], scientific = TRUE),
     Estimator = if (x$psd[[1L]]) "PSD WLS" else "ordinary WLS",
     Returned = percent(mean(x$returned)),
-    Stationary = percent(mean(stationary)),
-    `Admissible among stationary` = if (sum(stationary)) {
-      percent(mean(x$admissible[stationary]))
+    `Driven/lifted stationary` = percent(mean(lifted)),
+    `Cone stationary` = percent(mean(cone)),
+    `Admissible among cone-stationary` = if (sum(cone)) {
+      percent(mean(x$admissible[cone]))
     } else "—",
     check.names = FALSE
   )
@@ -93,16 +100,18 @@ two_group_equality_max <- max(
   two_group$equality_violation_inf[two_group$returned]
 )
 misspecified_stationary <- misspecified$returned &
-  !is.na(misspecified$audit_stationary) & misspecified$audit_stationary
+  misspecified$geometric_checked &
+  !is.na(misspecified$cone_stationary) & misspecified$cone_stationary
 misspecified_min_fmin <- min(misspecified$fmin[misspecified_stationary])
 
-conditioning_stationarity <- function(method, condition) {
+conditioning_cone_stationarity <- function(method, condition) {
   x <- conditioning[
     conditioning$method == method &
       conditioning$weight_condition_target == condition,
     , drop = FALSE
   ]
-  mean(x$returned & !is.na(x$audit_stationary) & x$audit_stationary)
+  mean(x$returned & x$geometric_checked &
+         !is.na(x$cone_stationary) & x$cone_stationary)
 }
 conditioning_return <- function(method, condition) {
   x <- conditioning[
@@ -116,7 +125,7 @@ conditioning_return <- function(method, condition) {
 interior <- pairs[
   pairs$target_population_min_eigenvalue >= 0.20 &
     pairs$ordinary_returned & pairs$psd_returned &
-    pairs$ordinary_stationary & pairs$psd_stationary &
+    pairs$ordinary_cone_stationary & pairs$psd_cone_stationary &
     pairs$ordinary_admissible,
   , drop = FALSE
 ]
@@ -125,25 +134,25 @@ max_interior_sigma_gap <- max(interior$sigma_max_abs_difference)
 
 short_answer <- sprintf(
   paste(
-    "Across %s fit attempts, every one of the %s stationary covariance-honest",
+    "Across %s fit attempts, every one of the %s cone-stationary covariance-honest",
     "fits was admissible and every returned objective recomputed correctly.",
     "The grouped fits honored both equalities to %.2e, and all %s stationary",
     "misspecified-model fits retained nonzero discrepancy (minimum %.2e).",
     "Fixed-WLS conditioning was the clear limit: at condition numbers 1, 1e4,",
     "and 1e8, ordinary return rates were %.0f%%, %.0f%%, and %.0f%%, while PSD",
-    "stationarity rates were %.0f%%, %.0f%%, and %.0f%%."
+    "cone-stationarity rates were %.0f%%, %.0f%%, and %.0f%%."
   ),
   format(nrow(raw), big.mark = ","),
-  format(sum(psd_stationary), big.mark = ","),
+  format(sum(psd_cone_stationary), big.mark = ","),
   two_group_equality_max,
   format(sum(misspecified_stationary), big.mark = ","),
   misspecified_min_fmin,
   100 * conditioning_return("wls", 1),
   100 * conditioning_return("wls", 1e4),
   100 * conditioning_return("wls", 1e8),
-  100 * conditioning_stationarity("psd_wls", 1),
-  100 * conditioning_stationarity("psd_wls", 1e4),
-  100 * conditioning_stationarity("psd_wls", 1e8)
+  100 * conditioning_cone_stationarity("psd_wls", 1),
+  100 * conditioning_cone_stationarity("psd_wls", 1e4),
+  100 * conditioning_cone_stationarity("psd_wls", 1e8)
 )
 
 axis_groups <- split(raw, interaction(
@@ -152,20 +161,27 @@ axis_groups <- split(raw, interaction(
 axis_display <- do.call(rbind, lapply(axis_groups, function(x) {
   ordinary_x <- x[!x$psd, , drop = FALSE]
   psd_x <- x[x$psd, , drop = FALSE]
-  ordinary_ok <- ordinary_x$returned & !is.na(ordinary_x$audit_stationary) &
+  ordinary_driven <- ordinary_x$returned &
+    !is.na(ordinary_x$audit_stationary) &
     ordinary_x$audit_stationary
-  psd_ok <- psd_x$returned & !is.na(psd_x$audit_stationary) &
+  ordinary_cone <- ordinary_x$returned & ordinary_x$geometric_checked &
+    !is.na(ordinary_x$cone_stationary) & ordinary_x$cone_stationary
+  psd_lifted <- psd_x$returned & !is.na(psd_x$audit_stationary) &
     psd_x$audit_stationary
+  psd_cone <- psd_x$returned & psd_x$geometric_checked &
+    !is.na(psd_x$cone_stationary) & psd_x$cone_stationary
   data.frame(
     Structure = gsub("_", " ", x$structure[[1L]], fixed = TRUE),
     Stress = gsub("_", " ", x$stress_axis[[1L]], fixed = TRUE),
     `Ordinary returned` = mean(ordinary_x$returned),
-    `Ordinary admissible` = if (sum(ordinary_ok)) {
-      mean(ordinary_x$admissible[ordinary_ok])
+    `Ordinary driven stationary` = mean(ordinary_driven),
+    `Ordinary cone stationary` = mean(ordinary_cone),
+    `PSD returned` = mean(psd_x$returned),
+    `PSD lifted stationary` = mean(psd_lifted),
+    `PSD cone stationary` = mean(psd_cone),
+    `PSD admissible` = if (sum(psd_cone)) {
+      mean(psd_x$admissible[psd_cone])
     } else NA_real_,
-    `PSD stationary` = mean(psd_ok),
-    `PSD admissible` = if (sum(psd_ok)) mean(psd_x$admissible[psd_ok])
-      else NA_real_,
     check.names = FALSE
   )
 }))
@@ -173,21 +189,31 @@ axis_display <- axis_display[order(
   axis_display$Structure, axis_display$Stress
 ), ]
 rownames(axis_display) <- NULL
-for (field in names(axis_display)[3:6]) {
+for (field in names(axis_display)[3:9]) {
   axis_display[[field]] <- percent(axis_display[[field]])
 }
 
 interior_groups <- split(interior, interior$criterion)
-interior_display <- do.call(rbind, lapply(interior_groups, function(x) {
+interior_display <- if (length(interior_groups)) {
+  do.call(rbind, lapply(interior_groups, function(x) {
+    data.frame(
+      Criterion = gsub("_", " ", x$criterion[[1L]], fixed = TRUE),
+      Pairs = nrow(x),
+      `Maximum objective difference` = max(abs(x$objective_gap)),
+      `Maximum covariance difference` = max(x$sigma_max_abs_difference),
+      check.names = FALSE
+    )
+  }))
+} else {
   data.frame(
-    Criterion = gsub("_", " ", x$criterion[[1L]], fixed = TRUE),
-    Pairs = nrow(x),
-    `Maximum objective difference` = max(abs(x$objective_gap)),
-    `Maximum covariance difference` = max(x$sigma_max_abs_difference),
+    Criterion = character(), Pairs = integer(),
+    `Maximum objective difference` = numeric(),
+    `Maximum covariance difference` = numeric(),
     check.names = FALSE
   )
-}))
-interior_display <- interior_display[order(interior_display$Criterion), ]
+}
+interior_display <- interior_display[order(interior_display$Criterion), ,
+                                     drop = FALSE]
 rownames(interior_display) <- NULL
 interior_display$`Maximum objective difference` <- sprintf(
   "%.2e", interior_display$`Maximum objective difference`
@@ -197,13 +223,24 @@ interior_display$`Maximum covariance difference` <- sprintf(
 )
 
 ordinary_admissible <- sum(
-  ordinary_stationary & !is.na(ordinary$admissible) & ordinary$admissible
+  ordinary_cone_stationary & !is.na(ordinary$admissible) &
+    ordinary$admissible
 )
-ordinary_admissible_rate <- ordinary_admissible / sum(ordinary_stationary)
+ordinary_admissible_rate <- ordinary_admissible /
+  sum(ordinary_cone_stationary)
 psd_nonstationary <- psd[
-  psd$returned & !is.na(psd$audit_stationary) & !psd$audit_stationary,
+  psd$returned & !is.na(psd$cone_stationary) & !psd$cone_stationary,
   , drop = FALSE
 ]
+psd_lifted_only <- sum(
+  psd$returned & psd_lifted_stationary & !psd_cone_stationary
+)
+psd_cone_only <- sum(
+  psd$returned & !psd_lifted_stationary & psd_cone_stationary
+)
+psd_cone_not_ambient <- sum(
+  psd_cone_stationary & !psd$ambient_stationary
+)
 nonstationary_by_method <- sort(table(psd_nonstationary$method), decreasing = TRUE)
 nonstationary_description <- paste(
   paste0(names(nonstationary_by_method), " (", as.integer(nonstationary_by_method), ")"),
@@ -228,21 +265,31 @@ with a 95% interval of
 Only `r percent(ordinary_admissible_rate, 1)` of their stationary returns were
 covariance-admissible. The constrained methods therefore repaired a material
 set of boundary solutions rather than merely reproducing the ordinary fits.
-The overall covariance-honest stationarity rate was
-`r percent(mean(psd_stationary), 2)` (95% Wilson interval
-`r percent(psd_stationary_ci[[1L]], 2)`–`r percent(psd_stationary_ci[[2L]], 2)`).
+The overall covariance-honest cone-stationarity rate was
+`r percent(mean(psd_cone_stationary), 2)` (95% Wilson interval
+`r percent(psd_cone_stationary_ci[[1L]], 2)`–`r percent(psd_cone_stationary_ci[[2L]], 2)`).
 
 ## Evidence
 
 ```{r stress-table}
-knitr::kable(axis_display, align = "llrrrr")
+knitr::kable(axis_display, align = "llrrrrrrr")
 ```
 
 The covariance-honest stationarity loss is localized: the
 `r format(nrow(psd_nonstationary), big.mark = ",")` returned candidates that
-failed the audit were `r nonstationary_description`. Every stationary
-constrained result was admissible. Solver return, stationarity, and covariance
-admissibility remain separate outcomes in the result files.
+failed the cone audit were `r nonstationary_description`. Every cone-stationary
+constrained result was admissible. Solver return, the original driven/lifted
+audit, common-coordinate cone stationarity, and covariance admissibility remain
+separate outcomes in the result files.
+
+The distinction is operational rather than cosmetic. The PSD normal cone made
+`r format(psd_cone_not_ambient, big.mark = ",")` covariance-honest returns
+stationary that would fail an equality/bound-only ambient test. Conversely,
+`r format(psd_lifted_only, big.mark = ",")` returns passed the original
+lifted-coordinate audit but failed the common cone audit; `r format(psd_cone_only,
+big.mark = ",")` showed the reverse. All geometric gradients were finite and
+both normal projections completed for every returned fit, so these differences
+are stationarity results rather than diagnostic-solver failures.
 
 For the subset where the ordinary fit was itself stationary and admissible,
 the interior agreement gate was:
@@ -262,7 +309,7 @@ objective recomputation, including nonstationary candidates.
 The targeted fixed-WLS slice separates return from stationarity sharply:
 
 ```{r conditioning-table}
-knitr::kable(conditioning_display, align = "llrrr")
+knitr::kable(conditioning_display, align = "llrrrr")
 ```
 
 All recorded weights had the requested condition number and full effective
@@ -285,7 +332,17 @@ plus one general linear equality. The boundary paths move residual and latent
 covariance blocks separately, with one joint-boundary cell; the sample-size
 path spans 2, 5, 10, and 50 observations per free parameter.
 
-Missing-data, ordinal, mixed-ordinal, categorical-ML, and multistart
+Cone stationarity is measured from the full model differential with the
+product Frobenius metric on the model matrices. This makes ordinary and
+covariance-honest fits directly comparable and is unchanged by orthogonal
+changes of covariance-block basis, but it is not invariant to arbitrary
+rescaling of observed variables. Its verdict uses the metric-dual L2 residual;
+the coordinatewise infinity residual remains available for inspection but does
+not drive the verdict. The original optimizer-coordinate audit is retained
+separately for lavaan-compatible convergence inspection.
+
+Missing-data, ordinal, mixed-ordinal, and categorical-ML paths currently have
+deterministic smoke anchors; calibrated stress pilots and multistart
 confirmation slices are still outstanding. The conditioning result is specific
 to this diagonal fixed-weight spectrum and the current optimizers; it does not
 establish a universal condition-number cutoff. Individual millisecond timings

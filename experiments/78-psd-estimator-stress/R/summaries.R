@@ -69,6 +69,12 @@ pair_results <- function(raw) {
       psd_returned = psd$returned,
       ordinary_stationary = ordinary$audit_stationary,
       psd_stationary = psd$audit_stationary,
+      ordinary_ambient_stationary = ordinary$ambient_stationary,
+      psd_ambient_stationary = psd$ambient_stationary,
+      ordinary_cone_stationary = ordinary$cone_stationary,
+      psd_cone_stationary = psd$cone_stationary,
+      ordinary_cone_residual_inf = ordinary$cone_residual_inf,
+      psd_cone_residual_inf = psd$cone_residual_inf,
       ordinary_admissible = ordinary$admissible,
       psd_admissible = psd$admissible,
       ordinary_equality_violation = ordinary$equality_violation_inf,
@@ -100,7 +106,9 @@ pilot_cell_summary <- function(raw) {
   rows <- lapply(groups, function(x) {
     returned <- x$returned
     stationary <- returned & !is.na(x$audit_stationary) & x$audit_stationary
-    psd_accepted <- x$psd & stationary
+    cone_stationary <- returned & !is.na(x$geometric_checked) &
+      x$geometric_checked & !is.na(x$cone_stationary) & x$cone_stationary
+    psd_accepted <- x$psd & cone_stationary
     return_ci <- wilson_interval(sum(returned), length(returned))
     stationary_ci <- wilson_interval(sum(stationary), length(stationary))
     admissible_ci <- wilson_interval(
@@ -129,6 +137,11 @@ pilot_cell_summary <- function(raw) {
       stationary_rate = mean(stationary),
       stationary_ci_low = stationary_ci[[1L]],
       stationary_ci_high = stationary_ci[[2L]],
+      geometric_checked_rate = safe_rate(x$geometric_checked[returned]),
+      ambient_stationary_rate = mean(
+        returned & !is.na(x$ambient_stationary) & x$ambient_stationary
+      ),
+      cone_stationary_rate = mean(cone_stationary),
       admissible_rate = if (sum(psd_accepted)) {
         mean(x$admissible[psd_accepted])
       } else NA_real_,
@@ -159,8 +172,8 @@ pilot_pair_summary <- function(pairs) {
   ))
   rows <- lapply(groups, function(x) {
     comparable <- x$ordinary_returned & x$psd_returned &
-      !is.na(x$ordinary_stationary) & x$ordinary_stationary &
-      !is.na(x$psd_stationary) & x$psd_stationary
+      !is.na(x$ordinary_cone_stationary) & x$ordinary_cone_stationary &
+      !is.na(x$psd_cone_stationary) & x$psd_cone_stationary
     data.frame(
       structure = x$structure[[1L]],
       stress_axis = x$stress_axis[[1L]],
@@ -209,6 +222,9 @@ family_summary <- function(raw) {
       fits = nrow(x),
       returned_rate = safe_rate(x$returned[x$expected_outcome == "fit"]),
       audit_stationary_rate = safe_rate(returned$audit_stationary),
+      geometric_checked_rate = safe_rate(returned$geometric_checked),
+      ambient_stationary_rate = safe_rate(returned$ambient_stationary),
+      cone_stationary_rate = safe_rate(returned$cone_stationary),
       psd_admissible_rate = safe_rate(psd$admissible[psd$returned]),
       psd_boundary_rate = safe_rate(psd$primitive_boundary[psd$returned]),
       objective_checks = nrow(objective_checked),
@@ -224,13 +240,24 @@ family_summary <- function(raw) {
 invariant_summary <- function(raw, pairs = pair_results(raw)) {
   accepted_psd <- raw[
     raw$psd & raw$expected_outcome == "fit" & raw$returned &
-      !is.na(raw$audit_stationary) & raw$audit_stationary,
+      !is.na(raw$cone_stationary) & raw$cone_stationary,
     , drop = FALSE
   ]
   returned <- raw[
     raw$expected_outcome == "fit" & raw$returned,
     , drop = FALSE
   ]
+  geometric_checked <- returned[
+    !is.na(returned$geometric_checked) & returned$geometric_checked,
+    , drop = FALSE
+  ]
+  geometric_projection_ok <-
+    !is.na(geometric_checked$geometric_gradient_finite) &
+      geometric_checked$geometric_gradient_finite &
+      !is.na(geometric_checked$ambient_projection_converged) &
+      geometric_checked$ambient_projection_converged &
+      !is.na(geometric_checked$cone_projection_converged) &
+      geometric_checked$cone_projection_converged
   input_checked <- raw[!is.na(raw$input_unchanged), , drop = FALSE]
   stage1_checked <- raw[
     !is.na(raw$stage1_fingerprint) & nzchar(raw$stage1_fingerprint),
@@ -263,8 +290,9 @@ invariant_summary <- function(raw, pairs = pair_results(raw)) {
   interior_pairs <- pairs[
     pairs$target_population_min_eigenvalue >= 0.20 &
       pairs$ordinary_returned & pairs$psd_returned &
-      !is.na(pairs$ordinary_stationary) & pairs$ordinary_stationary &
-      !is.na(pairs$psd_stationary) & pairs$psd_stationary &
+      !is.na(pairs$ordinary_cone_stationary) &
+        pairs$ordinary_cone_stationary &
+      !is.na(pairs$psd_cone_stationary) & pairs$psd_cone_stationary &
       !is.na(pairs$ordinary_admissible) & pairs$ordinary_admissible,
     , drop = FALSE
   ]
@@ -274,6 +302,8 @@ invariant_summary <- function(raw, pairs = pair_results(raw)) {
   data.frame(
     invariant = c(
       "accepted_psd_is_admissible",
+      "returned_fit_has_geometric_audit",
+      "geometric_projection_completed",
       "independent_objective_matches",
       "input_object_is_unchanged",
       "ml2s_stage1_is_unchanged",
@@ -284,12 +314,15 @@ invariant_summary <- function(raw, pairs = pair_results(raw)) {
       "interior_pair_agreement"
     ),
     checked = c(
-      nrow(accepted_psd), nrow(returned), nrow(input_checked),
-      nrow(stage1_checked), nrow(domain), nrow(fixed_weight),
+      nrow(accepted_psd), nrow(returned), nrow(geometric_checked),
+      nrow(returned), nrow(input_checked), nrow(stage1_checked), nrow(domain),
+      nrow(fixed_weight),
       nrow(two_group), nrow(misspecified), nrow(interior_pairs)
     ),
     violations = c(
       sum(is.na(accepted_psd$admissible) | !accepted_psd$admissible),
+      nrow(returned) - nrow(geometric_checked),
+      sum(is.na(geometric_projection_ok) | !geometric_projection_ok),
       sum(is.na(returned$objective_ok) | !returned$objective_ok),
       sum(is.na(input_checked$input_unchanged) | !input_checked$input_unchanged),
       sum(is.na(stage1_checked$stage1_unchanged) |
