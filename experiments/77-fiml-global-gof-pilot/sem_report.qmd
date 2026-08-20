@@ -227,7 +227,9 @@ Each dataset is fitted once by FIML and passed to six global-fit calibrations:
 
 This is a global score test of the fitted SEM against the local saturated
 mean-and-covariance model. It is not a robust standard error and it does not
-rescale the ordinary likelihood-ratio statistic.
+rescale the ordinary likelihood-ratio statistic. A companion
+[working note](notes/multiplier_score_lineage.qmd) gives the score-test,
+effective-score, wild-bootstrap, sign-randomization, and SEM lineages in detail.
 
 Let the saturated moment vector be
 

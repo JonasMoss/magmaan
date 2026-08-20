@@ -1,0 +1,443 @@
+---
+title: "Effective multiplier scores: lineage, equivalences, and limits"
+subtitle: "Working note for experiment 77"
+bibliography: multiplier_score_lineage.bib
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Status and conclusion
+
+This is a deliberately local working note. It temporarily lives with experiment
+77 so that the method used there and its literature can be read together. It
+should eventually be consolidated into the research notes or a paper methods
+section.
+
+The short conclusion is:
+
+> With fixed casewise contributions, multiplying every contribution by an
+> independent Rademacher variable is algebraically identical to sign flipping
+> it. Thus the effective Rademacher procedure in experiment 77 is both a
+> sign-flipped-score procedure and a multiplier score bootstrap. The substantial
+> differences lie in the inferential framework: the allowed weight laws, the
+> construction of the reference distribution, centering and studentization,
+> and whether validity comes from finite-sample group invariance or only from a
+> conditional central limit theorem.
+
+For experiment 77, **Rademacher multiplier calibration of a nuisance-effective
+global score test** is the safest primary description. "Equivalently, we sign
+flip the projected casewise score contributions" is a useful algebraic
+explanation, but **exact sign-randomization test** would overstate the available
+finite-sample justification under nonnormal FIML data.
+
+## What experiment 77 computes
+
+Let the saturated moment parameter be
+
+$$
+\eta=
+\begin{pmatrix}
+\operatorname{vech}(\Sigma)\\
+\mu
+\end{pmatrix}\in\mathbb R^m,
+$$
+
+with the mean block omitted for covariance-only complete-data models. At the
+restricted SEM estimate $\widehat\theta$, let $s_i$ be case $i$'s score with
+respect to $\eta$. For FIML, $s_i$ is the observed-data score for that case's
+missingness pattern; missing entries are never filled in.
+
+Let
+
+$$
+\Delta=\frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}
+$$
+
+be the local SEM tangent, after incorporating affine equality constraints. Let
+$K$ be an orthonormal basis for $\operatorname{col}(\Delta)$ and $D$ an
+orthonormal basis for its Euclidean complement. If $I$ is the saturated-moment
+working Fisher information, define
+
+$$
+G
+=D-K(K^{\mathsf T}IK)^{-1}K^{\mathsf T}ID.
+$$
+
+The construction ensures
+
+$$
+K^{\mathsf T}IG=0.
+$$
+
+Thus the columns of $G$ represent saturated directions made orthogonal, in the
+working information metric, to changes locally explained by the fitted SEM. The
+casewise effective contributions and their sum are
+
+$$
+z_i=G^{\mathsf T}s_i,
+\qquad
+u=\sum_{i=1}^n z_i.
+$$
+
+With
+
+$$
+V=G^{\mathsf T}IG,
+$$
+
+the observed statistic is
+
+$$
+T=u^{\mathsf T}V^{-1}u.
+$$
+
+Here $I$ and $V$ are sample-summed quantities. Equivalently, one may divide
+$u$ by $\sqrt n$ and $V$ by $n$; the quadratic statistic is unchanged. The
+dimension
+
+$$
+d=m-\operatorname{rank}(\Delta)
+$$
+
+is ordinarily the SEM model degrees of freedom.
+
+For draw $b$, experiment 77 generates independent Rademacher variables
+$\xi_{ib}\in\{-1,+1\}$ and computes
+
+$$
+u_b=\sum_{i=1}^n \xi_{ib}z_i,
+\qquad
+T_b=u_b^{\mathsf T}V^{-1}u_b.
+$$
+
+With $B$ random draws, the reported Monte Carlo p-value is
+
+$$
+\widehat p
+=\frac{1+\sum_{b=1}^B\mathbf 1(T_b\geq T)}{B+1}.
+$$
+
+The fitted moments, tangent projection, and metric $V$ remain fixed. No
+saturated model and no bootstrap SEM is fitted. Experiment 77 uses $B=199$, so
+the p-value grid has width $1/200$.
+
+## Why the nuisance projection appears
+
+The construction is the classical effective-score correction in a different
+coordinate system. Partition a parameter into tested and nuisance components,
+$(\beta,\gamma)$, with casewise scores
+$\psi_{\beta i}$ and $\psi_{\gamma i}$. Let $A$ be the sensitivity, or
+negative expected derivative of the score, partitioned conformably. Under the
+null,
+
+$$
+\sqrt n(\widehat\gamma-\gamma_0)
+=A_{\gamma\gamma}^{-1}
+\frac{1}{\sqrt n}\sum_{i=1}^n\psi_{\gamma i}+o_p(1).
+$$
+
+Expanding the tested score around $\gamma_0$ gives
+
+$$
+\frac{1}{\sqrt n}\sum_{i=1}^n
+\psi_{\beta i}(\widehat\gamma)
+=
+\frac{1}{\sqrt n}\sum_{i=1}^n
+\left(
+\psi_{\beta i}
+-A_{\beta\gamma}A_{\gamma\gamma}^{-1}\psi_{\gamma i}
+\right)
++o_p(1).
+$$
+
+The expression in parentheses is the nuisance-effective score contribution.
+It is the score-test/C(alpha) construction of @neyman1959 and the effective
+score developed pedagogically by @hall_mathiason1990. In experiment 77, the
+tested coordinates are the saturated directions $D$, the nuisance coordinates
+are the SEM tangent $K$, and the working information $I$ supplies the
+sensitivity blocks. The matrix $G$ is exactly the coordinate-free version of
+the subtraction above.
+
+This correction matters for resampling. At a restricted optimum the **sum** of
+the nuisance score is zero, so using the raw tested score or the effective score
+can give the same observed statistic. Their individual rows differ, however.
+Multipliers act on the individual rows, and only the effective rows reproduce
+the first-order effect of estimating the nuisance parameter. This is the main
+point of the effective sign-flip construction in
+@hemerik_goeman_finos2020.
+
+## What the multiplier distribution approximates
+
+Write the normalized effective score as
+
+$$
+U_n=n^{-1/2}\sum_{i=1}^n z_i.
+$$
+
+Suppose, under the null, that the rows are independent, have mean zero, satisfy
+a Lindeberg condition, and have limiting average covariance
+
+$$
+B_z=\lim_{n\to\infty}\frac1n\sum_{i=1}^n
+\operatorname{Var}(z_i).
+$$
+
+Then
+
+$$
+U_n\Rightarrow N(0,B_z).
+$$
+
+Conditionally on the observed rows, multipliers with
+$E(\xi_i)=0$ and $E(\xi_i^2)=1$ give
+
+$$
+U_n^*=n^{-1/2}\sum_{i=1}^n\xi_i z_i,
+$$
+
+with
+
+$$
+E_*(U_n^*)=0,
+\qquad
+\operatorname{Var}_*(U_n^*)=\frac1n\sum_{i=1}^n z_i z_i^{\mathsf T}.
+$$
+
+Under the corresponding multiplier central limit theorem, the conditional law
+of $U_n^*$ approaches the null law of $U_n$. General weighted-bootstrap theory
+is developed by @praestgaard_wellner1993; direct resampling of estimating-
+function summands appears in @hu_zidek1995 and @hu_kalbfleisch2000; and
+@kline_santos2012 explicitly develops score perturbation for M-estimator Wald,
+LM, and moment-restriction tests.
+
+If the working metric $V/n$ converges to $V_0$, but $V_0\neq B_z$, then
+
+$$
+T\Rightarrow
+Z^{\mathsf T}V_0^{-1}Z,
+\qquad Z\sim N(0,B_z),
+$$
+
+which is generally a weighted sum of independent $\chi_1^2$ variables. The
+multiplier draws reproduce this spectrum implicitly because their conditional
+covariance estimates $B_z$. They do not need to form the full fourth-moment
+matrix $B_z$ and diagonalize $V_0^{-1}B_z$. This connects the score multiplier
+to the weighted-chi-square SEM asymptotics of @shapiro1983 and @satorra1989.
+
+The often-used phrase "flipping kills the mean but preserves the covariance"
+needs this conditional interpretation. The weights have conditional mean zero,
+and their unit second moment preserves the empirical second moment of the fixed
+rows. Sign flipping does not literally transform a nonzero-mean population into
+the null population.
+
+## Is sign flipping different from multiplier bootstrap?
+
+### Algebraically: no, for Rademacher weights
+
+For fixed rows $z_1,\ldots,z_n$,
+
+$$
+\xi_i z_i=
+\begin{cases}
+ z_i,&\xi_i=+1,\\
+-z_i,&\xi_i=-1.
+\end{cases}
+$$
+
+Consequently, a Rademacher multiplier draw and an independent sign-flip draw
+produce exactly the same $u_b$ and $T_b$. There is no numerical or statistical
+difference hiding behind the two names when the same rows, metric, and p-value
+rule are used.
+
+### Inferentially: sometimes
+
+| Feature | Sign-randomization framing | Multiplier-bootstrap framing |
+|---|---|---|
+| Transformations | Usually the finite group $\{-1,+1\}^n$ | Independent mean-zero, unit-variance weights |
+| Weight laws | Rademacher | Rademacher, Gaussian, Mammen, centered exponential, and others |
+| Exactness route | Joint distribution invariant under all sign changes | None in general; conditional weak convergence |
+| Asymptotic route | Approximate symmetry of a limiting statistic | Conditional multiplier CLT for an empirical/score process |
+| Observed sample | Identity sign vector is one transformation in the rank | Observed statistic is compared with conditional bootstrap draws |
+| Nuisance fitting | Can break sign invariance; effective scores repair first order | Influence-function/effective-score linearization repairs first order |
+| Studentization | Optional; Hemerik et al. allow a common quadratic metric | Often explicit bootstrap-t or weighted-meat studentization |
+| Non-Rademacher weights | No finite sign group or sign interpretation | Natural and sometimes chosen for higher-order moment matching |
+
+If the joint null law of $(z_1,\ldots,z_n)$ is invariant under arbitrary
+componentwise sign changes, enumerating the sign group yields a finite-sample
+randomization test. Randomly sampling group elements while retaining the
+identity transformation yields a Monte Carlo version of that rank test. This
+is a stronger conclusion than bootstrap consistency.
+
+Mean-zero scores need not be symmetric. Under skewness, heteroskedasticity, or
+estimated nuisance parameters, the required finite-sample group invariance will
+usually fail. A sign-flip procedure can nevertheless be asymptotically valid
+because the normalized score has a symmetric Gaussian limit. That is the
+approximate-symmetry distinction formalized more generally by
+@canay_romano_shaikh2017 and used for score contributions by
+@hemerik_goeman_finos2020.
+
+Conversely, Gaussian or Mammen weights may satisfy a multiplier theorem without
+defining any transformation group of the observed data. Such procedures are
+multiplier bootstraps, not sign-randomization tests. Mammen's asymmetric
+two-point law is motivated by matching an additional weight moment and improving
+higher-order behavior in regression settings [@mammen1993], building on the
+wild-bootstrap line of @wu1986 and @liu1988.
+
+Thus:
+
+$$
+\text{Rademacher sign flip}
+\subset
+\text{multiplier bootstrap algorithms},
+$$
+
+but a sign-randomization **validity theorem** and a multiplier-bootstrap
+**validity theorem** do not have identical assumptions or conclusions.
+
+## Centering and studentization
+
+These two choices often account for apparent differences between implementations
+that all say "multiplier score test."
+
+### Centering
+
+A conventional multiplier empirical process uses centered rows,
+
+$$
+\widetilde z_i=z_i-\bar z,
+\qquad
+\bar z=n^{-1}\sum_i z_i,
+$$
+
+whereas the basic sign-flip construction commonly multiplies the raw effective
+rows. Under a correctly imposed null, $\bar z=O_p(n^{-1/2})$, and the centered
+and uncentered conditional covariance estimates differ by
+
+$$
+\frac1n\sum_i z_i z_i^{\mathsf T}
+-
+\frac1n\sum_i\widetilde z_i\widetilde z_i^{\mathsf T}
+=\bar z\bar z^{\mathsf T}=O_p(n^{-1}).
+$$
+
+The distinction is asymptotically negligible under the null but can matter in
+small samples. Centering also makes explicit that the bootstrap reference is a
+null reference while the observed numerator remains unchanged. Experiment 77
+uses the raw projected rows by default; its API provides optional within-pattern
+centering for diagnostics.
+
+### Studentization
+
+Experiment 77 holds $V=G^{\mathsf T}IG$ fixed across multiplier draws. This
+matches the multidimensional Hemerik--Goeman--Finos construction, which permits
+a common convergent quadratic metric. It deliberately lets the resampling
+distribution reproduce the weighted-chi-square spectrum induced by mismatch
+between the working information and the empirical score covariance.
+
+A score-bootstrap variant may instead studentize the perturbed score with a
+draw-specific covariance or "meat." One simple version defines
+
+$$
+\bar z_b^*=n^{-1}\sum_i\xi_{ib}z_i,
+\qquad
+\widehat B_b^*
+=\sum_i
+(\xi_{ib}z_i-\bar z_b^*)
+(\xi_{ib}z_i-\bar z_b^*)^{\mathsf T},
+\qquad
+T_b^{\mathrm{stud}}
+=u_b^{\mathsf T}(\widehat B_b^*)^{-1}u_b.
+$$
+
+For Rademacher weights, the uncentered second-moment term is fixed because
+$\xi_{ib}^2=1$; only the centering term varies. With Gaussian or Mammen weights,
+the squared weights also change the meat. More elaborate score bootstraps may
+evaluate the meat at a perturbed parameter. Studentization targets a more
+pivotal statistic, but a draw-specific inverse can be unstable when $d$ is not
+small relative to $n$ or the empirical meat is poorly conditioned. It is a
+different calibration choice, not what makes a procedure a multiplier
+bootstrap.
+
+## The actual literature lineage
+
+There are several converging lines, not one chain in which every later paper
+cites every earlier paper.
+
+1. **Score/LM testing.** @rao1948 introduced the score-test principle;
+   @silvey1959 developed the constrained-likelihood Lagrange-multiplier
+   formulation.
+2. **Composite hypotheses and effective scores.** @neyman1959 and
+   @hall_mathiason1990 supply the nuisance-orthogonal score construction.
+   @boos1992 extends the score-test calculation to estimating equations and
+   misspecified likelihoods using empirical variance estimates.
+3. **Wild and weighted bootstrap.** @wu1986, @liu1988, @mammen1993, and
+   @praestgaard_wellner1993 establish the broader idea of random weights that
+   reproduce a heterogeneous empirical process.
+4. **Estimating-function and score resampling.** @hu_zidek1995 and
+   @hu_kalbfleisch2000 directly resample estimating-function summands.
+   @kline_santos2012 explicitly perturbs M-estimator scores and proves results
+   for LM and moment-restriction tests without refitting.
+5. **Sign-flipped effective scores.** @hemerik_goeman_finos2020 combine
+   Rademacher transformations, individual score contributions, effective-score
+   nuisance correction, multidimensional quadratic statistics, and a
+   permutation-style Monte Carlo rank. This is the closest constructional
+   source for experiment 77.
+6. **SEM moment geometry.** @shapiro1983 and @satorra1989 supply the saturated
+   moment vector, model tangent, working metric, and weighted-chi-square
+   asymptotics. Experiment 77 applies the score-multiplier construction to the
+   local saturated complement under complete-data ML and observed-pattern FIML.
+
+Hemerik, Goeman, and Finos frame their contribution through permutation and
+sign-flip work, not through Kline--Santos or the classical wild-bootstrap
+papers. Calling all these papers one explicit citation chain would therefore be
+historically inaccurate. They are mathematically adjacent traditions that meet
+at random weighting of casewise scores.
+
+The Foldnes--Grønneberg--Moss pEBA work is not part of this lineage. It belongs
+to the separate family that estimates or regularizes the eigenvalue spectrum of
+the SEM quadratic-form limit.
+
+## What may safely be claimed for experiment 77
+
+The sources above support the construction and its first-order analogy. They do
+not by themselves prove every feature of the FIML--SEM extension. A formal
+validity argument still needs to state conditions ensuring:
+
+- independent casewise observed-data scores, possibly non-identically
+  distributed over missingness patterns;
+- zero expected saturated score at the null pseudo-true moments;
+- consistency of the working sensitivity $I$ used in the nuisance projection;
+- a stable tangent rank and nonsingular $K^{\mathsf T}IK$ and
+  $G^{\mathsf T}IG$;
+- a Lindeberg condition and consistent empirical covariance for the projected
+  rows;
+- negligibility of replacing population moments, tangent, and information by
+  their fitted versions; and
+- an ignorable missingness argument appropriate to the claimed FIML setting.
+
+In particular, the VM and independent-generator conditions used in experiment
+77 do not generally make casewise scores exactly symmetric. MAR plus a working
+Gaussian observed-data likelihood also requires more care than a correctly
+specified parametric likelihood. The simulation can establish empirical
+calibration in its design cells; it does not convert the procedure into an
+exact finite-sample sign test.
+
+Recommended wording is:
+
+> We use Rademacher multiplier calibration of the nuisance-effective saturated
+> score. Algebraically, each multiplier draw sign flips the projected casewise
+> score contributions. The construction adapts the effective score-flipping
+> test of Hemerik, Goeman, and Finos (2020) to the local saturated complement of
+> a fitted SEM and is closely related to estimating-function and score wild
+> bootstraps. We use "multiplier" rather than "exact sign-randomization" because
+> validity under the nonnormal FIML design is asymptotic rather than based on
+> finite-sample sign invariance.
+
+## References
