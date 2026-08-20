@@ -17,7 +17,7 @@ script_dir <- dirname(normalizePath(knitr::current_input(dir = TRUE)))
 result_dir <- Sys.getenv(
   "MAGMAAN_SEM_RESULT_DIR",
   unset = file.path(
-    script_dir, "results", "sem-paired-corrected-score-n200-500"
+    script_dir, "results", "sem-paired-score-fmg-n200-500"
   )
 )
 read_result <- function(name) read.csv(
@@ -108,6 +108,7 @@ for (estimator in estimator_order) {
     drop = TRUE, lex.order = TRUE)
   index <- match(target_key, source_key)
   for (method in names(method_columns)) {
+    if (!any(is.finite(source[[method]]))) next
     display_method <- if (method == "Scalar robust") {
       if (estimator == "FIML") "Yuan--Bentler MLR" else "Scaled ML2S"
     } else method
@@ -179,15 +180,31 @@ replications per cell; FIML and ML2S are fitted to the same generated datasets.
 headline <- scorecard[, c(
   "estimator", "method", "mean_cell_rejection", "mean_abs_size_error",
   "min_cell_rejection", "max_cell_rejection", "cells_in_band")]
+headline <- headline[scorecard$finite > 0L, ]
 names(headline) <- c(
   "estimator", "method", "mean size", "mean |size-.05|", "minimum", "maximum",
   "cells in [.025,.075]")
 knitr::kable(headline, digits = 3, row.names = FALSE)
 ```
 
-Each row is one estimator--calibration combination. The summary therefore
-separates whether a calibration works from whether it is attached to FIML or
-to the two-stage estimate.
+Score pEBA(4) is the best FIML calibration in this panel. Its mean rejection is
+.043, its mean absolute cellwise size error is .014, and 66/75 cells lie in the
+practical [.025,.075] band. The legacy multiplier gives .058, .015, and 59/75,
+respectively. Thus score pEBA(4) is modestly but consistently better here, in
+line with the earlier score-FMG experiments.
+
+For ML2S, score pEBA(4) and the multiplier are closer: their mean rejection
+rates are .069 and .072, and both place 48/75 cells in the practical band. The
+score calibration is better under MAR (.058 versus .068 overall) but worse
+under MCAR (.102 versus .088). Neither is uniformly calibrated for ML2S in the
+hard missing-data cells.
+
+The MAR cells do not establish consistency. In the severe nonnormal MAR cells,
+the legacy FIML multiplier rejects about .075--.079 while score pEBA(4) rejects
+about .042--.055. That is useful finite-sample evidence for score-spectrum
+calibration, but both normal-FIML and the normal-EM first stage can target
+pseudo-true rather than population moments under nonnormal MAR. A reference-law
+improvement cannot generally repair that estimand problem.
 
 ## All 75 design cells
 
@@ -281,9 +298,10 @@ knitr::kable(model_table, row.names = FALSE)
 
 ## Methods
 
-Each generated dataset is fitted by both FIML and ML2S. FIML is passed to
-eleven global-fit calibrations, including both multiplier constructions. ML2S
-is passed to the ten calibrations for which a two-stage construction exists:
+Each generated dataset is fitted by both FIML and ML2S and passed to ten
+global-fit calibrations. The current code also contains an eleventh,
+FIML-specific corrected multiplier, but it landed after this production panel
+started and is therefore described but not included in the tables:
 
 - **Corrected multiplier:** the FIML projected saturated-score test described
   below, using the realized observed-data sensitivity and 199 Mammen draws.
@@ -438,6 +456,7 @@ counted as non-rejections.
 
 ```{r denominator-table}
 denominators <- scorecard[, c("estimator", "method", "attempted", "finite")]
+denominators <- denominators[denominators$finite > 0L, ]
 denominators$non_finite <- denominators$attempted - denominators$finite
 names(denominators) <- c(
   "estimator", "method", "attempted", "finite p-values",
@@ -450,32 +469,36 @@ knitr::kable(denominators, row.names = FALSE)
 ```{r geometry-table}
 show_geometry <- geometry[, c(
   "estimator", "model_label", "attempted", "fit_ok", "flip_ok",
-  "nominal_geometry", "flip_corrected_ok",
-  "corrected_nominal_geometry")]
+  "nominal_geometry")]
 names(show_geometry) <- c(
   "estimator", "model", "attempted", "converged", "finite multiplier",
-  "nominal tangent rank", "finite corrected multiplier",
-  "corrected nominal tangent rank")
+  "nominal tangent rank")
 knitr::kable(show_geometry, row.names = FALSE)
 ```
 
-The table separates convergence, finite multiplier output, and the numerical
-tangent-rank gate for both multiplier constructions. Corrected entries are
-available only for FIML. These diagnostics must be interpreted with the
-method-specific denominators above after the paired run completes.
+The panel has four fit failures among 75,000 estimator rows: one FIML and three
+ML2S. Every converged fit produced a finite legacy-multiplier p-value. Four FIML
+and one ML2S call lost numerical tangent rank despite producing a finite value;
+the table records these separately rather than silently counting them as
+ordinary tests.
 
 ### Runtime and next experiment
 
-The runner records fit, FMG, legacy-multiplier, corrected-multiplier, and total
-times separately. Its timing projection uses the observed parallel speedup and
-must be regenerated from the completed paired null panel before planning a
-matched-power continuation.
+The checkpointed panel took approximately 86 minutes on ten workers, including
+75,000 fits, the LR/discrepancy and score-FMG batteries, and 199 multiplier
+draws. The final 25-rep large-model severe-IG/MCAR chunk dominated the tail.
+The corrected multiplier was not part of this timing.
 
 ### Reproduce
+
+The archived panel above predates the corrected multiplier. To run the current
+implementation into a fresh directory and render that expanded panel, point the
+report at the same directory explicitly:
 
 ```sh
 Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 500 --n 200 \
   --flips 199 --cores 10 --chunk-size 25 \
   --results-dir experiments/77-fiml-global-gof-pilot/results/sem-paired-corrected-score-n200-500
-quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
+MAGMAAN_SEM_RESULT_DIR=experiments/77-fiml-global-gof-pilot/results/sem-paired-corrected-score-n200-500 \
+  quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
 ```
