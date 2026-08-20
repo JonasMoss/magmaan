@@ -481,6 +481,16 @@ fiml_saturated_casewise_deviance_scores(
     const RawData& raw, const FIMLPack& pack,
     const model::ImpliedMoments& moments, bool include_means);
 
+// Realized saturated-moment sensitivity, `-d score / d eta'`, evaluated at
+// caller-supplied moments. Its column order and total-sample likelihood scale
+// match `fiml_saturated_casewise_deviance_scores`: block-stacked covariance
+// vechs followed by block-stacked means. This is not the saturated H1 Hessian
+// unless `moments` are the fitted H1 moments.
+post_expected<Eigen::MatrixXd>
+fiml_saturated_observed_information(
+    const RawData& raw, const FIMLPack& pack,
+    const model::ImpliedMoments& moments, bool include_means);
+
 post_expected<FIMLScoreMeatBread>
 fiml_score_meat_bread(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,

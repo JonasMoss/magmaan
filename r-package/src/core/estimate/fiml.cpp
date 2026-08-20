@@ -2434,6 +2434,78 @@ fiml_saturated_casewise_deviance_scores(
 }
 
 post_expected<Eigen::MatrixXd>
+fiml_saturated_observed_information(
+    const RawData& raw, const FIMLPack& pack,
+    const model::ImpliedMoments& moments, bool include_means) {
+  const std::size_t n_blocks = raw.X.size();
+  if (n_blocks == 0 || moments.sigma.size() != n_blocks ||
+      pack.cache.block_p.size() != n_blocks ||
+      pack.cache.sigma_offsets.size() != n_blocks ||
+      pack.cache.mu_offsets.size() != n_blocks ||
+      (include_means && moments.mu.size() != n_blocks)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML saturated observed information: block layout differs"));
+  }
+
+  Eigen::Index sigma_dim = 0;
+  Eigen::Index mu_dim = 0;
+  Eigen::Index total_rows = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    if (p <= 0 || pack.cache.block_p[b] != p ||
+        moments.sigma[b].rows() != p || moments.sigma[b].cols() != p ||
+        (include_means && moments.mu[b].size() != p)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML saturated observed information: block dimensions differ"));
+    }
+    sigma_dim = std::max(sigma_dim,
+                         pack.cache.sigma_offsets[b] + vech_len(p));
+    mu_dim = std::max(mu_dim, pack.cache.mu_offsets[b] + p);
+    total_rows += raw.X[b].rows();
+  }
+  if (total_rows != pack.cache.n_total) {
+    return std::unexpected(make_post_err(
+        PostError::Kind::NumericIssue,
+        "FIML saturated observed information: raw row count differs from cache"));
+  }
+
+  const Eigen::Index moment_dim = sigma_dim + (include_means ? mu_dim : 0);
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(moment_dim, moment_dim);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index pstar = vech_len(p);
+    Eigen::VectorXd mu;
+    if (include_means) {
+      mu = moments.mu[b];
+    } else if (b < pack.start_stats.mean.size() &&
+               pack.start_stats.mean[b].size() == p) {
+      mu = pack.start_stats.mean[b];
+    } else {
+      return std::unexpected(make_post_err(
+          PostError::Kind::NumericIssue,
+          "FIML saturated observed information: covariance-only path needs block means"));
+    }
+    auto Hbar = fiml_saturated_hessian_analytic_block(
+        pack.cache, b, mu, moments.sigma[b]);
+    if (!Hbar.has_value()) return std::unexpected(Hbar.error());
+    const double scale = 0.5 * static_cast<double>(raw.X[b].rows());
+    const Eigen::Index sigma_off = pack.cache.sigma_offsets[b];
+    out.block(sigma_off, sigma_off, pstar, pstar).noalias() +=
+        scale * Hbar->bottomRightCorner(pstar, pstar);
+    if (include_means) {
+      const Eigen::Index mean_off = sigma_dim + pack.cache.mu_offsets[b];
+      out.block(mean_off, mean_off, p, p).noalias() +=
+          scale * Hbar->topLeftCorner(p, p);
+      out.block(mean_off, sigma_off, p, pstar).noalias() +=
+          scale * Hbar->topRightCorner(p, pstar);
+      out.block(sigma_off, mean_off, pstar, p).noalias() +=
+          scale * Hbar->bottomLeftCorner(pstar, p);
+    }
+  }
+  return Eigen::MatrixXd(0.5 * (out + out.transpose()));
+}
+
+post_expected<Eigen::MatrixXd>
 fiml_casewise_deviance_scores(const spec::LatentStructure& pt,
                               const model::MatrixRep& rep,
                               const RawData& raw,

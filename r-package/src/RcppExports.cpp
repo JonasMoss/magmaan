@@ -1970,8 +1970,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // inference_score_flip_test
-Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0, SEXP raw, int n_flips, double seed, std::string calibration, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization);
-RcppExport SEXP _magmaan_inference_score_flip_test(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP calibrationSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP) {
+Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0, SEXP raw, int n_flips, double seed, std::string calibration, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization, std::string sensitivity);
+RcppExport SEXP _magmaan_inference_score_flip_test(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP calibrationSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP, SEXP sensitivitySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1985,13 +1985,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type two_point_skewness(two_point_skewnessSEXP);
     Rcpp::traits::input_parameter< bool >::type center_multiplier_scores(center_multiplier_scoresSEXP);
     Rcpp::traits::input_parameter< std::string >::type multiplier_studentization(multiplier_studentizationSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_score_flip_test(fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization));
+    Rcpp::traits::input_parameter< std::string >::type sensitivity(sensitivitySEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_flip_test(fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity));
     return rcpp_result_gen;
 END_RCPP
 }
 // inference_score_flip_test_model
-Rcpp::List inference_score_flip_test_model(SEXP partable_H1, Rcpp::List fit_H0, SEXP raw, int n_flips, double seed, std::string calibration, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization);
-RcppExport SEXP _magmaan_inference_score_flip_test_model(SEXP partable_H1SEXP, SEXP fit_H0SEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP calibrationSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP) {
+Rcpp::List inference_score_flip_test_model(SEXP partable_H1, Rcpp::List fit_H0, SEXP raw, int n_flips, double seed, std::string calibration, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization, std::string sensitivity);
+RcppExport SEXP _magmaan_inference_score_flip_test_model(SEXP partable_H1SEXP, SEXP fit_H0SEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP calibrationSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP, SEXP sensitivitySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2005,13 +2006,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type two_point_skewness(two_point_skewnessSEXP);
     Rcpp::traits::input_parameter< bool >::type center_multiplier_scores(center_multiplier_scoresSEXP);
     Rcpp::traits::input_parameter< std::string >::type multiplier_studentization(multiplier_studentizationSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_score_flip_test_model(partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization));
+    Rcpp::traits::input_parameter< std::string >::type sensitivity(sensitivitySEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_flip_test_model(partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity));
     return rcpp_result_gen;
 END_RCPP
 }
 // inference_global_score_flip_test
-Rcpp::List inference_global_score_flip_test(Rcpp::List fit, SEXP raw, int n_flips, double seed, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization);
-RcppExport SEXP _magmaan_inference_global_score_flip_test(SEXP fitSEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP) {
+Rcpp::List inference_global_score_flip_test(Rcpp::List fit, SEXP raw, int n_flips, double seed, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization, std::string sensitivity);
+RcppExport SEXP _magmaan_inference_global_score_flip_test(SEXP fitSEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP, SEXP sensitivitySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2023,7 +2025,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type two_point_skewness(two_point_skewnessSEXP);
     Rcpp::traits::input_parameter< bool >::type center_multiplier_scores(center_multiplier_scoresSEXP);
     Rcpp::traits::input_parameter< std::string >::type multiplier_studentization(multiplier_studentizationSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_global_score_flip_test(fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization));
+    Rcpp::traits::input_parameter< std::string >::type sensitivity(sensitivitySEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_global_score_flip_test(fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3993,9 +3996,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_casewise_influence_ij_fit, 3},
     {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 11},
     {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
-    {"_magmaan_inference_score_flip_test", (DL_FUNC) &_magmaan_inference_score_flip_test, 10},
-    {"_magmaan_inference_score_flip_test_model", (DL_FUNC) &_magmaan_inference_score_flip_test_model, 10},
-    {"_magmaan_inference_global_score_flip_test", (DL_FUNC) &_magmaan_inference_global_score_flip_test, 8},
+    {"_magmaan_inference_score_flip_test", (DL_FUNC) &_magmaan_inference_score_flip_test, 11},
+    {"_magmaan_inference_score_flip_test_model", (DL_FUNC) &_magmaan_inference_score_flip_test_model, 11},
+    {"_magmaan_inference_global_score_flip_test", (DL_FUNC) &_magmaan_inference_global_score_flip_test, 9},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},

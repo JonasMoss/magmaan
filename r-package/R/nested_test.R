@@ -25,6 +25,10 @@
 #'   Rademacher law and one gives Mammen's law.
 #' @param center_multiplier_scores Whether to center effective-score
 #'   contributions within information strata before applying multipliers.
+#' @param sensitivity Nuisance sensitivity (bread). `"expected"` preserves
+#'   the original pattern-conditional normal-theory construction;
+#'   `"observed"` uses the realized likelihood Hessian and supplies the
+#'   pseudo-true/MAR correction when information equality need not hold.
 #' @param multiplier_studentization Optional `"weighted-meat"` bootstrap-t
 #'   diagnostic using the per-draw meat
 #'   `sum(w_i^2 u_i u_i')`. `"none"` retains the expected-information metric.
@@ -50,10 +54,12 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
                             two_point_skewness = 1,
                             center_multiplier_scores = FALSE,
                             multiplier_studentization = c("none",
-                                                          "weighted-meat")) {
+                                                          "weighted-meat"),
+                            sensitivity = c("expected", "observed")) {
   calibration <- match.arg(calibration)
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
+  sensitivity <- match.arg(sensitivity)
   h1_is_model <- inherits(fit_H1, "magmaan_model_spec")
   estimator_H0 <- toupper(fit_H0$estimator %||% "ML")
   estimator_H1 <- if (h1_is_model) estimator_H0 else
@@ -88,6 +94,15 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
          call. = FALSE)
   }
   center_multiplier_scores <- isTRUE(center_multiplier_scores)
+  if (sensitivity == "observed" &&
+      !calibration %in% c("effective", "asymptotic")) {
+    stop("score_flip_test(): `sensitivity = \"observed\"` supports only effective or asymptotic calibration",
+         call. = FALSE)
+  }
+  if (sensitivity == "observed" && center_multiplier_scores) {
+    stop("score_flip_test(): observed sensitivity does not support within-stratum score centering",
+         call. = FALSE)
+  }
   if ((center_multiplier_scores ||
        multiplier_studentization != "none") &&
       calibration != "effective") {
@@ -129,18 +144,19 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
     magmaan_core$inference_score_flip_test_model(
       fit_H1$partable, fit_H0, raw, n_flips, seed, calibration, multiplier,
       two_point_skewness, center_multiplier_scores,
-      multiplier_studentization)
+      multiplier_studentization, sensitivity)
   } else {
     magmaan_core$inference_score_flip_test(
       fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier,
       two_point_skewness, center_multiplier_scores,
-      multiplier_studentization)
+      multiplier_studentization, sensitivity)
   }
   out$calibration <- calibration
   out$multiplier <- multiplier
   out$two_point_skewness <- two_point_skewness
   out$center_multiplier_scores <- center_multiplier_scores
   out$multiplier_studentization <- multiplier_studentization
+  out$sensitivity <- sensitivity
   class(out) <- c("magmaan_score_flip_test", "list")
   out
 }
@@ -170,9 +186,11 @@ global_score_flip_test <- function(
     multiplier = c("rademacher", "mammen", "two-point", "gaussian",
                    "centered-exponential"),
     two_point_skewness = 1, center_multiplier_scores = FALSE,
-    multiplier_studentization = c("none", "weighted-meat")) {
+    multiplier_studentization = c("none", "weighted-meat"),
+    sensitivity = c("expected", "observed")) {
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
+  sensitivity <- match.arg(sensitivity)
   estimator <- toupper(fit$estimator %||% "ML")
   if (!estimator %in% c("ML", "FIML", "ML2S")) {
     stop("global_score_flip_test(): `fit` must use ML, FIML, or normal-theory ML2S",
@@ -200,6 +218,14 @@ global_score_flip_test <- function(
     stop("global_score_flip_test(): `center_multiplier_scores` must be TRUE or FALSE",
          call. = FALSE)
   }
+  if (sensitivity == "observed" && estimator == "ML2S") {
+    stop("global_score_flip_test(): observed sensitivity is not defined for ML2S",
+         call. = FALSE)
+  }
+  if (sensitivity == "observed" && isTRUE(center_multiplier_scores)) {
+    stop("global_score_flip_test(): observed sensitivity does not support within-pattern score centering",
+         call. = FALSE)
+  }
   if (estimator %in% c("FIML", "ML2S")) {
     if (!missing(data) && !is.null(data)) {
       stop("global_score_flip_test(): FIML/ML2S uses `fit$raw_data`; omit `data`",
@@ -225,11 +251,13 @@ global_score_flip_test <- function(
   }
   out <- magmaan_core$inference_global_score_flip_test(
       fit, raw, n_flips, seed, multiplier, two_point_skewness,
-      isTRUE(center_multiplier_scores), multiplier_studentization)
+      isTRUE(center_multiplier_scores), multiplier_studentization,
+      sensitivity)
   out$multiplier <- multiplier
   out$two_point_skewness <- two_point_skewness
   out$center_multiplier_scores <- isTRUE(center_multiplier_scores)
   out$multiplier_studentization <- multiplier_studentization
+  out$sensitivity <- sensitivity
   class(out) <- c("magmaan_global_score_flip_test", "list")
   out
 }
@@ -248,10 +276,12 @@ global_score_flip_test <- function(
 #'   score statistic, restriction eigenvalues, pEBA4/SB/exact-mixture/sandwich
 #'   p-values, conditioning diagnostics, and setup/asymptotic timings.
 #' @export
-nested_score_test <- function(fit_H1, fit_H0, data = NULL) {
+nested_score_test <- function(fit_H1, fit_H0, data = NULL,
+                              sensitivity = c("expected", "observed")) {
+  sensitivity <- match.arg(sensitivity)
   out <- score_flip_test(
     fit_H1, fit_H0, data = data, n_flips = 0L, seed = 0,
-    calibration = "asymptotic")
+    calibration = "asymptotic", sensitivity = sensitivity)
   peba4 <- magmaan_core$robust_fmg_test(
     out$statistic_effective, out$df, out$eigenvalues,
     method = "peba", param = 4, truncate_negative = TRUE)
@@ -266,19 +296,23 @@ nested_score_test <- function(fit_H1, fit_H0, data = NULL) {
 #' @export
 print.magmaan_score_flip_test <- function(x, ...) {
   centered_label <- if (isTRUE(x$center_multiplier_scores)) "centered " else ""
+  sensitivity_label <- if (identical(x$sensitivity %||% "expected", "observed"))
+    "observed-sensitivity " else ""
   label <- if (!identical(x$multiplier_studentization %||% "none", "none")) {
-    paste0(centered_label, x$multiplier %||% "rademacher",
+    paste0(sensitivity_label, centered_label, x$multiplier %||% "rademacher",
            " weighted-meat multiplier score test")
   } else if (!identical(x$multiplier %||% "rademacher", "rademacher")) {
     if (identical(x$multiplier, "two-point")) {
-      paste0(centered_label,
+      paste0(sensitivity_label, centered_label,
              sprintf("two-point (skewness %.3g) multiplier score test",
                      x$two_point_skewness))
-    } else paste0(centered_label, x$multiplier, " multiplier score test")
+    } else paste0(sensitivity_label, centered_label, x$multiplier,
+                  " multiplier score test")
   } else switch(x$calibration %||% "all",
-    effective = "effective sign-flip score test",
+    effective = paste0(sensitivity_label, "effective sign-flip score test"),
     `effective-standardized` = "standardized sign-flip score test",
-    asymptotic = "nested score test (no sign calibration)",
+    asymptotic = paste0(sensitivity_label,
+                        "nested score test (no sign calibration)"),
     "basic/effective/standardized sign-flip score test")
   statistic <- if (is.finite(x$statistic_standardized))
     x$statistic_standardized else x$statistic_effective

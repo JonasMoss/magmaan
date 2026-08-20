@@ -2566,6 +2566,20 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   const bool multiplier_studentized =
       options.multiplier_studentization ==
       ScoreFlipMultiplierStudentization::WeightedMeat;
+  const bool observed_sensitivity =
+      options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+  if (observed_sensitivity &&
+      options.calibration != ScoreFlipCalibration::Effective &&
+      options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: observed sensitivity supports only effective or asymptotic calibration"));
+  }
+  if (observed_sensitivity && options.center_multiplier_scores) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: observed sensitivity does not support within-stratum score centering"));
+  }
   if (resample &&
       options.multiplier != ScoreFlipMultiplier::Rademacher &&
       options.calibration != ScoreFlipCalibration::Effective) {
@@ -2697,15 +2711,34 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
     I.noalias() += static_cast<double>(strata.n_obs[s]) * strata.per_case[s];
   }
 
-  const Eigen::MatrixXd A_nuisance = K.transpose() * I * K;
+  Eigen::MatrixXd sensitivity = I;
+  if (observed_sensitivity) {
+    post_expected<Eigen::MatrixXd> observed;
+    if (fiml_pack == nullptr) {
+      observed = information_observed_analytic(pt_H1, rep_H1, *samp, est_H0);
+    } else {
+      observed = estimate::fiml::fiml_observed_information(
+          pt_H1, rep_H1, raw, est_H0, *fiml_pack);
+    }
+    if (!observed.has_value()) return std::unexpected(observed.error());
+    if (observed->rows() != npar || observed->cols() != npar) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "score_flip_test: observed sensitivity has incompatible dimensions"));
+    }
+    sensitivity = 0.5 * (*observed + observed->transpose());
+  }
+
+  const Eigen::MatrixXd A_nuisance = K.transpose() * sensitivity * K;
   auto Ainv = invert_symmetric(A_nuisance,
                                "score_flip_test nuisance information");
   if (!Ainv.has_value()) return std::unexpected(Ainv.error());
   Eigen::MatrixXd G = D;
   if (K.cols() > 0) {
-    G.noalias() -= K * ((*Ainv) * (K.transpose() * I * D));
+    G.noalias() -=
+        K * ((*Ainv) * (K.transpose() * sensitivity * D));
   }
-  Eigen::MatrixXd V_identity = G.transpose() * I * G;
+  Eigen::MatrixXd V_identity = G.transpose() * sensitivity * G;
   V_identity = 0.5 * (V_identity + V_identity.transpose());
 
   std::optional<estimate::fiml::FIMLPack> owned_pack;
@@ -2915,7 +2948,7 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   const auto asymptotic_begin = Clock::now();
   const Eigen::MatrixXd B1 = scores.transpose() * scores;
   auto asymptotic = score_for_subspace_robust(
-      {}, score_full, I, I, B1, K, D);
+      {}, score_full, sensitivity, sensitivity, B1, K, D);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
 
   const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -2977,6 +3010,7 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   out.eigvals = std::move(asymptotic->eigvals);
   out.n_flips = n_resamples;
   out.seed = options.seed;
+  out.sensitivity = options.sensitivity;
   out.nuisance_stationarity_norm =
       K.cols() > 0 ? (K.transpose() * score_full).lpNorm<Eigen::Infinity>() : 0.0;
   out.min_variance_eigenvalue = min_variance_eigenvalue;
@@ -3057,6 +3091,13 @@ global_score_flip_test(spec::LatentStructure pt,
   const bool multiplier_studentized =
       options.multiplier_studentization ==
       ScoreFlipMultiplierStudentization::WeightedMeat;
+  const bool observed_sensitivity =
+      options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+  if (observed_sensitivity && options.center_multiplier_scores) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "global_score_flip_test: observed sensitivity does not support within-pattern score centering"));
+  }
   if (options.calibration != ScoreFlipCalibration::Effective &&
       options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -3156,16 +3197,28 @@ global_score_flip_test(spec::LatentStructure pt,
   const double tangent_min = tangent_rank > 0
       ? svd.singularValues()(tangent_rank - 1) : 0.0;
 
-  const Eigen::MatrixXd& I = geometry->information;
+  Eigen::MatrixXd sensitivity = geometry->information;
+  if (observed_sensitivity) {
+    auto observed = estimate::fiml::fiml_saturated_observed_information(
+        raw, pack, eval->moments, include_means);
+    if (!observed.has_value()) return std::unexpected(observed.error());
+    if (observed->rows() != moment_dim || observed->cols() != moment_dim) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "global_score_flip_test: observed sensitivity has incompatible dimensions"));
+    }
+    sensitivity = std::move(*observed);
+  }
   Eigen::MatrixXd G = D;
   if (tangent_rank > 0) {
     auto Ainv = invert_symmetric(
-        K.transpose() * I * K,
+        K.transpose() * sensitivity * K,
         "global_score_flip_test tangent information");
     if (!Ainv.has_value()) return std::unexpected(Ainv.error());
-    G.noalias() -= K * ((*Ainv) * (K.transpose() * I * D));
+    G.noalias() -=
+        K * ((*Ainv) * (K.transpose() * sensitivity * D));
   }
-  Eigen::MatrixXd V_identity = G.transpose() * I * G;
+  Eigen::MatrixXd V_identity = G.transpose() * sensitivity * G;
   V_identity = 0.5 * (V_identity + V_identity.transpose());
 
   auto score_rows =
@@ -3272,7 +3325,7 @@ global_score_flip_test(spec::LatentStructure pt,
   const auto asymptotic_begin = Clock::now();
   const Eigen::MatrixXd B1 = scores.transpose() * scores;
   auto asymptotic = score_for_subspace_robust(
-      {}, score_full, I, I, B1, K, D);
+      {}, score_full, sensitivity, sensitivity, B1, K, D);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
   const double asymptotic_seconds = std::chrono::duration<double>(
       Clock::now() - asymptotic_begin).count();
@@ -3320,6 +3373,7 @@ global_score_flip_test(spec::LatentStructure pt,
   flip.eigvals = std::move(asymptotic->eigvals);
   flip.n_flips = n_resamples;
   flip.seed = options.seed;
+  flip.sensitivity = options.sensitivity;
   flip.nuisance_stationarity_norm = tangent_rank > 0
       ? (K.transpose() * score_full).lpNorm<Eigen::Infinity>() : 0.0;
   flip.min_variance_eigenvalue = t_obs->min_eigenvalue;
@@ -3362,6 +3416,11 @@ global_score_flip_test_ml2s(
   const bool multiplier_studentized =
       options.multiplier_studentization ==
       ScoreFlipMultiplierStudentization::WeightedMeat;
+  if (options.sensitivity == ScoreFlipSensitivity::ObservedInformation) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: observed sensitivity is not defined for the two-stage score construction"));
+  }
   if (options.calibration != ScoreFlipCalibration::Effective &&
       options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -3700,6 +3759,7 @@ global_score_flip_test_ml2s(
   flip.eigvals = std::move(asymptotic->eigvals);
   flip.n_flips = n_resamples;
   flip.seed = options.seed;
+  flip.sensitivity = options.sensitivity;
   flip.nuisance_stationarity_norm = tangent_rank > 0
       ? (K.transpose() * score_full).lpNorm<Eigen::Infinity>() : 0.0;
   flip.min_variance_eigenvalue = t_obs->min_eigenvalue;

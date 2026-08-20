@@ -513,16 +513,16 @@ inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread =
     .Call(`_magmaan_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
 }
 
-inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none") {
-    .Call(`_magmaan_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization)
+inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+    .Call(`_magmaan_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
-inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none") {
-    .Call(`_magmaan_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization)
+inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+    .Call(`_magmaan_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
-inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none") {
-    .Call(`_magmaan_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization)
+inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+    .Call(`_magmaan_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
 infer_z_test <- function(fit, se) {

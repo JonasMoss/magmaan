@@ -495,10 +495,17 @@ when they next change.
   Keep centered Mammen experimental rather than default: it is a multiplier
   bootstrap without exact sign-randomization validity and is still
   effective-score-only because flip-specific standardization uses `w_i^2=1`.
-  Do not spend another large grid on complete-data `q=8` calibration. The next
-  useful work is an asymptotic argument for recentered estimated-nuisance score
-  rows, an explicit stratum policy for FIML and ordinal/categorical scores, and
-  a near-singular nuisance-information gate. In parallel, the bounded analytic
+  Do not spend another large grid on complete-data `q=8` calibration. An
+  opt-in observed-sensitivity path has now landed for nested ML/FIML and global
+  ML/FIML scores while preserving expected information as the historical
+  default. It uses the realized likelihood Hessian in the nuisance projection
+  and quadratic/mixture bread, which is the required first-order correction at
+  an observed-data pseudo-null under misspecification. It is deliberately
+  effective/asymptotic-only and does not permit within-pattern centering; the
+  remaining useful work is an asymptotic argument for any recentered
+  estimated-nuisance rows, an explicit global-centering/stratum policy for FIML
+  and ordinal/categorical scores, and a near-singular observed-sensitivity
+  gate. In parallel, the bounded analytic
   question remains shrinkage of `G'B1G` itself, spanning SB's
   common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
   inverse. Gate either proposal on null size, matched-null power, and meat

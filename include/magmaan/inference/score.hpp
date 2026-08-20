@@ -463,6 +463,8 @@ score_tests_robust_joint(spec::LatentStructure pt,
 // the corresponding observed-pattern conditional Fisher information. In both
 // cases the weights act on individual likelihood-score contributions and the
 // pattern/group strata define nuisance covariance and optional score centering.
+// ScoreFlipOptions::sensitivity retains that expected-information geometry by
+// default or opts into the realized observed-data Hessian correction.
 // `n_flips` counts random transformations; the observed statistic is included
 // separately in the Monte Carlo rank denominator.
 enum class ScoreFlipCalibration {
@@ -497,6 +499,15 @@ enum class ScoreFlipMultiplierStudentization {
   WeightedMeat,
 };
 
+// Sensitivity (bread) used to remove estimated nuisance parameters. The
+// expected-information choice preserves the original normal-theory
+// construction. ObservedInformation uses the realized likelihood Hessian and
+// is the pseudo-true/MAR correction when information equality need not hold.
+enum class ScoreFlipSensitivity {
+  ExpectedInformation,
+  ObservedInformation,
+};
+
 struct ScoreFlipOptions {
   int n_flips = 999;
   std::uint64_t seed = 1;
@@ -515,6 +526,8 @@ struct ScoreFlipOptions {
   // raw-OPG sandwich score statistic.
   ScoreFlipMultiplierStudentization multiplier_studentization =
       ScoreFlipMultiplierStudentization::None;
+  ScoreFlipSensitivity sensitivity =
+      ScoreFlipSensitivity::ExpectedInformation;
   // Deterministic verification path for tiny samples. Enumerates every
   // non-identity sign vector and ignores n_flips/seed; capped at n <= 20.
   bool exact_enumeration = false;
@@ -558,6 +571,8 @@ struct ScoreFlipTestResult {
 
   int n_flips = 0;
   std::uint64_t seed = 1;
+  ScoreFlipSensitivity sensitivity =
+      ScoreFlipSensitivity::ExpectedInformation;
   double nuisance_stationarity_norm = 0.0;
   double min_variance_eigenvalue = 0.0;
   double max_variance_condition = 1.0;
@@ -574,9 +589,10 @@ struct ScoreFlipTestResult {
 // Global goodness-of-fit score flip for a curved SEM against the local
 // saturated mean/covariance model. The direct saturated likelihood scores are
 // projected off the fitted model's moment tangent using observed-pattern
-// conditional Fisher information. This is deliberately an effective-score
-// test: the affine pair's basic/flip-specific-standardized variants do not
-// have a distinct global-model interpretation.
+// conditional Fisher information by default, or the realized saturated-moment
+// Hessian when observed sensitivity is requested. This is deliberately an
+// effective-score test: the affine pair's basic/flip-specific-standardized
+// variants do not have a distinct global-model interpretation.
 struct GlobalScoreFlipOptions {
   ScoreFlipOptions resampling;
 
