@@ -499,10 +499,11 @@ enum class ScoreFlipMultiplierStudentization {
   WeightedMeat,
 };
 
-// Sensitivity (bread) used to remove estimated nuisance parameters. The
-// expected-information choice preserves the original normal-theory
-// construction. ObservedInformation uses the realized likelihood Hessian and
-// is the pseudo-true/MAR correction when information equality need not hold.
+// Sensitivity used to remove estimated nuisance parameters. The expected-
+// information choice preserves the original normal-theory construction.
+// ObservedInformation uses the realized likelihood Hessian for the nuisance
+// projection when information equality need not hold. The common score
+// quadratic retains the stable expected-information metric.
 enum class ScoreFlipSensitivity {
   ExpectedInformation,
   ObservedInformation,
@@ -589,8 +590,9 @@ struct ScoreFlipTestResult {
 // Global goodness-of-fit score flip for a curved SEM against the local
 // saturated mean/covariance model. The direct saturated likelihood scores are
 // projected off the fitted model's moment tangent using observed-pattern
-// conditional Fisher information by default, or the realized saturated-moment
-// Hessian when observed sensitivity is requested. This is deliberately an
+// conditional Fisher information by default, or uses the realized saturated-
+// moment Hessian for the tangent projection when observed sensitivity is
+// requested. The common quadratic retains the Fisher metric. This is deliberately an
 // effective-score test: the affine pair's basic/flip-specific-standardized
 // variants do not have a distinct global-model interpretation.
 struct GlobalScoreFlipOptions {

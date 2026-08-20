@@ -1487,13 +1487,15 @@ score_for_direction_robust(const ScoreCandidate& candidate,
 }
 
 post_expected<JointScoreTestResult>
-score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
-                          const Eigen::VectorXd& score_full,
-                          const Eigen::MatrixXd& info_full,
-                          const Eigen::MatrixXd& A1,
-                          const Eigen::MatrixXd& B1,
-                          const Eigen::MatrixXd& K_nuisance,
-                          const Eigen::MatrixXd& directions) {
+score_for_subspace_robust_impl(
+    std::vector<ScoreCandidate> candidates,
+    const Eigen::VectorXd& score_full,
+    const Eigen::MatrixXd& info_full,
+    const Eigen::MatrixXd& A1,
+    const Eigen::MatrixXd& B1,
+    const Eigen::MatrixXd& K_nuisance,
+    const Eigen::MatrixXd& directions,
+    const Eigen::MatrixXd* nuisance_sensitivity) {
   const Eigen::Index q = score_full.size();
   const Eigen::Index df = directions.cols();
   if (info_full.rows() != q || info_full.cols() != q || directions.rows() != q ||
@@ -1503,18 +1505,26 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
         "robust joint score test: incompatible subspace shapes"));
   }
 
-  // Efficient-score subspace: each release direction made info-orthogonal to the
-  // nuisance subspace. G = D − K (KᵀIK)⁻¹ Kᵀ I D (the matrix form of the
-  // per-direction g, so u = Gᵀs and V = GᵀIG are the Schur-reduced score/info).
+  const Eigen::MatrixXd& projection = nuisance_sensitivity == nullptr
+      ? info_full : *nuisance_sensitivity;
+  if (projection.rows() != q || projection.cols() != q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust joint score test: incompatible nuisance sensitivity shape"));
+  }
+
+  // Efficient-score subspace: each release direction made sensitivity-
+  // orthogonal to the nuisance subspace. The quadratic metric may remain a
+  // separate stable positive-definite matrix under misspecification.
   Eigen::MatrixXd G = directions;
   if (K_nuisance.cols() > 0) {
-    const Eigen::MatrixXd I_d = info_full * directions;  // q × df
-    const Eigen::MatrixXd I_aa =
-        K_nuisance.transpose() * info_full * K_nuisance;
+    const Eigen::MatrixXd A_d = projection * directions;  // q × df
+    const Eigen::MatrixXd A_aa =
+        K_nuisance.transpose() * projection * K_nuisance;
     auto Iaa_inv =
-        invert_symmetric(I_aa, "robust joint score test nuisance information");
+        invert_symmetric(A_aa, "robust joint score test nuisance sensitivity");
     if (!Iaa_inv.has_value()) return std::unexpected(Iaa_inv.error());
-    G.noalias() -= K_nuisance * ((*Iaa_inv) * (K_nuisance.transpose() * I_d));
+    G.noalias() -= K_nuisance *
+        ((*Iaa_inv) * (K_nuisance.transpose() * A_d));
   }
 
   // NT joint (multivariate score) statistic T = uᵀ V⁻¹ u.
@@ -1590,6 +1600,19 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
     out.p_mixture = out.p_value;
   }
   return out;
+}
+
+post_expected<JointScoreTestResult>
+score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
+                          const Eigen::VectorXd& score_full,
+                          const Eigen::MatrixXd& info_full,
+                          const Eigen::MatrixXd& A1,
+                          const Eigen::MatrixXd& B1,
+                          const Eigen::MatrixXd& K_nuisance,
+                          const Eigen::MatrixXd& directions) {
+  return score_for_subspace_robust_impl(
+      std::move(candidates), score_full, info_full, A1, B1, K_nuisance,
+      directions, nullptr);
 }
 
 namespace {
@@ -2739,7 +2762,7 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
     G.noalias() -=
         K * ((*Ainv) * (K.transpose() * sensitivity * D));
   }
-  Eigen::MatrixXd V_identity = G.transpose() * sensitivity * G;
+  Eigen::MatrixXd V_identity = G.transpose() * I * G;
   V_identity = 0.5 * (V_identity + V_identity.transpose());
 
   std::optional<estimate::fiml::FIMLPack> owned_pack;
@@ -2948,8 +2971,9 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
 
   const auto asymptotic_begin = Clock::now();
   const Eigen::MatrixXd B1 = scores.transpose() * scores;
-  auto asymptotic = score_for_subspace_robust(
-      {}, score_full, sensitivity, sensitivity, B1, K, D);
+  auto asymptotic = score_for_subspace_robust_impl(
+      {}, score_full, I, I, B1, K, D,
+      observed_sensitivity ? &sensitivity : nullptr);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
 
   const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -3219,7 +3243,8 @@ global_score_flip_test(spec::LatentStructure pt,
     G.noalias() -=
         K * ((*Ainv) * (K.transpose() * sensitivity * D));
   }
-  Eigen::MatrixXd V_identity = G.transpose() * sensitivity * G;
+  Eigen::MatrixXd V_identity =
+      G.transpose() * geometry->information * G;
   V_identity = 0.5 * (V_identity + V_identity.transpose());
 
   auto score_rows =
@@ -3325,8 +3350,9 @@ global_score_flip_test(spec::LatentStructure pt,
 
   const auto asymptotic_begin = Clock::now();
   const Eigen::MatrixXd B1 = scores.transpose() * scores;
-  auto asymptotic = score_for_subspace_robust(
-      {}, score_full, sensitivity, sensitivity, B1, K, D);
+  auto asymptotic = score_for_subspace_robust_impl(
+      {}, score_full, geometry->information, geometry->information, B1, K, D,
+      observed_sensitivity ? &sensitivity : nullptr);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
   const double asymptotic_seconds = std::chrono::duration<double>(
       Clock::now() - asymptotic_begin).count();
