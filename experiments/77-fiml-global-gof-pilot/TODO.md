@@ -17,8 +17,9 @@ is frozen.
   multiplier results and diagnostics, but do not spend the publication design
   on further multiplier variants.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
-  repairing or combining its focus phase. Its setup is being replaced, so the
-  next production run will use Slurm after the design gates are frozen.
+  repairing its three partial focus cells. Collect and combine the available
+  rows only as an explicitly incomplete exploratory snapshot. The next
+  production run will use Slurm after the design gates are frozen.
 
 ## Gate A: five broad, sourceable SEMs
 

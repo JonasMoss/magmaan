@@ -12,11 +12,14 @@ or interpreted as the paper's power study.
 - Their restarts failed because the resumability guard read the blank
   `max_cells` CSV field as `NA` and compared it with the in-memory empty string.
   This was an orchestration/configuration failure, not an SEM fit failure.
-- Repairing the remaining 725 replications and combining the old focus phase is
-  not worthwhile because the model and missingness setup will change.
+- Repairing the remaining 725 replications is not worthwhile because the model
+  and missingness setup will change. The 164,275 available focus rows were
+  nevertheless collected and combined with an explicit coverage ledger for an
+  exploratory report snapshot.
 
 The persistent Modal volume is left intact as provenance; no files are deleted.
 The next production run will be built for Slurm after the five source-based
 models, MAR mechanisms, adverse estimand-stress arm, and power alternatives are
 frozen. Results from this retired run may inform implementation diagnostics but
-must not enter the publication tables.
+must not enter the publication tables. They may appear in the preliminary
+experiment report only when labeled incomplete and retired.

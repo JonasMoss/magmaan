@@ -666,9 +666,11 @@ when they next change.
   its stress phase combined 60/60 cells, but its focus phase stopped at 162/165
   shards because restarted calls tripped an empty-field configuration guard.
   The remaining 725 replications are not worth recovering before the setup
-  changes. Preserve the remote files as provenance, exclude this run from
-  publication tables, and build the replacement production run for Slurm only
-  after the design is frozen. The prospective paper has three explicit design
+  changes. The 164,275 available focus rows and complete 30,000-row stress phase
+  are collected locally; the preliminary report labels their power summary as
+  incomplete and retired. Preserve the remote files as provenance, exclude
+  this run from publication tables, and build the replacement production run
+  for Slurm only after the design is frozen. The prospective paper has three explicit design
   gates recorded in
   experiment 77's `TODO.md`. First, replace the implementation-oriented pilot
   panel with five broad, sourceable models: one-factor, correlated three-factor,
