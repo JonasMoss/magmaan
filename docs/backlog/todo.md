@@ -662,6 +662,18 @@ when they next change.
   labeled estimand stress. Remaining work is to launch, combine, and audit that
   run. Do not interpret nonnormal-MAR rejection as ordinary Type-I error or add
   ML2S power unless a separate two-stage question emerges.
+  The prospective paper now has three explicit design gates recorded in
+  experiment 77's `TODO.md`. First, replace the implementation-oriented pilot
+  panel with five broad, sourceable models: one-factor, correlated three-factor,
+  bifactor, latent mediation, and linear growth, all at 15 observed variables
+  or fewer. Second, freeze literature-grounded MAR-L/MAR-L2/MAR-NL and
+  few/many-pattern mechanisms, plus a separately labeled nonnormal-MAR
+  pseudo-true-target stress. Third, predeclare and report a public-data corpus
+  screen for one or two interpretable MLR-reject/score-pEBA4-nonreject examples.
+  Multiplier development is dropped from the planned comparison; preserve its
+  completed diagnostics but do not expand it. Do not launch the publication
+  grid until model parameters, source adaptations, missingness mappings, and
+  the empirical screening rule are frozen.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
