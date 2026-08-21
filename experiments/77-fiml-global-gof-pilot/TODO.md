@@ -16,8 +16,9 @@ is frozen.
 - [x] Drop the multiplier from the planned paper comparison. Preserve existing
   multiplier results and diagnostics, but do not spend the publication design
   on further multiplier variants.
-- [ ] Bank and audit the already-running matched-power continuation before
-  simplifying the report or retiring any result fields.
+- [x] Retire the incomplete `power-v1-20260821` Modal continuation without
+  repairing or combining its focus phase. Its setup is being replaced, so the
+  next production run will use Slurm after the design gates are frozen.
 
 ## Gate A: five broad, sourceable SEMs
 
@@ -111,6 +112,8 @@ Primary sources are Savalei and Falk (2014),
 
 ## Production decision after the gates
 
+- [ ] Build the replacement production harness for Slurm. Do not resume the
+  retired Modal run or treat its completed stress phase as publication data.
 - [ ] Choose the final sample-size, generator, MAR, and power grid only after
   Gates A and B are frozen.
 - [ ] Recalibrate sparse and diffuse alternatives for the source-based model

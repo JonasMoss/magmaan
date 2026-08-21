@@ -657,12 +657,19 @@ when they next change.
   recorded under both geometries. Sparse omitted-residual and diffuse omitted-method-factor
   alternatives are tuned per model to 50% asymptotic normal-theory LR power at
   `n=200`, then compared with method/cell-specific empirical-null cutoffs. The
-  Modal focus has 165 one-cell shards (55 mechanisms x null/sparse/diffuse,
+  launched Modal design had 165 one-cell focus shards (55 mechanisms x
+  null/sparse/diffuse,
   1,000 replications, 999 draws); 60 nonnormal-MAR shards are a separately
-  labeled estimand stress. Remaining work is to launch, combine, and audit that
-  run. Do not interpret nonnormal-MAR rejection as ordinary Type-I error or add
-  ML2S power unless a separate two-stage question emerges.
-  The prospective paper now has three explicit design gates recorded in
+  labeled estimand stress. Do not interpret nonnormal-MAR rejection as ordinary
+  Type-I error or add ML2S power unless a separate two-stage question emerges.
+  The `power-v1-20260821` Modal continuation is retired rather than repaired:
+  its stress phase combined 60/60 cells, but its focus phase stopped at 162/165
+  shards because restarted calls tripped an empty-field configuration guard.
+  The remaining 725 replications are not worth recovering before the setup
+  changes. Preserve the remote files as provenance, exclude this run from
+  publication tables, and build the replacement production run for Slurm only
+  after the design is frozen. The prospective paper has three explicit design
+  gates recorded in
   experiment 77's `TODO.md`. First, replace the implementation-oriented pilot
   panel with five broad, sourceable models: one-factor, correlated three-factor,
   bifactor, latent mediation, and linear growth, all at 15 observed variables
