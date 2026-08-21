@@ -1,0 +1,25 @@
+project:
+  type: default
+  output-dir: _site
+  pre-render:
+    - python3 tools/repo_metrics.py --repo ../.. --output generated/repo_metrics.csv
+
+format:
+  revealjs:
+    theme: [default, theme.scss]
+    embed-resources: true
+    slide-number: c/t
+    transition: fade
+    background-transition: fade
+    navigation-mode: linear
+    controls: true
+    progress: true
+    center: false
+    width: 1600
+    height: 900
+    margin: 0.08
+
+execute:
+  echo: false
+  warning: false
+  message: false

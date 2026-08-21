@@ -1,0 +1,15 @@
+default:
+    @just --list
+
+metrics:
+    python3 tools/repo_metrics.py --repo ../.. --output generated/repo_metrics.csv
+
+render:
+    XDG_CACHE_HOME="$PWD/.quarto/cache" DENO_DIR="$PWD/.quarto/deno" quarto render talk.qmd
+    @echo "Presentation: _site/talk.html"
+
+preview:
+    XDG_CACHE_HOME="$PWD/.quarto/cache" DENO_DIR="$PWD/.quarto/deno" quarto preview talk.qmd
+
+clean:
+    quarto clean

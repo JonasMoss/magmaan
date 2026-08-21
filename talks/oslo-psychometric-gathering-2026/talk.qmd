@@ -1,0 +1,408 @@
+---
+title: "How I made magmaan"
+subtitle: "and why I could not have made it in 2023"
+author: "Jonas Moss"
+format:
+  revealjs:
+    footer: "Oslo Psychometric Gathering · 2026"
+title-slide-attributes:
+  data-background-color: "#fbfaf7"
+  data-background-image: "../../docs/assets/logo/logo_compact.png"
+  data-background-size: "430px"
+  data-background-position: "88% 14%"
+  data-background-repeat: "no-repeat"
+---
+
+```{r}
+#| label: setup
+#| include: false
+metrics_path <- file.path("generated", "repo_metrics.csv")
+if (!file.exists(metrics_path)) {
+  stop("Missing generated repository metrics. Run `just metrics`.", call. = FALSE)
+}
+metrics_frame <- utils::read.csv(metrics_path, stringsAsFactors = FALSE,
+                                 check.names = FALSE)
+metrics <- stats::setNames(metrics_frame$value, metrics_frame$metric)
+
+metric_num <- function(key) as.numeric(metrics[[key]])
+fmt_int <- function(key) formatC(metric_num(key), format = "d", big.mark = ",")
+fmt_num <- function(key, digits = 1L) {
+  formatC(metric_num(key), format = "f", digits = digits, big.mark = ",")
+}
+fmt_date <- function(key, format = "%e %b %Y") {
+  format(as.Date(metrics[[key]]), format = format)
+}
+```
+
+## A guessing game
+
+<div class="eyebrow">One repository · one maintainer</div>
+
+<div class="hero-question">How many developers—and how many years—would you expect?</div>
+
+::: {.fragment}
+
+Parser. Model compiler. ML, FIML, least squares, ordinal and mixed data.
+Information matrices. Robust tests. Simulation machinery. R bindings.
+
+:::
+
+::: {.notes}
+Pause and ask the room. Let them supply a number before revealing anything.
+The list is illustrative, not intended as a complete capability claim.
+:::
+
+## The reveal
+
+<div class="metric-grid">
+  <div class="metric"><span class="number">`r fmt_int("elapsed_days")`</span><span class="label">calendar days since the first commit</span></div>
+  <div class="metric"><span class="number">`r fmt_int("contributors")`</span><span class="label">recorded human author</span></div>
+  <div class="metric"><span class="number">`r fmt_int("commits")`</span><span class="label">commits reachable from HEAD</span></div>
+  <div class="metric"><span class="number">`r fmt_int("core_cpp_loc")`</span><span class="label">lines of canonical C++</span></div>
+</div>
+
+<div class="metric-grid">
+  <div class="metric"><span class="number">`r fmt_int("test_cpp_loc")`</span><span class="label">lines of C++ tests</span></div>
+  <div class="metric"><span class="number">`r fmt_int("test_cases")`</span><span class="label">C++ test cases</span></div>
+  <div class="metric"><span class="number">`r fmt_int("json_fixtures")`</span><span class="label">checked-in JSON fixtures</span></div>
+  <div class="metric"><span class="number">`r fmt_int("experiments")`</span><span class="label">numbered experiments</span></div>
+</div>
+
+<div class="source-line">Generated at render time · snapshot `r fmt_date("snapshot_date")` · canonical C++ excludes build trees, dependencies, and vendored R copies</div>
+
+::: {.notes}
+The first commit was `r fmt_date("first_commit_date")`. These are physical
+lines, not a complexity measure. “Recorded human author” is the git history,
+not a claim that the agent contributed nothing.
+:::
+
+## These numbers prove almost nothing
+
+<div class="claim dark">AI makes output cheap. It also makes plausible mistakes cheap.</div>
+
+::: {.fragment}
+
+The scarce work moved:
+
+- from **typing** to specifying the statistical contract;
+- from implementing one path to checking every reduction;
+- from producing code to designing ways for it to fail.
+
+:::
+
+::: {.fragment}
+
+> The bottleneck moved from implementation to falsification.
+
+:::
+
+::: {.notes}
+This is the anti-productivity-flex slide. Volume establishes that the production
+function changed; it does not establish scientific value.
+:::
+
+## ChatGPT is not the experience I mean
+
+<div class="comparison">
+  <div class="quiet">
+    <h3>Chat interaction</h3>
+    <ul>
+      <li>question → answer</li>
+      <li>a function or snippet</li>
+      <li>you integrate and test it</li>
+      <li>context is mostly supplied by you</li>
+    </ul>
+  </div>
+  <div class="accent">
+    <h3>Repository agent</h3>
+    <ul>
+      <li>reads code, rules, tests and history</li>
+      <li>edits C++, R, fixtures and docs together</li>
+      <li>compiles, runs, diagnoses and revises</li>
+      <li>keeps working until the contract closes</li>
+    </ul>
+  </div>
+</div>
+
+<div class="claim">The unit of work is not a prompt. It is a closed development loop.</div>
+
+::: {.notes}
+Optional: replace this slide or the next with a 20–30 second recording of one
+real Codex turn. Do not do a live demo.
+:::
+
+## The loop
+
+<div class="loop">
+  <div class="step">Scientific<br>question</div><div class="arrow">→</div>
+  <div class="step">Explicit<br>contract</div><div class="arrow">→</div>
+  <div class="step">Implementation</div><div class="arrow">→</div>
+  <div class="step">Oracle +<br>properties</div><div class="arrow">→</div>
+  <div class="step">Simulation</div><div class="arrow">↺</div>
+</div>
+
+<div class="full-quote">A coding agent becomes useful when it can travel around this loop—not when it can type the middle box.</div>
+
+::: {.notes}
+The contract includes input ordering, scaling, grouping, missingness, supported
+combinations and explicit errors. Simulation is allowed to revise the question,
+not just approve the implementation.
+:::
+
+## AI amplifies architecture
+
+<div class="comparison">
+  <div class="accent">
+    <h3>Composable repository</h3>
+    <ul>
+      <li>small inputs and visible data flow</li>
+      <li>local contracts and focused tests</li>
+      <li>one primitive reused by many methods</li>
+      <li>bounded context for both human and agent</li>
+    </ul>
+  </div>
+  <div class="quiet">
+    <h3>Coupled repository</h3>
+    <ul>
+      <li>state hidden in large objects and caches</li>
+      <li>string dispatch and distant side effects</li>
+      <li>new methods fork the fitting machinery</li>
+      <li>the agent produces coherent-looking debt faster</li>
+    </ul>
+  </div>
+</div>
+
+<div class="claim">Good architecture is context engineering.</div>
+
+::: {.notes}
+This is not mainly a language claim. An agent reasons better when the dependency
+surface is small, contracts are local, and failures occur near their source.
+:::
+
+## Why C++ first?
+
+<div class="takeaway-grid">
+  <div><strong>One implementation</strong>R exposes thin wrappers; it does not grow a second SEM engine.</div>
+  <div><strong>Fast inner loops</strong>Optimization, finite differences and simulation can become routine validation tools.</div>
+  <div><strong>Visible contracts</strong>Types, values and <code>std::expected</code> make data flow and failure explicit.</div>
+</div>
+
+<div class="claim">Make magmaan less ambitious as a package—and more ambitious as an engine.</div>
+
+::: {.notes}
+C++23 is used with no exceptions or RTTI. The point is not macho systems
+programming. The point is a fast, typed, binding-independent statistical core.
+:::
+
+## A small vocabulary, many compositions
+
+<div class="layer-stack">
+  <div class="layer"><div class="name">Friendly API + R</div><div class="desc">thin composition for ordinary workflows</div></div>
+  <div class="layer core"><div class="name">Compositional C++</div><div class="desc">spec · data · model · estimate · inference · robust · measures · optim</div></div>
+  <div class="layer frontier"><div class="name">Per-domain frontier</div><div class="desc">research methods, still tested, with weaker API-stability promises</div></div>
+  <div class="layer"><div class="name">Compatibility boundary</div><div class="desc">lavaan-shaped projection and oracle matching</div></div>
+</div>
+
+The extension vocabulary is deliberately small: **discrepancy, optimizer,
+standard-error method, fit index, data/moment builder**.
+
+::: {.fragment}
+
+A new method must compose the engine—not fork it.
+
+:::
+
+::: {.notes}
+There are many domain types, but few architectural extension ideas. If a method
+does not fit, that may reveal a missing abstraction. It is not permission to
+create a parallel estimation stack.
+:::
+
+## The fitted object is not the program
+
+<div class="branch">
+  <div class="fit">Fit<br><span class="tiny">model · data · estimates</span></div>
+  <div>information<br>and SEs</div>
+  <div>tests and<br>modification indices</div>
+  <div>fit measures and<br>standardization</div>
+</div>
+
+<br>
+
+Every post-fit choice is an explicit computation with its own configuration,
+result and failure.
+
+<div class="comparison small">
+  <div class="quiet"><h3>lavaan-style object</h3>Excellent end-user ergonomics: one rich fit, inspect anything.</div>
+  <div class="accent"><h3>magmaan engine</h3>Better research ergonomics: inspectable ingredients, replaceable pieces, independent tests.</div>
+</div>
+
+::: {.notes}
+Be respectful: lavaan optimizes for a different job and is the oracle here. The
+claim is that reproducing its mega-object internally would have made magmaan
+substantially harder to extend safely with an agent.
+:::
+
+## The test corpus is the scientific product
+
+<div class="validation-stack">
+  <div class="v1"><span class="number">`r fmt_int("assertions")` assertions</span><span class="desc">local algebra, boundaries, reductions and failure contracts</span></div>
+  <div class="v2"><span class="number">finite differences</span><span class="desc">gradients, Jacobians and independent derivative probes</span></div>
+  <div class="v3"><span class="number">`r fmt_int("corpus_models")` synthetic models</span><span class="desc">parser → partable → matrices → fit → inference against lavaan</span></div>
+  <div class="v4"><span class="number">parity + simulation</span><span class="desc">real data, literature replications, adversarial and boundary cases</span></div>
+</div>
+
+<div class="metric-grid">
+  <div class="metric"><span class="number">`r fmt_int("test_cases")`</span><span class="label">focused C++ test cases</span></div>
+  <div class="metric"><span class="number">`r fmt_int("json_fixtures")`</span><span class="label">frozen JSON fixtures</span></div>
+  <div class="metric"><span class="number">`r fmt_int("parity_cases")`</span><span class="label">real-data parity cases</span></div>
+  <div class="metric"><span class="number">`r fmt_int("research_notes")`</span><span class="label">LaTeX research notes</span></div>
+</div>
+
+::: {.notes}
+CI does not need R: oracle output is regenerated deliberately and checked in.
+Lavaan is the oracle where parity is claimed. Calling an oracle defect requires
+both an independent reference and a violated first-principles property.
+:::
+
+## One methods thread, 19–23 June
+
+<div class="timeline">
+  <div class="date">19 June</div><div class="event">A numerical jackknife shows the ordinal-DWLS observed-bread gap does <em>not</em> vanish: the estimated-weight influence is missing.</div>
+  <div class="date">19 June</div><div class="event">Derive and implement the complete infinitesimal-jackknife sandwich; gate it against resampling and finite differences.</div>
+  <div class="date">20–22 June</div><div class="event">Generalize the influence machinery across continuous, ordinal, mixed, multigroup and missing-data paths.</div>
+  <div class="date">22 June</div><div class="event">Compose it into RMSEA, CRMR/SRMR, CFI/TLI, modification indices and score tests; add Monte Carlo coverage checks and R surfaces.</div>
+  <div class="date">23 June</div><div class="event">Reuse the same casewise influence for one-step case diagnostics.</div>
+</div>
+
+<div class="source-line">Timeline reconstructed from git history; dates describe repository history, not uninterrupted wall-clock work.</div>
+
+::: {.notes}
+This is the concrete loop: anomaly, mathematical explanation, a reusable
+primitive, independent checks, propagation, simulation and interpretation.
+:::
+
+## The psychometric result
+
+For ordinal DWLS, the fitted weight Ŵ and the sample moments come from the
+**same observations**.
+
+::: {.fragment}
+
+- At exact fit, the extra weight-influence term disappears.
+- Under fixed misspecification, it is first order.
+- An “observed-Hessian robust SE” is still incomplete if it freezes Ŵ.
+
+:::
+
+<div class="takeaway-grid fragment">
+  <div><strong>0.927</strong>coverage from the observed-bread interval</div>
+  <div><strong>0.947</strong>coverage from the complete IJ interval</div>
+  <div><strong>≈ 0.3%</strong>error in recovered empirical sampling SD</div>
+</div>
+
+<div class="source-line">Focused N = 2,500 experiment; nominal coverage 0.95; one structural parameter under misspecification.</div>
+
+::: {.notes}
+Do not overgeneralize. This is one controlled design and one focal parameter.
+The stronger point for this talk is the full path from discrepancy to tested
+method. Source: docs/research/notes/misspec_observed_bread.tex.
+:::
+
+## Composition pays compound interest
+
+<div class="claim">Casewise scores + information + a restriction space</div>
+
+<div class="branch">
+  <div>robust score tests<br>and MI</div>
+  <div>SB / mean–variance<br>adjustments</div>
+  <div>eigenvalue mixtures<br>FMG / pEBA</div>
+  <div>sign flips · multipliers<br>Hotelling</div>
+</div>
+
+<br>
+
+These are not independent test implementations. They are different reductions
+and calibrations of shared, independently tested primitives.
+
+::: {.notes}
+This is deliberately a montage. Do not explain every acronym. The point is the
+architectural leverage and the ability to compare methods on exactly the same
+scores, information conventions and simulated draws.
+:::
+
+## What did the human still have to do?
+
+<div class="comparison">
+  <div class="accent">
+    <h3>The agent compounds</h3>
+    <ul>
+      <li>repository search and propagation</li>
+      <li>implementation and build loops</li>
+      <li>fixture and derivative comparisons</li>
+      <li>experiment and documentation plumbing</li>
+    </ul>
+  </div>
+  <div class="quiet">
+    <h3>The researcher remains responsible</h3>
+    <ul>
+      <li>the estimand and mathematical contract</li>
+      <li>which oracle deserves trust</li>
+      <li>counterexamples and evidence standards</li>
+      <li>interpretation, scope and when to stop</li>
+    </ul>
+  </div>
+</div>
+
+<div class="claim">AI does not remove judgment. It increases the amount of judgment you can operationalize.</div>
+
+::: {.notes}
+Avoid false modesty and false automation. The collaboration is valuable because
+the researcher can encode taste, skepticism and standards into repository rules
+and tests, then let the agent apply them repeatedly.
+:::
+
+## What changed?
+
+<div class="takeaway-grid">
+  <div><strong>Build engines</strong>Small explicit primitives let both people and agents reason locally and compose globally.</div>
+  <div><strong>Treat tests as science</strong>When code is abundant, contracts, counterexamples and independent oracles are the scarce asset.</div>
+  <div><strong>Close the loop</strong>Use agents to move from question through implementation to attempted falsification—not merely to emit code.</div>
+</div>
+
+<div class="full-quote">The revolutionary part is not that a machine can code. It is that a psychometrician can now afford to test an idea all the way down.</div>
+
+::: {.notes}
+End here. Questions can go toward Codex workflow, C++ architecture, the test
+corpus, or the misspecification result.
+:::
+
+## Appendix: what exactly was counted? {.smaller}
+
+| Metric | Definition |
+|---|---|
+| Canonical C++ | Physical lines in tracked C/C++ files under `include/` and `src/`; excludes dependencies, builds and vendored R copies. |
+| C++ tests | Tracked C/C++ under `tests/`; test cases and assertions are doctest macro invocations. |
+| JSON fixtures | Tracked `.json` files under `tests/fixtures/`. |
+| Experiments | Tracked top-level directories matching `experiments/NN-*`; archived experiments are excluded. |
+| Authors | Unique git author email addresses reachable from `HEAD`. |
+| Days | Inclusive calendar days from the first reachable commit to render date. |
+
+<div class="source-line">Generator: talks/oslo-psychometric-gathering-2026/tools/repo_metrics.py</div>
+
+::: {.notes}
+Use only if someone questions the numbers. The CSV also stores these definitions.
+:::
+
+## Appendix: the validation rule
+
+<div class="full-quote">Lavaan is the oracle—until an independent reference and a first-principles property establish that it is wrong.</div>
+
+That high bar prevents the most convenient conclusion in compatibility work:
+
+> “Our output differs, therefore the oracle must be defective.”
+
+::: {.notes}
+The rare documented oracle defects are gated transitively or against an
+independent reference. A bare difference is assumed to be a magmaan bug.
+:::
