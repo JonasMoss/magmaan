@@ -60,7 +60,7 @@ MAX_ESTIMATED_USD = 15.0
 
 def hourly_usd() -> float:
     return 3600 * (CPU * CPU_USD_PER_CORE_SECOND
-                   + MEMORY_MIB / 1024 * MEMORY_USD_PER_GIB_SECOND)
+                   + MEMORY_MIB / 1024 * MEM_USD_PER_GIB_SECOND)
 
 
 def expected_cost_usd(focus: bool, stress: bool,
