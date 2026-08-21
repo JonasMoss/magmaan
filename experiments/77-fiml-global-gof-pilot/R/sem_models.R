@@ -156,26 +156,31 @@ sem_distribution_moments <- function(distribution, p) {
        exkurt = rep(target[["exkurt"]], p))
 }
 
-sem_calibrate_sampler <- function(model, distribution) {
+sem_calibrate_sampler <- function(model, distribution,
+                                  Sigma = model$Sigma, mu = model$mu) {
   begin <- proc.time()[["elapsed"]]
   moments <- sem_distribution_moments(distribution, model$p)
   kind <- sub("[12]$", "", distribution)
-  sds <- sqrt(diag(model$Sigma))
+  stopifnot(identical(dim(Sigma), c(model$p, model$p)),
+            length(mu) == model$p,
+            min(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values) > 0)
+  sds <- sqrt(diag(Sigma))
   calibration <- switch(kind,
     normal = NULL,
     vm = magmaan::magmaan_core$sim_vm_calibrate(
-      stats::cov2cor(model$Sigma), moments$skew, moments$exkurt),
+      stats::cov2cor(Sigma), moments$skew, moments$exkurt),
     ig = magmaan::magmaan_core$sim_ig_calibrate(
-      model$Sigma, moments$skew, moments$exkurt,
+      Sigma, moments$skew, moments$exkurt,
       root = "symmetric", generator_family = "pearson",
       quadrature_points = 81L),
     stop("unknown SEM generator: ", distribution, call. = FALSE))
   list(
     kind = kind,
     distribution = distribution,
-    Sigma = model$Sigma,
-    mu = model$mu,
-    chol = if (kind == "normal") chol(model$Sigma) else NULL,
+    Sigma = Sigma,
+    mu = mu,
+    p = model$p,
+    chol = if (kind == "normal") chol(Sigma) else NULL,
     scale = if (kind == "vm") sds else rep(1, model$p),
     calibration = calibration,
     setup_seconds = proc.time()[["elapsed"]] - begin)
@@ -189,7 +194,7 @@ sem_draw <- function(model, sampler, n, seed) {
   seed <- sem_seed(seed)
   if (sampler$kind == "normal") {
     set.seed(seed)
-    X <- matrix(stats::rnorm(n * model$p), nrow = n) %*% sampler$chol
+    X <- matrix(stats::rnorm(n * sampler$p), nrow = n) %*% sampler$chol
   } else {
     batch <- switch(sampler$kind,
       vm = magmaan::magmaan_core$sim_vm_draw(

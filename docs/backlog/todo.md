@@ -637,9 +637,31 @@ when they next change.
   FIML/ML2S fits, finite multiplier p-values, and prespecified tangent df.
   However, a five-rep p=15 timing audit found a heavy ML2S Stage-2 optimizer
   tail under MCAR (median total .26 s, 90th percentile 13.0 s, maximum 153 s).
-  Before the 500-rep paired null/power panel, add chunk/checkpoint support or a
-  per-replicate timeout/retry policy and decide whether p=15 should use a
-  modestly larger n; do not project the full run from median cost alone.
+  The checkpointed `n=200` continuation subsequently completed 500 null
+  replications over five models, five normal/VM/IG laws, complete/MCAR/MAR, and
+  paired FIML/ML2S fits (75,000 estimator rows; four fit failures). Restricting
+  the primary interpretation to the 55 complete/MCAR plus normal-MAR cells,
+  projected-score pEBA4 had mean absolute size error .0127 and range
+  .014--.074, versus .0139 and .024--.094 for the expected-sensitivity
+  Rademacher multiplier. Score SB
+  was close (.0145, .034--.092). The statistic/correction interaction is the
+  main result: score SB/pEBA4 were viable while score SS/ALL were conservative;
+  LR SS/ALL were viable while LR SB/pEBA4 were liberal. ML2S worsened the useful
+  methods under missingness and is now a secondary negative result.
+  Iteration 07 sets up the FIML-only matched-power continuation. A normal-data
+  audit found the realized observed-sensitivity projection extremely
+  conservative at `n=200` in the higher-df models, so the identified-null
+  comparison retains expected-sensitivity score tests as primary. A
+  three-corner multiplier ablation (expected/Rademacher, expected/Mammen,
+  observed/Mammen) separates weight-law and projection changes; score-FMG is
+  recorded under both geometries. Sparse omitted-residual and diffuse omitted-method-factor
+  alternatives are tuned per model to 50% asymptotic normal-theory LR power at
+  `n=200`, then compared with method/cell-specific empirical-null cutoffs. The
+  Modal focus has 165 one-cell shards (55 mechanisms x null/sparse/diffuse,
+  1,000 replications, 999 draws); 60 nonnormal-MAR shards are a separately
+  labeled estimand stress. Remaining work is to launch, combine, and audit that
+  run. Do not interpret nonnormal-MAR rejection as ordinary Type-I error or add
+  ML2S power unless a separate two-stage question emerges.
   The focused published-DGP follow-up (experiment 63) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null

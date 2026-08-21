@@ -44,17 +44,24 @@ generator_labels <- c(
 missingness_labels <- c(
   complete = "Complete", mcar_30 = "30% MCAR", mar_30 = "30% MAR")
 method_columns <- c(
-  "Corrected multiplier" = "p_flip_corrected",
-  "Legacy multiplier" = "p_flip_effective",
+  "Observed-sensitivity Mammen multiplier" = "p_flip_corrected",
+  "Expected-sensitivity Mammen multiplier" = "p_flip_expected_mammen",
+  "Expected-sensitivity Rademacher multiplier" = "p_flip_effective",
+  "Naive LR/D" = "p_lrt_naive",
   "Scalar robust" = "p_lrt_mlr",
   "LR/D FMG SB" = "p_lrt_sb",
   "LR/D FMG SS" = "p_lrt_ss",
   "LR/D FMG pEBA(4)" = "p_lrt_peba4",
   "LR/D FMG all" = "p_lrt_all",
+  "Observed-score FMG SB" = "p_score_corrected_sb",
+  "Observed-score FMG SS" = "p_score_corrected_ss",
+  "Observed-score FMG pEBA(4)" = "p_score_corrected_peba4",
+  "Observed-score FMG all" = "p_score_corrected_all",
   "Score FMG SB" = "p_score_sb",
   "Score FMG SS" = "p_score_ss",
   "Score FMG pEBA(4)" = "p_score_peba4",
   "Score FMG all" = "p_score_all")
+method_columns <- method_columns[method_columns %in% names(replications)]
 
 group_vars <- c("model_id", "distribution", "missingness", "estimator")
 group_id <- interaction(
@@ -70,6 +77,9 @@ cell_estimator_table <- do.call(rbind, lapply(cell_rows, function(ii) {
     generator = unname(generator_labels[[z$distribution[[1L]]]]),
     missingness_id = z$missingness[[1L]],
     missingness = unname(missingness_labels[[z$missingness[[1L]]]]),
+    analysis_region = if (
+      z$missingness[[1L]] == "mar_30" && z$distribution[[1L]] != "normal"
+    ) "Nonnormal MAR stress" else "Identified null",
     estimator = z$estimator[[1L]],
     stringsAsFactors = FALSE, check.names = FALSE)
   for (method in names(method_columns)) {
@@ -151,6 +161,33 @@ scorecard <- do.call(rbind, lapply(estimator_order, function(estimator) {
   }))
 }))
 
+summarize_region <- function(region) {
+  do.call(rbind, lapply(estimator_order, function(estimator) {
+    z <- cell_estimator_table[
+      as.character(cell_estimator_table$estimator) == estimator &
+        cell_estimator_table$analysis_region == region, ]
+    do.call(rbind, lapply(names(method_columns), function(method) {
+      rejection <- z[[method]]
+      rejection <- rejection[is.finite(rejection)]
+      display_method <- if (method == "Scalar robust") {
+        if (estimator == "FIML") "Yuan--Bentler MLR" else "Scaled ML2S"
+      } else method
+      data.frame(
+        estimator = estimator, method = display_method,
+        cells = length(rejection),
+        mean_abs_size_error = if (length(rejection)) {
+          mean(abs(rejection - .05))
+        } else NA_real_,
+        min_cell_rejection = if (length(rejection)) min(rejection) else NA_real_,
+        max_cell_rejection = if (length(rejection)) max(rejection) else NA_real_,
+        mean_cell_rejection = if (length(rejection)) mean(rejection) else NA_real_,
+        stringsAsFactors = FALSE)
+    }))
+  }))
+}
+identified_scorecard <- summarize_region("Identified null")
+mar_stress_scorecard <- summarize_region("Nonnormal MAR stress")
+
 replications$nominal_geometry <- replications$flip_ok &
   replications$flip_df == replications$expected_df
 replications$corrected_nominal_geometry <-
@@ -166,77 +203,184 @@ geometry$attempted <- vapply(seq_len(nrow(geometry)), function(i) {
 }, integer(1L))
 ```
 
-The question is deliberately narrow: how well calibrated are global
-goodness-of-fit tests when correctly specified, ordinary latent-variable models
-are fitted by FIML or normal-theory two-stage ML (ML2S) to normal,
-Vale--Maurelli, and independent-generator data under complete sampling, MCAR,
-and observed-predictor MAR? All entries below are Type-I rejection rates at
-$\alpha=.05$. The paired design has 75 data-generating cells, $n=200$, and 500
-replications per cell; FIML and ML2S are fitted to the same generated datasets.
+This is a preliminary null-calibration study of global goodness-of-fit tests in
+five ordinary latent-variable models. The design crosses normal,
+Vale--Maurelli, and independent-generator data with complete sampling, 30%
+MCAR, and observed-predictor MAR at $n=200$, with 500 replications per cell.
 
-## Headline result
+The main calibration region contains 55 cells: every complete and MCAR cell,
+plus normal-data MAR. These are the cells in which the generating moments are
+also the relevant null target for Gaussian FIML. The remaining 20 nonnormal-MAR
+cells are retained as an estimand stress test, not interpreted as ordinary
+Type-I error: under nonnormal MAR, Gaussian FIML can converge to pseudo-true
+moments outside the generating SEM.
 
-```{r headline-table}
-headline <- scorecard[, c(
-  "estimator", "method", "mean_cell_rejection", "mean_abs_size_error",
-  "min_cell_rejection", "max_cell_rejection", "cells_in_band")]
-headline <- headline[scorecard$finite > 0L, ]
-names(headline) <- c(
-  "estimator", "method", "mean size", "mean |size-.05|", "minimum", "maximum",
-  "cells in [.025,.075]")
-knitr::kable(headline, digits = 3, row.names = FALSE)
+## Preliminary story
+
+### 1. Projected-score pEBA(4) is the strongest FIML result
+
+```{r fiml-primary-table}
+fiml_primary <- identified_scorecard[
+  identified_scorecard$estimator == "FIML" &
+    is.finite(identified_scorecard$mean_abs_size_error),
+  c("method", "mean_abs_size_error", "min_cell_rejection",
+    "max_cell_rejection")]
+fiml_primary <- fiml_primary[order(fiml_primary$mean_abs_size_error), ]
+names(fiml_primary) <- c("method", "mean |size-.05|", "minimum", "maximum")
+knitr::kable(fiml_primary, digits = 3, row.names = FALSE)
 ```
 
-Score pEBA(4) is the best FIML calibration in this panel. Its mean rejection is
-.043, its mean absolute cellwise size error is .014, and 66/75 cells lie in the
-practical [.025,.075] band. The legacy multiplier gives .058, .015, and 59/75,
-respectively. Thus score pEBA(4) is modestly but consistently better here, in
-line with the earlier score-FMG experiments.
+Projected-score pEBA(4) has the smallest mean absolute size error (.013), and
+its 55-cell range stops at .074. The expected-sensitivity Rademacher multiplier
+from the completed panel is close on average
+(.014) but reaches .094, while projected-score SB is also competitive (.015,
+range .034--.092). The pEBA advantage over the multiplier is not cellwise
+uniform; it comes from containing the larger errors rather than winning most
+individual cells. The multiplier is therefore useful as a benchmark, but the
+preliminary result does not require it as the lead method.
 
-For ML2S, score pEBA(4) and the multiplier are closer: their mean rejection
-rates are .069 and .072, and both place 48/75 cells in the practical band. The
-score calibration is better under MAR (.058 versus .068 overall) but worse
-under MCAR (.102 versus .088). Neither is uniformly calibrated for ML2S in the
-hard missing-data cells.
+### 2. The correction and the base statistic cannot be separated
 
-The MAR cells do not establish consistency. In the severe nonnormal MAR cells,
-the legacy FIML multiplier rejects about .075--.079 while score pEBA(4) rejects
-about .042--.055. That is useful finite-sample evidence for score-spectrum
-calibration, but both normal-FIML and the normal-EM first stage can target
-pseudo-true rather than population moments under nonnormal MAR. A reference-law
-improvement cannot generally repair that estimand problem.
-
-## All 75 design cells
-
-Each entry is the proportion of finite p-values below .05. Method-specific
-finite denominators and numerical diagnostics are reported in the appendix.
-The method closest to the nominal .05 rate is bold in each row; exact ties are
-all bold.
-
-```{r all-cells-table}
-all_cells <- cell_table[, c(
-  "model", "generator", "missingness", wide_method_columns)]
-cell_rates <- as.matrix(all_cells[, wide_method_columns])
-cell_error <- abs(cell_rates - .05)
-best_error <- apply(cell_error, 1L, min, na.rm = TRUE)
-for (method in wide_method_columns) {
-  value <- cell_rates[, method]
-  rendered <- sprintf("%.3f", value)
-  rendered[!is.finite(value)] <- "---"
-  is_winner <- is.finite(cell_error[, method]) &
-    abs(cell_error[, method] - best_error) < 1e-12
-  rendered[is_winner] <- paste0("<strong>", rendered[is_winner], "</strong>")
-  all_cells[[method]] <- rendered
-}
-knitr::kable(
-  all_cells, row.names = FALSE, escape = FALSE,
-  align = c("l", "l", "l", rep("r", length(wide_method_columns))))
+```{r score-lrt-crossing-table}
+crossing <- data.frame(
+  correction = c("SB", "SS", "pEBA(4)", "all"),
+  score_method = c("Score FMG SB", "Score FMG SS",
+                   "Score FMG pEBA(4)", "Score FMG all"),
+  lrt_method = c("LR/D FMG SB", "LR/D FMG SS",
+                 "LR/D FMG pEBA(4)", "LR/D FMG all"),
+  stringsAsFactors = FALSE)
+take_metric <- function(method, metric) identified_scorecard[
+  identified_scorecard$estimator == "FIML" &
+    identified_scorecard$method == method, metric]
+crossing$score_mae <- vapply(
+  crossing$score_method, take_metric, numeric(1L),
+  metric = "mean_abs_size_error")
+crossing$score_min <- vapply(
+  crossing$score_method, take_metric, numeric(1L),
+  metric = "min_cell_rejection")
+crossing$score_max <- vapply(
+  crossing$score_method, take_metric, numeric(1L),
+  metric = "max_cell_rejection")
+crossing$lrt_mae <- vapply(
+  crossing$lrt_method, take_metric, numeric(1L),
+  metric = "mean_abs_size_error")
+crossing$lrt_min <- vapply(
+  crossing$lrt_method, take_metric, numeric(1L),
+  metric = "min_cell_rejection")
+crossing$lrt_max <- vapply(
+  crossing$lrt_method, take_metric, numeric(1L),
+  metric = "max_cell_rejection")
+crossing <- crossing[, c(
+  "correction", "score_mae", "score_min", "score_max",
+  "lrt_mae", "lrt_min", "lrt_max")]
+names(crossing) <- c(
+  "correction", "score MAE", "score min", "score max",
+  "LR MAE", "LR min", "LR max")
+knitr::kable(crossing, digits = 3, row.names = FALSE)
 ```
 
-The bold entry is the calibration closest to .05 in that data-generating cell,
-across both estimators; exact ties are all bold. The table is intentionally
-wide so the paired FIML and ML2S results can be compared without splitting the
-design across panels.
+There is no generic ordering of scores above likelihood ratios. SB and pEBA(4)
+work with the projected-score statistic, whereas score SS and score `all` are
+strongly conservative. For the likelihood-ratio statistic the ordering
+reverses: SS and `all` are the viable corrections, while SB and pEBA(4) are
+liberal. In particular, LR SS does beat score SS, but the best projected-score
+calibration beats the best likelihood-ratio calibration. The large reversal is
+important enough to require a focused formula and implementation audit before
+it becomes more than a preliminary finding.
+
+### 3. Two-stage ML does not improve the useful methods
+
+```{r estimator-comparison-table}
+selected_methods <- c(
+  "Score FMG pEBA(4)", "Score FMG SB", "LR/D FMG all", "LR/D FMG SS",
+  "Expected-sensitivity Rademacher multiplier")
+estimator_comparison <- do.call(rbind, lapply(selected_methods, function(method) {
+  rows <- identified_scorecard[identified_scorecard$method == method, ]
+  data.frame(
+    method = method,
+    FIML_MAE = rows$mean_abs_size_error[rows$estimator == "FIML"],
+    FIML_min = rows$min_cell_rejection[rows$estimator == "FIML"],
+    FIML_max = rows$max_cell_rejection[rows$estimator == "FIML"],
+    ML2S_MAE = rows$mean_abs_size_error[rows$estimator == "ML2S"],
+    ML2S_min = rows$min_cell_rejection[rows$estimator == "ML2S"],
+    ML2S_max = rows$max_cell_rejection[rows$estimator == "ML2S"])
+}))
+names(estimator_comparison) <- c(
+  "method", "FIML MAE", "FIML min", "FIML max",
+  "ML2S MAE", "ML2S min", "ML2S max")
+knitr::kable(estimator_comparison, digits = 3, row.names = FALSE)
+```
+
+ML2S is nearly indistinguishable from FIML under complete sampling, then
+generally deteriorates under missingness. In the identified-null region,
+projected-score pEBA(4) moves from .013 to .029 mean absolute error and its
+maximum rejection rises from .074 to .162; projected-score SB deteriorates
+more sharply. ML2S is therefore a secondary negative result rather than part
+of the main replacement-method story.
+
+## Next experiment: fair multiplier geometry and matched power
+
+The completed panel predates magmaan's observed-sensitivity projection. Its
+score-FMG rows and legacy multiplier use expected sensitivity. That remains the
+primary geometry in the 55-cell identified-null region: there the fitted SEM
+moments are the Gaussian-score target and expected and observed sensitivity
+coincide in the population. A 100-rep normal audit of the new code found that
+plugging the realized sensitivity into the projection can be extremely
+conservative at $n=200$ in the higher-df models, so it will not silently replace
+the preliminary score tests.
+
+The revised runner instead records a three-corner multiplier ablation:
+expected-sensitivity Rademacher, expected-sensitivity Mammen, and
+observed-sensitivity Mammen. It also records the analytic score calibrations
+under both expected and observed projection geometry. This separates weight-law
+changes from sensitivity changes. The observed-sensitivity rows are diagnostics
+for a genuinely defined pseudo-true null; they cannot make the present
+nonnormal-MAR generating SEM into such a null.
+
+Power will be studied under two prespecified misspecifications for each model:
+
+- a **sparse** alternative consisting of one omitted residual covariance; and
+- a **diffuse** alternative consisting of an omitted method factor on a small,
+  model-specific set of indicators or waves.
+
+```{r power-design-table}
+power_design <- data.frame(
+  model = unname(model_labels[model_order]),
+  sparse = c("x1 ~~ x2", "x1 ~~ x6", "x1 ~~ x5", "x1 ~~ x6",
+             "y2 ~~ y3"),
+  sparse_effect = c(.1068, .2391, .1562, .1881, .0684),
+  diffuse = c("x1, x3, x5", "x1, x3, x6, x8", "x1, x5, x9",
+              "x1, x6, x11", "y1, y3, y5"),
+  diffuse_effect = c(.1433, .1239, .1264, .1586, .0688),
+  stringsAsFactors = FALSE)
+names(power_design) <- c(
+  "model", "sparse residual pair", "effect", "diffuse method set", "effect")
+knitr::kable(power_design, digits = 4, row.names = FALSE)
+```
+
+The sparse effect is the added residual covariance as a fraction of the two
+variables' baseline standard deviations. The diffuse effect is the variance of
+a method factor whose listed loadings equal the variables' baseline standard
+deviations. Thus both perturbations are scale-free, but they represent visibly
+different local failures: one concentrated residual edge versus shared
+cross-block dependence.
+
+Within each model and alternative, the perturbation is calibrated by population
+normal-theory ML so that the ordinary likelihood-ratio test has 50% asymptotic
+power at $n=200$. Equivalently, the population discrepancy satisfies
+$(n-1)F_0=\lambda_{.50}$, where $\lambda_{.50}$ solves the noncentral
+$\chi^2_{df}(\lambda)$ power equation at $\alpha=.05$. This common reference
+does not tune the design in favor of any robust method. Null, sparse, and
+diffuse cells share random-number seeds. The primary power comparison uses each
+method's own empirical-null fifth-percentile cutoff in the matching model,
+generator, and missingness cell; nominal-threshold power remains descriptive.
+
+The main run is FIML-only over the 55 identified-null mechanisms. Nonnormal MAR
+is a separately labeled estimand-stress phase, and ML2S power is deferred unless
+the secondary estimator story becomes independently interesting. A 100-rep
+normal-complete audit put ordinary-LR rejection near the intended .50 under
+both alternatives in all five models, which is sufficient to validate the
+population calibration before the larger run.
 
 ## Model specifications
 
@@ -298,112 +442,42 @@ knitr::kable(model_table, row.names = FALSE)
 
 ## Methods
 
-Each generated dataset is fitted by both FIML and ML2S and passed to ten
-global-fit calibrations. The current code also contains an eleventh,
-FIML-specific corrected multiplier, but it landed after this production panel
-started and is therefore described but not included in the tables:
+Each generated dataset in the completed panel is fitted by both FIML and ML2S
+and yields eleven finite global-fit calibrations: naive LR/discrepancy, the
+scalar robust test, four LR/discrepancy FMG variants, four projected-score FMG
+variants, and the expected-sensitivity Rademacher multiplier. The current code additionally
+computes expected-sensitivity Mammen and observed-sensitivity Mammen
+multipliers plus four score-FMG calibrations from the observed-sensitivity
+geometry. Those new results landed after this production panel started and are
+therefore described but not included in the preliminary tables:
 
-- **Corrected multiplier:** the FIML projected saturated-score test described
-  below, using the realized observed-data sensitivity and 199 Mammen draws.
-- **Legacy multiplier:** the original expected-information projection with 199
-  Rademacher draws. This remains the multiplier construction used for ML2S.
+- **Observed-sensitivity multiplier:** the FIML projected saturated-score test
+  described below, using realized observed-data sensitivity and Mammen draws.
+- **Expected-sensitivity Mammen:** the weight-law control, using the legacy
+  projection with Mammen rather than Rademacher draws.
+- **Expected-sensitivity Rademacher multiplier:** the completed panel's
+  construction, using 199 Rademacher draws. This remains the multiplier
+  construction used for ML2S.
 - **Scalar robust:** Yuan--Bentler/Mplus MLR for FIML and the scaled two-stage
   statistic for ML2S.
 - **LR/discrepancy FMG:** SB, SS, pEBA(4), and `all`, computed from the robust
   eigenvalue spectrum of the FIML likelihood-ratio or ML2S Stage-2 discrepancy.
 - **Score FMG:** the same four spectrum transforms applied to the global
-  projected score statistic and its own robust eigenvalues.
+  projected score statistic and its own robust eigenvalues. The completed panel
+  uses expected sensitivity. The next panel retains those rows as primary and
+  records observed-sensitivity versions as a finite-sample diagnostic.
 
-### Corrected effective multiplier
+### Multiplier status
 
-This is a global score test of the fitted SEM against the local saturated
-mean-and-covariance model. It is not a robust standard error and it does not
-rescale the ordinary likelihood-ratio statistic. A companion
-[working note](notes/multiplier_score_lineage.qmd) gives the score-test,
-effective-score, wild-bootstrap, sign-randomization, and SEM lineages in detail.
-
-Let the saturated moment vector be
-
-$$
-\eta =
-\begin{pmatrix}
-\operatorname{vech}(\Sigma) \\
-\mu
-\end{pmatrix}
-\in \mathbb{R}^{m}.
-$$
-
-At the restricted estimate $\widehat\theta$, the method evaluates each case's
-direct saturated observed-data score $s_i$. Under FIML, this is the likelihood
-score for the variables actually observed for that case; missing values are not
-filled in.
-
-Let $\Delta=\partial\eta(\theta)/\partial\theta^{\mathsf T}$ be the local model
-tangent, with affine equality constraints incorporated. If $K$ spans that
-tangent, $D$ spans its Euclidean complement, and $A$ is the realized
-observed-data sensitivity, define
-
-$$
-G_A=D-K(K^{\mathsf T}AK)^{-1}K^{\mathsf T}AD.
-$$
-
-Then $K^{\mathsf T}AG_A=0$, so $z_i=G_A^{\mathsf T}s_i$ retains only saturated
-directions not locally explained by the SEM. The observed statistic is
-
-$$
-u=\sum_{i=1}^{n}z_i,
-\qquad
-V=G_A^{\mathsf T}IG_A,
-\qquad
-T=u^{\mathsf T}V^{-1}u.
-$$
-
-Its dimension is $d=m-\operatorname{rank}(\Delta)$, ordinarily the model df.
-For multiplier draw $b$, the corrected procedure uses independent Mammen
-weights with values $(1-\sqrt 5)/2$ and $(1+\sqrt 5)/2$ and respective
-probabilities $(\sqrt 5+1)/(2\sqrt 5)$ and
-$(\sqrt 5-1)/(2\sqrt 5)$. These weights satisfy
-$E(w_{ib})=0$, $E(w_{ib}^2)=1$, and $E(w_{ib}^3)=1$. Each draw gives
-
-$$
-u_b=\sum_{i=1}^{n}w_{ib}z_i,
-\qquad
-T_b=u_b^{\mathsf T}V^{-1}u_b,
-\qquad
-\widehat p=
-\frac{1+\sum_{b=1}^{B}\mathbf{1}(T_b\geq T)}{B+1}.
-$$
-
-Here $I$ is the positive-definite pattern-conditional Gaussian Fisher metric.
-The realized Hessian $A$ is required for the nuisance correction, while
-multiplier validity permits a separate fixed positive-definite quadratic.
-Here $B=199$, so the p-value grid has width $1/200$. The fitted moments,
-projection, and quadratic metric stay fixed. Every draw is only a weighted score
-sum and a small quadratic form. Neither the null SEM nor a saturated alternative
-is refitted. Unlike MLR's scalar adjustment of a likelihood-ratio statistic,
-the multiplier reference retains casewise, direction-specific score variation
-after removing the SEM tangent.
-
-The retained legacy comparator also replaces $A$ by $I$ in the nuisance
-projection and uses Rademacher weights. A separate scalar
-MAR diagnostic found that the sensitivity choice accounted for the material
-calibration change. Mammen and Rademacher weights were much closer once the
-effective rows used the observed-data sensitivity.
-
-For two-stage ML, the legacy gate is constructed from the two stages rather than
-borrowing the FIML likelihood scores. Let $\widehat\eta_S$ be the saturated EM
-moment estimate, $\phi_i$ its casewise influence rows, and
-$W(\widehat\theta)$ the fitted normal-theory Stage-2 metric. The observed
-saturated score is generated by
-$\widehat\eta_S-\eta(\widehat\theta)$; multiplier rows propagate $\phi_i$
-through the same fixed metric and tangent projection. Thus every draw still
-avoids refitting, but missing-data variation enters through Stage-1 EM
-influence rather than direct FIML scores. On complete data this construction
-reproduces the ordinary ML observed statistic and multiplier p-value; its
-robust spectrum is first-order equivalent because it retains moment influence
-rather than raw likelihood-score rows.
-An observed-sensitivity two-stage analogue has not been defined, so the
-corrected multiplier is unavailable for ML2S.
+The multiplier is now a benchmark rather than the organizing method. The
+legacy panel used an expected-information nuisance projection and Rademacher
+weights. Current magmaan can instead use the realized observed-data
+sensitivity for that projection and Mammen weights. The next run crosses these
+changes through the three-corner ablation above rather than presenting them as
+one indivisible correction.
+The construction and the unavailable ML2S analogue are summarized in the
+appendix; the full lineage remains in the companion
+[working note](notes/multiplier_score_lineage.qmd).
 
 ## Paired estimators and the larger model
 
@@ -449,6 +523,95 @@ moments even when the SEM covariance structure is correct.
 
 ## Appendix: numerical and computational details {.appendix}
 
+### Complete 75-cell scorecard
+
+This table reproduces the former headline across all 75 cells and both
+estimators. It mixes the identified-null region with the 20 nonnormal-MAR
+estimand-stress cells and is therefore descriptive rather than a pure Type-I
+summary.
+
+```{r headline-table}
+headline <- scorecard[, c(
+  "estimator", "method", "mean_cell_rejection", "mean_abs_size_error",
+  "min_cell_rejection", "max_cell_rejection", "cells_in_band")]
+headline <- headline[scorecard$finite > 0L, ]
+names(headline) <- c(
+  "estimator", "method", "mean size", "mean |size-.05|", "minimum", "maximum",
+  "cells in [.025,.075]")
+knitr::kable(headline, digits = 3, row.names = FALSE)
+```
+
+### Nonnormal-MAR estimand stress
+
+```{r mar-stress-table}
+mar_stress <- mar_stress_scorecard[
+  is.finite(mar_stress_scorecard$mean_abs_size_error),
+  c("estimator", "method", "mean_abs_size_error",
+    "min_cell_rejection", "max_cell_rejection")]
+names(mar_stress) <- c(
+  "estimator", "method", "mean |rate-.05|", "minimum", "maximum")
+knitr::kable(mar_stress, digits = 3, row.names = FALSE)
+```
+
+These rates describe rejection relative to the generating SEM moments, not
+necessarily Type-I error for the Gaussian-FIML pseudo-true target.
+
+### All 75 design cells
+
+Each entry is the proportion of finite p-values below .05. The method closest
+to .05 is bold in each row; exact ties are all bold. The table is intentionally
+wide.
+
+```{r all-cells-table}
+all_cells <- cell_table[, c(
+  "model", "generator", "missingness", wide_method_columns)]
+cell_rates <- as.matrix(all_cells[, wide_method_columns])
+cell_error <- abs(cell_rates - .05)
+best_error <- apply(cell_error, 1L, min, na.rm = TRUE)
+for (method in wide_method_columns) {
+  value <- cell_rates[, method]
+  rendered <- sprintf("%.3f", value)
+  rendered[!is.finite(value)] <- "---"
+  is_winner <- is.finite(cell_error[, method]) &
+    abs(cell_error[, method] - best_error) < 1e-12
+  rendered[is_winner] <- paste0("<strong>", rendered[is_winner], "</strong>")
+  all_cells[[method]] <- rendered
+}
+knitr::kable(
+  all_cells, row.names = FALSE, escape = FALSE,
+  align = c("l", "l", "l", rep("r", length(wide_method_columns))))
+```
+
+### Multiplier constructions
+
+Let $s_i$ be the direct saturated observed-data score at the restricted FIML
+fit, $K$ span the SEM tangent, $D$ its Euclidean complement, $A$ the realized
+observed-data sensitivity, and $I$ the fixed pattern-conditional Fisher metric.
+The corrected projection is
+
+$$
+G_A=D-K(K^{\mathsf T}AK)^{-1}K^{\mathsf T}AD,
+\qquad K^{\mathsf T}AG_A=0.
+$$
+
+With $z_i=G_A^{\mathsf T}s_i$, $u=\sum_i z_i$, and
+$V=G_A^{\mathsf T}IG_A$, the observed statistic is
+$T=u^{\mathsf T}V^{-1}u$. Mammen draws replace $u$ by
+$u_b=\sum_iw_{ib}z_i$ while retaining the fitted moments, projection, and
+quadratic metric. The Monte Carlo p-value is
+
+$$
+\widehat p=\frac{1+\sum_{b=1}^{B}\mathbf{1}(T_b\geq T)}{B+1}.
+$$
+
+Observed-geometry score-FMG diagnostics in the next run use this same $G_A$,
+observed statistic, and robust spectrum. The primary identified-null score rows
+retain the expected-sensitivity projection. Expected-sensitivity Mammen and
+Rademacher multipliers isolate the weight law, while expected- versus
+observed-sensitivity Mammen isolates the projection. No observed-sensitivity
+two-stage analogue is currently defined; ML2S retains its Stage-1
+influence/Stage-2 discrepancy construction.
+
 ### Method-specific denominators
 
 Rejection rates use finite, method-specific denominators. Failures are not
@@ -491,14 +654,28 @@ The corrected multiplier was not part of this timing.
 
 ### Reproduce
 
-The archived panel above predates the corrected multiplier. To run the current
-implementation into a fresh directory and render that expanded panel, point the
-report at the same directory explicitly:
+The archived panel above predates the corrected multiplier and remains the
+report's default input. To calibrate and smoke-test the planned paired
+null/sparse/diffuse continuation locally:
 
 ```sh
-Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R --reps 500 --n 200 \
-  --flips 199 --cores 10 --chunk-size 25 \
-  --results-dir experiments/77-fiml-global-gof-pilot/results/sem-paired-corrected-score-n200-500
-MAGMAAN_SEM_RESULT_DIR=experiments/77-fiml-global-gof-pilot/results/sem-paired-corrected-score-n200-500 \
-  quarto render experiments/77-fiml-global-gof-pilot/sem_report.qmd
+Rscript experiments/77-fiml-global-gof-pilot/calibrate_power.R
+Rscript experiments/77-fiml-global-gof-pilot/run_sem_models.R \
+  --reps 5 --n 200 --flips 19 --cores 4 --chunk-size 1 \
+  --estimators FIML --truth null,sparse,diffuse --regions identified_null \
+  --power-calibration-file experiments/77-fiml-global-gof-pilot/results/calibration/power_calibration_n200.csv \
+  --results-dir experiments/77-fiml-global-gof-pilot/results/power-smoke
+```
+
+The Modal harness is dry-run by default. The preflight starts one two-rep cell;
+the substantive focus launches 165 one-cell shards with 1,000 replications and
+999 multiplier draws. `--mode all` additionally launches the separately
+labeled 60-cell nonnormal-MAR stress phase at 500 replications.
+
+```sh
+modal run experiments/77-fiml-global-gof-pilot/modal/app.py
+modal run experiments/77-fiml-global-gof-pilot/modal/app.py \
+  --mode preflight --run-id exp77-aug21
+modal run --detach experiments/77-fiml-global-gof-pilot/modal/app.py \
+  --mode focus --run-id exp77-aug21
 ```

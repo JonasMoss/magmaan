@@ -9,6 +9,8 @@ script_dir <- if (length(script_arg)) {
 source(file.path(script_dir, "..", "_support", "R", "helpers.R"))
 source(file.path(script_dir, "..", "_support", "R", "missingness.R"))
 source(file.path(script_dir, "R", "sem_models.R"))
+source(file.path(script_dir, "R", "sem_power.R"))
+source(file.path(script_dir, "R", "sem_summaries.R"))
 set_single_threaded_math()
 
 usage <- function() cat(
@@ -23,6 +25,11 @@ usage <- function() cat(
   "  --estimators CSV     Default FIML,ML2S.\n",
   "  --distributions CSV  Default normal,vm1,ig1,vm2,ig2.\n",
   "  --missingness CSV    Default complete,mcar_30,mar_30.\n",
+  "  --truth CSV          Default null; choices null,sparse,diffuse.\n",
+  "  --regions CSV        Default identified_null,nonnormal_mar_stress.\n",
+  "  --power-calibration-file P  Required when truth includes power.\n",
+  "  --shard-index J --shard-count K  Deterministic cell sharding.\n",
+  "  --max-cells N        Optional post-filter cell cap.\n",
   "  --seed-base N        Deterministic seed base.\n",
   "  --results-dir P      Output directory.\n",
   "  --help               Show this help.\n", sep = "")
@@ -33,6 +40,10 @@ opts <- list(
   models = NULL, estimators = c("FIML", "ML2S"),
   distributions = c("normal", "vm1", "ig1", "vm2", "ig2"),
   missingness = c("complete", "mcar_30", "mar_30"),
+  truth = "null",
+  regions = c("identified_null", "nonnormal_mar_stress"),
+  power_calibration_file = NULL,
+  shard_index = 1L, shard_count = 1L, max_cells = NULL,
   seed_base = 20260820L, results_dir = NULL)
 args <- commandArgs(TRUE)
 i <- 1L
@@ -55,13 +66,22 @@ while (i <= length(args)) {
     opts$distributions <- parse_csv_arg(take())
   } else if (arg == "--missingness") {
     opts$missingness <- parse_csv_arg(take())
-  } else if (arg == "--seed-base") opts$seed_base <- as.integer(take())
+  } else if (arg == "--truth") opts$truth <- parse_csv_arg(take())
+  else if (arg == "--regions") opts$regions <- parse_csv_arg(take())
+  else if (arg == "--power-calibration-file") {
+    opts$power_calibration_file <- take()
+  } else if (arg == "--shard-index") opts$shard_index <- as.integer(take())
+  else if (arg == "--shard-count") opts$shard_count <- as.integer(take())
+  else if (arg == "--max-cells") opts$max_cells <- as.integer(take())
+  else if (arg == "--seed-base") opts$seed_base <- as.integer(take())
   else if (arg == "--results-dir") opts$results_dir <- take()
   else stop("unknown argument: ", arg, call. = FALSE)
   i <- i + 1L
 }
 stopifnot(opts$reps > 0L, opts$n >= 80L, opts$flips > 0L, opts$cores > 0L,
           opts$chunk_size > 0L,
+          opts$shard_index > 0L, opts$shard_count > 0L,
+          opts$shard_index <= opts$shard_count,
           opts$seed_base >= 0L)
 
 models <- sem_model_catalog()
@@ -74,49 +94,96 @@ if (length(unknown_models)) {
 models <- models[opts$models]
 allowed_distributions <- c("normal", "vm1", "ig1", "vm2", "ig2")
 allowed_missingness <- c("complete", "mcar_30", "mar_30")
+allowed_truth <- c("null", sem_power_alternatives)
+allowed_regions <- c("identified_null", "nonnormal_mar_stress")
 stopifnot(all(opts$distributions %in% allowed_distributions),
           all(opts$missingness %in% allowed_missingness),
+          all(opts$truth %in% allowed_truth),
+          all(opts$regions %in% allowed_regions),
           length(opts$estimators) > 0L,
           all(opts$estimators %in% c("FIML", "ML2S")))
+if (!is.null(opts$max_cells)) stopifnot(opts$max_cells > 0L)
+
+power_calibration <- if (any(opts$truth != "null")) {
+  sem_read_power_calibration(opts$power_calibration_file, models, opts$n)
+} else data.frame()
+
+population_for <- function(model, truth) {
+  if (truth == "null") return(sem_power_population(model, truth))
+  row <- power_calibration[
+    power_calibration$model_id == model$model_id &
+      power_calibration$alternative == truth, , drop = FALSE]
+  sem_power_population(model, truth, row$effect[[1L]])
+}
 
 results <- opts$results_dir %||%
   file.path(script_dir, "results", "sem-model-smoke")
 dir.create(results, recursive = TRUE, showWarnings = FALSE)
 
-calibration_rows <- list()
-samplers <- list()
-for (model in models) {
-  for (distribution in opts$distributions) {
-    key <- paste(model$model_id, distribution, sep = "::")
-    begin <- proc.time()[["elapsed"]]
-    sampler <- tryCatch(
-      sem_calibrate_sampler(model, distribution), error = function(e) e)
-    seconds <- proc.time()[["elapsed"]] - begin
-    ok <- !inherits(sampler, "error")
-    calibration_rows[[key]] <- data.frame(
-      model_id = model$model_id, model_label = model$model_label,
-      distribution = distribution, calibration_ok = ok,
-      calibration_seconds = seconds,
-      calibration_error = if (ok) "" else conditionMessage(sampler),
-      stringsAsFactors = FALSE)
-    samplers[[key]] <- sampler
-  }
-}
-calibration <- do.call(rbind, calibration_rows)
-row.names(calibration) <- NULL
-write_csv(calibration, file.path(results, "generator_calibration.csv"))
-
 grid <- expand.grid(
   model_id = names(models), distribution = opts$distributions,
-  missingness = opts$missingness,
+  missingness = opts$missingness, truth = opts$truth,
   KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+grid$analysis_region <- ifelse(
+  grid$missingness == "mar_30" & grid$distribution != "normal",
+  "nonnormal_mar_stress", "identified_null")
+grid <- grid[grid$analysis_region %in% opts$regions, , drop = FALSE]
 grid$cell_id <- seq_len(nrow(grid))
+grid$pair_id <- as.integer(interaction(
+  grid[c("model_id", "distribution", "missingness")],
+  drop = TRUE, lex.order = TRUE))
+if (opts$shard_count > 1L) {
+  take_shard <- (seq_len(nrow(grid)) - 1L) %% opts$shard_count + 1L ==
+    opts$shard_index
+  grid <- grid[take_shard, , drop = FALSE]
+}
+if (!is.null(opts$max_cells)) grid <- head(grid, opts$max_cells)
+if (!nrow(grid)) stop("cell filters selected no rows", call. = FALSE)
 grid$model_label <- vapply(grid$model_id, function(id) models[[id]]$model_label,
                            character(1L))
 grid$p <- vapply(grid$model_id, function(id) models[[id]]$p, integer(1L))
 grid$expected_df <- vapply(
   grid$model_id, function(id) models[[id]]$expected_df, integer(1L))
 grid$n <- opts$n
+grid$alternative_effect <- 0
+grid$population_fml <- 0
+for (index in which(grid$truth != "null")) {
+  row <- power_calibration[
+    power_calibration$model_id == grid$model_id[[index]] &
+      power_calibration$alternative == grid$truth[[index]], , drop = FALSE]
+  grid$alternative_effect[[index]] <- row$effect[[1L]]
+  grid$population_fml[[index]] <- row$achieved_fml[[1L]]
+}
+
+calibration_rows <- list()
+samplers <- list()
+population_keys <- unique(grid[c("model_id", "truth", "distribution")])
+for (index in seq_len(nrow(population_keys))) {
+    model <- models[[population_keys$model_id[[index]]]]
+    truth <- population_keys$truth[[index]]
+    distribution <- population_keys$distribution[[index]]
+    population <- population_for(model, truth)
+    key <- paste(model$model_id, truth, distribution, sep = "::")
+    begin <- proc.time()[["elapsed"]]
+    sampler <- tryCatch(
+      sem_calibrate_sampler(
+        model, distribution, Sigma = population$Sigma, mu = population$mu),
+      error = function(e) e)
+    seconds <- proc.time()[["elapsed"]] - begin
+    ok <- !inherits(sampler, "error")
+    calibration_rows[[key]] <- data.frame(
+      model_id = model$model_id, model_label = model$model_label,
+      truth = truth, distribution = distribution,
+      alternative_effect = population$effect, calibration_ok = ok,
+      calibration_seconds = seconds,
+      calibration_error = if (ok) "" else conditionMessage(sampler),
+      stringsAsFactors = FALSE)
+    samplers[[key]] <- sampler
+}
+calibration <- do.call(rbind, calibration_rows)
+row.names(calibration) <- NULL
+write_csv(calibration, file.path(results, "generator_calibration.csv"))
+
 design <- grid[rep(seq_len(nrow(grid)), each = length(opts$estimators)), , drop = FALSE]
 design$estimator <- rep(opts$estimators, times = nrow(grid))
 row.names(design) <- NULL
@@ -126,6 +193,8 @@ config_path <- file.path(results, "run_config.csv")
 code_hash <- paste(unname(tools::md5sum(c(
   file.path(script_dir, "run_sem_models.R"),
   file.path(script_dir, "R", "sem_models.R"),
+  file.path(script_dir, "R", "sem_power.R"),
+  file.path(script_dir, "R", "sem_summaries.R"),
   file.path(script_dir, "..", "_support", "R", "missingness.R")))),
   collapse = ":")
 run_config <- data.frame(
@@ -134,6 +203,13 @@ run_config <- data.frame(
   models = paste(names(models), collapse = ","),
   distributions = paste(opts$distributions, collapse = ","),
   missingness = paste(opts$missingness, collapse = ","),
+  truth = paste(opts$truth, collapse = ","),
+  regions = paste(opts$regions, collapse = ","),
+  power_calibration_file = opts$power_calibration_file %||% "",
+  power_calibration_hash = if (is.null(opts$power_calibration_file)) "" else
+    unname(tools::md5sum(opts$power_calibration_file)),
+  shard_index = opts$shard_index, shard_count = opts$shard_count,
+  max_cells = opts$max_cells %||% "",
   seed_base = opts$seed_base, code_hash = code_hash,
   stringsAsFactors = FALSE)
 if (file.exists(config_path)) {
@@ -154,23 +230,34 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
   data.frame(
     cell_id = cell$cell_id, model_id = cell$model_id,
     model_label = cell$model_label, distribution = cell$distribution,
-    missingness = cell$missingness, estimator = estimator, p = cell$p,
+    missingness = cell$missingness, truth = cell$truth,
+    analysis_region = cell$analysis_region, pair_id = cell$pair_id,
+    alternative_effect = cell$alternative_effect,
+    population_fml = cell$population_fml,
+    estimator = estimator, p = cell$p,
     expected_df = cell$expected_df, n = cell$n, rep = rep_id, seed = seed,
     fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
+    flip_expected_mammen_ok = FALSE,
     flip_corrected_ok = FALSE, flip_nominal_geometry = FALSE,
     flip_corrected_nominal_geometry = FALSE,
     fit_error = "", fmg_error = "", mlr_error = "", flip_error = "",
+    flip_expected_mammen_error = "",
     flip_corrected_error = "",
     realized_missing_eligible = NA_real_, fitted_df = NA_integer_,
     npar = NA_integer_, fit_seconds = NA_real_, fmg_seconds = NA_real_,
     mlr_seconds = NA_real_, flip_seconds = NA_real_,
+    flip_expected_mammen_seconds = NA_real_,
     flip_corrected_seconds = NA_real_, total_seconds = NA_real_,
     p_lrt_naive = NA_real_, p_lrt_mlr = NA_real_, p_lrt_sb = NA_real_,
     p_lrt_ss = NA_real_, p_lrt_peba4 = NA_real_, p_lrt_all = NA_real_,
-    p_flip_effective = NA_real_, p_flip_corrected = NA_real_,
+    p_flip_effective = NA_real_, p_flip_expected_mammen = NA_real_,
+    p_flip_corrected = NA_real_,
     p_score_sb = NA_real_,
     p_score_ss = NA_real_, p_score_peba4 = NA_real_,
-    p_score_all = NA_real_, flip_statistic = NA_real_,
+    p_score_all = NA_real_,
+    p_score_corrected_sb = NA_real_, p_score_corrected_ss = NA_real_,
+    p_score_corrected_peba4 = NA_real_, p_score_corrected_all = NA_real_,
+    flip_statistic = NA_real_,
     flip_df = NA_integer_, flip_tangent_rank = NA_integer_,
     flip_corrected_statistic = NA_real_, flip_corrected_df = NA_integer_,
     flip_corrected_tangent_rank = NA_integer_,
@@ -179,9 +266,10 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
 
 one_rep <- function(cell, rep_id) {
   begin <- proc.time()[["elapsed"]]
-  seed <- sem_seed(opts$seed_base + cell$cell_id * 100003L + rep_id)
+  seed <- sem_seed(opts$seed_base + cell$pair_id * 100003L + rep_id)
   model <- models[[cell$model_id]]
-  sampler <- samplers[[paste(cell$model_id, cell$distribution, sep = "::")]]
+  sampler <- samplers[[paste(
+    cell$model_id, cell$truth, cell$distribution, sep = "::")]]
   if (inherits(sampler, "error")) {
     return(do.call(rbind, lapply(opts$estimators, function(estimator) {
       out <- empty_rep(cell, rep_id, seed, estimator)
@@ -317,6 +405,26 @@ one_rep <- function(cell, rep_id) {
     }
 
     if (estimator == "FIML") {
+      expected_mammen_begin <- proc.time()[["elapsed"]]
+      expected_mammen <- tryCatch(
+        magmaan::global_score_flip_test(
+          fit, n_flips = opts$flips, seed = seed + 900001L,
+          multiplier = "mammen", sensitivity = "expected"),
+        error = function(e) e)
+      out$flip_expected_mammen_seconds <-
+        proc.time()[["elapsed"]] - expected_mammen_begin
+      if (inherits(expected_mammen, "error")) {
+        out$flip_expected_mammen_error <- conditionMessage(expected_mammen)
+      } else {
+        out$p_flip_expected_mammen <- expected_mammen$p_effective
+        out$flip_expected_mammen_ok <-
+          is.finite(out$p_flip_expected_mammen)
+        if (!out$flip_expected_mammen_ok) {
+          out$flip_expected_mammen_error <-
+            "expected-sensitivity Mammen p-value is non-finite"
+        }
+      }
+
       corrected_begin <- proc.time()[["elapsed"]]
       corrected <- tryCatch(
         magmaan::global_score_flip_test(
@@ -329,6 +437,15 @@ one_rep <- function(cell, rep_id) {
         out$flip_corrected_error <- conditionMessage(corrected)
       } else {
         out$p_flip_corrected <- corrected$p_effective
+        corrected_score_fmg <- function(method, param = 4) tryCatch(
+          magmaan:::infer_fmg_test(
+            corrected$statistic_effective, corrected$df,
+            corrected$eigenvalues, method = method, param = param)$p_value,
+          error = function(e) NA_real_)
+        out$p_score_corrected_sb <- corrected$p_mean_scaled
+        out$p_score_corrected_ss <- corrected_score_fmg("ss")
+        out$p_score_corrected_peba4 <- corrected_score_fmg("peba", 4)
+        out$p_score_corrected_all <- corrected$p_mixture
         out$flip_corrected_statistic <- corrected$statistic_effective
         out$flip_corrected_df <- as.integer(corrected$df)
         out$flip_corrected_tangent_rank <-
@@ -403,9 +520,11 @@ raw <- raw[order(raw$cell_id, raw$rep,
 row.names(raw) <- NULL
 wall_seconds <- proc.time()[["elapsed"]] - wall_begin
 write_csv(raw, file.path(results, "replications.csv"))
+sem_write_method_summaries(raw, results)
 
 group_vars <- c("model_id", "model_label", "estimator", "distribution",
-                "missingness", "p", "expected_df")
+                "missingness", "analysis_region", "truth",
+                "alternative_effect", "population_fml", "p", "expected_df")
 group_id <- interaction(raw[group_vars], drop = TRUE, lex.order = TRUE)
 mean_or_na <- function(x) {
   if (all(is.na(x))) NA_real_ else mean(as.numeric(x), na.rm = TRUE)
@@ -418,6 +537,8 @@ timing <- do.call(rbind, lapply(split(seq_len(nrow(raw)), group_id), function(ii
     fmg_seconds = mean_or_na(z$fmg_seconds),
     mlr_seconds = mean_or_na(z$mlr_seconds),
     flip_seconds = mean_or_na(z$flip_seconds),
+    flip_expected_mammen_seconds = mean_or_na(
+      z$flip_expected_mammen_seconds),
     flip_corrected_seconds = mean_or_na(z$flip_corrected_seconds),
     total_seconds = mean_or_na(z$total_seconds),
     fit_success_rate = mean(z$fit_ok),
@@ -442,23 +563,18 @@ observed_speedup <- runtime_cpu_seconds / wall_seconds
 setup_seconds <- sum(calibration$calibration_seconds)
 seconds_per_full_sweep <- sum(timing$total_seconds)
 projection <- do.call(rbind, lapply(c(100L, 500L, 2000L), function(reps) {
-  panels <- c(null_only = 1L, null_plus_power = 2L)
-  do.call(rbind, lapply(names(panels), function(panel) {
-    scenario_multiplier <- panels[[panel]]
-    projected_runtime <- seconds_per_full_sweep * reps * scenario_multiplier /
-      max(1, observed_speedup)
-    data.frame(
-      panel = panel, reps_per_cell = reps,
-      cells = nrow(grid) * length(opts$estimators) * scenario_multiplier,
-      total_replications = reps * nrow(grid) * length(opts$estimators) *
-        scenario_multiplier,
-      projected_setup_seconds = setup_seconds,
-      projected_runtime_seconds = projected_runtime,
-      projected_wall_seconds = setup_seconds + projected_runtime,
-      projected_wall_hours = (setup_seconds + projected_runtime) / 3600,
-      observed_parallel_speedup = observed_speedup,
-      stringsAsFactors = FALSE)
-  }))
+  projected_runtime <- seconds_per_full_sweep * reps /
+    max(1, observed_speedup)
+  data.frame(
+    panel = "selected_design", reps_per_cell = reps,
+    cells = nrow(grid) * length(opts$estimators),
+    total_replications = reps * nrow(grid) * length(opts$estimators),
+    projected_setup_seconds = setup_seconds,
+    projected_runtime_seconds = projected_runtime,
+    projected_wall_seconds = setup_seconds + projected_runtime,
+    projected_wall_hours = (setup_seconds + projected_runtime) / 3600,
+    observed_parallel_speedup = observed_speedup,
+    stringsAsFactors = FALSE)
 }))
 write_csv(projection, file.path(results, "timing_projection.csv"))
 write_metadata(file.path(results, "metadata.csv"), list(
@@ -466,7 +582,10 @@ write_metadata(file.path(results, "metadata.csv"), list(
   chunk_size = opts$chunk_size,
   cores = opts$cores, cells = nrow(grid) * length(opts$estimators),
   distributions = opts$distributions, missingness = opts$missingness,
+  truth = opts$truth, regions = opts$regions,
   models = names(models), estimators = opts$estimators,
+  power_calibration_file = opts$power_calibration_file %||% "",
+  alpha_convention = "p <= 0.05; p < 0.05 retained as sensitivity",
   seed_base = opts$seed_base,
   setup_seconds = setup_seconds, runtime_wall_seconds = wall_seconds,
   runtime_cpu_seconds = runtime_cpu_seconds,
@@ -475,6 +594,8 @@ write_metadata(file.path(results, "metadata.csv"), list(
   mlr_nonfinite_or_failures = sum(!raw$mlr_ok),
   flip_failures = sum(!raw$flip_ok),
   flip_non_nominal_geometry = sum(raw$flip_ok & !raw$flip_nominal_geometry),
+  flip_expected_mammen_failures = sum(
+    raw$estimator == "FIML" & !raw$flip_expected_mammen_ok),
   flip_corrected_failures = sum(
     raw$estimator == "FIML" & !raw$flip_corrected_ok),
   flip_corrected_non_nominal_geometry = sum(
@@ -485,14 +606,15 @@ write_metadata(file.path(results, "metadata.csv"), list(
 cat(sprintf(
   "setup=%.1fs runtime_wall=%.1fs observed_speedup=%.2fx failures=%d/%d\n",
   setup_seconds, wall_seconds, observed_speedup, sum(!raw$fit_ok), nrow(raw)))
-print(timing[, c("model_id", "distribution", "missingness", "total_seconds",
+print(timing[, c("model_id", "distribution", "missingness", "truth",
+                 "total_seconds",
                  "estimator",
                  "fit_success_rate", "fmg_success_rate", "mlr_finite_rate",
                  "flip_success_rate", "flip_nominal_geometry_rate",
                  "flip_corrected_success_rate",
                  "flip_corrected_nominal_geometry_rate")],
       row.names = FALSE, digits = 3)
-cat("\nProjected wall time for null-only and doubled null-plus-power panels:\n")
+cat("\nProjected wall time for the selected design:\n")
 print(projection[, c("panel", "reps_per_cell", "total_replications",
                      "projected_wall_seconds", "projected_wall_hours")],
       row.names = FALSE, digits = 3)
