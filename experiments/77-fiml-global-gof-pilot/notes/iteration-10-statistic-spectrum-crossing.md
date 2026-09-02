@@ -92,3 +92,42 @@ cell-specific reversals. For the observed-sensitivity score, cross-pairing
 reveals much stronger co-movement: the statistic and spectrum should not be
 interpreted as separable corrections. These results are a one-model pilot and
 must be repeated after the paper's model and MAR panels are frozen.
+
+## LRT implementation and increasing-N audit
+
+A same-data oracle rerun compared magmaan with lavaan over 105 FIML/MLR fits
+spanning complete, MCAR, MAR, and MNAR data and seven outcome laws. The maximum
+absolute difference was `3.62e-6` for the unscaled LRT, `5.60e-3` for the
+scaled MLR statistic, and `7.03e-5` for its p-value. There were no degrees-of-
+freedom or 5% decision mismatches. This directly validates the FIML LRT base
+statistic and scalar MLR path; lavaan does not provide an oracle for the FMG
+full spectrum.
+
+The expected-score crossing was then repeated at larger sample sizes. The
+table gives native LRT/FMG pEBA(4) rejection. The `n = 120` and `n = 500`
+columns use 1,000 and 500 replications per cell; `n = 2000` uses 250.
+
+| Generator | Missingness | n = 120 | n = 500 | n = 2000 |
+|---|---:|---:|---:|---:|
+| Normal | Complete | .063 | .046 | .052 |
+| Normal | MAR | .087 | .050 | .076 |
+| VM2 | Complete | .144 | .084 | .068 |
+| VM2 | MAR | .241 | .176 | .236 |
+| IG2 | Complete | .097 | .052 | .044 |
+| IG2 | MAR | .162 | .194 | .592 |
+
+The complete-data and normal-MAR conditions move toward nominal calibration.
+The nonnormal-MAR conditions do not. This is the signature of Gaussian-FIML
+pseudo-true target drift rather than a generic observed-versus-expected
+information error. Under nonnormal MAR, different missingness patterns can
+have different selected conditional moments, so the common Gaussian mean and
+covariance model fitted by FIML need not have the generating SEM moments as its
+pseudo-true target. A robust spectrum changes the null fluctuation scale but
+cannot remove a positive population discrepancy between the restricted and
+saturated observed-data likelihoods.
+
+The projected score is not immune to this drift at larger N. Its native
+pEBA(4) rejection under VM2 MAR rose from .049 to .086 to .176, and under IG2
+MAR from .065 to .176 to .608. Its attractive `n = 120` behavior in these
+stress cells therefore must not be called Type-I calibration. Both methods are
+eventually detecting observed-data pseudo-model failure.
