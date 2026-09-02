@@ -3118,6 +3118,9 @@ global_score_flip_test(spec::LatentStructure pt,
       ScoreFlipMultiplierStudentization::WeightedMeat;
   const bool observed_sensitivity =
       options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+  const bool observed_metric =
+      global_options.metric ==
+      GlobalScoreFlipOptions::Metric::ObservedInformation;
   if (observed_sensitivity && options.center_multiplier_scores) {
     return std::unexpected(make_err(
         PostError::Kind::NumericIssue,
@@ -3222,8 +3225,8 @@ global_score_flip_test(spec::LatentStructure pt,
   const double tangent_min = tangent_rank > 0
       ? svd.singularValues()(tangent_rank - 1) : 0.0;
 
-  Eigen::MatrixXd sensitivity = geometry->information;
-  if (observed_sensitivity) {
+  Eigen::MatrixXd observed_information;
+  if (observed_sensitivity || observed_metric) {
     auto observed = estimate::fiml::fiml_saturated_observed_information(
         raw, pack, eval->moments, include_means);
     if (!observed.has_value()) return std::unexpected(observed.error());
@@ -3232,8 +3235,12 @@ global_score_flip_test(spec::LatentStructure pt,
           PostError::Kind::NumericIssue,
           "global_score_flip_test: observed sensitivity has incompatible dimensions"));
     }
-    sensitivity = std::move(*observed);
+    observed_information = std::move(*observed);
   }
+  const Eigen::MatrixXd& sensitivity = observed_sensitivity
+      ? observed_information : geometry->information;
+  const Eigen::MatrixXd& metric = observed_metric
+      ? observed_information : geometry->information;
   Eigen::MatrixXd G = D;
   if (tangent_rank > 0) {
     auto Ainv = invert_symmetric(
@@ -3244,7 +3251,7 @@ global_score_flip_test(spec::LatentStructure pt,
         K * ((*Ainv) * (K.transpose() * sensitivity * D));
   }
   Eigen::MatrixXd V_identity =
-      G.transpose() * geometry->information * G;
+      G.transpose() * metric * G;
   V_identity = 0.5 * (V_identity + V_identity.transpose());
 
   auto score_rows =
@@ -3351,8 +3358,7 @@ global_score_flip_test(spec::LatentStructure pt,
   const auto asymptotic_begin = Clock::now();
   const Eigen::MatrixXd B1 = scores.transpose() * scores;
   auto asymptotic = score_for_subspace_robust_impl(
-      {}, score_full, geometry->information, geometry->information, B1, K, D,
-      observed_sensitivity ? &sensitivity : nullptr);
+      {}, score_full, metric, metric, B1, K, D, &sensitivity);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
   const double asymptotic_seconds = std::chrono::duration<double>(
       Clock::now() - asymptotic_begin).count();
@@ -3417,6 +3423,7 @@ global_score_flip_test(spec::LatentStructure pt,
 
   GlobalScoreFlipTestResult out;
   out.flip = std::move(flip);
+  out.metric = global_options.metric;
   out.saturated_moment_dim = static_cast<int>(moment_dim);
   out.tangent_rank = static_cast<int>(tangent_rank);
   out.tangent_min_singular_value = tangent_min;
@@ -3447,6 +3454,12 @@ global_score_flip_test_ml2s(
     return std::unexpected(make_err(
         PostError::Kind::NumericIssue,
         "global_score_flip_test_ml2s: observed sensitivity is not defined for the two-stage score construction"));
+  }
+  if (global_options.metric ==
+      GlobalScoreFlipOptions::Metric::ObservedInformation) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "global_score_flip_test_ml2s: observed metric is not defined for the two-stage score construction"));
   }
   if (options.calibration != ScoreFlipCalibration::Effective &&
       options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
@@ -3803,6 +3816,7 @@ global_score_flip_test_ml2s(
 
   GlobalScoreFlipTestResult out;
   out.flip = std::move(flip);
+  out.metric = global_options.metric;
   out.saturated_moment_dim = static_cast<int>(moment_dim);
   out.tangent_rank = static_cast<int>(tangent_rank);
   out.tangent_min_singular_value = tangent_min;

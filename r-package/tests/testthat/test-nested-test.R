@@ -144,4 +144,10 @@ test_that("observed score sensitivity enforces its supported calibration", {
     ),
     "not defined for ML2S"
   )
+  expect_error(
+    global_score_flip_test(
+      list(estimator = "ML2S"), metric = "observed"
+    ),
+    "observed metric is not defined for ML2S"
+  )
 })

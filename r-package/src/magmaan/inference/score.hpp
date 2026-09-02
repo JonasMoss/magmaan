@@ -599,6 +599,17 @@ struct ScoreFlipTestResult {
 struct GlobalScoreFlipOptions {
   ScoreFlipOptions resampling;
 
+  // Positive-definite metric used by the observed score quadratic and as the
+  // bread of its generalized eigenvalue spectrum. ExpectedInformation retains
+  // the established pattern-conditional Fisher construction. ObservedInformation
+  // is an opt-in diagnostic and fails closed if the realized H0 information is
+  // not positive definite on the tested complement.
+  enum class Metric {
+    ExpectedInformation,
+    ObservedInformation,
+  };
+  Metric metric = Metric::ExpectedInformation;
+
   GlobalScoreFlipOptions() {
     resampling.calibration = ScoreFlipCalibration::Effective;
   }
@@ -606,6 +617,8 @@ struct GlobalScoreFlipOptions {
 
 struct GlobalScoreFlipTestResult {
   ScoreFlipTestResult flip;
+  GlobalScoreFlipOptions::Metric metric =
+      GlobalScoreFlipOptions::Metric::ExpectedInformation;
   int saturated_moment_dim = 0;
   int tangent_rank = 0;
   double tangent_min_singular_value = 0.0;

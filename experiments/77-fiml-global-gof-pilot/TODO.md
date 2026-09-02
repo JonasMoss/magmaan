@@ -16,6 +16,14 @@ is frozen.
 - [x] Drop the multiplier from the planned paper comparison. Preserve existing
   multiplier results and diagnostics, but do not spend the publication design
   on further multiplier variants.
+- [x] Smoke-audit the opt-in full-observed global-score construction, which uses the
+  realized H0 information for the nuisance projection, score quadratic, and
+  robust-spectrum bread. In 300 `n=120` fits across the five pilot models,
+  normal/VM/IG generators, and complete/MAR data, 74 calls failed because the
+  projected information was not positive definite. Among the 226 usable calls,
+  score pEBA(4) rejected 58%, compared with 2.7% for the observed-sensitivity
+  score retaining the Fisher metric. Keep the implementation as a diagnostic,
+  but do not put this variant in the planned paper battery.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next

@@ -177,6 +177,11 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
 #'   model.
 #' @param data Raw fitting data for complete-data ML. FIML and ML2S use
 #'   `fit$raw_data`.
+#' @param metric Score-quadratic and robust-spectrum bread. `"expected"` uses
+#'   the stable pattern-conditional Fisher information. `"observed"` uses the
+#'   realized H0 likelihood information and fails if it is not positive
+#'   definite on the tested complement. The latter is an experimental ML/FIML
+#'   diagnostic and is not defined for ML2S.
 #' @inheritParams score_flip_test
 #' @return A `magmaan_global_score_flip_test` list containing the effective
 #'   multiplier result, asymptotic comparators, and saturated/tangent geometry
@@ -188,10 +193,12 @@ global_score_flip_test <- function(
                    "centered-exponential"),
     two_point_skewness = 1, center_multiplier_scores = FALSE,
     multiplier_studentization = c("none", "weighted-meat"),
-    sensitivity = c("expected", "observed")) {
+    sensitivity = c("expected", "observed"),
+    metric = c("expected", "observed")) {
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
   sensitivity <- match.arg(sensitivity)
+  metric <- match.arg(metric)
   estimator <- toupper(fit$estimator %||% "ML")
   if (!estimator %in% c("ML", "FIML", "ML2S")) {
     stop("global_score_flip_test(): `fit` must use ML, FIML, or normal-theory ML2S",
@@ -221,6 +228,10 @@ global_score_flip_test <- function(
   }
   if (sensitivity == "observed" && estimator == "ML2S") {
     stop("global_score_flip_test(): observed sensitivity is not defined for ML2S",
+         call. = FALSE)
+  }
+  if (metric == "observed" && estimator == "ML2S") {
+    stop("global_score_flip_test(): observed metric is not defined for ML2S",
          call. = FALSE)
   }
   if (sensitivity == "observed" && isTRUE(center_multiplier_scores)) {
@@ -253,12 +264,13 @@ global_score_flip_test <- function(
   out <- magmaan_core$inference_global_score_flip_test(
       fit, raw, n_flips, seed, multiplier, two_point_skewness,
       isTRUE(center_multiplier_scores), multiplier_studentization,
-      sensitivity)
+      sensitivity, metric)
   out$multiplier <- multiplier
   out$two_point_skewness <- two_point_skewness
   out$center_multiplier_scores <- isTRUE(center_multiplier_scores)
   out$multiplier_studentization <- multiplier_studentization
   out$sensitivity <- sensitivity
+  out$metric <- metric
   class(out) <- c("magmaan_global_score_flip_test", "list")
   out
 }

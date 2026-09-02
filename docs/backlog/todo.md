@@ -654,7 +654,11 @@ when they next change.
   comparison retains expected-sensitivity score tests as primary. A
   three-corner multiplier ablation (expected/Rademacher, expected/Mammen,
   observed/Mammen) separates weight-law and projection changes; score-FMG is
-  recorded under both geometries. Sparse omitted-residual and diffuse omitted-method-factor
+  recorded under both geometries. A subsequent 300-fit `n=120` smoke made the
+  realized H0 information the quadratic and spectrum metric as well: 74 calls
+  failed positive-definiteness and usable score-pEBA4 calls rejected 58%, so
+  keep that full-observed construction diagnostic-only and do not add it to
+  the planned primary battery. Sparse omitted-residual and diffuse omitted-method-factor
   alternatives are tuned per model to 50% asymptotic normal-theory LR power at
   `n=200`, then compared with method/cell-specific empirical-null cutoffs. The
   launched Modal design had 165 one-cell focus shards (55 mechanisms x

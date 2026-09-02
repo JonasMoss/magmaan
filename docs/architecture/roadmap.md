@@ -875,7 +875,12 @@ an unconstrained gradient test to constrained solutions.
   scores off the local SEM moment tangent. Its opt-in observed-sensitivity
   variant instead uses the analytic realized saturated-moment Hessian at the
   restricted fitted moments for the tangent projection; a projection identity is unit-gated against the
-  existing structural observed-H1 information. The tested dimension is therefore
+  existing structural observed-H1 information. A separate opt-in global-score
+  metric can now use that same observed H0 information for the score quadratic
+  and generalized-eigenvalue bread, while the established default retains the
+  conditional Fisher metric. The full-observed variant fails closed when its
+  tested-complement information is not positive definite and is unavailable
+  for ML2S. The tested dimension is therefore
   the saturated mean/covariance dimension minus the numerical tangent rank; no saturated H1
   fit and no refit per multiplier draw is required. Complete data and an
   all-observed FIML mask are unit-gated to the same statistic and multiplier
@@ -903,6 +908,14 @@ an unconstrained gradient test to constrained solutions.
   therefore report the prespecified-rank denominator separately and fail closed
   on non-nominal geometry rather than treating a finite p-value alone as full
   test success.
+  A 300-fit, 30-cell `n=120` triage of the full-observed metric across all five
+  pilot models, normal/VM/IG generators, and complete/MAR data found only
+  226/300 usable calls; all 74 failures were non-positive-definite projected
+  observed information. Among usable calls, observed-metric score pEBA4
+  rejected 58%, versus 2.7% for the established observed-sensitivity/Fisher-
+  metric score pEBA4 on all 300 fits. Ten replications per cell are not a size
+  study, but the magnitude and conditioning failures rule this construction
+  out as a default; retain it only as a diagnostic comparator.
   Experiment 62's 300-replication
   probe found the basic test extremely conservative, effective flips close to
   nominal, and standardization a small improvement concentrated at n=30; the

@@ -8242,6 +8242,24 @@ const char* score_flip_sensitivity_string(
       ? "observed" : "expected";
 }
 
+magmaan::inference::frontier::GlobalScoreFlipOptions::Metric
+global_score_metric_from_string(const std::string& metric) {
+  using Metric =
+      magmaan::inference::frontier::GlobalScoreFlipOptions::Metric;
+  if (metric == "expected") return Metric::ExpectedInformation;
+  if (metric == "observed") return Metric::ObservedInformation;
+  Rcpp::stop("magmaan: global_score_flip_test metric must be 'expected' or "
+             "'observed'");
+  return Metric::ExpectedInformation;
+}
+
+const char* global_score_metric_string(
+    magmaan::inference::frontier::GlobalScoreFlipOptions::Metric metric) {
+  using Metric =
+      magmaan::inference::frontier::GlobalScoreFlipOptions::Metric;
+  return metric == Metric::ObservedInformation ? "observed" : "expected";
+}
+
 Rcpp::List score_flip_result_to_r(
     const magmaan::inference::frontier::ScoreFlipTestResult& out) {
   return Rcpp::List::create(
@@ -8297,6 +8315,7 @@ Rcpp::List score_flip_result_to_r(
 Rcpp::List global_score_flip_result_to_r(
     const magmaan::inference::frontier::GlobalScoreFlipTestResult& out) {
   Rcpp::List result = score_flip_result_to_r(out.flip);
+  result["metric"] = global_score_metric_string(out.metric);
   result["saturated_moment_dim"] = out.saturated_moment_dim;
   result["tangent_rank"] = out.tangent_rank;
   result["tangent_min_singular_value"] = out.tangent_min_singular_value;
@@ -8435,7 +8454,8 @@ Rcpp::List inference_global_score_flip_test(
     double two_point_skewness = 1.0,
     bool center_multiplier_scores = false,
     std::string multiplier_studentization = "none",
-    std::string sensitivity = "expected") {
+    std::string sensitivity = "expected",
+    std::string metric = "expected") {
   if (n_flips < 1) {
     Rcpp::stop("magmaan: global_score_flip_test n_flips must be positive");
   }
@@ -8464,6 +8484,7 @@ Rcpp::List inference_global_score_flip_test(
           multiplier_studentization);
   options.resampling.sensitivity =
       score_flip_sensitivity_from_string(sensitivity);
+  options.metric = global_score_metric_from_string(metric);
   magmaan::post_expected<
       magmaan::inference::frontier::GlobalScoreFlipTestResult> out;
   if (estimator == "ML2S") {

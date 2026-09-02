@@ -239,15 +239,18 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
     fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
     flip_expected_mammen_ok = FALSE,
     flip_corrected_ok = FALSE, flip_nominal_geometry = FALSE,
+    score_observed_metric_ok = FALSE,
     flip_corrected_nominal_geometry = FALSE,
     fit_error = "", fmg_error = "", mlr_error = "", flip_error = "",
     flip_expected_mammen_error = "",
     flip_corrected_error = "",
+    score_observed_metric_error = "",
     realized_missing_eligible = NA_real_, fitted_df = NA_integer_,
     npar = NA_integer_, fit_seconds = NA_real_, fmg_seconds = NA_real_,
     mlr_seconds = NA_real_, flip_seconds = NA_real_,
     flip_expected_mammen_seconds = NA_real_,
-    flip_corrected_seconds = NA_real_, total_seconds = NA_real_,
+    flip_corrected_seconds = NA_real_,
+    score_observed_metric_seconds = NA_real_, total_seconds = NA_real_,
     p_lrt_naive = NA_real_, p_lrt_mlr = NA_real_, p_lrt_sb = NA_real_,
     p_lrt_ss = NA_real_, p_lrt_peba4 = NA_real_, p_lrt_all = NA_real_,
     p_flip_effective = NA_real_, p_flip_expected_mammen = NA_real_,
@@ -257,10 +260,17 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
     p_score_all = NA_real_,
     p_score_corrected_sb = NA_real_, p_score_corrected_ss = NA_real_,
     p_score_corrected_peba4 = NA_real_, p_score_corrected_all = NA_real_,
+    p_score_observed_metric_sb = NA_real_,
+    p_score_observed_metric_ss = NA_real_,
+    p_score_observed_metric_peba4 = NA_real_,
+    p_score_observed_metric_all = NA_real_,
     flip_statistic = NA_real_,
     flip_df = NA_integer_, flip_tangent_rank = NA_integer_,
     flip_corrected_statistic = NA_real_, flip_corrected_df = NA_integer_,
     flip_corrected_tangent_rank = NA_integer_,
+    score_observed_metric_statistic = NA_real_,
+    score_observed_metric_df = NA_integer_,
+    score_observed_metric_tangent_rank = NA_integer_,
     stringsAsFactors = FALSE)
 }
 
@@ -459,6 +469,47 @@ one_rep <- function(cell, rep_id) {
             "corrected global multiplier p-value is non-finite"
         }
       }
+
+      observed_metric_begin <- proc.time()[["elapsed"]]
+      observed_metric <- tryCatch(
+        magmaan::global_score_flip_test(
+          fit, n_flips = 1L, seed = seed + 900001L,
+          multiplier = "rademacher", sensitivity = "observed",
+          metric = "observed"),
+        error = function(e) e)
+      out$score_observed_metric_seconds <-
+        proc.time()[["elapsed"]] - observed_metric_begin
+      if (inherits(observed_metric, "error")) {
+        out$score_observed_metric_error <- conditionMessage(observed_metric)
+      } else {
+        observed_metric_fmg <- function(method, param = 4) tryCatch(
+          magmaan:::infer_fmg_test(
+            observed_metric$statistic_effective, observed_metric$df,
+            observed_metric$eigenvalues,
+            method = method, param = param)$p_value,
+          error = function(e) NA_real_)
+        out$p_score_observed_metric_sb <- observed_metric$p_mean_scaled
+        out$p_score_observed_metric_ss <- observed_metric_fmg("ss")
+        out$p_score_observed_metric_peba4 <-
+          observed_metric_fmg("peba", 4)
+        out$p_score_observed_metric_all <- observed_metric$p_mixture
+        out$score_observed_metric_statistic <-
+          observed_metric$statistic_effective
+        out$score_observed_metric_df <- as.integer(observed_metric$df)
+        out$score_observed_metric_tangent_rank <-
+          as.integer(observed_metric$tangent_rank)
+        out$score_observed_metric_ok <- all(is.finite(c(
+          out$p_score_observed_metric_sb,
+          out$p_score_observed_metric_ss,
+          out$p_score_observed_metric_peba4,
+          out$p_score_observed_metric_all))) &&
+          identical(out$score_observed_metric_df,
+                    as.integer(cell$expected_df))
+        if (!out$score_observed_metric_ok) {
+          out$score_observed_metric_error <-
+            "full-observed score spectrum is non-finite or has non-nominal geometry"
+        }
+      }
     }
     out$total_seconds <- proc.time()[["elapsed"]] - estimator_begin +
       em_seconds / length(opts$estimators)
@@ -540,6 +591,8 @@ timing <- do.call(rbind, lapply(split(seq_len(nrow(raw)), group_id), function(ii
     flip_expected_mammen_seconds = mean_or_na(
       z$flip_expected_mammen_seconds),
     flip_corrected_seconds = mean_or_na(z$flip_corrected_seconds),
+    score_observed_metric_seconds = mean_or_na(
+      z$score_observed_metric_seconds),
     total_seconds = mean_or_na(z$total_seconds),
     fit_success_rate = mean(z$fit_ok),
     fmg_success_rate = mean(z$fmg_ok),
@@ -552,6 +605,10 @@ timing <- do.call(rbind, lapply(split(seq_len(nrow(raw)), group_id), function(ii
     flip_corrected_nominal_geometry_rate =
       if (z$estimator[[1L]] == "FIML") {
         mean(z$flip_corrected_nominal_geometry)
+      } else NA_real_,
+    score_observed_metric_success_rate =
+      if (z$estimator[[1L]] == "FIML") {
+        mean(z$score_observed_metric_ok)
       } else NA_real_,
     stringsAsFactors = FALSE)
 }))
@@ -600,7 +657,9 @@ write_metadata(file.path(results, "metadata.csv"), list(
     raw$estimator == "FIML" & !raw$flip_corrected_ok),
   flip_corrected_non_nominal_geometry = sum(
     raw$estimator == "FIML" & raw$flip_corrected_ok &
-      !raw$flip_corrected_nominal_geometry)),
+      !raw$flip_corrected_nominal_geometry),
+  score_observed_metric_failures = sum(
+    raw$estimator == "FIML" & !raw$score_observed_metric_ok)),
   packages = "magmaan")
 
 cat(sprintf(
@@ -612,7 +671,8 @@ print(timing[, c("model_id", "distribution", "missingness", "truth",
                  "fit_success_rate", "fmg_success_rate", "mlr_finite_rate",
                  "flip_success_rate", "flip_nominal_geometry_rate",
                  "flip_corrected_success_rate",
-                 "flip_corrected_nominal_geometry_rate")],
+                 "flip_corrected_nominal_geometry_rate",
+                 "score_observed_metric_success_rate")],
       row.names = FALSE, digits = 3)
 cat("\nProjected wall time for the selected design:\n")
 print(projection[, c("panel", "reps_per_cell", "total_replications",

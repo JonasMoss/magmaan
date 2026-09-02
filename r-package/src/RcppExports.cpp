@@ -2012,8 +2012,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // inference_global_score_flip_test
-Rcpp::List inference_global_score_flip_test(Rcpp::List fit, SEXP raw, int n_flips, double seed, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization, std::string sensitivity);
-RcppExport SEXP _magmaan_inference_global_score_flip_test(SEXP fitSEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP, SEXP sensitivitySEXP) {
+Rcpp::List inference_global_score_flip_test(Rcpp::List fit, SEXP raw, int n_flips, double seed, std::string multiplier, double two_point_skewness, bool center_multiplier_scores, std::string multiplier_studentization, std::string sensitivity, std::string metric);
+RcppExport SEXP _magmaan_inference_global_score_flip_test(SEXP fitSEXP, SEXP rawSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP, SEXP center_multiplier_scoresSEXP, SEXP multiplier_studentizationSEXP, SEXP sensitivitySEXP, SEXP metricSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2026,7 +2026,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type center_multiplier_scores(center_multiplier_scoresSEXP);
     Rcpp::traits::input_parameter< std::string >::type multiplier_studentization(multiplier_studentizationSEXP);
     Rcpp::traits::input_parameter< std::string >::type sensitivity(sensitivitySEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_global_score_flip_test(fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity));
+    Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_global_score_flip_test(fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity, metric));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3998,7 +3999,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 7},
     {"_magmaan_inference_score_flip_test", (DL_FUNC) &_magmaan_inference_score_flip_test, 11},
     {"_magmaan_inference_score_flip_test_model", (DL_FUNC) &_magmaan_inference_score_flip_test_model, 11},
-    {"_magmaan_inference_global_score_flip_test", (DL_FUNC) &_magmaan_inference_global_score_flip_test, 9},
+    {"_magmaan_inference_global_score_flip_test", (DL_FUNC) &_magmaan_inference_global_score_flip_test, 10},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},

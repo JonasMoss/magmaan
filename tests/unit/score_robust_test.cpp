@@ -1897,6 +1897,8 @@ TEST_CASE("frontier global score flip uses the curved SEM complement") {
   CHECK(masked->flip.df == 2);
   CHECK(masked->flip.n_flips == 127);
   CHECK(masked->flip.p_value == masked->flip.p_effective);
+  CHECK(masked->metric ==
+        inf::frontier::GlobalScoreFlipOptions::Metric::ExpectedInformation);
   CHECK(masked->flip.statistic_effective ==
         doctest::Approx(complete->flip.statistic_effective).epsilon(1e-9));
   CHECK(masked->flip.p_effective == complete->flip.p_effective);
@@ -2028,6 +2030,21 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
   CHECK(std::isfinite(corrected->flip.p_effective));
   CHECK(corrected->flip.statistic_effective !=
         doctest::Approx(a->flip.statistic_effective).epsilon(1e-12));
+
+  opts.metric =
+      inf::frontier::GlobalScoreFlipOptions::Metric::ObservedInformation;
+  auto observed_metric = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  if (!observed_metric.has_value()) MESSAGE(observed_metric.error().detail);
+  REQUIRE(observed_metric.has_value());
+  CHECK(observed_metric->metric ==
+        inf::frontier::GlobalScoreFlipOptions::Metric::ObservedInformation);
+  CHECK(std::isfinite(observed_metric->flip.statistic_effective));
+  CHECK(std::isfinite(observed_metric->flip.p_mixture));
+  CHECK(observed_metric->flip.statistic_effective !=
+        doctest::Approx(corrected->flip.statistic_effective).epsilon(1e-12));
+  CHECK((observed_metric->flip.eigvals - corrected->flip.eigvals).norm() >
+        1e-12);
 }
 
 TEST_CASE("frontier global ML2S score flip uses Stage-1 EM influence") {
