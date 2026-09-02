@@ -24,6 +24,12 @@ is frozen.
   score pEBA(4) rejected 58%, compared with 2.7% for the observed-sensitivity
   score retaining the Fisher metric. Keep the implementation as a diagnostic,
   but do not put this variant in the planned paper battery.
+- [x] Add a statistic-by-spectrum crossing diagnostic for FIML LRT/FMG versus
+  projected-score pEBA(4). In a 6,000-fit one-factor pilot, neither the base
+  statistic nor the spectrum alone reproduced the expected-score calibration;
+  the native score pairing was required. The observed-sensitivity crossing
+  showed much stronger opposing movements and 63 non-positive-definite tangent
+  failures. See `notes/iteration-10-statistic-spectrum-crossing.md`.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next
