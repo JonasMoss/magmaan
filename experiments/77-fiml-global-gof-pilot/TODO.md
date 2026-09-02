@@ -30,6 +30,11 @@ is frozen.
   the native score pairing was required. The observed-sensitivity crossing
   showed much stronger opposing movements and 63 non-positive-definite tangent
   failures. See `notes/iteration-10-statistic-spectrum-crossing.md`.
+- [x] Approximate the H0 and saturated H1 Gaussian-FIML pseudo-targets under
+  VM2/IG2 MAR with 200,000-case draws, and run a Gaussian shadow null at the H0
+  pseudo-true moments. The original arms retain positive per-case LR
+  discrepancy and reject; the artificial Gaussian shadows return near nominal.
+  See `notes/iteration-11-pseudotrue-shadow.md`.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next
