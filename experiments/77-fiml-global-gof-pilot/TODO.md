@@ -35,6 +35,10 @@ is frozen.
   pseudo-true moments. The original arms retain positive per-case LR
   discrepancy and reject; the artificial Gaussian shadows return near nominal.
   See `notes/iteration-11-pseudotrue-shadow.md`.
+- [x] Express the H1 pseudo-target outside H0 using zero-under-H0 directions.
+  For the one-factor pilot these are descriptive off-diagonal shadow residual
+  covariances plus parameterization-free tetrad violations; literal
+  cross-loadings require a multi-factor follow-up.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next

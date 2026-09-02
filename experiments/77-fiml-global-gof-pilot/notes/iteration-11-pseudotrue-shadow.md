@@ -45,6 +45,39 @@ does not make the global-fit null true for the original distribution. The
 saturated Gaussian pseudo-target remains outside the one-factor model, as
 shown by the nonzero H0-H1 moment gap and positive per-case LR discrepancy.
 
+## Restrictions that are zero under H0
+
+The restricted pseudo-parameters above are not enough to demonstrate model
+failure: by construction they always lie in H0. For this one-factor model,
+literal cross-loadings do not exist. The corresponding zero-under-H0
+quantities are off-diagonal residual covariances. Holding the H0 pseudo-true
+factor component fixed, define the descriptive H1 shadow residual as
+
+`Theta_shadow,ij = Sigma_H1*,ij - Sigma_H0*,ij`, for `i != j`.
+
+The largest values are:
+
+| Generator | Residual pair | Shadow covariance | Standardized shadow value |
+|---|---|---:|---:|
+| VM2 | x3 ~~ x2 | .0287 | .0237 |
+| VM2 | x6 ~~ x2 | .0271 | .0229 |
+| VM2 | x5 ~~ x2 | .0308 | .0226 |
+| VM2 | x2 ~~ x1 | -.0258 | -.0192 |
+| IG2 | x3 ~~ x2 | .0245 | .0200 |
+| IG2 | x2 ~~ x1 | -.0266 | -.0196 |
+| IG2 | x6 ~~ x2 | .0239 | .0196 |
+| IG2 | x5 ~~ x2 | .0271 | .0195 |
+
+These are descriptive coordinates because a saturated covariance has no unique
+factor/residual decomposition. A parameterization-free demonstration uses the
+one-factor model's vanishing tetrads. At the generating correlation matrix the
+tetrads are zero to numerical precision. At the saturated FIML pseudo-target,
+the maximum absolute tetrad is .0340 for VM2 and .0313 for IG2. The largest
+violations repeatedly involve the always-observed `x1,x2` pair together with
+two variables selected for missingness. Thus H0 is explicitly false at the
+observed-data H1 pseudo-target, not merely represented by shifted parameters
+inside the best-fitting H0.
+
 ## Gaussian shadow experiment
 
 | Generator label | Arm | Mean LRT | SB reject | pEBA(4) reject | ALL reject |

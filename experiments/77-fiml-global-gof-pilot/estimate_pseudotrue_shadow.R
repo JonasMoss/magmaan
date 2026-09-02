@@ -95,6 +95,8 @@ true_value <- function(lhs, op, rhs) {
 targets <- list()
 parameter_rows <- list()
 moment_rows <- list()
+shadow_residual_rows <- list()
+tetrad_rows <- list()
 target_summary <- list()
 for (index in seq_along(opts$distributions)) {
   distribution <- opts$distributions[[index]]
@@ -151,6 +153,41 @@ for (index in seq_along(opts$distributions)) {
     moment_index$h0_pseudotrue - moment_index$h1_pseudotrue
   moment_rows[[distribution]] <- moment_index
 
+  offdiag <- which(lower.tri(target$Sigma_h1), arr.ind = TRUE)
+  shadow_residual <- target$Sigma_h1 - target$Sigma_h0
+  standardized_residual <- shadow_residual / sqrt(outer(
+    diag(target$Sigma_h1), diag(target$Sigma_h1)))
+  shadow_residual_rows[[distribution]] <- data.frame(
+    distribution = distribution,
+    lhs = model$ov[offdiag[, 1L]],
+    op = "~~",
+    rhs = model$ov[offdiag[, 2L]],
+    h0_value = 0,
+    h1_shadow_value = shadow_residual[offdiag],
+    standardized_h1_shadow_value = standardized_residual[offdiag],
+    stringsAsFactors = FALSE)
+
+  h1_cor <- stats::cov2cor(target$Sigma_h1)
+  generating_cor <- stats::cov2cor(model$Sigma)
+  tetrad_combinations <- utils::combn(seq_len(model$p), 4L)
+  tetrads <- do.call(rbind, lapply(seq_len(ncol(tetrad_combinations)),
+                                  function(k) {
+    j <- tetrad_combinations[, k]
+    tetrad_values <- function(R) c(
+      R[j[1L], j[2L]] * R[j[3L], j[4L]] -
+        R[j[1L], j[3L]] * R[j[2L], j[4L]],
+      R[j[1L], j[2L]] * R[j[3L], j[4L]] -
+        R[j[1L], j[4L]] * R[j[2L], j[3L]])
+    data.frame(
+      distribution = distribution,
+      variables = paste(model$ov[j], collapse = ","),
+      tetrad = c("ab_cd_minus_ac_bd", "ab_cd_minus_ad_bc"),
+      generating_value = tetrad_values(generating_cor),
+      h1_pseudotrue_value = tetrad_values(h1_cor),
+      stringsAsFactors = FALSE)
+  }))
+  tetrad_rows[[distribution]] <- tetrads
+
   target_summary[[distribution]] <- data.frame(
     distribution = distribution,
     population_n = opts$population_n,
@@ -167,6 +204,10 @@ for (index in seq_along(opts$distributions)) {
     max_abs_h0_h1_moment_gap = max(abs(c(
       target$mu_h0 - target$mu_h1,
       target$Sigma_h0 - target$Sigma_h1))),
+    max_abs_h1_shadow_residual_correlation = max(abs(
+      standardized_residual[offdiag])),
+    max_abs_generating_tetrad = max(abs(tetrads$generating_value)),
+    max_abs_h1_pseudotrue_tetrad = max(abs(tetrads$h1_pseudotrue_value)),
     mean_eigenvalue = mean(target$eigenvalues),
     stringsAsFactors = FALSE)
 }
@@ -175,10 +216,23 @@ parameter_table <- do.call(rbind, parameter_rows)
 row.names(parameter_table) <- NULL
 moment_table <- do.call(rbind, moment_rows)
 row.names(moment_table) <- NULL
+shadow_residual_table <- do.call(rbind, shadow_residual_rows)
+shadow_residual_table <- shadow_residual_table[order(
+  shadow_residual_table$distribution,
+  -abs(shadow_residual_table$standardized_h1_shadow_value)), ]
+row.names(shadow_residual_table) <- NULL
+tetrad_table <- do.call(rbind, tetrad_rows)
+tetrad_table <- tetrad_table[order(
+  tetrad_table$distribution,
+  -abs(tetrad_table$h1_pseudotrue_value)), ]
+row.names(tetrad_table) <- NULL
 target_summary <- do.call(rbind, target_summary)
 row.names(target_summary) <- NULL
 write_csv(parameter_table, file.path(results, "pseudotrue_parameters.csv"))
 write_csv(moment_table, file.path(results, "pseudotrue_covariances.csv"))
+write_csv(shadow_residual_table, file.path(
+  results, "h1_shadow_residual_covariances.csv"))
+write_csv(tetrad_table, file.path(results, "h1_pseudotrue_tetrads.csv"))
 write_csv(target_summary, file.path(results, "pseudotrue_summary.csv"))
 
 arms <- do.call(rbind, lapply(opts$distributions, function(distribution) {
