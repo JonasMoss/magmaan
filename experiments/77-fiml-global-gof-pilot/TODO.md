@@ -56,7 +56,9 @@ is frozen.
   sensitivity with the expected metric stayed near nominal. The new
   observed-H1 geometry is PD and null-equivalent asymptotically but converges
   prohibitively slowly under strong selection. See
-  `notes/iteration-13-pseudonull-information.md`.
+  `notes/iteration-13-pseudonull-information.md`. The companion exposition
+  `notes/lrt-score-information-geometry.qmd` separates the LRT and projected-
+  score constructions before deriving sensitivity, meat, and metric.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next

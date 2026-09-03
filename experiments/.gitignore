@@ -2,6 +2,7 @@
 **/.quarto/
 **/report.html
 **/sem_report.html
+**/notes/*.html
 **/report.pdf
 **/report_files/
 **/results/*

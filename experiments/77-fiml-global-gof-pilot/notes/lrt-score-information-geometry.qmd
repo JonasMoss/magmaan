@@ -1,0 +1,517 @@
+---
+title: "FIML goodness of fit: LRT, projected score, and information geometry"
+subtitle: "Why sensitivity, meat, and metric are three different objects"
+format:
+  html:
+    toc: true
+    number-sections: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## The short version
+
+This note separates three layers that are easy to conflate:
+
+1. **The hypothesis:** does the saturated Gaussian-FIML pseudo-true moment
+   vector belong to the SEM?
+2. **The base statistic:** do we measure departure using the likelihood-ratio
+   statistic or a projected saturated score statistic?
+3. **The reference distribution:** how variable is that statistic under a
+   possibly nonnormal observed-data distribution?
+
+For the projected score test, three matrices then appear:
+
+| Symbol | Name | Job | Sandwich analogy |
+|---|---|---|---|
+| $A$ | sensitivity | adjusts for estimating the SEM nuisance parameters | bread |
+| $B$ | score covariance | describes the actual variation of casewise scores | meat |
+| $M$ | quadratic metric | defines the scale on which the projected score is measured | neither |
+
+The proposed hybrid score construction is therefore
+
+$$
+\boxed{
+  A=\text{observed-H0 sensitivity},\qquad
+  B=\text{empirical score meat},\qquad
+  M=\text{expected-Fisher metric}.
+}
+$$
+
+This is not an incomplete sandwich. The robust reference spectrum explicitly
+combines $M$ and $B$. The reason $A$ needs special attention is different: it
+determines which part of each saturated score remains after accounting for
+parameter estimation under H0.
+
+## Part I: the tests before the estimation machinery
+
+### The hypothesis is about the FIML pseudo-true target
+
+Let $P$ denote the actual observed-data distribution. It may be nonnormal and
+may contain missing values generated under MAR. We nevertheless fit the
+working Gaussian FIML likelihood.
+
+Let $\eta$ collect all saturated means and unique covariance elements, and let
+$\mathcal M_0=\{\eta(\theta):\theta\in\Theta_0\}$ be the moment surface allowed
+by the SEM. The unrestricted Gaussian-FIML population optimum is
+
+$$
+\eta_1^*=
+\arg\max_{\eta} E_P\{\ell_i(\eta)\}.
+$$
+
+The restricted optimum is
+
+$$
+\theta_0^*=
+\arg\max_{\theta} E_P\{\ell_i(\eta(\theta))\},
+\qquad
+\eta_0^*=\eta(\theta_0^*).
+$$
+
+The goodness-of-fit pseudo-null is
+
+$$
+H_0:\quad \eta_1^*\in\mathcal M_0,
+$$
+
+or, equivalently under ordinary regularity conditions,
+$\eta_1^*=\eta_0^*$. This—not necessarily the generating complete-data SEM—is
+the hypothesis seen by Gaussian FIML.
+
+This distinction matters under nonnormal MAR. A data-generating SEM can be
+correct for the complete variables while the Gaussian-FIML pseudo-true target
+falls outside that SEM. In that case both LR and score tests should eventually
+reject. Calling their rejection rate “size” would test the wrong hypothesis.
+
+### The LRT route
+
+The likelihood-ratio statistic compares two fitted likelihoods:
+
+$$
+T_{\mathrm{LR}}
+=2\{\ell_n(\widehat\eta_1)-
+      \ell_n(\eta(\widehat\theta_0))\}.
+$$
+
+Here $\widehat\eta_1$ is the saturated H1 fit and $\widehat\theta_0$ is the
+restricted SEM fit. The LRT therefore asks how much maximized likelihood is
+lost by restricting the saturated moments to the SEM surface.
+
+Under a correctly specified normal likelihood, Wilks' theorem gives
+
+$$
+T_{\mathrm{LR}}\overset{d}{\longrightarrow}\chi_d^2,
+$$
+
+where
+
+$$
+d=\dim(\eta)-\operatorname{rank}(\Delta),
+\qquad
+\Delta=\frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}.
+$$
+
+Under distributional misspecification, the same base statistic generally has a
+weighted chi-square limit:
+
+$$
+T_{\mathrm{LR}}
+\overset{d}{\longrightarrow}
+\sum_{j=1}^{d}\lambda_{\mathrm{LR},j}\chi_{1,j}^2.
+$$
+
+The FMG procedures leave $T_{\mathrm{LR}}$ as the base statistic and transform
+its estimated spectrum. SB replaces the spectrum by its mean; pEBA(4) shrinks
+or pools it in the prescribed way; the plug-in mixture uses the individual
+estimated eigenvalues.
+
+#### Why does the LRT use saturated-H1 information?
+
+The LRT is literally a difference from the saturated maximum. Its local
+quadratic expansion is therefore naturally anchored at $\widehat\eta_1$. Let
+$V_1$ be the realized saturated observed information at that maximum, let
+$\widehat\Gamma_1$ estimate the asymptotic covariance of
+$\sqrt n(\widehat\eta_1-\eta_1^*)$, and let $\widehat\Delta_0$ be the SEM
+tangent. The LRT residual-curvature operator is
+
+$$
+U_{\mathrm{LR}}
+=V_1-
+V_1\widehat\Delta_0
+(\widehat\Delta_0^{\mathsf T}V_1\widehat\Delta_0)^{-1}
+\widehat\Delta_0^{\mathsf T}V_1.
+$$
+
+The $d$ nonzero eigenvalues of
+$U_{\mathrm{LR}}\widehat\Gamma_1$ are the LRT/FMG spectrum.
+
+Under H0, the H0 and H1 estimators converge to the same population point. Thus
+using H1 curvature does **not** mean assuming H1 is true. It uses the stable
+finite-sample expansion point supplied by the unrestricted maximum. At that
+maximum the realized curvature is positive definite under ordinary
+conditions. The restricted H0 estimate is only a maximum along the SEM
+tangent; it need not be a maximum in every saturated direction.
+
+### The projected-score route
+
+The score test fits H0 and asks whether the likelihood still wants to move away
+from the SEM in any saturated direction. Define the casewise saturated score
+
+$$
+s_i(\eta)=\frac{\partial\ell_i(\eta)}{\partial\eta},
+$$
+
+and evaluate it at the restricted fit:
+
+$$
+s_i=s_i\{\eta(\widehat\theta_0)\},
+\qquad
+s=\sum_{i=1}^n s_i.
+$$
+
+“Saturated score at H0” therefore means:
+
+- differentiate with respect to the unrestricted saturated coordinates
+  $\eta$;
+- evaluate that derivative at the restricted SEM moments.
+
+It does **not** mean that the scores came from an H1 fit.
+
+Let $K$ be an orthonormal basis for the SEM tangent
+$\operatorname{col}(\widehat\Delta_0)$, and let $D$ span its Euclidean
+complement. The $d$ columns of $D$ are candidate lack-of-fit directions. They
+must be adjusted for the fact that $\widehat\theta_0$ was estimated. Given a
+sensitivity matrix $A$, define
+
+$$
+G_A
+=D-K(K^{\mathsf T}AK)^{-1}K^{\mathsf T}AD.
+$$
+
+Then
+
+$$
+K^{\mathsf T}AG_A=0.
+$$
+
+Thus $G_A$ contains directions that are orthogonal, in the sensitivity
+geometry, to movements already explained by re-estimating the SEM parameters.
+The projected total score is
+
+$$
+u=G_A^{\mathsf T}s.
+$$
+
+Choose a positive-definite quadratic metric $M$ and define
+
+$$
+V_M=G_A^{\mathsf T}MG_A.
+$$
+
+The projected-score base statistic is
+
+$$
+T_{\mathrm{S}}
+=u^{\mathsf T}V_M^{-1}u.
+$$
+
+This statistic is not the LRT. It uses the slope of the likelihood at H0 rather
+than the height difference between H0 and H1.
+
+Let the empirical score meat be
+
+$$
+\widehat B=\sum_{i=1}^n s_i s_i^{\mathsf T}.
+$$
+
+The projected meat is $G_A^{\mathsf T}\widehat B G_A$, and the score-spectrum
+eigenvalues solve
+
+$$
+G_A^{\mathsf T}\widehat B G_A,v
+=\lambda_{\mathrm S}
+G_A^{\mathsf T}M G_A,v.
+$$
+
+Equivalently, they are the generalized eigenvalues of
+
+$$
+\left(
+G_A^{\mathsf T}\widehat B G_A,
+G_A^{\mathsf T}M G_A
+\right).
+$$
+
+Consequently,
+
+$$
+T_{\mathrm S}
+\overset{d}{\longrightarrow}
+\sum_{j=1}^{d}\lambda_{\mathrm S,j}\chi_{1,j}^2.
+$$
+
+SB, pEBA(4), and the plug-in mixture can then calibrate the **score** spectrum,
+just as they calibrate the LRT spectrum. The transformation names are the same;
+the statistic-spectrum pair is not.
+
+### Why the LRT and score spectra can differ
+
+Both tests target the same pseudo-null and have the same nominal degrees of
+freedom, but their finite-sample constructions differ:
+
+| Feature | LRT/FM G | Projected score/FM G |
+|---|---|---|
+| Base statistic | likelihood-height difference | projected H0 likelihood slope |
+| Score evaluation | implicit through H0/H1 fits | saturated-coordinate score at H0 |
+| Projection | LRT residual curvature | nuisance-effective score directions |
+| Natural finite-sample anchor | saturated H1 | restricted H0 |
+| Spectrum | eigenvalues of $U_{\mathrm{LR}}\widehat\Gamma_1$ | generalized eigenvalues of projected $B$ against projected $M$ |
+
+Under a correctly specified likelihood and asymptotically under regular local
+conditions, LR, score, and Wald tests are equivalent. That statement does not
+make their estimated finite-sample statistics or spectra identical. In the
+pilot, crossing the LRT statistic with the score spectrum and vice versa showed
+that both pieces contributed to the observed calibration differences. Those
+crossed combinations are diagnostics, not proposed tests: each native
+statistic and spectrum is derived as a coherent pair.
+
+## Part II: the estimation machinery underneath the score test
+
+### Start with ordinary misspecified-likelihood estimation
+
+For a generic working likelihood, let
+
+$$
+s_i(\eta)=\frac{\partial\ell_i(\eta)}{\partial\eta}.
+$$
+
+At the pseudo-true point $\eta^*$, define the per-case sensitivity and meat:
+
+$$
+A
+=-E_P\left\{
+  \frac{\partial s_i(\eta^*)}{\partial\eta^{\mathsf T}}
+\right\},
+\qquad
+B
+=E_P\{s_i(\eta^*)s_i(\eta^*)^{\mathsf T}\}.
+$$
+
+The estimator has sandwich covariance
+
+$$
+\operatorname{Avar}\{\sqrt n(\widehat\eta-\eta^*)\}
+=A^{-1}BA^{-1}.
+$$
+
+This is the familiar bread--meat--bread sandwich:
+
+$$
+\underbrace{A^{-1}}_{\text{bread}}
+\underbrace{B}_{\text{meat}}
+\underbrace{A^{-1}}_{\text{bread}}.
+$$
+
+If the likelihood is correctly specified, the information identity gives
+$A=B=I_F$, where $I_F$ is Fisher information. Under misspecification these
+three objects can differ:
+
+$$
+A\ne B,\qquad A\ne I_F,\qquad B\ne I_F.
+$$
+
+Nonnormality commonly makes $B\ne I_F$. Under nonnormal MAR, the actual
+sensitivity can also satisfy $A\ne I_F$.
+
+### Why sensitivity enters the nuisance projection
+
+To see why $A$ is needed before forming the meat, temporarily partition a
+parameter into tested coordinates $\beta$ and nuisance coordinates $\gamma$.
+At the restricted estimator $\widehat\gamma$, a first-order expansion gives
+
+$$
+\frac{1}{\sqrt n}\sum_{i=1}^n
+s_{\beta i}(\widehat\gamma)
+=
+\frac{1}{\sqrt n}\sum_{i=1}^n
+\left\{
+s_{\beta i}
+-A_{\beta\gamma}A_{\gamma\gamma}^{-1}s_{\gamma i}
+\right\}
++o_p(1).
+$$
+
+The term in braces is the nuisance-effective case contribution. It describes
+how estimating $\gamma$ changes the tested score. Its covariance—not the
+covariance of the unadjusted tested scores—is the correct meat for the score
+test.
+
+The matrix $G_A$ is the coordinate-free saturated-moment version of precisely
+this subtraction. Therefore:
+
+- $A$ determines the correct effective score rows $G_A^{\mathsf T}s_i$;
+- $B$ supplies the covariance of the original casewise scores;
+- $G_A^{\mathsf T}BG_A$ supplies the covariance after nuisance adjustment.
+
+Using the wrong $A$ projects the casewise scores in the wrong direction. An
+empirical $B$ cannot repair that mistake afterward: it can accurately measure
+the variance of the wrong rows, but those rows omit the correct first-order
+effect of estimating the nuisance parameters.
+
+### Why the metric is not another sandwich bread
+
+The metric $M$ answers a different question: in what units should the observed
+projected score $u$ be measured? It defines the base quadratic
+
+$$
+T_{\mathrm S}=u^{\mathsf T}(G_A^{\mathsf T}MG_A)^{-1}u.
+$$
+
+Its robust null law is then determined by comparing the actual projected
+variance with those chosen units:
+
+$$
+\lambda_{\mathrm S}
+=\operatorname{eig}
+\left\{
+(G_A^{\mathsf T}MG_A)^{-1}
+(G_A^{\mathsf T}BG_A)
+\right\}.
+$$
+
+If $M=B$, direct sandwich studentization yields an ordinary asymptotic
+$\chi_d^2$ statistic. If $M$ is a stable model-based matrix, then the
+eigenvalues quantify the discrepancy between $M$ and $B$, and the weighted
+chi-square calibration accounts for it. Both routes can be asymptotically
+valid. They define different finite-sample base statistics.
+
+Thus $M$ is sometimes casually called a “bread” because it appears in the
+denominator of the quadratic and the generalized eigenproblem. That language
+is dangerous here. It is not the sensitivity bread $A$ governing estimation
+or nuisance adjustment. Calling both objects “bread” is exactly how the roles
+became muddled.
+
+### A useful special case
+
+Under a correctly specified normal likelihood,
+
+$$
+A=B=M=I_F.
+$$
+
+Then the nuisance projection is Fisher-orthogonal, all score eigenvalues equal
+one asymptotically, and
+
+$$
+T_{\mathrm S}\overset{d}{\longrightarrow}\chi_d^2.
+$$
+
+Robust SEM becomes difficult because real applications relax that special
+identity one equality at a time:
+
+- nonnormal complete data often leave $A=M=I_F$ but change $B$;
+- a nonnormal-MAR pseudo-null can change both $A$ and $B$;
+- a convenient positive-definite $M$ may still be retained if the spectrum
+  consistently compares it with $B$.
+
+## Part III: what the current options actually mean
+
+### The three information estimates
+
+The implementation now exposes three candidate information matrices:
+
+1. **Expected Fisher:** the pattern-conditional Gaussian Fisher matrix at the
+   restricted fit. It is smooth and positive definite, but need not estimate
+   the actual sensitivity under nonnormal MAR.
+2. **Observed H0:** the realized negative Hessian at the restricted SEM fit.
+   It targets the actual H0 sensitivity, but the restricted fit need not be a
+   maximum in the full saturated space, so this matrix can be indefinite in
+   finite samples.
+3. **Observed H1:** the realized negative Hessian at the saturated maximum. It
+   is normally positive definite and has the same population limit as observed
+   H0 under the pseudo-null, but it can be a noisy plug-in for the H0 score
+   geometry.
+
+The score rows themselves remain saturated-coordinate scores evaluated at H0
+in all three cases. Selecting observed H1 changes only $A$, $M$, or both.
+
+### Mapping the score configurations
+
+| Configuration | Sensitivity $A$ | Meat $B$ | Metric $M$ |
+|---|---|---|---|
+| expected-H0 | expected Fisher H0 | empirical H0 scores | expected Fisher H0 |
+| observed-H0 / expected metric | observed Hessian H0 | empirical H0 scores | expected Fisher H0 |
+| observed-H1 / expected metric | observed Hessian H1 | empirical H0 scores | expected Fisher H0 |
+| full observed-H0 | observed Hessian H0 | empirical H0 scores | observed Hessian H0 |
+| full observed-H1 | observed Hessian H1 | empirical H0 scores | observed Hessian H1 |
+
+This table also shows why “observed sensitivity with expected metric” is a
+complete construction. It has an observed bread, an empirical meat, and a
+separately chosen stable quadratic metric. Nothing is missing.
+
+### What the exact pseudo-null experiment found
+
+The targeted experiment used mutually independent nonnormal variables and MAR
+selection on an always-observed driver. Independence makes the three tested
+cross-covariances an exact Gaussian-FIML pseudo-null. Strong selection changes
+the moments of the driver among the rows where the outcomes are observed.
+
+In that design, expected Fisher omitted actual covariance--mean sensitivity
+terms. With pEBA(4), its rejection rate fell to zero under strong selection all
+the way through $n=10{,}000$. The observed-H0-sensitivity / expected-metric
+construction remained around .04--.06.
+
+Observed H1 and observed H0 have the same population sensitivity at the
+pseudo-null. A 200,000-case diagnostic gave nearly identical projected
+eigenvalues. Nevertheless, observed-H1 sensitivity was extremely conservative
+at practical sample sizes under strong selection. Its noisy fitted H1
+cross-covariances contaminated precisely the directions being tested; H0 fixed
+those cross-covariances at their null values and produced a much more stable
+finite-sample sensitivity.
+
+### Present recommendation
+
+For the next nonnormal-MAR pseudo-null simulations, use
+
+$$
+A=\widehat A_{\mathrm{obs},0},
+\qquad
+B=\sum_i s_i s_i^{\mathsf T},
+\qquad
+M=\widehat I_{F,0}
+$$
+
+as the primary projected-score construction. Retain expected-H0 and
+observed-H1 versions as diagnostics.
+
+This recommendation is provisional for three reasons:
+
+1. the sharp result comes from a deliberately small three-df diagnostic;
+2. observed-H0 saturated information can be indefinite in broader latent SEMs;
+3. the construction still needs confirmation in the source-based substantive
+   models selected for the paper.
+
+The conceptual conclusion is firmer: robust score testing requires us to keep
+sensitivity, meat, and metric separate. Expected Fisher may be a convenient
+metric even when it is the wrong sensitivity.
+
+## Reading checklist
+
+When interpreting any result in the experiment, ask these questions in order:
+
+1. Is the Gaussian-FIML pseudo-null actually true?
+2. Is the base statistic LR or projected score?
+3. Is its reference spectrum the matching LR or score spectrum?
+4. For a score test, what sensitivity $A$ defined the nuisance projection?
+5. What empirical or model-based meat $B$ describes score variation?
+6. What metric $M$ defined the scalar quadratic?
+7. Was the weighted spectrum kept intact, mean-scaled, or transformed by
+   pEBA(4)?
+
+Only after those questions are answered does a reported p-value have an
+unambiguous meaning.
