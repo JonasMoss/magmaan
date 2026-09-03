@@ -39,6 +39,11 @@ is frozen.
   For the one-factor pilot these are descriptive off-diagonal shadow residual
   covariances plus parameterization-free tetrad violations; literal
   cross-loadings require a multi-factor follow-up.
+- [x] Check expected versus observed score sensitivity under MCAR across
+  `n = 120, 500, 2000`. Expected-score pEBA(4) stays near nominal for
+  normal/VM2/IG2, while observed sensitivity approaches it more slowly and
+  LRT/FMG's severe-VM inflation declines with N. See
+  `notes/iteration-12-mcar-expected-score.md`.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next
