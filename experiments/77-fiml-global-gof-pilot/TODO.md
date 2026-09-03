@@ -59,6 +59,13 @@ is frozen.
   `notes/iteration-13-pseudonull-information.md`. The companion exposition
   `notes/lrt-score-information-geometry.qmd` separates the LRT and projected-
   score constructions before deriving sensitivity, meat, and metric.
+- [x] Test whether the direct sandwich score can remove the need for an SB or
+  pEBA correction. Raw and centered OPG, Hotelling calibration, two
+  predeclared vanishing meat shrinkages, and two observed-sensitivity
+  shrinkages were checked at the exact pseudo-null and in 9/34/87-df latent
+  models. Regularization did not rescue the severe finite-sample liberality of
+  the observed-sensitivity sandwich. Do not tune it or add it to the paper
+  battery. See `notes/iteration-14-robust-score-regularization.md`.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next

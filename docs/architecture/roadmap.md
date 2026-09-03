@@ -885,6 +885,13 @@ an unconstrained gradient test to constrained solutions.
   its finite-sample curvature positive definite. The R surface names this
   choice `observed-h1`; its score rows and observed statistic remain evaluated
   at H0, so it is an H1-geometry score test rather than an LR construction.
+  The global result also exposes the summed df-dimensional projected score,
+  quadratic metric, and raw OPG meat, allowing experiment-side checks of the
+  direct sandwich without reconstructing the saturated tangent. Two explicitly
+  diagnostic observed-H0 sensitivity variants shrink the realized Hessian
+  toward expected Fisher information with weights based only on
+  `tangent_rank / n` (light and square-root rules); both weights vanish under
+  fixed-dimensional asymptotics and the realized weight is returned.
   The full-observed H0 variant fails closed when its
   tested-complement information is not positive definite and is unavailable
   for ML2S. The tested dimension is therefore

@@ -512,6 +512,11 @@ enum class ScoreFlipMultiplierStudentization {
 enum class ScoreFlipSensitivity {
   ExpectedInformation,
   ObservedInformation,
+  // Global-GOF diagnostics that shrink the realized H0 Hessian toward the
+  // expected Fisher information. The weights depend only on tangent_rank / n
+  // and vanish under fixed-dimensional asymptotics.
+  ObservedInformationLightShrinkage,
+  ObservedInformationSqrtShrinkage,
   SaturatedObservedInformation,
 };
 
@@ -628,6 +633,15 @@ struct GlobalScoreFlipTestResult {
   ScoreFlipTestResult flip;
   GlobalScoreFlipOptions::Metric metric =
       GlobalScoreFlipOptions::Metric::ExpectedInformation;
+  double sensitivity_shrinkage = 0.0;
+  // Research diagnostics in the df-dimensional effective-score coordinates.
+  // All three use summed (rather than per-case) scaling. projected_meat is
+  // the raw OPG sum; callers can obtain the globally centered meat by
+  // subtracting projected_score * projected_score' / n_obs.
+  int n_obs = 0;
+  Eigen::VectorXd projected_score;
+  Eigen::MatrixXd projected_metric;
+  Eigen::MatrixXd projected_meat;
   int saturated_moment_dim = 0;
   int tangent_rank = 0;
   double tangent_min_singular_value = 0.0;

@@ -11,6 +11,7 @@ source(file.path(script_dir, "..", "_support", "R", "missingness.R"))
 source(file.path(script_dir, "R", "sem_models.R"))
 source(file.path(script_dir, "R", "sem_power.R"))
 source(file.path(script_dir, "R", "sem_summaries.R"))
+source(file.path(script_dir, "R", "score_sandwich.R"))
 set_single_threaded_math()
 
 usage <- function() cat(
@@ -195,6 +196,7 @@ code_hash <- paste(unname(tools::md5sum(c(
   file.path(script_dir, "R", "sem_models.R"),
   file.path(script_dir, "R", "sem_power.R"),
   file.path(script_dir, "R", "sem_summaries.R"),
+  file.path(script_dir, "R", "score_sandwich.R"),
   file.path(script_dir, "..", "_support", "R", "missingness.R")))),
   collapse = ":")
 run_config <- data.frame(
@@ -239,11 +241,19 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
     fit_ok = FALSE, fmg_ok = FALSE, mlr_ok = FALSE, flip_ok = FALSE,
     flip_expected_mammen_ok = FALSE,
     flip_corrected_ok = FALSE, flip_nominal_geometry = FALSE,
+    score_sandwich_expected_ok = FALSE,
+    score_sandwich_sensitivity_light_ok = FALSE,
+    score_sandwich_sensitivity_sqrt_ok = FALSE,
+    score_sandwich_ok = FALSE,
     score_observed_metric_ok = FALSE,
     flip_corrected_nominal_geometry = FALSE,
     fit_error = "", fmg_error = "", mlr_error = "", flip_error = "",
     flip_expected_mammen_error = "",
     flip_corrected_error = "",
+    score_sandwich_expected_error = "",
+    score_sandwich_sensitivity_light_error = "",
+    score_sandwich_sensitivity_sqrt_error = "",
+    score_sandwich_error = "",
     score_observed_metric_error = "",
     realized_missing_eligible = NA_real_, fitted_df = NA_integer_,
     npar = NA_integer_, fit_seconds = NA_real_, fmg_seconds = NA_real_,
@@ -260,6 +270,14 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
     p_score_all = NA_real_,
     p_score_corrected_sb = NA_real_, p_score_corrected_ss = NA_real_,
     p_score_corrected_peba4 = NA_real_, p_score_corrected_all = NA_real_,
+    p_score_sandwich_expected_raw = NA_real_,
+    p_score_sandwich_expected_shrink_sqrt = NA_real_,
+    p_score_sandwich_sensitivity_light = NA_real_,
+    p_score_sandwich_sensitivity_sqrt = NA_real_,
+    p_score_sandwich_raw = NA_real_,
+    p_score_sandwich_hotelling = NA_real_,
+    p_score_sandwich_shrink_light = NA_real_,
+    p_score_sandwich_shrink_sqrt = NA_real_,
     p_score_observed_metric_sb = NA_real_,
     p_score_observed_metric_ss = NA_real_,
     p_score_observed_metric_peba4 = NA_real_,
@@ -268,6 +286,16 @@ empty_rep <- function(cell, rep_id, seed, estimator) {
     flip_df = NA_integer_, flip_tangent_rank = NA_integer_,
     flip_corrected_statistic = NA_real_, flip_corrected_df = NA_integer_,
     flip_corrected_tangent_rank = NA_integer_,
+    score_sandwich_statistic_raw = NA_real_,
+    score_sandwich_statistic_centered = NA_real_,
+    score_sandwich_p_centered_chisq = NA_real_,
+    score_sandwich_statistic_hotelling = NA_real_,
+    score_sandwich_rho_light = NA_real_,
+    score_sandwich_statistic_shrink_light = NA_real_,
+    score_sandwich_rho_sqrt = NA_real_,
+    score_sandwich_statistic_shrink_sqrt = NA_real_,
+    score_sandwich_centered_min_eigenvalue = NA_real_,
+    score_sandwich_centered_condition = NA_real_,
     score_observed_metric_statistic = NA_real_,
     score_observed_metric_df = NA_integer_,
     score_observed_metric_tangent_rank = NA_integer_,
@@ -405,6 +433,23 @@ one_rep <- function(cell, rep_id) {
       out$p_score_ss <- score_fmg("ss")
       out$p_score_peba4 <- score_fmg("peba", 4)
       out$p_score_all <- flip$p_mixture
+      sandwich_expected <- tryCatch(
+        score_sandwich_diagnostics(flip), error = function(e) e)
+      if (inherits(sandwich_expected, "error")) {
+        out$score_sandwich_expected_error <-
+          conditionMessage(sandwich_expected)
+      } else {
+        out$p_score_sandwich_expected_raw <-
+          sandwich_expected$sandwich_p_raw
+        out$p_score_sandwich_expected_shrink_sqrt <-
+          sandwich_expected$sandwich_p_shrink_sqrt
+        out$score_sandwich_expected_ok <- all(
+          is.finite(unlist(sandwich_expected)))
+        if (!out$score_sandwich_expected_ok) {
+          out$score_sandwich_expected_error <-
+            "expected-projection sandwich contains non-finite values"
+        }
+      }
       out$flip_statistic <- flip$statistic_effective
       out$flip_df <- as.integer(flip$df)
       out$flip_tangent_rank <- as.integer(flip$tangent_rank)
@@ -456,6 +501,41 @@ one_rep <- function(cell, rep_id) {
         out$p_score_corrected_ss <- corrected_score_fmg("ss")
         out$p_score_corrected_peba4 <- corrected_score_fmg("peba", 4)
         out$p_score_corrected_all <- corrected$p_mixture
+        sandwich <- tryCatch(
+          score_sandwich_diagnostics(corrected), error = function(e) e)
+        if (inherits(sandwich, "error")) {
+          out$score_sandwich_error <- conditionMessage(sandwich)
+        } else {
+          out$p_score_sandwich_raw <- sandwich$sandwich_p_raw
+          out$p_score_sandwich_hotelling <- sandwich$sandwich_p_hotelling
+          out$p_score_sandwich_shrink_light <-
+            sandwich$sandwich_p_shrink_light
+          out$p_score_sandwich_shrink_sqrt <-
+            sandwich$sandwich_p_shrink_sqrt
+          out$score_sandwich_statistic_raw <-
+            sandwich$sandwich_statistic_raw
+          out$score_sandwich_statistic_centered <-
+            sandwich$sandwich_statistic_centered
+          out$score_sandwich_p_centered_chisq <-
+            sandwich$sandwich_p_centered_chisq
+          out$score_sandwich_statistic_hotelling <-
+            sandwich$sandwich_statistic_hotelling
+          out$score_sandwich_rho_light <- sandwich$sandwich_rho_light
+          out$score_sandwich_statistic_shrink_light <-
+            sandwich$sandwich_statistic_shrink_light
+          out$score_sandwich_rho_sqrt <- sandwich$sandwich_rho_sqrt
+          out$score_sandwich_statistic_shrink_sqrt <-
+            sandwich$sandwich_statistic_shrink_sqrt
+          out$score_sandwich_centered_min_eigenvalue <-
+            sandwich$sandwich_centered_min_eigenvalue
+          out$score_sandwich_centered_condition <-
+            sandwich$sandwich_centered_condition
+          out$score_sandwich_ok <- all(is.finite(unlist(sandwich)))
+          if (!out$score_sandwich_ok) {
+            out$score_sandwich_error <-
+              "sandwich diagnostic contains non-finite values"
+          }
+        }
         out$flip_corrected_statistic <- corrected$statistic_effective
         out$flip_corrected_df <- as.integer(corrected$df)
         out$flip_corrected_tangent_rank <-
@@ -467,6 +547,31 @@ one_rep <- function(cell, rep_id) {
         if (!out$flip_corrected_ok) {
           out$flip_corrected_error <-
             "corrected global multiplier p-value is non-finite"
+        }
+      }
+
+      sensitivity_variants <- c(
+        light = "observed-shrink-light", sqrt = "observed-shrink-sqrt")
+      for (variant in names(sensitivity_variants)) {
+        variant_score <- tryCatch(
+          magmaan::global_score_flip_test(
+            fit, n_flips = 1L, seed = seed + 900001L,
+            multiplier = "mammen",
+            sensitivity = sensitivity_variants[[variant]]),
+          error = function(e) e)
+        ok_name <- paste0(
+          "score_sandwich_sensitivity_", variant, "_ok")
+        error_name <- paste0(
+          "score_sandwich_sensitivity_", variant, "_error")
+        p_name <- paste0("p_score_sandwich_sensitivity_", variant)
+        if (inherits(variant_score, "error")) {
+          out[[error_name]] <- conditionMessage(variant_score)
+        } else {
+          out[[p_name]] <- variant_score$p_sandwich
+          out[[ok_name]] <- is.finite(out[[p_name]])
+          if (!out[[ok_name]]) {
+            out[[error_name]] <- "shrunken-sensitivity p-value is non-finite"
+          }
         }
       }
 

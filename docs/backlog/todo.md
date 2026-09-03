@@ -511,6 +511,21 @@ when they next change.
   common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
   inverse. Gate either proposal on null size, matched-null power, and meat
   conditioning rather than one aggregate rejection rate.
+  Experiment 77 has now closed the simple version of that gate. It exposed the
+  projected score/metric/meat and compared raw and centered OPG, Hotelling, two
+  predeclared vanishing meat shrinkages, and two analogous shrinkages of the
+  observed sensitivity. At an exact three-df nonnormal-MAR pseudo-null the
+  best shrinkage improved mean absolute size error only from 1.93 to 1.74
+  percentage points, versus about 0.9 for score SB/pEBA4. At `n=200` in
+  9/34/87-df latent models the raw observed-sensitivity sandwich was grossly
+  liberal (10.2--99.7% across cells), and neither Hotelling nor shrinkage made
+  it usable. A normal-complete diagnostic localized much of the problem to the
+  noisy observed-Hessian nuisance projection: expected sensitivity gave
+  4.2/5.6/2.8% rejection by df, versus 9.6/24.6/39.4% for observed sensitivity.
+  Expected sensitivity is not an escape hatch because it rejects essentially
+  zero times under strong nonnormal MAR. Do not tune a fixed shrinkage constant
+  or carry direct-sandwich variants into the planned paper battery; retain the
+  new surfaces as frontier diagnostics only.
   Experiment 71 now supplies the first projected-Satterthwaite gate for the
   centered-meat pivotal GOF score. In a true five-indicator one-factor model
   (`df=5`, n=30/50/100/200), the centered-meat chi-square was liberal at low n

@@ -7,6 +7,7 @@ script_dir <- if (length(script_arg)) {
   dirname(normalizePath(sub("^--file=", "", script_arg[[1L]])))
 } else normalizePath(".")
 source(file.path(script_dir, "..", "_support", "R", "helpers.R"))
+source(file.path(script_dir, "R", "score_sandwich.R"))
 set_single_threaded_math()
 
 sem_seed <- function(seed) {
@@ -122,11 +123,15 @@ write_csv(population_check, file.path(results, "population_check.csv"))
 geometries <- data.frame(
   geometry = c(
     "expected-H0", "observed-H0/expected-metric",
+    "observed-H0-light/expected-metric",
+    "observed-H0-sqrt/expected-metric",
     "observed-H1/expected-metric", "observed-H0", "observed-H1"),
   sensitivity = c(
-    "expected", "observed", "observed-h1", "observed", "observed-h1"),
+    "expected", "observed", "observed-shrink-light",
+    "observed-shrink-sqrt", "observed-h1", "observed", "observed-h1"),
   metric = c(
-    "expected", "expected", "expected", "observed", "observed-h1"),
+    "expected", "expected", "expected", "expected", "expected",
+    "observed", "observed-h1"),
   stringsAsFactors = FALSE)
 
 fmg_peba4 <- function(score) {
@@ -188,7 +193,13 @@ one_rep <- function(n, beta, intercept, rep_id, cell_id) {
       ok = FALSE, error = error, statistic = NA_real_, df = NA_integer_,
       eigen_min = NA_real_, eigen_mean = NA_real_, eigen_max = NA_real_,
       p_sb = NA_real_, p_peba4 = NA_real_, p_all = NA_real_,
-      p_sandwich = NA_real_, stringsAsFactors = FALSE))
+      p_sandwich = NA_real_, sandwich_ok = FALSE, sandwich_error = error,
+      p_sandwich_centered_chisq = NA_real_,
+      p_sandwich_hotelling = NA_real_,
+      p_sandwich_shrink_light = NA_real_,
+      p_sandwich_shrink_sqrt = NA_real_,
+      sandwich_rho_light = NA_real_, sandwich_rho_sqrt = NA_real_,
+      sandwich_centered_condition = NA_real_, stringsAsFactors = FALSE))
   }
 
   do.call(rbind, lapply(seq_len(nrow(geometries)), function(g) {
@@ -205,7 +216,14 @@ one_rep <- function(n, beta, intercept, rep_id, cell_id) {
         ok = FALSE, error = conditionMessage(score), statistic = NA_real_,
         df = NA_integer_, eigen_min = NA_real_, eigen_mean = NA_real_,
         eigen_max = NA_real_, p_sb = NA_real_, p_peba4 = NA_real_,
-        p_all = NA_real_, p_sandwich = NA_real_, stringsAsFactors = FALSE))
+        p_all = NA_real_, p_sandwich = NA_real_, sandwich_ok = FALSE,
+        sandwich_error = conditionMessage(score),
+        p_sandwich_centered_chisq = NA_real_,
+        p_sandwich_hotelling = NA_real_,
+        p_sandwich_shrink_light = NA_real_,
+        p_sandwich_shrink_sqrt = NA_real_,
+        sandwich_rho_light = NA_real_, sandwich_rho_sqrt = NA_real_,
+        sandwich_centered_condition = NA_real_, stringsAsFactors = FALSE))
     }
     eigenvalues <- score$eigenvalues
     out <- data.frame(
@@ -217,6 +235,31 @@ one_rep <- function(n, beta, intercept, rep_id, cell_id) {
       p_sb = score$p_mean_scaled, p_peba4 = fmg_peba4(score),
       p_all = score$p_mixture, p_sandwich = score$p_sandwich,
       stringsAsFactors = FALSE)
+    sandwich <- tryCatch(
+      score_sandwich_diagnostics(score), error = function(e) e)
+    if (inherits(sandwich, "error")) {
+      out$sandwich_ok <- FALSE
+      out$sandwich_error <- conditionMessage(sandwich)
+      out$p_sandwich_centered_chisq <- NA_real_
+      out$p_sandwich_hotelling <- NA_real_
+      out$p_sandwich_shrink_light <- NA_real_
+      out$p_sandwich_shrink_sqrt <- NA_real_
+      out$sandwich_rho_light <- NA_real_
+      out$sandwich_rho_sqrt <- NA_real_
+      out$sandwich_centered_condition <- NA_real_
+    } else {
+      out$sandwich_ok <- TRUE
+      out$sandwich_error <- ""
+      out$p_sandwich_centered_chisq <-
+        sandwich$sandwich_p_centered_chisq
+      out$p_sandwich_hotelling <- sandwich$sandwich_p_hotelling
+      out$p_sandwich_shrink_light <- sandwich$sandwich_p_shrink_light
+      out$p_sandwich_shrink_sqrt <- sandwich$sandwich_p_shrink_sqrt
+      out$sandwich_rho_light <- sandwich$sandwich_rho_light
+      out$sandwich_rho_sqrt <- sandwich$sandwich_rho_sqrt
+      out$sandwich_centered_condition <-
+        sandwich$sandwich_centered_condition
+    }
     out$ok <- all(is.finite(unlist(out[c(
       "statistic", "df", "eigen_min", "eigen_mean", "eigen_max",
       "p_sb", "p_peba4", "p_all")])))
@@ -270,6 +313,17 @@ summary <- do.call(rbind, lapply(summary_groups, function(z) {
     reject_peba4 = mean(good$p_peba4 < .05),
     reject_all = mean(good$p_all < .05),
     reject_sandwich = mean(good$p_sandwich < .05, na.rm = TRUE),
+    reject_sandwich_centered_chisq = mean(
+      good$p_sandwich_centered_chisq < .05, na.rm = TRUE),
+    reject_sandwich_hotelling = mean(
+      good$p_sandwich_hotelling < .05, na.rm = TRUE),
+    reject_sandwich_shrink_light = mean(
+      good$p_sandwich_shrink_light < .05, na.rm = TRUE),
+    reject_sandwich_shrink_sqrt = mean(
+      good$p_sandwich_shrink_sqrt < .05, na.rm = TRUE),
+    sandwich_usable = sum(good$sandwich_ok),
+    mean_sandwich_centered_condition = mean(
+      good$sandwich_centered_condition, na.rm = TRUE),
     mean_statistic = mean(good$statistic),
     mean_eigen_min = mean(good$eigen_min),
     mean_eigen_mean = mean(good$eigen_mean),

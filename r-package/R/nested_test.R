@@ -179,6 +179,10 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
 #'   `fit$raw_data`.
 #' @param sensitivity Nuisance-projection bread. `"expected"` uses the fitted
 #'   H0 Fisher information, `"observed"` uses the realized H0 Hessian, and
+#'   `"observed-shrink-light"` and `"observed-shrink-sqrt"` shrink that Hessian
+#'   toward expected Fisher information using a predeclared function of the
+#'   nuisance-tangent dimension divided by sample size. Both weights vanish
+#'   under fixed-dimensional asymptotics. Finally,
 #'   `"observed-h1"` uses the realized saturated H1 Hessian. The H1 choice is
 #'   null-equivalent to observed H0 sensitivity but evaluated at the stable
 #'   saturated optimum. The observed choices are unavailable for ML2S.
@@ -201,7 +205,9 @@ global_score_flip_test <- function(
                    "centered-exponential"),
     two_point_skewness = 1, center_multiplier_scores = FALSE,
     multiplier_studentization = c("none", "weighted-meat"),
-    sensitivity = c("expected", "observed", "observed-h1"),
+    sensitivity = c(
+      "expected", "observed", "observed-shrink-light",
+      "observed-shrink-sqrt", "observed-h1"),
     metric = c("expected", "observed", "observed-h1")) {
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)

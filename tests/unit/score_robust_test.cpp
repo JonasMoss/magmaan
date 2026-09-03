@@ -2031,6 +2031,32 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
   CHECK(corrected->flip.statistic_effective !=
         doctest::Approx(a->flip.statistic_effective).epsilon(1e-12));
 
+  opts.resampling.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::ObservedInformationLightShrinkage;
+  auto shrunken_light = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  if (!shrunken_light.has_value()) MESSAGE(shrunken_light.error().detail);
+  REQUIRE(shrunken_light.has_value());
+  const double tangent_ratio =
+      static_cast<double>(shrunken_light->tangent_rank) /
+      static_cast<double>(raw.X.front().rows());
+  CHECK(shrunken_light->sensitivity_shrinkage ==
+        doctest::Approx(tangent_ratio / (1.0 + tangent_ratio)));
+  CHECK(std::isfinite(shrunken_light->flip.p_sandwich));
+
+  opts.resampling.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::ObservedInformationSqrtShrinkage;
+  auto shrunken_sqrt = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  if (!shrunken_sqrt.has_value()) MESSAGE(shrunken_sqrt.error().detail);
+  REQUIRE(shrunken_sqrt.has_value());
+  CHECK(shrunken_sqrt->sensitivity_shrinkage ==
+        doctest::Approx(std::sqrt(tangent_ratio) /
+                        (1.0 + std::sqrt(tangent_ratio))));
+  CHECK(std::isfinite(shrunken_sqrt->flip.p_sandwich));
+
+  opts.resampling.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::ObservedInformation;
   opts.metric =
       inf::frontier::GlobalScoreFlipOptions::Metric::ObservedInformation;
   auto observed_metric = inf::frontier::global_score_flip_test(
@@ -2064,6 +2090,25 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
   CHECK(std::isfinite(saturated_observed_score->flip.statistic_effective));
   CHECK(std::isfinite(saturated_observed_score->flip.p_mixture));
   CHECK(saturated_observed_score->flip.min_variance_eigenvalue > 0.0);
+  CHECK(saturated_observed_score->n_obs == raw.X.front().rows());
+  CHECK(saturated_observed_score->projected_score.size() ==
+        saturated_observed_score->flip.df);
+  CHECK(saturated_observed_score->projected_metric.rows() ==
+        saturated_observed_score->flip.df);
+  CHECK(saturated_observed_score->projected_meat.rows() ==
+        saturated_observed_score->flip.df);
+  const Eigen::VectorXd metric_solution =
+      saturated_observed_score->projected_metric.ldlt().solve(
+          saturated_observed_score->projected_score);
+  CHECK(saturated_observed_score->projected_score.dot(metric_solution) ==
+        doctest::Approx(
+            saturated_observed_score->flip.statistic_effective).epsilon(1e-10));
+  const Eigen::VectorXd meat_solution =
+      saturated_observed_score->projected_meat.ldlt().solve(
+          saturated_observed_score->projected_score);
+  CHECK(saturated_observed_score->projected_score.dot(meat_solution) ==
+        doctest::Approx(
+            saturated_observed_score->flip.statistic_sandwich).epsilon(1e-10));
   CHECK((saturated_observed_score->flip.eigvals -
          observed_metric->flip.eigvals).norm() > 1e-12);
 }

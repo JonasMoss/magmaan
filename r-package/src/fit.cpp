@@ -8229,11 +8229,18 @@ score_flip_sensitivity_from_string(const std::string& sensitivity) {
   if (sensitivity == "observed") {
     return Sensitivity::ObservedInformation;
   }
+  if (sensitivity == "observed-shrink-light") {
+    return Sensitivity::ObservedInformationLightShrinkage;
+  }
+  if (sensitivity == "observed-shrink-sqrt") {
+    return Sensitivity::ObservedInformationSqrtShrinkage;
+  }
   if (sensitivity == "observed-h1") {
     return Sensitivity::SaturatedObservedInformation;
   }
   Rcpp::stop("magmaan: score_flip_test sensitivity must be 'expected', "
-             "'observed', or 'observed-h1'");
+             "'observed', 'observed-shrink-light', "
+             "'observed-shrink-sqrt', or 'observed-h1'");
   return Sensitivity::ExpectedInformation;
 }
 
@@ -8246,6 +8253,10 @@ const char* score_flip_sensitivity_string(
       return "expected";
     case Sensitivity::ObservedInformation:
       return "observed";
+    case Sensitivity::ObservedInformationLightShrinkage:
+      return "observed-shrink-light";
+    case Sensitivity::ObservedInformationSqrtShrinkage:
+      return "observed-shrink-sqrt";
     case Sensitivity::SaturatedObservedInformation:
       return "observed-h1";
   }
@@ -8337,6 +8348,11 @@ Rcpp::List global_score_flip_result_to_r(
     const magmaan::inference::frontier::GlobalScoreFlipTestResult& out) {
   Rcpp::List result = score_flip_result_to_r(out.flip);
   result["metric"] = global_score_metric_string(out.metric);
+  result["sensitivity_shrinkage"] = out.sensitivity_shrinkage;
+  result["n_obs"] = out.n_obs;
+  result["projected_score"] = Rcpp::wrap(out.projected_score);
+  result["projected_metric"] = Rcpp::wrap(out.projected_metric);
+  result["projected_meat"] = Rcpp::wrap(out.projected_meat);
   result["saturated_moment_dim"] = out.saturated_moment_dim;
   result["tangent_rank"] = out.tangent_rank;
   result["tangent_min_singular_value"] = out.tangent_min_singular_value;

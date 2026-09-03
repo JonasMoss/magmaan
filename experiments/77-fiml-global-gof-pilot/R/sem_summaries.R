@@ -13,6 +13,14 @@ sem_method_catalog <- function() {
     "Observed-score FMG SS" = "p_score_corrected_ss",
     "Observed-score FMG pEBA(4)" = "p_score_corrected_peba4",
     "Observed-score FMG all" = "p_score_corrected_all",
+    "Robust score, raw OPG chi-square" = "p_score_sandwich_raw",
+    "Robust score, centered Hotelling F" = "p_score_sandwich_hotelling",
+    "Robust score, light shrinkage" = "p_score_sandwich_shrink_light",
+    "Robust score, square-root shrinkage" = "p_score_sandwich_shrink_sqrt",
+    "Robust score, light sensitivity shrinkage" =
+      "p_score_sandwich_sensitivity_light",
+    "Robust score, square-root sensitivity shrinkage" =
+      "p_score_sandwich_sensitivity_sqrt",
     "Full-observed score FMG SB" = "p_score_observed_metric_sb",
     "Full-observed score FMG SS" = "p_score_observed_metric_ss",
     "Full-observed score FMG pEBA(4)" = "p_score_observed_metric_peba4",

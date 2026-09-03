@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <set>
@@ -2593,6 +2594,15 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   const bool observed_sensitivity =
       options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
   if (options.sensitivity ==
+          ScoreFlipSensitivity::ObservedInformationLightShrinkage ||
+      options.sensitivity ==
+          ScoreFlipSensitivity::ObservedInformationSqrtShrinkage) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: shrunken observed sensitivity is available only "
+        "for global goodness of fit"));
+  }
+  if (options.sensitivity ==
       ScoreFlipSensitivity::SaturatedObservedInformation) {
     return std::unexpected(make_err(
         PostError::Kind::NumericIssue,
@@ -3122,8 +3132,16 @@ global_score_flip_test(spec::LatentStructure pt,
   const bool multiplier_studentized =
       options.multiplier_studentization ==
       ScoreFlipMultiplierStudentization::WeightedMeat;
+  const bool light_shrunken_observed_sensitivity =
+      options.sensitivity ==
+      ScoreFlipSensitivity::ObservedInformationLightShrinkage;
+  const bool sqrt_shrunken_observed_sensitivity =
+      options.sensitivity ==
+      ScoreFlipSensitivity::ObservedInformationSqrtShrinkage;
   const bool observed_sensitivity =
-      options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+      options.sensitivity == ScoreFlipSensitivity::ObservedInformation ||
+      light_shrunken_observed_sensitivity ||
+      sqrt_shrunken_observed_sensitivity;
   const bool saturated_observed_sensitivity =
       options.sensitivity ==
       ScoreFlipSensitivity::SaturatedObservedInformation;
@@ -3271,9 +3289,35 @@ global_score_flip_test(spec::LatentStructure pt,
     }
     saturated_observed_information = std::move(*saturated_observed);
   }
+  double sensitivity_shrinkage = 0.0;
+  Eigen::MatrixXd shrunken_observed_information;
+  if (light_shrunken_observed_sensitivity ||
+      sqrt_shrunken_observed_sensitivity) {
+    const auto n_obs = std::accumulate(
+        geometry->n_obs.begin(), geometry->n_obs.end(), std::size_t{0});
+    if (n_obs == 0) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "global_score_flip_test: cannot shrink sensitivity with zero "
+          "observations"));
+    }
+    const double ratio = static_cast<double>(tangent_rank) /
+                         static_cast<double>(n_obs);
+    sensitivity_shrinkage = light_shrunken_observed_sensitivity
+        ? ratio / (1.0 + ratio)
+        : std::sqrt(ratio) / (1.0 + std::sqrt(ratio));
+    shrunken_observed_information =
+        (1.0 - sensitivity_shrinkage) * observed_information +
+        sensitivity_shrinkage * geometry->information;
+  }
   const Eigen::MatrixXd& sensitivity = saturated_observed_sensitivity
       ? saturated_observed_information
-      : observed_sensitivity ? observed_information : geometry->information;
+      : (light_shrunken_observed_sensitivity ||
+         sqrt_shrunken_observed_sensitivity)
+          ? shrunken_observed_information
+          : observed_sensitivity
+              ? observed_information
+              : geometry->information;
   const Eigen::MatrixXd& metric = saturated_observed_metric
       ? saturated_observed_information
       : observed_metric ? observed_information : geometry->information;
@@ -3460,6 +3504,13 @@ global_score_flip_test(spec::LatentStructure pt,
   GlobalScoreFlipTestResult out;
   out.flip = std::move(flip);
   out.metric = global_options.metric;
+  out.sensitivity_shrinkage = sensitivity_shrinkage;
+  out.n_obs = static_cast<int>(total_n);
+  out.projected_score = u_obs;
+  out.projected_metric = V_identity;
+  out.projected_meat = G.transpose() * B1 * G;
+  out.projected_meat =
+      0.5 * (out.projected_meat + out.projected_meat.transpose());
   out.saturated_moment_dim = static_cast<int>(moment_dim);
   out.tangent_rank = static_cast<int>(tangent_rank);
   out.tangent_min_singular_value = tangent_min;
@@ -3853,6 +3904,12 @@ global_score_flip_test_ml2s(
   GlobalScoreFlipTestResult out;
   out.flip = std::move(flip);
   out.metric = global_options.metric;
+  out.n_obs = static_cast<int>(total_rows);
+  out.projected_score = u_obs;
+  out.projected_metric = V_identity;
+  out.projected_meat = G.transpose() * B1 * G;
+  out.projected_meat =
+      0.5 * (out.projected_meat + out.projected_meat.transpose());
   out.saturated_moment_dim = static_cast<int>(moment_dim);
   out.tangent_rank = static_cast<int>(tangent_rank);
   out.tangent_min_singular_value = tangent_min;
