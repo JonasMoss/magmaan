@@ -7,6 +7,7 @@ format:
     toc: true
     number-sections: false
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -63,44 +64,44 @@ $$
 
 be the local SEM tangent, after incorporating affine equality constraints. Let
 $K$ be an orthonormal basis for $\operatorname{col}(\Delta)$ and $D$ an
-orthonormal basis for its Euclidean complement. If $A$ is the realized
+orthonormal basis for its Euclidean complement. If $H$ is the realized
 observed-data saturated-moment sensitivity, define
 
 $$
-G_A
-=D-K(K^{\mathsf T}AK)^{-1}K^{\mathsf T}AD.
+G_H
+=D-K(K^{\mathsf T}HK)^{-1}K^{\mathsf T}HD.
 $$
 
 The construction ensures
 
 $$
-K^{\mathsf T}AG_A=0.
+K^{\mathsf T}HG_H=0.
 $$
 
-Thus the columns of $G_A$ represent saturated directions made orthogonal, in
+Thus the columns of $G_H$ represent saturated directions made orthogonal, in
 the sensitivity metric, to changes locally explained by the fitted SEM. The
 casewise effective contributions and their sum are
 
 $$
-z_i=G_A^{\mathsf T}s_i,
+z_i=G_H^{\mathsf T}s_i,
 \qquad
 u=\sum_{i=1}^n z_i.
 $$
 
-With
+With quadratic metric $M$,
 
 $$
-V=G_A^{\mathsf T}IG_A,
+V_M=G_H^{\mathsf T}MG_H,
 $$
 
 the observed statistic is
 
 $$
-T=u^{\mathsf T}V^{-1}u.
+T_M=u^{\mathsf T}V_M^{-1}u.
 $$
 
-Here $I$ and $V$ are sample-summed quantities. Equivalently, one may divide
-$u$ by $\sqrt n$ and $V$ by $n$; the quadratic statistic is unchanged. The
+Here $M$ and $V_M$ are sample-summed quantities. Equivalently, one may divide
+$u$ by $\sqrt n$ and $V_M$ by $n$; the quadratic statistic is unchanged. The
 dimension
 
 $$
@@ -116,24 +117,24 @@ computes
 $$
 u_b=\sum_{i=1}^n w_{ib}z_i,
 \qquad
-T_b=u_b^{\mathsf T}V^{-1}u_b.
+T_{M,b}=u_b^{\mathsf T}V_M^{-1}u_b.
 $$
 
-With $B$ random draws, the reported Monte Carlo p-value is
+With $R$ random draws, the reported Monte Carlo p-value is
 
 $$
 \widehat p
-=\frac{1+\sum_{b=1}^B\mathbf 1(T_b\geq T)}{B+1}.
+=\frac{1+\sum_{b=1}^R\mathbf 1(T_{M,b}\geq T_M)}{R+1}.
 $$
 
-Here $I$ is the positive-definite pattern-conditional Gaussian Fisher metric.
-The nuisance sensitivity $A$ and the common quadratic metric have distinct
-roles. Multiplier validity requires the first-order effective rows to use $A$
-and permits any fixed positive-definite limiting quadratic. The fitted moments,
-tangent projection, and metric $V$ remain fixed. No
-saturated model and no bootstrap SEM is fitted. Experiment 77 uses $B=199$, so
+Experiment 77 takes $M=I_F$, the positive-definite pattern-conditional
+Gaussian Fisher metric. The nuisance sensitivity $H$ and the common quadratic
+metric have distinct roles. Multiplier validity requires the first-order
+effective rows to use $H$ and permits any fixed positive-definite limiting
+quadratic. The fitted moments, tangent projection, and metric $V_M$ remain fixed. No
+saturated model and no bootstrap SEM is fitted. Experiment 77 uses $R=199$, so
 the p-value grid has width $1/200$. The legacy comparator substitutes the
-pattern-conditional Fisher information $I$ for $A$ and uses Rademacher
+pattern-conditional Fisher information $I_F$ for $H$ and uses Rademacher
 multipliers.
 
 ## Why the nuisance projection appears
@@ -141,13 +142,13 @@ multipliers.
 The construction is the classical effective-score correction in a different
 coordinate system. Partition a parameter into tested and nuisance components,
 $(\beta,\gamma)$, with casewise scores
-$\psi_{\beta i}$ and $\psi_{\gamma i}$. Let $A$ be the sensitivity, or
+$\psi_{\beta i}$ and $\psi_{\gamma i}$. Let $H$ be the sensitivity, or
 negative expected derivative of the score, partitioned conformably. Under the
 null,
 
 $$
 \sqrt n(\widehat\gamma-\gamma_0)
-=A_{\gamma\gamma}^{-1}
+=H_{\gamma\gamma}^{-1}
 \frac{1}{\sqrt n}\sum_{i=1}^n\psi_{\gamma i}+o_p(1).
 $$
 
@@ -160,7 +161,7 @@ $$
 \frac{1}{\sqrt n}\sum_{i=1}^n
 \left(
 \psi_{\beta i}
--A_{\beta\gamma}A_{\gamma\gamma}^{-1}\psi_{\gamma i}
+-H_{\beta\gamma}H_{\gamma\gamma}^{-1}\psi_{\gamma i}
 \right)
 +o_p(1).
 $$
@@ -170,7 +171,7 @@ It is the score-test/C(alpha) construction of @neyman1959 and the effective
 score developed pedagogically by @hall_mathiason1990. In experiment 77, the
 tested coordinates are the saturated directions $D$, the nuisance coordinates
 are the SEM tangent $K$, and the observed-data Hessian supplies the sensitivity
-blocks. The matrix $G_A$ is exactly the coordinate-free version of the
+blocks. The matrix $G_H$ is exactly the coordinate-free version of the
 subtraction above.
 
 This correction matters for resampling. At a restricted optimum the **sum** of
@@ -193,14 +194,14 @@ Suppose, under the null, that the rows are independent, have mean zero, satisfy
 a Lindeberg condition, and have limiting average covariance
 
 $$
-B_z=\lim_{n\to\infty}\frac1n\sum_{i=1}^n
+J_z=\lim_{n\to\infty}\frac1n\sum_{i=1}^n
 \operatorname{Var}(z_i).
 $$
 
 Then
 
 $$
-U_n\Rightarrow N(0,B_z).
+U_n\Rightarrow N(0,J_z).
 $$
 
 Conditionally on the observed rows, multipliers with
@@ -225,18 +226,18 @@ function summands appears in @hu_zidek1995 and @hu_kalbfleisch2000; and
 @kline_santos2012 explicitly develops score perturbation for M-estimator Wald,
 LM, and moment-restriction tests.
 
-If the working metric $V/n$ converges to $V_0$, but $V_0\neq B_z$, then
+If the working metric $V_M/n$ converges to $V_0$, but $V_0\neq J_z$, then
 
 $$
-T\Rightarrow
+T_M\Rightarrow
 Z^{\mathsf T}V_0^{-1}Z,
-\qquad Z\sim N(0,B_z),
+\qquad Z\sim N(0,J_z),
 $$
 
 which is generally a weighted sum of independent $\chi_1^2$ variables. The
 multiplier draws reproduce this spectrum implicitly because their conditional
-covariance estimates $B_z$. They do not need to form the full fourth-moment
-matrix $B_z$ and diagonalize $V_0^{-1}B_z$. This connects the score multiplier
+covariance estimates $J_z$. They do not need to form the full fourth-moment
+matrix $J_z$ and diagonalize $V_0^{-1}J_z$. This connects the score multiplier
 to the weighted-chi-square SEM asymptotics of @shapiro1983 and @satorra1989.
 
 The often-used phrase "flipping kills the mean but preserves the covariance"
@@ -260,7 +261,7 @@ $$
 $$
 
 Consequently, a Rademacher multiplier draw and an independent sign-flip draw
-produce exactly the same $u_b$ and $T_b$. There is no numerical or statistical
+produce exactly the same $u_b$ and $T_{M,b}$. There is no numerical or statistical
 difference hiding behind the two names when the same rows, metric, and p-value
 rule are used.
 
@@ -343,7 +344,8 @@ within-pattern centering. The legacy API retains centering as a diagnostic.
 
 ### Studentization
 
-Experiment 77 holds $V=G_A^{\mathsf T}IG_A$ fixed across multiplier draws. This
+Experiment 77 holds
+$V_M=G_H^{\mathsf T}I_F G_H$ fixed across multiplier draws. This
 matches the multidimensional Hemerik--Goeman--Finos construction, which permits
 a common convergent quadratic metric. It deliberately lets the resampling
 distribution reproduce the weighted-chi-square spectrum induced by mismatch
@@ -355,13 +357,13 @@ draw-specific covariance or "meat." One simple version defines
 $$
 \bar z_b^*=n^{-1}\sum_i\xi_{ib}z_i,
 \qquad
-\widehat B_b^*
+\widehat J_b^*
 =\sum_i
 (\xi_{ib}z_i-\bar z_b^*)
 (\xi_{ib}z_i-\bar z_b^*)^{\mathsf T},
 \qquad
 T_b^{\mathrm{stud}}
-=u_b^{\mathsf T}(\widehat B_b^*)^{-1}u_b.
+=u_b^{\mathsf T}(\widehat J_b^*)^{-1}u_b.
 $$
 
 For Rademacher weights, the uncentered second-moment term is fixed because
@@ -421,9 +423,9 @@ validity argument still needs to state conditions ensuring:
 - independent casewise observed-data scores, possibly non-identically
   distributed over missingness patterns;
 - zero expected saturated score at the null pseudo-true moments;
-- consistency of the working sensitivity $I$ used in the nuisance projection;
-- a stable tangent rank and nonsingular $K^{\mathsf T}IK$ and
-  $G^{\mathsf T}IG$;
+- consistency of the working sensitivity $H$ used in the nuisance projection;
+- a stable tangent rank and nonsingular $K^{\mathsf T}HK$ and
+  $G_H^{\mathsf T}MG_H$;
 - a Lindeberg condition and consistent empirical covariance for the projected
   rows;
 - negligibility of replacing population moments, tangent, and information by
