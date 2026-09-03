@@ -2045,6 +2045,27 @@ TEST_CASE("frontier global FIML score flip is reproducible with missing patterns
         doctest::Approx(corrected->flip.statistic_effective).epsilon(1e-12));
   CHECK((observed_metric->flip.eigvals - corrected->flip.eigvals).norm() >
         1e-12);
+
+  opts.resampling.sensitivity =
+      inf::frontier::ScoreFlipSensitivity::SaturatedObservedInformation;
+  opts.metric = inf::frontier::GlobalScoreFlipOptions::Metric::
+      SaturatedObservedInformation;
+  auto saturated_observed_score = inf::frontier::global_score_flip_test(
+      h.pt, h.rep, raw, *pack, *est, opts);
+  if (!saturated_observed_score.has_value()) {
+    MESSAGE(saturated_observed_score.error().detail);
+  }
+  REQUIRE(saturated_observed_score.has_value());
+  CHECK(saturated_observed_score->flip.sensitivity ==
+        inf::frontier::ScoreFlipSensitivity::SaturatedObservedInformation);
+  CHECK(saturated_observed_score->metric ==
+        inf::frontier::GlobalScoreFlipOptions::Metric::
+            SaturatedObservedInformation);
+  CHECK(std::isfinite(saturated_observed_score->flip.statistic_effective));
+  CHECK(std::isfinite(saturated_observed_score->flip.p_mixture));
+  CHECK(saturated_observed_score->flip.min_variance_eigenvalue > 0.0);
+  CHECK((saturated_observed_score->flip.eigvals -
+         observed_metric->flip.eigvals).norm() > 1e-12);
 }
 
 TEST_CASE("frontier global ML2S score flip uses Stage-1 EM influence") {

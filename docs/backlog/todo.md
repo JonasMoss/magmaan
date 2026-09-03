@@ -687,6 +687,14 @@ when they next change.
   few/many-pattern mechanisms, plus a separately labeled nonnormal-MAR
   pseudo-true-target stress. Third, predeclare and report a public-data corpus
   screen for one or two interpretable MLR-reject/score-pEBA4-nonreject examples.
+  A targeted three-df nonnormal-MAR pseudo-null now isolates the information
+  choice: expected-H0 score pEBA4 rejection falls to zero under strong tail
+  selection through n=10,000, whereas observed-H0 sensitivity with the stable
+  expected metric remains near nominal. Saturated-H1 observed geometry is now
+  exposed as an opt-in comparator; it is PD and shares the H0 sensitivity limit,
+  but converges prohibitively slowly in this stress design. Carry observed-H0
+  sensitivity/expected metric into the source-based latent-model gate and do
+  not treat expected Fisher as the default under nonnormal MAR.
   Multiplier development is dropped from the planned comparison; preserve its
   completed diagnostics but do not expand it. Do not launch the publication
   grid until model parameters, source adaptations, missingness mappings, and

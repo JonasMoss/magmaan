@@ -301,6 +301,17 @@ This rule is prospective. The tables below retain the retired pilot's original
 classification so its saved results are described faithfully; its nonnormal-
 MAR arms do not qualify as nulls for the replacement design.
 
+A subsequent exact nonnormal-MAR pseudo-null diagnostic also changes the
+planned score geometry. Under strong tail selection, expected-H0 score
+pEBA(4) rejection fell to zero through $n=10{,}000$, whereas realized H0
+sensitivity with the stable expected metric remained near nominal. Realized
+saturated-H1 information is positive definite and shares the same population
+sensitivity at the pseudo-null, but converged prohibitively slowly in this
+design. The replacement nonnormal-MAR battery will therefore use observed-H0
+sensitivity with the expected metric as its primary score construction and
+retain expected-H0 and observed-H1 geometries as diagnostics. Full details are
+in the [pseudo-null information note](notes/iteration-13-pseudonull-information.md).
+
 ## Preliminary story
 
 ### 1. Projected-score pEBA(4) is the strongest FIML result
@@ -565,7 +576,10 @@ calibrations:
 - **LR/discrepancy FMG:** SB, SS, pEBA(4), and `all`, computed from the robust
   eigenvalue spectrum of the FIML likelihood-ratio or ML2S Stage-2 discrepancy.
 - **Score FMG:** the same four spectrum transforms applied to the global
-  projected score statistic and its own robust eigenvalues.
+  projected score statistic and its own robust eigenvalues. The retired tables
+  use expected-H0 sensitivity. The prospective nonnormal-MAR comparison uses
+  observed-H0 sensitivity with the expected metric, with expected-H0 and
+  observed-H1 variants reported as information diagnostics.
 
 ## Paired estimators and the larger model
 

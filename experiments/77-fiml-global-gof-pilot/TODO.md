@@ -50,6 +50,13 @@ is frozen.
   normal/VM2/IG2, while observed sensitivity approaches it more slowly and
   LRT/FMG's severe-VM inflation declines with N. See
   `notes/iteration-12-mcar-expected-score.md`.
+- [x] Isolate information-matrix failure at an exact nonnormal-MAR pseudo-null.
+  In a three-df block-independence diagnostic, expected-H0 score pEBA(4)
+  rejection fell to zero as MAR selection strengthened, while observed-H0
+  sensitivity with the expected metric stayed near nominal. The new
+  observed-H1 geometry is PD and null-equivalent asymptotically but converges
+  prohibitively slowly under strong selection. See
+  `notes/iteration-13-pseudonull-information.md`.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next
@@ -110,10 +117,12 @@ Before changing the simulation code:
   Gaussian-FIML pseudo-true discrepancy before running Monte Carlo. If the
   saturated pseudo-target is outside H0, classify this arm as a fixed
   pseudo-model alternative rather than an adverse null.
-- [ ] Build at least one nonnormal-MAR pseudo-null for the information-matrix
-  comparison. It must preserve nonnormality and MAR while satisfying the
-  Gaussian-FIML pseudo-null; the earlier Gaussian shadow is only an
-  implementation control and does not meet this requirement.
+- [x] Build a nonnormal-MAR pseudo-null for the information-matrix comparison.
+  The exact block-independence diagnostic preserves nonnormality and MAR while
+  satisfying the Gaussian-FIML pseudo-null, and establishes that expected
+  sensitivity can fail severely. It is a targeted methods diagnostic, not one
+  of the five substantive paper models; reproduce the construction in a
+  source-based latent model before freezing the primary battery.
 - [ ] Calibrate the achieved marginal missing rate and pattern distribution for
   every model/mechanism pair; save these population or very-large-sample checks
   before the production run.

@@ -2592,6 +2592,12 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
       ScoreFlipMultiplierStudentization::WeightedMeat;
   const bool observed_sensitivity =
       options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+  if (options.sensitivity ==
+      ScoreFlipSensitivity::SaturatedObservedInformation) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: saturated-H1 observed sensitivity is available only for global goodness of fit"));
+  }
   if (observed_sensitivity &&
       options.calibration != ScoreFlipCalibration::Effective &&
       options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
@@ -3118,10 +3124,17 @@ global_score_flip_test(spec::LatentStructure pt,
       ScoreFlipMultiplierStudentization::WeightedMeat;
   const bool observed_sensitivity =
       options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+  const bool saturated_observed_sensitivity =
+      options.sensitivity ==
+      ScoreFlipSensitivity::SaturatedObservedInformation;
   const bool observed_metric =
       global_options.metric ==
       GlobalScoreFlipOptions::Metric::ObservedInformation;
-  if (observed_sensitivity && options.center_multiplier_scores) {
+  const bool saturated_observed_metric =
+      global_options.metric ==
+      GlobalScoreFlipOptions::Metric::SaturatedObservedInformation;
+  if ((observed_sensitivity || saturated_observed_sensitivity) &&
+      options.center_multiplier_scores) {
     return std::unexpected(make_err(
         PostError::Kind::NumericIssue,
         "global_score_flip_test: observed sensitivity does not support within-pattern score centering"));
@@ -3237,10 +3250,33 @@ global_score_flip_test(spec::LatentStructure pt,
     }
     observed_information = std::move(*observed);
   }
-  const Eigen::MatrixXd& sensitivity = observed_sensitivity
-      ? observed_information : geometry->information;
-  const Eigen::MatrixXd& metric = observed_metric
-      ? observed_information : geometry->information;
+  Eigen::MatrixXd saturated_observed_information;
+  if (saturated_observed_sensitivity || saturated_observed_metric) {
+    auto h1 = estimate::fiml::fiml_h1_moments(raw, pack);
+    if (!h1.has_value()) return std::unexpected(fit_to_post(h1.error()));
+    model::ImpliedMoments h1_moments;
+    h1_moments.sigma = h1->sigma;
+    h1_moments.mu = h1->mu;
+    auto saturated_observed =
+        estimate::fiml::fiml_saturated_observed_information(
+            raw, pack, h1_moments, include_means);
+    if (!saturated_observed.has_value()) {
+      return std::unexpected(saturated_observed.error());
+    }
+    if (saturated_observed->rows() != moment_dim ||
+        saturated_observed->cols() != moment_dim) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "global_score_flip_test: saturated-H1 observed information has incompatible dimensions"));
+    }
+    saturated_observed_information = std::move(*saturated_observed);
+  }
+  const Eigen::MatrixXd& sensitivity = saturated_observed_sensitivity
+      ? saturated_observed_information
+      : observed_sensitivity ? observed_information : geometry->information;
+  const Eigen::MatrixXd& metric = saturated_observed_metric
+      ? saturated_observed_information
+      : observed_metric ? observed_information : geometry->information;
   Eigen::MatrixXd G = D;
   if (tangent_rank > 0) {
     auto Ainv = invert_symmetric(
@@ -3450,13 +3486,13 @@ global_score_flip_test_ml2s(
   const bool multiplier_studentized =
       options.multiplier_studentization ==
       ScoreFlipMultiplierStudentization::WeightedMeat;
-  if (options.sensitivity == ScoreFlipSensitivity::ObservedInformation) {
+  if (options.sensitivity != ScoreFlipSensitivity::ExpectedInformation) {
     return std::unexpected(make_err(
         PostError::Kind::NumericIssue,
         "global_score_flip_test_ml2s: observed sensitivity is not defined for the two-stage score construction"));
   }
-  if (global_options.metric ==
-      GlobalScoreFlipOptions::Metric::ObservedInformation) {
+  if (global_options.metric !=
+      GlobalScoreFlipOptions::Metric::ExpectedInformation) {
     return std::unexpected(make_err(
         PostError::Kind::NumericIssue,
         "global_score_flip_test_ml2s: observed metric is not defined for the two-stage score construction"));

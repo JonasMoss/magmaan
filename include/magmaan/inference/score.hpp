@@ -503,10 +503,15 @@ enum class ScoreFlipMultiplierStudentization {
 // information choice preserves the original normal-theory construction.
 // ObservedInformation uses the realized likelihood Hessian for the nuisance
 // projection when information equality need not hold. The common score
-// quadratic retains the stable expected-information metric.
+// quadratic retains the stable expected-information metric unless separately
+// overridden by GlobalScoreFlipOptions::Metric. SaturatedObservedInformation
+// is global-GOF-only: it evaluates the same realized saturated Hessian at the
+// fitted saturated H1 moments, yielding a positive-definite null-equivalent
+// plug-in without using the restricted point's complement curvature.
 enum class ScoreFlipSensitivity {
   ExpectedInformation,
   ObservedInformation,
+  SaturatedObservedInformation,
 };
 
 struct ScoreFlipOptions {
@@ -603,9 +608,13 @@ struct GlobalScoreFlipOptions {
   // the established pattern-conditional Fisher construction. ObservedInformation
   // is an opt-in diagnostic and fails closed if the realized H0 information is
   // not positive definite on the tested complement.
+  // SaturatedObservedInformation evaluates the realized information at the
+  // saturated H1 optimum; it is null-equivalent to the H0 observed sensitivity
+  // but remains a distinct finite-sample geometry.
   enum class Metric {
     ExpectedInformation,
     ObservedInformation,
+    SaturatedObservedInformation,
   };
   Metric metric = Metric::ExpectedInformation;
 

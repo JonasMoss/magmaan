@@ -8229,8 +8229,11 @@ score_flip_sensitivity_from_string(const std::string& sensitivity) {
   if (sensitivity == "observed") {
     return Sensitivity::ObservedInformation;
   }
-  Rcpp::stop("magmaan: score_flip_test sensitivity must be 'expected' or "
-             "'observed'");
+  if (sensitivity == "observed-h1") {
+    return Sensitivity::SaturatedObservedInformation;
+  }
+  Rcpp::stop("magmaan: score_flip_test sensitivity must be 'expected', "
+             "'observed', or 'observed-h1'");
   return Sensitivity::ExpectedInformation;
 }
 
@@ -8238,8 +8241,15 @@ const char* score_flip_sensitivity_string(
     magmaan::inference::frontier::ScoreFlipSensitivity sensitivity) {
   using Sensitivity =
       magmaan::inference::frontier::ScoreFlipSensitivity;
-  return sensitivity == Sensitivity::ObservedInformation
-      ? "observed" : "expected";
+  switch (sensitivity) {
+    case Sensitivity::ExpectedInformation:
+      return "expected";
+    case Sensitivity::ObservedInformation:
+      return "observed";
+    case Sensitivity::SaturatedObservedInformation:
+      return "observed-h1";
+  }
+  return "expected";
 }
 
 magmaan::inference::frontier::GlobalScoreFlipOptions::Metric
@@ -8248,8 +8258,11 @@ global_score_metric_from_string(const std::string& metric) {
       magmaan::inference::frontier::GlobalScoreFlipOptions::Metric;
   if (metric == "expected") return Metric::ExpectedInformation;
   if (metric == "observed") return Metric::ObservedInformation;
-  Rcpp::stop("magmaan: global_score_flip_test metric must be 'expected' or "
-             "'observed'");
+  if (metric == "observed-h1") {
+    return Metric::SaturatedObservedInformation;
+  }
+  Rcpp::stop("magmaan: global_score_flip_test metric must be 'expected', "
+             "'observed', or 'observed-h1'");
   return Metric::ExpectedInformation;
 }
 
@@ -8257,7 +8270,15 @@ const char* global_score_metric_string(
     magmaan::inference::frontier::GlobalScoreFlipOptions::Metric metric) {
   using Metric =
       magmaan::inference::frontier::GlobalScoreFlipOptions::Metric;
-  return metric == Metric::ObservedInformation ? "observed" : "expected";
+  switch (metric) {
+    case Metric::ExpectedInformation:
+      return "expected";
+    case Metric::ObservedInformation:
+      return "observed";
+    case Metric::SaturatedObservedInformation:
+      return "observed-h1";
+  }
+  return "expected";
 }
 
 Rcpp::List score_flip_result_to_r(

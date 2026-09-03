@@ -177,11 +177,19 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
 #'   model.
 #' @param data Raw fitting data for complete-data ML. FIML and ML2S use
 #'   `fit$raw_data`.
+#' @param sensitivity Nuisance-projection bread. `"expected"` uses the fitted
+#'   H0 Fisher information, `"observed"` uses the realized H0 Hessian, and
+#'   `"observed-h1"` uses the realized saturated H1 Hessian. The H1 choice is
+#'   null-equivalent to observed H0 sensitivity but evaluated at the stable
+#'   saturated optimum. The observed choices are unavailable for ML2S.
 #' @param metric Score-quadratic and robust-spectrum bread. `"expected"` uses
 #'   the stable pattern-conditional Fisher information. `"observed"` uses the
 #'   realized H0 likelihood information and fails if it is not positive
-#'   definite on the tested complement. The latter is an experimental ML/FIML
-#'   diagnostic and is not defined for ML2S.
+#'   definite on the tested complement. `"observed-h1"` uses the realized
+#'   saturated likelihood information at the fitted H1 moments; under a
+#'   pseudo-null it has the same population target as observed H0 information
+#'   but is positive definite at the saturated optimum. The observed choices
+#'   are experimental ML/FIML diagnostics and are not defined for ML2S.
 #' @inheritParams score_flip_test
 #' @return A `magmaan_global_score_flip_test` list containing the effective
 #'   multiplier result, asymptotic comparators, and saturated/tangent geometry
@@ -193,8 +201,8 @@ global_score_flip_test <- function(
                    "centered-exponential"),
     two_point_skewness = 1, center_multiplier_scores = FALSE,
     multiplier_studentization = c("none", "weighted-meat"),
-    sensitivity = c("expected", "observed"),
-    metric = c("expected", "observed")) {
+    sensitivity = c("expected", "observed", "observed-h1"),
+    metric = c("expected", "observed", "observed-h1")) {
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
   sensitivity <- match.arg(sensitivity)
@@ -226,15 +234,15 @@ global_score_flip_test <- function(
     stop("global_score_flip_test(): `center_multiplier_scores` must be TRUE or FALSE",
          call. = FALSE)
   }
-  if (sensitivity == "observed" && estimator == "ML2S") {
+  if (sensitivity != "expected" && estimator == "ML2S") {
     stop("global_score_flip_test(): observed sensitivity is not defined for ML2S",
          call. = FALSE)
   }
-  if (metric == "observed" && estimator == "ML2S") {
+  if (metric != "expected" && estimator == "ML2S") {
     stop("global_score_flip_test(): observed metric is not defined for ML2S",
          call. = FALSE)
   }
-  if (sensitivity == "observed" && isTRUE(center_multiplier_scores)) {
+  if (sensitivity != "expected" && isTRUE(center_multiplier_scores)) {
     stop("global_score_flip_test(): observed sensitivity does not support within-pattern score centering",
          call. = FALSE)
   }

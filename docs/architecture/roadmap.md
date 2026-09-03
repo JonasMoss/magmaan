@@ -878,7 +878,14 @@ an unconstrained gradient test to constrained solutions.
   existing structural observed-H1 information. A separate opt-in global-score
   metric can now use that same observed H0 information for the score quadratic
   and generalized-eigenvalue bread, while the established default retains the
-  conditional Fisher metric. The full-observed variant fails closed when its
+  conditional Fisher metric. A second observed-information diagnostic uses
+  the realized saturated H1 Hessian for either the nuisance projection or the
+  quadratic/spectrum metric. At a pseudo-null it has the same population target
+  as observed H0 information, while evaluation at the saturated optimum keeps
+  its finite-sample curvature positive definite. The R surface names this
+  choice `observed-h1`; its score rows and observed statistic remain evaluated
+  at H0, so it is an H1-geometry score test rather than an LR construction.
+  The full-observed H0 variant fails closed when its
   tested-complement information is not positive definite and is unavailable
   for ML2S. The tested dimension is therefore
   the saturated mean/covariance dimension minus the numerical tangent rank; no saturated H1
