@@ -277,6 +277,30 @@ cells are retained as an estimand stress test, not interpreted as ordinary
 Type-I error: under nonnormal MAR, Gaussian FIML can converge to pseudo-true
 moments outside the generating SEM.
 
+### Prospective null definition
+
+The replacement study will use an estimator-level null throughout. Let
+$\eta_1^\star$ denote the saturated Gaussian-FIML pseudo-true mean/covariance
+target under the joint outcome and missingness mechanism, and let
+$\mathcal M_0=\{\eta(\theta):\theta\in\Theta_0\}$ denote the fitted SEM. A
+condition is a null condition only when
+
+$$
+\eta_1^\star\in\mathcal M_0,
+$$
+
+equivalently when the population restricted--saturated Gaussian-FIML
+discrepancy is zero. Satisfying the SEM in the generating complete-data
+covariance is not enough. Proposed MAR nulls must be constructed or calibrated
+to this pseudo-null and checked with very-large-sample restricted and saturated
+fits, zero-under-H0 directions, and Monte Carlo uncertainty. Any mechanism
+whose saturated pseudo-target lies outside $\mathcal M_0$ is a pseudo-model
+alternative and belongs in a power or stress analysis, not a size table.
+
+This rule is prospective. The tables below retain the retired pilot's original
+classification so its saved results are described faithfully; its nonnormal-
+MAR arms do not qualify as nulls for the replacement design.
+
 ## Preliminary story
 
 ### 1. Projected-score pEBA(4) is the strongest FIML result
@@ -583,7 +607,9 @@ the first indicator or wave, or with a calibrated 30% MAR mechanism. The MAR
 arm keeps the first two variables observed and makes missingness elsewhere
 depend on them. Under nonnormal MAR it is deliberately a pseudo-ML stress arm:
 normal-theory FIML and saturated normal EM need not target the population
-moments even when the SEM covariance structure is correct.
+moments even when the SEM covariance structure is correct. In the replacement
+study this arm is an alternative unless it is recalibrated so its saturated
+Gaussian-FIML pseudo-target satisfies the SEM.
 
 ## Appendix: numerical and computational details {.appendix}
 

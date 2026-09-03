@@ -7,6 +7,12 @@ is frozen.
 
 ## Scope decision
 
+- [x] Define the null by the estimator being tested. For every future FIML
+  calibration cell, \(H_0\) means that the saturated Gaussian-FIML
+  pseudo-true target belongs to the fitted SEM. A generating full-data
+  covariance that satisfies the SEM is not sufficient under MAR. Retain the
+  old nonnormal-MAR arms only as historical pseudo-model alternatives, never
+  as null/size cells.
 - [x] Make projected-score pEBA(4), with score SB as the simple benchmark, the
   main method story.
 - [x] Treat LR corrections as a separate statistic/correction interaction, not
@@ -93,18 +99,21 @@ Before changing the simulation code:
 - [ ] Decide which missing rates are primary. Their 15% and 30% conditions are
   the default candidates; a smaller paper grid may retain 30% as the main
   stress and use 15% only for sensitivity.
-- [ ] Keep complete and MCAR controls. Separate normal-MAR cells, where the
-  Gaussian observed-data likelihood is correctly specified, from nonnormal-MAR
-  estimand stress.
+- [ ] Keep complete and MCAR controls. For every proposed MAR null, construct
+  or numerically calibrate the DGP so that its saturated Gaussian-FIML
+  pseudo-target lies in the fitted SEM. Verify the restricted--saturated
+  population discrepancy, zero-under-H0 shadow directions, and Monte Carlo
+  uncertainty before admitting the cell to a size table.
 - [ ] Add one deliberately adverse but still MAR diagnostic based on the
   Yuan--Bentler/Savalei warning: selection on an always-observed, skewed tail
   that is strongly related to the variables made missing. Calculate the
-  Gaussian-FIML pseudo-true discrepancy from the generating SEM before running
-  Monte Carlo.
-- [ ] Do not call nonnormal-MAR rejection ordinary Type-I error when Gaussian
-  FIML targets a different pseudo-true moment structure. Report it as estimand
-  drift/model-target failure, with parameter and population-discrepancy
-  diagnostics.
+  Gaussian-FIML pseudo-true discrepancy before running Monte Carlo. If the
+  saturated pseudo-target is outside H0, classify this arm as a fixed
+  pseudo-model alternative rather than an adverse null.
+- [ ] Build at least one nonnormal-MAR pseudo-null for the information-matrix
+  comparison. It must preserve nonnormality and MAR while satisfying the
+  Gaussian-FIML pseudo-null; the earlier Gaussian shadow is only an
+  implementation control and does not meet this requirement.
 - [ ] Calibrate the achieved marginal missing rate and pattern distribution for
   every model/mechanism pair; save these population or very-large-sample checks
   before the production run.
@@ -146,8 +155,10 @@ Primary sources are Savalei and Falk (2014),
 - [ ] Choose the final sample-size, generator, MAR, and power grid only after
   Gates A and B are frozen.
 - [ ] Recalibrate sparse and diffuse alternatives for the source-based model
-  populations. Use method/cell-specific empirical-null cutoffs for the primary
-  power comparison and retain nominal power as a diagnostic.
+  populations as departures from the matching estimator-level pseudo-null.
+  Use method/cell-specific empirical-null cutoffs for the primary power
+  comparison and retain nominal power as a diagnostic.
 - [ ] Write a short simulation protocol stating primary estimands, primary
-  cells, exclusion/failure handling, Monte Carlo precision, and multiplicity of
-  descriptive comparisons before launching the publication run.
+  cells, the numerical pseudo-null acceptance rule, exclusion/failure handling,
+  Monte Carlo precision, and multiplicity of descriptive comparisons before
+  launching the publication run.

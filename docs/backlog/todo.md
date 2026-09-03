@@ -672,10 +672,14 @@ when they next change.
   The remaining 725 replications are not worth recovering before the setup
   changes. The 164,275 available focus rows and complete 30,000-row stress phase
   are collected locally; the preliminary report labels their power summary as
-  incomplete and retired. Preserve the remote files as provenance, exclude
-  this run from publication tables, and build the replacement production run
-  for Slurm only after the design is frozen. The prospective paper has three explicit design
-  gates recorded in
+  incomplete and retired. The replacement design now defines H0 at the
+  estimator level: a calibration DGP must place the saturated Gaussian-FIML
+  pseudo-true target inside the fitted SEM. A generating full-data covariance
+  in the SEM is not a null certificate under MAR; such off-pseudo-null arms are
+  power/estimand-stress conditions. Preserve the remote files as provenance,
+  exclude this run from publication tables, and build the replacement
+  production run for Slurm only after the design is frozen. The prospective
+  paper has three explicit design gates recorded in
   experiment 77's `TODO.md`. First, replace the implementation-oriented pilot
   panel with five broad, sourceable models: one-factor, correlated three-factor,
   bifactor, latent mediation, and linear growth, all at 15 observed variables

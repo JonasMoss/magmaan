@@ -110,3 +110,26 @@ The scientifically honest presentation is therefore:
 4. optionally show the Gaussian shadow as an implementation illustration; and
 5. label the original nonnormal-MAR rejection as pseudo-model/estimand stress,
    not Type-I error.
+
+## Prospective decision
+
+From the next design onward, the Gaussian-FIML pseudo-null is the only null.
+Writing the fitted SEM as \(\mathcal M_0\) and the saturated Gaussian-FIML
+pseudo-target as \(\eta_1^\star\), a DGP enters a calibration table only if
+
+\[
+\eta_1^\star \in \mathcal M_0.
+\]
+
+A full-data covariance generated inside \(\mathcal M_0\) is not itself a null
+certificate under MAR. The original VM2/IG2 MAR arms in this note are therefore
+pseudo-model alternatives. The Gaussian shadow satisfies the pseudo-null but
+does not preserve the nonnormal-MAR problem, so a future information-matrix
+comparison still needs a deliberately constructed nonnormal-MAR pseudo-null.
+
+Operationally, every proposed MAR null must be screened before simulation with
+a very-large-sample saturated H1 fit and restricted H0 fit. Admission requires
+a restricted--saturated per-case discrepancy indistinguishable from zero at
+the stated numerical/Monte Carlo tolerance and negligible zero-under-H0 shadow
+directions. Power perturbations are then defined relative to this same
+pseudo-null target.
