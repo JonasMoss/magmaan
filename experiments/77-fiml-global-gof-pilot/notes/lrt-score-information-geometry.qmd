@@ -89,6 +89,64 @@ correct for the complete variables while the Gaussian-FIML pseudo-true target
 falls outside that SEM. In that case both LR and score tests should eventually
 reject. Calling their rejection rate “size” would test the wrong hypothesis.
 
+### Shared tangent and complement notation
+
+Let $m=\dim(\eta)$ be the dimension of the saturated moment vector, and define
+the SEM moment Jacobian at the pseudo-null by
+
+$$
+\Delta_0
+=\left.
+  \frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}
+ \right|_{\theta=\theta_0^*}.
+$$
+
+After incorporating parameter constraints, let
+
+$$
+r=\operatorname{rank}(\Delta_0),
+\qquad
+d=m-r.
+$$
+
+Here $r$ is the local dimension of the SEM moment surface and $d$ is the
+number of locally excluded saturated directions: ordinarily the model's
+goodness-of-fit degrees of freedom.
+
+Choose matrices
+
+$$
+K\in\mathbb R^{m\times r},
+\qquad
+D\in\mathbb R^{m\times d}
+$$
+
+whose columns form orthonormal bases for the tangent and its ordinary
+Euclidean complement:
+
+$$
+\operatorname{col}(K)=\operatorname{col}(\Delta_0),
+\qquad
+\operatorname{col}(D)=\operatorname{col}(K)^\perp.
+$$
+
+Equivalently,
+
+$$
+K^{\mathsf T}K=I_r,
+\qquad
+D^{\mathsf T}D=I_d,
+\qquad
+K^{\mathsf T}D=0,
+\qquad
+KK^{\mathsf T}+DD^{\mathsf T}=I_m.
+$$
+
+Thus $K$ contains directions obtainable by infinitesimally changing the SEM
+parameters, whereas $D$ contains candidate local lack-of-fit directions. The
+bases are not unique. Only their column spaces matter, and all statistics below
+are invariant to orthogonal changes of basis within either space.
+
 ### The LRT route
 
 The likelihood-ratio statistic compares two fitted likelihoods:
@@ -109,14 +167,6 @@ $$
 T_{\mathrm{LR}}\overset{d}{\longrightarrow}\chi_d^2,
 $$
 
-where
-
-$$
-d=\dim(\eta)-\operatorname{rank}(\Delta),
-\qquad
-\Delta=\frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}.
-$$
-
 Under distributional misspecification, the same base statistic generally has a
 weighted chi-square limit:
 
@@ -126,6 +176,9 @@ T_{\mathrm{LR}}
 \sum_{j=1}^{d}\lambda_{\mathrm{LR},j}\chi_{1,j}^2.
 $$
 
+This is the familiar robust covariance-structure limit
+[@shapiro1983; @satorra1989].
+
 The FMG procedures leave $T_{\mathrm{LR}}$ as the base statistic and transform
 its estimated spectrum. SB replaces the spectrum by its mean; pEBA(4) shrinks
 or pools it in the prescribed way; the plug-in mixture uses the individual
@@ -134,22 +187,91 @@ estimated eigenvalues.
 #### Why does the LRT use saturated-H1 information?
 
 The LRT is literally a difference from the saturated maximum. Its local
-quadratic expansion is therefore naturally anchored at $\widehat\eta_1$. Let
-$V_1$ be the realized saturated observed information at that maximum, let
-$\widehat\Gamma_1$ estimate the asymptotic covariance of
-$\sqrt n(\widehat\eta_1-\eta_1^*)$, and let $\widehat\Delta_0$ be the SEM
-tangent. The LRT residual-curvature operator is
+quadratic expansion is therefore naturally anchored at $\widehat\eta_1$. In
+the same notation used for the score route, define the saturated-H1
+sensitivity and score variability by
+
+$$
+H_1
+=-E_P\left\{
+  \frac{\partial s_i(\eta_1^*)}{\partial\eta^{\mathsf T}}
+\right\},
+\qquad
+J_1
+=E_P\{s_i(\eta_1^*)s_i(\eta_1^*)^{\mathsf T}\}.
+$$
+
+The saturated estimator therefore has asymptotic covariance
+
+$$
+\Gamma_1=H_1^{-1}J_1H_1^{-1}.
+$$
+
+Under the pseudo-null, $\eta_1^*=\eta_0^*$ and the shared $K$ above is the
+restricted-model tangent at that point. Define
+
+$$
+P_{H_1}^\perp
+=I-K(K^{\mathsf T}H_1K)^{-1}K^{\mathsf T}H_1,
+\qquad
+G_{H_1}=P_{H_1}^\perp D.
+$$
+
+The LRT residual-curvature operator is
 
 $$
 U_{\mathrm{LR}}
-=V_1-
-V_1\widehat\Delta_0
-(\widehat\Delta_0^{\mathsf T}V_1\widehat\Delta_0)^{-1}
-\widehat\Delta_0^{\mathsf T}V_1.
+=H_1-
+H_1K(K^{\mathsf T}H_1K)^{-1}K^{\mathsf T}H_1
+=H_1P_{H_1}^\perp.
 $$
 
-The $d$ nonzero eigenvalues of
-$U_{\mathrm{LR}}\widehat\Gamma_1$ are the LRT/FMG spectrum.
+It may equivalently be expressed through the same orthogonalized-complement
+basis:
+
+$$
+U_{\mathrm{LR}}
+=H_1G_{H_1}
+(G_{H_1}^{\mathsf T}H_1G_{H_1})^{-1}
+G_{H_1}^{\mathsf T}H_1.
+$$
+
+Substituting $\Gamma_1=H_1^{-1}J_1H_1^{-1}$ gives
+
+$$
+U_{\mathrm{LR}}\Gamma_1
+=H_1G_{H_1}
+(G_{H_1}^{\mathsf T}H_1G_{H_1})^{-1}
+G_{H_1}^{\mathsf T}J_1H_1^{-1}.
+$$
+
+Using the fact that $AB$ and $BA$ have the same nonzero eigenvalues, the $d$
+nonzero eigenvalues of $U_{\mathrm{LR}}\Gamma_1$ are consequently the
+generalized eigenvalues of
+
+$$
+J_{1,\mathrm{eff}}v
+=\lambda_{\mathrm{LR}}H_{1,\mathrm{eff}}v,
+$$
+
+where
+
+$$
+J_{1,\mathrm{eff}}
+=G_{H_1}^{\mathsf T}J_1G_{H_1},
+\qquad
+H_{1,\mathrm{eff}}
+=G_{H_1}^{\mathsf T}H_1G_{H_1}.
+$$
+
+Thus the LRT spectrum can also be read as projected score variability $J$
+against projected sensitivity $H$. The important difference is that the LRT
+does not let us choose a separate metric $M$: its local quadratic metric is
+fixed by the saturated-H1 likelihood curvature, $M_{\mathrm{LR}}=H_1$.
+Finite-sample FMG replaces these population objects by their saturated-H1
+estimates. The base statistic remains the actual likelihood difference; the
+quadratic representation derives its asymptotic reference law rather than
+replacing it.
 
 Under H0, the H0 and H1 estimators converge to the same population point. Thus
 using H1 curvature does **not** mean assuming H1 is true. It uses the stable
@@ -185,7 +307,9 @@ $$
 Thus $H$ is the negative expected slope of the score and $J$ is its covariance
 at the pseudo-null. These are the conventional sandwich roles: $H$ is bread
 and $J$ is meat. The sample calculation evaluates $s_i$ and estimates $H$ and
-$J$ at the restricted fit $\eta(\widehat\theta_0)$.
+$J$ at the restricted fit $\eta(\widehat\theta_0)$. Equivalently, these could
+be labeled $H_0$ and $J_0$; the subscript is suppressed throughout the score
+route because every score object is anchored at H0.
 
 “Saturated score at H0” therefore means:
 
@@ -197,12 +321,10 @@ It does **not** mean that the scores came from an H1 fit.
 
 #### Deriving the nuisance-orthogonal directions
 
-Let $K$ be an orthonormal basis for the SEM tangent
-$\operatorname{col}(\Delta)$ and let $D$ be an orthonormal basis for its
-Euclidean complement. The $d$ columns of $D$ initially represent candidate
-lack-of-fit directions. Because the SEM parameters were estimated, however,
-we must remove the part of each candidate direction that can be explained by
-movement along $K$.
+Use the shared $K$ and $D$ defined above. The $d$ columns of $D$ initially
+represent candidate lack-of-fit directions. Because the SEM parameters were
+estimated, however, we must remove the part of each candidate direction that
+can be explained by movement along $K$.
 
 Seek adjusted directions of the form
 
@@ -368,9 +490,9 @@ freedom, but their finite-sample constructions differ:
 |---|---|---|
 | Base statistic | likelihood-height difference | projected H0 likelihood slope |
 | Score evaluation | implicit through H0/H1 fits | saturated-coordinate score at H0 |
-| Projection | LRT residual curvature | nuisance-effective score directions |
+| Projection | $G_{H_1}$ from saturated-H1 curvature | $G_H$ from restricted-H0 sensitivity |
 | Natural finite-sample anchor | saturated H1 | restricted H0 |
-| Spectrum | eigenvalues of $U_{\mathrm{LR}}\widehat\Gamma_1$ | generalized eigenvalues of projected $J$ against projected $M$ |
+| Spectrum | generalized eigenvalues of projected $J_1$ against projected $H_1$ | generalized eigenvalues of projected $J$ against projected $M$ |
 
 Under a correctly specified likelihood and asymptotically under regular local
 conditions, LR, score, and Wald tests are equivalent. That statement does not
@@ -608,11 +730,13 @@ When interpreting any result in the experiment, ask these questions in order:
 1. Is the Gaussian-FIML pseudo-null actually true?
 2. Is the base statistic LR or projected score?
 3. Is its reference spectrum the matching LR or score spectrum?
-4. For a score test, what sensitivity $H$ defined the nuisance projection?
-5. What empirical or model-based score variability $J$ describes score
+4. For an LRT, were $H_1$, $J_1$, and $G_{H_1}$ estimated at the saturated H1
+   fit?
+5. For a score test, what H0 sensitivity $H$ defined $G_H$?
+6. What empirical or model-based score variability $J$ describes score
    variation?
-6. What metric $M$ defined the scalar quadratic?
-7. Was the weighted spectrum kept intact, mean-scaled, or transformed by
+7. What metric $M$ defined the scalar quadratic?
+8. Was the weighted spectrum kept intact, mean-scaled, or transformed by
    pEBA(4)?
 
 Only after those questions are answered does a reported p-value have an

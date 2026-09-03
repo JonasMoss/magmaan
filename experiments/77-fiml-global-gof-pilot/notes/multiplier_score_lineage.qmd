@@ -64,8 +64,30 @@ $$
 
 be the local SEM tangent, after incorporating affine equality constraints. Let
 $K$ be an orthonormal basis for $\operatorname{col}(\Delta)$ and $D$ an
-orthonormal basis for its Euclidean complement. If $H$ is the realized
-observed-data saturated-moment sensitivity, define
+orthonormal basis for its Euclidean complement. If
+$r=\operatorname{rank}(\Delta)$ and $d=m-r$, then
+
+$$
+K\in\mathbb R^{m\times r},
+\qquad
+D\in\mathbb R^{m\times d},
+$$
+
+with
+
+$$
+K^{\mathsf T}K=I_r,
+\qquad
+D^{\mathsf T}D=I_d,
+\qquad
+K^{\mathsf T}D=0,
+\qquad
+KK^{\mathsf T}+DD^{\mathsf T}=I_m.
+$$
+
+Thus $K$ spans moment changes locally allowed by the SEM, while $D$ spans
+candidate lack-of-fit directions. If $H$ is the realized observed-data
+saturated-moment sensitivity, define
 
 $$
 G_H
