@@ -168,6 +168,20 @@ Primary sources are Savalei and Falk (2014),
 
 ## Production decision after the gates
 
+- [ ] Write a theorem-level appendix treatment of robust nested likelihood-ratio
+  calibration in parameter coordinates. Take the larger model as the ambient
+  parameter space, represent the smaller model by one regular embedding, and
+  state the pseudo-null, rank, and common-evaluation assumptions explicitly.
+  Prove the tangent pullbacks for expected sensitivity and score variability,
+  derive the residual $U\Gamma$ operator, its reduced generalized-eigenvalue
+  representation, and the trace-difference identity. Clearly distinguish the
+  common-coordinate projection estimator from separately estimated H1-minus-H0
+  trace corrections: the latter can consistently estimate the SB mean but do
+  not determine a unique whole spectrum. Include the observed-Hessian curvature
+  remainder, coordinate-invariance statements, non-affine embeddings, and the
+  boundary/singularity cases excluded by regular asymptotics. Support the final
+  formulation with primary references and keep notation aligned with the main
+  text.
 - [ ] Build the replacement production harness for Slurm. Do not resume the
   retired Modal run or treat its completed stress phase as publication data.
 - [ ] Choose the final sample-size, generator, MAR, and power grid only after
