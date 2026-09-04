@@ -31,6 +31,7 @@ For the projected score test, three matrices then appear:
 |---|---|---|---|
 | $H$ | sensitivity | adjusts for estimating the SEM nuisance parameters | bread |
 | $J$ | score variability | describes the actual variation of casewise scores | meat |
+| $J^*$ | working-normal score variability | equals working expected Fisher information | neither unless deliberately used as $M$ |
 | $M$ | quadratic metric | defines the scale on which the projected score is measured | neither |
 
 The proposed hybrid score construction is therefore
@@ -39,7 +40,7 @@ $$
 \boxed{
   H=\text{observed-H0 sensitivity},\qquad
   J=\text{empirical score meat},\qquad
-  M=\text{expected-Fisher metric}.
+  M=J^*=\text{working expected-Fisher metric}.
 }
 $$
 
@@ -48,7 +49,13 @@ combines $M$ and $J$. The reason $H$ needs special attention is different: it
 determines which part of each saturated score remains after accounting for
 parameter estimation under H0.
 
-## Part I: the tests before the estimation machinery
+Throughout **Part I**, unadorned symbols such as $H$, $J$, and $M$ are
+population quantities. **Part II** puts hats on their finite-sample estimates
+and records exactly what the current magmaan implementations compute. Keeping
+these two modes separate prevents a convenient estimator from being mistaken
+for the population object it is intended to estimate.
+
+## Part I: population mode
 
 ### The hypothesis is about the FIML pseudo-true target
 
@@ -311,6 +318,26 @@ $J$ at the restricted fit $\eta(\widehat\theta_0)$. Equivalently, these could
 be labeled $H_0$ and $J_0$; the subscript is suppressed throughout the score
 route because every score object is anchored at H0.
 
+It is also useful to reserve a third symbol,
+
+$$
+J^*=\operatorname{Var}_{P^*}\{s_i(\eta_0^*)\},
+$$
+
+where $P^*$ is the working Gaussian observed-data law at the pseudo-null. By
+the Gaussian information identity, $J^*$ is also the working expected Fisher
+information. It is a model-based matrix, unlike the actual score variability
+$J=\operatorname{Var}_{P}(s_i)$. This notation lets us say precisely what is
+special about complete-data nonnormality:
+
+- under a correct Gaussian model, $H=J=J^*$;
+- with complete nonnormal data and correct means and covariances, the Gaussian
+  criterion still gives $H=J^*$, although generally $J\ne J^*$;
+- under nonnormal MAR, even $H=J^*$ need not hold.
+
+Thus $J^*$ can remain a useful, stable **metric** when it is not the actual
+score covariance and, under MAR, not the correct **sensitivity**.
+
 “Saturated score at H0” therefore means:
 
 - differentiate with respect to the unrestricted saturated coordinates
@@ -481,6 +508,60 @@ SB, pEBA(4), and the plug-in mixture can calibrate this **score** spectrum,
 just as they calibrate the LRT spectrum. The transformation names are the same;
 the statistic-spectrum pair is not.
 
+#### Local power and the meaning of “efficient”
+
+Under a sequence of local alternatives, write
+
+$$
+u_n\overset{d}{\longrightarrow}N(\delta,\Omega),
+\qquad
+\Omega=G_H^{\mathsf T}JG_H,
+$$
+
+and let $Q=G_H^{\mathsf T}MG_H$. Then
+$T_M=u_n^{\mathsf T}Q^{-1}u_n$ has a weighted noncentral chi-square limit. If
+
+$$
+C_Q=\Omega^{1/2}Q^{-1}\Omega^{1/2}
+  =R\operatorname{diag}(\lambda_1,\ldots,\lambda_d)R^{\mathsf T},
+$$
+
+the noncentralities are the squared components of
+$R^{\mathsf T}\Omega^{-1/2}\delta$. Consequently, changing $M$ generally
+changes local power direction by direction; there is no uniform ordering for
+$d>1$. For $d=1$, any scalar metric disappears after exact null calibration.
+
+The direct robust choice $M=J$ gives
+
+$$
+T_J\overset{d}{\longrightarrow}
+\chi_d^2\left(\delta^{\mathsf T}\Omega^{-1}\delta\right).
+$$
+
+It is the canonical invariant quadratic for the fixed Gaussian shift
+experiment in $u_n$. That does **not** by itself make Gaussian-QML estimation
+semiparametrically efficient for arbitrary nonnormal distributions: attaining
+that stronger efficiency bound can also require changing the underlying
+estimating equations or moment weight, as in ADF estimation. “Valid robust
+calibration,” “best quadratic given these scores,” and “efficient estimator in
+a larger distributional model” are three different claims.
+
+For complete nonnormal data with correct means and covariances, $H=J^*$.
+Therefore the $J^*$-metric score and the $H$-metric Rao/LR quadratic are the
+same population statistic, with robust spectrum
+
+$$
+\operatorname{eig}\left\{
+  (G_H^{\mathsf T}HG_H)^{-1}(G_H^{\mathsf T}JG_H)
+\right\}.
+$$
+
+They are chi-square only under normality or another information-identity
+special case. Under nonnormality they require a weighted-law correction (or an
+appropriate reduction such as SB). If $G_H^{\mathsf T}JG_H$ happens to be a
+scalar multiple of $G_H^{\mathsf T}HG_H$, scalar SB is already exact to first
+order; otherwise it retains only the mean of a genuinely dispersed spectrum.
+
 ### Why the LRT and score spectra can differ
 
 Both tests target the same pseudo-null and have the same nominal degrees of
@@ -502,9 +583,9 @@ that both pieces contributed to the observed calibration differences. Those
 crossed combinations are diagnostics, not proposed tests: each native
 statistic and spectrum is derived as a coherent pair.
 
-## Part II: the estimation machinery underneath the score test
+## Part II: estimation mode
 
-### Start with ordinary misspecified-likelihood estimation
+### From population definitions to sample estimates
 
 For a generic working likelihood, let
 
@@ -531,6 +612,26 @@ $$
 \operatorname{Avar}\{\sqrt n(\widehat\eta-\eta^*)\}
 =H^{-1}JH^{-1}.
 $$
+
+For a fitted sample, the corresponding per-case estimates are
+
+$$
+\widehat H(\widetilde\eta)
+=-\frac1n\sum_{i=1}^n
+  \frac{\partial s_i(\widetilde\eta)}{\partial\eta^{\mathsf T}},
+\qquad
+\widehat J(\widetilde\eta)
+=\frac1n\sum_{i=1}^n
+  s_i(\widetilde\eta)s_i(\widetilde\eta)^{\mathsf T}.
+$$
+
+The evaluation point $\widetilde\eta$ is part of an estimator's definition:
+it can be the restricted fit $\widehat\eta_0$ or the saturated fit
+$\widehat\eta_1$. Multiplying both matrices by $n$ changes neither a sandwich
+covariance after its matching normalization nor any $H^{-1}J$ eigenvalue.
+Magmaan uses summed likelihood units internally in some paths and
+per-observation deviance units in others, with the factors of two converted
+explicitly.
 
 This is the familiar bread--meat--bread sandwich:
 
@@ -641,6 +742,143 @@ identity one equality at a time:
 - a nonnormal-MAR pseudo-null can change both $H$ and $J$;
 - a convenient positive-definite $M$ may still be retained if the spectrum
   consistently compares it with $J$.
+
+### What magmaan's Yuan--Bentler/Mplus MLR estimates
+
+The public experiment route is
+`estimate_fiml_robust_mlr(fit)`. It reproduces lavaan's
+`yuan.bentler.mplus` result and implements the scalar trace-difference version
+of the Yuan--Bentler FIML correction [@yuan_bentler2000]. Let
+$\widehat H_{\eta,1}$ and $\widehat J_{\eta,1}$ denote the saturated-coordinate
+observed information and empirical score variability at the EM H1 fit. Let
+$\widehat H_{\theta,0}$ and $\widehat J_{\theta,0}$ denote the analogous
+objects in the restricted model's locally free parameter coordinates at the
+H0 fit. Magmaan computes
+
+$$
+\widehat\tau_1
+=\operatorname{tr}
+  (\widehat H_{\eta,1}^{-1}\widehat J_{\eta,1}),
+\qquad
+\widehat\tau_0
+=\operatorname{tr}
+  (\widehat H_{\theta,0}^{-1}\widehat J_{\theta,0}),
+$$
+
+followed by
+
+$$
+\boxed{
+\widehat c_{\mathrm{MLR}}
+=\frac{\widehat\tau_1-\widehat\tau_0}{d},
+\qquad
+T_{\mathrm{MLR}}
+=\frac{T_{\mathrm{LR}}}{\widehat c_{\mathrm{MLR}}}.
+}
+$$
+
+The result is compared with $\chi_d^2$. In the population limit under working
+normality, each trace is its parameter-space dimension, so
+$\tau_1-\tau_0=m-r=d$ and $c=1$.
+
+The finite-sample ingredients are quite specific:
+
+1. The H1 means and covariances are estimated by the unrestricted FIML/EM fit.
+   Saturated casewise observed-pattern scores are evaluated there.
+   $\widehat J_{\eta,1}$ is their outer-product sum, and
+   $\widehat H_{\eta,1}$ is the analytic realized saturated Hessian.
+2. Restricted-model casewise scores are evaluated at
+   $\widehat\theta_0$. $\widehat J_{\theta,0}$ is their outer-product mean,
+   while $\widehat H_{\theta,0}$ is the analytic **observed H0 Hessian**. It
+   includes the second-derivative-of-the-SEM-moment-map term, rather than being
+   merely an expected Fisher matrix. Equality constraints are first collapsed
+   to locally free coordinates.
+3. Only the two traces are retained for the test. The returned H0 eigenvalues
+   are diagnostics for $\widehat H_{\theta,0}^{-1}\widehat J_{\theta,0}$;
+   they are not the $d$ goodness-of-fit eigenvalues.
+
+Because the code represents scores as gradients of the deviance $-2\ell$, it
+forms
+$\tfrac12\operatorname{tr}(H_{\mathrm{dev}}^{-1}J_{\mathrm{dev}})$. The
+factor $1/2$ exactly converts this to $\operatorname{tr}(H^{-1}J)$ in
+log-likelihood units; it is not an additional statistical approximation.
+
+This is an **estimation recipe for the mean eigenvalue**, not a definition of
+a different population null. At a regular pseudo-null, the H0 trace is the
+tangent-space contribution and the H1-minus-H0 difference estimates the trace
+of the residual $U\Gamma$ operator. Away from the pseudo-null, or in finite
+samples, the separately evaluated H0 and H1 pieces need not equal a single
+common-metric residual projection.
+
+### What magmaan's full FIML FMG spectrum estimates
+
+The FMG path begins from the same fitted FIML model but estimates the entire
+$d$-dimensional spectrum. In saturated coordinates it constructs
+
+$$
+\widehat\Gamma_1
+=\widehat H_{\eta,1}^{-1}
+ \widehat J_{\eta,1}
+ \widehat H_{\eta,1}^{-1},
+$$
+
+and evaluates the restricted model moment Jacobian
+$\widehat\Delta_0=\partial\eta(\theta)/\partial\theta^{\mathsf T}$ at
+$\widehat\theta_0$ (after collapsing equality constraints). With the
+saturated-H1 observed information as its common metric,
+
+$$
+\widehat U
+=\widehat H_{\eta,1}
+-\widehat H_{\eta,1}\widehat\Delta_0
+ (\widehat\Delta_0^{\mathsf T}
+  \widehat H_{\eta,1}\widehat\Delta_0)^{-1}
+ \widehat\Delta_0^{\mathsf T}\widehat H_{\eta,1}.
+$$
+
+`infer_fiml_fmg_spectrum()` returns the $d$ nonzero eigenvalues of
+$\widehat U\widehat\Gamma_1$ and the actual FIML LR statistic. The numerical
+eigensolver uses the equivalent symmetric reduction, so it does not directly
+diagonalize a nonsymmetric product. Under FIML, this interface deliberately
+provides only the empirical (“biased”) $\widehat\Gamma_1$ and the LR base;
+the complete-data Du--Bentler unbiased correction and RLS base are rejected.
+
+The FMG reductions then act on this one estimated spectrum:
+
+$$
+\widehat c_{\mathrm{SB}}
+=\frac1d\sum_{j=1}^d\widehat\lambda_j,
+$$
+
+whereas SS, pEBA(4), and the plug-in mixture also use its dispersion or its
+individual eigenvalues. This is why they can differ when first-moment MLR
+scaling is inadequate.
+
+The source-level map is:
+
+| Statistical quantity | Core implementation |
+|---|---|
+| $T_{\mathrm{LR}}$ and saturated H1 likelihood | `fiml_extras` |
+| $\widehat H_{\theta,0}$ and H0 score rows | `fiml_score_meat_bread` |
+| $\widehat\tau_1$ | `fiml_saturated_trace_h1` |
+| MLR trace difference and scaling | `fiml_robust_mlr_impl` |
+| $\widehat H_{\eta,1}$, $\widehat J_{\eta,1}$, $\widehat\Gamma_1$ | `saturated_em_moments` |
+| $\widehat\Delta_0$ and $\widehat U$ | `fiml_eta_jacobian_impl` and `fiml_residual_projector_impl` |
+| FMG eigenvalues | `fiml_ugamma_spectrum_impl` |
+
+The R bindings `estimate_fiml_robust_mlr()` and
+`infer_fiml_fmg_spectrum()` expose the two paths used by the experiment.
+
+The distinction between `MLR` and FMG `SB` in the experiments is finite-sample
+estimation, not population algebra. MLR uses the separately estimated
+$\widehat\tau_1-\widehat\tau_0$ trace. FMG `SB` uses
+$\operatorname{tr}(\widehat U\widehat\Gamma_1)$ from one saturated-H1 metric
+and projection. These coincide at the regular pseudo-null in population but
+need not coincide replicate by replicate. Magmaan has both an algebraic guard
+for the common-metric $U\Gamma$ trace and a missing-data regression check that
+the two implemented trace routes agree closely; the companion simulation also
+checks the MLR route directly against lavaan. Oracle agreement establishes
+implementation parity, not good null calibration.
 
 ## Part III: what the current options actually mean
 
