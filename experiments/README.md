@@ -93,6 +93,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 76 | [psd-ml-repair-risk](76-psd-ml-repair-risk/report.qmd) | benchmark | active | What does PSD-ML repair when ordinary NTML leaves the primitive covariance domain, and what is its near-boundary estimation risk? |
 | 77 | [fiml-global-gof-pilot](77-fiml-global-gof-pilot/report.qmd) | probe | active | Across finite-moment stress, MAR, and explicit contract violations, do effective multiplier or spectrum-aware scores calibrate global FIML GOF better than Yuan–Bentler MLR? |
 | 78 | [psd-estimator-stress](78-psd-estimator-stress/report.qmd) | benchmark | active | Across the supported single-level estimator families, where do covariance-honest point fits remain correct, admissible, stable across starts, and computationally practical? |
+| 79 | [Savalei-Falk-2014 test map](79-savalei-falk-2014-test-map/report.qmd) | replication | active | Which exact null/reference models and observed-information corrections define Savalei and Falk's robust FIML and two-stage tests, and how should magmaan verify them? |
 
 ## Archived
 

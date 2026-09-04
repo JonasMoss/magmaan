@@ -1552,7 +1552,16 @@ an unconstrained gradient test to constrained solutions.
   moments, leaving a 1-3% trace gap to robust.two.stage that grew with
   non-normality; the unstructured weight - the convention lavaan two-stage forces
   and FIML FMG already used - closed it exactly.) Calibration evidence is in
-  `experiments/24-fiml-twostage-fmg-chisq`. Nested/model-pair FIML FMG is
+  `experiments/24-fiml-twostage-fmg-chisq`. A separate literature reconstruction in
+  `experiments/79-savalei-falk-2014-test-map` establishes that these modern
+  defaults are **not** the finite-sample configurations used by Savalei and Falk
+  (2014): their EQS runs selected analytic observed information (`SE=EXACT`) and
+  structured-model residual projections for robust FIML, with the corresponding
+  observed-information two-stage correction. The current MLR trace-difference,
+  FIML saturated-H1 FMG metric, and ML2S unstructured-H1 metric remain correctly
+  named for their existing oracles; a future paper replication must add explicit
+  paper-era routes rather than relabel any of them.
+  Nested/model-pair FIML FMG is
   available through the existing `robust_nested_lrt()` / `nestedTest()`
   `method = "restriction_map"` route when both fits are FIML and carry
   compatible `raw_data`: for empirical Gamma it builds the H1-anchored split

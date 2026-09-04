@@ -2648,6 +2648,17 @@ work lives in [`speculative.md`](speculative.md). Open work:
     1-3% trace/SE gap that grew with non-normality. Note: on complete data this is
     `robust.two.stage`, NOT `robust.sem`/MLM - those differ on the same axis when
     Σ̂ ≠ Σ(θ̂).
+  - **M — verify the Savalei–Falk (2014) observed-information configurations.**
+    Their simulation did not use today's MLR trace-difference or lavaan
+    `robust.two.stage` defaults. Build independent equation-level references for
+    the paper's analytic observed structured-H0 FIML correction and its
+    observed-information two-stage correction; gate the intermediate A/B/Omega,
+    derivative, residual-projector, trace, scale, statistic, and df before any
+    Monte Carlo comparison. Add explicitly named paper-era post-fit routes only
+    after those same-data gates pass, preserving current MLR, FIML FMG, and ML2S
+    semantics. `experiments/79-savalei-falk-2014-test-map` records the source map,
+    deterministic routing witness, and staged replication plan; experiment 77
+    should consume the new routes only after verification.
 - **Landed; remainder in speculative.** The Van-Praag pairwise covariance
   machinery (`data::pairwise_sample_stats`,
   `robust::pairwise_casewise_contributions`, `data::gamma_nt_pairwise`,
