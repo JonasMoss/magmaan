@@ -2460,6 +2460,25 @@ TEST_CASE("two_stage_em_ml_inference: missing data returns finite corrected outp
   CHECK(ml2s->scaling_factor > 0.0);
   CHECK(std::isfinite(ml2s->chisq));
   CHECK(std::isfinite(ml2s->chisq_scaled));
+
+  auto choices =
+      magmaan::estimate::fiml::frontier::two_stage_information_choices(
+          *built.pt, *built.rep, *est, *sm);
+  REQUIRE_MESSAGE(choices.has_value(),
+      "two_stage_information_choices failed: " <<
+      (choices.has_value() ? "" : choices.error().detail));
+  REQUIRE(choices->choices.size() == 4);
+  CHECK(choices->df == ml2s->df);
+  CHECK(choices->saturated_expected_observed_max_abs < 1e-10);
+  CHECK(choices->choices[0].name == "saturated_expected");
+  CHECK(choices->choices[1].name == "saturated_observed");
+  CHECK(choices->choices[0].scaling_factor ==
+        doctest::Approx(ml2s->scaling_factor).epsilon(1e-10));
+  CHECK(choices->choices[1].scaling_factor ==
+        doctest::Approx(ml2s->scaling_factor).epsilon(1e-10));
+  CHECK(choices->choices[0].projector_rank == ml2s->df);
+  CHECK(choices->choices[2].name == "structured_expected");
+  CHECK(choices->choices[3].name == "structured_observed");
 }
 
 TEST_CASE("fiml_profile: missing data raw, pack, and saturated moments agree") {

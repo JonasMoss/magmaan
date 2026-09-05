@@ -6957,6 +6957,56 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
   return out;
 }
 
+// Equation-level frontier diagnostic for identifying the complete-data
+// saturated-information convention used by historical ML2S scaled tests.
+// [[Rcpp::export]]
+Rcpp::List frontier_ml2s_information_choices_impl(Rcpp::List fit,
+                                                   double eigen_tol = 1e-9) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    Rcpp::stop("frontier_ml2s_information_choices(): fit must carry a usable "
+               "$stage1 saturated-moment object");
+  }
+  auto r_or = magmaan::estimate::fiml::frontier::two_stage_information_choices(
+      ctx.pt, ctx.rep, est, sm, eigen_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+
+  const R_xlen_t n = static_cast<R_xlen_t>(r_or->choices.size());
+  Rcpp::CharacterVector name(n);
+  Rcpp::NumericVector trace(n), scale(n), chisq_scaled(n), min_h(n), min_u(n);
+  Rcpp::IntegerVector neg_h(n), neg_u(n), rank_u(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& row = r_or->choices[static_cast<std::size_t>(i)];
+    name[i] = row.name;
+    trace[i] = row.trace_ugamma;
+    scale[i] = row.scaling_factor;
+    chisq_scaled[i] = row.chisq_scaled;
+    min_h[i] = row.min_information_eigenvalue;
+    min_u[i] = row.min_projector_eigenvalue;
+    neg_h[i] = static_cast<int>(row.information_negative_eigenvalues);
+    neg_u[i] = static_cast<int>(row.projector_negative_eigenvalues);
+    rank_u[i] = static_cast<int>(row.projector_rank);
+  }
+  return Rcpp::List::create(
+      Rcpp::_["choices"] = Rcpp::DataFrame::create(
+          Rcpp::_["information"] = name,
+          Rcpp::_["trace_ugamma"] = trace,
+          Rcpp::_["scaling_factor"] = scale,
+          Rcpp::_["chisq_scaled"] = chisq_scaled,
+          Rcpp::_["min_information_eigenvalue"] = min_h,
+          Rcpp::_["min_projector_eigenvalue"] = min_u,
+          Rcpp::_["information_negative_eigenvalues"] = neg_h,
+          Rcpp::_["projector_negative_eigenvalues"] = neg_u,
+          Rcpp::_["projector_rank"] = rank_u),
+      Rcpp::_["chisq"] = r_or->chisq,
+      Rcpp::_["df"] = r_or->df,
+      Rcpp::_["delta_rank"] = static_cast<int>(r_or->delta_rank),
+      Rcpp::_["saturated_expected_observed_max_abs"] =
+          r_or->saturated_expected_observed_max_abs);
+}
+
 // two_stage_stage2_weight_blocks_impl() — mirrors
 // estimate::fiml::two_stage_stage2_weight_blocks(). Builds the per-block Stage-2
 // weight (Nt / Dwls / Adf / Dls) from a Stage-1 saturated-moments list, returned

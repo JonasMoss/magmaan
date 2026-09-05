@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -100,6 +101,15 @@ fleishman_residual(double b,
 
 double residual_norm(const Eigen::Vector3d& r) noexcept {
   return std::max({std::abs(r(0)), std::abs(r(1)), std::abs(r(2))});
+}
+
+bool is_monotone_increasing(const FleishmanCoefficients& coef,
+                            double tol) noexcept {
+  if (!(coef.b > 0.0)) return false;
+  if (coef.d > tol) {
+    return coef.b - coef.c * coef.c / (3.0 * coef.d) >= -tol;
+  }
+  return std::abs(coef.d) <= tol && std::abs(coef.c) <= tol;
 }
 
 sim_expected<FleishmanCoefficients>
@@ -385,12 +395,20 @@ fit_fleishman_coefficients(double skewness,
 
   SimError last_error{SimError::Kind::CalibrationFailed,
                       "fit_fleishman_coefficients: Fleishman moment equations did not converge"};
+  std::optional<FleishmanCoefficients> fallback;
   for (const auto& start : starts) {
     auto fit_or = solve_fleishman_from_start(
         skewness, excess_kurtosis, options, start);
-    if (fit_or.has_value()) return fit_or;
+    if (fit_or.has_value()) {
+      if (is_monotone_increasing(*fit_or, options.coefficient_tol)) {
+        return fit_or;
+      }
+      if (!fallback.has_value()) fallback = *fit_or;
+      continue;
+    }
     last_error = fit_or.error();
   }
+  if (fallback.has_value()) return *fallback;
   return std::unexpected(last_error);
 }
 

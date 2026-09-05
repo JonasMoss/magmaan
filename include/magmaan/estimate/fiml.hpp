@@ -778,6 +778,43 @@ two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
 
 namespace frontier {
 
+// Equation-level diagnostic for the complete-data saturated-information
+// choice in the Savalei--Falk two-stage scaled statistic. All variants use the
+// same Stage-1 saturated-FIML sandwich Gamma and the same Stage-2 estimate and
+// model Jacobian; only the moment-space information H in
+// U = H - H Delta (Delta' H Delta)^-1 Delta' H changes. This is deliberately a
+// single-group frontier surface for method-identification experiments, not a
+// replacement for the lavaan-parity ML2S default.
+struct TwoStageInformationChoice {
+  std::string name;
+  double trace_ugamma = std::numeric_limits<double>::quiet_NaN();
+  double scaling_factor = std::numeric_limits<double>::quiet_NaN();
+  double chisq_scaled = std::numeric_limits<double>::quiet_NaN();
+  double min_information_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double min_projector_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  Eigen::Index information_negative_eigenvalues = 0;
+  Eigen::Index projector_negative_eigenvalues = 0;
+  Eigen::Index projector_rank = 0;
+};
+
+struct TwoStageInformationChoiceAudit {
+  std::vector<TwoStageInformationChoice> choices;
+  double chisq = std::numeric_limits<double>::quiet_NaN();
+  int df = 0;
+  Eigen::Index delta_rank = 0;
+  double saturated_expected_observed_max_abs =
+      std::numeric_limits<double>::quiet_NaN();
+};
+
+post_expected<TwoStageInformationChoiceAudit>
+two_stage_information_choices(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const Estimates& est,
+                              const SaturatedMoments& stage1,
+                              double eigen_tol = 1e-9);
+
 // Raw-data FIML over PSD primitive LISREL covariance matrices. The optimizer
 // works in an internal Cholesky lift and returns the ordinary partable-shaped
 // parameter vector; every observed-pattern covariance must remain positive

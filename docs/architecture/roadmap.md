@@ -1421,6 +1421,14 @@ an unconstrained gradient test to constrained solutions.
   to unstructured observed-bread robust SEM for the NT weight and observed-bread
   `robust_continuous_ls` for the ADF weight. The default remains the
   lavaan-parity expected-bread convention.
+  The separate frontier diagnostic
+  `estimate::fiml::frontier::two_stage_information_choices` holds the
+  Stage-1 sandwich, Stage-2 fit, moment Jacobian, and base statistic fixed while
+  crossing saturated versus structured and expected versus observed
+  *complete-data saturated-moment* information in the residual projector. It is
+  currently single-group/mean-structure only and exists to identify historical
+  Savalei--Falk/EQS test conventions; it does not change the ML2S default or
+  reuse the full structured-`theta` observed-bread option as a surrogate.
   `estimate::fiml::two_stage_fit_measures` adds the matching TS global-index
   layer: baseline scaling (`cB`), scaled CFI/TLI/RMSEA, and robust CFI/TLI/RMSEA
   with RMSEA confidence intervals and p-values. Complete-data multi-group tests
@@ -1836,7 +1844,9 @@ an unconstrained gradient test to constrained solutions.
   `simulate_vale_maurelli_matrix()`, and `simulate_vale_maurelli_raw()`.
   The first slice implements the classic third-order Fleishman transform
   `a + bZ + cZ^2 + dZ^3`: coefficients are solved from target skewness and
-  excess kurtosis by exact polynomial moments, pairwise intermediate normal
+  excess kurtosis by exact polynomial moments, with the conventional monotone
+  increasing root preferred when the moment equations have multiple solutions;
+  pairwise intermediate normal
   correlations are solved from the Vale-Maurelli covariance cubic, and the
   assembled intermediate correlation matrix is Cholesky-validated before
   sampling. The R package exposes the two-stage split as

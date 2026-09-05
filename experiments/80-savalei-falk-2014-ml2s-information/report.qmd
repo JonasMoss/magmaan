@@ -1,0 +1,183 @@
+---
+title: "Which information matrix produced the Savalei–Falk two-stage test?"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(if (nzchar(override)) override else character(),
+           file.path("results", c("replication", "pilot", "smoke")))
+available <- roots[vapply(roots, function(path)
+  file.exists(file.path(path, "metadata.csv")), logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+summary <- read_result("summary.csv")
+design <- read_result("design.csv")
+audit_frame <- read_result("audit.csv")
+audit <- setNames(audit_frame$value, audit_frame$key)
+meta_frame <- read_result("metadata.csv")
+meta <- setNames(meta_frame$value, meta_frame$key)
+reps <- as.integer(meta[["reps_per_cell"]])
+profile <- meta[["profile"]]
+labels <- c(
+  saturated_expected = "Saturated plug-in (current ML2S)",
+  saturated_observed = "Saturated observed",
+  structured_expected = "Structured expected",
+  structured_observed = "Structured observed (paper wording)")
+k7 <- summary[summary$kurtosis == 7, , drop = FALSE]
+k7$Method <- unname(labels[k7$information])
+k7$Rejection <- 100 * k7$rejection_rate
+k7$MC_SE <- 100 * k7$rejection_se
+k7$Scale <- k7$mean_scaling_factor
+k7 <- k7[match(names(labels), k7$information), ]
+structured_observed_rate <- k7$rejection_rate[
+  k7$information == "structured_observed"]
+paper_se <- sqrt(0.10 * 0.90 / 1000)
+combined_z <- abs(structured_observed_rate - 0.10) /
+  sqrt(k7$rejection_se[k7$information == "structured_observed"]^2 +
+         paper_se^2)
+eligible <- 100 * design$theoretical_eligible_proportion[
+  design$kurtosis == 7]
+identity_error <- audit[["saturated_identity_max_abs"]]
+default_error <- audit[["default_scale_max_abs"]]
+indef <- aggregate(
+  cbind(H = summary$information_indefinite_rate,
+        U = summary$projector_indefinite_rate) ~ information,
+  data = summary, mean)
+indef$Method <- unname(labels[indef$information])
+indef$H <- 100 * indef$H
+indef$U <- 100 * indef$U
+```
+
+## Question
+
+Savalei and Falk describe the two-stage correction with the complete-data
+information matrix of the saturated moment model, while also saying that
+observed information was used throughout. Did their reported statistic use the
+saturated plug-in, structured expected information, or structured observed
+information?
+
+## Short answer
+
+`r if (reps >= 1000) sprintf("The evidence identifies **structured observed information** as the paper's implementation. It gives %.1f%% rejection in the diagnostic cell versus the published 10.0%%; the %.1f-point difference is %.1f combined Monte Carlo standard errors. The saturated/current-ML2S and structured-expected alternatives are nowhere close.", 100 * structured_observed_rate, 100 * abs(structured_observed_rate - .10), combined_z) else sprintf("The %s run (%d samples per kurtosis cell) validates the crossed-information pipeline, but is too small to identify the paper's implementation from its 10.0%% rejection-rate target. A 1,000-replication run is required.", profile, reps)`
+
+The equation-level checks passed: complete-data expected and observed
+information agreed at the saturated estimate to
+`r format(identity_error, digits = 3, scientific = TRUE)`, and the saturated
+expected statistic reproduced magmaan's current ML2S scale to
+`r format(default_error, digits = 3, scientific = TRUE)`.
+The matching structured-observed matrix is indefinite in
+`r sprintf("%.2f%%", 100 * indef$H[indef$information == "structured_observed"])`
+of fitted samples, confirming that this historical choice has no
+positive-semidefiniteness guarantee.
+
+## Evidence
+
+The focused cell is Savalei–Falk Model 2 with (N=200), skewness 2, kurtosis 7,
+30% missingness, many patterns, and MAR-L deletion. The article reports a 10.0%
+two-stage rejection rate there. Each row below is computed from the same fitted
+sample; only the $H$ used in
+
+\[
+U=H-H\Delta(\Delta^\top H\Delta)^{-1}\Delta^\top H.
+\]
+
+changes.
+
+```{r result-table}
+knitr::kable(
+  k7[, c("Method", "Rejection", "MC_SE", "Scale")],
+  digits = c(NA, 1, 1, 3), row.names = FALSE,
+  col.names = c("Information choice", "Reject (%)", "MC SE (points)",
+                "Mean scale"),
+  caption = "Model 2, N=200, MAR-L, MP, 30% missing, skewness 2, kurtosis 7. Published TS rejection: 10.0%.")
+```
+
+The saturated expected and saturated observed rows are an intentional identity
+check: at the unrestricted complete-data moment estimate, observed and expected
+information coincide. Structured observed information is evaluated at the
+Stage-2 model-implied moments while retaining the saturated EM moments as the
+pseudo-data. That point does not minimize the complete-data saturated
+likelihood over unrestricted moments, so its observed Hessian need not be
+positive semidefinite; the stability table shows that it generally is not.
+
+```{r stability-table}
+knitr::kable(
+  indef[, c("Method", "H", "U")],
+  digits = c(NA, 1, 1), row.names = FALSE,
+  col.names = c("Information choice", "Indefinite H (%)",
+                "Indefinite U (%)"),
+  caption = "Finite-sample geometry diagnostics across both kurtosis cells.")
+```
+
+## Caveats
+
+This is a targeted implementation-identification experiment, not a full
+replication of the 192-cell study. The original random seeds and EQS random
+number stream are unavailable, and the published 10.0% is itself a
+1,000-replication Monte Carlo estimate. A difference smaller than roughly one
+percentage point is not compelling identification evidence.
+
+The generator uses the conventional monotone-increasing Fleishman root in
+magmaan's Vale–Maurelli implementation and treats the paper's kurtosis values
+as excess kurtosis. For the moderate condition this gives
+`r sprintf("%.1f%%", eligible)` theoretically eligible observations under the
+paper's positive-value MAR-L rule, matching the article's approximately 38%.
+The missingness algorithm reaches exactly 30% missingness in each of the six
+published deletion sets, conditional on the corresponding variable being
+positive. Candidate samples in which a conditioning variable has fewer than
+60 positive observations cannot satisfy that instruction and are regenerated;
+this implicit edge case cost
+`r sum(design$eligibility_rejections)` candidate samples across the two cells.
+The compact replication summaries and equation-level audit are frozen with the
+experiment so this report remains renderable; raw replication rows are local
+generated output.
+
+## Reproduce
+
+```bash
+cd experiments/80-savalei-falk-2014-ml2s-information
+
+# Structural and identity check
+Rscript run_experiment.R --smoke
+
+# Identification run matching the paper's 1,000 replications per cell
+Rscript run_experiment.R --replication --cores 8
+
+quarto render report.qmd
+```
+
+## Mathematical definition of the four choices
+
+Let $\widehat\beta=(\widehat\mu,\operatorname{vech}\widehat\Sigma)$ be the
+Stage-1 saturated FIML estimate and let
+$\widetilde\beta=\beta(\widetilde\theta)$ be the Stage-2 structured moments.
+The four rows use
+
+\[
+\begin{aligned}
+H_{SE}&=H_{\mathrm{exp}}(\widehat\beta), &
+H_{SO}&=H_{\mathrm{obs}}(\widehat\beta;\widehat\beta),\\
+H_{XE}&=H_{\mathrm{exp}}(\widetilde\beta), &
+H_{XO}&=H_{\mathrm{obs}}(\widetilde\beta;\widehat\beta).
+\end{aligned}
+\]
+
+The semicolon separates the point where the complete-data saturated likelihood
+is differentiated from the pseudo-data moments entering that likelihood. In
+every row, $\Omega=G_1^{-1}J_1G_1^{-1}$ is the same empirical Stage-1 FIML
+sandwich, and $\Delta=\partial\beta(\theta)/\partial\theta^\top$ is the same
+Stage-2 Jacobian. Thus only $H$ changes. At the saturated estimate,
+$H_{SE}=H_{SO}$ exactly.

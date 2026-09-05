@@ -2,6 +2,7 @@
 #include "magmaan/estimate/fiml.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -7146,6 +7147,94 @@ using estimate::frontier::ScalarProfileReference;
 
 namespace {
 
+post_expected<Eigen::MatrixXd>
+complete_saturated_observed_information(
+    const SaturatedMoments& stage1,
+    const model::ImpliedMoments& evaluation) {
+  if (stage1.cov.size() != 1 || stage1.mean.size() != 1 ||
+      stage1.n_obs.size() != 1 || evaluation.sigma.size() != 1 ||
+      evaluation.mu.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: single-group mean-structure input "
+        "is required"));
+  }
+  const Eigen::Index p = stage1.cov[0].rows();
+  if (p <= 0 || stage1.cov[0].cols() != p || stage1.mean[0].size() != p ||
+      stage1.n_obs[0] <= 0 || evaluation.sigma[0].rows() != p ||
+      evaluation.sigma[0].cols() != p || evaluation.mu[0].size() != p) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: malformed moment block"));
+  }
+
+  FIMLCache cache;
+  cache.block_p.push_back(p);
+  cache.sigma_offsets.push_back(0);
+  cache.mu_offsets.push_back(0);
+  cache.n_total = stage1.n_obs[0];
+  FIMLPattern pattern;
+  pattern.block = 0;
+  pattern.n_obs = stage1.n_obs[0];
+  pattern.mean = stage1.mean[0];
+  pattern.cov = stage1.cov[0];
+  pattern.observed.reserve(static_cast<std::size_t>(p));
+  for (Eigen::Index j = 0; j < p; ++j) pattern.observed.push_back(j);
+  cache.patterns.push_back(std::move(pattern));
+
+  auto hdev_or = fiml_saturated_hessian_analytic_block(
+      cache, 0, evaluation.mu[0], evaluation.sigma[0]);
+  if (!hdev_or.has_value()) return std::unexpected(hdev_or.error());
+  return Eigen::MatrixXd(0.5 * (*hdev_or));
+}
+
+post_expected<TwoStageInformationChoice>
+information_choice_row(std::string name,
+                       const Eigen::MatrixXd& H,
+                       const Eigen::MatrixXd& Omega,
+                       const Eigen::MatrixXd& Delta,
+                       double chisq, int df, double eigen_tol) {
+  if (H.rows() != H.cols() || Omega.rows() != Omega.cols() ||
+      H.rows() != Omega.rows() || Delta.rows() != H.rows() || df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: incompatible matrix dimensions"));
+  }
+  Eigen::MatrixXd Hs = 0.5 * (H + H.transpose()).eval();
+  const Eigen::MatrixXd HD = Hs * Delta;
+  Eigen::MatrixXd DtHD = Delta.transpose() * HD;
+  DtHD = 0.5 * (DtHD + DtHD.transpose()).eval();
+  auto inv_or = invert_symmetric(
+      DtHD, "two_stage_information_choices: Delta' H Delta");
+  if (!inv_or.has_value()) return std::unexpected(inv_or.error());
+  Eigen::MatrixXd U = Hs - HD * (*inv_or) * HD.transpose();
+  U = 0.5 * (U + U.transpose()).eval();
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> h_eig(Hs);
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> u_eig(U);
+  if (h_eig.info() != Eigen::Success || u_eig.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: eigendecomposition failed"));
+  }
+  const Eigen::VectorXd he = h_eig.eigenvalues();
+  const Eigen::VectorXd ue = u_eig.eigenvalues();
+  const double h_scale = std::max(1.0, he.cwiseAbs().maxCoeff());
+  const double u_scale = std::max(1.0, ue.cwiseAbs().maxCoeff());
+  const double h_cut = eigen_tol * h_scale;
+  const double u_cut = eigen_tol * u_scale;
+
+  TwoStageInformationChoice out;
+  out.name = std::move(name);
+  out.trace_ugamma = Omega.cwiseProduct(U.transpose()).sum();
+  out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
+  out.chisq_scaled = out.scaling_factor > 0.0
+      ? chisq / out.scaling_factor
+      : std::numeric_limits<double>::quiet_NaN();
+  out.min_information_eigenvalue = he.minCoeff();
+  out.min_projector_eigenvalue = ue.minCoeff();
+  out.information_negative_eigenvalues = (he.array() < -h_cut).count();
+  out.projector_negative_eigenvalues = (ue.array() < -u_cut).count();
+  out.projector_rank = (ue.cwiseAbs().array() > u_cut).count();
+  return out;
+}
+
 Eigen::VectorXd fd_scalar_gradient(
     const std::function<double(const Eigen::VectorXd&)>& value,
     const Eigen::VectorXd& theta) {
@@ -7802,6 +7891,118 @@ profile_ci_from_evaluator(double estimate,
 }
 
 }  // namespace
+
+post_expected<TwoStageInformationChoiceAudit>
+two_stage_information_choices(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const Estimates& est,
+                              const SaturatedMoments& stage1,
+                              double eigen_tol) {
+  if (!(eigen_tol > 0.0) || !std::isfinite(eigen_tol)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: eigen_tol must be positive"));
+  }
+  if (stage1.cov.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: only one group is currently supported"));
+  }
+  SampleStats samp = sample_stats_from_saturated(stage1);
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(
+        e.error(), "two_stage_information_choices: fixed.x resolution"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto moments_or = ev_or->evaluate(est.theta, true, true);
+  if (!moments_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: model evaluation failed: " +
+            moments_or.error().detail));
+  }
+  auto js_or = ev_or->dsigma_dtheta(est.theta);
+  auto jm_or = ev_or->dmu_dtheta(est.theta);
+  if (!js_or.has_value() || !jm_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: model Jacobian failed"));
+  }
+  if (jm_or->size() == 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: a mean structure is required"));
+  }
+  const Ml2sMomentLayout layout =
+      ml2s_make_layout(samp, moments_or->moments);
+  auto delta_or = ml2s_moment_jacobian_block(
+      layout, moments_or->moments, *js_or, *jm_or, 0);
+  if (!delta_or.has_value()) return std::unexpected(delta_or.error());
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  Eigen::MatrixXd Delta = (*delta_or) * con_or->K();
+
+  auto df_or = inference::df_stat(pt, samp, est.theta);
+  if (!df_or.has_value()) return std::unexpected(df_or.error());
+  const int df = *df_or;
+  if (df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: positive degrees of freedom required"));
+  }
+  const double chisq = inference::chi2_stat(samp, est);
+  auto omega_or = two_stage_gamma_from_acov(stage1, false);
+  if (!omega_or.has_value()) return std::unexpected(omega_or.error());
+
+  auto h_sat_expected_or = two_stage_stage2_weight(
+      stage1, TwoStageWeight::Nt);
+  if (!h_sat_expected_or.has_value()) {
+    return std::unexpected(h_sat_expected_or.error());
+  }
+  SaturatedMoments structured = stage1;
+  structured.cov = moments_or->moments.sigma;
+  structured.mean = moments_or->moments.mu;
+  auto h_struct_expected_or = two_stage_stage2_weight(
+      structured, TwoStageWeight::Nt);
+  if (!h_struct_expected_or.has_value()) {
+    return std::unexpected(h_struct_expected_or.error());
+  }
+  auto h_struct_observed_or = complete_saturated_observed_information(
+      stage1, moments_or->moments);
+  if (!h_struct_observed_or.has_value()) {
+    return std::unexpected(h_struct_observed_or.error());
+  }
+  model::ImpliedMoments saturated_eval;
+  saturated_eval.mu = stage1.mean;
+  saturated_eval.sigma = stage1.cov;
+  auto h_sat_observed_or = complete_saturated_observed_information(
+      stage1, saturated_eval);
+  if (!h_sat_observed_or.has_value()) {
+    return std::unexpected(h_sat_observed_or.error());
+  }
+
+  TwoStageInformationChoiceAudit out;
+  out.chisq = chisq;
+  out.df = df;
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(Delta);
+  qr.setThreshold(eigen_tol);
+  out.delta_rank = qr.rank();
+  out.saturated_expected_observed_max_abs =
+      ((*h_sat_expected_or) - (*h_sat_observed_or)).cwiseAbs().maxCoeff();
+  const std::array<std::pair<std::string, const Eigen::MatrixXd*>, 4> variants{{
+      {"saturated_expected", &*h_sat_expected_or},
+      {"saturated_observed", &*h_sat_observed_or},
+      {"structured_expected", &*h_struct_expected_or},
+      {"structured_observed", &*h_struct_observed_or}}};
+  out.choices.reserve(variants.size());
+  for (const auto& [name, H] : variants) {
+    auto row_or = information_choice_row(
+        name, *H, *omega_or, Delta, chisq, df, eigen_tol);
+    if (!row_or.has_value()) return std::unexpected(row_or.error());
+    out.choices.push_back(std::move(*row_or));
+  }
+  return out;
+}
 
 fit_expected<Estimates>
 fit_fiml_constrained(spec::LatentStructure pt,

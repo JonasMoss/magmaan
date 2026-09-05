@@ -1651,6 +1651,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_ml2s_information_choices_impl
+Rcpp::List frontier_ml2s_information_choices_impl(Rcpp::List fit, double eigen_tol);
+RcppExport SEXP _magmaan_frontier_ml2s_information_choices_impl(SEXP fitSEXP, SEXP eigen_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< double >::type eigen_tol(eigen_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_ml2s_information_choices_impl(fit, eigen_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // two_stage_stage2_weight_blocks_impl
 Rcpp::List two_stage_stage2_weight_blocks_impl(Rcpp::List stage1, std::string stage2_weight, double dls_a);
 RcppExport SEXP _magmaan_two_stage_stage2_weight_blocks_impl(SEXP stage1SEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
@@ -3974,6 +3986,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fiml_fit_measures_impl", (DL_FUNC) &_magmaan_fiml_fit_measures_impl, 2},
     {"_magmaan_infer_ml2s_casewise_influence_ij_fit", (DL_FUNC) &_magmaan_infer_ml2s_casewise_influence_ij_fit, 4},
     {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 5},
+    {"_magmaan_frontier_ml2s_information_choices_impl", (DL_FUNC) &_magmaan_frontier_ml2s_information_choices_impl, 2},
     {"_magmaan_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_two_stage_stage2_weight_blocks_impl, 3},
     {"_magmaan_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaan_infer_fiml_fmg_spectrum, 2},
     {"_magmaan_measures_standardize_lv", (DL_FUNC) &_magmaan_measures_standardize_lv, 2},

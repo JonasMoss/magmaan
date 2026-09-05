@@ -117,6 +117,10 @@ TEST_CASE("Fleishman coefficient solve covers Rhemtulla nonnormal target") {
   if (!coef_or.has_value()) MESSAGE(coef_or.error().detail);
   REQUIRE(coef_or.has_value());
 
+  CHECK(coef_or->b > 0.0);
+  CHECK(coef_or->d > 0.0);
+  CHECK(coef_or->b - coef_or->c * coef_or->c / (3.0 * coef_or->d) > 0.0);
+
   std::mt19937_64 rng(20260603);
   Eigen::MatrixXd X(160000, 1);
   std::normal_distribution<double> normal(0.0, 1.0);
@@ -126,6 +130,22 @@ TEST_CASE("Fleishman coefficient solve covers Rhemtulla nonnormal target") {
   }
   CHECK(std::abs(sample_skewness(X, 0) - 2.0) < 0.14);
   CHECK(std::abs(sample_excess_kurtosis(X, 0) - 7.0) < 0.55);
+}
+
+TEST_CASE("Vale-Maurelli Rhemtulla branch supports negative correlations") {
+  Eigen::VectorXd skew = Eigen::VectorXd::Constant(2, 2.0);
+  Eigen::VectorXd kurt = Eigen::VectorXd::Constant(2, 7.0);
+  const Eigen::MatrixXd target = corr2(-0.08);
+
+  auto cal_or = magmaan::sim::calibrate_vale_maurelli(target, skew, kurt);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  CHECK(cal_or->intermediate_corr(0, 1) < 0.0);
+  auto cov_or = magmaan::sim::fleishman_covariance(
+      cal_or->coefficients[0], cal_or->coefficients[1],
+      cal_or->intermediate_corr(0, 1));
+  REQUIRE(cov_or.has_value());
+  CHECK(*cov_or == doctest::Approx(-0.08).epsilon(1e-10));
 }
 
 TEST_CASE("Vale-Maurelli simulation respects target moments and correlations") {

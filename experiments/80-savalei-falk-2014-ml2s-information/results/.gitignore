@@ -1,0 +1,9 @@
+*
+!.gitignore
+!/replication/
+/replication/*
+!/replication/audit.csv
+!/replication/design.csv
+!/replication/failures.csv
+!/replication/metadata.csv
+!/replication/summary.csv

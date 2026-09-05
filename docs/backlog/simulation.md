@@ -27,7 +27,9 @@ exposes `sim_*_batch()` convenience calls plus the reusable
 `sim_ig_calibrate()` / `sim_ig_draw()`,
 `sim_norta_calibrate()` / `sim_norta_draw()`,
 `sim_vm_calibrate()` / `sim_vm_draw()` (Vale-Maurelli/Fleishman: target
-correlation + per-margin skewness/excess kurtosis),
+correlation + per-margin skewness/excess kurtosis, preferring the conventional
+monotone-increasing Fleishman root when the moment equations have multiple
+solutions),
 `sim_plsim_calibrate()` / `sim_plsim_draw()`,
 `sim_bicop_calibrate()` / `sim_bicop_draw()`, and
 `sim_cvine_calibrate()` / `sim_cvine_draw()` and
