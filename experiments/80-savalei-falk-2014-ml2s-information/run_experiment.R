@@ -16,8 +16,8 @@ suppressPackageStartupMessages(library(magmaan))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--replication|--fingerprint] [options]\n\n",
-  "Identify the matrix-estimation conventions in the Savalei-Falk (2014)\n",
-  "robust FIML and two-stage tests. One fit of each method per generated\n",
+  "Compare plausible matrix-estimation conventions with the Savalei-Falk\n",
+  "(2014) robust FIML and two-stage tests. One fit per method and generated\n",
   "sample is reused for all canonical FIML residual/sandwich choices and\n",
   "all ML2S Stage-1 bread/meat by Stage-2 H choices. The named Mplus-style\n",
   "Yuan-Bentler MLR trace-difference is evaluated separately.\n\n",

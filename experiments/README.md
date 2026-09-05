@@ -94,7 +94,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 77 | [fiml-global-gof-pilot](77-fiml-global-gof-pilot/report.qmd) | probe | active | Across finite-moment stress, MAR, and explicit contract violations, do effective multiplier or spectrum-aware scores calibrate global FIML GOF better than Yuan–Bentler MLR? |
 | 78 | [psd-estimator-stress](78-psd-estimator-stress/report.qmd) | benchmark | active | Across the supported single-level estimator families, where do covariance-honest point fits remain correct, admissible, stable across starts, and computationally practical? |
 | 79 | [Savalei-Falk-2014 test map](79-savalei-falk-2014-test-map/report.qmd) | replication | active | Which exact null/reference models and observed-information corrections define Savalei and Falk's robust FIML and two-stage tests, and how should magmaan verify them? |
-| 80 | [Savalei-Falk-2014 matrix choices](80-savalei-falk-2014-ml2s-information/report.qmd) | replication | active | Does the original Yuan-Bentler expected-information FIML correction reproduce Savalei and Falk's EQS rejection-rate fingerprint? |
+| 80 | [Savalei-Falk-2014 matrix choices](80-savalei-falk-2014-ml2s-information/report.qmd) | replication | complete | Which Yuan-Bentler-style matrix choice gives rejection behavior most similar to Savalei and Falk, without claiming an exact EQS replication? |
 
 ## Archived
 
