@@ -2461,24 +2461,68 @@ TEST_CASE("two_stage_em_ml_inference: missing data returns finite corrected outp
   CHECK(std::isfinite(ml2s->chisq));
   CHECK(std::isfinite(ml2s->chisq_scaled));
 
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
   auto choices =
       magmaan::estimate::fiml::frontier::two_stage_information_choices(
-          *built.pt, *built.rep, *est, *sm);
+          *built.pt, *built.rep, raw, *est, *sm, *pack);
   REQUIRE_MESSAGE(choices.has_value(),
       "two_stage_information_choices failed: " <<
       (choices.has_value() ? "" : choices.error().detail));
-  REQUIRE(choices->choices.size() == 4);
+  REQUIRE(choices->choices.size() == 32);
   CHECK(choices->df == ml2s->df);
   CHECK(choices->saturated_expected_observed_max_abs < 1e-10);
-  CHECK(choices->choices[0].name == "saturated_expected");
-  CHECK(choices->choices[1].name == "saturated_observed");
+  CHECK(choices->stage1_expected_observed_max_abs > 1e-10);
+  CHECK(choices->choices[0].name ==
+        "saturated_observed__saturated__saturated_expected");
+  CHECK(choices->choices[1].name ==
+        "saturated_observed__saturated__saturated_observed");
+  CHECK(choices->choices[0].stage1_information ==
+        "saturated_observed__saturated");
+  CHECK(choices->choices[0].stage1_bread_point == "saturated");
+  CHECK(choices->choices[0].stage1_bread_kind == "observed");
+  CHECK(choices->choices[0].stage1_meat_point == "saturated");
+  CHECK(choices->choices[0].stage2_information == "saturated_expected");
   CHECK(choices->choices[0].scaling_factor ==
         doctest::Approx(ml2s->scaling_factor).epsilon(1e-10));
   CHECK(choices->choices[1].scaling_factor ==
         doctest::Approx(ml2s->scaling_factor).epsilon(1e-10));
   CHECK(choices->choices[0].projector_rank == ml2s->df);
-  CHECK(choices->choices[2].name == "structured_expected");
-  CHECK(choices->choices[3].name == "structured_observed");
+  CHECK(choices->choices[2].name ==
+        "saturated_observed__saturated__structured_expected");
+  CHECK(choices->choices[3].name ==
+        "saturated_observed__saturated__structured_observed");
+  CHECK(choices->choices[4].name ==
+        "saturated_observed__structured__saturated_expected");
+  CHECK(choices->choices[8].name ==
+        "saturated_expected__saturated__saturated_expected");
+  CHECK(choices->choices[8].stage1_information_negative_eigenvalues == 0);
+
+  auto est_fiml = magmaan::estimate::fiml::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, *pack,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est_fiml.has_value(),
+      "FIML fit failed: " <<
+      (est_fiml.has_value() ? "" : est_fiml.error().detail));
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto extras = magmaan::estimate::fiml::fiml_extras(
+      *built.pt, *built.rep, raw, *est_fiml, *pack, *h1);
+  REQUIRE(extras.has_value());
+  auto fiml_choices =
+      magmaan::estimate::fiml::frontier::fiml_information_choices(
+          *built.pt, *built.rep, raw, *est_fiml, *sm, *pack,
+          extras->chi2, choices->df);
+  REQUIRE_MESSAGE(fiml_choices.has_value(),
+      "fiml_information_choices failed: " <<
+      (fiml_choices.has_value() ? "" : fiml_choices.error().detail));
+  REQUIRE(fiml_choices->choices.size() == 48);
+  CHECK(fiml_choices->choices[0].name ==
+        "saturated_observed_h1__saturated_observed__saturated");
+  CHECK(fiml_choices->choices[32].name ==
+        "structured_observed_h1__structured_observed__structured");
+  CHECK(fiml_choices->choices[32].residual_rank == fiml_choices->df);
+  CHECK(std::isfinite(fiml_choices->choices[32].scaling_factor));
 }
 
 TEST_CASE("fiml_profile: missing data raw, pack, and saturated moments agree") {

@@ -69,6 +69,7 @@ estimate_fiml <- fit_fiml_impl
 estimate_saturated_em_moments <- saturated_em_moments_impl
 estimate_two_stage_em <- estimate_two_stage_em_impl
 frontier_ml2s_information_choices <- frontier_ml2s_information_choices_impl
+frontier_fiml_information_choices <- frontier_fiml_information_choices_impl
 estimate_uls <- fit_uls_impl
 estimate_gls <- fit_gls_impl
 estimate_gls_pairwise <- fit_gls_pairwise_impl
@@ -567,6 +568,7 @@ magmaan_core <- local({
       "frontier_fit_ml_psd",
       "frontier_fit_ml2s_psd",
       "frontier_ml2s_information_choices",
+      "frontier_fiml_information_choices",
       "frontier_fit_uls_psd",
       "frontier_fit_gls_psd",
       "frontier_fit_wls_psd",

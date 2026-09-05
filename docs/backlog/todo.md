@@ -2657,8 +2657,18 @@ work lives in [`speculative.md`](speculative.md). Open work:
     Monte Carlo comparison. Add explicitly named paper-era post-fit routes only
     after those same-data gates pass, preserving current MLR, FIML FMG, and ML2S
     semantics. `experiments/79-savalei-falk-2014-test-map` records the source map,
-    deterministic routing witness, and staged replication plan; experiment 77
-    should consume the new routes only after verification.
+    deterministic routing witness, and staged replication plan. Experiment 80
+    now supplies the exhaustive diagnostic surface: 48 direct-FIML and 32 ML2S
+    matrix-estimation combinations are evaluated on identical generated
+    samples. Its targeted run identifies the two-stage candidate (11.5% versus
+    the published 10.0%) but exposes a direct-FIML conflict: the literal
+    all-structured observed row rejects only 36.5% among 935 usable tests, while
+    the closest saturated-expected row rejects 61.9% versus the published 63.3%.
+    Before Experiment 77 consumes a direct-FIML route, compare the analytic
+    structured observed-H1 matrix against an independent EQS/symbolic oracle and
+    determine whether EQS applied `SE=EXACT` to the robust test or only its
+    standard errors. The ML2S candidate can proceed through the remaining
+    equation-level gates above without waiting for that FIML resolution.
 - **Landed; remainder in speculative.** The Van-Praag pairwise covariance
   machinery (`data::pairwise_sample_stats`,
   `robust::pairwise_casewise_contributions`, `data::gamma_nt_pairwise`,

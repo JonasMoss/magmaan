@@ -778,23 +778,34 @@ two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
 
 namespace frontier {
 
-// Equation-level diagnostic for the complete-data saturated-information
-// choice in the Savalei--Falk two-stage scaled statistic. All variants use the
-// same Stage-1 saturated-FIML sandwich Gamma and the same Stage-2 estimate and
-// model Jacobian; only the moment-space information H in
-// U = H - H Delta (Delta' H Delta)^-1 Delta' H changes. This is deliberately a
-// single-group frontier surface for method-identification experiments, not a
-// replacement for the lavaan-parity ML2S default.
+// Equation-level diagnostic for the information choices in the
+// Savalei--Falk two-stage scaled statistic. The Stage-1 saturated-FIML
+// sandwich crosses saturated/structured evaluation, observed/expected breads,
+// and saturated/structured empirical score meat. Independently, the Stage-2
+// moment-space information H
+// in U = H - H Delta (Delta' H Delta)^-1 Delta' H crosses saturated versus
+// structured evaluation and expected versus observed information. Every row
+// uses the same Stage-1 estimate, Stage-2 estimate, and model Jacobian. This is
+// deliberately a single-group frontier surface for method-identification
+// experiments, not a replacement for the lavaan-parity ML2S default.
 struct TwoStageInformationChoice {
   std::string name;
+  std::string stage1_information;
+  std::string stage1_bread_point;
+  std::string stage1_bread_kind;
+  std::string stage1_meat_point;
+  std::string stage2_information;
   double trace_ugamma = std::numeric_limits<double>::quiet_NaN();
   double scaling_factor = std::numeric_limits<double>::quiet_NaN();
   double chisq_scaled = std::numeric_limits<double>::quiet_NaN();
+  double min_stage1_information_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
   double min_information_eigenvalue =
       std::numeric_limits<double>::quiet_NaN();
   double min_projector_eigenvalue =
       std::numeric_limits<double>::quiet_NaN();
   Eigen::Index information_negative_eigenvalues = 0;
+  Eigen::Index stage1_information_negative_eigenvalues = 0;
   Eigen::Index projector_negative_eigenvalues = 0;
   Eigen::Index projector_rank = 0;
 };
@@ -806,14 +817,63 @@ struct TwoStageInformationChoiceAudit {
   Eigen::Index delta_rank = 0;
   double saturated_expected_observed_max_abs =
       std::numeric_limits<double>::quiet_NaN();
+  double stage1_expected_observed_max_abs =
+      std::numeric_limits<double>::quiet_NaN();
 };
 
 post_expected<TwoStageInformationChoiceAudit>
 two_stage_information_choices(spec::LatentStructure pt,
                               const model::MatrixRep& rep,
+                              const RawData& raw,
                               const Estimates& est,
                               const SaturatedMoments& stage1,
+                              const FIMLPack& pack,
                               double eigen_tol = 1e-9);
+
+// Exact Equation-37 FIML scaling choices in the Savalei--Rosseel taxonomy.
+// The residual metric crosses the four saturated/structured by
+// expected/observed-H1 choices plus the two observed full-Hessian variants.
+// The saturated-moment sandwich independently crosses four bread choices with
+// saturated versus structured empirical score meat. The historical
+// Savalei--Falk row is structured observed-H1 residual information with a
+// structured observed bread and structured meat under a literal reading of
+// their equations; the experiment intentionally tests that reading rather
+// than treating it as an implementation fact.
+struct FIMLInformationChoice {
+  std::string name;
+  std::string residual_information;
+  std::string omega_bread_point;
+  std::string omega_bread_kind;
+  std::string omega_meat_point;
+  double trace_ugamma = std::numeric_limits<double>::quiet_NaN();
+  double scaling_factor = std::numeric_limits<double>::quiet_NaN();
+  double chisq_scaled = std::numeric_limits<double>::quiet_NaN();
+  double min_residual_information_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double min_omega_bread_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  Eigen::Index residual_information_negative_eigenvalues = 0;
+  Eigen::Index omega_bread_negative_eigenvalues = 0;
+  Eigen::Index residual_rank = 0;
+};
+
+struct FIMLInformationChoiceAudit {
+  std::vector<FIMLInformationChoice> choices;
+  double chisq = std::numeric_limits<double>::quiet_NaN();
+  int df = 0;
+  Eigen::Index delta_rank = 0;
+};
+
+post_expected<FIMLInformationChoiceAudit>
+fiml_information_choices(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const RawData& raw,
+                         const Estimates& est,
+                         const SaturatedMoments& saturated,
+                         const FIMLPack& pack,
+                         double chisq,
+                         int df,
+                         double eigen_tol = 1e-9);
 
 // Raw-data FIML over PSD primitive LISREL covariance matrices. The optimizer
 // works in an internal Cholesky lift and returns the ordinary partable-shaped

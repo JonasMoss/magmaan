@@ -7186,14 +7186,104 @@ complete_saturated_observed_information(
   return Eigen::MatrixXd(0.5 * (*hdev_or));
 }
 
-post_expected<TwoStageInformationChoice>
-information_choice_row(std::string name,
-                       const Eigen::MatrixXd& H,
-                       const Eigen::MatrixXd& Omega,
-                       const Eigen::MatrixXd& Delta,
-                       double chisq, int df, double eigen_tol) {
-  if (H.rows() != H.cols() || Omega.rows() != Omega.cols() ||
-      H.rows() != Omega.rows() || Delta.rows() != H.rows() || df <= 0) {
+post_expected<Eigen::MatrixXd>
+fiml_eta_expected_information(const model::ImpliedMoments& moments,
+                              const FIMLCache& cache) {
+  const std::size_t B = moments.sigma.size();
+  if (B == 0 || moments.mu.size() != B || cache.block_p.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "information choices: moments and pattern cache differ"));
+  }
+
+  FIMLCache expected_cache = cache;
+  for (FIMLPattern& pattern : expected_cache.patterns) {
+    if (pattern.block >= B || pattern.n_obs <= 0 ||
+        pattern.observed.empty()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_information_choices: invalid Stage-1 missingness "
+          "pattern"));
+    }
+    const std::size_t b = pattern.block;
+    pattern.mean = select_vector(moments.mu[b], pattern.observed);
+    pattern.cov = select_square(moments.sigma[b], pattern.observed);
+  }
+
+  std::vector<Eigen::Index> offsets(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    if (p <= 0 || moments.mu[b].size() != p ||
+        moments.sigma[b].rows() != p || moments.sigma[b].cols() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "information choices: malformed moment block"));
+    }
+    offsets[b + 1] = offsets[b] + p + vech_len(p);
+  }
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(offsets.back(), offsets.back());
+  for (std::size_t b = 0; b < B; ++b) {
+    auto hdev_or = fiml_saturated_hessian_analytic_block(
+        expected_cache, b, moments.mu[b], moments.sigma[b]);
+    if (!hdev_or.has_value()) return std::unexpected(hdev_or.error());
+    const Eigen::Index q = offsets[b + 1] - offsets[b];
+    std::int64_t n_block = 0;
+    for (const FIMLPattern& pattern : cache.patterns) {
+      if (pattern.block == b) n_block += pattern.n_obs;
+    }
+    if (n_block <= 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "information choices: empty missingness-pattern block"));
+    }
+    H.block(offsets[b], offsets[b], q, q) =
+        (static_cast<double>(n_block) / 2.0) * (*hdev_or);
+  }
+  return Eigen::MatrixXd(0.5 * (H + H.transpose()));
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_eta_score_meat(const RawData& raw, const FIMLCache& cache,
+                    const model::ImpliedMoments& moments) {
+  const std::size_t B = raw.X.size();
+  if (B == 0 || moments.mu.size() != B || moments.sigma.size() != B ||
+      cache.block_p.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "information choices: raw data, moments, and cache differ"));
+  }
+  std::vector<Eigen::Index> offsets(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    if (raw.X[b].cols() != p || moments.mu[b].size() != p ||
+        moments.sigma[b].rows() != p || moments.sigma[b].cols() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "information choices: malformed score-meat block"));
+    }
+    offsets[b + 1] = offsets[b] + p + vech_len(p);
+  }
+  Eigen::MatrixXd J = Eigen::MatrixXd::Zero(offsets.back(), offsets.back());
+  for (std::size_t b = 0; b < B; ++b) {
+    auto scores_or = fiml_saturated_scores_block(
+        raw, b, moments.mu[b], moments.sigma[b]);
+    if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+    const Eigen::Index q = offsets[b + 1] - offsets[b];
+    J.block(offsets[b], offsets[b], q, q) =
+        0.25 * (scores_or->transpose() * (*scores_or));
+  }
+  return Eigen::MatrixXd(0.5 * (J + J.transpose()));
+}
+
+struct ProjectorGeometry {
+  std::string name;
+  Eigen::MatrixXd U;
+  double min_information_eigenvalue{0.0};
+  double min_projector_eigenvalue{0.0};
+  Eigen::Index information_negative_eigenvalues{0};
+  Eigen::Index projector_negative_eigenvalues{0};
+  Eigen::Index projector_rank{0};
+};
+
+post_expected<ProjectorGeometry>
+projector_geometry(std::string name, const Eigen::MatrixXd& H,
+                   const Eigen::MatrixXd& Delta, double eigen_tol) {
+  if (H.rows() != H.cols() || Delta.rows() != H.rows()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "two_stage_information_choices: incompatible matrix dimensions"));
   }
@@ -7220,18 +7310,56 @@ information_choice_row(std::string name,
   const double h_cut = eigen_tol * h_scale;
   const double u_cut = eigen_tol * u_scale;
 
-  TwoStageInformationChoice out;
+  ProjectorGeometry out;
   out.name = std::move(name);
-  out.trace_ugamma = Omega.cwiseProduct(U.transpose()).sum();
-  out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
-  out.chisq_scaled = out.scaling_factor > 0.0
-      ? chisq / out.scaling_factor
-      : std::numeric_limits<double>::quiet_NaN();
+  out.U = std::move(U);
   out.min_information_eigenvalue = he.minCoeff();
   out.min_projector_eigenvalue = ue.minCoeff();
   out.information_negative_eigenvalues = (he.array() < -h_cut).count();
   out.projector_negative_eigenvalues = (ue.array() < -u_cut).count();
   out.projector_rank = (ue.cwiseAbs().array() > u_cut).count();
+  return out;
+}
+
+post_expected<TwoStageInformationChoice>
+information_choice_row(std::string stage1_bread_point,
+                       std::string stage1_bread_kind,
+                       std::string stage1_meat_point,
+                       const ProjectorGeometry& geometry,
+                       double min_stage1_information_eigenvalue,
+                       Eigen::Index stage1_information_negative_eigenvalues,
+                       const Eigen::MatrixXd& Omega,
+                       double chisq, int df) {
+  if (geometry.U.rows() != geometry.U.cols() ||
+      geometry.U.rows() != Omega.rows() || Omega.rows() != Omega.cols() ||
+      df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: incompatible cached geometry"));
+  }
+  TwoStageInformationChoice out;
+  out.stage1_information = stage1_bread_point + "_" + stage1_bread_kind +
+                           "__" + stage1_meat_point;
+  out.name = out.stage1_information + "__" + geometry.name;
+  out.stage1_bread_point = std::move(stage1_bread_point);
+  out.stage1_bread_kind = std::move(stage1_bread_kind);
+  out.stage1_meat_point = std::move(stage1_meat_point);
+  out.stage2_information = geometry.name;
+  out.trace_ugamma = Omega.cwiseProduct(geometry.U.transpose()).sum();
+  out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
+  out.chisq_scaled = out.scaling_factor > 0.0
+      ? chisq / out.scaling_factor
+      : std::numeric_limits<double>::quiet_NaN();
+  out.min_information_eigenvalue = geometry.min_information_eigenvalue;
+  out.min_projector_eigenvalue = geometry.min_projector_eigenvalue;
+  out.information_negative_eigenvalues =
+      geometry.information_negative_eigenvalues;
+  out.projector_negative_eigenvalues =
+      geometry.projector_negative_eigenvalues;
+  out.projector_rank = geometry.projector_rank;
+  out.min_stage1_information_eigenvalue =
+      min_stage1_information_eigenvalue;
+  out.stage1_information_negative_eigenvalues =
+      stage1_information_negative_eigenvalues;
   return out;
 }
 
@@ -7895,8 +8023,10 @@ profile_ci_from_evaluator(double estimate,
 post_expected<TwoStageInformationChoiceAudit>
 two_stage_information_choices(spec::LatentStructure pt,
                               const model::MatrixRep& rep,
+                              const RawData& raw,
                               const Estimates& est,
                               const SaturatedMoments& stage1,
+                              const FIMLPack& pack,
                               double eigen_tol) {
   if (!(eigen_tol > 0.0) || !std::isfinite(eigen_tol)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -7951,8 +8081,34 @@ two_stage_information_choices(spec::LatentStructure pt,
         "two_stage_information_choices: positive degrees of freedom required"));
   }
   const double chisq = inference::chi2_stat(samp, est);
-  auto omega_or = two_stage_gamma_from_acov(stage1, false);
-  if (!omega_or.has_value()) return std::unexpected(omega_or.error());
+  model::ImpliedMoments saturated_eval;
+  saturated_eval.mu = stage1.mean;
+  saturated_eval.sigma = stage1.cov;
+  auto h_sat_fiml_expected_or = fiml_eta_expected_information(
+      saturated_eval, pack.cache);
+  auto h_struct_fiml_expected_or = fiml_eta_expected_information(
+      moments_or->moments, pack.cache);
+  auto h_struct_fiml_observed_or = fiml_structured_h1_information(
+      pt, rep, raw, est, pack);
+  auto j_struct_or = fiml_eta_score_meat(raw, pack.cache,
+                                        moments_or->moments);
+  if (!h_sat_fiml_expected_or.has_value()) {
+    return std::unexpected(h_sat_fiml_expected_or.error());
+  }
+  if (!h_struct_fiml_expected_or.has_value()) {
+    return std::unexpected(h_struct_fiml_expected_or.error());
+  }
+  if (!h_struct_fiml_observed_or.has_value()) {
+    return std::unexpected(h_struct_fiml_observed_or.error());
+  }
+  if (!j_struct_or.has_value()) return std::unexpected(j_struct_or.error());
+  if (stage1.J.rows() != h_sat_fiml_expected_or->rows() ||
+      stage1.J.cols() != h_sat_fiml_expected_or->cols() ||
+      stage1.H.rows() != h_sat_fiml_expected_or->rows() ||
+      stage1.H.cols() != h_sat_fiml_expected_or->cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_information_choices: Stage-1 H/J dimensions differ"));
+  }
 
   auto h_sat_expected_or = two_stage_stage2_weight(
       stage1, TwoStageWeight::Nt);
@@ -7972,9 +8128,6 @@ two_stage_information_choices(spec::LatentStructure pt,
   if (!h_struct_observed_or.has_value()) {
     return std::unexpected(h_struct_observed_or.error());
   }
-  model::ImpliedMoments saturated_eval;
-  saturated_eval.mu = stage1.mean;
-  saturated_eval.sigma = stage1.cov;
   auto h_sat_observed_or = complete_saturated_observed_information(
       stage1, saturated_eval);
   if (!h_sat_observed_or.has_value()) {
@@ -7989,17 +8142,277 @@ two_stage_information_choices(spec::LatentStructure pt,
   out.delta_rank = qr.rank();
   out.saturated_expected_observed_max_abs =
       ((*h_sat_expected_or) - (*h_sat_observed_or)).cwiseAbs().maxCoeff();
-  const std::array<std::pair<std::string, const Eigen::MatrixXd*>, 4> variants{{
+  out.stage1_expected_observed_max_abs =
+      ((*h_sat_fiml_expected_or) - stage1.H).cwiseAbs().maxCoeff();
+  struct BreadVariant {
+    std::string_view point;
+    std::string_view kind;
+    const Eigen::MatrixXd* H;
+    double min_eigenvalue{0.0};
+    Eigen::Index negative_eigenvalues{0};
+  };
+  std::array<BreadVariant, 4> stage1_breads{{
+      {"saturated", "observed", &stage1.H},
+      {"saturated", "expected", &*h_sat_fiml_expected_or},
+      {"structured", "observed", &*h_struct_fiml_observed_or},
+      {"structured", "expected", &*h_struct_fiml_expected_or}}};
+  const std::array<std::pair<std::string_view, const Eigen::MatrixXd*>, 2>
+      stage1_meats{{
+          {"saturated", &stage1.J},
+          {"structured", &*j_struct_or}}};
+  const std::array<std::pair<std::string, const Eigen::MatrixXd*>, 4>
+      stage2_variants{{
       {"saturated_expected", &*h_sat_expected_or},
       {"saturated_observed", &*h_sat_observed_or},
       {"structured_expected", &*h_struct_expected_or},
       {"structured_observed", &*h_struct_observed_or}}};
-  out.choices.reserve(variants.size());
-  for (const auto& [name, H] : variants) {
-    auto row_or = information_choice_row(
-        name, *H, *omega_or, Delta, chisq, df, eigen_tol);
-    if (!row_or.has_value()) return std::unexpected(row_or.error());
-    out.choices.push_back(std::move(*row_or));
+  for (BreadVariant& bread : stage1_breads) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(
+        0.5 * ((*bread.H) + bread.H->transpose()));
+    if (eig.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_information_choices: Stage-1 eigendecomposition failed"));
+    }
+    const Eigen::VectorXd ev = eig.eigenvalues();
+    const double scale = std::max(1.0, ev.cwiseAbs().maxCoeff());
+    bread.min_eigenvalue = ev.minCoeff();
+    bread.negative_eigenvalues =
+        (ev.array() < -eigen_tol * scale).count();
+  }
+  std::vector<ProjectorGeometry> stage2_geometries;
+  stage2_geometries.reserve(stage2_variants.size());
+  for (const auto& [name, H] : stage2_variants) {
+    auto geometry_or = projector_geometry(name, *H, Delta, eigen_tol);
+    if (!geometry_or.has_value()) {
+      return std::unexpected(geometry_or.error());
+    }
+    stage2_geometries.push_back(std::move(*geometry_or));
+  }
+  out.choices.reserve(stage1_breads.size() * stage1_meats.size() *
+                      stage2_geometries.size());
+  const double n = static_cast<double>(stage1.n_obs[0]);
+  for (const BreadVariant& bread : stage1_breads) {
+    auto Hinv_or = invert_symmetric(
+        *bread.H, "two_stage_information_choices: Stage-1 bread");
+    if (!Hinv_or.has_value()) return std::unexpected(Hinv_or.error());
+    for (const auto& [meat_point, J] : stage1_meats) {
+      Eigen::MatrixXd Omega = n * (*Hinv_or) * (*J) * (*Hinv_or);
+      Omega = 0.5 * (Omega + Omega.transpose()).eval();
+      for (const ProjectorGeometry& geometry : stage2_geometries) {
+        auto row_or = information_choice_row(
+            std::string(bread.point), std::string(bread.kind),
+            std::string(meat_point), geometry, bread.min_eigenvalue,
+            bread.negative_eigenvalues, Omega, chisq, df);
+        if (!row_or.has_value()) return std::unexpected(row_or.error());
+        out.choices.push_back(std::move(*row_or));
+      }
+    }
+  }
+  return out;
+}
+
+post_expected<FIMLInformationChoiceAudit>
+fiml_information_choices(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const RawData& raw,
+                         const Estimates& est,
+                         const SaturatedMoments& saturated,
+                         const FIMLPack& pack,
+                         double chisq,
+                         int df,
+                         double eigen_tol) {
+  if (!(eigen_tol > 0.0) || !std::isfinite(eigen_tol) || df <= 0 ||
+      !std::isfinite(chisq)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_information_choices: invalid chi-square, df, or eigen_tol"));
+  }
+  if (raw.X.size() != 1 || saturated.cov.size() != 1 ||
+      saturated.mean.size() != 1 || saturated.n_obs.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_information_choices: only one group is currently supported"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(
+        e.error(), "fiml_information_choices: fixed.x resolution"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_information_choices: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval_or = ev_or->evaluate(est.theta, true, true);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_information_choices: model evaluation failed: " +
+            eval_or.error().detail));
+  }
+  const Eigen::Index Q = saturated.H.rows();
+  if (Q <= 0 || saturated.H.cols() != Q || saturated.J.rows() != Q ||
+      saturated.J.cols() != Q || saturated.acov.rows() != Q ||
+      saturated.acov.cols() != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_information_choices: malformed saturated H/J/ACOV"));
+  }
+  auto Delta_or = fiml_projector_delta_impl(pt, rep, raw, est, pack, Q);
+  if (!Delta_or.has_value()) return std::unexpected(Delta_or.error());
+  const Eigen::MatrixXd& Delta = *Delta_or;
+
+  model::ImpliedMoments saturated_eval;
+  saturated_eval.mu = saturated.mean;
+  saturated_eval.sigma = saturated.cov;
+  auto h_sat_expected_or = fiml_eta_expected_information(
+      saturated_eval, pack.cache);
+  auto h_struct_expected_or = fiml_eta_expected_information(
+      eval_or->moments, pack.cache);
+  auto h_struct_observed_or = fiml_structured_h1_information(
+      pt, rep, raw, est, pack);
+  auto j_struct_or = fiml_eta_score_meat(raw, pack.cache,
+                                        eval_or->moments);
+  if (!h_sat_expected_or.has_value()) {
+    return std::unexpected(h_sat_expected_or.error());
+  }
+  if (!h_struct_expected_or.has_value()) {
+    return std::unexpected(h_struct_expected_or.error());
+  }
+  if (!h_struct_observed_or.has_value()) {
+    return std::unexpected(h_struct_observed_or.error());
+  }
+  if (!j_struct_or.has_value()) return std::unexpected(j_struct_or.error());
+
+  struct BreadVariant {
+    std::string_view point;
+    std::string_view kind;
+    const Eigen::MatrixXd* H;
+  };
+  const std::array<BreadVariant, 4> breads{{
+      {"saturated", "observed", &saturated.H},
+      {"saturated", "expected", &*h_sat_expected_or},
+      {"structured", "observed", &*h_struct_observed_or},
+      {"structured", "expected", &*h_struct_expected_or}}};
+  const std::array<std::pair<std::string_view, const Eigen::MatrixXd*>, 2>
+      meats{{
+          {"saturated", &saturated.J},
+          {"structured", &*j_struct_or}}};
+
+  auto pure_residual = [&](const Eigen::MatrixXd& H,
+                           std::string_view name)
+      -> post_expected<Eigen::MatrixXd> {
+    const Eigen::MatrixXd HD = H * Delta;
+    auto inv_or = invert_symmetric(
+        Delta.transpose() * HD,
+        "fiml_information_choices: " + std::string(name));
+    if (!inv_or.has_value()) return std::unexpected(inv_or.error());
+    Eigen::MatrixXd U = H - HD * (*inv_or) * HD.transpose();
+    return Eigen::MatrixXd(0.5 * (U + U.transpose()));
+  };
+
+  struct ResidualVariant {
+    std::string name;
+    Eigen::MatrixXd U;
+    double min_eigenvalue{0.0};
+    Eigen::Index negative_eigenvalues{0};
+    Eigen::Index rank{0};
+  };
+  std::vector<ResidualVariant> residuals;
+  residuals.reserve(6);
+  for (const BreadVariant& bread : breads) {
+    auto U_or = pure_residual(*bread.H,
+        std::string(bread.point) + " " + std::string(bread.kind));
+    if (!U_or.has_value()) return std::unexpected(U_or.error());
+    residuals.push_back({
+        std::string(bread.point) + "_" + std::string(bread.kind) + "_h1",
+        std::move(*U_or)});
+  }
+
+  auto theta_observed_or = fiml_observed_information_impl(
+      pt, rep, raw, est, pack);
+  if (!theta_observed_or.has_value()) {
+    return std::unexpected(theta_observed_or.error());
+  }
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  Eigen::MatrixXd theta_observed = *theta_observed_or;
+  if (con_or->active()) {
+    theta_observed = con_or->K().transpose() * theta_observed * con_or->K();
+  }
+  auto theta_inv_or = invert_symmetric(
+      theta_observed,
+      "fiml_information_choices: structured full observed Hessian");
+  if (!theta_inv_or.has_value()) return std::unexpected(theta_inv_or.error());
+  for (const auto& [name, H] : std::array<
+           std::pair<std::string_view, const Eigen::MatrixXd*>, 2>{{
+           {"structured_observed_hessian", &*h_struct_observed_or},
+           {"mixed_saturated_observed_hessian", &saturated.H}}}) {
+    const Eigen::MatrixXd HD = (*H) * Delta;
+    Eigen::MatrixXd U = (*H) - HD * (*theta_inv_or) * HD.transpose();
+    residuals.push_back({std::string(name),
+                         0.5 * (U + U.transpose()).eval()});
+  }
+
+  for (ResidualVariant& residual : residuals) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(residual.U);
+    if (eig.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_information_choices: residual eigensolve failed"));
+    }
+    const Eigen::VectorXd ev = eig.eigenvalues();
+    const double scale = std::max(1.0, ev.cwiseAbs().maxCoeff());
+    residual.min_eigenvalue = ev.minCoeff();
+    residual.negative_eigenvalues =
+        (ev.array() < -eigen_tol * scale).count();
+    residual.rank =
+        (ev.cwiseAbs().array() > eigen_tol * scale).count();
+  }
+
+  FIMLInformationChoiceAudit out;
+  out.chisq = chisq;
+  out.df = df;
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> delta_qr(Delta);
+  delta_qr.setThreshold(eigen_tol);
+  out.delta_rank = delta_qr.rank();
+  out.choices.reserve(residuals.size() * breads.size() * meats.size());
+
+  for (const BreadVariant& bread : breads) {
+    auto Hinv_or = invert_symmetric(
+        *bread.H, "fiml_information_choices: Omega bread");
+    if (!Hinv_or.has_value()) return std::unexpected(Hinv_or.error());
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> bread_eig(
+        0.5 * ((*bread.H) + bread.H->transpose()));
+    if (bread_eig.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_information_choices: Omega-bread eigensolve failed"));
+    }
+    const Eigen::VectorXd bread_ev = bread_eig.eigenvalues();
+    const double bread_scale = std::max(1.0, bread_ev.cwiseAbs().maxCoeff());
+    for (const auto& [meat_point, J] : meats) {
+      Eigen::MatrixXd acov = (*Hinv_or) * (*J) * (*Hinv_or);
+      acov = 0.5 * (acov + acov.transpose()).eval();
+      for (const ResidualVariant& residual : residuals) {
+        FIMLInformationChoice row;
+        row.residual_information = residual.name;
+        row.omega_bread_point = bread.point;
+        row.omega_bread_kind = bread.kind;
+        row.omega_meat_point = meat_point;
+        row.name = residual.name + "__" + std::string(bread.point) + "_" +
+                   std::string(bread.kind) + "__" + std::string(meat_point);
+        row.trace_ugamma =
+            acov.cwiseProduct(residual.U.transpose()).sum();
+        row.scaling_factor = row.trace_ugamma / static_cast<double>(df);
+        row.chisq_scaled = row.scaling_factor > 0.0
+            ? chisq / row.scaling_factor
+            : std::numeric_limits<double>::quiet_NaN();
+        row.min_residual_information_eigenvalue = residual.min_eigenvalue;
+        row.min_omega_bread_eigenvalue = bread_ev.minCoeff();
+        row.residual_information_negative_eigenvalues =
+            residual.negative_eigenvalues;
+        row.omega_bread_negative_eigenvalues =
+            (bread_ev.array() < -eigen_tol * bread_scale).count();
+        row.residual_rank = residual.rank;
+        out.choices.push_back(std::move(row));
+      }
+    }
   }
   return out;
 }

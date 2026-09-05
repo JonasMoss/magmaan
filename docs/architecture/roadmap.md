@@ -1421,14 +1421,24 @@ an unconstrained gradient test to constrained solutions.
   to unstructured observed-bread robust SEM for the NT weight and observed-bread
   `robust_continuous_ls` for the ADF weight. The default remains the
   lavaan-parity expected-bread convention.
-  The separate frontier diagnostic
-  `estimate::fiml::frontier::two_stage_information_choices` holds the
-  Stage-1 sandwich, Stage-2 fit, moment Jacobian, and base statistic fixed while
-  crossing saturated versus structured and expected versus observed
-  *complete-data saturated-moment* information in the residual projector. It is
-  currently single-group/mean-structure only and exists to identify historical
-  Savalei--Falk/EQS test conventions; it does not change the ML2S default or
-  reuse the full structured-`theta` observed-bread option as a surrogate.
+  The separate single-group/mean-structure frontier diagnostics
+  `estimate::fiml::frontier::{two_stage,fiml}_information_choices` enumerate
+  the historical matrix-estimation axes without changing either estimator's
+  default. The ML2S audit crosses four saturated/structured,
+  observed/expected Stage-1 breads, two score-meat evaluation points, and four
+  complete-data Stage-2 residual metrics (32 rows). The direct-FIML audit
+  crosses the six Equation-37 residual metrics catalogued by Savalei and
+  Rosseel (2022) with four sandwich breads and two meat points (48 rows).
+  Experiment 80 applies all 80 choices to the same generated samples to identify
+  the Savalei--Falk/EQS configurations. Its 2 x 1,000 targeted run identifies
+  the two-stage source candidate (11.5% rejection versus the published 10.0%):
+  saturated observed Stage-1 bread, saturated score meat, and structured
+  observed Stage-2 information. Direct FIML remains unresolved. The literal
+  all-structured observed Equation-(5/6) row was usable in only 935 samples and
+  rejected 36.5%, whereas the closest row used saturated expected residual
+  information and a saturated expected/saturated-score sandwich (61.9% versus
+  63.3%). This conflict is now an explicit matrix-oracle gate before any
+  paper-era direct-FIML route is added.
   `estimate::fiml::two_stage_fit_measures` adds the matching TS global-index
   layer: baseline scaling (`cB`), scaled CFI/TLI/RMSEA, and robust CFI/TLI/RMSEA
   with RMSEA confidence intervals and p-values. Complete-data multi-group tests

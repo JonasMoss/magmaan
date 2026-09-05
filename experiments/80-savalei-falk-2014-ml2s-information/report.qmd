@@ -1,5 +1,5 @@
 ---
-title: "Which information matrix produced the Savalei–Falk two-stage test?"
+title: "Which matrix choices produced the Savalei–Falk robust tests?"
 format:
   html:
     toc: true
@@ -31,153 +31,236 @@ meta_frame <- read_result("metadata.csv")
 meta <- setNames(meta_frame$value, meta_frame$key)
 reps <- as.integer(meta[["reps_per_cell"]])
 profile <- meta[["profile"]]
-labels <- c(
-  saturated_expected = "Saturated plug-in (current ML2S)",
-  saturated_observed = "Saturated observed",
-  structured_expected = "Structured expected",
-  structured_observed = "Structured observed (paper wording)")
 k7 <- summary[summary$kurtosis == 7, , drop = FALSE]
-k7$Method <- unname(labels[k7$information])
-k7$Rejection <- 100 * k7$rejection_rate
-k7$MC_SE <- 100 * k7$rejection_se
-k7$Scale <- k7$mean_scaling_factor
-k7 <- k7[match(names(labels), k7$information), ]
-structured_observed_rate <- k7$rejection_rate[
-  k7$information == "structured_observed"]
-paper_se <- sqrt(0.10 * 0.90 / 1000)
-combined_z <- abs(structured_observed_rate - 0.10) /
-  sqrt(k7$rejection_se[k7$information == "structured_observed"]^2 +
-         paper_se^2)
+
+one <- function(x, label) {
+  if (nrow(x) != 1L) stop("expected one summary row for ", label)
+  x
+}
+ml2s_default <- one(k7[
+  k7$method == "ml2s" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "saturated" &
+    k7$stage2_information == "saturated_expected", ], "ML2S default")
+ml2s_source <- one(k7[
+  k7$method == "ml2s" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "saturated" &
+    k7$stage2_information == "structured_observed", ], "ML2S source row")
+fiml_default <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "saturated_observed_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "saturated", ], "FIML H1 default")
+fiml_literal <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "structured_observed_h1" &
+    k7$omega_bread_point == "structured" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "structured", ], "literal FIML equations row")
+
+targets <- c(ml2s = .100, fiml = .633)
+closest <- lapply(names(targets), function(method) {
+  z <- k7[k7$method == method, , drop = FALSE]
+  z[which.min(abs(z$rejection_rate - targets[[method]])), , drop = FALSE]
+})
+names(closest) <- names(targets)
+ml2s_target_se <- sqrt(.1 * .9 / 1000)
+fiml_target_se <- sqrt(.633 * .367 / 1000)
+ml2s_z <- abs(ml2s_source$rejection_rate - .1) /
+  sqrt(ml2s_source$rejection_se^2 + ml2s_target_se^2)
+fiml_closest <- closest$fiml
+fiml_expected <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "saturated_expected_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "expected" &
+    k7$omega_meat_point == "saturated", ], "FIML closest row")
+stopifnot(identical(fiml_closest$information, fiml_expected$information))
+fiml_z <- abs(fiml_closest$rejection_rate - .633) /
+  sqrt(fiml_closest$rejection_se^2 + fiml_target_se^2)
+fiml_observed_residual <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "saturated_observed_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "expected" &
+    k7$omega_meat_point == "saturated", ], "FIML observed-residual alternative")
+
+evidence <- rbind(ml2s_source, ml2s_default, fiml_closest,
+                  fiml_observed_residual, fiml_literal, fiml_default)
+evidence$Choice <- c("Source-implied candidate", "Current magmaan default",
+                     "Closest: saturated expected throughout",
+                     "Observed residual, expected sandwich",
+                     "Literal all-structured observed equations",
+                     "Current magmaan H1 metric")
+evidence$Method <- c("Two-stage", "Two-stage", rep("Direct FIML", 4L))
+evidence$Published <- c(10.0, NA, 63.3, 63.3, 63.3, NA)
+evidence$Usable <- 100 * evidence$replications / reps
+evidence$Rejection <- 100 * evidence$rejection_rate
+evidence$MC_SE <- 100 * evidence$rejection_se
+evidence$Scale <- evidence$mean_scaling_factor
+
 eligible <- 100 * design$theoretical_eligible_proportion[
   design$kurtosis == 7]
 identity_error <- audit[["saturated_identity_max_abs"]]
 default_error <- audit[["default_scale_max_abs"]]
-indef <- aggregate(
-  cbind(H = summary$information_indefinite_rate,
-        U = summary$projector_indefinite_rate) ~ information,
-  data = summary, mean)
-indef$Method <- unname(labels[indef$information])
-indef$H <- 100 * indef$H
-indef$U <- 100 * indef$U
 ```
 
 ## Question
 
-Savalei and Falk describe the two-stage correction with the complete-data
-information matrix of the saturated moment model, while also saying that
-observed information was used throughout. Did their reported statistic use the
-saturated plug-in, structured expected information, or structured observed
-information?
+Which choices of residual information, sandwich bread, and score meat reproduce
+the robust FIML and robust two-stage tests reported by Savalei and Falk (2014)?
+The answer determines the explicitly named paper-era routes that Experiment 77
+should verify; it must not silently change magmaan's modern defaults.
 
 ## Short answer
 
-`r if (reps >= 1000) sprintf("The evidence identifies **structured observed information** as the paper's implementation. It gives %.1f%% rejection in the diagnostic cell versus the published 10.0%%; the %.1f-point difference is %.1f combined Monte Carlo standard errors. The saturated/current-ML2S and structured-expected alternatives are nowhere close.", 100 * structured_observed_rate, 100 * abs(structured_observed_rate - .10), combined_z) else sprintf("The %s run (%d samples per kurtosis cell) validates the crossed-information pipeline, but is too small to identify the paper's implementation from its 10.0%% rejection-rate target. A 1,000-replication run is required.", profile, reps)`
+`r if (reps >= 1000) sprintf("For **two-stage FIML**, the source-implied choice—saturated observed Stage-1 bread, saturated score meat, and structured observed Stage-2 information—is also the empirical match: %.1f%% rejection versus the published 10.0%% (%.1f combined Monte Carlo SE). For **direct FIML**, the grid exposes an unresolved conflict. The closest row uses saturated expected residual information and a saturated expected/saturated-score sandwich (%.1f%% versus 63.3%%; %.1f combined Monte Carlo SE), whereas the literal structured-observed equations produce only %.1f%% rejection among %.1f%% usable tests.", 100 * ml2s_source$rejection_rate, ml2s_z, 100 * fiml_expected$rejection_rate, fiml_z, 100 * fiml_literal$rejection_rate, 100 * fiml_literal$replications / reps) else sprintf("The %s run (%d samples per cell) validates all 80 matrix constructions, but is too small to compare them reliably with the paper's 10.0%% two-stage and 63.3%% FIML targets.", profile, reps)`
 
-The equation-level checks passed: complete-data expected and observed
-information agreed at the saturated estimate to
-`r format(identity_error, digits = 3, scientific = TRUE)`, and the saturated
-expected statistic reproduced magmaan's current ML2S scale to
-`r format(default_error, digits = 3, scientific = TRUE)`.
-The matching structured-observed matrix is indefinite in
-`r sprintf("%.2f%%", 100 * indef$H[indef$information == "structured_observed"])`
-of fitted samples, confirming that this historical choice has no
-positive-semidefiniteness guarantee.
+`r if (reps >= 1000) "Experiment 77 can proceed with the two-stage candidate, but it should **not yet add a paper-era direct-FIML route**. The next FIML gate must determine whether our structured observed-H1 construction matches EQS's analytic matrix, or whether EQS applied SE=EXACT only to standard errors while its robust test retained saturated expected information. The current magmaan defaults remain unchanged." else ""`
 
 ## Evidence
 
-The focused cell is Savalei–Falk Model 2 with (N=200), skewness 2, kurtosis 7,
-30% missingness, many patterns, and MAR-L deletion. The article reports a 10.0%
-two-stage rejection rate there. Each row below is computed from the same fitted
-sample; only the $H$ used in
+All rows use Savalei–Falk Model 2, (N=200), MAR-L, many missingness
+patterns, 30% missingness, skewness 2, and kurtosis 7. Each method is fitted
+once to a sample and every matrix choice is evaluated on that same fit.
 
-\[
-U=H-H\Delta(\Delta^\top H\Delta)^{-1}\Delta^\top H.
-\]
-
-changes.
-
-```{r result-table}
+```{r evidence-table}
 knitr::kable(
-  k7[, c("Method", "Rejection", "MC_SE", "Scale")],
-  digits = c(NA, 1, 1, 3), row.names = FALSE,
-  col.names = c("Information choice", "Reject (%)", "MC SE (points)",
-                "Mean scale"),
-  caption = "Model 2, N=200, MAR-L, MP, 30% missing, skewness 2, kurtosis 7. Published TS rejection: 10.0%.")
+  evidence[, c("Method", "Choice", "Published", "Usable", "Rejection",
+                 "MC_SE", "Scale")],
+  digits = c(NA, NA, 1, 1, 1, 1, 3), row.names = FALSE,
+  col.names = c("Method", "Matrix choice", "Published (%)", "Usable (%)",
+                "Reject (%)", "MC SE (points)", "Mean scale"),
+  caption = "Published targets and reconstructed/default matrix choices in the diagnostic cell.")
 ```
 
-The saturated expected and saturated observed rows are an intentional identity
-check: at the unrestricted complete-data moment estimate, observed and expected
-information coincide. Structured observed information is evaluated at the
-Stage-2 model-implied moments while retaining the saturated EM moments as the
-pseudo-data. That point does not minimize the complete-data saturated
-likelihood over unrestricted moments, so its observed Hessian need not be
-positive semidefinite; the stability table shows that it generally is not.
+The literal direct-FIML residual matrix is indefinite in
+`r sprintf("%.1f%%", 100 * fiml_literal$projection_indefinite_rate)` of its
+usable samples, and 65 of 1,000 scales are nonpositive. The two-stage structured
+observed residual matrix is indefinite in
+`r sprintf("%.1f%%", 100 * ml2s_source$projection_indefinite_rate)`, yet its
+trace remains positive in every sample. Indefiniteness is expected finite-sample
+geometry because neither structured matrix is evaluated at an unrestricted
+moment-model optimum.
 
-```{r stability-table}
-knitr::kable(
-  indef[, c("Method", "H", "U")],
-  digits = c(NA, 1, 1), row.names = FALSE,
-  col.names = c("Information choice", "Indefinite H (%)",
-                "Indefinite U (%)"),
-  caption = "Finite-sample geometry diagnostics across both kurtosis cells.")
-```
+The complete-data saturated expected/observed identity holds to
+`r format(identity_error, digits = 3, scientific = TRUE)`, and the enumerated
+ML2S default reproduces magmaan's fitted scale to
+`r format(default_error, digits = 3, scientific = TRUE)`.
 
 ## Caveats
 
-This is a targeted implementation-identification experiment, not a full
-replication of the 192-cell study. The original random seeds and EQS random
-number stream are unavailable, and the published 10.0% is itself a
-1,000-replication Monte Carlo estimate. A difference smaller than roughly one
-percentage point is not compelling identification evidence.
+This is a targeted two-cell implementation-identification experiment, not a
+replication of all 192 published cells. The original EQS random stream is not
+available, and each published percentage is itself based on 1,000 samples.
+Agreement within roughly one to two percentage points is therefore the relevant
+resolution, not exact equality. One published rejection rate cannot distinguish
+every near-matching FIML row: the saturated-observed residual paired with the
+same expected sandwich gives
+`r sprintf("%.1f%%", 100 * fiml_observed_residual$rejection_rate)`. The
+matrix-level EQS comparison is therefore essential rather than optional.
 
-The generator uses the conventional monotone-increasing Fleishman root in
-magmaan's Vale–Maurelli implementation and treats the paper's kurtosis values
-as excess kurtosis. For the moderate condition this gives
-`r sprintf("%.1f%%", eligible)` theoretically eligible observations under the
-paper's positive-value MAR-L rule, matching the article's approximately 38%.
-The missingness algorithm reaches exactly 30% missingness in each of the six
-published deletion sets, conditional on the corresponding variable being
-positive. Candidate samples in which a conditioning variable has fewer than
-60 positive observations cannot satisfy that instruction and are regenerated;
-this implicit edge case cost
-`r sum(design$eligibility_rejections)` candidate samples across the two cells.
-The compact replication summaries and equation-level audit are frozen with the
-experiment so this report remains renderable; raw replication rows are local
-generated output.
+The generator uses the monotone-increasing Fleishman root and treats the stated
+kurtoses as excess kurtosis. In the moderate cell it yields
+`r sprintf("%.1f%%", eligible)` theoretically MAR-L-eligible observations,
+matching the paper's approximately 38%. The missingness routine enforces exactly
+30% deletion within every published variable set and regenerates samples that
+cannot meet that conditional instruction. The tracked CSV is a compact summary;
+raw replication rows and per-cell checkpoints remain generated local output.
 
 ## Reproduce
 
 ```bash
 cd experiments/80-savalei-falk-2014-ml2s-information
 
-# Structural and identity check
 Rscript run_experiment.R --smoke
-
-# Identification run matching the paper's 1,000 replications per cell
 Rscript run_experiment.R --replication --cores 8
-
 quarto render report.qmd
 ```
 
-## Mathematical definition of the four choices
+## Matrix grid
 
-Let $\widehat\beta=(\widehat\mu,\operatorname{vech}\widehat\Sigma)$ be the
-Stage-1 saturated FIML estimate and let
-$\widetilde\beta=\beta(\widetilde\theta)$ be the Stage-2 structured moments.
-The four rows use
+Let \(\widehat\beta\) denote the unrestricted saturated FIML estimate of the
+means and covariances, let
+\(\widehat\beta_0=\beta(\widehat\theta)\) denote the moments implied by the
+direct-FIML fit, and let
+\(\widetilde\beta_0=\beta(\widetilde\theta)\) denote the moments implied by the
+second-stage fit. Write
 
 \[
-\begin{aligned}
-H_{SE}&=H_{\mathrm{exp}}(\widehat\beta), &
-H_{SO}&=H_{\mathrm{obs}}(\widehat\beta;\widehat\beta),\\
-H_{XE}&=H_{\mathrm{exp}}(\widetilde\beta), &
-H_{XO}&=H_{\mathrm{obs}}(\widetilde\beta;\widehat\beta).
-\end{aligned}
+A_\beta^{r,k}=-E_k\!\left[\frac{1}{n}
+  \frac{\partial^2\ell(\beta)}
+       {\partial\beta\partial\beta^\top}\right]_{\beta=\beta_r},
+\qquad
+B_\beta^r=\frac{1}{n}\sum_{i=1}^n
+  s_i(\beta_r)s_i(\beta_r)^\top ,
 \]
 
-The semicolon separates the point where the complete-data saturated likelihood
-is differentiated from the pseudo-data moments entering that likelihood. In
-every row, $\Omega=G_1^{-1}J_1G_1^{-1}$ is the same empirical Stage-1 FIML
-sandwich, and $\Delta=\partial\beta(\theta)/\partial\theta^\top$ is the same
-Stage-2 Jacobian. Thus only $H$ changes. At the saturated estimate,
-$H_{SE}=H_{SO}$ exactly.
+where \(r\in\{H1,0\}\) selects saturated or structured moments and
+\(k\in\{E,O\}\) selects expected or observed information. Following the
+paper's score-outer-product definition, \(B\) is not sample-centered. The
+sandwich is
+
+\[
+\Omega(A,B)=A^{-1}BA^{-1}.
+\]
+
+For direct FIML, four residual matrices use the H1-form projection
+
+\[
+U(A)=A-A\Delta(\Delta^\top A\Delta)^{-1}\Delta^\top A,
+\qquad
+\Delta=\frac{\partial\beta(\theta)}{\partial\theta^\top},
+\]
+
+with
+\(A\in\{A_\beta^{H1,E},A_\beta^{H1,O},
+A_\beta^{0,E},A_\beta^{0,O}\}\). Two further choices replace
+\(\Delta^\top A\Delta\) by the full observed structured-parameter Hessian,
+using either structured or saturated observed outer information. Each of those
+six \(U\) choices is crossed with four sandwich breads
+\(A_\beta^{H1,E},A_\beta^{H1,O},A_\beta^{0,E},A_\beta^{0,O}\) and two meats
+\(B_\beta^{H1},B_\beta^0\), giving \(6\times4\times2=48\) tests. A literal
+reading of Savalei and Falk's Equations (5)–(6) selects
+
+\[
+U(A_\beta^{0,O}),\qquad
+\Omega=\Omega(A_\beta^{0,O},B_\beta^0).
+\]
+
+For two-stage FIML, the Stage-1 asymptotic covariance is independently crossed
+over the same four incomplete-data breads and two meat points,
+
+\[
+\Omega_1=\Omega(A_\beta^{r,k},B_\beta^m),
+\qquad r,m\in\{H1,0\},\quad k\in\{E,O\}.
+\]
+
+The second-stage residual matrix uses complete-data saturated-moment
+information \(H\), evaluated at either \(\widehat\beta\) or
+\(\widetilde\beta_0\), with expected or observed curvature:
+
+\[
+U(H)=H-H\widetilde\Delta
+ (\widetilde\Delta^\top H\widetilde\Delta)^{-1}
+ \widetilde\Delta^\top H.
+\]
+
+This gives \(4\times2\times4=32\) tests. Equation (2), Equation (4), and
+SE=EXACT select saturated observed Stage-1 bread, saturated meat, and structured
+observed \(H\). Magmaan's current ML2S instead uses the same Stage-1 sandwich
+with saturated expected \(H\). Every row finally uses
+
+\[
+c=\frac{\operatorname{tr}(U\Omega)}{d},
+\qquad T_{\mathrm{scaled}}=\frac{T}{c},
+\qquad d=186.
+\]
+
+The six direct-FIML residual choices follow the Equation-37 taxonomy in
+Savalei and Rosseel (2022); the historical selections follow Savalei and Falk
+(2014), especially Equations (2), (4)–(6), and Appendix B.

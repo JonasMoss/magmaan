@@ -421,8 +421,12 @@ estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4, sta
     .Call(`_magmaan_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step, stage2_weight, dls_a)
 }
 
-frontier_ml2s_information_choices_impl <- function(fit, eigen_tol = 1e-9) {
-    .Call(`_magmaan_frontier_ml2s_information_choices_impl`, fit, eigen_tol)
+frontier_ml2s_information_choices_impl <- function(fit, raw_data = NULL, eigen_tol = 1e-9) {
+    .Call(`_magmaan_frontier_ml2s_information_choices_impl`, fit, raw_data, eigen_tol)
+}
+
+frontier_fiml_information_choices_impl <- function(fit, raw_data = NULL, eigen_tol = 1e-9) {
+    .Call(`_magmaan_frontier_fiml_information_choices_impl`, fit, raw_data, eigen_tol)
 }
 
 two_stage_stage2_weight_blocks_impl <- function(stage1, stage2_weight = "nt", dls_a = 0.5) {

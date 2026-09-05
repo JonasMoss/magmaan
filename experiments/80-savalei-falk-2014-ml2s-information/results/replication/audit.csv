@@ -1,6 +1,7 @@
 "key","value"
 "saturated_identity_max_abs",5.6559201766504e-12
-"default_scale_max_abs",1.03916875104915e-13
+"stage1_bread_difference_max_abs",1575.0396953389
+"default_scale_max_abs",8.34887714518118e-14
 "delta_rank_min",66
 "delta_rank_max",66
 "df_min",186

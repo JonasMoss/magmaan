@@ -6957,10 +6957,11 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
   return out;
 }
 
-// Equation-level frontier diagnostic for identifying the complete-data
-// saturated-information convention used by historical ML2S scaled tests.
+// Equation-level frontier diagnostic for identifying the Stage-1 and Stage-2
+// information conventions used by historical ML2S scaled tests.
 // [[Rcpp::export]]
 Rcpp::List frontier_ml2s_information_choices_impl(Rcpp::List fit,
+                                                   SEXP raw_data = R_NilValue,
                                                    double eigen_tol = 1e-9) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -6969,22 +6970,43 @@ Rcpp::List frontier_ml2s_information_choices_impl(Rcpp::List fit,
     Rcpp::stop("frontier_ml2s_information_choices(): fit must carry a usable "
                "$stage1 saturated-moment object");
   }
+  SEXP rd = raw_data;
+  if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) {
+    rd = fit["raw_data"];
+  }
+  if (Rf_isNull(rd)) {
+    Rcpp::stop("frontier_ml2s_information_choices(): raw_data is required, "
+               "either explicitly or in fit$raw_data");
+  }
+  const magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, rd);
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
   auto r_or = magmaan::estimate::fiml::frontier::two_stage_information_choices(
-      ctx.pt, ctx.rep, est, sm, eigen_tol);
+      ctx.pt, ctx.rep, raw, est, sm, *pack_or, eigen_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
 
   const R_xlen_t n = static_cast<R_xlen_t>(r_or->choices.size());
-  Rcpp::CharacterVector name(n);
-  Rcpp::NumericVector trace(n), scale(n), chisq_scaled(n), min_h(n), min_u(n);
-  Rcpp::IntegerVector neg_h(n), neg_u(n), rank_u(n);
+  Rcpp::CharacterVector name(n), stage1_name(n), stage1_bread_point(n),
+      stage1_bread_kind(n), stage1_meat_point(n), stage2_name(n);
+  Rcpp::NumericVector trace(n), scale(n), chisq_scaled(n), min_stage1_h(n),
+      min_h(n), min_u(n);
+  Rcpp::IntegerVector neg_stage1_h(n), neg_h(n), neg_u(n), rank_u(n);
   for (R_xlen_t i = 0; i < n; ++i) {
     const auto& row = r_or->choices[static_cast<std::size_t>(i)];
     name[i] = row.name;
+    stage1_name[i] = row.stage1_information;
+    stage1_bread_point[i] = row.stage1_bread_point;
+    stage1_bread_kind[i] = row.stage1_bread_kind;
+    stage1_meat_point[i] = row.stage1_meat_point;
+    stage2_name[i] = row.stage2_information;
     trace[i] = row.trace_ugamma;
     scale[i] = row.scaling_factor;
     chisq_scaled[i] = row.chisq_scaled;
+    min_stage1_h[i] = row.min_stage1_information_eigenvalue;
     min_h[i] = row.min_information_eigenvalue;
     min_u[i] = row.min_projector_eigenvalue;
+    neg_stage1_h[i] =
+        static_cast<int>(row.stage1_information_negative_eigenvalues);
     neg_h[i] = static_cast<int>(row.information_negative_eigenvalues);
     neg_u[i] = static_cast<int>(row.projector_negative_eigenvalues);
     rank_u[i] = static_cast<int>(row.projector_rank);
@@ -6992,11 +7014,19 @@ Rcpp::List frontier_ml2s_information_choices_impl(Rcpp::List fit,
   return Rcpp::List::create(
       Rcpp::_["choices"] = Rcpp::DataFrame::create(
           Rcpp::_["information"] = name,
+          Rcpp::_["stage1_information"] = stage1_name,
+          Rcpp::_["stage1_bread_point"] = stage1_bread_point,
+          Rcpp::_["stage1_bread_kind"] = stage1_bread_kind,
+          Rcpp::_["stage1_meat_point"] = stage1_meat_point,
+          Rcpp::_["stage2_information"] = stage2_name,
           Rcpp::_["trace_ugamma"] = trace,
           Rcpp::_["scaling_factor"] = scale,
           Rcpp::_["chisq_scaled"] = chisq_scaled,
+          Rcpp::_["min_stage1_information_eigenvalue"] = min_stage1_h,
           Rcpp::_["min_information_eigenvalue"] = min_h,
           Rcpp::_["min_projector_eigenvalue"] = min_u,
+          Rcpp::_["stage1_information_negative_eigenvalues"] =
+              neg_stage1_h,
           Rcpp::_["information_negative_eigenvalues"] = neg_h,
           Rcpp::_["projector_negative_eigenvalues"] = neg_u,
           Rcpp::_["projector_rank"] = rank_u),
@@ -7004,7 +7034,86 @@ Rcpp::List frontier_ml2s_information_choices_impl(Rcpp::List fit,
       Rcpp::_["df"] = r_or->df,
       Rcpp::_["delta_rank"] = static_cast<int>(r_or->delta_rank),
       Rcpp::_["saturated_expected_observed_max_abs"] =
-          r_or->saturated_expected_observed_max_abs);
+          r_or->saturated_expected_observed_max_abs,
+      Rcpp::_["stage1_expected_observed_max_abs"] =
+          r_or->stage1_expected_observed_max_abs);
+}
+
+// Equation-37 FIML diagnostic crossing the canonical residual-information and
+// saturated-moment sandwich choices.
+// [[Rcpp::export]]
+Rcpp::List frontier_fiml_information_choices_impl(Rcpp::List fit,
+                                                  SEXP raw_data = R_NilValue,
+                                                  double eigen_tol = 1e-9) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  SEXP rd = raw_data;
+  if (Rf_isNull(rd) && fit.containsElementNamed("raw_data")) {
+    rd = fit["raw_data"];
+  }
+  if (Rf_isNull(rd)) {
+    Rcpp::stop("frontier_fiml_information_choices(): raw_data is required, "
+               "either explicitly or in fit$raw_data");
+  }
+  const magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, rd);
+  std::unique_ptr<FimlPack> owned_pack;
+  std::unique_ptr<FimlH1> owned_h1;
+  std::unique_ptr<SaturatedMoments> owned_saturated;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
+  const SaturatedMoments& sm =
+      fiml_saturated_for_fit(fit, raw, pack, h1, owned_saturated);
+  auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
+  if (!df_or.has_value()) stop_post(df_or.error());
+  auto extras_or = magmaan::estimate::fiml::fiml_extras(
+      ctx.pt, ctx.rep, raw, est, pack, h1);
+  if (!extras_or.has_value()) stop_post(extras_or.error());
+  auto r_or = magmaan::estimate::fiml::frontier::fiml_information_choices(
+      ctx.pt, ctx.rep, raw, est, sm, pack,
+      extras_or->chi2, *df_or, eigen_tol);
+  if (!r_or.has_value()) stop_post(r_or.error());
+
+  const R_xlen_t n = static_cast<R_xlen_t>(r_or->choices.size());
+  Rcpp::CharacterVector name(n), residual(n), bread_point(n), bread_kind(n),
+      meat_point(n);
+  Rcpp::NumericVector trace(n), scale(n), chisq_scaled(n), min_u(n),
+      min_bread(n);
+  Rcpp::IntegerVector neg_u(n), neg_bread(n), rank_u(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& row = r_or->choices[static_cast<std::size_t>(i)];
+    name[i] = row.name;
+    residual[i] = row.residual_information;
+    bread_point[i] = row.omega_bread_point;
+    bread_kind[i] = row.omega_bread_kind;
+    meat_point[i] = row.omega_meat_point;
+    trace[i] = row.trace_ugamma;
+    scale[i] = row.scaling_factor;
+    chisq_scaled[i] = row.chisq_scaled;
+    min_u[i] = row.min_residual_information_eigenvalue;
+    min_bread[i] = row.min_omega_bread_eigenvalue;
+    neg_u[i] =
+        static_cast<int>(row.residual_information_negative_eigenvalues);
+    neg_bread[i] = static_cast<int>(row.omega_bread_negative_eigenvalues);
+    rank_u[i] = static_cast<int>(row.residual_rank);
+  }
+  return Rcpp::List::create(
+      Rcpp::_["choices"] = Rcpp::DataFrame::create(
+          Rcpp::_["information"] = name,
+          Rcpp::_["residual_information"] = residual,
+          Rcpp::_["omega_bread_point"] = bread_point,
+          Rcpp::_["omega_bread_kind"] = bread_kind,
+          Rcpp::_["omega_meat_point"] = meat_point,
+          Rcpp::_["trace_ugamma"] = trace,
+          Rcpp::_["scaling_factor"] = scale,
+          Rcpp::_["chisq_scaled"] = chisq_scaled,
+          Rcpp::_["min_residual_information_eigenvalue"] = min_u,
+          Rcpp::_["min_omega_bread_eigenvalue"] = min_bread,
+          Rcpp::_["residual_information_negative_eigenvalues"] = neg_u,
+          Rcpp::_["omega_bread_negative_eigenvalues"] = neg_bread,
+          Rcpp::_["residual_rank"] = rank_u),
+      Rcpp::_["chisq"] = r_or->chisq,
+      Rcpp::_["df"] = r_or->df,
+      Rcpp::_["delta_rank"] = static_cast<int>(r_or->delta_rank));
 }
 
 // two_stage_stage2_weight_blocks_impl() — mirrors
