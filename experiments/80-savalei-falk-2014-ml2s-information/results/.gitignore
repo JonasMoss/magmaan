@@ -4,6 +4,15 @@
 /replication/*
 !/replication/audit.csv
 !/replication/design.csv
+!/replication/dgp_roots.csv
 !/replication/failures.csv
 !/replication/metadata.csv
 !/replication/summary.csv
+!/fingerprint/
+/fingerprint/*
+!/fingerprint/audit.csv
+!/fingerprint/design.csv
+!/fingerprint/dgp_roots.csv
+!/fingerprint/failures.csv
+!/fingerprint/metadata.csv
+!/fingerprint/summary.csv
