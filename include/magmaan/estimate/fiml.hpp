@@ -778,6 +778,77 @@ two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
 
 namespace frontier {
 
+// Patternwise normal-theory ML (PNTML), a two-stage frontier estimator for
+// incomplete continuous data. Stage 1 supplies one saturated Gaussian-FIML
+// target eta_hat = [mu; vech(Sigma)]. Stage 2 minimizes the frequency-weighted
+// sum of Gaussian ML discrepancies between every observed marginal of eta_hat
+// and the corresponding model-implied marginal. With complete data this is
+// ordinary NTML exactly; under normal MCAR its local metric is the observed-
+// pattern Fisher information, so it has the same first-order influence as
+// direct FIML. It is an objective family, not a TwoStageWeight member.
+//
+// `cache` retains only the observed-index/count design from the raw-data pack:
+// its pattern means/covariances are replaced by marginals of `stage1`.
+// `saturated_value` is the full-F discrepancy at eta_hat; the optimizer stores
+// half-F, so the PNTML goodness-of-fit statistic is
+//   N * (F(theta_hat) - saturated_value).
+struct PatternNTML {
+  FIMLCache cache;
+  double saturated_value = 0.0;
+
+  fit_expected<double>
+  value(const model::ImpliedMoments& moments) const;
+
+  fit_expected<FIMLValueGradient>
+  value_gradient(const model::ImpliedMoments& moments,
+                 const Eigen::MatrixXd& J_sigma,
+                 const Eigen::MatrixXd& J_mu) const;
+};
+
+fit_expected<PatternNTML>
+pattern_ntml_target(const FIMLPack& pack,
+                    const SaturatedMoments& stage1);
+
+// Per-group, per-observation local PNTML metric in [mu; vech(Sigma)] order.
+// No dense inverse of the full saturated ACOV is required: each block is a
+// sum of pulled-back ordinary normal-information contributions over patterns.
+post_expected<std::vector<Eigen::MatrixXd>>
+pattern_ntml_information_blocks(const PatternNTML& target,
+                                const SaturatedMoments& stage1);
+
+fit_expected<Estimates>
+fit_pattern_ntml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Eigen::VectorXd& x0,
+                 const FIMLPack& pack,
+                 const SaturatedMoments& stage1,
+                 Backend backend = Backend::NloptLbfgsSlsqpFallback,
+                 optim::OptimOptions opts = {});
+
+fit_expected<Estimates>
+fit_pattern_ntml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Eigen::VectorXd& x0,
+                 Backend backend = Backend::NloptLbfgsSlsqpFallback,
+                 optim::OptimOptions opts = {},
+                 FIMLH1Options h1_options = {});
+
+// Normal-theory null/correct-specification inference for a matching PNTML fit.
+// The Stage-1 law is Gamma_N = V_pattern^{-1}, where V_pattern is the same
+// pattern-normal expected information used by the objective. Thus U*Gamma_N
+// has exactly df unit eigenvalues and the scaled statistic equals the raw
+// PNTML statistic. Under normal MCAR this reaches the direct-FIML information
+// bound using expected information only. MAR-robust and nonnormal empirical-
+// sandwich variants are deliberately outside this first frontier contract.
+post_expected<TwoStageEMMLInference>
+pattern_ntml_inference(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const Estimates& est,
+                       const PatternNTML& target,
+                       const SaturatedMoments& stage1);
+
 // Equation-level diagnostic for the information choices in the
 // Savalei--Falk two-stage scaled statistic. The Stage-1 saturated-FIML
 // sandwich crosses saturated/structured evaluation, observed/expected breads,

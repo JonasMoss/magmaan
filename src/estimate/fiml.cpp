@@ -7144,6 +7144,229 @@ using estimate::frontier::ScalarProfileCiResult;
 using estimate::frontier::ScalarProfileLrtResult;
 using estimate::frontier::ScalarProfileReference;
 
+fit_expected<double>
+PatternNTML::value(const model::ImpliedMoments& moments) const {
+  return FIML{}.value(RawData{}, cache, moments);
+}
+
+fit_expected<FIMLValueGradient>
+PatternNTML::value_gradient(const model::ImpliedMoments& moments,
+                            const Eigen::MatrixXd& J_sigma,
+                            const Eigen::MatrixXd& J_mu) const {
+  return FIML{}.value_gradient(RawData{}, cache, moments, J_sigma, J_mu);
+}
+
+fit_expected<PatternNTML>
+pattern_ntml_target(const FIMLPack& pack,
+                    const SaturatedMoments& stage1) {
+  const std::size_t B = pack.cache.block_p.size();
+  if (B == 0 || stage1.mean.size() != B || stage1.cov.size() != B ||
+      stage1.n_obs.size() != B) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "pattern_ntml_target: Stage-1 and pattern block counts differ"));
+  }
+
+  PatternNTML out;
+  out.cache = pack.cache;
+  std::vector<std::int64_t> pattern_n(B, 0);
+  for (FIMLPattern& pattern : out.cache.patterns) {
+    if (pattern.block >= B || pattern.n_obs <= 0 || pattern.observed.empty()) {
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "pattern_ntml_target: invalid observed-data pattern"));
+    }
+    const std::size_t b = pattern.block;
+    const Eigen::Index p = out.cache.block_p[b];
+    if (stage1.mean[b].size() != p || stage1.cov[b].rows() != p ||
+        stage1.cov[b].cols() != p || stage1.n_obs[b] <= 0) {
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "pattern_ntml_target: malformed Stage-1 moment block " +
+              std::to_string(b)));
+    }
+    for (Eigen::Index j : pattern.observed) {
+      if (j < 0 || j >= p) {
+        return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+            "pattern_ntml_target: observed index is out of range"));
+      }
+    }
+    pattern.mean = select_vector(stage1.mean[b], pattern.observed);
+    pattern.cov = select_square(stage1.cov[b], pattern.observed);
+    pattern_n[b] += pattern.n_obs;
+  }
+  for (std::size_t b = 0; b < B; ++b) {
+    if (pattern_n[b] != stage1.n_obs[b]) {
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "pattern_ntml_target: pattern counts do not sum to Stage-1 n_obs "
+          "in block " + std::to_string(b)));
+    }
+  }
+
+  model::ImpliedMoments saturated;
+  saturated.mu = stage1.mean;
+  saturated.sigma = stage1.cov;
+  auto value_or = out.value(saturated);
+  if (!value_or.has_value()) return std::unexpected(value_or.error());
+  out.saturated_value = *value_or;
+  return out;
+}
+
+post_expected<std::vector<Eigen::MatrixXd>>
+pattern_ntml_information_blocks(const PatternNTML& target,
+                                const SaturatedMoments& stage1) {
+  const std::size_t B = target.cache.block_p.size();
+  if (B == 0 || stage1.mean.size() != B || stage1.cov.size() != B ||
+      stage1.n_obs.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "pattern_ntml_information_blocks: incompatible block layout"));
+  }
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(B);
+  for (std::size_t b = 0; b < B; ++b) {
+    auto hdev_or = fiml_saturated_hessian_analytic_block(
+        target.cache, b, stage1.mean[b], stage1.cov[b]);
+    if (!hdev_or.has_value()) return std::unexpected(hdev_or.error());
+    Eigen::MatrixXd info = 0.5 * (*hdev_or);
+    info = 0.5 * (info + info.transpose()).eval();
+    Eigen::LLT<Eigen::MatrixXd> llt(info);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+          "pattern_ntml_information_blocks: pattern-normal information is "
+          "not positive definite in block " + std::to_string(b)));
+    }
+    out.push_back(std::move(info));
+  }
+  return out;
+}
+
+fit_expected<Estimates>
+fit_pattern_ntml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Eigen::VectorXd& x0,
+                 const FIMLPack& pack,
+                 const SaturatedMoments& stage1,
+                 Backend backend,
+                 optim::OptimOptions opts) {
+  auto target_or = pattern_ntml_target(pack, stage1);
+  if (!target_or.has_value()) return std::unexpected(target_or.error());
+  const estimate::frontier::ExtraNonlinearEqConstraints extra;
+  return fit_fiml_impl(std::move(pt), rep, raw, x0, target_or->cache,
+                       sample_stats_from_saturated(stage1), FIML{}, extra,
+                       backend, std::move(opts), "fit_pattern_ntml");
+}
+
+fit_expected<Estimates>
+fit_pattern_ntml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Eigen::VectorXd& x0,
+                 Backend backend,
+                 optim::OptimOptions opts,
+                 FIMLH1Options h1_options) {
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) return std::unexpected(pack_or.error());
+  auto h1_or = fiml_h1_moments(raw, *pack_or, h1_options);
+  if (!h1_or.has_value()) return std::unexpected(h1_or.error());
+  SaturatedMoments stage1;
+  stage1.mean = h1_or->mu;
+  stage1.cov = h1_or->sigma;
+  stage1.warnings = h1_or->warnings;
+  stage1.n_obs.reserve(raw.X.size());
+  for (const Eigen::MatrixXd& X : raw.X) {
+    stage1.n_obs.push_back(static_cast<std::int64_t>(X.rows()));
+  }
+  return fit_pattern_ntml(std::move(pt), rep, raw, x0, *pack_or, stage1,
+                          backend, std::move(opts));
+}
+
+post_expected<TwoStageEMMLInference>
+pattern_ntml_inference(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const Estimates& est,
+                       const PatternNTML& target,
+                       const SaturatedMoments& stage1) {
+  SampleStats samp = sample_stats_from_saturated(stage1);
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "pattern_ntml_inference: fixed.x resolution"));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "pattern_ntml_inference: fitted theta length does not match partable"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "pattern_ntml_inference: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval_or = ev_or->evaluate(est.theta, false, false);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "pattern_ntml_inference: model evaluation failed: " +
+            eval_or.error().detail));
+  }
+  auto value_or = target.value(eval_or->moments);
+  if (!value_or.has_value()) {
+    return std::unexpected(fit_to_post(value_or.error(),
+        "pattern_ntml_inference: objective"));
+  }
+  double N = 0.0;
+  for (std::int64_t n : stage1.n_obs) N += static_cast<double>(n);
+  if (!(N > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "pattern_ntml_inference: non-positive total sample size"));
+  }
+  double discrepancy = *value_or - target.saturated_value;
+  const double scale = std::max({1.0, std::abs(*value_or),
+                                 std::abs(target.saturated_value)});
+  if (discrepancy < -1e-10 * scale) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "pattern_ntml_inference: fitted objective is below its saturated "
+        "minimum"));
+  }
+  discrepancy = std::max(0.0, discrepancy);
+  const double chisq = N * discrepancy;
+
+  auto weight_or = pattern_ntml_information_blocks(target, stage1);
+  if (!weight_or.has_value()) return std::unexpected(weight_or.error());
+  std::vector<Eigen::MatrixXd> gamma;
+  gamma.reserve(weight_or->size());
+  for (std::size_t b = 0; b < weight_or->size(); ++b) {
+    const Eigen::MatrixXd& info = (*weight_or)[b];
+    Eigen::LLT<Eigen::MatrixXd> llt(info);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+          "pattern_ntml_inference: pattern-normal expected information is "
+          "not positive definite in block " + std::to_string(b)));
+    }
+    gamma.push_back(llt.solve(Eigen::MatrixXd::Identity(info.rows(),
+                                                        info.cols())));
+  }
+
+  Estimates metric_est = est;
+  metric_est.fmin = chisq / (2.0 * N);
+  auto rr_or = robust_continuous_ls(std::move(pt), rep, samp, metric_est,
+                                    *weight_or, gamma,
+                                    robust::Information::Expected);
+  if (!rr_or.has_value()) return std::unexpected(rr_or.error());
+
+  TwoStageEMMLInference out;
+  out.vcov = std::move(rr_or->vcov);
+  out.se = std::move(rr_or->se);
+  out.eigvals = std::move(rr_or->eigvals);
+  out.chisq = chisq;
+  out.df = rr_or->df;
+  out.trace_ugamma = out.eigvals.size() > 0 ? out.eigvals.sum() : 0.0;
+  out.scaling_factor = out.df > 0
+      ? out.trace_ugamma / static_cast<double>(out.df)
+      : std::numeric_limits<double>::quiet_NaN();
+  out.chisq_scaled = out.scaling_factor > 0.0
+      ? out.chisq / out.scaling_factor
+      : std::numeric_limits<double>::quiet_NaN();
+  out.ntotal = static_cast<std::int64_t>(N);
+  return out;
+}
+
 namespace {
 
 post_expected<Eigen::MatrixXd>

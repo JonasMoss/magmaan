@@ -681,6 +681,16 @@ when they next change.
   1,000 replications, 999 draws); 60 nonnormal-MAR shards are a separately
   labeled estimand stress. Do not interpret nonnormal-MAR rejection as ordinary
   Type-I error or add ML2S power unless a separate two-stage question emerges.
+  Such a question has now emerged as patternwise NTML, but it is kept separate
+  from the retired FIML-versus-ML2S power continuation. Iteration 15 implements
+  the pattern-normal objective and its expected-information normal-MCAR
+  inference, with exact complete-data gates and a 20-replication paired
+  complete/MCAR plumbing smoke. If promoted beyond that smoke, run a dedicated
+  normal-MCAR comparison of bias, RMSE, expected-information SE calibration,
+  and null size. Study MAR separately: point consistency follows the saturated
+  FIML target under ignorability, whereas the present pattern-count-only
+  model-based inference is not a general MAR claim. An empirical Stage-1
+  sandwich would be a separately named robust PNTML extension.
   The `power-v1-20260821` Modal continuation is retired rather than repaired:
   its stress phase combined 60/60 cells, but its focus phase stopped at 162/165
   shards because restarted calls tripped an empty-field configuration guard.

@@ -5053,6 +5053,112 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   return out;
 }
 
+// Patternwise normal-theory ML (PNTML). Stage 1 is the saturated Gaussian-FIML
+// estimate. Stage 2 evaluates each observed-data pattern's Gaussian discrepancy
+// at the corresponding marginal of those common saturated moments. The raw
+// pattern layout therefore remains part of the objective even though no raw
+// observation enters Stage 2 directly.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_pattern_ntml_impl(
+    SEXP partable, SEXP raw_data,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> stage1 = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_pattern_ntml");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty()) {
+    Rcpp::stop("magmaan: model has no observed variables");
+  }
+  ctx.meanstructure = has_meanstructure(ctx.pt);
+  if (!ctx.meanstructure) {
+    Rcpp::stop("magmaan: frontier_fit_pattern_ntml() requires a mean structure");
+  }
+
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  if (auto e = magmaan::estimate::fiml::validate_fiml_fixed_x_missing_policy(
+          ctx.pt, raw); !e.has_value()) {
+    stop_fit(e.error());
+  }
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
+
+  SaturatedMoments sm;
+  if (stage1.isNotNull()) {
+    if (!magmaanr::saturated_target_from_list(Rcpp::List(stage1.get()), sm)) {
+      Rcpp::stop("magmaan: frontier_fit_pattern_ntml() needs stage1 with "
+                 "mean/cov/n_obs");
+    }
+  } else {
+    auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(
+        raw, *pack_or, fiml_h1_opts_from(control));
+    if (!h1_or.has_value()) stop_fit(h1_or.error());
+    sm.mean = h1_or->mu;
+    sm.cov = h1_or->sigma;
+    sm.warnings = h1_or->warnings;
+    sm.n_obs.reserve(raw.X.size());
+    for (const Eigen::MatrixXd& X : raw.X) {
+      sm.n_obs.push_back(static_cast<std::int64_t>(X.rows()));
+    }
+  }
+
+  auto target_or =
+      magmaan::estimate::fiml::frontier::pattern_ntml_target(*pack_or, sm);
+  if (!target_or.has_value()) stop_fit(target_or.error());
+
+  ctx.samp.S = sm.cov;
+  ctx.samp.mean = sm.mean;
+  ctx.samp.n_obs = sm.n_obs;
+  ctx.ov_names = ctx.rep.ov_names[0];
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      fiml_backend_from_optimizer_arg(optimizer);
+  auto est_or = magmaan::estimate::fiml::frontier::fit_pattern_ntml(
+      ctx.pt, ctx.rep, raw, x0, *pack_or, sm, backend,
+      optim_opts_from(control));
+  if (!est_or.has_value()) stop_fit(est_or.error());
+  const magmaan::estimate::Estimates est = std::move(*est_or);
+
+  auto inf_or = magmaan::estimate::fiml::frontier::pattern_ntml_inference(
+      ctx.pt, ctx.rep, est, *target_or, sm);
+  if (!inf_or.has_value()) stop_post(inf_or.error());
+  const auto& inf = *inf_or;
+  Rcpp::List correction = Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(inf.vcov),
+      Rcpp::_["se"] = Rcpp::wrap(inf.se),
+      Rcpp::_["eigvals"] = Rcpp::wrap(inf.eigvals),
+      Rcpp::_["chisq"] = inf.chisq,
+      Rcpp::_["chisq_scaled"] = inf.chisq_scaled,
+      Rcpp::_["scaling_factor"] = inf.scaling_factor,
+      Rcpp::_["trace_ugamma"] = inf.trace_ugamma,
+      Rcpp::_["df"] = inf.df,
+      Rcpp::_["ntotal"] = static_cast<double>(inf.ntotal));
+  correction["chisq.scaled"] = inf.chisq_scaled;
+  correction["chisq.scaling.factor"] = inf.scaling_factor;
+
+  Rcpp::List out = fit_result(ctx, est, &starts, "PNTML");
+  out["stage1"] = saturated_moments_to_r(sm);
+  out["raw_data"] =
+      fiml_raw_to_r(raw, ctx.rep.ov_names, ctx.names.group_labels);
+  out["stage2_objective"] = "pattern_ntml";
+  out["pntml"] = correction;
+  out["vcov"] = correction["vcov"];
+  out["se"] = correction["se"];
+  out["chisq"] = inf.chisq;
+  out["df"] = inf.df;
+  out["chisq_scaled"] = inf.chisq_scaled;
+  out["scaling_factor"] = inf.scaling_factor;
+  return out;
+}
+
 // Raw-data FIML with PSD primitive LISREL covariance matrices. The Cholesky
 // lift is internal; the returned fit retains the ordinary partable parameters.
 //

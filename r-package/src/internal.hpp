@@ -984,14 +984,14 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
 // recompute (the EM is deterministic) while skipping the EM + observed-
 // information rebuild. Shared by fit.cpp and lr_test_satorra.cpp so two-stage
 // SB, the FMG spectrum, and the nested LRT all consume one saturated build.
-// Reconstruct SaturatedMoments from a Stage-1 list carrying mean/cov/n_obs/acov
-// (the shape returned by saturated_em_moments_impl); H/J are optional.
-inline bool saturated_from_list(Rcpp::List st,
-                                magmaan::estimate::fiml::SaturatedMoments& out) {
+// Reconstruct only the saturated target moments. Pattern-NTML deliberately
+// needs no empirical Stage-1 information or ACOV.
+inline bool saturated_target_from_list(
+    Rcpp::List st, magmaan::estimate::fiml::SaturatedMoments& out) {
   if (!st.containsElementNamed("mean") || !st.containsElementNamed("cov") ||
-      !st.containsElementNamed("n_obs") || !st.containsElementNamed("acov") ||
+      !st.containsElementNamed("n_obs") ||
       Rf_isNull(st["mean"]) || Rf_isNull(st["cov"]) ||
-      Rf_isNull(st["n_obs"]) || Rf_isNull(st["acov"])) {
+      Rf_isNull(st["n_obs"])) {
     return false;
   }
   Rcpp::List mean_l(st["mean"]);
@@ -1009,7 +1009,9 @@ inline bool saturated_from_list(Rcpp::List st,
         Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(cov_l[b])));
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
   }
-  out.acov = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["acov"]));
+  out.H.resize(0, 0);
+  out.J.resize(0, 0);
+  out.acov.resize(0, 0);
   out.warnings.clear();
   if (st.containsElementNamed("warnings") && !Rf_isNull(st["warnings"])) {
     Rcpp::CharacterVector warnings(st["warnings"]);
@@ -1020,6 +1022,18 @@ inline bool saturated_from_list(Rcpp::List st,
       }
     }
   }
+  return true;
+}
+
+// Reconstruct SaturatedMoments from a Stage-1 list carrying mean/cov/n_obs/acov
+// (the shape returned by saturated_em_moments_impl); H/J are optional.
+inline bool saturated_from_list(Rcpp::List st,
+                                magmaan::estimate::fiml::SaturatedMoments& out) {
+  if (!st.containsElementNamed("acov") || Rf_isNull(st["acov"]) ||
+      !saturated_target_from_list(st, out)) {
+    return false;
+  }
+  out.acov = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["acov"]));
   if (st.containsElementNamed("H") && !Rf_isNull(st["H"]))
     out.H = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["H"]));
   if (st.containsElementNamed("J") && !Rf_isNull(st["J"]))

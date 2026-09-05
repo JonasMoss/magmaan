@@ -189,6 +189,10 @@ fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) 
     .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
 
+frontier_fit_pattern_ntml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, stage1 = NULL) {
+    .Call(`_magmaan_frontier_fit_pattern_ntml_impl`, partable, raw_data, optimizer, control, stage1)
+}
+
 frontier_fit_fiml_psd_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
     .Call(`_magmaan_frontier_fit_fiml_psd_impl`, partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol)
 }

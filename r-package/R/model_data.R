@@ -1570,6 +1570,28 @@ fit_fiml <- function(model, data,
                 optimizer = optimizer, control = control)
 }
 
+# Frontier two-stage patternwise normal-theory ML. The saturated FIML moments
+# may be supplied once and reused across models fitted to the same raw pattern
+# layout. Null/correct-specification inference is attached as `$pntml`.
+frontier_fit_pattern_ntml <- function(
+    model, data, optimizer = "nlopt-lbfgs-slsqp-fallback", control = NULL,
+    stage1 = NULL) {
+  if (is.character(model) && length(model) == 1L) {
+    model <- model_spec(model, meanstructure = TRUE)
+  } else if (inherits(model, "magmaan_model_spec") &&
+             !.model_spec_has_meanstructure(model)) {
+    model <- .rebuild_model_spec(
+      model, overrides = list(meanstructure = TRUE),
+      caller = "frontier_fit_pattern_ntml"
+    )
+  }
+  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
+  frontier_fit_pattern_ntml_impl(
+    partable_arg(model), fiml_data_arg(data), optimizer = optimizer,
+    control = control, stage1 = stage1
+  )
+}
+
 # Frontier raw-data FIML over PSD primitive LISREL covariance matrices.
 # Inference for boundary solutions is intentionally outside this estimator's
 # current validation contract.

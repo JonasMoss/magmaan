@@ -2905,6 +2905,153 @@ TEST_CASE("frontier FIML and ML2S NT parameter profile LRTs invert ordinary CIs"
         doctest::Approx(ci_opts.cutoff).epsilon(1e-3));
 }
 
+TEST_CASE("pattern NTML reduces exactly to ordinary NTML on complete data") {
+  namespace mf = magmaan::estimate::fiml;
+  namespace mff = magmaan::estimate::fiml::frontier;
+
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {220}, false);
+
+  auto pack = mf::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = mf::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto stage1 = mf::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(stage1.has_value());
+  auto target = mff::pattern_ntml_target(*pack, *stage1);
+  REQUIRE_MESSAGE(target.has_value(),
+      "pattern_ntml_target failed: " <<
+      (target.has_value() ? "" : target.error().detail));
+
+  magmaan::model::ImpliedMoments saturated;
+  saturated.mu = stage1->mean;
+  saturated.sigma = stage1->cov;
+  auto at_saturated = target->value(saturated);
+  REQUIRE(at_saturated.has_value());
+  CHECK(*at_saturated == doctest::Approx(target->saturated_value).epsilon(1e-13));
+
+  auto Wp = mff::pattern_ntml_information_blocks(*target, *stage1);
+  auto Wnt = mf::two_stage_stage2_weight_blocks(
+      *stage1, mf::TwoStageWeight::Nt);
+  REQUIRE(Wp.has_value());
+  REQUIRE(Wnt.has_value());
+  REQUIRE(Wp->size() == Wnt->size());
+  for (std::size_t b = 0; b < Wp->size(); ++b) {
+    CHECK(((*Wp)[b] - (*Wnt)[b]).cwiseAbs().maxCoeff() < 1e-10);
+  }
+
+  magmaan::data::SampleStats samp;
+  samp.S = stage1->cov;
+  samp.mean = stage1->mean;
+  samp.n_obs = stage1->n_obs;
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-9;
+  auto ml = magmaan::estimate::fit_ml(
+      *built.pt, *built.rep, samp, theta0, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto pntml = mff::fit_pattern_ntml(
+      *built.pt, *built.rep, raw, theta0, *pack, *stage1,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(ml.has_value(),
+      "complete-data NTML failed: " << (ml.has_value() ? "" : ml.error().detail));
+  REQUIRE_MESSAGE(pntml.has_value(),
+      "complete-data PNTML failed: " <<
+      (pntml.has_value() ? "" : pntml.error().detail));
+  CHECK((pntml->theta - ml->theta).cwiseAbs().maxCoeff() < 2e-7);
+
+  auto pinf = mff::pattern_ntml_inference(
+      *built.pt, *built.rep, *pntml, *target, *stage1);
+  REQUIRE_MESSAGE(pinf.has_value(),
+      "complete-data PNTML inference failed: " <<
+      (pinf.has_value() ? "" : pinf.error().detail));
+  CHECK(pinf->chisq ==
+        doctest::Approx(magmaan::inference::chi2_stat(samp, *ml)).epsilon(1e-7));
+  CHECK(pinf->df == 2);
+  CHECK((pinf->eigvals.array() - 1.0).abs().maxCoeff() < 1e-9);
+  CHECK(pinf->scaling_factor == doctest::Approx(1.0).epsilon(1e-9));
+  CHECK(pinf->chisq_scaled == doctest::Approx(pinf->chisq).epsilon(1e-9));
+}
+
+TEST_CASE("pattern NTML analytic gradient and local information hold under MCAR") {
+  namespace mf = magmaan::estimate::fiml;
+  namespace mff = magmaan::estimate::fiml::frontier;
+
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {240});
+  auto pack = mf::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = mf::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto stage1 = mf::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(stage1.has_value());
+  auto target = mff::pattern_ntml_target(*pack, *stage1);
+  REQUIRE(target.has_value());
+
+  auto eval = built.ev.evaluate(theta0, true, true);
+  REQUIRE(eval.has_value());
+  auto vg = target->value_gradient(
+      eval->moments, eval->J_sigma, eval->J_mu);
+  REQUIRE(vg.has_value());
+  Eigen::VectorXd gfd(theta0.size());
+  for (Eigen::Index k = 0; k < theta0.size(); ++k) {
+    const double h = 1e-6 * std::max(1.0, std::abs(theta0(k)));
+    Eigen::VectorXd xp = theta0;
+    Eigen::VectorXd xm = theta0;
+    xp(k) += h;
+    xm(k) -= h;
+    auto ep = built.ev.evaluate(xp, false, false);
+    auto em = built.ev.evaluate(xm, false, false);
+    REQUIRE(ep.has_value());
+    REQUIRE(em.has_value());
+    auto fp = target->value(ep->moments);
+    auto fm = target->value(em->moments);
+    REQUIRE(fp.has_value());
+    REQUIRE(fm.has_value());
+    gfd(k) = (*fp - *fm) / (2.0 * h);
+  }
+  CHECK((vg->gradient - gfd).cwiseAbs().maxCoeff() < 2e-5);
+
+  auto Wp = mff::pattern_ntml_information_blocks(*target, *stage1);
+  auto Wnt = mf::two_stage_stage2_weight_blocks(
+      *stage1, mf::TwoStageWeight::Nt);
+  REQUIRE(Wp.has_value());
+  REQUIRE(Wnt.has_value());
+  REQUIRE(Wp->size() == 1);
+  CHECK(((*Wp)[0] - (*Wnt)[0]).cwiseAbs().maxCoeff() > 1e-4);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-9;
+  auto pntml = mff::fit_pattern_ntml(
+      *built.pt, *built.rep, raw, theta0, *pack, *stage1,
+      magmaan::estimate::Backend::NloptLbfgsSlsqpFallback, opts);
+  REQUIRE_MESSAGE(pntml.has_value(),
+      "MCAR PNTML fit failed: " <<
+      (pntml.has_value() ? "" : pntml.error().detail));
+  auto inf = mff::pattern_ntml_inference(
+      *built.pt, *built.rep, *pntml, *target, *stage1);
+  REQUIRE_MESSAGE(inf.has_value(),
+      "MCAR PNTML inference failed: " <<
+      (inf.has_value() ? "" : inf.error().detail));
+  CHECK(inf->ntotal == 240);
+  CHECK(inf->df > 0);
+  CHECK(inf->vcov.allFinite());
+  CHECK(inf->se.allFinite());
+  CHECK(inf->eigvals.size() == inf->df);
+  CHECK(inf->eigvals.allFinite());
+  CHECK((inf->eigvals.array() - 1.0).abs().maxCoeff() < 1e-9);
+  CHECK(inf->scaling_factor == doctest::Approx(1.0).epsilon(1e-9));
+  CHECK(inf->chisq >= 0.0);
+  CHECK(std::isfinite(inf->chisq_scaled));
+}
+
 TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT "
           "spectrum; ADF collapses to c=1; DLS endpoints match Nt/Adf") {
   namespace mf = magmaan::estimate::fiml;

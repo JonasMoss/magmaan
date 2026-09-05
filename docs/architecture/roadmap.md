@@ -202,6 +202,28 @@ omits the ordinary ML2S covariance/test correction because boundary inference
 has no automatic policy. Focused gates cover all five fixed Stage-2 policies,
 interior reduction, unchanged Stage 1, and an improper-solution repair.
 
+`estimate::fiml::frontier::PatternNTML` is a distinct two-stage normal-theory
+objective rather than another `TwoStageWeight`. It retains the raw
+observed-pattern counts and coordinate selectors, replaces each pattern's
+empirical moments by the corresponding marginal of one saturated Gaussian-FIML
+Stage-1 estimate, and minimizes the resulting frequency-weighted sum of
+Gaussian marginal discrepancies. `fit_pattern_ntml()` accepts either retained
+`FIMLPack`/`SaturatedMoments` inputs or raw data, while
+`pattern_ntml_information_blocks()` builds its local saturated-moment metric as
+a sum of analytic pattern-normal expected-information pullbacks. The first
+inference contract is deliberately model-based: the Stage-1 law is the inverse
+of that same expected information, giving unit `U*Gamma` eigenvalues and unit
+scaling. This makes the complete-data reduction exactly NTML and gives the same
+first-order influence as direct FIML under normal MCAR. Although projecting a
+consistent saturated FIML target preserves point consistency under ignorable
+MAR, the pattern-count-only information is not claimed efficient or inferentially
+valid for general MAR. R exposes the method as
+`frontier_fit_pattern_ntml()`, retains `stage1` and `raw_data`, and attaches the
+normal-theory covariance and chi-square fields under `fit$pntml`. C++ and R
+gates cover complete-data identity, MCAR analytic gradients, Stage-1 reuse, and
+unit-spectrum inference; experiment 77 iteration 15 records the first paired
+normal complete/MCAR plumbing smoke.
+
 `estimate::frontier::fit_ordinal_psd` and `fit_mixed_ordinal_psd` now compose
 the same lift with the existing all-ordinal and mixed continuous/ordinal
 ULS/DWLS/WLS residual engines after their respective partable preparation.
