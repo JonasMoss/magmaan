@@ -77,8 +77,12 @@ about 0.02%.
 influence channels used by complete-data ordinal DWLS IJ. It calls the
 production statistics builder (full Gamma, without its WLS inverse), direct
 Gamma-diagonal influence, Gamma-diagonal finite-difference Jacobian, and
-`moment_influence * D.transpose()` separately. It does not fit a model or
-measure a complete SE calculation.
+`moment_influence * D.transpose()` separately. For at least three indicators it
+also times a DWLS fit and the complete `robust_ordinal_ij` calculation. The
+fitted one-factor model fixes its second loading to 0.4 (first loading 1), away
+from its generating ratio, so the weight-influence correction matters under
+population misspecification. Other loadings and thresholds remain free. Parsing,
+model construction, and start preparation are outside these timings.
 
 ```sh
 cmake --preset opt -DMAGMAAN_BUILD_BENCH=ON
@@ -104,8 +108,27 @@ diagnostics, not replacements for the case-weight derivative tests.
 Run serially without competing simulation workers. The `opt` library disables
 Eigen threading. Record compiler/build flags, CPU, library identity, and any
 background load with saved timings under ignored `benchmarks/results/`.
-Memory and worker scaling need separate measurements. The investigation and
-ordered optimization plan are in the
+Memory and worker scaling need separate measurements.
+
+The before/after timing plan is deliberately small:
+
+1. Preserve an executable built before the change, then build the new executable
+   with the same `opt` settings. Record the source revision and library hashes.
+2. Run the three commands above against both executables, serially with the same
+   seed. Each reports five repetitions after one warm-up. Stop competing builds
+   and simulation workers while timing.
+3. Compare median direct influence, Jacobian, and complete IJ time. Also report
+   statistics + fit + IJ as the sum of their medians, clearly distinguished from
+   a separately timed raw-data pipeline. Use the individual min/max columns to
+   detect an unstable run rather than adding a large performance test grid.
+4. Require numerical agreement first: unchanged statistics/fit checksums, close
+   Gamma and complete-covariance checksums, and passing dense-reference,
+   case-weight, and ordinal parity tests. Performance ratios are advisory, not
+   timing assertions in CI.
+
+Completed measurements and numerical contracts live in the
+[roadmap](../docs/architecture/roadmap.md#ordinal-dwls-gamma-performance);
+remaining work lives in the
 [active backlog](../docs/backlog/todo.md#ordinal-dwls-gamma-influence-performance).
 
 ## Outstanding

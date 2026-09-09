@@ -1,4 +1,8 @@
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/spec/build.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -119,7 +123,51 @@ int main(int argc, char** argv) {
         return movement.allFinite();
       }, [&]() { return movement.squaredNorm(); })) return 1;
 
-  // Probe the proposed item/pair dependency support against the current dense FD.
+  if (p >= 3) {
+    // Fix the second loading away from its generating ratio so the timed IJ
+    // retains a weight-influence contribution under population misspecification.
+    std::string syntax = "f =~ x1 + 0.4*x2";
+    for (int j = 3; j <= p; ++j) syntax += " + x" + std::to_string(j);
+    syntax += '\n';
+    for (int j = 0; j < p; ++j) {
+      const std::string name = "x" + std::to_string(j + 1);
+      syntax += name + " | t1";
+      for (int k = 2; k < stats.n_levels[0][static_cast<std::size_t>(j)]; ++k)
+        syntax += " + t" + std::to_string(k);
+      syntax += '\n' + name + " ~*~ 1*" + name + '\n';
+    }
+    auto parsed = magmaan::parse::Parser::parse(syntax);
+    if (!parsed) { std::cerr << parsed.error().detail << '\n'; return 1; }
+    auto pt = magmaan::spec::build(*parsed);
+    if (!pt) { std::cerr << pt.error().detail << '\n'; return 1; }
+    auto rep = magmaan::model::build_matrix_rep(*pt);
+    if (!rep) { std::cerr << rep.error().detail << '\n'; return 1; }
+    auto starts = magmaan::estimate::ordinal_start_values(*pt, *rep, stats, {});
+    if (!starts) { std::cerr << starts.error().detail << '\n'; return 1; }
+    magmaan::estimate::Estimates fit;
+    magmaan::estimate::OrdinalRobustResult ij;
+    magmaan::optim::OptimOptions options;
+    options.max_iter = 1500;
+    options.ftol = 1e-12;
+    options.gtol = 1e-8;
+    constexpr auto dwls = magmaan::estimate::OrdinalWeightKind::DWLS;
+    if (!measure(prefix, "dwls_fit", reps, [&]() {
+          auto result = magmaan::estimate::fit_ordinal_bounded(
+              *pt, *rep, stats, {}, dwls, *starts,
+              magmaan::estimate::Backend::NloptLbfgs, options);
+          if (!result) { std::cerr << result.error().detail << '\n'; return false; }
+          fit = std::move(*result);
+          return fit.optimizer_status == magmaan::optim::OptimStatus::Converged;
+        }, [&]() { return fit.fmin; })) return 1;
+    if (!measure(prefix, "dwls_complete_ij", reps, [&]() {
+          auto result = magmaan::estimate::robust_ordinal_ij(*pt, *rep, stats, fit, dwls);
+          if (!result) { std::cerr << result.error().detail << '\n'; return false; }
+          ij = std::move(*result);
+          return ij.vcov.allFinite();
+        }, [&]() { return ij.vcov.squaredNorm(); })) return 1;
+  }
+
+  // Check item/pair dependency support independently of how D is evaluated.
   const Eigen::Index nth = stats.thresholds[0].size();
   const Eigen::Index m = D.rows();
   Eigen::ArrayXXi support = Eigen::ArrayXXi::Zero(m, m);

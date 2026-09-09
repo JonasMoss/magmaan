@@ -16,6 +16,7 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 #include <Eigen/LU>
+#include <Eigen/QR>
 
 #include "magmaan/data/h_score.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -3014,6 +3015,127 @@ TEST_CASE("Observed ordinal stats degenerate to complete-data ordinal stats") {
   CHECK(observed->pairwise_gamma == "overlap");
 }
 
+namespace {
+
+void check_local_ordinal_gamma_against_dense(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R, double step) {
+  // The full-Gamma WLS helpers retain the global row-score/sandwich algebra.
+  auto direct = magmaan::data::ordinal_gamma_diag_data_influence(Xcat, levels, thresholds, R);
+  auto full = magmaan::data::ordinal_gamma_data_influence(Xcat, levels, thresholds, R);
+  auto D = magmaan::data::ordinal_gamma_diag_jacobian_fd(Xcat, levels, thresholds, R, step);
+  auto Dfull = magmaan::data::ordinal_gamma_jacobian_fd(Xcat, levels, thresholds, R, step);
+  REQUIRE_MESSAGE(direct.has_value(), (direct.has_value() ? "" : direct.error().detail));
+  REQUIRE(full.has_value());
+  REQUIRE_MESSAGE(D.has_value(), (D.has_value() ? "" : D.error().detail));
+  REQUIRE(Dfull.has_value());
+  const Eigen::Index m = D->rows();
+  REQUIRE(full->cols() == m * m);
+  REQUIRE(Dfull->rows() == m * m);
+  REQUIRE(direct->allFinite());
+  REQUIRE(D->allFinite());
+  for (Eigen::Index k = 0; k < m; ++k) {
+    CAPTURE(k);
+    const auto reference_if = full->col(k * (m + 1));
+    const auto reference_D = Dfull->row(k * (m + 1));
+    CHECK((direct->col(k) - reference_if).cwiseAbs().maxCoeff() <
+          1e-9 * (1.0 + reference_if.cwiseAbs().maxCoeff()));
+    CHECK((D->row(k) - reference_D).cwiseAbs().maxCoeff() <
+          2e-7 * (1.0 + reference_D.cwiseAbs().maxCoeff()));
+  }
+  CHECK(direct->colwise().mean().cwiseAbs().maxCoeff() <
+        1e-10 * (1.0 + direct->cwiseAbs().maxCoeff()));
+}
+
+}  // namespace
+
+TEST_CASE("Ordinal local Gamma matches dense algebra across items and off-root moments") {
+  for (const std::vector<std::int32_t>& levels :
+       {std::vector<std::int32_t>{2, 2, 2, 2}, {2, 3, 4, 2}}) {
+    std::mt19937 rng(20260909);
+    std::normal_distribution<double> normal;
+    Eigen::MatrixXd X(120, 4);
+    for (Eigen::Index r = 0; r < X.rows(); ++r) {
+      const double factor = normal(rng);
+      for (Eigen::Index j = 0; j < X.cols(); ++j) {
+        const double y = 0.65 * factor + std::sqrt(1.0 - 0.65 * 0.65) * normal(rng);
+        const int count = levels[static_cast<std::size_t>(j)];
+        X(r, j) = 1 + std::min(count - 1, static_cast<int>(count * std_normal_cdf(y)));
+      }
+    }
+    auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, false);
+    REQUIRE(stats.has_value());
+    REQUIRE(stats->n_levels[0] == levels);
+    for (const bool perturb : {false, true}) {
+      CAPTURE(perturb);
+      Eigen::VectorXd th = stats->thresholds[0];
+      Eigen::MatrixXd R = stats->R[0];
+      if (perturb) {
+        for (Eigen::Index k = 0; k < th.size(); ++k) th(k) += k % 2 ? 0.031 : -0.047;
+        R(2, 0) = R(0, 2) = R(2, 0) + 0.035;
+      }
+      for (const double step : {1e-5, 1e-4, 3e-4}) {
+        CAPTURE(step);
+        check_local_ordinal_gamma_against_dense(stats->int_data[0], levels, th, R, step);
+      }
+    }
+  }
+}
+
+TEST_CASE("Ordinal local Gamma preserves sparse-cell and high-correlation calculations") {
+  Eigen::MatrixXd counts(2, 2);
+  counts << 40, 0, 3, 41;
+  const Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, false);
+  REQUIRE(stats.has_value());
+  for (const double rho : {0.96, 0.995}) {
+    CAPTURE(rho);
+    Eigen::MatrixXd R = stats->R[0];
+    R(1, 0) = R(0, 1) = rho;
+    for (const double step : {1e-5, 1e-4})
+      check_local_ordinal_gamma_against_dense(stats->int_data[0], stats->n_levels[0],
+                                             stats->thresholds[0], R, step);
+  }
+}
+
+TEST_CASE("Ordinal local Gamma retains the global threshold conditioning gate") {
+  Eigen::MatrixXi X(120, 2);
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    X(r, 0) = static_cast<int>(r % 2);
+    X(r, 1) = static_cast<int>((r / 2) % 2);
+  }
+  Eigen::VectorXd th(2);
+  th << 7.8, 0;
+  Eigen::MatrixXd R(2, 2);
+  R << 1, 0.3, 0.3, 1;
+  const std::vector<std::int32_t> levels{2, 2};
+  // Both scalar blocks pass individually; the off-root tail threshold fails
+  // the relative cutoff set by the much larger other item's information.
+  for (Eigen::Index j = 0; j < 2; ++j) {
+    const Eigen::MatrixXi item = X.col(j);
+    REQUIRE(magmaan::data::ordinal_gamma_diag_data_influence(
+        item, {2}, th.segment(j, 1), Eigen::MatrixXd::Identity(1, 1)).has_value());
+  }
+  CHECK_FALSE(magmaan::data::ordinal_gamma_data_influence(X, levels, th, R).has_value());
+  CHECK_FALSE(magmaan::data::ordinal_gamma_diag_data_influence(X, levels, th, R).has_value());
+  CHECK_FALSE(magmaan::data::ordinal_gamma_diag_jacobian_fd(X, levels, th, R).has_value());
+}
+
+TEST_CASE("Ordinal local Gamma rejects malformed complete-data inputs and FD steps") {
+  Eigen::MatrixXi X(4, 2);
+  X << 0, 0, 0, 1, 1, 0, 1, 1;
+  const Eigen::VectorXd th = Eigen::VectorXd::Zero(2);
+  const Eigen::MatrixXd R = Eigen::MatrixXd::Identity(2, 2);
+  const std::vector<std::int32_t> levels{2, 2};
+  for (const double step : {0.0, -1e-4, std::numeric_limits<double>::infinity()})
+    CHECK_FALSE(magmaan::data::ordinal_gamma_diag_jacobian_fd(X, levels, th, R, step).has_value());
+  CHECK_FALSE(magmaan::data::ordinal_gamma_diag_data_influence(X, {2}, th, R).has_value());
+  X(0, 0) = -1;
+  CHECK_FALSE(magmaan::data::ordinal_gamma_diag_data_influence(X, levels, th, R).has_value());
+  X(0, 0) = 2;
+  CHECK_FALSE(magmaan::data::ordinal_gamma_diag_jacobian_fd(X, levels, th, R).has_value());
+}
+
 TEST_CASE("ordinal_gamma_diag_data_influence matches case-weight finite differences") {
   Eigen::MatrixXd counts(3, 3);
   counts << 11, 7, 5,
@@ -4586,6 +4708,49 @@ TEST_CASE("ordinal_casewise_influence_ij Gram reproduces the DWLS IJ vcov") {
   const double diag =
       (infl->influence - infl->influence_naive).cwiseAbs().maxCoeff();
   CHECK(diag > 1e-8);
+
+  // Recover the unchanged moment-to-parameter map from the naive influence,
+  // then independently supply the retained dense WLS Gamma channels. This
+  // checks the complete covariance without reproducing the SEM bread code.
+  auto prepared = *pt;
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(prepared, *stats).has_value());
+  auto evaluator = magmaan::model::ModelEvaluator::build(prepared, *mr);
+  REQUIRE(evaluator.has_value());
+  auto evaluated = evaluator->evaluate(fit->theta, false, false);
+  REQUIRE(evaluated.has_value());
+  const auto& G = stats->moment_influence[0];
+  const Eigen::Index m = G.cols();
+  Eigen::VectorXd residual(m);
+  Eigen::Index k = 0;
+  for (std::size_t row = 0; row < prepared.size(); ++row) {
+    if (prepared.op[row] != magmaan::parse::Op::Threshold) continue;
+    REQUIRE(prepared.free[row] > 0);
+    residual(k) = fit->theta(prepared.free[row] - 1) - stats->thresholds[0](k);
+    ++k;
+  }
+  REQUIRE(k == stats->thresholds[0].size());
+  for (Eigen::Index j = 0; j < 4; ++j)
+    for (Eigen::Index i = j + 1; i < 4; ++i)
+      residual(k++) = evaluated->moments.sigma[0](i, j) - stats->R[0](i, j);
+  REQUIRE(residual.tail(6).norm() > 1e-4);
+  auto full_IF = magmaan::data::ordinal_gamma_data_influence(
+      stats->int_data[0], stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  auto full_D = magmaan::data::ordinal_gamma_jacobian_fd(
+      stats->int_data[0], stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(full_IF.has_value());
+  REQUIRE(full_D.has_value());
+  Eigen::MatrixXd correction(G.rows(), m);
+  for (k = 0; k < m; ++k) {
+    const double gamma = stats->NACOV[0](k, k);
+    correction.col(k) = residual(k) / (gamma * gamma) *
+        (full_IF->col(k * (m + 1)) + G * full_D->row(k * (m + 1)).transpose());
+  }
+  const Eigen::MatrixXd weighted_G = G * stats->W_dwls[0];
+  const Eigen::MatrixXd transfer = weighted_G.colPivHouseholderQr().solve(infl->influence_naive);
+  REQUIRE((weighted_G * transfer).isApprox(infl->influence_naive, 1e-9));
+  const Eigen::MatrixXd expected = (weighted_G + correction) * transfer;
+  CHECK(expected.isApprox(infl->influence, 1e-8));
+  CHECK((expected.transpose() * expected).isApprox(ij->vcov, 1e-8));
 }
 
 TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma variant") {

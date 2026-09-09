@@ -2900,6 +2900,79 @@ stop rather than any usable non-error return.
   positive `n_obs`, and positive NACOV diagonals before fitting or robust
   reporting.
 
+#### Ordinal DWLS Gamma performance
+
+Complete-data all-ordinal DWLS estimated-weight inference now evaluates both
+Gamma-diagonal influence channels using local item/pair subsystems. The public
+`ordinal_gamma_diag_data_influence` and `ordinal_gamma_diag_jacobian_fd` shapes
+and moment ordering are preserved. The Jacobian still uses central finite
+differences with the caller's `h_rel`; there is no statistical approximation or
+change to the fitted criterion. Full-WLS, observed/missing, and mixed Gamma
+helpers retain their existing implementations.
+
+The private workspace in `src/data/ordinal.cpp` builds marginal category counts
+and score/bread blocks once per call. A correlation's local subsystem contains
+its two items' thresholds and its own rho, so a binary pair needs only three
+coordinates. Pair counts weight the category-cell scores returned by the
+existing `ordinal_pair_scores` kernel. The local influence Gram yields the
+required Gamma block; direct bread variation is evaluated on that same block,
+using the equality of the two diagonal sandwich terms for symmetric Gamma.
+Only the requested influence columns are scattered back to observations.
+Threshold direct influence reduces to `Gamma_kk - g_ik^2` because its bread is
+its marginal score Gram. No bread-variation term is omitted.
+
+Finite differences reuse the marginal blocks at each positive/negative
+threshold perturbation and evaluate only pairs incident to that threshold or
+the pair whose rho changes. At 18 binary indicators this uses 918 pair-score
+builds instead of 52,326. The returned 171×171 Jacobian is initialized to zero
+and has only 477 possible nonzero entries. The full threshold block's relative
+positive-definiteness cutoff is retained across items and at perturbed moments;
+independent item cutoffs alone would accept badly scaled global blocks.
+
+The small timing protocol lives in `benchmarks/README.md` and
+`benchmarks/ordinal_gamma_influence_bench.cpp`: three fixed synthetic samples,
+one warm-up and five repetitions, one process, the same Clang 21.1.8 `opt`
+settings (`-O3 -DNDEBUG -march=native`, Eigen threading disabled), on an Intel
+i7-1355U. The benchmark fits a one-factor DWLS model with a deliberately
+misspecified second loading, then times the complete `robust_ordinal_ij` call.
+Parsing and start construction are outside the measured stages. On 2026-09-09,
+median milliseconds were:
+
+| n | Indicators | Categories | Direct Gamma IF, before → after | Gamma Jacobian, before → after | Complete IJ, before → after | IJ speedup |
+|---:|---:|---:|---:|---:|---:|---:|
+| 300 | 18 | 2 | 219.83 → 0.29 | 350.92 → 1.14 | 576.92 → 2.58 | 224x |
+| 1200 | 18 | 2 | 764.35 → 0.52 | 1069.12 → 1.23 | 2225.82 → 5.73 | 389x |
+| 300 | 18 | 4 | 456.56 → 1.75 | 1461.87 → 21.48 | 1936.30 → 26.36 | 73x |
+
+The sum of statistics, fit, and IJ medians fell from about 582 to 6.3 ms, 2233
+to 13.0 ms, and 1949 to 36.9 ms, respectively. These sums are not separately
+timed raw-data pipelines. The timings are advisory local comparisons, not a
+replay of a paper's generator, a calibration result, or CI timing gates. Raw
+CSV/min/max/CPU logs and binary hashes are ignored under
+`benchmarks/results/ordinal_gamma_local_{before,after}.{csv,log}` and
+`benchmarks/results/ordinal_gamma_local.sha256`. All 18 printed result
+checksums agree at their ten-significant-digit precision. The pre-change core
+was `29e97b0f`; the old/new opt archive SHA-256 values are
+`2c12c92f8e818bdbefcd3856db0b95ba4e0d3b449eb7ef2cdefbc154330a8734` and
+`79546954d0a6e31bb8c94439e284d6595fd348a7cbe625b563d413f714c0c18e`.
+
+Validation includes the existing case-weight finite differences and full/
+diagonal/observed reductions, new full-Gamma reference comparisons across four
+items with unequal category counts at fitted and perturbed moments and three
+FD step sizes, sparse-cell/high-rho checks, and the global conditioning gate.
+An end-to-end DWLS test combines the retained dense WLS Gamma channels with
+the fitted moment-to-parameter map and matches the complete IJ covariance with
+nonzero fitted residuals. The complete optimized ordinal suite passes all 134
+tests and 3,798 assertions, including lavaan golden parity. Seven targeted
+ASan/UBSan tests pass 511 assertions; leak detection was disabled because
+LeakSanitizer cannot run under this environment's process tracer. The R
+package's vendored core is refreshed and `just r-dev` reinstalls the development
+package. Before/after R checks on 18 binary and four-category indicators give
+identical fitted parameters, maximum covariance difference 4.87e-15, and maximum
+SE difference 2.27e-14. The existing `ordinal_dwls_wls.R` workflow passes. The
+repository-wide layering check still reports unrelated existing paper-to-tests
+references in `covariance-honest-sem` and `target-specific-distinguishability`.
+
 ### R bindings and public namespace transition
 
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
