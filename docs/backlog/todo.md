@@ -13,6 +13,130 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+### Ordinal DWLS Gamma influence performance
+
+**M — optimize complete-data all-ordinal DWLS estimated-weight IJ.** Inspection
+and a component timing probe on 2026-09-09 establish two substantial costs;
+production algorithms have not been changed. The repeatable advisory harness is
+`benchmarks/ordinal_gamma_influence_bench.cpp` (build/run instructions in
+`benchmarks/README.md`). Keep the optimization in canonical core code and the R
+interface thin.
+
+The initial optimized-library probe used one warm-up and five timed calls on
+each fixed synthetic sample, one process, Eigen threading disabled, on an
+Intel i7-1355U with Clang 21.1.8 and `-O3 -DNDEBUG -march=native`. These are
+component timings, not a replay of a particular SEM simulation or a complete
+fit/SE benchmark. Median elapsed milliseconds:
+
+| n | Indicators | Categories | Statistics | Direct Gamma IF | Gamma Jacobian | IF × Jacobian |
+|---:|---:|---:|---:|---:|---:|---:|
+| 300 | 6 | 2 | 0.30 | 2.49 | 3.96 | 0.008 |
+| 300 | 12 | 2 | 0.73 | 20.71 | 57.61 | 0.066 |
+| 300 | 18 | 2 | 2.16 | 226.83 | 360.74 | 0.293 |
+| 1200 | 18 | 2 | 5.58 | 787.37 | 1122.66 | 1.211 |
+| 300 | 18 | 4 | 6.31 | 404.55 | 1559.91 | 0.552 |
+
+The Jacobian dominates these cases, but direct Gamma influence contributes
+about 39% of the two Gamma costs at 18 binary indicators and n=300. Eliminating
+the Jacobian entirely would therefore improve these two components together
+by at most about 2.6x. Optimize both channels before drawing conclusions about
+the remaining SE or fitting costs. Process CPU and wall time were close for
+the large cases. Hardware-counter profiling was unavailable on this host
+(`perf_event_paranoid=4`); the timings isolate public helper calls, not individual
+matrix kernels. Raw initial timings are in ignored
+`benchmarks/results/ordinal_gamma_probe_20260909.{csv,log}`. The initial probe
+linked the existing opt archive with SHA-256
+`2c12c92f8e818bdbefcd3856db0b95ba4e0d3b449eb7ef2cdefbc154330a8734`;
+the subsequent CMake target build retained that archive identity. Its five-cell
+replay agreed on all 20 printed result checksums and reproduced the large-case
+timings (n=300 binary: 221 ms direct, 359 ms Jacobian; n=1200: 781/1121 ms).
+Replay logs and source/binary hashes use the same filename stem with
+`_rebuilt.{csv,log,sha256}`. Record fresh identities for implementation
+comparisons. The benchmark target builds successfully and `git diff --check`
+passes. The full layering checker reports existing paper-to-tests dependencies
+in `covariance-honest-sem` and `target-specific-distinguishability`; none are
+in the benchmark or core files touched by this investigation.
+
+Code findings:
+
+- `ordinal_gamma_diag_jacobian_fd` in `src/data/ordinal.cpp` perturbs all
+  `m = sum(K_j - 1) + p(p-1)/2` first-stage coordinates in both directions.
+  Its `gamma_diag_at_kappa` helper rebuilds every marginal and pair score,
+  forms the full `SC' SC`, constructs dense inverse-bread matrices, and
+  multiplies `B_inv * INNER` to extract only diagonal quadratic forms.
+  At p=18 binary, this is 342 whole-diagonal evaluations and 52,326 pair-score
+  builds. There is no model refitting inside this loop.
+- `ordinal_gamma_diag_data_influence` also builds full Gamma, then allocates a
+  dense per-case bread contribution and evaluates both `B_inv * bi * Gamma`
+  and `Gamma * bi' * B_inv'` for every observation. Only their diagonals are
+  consumed. Symmetric Gamma makes those diagonals equal. More substantially,
+  the needed rows and Gamma subblocks have item/pair-local support.
+- The threshold bread is block diagonal by item, correlation bread is
+  diagonal by pair, and each correlation/threshold coupling involves only its
+  two items. A threshold Gamma diagonal depends only on that item's thresholds;
+  a correlation Gamma diagonal depends only on its own rho and its two items'
+  thresholds. At p=18 binary, the dense 171×171 Jacobian has only 477 possible
+  nonzero entries. The probe found exactly zero outside that support for the
+  binary cases and at most 2.34e-11 for four categories.
+- `ordinal_pair_scores` in `src/data/pairwise_ordinal.cpp` already computes
+  bivariate probabilities and derivatives once per category cell, then
+  scatters them to observations. The opportunities are reusing fixed counts,
+  removing repeated scatter/validation/allocation, caching marginal scores by
+  category, and avoiding unrelated pair rebuilds. A new bivariate integration
+  algorithm is not justified by this evidence.
+- `build_ordinal_ij_blocks` in `src/estimate/ordinal.cpp` recomputes both
+  theta-independent Gamma channels per call. Other ordinal IJ/profile/RBM
+  consumers also call them. Reuse can benefit multiple fits or post-fit
+  requests sharing the same first-stage sample, but it does not by itself
+  accelerate the first complete IJ on a fresh replication.
+
+Implementation order:
+
+1. **Local diagonal assembly and direct influence.** Introduce a private
+   complete-data workspace with item/pair counts, category indices, and local
+   score/bread blocks. First validate an equivalent diagonal evaluator:
+   `Gamma_kk = sum_i g_ik^2 / n`, with each influence column computed from its
+   item's or pair's small inverse-bread block. For binary data a correlation
+   needs only three coordinates. Compute the direct bread contraction only on
+   those blocks, using the equality of the two diagonal sandwich terms.
+   Evaluate category/cell contributions once and scatter only the requested
+   per-case output. Retain both score-product and bread-variation terms.
+2. **Local finite differences.** Keep central differences and the current
+   `h_rel` initially. Perturb only the local arguments of each requested
+   diagonal, reusing unaffected marginal blocks. Binary correlations need six
+   local evaluations each (two thresholds and rho); this reduces pair-score
+   evaluations from 52,326 to 918, apart from initial cache construction: 57x
+   fewer pair evaluations, not a promised 57x elapsed speedup. Count-weighted
+   cell algebra removes repeated scans over n from these perturbations.
+   Preserve the existing public dense Jacobian result initially; its later
+   dense multiplication is negligible in the measured cases.
+3. **Reuse across post-fit calls.** Share the prepared Gamma-influence
+   workspace between consumers of an unchanged first-stage dataset. Make
+   ownership/invalidation explicit for data, thresholds, correlations, category
+   levels, and derivative settings. Cache the Gamma channels, then apply the
+   fitted-model residual/Jacobian contraction at each requested fit. Avoid a
+   hidden global cache or automatic inference work during estimation.
+4. **Reprofile before analytic derivatives or threading.** Extend timings to
+   actual DWLS fits and complete IJ SEs on saved samples, then measure n, p,
+   categories, peak memory, and controlled worker counts. Analytic derivatives
+   are a later option if local finite differences remain material; probability
+   floors, ordered thresholds, and correlations near their boundaries need
+   care. Treat observed/missing, mixed, and full-WLS optimizations as separate
+   slices after complete-data all-ordinal equivalence is established.
+
+Acceptance: compare diagonal values, both influence channels, and derivatives
+against the present dense implementation at fitted and perturbed kappa; use
+multiple FD step sizes and binary, multi-category, sparse-cell, and high-rho
+cases. Retain a small independent dense/case-weight reference in tests. Run
+the existing case-weight FD and full/diagonal/reduction checks in
+`tests/unit/ordinal_test.cpp`, plus ordinal golden parity and end-to-end IJ
+covariance/SE checks with nonzero fitted residuals. The weight channel uses
+only Gamma's diagonal; the final sandwich must retain the joint moment and
+weight influence cross covariances. Check benchmark checksums and complete
+SEs before reporting speedups, then re-vendor after canonical C++ changes.
+
+### Other estimation and inference follow-ups
+
 Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)). The

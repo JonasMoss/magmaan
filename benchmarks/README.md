@@ -71,6 +71,43 @@ through `aligned_malloc` → `std::malloc`, bypassing `operator new`; an
 (`valgrind --tool=massif ./magmaan_mem_profile ...`) — the two agree to within
 about 0.02%.
 
+## Ordinal DWLS Gamma influence profiling
+
+`magmaan_ordinal_gamma_influence_bench` isolates the two estimated-weight
+influence channels used by complete-data ordinal DWLS IJ. It calls the
+production statistics builder (full Gamma, without its WLS inverse), direct
+Gamma-diagonal influence, Gamma-diagonal finite-difference Jacobian, and
+`moment_influence * D.transpose()` separately. It does not fit a model or
+measure a complete SE calculation.
+
+```sh
+cmake --preset opt -DMAGMAAN_BUILD_BENCH=ON
+cmake --build --preset opt --target magmaan_ordinal_gamma_influence_bench
+build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 300 18 2 5 23260716
+build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 1200 18 2 5 23260716
+build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 300 18 4 5 23260716
+```
+
+Arguments are sample size, indicator count, category count, timed repetitions,
+and seed; the first example gives the defaults. The synthetic data come from a
+normal one-factor model with loadings 0.55–0.75 and equiprobable marginal
+categories. The seed fixes the sample within a given C++ standard-library
+implementation; this is not a reproduction of a paper's data generator.
+
+Each stage receives one untimed warm-up and then repeats on the same data.
+CSV stdout reports median/minimum/maximum wall milliseconds, median process
+CPU milliseconds, and a result checksum. Stderr reports the proposed
+item/pair-local Jacobian support and the largest derivative outside it, plus
+the largest absolute column mean of the complete Gamma influence. These are
+diagnostics, not replacements for the case-weight derivative tests.
+
+Run serially without competing simulation workers. The `opt` library disables
+Eigen threading. Record compiler/build flags, CPU, library identity, and any
+background load with saved timings under ignored `benchmarks/results/`.
+Memory and worker scaling need separate measurements. The investigation and
+ordered optimization plan are in the
+[active backlog](../docs/backlog/todo.md#ordinal-dwls-gamma-influence-performance).
+
 ## Outstanding
 
 - License audit: the Stata Press and Mplus example datasets are fetched into
