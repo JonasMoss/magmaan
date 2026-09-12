@@ -1948,14 +1948,15 @@ static void attach_geometric_stationarity(
     const spec::LatentStructure& pt,
     const Prelude& pre,
     const Bounds& bounds,
-    const optim::ScalarProblem& full_theta_problem) {
+    const optim::ScalarProblem& full_theta_problem,
+    StationarityDomain domain = StationarityDomain::Ambient) {
   Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
   const double value = full_theta_problem.f(est.theta, gradient);
   if (!std::isfinite(value)) {
     gradient.setConstant(std::numeric_limits<double>::quiet_NaN());
   }
-  est.diagnostics.geometric_stationarity = audit_geometric_stationarity(
-      est.theta, gradient, pt, pre.ev, pre.con, pre.nl, bounds);
+  audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
+                       pt, pre.ev, pre.con, pre.nl, bounds, domain);
 }
 
 static void attach_gmm_geometric_stationarity(
@@ -1965,11 +1966,12 @@ static void attach_gmm_geometric_stationarity(
     const SampleStats& samp,
     const Eigen::VectorXd& layout_point,
     const gmm::Weight& weight,
-    const Bounds& bounds) {
+    const Bounds& bounds,
+    StationarityDomain domain = StationarityDomain::Ambient) {
   auto problem = gmm::residuals(pre.ev, samp, layout_point, weight);
   if (!problem.has_value()) return;
   attach_geometric_stationarity(
-      est, pt, pre, bounds, optim::scalarize(*problem));
+      est, pt, pre, bounds, optim::scalarize(*problem), domain);
 }
 
 namespace {
@@ -2113,7 +2115,8 @@ fit_fiml_psd_impl(spec::LatentStructure pt,
   const optim::ScalarProblem full_problem = full_fiml_problem(
       pre->ev, raw, pack.cache, discrepancy);
   attach_geometric_stationarity(
-      *est, pt, *pre, Bounds{}, full_problem);
+      *est, pt, *pre, Bounds{}, full_problem, StationarityDomain::Psd);
+  est->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return est;
 }
 
@@ -2356,6 +2359,9 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
                                      "fit_ml_constrained");
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  if (!extra.active()) {
+    attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  }
   return est;
 }
 
@@ -2388,8 +2394,9 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto full_problem = estimate::ml_objective(pre->ev, samp);
   if (full_problem.has_value()) {
     attach_geometric_stationarity(
-        *est, pt, *pre, Bounds{}, *full_problem);
+        *est, pt, *pre, Bounds{}, *full_problem, StationarityDomain::Psd);
   }
+  est->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return est;
 }
 
@@ -2418,7 +2425,8 @@ fit_gmm_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
                                "fit_gmm_psd");
   if (!est.has_value()) return est;
   attach_gmm_geometric_stationarity(
-      *est, pt, *pre, samp, x0, weight, Bounds{});
+      *est, pt, *pre, samp, x0, weight, Bounds{}, StationarityDomain::Psd);
+  est->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return est;
 }
 
@@ -2525,8 +2533,10 @@ fit_ordinal_psd(spec::LatentStructure pt,
       *pre, pt, rep, stats, result->theta, weights, parameterization);
   if (full_problem.has_value()) {
     attach_geometric_stationarity(
-        *result, pt, *pre, bounds, optim::scalarize(*full_problem));
+        *result, pt, *pre, bounds, optim::scalarize(*full_problem),
+        StationarityDomain::Psd);
   }
+  result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;
 }
 
@@ -2610,8 +2620,9 @@ fit_catml_psd(spec::LatentStructure pt,
     const optim::ScalarProblem full_problem = catml_problem(
         pre->ev, sample, std::move(*full_cache), who);
     attach_geometric_stationarity(
-        *result, pt, *pre, Bounds{}, full_problem);
+        *result, pt, *pre, Bounds{}, full_problem, StationarityDomain::Psd);
   }
+  result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;
 }
 
@@ -2720,8 +2731,10 @@ fit_mixed_ordinal_psd(
       *pre, pt, rep, stats, result->theta, weights, parameterization);
   if (full_problem.has_value()) {
     attach_geometric_stationarity(
-        *result, pt, *pre, bounds, optim::scalarize(*full_problem));
+        *result, pt, *pre, bounds, optim::scalarize(*full_problem),
+        StationarityDomain::Psd);
   }
+  result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;
 }
 
@@ -2760,6 +2773,9 @@ fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
                                      "fit_gmm_constrained");
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
+  if (!extra.active()) {
+    attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  }
   return est;
 }
 
@@ -3166,8 +3182,10 @@ fit_gmm_fitted_weight_psd(
       pre->ev, samp, est->theta, fitted_opts.kind, who);
   if (final_weight.has_value()) {
     attach_gmm_geometric_stationarity(
-        *est, pt, *pre, samp, est->theta, *final_weight, Bounds{});
+        *est, pt, *pre, samp, est->theta, *final_weight, Bounds{},
+        StationarityDomain::Psd);
   }
+  est->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return est;
 }
 
@@ -4745,6 +4763,7 @@ compose_fisher_ml(const spec::LatentStructure& pt, const Prelude& pre,
         static_cast<std::int32_t>(snlls_split.alpha_cols.size());
   }
   attach_diagnostics(est, pt, pre, bounds);
+  attach_geometric_stationarity(est, pt, pre, bounds, ml_prob);
   return est;
 }
 
@@ -5040,6 +5059,7 @@ compose_irls_outer(const spec::LatentStructure& pt, const Prelude& pre,
   est.n_alpha_solve_fast     = snlls_n_alpha_fast;
   est.n_alpha_solve_fallback = snlls_n_alpha_fallback;
   attach_diagnostics(est, pt, pre, bounds);
+  attach_geometric_stationarity(est, pt, pre, bounds, ml_prob);
   return est;
 }
 

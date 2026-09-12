@@ -490,6 +490,63 @@ finalize_fit_diagnostics_impl(const Eigen::VectorXd&        theta_full,
 
 }  // namespace
 
+FitVerdict common_fit_verdict(const FitDiagnostics& d) {
+  FitVerdict out;
+  out.domain = d.stationarity_domain;
+  if (d.objective.checked) {
+    out.objective = d.objective.finite && d.objective.consistent
+        ? FitCheck::Passed : FitCheck::Failed;
+  }
+  const auto& g = d.geometric_stationarity;
+  if (g.checked) {
+    const bool psd = out.domain == StationarityDomain::Psd;
+    const bool projected = psd ? g.cone_projection_converged
+                              : g.ambient_projection_converged;
+    const bool stationary = psd ? g.cone_stationary : g.ambient_stationary;
+    if (!g.gradient_finite) {
+      out.stationarity = FitCheck::Failed;
+    } else if (projected) {
+      out.stationarity = stationary ? FitCheck::Passed : FitCheck::Failed;
+    }
+    // An unfinished normal-cone projection is not evidence of nonstationarity.
+  }
+  if (out.objective == FitCheck::Failed ||
+      out.stationarity == FitCheck::Failed) {
+    out.status = FitCheck::Failed;
+  } else if (out.objective == FitCheck::Passed &&
+             out.stationarity == FitCheck::Passed) {
+    out.status = FitCheck::Passed;
+  }
+  return out;
+}
+
+void audit_full_model_fit(
+    FitDiagnostics& diagnostics,
+    const Eigen::VectorXd& theta_full,
+    const Eigen::VectorXd& gradient_full,
+    double reported_value, double recomputed_value,
+    const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
+    const EqConstraints& con, const NonlinearEqConstraints& nl,
+    const Bounds& bounds, StationarityDomain domain,
+    GeometricStationarityOptions opts, double objective_multiplier) {
+  diagnostics.stationarity_domain = domain;
+  auto& objective = diagnostics.objective;
+  objective.checked = true;
+  objective.multiplier = objective_multiplier;
+  objective.reported = objective_multiplier * reported_value;
+  objective.recomputed = objective_multiplier * recomputed_value;
+  objective.finite = theta_full.allFinite() &&
+      std::isfinite(objective_multiplier) && objective_multiplier > 0.0 &&
+      std::isfinite(objective.reported) && std::isfinite(objective.recomputed);
+  objective.consistency_tolerance = 1e-6 * (1.0 + std::abs(objective.reported));
+  objective.consistent = objective.finite &&
+      std::abs(objective.recomputed - objective.reported) <=
+          objective.consistency_tolerance;
+  diagnostics.geometric_stationarity = audit_geometric_stationarity(
+      theta_full, objective_multiplier * gradient_full,
+      pt, ev, con, nl, bounds, opts);
+}
+
 GeometricStationarityDiagnostics
 audit_geometric_stationarity(
     const Eigen::VectorXd& theta_full,

@@ -157,7 +157,8 @@ int main(int argc, char** argv) {
               magmaan::estimate::Backend::NloptLbfgs, options);
           if (!result) { std::cerr << result.error().detail << '\n'; return false; }
           fit = std::move(*result);
-          return fit.optimizer_status == magmaan::optim::OptimStatus::Converged;
+          return magmaan::estimate::fit_verdict(fit).status ==
+                 magmaan::estimate::FitCheck::Passed;
         }, [&]() { return fit.fmin; })) return 1;
     if (!measure(prefix, "dwls_complete_ij", reps, [&]() {
           auto result = magmaan::estimate::robust_ordinal_ij(*pt, *rep, stats, fit, dwls);

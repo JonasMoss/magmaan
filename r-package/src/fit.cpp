@@ -341,6 +341,39 @@ Rcpp::List standardized_residuals_to_r(
       Rcpp::_["summary"] = residual_summary_to_r(r.summary));
 }
 
+const char* fit_check_to_r(magmaan::estimate::FitCheck check) {
+  using magmaan::estimate::FitCheck;
+  return check == FitCheck::Passed ? "passed"
+       : check == FitCheck::Failed ? "failed" : "unchecked";
+}
+
+int common_converged_value(const magmaan::estimate::Estimates& est) {
+  using magmaan::estimate::FitCheck;
+  const auto status = magmaan::estimate::fit_verdict(est).status;
+  return status == FitCheck::Unchecked ? NA_LOGICAL
+       : status == FitCheck::Passed;
+}
+
+Rcpp::LogicalVector common_converged_to_r(
+    const magmaan::estimate::Estimates& est) {
+  return Rcpp::LogicalVector::create(common_converged_value(est));
+}
+
+Rcpp::List common_verdict_to_r(const magmaan::estimate::FitDiagnostics& d) {
+  const auto v = magmaan::estimate::common_fit_verdict(d);
+  const auto& o = d.objective;
+  return Rcpp::List::create(
+      Rcpp::_["status"] = fit_check_to_r(v.status),
+      Rcpp::_["objective"] = fit_check_to_r(v.objective),
+      Rcpp::_["stationarity"] = fit_check_to_r(v.stationarity),
+      Rcpp::_["domain"] = v.domain == magmaan::estimate::StationarityDomain::Psd
+          ? "psd" : "ambient",
+      Rcpp::_["objective_multiplier"] = o.multiplier,
+      Rcpp::_["objective_recomputed"] = o.recomputed,
+      Rcpp::_["objective_reported"] = o.reported,
+      Rcpp::_["objective_consistency_tolerance"] = o.consistency_tolerance);
+}
+
 const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
   using magmaan::optim::OptimStatus;
   return status == OptimStatus::Converged           ? "converged"
@@ -393,7 +426,7 @@ Rcpp::List continuation_to_r(
   Rcpp::NumericVector alpha(n), min_ev(n), max_ev(n), condition(n), fmin(n),
       grad_norm(n);
   Rcpp::LogicalVector converged(n), sigma_pd_all(n);
-  Rcpp::CharacterVector optimizer_status(n);
+  Rcpp::CharacterVector optimizer_status(n), common_status(n);
 
   Eigen::Index npar = 0;
   if (!result.steps.empty()) npar = result.steps.front().estimates.theta.size();
@@ -411,8 +444,8 @@ Rcpp::List continuation_to_r(
     f_evals[i] = s.estimates.f_evals;
     g_evals[i] = s.estimates.g_evals;
     grad_norm[i] = s.estimates.grad_inf_norm;
-    converged[i] =
-        s.estimates.optimizer_status == magmaan::optim::OptimStatus::Converged;
+    converged[i] = common_converged_value(s.estimates);
+    common_status[i] = fit_check_to_r(magmaan::estimate::fit_verdict(s.estimates).status);
     sigma_pd_all[i] = s.estimates.diagnostics.sigma_pd_all;
     optimizer_status[i] = optim_status_to_r(s.estimates.optimizer_status);
     if (s.estimates.theta.size() == npar) {
@@ -427,6 +460,7 @@ Rcpp::List continuation_to_r(
       Rcpp::_["max_sample_eigen"] = max_ev,
       Rcpp::_["sample_condition"] = condition,
       Rcpp::_["converged"] = converged,
+      Rcpp::_["convergence_status"] = common_status,
       Rcpp::_["optimizer_status"] = optimizer_status,
       Rcpp::_["fmin"] = fmin,
       Rcpp::_["grad_norm"] = grad_norm,
@@ -570,7 +604,8 @@ Rcpp::List fcsem_fit_result(FcSemCtx& ctx,
   const char* opt_status = optim_status_to_r(est.optimizer_status);
 
   Rcpp::List out = Rcpp::List::create(
-      Rcpp::_["converged"]     = (est.optimizer_status == OptimStatus::Converged),
+      Rcpp::_["converged"]     = common_converged_to_r(est),
+      Rcpp::_["verdict"] = common_verdict_to_r(est.diagnostics),
       Rcpp::_["estimator"]     = "FCSEM-ML",
       Rcpp::_["fmin"]          = est.fmin,
       Rcpp::_["iterations"]    = est.iterations,
@@ -1121,6 +1156,7 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["admissibility"]          = admissibility_to_r(d.admissibility),
       Rcpp::_["geometric_stationarity"] =
           geometric_stationarity_to_r(d.geometric_stationarity),
+      Rcpp::_["verdict"] = common_verdict_to_r(d),
       Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);
 }
 
@@ -1150,13 +1186,14 @@ Rcpp::List fit_result(Ctx& ctx,
     ntotal += ctx.samp.n_obs[b];
   }
 
-  // Refined optimizer status, surfaced to R alongside the boolean `converged`
-  // (which now means "clean stationary stop", not merely "did not error").
+  // Backend termination remains diagnostic. Convergence is the common
+  // full-model verdict, with NA for paths whose checks are not yet wired.
   using magmaan::optim::OptimStatus;
   const char* opt_status = optim_status_to_r(est.optimizer_status);
 
   Rcpp::List out = Rcpp::List::create(
-      Rcpp::_["converged"]     = (est.optimizer_status == OptimStatus::Converged),
+      Rcpp::_["converged"]     = common_converged_to_r(est),
+      Rcpp::_["verdict"] = common_verdict_to_r(est.diagnostics),
       Rcpp::_["estimator"]     = estimator,
       Rcpp::_["fmin"]          = est.fmin,
       Rcpp::_["iterations"]    = est.iterations,
@@ -4261,7 +4298,8 @@ Rcpp::List fit_twolevel_impl(SEXP partable, Rcpp::NumericMatrix data,
 
   using magmaan::optim::OptimStatus;
   Rcpp::List out = Rcpp::List::create(
-      Rcpp::_["converged"]    = (est.optimizer_status == OptimStatus::Converged),
+      Rcpp::_["converged"]    = common_converged_to_r(est),
+      Rcpp::_["verdict"] = common_verdict_to_r(est.diagnostics),
       Rcpp::_["estimator"]    = "ML",
       Rcpp::_["fmin"]         = est.fmin,
       Rcpp::_["iterations"]   = est.iterations,
@@ -4561,8 +4599,8 @@ vector_to_r(const Eigen::VectorXd& x,
 
 Rcpp::List sam_estimates_to_r(const magmaan::estimate::Estimates& est) {
   return Rcpp::List::create(
-      Rcpp::_["converged"] = (est.optimizer_status ==
-                              magmaan::optim::OptimStatus::Converged),
+      Rcpp::_["converged"] = common_converged_to_r(est),
+      Rcpp::_["verdict"] = common_verdict_to_r(est.diagnostics),
       Rcpp::_["theta"] = Rcpp::wrap(est.theta),
       Rcpp::_["fmin"] = est.fmin,
       Rcpp::_["iterations"] = est.iterations,

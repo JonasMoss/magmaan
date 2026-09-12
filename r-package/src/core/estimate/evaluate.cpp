@@ -156,11 +156,14 @@ evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
       theta_full, pt, prelude.ev, prelude.con, prelude.nl, bounds,
       /*snlls_profile_fallback_flag=*/false);
 
+  audit_full_model_fit(diagnostics, theta_full, grad, f_at, f_at,
+                       pt, prelude.ev, prelude.con, prelude.nl, bounds);
+
   // `iterations = 0`, `f_evals = 1`, `g_evals = 1` are the documented
   // "no outer optimizer ran" defaults from fit.hpp, with `f_evals`/`g_evals`
   // bumped to reflect the single objective+gradient evaluation we did do.
-  // `optimizer_status = Converged` is a sentinel — `audit.advisory_status`
-  // is the authoritative verdict for callers.
+  // `optimizer_status = Converged` is a sentinel; fit_verdict(out) supplies
+  // the authoritative full-model verdict without an optimizer.
   Estimates out;
   out.theta            = theta_full;
   out.fmin             = f_at;

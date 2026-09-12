@@ -33,6 +33,8 @@ test_that("single-group two-level ML matches lavaan (saturated CFA)", {
 
   expect_s3_class(fit, "magmaan_fit")
   expect_true(fit$converged)
+  expect_equal(fit$verdict$objective_multiplier, 1 / nrow(d))
+  expect_equal(fit$verdict$objective_reported, fit$fmin / nrow(d))
   expect_true(is.list(fit$audit))
   expect_true(is.logical(fit$audit$stationary))
   expect_true(is.list(fit$diagnostics))
@@ -92,6 +94,8 @@ test_that("single-group two-level ML matches lavaan on a non-saturated model", {
   fit <- fit_twolevel(model, d, cluster = "cluster")
 
   expect_true(fit$converged)
+  expect_equal(fit$verdict$objective_multiplier, 1 / nrow(d))
+  expect_equal(fit$verdict$objective_reported, fit$fmin / nrow(d))
   expect_gt(fit$df, 0L)              # genuinely over-identified
   expect_equal(fit$df, lav_df)
   expect_equal(fit$chisq, lav_chisq, tolerance = 1e-2)
@@ -125,6 +129,8 @@ test_that("two-level standard bounds stabilize a weak six-indicator between fact
   fit <- fit_twolevel(model, d, cluster = "cluster", bounds = "standard")
 
   expect_true(fit$converged)
+  expect_equal(fit$verdict$objective_multiplier, 1 / nrow(d))
+  expect_equal(fit$verdict$objective_reported, fit$fmin / nrow(d))
   expect_true(isTRUE(fit$diagnostics$sigma_pd_all))
   expect_equal(fit$df, lav_df)
   expect_equal(fit$chisq, lav_chisq, tolerance = 1e-2)

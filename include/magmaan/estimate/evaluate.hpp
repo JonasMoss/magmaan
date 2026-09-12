@@ -23,9 +23,8 @@
 // The returned `Estimates` follows the convention `fit.hpp` already documents
 // for "exact/closed-form solve where no outer optimizer ran": `iterations = 0`,
 // `f_evals = 1`, `g_evals = 1`, `optimizer_status = Converged` (a sentinel —
-// the audit field below is the authoritative verdict), and the audit /
-// diagnostics filled from the standard `audit_terminal_iterate` +
-// `finalize_fit_diagnostics` calls.
+// `fit_verdict()` is authoritative), with both the original-coordinate common
+// audit and the legacy driven-coordinate audit available for inspection.
 //
 // Full-θ semantics: even when the model is separable, this entry point treats
 // θ as the unprofiled full vector. The audit runs on the same scalar

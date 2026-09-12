@@ -7673,6 +7673,9 @@ TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {
     CHECK((snlls->theta - bounded->theta).cwiseAbs().maxCoeff() < 8e-4);
     CHECK(snlls->n_nonlinear > 0);
     CHECK(snlls->n_linear > 0);
+    CHECK(snlls->diagnostics.geometric_stationarity.checked);
+    CHECK(magmaan::estimate::fit_verdict(*snlls).objective ==
+          magmaan::estimate::FitCheck::Passed);
   };
 
   check_weight(magmaan::estimate::OrdinalWeightKind::DWLS);
@@ -7732,6 +7735,9 @@ TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {
     CHECK((snlls->theta - bounded->theta).cwiseAbs().maxCoeff() < 8e-4);
     CHECK(snlls->n_nonlinear > 0);
     CHECK(snlls->n_linear > 0);
+    CHECK(snlls->diagnostics.geometric_stationarity.checked);
+    CHECK(magmaan::estimate::fit_verdict(*snlls).objective ==
+          magmaan::estimate::FitCheck::Passed);
   };
   check_theta(magmaan::estimate::OrdinalWeightKind::DWLS);
   check_theta(magmaan::estimate::OrdinalWeightKind::WLS);
@@ -7827,6 +7833,11 @@ TEST_CASE("Mixed ordinal fit-only workspace supplies DWLS diagonal fits") {
   CHECK(lazy_bounded->fmin ==
         doctest::Approx(full_bounded->fmin).epsilon(2e-6));
   CHECK(lazy_snlls->fmin == doctest::Approx(full_bounded->fmin).epsilon(2e-6));
+  for (const auto* fit : {&*full_bounded, &*lazy_bounded, &*lazy_snlls}) {
+    CHECK(fit->diagnostics.geometric_stationarity.checked);
+    CHECK(magmaan::estimate::fit_verdict(*fit).objective ==
+          magmaan::estimate::FitCheck::Passed);
+  }
   CHECK((lazy_bounded->theta - full_bounded->theta).cwiseAbs().maxCoeff() <
         8e-4);
   CHECK((lazy_snlls->theta - full_bounded->theta).cwiseAbs().maxCoeff() <

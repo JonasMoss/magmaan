@@ -9,6 +9,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -316,4 +317,101 @@ TEST_CASE("geometric stationarity thresholds the metric-dual L2 norm") {
   CHECK_FALSE(d.ambient_stationary);
   CHECK(d.cone_residual_l2 == doctest::Approx(d.ambient_residual_l2));
   CHECK_FALSE(d.cone_stationary);
+}
+
+TEST_CASE("common fit verdict is independent of backend and legacy audit") {
+  using namespace magmaan::estimate;
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  Estimates est;
+  est.theta = pd_theta(bits.ev);
+  const Eigen::VectorXd zero = Eigen::VectorXd::Zero(est.theta.size());
+  CHECK(fit_verdict(est).status == FitCheck::Unchecked);
+  audit_full_model_fit(est.diagnostics, est.theta, zero, 0.25, 0.25,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  for (auto status : {magmaan::optim::OptimStatus::Converged,
+                      magmaan::optim::OptimStatus::SingularConvergence,
+                      magmaan::optim::OptimStatus::BudgetExhausted,
+                      magmaan::optim::OptimStatus::Unknown}) {
+    est.optimizer_status = status;
+    CHECK_FALSE(est.audit.f_consistent); // Missing L1 is not a veto.
+    CHECK(fit_verdict(est).status == FitCheck::Passed);
+  }
+  est.diagnostics.geometric_stationarity.ambient_projection_converged = false;
+  CHECK(fit_verdict(est).status == FitCheck::Unchecked);
+  CHECK(fit_verdict(est).objective == FitCheck::Passed);
+  est.optimizer_status = magmaan::optim::OptimStatus::Converged;
+  audit_full_model_fit(est.diagnostics, est.theta,
+                       Eigen::VectorXd::Ones(est.theta.size()), 0.25, 0.25,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  CHECK(fit_verdict(est).status == FitCheck::Failed);
+  CHECK(fit_verdict(est).objective == FitCheck::Passed);
+  CHECK(fit_verdict(est).stationarity == FitCheck::Failed);
+  audit_full_model_fit(est.diagnostics, est.theta, zero, 0.25, 0.5,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  CHECK(fit_verdict(est).status == FitCheck::Failed);
+  CHECK(fit_verdict(est).objective == FitCheck::Failed);
+  CHECK(fit_verdict(est).stationarity == FitCheck::Passed);
+  audit_full_model_fit(est.diagnostics, est.theta, zero, 0.25,
+                       std::numeric_limits<double>::quiet_NaN(),
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  CHECK(fit_verdict(est).status == FitCheck::Failed);
+}
+
+TEST_CASE("common fit verdict uses declared PSD domain at a boundary") {
+  using namespace magmaan::estimate;
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  Eigen::VectorXd theta = pd_theta(bits.ev);
+  Eigen::Index variance = -1;
+  const auto locations = bits.ev.param_locations();
+  for (std::size_t k = 0; k < locations.size(); ++k) {
+    if (locations[k].mat == magmaan::model::MatId::Theta &&
+        locations[k].row == locations[k].col) {
+      variance = static_cast<Eigen::Index>(k);
+      break;
+    }
+  }
+  REQUIRE(variance >= 0);
+  theta(variance) = 0.0;
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(theta.size());
+  gradient(variance) = 2.0;
+  FitDiagnostics d;
+  audit_full_model_fit(d, theta, gradient, 1.0, 1.0,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  CHECK(common_fit_verdict(d).status == FitCheck::Failed);
+  CHECK(common_fit_verdict(d).domain == StationarityDomain::Ambient);
+  audit_full_model_fit(d, theta, gradient, 1.0, 1.0,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{},
+                       StationarityDomain::Psd);
+  CHECK(common_fit_verdict(d).status == FitCheck::Passed);
+  theta(variance) = -0.1;
+  gradient.setZero();
+  audit_full_model_fit(d, theta, gradient, 1.0, 1.0,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{},
+                       StationarityDomain::Psd);
+  CHECK(common_fit_verdict(d).status == FitCheck::Failed);
+  audit_full_model_fit(d, theta, gradient, 1.0, 1.0,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  CHECK(common_fit_verdict(d).status == FitCheck::Passed);
+  CHECK_FALSE(d.geometric_stationarity.covariance_feasible);
+}
+
+TEST_CASE("common fit verdict normalizes total objectives and gradients together") {
+  using namespace magmaan::estimate;
+  auto bits = build_bits("f =~ x1 + x2 + x3");
+  const Eigen::VectorXd theta = pd_theta(bits.ev);
+  const Eigen::VectorXd gradient = Eigen::VectorXd::Constant(theta.size(), 1e-5);
+  FitDiagnostics reference;
+  audit_full_model_fit(reference, theta, gradient, 0.25, 0.25,
+                       *bits.pt, bits.ev, bits.con, bits.nl, Bounds{});
+  for (double n : {1.0, 1000.0}) {
+    FitDiagnostics total;
+    audit_full_model_fit(total, theta, n * gradient, n * 0.25, n * 0.25,
+                         *bits.pt, bits.ev, bits.con, bits.nl, Bounds{},
+                         StationarityDomain::Ambient, {}, 1.0 / n);
+    CHECK(common_fit_verdict(total).status == FitCheck::Passed);
+    CHECK(total.objective.multiplier == doctest::Approx(1.0 / n));
+    CHECK(total.objective.reported == doctest::Approx(reference.objective.reported));
+    CHECK(total.geometric_stationarity.ambient_residual_l2 ==
+          doctest::Approx(reference.geometric_stationarity.ambient_residual_l2));
+  }
 }

@@ -72,6 +72,11 @@ struct Estimates {
   std::int32_t          n_alpha_solve_fallback = -1;
 };
 
+// Consumers use this common verdict; optimizer_status explains termination.
+inline FitVerdict fit_verdict(const Estimates& estimates) {
+  return common_fit_verdict(estimates.diagnostics);
+}
+
 // Optimizer backend selector for the convenience composers below.
 //   Ceres        — Levenberg–Marquardt; LS path only, needs MAGMAAN_WITH_CERES.
 //   CeresBfgs    — Ceres line-search dense BFGS; unbounded LS path only.

@@ -1,5 +1,81 @@
 # Terminal Audit (L1) and Fit Diagnostics (L2)
 
+## Authoritative fit verdict (2026-09-12)
+
+The full-model audit is the authority for numerical acceptance throughout
+magmaan. Backend termination explains how the search stopped; it is neither
+proof of convergence nor an additional veto on a passing common verdict.
+The driven-coordinate L1 record remains available for debugging and
+lavaan-compatible inspection. The backend adapter policies described below
+are implementation details, not the fit-level acceptance contract.
+
+`estimate::fit_verdict(estimates)` is the C++ entry point. Its status and
+component checks are `Passed`, `Failed`, or `Unchecked`. A failed component
+makes the overall verdict failed; all required components must pass to make
+it passed. An incomplete audit with no demonstrated failure is unchecked.
+No unchecked component falls back to a backend status or L1 boolean. A
+normal-cone projection that did not converge leaves stationarity unchecked;
+it is not evidence that the fitted point is nonstationary.
+
+The required checks are:
+
+1. Recompute the original objective at the returned full parameter vector,
+   on the common per-observation half-discrepancy scale. Require finite parameters/objective
+   and agreement with the reported objective within
+   `1e-6 * (1 + abs(reported))`; expose the normalized values and threshold.
+   Record `objective_multiplier`, applied to both value and gradient. It is
+   one for ordinary ML/LS/FIML and `1/N` for two-level ML, whose native `fmin`
+   is a total deviance. This conversion does not change fitting or inference.
+2. Recompute the full-model objective gradient, including eliminated linear
+   and threshold coordinates. Check the declared constraints and the existing
+   model-Frobenius metric-dual L2 stationarity residual at tolerance `1e-3`.
+   This change does not recalibrate tolerances or assert global optimality.
+
+The fit entry point declares `Ambient` or `Psd` before the verdict is selected.
+Ordinary fits use equality/bound normals; explicitly PSD-constrained fits
+also use primitive covariance-cone normals and require PSD feasibility.
+Never select the domain according to which residual passes. Both residuals
+remain visible and coincide in the positive-definite interior.
+
+Covariance admissibility is a separate diagnostic for ordinary fits: an
+unconstrained optimum may be numerically converged but inadmissible. Numerical
+convergence also does not establish identification, a local minimum, or the
+validity of a particular standard-error or test formula. Consumers may require
+those properties in addition, with separately reported reasons.
+
+R exposes `fit$verdict` and `fit$diagnostics$verdict`; `fit$converged` is the
+logical projection: TRUE for passed, FALSE for failed, NA for unchecked.
+`optimizer_status` and `fit$audit` remain diagnostic. Consumers should use
+`isTRUE(fit$converged)` when they require a certified numerical fit and must
+not turn missing/NA verdicts into success. `evaluate_at()` still exposes
+`audit_options` for its legacy L1 record; these do not alter the common
+verdict's metric or default tolerances. Closed-form estimators that are not
+objective minimizers report numerical convergence as not applicable rather
+than inventing a stationary objective.
+
+Failed or unchecked fits remain inspectable return values. A future adapter
+migration must also preserve evaluable terminal candidates across soft backend
+exits so the common audit can assess them; invalid inputs and absent/nonfinite
+candidates remain errors. Different stopping algorithms are allowed, but
+candidate retention and final assessment must follow one policy.
+
+### Standardization rollout
+
+Implemented first: one verdict function independent of optimizer status,
+original-objective verification at the existing continuous ML/LS, FIML,
+ML2S, Fisher/IRLS, two-level ML and ordinal finalization seams, explicit PSD
+domain selection, continuous closed-form SNLLS coverage, full-coordinate audits for profiled ordinal paths,
+and Estimates-based R result serialization. Uncovered specialized or extra-
+callback-constraint paths report unchecked; they are not silently certified.
+The existing frozen SNLLS handoff remains evidence of its pinned revision and
+retains its original screening policy, not a template for new studies.
+
+Remaining migration work belongs in `docs/backlog/todo.md`: backend candidate
+retention, complete specialized/extra-constraint coverage, and migration of
+research consumers that still read L1/backend flags. This section supersedes
+older statements below that treat the full-model audit as merely additive or
+an optimizer status as the authoritative fit verdict.
+
 ## Context
 
 magmaan's Newsom corpus speed survey turned up cases where the L-BFGS Full

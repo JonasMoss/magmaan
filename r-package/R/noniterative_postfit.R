@@ -16,13 +16,15 @@
 # ---- classing / predicates -------------------------------------------------
 
 # Turn the raw fit_result list returned by the noniterative_cfa_*_impl calls
-# into a first-class magmaan_fit. The closed-form map "converged" by
-# construction (there is no optimizer), and `fmin` is a meaningless 0 for these
+# into a first-class magmaan_fit. Numerical optimization convergence is not
+# applicable to this map, and `fmin` is a meaningless 0 for these
 # estimators, so downstream code must route through the residual GOF, not
 # `infer_chi2_stat(ss, fit$fmin)`.
 .finalize_noniterative_fit <- function(out) {
   out$noniterative <- TRUE
-  out$converged <- TRUE
+  out$converged <- NA
+  out$verdict <- list(status = "not_applicable",
+                      reason = "This closed-form estimator is not an objective minimizer.")
   class(out) <- c("magmaan_noniterative_fit", "magmaan_fit", "list")
   out
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include <Eigen/Core>
@@ -9,11 +10,12 @@
 
 // Fit finalization audit (Layer 2).
 //
-// L1 (`optim::audit_terminal_iterate`) certifies first-order stationarity in
+// L1 (`optim::audit_terminal_iterate`) diagnoses first-order stationarity in
 // the *driven* coordinate system the optimizer minimized over. L2 lives on the
 // other side of `prob.expand(out->x)`: it operates on full θ and answers a
 // different question — "is this fit usable for downstream inference?" — by
-// recording diagnostics that SE/χ²/robust-correction code needs to decide
+// recording the authoritative common numerical verdict and the diagnostics
+// that SE/χ²/robust-correction code needs to decide
 // whether its formulae apply. L2 never blocks a fit; it records.
 //
 // Concretely:
@@ -125,6 +127,30 @@ struct GeometricStationarityDiagnostics {
   std::int32_t cone_projection_iterations = 0;
 };
 
+// The domain is declared by the fit entry point, never selected by which
+// residual happens to pass. Backend status is not an input to this verdict.
+enum class FitCheck { Unchecked, Passed, Failed };
+enum class StationarityDomain { Ambient, Psd };
+
+struct ObjectiveDiagnostics {
+  bool checked = false;
+  bool finite = false;
+  bool consistent = false;
+  double recomputed = std::numeric_limits<double>::quiet_NaN();
+  double reported = std::numeric_limits<double>::quiet_NaN();
+  double consistency_tolerance = std::numeric_limits<double>::quiet_NaN();
+  // Multiply the native reported/recomputed objective AND gradient by this
+  // factor to reach the common per-observation half-discrepancy scale.
+  double multiplier = 1.0;
+};
+
+struct FitVerdict {
+  FitCheck status = FitCheck::Unchecked;
+  FitCheck objective = FitCheck::Unchecked;
+  FitCheck stationarity = FitCheck::Unchecked;
+  StationarityDomain domain = StationarityDomain::Ambient;
+};
+
 struct FitDiagnostics {
   // Implied Σ Cholesky per group; `sigma_pd_all` is the && over the vector.
   // ML/GLS need PD; ULS only needs finite. Empty when the evaluator could
@@ -152,7 +178,7 @@ struct FitDiagnostics {
   // Covariance-domain audit on the assembled reduced-LISREL matrices.
   AdmissibilityDiagnostics admissibility;
 
-  // Additive common-coordinate / PSD-cone stationarity diagnostic. It remains
+  // Common-coordinate / PSD-cone stationarity diagnostic. It remains
   // unchecked on fit paths that have not supplied an ordinary full-θ
   // objective gradient; `fit$audit` is never overwritten.
   GeometricStationarityDiagnostics geometric_stationarity;
@@ -162,6 +188,9 @@ struct FitDiagnostics {
   // wiring it requires a flag on `GpProblem`. Recorded here so consumers
   // (and a follow-up PR) have a stable schema slot.
   bool                   snlls_profile_fallback = false;
+
+  ObjectiveDiagnostics objective = {};
+  StationarityDomain stationarity_domain = StationarityDomain::Ambient;
 };
 
 struct DiagnosticsOptions {
@@ -191,6 +220,25 @@ struct GeometricStationarityOptions {
   double projection_tol = 1e-11;
   std::int32_t projection_max_iter = 20000;
 };
+
+// Authoritative numerical verdict. Admissibility remains separate for ambient
+// fits; PSD feasibility participates in the PSD stationarity check. Missing
+// checks are never replaced by optimizer status or driven-coordinate audits.
+FitVerdict common_fit_verdict(const FitDiagnostics& diagnostics);
+
+// Record the original half-discrepancy and its full-coordinate gradient. The
+// caller evaluates these at the returned theta before invoking this function.
+void audit_full_model_fit(
+    FitDiagnostics& diagnostics,
+    const Eigen::VectorXd& theta_full,
+    const Eigen::VectorXd& gradient_full,
+    double reported_value, double recomputed_value,
+    const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
+    const EqConstraints& con, const NonlinearEqConstraints& nl,
+    const Bounds& bounds,
+    StationarityDomain domain = StationarityDomain::Ambient,
+    GeometricStationarityOptions opts = {},
+    double objective_multiplier = 1.0);
 
 // Audit a terminal full-θ objective gradient against the original model
 // geometry. This is public so research code can recompute the geometric audit

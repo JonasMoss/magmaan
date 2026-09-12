@@ -125,23 +125,25 @@ constraint-Jacobian rank under `fit$audit`. Boundary fits are reported by the
 existing covariance diagnostics; ordinary interior information-matrix
 inference is not yet promoted as valid at a rank-deficient component solution.
 
-Fit finalization also carries an additive common-coordinate stationarity
-diagnostic at `fit$diagnostics$geometric_stationarity`. It evaluates the
-analytic objective differential in ordinary full-model coordinates under the
-product Frobenius metric, thresholds the metric-dual L2 distance, first against
-equality/bound normals and then against the true primitive PSD normal cones
-obtained from the null spaces of singular
-`Theta`/`Psi` blocks. This removes the Cholesky-chart degeneracy at a
-rank-deficient boundary and makes ordinary and PSD fits directly comparable,
-while preserving `fit$audit` unchanged for driven-coordinate/lavaan-compatible
-inspection. The cone residual equals the ambient residual in the
-positive-definite interior. The common audit is wired for continuous ML and
-fixed/fitted-weight GMM/LS, FIML, their PSD counterparts, ML2S Stage 2,
-ordinary and PSD ordinal/mixed-ordinal LS, and CatML. Continuous fixed-weight
-SNLLS now rebuilds the ordinary full-model LS
-gradient after profiling, so this audit includes eliminated covariance/mean
-coordinates as well as nonlinear ones, including all-linear closed-form fits.
-Fits with extra callback constraints remain explicitly unchecked.
+Fit finalization supplies the authoritative common numerical verdict through
+`estimate::fit_verdict(estimates)`, independently of optimizer termination or
+the driven-coordinate `fit$audit`. It verifies the original half-discrepancy
+objective and full-model gradient on a declared per-observation scale (two-level
+ML uses an explicit `1/N` multiplier), then applies the model-Frobenius metric-dual
+L2 stationarity criterion. Fit entry points explicitly select ambient
+(equality/bound) or PSD-cone geometry; covariance admissibility remains a
+separate requirement for ordinary fits. Status is passed, failed, or unchecked.
+R's `fit$converged` projects this to TRUE, FALSE, or NA and exposes the component
+verdict, objective values/tolerance, and existing geometric residuals.
+
+The common audit is wired for continuous ML and fixed/fitted-weight GMM/LS,
+FIML, their PSD counterparts, Fisher/IRLS, two-level ML, ML2S Stage 2, ordinary/profiled ordinal and mixed
+ordinal LS, and CatML. Continuous SNLLS audits eliminated covariance/mean
+coordinates, including all-linear closed-form fits. Profiled ordinal fits
+reconstruct and audit the original threshold-inclusive objective. Extra callback
+constraints and uncovered specialized paths remain explicitly unchecked.
+Backend soft-exit candidate retention and research-consumer migration remain
+open; see `docs/design/terminal-audit.md` for the contract and rollout boundary.
 
 The continuous R SNLLS primitives reject supplied bounds instead of silently
 ignoring them; the unbounded profile does not enforce variance or PSD bounds.
@@ -2144,8 +2146,8 @@ success status and final stationarity diagnostic. The C++ `OptimResult` and
 `LineSearchSalvaged`, `SingularConvergence`, or `Unknown`) and a final
 (projected, when bounded) gradient infinity norm when the backend can compute
 one. R fit lists expose these as `optimizer_status` and `grad_norm`; the
-legacy `converged` boolean is now true only for a clean stationary optimizer
-stop rather than any usable non-error return.
+`converged` field projects the common verdict (TRUE/FALSE/NA), independently
+of the optimizer stop. A returned estimate need not pass that verdict.
 
 
 - `Backend::NloptLbfgs` is the complete-data scalar default. FIML defaults to

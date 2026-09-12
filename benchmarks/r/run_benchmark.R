@@ -153,7 +153,9 @@ fit_diagnostics <- function(mfit, lfit, m_fmin, l_fmin) {
         "not exposed by the current magmaan fit object"
       } else "",
       iterations = scalar_or_na(mfit$iterations),
-      converged = isTRUE(mfit$converged %||% TRUE)
+      converged = mfit$converged %||% NA,
+      common_verdict = mfit$verdict %||% list(status = "unchecked"),
+      optimizer_status = mfit$optimizer_status %||% NA_character_
     ),
     lavaan = list(
       objective = l_fmin,
@@ -215,7 +217,8 @@ run_case <- function(id) {
   out$n_obs <- sum(unname(lavaan::lavInspect(lfit, "nobs")))
   out$n_vars <- length(lavaan::lavNames(lfit, type = "ov"))
   out$npar <- sum(l_pt$free > 0L)
-  out$magmaan_converged <- isTRUE(mfit$converged %||% TRUE)
+  out$magmaan_converged <- mfit$converged %||% NA
+  out$magmaan_verdict <- mfit$verdict %||% list(status = "unchecked")
   out$lavaan_converged <- isTRUE(lavaan::lavInspect(lfit, "converged"))
 
   ## Correctness: reuse magmaan's own partable comparator as the structural +

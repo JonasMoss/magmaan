@@ -180,6 +180,10 @@ void check_psd_terminal(const magmaan::estimate::Estimates& fit) {
   CHECK(fit.diagnostics.admissibility.admissible);
   CHECK(fit.diagnostics.geometric_stationarity.checked);
   CHECK(fit.diagnostics.geometric_stationarity.cone_stationary);
+  CHECK(magmaan::estimate::fit_verdict(fit).domain ==
+        magmaan::estimate::StationarityDomain::Psd);
+  CHECK(magmaan::estimate::fit_verdict(fit).status ==
+        magmaan::estimate::FitCheck::Passed);
   CHECK(fit.audit.constrained);
   CHECK(fit.audit.constraint_violation_inf <= 1e-6);
   CHECK(fit.audit.stationary);

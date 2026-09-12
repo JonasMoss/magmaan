@@ -2297,7 +2297,10 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
 print.magmaan_fit <- function(x, ...) {
   cat("magmaan fit (estimate only)\n")
   cat("  estimator: ", x$estimator %||% "unknown", "\n", sep = "")
-  cat("  converged: ", if (isTRUE(x$converged)) "TRUE" else "FALSE", "\n", sep = "")
+  convergence <- if (isTRUE(x$converged)) "TRUE" else if (identical(x$converged, FALSE)) {
+    "FALSE"
+  } else if (!is.null(x$verdict$status)) x$verdict$status else "unchecked"
+  cat("  converged: ", convergence, "\n", sep = "")
   admissibility <- x$diagnostics$admissibility
   if (is.list(admissibility) && isTRUE(admissibility$checked)) {
     cat("  covariance-admissible: ",

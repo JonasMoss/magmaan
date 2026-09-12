@@ -1,5 +1,21 @@
 # magmaan SEM Zoo Benchmarks
 
+## Numerical acceptance
+
+New fit comparisons use `estimate::fit_verdict(est).status == FitCheck::Passed`
+in C++, or `isTRUE(fit$converged)` in R. Preserve the component verdict and
+backend termination separately; neither a backend success code nor a legacy
+`fit$audit` flag substitutes for the common full-model check. Admissibility and
+cross-method objective/parameter agreement are additional, separately reported
+comparison requirements. Unchecked fits are not accepted by default.
+
+The ordinal SNLLS driver exports `common_verdict`, its objective/stationarity
+components, the declared domain, stationarity residual/tolerance, and
+admissibility fields. Its `status=ok` means a fit returned, not that it passed
+the numerical screen. The frozen `snlls-handoff` scripts/results retain the
+policy of their pinned source revision for reproduction; use the common
+verdict contract for new studies. See `docs/design/terminal-audit.md`.
+
 This directory is the staging area for repeatable benchmark cases. The harness
 is R-first because the public comparison target is lavaan and the exploratory R
 package is the user-facing path for now.

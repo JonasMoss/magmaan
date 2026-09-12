@@ -6965,9 +6965,8 @@ fit_fiml_impl(spec::LatentStructure pt,
       if (!std::isfinite(value)) {
         gradient.setConstant(std::numeric_limits<double>::quiet_NaN());
       }
-      est.diagnostics.geometric_stationarity =
-          audit_geometric_stationarity(
-              est.theta, gradient, pt, ev, con, nl, Bounds{});
+      audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
+                           pt, ev, con, nl, Bounds{});
     }
     return est;
   };

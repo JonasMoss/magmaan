@@ -2822,19 +2822,19 @@ work lives in [`speculative.md`](speculative.md). Open work:
   (`tests/unit/terminal_audit_test.cpp`), so the experiment is one option flip
   away once the data exists; see `docs/design/terminal-audit.md` "Tolerance
   calibration".
-- **M/L.** Finish decoupling terminal audits from optimizer coordinates. The
-  common full-model audit now records ambient equality/bound stationarity and
-  true primitive-PSD-cone stationarity under the model-Frobenius metric-dual L2
-  norm for ML, fixed/fitted-weight GMM/LS, FIML, ML2S Stage 2,
-  ordinal/mixed ordinal, CatML,
-  and their PSD variants. It is additive and leaves the driven/lavaan-compatible
-  `fit$audit` untouched. Continuous `fit_snlls` / `fit_snlls_gls` now rebuild the full-`theta` LS
-  gradient, including eliminated alpha coordinates. Remaining: include
-  normals from `ExtraNonlinearEqConstraints`, and decide whether residual-only
-  specialized paths should rebuild a scalar terminal objective. Record profile
-  rank/conditioning and fallback diagnostics alongside both verdicts. Do not
-  make the common audit a hard return gate until the stress/corpus verifier
-  track shows how often it differs from the driven verdict.
+- **M/L.** Complete the common-verdict rollout defined in
+  `docs/design/terminal-audit.md`. The authoritative C++ verdict and R
+  TRUE/FALSE/NA convergence projection now use original-objective verification
+  plus common full-model stationarity, with explicitly selected ambient/PSD
+  geometry. Legacy/backend flags are not vetoes. Remaining:
+  preserve evaluable terminal candidates uniformly across soft backend exits;
+  include `ExtraNonlinearEqConstraints` normals; wire specialized residual,
+  FCSEM and other currently unchecked fit paths; migrate active research
+  consumers that still gate on driven audits/backend statuses. Do not convert
+  failed/unchecked returned fits into hard errors. Retain rank/conditioning
+  and fallback diagnostics alongside the common verdict, and use stress/corpus
+  comparisons to validate each coverage extension. The frozen SNLLS handoff's
+  historical screen is retained only for reproducibility of its pinned run.
 - **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS, Ceres
   trust-region, Ceres dense BFGS, and SNLLS only on semantically appropriate
   cases; include shallow or Heywood-prone LS cases so bounds and conditioning stay
@@ -2849,17 +2849,14 @@ work lives in [`speculative.md`](speculative.md). Open work:
   telemetry and broader corpus calibration remain useful before freezing
   new speed claims. Details and the bounded publication/handoff proposal:
   [SNLLS handoff review](../research/snlls-handoff-review.md).
-- **S/M.** Close the validation/reporting gaps exposed by the clean SNLLS
-  collaborator run at `c54cfc5f`. All-linear continuous SNLLS now receives the
-  common full-coordinate audit but leaves legacy `audit.f_consistent` at its
-  default false/uncomputed value; populate an explicit original-objective
-  check and distinguish uncomputed from failed audits. Record PORT optimizer
-  exits alongside the common audit: strict controls can return
-  `singular_convergence` at a common-audit-stationary fit. Before promoting
-  ordinal timing ratios, equalize ordinary/profiled finalization audit work
-  and export full-coordinate stationarity/admissibility in the native driver.
-  The frozen handoff retains these exclusions and preliminary ordinal labels;
-  see `benchmarks/snlls-handoff/FINDINGS.md` for the generated-data run.
+- **S/M.** Rerun the SNLLS comparisons on a new frozen revision after the
+  common-verdict rollout. The all-linear objective check is now explicit at
+  full-model finalization, and profiled ordinal fits now perform the original-
+  objective/full-coordinate audit. Export the common verdict and residuals in
+  all benchmark rows and remove L1/backend gates from new comparison screens.
+  Do not overwrite the frozen `c54cfc5f` bundle or reinterpret its timings as
+  measurements of the new finalization work. Its findings remain in
+  `benchmarks/snlls-handoff/FINDINGS.md`.
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real cases
   (especially a Geiser/Eid LST covariance input and a documented MTMM variant)

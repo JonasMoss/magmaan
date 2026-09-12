@@ -9402,8 +9402,38 @@ void attach_ordinal_geometric_diagnostics(
   if (!std::isfinite(value)) {
     gradient.setConstant(std::numeric_limits<double>::quiet_NaN());
   }
-  est.diagnostics.geometric_stationarity = audit_geometric_stationarity(
-      est.theta, gradient, pt, ev, con, nl, bounds);
+  audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
+                       pt, ev, con, nl, bounds);
+}
+
+// Threshold profiling must be audited against the original moment residuals,
+// including threshold coordinates eliminated during optimization.
+void attach_reconstructed_ordinal_diagnostics(
+    Estimates& est, const spec::LatentStructure& pt,
+    const model::ModelEvaluator& ev, const data::OrdinalStats& stats,
+    const ThresholdLayout& layout, const std::vector<Eigen::MatrixXd>& factors,
+    const Bounds& bounds, OrdinalParameterization parameterization) {
+  auto con = build_eq_constraints(pt);
+  if (!con.has_value()) return;
+  const auto nl = build_nl_constraints(pt);
+  est.diagnostics = finalize_fit_diagnostics(
+      est.theta, pt, ev, *con, nl, bounds);
+  Eigen::VectorXd gradient = Eigen::VectorXd::Constant(
+      est.theta.size(), std::numeric_limits<double>::quiet_NaN());
+  double value = std::numeric_limits<double>::infinity();
+  auto eval = ev.evaluate(est.theta, true, true);
+  if (eval.has_value()) {
+    auto r = ordinal_residuals(stats, layout, eval->moments, factors,
+                              est.theta, parameterization);
+    auto J = ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                             factors, est.theta, parameterization, eval->J_mu);
+    if (r.has_value() && J.has_value()) {
+      value = 0.5 * r->squaredNorm();
+      gradient = J->transpose() * *r;
+    }
+  }
+  audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
+                       pt, ev, *con, nl, bounds);
 }
 
 fit_expected<Estimates>
@@ -11032,8 +11062,11 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                               factors, x, parameterization, eval->J_mu);
     };
 
-    return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
-                            "fit_ordinal_bounded");
+    auto est = solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                                 "fit_ordinal_bounded");
+    if (!est.has_value()) return est;
+    attach_ordinal_geometric_diagnostics(*est, pt, ev, con, bounds, prob);
+    return est;
   }
   auto profile_or = make_threshold_design(pt, layout, stats, x0);
   if (!profile_or.has_value()) return std::unexpected(profile_or.error());
@@ -11124,6 +11157,11 @@ fit_ordinal_bounded(spec::LatentStructure pt,
       stats, layout, eval_hat->moments, profiled_weights, est->theta);
   if (!theta_or.has_value()) return std::unexpected(theta_or.error());
   est->theta = std::move(*theta_or);
+  auto factors = full_weight_factors(moments, gamma_cache, plan);
+  if (factors.has_value()) {
+    attach_reconstructed_ordinal_diagnostics(
+        *est, pt, ev, stats, layout, *factors, bounds, parameterization);
+  }
   return est;
 }
 
@@ -11285,9 +11323,15 @@ fit_ordinal_snlls(spec::LatentStructure pt,
   if (!theta_final_or.has_value()) {
     return std::unexpected(theta_final_or.error());
   }
-  return Estimates{std::move(*theta_final_or), fmin, iterations, f_evals,
-                   g_evals, status, grad_inf_norm, std::move(audit), {},
-                   gp_or->n_nonlinear, gp_or->n_linear};
+  Estimates est{std::move(*theta_final_or), fmin, iterations, f_evals,
+                g_evals, status, grad_inf_norm, std::move(audit), {},
+                gp_or->n_nonlinear, gp_or->n_linear};
+  auto factors = full_weight_factors(moments, gamma_cache, plan);
+  if (factors.has_value()) {
+    attach_reconstructed_ordinal_diagnostics(
+        est, pt, ev_full, stats, layout, *factors, Bounds{}, parameterization);
+  }
+  return est;
 }
 
 fit_expected<Estimates>
@@ -11420,9 +11464,14 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
     audit = std::move(out->audit);
   }
 
-  return Estimates{std::move(theta_hat), fmin, iterations, f_evals, g_evals,
-                   status, grad_inf_norm, std::move(audit), {},
-                   gp_or->n_nonlinear, gp_or->n_linear};
+  Estimates est{std::move(theta_hat), fmin, iterations, f_evals, g_evals,
+                status, grad_inf_norm, std::move(audit), {},
+                gp_or->n_nonlinear, gp_or->n_linear};
+  auto con = build_eq_constraints(pt);
+  if (con.has_value()) {
+    attach_ordinal_geometric_diagnostics(est, pt, ev, *con, Bounds{}, base);
+  }
+  return est;
 }
 
 fit_expected<Estimates>
@@ -11688,9 +11737,14 @@ fit_mixed_ordinal_snlls_full_thresholds(
     audit = std::move(out->audit);
   }
 
-  return Estimates{std::move(theta_hat), fmin, iterations, f_evals, g_evals,
-                   status, grad_inf_norm, std::move(audit), {},
-                   gp_or->n_nonlinear, gp_or->n_linear};
+  Estimates est{std::move(theta_hat), fmin, iterations, f_evals, g_evals,
+                status, grad_inf_norm, std::move(audit), {},
+                gp_or->n_nonlinear, gp_or->n_linear};
+  auto con = build_eq_constraints(pt);
+  if (con.has_value()) {
+    attach_ordinal_geometric_diagnostics(est, pt, ev, *con, Bounds{}, base);
+  }
+  return est;
 }
 
 fit_expected<Estimates>

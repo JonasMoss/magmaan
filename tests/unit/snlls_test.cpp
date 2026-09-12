@@ -311,6 +311,8 @@ TEST_CASE("SNLLS: covariance-only model is solved by profiling alone") {
   CHECK(est->n_linear == 3);
   CHECK(est->diagnostics.geometric_stationarity.checked);
   CHECK(est->diagnostics.geometric_stationarity.ambient_stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est).status ==
+        magmaan::estimate::FitCheck::Passed);
 }
 
 TEST_CASE("SNLLS: reports β/α block sizes on a 1F covariance model") {
@@ -585,6 +587,8 @@ TEST_CASE("SNLLS: full-coordinate stationarity agrees with the original LS gradi
       CHECK(audit.checked);
       CHECK(audit.gradient_finite);
       CHECK(audit.ambient_stationary);
+      CHECK(magmaan::estimate::fit_verdict(*fit).status ==
+            magmaan::estimate::FitCheck::Passed);
       CHECK(audit.raw_gradient_inf == doctest::Approx(
           gradient.cwiseAbs().maxCoeff()).scale(1.0).epsilon(1e-12));
       CHECK(fit->fmin == doctest::Approx(0.5 * e->residual.squaredNorm())

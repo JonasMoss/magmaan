@@ -103,6 +103,16 @@ fit_ml_twolevel(spec::LatentStructure pt, const model::MatrixRep& rep,
   est.diagnostics =
       finalize_fit_diagnostics(est.theta, pt, ev, *con,
                                NonlinearEqConstraints{}, bounds);
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+  const double value = prob->f(est.theta, gradient);
+  double n_total = 0.0;
+  for (const auto& group : cs.groups) n_total += static_cast<double>(group.n_within);
+  // The two-level objective is a total deviance; ordinary ML audits use a
+  // per-observation discrepancy. Keep estimation/inference on their native
+  // scale and declare the audit conversion explicitly.
+  audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
+                       pt, ev, *con, NonlinearEqConstraints{}, bounds,
+                       StationarityDomain::Ambient, {}, 1.0 / n_total);
   return est;
 }
 

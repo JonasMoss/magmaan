@@ -130,6 +130,12 @@ std::string optim_status_name(magmaan::optim::OptimStatus status) {
   return "unknown";
 }
 
+std::string fit_check_name(magmaan::estimate::FitCheck status) {
+  using magmaan::estimate::FitCheck;
+  return status == FitCheck::Passed ? "passed"
+       : status == FitCheck::Failed ? "failed" : "unchecked";
+}
+
 std::string estimator_name(OrdinalEstimatorKind estimator) {
   switch (estimator) {
     case OrdinalEstimatorKind::ULS:
@@ -696,6 +702,17 @@ struct Row {
   int f_evals = -1;
   int g_evals = -1;
   std::string optimizer_status;
+  std::string common_verdict = "unchecked";
+  std::string common_objective = "unchecked";
+  std::string common_stationarity = "unchecked";
+  std::string stationarity_domain = "ambient";
+  double objective_multiplier = quiet_nan();
+  double objective_recomputed = quiet_nan();
+  double objective_consistency_tolerance = quiet_nan();
+  double common_residual_l2 = quiet_nan();
+  double stationarity_tolerance = quiet_nan();
+  bool admissibility_checked = false;
+  bool admissible = false;
   double grad_inf_norm = quiet_nan();
   int n_nonlinear = -1;
   int n_linear = -1;
@@ -723,7 +740,10 @@ void write_header(std::ostream& out) {
          "cache_blocks,cache_has_diagonal,cache_has_full,"
          "cache_has_dwls_weight,cache_has_wls_weight,"
          "theta_diff_profiled_bounded,fmin_diff_profiled_bounded,"
-         "theta_diff_full_bounded,fmin_diff_full_bounded\n";
+         "theta_diff_full_bounded,fmin_diff_full_bounded,"
+         "common_verdict,common_objective,common_stationarity,stationarity_domain,"
+         "common_residual_l2,stationarity_tolerance,admissibility_checked,admissible,"
+         "objective_multiplier,objective_recomputed,objective_consistency_tolerance\n";
 }
 
 void write_row(std::ostream& out, const Row& row) {
@@ -754,7 +774,13 @@ void write_row(std::ostream& out, const Row& row) {
       << row.theta_diff_profiled_bounded << ','
       << row.fmin_diff_profiled_bounded << ','
       << row.theta_diff_full_bounded << ','
-      << row.fmin_diff_full_bounded << '\n';
+      << row.fmin_diff_full_bounded << ',' << row.common_verdict << ','
+      << row.common_objective << ',' << row.common_stationarity << ','
+      << row.stationarity_domain << ',' << row.common_residual_l2 << ','
+      << row.stationarity_tolerance << ',' << bool_csv(row.admissibility_checked)
+      << ',' << bool_csv(row.admissible) << ',' << row.objective_multiplier
+      << ',' << row.objective_recomputed << ','
+      << row.objective_consistency_tolerance << '\n';
 }
 
 void fill_estimate_fields(Row& row, const Estimates& est) {
@@ -763,6 +789,21 @@ void fill_estimate_fields(Row& row, const Estimates& est) {
   row.f_evals = est.f_evals;
   row.g_evals = est.g_evals;
   row.optimizer_status = optim_status_name(est.optimizer_status);
+  const auto verdict = magmaan::estimate::fit_verdict(est);
+  const auto& geometry = est.diagnostics.geometric_stationarity;
+  const bool psd = verdict.domain == magmaan::estimate::StationarityDomain::Psd;
+  row.objective_multiplier = est.diagnostics.objective.multiplier;
+  row.objective_recomputed = est.diagnostics.objective.recomputed;
+  row.objective_consistency_tolerance = est.diagnostics.objective.consistency_tolerance;
+  row.common_verdict = fit_check_name(verdict.status);
+  row.common_objective = fit_check_name(verdict.objective);
+  row.common_stationarity = fit_check_name(verdict.stationarity);
+  row.stationarity_domain = psd ? "psd" : "ambient";
+  row.common_residual_l2 = psd ? geometry.cone_residual_l2
+                              : geometry.ambient_residual_l2;
+  row.stationarity_tolerance = geometry.stationarity_tol;
+  row.admissibility_checked = est.diagnostics.admissibility.checked;
+  row.admissible = est.diagnostics.admissibility.admissible;
   row.grad_inf_norm = est.grad_inf_norm;
   row.n_nonlinear = est.n_nonlinear;
   row.n_linear = est.n_linear;
