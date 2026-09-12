@@ -2849,6 +2849,17 @@ work lives in [`speculative.md`](speculative.md). Open work:
   telemetry and broader corpus calibration remain useful before freezing
   new speed claims. Details and the bounded publication/handoff proposal:
   [SNLLS handoff review](../research/snlls-handoff-review.md).
+- **S/M.** Close the validation/reporting gaps exposed by the clean SNLLS
+  collaborator run at `c54cfc5f`. All-linear continuous SNLLS now receives the
+  common full-coordinate audit but leaves legacy `audit.f_consistent` at its
+  default false/uncomputed value; populate an explicit original-objective
+  check and distinguish uncomputed from failed audits. Record PORT optimizer
+  exits alongside the common audit: strict controls can return
+  `singular_convergence` at a common-audit-stationary fit. Before promoting
+  ordinal timing ratios, equalize ordinary/profiled finalization audit work
+  and export full-coordinate stationarity/admissibility in the native driver.
+  The frozen handoff retains these exclusions and preliminary ordinal labels;
+  see `benchmarks/snlls-handoff/FINDINGS.md` for the generated-data run.
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real cases
   (especially a Geiser/Eid LST covariance input and a documented MTMM variant)
