@@ -2839,6 +2839,19 @@ work lives in [`speculative.md`](speculative.md). Open work:
   trust-region, Ceres dense BFGS, and SNLLS only on semantically appropriate
   cases; include shallow or Heywood-prone LS cases so bounds and conditioning stay
   visible.
+- **S/M.** Harden SNLLS contracts before a collaborator benchmark freeze.
+  The continuous R `fit_{uls,gls,wls}_snlls_impl` primitives currently accept
+  and discard `bounds`; reject supplied bounds until the profile supports
+  them. Correct the fast-alpha note/source claim that the `1e-7` estimated
+  rcond gate guarantees at most one digit lost versus QR; the displayed
+  derivation is invalid and the estimator can be optimistic. Validate the
+  heuristic against scaled/rank-stress QR/SVD references and an inner residual
+  check. Explicitly document the Kaufman residual-Jacobian approximation:
+  the scalar gradient is exact under regular, accurately solved profiling,
+  but PORT-NLS/Ceres do not receive the full profiled residual derivative.
+  Evaluate an exact derivative there and a cheaper scalar-only gradient as
+  separate experiments. Details and the bounded publication/handoff proposal:
+  [SNLLS handoff review](../research/snlls-handoff-review.md).
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real cases
   (especially a Geiser/Eid LST covariance input and a documented MTMM variant)
