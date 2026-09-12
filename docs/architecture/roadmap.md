@@ -137,8 +137,22 @@ while preserving `fit$audit` unchanged for driven-coordinate/lavaan-compatible
 inspection. The cone residual equals the ambient residual in the
 positive-definite interior. The common audit is wired for continuous ML and
 fixed/fitted-weight GMM/LS, FIML, their PSD counterparts, ML2S Stage 2,
-ordinary and PSD ordinal/mixed-ordinal LS, and CatML. Profiled SNLLS and fits
-with extra callback constraints remain explicitly unchecked.
+ordinary and PSD ordinal/mixed-ordinal LS, and CatML. Continuous fixed-weight
+SNLLS now rebuilds the ordinary full-model LS
+gradient after profiling, so this audit includes eliminated covariance/mean
+coordinates as well as nonlinear ones, including all-linear closed-form fits.
+Fits with extra callback constraints remain explicitly unchecked.
+
+The continuous R SNLLS primitives reject supplied bounds instead of silently
+ignoring them; the unbounded profile does not enforce variance or PSD bounds.
+The fast inner Cholesky solve uses a heuristic estimated-rcond screen plus a
+scaled normal-residual check against the original design, falling back to
+column-pivoted QR. The threshold carries no guaranteed digits-lost bound.
+GP's residual callbacks explicitly supply Kaufman's approximate Jacobian:
+its scalar gradient is exact locally at fixed rank with an accurate inner
+solve, while PORT-NLS/Ceres use approximate Gauss–Newton curvature. Focused
+gates compare scaled/full-rank/near-dependent/rank-deficient profiles with
+SVD and compare the final common audit with the original LS gradient.
 
 The production lifted-objective compiler has a private derivative-probe seam
 used only by regression tests. Central finite differences now gate the complete

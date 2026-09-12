@@ -5077,6 +5077,7 @@ fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
   // SNLLS has no box bounds on the nonlinear block; attach_diagnostics
   // reads `bounds.empty()` correctly and reports no active bounds.
   attach_diagnostics(*est, pt, *pre, Bounds{});
+  attach_gmm_geometric_stationarity(*est, pt, *pre, samp, x0, weight, Bounds{});
   return est;
 }
 
@@ -5091,6 +5092,7 @@ fit_snlls_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_snlls(pt, pre->ev, samp, x0, *W, backend, opts);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, Bounds{});
+  attach_gmm_geometric_stationarity(*est, pt, *pre, samp, x0, *W, Bounds{});
   return est;
 }
 

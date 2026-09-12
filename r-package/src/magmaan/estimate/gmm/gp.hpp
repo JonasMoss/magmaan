@@ -20,6 +20,10 @@
 //
 // `gp` transforms a θ-space GmmProblem into the profiled β-space one — a
 // closure transform, parallel to `estimate::reparameterize`.
+// The returned J/eval callbacks supply Kaufman's projected residual-Jacobian
+// approximation, not the full derivative of the profiled residual. At locally
+// fixed rank with an accurate inner solve, J' r is the exact scalar gradient;
+// residual-based optimizers receive approximate Gauss–Newton curvature.
 
 namespace magmaan::estimate::gmm {
 

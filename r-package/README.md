@@ -243,3 +243,19 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   `magmaan_core$infer_mixed_ordinal_robust(fit, mixed_stats, weight = "")`.
   Mixed `NACOV`/weight and robust reporting parity is still looser than the
   all-ordinal path. Empty `weight` reuses `fit$estimator`.
+
+## Continuous SNLLS contract
+
+Use `magmaan_core$fit_uls_snlls(model, data)`, `fit_gls_snlls(model, data)`,
+or `fit_wls_snlls(model, data, W)` for fixed-weight separable fits. These
+paths are unbounded: supplied bounds are rejected, including variance-bound
+presets. Choose the corresponding ordinary LS fit when bounds are required.
+`NULL` or the friendly wrapper's `bounds = "none"` requests unbounded fitting.
+Covariance admissibility is reported separately; profiling does not impose PSD.
+
+`fit$diagnostics$geometric_stationarity` recomputes stationarity in the full
+model coordinates, including the eliminated linear parameters. It is additive
+and does not replace `fit$audit`, which retains the optimizer's driven-coordinate
+verdict. GP uses Kaufman's approximate residual Jacobian: scalar gradients are
+exact locally at fixed rank with accurate inner solves, while residual-based
+backends use approximate Gauss–Newton curvature.

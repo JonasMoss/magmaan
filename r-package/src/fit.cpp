@@ -6291,7 +6291,10 @@ Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
-  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  if (bounds.isNotNull()) {
+    Rcpp::stop("SNLLS does not support bounds; use an ordinary LS fit with "
+               "bounds, or explicitly request an unbounded SNLLS fit");
+  }
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
       {}, backend, optim_opts_from(control));
@@ -6311,7 +6314,10 @@ Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
-  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  if (bounds.isNotNull()) {
+    Rcpp::stop("SNLLS does not support bounds; use an ordinary LS fit with "
+               "bounds, or explicitly request an unbounded SNLLS fit");
+  }
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_snlls_gls(ctx.pt, ctx.rep, ctx.samp, x0,
       backend, optim_opts_from(control));
@@ -6332,7 +6338,10 @@ Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
                                   sample_stats);
   magmaan::estimate::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
-  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  if (bounds.isNotNull()) {
+    Rcpp::stop("SNLLS does not support bounds; use an ordinary LS fit with "
+               "bounds, or explicitly request an unbounded SNLLS fit");
+  }
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
       std::move(wls), backend, optim_opts_from(control));

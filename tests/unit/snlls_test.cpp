@@ -2,6 +2,7 @@
 #include "../test_fit.hpp"
 
 #include <Eigen/Core>
+#include <Eigen/SVD>
 #include <nlohmann/json.hpp>
 
 #include "magmaan/data/sample_stats.hpp"
@@ -308,6 +309,8 @@ TEST_CASE("SNLLS: covariance-only model is solved by profiling alone") {
   // Three variance/covariance parameters all profile out — no β block.
   CHECK(est->n_nonlinear == 0);
   CHECK(est->n_linear == 3);
+  CHECK(est->diagnostics.geometric_stationarity.checked);
+  CHECK(est->diagnostics.geometric_stationarity.ambient_stationary);
 }
 
 TEST_CASE("SNLLS: reports β/α block sizes on a 1F covariance model") {
@@ -545,4 +548,123 @@ TEST_CASE("SNLLS: alpha-solve counters are sentinel-NA on full-θ paths") {
   REQUIRE(est.has_value());
   CHECK(est->n_alpha_solve_fast == -1);
   CHECK(est->n_alpha_solve_fallback == -1);
+}
+
+TEST_CASE("SNLLS: full-coordinate stationarity agrees with the original LS gradient") {
+  for (const auto syntax : {"f =~ x1 + x2 + x3 + x4",
+                            "f =~ x1 + l*x2 + l*x3 + x4"}) {
+    const auto h = handles_for(syntax);
+    SampleStats samp;
+    samp.S = {make_misspecified_1f_S()};
+    samp.n_obs = {301};
+    auto ev = ModelEvaluator::build(h.pt, h.rep);
+    REQUIRE(ev.has_value());
+    auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+    REQUIRE(x0.has_value());
+    for (int kind = 0; kind < 3; ++kind) {
+      magmaan::estimate::gmm::Weight weight;
+      if (kind == 1) {
+        auto w = magmaan::estimate::gmm::normal_theory_weight(*ev, samp, *x0);
+        REQUIRE(w.has_value());
+        weight = *w;
+      } else if (kind == 2) {
+        weight = {2.0 * Eigen::MatrixXd::Identity(10, 10)};
+      }
+      auto fit = kind == 1
+          ? magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
+                                            Backend::NloptLbfgs, snlls_opts())
+          : magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, weight,
+                                        Backend::NloptLbfgs, snlls_opts());
+      REQUIRE(fit.has_value());
+      auto base = magmaan::estimate::gmm::residuals(*ev, samp, *x0, weight);
+      REQUIRE(base.has_value());
+      auto e = base->eval(fit->theta);
+      REQUIRE(e.has_value());
+      const Eigen::VectorXd gradient = e->jacobian.transpose() * e->residual;
+      const auto& audit = fit->diagnostics.geometric_stationarity;
+      CHECK(audit.checked);
+      CHECK(audit.gradient_finite);
+      CHECK(audit.ambient_stationary);
+      CHECK(audit.raw_gradient_inf == doctest::Approx(
+          gradient.cwiseAbs().maxCoeff()).scale(1.0).epsilon(1e-12));
+      CHECK(fit->fmin == doctest::Approx(0.5 * e->residual.squaredNorm())
+                            .scale(1.0).epsilon(1e-12));
+    }
+  }
+}
+
+TEST_CASE("SNLLS: inner solve agrees with SVD across scales and ranks") {
+  const auto h = handles_for("x1 ~~ x1\nx2 ~~ x2");
+  REQUIRE(h.pt.n_free() == 2);
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  for (double scale : {1e-8, 1.0, 1e8}) {
+    for (double delta : {1.0, 1e-5, 0.0}) {
+      CAPTURE(scale);
+      CAPTURE(delta);
+      Eigen::MatrixXd H(6, 2);
+      H << 1, 1, 1, 1 + delta, -1, -1, 0, delta, .5, .5, 0, 0;
+      H *= scale;
+      Eigen::VectorXd y(6);
+      y << 1, -2, .3, .7, -.1, 1;
+      y *= scale;
+      magmaan::optim::GmmProblem base;
+      base.n_param = 2;
+      base.n_resid = 6;
+      base.r = [H, y](const Eigen::VectorXd& theta)
+          -> magmaan::fit_expected<Eigen::VectorXd> { return H * theta - y; };
+      base.J = [H](const Eigen::VectorXd&)
+          -> magmaan::fit_expected<Eigen::MatrixXd> { return H; };
+      auto profile = magmaan::estimate::gmm::gp(
+          base, h.pt, *ev, Eigen::VectorXd::Zero(2));
+      REQUIRE(profile.has_value());
+      CHECK(profile->problem.n_param == 0);
+      auto r = profile->problem.r(Eigen::VectorXd(0));
+      REQUIRE(r.has_value());
+      const Eigen::VectorXd theta = profile->problem.expand(Eigen::VectorXd(0));
+      const Eigen::VectorXd reference = H.jacobiSvd(
+          Eigen::ComputeThinU | Eigen::ComputeThinV).solve(y);
+      CHECK((H * theta - H * reference).norm() / scale < 1e-8);
+      CHECK(r->norm() / scale == doctest::Approx((H * reference - y).norm() / scale)
+                                  .epsilon(1e-8));
+      CHECK(*profile->n_alpha_solve_fast == (delta == 1.0 ? 1 : 0));
+      CHECK(*profile->n_alpha_solve_fallback == (delta == 1.0 ? 0 : 1));
+    }
+  }
+}
+
+TEST_CASE("SNLLS: Kaufman Jacobian preserves the gradient but differs from the residual derivative") {
+  const auto h = handles_for("f =~ 1*x1 + b*x2\nf ~~ 1*f\nx1 ~~ 0*x1\nx2 ~~ a*x2");
+  REQUIRE(h.pt.n_free() == 2);
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  const auto locs = ev->param_locations();
+  const int b = locs[0].mat == magmaan::model::MatId::Lambda ? 0 : 1;
+  const int a = 1 - b;
+  magmaan::optim::GmmProblem base;
+  base.n_param = 2;
+  base.n_resid = 2;
+  base.r = [a, b](const Eigen::VectorXd& theta)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    return Eigen::Vector2d(theta(a) - 1.0, theta(a) * theta(b));
+  };
+  base.J = [a, b](const Eigen::VectorXd& theta)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    Eigen::MatrixXd J = Eigen::MatrixXd::Zero(2, 2);
+    J(0, a) = 1; J(1, a) = theta(b); J(1, b) = theta(a);
+    return J;
+  };
+  auto profile = magmaan::estimate::gmm::gp(base, h.pt, *ev, Eigen::VectorXd::Ones(2));
+  REQUIRE(profile.has_value());
+  auto e = profile->problem.eval(Eigen::VectorXd::Ones(1));
+  REQUIRE(e.has_value());
+  const double eps = 1e-6;
+  auto rp = profile->problem.r(Eigen::VectorXd::Constant(1, 1 + eps));
+  auto rm = profile->problem.r(Eigen::VectorXd::Constant(1, 1 - eps));
+  REQUIRE(rp.has_value());
+  REQUIRE(rm.has_value());
+  const Eigen::VectorXd fd = (*rp - *rm) / (2 * eps);
+  CHECK((fd - e->jacobian.col(0)).norm() > 0.3);
+  CHECK(e->jacobian.col(0).dot(e->residual) == doctest::Approx(0.25));
+  CHECK(e->jacobian.col(0).dot(e->residual) == doctest::Approx(fd.dot(e->residual)));
 }

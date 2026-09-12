@@ -2,8 +2,8 @@
 
 **Status:** implemented. This is the rationale for shipped behavior, not a
 proposal; the gate lives at `src/estimate/gmm/gp.cpp` and is guarded by
-`tests/unit/snlls_test.cpp`. Kept because the threshold derivation below is the
-"why this constant" that the code comments defer to.
+`tests/unit/snlls_test.cpp`. The threshold is an empirical screen, supplemented by a direct inner
+normal-residual check; neither guarantees a bound on forward error.
 
 ## Motivation
 
@@ -26,79 +26,82 @@ J. QR is the safe default — it handles arbitrary rank and ill-
 conditioning — but pays a constant factor that the closed-form-friendly
 regime can't absorb.
 
-Cholesky on the normal-equations Gram `A = JᵀJ` is roughly 2× cheaper
-than QR for n ≫ p but loses guarantees as `A` becomes ill-conditioned:
-Higham (*Accuracy and Stability of Numerical Algorithms*, 2nd ed.,
-Thm 20.4) bounds the relative error of the Cholesky-NE solution by
-`O(u · κ₂(J)²)` vs QR's `O(u · κ₂(J))`. For a well-conditioned `A`
-the loss is < 1 digit and the speedup compounds — once per outer
-optimizer iteration of every SNLLS fit, not only at 100% profile share.
-
-A gated fast path gives the speedup where it's safe and falls back to
-the existing QR otherwise.
+Cholesky on the normal-equations Gram `A = JᵀJ` can reduce factorization
+cost on well-conditioned designs. Forming the Gram squares the 2-norm
+condition number. General least-squares forward error also depends on
+residual geometry, so there is no unconditional digits-lost comparison with
+QR. The fast path is screened empirically and checked against the original
+inner design; rank-revealing QR remains the fallback.
 
 ## Algorithm
 
 In `profile_at()`:
 
-1. Form `A = JᵀJ` and rhs `b = Jᵀ·(−r₀)`.
-2. Attempt `Eigen::LLT<MatrixXd>` factorization of `A`. PD failure →
-   fallback to QR.
-3. If LLT succeeded, estimate `rcond(A)` via `rcond_pocon_sym` (file-
-   local helper, Hager 1-norm estimator on the existing factor).
-4. If `rcond(A) > kFastSolveThreshold` (= `1e-7`), solve via the LLT
-   factor — both for α̂ and for the β-gauge back-solve. Set
-   `ProfilePoint::used_fast_solve = true`.
-5. Otherwise construct `ColPivHouseholderQR<MatrixXd>(J)` and use it
-   for both solves (today's path).
+1. Form `A = JᵀJ`, factor it with LLT, and estimate its reciprocal 1-norm
+   condition number with `rcond_pocon_sym`.
+2. If LLT succeeds and the estimate exceeds `fast_solve_threshold = 1e-7`,
+   compute a candidate alpha with the factor.
+3. Recompute `r = r0 + J alpha` and `Jᵀ r` using the original design. Accept
+   the candidate only if it is finite and
+   `||Jᵀ r||₂ <= 64 epsilon max(rows(J), cols(J)) ||J||F
+   (||r0||₂ + ||J||F ||alpha||₂)`, with finite scale and residual norm.
+4. If either screen fails, solve with column-pivoted Householder QR of J.
+   Return an error if the resulting parameters or residual are non-finite.
+5. Reuse the accepted alpha factorization for the nonlinear-column projection.
+   The fast/fallback counter records the accepted solve, not the LLT attempt.
 
-Both consumers (α̂ at `gp.cpp:227-228` and the gauge term at the
-following block) **must** see the same inverse, so the dispatch
-branches a single `bool used_fast` decision through both.
+The normal-residual test is a scale-aware stationarity check. It is not a
+forward-error bound and cannot certify a unique alpha at deficient rank.
+QR may choose a different representative from SVD there; the invariant
+comparison is the fitted residual. Rank changes can also break smoothness
+of the profiled objective.
 
-## Threshold derivation
+## Threshold rationale and correction
 
-Higham Thm 20.4: the relative error of Cholesky-on-NE is bounded by
-`c(n,p) · u · κ₂(A)` where `A = JᵀJ` and `u` is unit roundoff. QR's
-bound is `c(n,p) · u · κ₂(J) = c(n,p) · u · √κ₂(A)`. Cholesky loses
-one digit relative to QR when
+The `1e-7` threshold is retained as an empirical condition screen; it is not
+a proved accuracy guarantee. The previous note's claimed derivation of a
+one-digit-loss threshold was invalid: `u*kappa(A) = u*sqrt(kappa(A))` gives
+`kappa(A)=1`, not `1/sqrt(u)`. Nor do the general LS forward-error bounds
+reduce to those two expressions without additional conditions. For IEEE
+binary64 round-to-nearest, machine epsilon is `2^-52` and unit roundoff is
+`2^-53`; they must not be interchanged.
 
-```
-u · κ₂(A) ≈ u · √κ₂(A)   ⟺   κ₂(A) ≈ 1/√u   ⟺   rcond(A) ≈ √u
-```
-
-For double precision `u = 2⁻⁵² ≈ 2.22·10⁻¹⁶` and `√u ≈ 1.49·10⁻⁸`.
-The gate at `1e-7` keeps us strictly above this "loses ≤ 1 digit"
-floor and adds ~6× headroom to absorb:
-
-- Hager's optimistic bias (his iterate is a *lower* bound on
-  `‖A⁻¹‖₁`, so `rcond_pocon_sym` is an *upper* bound on the true
-  rcond — it can pass when truth is worse).
-- Any residual amplification from forming the explicit product `JᵀJ`.
-
-The gate is a `constexpr`, not a runtime tunable. v1 ships one
-defensive value; revisit only if downstream evidence warrants.
+The reciprocal-condition estimator may be optimistic. No universal factor
+of six bounds that optimism, and the old headroom argument did not prove
+otherwise. The direct normal-residual screen complements the condition
+estimate without turning either into a forward-error guarantee. Tests
+compare against SVD on well-conditioned, nearly dependent, exactly dependent,
+and globally rescaled designs. These cover a finite regression grid, not
+all possible SEM designs or conditioning regimes.
 
 ## `rcond_pocon_sym` (Hager 1-norm estimator)
 
-LAPACK `?POCON`-style 1-norm rcond, specialized for a symmetric-PD
-matrix whose Cholesky factor is already in hand. See Higham §15.2,
-Algorithm 15.4.
+The helper estimates `1/(||A||₁ ||A^-1||₁)` using the existing symmetric-PD
+factor. Its five-iteration limit permits ten LLT solves plus one alternating
+ramp polishing solve: at most eleven LLT solves, or twenty-two triangular
+solves. Its cost is O(a²) for a alpha coordinates, versus O(m a²) to form
+JᵀJ for m residuals. Non-finite/zero-norm results return zero and select QR.
+The norm estimate has an optimistic reciprocal-condition bias in exact
+arithmetic; finite precision gives no certified enclosure.
 
-- Cost: at most 6 triangular back-solves on the existing factor =
-  `O(p²)`. Negligible against the `O(n·p²)` already spent forming
-  `A = JᵀJ`.
-- Returns 0.0 on any numeric pathology (non-finite intermediate,
-  zero norm), forcing the caller to fall back.
-- For symmetric `A`, `A⁻ᵀ = A⁻¹`, so one Cholesky factor covers both
-  back-solves Hager's algorithm needs.
+## Derivative contract
 
-**Conservative-bias note.** Hager's iterate is a lower bound on
-`‖A⁻¹‖₁`. So `rcond_pocon_sym = 1/(‖A‖₁·γ̂)` upper-bounds the true
-`1/(‖A‖₁·‖A⁻¹‖₁)`. In the gate `rcond_pocon_sym > 1e-7` this means
-we can pass *and* be wrong — but only by the polishing-step's
-typical 2-5× underestimation, which the 6× headroom above `√u`
-absorbs.
+The GP residual callbacks provide Kaufman's projected Jacobian
+`(I-P_J) J_beta`, evaluated at the profiled parameters. At locally fixed
+full column rank, the exact residual derivative also contains columns
+`-J (JᵀJ)^-1 (dJ/dbeta_j)ᵀ r`. These lie in the range of J and are
+orthogonal to r when the inner solve is accurate, so the scalar gradient
+is exact while the residual Jacobian is approximate. PORT-NLS and Ceres
+therefore receive approximate Gauss–Newton curvature. The public GP header
+states this contract; the tests separately check the scalar gradient and a
+nonzero-residual case where the residual derivative differs.
+
+Ordinary `fit_snlls` and `fit_snlls_gls` also recompute the original
+full-model LS gradient for `diagnostics.geometric_stationarity`, including
+eliminated alpha coordinates and covariance-cone diagnostics. This additive
+audit does not replace the optimizer's driven-coordinate `audit` or change
+its convergence flag. A bound-constrained inner solve is not implemented;
+the continuous R SNLLS primitives reject supplied bounds.
 
 ## Telemetry
 
@@ -115,14 +118,15 @@ existing `n_nonlinear` / `n_linear` convention. The R wrapper at
 
 Increment semantics (in the `gp_impl` closure):
 
-- `(fast, fallback) = (0, 0)` *and* SNLLS path taken → every α-solve
-  was a closed-form short-circuit (`n_alpha == 0`). No actual solve
-  happened — neither counter bumped.
+- `(fast, fallback) = (0, 0)` means no successful profile evaluation has
+  been counted yet. The public GP classifier requires a nonempty alpha block.
+  An all-linear model has zero beta coordinates, but still performs and
+  counts its inner solve.
 - `fast > 0 ∧ fallback == 0` → every cache miss took the fast path.
-- `fast > 0 ∧ fallback > 0` → mixed; the optimizer visited at least
-  one β where the Gram was near-singular.
-- `fast == 0 ∧ fallback > 0` → every cache miss fell back. The model
-  is structurally ill-conditioned in α.
+- `fast > 0 ∧ fallback > 0` → mixed; at least one candidate failed
+  the condition or direct normal-residual screen.
+- `fast == 0 ∧ fallback > 0` → every cache miss used QR. This
+  alone does not establish structural ill-conditioning.
 
 Cache hits do not bump the counters — they re-use a previously
 computed `ProfilePoint`.
@@ -159,9 +163,9 @@ Doctests in `tests/unit/snlls_test.cpp`:
 - Full-θ paths (`fit_ml`) → counters stay at sentinel `-1`.
 
 ```sh
-just test-area estimate snlls
-just test-fast
-just test-dev  # ASan + UBSan
+just test-area estimate '*SNLLS*'
+cmake --build --preset opt --target magmaan_test_estimate
+build/opt/tests/magmaan_test_estimate --test-case='*SNLLS*'
 ```
 
 For paper-side smoke (optional):

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -185,22 +186,20 @@ struct ProfilePoint {
 };
 
 // Gate on `rcond(HᵀH)` for the fast Cholesky-on-normal-equations α-solve
-// in `profile_at`. Higham (Accuracy and Stability of Numerical Algorithms,
-// 2nd ed., Thm 20.4) bounds the Cholesky-NE residual relative error at
-// `O(u · κ(HᵀH))`; the loss vs the rank-revealing QR is ≤ 1 digit when
-// `rcond(HᵀH) > √u ≈ 1.49e-8` in double. The 1e-7 gate adds ~6× headroom
-// for Hager's optimistic-bias rcond estimator and any extra amplification
-// from the residual product. See `docs/design/snlls-fast-alpha-solve.md`.
-constexpr double kFastSolveThreshold = 1e-7;
+// in `profile_at`. This is an empirical screen, not a bound on digits lost
+// versus QR: normal equations square the condition number and the estimate
+// below can be optimistic. A direct inner normal-residual check supplements
+// the screen. See `docs/design/snlls-fast-alpha-solve.md`.
+constexpr double fast_solve_threshold = 1e-7;
 
 // Hager 1-norm reciprocal-condition-number estimator
 // (Higham §15.2 / LAPACK ?POCON), specialized for a symmetric-PD matrix
-// whose Cholesky factor is already in hand. Returns 1 / (‖A‖₁·‖A⁻¹‖₁),
-// which is an *upper* bound on the true rcond (Hager's iterate is a
+// whose Cholesky factor is already in hand. Estimates 1 / (‖A‖₁·‖A⁻¹‖₁),
+// with an optimistic bias in exact arithmetic (Hager's iterate is a
 // lower bound on ‖A⁻¹‖₁). Returns 0.0 on any numeric pathology — that
 // forces the caller to fall back to the rank-revealing path.
 //
-// Cost: at most 6 triangular back-solves through the supplied factor,
+// Cost: at most 11 LLT solves (22 triangular solves), including polishing,
 // O(p²) total — negligible against the O(n·p²) already spent forming
 // `A = HᵀH`.
 double rcond_pocon_sym(const Eigen::LLT<Eigen::MatrixXd>& llt,
@@ -248,6 +247,23 @@ double rcond_pocon_sym(const Eigen::LLT<Eigen::MatrixXd>& llt,
   return 1.0 / (norm_A * gamma);
 }
 
+// Check stationarity against the original design, not the rounded Gram.
+// This is a scaled normal-residual check, not a forward-error guarantee.
+bool inner_solve_acceptable(const Eigen::MatrixXd& H,
+                            const Eigen::VectorXd& r0,
+                            const Eigen::VectorXd& alpha) {
+  if (!alpha.allFinite()) return false;
+  const Eigen::VectorXd r = r0 + H * alpha;
+  if (!r.allFinite()) return false;
+  const double normal_residual = (H.transpose() * r).norm();
+  const double hnorm = H.norm();
+  const double scale = hnorm * (r0.norm() + hnorm * alpha.norm());
+  if (!std::isfinite(scale) || !std::isfinite(normal_residual)) return false;
+  const double tol = 64.0 * std::numeric_limits<double>::epsilon() *
+                     static_cast<double>(std::max(H.rows(), H.cols()));
+  return normal_residual <= tol * scale;
+}
+
 // Solve the inner linear least-squares for α̂ at a given β.
 fit_expected<ProfilePoint>
 profile_at(const optim::GmmProblem& base, const Classification& cls,
@@ -287,26 +303,31 @@ profile_at(const optim::GmmProblem& base, const Classification& cls,
 
   // Two-path α-solve. Try Cholesky-on-normal-equations first; fall back
   // to rank-revealing QR if the Gram is not numerically PD or if the
-  // estimated rcond drops below `kFastSolveThreshold`. Whichever path
+  // estimated rcond drops below `fast_solve_threshold`, or the candidate
+  // fails the direct normal-residual check. Whichever path
   // wins is reused for the β-gauge back-solve below so both consumers
   // see the same inverse.
   const Eigen::MatrixXd HtH = out.H.transpose() * out.H;
   Eigen::LLT<Eigen::MatrixXd> llt(HtH);
   Eigen::ColPivHouseholderQR<Eigen::MatrixXd> H_qr;
   bool used_fast = false;
+  Eigen::VectorXd alpha_hat;
   if (llt.info() == Eigen::Success &&
-      rcond_pocon_sym(llt, HtH) > kFastSolveThreshold) {
-    used_fast = true;
+      rcond_pocon_sym(llt, HtH) > fast_solve_threshold) {
+    alpha_hat = llt.solve(out.H.transpose() * (-r0));
+    used_fast = inner_solve_acceptable(out.H, r0, alpha_hat);
   }
   if (!used_fast) {
     H_qr.compute(out.H);
+    alpha_hat = H_qr.solve(-r0);
   }
 
-  const Eigen::VectorXd alpha_hat = used_fast
-      ? Eigen::VectorXd(llt.solve(out.H.transpose() * (-r0)))
-      : Eigen::VectorXd(H_qr.solve(-r0));
   out.residual = r0 + out.H * alpha_hat;
   out.theta    = theta_base + cls.K_alpha * alpha_hat;
+  if (!out.residual.allFinite() || !out.theta.allFinite()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "SNLLS profile: inner solve returned non-finite values"));
+  }
   out.used_fast_solve = used_fast;
 
   // The outer (β) Jacobian must be taken at the *profiled* point θ̂(β):
@@ -315,6 +336,10 @@ profile_at(const optim::GmmProblem& base, const Classification& cls,
   auto Jr = base.J(out.theta);
   if (!Jr.has_value()) return std::unexpected(Jr.error());
   out.jacobian = *Jr * cls.K_beta;
+  // Kaufman's approximate residual Jacobian. The omitted derivative term
+  // lies in range(H) and is orthogonal to the profiled residual when the
+  // inner solve is accurate, so J' r is the exact scalar gradient locally
+  // at fixed rank. PORT-NLS/Ceres use approximate Gauss–Newton curvature.
   if (out.jacobian.cols() > 0) {
     const Eigen::MatrixXd coeff = used_fast
         ? Eigen::MatrixXd(llt.solve(out.H.transpose() * out.jacobian))

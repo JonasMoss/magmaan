@@ -2828,8 +2828,8 @@ work lives in [`speculative.md`](speculative.md). Open work:
   norm for ML, fixed/fitted-weight GMM/LS, FIML, ML2S Stage 2,
   ordinal/mixed ordinal, CatML,
   and their PSD variants. It is additive and leaves the driven/lavaan-compatible
-  `fit$audit` untouched. Remaining: give `fit_snlls` / `fit_snlls_gls` a
-  full-`theta` gradient that includes the eliminated alpha block, include
+  `fit$audit` untouched. Continuous `fit_snlls` / `fit_snlls_gls` now rebuild the full-`theta` LS
+  gradient, including eliminated alpha coordinates. Remaining: include
   normals from `ExtraNonlinearEqConstraints`, and decide whether residual-only
   specialized paths should rebuild a scalar terminal objective. Record profile
   rank/conditioning and fallback diagnostics alongside both verdicts. Do not
@@ -2839,18 +2839,15 @@ work lives in [`speculative.md`](speculative.md). Open work:
   trust-region, Ceres dense BFGS, and SNLLS only on semantically appropriate
   cases; include shallow or Heywood-prone LS cases so bounds and conditioning stay
   visible.
-- **S/M.** Harden SNLLS contracts before a collaborator benchmark freeze.
-  The continuous R `fit_{uls,gls,wls}_snlls_impl` primitives currently accept
-  and discard `bounds`; reject supplied bounds until the profile supports
-  them. Correct the fast-alpha note/source claim that the `1e-7` estimated
-  rcond gate guarantees at most one digit lost versus QR; the displayed
-  derivation is invalid and the estimator can be optimistic. Validate the
-  heuristic against scaled/rank-stress QR/SVD references and an inner residual
-  check. Explicitly document the Kaufman residual-Jacobian approximation:
-  the scalar gradient is exact under regular, accurately solved profiling,
-  but PORT-NLS/Ceres do not receive the full profiled residual derivative.
-  Evaluate an exact derivative there and a cheaper scalar-only gradient as
-  separate experiments. Details and the bounded publication/handoff proposal:
+- **S/M.** SNLLS follow-up experiments after the contract repairs. The R
+  bounds rejection, full-coordinate common audit, corrected conditioning
+  rationale, direct inner normal-residual screen, and explicit Kaufman
+  Jacobian contract are implemented and regression-gated. Still evaluate an
+  exact residual derivative for PORT-NLS/Ceres and a cheaper scalar-only
+  gradient as separate performance experiments; neither is a prerequisite
+  correctness repair for the documented approximation. Condition/rank
+  telemetry and broader corpus calibration remain useful before freezing
+  new speed claims. Details and the bounded publication/handoff proposal:
   [SNLLS handoff review](../research/snlls-handoff-review.md).
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real cases
