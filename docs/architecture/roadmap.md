@@ -154,7 +154,12 @@ GP's residual callbacks explicitly supply Kaufman's approximate Jacobian:
 its scalar gradient is exact locally at fixed rank with an accurate inner
 solve, while PORT-NLS/Ceres use approximate Gauss–Newton curvature. Focused
 gates compare scaled/full-rank/near-dependent/rank-deficient profiles with
-SVD and compare the final common audit with the original LS gradient.
+SVD and compare the final common audit with the original LS gradient. The
+shared GP classifier rejects nonlinear equality constraints for every caller.
+All-ordinal SNLLS explicitly rejects released-scale delta models: fitted
+response standardization breaks the affine covariance/threshold assumptions
+of the existing delta profile. This boundary does not affect ordinary delta
+or supported theta fits.
 
 All-ordinal theta SNLLS specializes independently free, unbounded thresholds
 when the model has no active equality constraints. It optimizes correlation

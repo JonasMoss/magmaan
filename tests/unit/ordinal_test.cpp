@@ -1887,6 +1887,37 @@ constexpr const char* k2GroupOrdinalCfa =
 // groups deliberately have different sample sizes so a missing n_b/N weight
 // in the joint normal equations would break parity with the legacy
 // unprofiled fit.
+TEST_CASE("Ordinal SNLLS rejects released-scale delta before profiling") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260610, 400, {0.85, 0.78, 0.71, 0.66}, -0.45, 0.55);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X, X});
+  REQUIRE(stats.has_value());
+  magmaan::spec::BuildOptions options;
+  options.n_groups = 2;
+  auto parsed = magmaan::parse::Parser::parse(k2GroupOrdinalCfa);
+  REQUIRE(parsed.has_value());
+  auto pt = magmaan::spec::build(*parsed, options);
+  REQUIRE(pt.has_value());
+  pt->group_equal = {magmaan::spec::GroupEqual::Thresholds};
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+  auto start = magmaan::estimate::ordinal_start_values(*pt, *rep, moments, {});
+  REQUIRE(start.has_value());
+  const auto plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::ULS,
+      magmaan::data::OrdinalMomentParameterization::Delta);
+  auto profiled = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *rep, moments, nullptr, plan, *start);
+  auto full = magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+      *pt, *rep, moments, nullptr, plan, *start);
+  REQUIRE_FALSE(profiled.has_value());
+  REQUIRE_FALSE(full.has_value());
+  CHECK(profiled.error().detail.find("released-scale delta") != std::string::npos);
+  CHECK(full.error().detail.find("released-scale delta") != std::string::npos);
+}
+
 TEST_CASE("Joint threshold profiling handles two-group ordinal fits") {
   const Eigen::MatrixXd X1 =
       ordinal_test_block(20260610, 700, {0.85, 0.78, 0.71, 0.66}, -0.45, 0.55);

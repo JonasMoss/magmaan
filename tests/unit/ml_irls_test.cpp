@@ -77,6 +77,8 @@ TEST_CASE("IRLS-ML cross-check: matches NLopt L-BFGS on a 1F CFA fit") {
   // The audit should certify the IRLS terminal iterate as stationary at the
   // lavaan-default `optim.dx.tol = 1e-3` threshold (Absolute mode default).
   CHECK(est_irls->audit.stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est_irls).status ==
+        magmaan::estimate::FitCheck::Passed);
 }
 
 TEST_CASE("IRLS-ML cross-check: matches NLopt L-BFGS with a mean structure") {
@@ -144,6 +146,8 @@ TEST_CASE("IRLS-ML-SNLLS cross-check: matches NLopt L-BFGS on a 1F CFA fit") {
         doctest::Approx(est_lbfgs->fmin).epsilon(1e-5));
   CHECK((est_irls->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
   CHECK(est_irls->audit.stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est_irls).status ==
+        magmaan::estimate::FitCheck::Passed);
   // SNLLS telemetry must surface — n_nonlinear / n_linear from the last
   // inner GP solve.
   CHECK(est_irls->n_nonlinear >= 0);
@@ -216,6 +220,8 @@ TEST_CASE("IRLS-ML mean structure: latent mean coupling matches NLopt L-BFGS") {
         doctest::Approx(est_lbfgs->fmin).epsilon(1e-5));
   CHECK((est_irls->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
   CHECK(est_irls->audit.stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est_irls).status ==
+        magmaan::estimate::FitCheck::Passed);
 }
 
 TEST_CASE("IRLS-ML-SNLLS == IRLS-ML at the optimum (separability cross-check)") {
@@ -320,6 +326,8 @@ TEST_CASE("Fisher-ML reaches the direct ML optimum on the Ernst n=25 replicate")
   CHECK((est_fisher_snlls->theta - est_ref->theta).cwiseAbs().maxCoeff() <
         1e-2);
   CHECK(est_fisher_snlls->audit.stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est_fisher_snlls).status ==
+        magmaan::estimate::FitCheck::Passed);
   CHECK(est_fisher_snlls->n_nonlinear >= 0);
   CHECK(est_fisher_snlls->n_linear > 0);
   CHECK(est_fisher_snlls->n_nonlinear + est_fisher_snlls->n_linear ==
@@ -353,6 +361,8 @@ TEST_CASE("IRLS-ML honors shared-label equality constraints") {
   CHECK((est_irls->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
   CHECK(est_irls->diagnostics.lin_eq_satisfied);
   CHECK(est_irls->audit.stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est_irls).status ==
+        magmaan::estimate::FitCheck::Passed);
 }
 
 TEST_CASE("IRLS-ML-SNLLS rejects box bounds explicitly") {
@@ -404,6 +414,8 @@ TEST_CASE("IRLS-ML reports converged when a zero-budget start is stationary") {
 
   CHECK(est_irls->optimizer_status == OptimStatus::Converged);
   CHECK(est_irls->audit.stationary);
+  CHECK(magmaan::estimate::fit_verdict(*est_irls).status ==
+        magmaan::estimate::FitCheck::Passed);
   CHECK(est_irls->iterations == 0);
 }
 

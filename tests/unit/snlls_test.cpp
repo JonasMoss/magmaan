@@ -672,3 +672,22 @@ TEST_CASE("SNLLS: Kaufman Jacobian preserves the gradient but differs from the r
   CHECK(e->jacobian.col(0).dot(e->residual) == doctest::Approx(0.25));
   CHECK(e->jacobian.col(0).dot(e->residual) == doctest::Approx(fd.dot(e->residual)));
 }
+
+TEST_CASE("SNLLS: shared GP engine rejects nonlinear equality constraints") {
+  const auto h = handles_for("f =~ x1 + b*x2 + x3\nx1 ~~ a*x1\na == b*b");
+  REQUIRE_FALSE(h.pt.nl_constraints.empty());
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  const Eigen::VectorXd start = Eigen::VectorXd::Ones(h.pt.n_free());
+  CHECK_FALSE(magmaan::estimate::gmm::gp_compatible(h.pt, *ev, start));
+  magmaan::optim::GmmProblem base;
+  auto generic = magmaan::estimate::gmm::gp(base, h.pt, *ev, start);
+  REQUIRE_FALSE(generic.has_value());
+  CHECK(generic.error().detail.find("nonlinear equality") != std::string::npos);
+  const std::vector<magmaan::estimate::gmm::GpBlockKind> kinds(
+      static_cast<std::size_t>(h.pt.n_free()),
+      magmaan::estimate::gmm::GpBlockKind::Linear);
+  auto overridden = magmaan::estimate::gmm::gp(base, h.pt, *ev, start, kinds);
+  REQUIRE_FALSE(overridden.has_value());
+  CHECK(overridden.error().detail.find("nonlinear equality") != std::string::npos);
+}

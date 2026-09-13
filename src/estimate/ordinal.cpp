@@ -1221,6 +1221,19 @@ Bounds profile_bounds(const ThresholdDesign& profile, const Bounds& bounds) {
   return out;
 }
 
+fit_expected<void> validate_ordinal_snlls_chart(
+    const ThresholdLayout& layout, OrdinalParameterization parameterization) {
+  if (parameterization == OrdinalParameterization::Delta) {
+    for (const auto& block : layout.scale_free) {
+      if (std::any_of(block.begin(), block.end(), [](char v) { return v != 0; }))
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "SNLLS compatibility: released-scale delta requires a nonlinear "
+            "moment map; use a full-moment ordinal fit"));
+    }
+  }
+  return {};
+}
+
 fit_expected<std::vector<gmm::GpBlockKind>>
 ordinal_gp_block_kinds(const spec::LatentStructure& pt,
                        const ThresholdLayout& layout,
@@ -11340,6 +11353,8 @@ fit_ordinal_snlls(spec::LatentStructure pt,
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(layout_or.error());
   const ThresholdLayout& layout = *layout_or;
+  if (auto valid = validate_ordinal_snlls_chart(layout, parameterization);
+      !valid.has_value()) return std::unexpected(valid.error());
 
   if (x0.size() != pt.n_free()) {
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
@@ -11505,6 +11520,8 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(layout_or.error());
   const ThresholdLayout& layout = *layout_or;
+  if (auto valid = validate_ordinal_snlls_chart(layout, parameterization);
+      !valid.has_value()) return std::unexpected(valid.error());
 
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) {

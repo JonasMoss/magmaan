@@ -2857,6 +2857,14 @@ work lives in [`speculative.md`](speculative.md). Open work:
   Do not overwrite the frozen `c54cfc5f` bundle or reinterpret its timings as
   measurements of the new finalization work. Its findings remain in
   `benchmarks/snlls-handoff/FINDINGS.md`.
+- **S/M.** SNLLS audit follow-up: released-scale delta is now explicitly
+  rejected by both all-ordinal SNLLS entry points, and the shared GP classifier
+  rejects nonlinear equalities for every caller. New support needs a nonlinear
+  standardized-moment profile, plus an audit of the adjacent cache-aware
+  bounded delta path; the full-moment objective alone does not establish
+  profiled-path support. Performance follow-ups include mixed theta threshold
+  elimination, Fisher Schur factor reuse, and clearer ordinal/IRLS inner-solve
+  telemetry. See `benchmarks/snlls-current/IMPLEMENTATION-AUDIT.md`.
 - **S/M.** Broaden theta threshold-profile eligibility only when needed.
   The independently free, unbounded-threshold/no-active-equality fast path is
   implemented, with ULS/DWLS direct reconstruction, a cached WLS QR Schur

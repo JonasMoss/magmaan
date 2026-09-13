@@ -83,6 +83,10 @@ fit_expected<Classification>
 classify(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
          const Eigen::VectorXd& theta_start,
          const std::vector<GpBlockKind>* override_kinds = nullptr) {
+  if (!pt.nl_constraints.empty()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "SNLLS compatibility: nonlinear equality constraints are not supported"));
+  }
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(fit_err(
