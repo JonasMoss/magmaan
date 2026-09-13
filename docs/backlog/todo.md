@@ -2849,14 +2849,14 @@ work lives in [`speculative.md`](speculative.md). Open work:
   telemetry and broader corpus calibration remain useful before freezing
   new speed claims. Details and the bounded publication/handoff proposal:
   [SNLLS handoff review](../research/snlls-handoff-review.md).
-- **S/M.** Rerun the SNLLS comparisons on a new frozen revision after the
-  common-verdict rollout. The all-linear objective check is now explicit at
-  full-model finalization, and profiled ordinal fits now perform the original-
-  objective/full-coordinate audit. Export the common verdict and residuals in
-  all benchmark rows and remove L1/backend gates from new comparison screens.
-  Do not overwrite the frozen `c54cfc5f` bundle or reinterpret its timings as
-  measurements of the new finalization work. Its findings remain in
-  `benchmarks/snlls-handoff/FINDINGS.md`.
+- **S/M.** Extend the frozen common-verdict SNLLS handoff to the larger paper
+  grids. `benchmarks/snlls-handoff-current` pins core `6e7bdb38`, including
+  theta specialization and input guards, with fresh clean-source diagnostic
+  comparisons and a manuscript evidence inventory. Full paper grids still need
+  a rerun with balanced timing order and the common verdict; reconcile the
+  continuous corpus's 280-versus-289 model counts and the Ernst replication
+  provenance before carrying over manuscript headlines. Preserve the earlier
+  frozen `c54cfc5f` bundle as its own historical snapshot.
 - **S/M.** SNLLS audit follow-up: released-scale delta is now explicitly
   rejected by both all-ordinal SNLLS entry points, and the shared GP classifier
   rejects nonlinear equalities for every caller. New support needs a nonlinear
