@@ -2857,6 +2857,16 @@ work lives in [`speculative.md`](speculative.md). Open work:
   Do not overwrite the frozen `c54cfc5f` bundle or reinterpret its timings as
   measurements of the new finalization work. Its findings remain in
   `benchmarks/snlls-handoff/FINDINGS.md`.
+- **M.** Specialize all-ordinal theta profiling for independently free
+  thresholds. The current generic full-threshold GP path retains all covariance
+  parameters as nonlinear and computes two full Jacobians plus dense threshold
+  solves/projections per new point. The 2026-09-13 investigation found no QR
+  fallbacks or numerical failure in the smoke grid. Use direct standardized
+  threshold reconstruction for ULS/DWLS and a cached Schur complement for WLS;
+  retain a generic fallback for ineligible constraints and the common full-model
+  audit. Gate reduced gradients, objective equivalence and reconstruction before
+  claiming a timing gain. See
+  `benchmarks/snlls-current/THETA-INVESTIGATION.md` for code and measured costs.
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real cases
   (especially a Geiser/Eid LST covariance input and a documented MTMM variant)
