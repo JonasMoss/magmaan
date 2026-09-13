@@ -313,12 +313,23 @@ lavaan.
 
 The threshold-profiled ordinal SNLLS path covers:
 
-- all-ordinal, delta parameterization (theta delegates to the full-threshold
-  path)
+- all-ordinal, delta parameterization
 - the full affine threshold design: free thresholds, fixed rows, equality
   merges within and across groups, and threshold-only linear constraints
 - ULS, DWLS, and WLS (profiled Schur-complement weight)
 - multi-group fits with joint `n_b/N`-weighted threshold normal equations
+
+Theta now has a separate fast path for independently free, unbounded
+thresholds with no active equality constraints. It eliminates standardized
+thresholds before optimization and reconstructs raw thresholds as
+`tau = mu + sqrt(diag(Sigma)) * z`. ULS/DWLS set `z` to observed thresholds;
+WLS caches the threshold map and a QR square root of the Schur-complement
+weight. All covariance parameters remain nonlinear because correlations use
+model-dependent standardization. The endpoint receives the original
+threshold-inclusive common audit. Fixed/shared thresholds and constrained
+models retain the generic full-threshold implementation. The explicit
+`fit_ordinal_snlls_full_thresholds()` entry point remains available as a
+reference for eligible models too.
 
 The nonlinear SNLLS block should operate on the profiled ordinal correlation
 objective after thresholds have been eliminated. Threshold estimates are then

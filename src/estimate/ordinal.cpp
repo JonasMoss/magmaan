@@ -44,6 +44,7 @@
 
 #include "detail_second_order.hpp"
 #include "detail_ordinal_psd.hpp"
+#include "detail_theta_threshold_profile.hpp"
 
 namespace magmaan::estimate {
 
@@ -11164,6 +11165,150 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   return est;
 }
 
+namespace {
+
+// Deliberately narrow eligibility: other charts and threshold constraints
+// retain the general GP implementation. Covariance parameters stay nonlinear.
+fit_expected<std::optional<Estimates>> fit_theta_free_thresholds(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const data::OrdinalMoments& moments, data::OrdinalGammaCache* cache,
+    data::OrdinalWeightPlan plan, const Eigen::VectorXd& x0,
+    Backend backend, OptimOptions opts) {
+  if (auto valid = validate_moments(moments, rep); !valid.has_value())
+    return std::unexpected(valid.error());
+  auto stats = stats_adapter(moments);
+  if (auto prep = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !prep.has_value()) return std::unexpected(prep.error());
+  if (x0.size() != pt.n_free())
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "theta threshold profile: start dimension mismatch"));
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  const auto& layout = *layout_or;
+  auto con = build_eq_constraints(pt);
+  if (!con.has_value()) return std::unexpected(make_err(FitError::Kind::NumericIssue, con.error().detail));
+  if (con->active() || build_nl_constraints(pt).active()) return std::nullopt;
+  auto bounds = bounds_from_partable(pt);
+  if (!bounds.has_value()) return std::unexpected(make_err(FitError::Kind::NumericIssue, bounds.error().detail));
+  std::vector<char> seen(static_cast<std::size_t>(pt.n_free()), 0);
+  Eigen::Index nth_total = 0;
+  for (const auto& block : layout.free) {
+    for (const auto fr : block) {
+      if (fr <= 0 || fr > pt.n_free()) return std::nullopt;
+      const auto k = static_cast<std::size_t>(fr - 1);
+      if (seen[k] || (!bounds->empty() &&
+          (std::isfinite(bounds->lower(fr - 1)) ||
+           std::isfinite(bounds->upper(fr - 1))))) return std::nullopt;
+      seen[k] = 1;
+      ++nth_total;
+    }
+  }
+  if (nth_total == 0) return std::nullopt;
+  auto fixed = fix_thresholds_for_snlls(pt, layout, stats, x0);
+  if (!fixed.has_value()) return std::unexpected(fixed.error());
+  auto ev = model::ModelEvaluator::build(fixed->pt, rep);
+  if (!ev.has_value()) return std::unexpected(make_err(
+      FitError::Kind::NumericIssue, ev.error().detail));
+  auto factors = full_weight_factors(moments, cache, plan);
+  if (!factors.has_value()) return std::unexpected(factors.error());
+  auto N = total_n_obs(moments);
+  if (!N.has_value()) return std::unexpected(N.error());
+  std::vector<detail::ThetaThresholdProfile> weights;
+  Eigen::Index nr = 0;
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    auto w = detail::theta_threshold_profile((*factors)[b],
+        moments.thresholds[b].size(),
+        plan.estimator != data::OrdinalEstimatorKind::WLS);
+    if (!w.has_value()) return std::unexpected(w.error());
+    w->factor *= std::sqrt(static_cast<double>(moments.n_obs[b]) /
+                           static_cast<double>(*N));
+    nr += w->factor.rows();
+    weights.push_back(std::move(*w));
+  }
+  auto evaluate = [&](const Eigen::VectorXd& x, bool jacobian)
+      -> fit_expected<optim::LsEvaluation> {
+    auto e = ev->evaluate(x, jacobian, false);
+    if (!e.has_value()) return std::unexpected(make_err(
+        FitError::Kind::NonPositiveDefiniteSigma, e.error().detail));
+    optim::LsEvaluation out;
+    out.residual.resize(nr);
+    if (jacobian) out.jacobian.resize(nr, x.size());
+    Eigen::Index off = 0, sigma_off = 0;
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const auto& S = e->moments.sigma[b];
+      if (!S.diagonal().allFinite() || (S.diagonal().array() <= 0).any())
+        return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+            "theta threshold profile: nonpositive response variance"));
+      const auto nc = weights[b].factor.rows();
+      out.residual.segment(off, nc) = weights[b].factor *
+          (std_corr_lower(S) - corr_lower(moments.R[b]));
+      if (jacobian) out.jacobian.middleRows(off, nc) = weights[b].factor *
+          std_corr_jacobian(S, e->J_sigma, sigma_off);
+      sigma_off += vech_len(S.rows());
+      off += nc;
+    }
+    if (!out.residual.allFinite() || (jacobian && !out.jacobian.allFinite()))
+      return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+          "theta threshold profile: nonfinite residual or Jacobian"));
+    return out;
+  };
+  optim::GmmProblem prob;
+  prob.n_resid = nr;
+  prob.n_param = fixed->x0.size();
+  prob.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.eval = [&](const Eigen::VectorXd& x) { return evaluate(x, true); };
+  prob.r = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+    auto e = evaluate(x, false);
+    if (!e.has_value()) return std::unexpected(e.error());
+    return std::move(e->residual);
+  };
+  prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+    auto e = evaluate(x, true);
+    if (!e.has_value()) return std::unexpected(e.error());
+    return std::move(e->jacobian);
+  };
+  fit_expected<Estimates> est = Estimates{};
+  if (prob.n_param == 0) {
+    auto r = prob.r(fixed->x0);
+    if (!r.has_value()) return std::unexpected(r.error());
+    est->theta = fixed->x0;
+    est->fmin = 0.5 * r->squaredNorm();
+  } else {
+    est = solve_ordinal_ls(prob, fixed->x0, Bounds{}, EqConstraints{},
+        backend, opts, "theta threshold profile");
+  }
+  if (!est.has_value()) return std::unexpected(est.error());
+  auto e = ev->evaluate(est->theta, false, false);
+  if (!e.has_value()) return std::unexpected(make_err(
+      FitError::Kind::NumericIssue, e.error().detail));
+  auto full = expand_threshold_fixed_theta(*fixed, est->theta);
+  if (!full.has_value()) return std::unexpected(full.error());
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const auto& S = e->moments.sigma[b];
+    const Eigen::VectorXd z = moments.thresholds[b] -
+        weights[b].threshold_from_corr *
+        (std_corr_lower(S) - corr_lower(moments.R[b]));
+    for (Eigen::Index k = 0; k < z.size(); ++k) {
+      const auto ov = stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double mu = b < e->moments.mu.size() && e->moments.mu[b].size() > 0
+          ? e->moments.mu[b](ov) : 0.0;
+      (*full)(layout.free[b][static_cast<std::size_t>(k)] - 1) =
+          mu + std::sqrt(S(ov, ov)) * z(k);
+    }
+  }
+  est->theta = std::move(*full);
+  est->n_nonlinear = static_cast<std::int32_t>(fixed->x0.size());
+  est->n_linear = static_cast<std::int32_t>(nth_total);
+  auto ev_full = model::ModelEvaluator::build(pt, rep);
+  if (!ev_full.has_value()) return std::unexpected(make_err(
+      FitError::Kind::NumericIssue, ev_full.error().detail));
+  attach_reconstructed_ordinal_diagnostics(*est, pt, *ev_full, stats, layout,
+      *factors, Bounds{}, OrdinalParameterization::Theta);
+  return std::optional<Estimates>{std::move(*est)};
+}
+
+}  // namespace
+
 fit_expected<Estimates>
 fit_ordinal_snlls(spec::LatentStructure pt,
                   const model::MatrixRep& rep,
@@ -11176,6 +11321,10 @@ fit_ordinal_snlls(spec::LatentStructure pt,
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
   if (parameterization == OrdinalParameterization::Theta) {
+    auto fast = fit_theta_free_thresholds(pt, rep, moments, gamma_cache, plan,
+                                         x0, backend, opts);
+    if (!fast.has_value()) return std::unexpected(fast.error());
+    if (fast->has_value()) return std::move(**fast);
     return fit_ordinal_snlls_full_thresholds(
         std::move(pt), rep, moments, gamma_cache, plan, x0, backend, opts);
   }

@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
+#include "../../src/estimate/detail_theta_threshold_profile.hpp"
 
 #include <algorithm>
 #include <array>
@@ -6366,6 +6367,38 @@ TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta
   CHECK((theta->theta - delta->theta).cwiseAbs().maxCoeff() > 1e-3);
 }
 
+TEST_CASE("Theta threshold profile preserves objective and off-optimum gradient") {
+  for (bool diagonal : {true, false}) {
+    Eigen::MatrixXd F = Eigen::MatrixXd::Identity(5, 5);
+    F.diagonal() << 0.8, 1.4, 0.9, 1.3, 1.1;
+    if (!diagonal) {
+      F(2, 0) = 0.4; F(3, 1) = -0.3; F(4, 0) = 0.2;
+      F(4, 2) = 0.25;
+    }
+    auto w = magmaan::detail::theta_threshold_profile(F, 2, diagonal);
+    REQUIRE(w.has_value());
+    for (double beta : {-0.7, 0.2, 1.1}) {
+      const auto residual = [&](double b) {
+        return Eigen::Vector3d(std::sin(b) - 0.2, b*b - 0.4, b + 0.3);
+      };
+      const Eigen::Vector3d d = residual(beta);
+      Eigen::VectorXd full(5);
+      full.head(2) = -w->threshold_from_corr * d;
+      full.tail(3) = d;
+      const Eigen::VectorXd wr = F.transpose() * full;
+      const Eigen::VectorXd reduced = w->factor * d;
+      CHECK(wr.squaredNorm() == doctest::Approx(reduced.squaredNorm()).epsilon(1e-12));
+      CHECK((F.topRows(2) * wr).norm() < 1e-12);
+      const Eigen::Vector3d derivative(std::cos(beta), 2*beta, 1);
+      const double gradient = (w->factor * derivative).dot(reduced);
+      const double eps = 1e-6;
+      const double fd = ((w->factor * residual(beta + eps)).squaredNorm() -
+                        (w->factor * residual(beta - eps)).squaredNorm()) / (4*eps);
+      CHECK(gradient == doctest::Approx(fd).epsilon(1e-8));
+    }
+  }
+}
+
 TEST_CASE("Cache-aware ordinal theta fits and SNLLS use fit-only workspaces") {
   std::mt19937 rng(20260611);
   std::normal_distribution<double> norm(0.0, 1.0);
@@ -6513,6 +6546,58 @@ TEST_CASE("Cache-aware ordinal theta fits and SNLLS use fit-only workspaces") {
         2e-4);
   CHECK(wls_cache.blocks[0].has_wls_weight);
   CHECK(wls_snlls_cache.blocks[0].has_wls_weight);
+
+  for (const auto estimator : {magmaan::data::OrdinalEstimatorKind::ULS,
+                              magmaan::data::OrdinalEstimatorKind::DWLS,
+                              magmaan::data::OrdinalEstimatorKind::WLS}) {
+    const auto plan = magmaan::data::ordinal_weight_plan(
+        magmaan::data::OrdinalWorkspacePurpose::FitOnly, estimator,
+        magmaan::data::OrdinalMomentParameterization::Theta);
+    auto cache = magmaan::data::OrdinalGammaCache{};
+    cache.blocks.resize(1);
+    cache.blocks[0].gamma = stats->NACOV[0];
+    cache.blocks[0].has_full = true;
+    auto fast = magmaan::estimate::fit_ordinal_snlls(
+        *pt, *mr, moments, &cache, plan, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    auto generic = magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+        *pt, *mr, moments, &cache, plan, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE(fast.has_value());
+    REQUIRE(generic.has_value());
+    CHECK(fast->fmin == doctest::Approx(generic->fmin).epsilon(1e-8));
+    CHECK((fast->theta - generic->theta).norm() < 3e-4);
+    CHECK(magmaan::estimate::fit_verdict(*fast).status == magmaan::estimate::FitCheck::Passed);
+    CHECK(magmaan::estimate::fit_verdict(*generic).status == magmaan::estimate::FitCheck::Passed);
+  }
+  for (bool shared : {false, true}) {
+    std::string constrained_syntax(syntax);
+    const auto first = constrained_syntax.find("x1 | t1");
+    constrained_syntax.replace(first, 7, shared ? "x1 | a*t1" : "x1 | 0*t1");
+    if (shared) {
+      const auto second = constrained_syntax.find("x2 | t1");
+      constrained_syntax.replace(second, 7, "x2 | a*t1");
+    }
+    auto parsed = magmaan::parse::Parser::parse(constrained_syntax);
+    REQUIRE(parsed.has_value());
+    auto constrained = magmaan::spec::build(*parsed);
+    REQUIRE(constrained.has_value());
+    auto rep = magmaan::model::build_matrix_rep(*constrained);
+    REQUIRE(rep.has_value());
+    auto start = magmaan::estimate::ordinal_start_values(*constrained, *rep, moments, {});
+    REQUIRE(start.has_value());
+    auto fallback = magmaan::estimate::fit_ordinal_snlls(
+        *constrained, *rep, moments, nullptr, uls_plan, *start,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    auto generic = magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+        *constrained, *rep, moments, nullptr, uls_plan, *start,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE(fallback.has_value());
+    REQUIRE(generic.has_value());
+    CHECK(fallback->f_evals == generic->f_evals);
+    CHECK((fallback->theta - generic->theta).norm() == 0);
+  }
+
 }
 
 TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenvalues") {

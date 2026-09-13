@@ -156,6 +156,15 @@ solve, while PORT-NLS/Ceres use approximate Gauss–Newton curvature. Focused
 gates compare scaled/full-rank/near-dependent/rank-deficient profiles with
 SVD and compare the final common audit with the original LS gradient.
 
+All-ordinal theta SNLLS specializes independently free, unbounded thresholds
+when the model has no active equality constraints. It optimizes correlation
+residuals, reconstructs raw thresholds using fitted response means/variances,
+and retains the original full-model audit. ULS/DWLS use direct reconstruction;
+WLS caches a QR square root of the Schur-complement weight. Fixed/shared
+thresholds and constrained models retain the generic full-threshold GP path,
+which also remains explicitly callable for comparisons. Theta covariance
+parameters remain nonlinear. Mixed ordinal paths are unchanged.
+
 The production lifted-objective compiler has a private derivative-probe seam
 used only by regression tests. Central finite differences now gate the complete
 lifted ML gradient and equality Jacobian for mean structures, shared covariance
