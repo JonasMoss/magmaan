@@ -633,6 +633,22 @@ noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "auto"
     .Call(`_magmaan_noniterative_cfa_scalar_impl`, fit, ref_group, estimator, discrepancy, gamma, data)
 }
 
+prepared_model_impl <- function(partable, kind, schema = NULL) {
+    .Call(`_magmaan_prepared_model_impl`, partable, kind, schema)
+}
+
+prepared_data_impl <- function(model, X, kind, ordered) {
+    .Call(`_magmaan_prepared_data_impl`, model, X, kind, ordered)
+}
+
+prepared_weight_impl <- function(data, method, W, full) {
+    .Call(`_magmaan_prepared_weight_impl`, data, method, W, full)
+}
+
+prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds)
+}
+
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }

@@ -80,20 +80,79 @@ Model-dependent post-fit helpers expose primitive-shaped entry points such as
 `magmaan_core`, with explicit `*_fit` aliases for scripts that prefer
 adapter-style names.
 
-## Reuse boundary of the current interface
+## Reusable model, data and weights
 
-`model_spec()` is reusable R-level syntax/partable preparation, not a persistent
-compiled C++ model. Native fit entry points currently reconstruct model contexts.
-Ordinal and mixed-ordinal wrappers additionally augment the threshold/scaling
-partable on each call. Supplying an existing model spec therefore does not mean
-that every kind of model construction has been moved outside estimation.
+For repeated estimation, use the native prepared interface:
 
-For repeated-fit performance work, separate model construction, dataset-specific
-statistics, fitting and inference. Sample moments, thresholds and missingness
-patterns must change with a new simulated dataset. The
-[interface audit and proposed reuse contract](../docs/design/r-model-preparation.md)
-records the estimator-family differences and the boundary a uniform prepared
-interface must enforce. That proposed interface is not yet implemented.
+```r
+model <- prepare_model("f =~ x1 + x2 + x3 + x4")
+data <- prepare_data(model, df)
+fit <- estimate(model, data, estimator = "ML")
+
+# A new replication reuses the model, but prepares its own data and weights.
+data2 <- prepare_data(model, df2)
+weight2 <- prepare_weight(data2, "DWLS")
+fit2 <- estimate(model, data2, weight = weight2)
+```
+
+`prepare_model()` retains the native model triple and matrix representation.
+`prepare_data()` builds per-dataset moments or a FIML missingness pack, without
+estimation weights. `prepare_weight()` owns the weight separately. `estimate()`
+refreshes data-dependent starts, fits and audits; inference remains explicit.
+Returned fits use the existing fit-list interface.
+
+| Data kind | Prepared estimators |
+|---|---|
+| `"moments"` (default for continuous models) | ML, ULS, GLS, WLS, DWLS |
+| `"raw"` (requires a model with `meanstructure = TRUE`) | FIML |
+| `"ordinal"` (all observed variables ordered) | ULS, DWLS, WLS; delta/theta |
+| `"mixed"` (some observed variables ordered) | DWLS, WLS; delta/theta |
+
+Continuous data can also be supplied as `list(S = ..., nobs = ..., mean = ...)`
+with N-divisor covariances. Empirical continuous weights need raw observations;
+otherwise supply `W` explicitly. The prepared weight exposes `$W` for inspection
+and for post-fit functions taking an explicit weight.
+
+For categorical models, declare the category schema once:
+
+```r
+model <- prepare_model("f =~ x1 + x2 + x3 + x4",
+                       ordered = names(df), prototype = df)
+data <- prepare_data(model, df)
+weight <- prepare_weight(data, "DWLS", full = FALSE)
+fit <- estimate(model, data, weight = weight)
+```
+
+The prototype contributes category labels/order only. It contributes no empirical
+thresholds or starting values. Each dataset must contain all declared categories;
+changed levels, missing model variables and incompatible groups fail explicitly.
+Declare group labels in `model_spec()`/`prepare_model()`; columns are matched by
+name. Use `missing = "listwise"` explicitly for incomplete moment data.
+
+For categorical weights, `full = TRUE` (the default) retains full Gamma and
+influence ingredients for existing post-fit inference; DWLS does not invert the
+full Gamma. `full = FALSE` builds only the DWLS diagonal. The resulting fit lacks
+full-Gamma inference ingredients. These can be requested separately, without
+refitting: `inference_weight <- prepare_weight(data, "DWLS", full = TRUE)` and
+then, for example,
+`magmaan_core$robust_ordinal(fit, inference_weight$stats)`. ULS can similarly use
+`prepare_weight(data, "ULS", full = TRUE)` when full-Gamma inference is wanted.
+Weight preparation currently calls the existing categorical builders, which
+recompute stage-one moments; that cost is outside estimation but remains an
+optimization opportunity. Measure model, data, weight, fit and inference stages
+separately.
+
+Handles are immutable and process-local: rebuild them in each worker, and after
+reading serialized objects. Reusing data across models requires identical
+observable order, category/group schema and mean-structure convention. A weight
+is tied to its dataset and cannot silently be reused for another replication.
+
+Existing `model_spec()`, `magmaan()`, `fit_*` and `magmaan_core$estimate_*` calls
+remain supported without deprecation warnings. `model_spec()` alone retains an R
+partable, not a compiled native model. Specialized ML2S, two-level, FC-SEM, SAM
+and frontier paths still use their existing entry points. Deprecation and removal
+wait for coverage and caller migration; see the
+[interface audit and rollout status](../docs/design/r-model-preparation.md).
 
 ## Sample-moment data
 

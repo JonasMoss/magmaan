@@ -2436,6 +2436,64 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prepared_model_impl
+SEXP prepared_model_impl(SEXP partable, std::string kind, Rcpp::Nullable<Rcpp::List> schema);
+RcppExport SEXP _magmaan_prepared_model_impl(SEXP partableSEXP, SEXP kindSEXP, SEXP schemaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< std::string >::type kind(kindSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type schema(schemaSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_model_impl(partable, kind, schema));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepared_data_impl
+SEXP prepared_data_impl(SEXP model, SEXP X, std::string kind, Rcpp::List ordered);
+RcppExport SEXP _magmaan_prepared_data_impl(SEXP modelSEXP, SEXP XSEXP, SEXP kindSEXP, SEXP orderedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< std::string >::type kind(kindSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordered(orderedSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_data_impl(model, X, kind, ordered));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepared_weight_impl
+Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full);
+RcppExport SEXP _magmaan_prepared_weight_impl(SEXP dataSEXP, SEXP methodSEXP, SEXP WSEXP, SEXP fullSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
+    Rcpp::traits::input_parameter< bool >::type full(fullSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_weight_impl(data, method, W, full));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepared_estimate_impl
+Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_prepared_estimate_impl(SEXP modelSEXP, SEXP dataSEXP, SEXP weightSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_estimate_impl(model, data, weight, estimator, optimizer, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_lr_test_satorra2000
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method, std::string computation);
 RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP computationSEXP) {
@@ -4068,6 +4126,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_noniterative_cfa_pseudo_lrt_impl", (DL_FUNC) &_magmaan_noniterative_cfa_pseudo_lrt_impl, 6},
     {"_magmaan_noniterative_cfa_constrained_impl", (DL_FUNC) &_magmaan_noniterative_cfa_constrained_impl, 5},
     {"_magmaan_noniterative_cfa_scalar_impl", (DL_FUNC) &_magmaan_noniterative_cfa_scalar_impl, 6},
+    {"_magmaan_prepared_model_impl", (DL_FUNC) &_magmaan_prepared_model_impl, 3},
+    {"_magmaan_prepared_data_impl", (DL_FUNC) &_magmaan_prepared_data_impl, 4},
+    {"_magmaan_prepared_weight_impl", (DL_FUNC) &_magmaan_prepared_weight_impl, 4},
+    {"_magmaan_prepared_estimate_impl", (DL_FUNC) &_magmaan_prepared_estimate_impl, 7},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_continuous_ls_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_continuous_ls_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},

@@ -693,10 +693,15 @@ raw_from_data_args(SEXP X_arg, SEXP mask_arg) {
 //                  data); false → take them as already in model order (the
 //                  fit-object entry point).
 inline Ctx ctx_from_parts(magmaan::spec::LatentStructure pt, magmaan::spec::LatentNames names,
-                          SEXP S, SEXP nobs, SEXP sample_mean, bool reorder) {
-  auto rep_or = lvm::build_matrix_rep(pt, &names);
-  if (!rep_or.has_value()) stop_model(rep_or.error());
-  lvm::MatrixRep rep = std::move(*rep_or);
+                          SEXP S, SEXP nobs, SEXP sample_mean, bool reorder,
+                          const lvm::MatrixRep* prepared_rep = nullptr) {
+  lvm::MatrixRep rep;
+  if (prepared_rep) rep = *prepared_rep;
+  else {
+    auto rep_or = lvm::build_matrix_rep(pt, &names);
+    if (!rep_or.has_value()) stop_model(rep_or.error());
+    rep = std::move(*rep_or);
+  }
   if (rep.ov_names.empty() || rep.ov_names[0].empty())
     Rcpp::stop("magmaan: model has no observed variables");
   const std::size_t n_blocks = rep.dims.size();

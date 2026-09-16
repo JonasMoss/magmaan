@@ -1,9 +1,33 @@
 # R model preparation and repeated estimation: interface audit
 
-Status: source audit and proposed contract, 16 September 2026. No prepared-model
-API has been implemented by this audit. Function names below describe roles,
-not a new exported API. The existing staged C++ types should be assessed before
-adding another implementation of model preparation in R.
+Status: initial prepared R interface implemented, 16 September 2026. The audit
+below records the legacy interface that motivated it; it is not a description
+of the new prepared path.
+
+## Implemented boundary
+
+`prepare_model()`, `prepare_data()`, `prepare_weight()` and `estimate()` retain
+immutable native model/data/weight handles for continuous ML/ULS/GLS/WLS/DWLS,
+FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS (delta/theta). Model preparation
+owns the triple and matrix representation; ordinal augmentation is done once
+from schema. Numerical evaluator construction and the core's ordinal layout
+validation still occur within fits. No claim is made that every internal
+ordinal preparation check has disappeared.
+
+Dataset preparation computes moments or the FIML missingness pack, without
+weights. Weights are explicitly dataset-bound. Full categorical Gamma is
+optional; the existing categorical weight builders currently recompute moments
+when constructing Gamma, so end-to-end preparation still has duplicated work.
+FIML estimation retains the pack but does not eagerly compute H1. Sample moments
+may also be supplied directly. Existing fit-list inference interfaces consume
+the resulting fits; full-Gamma categorical inference needs full statistics,
+available from `prepare_weight(..., full = TRUE)$stats`.
+
+`r-package/examples/prepared.R` checks fresh/prepared numerical parity, changed
+datasets, schema rejection, post-fit compatibility and process-local ownership.
+Specialized ML2S, two-level, FC-SEM, SAM and frontier methods remain on legacy
+entry points. Those functions are retained without warnings; they cannot be
+deprecated until their functionality and experiment callers have migrated.
 
 ## Finding
 
@@ -68,7 +92,7 @@ when group metadata changes or FIML/ML2S requires adding a mean structure.
 The `magmaan_core$estimate_*` aliases can bypass R augmentation when given an
 already augmented partable; they still reconstruct native objects.
 
-## Proposed uniform contract
+## Target uniform contract
 
 Use the same four stages across estimator families, with family-specific
 capabilities and explicit errors for unsupported combinations:
@@ -79,7 +103,8 @@ capabilities and explicit errors for unsupported combinations:
    counts/levels, groups and parameterization. Resolve threshold/scaling row
    layout here. Accept explicit schema or derive it from a prototype once.
 2. **Prepare data once per dataset.** Own sample moments, thresholds,
-   polychorics, weights, missingness patterns or clustered summaries as needed.
+   polychorics, missingness patterns or clustered summaries as needed. Prepare
+   estimation weights separately from these data summaries.
    Choose expensive data ingredients explicitly. These can be reused for
    several fits to the same data but change for each simulation replication.
 3. **Estimate from the prepared model and data.** Select estimator, optimizer,

@@ -10155,3 +10155,31 @@ Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
       Rcpp::_["p_value"] = sc->p_value,
       Rcpp::_["warnings"] = Rcpp::wrap(sc->warnings));
 }
+
+
+#include "prepared.hpp"
+
+// [[Rcpp::export]]
+SEXP prepared_model_impl(SEXP partable, std::string kind,
+                         Rcpp::Nullable<Rcpp::List> schema = R_NilValue) {
+  return prepared::model(partable, kind, schema);
+}
+
+// [[Rcpp::export]]
+SEXP prepared_data_impl(SEXP model, SEXP X, std::string kind, Rcpp::List ordered) {
+  return prepared::dataset(model, X, kind, ordered);
+}
+
+// [[Rcpp::export]]
+Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full) {
+  return prepared::weight(data, method, W, full);
+}
+
+// [[Rcpp::export]]
+Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight,
+                                 std::string estimator,
+                                 Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                                 Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+                                 Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  return prepared::fit(model, data, weight, estimator, optimizer, control, bounds);
+}

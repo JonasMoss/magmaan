@@ -31,14 +31,19 @@ semantics · **XL** statistical design/research track before implementation.
 
 ### Uniform prepared-model/data interface in R
 
-- **L — expose explicit model reuse across estimator families.** The
-  [R interface audit](../design/r-model-preparation.md) found that `model_spec()`
-  caches an R specification, while native fit wrappers rebuild the model;
-  ordinal/mixed wrappers also repeat expensive R threshold/scaling augmentation.
-  Agree the native ownership and schema contract, reusing the existing C++
-  model/data abstractions where suitable. Separate model preparation from
-  per-dataset moments/patterns/starts, preserve all audits, and verify reuse on
-  different simulated datasets. The proposed API is not implemented yet.
+- **L — extend prepared R ownership to the remaining specialized paths.**
+  Continuous ML/ULS/GLS/WLS/DWLS, FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS
+  now use `prepare_model/data/weight` plus `estimate`; see the
+  [rollout status](../design/r-model-preparation.md). Extend the same ownership
+  to ML2S/Stage 1, two-level/cluster summaries, FC-SEM, SAM and frontier methods
+  before deprecating their legacy entry points. Migrate experiment callers
+  without changing statistical procedures or benchmark timing boundaries.
+- **M — reuse categorical stage-one work when preparing Gamma.** The data stage
+  computes moments without weights, but the existing weight builders recompute
+  moments while obtaining the score ingredients for Gamma. Expose reusable
+  stage-one ingredients in core; do not duplicate that SEM logic in R. Profile
+  model, data, weight and fit stages separately. The core also retains ordinal
+  layout validation/preparation inside numerical fit composers.
 - **M — reconcile estimate-only behavior and reusable post-fit work.** Audit
   automatic two-level SE/H1 calculations, the current FIML H1 attachment, and
   SAM's SE default against the explicit inference contract. Provide explicit

@@ -3005,6 +3005,17 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
 
 ### R bindings and public namespace transition
 
+- **Prepared R interface:** `prepare_model`, `prepare_data`, `prepare_weight`
+  and `estimate` retain separate, immutable process-local native handles for
+  continuous ML/ULS/GLS/WLS/DWLS, FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS.
+  Ordinal schema augmentation and native matrix representation are prepared
+  once; each dataset refreshes moments/patterns/starts. Weights are dataset-bound,
+  and full categorical Gamma is optional. New FIML estimation does not compute
+  H1 eagerly. Existing fit lists and numerical audits are preserved. Legacy
+  entry points remain supported for compatibility and specialized families;
+  see [the rollout status](../design/r-model-preparation.md) and
+  [R usage](../../r-package/README.md#reusable-model-data-and-weights).
+
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics. Frontier
