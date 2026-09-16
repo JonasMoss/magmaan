@@ -13,6 +13,23 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+### Uniform prepared-model/data interface in R
+
+- **L — expose explicit model reuse across estimator families.** The
+  [R interface audit](../design/r-model-preparation.md) found that `model_spec()`
+  caches an R specification, while native fit wrappers rebuild the model;
+  ordinal/mixed wrappers also repeat expensive R threshold/scaling augmentation.
+  Agree the native ownership and schema contract, reusing the existing C++
+  model/data abstractions where suitable. Separate model preparation from
+  per-dataset moments/patterns/starts, preserve all audits, and verify reuse on
+  different simulated datasets. The proposed API is not implemented yet.
+- **M — reconcile estimate-only behavior and reusable post-fit work.** Audit
+  automatic two-level SE/H1 calculations, the current FIML H1 attachment, and
+  SAM's SE default against the explicit inference contract. Provide explicit
+  ownership for reusable dataset-level H1/Stage-1 quantities; do not remove
+  results relied on by existing consumers without a compatibility plan.
+
+
 ### Ordinal DWLS Gamma influence performance
 
 The complete-data all-ordinal local diagonal assembly, direct influence, and

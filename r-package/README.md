@@ -80,6 +80,21 @@ Model-dependent post-fit helpers expose primitive-shaped entry points such as
 `magmaan_core`, with explicit `*_fit` aliases for scripts that prefer
 adapter-style names.
 
+## Reuse boundary of the current interface
+
+`model_spec()` is reusable R-level syntax/partable preparation, not a persistent
+compiled C++ model. Native fit entry points currently reconstruct model contexts.
+Ordinal and mixed-ordinal wrappers additionally augment the threshold/scaling
+partable on each call. Supplying an existing model spec therefore does not mean
+that every kind of model construction has been moved outside estimation.
+
+For repeated-fit performance work, separate model construction, dataset-specific
+statistics, fitting and inference. Sample moments, thresholds and missingness
+patterns must change with a new simulated dataset. The
+[interface audit and proposed reuse contract](../docs/design/r-model-preparation.md)
+records the estimator-family differences and the boundary a uniform prepared
+interface must enforce. That proposed interface is not yet implemented.
+
 ## Sample-moment data
 
 Complete-data ML/ULS/GLS/WLS fit wrappers accept sample moments as
