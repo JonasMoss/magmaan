@@ -13,6 +13,19 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+### Lean complete-data global score calibration
+
+- **M — separate requested score calibration from unused diagnostics.** The
+  Oslo talk runtime diagnostic found that the global score-flip wrapper spends
+  about 7.45 ms/sample on an exact-mixture tail discarded by the SB/pEBA
+  simulation, within a 15.37 ms wrapper (54-draw, 18-condition pilot). Reuse
+  applicable fitted-weight RLS geometry for complete-data expected-information
+  scores; preserve the uncentered score-covariance convention and numerical
+  identity checks. Expose an asymptotic route without a dummy flip and make
+  exact-mixture, sandwich and diagnostic work explicit. Profile projection/
+  eigensolver reuse before changing the general missing-data route. The current
+  implementation and frozen simulation results are unchanged.
+
 ### Uniform prepared-model/data interface in R
 
 - **L — expose explicit model reuse across estimator families.** The
