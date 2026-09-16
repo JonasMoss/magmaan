@@ -191,6 +191,24 @@ struct UFactor {
   std::vector<Block> blocks;
 };
 
+// Owning shared NTML setup. Retain this across tests and bread choices.
+// A is the whitened, constraint-reduced Jacobian; Delta is unreduced.
+struct NTMLGeometry {
+  UFactor base;
+  Eigen::MatrixXd A, K_con, Delta;
+  std::vector<Eigen::VectorXd> mean_hat;
+  Eigen::Index q = 0;
+  double N_total = 0.0;
+};
+post_expected<NTMLGeometry> prepare_ntml_geometry(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Estimates& est,
+    WeightMoments moments = WeightMoments::Structured);
+post_expected<UFactor> ntml_u_factor(const NTMLGeometry& geometry);
+post_expected<UFactor> ntml_u_factor_observed(
+    const NTMLGeometry& geometry, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const SampleStats& samp, const Estimates& est);
+
 // Build the U-factor from (pt, rep, samp, est, spec). `spec.cov` is ignored
 // — the meat for the test is the `reduced_gamma_*` choice. Internally:
 //   1. Run `prepare_evaluator` (resolves fixed.x, rebuilds evaluator).

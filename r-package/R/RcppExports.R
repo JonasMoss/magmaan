@@ -649,8 +649,8 @@ prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = N
     .Call(`_magmaan_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds)
 }
 
-prepare_inference_impl <- function(fit, raw) {
-    .Call(`_magmaan_prepare_inference_impl`, fit, raw)
+prepare_inference_impl <- function(fit, raw, shared_data = NULL) {
+    .Call(`_magmaan_prepare_inference_impl`, fit, raw, shared_data)
 }
 
 score_rows_impl <- function(context, space) {
@@ -695,6 +695,30 @@ inference_snapshot_impl <- function(context) {
 
 score_components_matrix_impl <- function(score, rows, sensitivity, metric, nuisance, directions, influence_rows) {
     .Call(`_magmaan_score_components_matrix_impl`, score, rows, sensitivity, metric, nuisance, directions, influence_rows)
+}
+
+prepare_ntml_data_impl <- function(fit, raw, storage) {
+    .Call(`_magmaan_prepare_ntml_data_impl`, fit, raw, storage)
+}
+
+prepare_ntml_hypothesis_impl <- function(null_context, alternative_context) {
+    .Call(`_magmaan_prepare_ntml_hypothesis_impl`, null_context, alternative_context)
+}
+
+ntml_quadratic_impl <- function(object, hypothesis, score) {
+    .Call(`_magmaan_ntml_quadratic_impl`, object, hypothesis, score)
+}
+
+ntml_reference_impl <- function(object, spectrum) {
+    .Call(`_magmaan_ntml_reference_impl`, object, spectrum)
+}
+
+ntml_covariance_impl <- function(context, robust) {
+    .Call(`_magmaan_ntml_covariance_impl`, context, robust)
+}
+
+inference_reuse_impl <- function(context) {
+    .Call(`_magmaan_inference_reuse_impl`, context)
 }
 
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {

@@ -9,6 +9,11 @@ prepare_inference <- function(fit, data = NULL) {
     return(fit)
   }
   if (!inherits(fit, "magmaan_fit")) stop("prepare_inference(): supply a fitted magmaan model")
+  shared_data <- NULL
+  if (inherits(data, "magmaan_inference_data")) {
+    shared_data <- data$native
+    data <- data$raw
+  }
   estimator <- toupper(fit$estimator)
   if (!estimator %in% c("ML", "FIML", "ML2S"))
     stop("prepare_inference(): currently supports ML, FIML and fixed-NT ML2S")
@@ -26,7 +31,7 @@ prepare_inference <- function(fit, data = NULL) {
     if (is.null(data)) stop("prepare_inference(): supply the fitting data")
     raw <- raw_data_arg(fit, data)
   }
-  .score_object(prepare_inference_impl(fit, raw), "magmaan_inference")
+  .score_object(prepare_inference_impl(fit, raw, shared_data), "magmaan_inference")
 }
 
 scores <- function(object, data = NULL, space = c("parameter", "saturated")) {
@@ -61,6 +66,8 @@ score_quadratic <- function(score, metric, meat = NULL) {
 }
 
 score_spectrum <- function(projected) {
+  if (inherits(projected, "magmaan_ntml_quadratic"))
+    return(.score_object(ntml_reference_impl(projected$native, TRUE), "magmaan_quadratic_reference", source = projected))
   stopifnot(inherits(projected, "magmaan_projected_score"))
   .score_object(score_reference_impl(projected$native, TRUE), "magmaan_quadratic_reference", source = projected)
 }
@@ -81,6 +88,9 @@ calibrate_quadratic <- function(object, methods = "peba4") {
   methods <- tolower(methods)
   if (!length(methods) || any(!methods %in% c("std", "sb", "peba2", "peba4", "all")))
     stop("calibrate_quadratic(): use std, sb, peba2, peba4, or all (exact mixture)")
+  if (inherits(object, "magmaan_ntml_quadratic"))
+    object <- .score_object(ntml_reference_impl(object$native,
+      any(methods %in% c("peba2", "peba4", "all"))), "magmaan_quadratic_reference")
   if (inherits(object, "magmaan_projected_score")) {
     if (any(methods %in% c("peba2", "peba4", "all"))) object <- score_spectrum(object) else if ("sb" %in% methods)
       object <- .score_object(score_reference_impl(object$native, FALSE), "magmaan_quadratic_reference")
@@ -181,4 +191,42 @@ score_components_from_matrices <- function(score, rows, sensitivity,
   .score_object(list(native = ptr, score = score, rows = rows, sensitivity = sensitivity,
                      metric = metric, nuisance = nuisance, directions = directions,
                      influence_rows = influence_rows), "magmaan_score_components")
+}
+
+# Persistent NTML consumers share the existing U-factor and moment reducers.
+prepare_inference_data <- function(fit, data = NULL, storage = c("auto", "casewise", "tiled")) {
+  if (!inherits(fit, "magmaan_fit") || toupper(fit$estimator) != "ML")
+    stop("prepare_inference_data(): supply a continuous ML fit to define the data layout")
+  if (inherits(data, "magmaan_prepared_data")) data <- list(X=data$X,ov_names=data$model$ov_names)
+  data <- data %||% fit$raw_data
+  if (is.null(data)) stop("prepare_inference_data(): supply fitting observations")
+  raw <- raw_data_arg(fit, data)
+  .score_object(list(native=prepare_ntml_data_impl(fit,raw,match.arg(storage)),raw=raw), "magmaan_inference_data")
+}
+
+prepare_hypothesis <- function(null, alternative) {
+  stopifnot(inherits(null,"magmaan_inference"), inherits(alternative,"magmaan_inference"))
+  .score_object(list(native=prepare_ntml_hypothesis_impl(null$native,alternative$native),
+      null=null,alternative=alternative),"magmaan_inference_hypothesis")
+}
+
+inference_quadratic <- function(object, test = c("score", "lr")) {
+  test <- match.arg(test)
+  hypothesis <- inherits(object,"magmaan_inference_hypothesis")
+  if (!hypothesis && !inherits(object,"magmaan_inference"))
+    stop("inference_quadratic(): supply a prepared fit or hypothesis")
+  .score_object(ntml_quadratic_impl(object$native,hypothesis,test=="score"),
+      "magmaan_ntml_quadratic",source=object,test=test)
+}
+
+inference_covariance <- function(context, robust = FALSE) {
+  stopifnot(inherits(context,"magmaan_inference"),is.logical(robust),length(robust)==1L,!is.na(robust))
+  out <- ntml_covariance_impl(context$native,robust)
+  attr(out,"inference_context") <- context
+  out
+}
+
+inference_reuse <- function(context) {
+  stopifnot(inherits(context,"magmaan_inference"))
+  inference_reuse_impl(context$native)
 }

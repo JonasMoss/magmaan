@@ -19,12 +19,14 @@ The first-class ML/FIML/NT-ML2S score primitives, R inference snapshots,
 explicit calibration/resampling, and covariance/Wald composition are implemented;
 see the roadmap's reusable-score entry and `r-package/examples/scores.R`.
 
-- **M — extend persistent geometry reuse where conventions agree.** The native
-  fit context and projected-score factorizations are reusable today. Audit
-  fitted-moment evaluations and empirical-Gamma ownership across legacy LR/GOF
-  and score adapters before sharing their method-specific geometry. Require
-  matching evaluation point, mean structure, centering and finite-sample scale;
-  the score/RLS statistic identity alone is not sufficient to share a spectrum.
+- **M — extend shared inference beyond the continuous NTML path.** Complete-data
+  structured expected-information score/GOF, exact empirical nested LR and
+  covariance/Wald now share native contribution and geometry owners; see the
+  roadmap and `r-package/examples/inference_reuse.R`. Extend persistent reuse to
+  observed-bread score/covariance, delta-nesting and additional nested Gamma
+  conventions, then FIML/ML2S evaluation-point-specific influence ingredients.
+  Preserve each path's centering, group scaling and finite-sample conventions;
+  do not equate score and LR spectra merely because statistics coincide.
 - **L — add estimator-specific score/estimating-function adapters.** Ordinal,
   mixed, two-level and estimated-weight/regularized ML2S paths retain their
   existing interfaces. Extend the same reusable ingredients when their

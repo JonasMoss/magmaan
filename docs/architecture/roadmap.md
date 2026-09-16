@@ -870,6 +870,46 @@ an unconstrained gradient test to constrained solutions.
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
+- **Persistent continuous NTML inference (2026-09-16):** the existing
+  U-factor shared phase is now the owning `robust::NTMLGeometry`, exposed by
+  `prepare_ntml_geometry` and consumed by expected/observed U-factor tails.
+  `robust::frontier::{NTMLData,NTMLFit,NTMLHypothesis,NTMLQuadratic}` retain
+  complete-data sample/pattern setup, casewise contributions, fitted moments,
+  derivatives, weight factorizations, expected information/covariance and
+  test-specific reductions. These mutable native caches are session-local and
+  not thread-safe; prepared inputs must remain immutable.
+
+  R `prepare_inference_data` provides a shared dataset to `prepare_inference`.
+  `prepare_hypothesis` owns an exact affine nested pair with matching ambient
+  parameter slots. `inference_quadratic` produces global score/ML GOF or nested
+  score/exact H1-anchored Satorra–2000 LR without invoking a test wrapper.
+  `inference_covariance` shares expected information and empirical contributions
+  with Wald consumers. Existing compatible GOF (including unbiased spectra),
+  expected-information, expected sandwich-SE and exact empirical streaming LR
+  wrappers reuse these native snapshots; edited extracted fit lists invalidate
+  their handles. Other inference conventions retain the existing paths.
+
+  Casewise storage expands centered moment contributions once across models;
+  automatic storage switches to tiled projection above a 64-MiB contribution
+  budget. Global score and GOF share a projection. Score applies the fitted-mean
+  linear/constant correction without reconstructing fourth-moment contributions.
+  The large-N tiled path accumulates both reduced matrices in one pass instead
+  of retaining N-by-df rows. The spectrum uses row space when N < df; SB-only
+  calibration uses a trace and spectra are cached on demand. Distinct tiled
+  hypotheses may require distinct raw-data passes. Explicit unbiased GOF
+  retains the existing casewise correction, which may materialize contributions.
+  Neither full empirical Gamma nor full U is a prerequisite of sharing.
+
+  Validation: the optimized inference suite passes 325 cases / 39,332 assertions;
+  focused reuse tests cover unequal group sizes, mean/covariance layouts,
+  tiled/casewise parity, smaller row space and construction counts. R checks
+  additionally cover global and nested score/LR parity, unbiased GOF, sandwich
+  covariance/Wald, restricted means, repeated calls and ownership/invalidation.
+  `inference_reuse` exposes construction counters and
+  `benchmarks/inference_reuse.R` provides a bounded timing comparison.
+  Shared geometry for FIML/ML2S and additional bread/nesting conventions remains
+  on the backlog; the first-class score interfaces below remain available.
+
 - **Reusable score primitives (2026-09-16):**
   `inference::frontier::{global_score_components,global_score_components_ml2s,
   nested_score_components}` now own construction independently of tests.

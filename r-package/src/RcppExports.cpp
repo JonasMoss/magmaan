@@ -2495,14 +2495,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // prepare_inference_impl
-Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw);
-RcppExport SEXP _magmaan_prepare_inference_impl(SEXP fitSEXP, SEXP rawSEXP) {
+Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw, SEXP shared_data);
+RcppExport SEXP _magmaan_prepare_inference_impl(SEXP fitSEXP, SEXP rawSEXP, SEXP shared_dataSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
-    rcpp_result_gen = Rcpp::wrap(prepare_inference_impl(fit, raw));
+    Rcpp::traits::input_parameter< SEXP >::type shared_data(shared_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepare_inference_impl(fit, raw, shared_data));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2646,6 +2647,79 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type directions(directionsSEXP);
     Rcpp::traits::input_parameter< bool >::type influence_rows(influence_rowsSEXP);
     rcpp_result_gen = Rcpp::wrap(score_components_matrix_impl(score, rows, sensitivity, metric, nuisance, directions, influence_rows));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepare_ntml_data_impl
+SEXP prepare_ntml_data_impl(Rcpp::List fit, SEXP raw, std::string storage);
+RcppExport SEXP _magmaan_prepare_ntml_data_impl(SEXP fitSEXP, SEXP rawSEXP, SEXP storageSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< std::string >::type storage(storageSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepare_ntml_data_impl(fit, raw, storage));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepare_ntml_hypothesis_impl
+SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context);
+RcppExport SEXP _magmaan_prepare_ntml_hypothesis_impl(SEXP null_contextSEXP, SEXP alternative_contextSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type null_context(null_contextSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type alternative_context(alternative_contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepare_ntml_hypothesis_impl(null_context, alternative_context));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ntml_quadratic_impl
+Rcpp::List ntml_quadratic_impl(SEXP object, bool hypothesis, bool score);
+RcppExport SEXP _magmaan_ntml_quadratic_impl(SEXP objectSEXP, SEXP hypothesisSEXP, SEXP scoreSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type object(objectSEXP);
+    Rcpp::traits::input_parameter< bool >::type hypothesis(hypothesisSEXP);
+    Rcpp::traits::input_parameter< bool >::type score(scoreSEXP);
+    rcpp_result_gen = Rcpp::wrap(ntml_quadratic_impl(object, hypothesis, score));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ntml_reference_impl
+Rcpp::List ntml_reference_impl(SEXP object, bool spectrum);
+RcppExport SEXP _magmaan_ntml_reference_impl(SEXP objectSEXP, SEXP spectrumSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type object(objectSEXP);
+    Rcpp::traits::input_parameter< bool >::type spectrum(spectrumSEXP);
+    rcpp_result_gen = Rcpp::wrap(ntml_reference_impl(object, spectrum));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ntml_covariance_impl
+Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust);
+RcppExport SEXP _magmaan_ntml_covariance_impl(SEXP contextSEXP, SEXP robustSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
+    rcpp_result_gen = Rcpp::wrap(ntml_covariance_impl(context, robust));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inference_reuse_impl
+Rcpp::List inference_reuse_impl(SEXP context);
+RcppExport SEXP _magmaan_inference_reuse_impl(SEXP contextSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_reuse_impl(context));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4285,7 +4359,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_prepared_data_impl", (DL_FUNC) &_magmaan_prepared_data_impl, 4},
     {"_magmaan_prepared_weight_impl", (DL_FUNC) &_magmaan_prepared_weight_impl, 4},
     {"_magmaan_prepared_estimate_impl", (DL_FUNC) &_magmaan_prepared_estimate_impl, 7},
-    {"_magmaan_prepare_inference_impl", (DL_FUNC) &_magmaan_prepare_inference_impl, 2},
+    {"_magmaan_prepare_inference_impl", (DL_FUNC) &_magmaan_prepare_inference_impl, 3},
     {"_magmaan_score_rows_impl", (DL_FUNC) &_magmaan_score_rows_impl, 2},
     {"_magmaan_score_components_impl", (DL_FUNC) &_magmaan_score_components_impl, 4},
     {"_magmaan_project_scores_impl", (DL_FUNC) &_magmaan_project_scores_impl, 3},
@@ -4297,6 +4371,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_parameter_covariance_impl", (DL_FUNC) &_magmaan_parameter_covariance_impl, 3},
     {"_magmaan_inference_snapshot_impl", (DL_FUNC) &_magmaan_inference_snapshot_impl, 1},
     {"_magmaan_score_components_matrix_impl", (DL_FUNC) &_magmaan_score_components_matrix_impl, 7},
+    {"_magmaan_prepare_ntml_data_impl", (DL_FUNC) &_magmaan_prepare_ntml_data_impl, 3},
+    {"_magmaan_prepare_ntml_hypothesis_impl", (DL_FUNC) &_magmaan_prepare_ntml_hypothesis_impl, 2},
+    {"_magmaan_ntml_quadratic_impl", (DL_FUNC) &_magmaan_ntml_quadratic_impl, 3},
+    {"_magmaan_ntml_reference_impl", (DL_FUNC) &_magmaan_ntml_reference_impl, 2},
+    {"_magmaan_ntml_covariance_impl", (DL_FUNC) &_magmaan_ntml_covariance_impl, 2},
+    {"_magmaan_inference_reuse_impl", (DL_FUNC) &_magmaan_inference_reuse_impl, 1},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_continuous_ls_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_continuous_ls_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},

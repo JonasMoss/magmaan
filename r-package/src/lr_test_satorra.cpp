@@ -19,6 +19,7 @@
 #include <RcppEigen.h>
 
 #include "internal.hpp"
+#include "ntml_snapshot.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -563,6 +564,24 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
                                      std::string          gamma = "empirical",
                                      std::string          a_method = "exact",
                                      std::string          computation = "streaming") {
+  auto native0=magmaanr::ntml_snapshot(fit_H0), native1=magmaanr::ntml_snapshot(fit_H1);
+  if (native0 && native1 && native0->data==native1->data && gamma=="empirical" &&
+      a_method=="exact" && computation=="streaming") {
+    magmaan::data::RawData supplied;
+    for (R_xlen_t b=0;b<X_per_group.size();++b) supplied.X.push_back(Rcpp::as<Eigen::MatrixXd>(X_per_group[b]));
+    magmaanr::validate_ntml_raw(*native0,supplied);
+    auto h=magmaan::robust::frontier::prepare_ntml_hypothesis(native0,native1);
+    if (!h) magmaanr::stop_post(h.error());
+    auto q=magmaan::robust::frontier::ntml_quadratic(**h,false);
+    if (!q) magmaanr::stop_post(q.error());
+    auto e=magmaan::robust::frontier::ntml_spectrum(**q);
+    if (!e) magmaanr::stop_post(e.error());
+    magmaan::robust::SatorraDiffResult sd;
+    sd.eigenvalues=**e; sd.trace_CinvS=(**e).sum(); sd.trace_CinvS_sq=(**e).squaredNorm();
+    auto r=magmaan::robust::lr_test_satorra2000((**q).statistic,sd);
+    if (!r) magmaanr::stop_post(r.error());
+    return satorra2000_to_list(*r);
+  }
   // ── Build the H1 context (pt, rep, samp) and pull θ̂_H1 ─────────────────
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);

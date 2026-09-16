@@ -1,4 +1,5 @@
 #pragma once
+#include "magmaan/robust/prepared_ntml.hpp"
 
 namespace score_bindings {
 using namespace magmaan;
@@ -9,6 +10,7 @@ struct Context {
   data::RawData raw;
   estimate::fiml::FIMLPack pack;
   std::string estimator;
+  std::shared_ptr<robust::frontier::NTMLFit> ntml;
 };
 
 template<class T> T& get(SEXP ptr, const char* tag) {
@@ -20,7 +22,7 @@ template<class T> T& get(SEXP ptr, const char* tag) {
 template<class T> SEXP handle(T value, const char* tag) {
   return Rcpp::XPtr<T>(new T(std::move(value)), true, Rf_install(tag));
 }
-Rcpp::List prepare(Rcpp::List fit, SEXP raw) {
+Rcpp::List prepare(Rcpp::List fit, SEXP raw, SEXP shared_data = R_NilValue) {
   Context c;
   c.ctx = ctx_from_fit(fit);
   c.estimates = est_from_fit(fit);
@@ -28,8 +30,18 @@ Rcpp::List prepare(Rcpp::List fit, SEXP raw) {
   if (c.estimator != "ML" && c.estimator != "FIML" && c.estimator != "ML2S")
     Rcpp::stop("prepare_inference(): score adapters currently support ML, FIML and fixed-NT ML2S");
   c.raw = c.estimator == "ML" ? complete_raw_from_arg(c.ctx.rep, raw) : fiml_raw_from_arg(c.ctx.rep, raw);
-  std::unique_ptr<FimlPack> owned;
-  c.pack = fiml_pack_for_fit(fit, c.raw, owned);
+  std::shared_ptr<robust::frontier::NTMLData> shared;
+  if (c.estimator == "ML") {
+    if (!Rf_isNull(shared_data)) shared = get<std::shared_ptr<robust::frontier::NTMLData>>(shared_data,"magmaan_ntml_data");
+    else {
+      auto d=robust::frontier::prepare_ntml_data(c.raw,c.ctx.meanstructure);
+      if (!d) stop_post(d.error()); shared=*d;
+    }
+    c.pack=shared->pack;
+  } else {
+    std::unique_ptr<FimlPack> owned;
+    c.pack = fiml_pack_for_fit(fit, c.raw, owned);
+  }
   if (c.estimator == "ML") {
     const auto& sample = c.pack.start_stats;
     if (sample.n_obs != c.ctx.samp.n_obs || sample.S.size() != c.ctx.samp.S.size())
@@ -41,10 +53,31 @@ Rcpp::List prepare(Rcpp::List fit, SEXP raw) {
     }
   }
 
+  if (c.estimator == "ML") {
+    std::shared_ptr<robust::frontier::NTMLData> data=shared;
+    if (!Rf_isNull(shared_data)) {
+      data = get<std::shared_ptr<robust::frontier::NTMLData>>(shared_data,"magmaan_ntml_data");
+      if (data->raw.X.size() != c.raw.X.size()) Rcpp::stop("inference data layout mismatch");
+      for (std::size_t b=0;b<c.raw.X.size();++b)
+        if (data->raw.X[b].rows()!=c.raw.X[b].rows() || data->raw.X[b].cols()!=c.raw.X[b].cols() ||
+            !(data->raw.X[b].array()==c.raw.X[b].array()).all()) Rcpp::stop("inference data observations differ");
+    }
+    auto f = robust::frontier::prepare_ntml_fit(data,c.ctx.pt,c.ctx.rep,c.estimates);
+    if (f) c.ntml = std::move(*f);
+    else if (!Rf_isNull(shared_data)) stop_post(f.error());
+  } else if (!Rf_isNull(shared_data)) Rcpp::stop("shared NTML data require an ML fit");
+
   Rcpp::List out = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(c.estimates.theta),
       Rcpp::_["estimator"] = c.estimator);
   Rcpp::List snapshot = cache_fit_context(fit,c.ctx);
-  if (c.estimator == "ML") snapshot["raw_data"] = raw;
+  if (c.estimator == "ML") {
+    snapshot["raw_data"] = raw;
+    SEXP native=handle(c.ntml,"magmaan_ntml_fit");
+    Rcpp::List keys=Rcpp::List::create(snapshot["partable"],snapshot["S"],snapshot["nobs"],
+        snapshot["sample_mean"],snapshot["theta"],snapshot["fmin"],snapshot["raw_data"]);
+    R_SetExternalPtrProtected(native,keys);
+    snapshot.attr("magmaan_ntml") = native;
+  }
   out["fit"] = snapshot;
   out["original_fit"] = fit;
   out["raw"] = raw;

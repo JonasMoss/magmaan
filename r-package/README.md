@@ -334,6 +334,47 @@ verdict. GP uses Kaufman's approximate residual Jacobian: scalar gradients are
 exact locally at fixed rank with accurate inner solves, while residual-based
 backends use approximate Gauss–Newton curvature.
 
+### Sharing NTML work across tests
+
+For complete-data ML, use one inference dataset across the fitted models. The
+native objects retain the existing NTML U-factor setup, casewise contributions,
+information and each test's reduced covariance/spectrum:
+
+```r
+d <- prepare_inference_data(fit1, data)
+g0 <- prepare_inference(fit0, d)
+g1 <- prepare_inference(fit1, d)
+h <- prepare_hypothesis(g0, g1)
+
+# Global score and ML GOF at one fit:
+qs <- inference_quadratic(g0, "score")
+ql <- inference_quadratic(g0, "lr")
+# Nested score and exact Satorra–2000 LR:
+ns <- inference_quadratic(h, "score")
+nl <- inference_quadratic(h, "lr")
+calibrate_quadratic(ns, c("sb", "peba4"))
+calibrate_quadratic(nl, c("sb", "peba4"))
+
+V <- inference_covariance(g0, robust = TRUE) # reusable by wald_test()
+inference_reuse(g0)                         # construction counts
+```
+
+Repeated calls reuse the native results, including spectra. SB-only calibration
+uses the trace. `storage = "auto"` caches casewise moment contributions up to
+64 MiB, then uses tiled projections. The large-N global path accumulates score
+and GOF reductions together; the smaller row-space spectrum is used when
+appropriate. Neither empirical Gamma nor full U is required. Tiled storage may
+revisit raw data for distinct hypotheses; an explicit unbiased GOF request can
+materialize casewise contributions for the existing correction.
+
+This path currently supports structured expected-information geometry, affine
+exact parameter nesting, interior fits and random X. Score uses likelihood
+contributions at H0; LR uses its own H1-anchored reduction. Their finite-sample
+spectra remain distinct. Compatible prepared fits also feed the existing GOF,
+expected-information, expected sandwich-SE and exact empirical streaming LR
+wrappers. Other conventions, FIML and ML2S retain their existing interfaces.
+See `examples/inference_reuse.R` for parity and reuse checks.
+
 ### Reusable score and inference objects
 
 Scores are available without running a score test. For ML/FIML, prepare an

@@ -182,3 +182,12 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 Rscript benchmarks/sc
 ```
 
 No full simulation is run and no historical run artifacts are overwritten.
+
+### Shared NTML inference
+
+`Rscript benchmarks/inference_reuse.R` compares separate and shared global and
+nested score/LR pipelines at N=400, p=10/20 (15 warmed repetitions, no simulation
+rerun). Fresh shared timings include preparation; repeated timings cover four
+calibrations plus a cached covariance. The script asserts that repeated calls
+leave construction counts unchanged. Run with one BLAS/OpenMP thread and an
+updated R development installation. Timings are advisory and depend on dimension.

@@ -8,6 +8,7 @@
 // <-> R via RcppEigen. Shared plumbing lives in internal.hpp.
 
 #include "internal.hpp"
+#include "ntml_snapshot.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -6454,6 +6455,14 @@ SEXP estimate_structured_gamma_weight(Rcpp::List fit, SEXP raw_data) {
 //
 // [[Rcpp::export]]
 Rcpp::List model_implied(Rcpp::List fit) {
+  if (auto cached=magmaanr::ntml_snapshot(fit)) {
+    auto g=magmaan::robust::frontier::ntml_geometry(*cached);
+    if (!g) stop_post(g.error());
+    Rcpp::List sigma((*g)->base.blocks.size()),mu((*g)->mean_hat.size());
+    for (std::size_t b=0;b<(*g)->base.blocks.size();++b) sigma[b]=Rcpp::wrap((*g)->base.blocks[b].Sigma_hat);
+    for (std::size_t b=0;b<(*g)->mean_hat.size();++b) mu[b]=Rcpp::wrap((*g)->mean_hat[b]);
+    return Rcpp::List::create(Rcpp::_["sigma"]=sigma,Rcpp::_["mu"]=mu);
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
@@ -6477,6 +6486,10 @@ Rcpp::List model_implied(Rcpp::List fit) {
 //
 // [[Rcpp::export]]
 Rcpp::NumericMatrix infer_information_expected(Rcpp::List fit) {
+  if (auto cached=magmaanr::ntml_snapshot(fit)) {
+    auto info=magmaan::robust::frontier::ntml_information(*cached);
+    if (!info) stop_post(info.error()); return Rcpp::wrap(**info);
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   auto r = magmaan::inference::information_expected(ctx.pt, ctx.rep, ctx.samp, est);
@@ -10187,8 +10200,8 @@ Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight,
 #include "score_primitives.hpp"
 
 // [[Rcpp::export]]
-Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw) {
-  return score_bindings::prepare(fit, raw);
+Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw, SEXP shared_data = R_NilValue) {
+  return score_bindings::prepare(fit, raw, shared_data);
 }
 // [[Rcpp::export]]
 Rcpp::List score_rows_impl(SEXP context, std::string space) {
@@ -10228,6 +10241,11 @@ Rcpp::NumericMatrix inference_information_impl(SEXP context, std::string type) {
   const auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
   if (c.estimator == "ML2S") Rcpp::stop("inference_information(): use the ML2S Stage-1/Stage-2 covariance interface");
   magmaan::post_expected<Eigen::MatrixXd> out;
+  if (type == "expected" && c.ntml) {
+    auto info = magmaan::robust::frontier::ntml_information(*c.ntml);
+    if (!info) stop_post(info.error());
+    return Rcpp::wrap(**info);
+  }
   if (type == "expected") {
     out = c.estimator == "FIML" ? magmaan::estimate::fiml::fiml_expected_information(
         c.ctx.pt,c.ctx.rep,c.raw,c.estimates,c.pack) : magmaan::inference::information_expected(
@@ -10285,4 +10303,71 @@ SEXP score_components_matrix_impl(Rcpp::NumericVector score, Rcpp::NumericMatrix
       1e-9 * std::max(1.0, c.score.norm()))
     Rcpp::stop("score_components_from_matrices(): likelihood rows must sum to the observed score");
   return score_bindings::handle(std::move(c),"magmaan_score_components");
+}
+
+// [[Rcpp::export]]
+SEXP prepare_ntml_data_impl(Rcpp::List fit, SEXP raw, std::string storage) {
+  auto ctx = ctx_from_fit(fit);
+  auto method = magmaan::robust::frontier::ContributionStorage::Auto;
+  if (storage == "casewise") method = magmaan::robust::frontier::ContributionStorage::Casewise;
+  else if (storage == "tiled") method = magmaan::robust::frontier::ContributionStorage::Tiled;
+  else if (storage != "auto") Rcpp::stop("unknown contribution storage");
+  auto data = magmaan::robust::frontier::prepare_ntml_data(
+      complete_raw_from_arg(ctx.rep,raw),ctx.meanstructure,method);
+  if (!data) stop_post(data.error());
+  return score_bindings::handle(*data,"magmaan_ntml_data");
+}
+// [[Rcpp::export]]
+SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context) {
+  auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
+  auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
+  auto h = magmaan::robust::frontier::prepare_ntml_hypothesis(a.ntml,b.ntml);
+  if (!h) stop_post(h.error());
+  return score_bindings::handle(*h,"magmaan_ntml_hypothesis");
+}
+// [[Rcpp::export]]
+Rcpp::List ntml_quadratic_impl(SEXP object, bool hypothesis, bool score) {
+  magmaan::post_expected<std::shared_ptr<magmaan::robust::frontier::NTMLQuadratic>> q;
+  if (hypothesis) {
+    auto& h = score_bindings::get<std::shared_ptr<magmaan::robust::frontier::NTMLHypothesis>>(object,"magmaan_ntml_hypothesis");
+    q = magmaan::robust::frontier::ntml_quadratic(*h,score);
+  } else {
+    auto& c = score_bindings::get<score_bindings::Context>(object,"magmaan_inference_context");
+    if (!c.ntml) Rcpp::stop("inference_quadratic(): shared geometry requires an interior random-X continuous ML fit with affine constraints");
+    q = magmaan::robust::frontier::ntml_quadratic(*c.ntml,score);
+  }
+  if (!q) stop_post(q.error());
+  return Rcpp::List::create(Rcpp::_["statistic"]=(**q).statistic,Rcpp::_["df"]=(**q).df,
+      Rcpp::_["native"]=score_bindings::handle(*q,"magmaan_ntml_quadratic"));
+}
+// [[Rcpp::export]]
+Rcpp::List ntml_reference_impl(SEXP object, bool spectrum) {
+  auto& q = *score_bindings::get<std::shared_ptr<magmaan::robust::frontier::NTMLQuadratic>>(object,"magmaan_ntml_quadratic");
+  Rcpp::List out=Rcpp::List::create(Rcpp::_["statistic"]=q.statistic,Rcpp::_["df"]=q.df);
+  if (spectrum) {
+    auto values=magmaan::robust::frontier::ntml_spectrum(q);
+    if (!values) stop_post(values.error()); out["eigenvalues"]=Rcpp::wrap(**values);
+  } else out["mean_scale"]=(q.reduced ? q.reduced->trace() : q.rows.squaredNorm())/q.df;
+  return out;
+}
+// [[Rcpp::export]]
+Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust) {
+  auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
+  if (!c.ntml) Rcpp::stop("inference_covariance(): shared geometry requires continuous ML");
+  auto v=magmaan::robust::frontier::ntml_covariance(*c.ntml,robust);
+  if (!v) stop_post(v.error()); return Rcpp::wrap(**v);
+}
+// [[Rcpp::export]]
+Rcpp::List inference_reuse_impl(SEXP context) {
+  auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
+  if (!c.ntml) Rcpp::stop("reuse counters currently require continuous ML");
+  const auto& f=*c.ntml;
+  return Rcpp::List::create(Rcpp::_["geometry_builds"]=static_cast<double>(f.geometry_builds),
+    Rcpp::_["u_builds"]=static_cast<double>(f.u_builds),
+    Rcpp::_["information_builds"]=static_cast<double>(f.information_builds),
+    Rcpp::_["score_spectrum_builds"]=static_cast<double>(f.score ? f.score->spectrum_builds : 0),
+    Rcpp::_["lr_spectrum_builds"]=static_cast<double>(f.lr ? f.lr->spectrum_builds : 0),
+    Rcpp::_["contribution_builds"]=static_cast<double>(f.data->contribution_builds),
+    Rcpp::_["projection_passes"]=static_cast<double>(f.data->projection_passes),
+    Rcpp::_["storage"]=f.data->storage == magmaan::robust::frontier::ContributionStorage::Tiled ? "tiled" : "casewise");
 }

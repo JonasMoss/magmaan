@@ -7,6 +7,7 @@
 // eigensolve several ways. Shared plumbing lives in internal.hpp.
 
 #include "internal.hpp"
+#include "ntml_snapshot.hpp"
 
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
@@ -617,6 +618,19 @@ Rcpp::NumericVector infer_ugamma_eigenvalues(Rcpp::NumericMatrix M) {
 // [[Rcpp::export]]
 Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
                                     bool need_unbiased = false) {
+  if (auto cached = magmaanr::ntml_snapshot(fit)) {
+    magmaanr::validate_ntml_raw(*cached,raw_from_arg(cached->rep,X));
+    auto q=magmaan::robust::frontier::ntml_quadratic(*cached,false);
+    if (!q) stop_post(q.error());
+    auto e=magmaan::robust::frontier::ntml_spectrum(**q);
+    if (!e) stop_post(e.error());
+    Rcpp::List out=Rcpp::List::create(Rcpp::_["biased"]=Rcpp::wrap(**e));
+    if (need_unbiased) {
+      auto u=magmaan::robust::frontier::ntml_unbiased_spectrum(*cached);
+      if (!u) stop_post(u.error()); out["unbiased"]=Rcpp::wrap(**u);
+    }
+    return out;
+  }
   Ctx ctx = ctx_from_fit(fit);
 
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1492,6 +1506,15 @@ Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X,
                                std::string bread = "expected", std::string moments = "structured",
                                std::string cov = "empirical") {
+  if (auto cached=magmaanr::ntml_snapshot(fit);
+      cached && bread=="expected" && moments=="structured" &&
+      (cov=="empirical" || cov=="model_implied")) {
+    magmaanr::validate_ntml_raw(*cached,raw_from_arg(cached->rep,X));
+    auto v=magmaan::robust::frontier::ntml_covariance(*cached,cov=="empirical");
+    if (!v) stop_post(v.error());
+    const Eigen::VectorXd se=(**v).diagonal().cwiseMax(0.0).cwiseSqrt();
+    return Rcpp::List::create(Rcpp::_["vcov"]=Rcpp::wrap(**v),Rcpp::_["se"]=Rcpp::wrap(se));
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);

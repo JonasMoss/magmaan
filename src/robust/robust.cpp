@@ -495,13 +495,7 @@ namespace {
 // phase so that (a) the existing single-bread `build_u_factor` and (b) the
 // new `build_u_factor_pair` can compose against the same setup, with only
 // the bread tail (QR for Expected; H_obs for Observed) re-run per copy.
-struct UFactorShared {
-  UFactor base;            // bread-independent fields populated; kind/B/A/H_obs_inv/df left default
-  Eigen::MatrixXd A;       // total_rows × q, = L_Γ⁻¹·Δ (per-block, dual-segment when has_means)
-  Eigen::MatrixXd K_con;   // npar × n_alpha when active; empty otherwise
-  Eigen::Index    q       = 0;
-  double          N_total = 0.0;
-};
+using UFactorShared = NTMLGeometry;
 
 post_expected<UFactorShared>
 build_u_factor_shared(spec::LatentStructure                       pt,
@@ -686,6 +680,8 @@ build_u_factor_shared(spec::LatentStructure                       pt,
     return std::unexpected(make_err(con_or.error().kind,
         "build_u_factor: " + con_or.error().detail));
   }
+  sh.Delta = Delta_full;
+  sh.mean_hat = im_or->mu;
   Eigen::MatrixXd Delta = std::move(Delta_full);
   if (con_or->active()) {
     sh.K_con = con_or->K();
@@ -1009,6 +1005,23 @@ build_u_factor_pairwise_expected_streaming(
 }
 
 }  // namespace
+
+post_expected<NTMLGeometry> prepare_ntml_geometry(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Estimates& est, WeightMoments moments) {
+  if (moments == WeightMoments::Pairwise)
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "prepare_ntml_geometry: use the pairwise operator interface for missing data"));
+  return build_u_factor_shared(std::move(pt), rep, samp, est, moments);
+}
+post_expected<UFactor> ntml_u_factor(const NTMLGeometry& geometry) {
+  return finish_u_factor_expected(geometry);
+}
+post_expected<UFactor> ntml_u_factor_observed(
+    const NTMLGeometry& geometry, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const SampleStats& samp, const Estimates& est) {
+  return finish_u_factor_observed(geometry, pt, rep, samp, est);
+}
 
 // Public `build_u_factor`: thin composition of `build_u_factor_shared` plus
 // the matching bread tail. Kept binary-identical to the prior implementation.

@@ -200,11 +200,9 @@
 .fmg_result_rows <- function(fit, X, specs) {
   ss <- fit_sample_stats(fit)
   df <- infer_df_stat(fit$partable, ss)
-  implied <- model_implied(fit)
-  base_stat <- c(
-    ml = infer_chi2_stat(ss, fit$fmin),
-    rls = infer_rls_chi2_fit(fit, implied)$statistic
-  )
+  base_stat <- c(ml = infer_chi2_stat(ss, fit$fmin))
+  if (any(vapply(specs, function(s) s$base == "rls", logical(1))))
+    base_stat["rls"] <- infer_rls_chi2_fit(fit, model_implied(fit))$statistic
   need_ug <- any(vapply(specs, `[[`, logical(1), "ug"))
   ev <- infer_fmg_ugamma_spectra(fit, X, need_ug)
 

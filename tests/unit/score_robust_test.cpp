@@ -24,6 +24,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/prepared_ntml.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -2397,4 +2398,70 @@ TEST_CASE("score primitives: global FIML preparation and retained resampling agr
   auto flip = inf::frontier::resample_scores(*p,31,19);
   REQUIRE(flip.has_value());
   CHECK(flip->p_value == legacy->flip.p_effective);
+}
+
+TEST_CASE("prepared NTML shares contributions and geometry across score LR and covariance") {
+  using namespace rob::frontier;
+  for (bool means : {false,true}) {
+    auto h = means ? build_groups_mean("f =~ x1 + a*x2 + b*x3 + x4",2)
+                   : build_groups("f =~ x1 + a*x2 + b*x3 + x4",2);
+    std::mt19937 rng(382);
+    magmaan::data::RawData raw;
+    raw.X.push_back(multivariate_t_sample(rng,140,four_indicator_sample_cov(),7));
+    raw.X.push_back(multivariate_t_sample(rng,210,four_indicator_sample_cov(),7));
+    auto data = prepare_ntml_data(raw,means,ContributionStorage::Casewise);
+    REQUIRE(data.has_value());
+    auto est = magmaan::test::fit(h.pt,h.rep,(*data)->sample);
+    REQUIRE(est.has_value());
+    auto fit = prepare_ntml_fit(*data,h.pt,h.rep,*est);
+    REQUIRE(fit.has_value());
+    auto score = ntml_quadratic(**fit,true), lr = ntml_quadratic(**fit,false);
+    REQUIRE(score.has_value()); REQUIRE(lr.has_value());
+    auto components = inf::frontier::global_score_components(h.pt,h.rep,(*data)->sample,raw,*est);
+    REQUIRE(components.has_value());
+    auto projected = inf::frontier::project_scores(*components);
+    REQUIRE(projected.has_value());
+    CHECK((**score).statistic == doctest::Approx(projected->statistic).epsilon(1e-8));
+    auto se = ntml_spectrum(**score); auto oldse = inf::frontier::score_spectrum(*projected);
+    REQUIRE(se.has_value()); REQUIRE(oldse.has_value());
+    CHECK((**se-*oldse).norm() < 1e-7);
+    auto u = rob::build_u_factor(h.pt,h.rep,(*data)->sample,*est);
+    REQUIRE(u.has_value());
+    Eigen::Vector2d denom(140,210);
+    auto z = rob::casewise_contributions(raw,(*data)->sample,means);
+    REQUIRE(z.has_value());
+    auto M = rob::reduced_gamma_sample(*u,*z,denom);
+    REQUIRE(M.has_value());
+    auto expected = rob::ugamma_eigenvalues(*M); auto got = ntml_spectrum(**lr);
+    REQUIRE(expected.has_value()); REQUIRE(got.has_value());
+    CHECK((**got-*expected).norm()<1e-9);
+    auto info = ntml_information(**fit);
+    auto oldinfo = inf::information_expected(h.pt,h.rep,(*data)->sample,*est);
+    REQUIRE(info.has_value()); REQUIRE(oldinfo.has_value());
+    CHECK((**info-*oldinfo).norm()<1e-7);
+    REQUIRE(ntml_covariance(**fit).has_value()); REQUIRE(ntml_covariance(**fit,true).has_value());
+    const auto passes=(*data)->projection_passes;
+    CHECK(ntml_quadratic(**fit,true).value()==*score);
+    REQUIRE(ntml_covariance(**fit,true).has_value()); REQUIRE(ntml_spectrum(**lr).has_value());
+    CHECK((*data)->projection_passes==passes);
+    CHECK((*data)->contribution_builds==1);
+    CHECK((*fit)->geometry_builds==1); CHECK((*fit)->u_builds==1);
+    CHECK((**lr).spectrum_builds==1);
+    auto tiled=prepare_ntml_data(raw,means,ContributionStorage::Tiled);
+    REQUIRE(tiled.has_value());
+    auto tf=prepare_ntml_fit(*tiled,h.pt,h.rep,*est); REQUIRE(tf.has_value());
+    auto tq=ntml_quadratic(**tf,false); REQUIRE(tq.has_value());
+    auto te=ntml_spectrum(**tq); REQUIRE(te.has_value());
+    CHECK((**te-**got).norm()<1e-9);
+    CHECK((*tiled)->contribution_builds==0);
+  }
+}
+
+TEST_CASE("prepared NTML spectrum uses the smaller row space and caches it") {
+  rob::frontier::NTMLQuadratic q;
+  q.df=5; q.rows=Eigen::MatrixXd::Random(2,5); q.statistic=1;
+  auto e=rob::frontier::ntml_spectrum(q); REQUIRE(e.has_value());
+  auto dense=rob::ugamma_eigenvalues(q.rows.transpose()*q.rows); REQUIRE(dense.has_value());
+  CHECK((**e-*dense).norm()<1e-12); CHECK(q.row_space);
+  REQUIRE(rob::frontier::ntml_spectrum(q).has_value()); CHECK(q.spectrum_builds==1);
 }
