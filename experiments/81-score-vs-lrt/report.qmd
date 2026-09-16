@@ -1,0 +1,122 @@
+---
+title: "Score versus LR: timing the first simulation"
+params:
+  run: timing-battery-final
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+path <- file.path('results',params$run)
+if(!file.exists(file.path(path,'budget_projection.csv'))) stop(
+  'Missing pilot results. Run: Rscript run_experiment.R --reps 50 --output ',params$run)
+b <- read.csv(file.path(path,'budget_projection.csv'))
+tim <- read.csv(file.path(path,'score_lrt_timing.csv'))
+meta <- read.csv(file.path(path,'metadata.csv'))
+x <- read.csv(file.path(path,'replicates.csv'))
+one <- x[!duplicated(paste(x$cell_id,x$rep)),]
+checks <- read.csv('results/validation/checks.csv')
+get_meta <- function(key) meta$value[match(key,meta$key)]
+seconds <- tim$elapsed_seconds[tim$phase=='simulation_loop']
+project <- function(reps) (b$fixed_seconds+reps*b$seconds_per_grid_round)/60
+shared_fail <- sum(nzchar(one$error))
+```
+
+## Question
+
+Can we compare score and likelihood-ratio goodness-of-fit tests, including
+Satorra–Bentler and pEBA calibrations, within an hour on this laptop?
+
+## Short answer
+
+**The timing pilot says yes.** `r nrow(one)` samples across 18 cells took
+**`r round(seconds,1)` seconds** with one worker, on
+`r get_meta('power_start')`. At that measured rate, **2,000 replications per cell
+would take about `r round(project(2000))` minutes**, and **5,000 about
+`r round(project(5000))` minutes**. The latter is a reasonable target within an
+hour, allowing for slower fits and other activity.
+
+This is a runtime result, not a verdict on which test is better. There are only
+`r get_meta('reps')` replications per cell. The main simulation has not run.
+
+## Evidence
+
+```{r}
+plan <- data.frame(
+  `Replications per cell`=c(2000,5000),
+  `Total samples`=18*c(2000,5000),
+  `Projected minutes`=round(vapply(c(2000,5000),project,numeric(1)),1),
+  `MC SE at 5% (percentage points)`=round(100*sqrt(.05*.95/c(2000,5000)),2),
+  check.names=FALSE)
+knitr::kable(plan)
+```
+
+The projections include measured setup and warmup, and retain the measured
+single-worker throughput. They assume no parallel speedup. Compilation and
+experiment development are excluded. Plugging in, CPU power settings, thermal
+conditions and competing workloads can change the rate. A repeat pilot after
+plugging in can update the estimate.
+
+There were **`r shared_fail` shared fit failures among `r nrow(one)` samples**,
+including convergence, covariance-admissibility and stationarity failures.
+The sandwich score comparator is additionally unavailable with 20 indicators
+and N = 100: there are too few observations for its covariance estimate to
+have the required rank. This does not prevent SB and pEBA from using a
+rank-deficient estimated spectrum. All unavailable results retain a reason.
+
+All **`r nrow(checks)` numerical checks passed** on four separate datasets.
+They cover LR/SB agreement with lavaan, pEBA-family agreement with semTests,
+a separate Gaussian score formula, and the normal-reference reduction.
+The expected-information score statistic equals the fitted-weight RLS statistic
+at a stationary interior fit; the different calibrations remain separate.
+
+## Caveats
+
+- This is a null-size study only; it does not yet compare power.
+- The models are the source paper's two-factor, 10- and 20-indicator populations.
+  N = 100, 200 and 500 are a smaller-sample extension of its design.
+- Distributions are normal, the paper's severe Vale–Maurelli condition
+  (skewness 3, excess kurtosis 21), and a symmetric standardized t(10)
+  extension. The t(10) condition is **not** a paper replication; it has finite
+  eighth moments. All three preserve the target covariance.
+- Failed fits are retained, with rejection estimates conditioned on valid
+  draws and paired comparisons restricted to common valid draws. Read failure
+  rates alongside any later calibration result.
+- Tests share data and a fitted null. Timing records distinguish the batched
+  LR/RLS comparisons from score setup and calibrations. Individual LR-family
+  post-fit times have not been separately measured.
+- Question-to-report elapsed time and active researcher time are unmeasured.
+  The compute timing must not be presented as total research-development time.
+
+## Reproduce
+
+From the repository root, with the installed magmaan, lavaan and semTests packages:
+
+```sh
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  Rscript experiments/81-score-vs-lrt/validate.R
+
+# New output name preserves the battery pilot.
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  Rscript experiments/81-score-vs-lrt/run_experiment.R \
+  --reps 50 --workers 1 --budget-minutes 60 --output timing-ac
+
+quarto render experiments/81-score-vs-lrt/report.qmd -P run:timing-ac
+```
+
+A later main run can use `--reps 5000 --output main-5000` with the same thread
+settings. Nothing in rendering starts a simulation, and no main run is started
+automatically. Output folders must be new to preserve earlier runs.
+
+Raw draws' test results, failures, per-cell timing, software fingerprints,
+power state and hardware metadata are stored under `results/<run>/`. Use
+`Rscript experiments/81-score-vs-lrt/run_experiment.R --help` for options.
+
+The design follows [Foldnes, Moss & Grønneberg (2025; online 2024)](https://doi.org/10.1080/10705511.2024.2372028),
+with population loadings from the [source supplement](https://osf.io/6trwu/).
