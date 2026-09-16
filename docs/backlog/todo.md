@@ -13,18 +13,21 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-### Lean complete-data global score calibration
+### First-class score primitives
 
-- **M — separate requested score calibration from unused diagnostics.** The
-  Oslo talk runtime diagnostic found that the global score-flip wrapper spends
-  about 7.45 ms/sample on an exact-mixture tail discarded by the SB/pEBA
-  simulation, within a 15.37 ms wrapper (54-draw, 18-condition pilot). Reuse
-  applicable fitted-weight RLS geometry for complete-data expected-information
-  scores; preserve the uncentered score-covariance convention and numerical
-  identity checks. Expose an asymptotic route without a dummy flip and make
-  exact-mixture, sandwich and diagnostic work explicit. Profile projection/
-  eigensolver reuse before changing the general missing-data route. The current
-  implementation and frozen simulation results are unchanged.
+- **L — separate score construction, projection and calibration.** Expose
+  reusable score ingredients directly, with explicit coordinates, normalization,
+  sensitivity/metric and optional casewise rows. Make global/nested tests and
+  multiplier tests consumers of those primitives. The shared robust helper
+  currently computes an exact-mixture tail and sandwich diagnostics even for
+  callers requesting only SB/pEBA; this affects complete ML, direct FIML,
+  NT-ML2S and nested ML/FIML. Complete-data pilot timings attribute about
+  7.45 ms of a 15.37 ms score wrapper to an unused exact tail; missing-data
+  costs still need separate measurement. Reuse valid geometry/spectra without
+  changing centering or finite-sample conventions, and keep the ML2S observed
+  score distinct from Stage-1 influence rows. Implementation sequence and
+  acceptance criteria: [core-agent handoff](../../dev/handoffs/first-class-score-primitives.md).
+  No core change has yet been made by this handoff.
 
 ### Uniform prepared-model/data interface in R
 
