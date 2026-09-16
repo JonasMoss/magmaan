@@ -1602,6 +1602,35 @@ score_for_subspace_robust_impl(
   return out;
 }
 
+// Compatibility consumer: expensive historical diagnostics stay opt-in through
+// the legacy test entry points, never through component construction.
+post_expected<JointScoreTestResult>
+score_for_projected_robust_impl(const ProjectedScore& score) {
+  auto spectrum = score_spectrum(score);
+  if (!spectrum) return std::unexpected(spectrum.error());
+  JointScoreTestResult out;
+  out.df = static_cast<int>(score.score.size());
+  out.mi = score.statistic;
+  out.eigvals = std::move(*spectrum);
+  out.scaling_factor = out.eigvals.sum() / out.df;
+  if (!(out.scaling_factor > 0)) out.scaling_factor = 1.0;
+  out.mi_scaled = out.mi / out.scaling_factor;
+  out.p_value = chi2_pvalue(out.mi_scaled, out.df);
+  out.p_mixture = robust::weighted_chisq_upper(out.eigvals, out.mi);
+  auto sandwich = score_sandwich(score);
+  if (sandwich) {
+    out.mi_sandwich = *sandwich;
+    out.p_sandwich = chi2_pvalue(*sandwich, out.df);
+    out.sandwich_available = true;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(score.meat, Eigen::EigenvaluesOnly);
+    if (es.info() == Eigen::Success) {
+      out.sandwich_min_eigenvalue = es.eigenvalues().minCoeff();
+      out.sandwich_condition = es.eigenvalues().maxCoeff() / out.sandwich_min_eigenvalue;
+    }
+  }
+  return out;
+}
+
 post_expected<JointScoreTestResult>
 score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
                           const Eigen::VectorXd& score_full,
@@ -2568,8 +2597,30 @@ double draw_score_multiplier(std::mt19937_64& rng,
 
 }  // namespace
 
-post_expected<ScoreFlipTestResult>
-score_flip_test_impl(spec::LatentStructure pt_H1,
+post_expected<ScoreResamplingResult> resample_scores(
+    const ProjectedScore& score, int n_flips, std::uint64_t seed,
+    ScoreFlipMultiplier multiplier, double two_point_skewness) {
+  if (n_flips < 1 || score.rows.rows() == 0 ||
+      score.rows.cols() != score.score.size() || !score.rows.allFinite() ||
+      !std::isfinite(two_point_skewness) || two_point_skewness < 0 ||
+      two_point_skewness > 1e6)
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "resample_scores: retain rows and supply valid multiplier options"));
+  std::mt19937_64 rng(seed);
+  int exceed = 0;
+  for (int b = 0; b < n_flips; ++b) {
+    Eigen::VectorXd u = Eigen::VectorXd::Zero(score.score.size());
+    for (Eigen::Index i = 0; i < score.rows.rows(); ++i)
+      u += draw_score_multiplier(rng, multiplier, two_point_skewness) * score.rows.row(i).transpose();
+    const Eigen::VectorXd z = score.metric_cholesky.triangularView<Eigen::Lower>().solve(u);
+    if (z.squaredNorm() >= score.statistic) ++exceed;
+  }
+  const double p = (1.0 + exceed) / (1.0 + n_flips);
+  return ScoreResamplingResult{score.statistic, p, flip_mc_se(p, n_flips), n_flips};
+}
+
+post_expected<ScoreComponents>
+nested_score_components(spec::LatentStructure pt_H1,
                      const model::MatrixRep& rep_H1,
                      spec::LatentStructure pt_H0,
                      const model::MatrixRep& rep_H0,
@@ -2577,81 +2628,12 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
                      const RawData& raw,
                      const estimate::fiml::FIMLPack* fiml_pack,
                      const Estimates& est_H0,
-                     const ScoreFlipOptions& options) {
-  using Clock = std::chrono::steady_clock;
-  const auto total_begin = Clock::now();
-  const bool resample =
-      options.calibration != ScoreFlipCalibration::AsymptoticOnly;
-  const bool include_basic =
-      options.calibration == ScoreFlipCalibration::All;
-  const bool include_standardized =
-      options.calibration == ScoreFlipCalibration::All ||
-      options.calibration == ScoreFlipCalibration::EffectiveStandardized;
-  const bool multiplier_studentized =
-      options.multiplier_studentization ==
-      ScoreFlipMultiplierStudentization::WeightedMeat;
+                     ScoreFlipSensitivity sensitivity_kind) {
   const bool observed_sensitivity =
-      options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
-  if (options.sensitivity ==
-          ScoreFlipSensitivity::ObservedInformationLightShrinkage ||
-      options.sensitivity ==
-          ScoreFlipSensitivity::ObservedInformationSqrtShrinkage) {
-    return std::unexpected(make_err(
-        PostError::Kind::NumericIssue,
-        "score_flip_test: shrunken observed sensitivity is available only "
-        "for global goodness of fit"));
-  }
-  if (options.sensitivity ==
-      ScoreFlipSensitivity::SaturatedObservedInformation) {
-    return std::unexpected(make_err(
-        PostError::Kind::NumericIssue,
-        "score_flip_test: saturated-H1 observed sensitivity is available only for global goodness of fit"));
-  }
-  if (observed_sensitivity &&
-      options.calibration != ScoreFlipCalibration::Effective &&
-      options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
-    return std::unexpected(make_err(
-        PostError::Kind::NumericIssue,
-        "score_flip_test: observed sensitivity supports only effective or asymptotic calibration"));
-  }
-  if (observed_sensitivity && options.center_multiplier_scores) {
-    return std::unexpected(make_err(
-        PostError::Kind::NumericIssue,
-        "score_flip_test: observed sensitivity does not support within-stratum score centering"));
-  }
-  if (resample &&
-      options.multiplier != ScoreFlipMultiplier::Rademacher &&
-      options.calibration != ScoreFlipCalibration::Effective) {
+      sensitivity_kind == ScoreSensitivity::ObservedInformation;
+  if (sensitivity_kind != ScoreSensitivity::ExpectedInformation && !observed_sensitivity)
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: non-Rademacher multipliers require effective calibration"));
-  }
-  if (options.multiplier == ScoreFlipMultiplier::TwoPoint &&
-      (!std::isfinite(options.two_point_skewness) ||
-       options.two_point_skewness < 0.0 ||
-       options.two_point_skewness > 1e6)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: two-point skewness must be finite and in [0, 1e6]"));
-  }
-  if ((options.center_multiplier_scores || multiplier_studentized) &&
-      (!resample ||
-       options.calibration != ScoreFlipCalibration::Effective)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: multiplier centering and weighted-meat "
-        "studentization require effective calibration"));
-  }
-  if (options.exact_enumeration &&
-      options.multiplier != ScoreFlipMultiplier::Rademacher) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: exact enumeration is Rademacher-only"));
-  }
-  if (resample && !options.exact_enumeration && options.n_flips < 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: n_flips must be positive"));
-  }
-  if (!resample && options.exact_enumeration) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: exact enumeration requires a flip calibration"));
-  }
+        "nested_score_components: sensitivity must be expected or observed"));
   if (fiml_pack == nullptr) {
     if (samp == nullptr) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -2768,18 +2750,6 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
     sensitivity = 0.5 * (*observed + observed->transpose());
   }
 
-  const Eigen::MatrixXd A_nuisance = K.transpose() * sensitivity * K;
-  auto Ainv = invert_symmetric(A_nuisance,
-                               "score_flip_test nuisance information");
-  if (!Ainv.has_value()) return std::unexpected(Ainv.error());
-  Eigen::MatrixXd G = D;
-  if (K.cols() > 0) {
-    G.noalias() -=
-        K * ((*Ainv) * (K.transpose() * sensitivity * D));
-  }
-  Eigen::MatrixXd V_identity = G.transpose() * I * G;
-  V_identity = 0.5 * (V_identity + V_identity.transpose());
-
   std::optional<estimate::fiml::FIMLPack> owned_pack;
   if (fiml_pack == nullptr) {
     auto pack = estimate::fiml::fiml_pack(raw);
@@ -2796,7 +2766,124 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
         "score_flip_test: score rows and information strata differ"));
   }
   const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
-  const Eigen::MatrixXd effective_rows = scores * G;
+  ScoreComponents out;
+  out.score = score_full;
+  out.rows = scores;
+  out.sensitivity = std::move(sensitivity);
+  out.metric = std::move(I);
+  out.nuisance = K;
+  out.directions = D;
+  out.row_stratum = std::move(strata.row_stratum);
+  out.n_obs = std::move(strata.n_obs);
+  out.information_strata = std::move(strata.per_case);
+  return out;
+}
+
+post_expected<ScoreFlipTestResult>
+score_flip_test_impl(spec::LatentStructure pt_H1,
+                     const model::MatrixRep& rep_H1,
+                     spec::LatentStructure pt_H0,
+                     const model::MatrixRep& rep_H0,
+                     const SampleStats* samp,
+                     const RawData& raw,
+                     const estimate::fiml::FIMLPack* fiml_pack,
+                     const Estimates& est_H0,
+                     const ScoreFlipOptions& options) {
+  using Clock = std::chrono::steady_clock;
+  const auto total_begin = Clock::now();
+  const bool resample =
+      options.calibration != ScoreFlipCalibration::AsymptoticOnly;
+  const bool include_basic =
+      options.calibration == ScoreFlipCalibration::All;
+  const bool include_standardized =
+      options.calibration == ScoreFlipCalibration::All ||
+      options.calibration == ScoreFlipCalibration::EffectiveStandardized;
+  const bool multiplier_studentized =
+      options.multiplier_studentization ==
+      ScoreFlipMultiplierStudentization::WeightedMeat;
+  const bool observed_sensitivity =
+      options.sensitivity == ScoreFlipSensitivity::ObservedInformation;
+  if (options.sensitivity ==
+          ScoreFlipSensitivity::ObservedInformationLightShrinkage ||
+      options.sensitivity ==
+          ScoreFlipSensitivity::ObservedInformationSqrtShrinkage) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: shrunken observed sensitivity is available only "
+        "for global goodness of fit"));
+  }
+  if (options.sensitivity ==
+      ScoreFlipSensitivity::SaturatedObservedInformation) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: saturated-H1 observed sensitivity is available only for global goodness of fit"));
+  }
+  if (observed_sensitivity &&
+      options.calibration != ScoreFlipCalibration::Effective &&
+      options.calibration != ScoreFlipCalibration::AsymptoticOnly) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: observed sensitivity supports only effective or asymptotic calibration"));
+  }
+  if (observed_sensitivity && options.center_multiplier_scores) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "score_flip_test: observed sensitivity does not support within-stratum score centering"));
+  }
+  if (resample &&
+      options.multiplier != ScoreFlipMultiplier::Rademacher &&
+      options.calibration != ScoreFlipCalibration::Effective) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: non-Rademacher multipliers require effective calibration"));
+  }
+  if (options.multiplier == ScoreFlipMultiplier::TwoPoint &&
+      (!std::isfinite(options.two_point_skewness) ||
+       options.two_point_skewness < 0.0 ||
+       options.two_point_skewness > 1e6)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: two-point skewness must be finite and in [0, 1e6]"));
+  }
+  if ((options.center_multiplier_scores || multiplier_studentized) &&
+      (!resample ||
+       options.calibration != ScoreFlipCalibration::Effective)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: multiplier centering and weighted-meat "
+        "studentization require effective calibration"));
+  }
+  if (options.exact_enumeration &&
+      options.multiplier != ScoreFlipMultiplier::Rademacher) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: exact enumeration is Rademacher-only"));
+  }
+  if (resample && !options.exact_enumeration && options.n_flips < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: n_flips must be positive"));
+  }
+  if (!resample && options.exact_enumeration) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_flip_test: exact enumeration requires a flip calibration"));
+  }
+  auto components = nested_score_components(std::move(pt_H1), rep_H1,
+      std::move(pt_H0), rep_H0, samp, raw, fiml_pack, est_H0, options.sensitivity);
+  if (!components) return std::unexpected(components.error());
+  auto projected = project_scores(*components, true);
+  if (!projected) return std::unexpected(projected.error());
+  const auto& K = components->nuisance;
+  const auto& D = components->directions;
+  const auto& sensitivity = components->sensitivity;
+  const auto& scores = components->rows;
+  const auto& score_full = components->score;
+  const auto& G = projected->projection;
+  const auto& V_identity = projected->metric;
+  const auto& effective_rows = projected->rows;
+  const Eigen::Index df = projected->score.size();
+  FlipInformationStrata strata;
+  strata.per_case = components->information_strata;
+  strata.n_obs = components->n_obs;
+  strata.row_stratum = components->row_stratum;
+  const Eigen::MatrixXd A_nuisance = K.transpose() * sensitivity * K;
+  auto Ainv = invert_symmetric(A_nuisance, "score flips nuisance information");
+  if (!Ainv) return std::unexpected(Ainv.error());
   Eigen::MatrixXd multiplier_rows = effective_rows;
   if (options.center_multiplier_scores) {
     Eigen::MatrixXd stratum_sums = Eigen::MatrixXd::Zero(
@@ -2985,10 +3072,7 @@ score_flip_test_impl(spec::LatentStructure pt_H1,
   }
 
   const auto asymptotic_begin = Clock::now();
-  const Eigen::MatrixXd B1 = scores.transpose() * scores;
-  auto asymptotic = score_for_subspace_robust_impl(
-      {}, score_full, I, I, B1, K, D,
-      observed_sensitivity ? &sensitivity : nullptr);
+  auto asymptotic = score_for_projected_robust_impl(*projected);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
 
   const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -3116,6 +3200,196 @@ score_flip_test(spec::LatentStructure pt_H1,
       &*pack, est_H0, options);
 }
 
+post_expected<ScoreComponents>
+global_score_components(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const estimate::fiml::FIMLPack& pack,
+                       const Estimates& est,
+                       const ScoreGeometryOptions& geometry_options) {
+  const bool light_shrunken_observed_sensitivity =
+      geometry_options.sensitivity ==
+      ScoreFlipSensitivity::ObservedInformationLightShrinkage;
+  const bool sqrt_shrunken_observed_sensitivity =
+      geometry_options.sensitivity ==
+      ScoreFlipSensitivity::ObservedInformationSqrtShrinkage;
+  const bool observed_sensitivity =
+      geometry_options.sensitivity == ScoreFlipSensitivity::ObservedInformation ||
+      light_shrunken_observed_sensitivity ||
+      sqrt_shrunken_observed_sensitivity;
+  const bool saturated_observed_sensitivity =
+      geometry_options.sensitivity ==
+      ScoreFlipSensitivity::SaturatedObservedInformation;
+  const bool observed_metric =
+      geometry_options.metric ==
+      GlobalScoreFlipOptions::Metric::ObservedInformation;
+  const bool saturated_observed_metric =
+      geometry_options.metric ==
+      GlobalScoreFlipOptions::Metric::SaturatedObservedInformation;
+  if (pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: only affine equality constraints are supported"));
+  }
+  if (std::any_of(pt.exo.begin(), pt.exo.end(),
+                  [](std::int8_t value) { return value != 0; })) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: fixed-X models are not supported"));
+  }
+  if (est.diagnostics.active_bounds_full.any_active()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: boundary fits are not supported"));
+  }
+  if (est.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: estimate and model parameter counts differ"));
+  }
+  if (raw.mask.empty()) {
+    if (auto ok = validate_complete_flip_raw(pack.start_stats, raw);
+        !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev = build_eval(pt, rep);
+  if (!ev.has_value()) return std::unexpected(ev.error());
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  const bool include_means = eval->J_mu.rows() > 0;
+  if (!raw.mask.empty() && !include_means) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: missing-data models require a mean structure"));
+  }
+
+  auto geometry = saturated_flip_geometry(
+      raw, pack, eval->moments, include_means);
+  if (!geometry.has_value()) return std::unexpected(geometry.error());
+  const Eigen::Index moment_dim = geometry->information.rows();
+  if (eval->J_sigma.rows() > moment_dim ||
+      (include_means &&
+       eval->J_sigma.rows() + eval->J_mu.rows() != moment_dim)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: model Jacobian and saturated moments differ"));
+  }
+  Eigen::MatrixXd Delta_full = Eigen::MatrixXd::Zero(
+      moment_dim, est.theta.size());
+  Delta_full.topRows(eval->J_sigma.rows()) = eval->J_sigma;
+  if (include_means) {
+    Delta_full.bottomRows(eval->J_mu.rows()) = eval->J_mu;
+  }
+  auto constraints = build_eq_constraints(pt);
+  if (!constraints.has_value()) return std::unexpected(constraints.error());
+  const Eigen::MatrixXd Delta = Delta_full * constraints->K();
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      Delta, Eigen::ComputeFullU | Eigen::ComputeThinV);
+  svd.setThreshold(1e-9);
+  const Eigen::Index tangent_rank = svd.rank();
+  const Eigen::Index df = moment_dim - tangent_rank;
+  if (df < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: fitted model has no testable saturated complement"));
+  }
+  const Eigen::MatrixXd K = svd.matrixU().leftCols(tangent_rank);
+  const Eigen::MatrixXd D = svd.matrixU().rightCols(df);
+  const double tangent_max = tangent_rank > 0
+      ? svd.singularValues()(0) : 0.0;
+  const double tangent_min = tangent_rank > 0
+      ? svd.singularValues()(tangent_rank - 1) : 0.0;
+
+  Eigen::MatrixXd observed_information;
+  if (observed_sensitivity || observed_metric) {
+    auto observed = estimate::fiml::fiml_saturated_observed_information(
+        raw, pack, eval->moments, include_means);
+    if (!observed.has_value()) return std::unexpected(observed.error());
+    if (observed->rows() != moment_dim || observed->cols() != moment_dim) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "score_components: observed sensitivity has incompatible dimensions"));
+    }
+    observed_information = std::move(*observed);
+  }
+  Eigen::MatrixXd saturated_observed_information;
+  if (saturated_observed_sensitivity || saturated_observed_metric) {
+    auto h1 = estimate::fiml::fiml_h1_moments(raw, pack);
+    if (!h1.has_value()) return std::unexpected(fit_to_post(h1.error()));
+    model::ImpliedMoments h1_moments;
+    h1_moments.sigma = h1->sigma;
+    h1_moments.mu = h1->mu;
+    auto saturated_observed =
+        estimate::fiml::fiml_saturated_observed_information(
+            raw, pack, h1_moments, include_means);
+    if (!saturated_observed.has_value()) {
+      return std::unexpected(saturated_observed.error());
+    }
+    if (saturated_observed->rows() != moment_dim ||
+        saturated_observed->cols() != moment_dim) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "score_components: saturated-H1 observed information has incompatible dimensions"));
+    }
+    saturated_observed_information = std::move(*saturated_observed);
+  }
+  double sensitivity_shrinkage = 0.0;
+  Eigen::MatrixXd shrunken_observed_information;
+  if (light_shrunken_observed_sensitivity ||
+      sqrt_shrunken_observed_sensitivity) {
+    const auto n_obs = std::accumulate(
+        geometry->n_obs.begin(), geometry->n_obs.end(), std::size_t{0});
+    if (n_obs == 0) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "score_components: cannot shrink sensitivity with zero "
+          "observations"));
+    }
+    const double ratio = static_cast<double>(tangent_rank) /
+                         static_cast<double>(n_obs);
+    sensitivity_shrinkage = light_shrunken_observed_sensitivity
+        ? ratio / (1.0 + ratio)
+        : std::sqrt(ratio) / (1.0 + std::sqrt(ratio));
+    shrunken_observed_information =
+        (1.0 - sensitivity_shrinkage) * observed_information +
+        sensitivity_shrinkage * geometry->information;
+  }
+  const Eigen::MatrixXd& sensitivity = saturated_observed_sensitivity
+      ? saturated_observed_information
+      : (light_shrunken_observed_sensitivity ||
+         sqrt_shrunken_observed_sensitivity)
+          ? shrunken_observed_information
+          : observed_sensitivity
+              ? observed_information
+              : geometry->information;
+  const Eigen::MatrixXd& metric = saturated_observed_metric
+      ? saturated_observed_information
+      : observed_metric ? observed_information : geometry->information;
+  auto score_rows =
+      estimate::fiml::fiml_saturated_casewise_deviance_scores(
+          raw, pack, eval->moments, include_means);
+  if (!score_rows.has_value()) return std::unexpected(score_rows.error());
+  Eigen::MatrixXd scores = -0.5 * *score_rows;
+  if (scores.cols() != moment_dim ||
+      geometry->row_stratum.size() !=
+          static_cast<std::size_t>(scores.rows())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components: score and geometry dimensions differ"));
+  }
+  const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
+  ScoreComponents out;
+  out.score = score_full;
+  out.rows = scores;
+  out.sensitivity = sensitivity;
+  out.metric = metric;
+  out.nuisance = K;
+  out.directions = D;
+  out.row_stratum = std::move(geometry->row_stratum);
+  out.n_obs = std::move(geometry->n_obs);
+  out.sensitivity_shrinkage = sensitivity_shrinkage;
+  out.tangent_min_singular_value = tangent_min;
+  out.tangent_condition = tangent_rank > 0 ? tangent_max / tangent_min : 1.0;
+  return out;
+}
+
 post_expected<GlobalScoreFlipTestResult>
 global_score_flip_test(spec::LatentStructure pt,
                        const model::MatrixRep& rep,
@@ -3144,12 +3418,6 @@ global_score_flip_test(spec::LatentStructure pt,
   const bool saturated_observed_sensitivity =
       options.sensitivity ==
       ScoreFlipSensitivity::SaturatedObservedInformation;
-  const bool observed_metric =
-      global_options.metric ==
-      GlobalScoreFlipOptions::Metric::ObservedInformation;
-  const bool saturated_observed_metric =
-      global_options.metric ==
-      GlobalScoreFlipOptions::Metric::SaturatedObservedInformation;
   if ((observed_sensitivity || saturated_observed_sensitivity) &&
       options.center_multiplier_scores) {
     return std::unexpected(make_err(
@@ -3183,184 +3451,36 @@ global_score_flip_test(spec::LatentStructure pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "global_score_flip_test: multiplier diagnostics require resampling"));
   }
-  if (pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: only affine equality constraints are supported"));
-  }
-  if (std::any_of(pt.exo.begin(), pt.exo.end(),
-                  [](std::int8_t value) { return value != 0; })) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: fixed-X models are not supported"));
-  }
-  if (est.diagnostics.active_bounds_full.any_active()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: boundary fits are not supported"));
-  }
-  if (est.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: estimate and model parameter counts differ"));
-  }
-  if (raw.mask.empty()) {
-    if (auto ok = validate_complete_flip_raw(pack.start_stats, raw);
-        !ok.has_value()) {
-      return std::unexpected(ok.error());
-    }
-  }
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
-      !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  auto ev = build_eval(pt, rep);
-  if (!ev.has_value()) return std::unexpected(ev.error());
-  auto eval = ev->evaluate(est.theta, true, true);
-  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-  const bool include_means = eval->J_mu.rows() > 0;
-  if (!raw.mask.empty() && !include_means) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: missing-data models require a mean structure"));
-  }
-
-  auto geometry = saturated_flip_geometry(
-      raw, pack, eval->moments, include_means);
-  if (!geometry.has_value()) return std::unexpected(geometry.error());
-  const Eigen::Index moment_dim = geometry->information.rows();
-  if (eval->J_sigma.rows() > moment_dim ||
-      (include_means &&
-       eval->J_sigma.rows() + eval->J_mu.rows() != moment_dim)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: model Jacobian and saturated moments differ"));
-  }
-  Eigen::MatrixXd Delta_full = Eigen::MatrixXd::Zero(
-      moment_dim, est.theta.size());
-  Delta_full.topRows(eval->J_sigma.rows()) = eval->J_sigma;
-  if (include_means) {
-    Delta_full.bottomRows(eval->J_mu.rows()) = eval->J_mu;
-  }
-  auto constraints = build_eq_constraints(pt);
-  if (!constraints.has_value()) return std::unexpected(constraints.error());
-  const Eigen::MatrixXd Delta = Delta_full * constraints->K();
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
-      Delta, Eigen::ComputeFullU | Eigen::ComputeThinV);
-  svd.setThreshold(1e-9);
-  const Eigen::Index tangent_rank = svd.rank();
-  const Eigen::Index df = moment_dim - tangent_rank;
-  if (df < 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: fitted model has no testable saturated complement"));
-  }
-  const Eigen::MatrixXd K = svd.matrixU().leftCols(tangent_rank);
-  const Eigen::MatrixXd D = svd.matrixU().rightCols(df);
-  const double tangent_max = tangent_rank > 0
-      ? svd.singularValues()(0) : 0.0;
-  const double tangent_min = tangent_rank > 0
-      ? svd.singularValues()(tangent_rank - 1) : 0.0;
-
-  Eigen::MatrixXd observed_information;
-  if (observed_sensitivity || observed_metric) {
-    auto observed = estimate::fiml::fiml_saturated_observed_information(
-        raw, pack, eval->moments, include_means);
-    if (!observed.has_value()) return std::unexpected(observed.error());
-    if (observed->rows() != moment_dim || observed->cols() != moment_dim) {
-      return std::unexpected(make_err(
-          PostError::Kind::NumericIssue,
-          "global_score_flip_test: observed sensitivity has incompatible dimensions"));
-    }
-    observed_information = std::move(*observed);
-  }
-  Eigen::MatrixXd saturated_observed_information;
-  if (saturated_observed_sensitivity || saturated_observed_metric) {
-    auto h1 = estimate::fiml::fiml_h1_moments(raw, pack);
-    if (!h1.has_value()) return std::unexpected(fit_to_post(h1.error()));
-    model::ImpliedMoments h1_moments;
-    h1_moments.sigma = h1->sigma;
-    h1_moments.mu = h1->mu;
-    auto saturated_observed =
-        estimate::fiml::fiml_saturated_observed_information(
-            raw, pack, h1_moments, include_means);
-    if (!saturated_observed.has_value()) {
-      return std::unexpected(saturated_observed.error());
-    }
-    if (saturated_observed->rows() != moment_dim ||
-        saturated_observed->cols() != moment_dim) {
-      return std::unexpected(make_err(
-          PostError::Kind::NumericIssue,
-          "global_score_flip_test: saturated-H1 observed information has incompatible dimensions"));
-    }
-    saturated_observed_information = std::move(*saturated_observed);
-  }
-  double sensitivity_shrinkage = 0.0;
-  Eigen::MatrixXd shrunken_observed_information;
-  if (light_shrunken_observed_sensitivity ||
-      sqrt_shrunken_observed_sensitivity) {
-    const auto n_obs = std::accumulate(
-        geometry->n_obs.begin(), geometry->n_obs.end(), std::size_t{0});
-    if (n_obs == 0) {
-      return std::unexpected(make_err(
-          PostError::Kind::NumericIssue,
-          "global_score_flip_test: cannot shrink sensitivity with zero "
-          "observations"));
-    }
-    const double ratio = static_cast<double>(tangent_rank) /
-                         static_cast<double>(n_obs);
-    sensitivity_shrinkage = light_shrunken_observed_sensitivity
-        ? ratio / (1.0 + ratio)
-        : std::sqrt(ratio) / (1.0 + std::sqrt(ratio));
-    shrunken_observed_information =
-        (1.0 - sensitivity_shrinkage) * observed_information +
-        sensitivity_shrinkage * geometry->information;
-  }
-  const Eigen::MatrixXd& sensitivity = saturated_observed_sensitivity
-      ? saturated_observed_information
-      : (light_shrunken_observed_sensitivity ||
-         sqrt_shrunken_observed_sensitivity)
-          ? shrunken_observed_information
-          : observed_sensitivity
-              ? observed_information
-              : geometry->information;
-  const Eigen::MatrixXd& metric = saturated_observed_metric
-      ? saturated_observed_information
-      : observed_metric ? observed_information : geometry->information;
-  Eigen::MatrixXd G = D;
-  if (tangent_rank > 0) {
-    auto Ainv = invert_symmetric(
-        K.transpose() * sensitivity * K,
-        "global_score_flip_test tangent information");
-    if (!Ainv.has_value()) return std::unexpected(Ainv.error());
-    G.noalias() -=
-        K * ((*Ainv) * (K.transpose() * sensitivity * D));
-  }
-  Eigen::MatrixXd V_identity =
-      G.transpose() * metric * G;
-  V_identity = 0.5 * (V_identity + V_identity.transpose());
-
-  auto score_rows =
-      estimate::fiml::fiml_saturated_casewise_deviance_scores(
-          raw, pack, eval->moments, include_means);
-  if (!score_rows.has_value()) return std::unexpected(score_rows.error());
-  Eigen::MatrixXd scores = -0.5 * *score_rows;
-  if (scores.cols() != moment_dim ||
-      geometry->row_stratum.size() !=
-          static_cast<std::size_t>(scores.rows())) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test: score and geometry dimensions differ"));
-  }
-  const Eigen::VectorXd score_full = scores.colwise().sum().transpose();
-  const Eigen::MatrixXd effective_rows = scores * G;
+  auto components = global_score_components(std::move(pt), rep, raw, pack, est, ScoreGeometryOptions{options.sensitivity, global_options.metric});
+  if (!components) return std::unexpected(components.error());
+  auto projected = project_scores(*components, true);
+  if (!projected) return std::unexpected(projected.error());
+  const auto& V_identity = projected->metric;
+  const auto& effective_rows = projected->rows;
+  const auto& scores = components->rows;
+  const auto& score_full = components->score;
+  const auto& K = components->nuisance;
+  const Eigen::Index df = projected->score.size();
+  const Eigen::Index moment_dim = score_full.size();
+  const Eigen::Index tangent_rank = K.cols();
+  const double tangent_min = components->tangent_min_singular_value;
+  const double tangent_condition = components->tangent_condition;
+  const double sensitivity_shrinkage = components->sensitivity_shrinkage;
   Eigen::MatrixXd multiplier_rows = effective_rows;
   if (options.center_multiplier_scores) {
     Eigen::MatrixXd sums = Eigen::MatrixXd::Zero(
-        static_cast<Eigen::Index>(geometry->n_obs.size()), df);
+        static_cast<Eigen::Index>(components->n_obs.size()), df);
     for (Eigen::Index row = 0; row < multiplier_rows.rows(); ++row) {
       sums.row(static_cast<Eigen::Index>(
-          geometry->row_stratum[static_cast<std::size_t>(row)])) +=
+          components->row_stratum[static_cast<std::size_t>(row)])) +=
           multiplier_rows.row(row);
     }
     for (Eigen::Index row = 0; row < multiplier_rows.rows(); ++row) {
       const std::size_t stratum =
-          geometry->row_stratum[static_cast<std::size_t>(row)];
+          components->row_stratum[static_cast<std::size_t>(row)];
       multiplier_rows.row(row) -=
           sums.row(static_cast<Eigen::Index>(stratum)) /
-          static_cast<double>(geometry->n_obs[stratum]);
+          static_cast<double>(components->n_obs[stratum]);
     }
   }
   const Eigen::VectorXd u_obs =
@@ -3435,9 +3555,7 @@ global_score_flip_test(spec::LatentStructure pt,
   }
 
   const auto asymptotic_begin = Clock::now();
-  const Eigen::MatrixXd B1 = scores.transpose() * scores;
-  auto asymptotic = score_for_subspace_robust_impl(
-      {}, score_full, metric, metric, B1, K, D, &sensitivity);
+  auto asymptotic = score_for_projected_robust_impl(*projected);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
   const double asymptotic_seconds = std::chrono::duration<double>(
       Clock::now() - asymptotic_begin).count();
@@ -3507,14 +3625,206 @@ global_score_flip_test(spec::LatentStructure pt,
   out.n_obs = static_cast<int>(total_n);
   out.projected_score = u_obs;
   out.projected_metric = V_identity;
-  out.projected_meat = G.transpose() * B1 * G;
+  out.projected_meat = projected->meat;
   out.projected_meat =
       0.5 * (out.projected_meat + out.projected_meat.transpose());
   out.saturated_moment_dim = static_cast<int>(moment_dim);
   out.tangent_rank = static_cast<int>(tangent_rank);
   out.tangent_min_singular_value = tangent_min;
   out.tangent_condition = tangent_rank > 0
-      ? tangent_max / tangent_min : 1.0;
+      ? tangent_condition : 1.0;
+  return out;
+}
+
+post_expected<ScoreComponents>
+global_score_components_ml2s(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const RawData& raw,
+    const estimate::fiml::FIMLPack& pack,
+    const estimate::fiml::FIMLH1& h1,
+    const estimate::fiml::SaturatedMoments& sm,
+    const Estimates& est,
+    const ScoreGeometryOptions& geometry_options) {
+  if (geometry_options.sensitivity != ScoreSensitivity::ExpectedInformation ||
+      geometry_options.metric != ScoreMetric::ExpectedInformation)
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ML2S score components require expected sensitivity and metric"));
+  if (pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: only affine equality constraints are supported"));
+  }
+  if (std::any_of(pt.exo.begin(), pt.exo.end(),
+                  [](std::int8_t value) { return value != 0; })) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: fixed-X models are not supported"));
+  }
+  if (est.diagnostics.active_bounds_full.any_active()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: boundary fits are not supported"));
+  }
+  if (est.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: estimate and model parameter counts differ"));
+  }
+
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev = build_eval(pt, rep);
+  if (!ev.has_value()) return std::unexpected(ev.error());
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+
+  const std::size_t n_blocks = raw.X.size();
+  if (n_blocks == 0 || sm.mean.size() != n_blocks ||
+      sm.cov.size() != n_blocks || sm.n_obs.size() != n_blocks ||
+      eval->moments.sigma.size() != n_blocks ||
+      eval->moments.mu.size() != n_blocks ||
+      pack.cache.block_p.size() != n_blocks ||
+      pack.cache.sigma_offsets.size() != n_blocks ||
+      pack.cache.mu_offsets.size() != n_blocks) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: inconsistent Stage-1/model block layout"));
+  }
+
+  Eigen::Index moment_dim = 0;
+  Eigen::Index total_rows = 0;
+  std::vector<Eigen::Index> moment_offsets(n_blocks + 1, 0);
+  std::vector<Eigen::Index> row_offsets(n_blocks + 1, 0);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index q = p + p * (p + 1) / 2;
+    if (p <= 0 || raw.X[b].rows() <= 0 || pack.cache.block_p[b] != p ||
+        sm.n_obs[b] != raw.X[b].rows() || sm.mean[b].size() != p ||
+        sm.cov[b].rows() != p || sm.cov[b].cols() != p ||
+        eval->moments.mu[b].size() != p ||
+        eval->moments.sigma[b].rows() != p ||
+        eval->moments.sigma[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_components_ml2s: malformed block " +
+              std::to_string(b)));
+    }
+    moment_dim += q;
+    total_rows += raw.X[b].rows();
+    moment_offsets[b + 1] = moment_dim;
+    row_offsets[b + 1] = total_rows;
+  }
+  if (eval->J_mu.cols() != est.theta.size() ||
+      eval->J_sigma.cols() != est.theta.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: model Jacobian has incompatible columns"));
+  }
+
+  auto influence = estimate::fiml::saturated_em_moment_influence(
+      raw, pack, h1, sm);
+  if (!influence.has_value()) return std::unexpected(influence.error());
+  if (influence->rows() != total_rows || influence->cols() != moment_dim) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: Stage-1 influence has incompatible shape"));
+  }
+
+  Eigen::MatrixXd information = Eigen::MatrixXd::Zero(moment_dim, moment_dim);
+  Eigen::MatrixXd Delta_full =
+      Eigen::MatrixXd::Zero(moment_dim, est.theta.size());
+  Eigen::VectorXd score_full = Eigen::VectorXd::Zero(moment_dim);
+  Eigen::MatrixXd score_rows =
+      Eigen::MatrixXd::Zero(total_rows, moment_dim);
+  std::vector<std::size_t> row_stratum;
+  row_stratum.reserve(static_cast<std::size_t>(total_rows));
+  std::vector<std::int64_t> n_obs;
+  n_obs.reserve(n_blocks);
+
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index ps = p * (p + 1) / 2;
+    const Eigen::Index q = p + ps;
+    const Eigen::Index off = moment_offsets[b];
+    const Eigen::Index row_off = row_offsets[b];
+    const Eigen::Index nb = raw.X[b].rows();
+    const Eigen::MatrixXd Sigma =
+        0.5 * (eval->moments.sigma[b] +
+               eval->moments.sigma[b].transpose());
+    auto mean_weight = invert_symmetric(
+        Sigma, "score_components_ml2s fitted covariance");
+    if (!mean_weight.has_value()) return std::unexpected(mean_weight.error());
+    auto gamma = data::gamma_nt(Sigma);
+    if (!gamma.has_value()) return std::unexpected(gamma.error());
+    auto covariance_weight = invert_symmetric(
+        *gamma, "score_components_ml2s fitted NT Gamma");
+    if (!covariance_weight.has_value()) {
+      return std::unexpected(covariance_weight.error());
+    }
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(q, q);
+    W.topLeftCorner(p, p) = *mean_weight;
+    W.bottomRightCorner(ps, ps) = *covariance_weight;
+    information.block(off, off, q, q) = static_cast<double>(nb) * W;
+
+    const Eigen::Index mu_off = pack.cache.mu_offsets[b];
+    const Eigen::Index sigma_off = pack.cache.sigma_offsets[b];
+    if (mu_off + p > eval->J_mu.rows() ||
+        sigma_off + ps > eval->J_sigma.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score_components_ml2s: model Jacobian block offsets are invalid"));
+    }
+    Delta_full.block(off, 0, p, est.theta.size()) =
+        eval->J_mu.block(mu_off, 0, p, est.theta.size());
+    Delta_full.block(off + p, 0, ps, est.theta.size()) =
+        eval->J_sigma.block(sigma_off, 0, ps, est.theta.size());
+
+    const Eigen::VectorXd mean_residual =
+        sm.mean[b] - eval->moments.mu[b];
+    const Eigen::MatrixXd second_residual =
+        sm.cov[b] + mean_residual * mean_residual.transpose() - Sigma;
+    Eigen::VectorXd residual(q);
+    residual.head(p) = mean_residual;
+    Eigen::Index k = p;
+    for (Eigen::Index col = 0; col < p; ++col) {
+      for (Eigen::Index row = col; row < p; ++row) {
+        residual(k++) = second_residual(row, col);
+      }
+    }
+    score_full.segment(off, q).noalias() =
+        static_cast<double>(nb) * (W * residual);
+    score_rows.block(row_off, off, nb, q).noalias() =
+        static_cast<double>(nb) *
+        influence->block(row_off, off, nb, q) * W;
+    for (Eigen::Index row = 0; row < nb; ++row) row_stratum.push_back(b);
+    n_obs.push_back(nb);
+  }
+
+  auto constraints = build_eq_constraints(pt);
+  if (!constraints.has_value()) return std::unexpected(constraints.error());
+  const Eigen::MatrixXd Delta = Delta_full * constraints->K();
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      Delta, Eigen::ComputeFullU | Eigen::ComputeThinV);
+  svd.setThreshold(1e-9);
+  const Eigen::Index tangent_rank = svd.rank();
+  const Eigen::Index df = moment_dim - tangent_rank;
+  if (df < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "score_components_ml2s: fitted model has no testable saturated complement"));
+  }
+  const Eigen::MatrixXd K = svd.matrixU().leftCols(tangent_rank);
+  const Eigen::MatrixXd D = svd.matrixU().rightCols(df);
+  const double tangent_max = tangent_rank > 0
+      ? svd.singularValues()(0) : 0.0;
+  const double tangent_min = tangent_rank > 0
+      ? svd.singularValues()(tangent_rank - 1) : 0.0;
+
+  ScoreComponents out;
+  out.score = score_full;
+  out.rows = score_rows;
+  out.sensitivity = information;
+  out.metric = information;
+  out.nuisance = K;
+  out.directions = D;
+  out.row_stratum = std::move(row_stratum);
+  out.n_obs = std::move(n_obs);
+  out.influence_rows = true;
+  out.tangent_min_singular_value = tangent_min;
+  out.tangent_condition = tangent_rank > 0 ? tangent_max / tangent_min : 1.0;
   return out;
 }
 
@@ -3574,180 +3884,25 @@ global_score_flip_test_ml2s(
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "global_score_flip_test_ml2s: multiplier diagnostics require resampling"));
   }
-  if (pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: only affine equality constraints are supported"));
-  }
-  if (std::any_of(pt.exo.begin(), pt.exo.end(),
-                  [](std::int8_t value) { return value != 0; })) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: fixed-X models are not supported"));
-  }
-  if (est.diagnostics.active_bounds_full.any_active()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: boundary fits are not supported"));
-  }
-  if (est.theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: estimate and model parameter counts differ"));
-  }
-
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
-      !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  auto ev = build_eval(pt, rep);
-  if (!ev.has_value()) return std::unexpected(ev.error());
-  auto eval = ev->evaluate(est.theta, true, true);
-  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-
-  const std::size_t n_blocks = raw.X.size();
-  if (n_blocks == 0 || sm.mean.size() != n_blocks ||
-      sm.cov.size() != n_blocks || sm.n_obs.size() != n_blocks ||
-      eval->moments.sigma.size() != n_blocks ||
-      eval->moments.mu.size() != n_blocks ||
-      pack.cache.block_p.size() != n_blocks ||
-      pack.cache.sigma_offsets.size() != n_blocks ||
-      pack.cache.mu_offsets.size() != n_blocks) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: inconsistent Stage-1/model block layout"));
-  }
-
-  Eigen::Index moment_dim = 0;
-  Eigen::Index total_rows = 0;
-  std::vector<Eigen::Index> moment_offsets(n_blocks + 1, 0);
-  std::vector<Eigen::Index> row_offsets(n_blocks + 1, 0);
-  for (std::size_t b = 0; b < n_blocks; ++b) {
-    const Eigen::Index p = raw.X[b].cols();
-    const Eigen::Index q = p + p * (p + 1) / 2;
-    if (p <= 0 || raw.X[b].rows() <= 0 || pack.cache.block_p[b] != p ||
-        sm.n_obs[b] != raw.X[b].rows() || sm.mean[b].size() != p ||
-        sm.cov[b].rows() != p || sm.cov[b].cols() != p ||
-        eval->moments.mu[b].size() != p ||
-        eval->moments.sigma[b].rows() != p ||
-        eval->moments.sigma[b].cols() != p) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "global_score_flip_test_ml2s: malformed block " +
-              std::to_string(b)));
-    }
-    moment_dim += q;
-    total_rows += raw.X[b].rows();
-    moment_offsets[b + 1] = moment_dim;
-    row_offsets[b + 1] = total_rows;
-  }
-  if (eval->J_mu.cols() != est.theta.size() ||
-      eval->J_sigma.cols() != est.theta.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: model Jacobian has incompatible columns"));
-  }
-
-  auto influence = estimate::fiml::saturated_em_moment_influence(
-      raw, pack, h1, sm);
-  if (!influence.has_value()) return std::unexpected(influence.error());
-  if (influence->rows() != total_rows || influence->cols() != moment_dim) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: Stage-1 influence has incompatible shape"));
-  }
-
-  Eigen::MatrixXd information = Eigen::MatrixXd::Zero(moment_dim, moment_dim);
-  Eigen::MatrixXd Delta_full =
-      Eigen::MatrixXd::Zero(moment_dim, est.theta.size());
-  Eigen::VectorXd score_full = Eigen::VectorXd::Zero(moment_dim);
-  Eigen::MatrixXd score_rows =
-      Eigen::MatrixXd::Zero(total_rows, moment_dim);
-  std::vector<std::size_t> row_stratum;
-  row_stratum.reserve(static_cast<std::size_t>(total_rows));
-  std::vector<std::int64_t> n_obs;
-  n_obs.reserve(n_blocks);
-
-  for (std::size_t b = 0; b < n_blocks; ++b) {
-    const Eigen::Index p = raw.X[b].cols();
-    const Eigen::Index ps = p * (p + 1) / 2;
-    const Eigen::Index q = p + ps;
-    const Eigen::Index off = moment_offsets[b];
-    const Eigen::Index row_off = row_offsets[b];
-    const Eigen::Index nb = raw.X[b].rows();
-    const Eigen::MatrixXd Sigma =
-        0.5 * (eval->moments.sigma[b] +
-               eval->moments.sigma[b].transpose());
-    auto mean_weight = invert_symmetric(
-        Sigma, "global_score_flip_test_ml2s fitted covariance");
-    if (!mean_weight.has_value()) return std::unexpected(mean_weight.error());
-    auto gamma = data::gamma_nt(Sigma);
-    if (!gamma.has_value()) return std::unexpected(gamma.error());
-    auto covariance_weight = invert_symmetric(
-        *gamma, "global_score_flip_test_ml2s fitted NT Gamma");
-    if (!covariance_weight.has_value()) {
-      return std::unexpected(covariance_weight.error());
-    }
-    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(q, q);
-    W.topLeftCorner(p, p) = *mean_weight;
-    W.bottomRightCorner(ps, ps) = *covariance_weight;
-    information.block(off, off, q, q) = static_cast<double>(nb) * W;
-
-    const Eigen::Index mu_off = pack.cache.mu_offsets[b];
-    const Eigen::Index sigma_off = pack.cache.sigma_offsets[b];
-    if (mu_off + p > eval->J_mu.rows() ||
-        sigma_off + ps > eval->J_sigma.rows()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "global_score_flip_test_ml2s: model Jacobian block offsets are invalid"));
-    }
-    Delta_full.block(off, 0, p, est.theta.size()) =
-        eval->J_mu.block(mu_off, 0, p, est.theta.size());
-    Delta_full.block(off + p, 0, ps, est.theta.size()) =
-        eval->J_sigma.block(sigma_off, 0, ps, est.theta.size());
-
-    const Eigen::VectorXd mean_residual =
-        sm.mean[b] - eval->moments.mu[b];
-    const Eigen::MatrixXd second_residual =
-        sm.cov[b] + mean_residual * mean_residual.transpose() - Sigma;
-    Eigen::VectorXd residual(q);
-    residual.head(p) = mean_residual;
-    Eigen::Index k = p;
-    for (Eigen::Index col = 0; col < p; ++col) {
-      for (Eigen::Index row = col; row < p; ++row) {
-        residual(k++) = second_residual(row, col);
-      }
-    }
-    score_full.segment(off, q).noalias() =
-        static_cast<double>(nb) * (W * residual);
-    score_rows.block(row_off, off, nb, q).noalias() =
-        static_cast<double>(nb) *
-        influence->block(row_off, off, nb, q) * W;
-    for (Eigen::Index row = 0; row < nb; ++row) row_stratum.push_back(b);
-    n_obs.push_back(nb);
-  }
-
-  auto constraints = build_eq_constraints(pt);
-  if (!constraints.has_value()) return std::unexpected(constraints.error());
-  const Eigen::MatrixXd Delta = Delta_full * constraints->K();
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
-      Delta, Eigen::ComputeFullU | Eigen::ComputeThinV);
-  svd.setThreshold(1e-9);
-  const Eigen::Index tangent_rank = svd.rank();
-  const Eigen::Index df = moment_dim - tangent_rank;
-  if (df < 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "global_score_flip_test_ml2s: fitted model has no testable saturated complement"));
-  }
-  const Eigen::MatrixXd K = svd.matrixU().leftCols(tangent_rank);
-  const Eigen::MatrixXd D = svd.matrixU().rightCols(df);
-  const double tangent_max = tangent_rank > 0
-      ? svd.singularValues()(0) : 0.0;
-  const double tangent_min = tangent_rank > 0
-      ? svd.singularValues()(tangent_rank - 1) : 0.0;
-
-  Eigen::MatrixXd G = D;
-  if (tangent_rank > 0) {
-    auto Ainv = invert_symmetric(
-        K.transpose() * information * K,
-        "global_score_flip_test_ml2s tangent information");
-    if (!Ainv.has_value()) return std::unexpected(Ainv.error());
-    G.noalias() -= K * ((*Ainv) * (K.transpose() * information * D));
-  }
-  Eigen::MatrixXd V_identity = G.transpose() * information * G;
-  V_identity = 0.5 * (V_identity + V_identity.transpose());
-  const Eigen::MatrixXd effective_rows = score_rows * G;
+  auto components = global_score_components_ml2s(std::move(pt), rep, raw, pack, h1, sm, est, ScoreGeometryOptions{options.sensitivity, global_options.metric});
+  if (!components) return std::unexpected(components.error());
+  auto projected = project_scores(*components, true);
+  if (!projected) return std::unexpected(projected.error());
+  const auto& G = projected->projection;
+  const auto& V_identity = projected->metric;
+  const auto& effective_rows = projected->rows;
+  const auto& scores = components->rows;
+  const auto& score_full = components->score;
+  const auto& K = components->nuisance;
+  const Eigen::Index df = projected->score.size();
+  const Eigen::Index moment_dim = score_full.size();
+  const Eigen::Index tangent_rank = K.cols();
+  const double tangent_min = components->tangent_min_singular_value;
+  const double tangent_condition = components->tangent_condition;
+  const auto& row_stratum = components->row_stratum;
+  const auto& n_obs = components->n_obs;
+  const std::size_t n_blocks = n_obs.size();
+  const Eigen::Index total_rows = scores.rows();
   Eigen::MatrixXd multiplier_rows = effective_rows;
   if (options.center_multiplier_scores) {
     Eigen::MatrixXd sums = Eigen::MatrixXd::Zero(
@@ -3835,9 +3990,7 @@ global_score_flip_test_ml2s(
   }
 
   const auto asymptotic_begin = Clock::now();
-  const Eigen::MatrixXd B1 = score_rows.transpose() * score_rows;
-  auto asymptotic = score_for_subspace_robust(
-      {}, score_full, information, information, B1, K, D);
+  auto asymptotic = score_for_projected_robust_impl(*projected);
   if (!asymptotic.has_value()) return std::unexpected(asymptotic.error());
   const double asymptotic_seconds = std::chrono::duration<double>(
       Clock::now() - asymptotic_begin).count();
@@ -3906,15 +4059,28 @@ global_score_flip_test_ml2s(
   out.n_obs = static_cast<int>(total_rows);
   out.projected_score = u_obs;
   out.projected_metric = V_identity;
-  out.projected_meat = G.transpose() * B1 * G;
+  out.projected_meat = projected->meat;
   out.projected_meat =
       0.5 * (out.projected_meat + out.projected_meat.transpose());
   out.saturated_moment_dim = static_cast<int>(moment_dim);
   out.tangent_rank = static_cast<int>(tangent_rank);
   out.tangent_min_singular_value = tangent_min;
   out.tangent_condition = tangent_rank > 0
-      ? tangent_max / tangent_min : 1.0;
+      ? tangent_condition : 1.0;
   return out;
+}
+
+post_expected<ScoreComponents>
+global_score_components(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const SampleStats& samp, const RawData& raw,
+                        const Estimates& est,
+                        const ScoreGeometryOptions& options) {
+  if (auto ok = validate_complete_flip_raw(samp, raw); !ok.has_value())
+    return std::unexpected(ok.error());
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack) return std::unexpected(fit_to_post(pack.error()));
+  return global_score_components(std::move(pt), rep, raw, *pack, est, options);
 }
 
 post_expected<GlobalScoreFlipTestResult>

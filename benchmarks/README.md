@@ -163,3 +163,22 @@ remaining work lives in the
   line search on `bollen_democracy_sem` and does not converge on `bfi_5factor`;
   magmaan has no `growth()` equivalent, so `demo_growth_linear` does not match
   the lavaan growth parameterization.
+
+
+## Reusable score inference
+
+`score_primitives.R [output.csv]` is a bounded R benchmark for the staged score
+API. It times context preparation, components, projection, spectrum and
+calibration separately on two two-factor CFAs (10/20 variables, N=400), for
+complete ML, 10% MCAR FIML, and NT-ML2S. It compares the combined staged
+inference call with the legacy score-flip wrapper plus the same SB/pEBA2/pEBA4
+calibrations. Fits are outside all timers, each function is warmed, and 15
+calls are averaged. Component timers are independent measurements, not an
+exact additive profile. The reference wrapper has already benefited from the
+shared-core refactor; its historical exact-mixture diagnostic still runs.
+
+```sh
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 Rscript benchmarks/score_primitives.R /tmp/score-primitives.csv
+```
+
+No full simulation is run and no historical run artifacts are overwritten.

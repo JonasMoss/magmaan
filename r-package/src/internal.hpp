@@ -828,10 +828,34 @@ inline Ctx ctx_from_partable_sample_stats(SEXP partable, Rcpp::List sample_stats
 // Rebuild a Ctx from a fit object. `fit$S` is a list of per-group covariances
 // (length ≥ 1), already in the model's variable order; `fit$nobs` is the
 // per-group n vector; `fit$sample_mean` is R_NilValue or a list of vectors.
+struct FitContextSnapshot { Ctx ctx; };
+
+inline Rcpp::List cache_fit_context(Rcpp::List fit, const Ctx& ctx) {
+  Rcpp::List out(Rf_shallow_duplicate(fit));
+  Rcpp::List fields = Rcpp::List::create(fit["partable"],fit["S"],fit["nobs"],
+      fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue);
+  Rcpp::XPtr<FitContextSnapshot> ptr(new FitContextSnapshot{ctx},true,
+      Rf_install("magmaan_fit_context"));
+  R_SetExternalPtrProtected(ptr,fields);
+  out.attr("magmaan_context") = ptr;
+  return out;
+}
+
 inline Ctx ctx_from_fit(Rcpp::List fit) {
   if (!fit.containsElementNamed("partable") || !fit.containsElementNamed("S") ||
       !fit.containsElementNamed("nobs"))
     Rcpp::stop("magmaan: not a fit object (need partable/S/nobs) — pass the result of fit_fit()");
+  SEXP cached = fit.attr("magmaan_context");
+  if (TYPEOF(cached) == EXTPTRSXP && R_ExternalPtrAddr(cached) &&
+      R_ExternalPtrTag(cached) == Rf_install("magmaan_fit_context")) {
+    Rcpp::List fields(R_ExternalPtrProtected(cached));
+    const SEXP mean = fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue;
+    // R copy-on-modify preserves these exact objects in an immutable snapshot.
+    // An edited fit safely falls back to reconstruction instead of stale reuse.
+    if (SEXP(fields[0]) == SEXP(fit["partable"]) && SEXP(fields[1]) == SEXP(fit["S"]) &&
+        SEXP(fields[2]) == SEXP(fit["nobs"]) && SEXP(fields[3]) == mean)
+      return Rcpp::XPtr<FitContextSnapshot>(cached)->ctx;
+  }
   SEXP sm = fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue;
   SEXP partable = fit["partable"];
   if (is_true_attr(partable, native_fcsem_partable_attr)) {

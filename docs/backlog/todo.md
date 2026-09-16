@@ -13,21 +13,23 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-### First-class score primitives
+### Score/inference adapter follow-ups
 
-- **L — separate score construction, projection and calibration.** Expose
-  reusable score ingredients directly, with explicit coordinates, normalization,
-  sensitivity/metric and optional casewise rows. Make global/nested tests and
-  multiplier tests consumers of those primitives. The shared robust helper
-  currently computes an exact-mixture tail and sandwich diagnostics even for
-  callers requesting only SB/pEBA; this affects complete ML, direct FIML,
-  NT-ML2S and nested ML/FIML. Complete-data pilot timings attribute about
-  7.45 ms of a 15.37 ms score wrapper to an unused exact tail; missing-data
-  costs still need separate measurement. Reuse valid geometry/spectra without
-  changing centering or finite-sample conventions, and keep the ML2S observed
-  score distinct from Stage-1 influence rows. Implementation sequence and
-  acceptance criteria: [core-agent handoff](../../dev/handoffs/first-class-score-primitives.md).
-  No core change has yet been made by this handoff.
+The first-class ML/FIML/NT-ML2S score primitives, R inference snapshots,
+explicit calibration/resampling, and covariance/Wald composition are implemented;
+see the roadmap's reusable-score entry and `r-package/examples/scores.R`.
+
+- **M — extend persistent geometry reuse where conventions agree.** The native
+  fit context and projected-score factorizations are reusable today. Audit
+  fitted-moment evaluations and empirical-Gamma ownership across legacy LR/GOF
+  and score adapters before sharing their method-specific geometry. Require
+  matching evaluation point, mean structure, centering and finite-sample scale;
+  the score/RLS statistic identity alone is not sufficient to share a spectrum.
+- **L — add estimator-specific score/estimating-function adapters.** Ordinal,
+  mixed, two-level and estimated-weight/regularized ML2S paths retain their
+  existing interfaces. Extend the same reusable ingredients when their
+  sensitivity, influence and normalization contracts are independently tested;
+  do not label arbitrary estimating functions likelihood scores.
 
 ### Uniform prepared-model/data interface in R
 

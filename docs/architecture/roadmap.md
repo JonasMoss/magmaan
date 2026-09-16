@@ -870,6 +870,54 @@ an unconstrained gradient test to constrained solutions.
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
+- **Reusable score primitives (2026-09-16):**
+  `inference::frontier::{global_score_components,global_score_components_ml2s,
+  nested_score_components}` now own construction independently of tests.
+  `ScoreGeometryOptions` selects sensitivity and metric without any resampling
+  option. `ScoreComponents` retains the observed total score, casewise rows,
+  nuisance/test directions and geometry. NT-ML2S marks its rows as influence
+  contributions and preserves the separately computed observed Stage-2 score.
+  `project_scores` constructs an owning `ProjectedScore` with a retained metric
+  Cholesky factor, quadratic and meat; rows are optionally retained for explicit
+  multiplier resampling. `score_spectrum`, trace-only `score_mean_scale`,
+  `score_sandwich` and `resample_scores` consume that object separately. PSD
+  meat remains valid for mixture inference when sandwich inversion is unavailable.
+  Legacy nested/global score-flip wrappers now consume the same construction
+  and projection; their historical exact-mixture/sandwich diagnostics remain
+  compatibility behavior, not prerequisites of the primitive path.
+  The friendly `api::frontier::score_components` adapters accept global ML/FIML
+  fits or an H1 model plus H0 fit for nested hypotheses.
+
+  R exposes `prepare_inference`, `scores`, `score_components`,
+  `score_components_from_matrices`, `project_scores`, `score_quadratic`,
+  `score_spectrum`, `calibrate_quadratic`, `score_sandwich` and
+  `resample_scores` as thin wrappers over native construction/calculation.
+  Preparation snapshots the fitted model, parameters, raw data and FIML pack
+  once. Locked environments own native objects; restored process-local handles
+  require re-preparation. Bare likelihood scores use summed log-likelihood
+  units; globally centered covariance rows are an explicit projection option,
+  distinct from legacy within-pattern centering. `inference_information` and
+  `parameter_covariance` expose reusable ML/FIML matrices; `wald_test` accepts
+  an existing covariance. Tagged matrices reject a different snapshot.
+  Existing `fmg_tests`, `fmg_nested` and `robust_nested_lrt` also accept these
+  snapshots and reuse their native fit context. Extracted fit lists invalidate
+  that cache when their structural/sample objects change. LR/GOF-specific
+  geometry still follows its own method contracts; `quadratic_reference`
+  retains its computed statistic/spectrum for repeated downstream calibration.
+
+  Validation: the optimized inference suite passes 323 cases / 39,248
+  assertions; score-focused API checks pass 4 cases / 90 assertions. The R
+  `examples/scores.R` checks ML/FIML/ML2S reductions, nested scores without an
+  H1 fit, reference reuse, PSD meat, supplied matrices, Wald composition and
+  snapshot ownership/invalidation. A bounded 15-call benchmark at N=400 and
+  p=20 measures the new component/projection/spectrum/SB+pEBA pipeline at
+  about 8 ms (ML), 17 ms (FIML), and 21 ms (ML2S), compared with 15/23/29 ms
+  through the legacy score-flip wrapper; preparation is separately timed.
+  Recalibration from an existing spectrum takes about 0.5 ms. These laptop
+  timings are advisory; see `benchmarks/score_primitives.R`. They do not
+  replace the historical talk simulation runtime or imply identical
+  finite-sample score/LR spectra.
+
 - `inference::frontier::score_flip_test` adds Monte Carlo Rademacher calibration
   for affine nested complete-data ML and direct-FIML models. It derives the
   tested directions from the exact H1/H0 restriction map, evaluates individual

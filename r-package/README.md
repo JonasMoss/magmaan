@@ -333,3 +333,62 @@ and does not replace `fit$audit`, which retains the optimizer's driven-coordinat
 verdict. GP uses Kaufman's approximate residual Jacobian: scalar gradients are
 exact locally at fixed rank with accurate inner solves, while residual-based
 backends use approximate Gauss–Newton curvature.
+
+### Reusable score and inference objects
+
+Scores are available without running a score test. For ML/FIML, prepare an
+immutable inference snapshot once and choose the subsequent work explicitly:
+
+```r
+ctx <- prepare_inference(fit, data) # omit data for FIML/ML2S
+s <- scores(ctx, space = "parameter")
+c <- score_components(ctx)         # global saturated complement
+u <- project_scores(c, retain_rows = TRUE)
+e <- score_spectrum(u)             # compute once, reuse below
+calibrate_quadratic(e, c("sb", "peba2", "peba4"))
+resample_scores(u, n_flips = 999, seed = 7)
+```
+
+`score_components(ctx, H1 = unrestricted_model)` constructs affine nested
+ML/FIML ingredients without fitting H1. Neither component construction nor
+projection computes an exact-mixture p-value. `calibrate_quadratic(u, "sb")`
+uses a trace without an eigendecomposition; request `"all"` explicitly for the
+exact mixture. `score_sandwich(u)` is separate, so singular empirical meat can
+still support mixture calibration. `center = TRUE` on projection explicitly
+centers covariance rows globally, not within missingness patterns.
+
+`score_components_from_matrices()` accepts existing scores, rows, sensitivity,
+metric and chosen nuisance/test directions for method development. It uses the
+same C++ projection and downstream consumers as the fit adapters.
+
+NT-ML2S has a separate adapter: its observed Stage-2 score is not the sum of
+its Stage-1 influence rows. Regularized Stage 1 and non-NT weights remain
+unsupported. Full casewise likelihood scores and parameter information use the
+ML/FIML adapters; no universal likelihood-score interpretation is imposed on
+other estimators.
+
+Information and covariance can also be computed once and reused:
+
+```r
+I <- inference_information(ctx, "expected")
+V <- parameter_covariance(ctx, I)   # optionally supply a total-scale meat
+wald_test(ctx, R, vcov = V, q = target)
+```
+
+These matrices carry snapshot provenance, and using one with a different
+snapshot is rejected. Supplied matrices and parameter vectors remain available
+for methods development. Snapshots are process-local and immutable; changes to
+the source fit require a new snapshot. The prepared fit context is also reused
+by `fmg_tests(ctx)`, `fmg_nested(ctx1, ctx0)`, and
+`robust_nested_lrt(ctx1, ctx0)`. Legacy LR/GOF routines retain their own geometry
+construction; reuse their returned statistic/spectrum explicitly when only the
+calibration changes:
+
+```r
+lr <- robust_nested_lrt(ctx1, ctx0)
+r <- quadratic_reference(lr$T_diff, lr$df_diff, lr$eigenvalues)
+calibrate_quadratic(r, c("sb", "peba2", "peba4"))
+```
+
+See `examples/scores.R` for executable parity and ownership checks, and
+`?scores` for the coordinate and normalization contracts.

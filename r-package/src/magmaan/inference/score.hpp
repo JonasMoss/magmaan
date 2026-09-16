@@ -629,6 +629,87 @@ struct GlobalScoreFlipOptions {
   }
 };
 
+using ScoreSensitivity = ScoreFlipSensitivity;
+using ScoreMetric = GlobalScoreFlipOptions::Metric;
+struct ScoreGeometryOptions {
+  ScoreSensitivity sensitivity = ScoreSensitivity::ExpectedInformation;
+  ScoreMetric metric = ScoreMetric::ExpectedInformation;
+};
+
+// Reusable summed-likelihood ingredients. Influence rows (ML2S) need not sum
+// to the observed score. Geometry is explicit; construction performs no tests.
+struct ScoreComponents {
+  Eigen::VectorXd score;
+  Eigen::MatrixXd rows;
+  Eigen::MatrixXd sensitivity;
+  Eigen::MatrixXd metric;
+  Eigen::MatrixXd nuisance;
+  Eigen::MatrixXd directions;
+  std::vector<std::size_t> row_stratum;
+  std::vector<std::int64_t> n_obs;
+  std::vector<Eigen::MatrixXd> information_strata;
+  bool influence_rows = false;
+  double sensitivity_shrinkage = 0.0;
+  double tangent_min_singular_value = 0.0;
+  double tangent_condition = 1.0;
+};
+
+struct ProjectedScore {
+  Eigen::VectorXd score;
+  Eigen::MatrixXd metric;
+  Eigen::MatrixXd metric_cholesky;
+  Eigen::MatrixXd meat;
+  Eigen::MatrixXd rows;
+  Eigen::MatrixXd projection;
+  double statistic = 0.0;
+  int n_obs = 0;
+  bool influence_rows = false;
+};
+
+// Construct an owning projected object once; retain_rows enables resampling.
+// Centering applies to the covariance rows, never to the observed score.
+post_expected<ProjectedScore> project_scores(
+    const ScoreComponents& components, bool retain_rows = false,
+    bool center = false);
+// Matrix entry also supports supplied estimating functions and Wald contrasts.
+post_expected<ProjectedScore> score_quadratic(
+    const Eigen::VectorXd& score, const Eigen::MatrixXd& metric,
+    const Eigen::MatrixXd& meat);
+post_expected<Eigen::VectorXd> score_spectrum(const ProjectedScore& score);
+post_expected<double> score_mean_scale(const ProjectedScore& score);
+post_expected<double> score_sandwich(const ProjectedScore& score);
+struct ScoreResamplingResult {
+  double statistic = 0.0;
+  double p_value = 0.0;
+  double mc_se = 0.0;
+  int n_flips = 0;
+};
+post_expected<ScoreResamplingResult> resample_scores(
+    const ProjectedScore& score, int n_flips, std::uint64_t seed,
+    ScoreFlipMultiplier multiplier = ScoreFlipMultiplier::Rademacher,
+    double two_point_skewness = 1.0);
+
+post_expected<ScoreComponents> global_score_components(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const RawData& raw, const FIMLPack& pack, const Estimates& est,
+    const ScoreGeometryOptions& options = {});
+post_expected<ScoreComponents> global_score_components(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const RawData& raw, const Estimates& est,
+    const ScoreGeometryOptions& options = {});
+post_expected<ScoreComponents> global_score_components_ml2s(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const RawData& raw, const FIMLPack& pack,
+    const estimate::fiml::FIMLH1& h1,
+    const estimate::fiml::SaturatedMoments& sm, const Estimates& est,
+    const ScoreGeometryOptions& options = {});
+post_expected<ScoreComponents> nested_score_components(
+    spec::LatentStructure pt_H1, const model::MatrixRep& rep_H1,
+    spec::LatentStructure pt_H0, const model::MatrixRep& rep_H0,
+    const SampleStats* samp, const RawData& raw, const FIMLPack* pack,
+    const Estimates& est_H0, ScoreFlipSensitivity sensitivity =
+        ScoreFlipSensitivity::ExpectedInformation);
+
 struct GlobalScoreFlipTestResult {
   ScoreFlipTestResult flip;
   GlobalScoreFlipOptions::Metric metric =

@@ -10183,3 +10183,106 @@ Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight,
                                  Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
   return prepared::fit(model, data, weight, estimator, optimizer, control, bounds);
 }
+
+#include "score_primitives.hpp"
+
+// [[Rcpp::export]]
+Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw) {
+  return score_bindings::prepare(fit, raw);
+}
+// [[Rcpp::export]]
+Rcpp::List score_rows_impl(SEXP context, std::string space) {
+  return score_bindings::rows(context, space);
+}
+// [[Rcpp::export]]
+Rcpp::List score_components_impl(SEXP context, SEXP H1, std::string sensitivity, std::string metric) {
+  return score_bindings::components(context,H1,sensitivity,metric);
+}
+// [[Rcpp::export]]
+Rcpp::List project_scores_impl(SEXP components, bool retain_rows, bool center) {
+  return score_bindings::project(components,retain_rows,center);
+}
+// [[Rcpp::export]]
+Rcpp::List score_quadratic_impl(Rcpp::NumericVector score, Rcpp::NumericMatrix metric, SEXP meat) {
+  return score_bindings::quadratic(score,metric,meat);
+}
+// [[Rcpp::export]]
+Rcpp::List score_reference_impl(SEXP projected, bool spectrum) {
+  return score_bindings::reference(projected,spectrum);
+}
+// [[Rcpp::export]]
+Rcpp::List resample_scores_impl(SEXP projected, int n_flips, double seed,
+                               std::string multiplier, double two_point_skewness) {
+  return score_bindings::resample(projected,n_flips,seed,multiplier,two_point_skewness);
+}
+// [[Rcpp::export]]
+Rcpp::List score_sandwich_impl(SEXP projected) {
+  const auto& score = score_bindings::get<magmaan::inference::frontier::ProjectedScore>(
+      projected,"magmaan_projected_score");
+  auto statistic = magmaan::inference::frontier::score_sandwich(score);
+  if (!statistic) stop_post(statistic.error());
+  return Rcpp::List::create(Rcpp::_["statistic"] = *statistic, Rcpp::_["df"] = score.score.size());
+}
+// [[Rcpp::export]]
+Rcpp::NumericMatrix inference_information_impl(SEXP context, std::string type) {
+  const auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
+  if (c.estimator == "ML2S") Rcpp::stop("inference_information(): use the ML2S Stage-1/Stage-2 covariance interface");
+  magmaan::post_expected<Eigen::MatrixXd> out;
+  if (type == "expected") {
+    out = c.estimator == "FIML" ? magmaan::estimate::fiml::fiml_expected_information(
+        c.ctx.pt,c.ctx.rep,c.raw,c.estimates,c.pack) : magmaan::inference::information_expected(
+        c.ctx.pt,c.ctx.rep,c.ctx.samp,c.estimates);
+  } else if (type == "observed") {
+    out = c.estimator == "FIML" ? magmaan::estimate::fiml::fiml_observed_information(
+        c.ctx.pt,c.ctx.rep,c.raw,c.estimates,c.pack) : magmaan::inference::information_observed_analytic(
+        c.ctx.pt,c.ctx.rep,c.ctx.samp,c.estimates);
+  } else Rcpp::stop("inference_information(): unknown type");
+  if (!out) stop_post(out.error());
+  return Rcpp::wrap(*out);
+}
+// [[Rcpp::export]]
+Rcpp::NumericMatrix parameter_covariance_impl(SEXP context, Rcpp::NumericMatrix information, SEXP meat) {
+  const auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
+  auto out = magmaan::inference::vcov(Rcpp::as<Eigen::MatrixXd>(information),c.ctx.pt,c.estimates.theta);
+  if (!out) stop_post(out.error());
+  if (!Rf_isNull(meat)) {
+    const Eigen::MatrixXd B = Rcpp::as<Eigen::MatrixXd>(meat);
+    if (B.rows() != out->rows() || B.cols() != out->cols() || !B.allFinite() || !B.isApprox(B.transpose()))
+      Rcpp::stop("parameter_covariance(): meat must be finite, symmetric and match information");
+    *out = (*out * B * *out).eval();
+  }
+  return Rcpp::wrap(*out);
+}
+
+// [[Rcpp::export]]
+Rcpp::List inference_snapshot_impl(SEXP context) {
+  score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
+  return Rcpp::List(R_ExternalPtrProtected(context));
+}
+
+// [[Rcpp::export]]
+SEXP score_components_matrix_impl(Rcpp::NumericVector score, Rcpp::NumericMatrix rows,
+    Rcpp::NumericMatrix sensitivity, Rcpp::NumericMatrix metric,
+    Rcpp::NumericMatrix nuisance, Rcpp::NumericMatrix directions, bool influence_rows) {
+  magmaan::inference::frontier::ScoreComponents c;
+  c.score = Rcpp::as<Eigen::VectorXd>(score);
+  c.rows = Rcpp::as<Eigen::MatrixXd>(rows);
+  c.sensitivity = Rcpp::as<Eigen::MatrixXd>(sensitivity);
+  c.metric = Rcpp::as<Eigen::MatrixXd>(metric);
+  c.nuisance = Rcpp::as<Eigen::MatrixXd>(nuisance);
+  c.directions = Rcpp::as<Eigen::MatrixXd>(directions);
+  c.influence_rows = influence_rows;
+  const auto n = c.score.size();
+  if (n == 0 || !c.score.allFinite() || c.rows.cols() != n || c.rows.rows() == 0 ||
+      !c.rows.allFinite() || c.metric.rows() != n || c.metric.cols() != n ||
+      c.sensitivity.rows() != n || c.sensitivity.cols() != n ||
+      !c.metric.allFinite() || !c.sensitivity.allFinite() ||
+      !c.metric.isApprox(c.metric.transpose()) || !c.sensitivity.isApprox(c.sensitivity.transpose()) ||
+      c.nuisance.rows() != n || c.directions.rows() != n || c.directions.cols() == 0 ||
+      !c.nuisance.allFinite() || !c.directions.allFinite())
+    Rcpp::stop("score_components_from_matrices(): incompatible or non-finite ingredients");
+  if (!influence_rows && (c.rows.colwise().sum().transpose() - c.score).norm() >
+      1e-9 * std::max(1.0, c.score.norm()))
+    Rcpp::stop("score_components_from_matrices(): likelihood rows must sum to the observed score");
+  return score_bindings::handle(std::move(c),"magmaan_score_components");
+}

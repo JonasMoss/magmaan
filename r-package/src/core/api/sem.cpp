@@ -1591,6 +1591,53 @@ score_flip_test(const Model &h1, const Fit &h0, const data::RawData &raw,
   return post_result(std::move(out));
 }
 
+Result<inference::frontier::ScoreComponents>
+score_components(const Fit& fit, const data::RawData& raw,
+                 const inference::frontier::ScoreGeometryOptions& options) {
+  if (fit.estimator() != EstimatorKind::ML && fit.estimator() != EstimatorKind::FIML)
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "score_components() supports ML and FIML fits"));
+  if (fit.estimator() == EstimatorKind::ML) {
+    const auto* samp = fit.data().sample_stats();
+    if (!samp)
+      return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+          "score_components() requires sample statistics on an ML fit"));
+    return post_result(inference::frontier::global_score_components(
+        fit.model().structure(), fit.model().matrix_rep(), *samp, raw,
+        fit.estimates(), options));
+  }
+  if (fit.fiml_pack())
+    return post_result(inference::frontier::global_score_components(
+        fit.model().structure(), fit.model().matrix_rep(), raw,
+        *fit.fiml_pack(), fit.estimates(), options));
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack) return std::unexpected(make_error(ErrorStage::Fit, pack.error()));
+  return post_result(inference::frontier::global_score_components(
+      fit.model().structure(), fit.model().matrix_rep(), raw, *pack, fit.estimates(), options));
+}
+
+Result<inference::frontier::ScoreComponents>
+score_components(const Model& h1, const Fit& h0, const data::RawData& raw,
+                 inference::frontier::ScoreFlipSensitivity sensitivity) {
+  if (h0.estimator() == EstimatorKind::ML && h0.data().sample_stats())
+    return post_result(inference::frontier::nested_score_components(
+        h1.structure(),h1.matrix_rep(),h0.model().structure(),h0.model().matrix_rep(),
+        h0.data().sample_stats(),raw,nullptr,h0.estimates(),sensitivity));
+  if (h0.estimator() != EstimatorKind::FIML)
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "nested score_components() supports ML and FIML fits"));
+  std::optional<estimate::fiml::FIMLPack> owned;
+  const auto* pack = h0.fiml_pack();
+  if (!pack) {
+    auto value = estimate::fiml::fiml_pack(raw);
+    if (!value) return std::unexpected(make_error(ErrorStage::Fit,value.error()));
+    owned.emplace(std::move(*value)); pack = &*owned;
+  }
+  return post_result(inference::frontier::nested_score_components(
+      h1.structure(),h1.matrix_rep(),h0.model().structure(),h0.model().matrix_rep(),
+      nullptr,raw,pack,h0.estimates(),sensitivity));
+}
+
 Result<inference::frontier::GlobalScoreFlipTestResult>
 global_score_flip_test(
     const Fit &fit, const data::RawData &raw,

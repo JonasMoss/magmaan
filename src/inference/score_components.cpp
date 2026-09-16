@@ -1,0 +1,118 @@
+#include "magmaan/inference/score.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <Eigen/Cholesky>
+#include <Eigen/Eigenvalues>
+
+namespace magmaan::inference::frontier {
+namespace {
+PostError invalid(const char* detail) {
+  return {PostError::Kind::NumericIssue, detail};
+}
+bool symmetric(const Eigen::MatrixXd& x, Eigen::Index n) {
+  return x.rows() == n && x.cols() == n && x.allFinite() &&
+         x.isApprox(x.transpose(), 1e-10);
+}
+post_expected<Eigen::MatrixXd> whiten_meat(const ProjectedScore& s) {
+  const auto n = s.score.size();
+  if (n == 0 || !symmetric(s.meat, n) ||
+      s.metric_cholesky.rows() != n || s.metric_cholesky.cols() != n ||
+      !s.metric_cholesky.allFinite() ||
+      (s.metric_cholesky.diagonal().array() <= 0).any())
+    return std::unexpected(invalid("score spectrum: invalid metric factor or meat"));
+  Eigen::MatrixXd left = s.metric_cholesky.triangularView<Eigen::Lower>().solve(s.meat);
+  Eigen::MatrixXd out = s.metric_cholesky.triangularView<Eigen::Lower>().solve(left.transpose());
+  return Eigen::MatrixXd(0.5 * (out + out.transpose()));
+}
+}
+
+post_expected<ProjectedScore> score_quadratic(
+    const Eigen::VectorXd& score, const Eigen::MatrixXd& metric,
+    const Eigen::MatrixXd& meat) {
+  const auto n = score.size();
+  if (n == 0 || !score.allFinite() || !symmetric(metric, n) ||
+      (meat.size() && !symmetric(meat, n)))
+    return std::unexpected(invalid("score quadratic: incompatible or non-finite ingredients"));
+  Eigen::LLT<Eigen::MatrixXd> factor(metric);
+  if (factor.info() != Eigen::Success)
+    return std::unexpected(invalid("score quadratic: metric is not positive definite"));
+  ProjectedScore out;
+  out.score = score;
+  out.metric = metric;
+  out.metric_cholesky = factor.matrixL();
+  out.meat = meat;
+  const Eigen::VectorXd z = out.metric_cholesky.triangularView<Eigen::Lower>().solve(score);
+  out.statistic = z.squaredNorm();
+  if (!std::isfinite(out.statistic))
+    return std::unexpected(invalid("score quadratic: non-finite statistic"));
+  return out;
+}
+
+post_expected<ProjectedScore> project_scores(
+    const ScoreComponents& c, bool retain_rows, bool center) {
+  const auto n = c.score.size();
+  if (n == 0 || !c.score.allFinite() || !symmetric(c.metric, n) ||
+      !symmetric(c.sensitivity, n) || c.nuisance.rows() != n ||
+      c.directions.rows() != n || c.directions.cols() == 0 ||
+      !c.nuisance.allFinite() || !c.directions.allFinite() ||
+      c.rows.cols() != n || c.rows.rows() == 0 || !c.rows.allFinite())
+    return std::unexpected(invalid("project_scores: incompatible or non-finite ingredients"));
+  Eigen::MatrixXd G = c.directions;
+  if (c.nuisance.cols()) {
+    Eigen::MatrixXd A = c.nuisance.transpose() * c.sensitivity * c.nuisance;
+    A = 0.5 * (A + A.transpose()).eval();
+    Eigen::LDLT<Eigen::MatrixXd> factor(A);
+    if (factor.info() != Eigen::Success || !factor.isPositive() || factor.rcond() < 1e-12)
+      return std::unexpected(invalid("project_scores: singular nuisance sensitivity"));
+    const Eigen::MatrixXd rhs = c.nuisance.transpose() * c.sensitivity * G;
+    G -= c.nuisance * factor.solve(rhs);
+  }
+  Eigen::MatrixXd rows = c.rows * G;
+  const Eigen::VectorXd observed = G.transpose() * c.score;
+  if (center) rows.rowwise() -= rows.colwise().mean().eval();
+  Eigen::MatrixXd V = G.transpose() * c.metric * G;
+  V = 0.5 * (V + V.transpose()).eval();
+  auto out = score_quadratic(observed, V, rows.transpose() * rows);
+  if (!out) return out;
+  out->projection = std::move(G);
+  out->n_obs = static_cast<int>(rows.rows());
+  out->influence_rows = c.influence_rows;
+  if (retain_rows) out->rows = std::move(rows);
+  return out;
+}
+
+post_expected<Eigen::VectorXd> score_spectrum(const ProjectedScore& s) {
+  auto W = whiten_meat(s);
+  if (!W) return std::unexpected(W.error());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(*W, Eigen::EigenvaluesOnly);
+  if (es.info() != Eigen::Success)
+    return std::unexpected(invalid("score spectrum: eigensolver failed"));
+  Eigen::VectorXd values = es.eigenvalues();
+  const double tol = 1e-10 * std::max(1.0, values.cwiseAbs().maxCoeff());
+  if (values.minCoeff() < -tol)
+    return std::unexpected(invalid("score spectrum: meat is not positive semidefinite"));
+  return Eigen::VectorXd(values.cwiseMax(0.0));
+}
+
+post_expected<double> score_mean_scale(const ProjectedScore& s) {
+  auto W = whiten_meat(s);
+  if (!W) return std::unexpected(W.error());
+  const double scale = W->trace() / static_cast<double>(s.score.size());
+  if (!std::isfinite(scale) || scale <= 0)
+    return std::unexpected(invalid("score mean scale: non-positive trace"));
+  return scale;
+}
+
+post_expected<double> score_sandwich(const ProjectedScore& s) {
+  if (!symmetric(s.meat, s.score.size()))
+    return std::unexpected(invalid("score sandwich: missing or invalid meat"));
+  Eigen::LLT<Eigen::MatrixXd> factor(s.meat);
+  if (factor.info() != Eigen::Success || factor.rcond() < 1e-12)
+    return std::unexpected(invalid("score sandwich: meat is singular or not positive definite"));
+  const double statistic = s.score.dot(factor.solve(s.score));
+  if (!std::isfinite(statistic) || statistic < 0)
+    return std::unexpected(invalid("score sandwich: invalid statistic"));
+  return statistic;
+}
+} // namespace magmaan::inference::frontier

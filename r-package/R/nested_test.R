@@ -444,6 +444,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                               ud_method = c("2000", "2001"),
                               h1_reference_regularization = NULL,
                               weight = NULL) {
+  pair <- .inference_pair(fit_H1, fit_H0, data)
+  fit_H1 <- pair$H1; fit_H0 <- pair$H0; data <- pair$data
   gamma <- match.arg(gamma)
   method <- match.arg(method)
   convention <- match.arg(convention)

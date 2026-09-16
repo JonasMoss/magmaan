@@ -2494,6 +2494,161 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prepare_inference_impl
+Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw);
+RcppExport SEXP _magmaan_prepare_inference_impl(SEXP fitSEXP, SEXP rawSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepare_inference_impl(fit, raw));
+    return rcpp_result_gen;
+END_RCPP
+}
+// score_rows_impl
+Rcpp::List score_rows_impl(SEXP context, std::string space);
+RcppExport SEXP _magmaan_score_rows_impl(SEXP contextSEXP, SEXP spaceSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    Rcpp::traits::input_parameter< std::string >::type space(spaceSEXP);
+    rcpp_result_gen = Rcpp::wrap(score_rows_impl(context, space));
+    return rcpp_result_gen;
+END_RCPP
+}
+// score_components_impl
+Rcpp::List score_components_impl(SEXP context, SEXP H1, std::string sensitivity, std::string metric);
+RcppExport SEXP _magmaan_score_components_impl(SEXP contextSEXP, SEXP H1SEXP, SEXP sensitivitySEXP, SEXP metricSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type H1(H1SEXP);
+    Rcpp::traits::input_parameter< std::string >::type sensitivity(sensitivitySEXP);
+    Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
+    rcpp_result_gen = Rcpp::wrap(score_components_impl(context, H1, sensitivity, metric));
+    return rcpp_result_gen;
+END_RCPP
+}
+// project_scores_impl
+Rcpp::List project_scores_impl(SEXP components, bool retain_rows, bool center);
+RcppExport SEXP _magmaan_project_scores_impl(SEXP componentsSEXP, SEXP retain_rowsSEXP, SEXP centerSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type components(componentsSEXP);
+    Rcpp::traits::input_parameter< bool >::type retain_rows(retain_rowsSEXP);
+    Rcpp::traits::input_parameter< bool >::type center(centerSEXP);
+    rcpp_result_gen = Rcpp::wrap(project_scores_impl(components, retain_rows, center));
+    return rcpp_result_gen;
+END_RCPP
+}
+// score_quadratic_impl
+Rcpp::List score_quadratic_impl(Rcpp::NumericVector score, Rcpp::NumericMatrix metric, SEXP meat);
+RcppExport SEXP _magmaan_score_quadratic_impl(SEXP scoreSEXP, SEXP metricSEXP, SEXP meatSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type score(scoreSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type metric(metricSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type meat(meatSEXP);
+    rcpp_result_gen = Rcpp::wrap(score_quadratic_impl(score, metric, meat));
+    return rcpp_result_gen;
+END_RCPP
+}
+// score_reference_impl
+Rcpp::List score_reference_impl(SEXP projected, bool spectrum);
+RcppExport SEXP _magmaan_score_reference_impl(SEXP projectedSEXP, SEXP spectrumSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type projected(projectedSEXP);
+    Rcpp::traits::input_parameter< bool >::type spectrum(spectrumSEXP);
+    rcpp_result_gen = Rcpp::wrap(score_reference_impl(projected, spectrum));
+    return rcpp_result_gen;
+END_RCPP
+}
+// resample_scores_impl
+Rcpp::List resample_scores_impl(SEXP projected, int n_flips, double seed, std::string multiplier, double two_point_skewness);
+RcppExport SEXP _magmaan_resample_scores_impl(SEXP projectedSEXP, SEXP n_flipsSEXP, SEXP seedSEXP, SEXP multiplierSEXP, SEXP two_point_skewnessSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type projected(projectedSEXP);
+    Rcpp::traits::input_parameter< int >::type n_flips(n_flipsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< std::string >::type multiplier(multiplierSEXP);
+    Rcpp::traits::input_parameter< double >::type two_point_skewness(two_point_skewnessSEXP);
+    rcpp_result_gen = Rcpp::wrap(resample_scores_impl(projected, n_flips, seed, multiplier, two_point_skewness));
+    return rcpp_result_gen;
+END_RCPP
+}
+// score_sandwich_impl
+Rcpp::List score_sandwich_impl(SEXP projected);
+RcppExport SEXP _magmaan_score_sandwich_impl(SEXP projectedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type projected(projectedSEXP);
+    rcpp_result_gen = Rcpp::wrap(score_sandwich_impl(projected));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inference_information_impl
+Rcpp::NumericMatrix inference_information_impl(SEXP context, std::string type);
+RcppExport SEXP _magmaan_inference_information_impl(SEXP contextSEXP, SEXP typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_information_impl(context, type));
+    return rcpp_result_gen;
+END_RCPP
+}
+// parameter_covariance_impl
+Rcpp::NumericMatrix parameter_covariance_impl(SEXP context, Rcpp::NumericMatrix information, SEXP meat);
+RcppExport SEXP _magmaan_parameter_covariance_impl(SEXP contextSEXP, SEXP informationSEXP, SEXP meatSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type information(informationSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type meat(meatSEXP);
+    rcpp_result_gen = Rcpp::wrap(parameter_covariance_impl(context, information, meat));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inference_snapshot_impl
+Rcpp::List inference_snapshot_impl(SEXP context);
+RcppExport SEXP _magmaan_inference_snapshot_impl(SEXP contextSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_snapshot_impl(context));
+    return rcpp_result_gen;
+END_RCPP
+}
+// score_components_matrix_impl
+SEXP score_components_matrix_impl(Rcpp::NumericVector score, Rcpp::NumericMatrix rows, Rcpp::NumericMatrix sensitivity, Rcpp::NumericMatrix metric, Rcpp::NumericMatrix nuisance, Rcpp::NumericMatrix directions, bool influence_rows);
+RcppExport SEXP _magmaan_score_components_matrix_impl(SEXP scoreSEXP, SEXP rowsSEXP, SEXP sensitivitySEXP, SEXP metricSEXP, SEXP nuisanceSEXP, SEXP directionsSEXP, SEXP influence_rowsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type score(scoreSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type rows(rowsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type sensitivity(sensitivitySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type metric(metricSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type nuisance(nuisanceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type directions(directionsSEXP);
+    Rcpp::traits::input_parameter< bool >::type influence_rows(influence_rowsSEXP);
+    rcpp_result_gen = Rcpp::wrap(score_components_matrix_impl(score, rows, sensitivity, metric, nuisance, directions, influence_rows));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_lr_test_satorra2000
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method, std::string computation);
 RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP computationSEXP) {
@@ -4130,6 +4285,18 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_prepared_data_impl", (DL_FUNC) &_magmaan_prepared_data_impl, 4},
     {"_magmaan_prepared_weight_impl", (DL_FUNC) &_magmaan_prepared_weight_impl, 4},
     {"_magmaan_prepared_estimate_impl", (DL_FUNC) &_magmaan_prepared_estimate_impl, 7},
+    {"_magmaan_prepare_inference_impl", (DL_FUNC) &_magmaan_prepare_inference_impl, 2},
+    {"_magmaan_score_rows_impl", (DL_FUNC) &_magmaan_score_rows_impl, 2},
+    {"_magmaan_score_components_impl", (DL_FUNC) &_magmaan_score_components_impl, 4},
+    {"_magmaan_project_scores_impl", (DL_FUNC) &_magmaan_project_scores_impl, 3},
+    {"_magmaan_score_quadratic_impl", (DL_FUNC) &_magmaan_score_quadratic_impl, 3},
+    {"_magmaan_score_reference_impl", (DL_FUNC) &_magmaan_score_reference_impl, 2},
+    {"_magmaan_resample_scores_impl", (DL_FUNC) &_magmaan_resample_scores_impl, 5},
+    {"_magmaan_score_sandwich_impl", (DL_FUNC) &_magmaan_score_sandwich_impl, 1},
+    {"_magmaan_inference_information_impl", (DL_FUNC) &_magmaan_inference_information_impl, 2},
+    {"_magmaan_parameter_covariance_impl", (DL_FUNC) &_magmaan_parameter_covariance_impl, 3},
+    {"_magmaan_inference_snapshot_impl", (DL_FUNC) &_magmaan_inference_snapshot_impl, 1},
+    {"_magmaan_score_components_matrix_impl", (DL_FUNC) &_magmaan_score_components_matrix_impl, 7},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_continuous_ls_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_continuous_ls_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 9},

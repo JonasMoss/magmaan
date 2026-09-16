@@ -459,6 +459,14 @@ score_flip_test(const Model &h1, const Fit &h0, const data::RawData &raw,
 
 // Global curved-model goodness-of-fit counterpart: tests one ML/FIML fit
 // against the local saturated moment model without fitting H1.
+Result<inference::frontier::ScoreComponents>
+score_components(const Fit& fit, const data::RawData& raw,
+                 const inference::frontier::ScoreGeometryOptions& options = {});
+Result<inference::frontier::ScoreComponents>
+score_components(const Model& h1, const Fit& h0, const data::RawData& raw,
+                 inference::frontier::ScoreFlipSensitivity sensitivity =
+                     inference::frontier::ScoreFlipSensitivity::ExpectedInformation);
+
 Result<inference::frontier::GlobalScoreFlipTestResult>
 global_score_flip_test(
     const Fit &fit, const data::RawData &raw,

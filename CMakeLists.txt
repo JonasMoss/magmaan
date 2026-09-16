@@ -134,6 +134,7 @@ add_library(magmaan STATIC
   src/api/sem.cpp
   src/inference/inference.cpp
   src/inference/score.cpp
+  src/inference/score_components.cpp
   src/robust/robust.cpp
   src/robust/fmg.cpp
   src/robust/restriction.cpp

@@ -588,6 +588,11 @@ TEST_CASE("api frontier score flips support a nested FIML pair") {
   CHECK(global->saturated_moment_dim == 14);
   CHECK(global->tangent_rank == 12);
   CHECK(std::isfinite(global->flip.p_effective));
+  const auto components = magmaan::api::frontier::score_components(*h1_fit, raw);
+  REQUIRE_OK(components);
+  const auto projected = magmaan::inference::frontier::project_scores(*components);
+  REQUIRE(projected.has_value());
+  CHECK(projected->statistic == doctest::Approx(global->flip.statistic_effective));
 }
 
 TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
@@ -1134,6 +1139,23 @@ TEST_CASE("api second-order CFA fits and equals the correlated first-order model
   CHECK(m2.npar == m1.npar);
   CHECK(m2.test.df == m1.test.df);
   CHECK(m2.test.statistic == doctest::Approx(m1.test.statistic).epsilon(1e-3));
+}
+
+
+TEST_CASE("api score components reject a different ML sample") {
+  const auto model = magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4");
+  REQUIRE_OK(model);
+  auto raw = continuous_raw();
+  const auto stats = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(stats.has_value());
+  const auto data = magmaan::api::data_from_sample_stats(*model, *stats);
+  REQUIRE_OK(data);
+  const auto fit = magmaan::api::fit(
+      *model, *data, magmaan::api::ml().starts(magmaan::api::fabin_starts()));
+  REQUIRE_OK(fit);
+  REQUIRE_OK(magmaan::api::frontier::score_components(*fit, raw));
+  raw.X[0](0, 0) += 1.0;
+  CHECK_FALSE(magmaan::api::frontier::score_components(*fit, raw).has_value());
 }
 
 #undef REQUIRE_OK

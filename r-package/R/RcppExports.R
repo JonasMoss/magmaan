@@ -649,6 +649,54 @@ prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = N
     .Call(`_magmaan_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds)
 }
 
+prepare_inference_impl <- function(fit, raw) {
+    .Call(`_magmaan_prepare_inference_impl`, fit, raw)
+}
+
+score_rows_impl <- function(context, space) {
+    .Call(`_magmaan_score_rows_impl`, context, space)
+}
+
+score_components_impl <- function(context, H1, sensitivity, metric) {
+    .Call(`_magmaan_score_components_impl`, context, H1, sensitivity, metric)
+}
+
+project_scores_impl <- function(components, retain_rows, center) {
+    .Call(`_magmaan_project_scores_impl`, components, retain_rows, center)
+}
+
+score_quadratic_impl <- function(score, metric, meat) {
+    .Call(`_magmaan_score_quadratic_impl`, score, metric, meat)
+}
+
+score_reference_impl <- function(projected, spectrum) {
+    .Call(`_magmaan_score_reference_impl`, projected, spectrum)
+}
+
+resample_scores_impl <- function(projected, n_flips, seed, multiplier, two_point_skewness) {
+    .Call(`_magmaan_resample_scores_impl`, projected, n_flips, seed, multiplier, two_point_skewness)
+}
+
+score_sandwich_impl <- function(projected) {
+    .Call(`_magmaan_score_sandwich_impl`, projected)
+}
+
+inference_information_impl <- function(context, type) {
+    .Call(`_magmaan_inference_information_impl`, context, type)
+}
+
+parameter_covariance_impl <- function(context, information, meat) {
+    .Call(`_magmaan_parameter_covariance_impl`, context, information, meat)
+}
+
+inference_snapshot_impl <- function(context) {
+    .Call(`_magmaan_inference_snapshot_impl`, context)
+}
+
+score_components_matrix_impl <- function(score, rows, sensitivity, metric, nuisance, directions, influence_rows) {
+    .Call(`_magmaan_score_components_matrix_impl`, score, rows, sensitivity, metric, nuisance, directions, influence_rows)
+}
+
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }

@@ -2324,3 +2324,77 @@ TEST_CASE("frontier score flips: grouped variance matches dense case oracle") {
     CHECK((grouped - dense).norm() < 1e-12 * (1.0 + dense.norm()));
   }
 }
+
+TEST_CASE("score primitives: supplied geometry, basis invariance and PSD meat") {
+  using namespace inf::frontier;
+  ScoreComponents c;
+  c.score = Eigen::Vector3d(2, 3, 4);
+  c.metric = Eigen::Matrix3d::Identity();
+  c.sensitivity = c.metric;
+  c.nuisance = Eigen::MatrixXd::Zero(3, 1);
+  c.nuisance(0,0) = 1;
+  c.directions = Eigen::MatrixXd::Zero(3,2);
+  c.directions(1,0) = 1; c.directions(2,1) = 1;
+  c.rows = Eigen::MatrixXd::Zero(4,3);
+  c.rows.col(1) << 1, 2, -1, 1;
+  // Deliberately rank-deficient meat; the observed score is independent of rows.
+  c.influence_rows = true;
+  auto p = project_scores(c, true);
+  REQUIRE(p.has_value());
+  CHECK(p->statistic == doctest::Approx(25.0));
+  auto eigen = score_spectrum(*p);
+  REQUIRE(eigen.has_value());
+  CHECK((*eigen)(0) == doctest::Approx(0));
+  CHECK((*eigen)(1) == doctest::Approx(7));
+  CHECK_FALSE(score_sandwich(*p).has_value());
+  auto scale = score_mean_scale(*p);
+  REQUIRE(scale.has_value());
+  CHECK(*scale == doctest::Approx(3.5));
+  Eigen::Matrix2d change;
+  change << 2, 1, 0, 3;
+  c.directions = (c.directions * change).eval();
+  auto rotated = project_scores(c);
+  REQUIRE(rotated.has_value());
+  CHECK(rotated->statistic == doctest::Approx(p->statistic));
+  auto re = score_spectrum(*rotated);
+  REQUIRE(re.has_value());
+  CHECK((*re - *eigen).norm() < 1e-10);
+  auto centered = project_scores(c, true, true);
+  REQUIRE(centered.has_value());
+  CHECK(centered->statistic == doctest::Approx(p->statistic));
+  CHECK(centered->rows.colwise().sum().norm() < 1e-10);
+  auto draws = resample_scores(*p, 127, 42);
+  REQUIRE(draws.has_value());
+  CHECK(draws->p_value >= 1.0/128.0);
+  CHECK_FALSE(resample_scores(*rotated, 127, 42).has_value());
+  c.metric(0,0) = -1;
+  c.metric(1,1) = -1;
+  CHECK_FALSE(project_scores(c).has_value());
+}
+
+TEST_CASE("score primitives: global FIML preparation and retained resampling agree") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260918u);
+  auto raw = gaussian_cfa_raw(rng, 180, 3);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto est = magmaan::test::fit_fiml(h.pt,h.rep,raw);
+  REQUIRE(est.has_value());
+  inf::frontier::GlobalScoreFlipOptions options;
+  options.resampling.n_flips = 31;
+  options.resampling.seed = 19;
+  auto c = inf::frontier::global_score_components(h.pt,h.rep,raw,*pack,*est);
+  REQUIRE(c.has_value());
+  CHECK((c->score - c->rows.colwise().sum().transpose()).norm() < 1e-10);
+  auto p = inf::frontier::project_scores(*c,true);
+  REQUIRE(p.has_value());
+  auto legacy = inf::frontier::global_score_flip_test(h.pt,h.rep,raw,*pack,*est,options);
+  REQUIRE(legacy.has_value());
+  auto spectrum = inf::frontier::score_spectrum(*p);
+  REQUIRE(spectrum.has_value());
+  CHECK(p->statistic == doctest::Approx(legacy->flip.statistic_effective).epsilon(1e-9));
+  CHECK((*spectrum - legacy->flip.eigvals).norm() < 1e-9);
+  auto flip = inf::frontier::resample_scores(*p,31,19);
+  REQUIRE(flip.has_value());
+  CHECK(flip->p_value == legacy->flip.p_effective);
+}

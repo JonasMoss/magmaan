@@ -750,6 +750,8 @@ fmg_nested_mixed_ordinal <- function(
 fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
                        A.method = c("exact", "delta"), weight = NULL,
                        gamma = NULL) {
+  pair <- .inference_pair(fit_H1, fit_H0, data)
+  fit_H1 <- pair$H1; fit_H0 <- pair$H0; data <- pair$data
   A.method <- match.arg(A.method)
   tests <- tests %||% .fmg_default_tests_ordinal()
   complete_ml <- identical(.fmg_fit_estimator(fit_H1), "ML") &&
@@ -892,6 +894,8 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #' @export
 fmg_tests <- function(fit, tests = NULL, data = NULL, weight = NULL,
                       gamma = c("empirical", "normal")) {
+  if (inherits(fit, "magmaan_inference") && !is.null(data)) stop("inference snapshot already owns its data")
+  fit <- .inference_fit(fit)
   tests <- .fmg_resolve_default_tests(fit, tests)
   specs <- lapply(tests, .fmg_parse_test)
   # ML2S must be checked before FIML: a two-stage fit also carries a
