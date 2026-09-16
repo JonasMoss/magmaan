@@ -14,6 +14,12 @@ for(p in c(10,20)) for(distribution in c('normal','vm2')) {
   lr <- fmg_tests(f,tests=lr_tests,data=d)
   sc <- global_score_flip_test(f,d,n_flips=1L,sensitivity='expected',metric='expected')
   key <- paste(p,distribution,sep='_')
+  projected <- project_scores(score_components(prepare_inference(f,d)))
+  reference <- score_spectrum(projected)
+  check(paste0(key,'_primitive_statistic'),projected$statistic,sc$statistic_effective,1e-7)
+  check(paste0(key,'_primitive_spectrum'),reference$eigenvalues,sc$eigenvalues,1e-7)
+  check(paste0(key,'_primitive_SB'),calibrate_quadratic(reference,'sb')$p_value,sc$p_mean_scaled,1e-9)
+
   check(paste0(key,'_df'),sc$df,if(p==10)34 else 169,0)
   check(paste0(key,'_score_RLS'),sc$statistic_effective,
     lr$base_statistic[lr$label=='std_rls'],1e-5)

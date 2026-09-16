@@ -63,38 +63,46 @@ one_rep <- function(cell, rep_id, ctx, seed_base) {
   f <- ft$value
   out$admissible <- isTRUE(f$diagnostics$admissibility$admissible)
   if(!out$admissible[1]) {out$error <- 'fit covariance inadmissible';return(finish())}
-  lr <- measure(magmaan::fmg_tests(f,tests=lr_tests,data=gen$value))
+  # Snapshot preparation is included in total_rep_seconds / simulation wall
+  # time, but excluded from the historical per-method pipeline_seconds field.
+  context <- magmaan::prepare_inference(f, gen$value)
+  lr <- measure(magmaan::fmg_tests(context,tests=lr_tests))
   ix <- seq_along(lr_tests)
   out$postfit_batch_seconds[ix] <- lr$seconds
   if(inherits(lr$value,'error')) out$error[ix] <- conditionMessage(lr$value) else {
     out$p_value[ix] <- lr$value$p_value;out$df[ix] <- lr$value$df
     out$statistic[ix] <- lr$value$base_statistic
   }
-  # The existing global API requires one multiplier draw. Ignore all flip
-  # p-values; charge its overhead to the score batch and use only asymptotic
-  # statistics/spectrum. Expected H0 projection and metric, uncentered OPG.
-  sc <- measure(magmaan::global_score_flip_test(f,gen$value,n_flips=1L,seed=seed,
-    sensitivity='expected',metric='expected'))
+  # Explicit asymptotic primitives: no multiplier draws or exact-mixture tail.
+  # Projection/spectrum are shared by the requested score calibrations.
+  sc <- measure({
+    projected <- magmaan::project_scores(magmaan::score_components(context,
+      sensitivity='expected',metric='expected'))
+    reference <- magmaan::score_spectrum(projected)
+    list(projected=projected, reference=reference,
+         statistic_effective=projected$statistic)
+  })
   ix <- length(lr_tests)+seq_along(score_tests)
   out$postfit_batch_seconds[ix] <- sc$seconds
   if(inherits(sc$value,'error')) out$error[ix] <- conditionMessage(sc$value) else {
-    z <- sc$value
+    z <- sc$value$reference
     out$score_rank <- sum(z$eigenvalues > 1e-10 * max(z$eigenvalues))
-    out$df[ix] <- z$df;out$statistic[ix] <- z$statistic_effective
-    out$stationarity <- z$nuisance_stationarity_norm
+    out$df[ix] <- z$df;out$statistic[ix] <- z$statistic
     for(k in 1:3) {
-      tr <- measure(magmaan:::infer_fmg_test(z$statistic_effective,z$df,z$eigenvalues,
-        method=if(k==1) 'sb' else 'peba',param=c(0,2,4)[k]))
+      tr <- measure(magmaan::calibrate_quadratic(z,c('sb','peba2','peba4')[k]))
       out$postfit_seconds[ix[k]] <- sc$seconds + tr$seconds
       if(inherits(tr$value,'error')) out$error[ix[k]] <- conditionMessage(tr$value) else
         out$p_value[ix[k]] <- tr$value$p_value
     }
-    out$postfit_seconds[ix[4]] <- sc$seconds
-    out$statistic[ix[4]] <- z$statistic_sandwich
-    if(isTRUE(z$sandwich_available)) out$p_value[ix[4]] <- z$p_sandwich else
-      out$error[ix[4]] <- 'score meat rank deficient: sandwich unavailable'
+    sandwich <- measure(magmaan::calibrate_quadratic(
+      magmaan::score_sandwich(sc$value$projected),'std'))
+    out$postfit_seconds[ix[4]] <- sc$seconds + sandwich$seconds
+    if(inherits(sandwich$value,'error')) out$error[ix[4]] <- conditionMessage(sandwich$value) else {
+      out$statistic[ix[4]] <- sandwich$value$statistic
+      out$p_value[ix[4]] <- sandwich$value$p_value
+    }
     if(!inherits(lr$value,'error')) out$score_rls_abs_diff <- abs(
-      z$statistic_effective-lr$value$base_statistic[lr$value$label=='std_rls'])
+      z$statistic-lr$value$base_statistic[lr$value$label=='std_rls'])
   }
   # At an interior optimum expected-information score equals fitted-weight
   # RLS. Reject the shared fit if this necessary stationarity check fails.

@@ -1,7 +1,7 @@
 ---
 title: "Score versus LR: calibration and compute time"
 params:
-  run: main-2000
+  run: primitives-2000
 format:
   html:
     toc: true
@@ -142,9 +142,8 @@ display$Seconds <- round(display$Seconds,1)
 knitr::kable(display)
 ```
 
-The battery-powered pilot projected roughly 16 minutes for 2,000 replications
-per cell. The table gives realized wall time without assuming a parallel
-speedup. The computation uses one worker and one BLAS thread. Hardware, software
+The table gives realized wall time for the current implementation without
+assuming a parallel speedup. The earlier run remains in `results/main-2000/`. The computation uses one worker and one BLAS thread. Hardware, software
 fingerprints, power state, seeds and exact command are saved in `metadata.csv`.
 
 All **`r nrow(checks)` numerical checks passed** on four separate datasets:
@@ -167,7 +166,10 @@ RLS statistic; the calibrations remain separate.
   rates alongside any later calibration result.
 - Tests share data and a fitted null. Timing records distinguish the batched
   LR/RLS comparisons from score setup and calibrations. Individual LR-family
-  post-fit times have not been separately measured.
+  post-fit times have not been separately measured. Shared inference preparation
+  is included in the full simulation time, but excluded from the per-method
+  pipeline-time field. The former nuisance-stationarity column is unavailable
+  on the current path; the score/RLS identity check remains active.
 - Question-to-report elapsed time and active researcher time are unmeasured.
   The compute timing must not be presented as total research-development time.
 
@@ -181,7 +183,7 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   Rscript experiments/81-score-vs-lrt/run_experiment.R \
-  --reps 2000 --workers 1 --budget-minutes 60 --seed-base 20260917 --output main-2000
+  --reps 2000 --workers 1 --budget-minutes 60 --seed-base 20260917 --output primitives-2000
 
 quarto render experiments/81-score-vs-lrt/report.qmd
 ```

@@ -34,6 +34,8 @@ outdir <- file.path(base,'results',opts$output)
 if(dir.exists(outdir)) stop('Output already exists; choose another --output')
 dir.create(outdir,recursive=TRUE)
 write_out <- function(x,name) write.csv(x,file.path(outdir,name),row.names=FALSE,na='')
+package_files <- list.files(find.package('magmaan'),pattern='\\.(so|rdb|rdx)$|^DESCRIPTION$',recursive=TRUE,full.names=TRUE)
+package_hashes <- tools::md5sum(package_files)
 started <- Sys.time(); start <- clock_seconds()
 power <- function() {
   paths <- Sys.glob('/sys/class/power_supply/*/online')
@@ -127,6 +129,8 @@ write_out(projection,'budget_projection.csv')
 write_out(data.frame(phase=c('setup','warmup','simulation_loop','total_runner'),
  elapsed_seconds=c(setup_seconds,warmup_seconds,loop_seconds,clock_seconds()-start),
  workers=opts$workers,blas_threads=1,run_id=opts$output),'score_lrt_timing.csv')
+stopifnot(identical(package_hashes,tools::md5sum(package_files)))
+write_out(data.frame(path=names(package_hashes),md5=unname(package_hashes)),'package_fingerprints.csv')
 dll <- getLoadedDLLs()[['magmaan']][['path']]
 meta <- c(started_utc=format(started,tz='UTC',usetz=TRUE),finished_utc=format(Sys.time(),tz='UTC',usetz=TRUE),
  power_start=power_start,power_end=power(),command=paste(commandArgs(),collapse=' '),
