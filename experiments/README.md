@@ -96,7 +96,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 79 | [Savalei-Falk-2014 test map](79-savalei-falk-2014-test-map/report.qmd) | replication | active | Which exact null/reference models and observed-information corrections define Savalei and Falk's robust FIML and two-stage tests, and how should magmaan verify them? |
 | 80 | [Savalei-Falk-2014 matrix choices](80-savalei-falk-2014-ml2s-information/report.qmd) | replication | complete | Which Yuan-Bentler-style matrix choice gives rejection behavior most similar to Savalei and Falk, without claiming an exact EQS replication? |
 
-| 81 | [score-vs-lrt](81-score-vs-lrt/report.qmd) | benchmark | active | How much paired score-versus-LR calibration evidence fits into one hour, starting with a battery-powered timing pilot? |
+| 81 | [score-vs-lrt](81-score-vs-lrt/report.qmd) | benchmark | active | Do score-based SB and pEBA tests calibrate better than LR-based tests, and how long does the paired simulation take? |
 
 ## Archived
 
