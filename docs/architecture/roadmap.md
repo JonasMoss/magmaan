@@ -3018,6 +3018,39 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   positive `n_obs`, and positive NACOV diagonals before fitting or robust
   reporting.
 
+#### Ordinal weighted-LS whitening is structure-aware
+
+The weighted-LS moment residual is `r_b = sqrt(n_b/N) · F_bᵀ d_b`, where
+`F_b F_bᵀ` is block b's moment weight. Only full WLS needs a dense `F`: ULS uses
+the identity and DWLS a diagonal, the latter provably so, since every `W_dwls`
+construction site writes a zero matrix and then fills only its diagonal.
+
+`src/estimate/detail_whiten_factor.hpp` carries that structure in the type.
+`detail::WhitenFactor` is an Identity/Diagonal/Dense left-multiplying operator
+and `detail::MomentWeight` is the same idea for `W` itself. Producers
+(`weight_factors`, `full_weight_factors`) pick the kind; consumers call
+`t_apply`, so a diagonal weight costs O(rows · cols) instead of a GEMM and the
+identity costs a copy. Two structural consequences fall out and are honored:
+
+- a diagonal `W` has a structurally zero threshold-by-correlation block, so
+  `G_corr` is exactly zero and the profiled thresholds decouple from the
+  correlation residual. `ProfiledWeightWorkspace::corr_coupled` records that
+  once and the consumers skip the product rather than multiplying by zero on
+  every gradient;
+- `theta_threshold_profile` keeps a diagonal input diagonal, since a diagonal
+  weight leaves a diagonal Schur complement.
+
+`prob.eval` is set on every ordinal `GmmProblem`, so `optim::scalarize` uses its
+fused branch instead of evaluating the model twice per gradient.
+
+The contract is that none of this moves a number. Estimation-only DWLS at
+N=1000 dropped from 838 ms to 52 ms at p=50 with the empirical complexity
+exponent in p falling from 4.47 to 3.00 — the floor for a dense O(p²)-row by
+O(p)-column Jacobian — while fitted parameter vectors stayed bit-identical and
+gradient counts unchanged. `talks/oslo-psychometric-gathering-2026/tools/
+benchmark_ordinal_whitening.R` is the before/after harness and prints both the
+element-wise parity check and the fitted exponent pair.
+
 #### Ordinal DWLS Gamma performance
 
 Complete-data all-ordinal DWLS estimated-weight inference now evaluates both

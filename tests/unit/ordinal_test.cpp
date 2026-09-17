@@ -6406,8 +6406,16 @@ TEST_CASE("Theta threshold profile preserves objective and off-optimum gradient"
       F(2, 0) = 0.4; F(3, 1) = -0.3; F(4, 0) = 0.2;
       F(4, 2) = 0.25;
     }
-    auto w = magmaan::detail::theta_threshold_profile(F, 2, diagonal);
+    // A diagonal weight keeps a diagonal Schur complement, so the profile must
+    // hand back a Diagonal operator rather than a materialized dense matrix.
+    const auto FW = diagonal
+        ? magmaan::detail::WhitenFactor::diagonal(F.diagonal())
+        : magmaan::detail::WhitenFactor::dense(F);
+    auto w = magmaan::detail::theta_threshold_profile(FW, 2, diagonal);
     REQUIRE(w.has_value());
+    CHECK(w->factor.kind() == (diagonal
+        ? magmaan::detail::WhitenFactor::Kind::Diagonal
+        : magmaan::detail::WhitenFactor::Kind::Dense));
     for (double beta : {-0.7, 0.2, 1.1}) {
       const auto residual = [&](double b) {
         return Eigen::Vector3d(std::sin(b) - 0.2, b*b - 0.4, b + 0.3);
@@ -6417,14 +6425,14 @@ TEST_CASE("Theta threshold profile preserves objective and off-optimum gradient"
       full.head(2) = -w->threshold_from_corr * d;
       full.tail(3) = d;
       const Eigen::VectorXd wr = F.transpose() * full;
-      const Eigen::VectorXd reduced = w->factor * d;
+      const Eigen::VectorXd reduced = w->factor.apply(d);
       CHECK(wr.squaredNorm() == doctest::Approx(reduced.squaredNorm()).epsilon(1e-12));
       CHECK((F.topRows(2) * wr).norm() < 1e-12);
       const Eigen::Vector3d derivative(std::cos(beta), 2*beta, 1);
-      const double gradient = (w->factor * derivative).dot(reduced);
+      const double gradient = w->factor.apply(derivative).dot(reduced);
       const double eps = 1e-6;
-      const double fd = ((w->factor * residual(beta + eps)).squaredNorm() -
-                        (w->factor * residual(beta - eps)).squaredNorm()) / (4*eps);
+      const double fd = ((w->factor.apply(residual(beta + eps))).squaredNorm() -
+                        (w->factor.apply(residual(beta - eps))).squaredNorm()) / (4*eps);
       CHECK(gradient == doctest::Approx(fd).epsilon(1e-8));
     }
   }

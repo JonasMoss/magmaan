@@ -86,6 +86,137 @@ Remaining work, ordered by measured need:
   own validation. Worker scaling is a separate measurement if simulation
   throughput remains limiting after the serial improvement.
 
+### Ordinal weighted-LS whitening is dense where a reduction would do — FIXED
+
+Fixed 2026-09-17. Estimation-only DWLS at N=1000, three-factor CFA:
+
+| p | before | after | |
+|---|---|---|---|
+| 12 | 1.5 ms | 0.7 ms | 2.1x |
+| 20 | 10.4 ms | 2.8 ms | 3.7x |
+| 30 | 66.7 ms | 7.2 ms | 9.3x |
+| 40 | 307.6 ms | 24.4 ms | 12.6x |
+| 50 | 838.4 ms | 52.1 ms | **16.1x** |
+
+Empirical complexity exponent in p went 4.47 -> 3.00, which is the floor for a
+dense O(p²)-row by O(p)-column Jacobian. Fitted parameter vectors are
+**bit-identical** before and after at every p (max |delta| exactly 0), and
+gradient counts are unchanged, so this is a pure per-evaluation cost change.
+
+Against lavaan at N=1000, the decay-to-crossover is gone. Pipeline boundary was
+29.7x at p=6 decaying to 1.5x at p=50; it is now 21.7x at p=12 and 13.0x at
+p=50. Estimation-only is 18.6x at p=12 and 3.7x at p=50.
+
+What changed, all in `src/estimate/`:
+
+- `detail_whiten_factor.hpp` (new) holds `WhitenFactor`, an Identity/Diagonal/
+  Dense left-multiplying operator, and `MomentWeight`, the same idea for the
+  block moment weight W. `weight_factors` (both overloads) and
+  `full_weight_factors` now emit Diagonal for DWLS and Identity for ULS, and the
+  six whitening sites call `t_apply` instead of a dense GEMM.
+- `ProfiledWeightWorkspace::corr_coupled`. For a diagonal moment weight the
+  threshold-by-correlation block of W is *structurally* zero, so `R_corr`,
+  `G_corr` and `threshold_from_corr` are identically zero and the profiled
+  thresholds decouple from the correlation residual entirely. The old code still
+  spent a 150 x 1225 x 203 product against that zero matrix on every gradient at
+  p=50. Detected once in `build_joint_profiled_workspace`; the four consumers
+  skip it. This was worth as much as the whitening fix itself.
+- `prob.eval` set on the four `GmmProblem` constructions that lacked it, so
+  `optim::scalarize` stops taking its two-call fallback branch. Measured effect
+  is within noise rather than the predicted 2x, because `scalarize` always needs
+  the gradient, so the residual-only call this removes is ~200x cheaper than the
+  Jacobian call that remains. Kept as strictly-less-work.
+- `detail_theta_threshold_profile.hpp` takes and returns a `WhitenFactor`, and
+  keeps a diagonal input diagonal rather than materializing the Schur
+  complement.
+
+Remaining, both **memory-only now that the flops exponent is at its floor**:
+
+- **M — give `W_dwls` a diagonal storage type.** `data::OrdinalStats::W_dwls`
+  and `OrdinalGammaCacheBlock::w_dwls` are still `Eigen::MatrixXd` holding a
+  provably diagonal matrix (every construction site is `Zero(n,n)` with only
+  `(k,k)` written), ~15 MB per block at p=50. About 100 references across 10
+  files including `r-package/src/fit.cpp`, so it wants a quiet tree.
+- **S — `build_joint_profiled_workspace` no longer needs `Ws` and `factors` as
+  separate arguments** now that both are structure-aware; the weight is
+  recoverable from the factor.
+
+### Naive ordinal path builds and inverts a full NACOV it never uses
+
+Found 2026-09-17 while re-measuring the above. `magmaan(model, data, estimator =
+"DWLS", ordered = ...)` reaches `data_ordinal_stats_from_df` at
+`r-package/R/model_data.R:2158`, which does not pass `full_wls_weight` and so
+takes the default `TRUE` from the signature at `model_data.R:313`. That builds
+the dense mdim x mdim NACOV **and inverts it** to form the full WLS weight, for
+an estimator that needs only the diagonal.
+
+At p=50, N=1000, three-factor CFA:
+
+- `data_ordinal_stats_from_df(full_wls_weight = TRUE)`  1270.8 ms
+- `data_ordinal_stats_from_df(full_wls_weight = FALSE)`  501.9 ms
+- staged equivalent, `prepare_data` + `prepare_weight(full = FALSE)`  81.3 ms
+
+So the naive call wastes 769 ms on the unused inverse, and a further ~420 ms
+building a dense Gamma that the diagonal materialization plan avoids. Total
+naive `magmaan()` is 1396 ms against 178 ms for the staged path doing the same
+work. This is the whole reason the *naive* ordinal speedup still decays (8.8x at
+p=12 to 1.2x at p=50) while the pipeline speedup is now flat.
+
+- **S — pass `full_wls_weight = identical(estimator, "WLS")` at
+  `model_data.R:2158`.** One line, worth ~770 ms at p=50.
+- **M — route the naive ordinal branch through the diagonal Gamma
+  materialization plan** so DWLS and ULS never build the dense Gamma at all,
+  matching what `prepare_weight(full = FALSE)` already does.
+
+Not applied yet: `r-package/R/model_data.R` was held by a concurrent editor.
+
+### Ordinal weighted-LS whitening — original diagnosis
+
+Found 2026-09-16 while benchmarking magmaan against lavaan at p up to 50. The
+ordinal DWLS *estimation* step scales as p^4.5 empirically, against p^2.1 for
+continuous ML, so lavaan overtakes magmaan at around p=28 on the ordinal arm
+alone. Polychorics, the SB/UGamma channel, and the optimizer were each ruled out
+by measurement: `full=FALSE` and `full=TRUE` agree (780 vs 795 ms), magmaan's
+polychorics are 18-26x faster than lavaan's and flat in p, and gradient counts
+are flat (35 at p=12, 51 at p=50). The cost is entirely per-evaluation, and the
+same exponent blow-up appears on *continuous* weighted LS (ML 2.12, ULS 2.66,
+DWLS 4.53, GLS 5.01), so this is a weighted-LS defect, not an ordinal one.
+
+Baseline at N=1000, three-factor CFA, estimation only, DWLS diagonal Gamma:
+1.5 ms at p=12, 66.7 ms at p=30, 838 ms at p=50; exponent 4.47.
+
+Three separable defects:
+
+- **S — the diagonal DWLS weight is applied as a dense GEMM.** `weight_factors`
+  and `full_weight_factors` return a dense `mdim x mdim` Cholesky factor even
+  when the weight is diagonal, and every consumer spends
+  `factors[b].transpose() * X`: `ordinal_residuals`, `ordinal_jacobian`,
+  `mixed_ordinal_residuals`, `mixed_ordinal_jacobian`, and the hot profiled pair
+  `profiled_ordinal_residuals` / `profiled_ordinal_jacobian`. That is
+  O(nmoments^2 * npar) per Jacobian where O(nmoments * npar) suffices. At p=50
+  it is 2 * 1375^2 * 203 ~ 7.7e8 flops per Jacobian evaluation and each factor
+  is a ~15 MB dense matrix. `full_weight_factors` already holds the diagonal as
+  an `Eigen::VectorXd` immediately before scattering it into a zero matrix.
+- **S — ordinal ULS materializes the identity.** `weight_factors` pushes
+  `MatrixXd::Identity(mdim, mdim)`, so the ordinal path cannot take the
+  `factors.empty()` fast path that the continuous core already has at
+  `gmm/moment_quadratic.cpp:223`. ULS pays a full dense multiply by the
+  identity.
+- **S — `prob.eval` is unset, so every gradient evaluates the model twice.**
+  `fit_ordinal_bounded` sets only `prob.r` and `prob.J`, so `optim::scalarize`
+  takes its two-call fallback branch and runs `ModelEvaluator::evaluate` plus
+  the whitening twice per gradient. The fused pattern already exists at
+  `ordinal.cpp:8652`, `:8742`, `:9105`, `:9198`, and `:11272`; three problem
+  constructions still lack it.
+
+Fix order is Tier 1 `prob.eval` (pure 2x, no numerical change), Tier 2
+diagonal-aware whitening confined to `ordinal.cpp` (the 5-15x), Tier 3 give
+`data::OrdinalStats::W_dwls` and `OrdinalGammaCacheBlock::w_dwls` a diagonal
+storage type so the dense matrix is never built. Gate every tier on
+element-wise parity of the fitted parameter vector against the pre-fix run;
+`talks/oslo-psychometric-gathering-2026/tools/benchmark_ordinal_whitening.R`
+does the before/after and prints the fitted-exponent pair.
+
 ### Other estimation and inference follow-ups
 
 Small open items surfaced while fixing the standardized-solution and Kline/Guo
