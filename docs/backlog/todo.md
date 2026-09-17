@@ -141,14 +141,20 @@ Remaining, both **memory-only now that the flops exponent is at its floor**:
   separate arguments** now that both are structure-aware; the weight is
   recoverable from the factor.
 
-### Naive ordinal path builds and inverts a full NACOV it never uses
+### Naive ordinal path builds and inverts a full NACOV it never uses — PARTLY FIXED
 
 Found 2026-09-17 while re-measuring the above. `magmaan(model, data, estimator =
-"DWLS", ordered = ...)` reaches `data_ordinal_stats_from_df` at
-`r-package/R/model_data.R:2158`, which does not pass `full_wls_weight` and so
-takes the default `TRUE` from the signature at `model_data.R:313`. That builds
-the dense mdim x mdim NACOV **and inverts it** to form the full WLS weight, for
-an estimator that needs only the diagonal.
+"DWLS", ordered = ...)` reached `data_ordinal_stats_from_df` without passing
+`full_wls_weight`, so it took the default `TRUE` from the signature at
+`model_data.R:313`. That builds the dense mdim x mdim NACOV **and inverts it**
+to form the full WLS weight, for an estimator that needs only the diagonal.
+
+The ordinal branch of `magmaan()` now passes
+`full_wls_weight = identical(estimator, "WLS")`. Naive DWLS at p=50, N=1000 went
+from 1396 ms to 541 ms. All ordinal R examples still pass, including
+`ordinal_dwls_wls.R` (which exercises the WLS branch that does need the full
+weight) and `profile_lrt_parameter_ordinal.R` (which reads `fit$ordinal_stats`
+post-fit).
 
 At p=50, N=1000, three-factor CFA:
 
@@ -156,19 +162,25 @@ At p=50, N=1000, three-factor CFA:
 - `data_ordinal_stats_from_df(full_wls_weight = FALSE)`  501.9 ms
 - staged equivalent, `prepare_data` + `prepare_weight(full = FALSE)`  81.3 ms
 
-So the naive call wastes 769 ms on the unused inverse, and a further ~420 ms
+So the naive call wasted 769 ms on the unused inverse, and a further ~420 ms
 building a dense Gamma that the diagonal materialization plan avoids. Total
-naive `magmaan()` is 1396 ms against 178 ms for the staged path doing the same
-work. This is the whole reason the *naive* ordinal speedup still decays (8.8x at
-p=12 to 1.2x at p=50) while the pipeline speedup is now flat.
+naive `magmaan()` was 1396 ms against 178 ms for the staged path doing the same
+work. This is why the *naive* ordinal speedup decayed (8.8x at p=12 to 1.2x at
+p=50) while the pipeline speedup is flat.
 
-- **S — pass `full_wls_weight = identical(estimator, "WLS")` at
-  `model_data.R:2158`.** One line, worth ~770 ms at p=50.
+Remaining:
+
 - **M — route the naive ordinal branch through the diagonal Gamma
   materialization plan** so DWLS and ULS never build the dense Gamma at all,
-  matching what `prepare_weight(full = FALSE)` already does.
-
-Not applied yet: `r-package/R/model_data.R` was held by a concurrent editor.
+  matching what `prepare_weight(full = FALSE)` already does. That is the
+  remaining ~420 ms: `data_ordinal_stats_from_df(full_wls_weight = FALSE)` is
+  501.9 ms against 81.3 ms for `prepare_data` + `prepare_weight(full = FALSE)`,
+  because it still materializes the full dense NACOV. The obstacle is that the
+  naive branch calls `fit_dwls_ordinal(spec, stats)`, which wants a
+  `magmaan_ordinal_data`, whereas the cheap route is `prepare_model` +
+  `prepare_data` + `prepare_weight` + `estimate`; reconciling the two means
+  checking that `bounds`, `optimizer`, `control` and group handling survive the
+  swap, and that `finalize_magmaan_fit` accepts the result shape.
 
 ### Ordinal weighted-LS whitening — original diagnosis
 

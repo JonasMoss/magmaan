@@ -2154,14 +2154,21 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       ov_by_group <- model_matrix_rep(spec$partable)$ov_names
       if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
       all_ordinal <- all(vapply(ov_by_group, function(ov) setequal(spec$ordered, ov), logical(1)))
+      # Only WLS consumes the full weight. Building it means inverting the dense
+      # moment-by-moment NACOV, which dominates the whole call at even moderate
+      # p (770 ms of a 1400 ms fit at p = 50, N = 1000) and is pure waste for
+      # DWLS and ULS, which need the diagonal and the identity respectively.
+      want_full_wls <- identical(estimator, "WLS")
       data <- if (all_ordinal) {
         data_ordinal_stats_from_df(data, spec, group = group_var,
-                                   missing = missing, pd_gamma = pd_gamma)
+                                   missing = missing, pd_gamma = pd_gamma,
+                                   full_wls_weight = want_full_wls)
       } else {
         if (missing == "pairwise") {
           stop("magmaan(): missing = \"pairwise\" is currently implemented for all-ordinal data only")
         }
-        data_mixed_ordinal_stats_from_df(data, spec, group = group_var, missing = missing)
+        data_mixed_ordinal_stats_from_df(data, spec, group = group_var, missing = missing,
+                                         full_wls_weight = want_full_wls)
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
