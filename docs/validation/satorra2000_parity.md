@@ -293,3 +293,48 @@ step carries earlier equality rows into the exact restriction body before
 projection, whereas magmaan's exact route uses the clean `K_H1` versus `K_H0`
 complement. lavaan's public default is `A.method = "delta", scaled.shifted =
 TRUE`; use magmaan `convention = "lavaan"` when that is the oracle.
+
+## lavaan's native nested FMG hardcodes the delta restriction (2026-09-17)
+
+lavaan 0.7-2 has its own nested eigenvalue-tail battery, reached as
+`lavTestLRT(fit_H0, fit_H1, test = "peba4")` and dispatched through
+`lav_test_fmg_nested()` / `lav_test_fmg_ugamma_nested()`. Unlike
+`lavTestLRT(method = "satorra.2000")`, that route exposes **no `A.method`
+argument**: it always calls
+`lav_test_diff_a(m1, m0, method = "delta", reference = "H1")` and then forms
+`U = V Pi (P^-1 A' (A P^-1 A')^- A P^-1) Pi' V`, eigen-solving the full
+`p* x p*` product `U Gamma` and keeping the top `df_diff` eigenvalues.
+
+So a magmaan-versus-lavaan nested pEBA/pOLS comparison must pass
+`fmg_nested(..., A.method = "delta")` explicitly. `fmg_nested()` defaults to
+`A.method = "exact"`, and the two restriction maps give genuinely different
+difference spectra — not a rounding difference. Two-factor CFA, `N = 500`,
+`df_diff = 8`, normal data, all free loadings of both factors pinned at their
+population values by `==`:
+
+| case | max abs eigenvalue diff vs lavaan | pEBA4 p diff vs lavaan |
+|---|---:|---:|
+| `p=10`, `A.method = "exact"` | 1.73e-02 | 4.58e-03 |
+| `p=10`, `A.method = "delta"` | 1.20e-06 | 1.02e-07 |
+| `p=20`, `A.method = "exact"` | 2.98e-02 | 1.75e-03 |
+| `p=20`, `A.method = "delta"` | 8.50e-07 | 7.72e-08 |
+
+The tail evaluators are not the cause and should not be blamed for it: applying
+magmaan's native weighted-chi-square tail and lavaan's R-level Imhof
+integration to the *same* spectrum agrees to 2.7e-08. Gate nested FMG parity on
+`delta`; `exact` is a different, analytic restriction map, not an error.
+
+Two further limits of the lavaan comparator, both from
+`lav_test_fmg_check_missing()` / `lav_test_fmg_check_estimator()`:
+
+- lavaan's FMG requires `missing = "listwise"`, for global *and* nested tests.
+  Under FIML it refuses outright ("FMG nested tests require missing=
+  \"listwise\"; found \"ml\""), so there is no lavaan pEBA comparator for any
+  FIML cell. magmaan's `fmg_nested()` handles FIML and ML2S pairs.
+- It requires `estimator` `ML` or `MLM`, so ordinal and continuous-LS pairs have
+  no lavaan-native nested FMG comparator either.
+
+Evidence: `experiments/81-score-vs-lrt/diagnose_trace_sb_nested.R`, which also
+records that `pEBA4` collapses onto `pall` exactly when `df_diff <= 4` (the
+EBA-j blocks become singletons once `j >= m`), so a nested design meant to
+exercise pEBA4 as a distinct method needs `df_diff > 4`.

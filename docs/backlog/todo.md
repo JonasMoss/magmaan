@@ -1053,6 +1053,32 @@ when they next change.
   `gamma_nt_pairwise` on small fixtures; and stress cases report finite
   diagnostics instead of dense-matrix blowups.
 
+- **M — establish which lavaan FIML robust convention, if any, magmaan's FIML
+  `sb_ml` is supposed to match.** Under missing data the two engines make
+  different choices in estimating the bread, the meat and the saturated-H1
+  reference, and magmaan's defaults line up with neither lavaan variant
+  consistently. Two-factor CFA, `N = 500`, 10% MCAR
+  (`experiments/81-score-vs-lrt/diagnose_trace_sb_nested.R --with-fiml`):
+  `fmg_tests(tests = "sb_ml")` sits 1.5e-04 from lavaan's `yuan.bentler.mplus`
+  (the `estimator = "MLR"` test) but 9.2e-02 from `yuan.bentler` at `p = 20`,
+  and 5.6e-03 from *both* at `p = 10`. So it is not simply "magmaan targets the
+  Mplus variant" either. The `papers/fiml-fmg` gate reports 90/90 passing with
+  `convention = "lavaan"`, so the likely resolution is a convention flag that
+  `fmg_tests()` does not set rather than a defect, but until it is pinned down no
+  lavaan FIML robust test is a usable oracle and no FIML SB parity or timing
+  number should be quoted. Decide and document which convention each entry point
+  targets, then gate it. Two comparator traps to encode in whatever gate results,
+  because both yield plausible numbers: lavaan silently switches `missing` to
+  `"listwise"` when `satorra.bentler` is requested at fit time (so
+  `cfa(missing = "ml", test = "satorra.bentler")` is not a FIML fit), and
+  `lavTest(test = "satorra.bentler")` called post hoc on a genuine FIML fit slips
+  past that gate and returns Yuan-Bentler numbers under an SB label. Related but
+  distinct from the saturated-H1 regularizer item below, which is about
+  near-singular references rather than convention choice. Separately, lavaan's
+  FMG refuses `missing != "listwise"` outright
+  (`lav_test_fmg_check_missing()`), for global and nested tests alike, so no
+  lavaan pEBA comparator exists for any FIML cell regardless of how the
+  conventions are settled.
 - **M — FIML Satorra-2000 nested test: calibrate the opt-in saturated-H1
   reference regularizer under missing data (frontier).** The scaled and mixture nested difference tests
   (`nestedTest(method = "satorra.2000")`, especially direct FIML) collapse to
@@ -2498,6 +2524,38 @@ decisions in the simulation backlog.
 
 ## API and R boundary
 
+- **S — document the trace-form robust-test path so it is findable.** SB,
+  mean-variance-adjusted and scaled-shifted need only `df`, `tr(M)` and
+  `tr(M²)`, and magmaan has had that path for a long time:
+  `weighted_chisq_moments_from_M` in core, exposed to R as
+  `magmaan_core$robust_test_moments_both_breads_{zc,gamma}`, with the closed-form
+  scaling applied in R (the `sb_from_moments` helper copied across experiments
+  07/15/16/19). It is exact, not an approximation: on complete-data continuous
+  ML it reproduces `fmg_tests(tests = "sb_ml")` to 7e-16..1e-14
+  (`experiments/81-score-vs-lrt/diagnose_trace_sb_nested.R`), because the
+  reduced `M = BᵀΓ̂B` is exactly `df × df` so `Σλ = tr(M) = tr(UΓ̂)`.
+  The problem is purely discoverability. Today the only pointer is a three-line
+  comment in `r-package/R/zzz_core.R:266-268` referring to "the Maydeu
+  experiment", nothing in `r-package/README.md` or the roadmap mentions it, and
+  the obvious-looking entry points do not lead there: `fmg_tests()` always
+  eigensolves (`r-package/R/fmg.R:207` calls `infer_fmg_ugamma_spectra()` before
+  inspecting which method was requested, so even `tests = "std_ml"` pays it),
+  and `magmaan_core$robust_satorra_bentler` takes `eigvals`, not moments. Two
+  separate audit passes re-derived "magmaan eigensolves where lavaan traces"
+  from scratch before noticing the trace path already existed. Fix the docs
+  first: a named section in the R README plus a roadmap pointer, and cross-refer
+  from `fmg_tests()`'s help. Two real caveats to record with it. (1) The FMG
+  path truncates negative eigenvalues before averaging (`src/robust/fmg.cpp:165-172`),
+  so its SB scale is `mean(max(λ,0))` while the trace is untruncated `tr(M)/df`;
+  the two must disagree exactly when `n_truncated > 0` (the rank-deficient
+  `p=20, N=100` case). (2) Only complete-data continuous ML has the `Zc` route;
+  FIML already scales from its own trace inside the estimator.
+  Whether to also give `fmg_tests()` a method-aware branch that skips the
+  eigensolve for trace-only requests is a *separate*, lower-value decision: it
+  would have to return `NULL` in the `eigenvalues` column that
+  `.fmg_rows_to_df` currently publishes (`r-package/R/fmg.R:252`), and it buys
+  nothing whenever a pEBA/pOLS test is requested alongside SB, which is the
+  usual batched case. Do not bundle the two.
 - **S/M.** Add or rename R wrappers only when the methods-developer workflow
   exposes a concrete gap in the staged API; the current `magmaan_core`,
   `magmaan_fit`, and post-fit wrapper surface is otherwise sufficient for the
