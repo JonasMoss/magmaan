@@ -69,12 +69,17 @@ class BlockWeight {
 
   // W dense and symmetric PSD (WLS / ADF / DLS). Factors once here — the same
   // Cholesky-with-clamped-eigendecomposition fallback `gmm::residuals` used to
-  // do per call — so the hot path only ever sees the triangular factor.
+  // do per call — so the hot path only ever sees the triangular factor, and
+  // only the factor is stored.
   //
-  // W is kept alongside its factor so `to_dense()` returns it exactly rather
-  // than reconstructing L Lᵀ. That is memory-neutral against the status quo:
-  // `residuals` already held the caller's W and its own `factors` copy at the
-  // same time.
+  // `to_dense()` therefore reconstructs L Lᵀ rather than returning the W that
+  // was handed in. For the Cholesky path that is W to roundoff. For the
+  // clamped-eigendecomposition fallback (W positive *semi*definite, or PD to
+  // within the tolerance) it is the PSD projection of W, differing by at most
+  // the 1e-10·max|W| clamp. Keeping a second q×q copy purely to make
+  // `to_dense()` bit-exact would double the resident cost of exactly the
+  // weights that are already the largest — ADF/WLS blocks persist in
+  // `EstimatorSpec`, `api::Fit`, and the R handles.
   static fit_expected<BlockWeight> dense(const Eigen::MatrixXd& W,
                                          FitError::Kind err_kind,
                                          const std::string& detail) {
@@ -91,9 +96,8 @@ class BlockWeight {
           detail + ": weight matrix is not symmetric"});
     }
     BlockWeight w;
-    w.kind_    = Kind::Dense;
-    w.dim_     = W.rows();
-    w.w_dense_ = W;
+    w.kind_ = Kind::Dense;
+    w.dim_  = W.rows();
     Eigen::LLT<Eigen::MatrixXd> llt(W);
     if (llt.info() == Eigen::Success) {
       w.f_dense_ = Eigen::MatrixXd(llt.matrixL());
@@ -195,7 +199,7 @@ class BlockWeight {
       case Kind::Diagonal:
         return Eigen::MatrixXd(w_diag_.asDiagonal());
       case Kind::Dense:
-        return w_dense_;
+        return f_dense_ * f_dense_.transpose();
       case Kind::NormalTheory:
         return nt_to_dense();
     }
@@ -301,10 +305,11 @@ class BlockWeight {
 
   Kind kind_ = Kind::Identity;
   Eigen::Index dim_ = 0;
+  // Diagonal keeps both forms: it is O(q), so exactness in `to_dense()` is
+  // free. Dense keeps only the factor — see the `dense()` note above.
   Eigen::VectorXd w_diag_;   // Diagonal: diag(W)
   Eigen::VectorXd f_diag_;   // Diagonal: √diag(W)
-  Eigen::MatrixXd w_dense_;  // Dense: W
-  Eigen::MatrixXd f_dense_;  // Dense: lower factor L, W = L Lᵀ
+  Eigen::MatrixXd f_dense_;  // Dense: factor L, W = L Lᵀ
   Eigen::MatrixXd chol_;     // NormalTheory: chol(A) lower
   bool has_means_ = false;
 };
