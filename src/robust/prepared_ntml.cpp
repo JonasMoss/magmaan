@@ -242,7 +242,8 @@ post_expected<const Eigen::MatrixXd*> ntml_covariance(NTMLFit& fit, bool robust)
   if (!fit.covariance) {
     auto info = ntml_information(fit); if (!info) return std::unexpected(info.error());
     auto cov = inference::vcov(**info,fit.pt,fit.estimates.theta);
-    if (!cov) return std::unexpected(cov.error()); fit.covariance = std::move(*cov);
+    if (!cov) return std::unexpected(cov.error());
+    fit.covariance = std::move(*cov);
   }
   if (!robust) return &*fit.covariance;
   if (!fit.robust_covariance) {
@@ -279,7 +280,8 @@ post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
   if (!same_ambient(*null_fit,*alternative))
     return std::unexpected(invalid("NTML hypothesis: exact nesting requires matching ambient parameter slots and numeric model"));
   auto c0 = build_eq_constraints(null_fit->pt), c1 = build_eq_constraints(alternative->pt);
-  if (!c0) return std::unexpected(c0.error()); if (!c1) return std::unexpected(c1.error());
+  if (!c0) return std::unexpected(c0.error());
+  if (!c1) return std::unexpected(c1.error());
   auto restriction = restriction_alpha_from_K(*c1,*c0);
   if (!restriction) return std::unexpected(restriction.error());
   if (!restriction->A.rows()) return std::unexpected(invalid("NTML hypothesis: no restrictions released"));
@@ -325,7 +327,8 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLHypothesis& h, 
       : inference::chi2_stat(fit.data->sample,h.null_fit->estimates) -
         inference::chi2_stat(fit.data->sample,h.alternative->estimates);
   auto q = from_rows(std::move(whitened),statistic,static_cast<int>(h.restriction.A.rows()));
-  if (!q) return std::unexpected(q.error()); slot = *q;
+  if (!q) return std::unexpected(q.error());
+  slot = *q;
   if (!score) h.null_fit->nested_lr.emplace_back(h.alternative,slot);
   return slot;
 }

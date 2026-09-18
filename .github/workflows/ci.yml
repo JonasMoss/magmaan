@@ -51,6 +51,27 @@ jobs:
           Rscript -e 'testthat::test_file("r-package/tests/testthat/test-fmg.R", package = "magmaan")'
           Rscript -e 'testthat::test_file("r-package/tests/testthat/test-nested-test.R", package = "magmaan")'
 
+  build-gcc:
+    # Compiler diversity, not redundancy. The -Werror set is strict enough that
+    # GCC rejects code clang accepts (-Wmisleading-indentation is the one that
+    # bit us), and `remotes::install_github` builds the vendored core with
+    # whatever compiler R is configured with, which on most Linux distros and on
+    # CRAN is g++. Library only: the point is the compile, and ctest under clang
+    # already covers behaviour.
+    name: build (Linux, gcc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+
+      - name: Configure
+        run: cmake --preset default -DCMAKE_CXX_COMPILER=g++ -DMAGMAAN_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build --preset default
+
   build-test:
     name: build + ctest (Linux, clang)
     runs-on: ubuntu-latest
