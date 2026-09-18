@@ -5864,8 +5864,58 @@ post_expected<gmm::Weight>
 two_stage_stage2_weight_structured(const SaturatedMoments& sm,
                                    TwoStageWeight kind,
                                    TwoStageDlsOptions dls) {
+  // Three of the five kinds have a closed structural form and never need the
+  // dense q×q that `two_stage_stage2_weight_blocks` materializes.
+  //
+  //   Uls  → identity, by construction (`W.setIdentity()`).
+  //   Nt   → blockdiag(Σ⁻¹, Γ_NT(Σ)⁻¹), which is exactly BlockWeight::
+  //          NormalTheory(Σ, has_means): the mean block is Σ⁻¹ either way, and
+  //          Γ_NT(Σ)⁻¹ == ½·Dᵀ(Σ⁻¹ ⊗ Σ⁻¹)D is pinned in
+  //          tests/unit/gls_scalar_objective_test.cpp. Saves building Γ_NT
+  //          (O(p⁴)) and inverting it (O(p⁶)) in favour of a p×p Cholesky.
+  //   Dwls → provably diagonal (`W(i,i) = 1/d(i)`, every off-diagonal zero).
+  //          Γ_FIML is still formed, since its diagonal is the weight, but it
+  //          is not stored or factored.
+  //
+  // Adf and Dls are genuinely dense (full Γ⁻¹ and the Browne mix), so they
+  // keep the materialized path.
+  if (kind == TwoStageWeight::Uls) {
+    gmm::Weight out;
+    out.reserve(sm.cov.size());
+    for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+      const Eigen::Index p = sm.cov[b].rows();
+      out.push_back(gmm::BlockWeight::identity(p + vech_len(p)));
+    }
+    return out;
+  }
+
+  if (kind == TwoStageWeight::Nt) {
+    gmm::Weight out;
+    out.reserve(sm.cov.size());
+    for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+      auto bw = gmm::BlockWeight::normal_theory(
+          sm.cov[b], /*has_means=*/true, FitError::Kind::NumericIssue,
+          "two_stage_stage2_weight: block " + std::to_string(b));
+      if (!bw.has_value()) {
+        return std::unexpected(
+            fit_to_post(bw.error(), "two_stage_stage2_weight"));
+      }
+      out.push_back(std::move(*bw));
+    }
+    return out;
+  }
+
   auto blocks = two_stage_stage2_weight_blocks(sm, kind, dls);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
+
+  if (kind == TwoStageWeight::Dwls) {
+    gmm::Weight out;
+    out.reserve(blocks->size());
+    for (const auto& W : *blocks) out.push_back(
+        gmm::BlockWeight::diagonal(W.diagonal()));
+    return out;
+  }
+
   auto w = gmm::dense_weight(*blocks, FitError::Kind::NumericIssue,
                              "two_stage_stage2_weight");
   if (!w.has_value()) {

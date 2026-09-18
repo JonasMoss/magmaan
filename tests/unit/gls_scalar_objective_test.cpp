@@ -5,6 +5,7 @@
 
 #include <Eigen/Core>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/gmm/weight.hpp"
@@ -230,6 +231,47 @@ TEST_CASE("BlockWeight::NormalTheory closed-form to_dense matches the trace loop
               doctest::Approx(d.dot(Wref * d)).epsilon(1e-10));
       }
     }
+  }
+}
+
+// Is the normal-theory weight literally the inverse of the normal-theory
+// moment ACOV? `dls_weight.cpp` asserts it in a comment ("at a = 0 this equals
+// gmm::normal_theory_weight's covariance block; its 0.5 scaling cancels the
+// symmetric-basis factor 2") and `fiml::two_stage_stage2_weight_blocks` builds
+// its `Nt` weight as `blockdiag(Sigma^-1, gamma_nt(Sigma)^-1)`.
+//
+// If that holds, the `Nt` Stage-2 weight is exactly BlockWeight::NormalTheory
+// and can stop being materialized. This pins the claim rather than assuming
+// it, because the duplication-matrix scaling differs between diagonal and
+// off-diagonal vech entries and that is easy to get wrong in either direction.
+TEST_CASE("gamma_nt(Sigma) inverse is the NormalTheory covariance weight") {
+  std::mt19937 rng(20260918);
+  std::normal_distribution<double> nd(0.0, 1.0);
+  for (Eigen::Index p : {2, 3, 4, 5, 6, 8, 10}) {
+    CAPTURE(p);
+    Eigen::MatrixXd B(p, p);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      for (Eigen::Index j = 0; j < p; ++j) B(i, j) = nd(rng);
+    }
+    const Eigen::MatrixXd S =
+        B * B.transpose() +
+        static_cast<double>(p) * Eigen::MatrixXd::Identity(p, p);
+
+    auto G = magmaan::data::gamma_nt(S);
+    REQUIRE_OK(G);
+    const Eigen::MatrixXd Ginv = G->inverse();
+
+    auto bw = gmm::BlockWeight::normal_theory(
+        S, /*has_means=*/false, magmaan::FitError::Kind::NumericIssue, "chk");
+    REQUIRE_OK(bw);
+    const Eigen::MatrixXd W = bw->to_dense();
+
+    REQUIRE(W.rows() == Ginv.rows());
+    const double rel =
+        (Ginv - W).cwiseAbs().maxCoeff() /
+        std::max(1e-300, W.cwiseAbs().maxCoeff());
+    INFO("relative discrepancy = " << rel);
+    CHECK(rel < 1e-9);
   }
 }
 
