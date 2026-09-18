@@ -140,6 +140,31 @@ parity tests pin `magmaan·(N−G)/N == lavaan` at 5e-3.
 **Build if.** A concrete methods workflow needs the other convention or a
 side-by-side report.
 
+### Batched-`trsm` LS-shape whitening for the NormalTheory weight
+
+`gmm::BlockWeight::normal_theory` whitens a Jacobian column by column: unvech
+the column to a symmetric p×p, two triangular solves for `L⁻¹ H_j L⁻ᵀ`, then
+scaled-vech back. That is O(p³·n_free) against the dense GEMM's O(p⁴·n_free),
+but per-column BLAS-2 with vech packing loses to one cache-friendly BLAS-3
+GEMM until about p = 45 (measured 0.5x at p=10, 1.0x at p=20, 6.6x at p=60 —
+table in [todo.md](todo.md)). Batching the first solve into a single `trsm`
+over a stacked p × (p·n_free) right-hand side, and handling the second solve's
+per-block transpose in one pass, would recover BLAS-3 and deliver the full
+factor-of-p at every p.
+
+**Alternative already available.** The scalar trace-identity path, which never
+forms the whitened Jacobian at all — O(p³ + p²·n_free) — and which is what the
+default backends (`NloptLbfgs` for `fit_gls`, and everything routed through
+`optim::scalarize`) actually take. The LS shape is reached only by the
+genuinely least-squares backends, `PortNls` and `Ceres`. Memory and the
+removal of the O(q³) setup Cholesky are already won by the structured weight
+regardless of which shape runs.
+
+**Build if.** A `PortNls`/`Ceres` GLS or Fisher-IRLS workflow at large p
+becomes a measured bottleneck — i.e. someone is actually running the LS shape
+on a model big enough (p ≳ 45) for the whitening to dominate. Until then this
+optimizes a path the defaults do not take.
+
 ### Reduced-Gamma ordinal robust-inference products
 
 Robust ordinal/mixed reporting that consumes reduced Gamma products

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -94,6 +95,8 @@ validate_common_shapes(const SampleStats& s, const model::ImpliedMoments& m,
 }
 
 // Per-block moment layout: each block contributes [mean (if any) ; vech(cov)].
+constexpr double kInfinity = std::numeric_limits<double>::infinity();
+
 struct Layout {
   bool has_means = false;
   Eigen::Index n_rows = 0;
@@ -122,6 +125,16 @@ Layout make_layout(const SampleStats& s, const model::ImpliedMoments& m) {
   for (auto n : layout.block_rows) layout.n_rows += n;
   return layout;
 }
+
+// Per-sample cache for `normal_theory_objective`: the frozen S_b⁻¹ that
+// sandwiches D_b in the trace identity, the n_b/N block weights, and the
+// moment layout. The p×p inverses are the entire stored state — the q×q
+// weight is never formed.
+struct NtScalarCache {
+  std::vector<Eigen::MatrixXd> S_inv;
+  std::vector<double>          w_block;
+  Layout                       layout;
+};
 
 // W_kl = tr(S⁻¹ E_k S⁻¹ E_l) for symmetric lower-vech basis matrices E_k —
 // the normal-theory GLS weight on the covariance moments.
@@ -449,6 +462,116 @@ normal_theory_weight(const model::ModelEvaluator& ev,
     W.push_back(std::move(Wb));
   }
   return W;
+}
+
+fit_expected<optim::ScalarProblem>
+normal_theory_objective(const model::ModelEvaluator& ev,
+                        const data::SampleStats& samp,
+                        const Eigen::VectorXd& theta0) {
+  auto eval0 = ev.evaluate(theta0, false, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(
+        model_err(eval0.error(), "gmm::normal_theory_objective: theta0"));
+  }
+  if (auto ok = validate_common_shapes(samp, eval0->moments,
+                                       "gmm::normal_theory_objective");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto N = total_n_obs(samp);
+  if (!N.has_value()) return std::unexpected(N.error());
+
+  NtScalarCache cache;
+  cache.layout = make_layout(samp, eval0->moments);
+  cache.S_inv.resize(samp.S.size());
+  cache.w_block.resize(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    Eigen::LLT<Eigen::MatrixXd> llt(samp.S[b]);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSample,
+          "gmm::normal_theory_objective: block " + std::to_string(b) +
+              " sample covariance is not positive definite"));
+    }
+    cache.S_inv[b] = llt.solve(Eigen::MatrixXd::Identity(p, p));
+    cache.w_block[b] = static_cast<double>(samp.n_obs[b]) /
+                       static_cast<double>(*N);
+  }
+
+  optim::ScalarProblem prob;
+  prob.n_param = static_cast<Eigen::Index>(ev.n_free());
+  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+  prob.f = [&ev, s = samp, c = std::move(cache)](
+               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    auto eval = ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      grad.setZero();
+      return kInfinity;
+    }
+    const auto&   m = eval->moments;
+    const Layout& L = c.layout;
+
+    Eigen::VectorXd wv = Eigen::VectorXd::Zero(L.n_sigma_rows);
+    Eigen::VectorXd uv = Eigen::VectorXd::Zero(L.n_mu_rows);
+    double f = 0.0;
+
+    for (std::size_t b = 0; b < m.sigma.size(); ++b) {
+      const Eigen::Index      p  = m.sigma[b].rows();
+      const Eigen::MatrixXd&  Si = c.S_inv[b];
+      const double            wb = c.w_block[b];
+
+      const Eigen::MatrixXd D = m.sigma[b] - s.S[b];
+      Eigen::MatrixXd G = Si * D * Si;
+      G = 0.5 * (G + G.transpose());
+
+      // ½·tr(S⁻¹DS⁻¹D) = ½·<G, D>, both symmetric.
+      f += 0.25 * wb * (G.array() * D.array()).sum();
+
+      // ∂/∂θ_k of that term is ½·w_b·tr(G ∂Σ/∂θ_k); against a lower-vech
+      // Jacobian column the off-diagonals carry twice.
+      const double       scale = 0.5 * wb;
+      const Eigen::Index off   = L.sigma_offsets[b];
+      for (Eigen::Index cc = 0; cc < p; ++cc) {
+        for (Eigen::Index rr = cc; rr < p; ++rr) {
+          wv(off + vech_index(p, rr, cc)) =
+              scale * ((rr == cc) ? G(rr, rr) : 2.0 * G(rr, cc));
+        }
+      }
+
+      if (L.has_means && b < s.mean.size() && b < m.mu.size() &&
+          s.mean[b].size() > 0 && m.mu[b].size() > 0) {
+        const Eigen::VectorXd d = m.mu[b] - s.mean[b];
+        const Eigen::VectorXd z = Si * d;
+        f += 0.5 * wb * d.dot(z);
+        uv.segment(L.mu_offsets[b], p) = wb * z;
+      }
+    }
+
+    if (!std::isfinite(f)) {
+      grad.setZero();
+      return kInfinity;
+    }
+    if (eval->J_sigma.rows() != L.n_sigma_rows ||
+        eval->J_sigma.cols() != x.size()) {
+      grad.setZero();
+      return kInfinity;
+    }
+    grad.noalias() = eval->J_sigma.transpose() * wv;
+    if (L.has_means) {
+      if (eval->J_mu.rows() != L.n_mu_rows ||
+          eval->J_mu.cols() != x.size()) {
+        grad.setZero();
+        return kInfinity;
+      }
+      grad.noalias() += eval->J_mu.transpose() * uv;
+    }
+    if (!grad.allFinite()) {
+      grad.setZero();
+      return kInfinity;
+    }
+    return f;
+  };
+  return prob;
 }
 
 fit_expected<Weight>

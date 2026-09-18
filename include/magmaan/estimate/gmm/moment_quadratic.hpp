@@ -62,6 +62,28 @@ normal_theory_weight(const model::ModelEvaluator& ev,
                      const data::SampleStats& samp,
                      const Eigen::VectorXd& theta0);
 
+// Scalar-shape (F, ∇F) form of the normal-theory (GLS) objective, via the
+// trace identity. Mathematically identical to
+// `residuals(ev, samp, theta0, normal_theory_weight(ev, samp, theta0))` passed
+// through `optim::scalarize`, but never forms the q×q weight, its Cholesky, or
+// the q×n_free whitened Jacobian:
+//
+//   F(θ)      = ½ Σ_b w_b [ dᵀS_b⁻¹d + ½·tr(S_b⁻¹D_b S_b⁻¹D_b) ]
+//   ∂F/∂θ_k   = Σ_b w_b [ (S_b⁻¹d)ᵀ ∂μ_b/∂θ_k + ½·tr(G_b ∂Σ_b/∂θ_k) ]
+//
+// with d = μ_b(θ) − m̄_b, D_b = Σ_b(θ) − S_b, G_b = S_b⁻¹D_b S_b⁻¹ and
+// w_b = n_b/N. Cost is O(p³ + p²·n_free) per evaluation against the
+// moment-quadratic path's O(q²·n_free), q = p + p(p+1)/2.
+//
+// This is the same trace machinery `estimate::ml_objective` uses; GLS is ML's
+// G with S⁻¹ sandwiching D instead of Σ(θ)⁻¹, frozen at S rather than
+// refreshed each iteration. Fails NonPositiveDefiniteSample if any S_b is not
+// PD (the dense path fails later, when factoring the weight).
+fit_expected<optim::ScalarProblem>
+normal_theory_objective(const model::ModelEvaluator& ev,
+                        const data::SampleStats& samp,
+                        const Eigen::VectorXd& theta0);
+
 // Expected Fisher information block at θ, layout-matched to `normal_theory_
 // weight`. Same construction (½ D'(·⁻¹ ⊗ ·⁻¹) D on the cov block, ·⁻¹ on the
 // mean block) but built from Σ(θ) instead of S — the Fisher-scoring weight

@@ -1,0 +1,197 @@
+#include <doctest/doctest.h>
+
+#include <random>
+#include <string>
+
+#include <Eigen/Core>
+
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/weight.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/optim/optimizers.hpp"
+#include "magmaan/optim/problem.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/spec/build.hpp"
+
+// ============================================================================
+// `gmm::normal_theory_objective` — the scalar trace-identity form of GLS — must
+// agree with the dense moment-quadratic path (`residuals` with
+// `normal_theory_weight`, adapted by `optim::scalarize`) in both F and ∇F, at
+// arbitrary θ, with and without mean structure, single- and multi-block.
+//
+// The trace form is what makes GLS affordable: O(p³ + p²·n_free) per
+// evaluation against the dense path's O(q²·n_free) with q = p + p(p+1)/2, and
+// it never materializes the q×q weight or its Cholesky. It is only legitimate
+// if it is numerically the same objective, which is what this pins.
+//
+// Also covers `gmm::BlockWeight::NormalTheory`, the structured weight carrying
+// chol(A): its quadratic form and its dense materialization must match the
+// weight `normal_theory_weight` builds today.
+// ============================================================================
+
+#define REQUIRE_OK(value)                                                     \
+  do {                                                                        \
+    INFO("error: " << ((value).has_value() ? "" : (value).error().detail));   \
+    REQUIRE((value).has_value());                                             \
+    if (!(value).has_value()) return;                                         \
+  } while (false)
+
+namespace {
+
+using magmaan::data::SampleStats;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::ModelEvaluator;
+using magmaan::parse::Parser;
+using magmaan::spec::build;
+namespace gmm = magmaan::estimate::gmm;
+
+// A perturbation of each implied block as the sample statistic, so the
+// residual is nonzero (a saturated-fit S would make every gradient vanish and
+// pin nothing). Blocks come from the model's own implied moments, so the
+// count always agrees with the evaluator.
+SampleStats make_stats(const ModelEvaluator& ev, const Eigen::VectorXd& x0,
+                       unsigned seed) {
+  std::mt19937 rng(seed);
+  std::normal_distribution<double> nd(0.0, 0.02);
+  SampleStats samp;
+  auto m0 = ev.sigma(x0);
+  if (!m0.has_value()) return samp;
+  for (std::size_t b = 0; b < m0->sigma.size(); ++b) {
+    Eigen::MatrixXd S = m0->sigma[b];
+    for (Eigen::Index i = 0; i < S.rows(); ++i) {
+      for (Eigen::Index j = 0; j <= i; ++j) {
+        S(i, j) += nd(rng);
+        S(j, i) = S(i, j);
+      }
+    }
+    samp.S.push_back(S);
+    samp.n_obs.push_back(200 + 37 * static_cast<std::int64_t>(b));
+    // A mean block only exists when the *model* carries one; supplying sample
+    // means against a covariance-only model leaves `ls_has_means` false.
+    if (b < m0->mu.size() && m0->mu[b].size() > 0) {
+      Eigen::VectorXd mn = m0->mu[b];
+      for (Eigen::Index i = 0; i < mn.size(); ++i) mn(i) += nd(rng);
+      samp.mean.push_back(mn);
+    }
+  }
+  return samp;
+}
+
+void check_equivalence(const std::string& syntax, int n_groups,
+                       bool meanstructure, unsigned seed) {
+  INFO("syntax=" << syntax << " n_groups=" << n_groups
+                 << " meanstructure=" << meanstructure);
+  auto fp = Parser::parse(syntax);
+  REQUIRE_OK(fp);
+  magmaan::spec::BuildOptions bo;
+  bo.meanstructure = meanstructure;
+  bo.n_groups = n_groups;
+  auto pt = build(*fp, bo);
+  REQUIRE_OK(pt);
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE_OK(mr);
+  auto evr = ModelEvaluator::build(*pt, *mr);
+  REQUIRE_OK(evr);
+  const auto& ev = *evr;
+
+  const Eigen::Index nf = static_cast<Eigen::Index>(ev.n_free());
+  const Eigen::VectorXd x0 = Eigen::VectorXd::Constant(nf, 0.8);
+  SampleStats samp = make_stats(ev, x0, seed);
+  REQUIRE(samp.S.size() == static_cast<std::size_t>(n_groups));
+  CHECK(samp.mean.size() == (meanstructure ? samp.S.size() : 0u));
+
+  auto W = gmm::normal_theory_weight(ev, samp, x0);
+  REQUIRE_OK(W);
+  auto dense_prob = gmm::residuals(ev, samp, x0, *W);
+  REQUIRE_OK(dense_prob);
+  auto scalar_dense = magmaan::optim::scalarize(*dense_prob);
+
+  auto trace_prob = gmm::normal_theory_objective(ev, samp, x0);
+  REQUIRE_OK(trace_prob);
+
+  std::mt19937 rng(seed + 991);
+  std::normal_distribution<double> jitter(0.0, 0.12);
+  int compared = 0;
+  for (int t = 0; t < 25; ++t) {
+    Eigen::VectorXd x(nf);
+    for (Eigen::Index i = 0; i < nf; ++i) x(i) = 0.8 + jitter(rng);
+
+    Eigen::VectorXd g_dense = Eigen::VectorXd::Zero(nf);
+    Eigen::VectorXd g_trace = Eigen::VectorXd::Zero(nf);
+    const double f_dense = scalar_dense.f(x, g_dense);
+    const double f_trace = trace_prob->f(x, g_trace);
+
+    if (!std::isfinite(f_dense) || !std::isfinite(f_trace)) {
+      // Both adapters report an invalid θ the same way.
+      CHECK(std::isfinite(f_dense) == std::isfinite(f_trace));
+      continue;
+    }
+    ++compared;
+    CHECK(f_trace == doctest::Approx(f_dense).epsilon(1e-11));
+    const double gscale = std::max(1.0, g_dense.cwiseAbs().maxCoeff());
+    CHECK((g_trace - g_dense).cwiseAbs().maxCoeff() / gscale < 1e-9);
+  }
+  CHECK(compared > 0);
+}
+
+}  // namespace
+
+TEST_CASE("GLS scalar trace objective matches the dense moment-quadratic path") {
+  const std::string one_factor = "f =~ x1 + x2 + x3 + x4";
+  const std::string two_factor =
+      "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf1 ~~ f2";
+
+  SUBCASE("1 factor, covariance only")   { check_equivalence(one_factor, 1, false, 11); }
+  SUBCASE("1 factor, mean structure")    { check_equivalence(one_factor, 1, true,  12); }
+  SUBCASE("1 factor, 2 groups")          { check_equivalence(one_factor, 2, false, 13); }
+  SUBCASE("1 factor, 3 groups + means")  { check_equivalence(one_factor, 3, true,  14); }
+  SUBCASE("2 factors, covariance only")  { check_equivalence(two_factor, 1, false, 15); }
+  SUBCASE("2 factors, mean structure")   { check_equivalence(two_factor, 1, true,  16); }
+  SUBCASE("2 factors, 2 groups + means") { check_equivalence(two_factor, 2, true,  17); }
+}
+
+TEST_CASE("BlockWeight::NormalTheory reproduces the dense normal-theory weight") {
+  for (bool meanstructure : {false, true}) {
+    CAPTURE(meanstructure);
+    auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");
+    REQUIRE_OK(fp);
+    magmaan::spec::BuildOptions bo;
+    bo.meanstructure = meanstructure;
+    auto pt = build(*fp, bo);
+    REQUIRE_OK(pt);
+    auto mr = build_matrix_rep(*pt);
+    REQUIRE_OK(mr);
+    auto evr = ModelEvaluator::build(*pt, *mr);
+    REQUIRE_OK(evr);
+    const auto& ev = *evr;
+
+    const Eigen::Index nf = static_cast<Eigen::Index>(ev.n_free());
+    const Eigen::VectorXd x0 = Eigen::VectorXd::Constant(nf, 0.8);
+    SampleStats samp = make_stats(ev, x0, 23);
+    auto W = gmm::normal_theory_weight(ev, samp, x0);
+    REQUIRE_OK(W);
+    REQUIRE(W->size() == 1u);
+    const Eigen::MatrixXd& Wref = (*W)[0];
+
+    auto bw = gmm::BlockWeight::normal_theory(
+        samp.S[0], meanstructure, magmaan::FitError::Kind::NumericIssue,
+        "test");
+    REQUIRE_OK(bw);
+    REQUIRE(bw->rows() == Wref.rows());
+
+    // Dense materialization agrees with what the fit path builds today.
+    CHECK((bw->to_dense() - Wref).cwiseAbs().maxCoeff() < 1e-10);
+
+    // And the whitening reproduces the quadratic form without forming q×q.
+    std::mt19937 rng(77);
+    std::normal_distribution<double> nd(0.0, 1.0);
+    for (int t = 0; t < 20; ++t) {
+      Eigen::VectorXd d(Wref.rows());
+      for (Eigen::Index i = 0; i < d.size(); ++i) d(i) = nd(rng);
+      const Eigen::VectorXd r = bw->t_apply(1.0, d);
+      CHECK(r.squaredNorm() == doctest::Approx(d.dot(Wref * d)).epsilon(1e-10));
+    }
+  }
+}

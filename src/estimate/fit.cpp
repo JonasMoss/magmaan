@@ -2149,6 +2149,27 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         Bounds bounds, Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gls");
   if (!pre.has_value()) return std::unexpected(pre.error());
+
+  // Ceres / CeresBfgs / PortNls drive the residual-and-Jacobian form directly
+  // (see `run_gmm`), so they need the materialized weight. Every other backend
+  // is scalar-shaped — `run_gmm` would immediately `optim::scalarize` the
+  // problem it just built — so it takes the trace identity instead, which
+  // never forms the q×q weight, its O(q³) Cholesky, or the q×n_free whitened
+  // Jacobian. Same F and ∇F either way; see
+  // tests/unit/gls_scalar_objective_test.cpp.
+  if (backend != Backend::Ceres && backend != Backend::CeresBfgs &&
+      backend != Backend::PortNls) {
+    auto obj_or = gmm::normal_theory_objective(pre->ev, samp, x0);
+    if (!obj_or.has_value()) return std::unexpected(obj_or.error());
+    const optim::ScalarProblem prob = std::move(*obj_or);
+    auto est = compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
+                                 opts, "fit_gls");
+    if (!est.has_value()) return est;
+    attach_diagnostics(*est, pt, *pre, bounds);
+    attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+    return est;
+  }
+
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
   if (!W.has_value()) return std::unexpected(W.error());
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds,
