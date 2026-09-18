@@ -2750,6 +2750,66 @@ decisions in the simulation backlog.
 
 ## API and R boundary
 
+### Decompose `EstimatorSpec` into its actual axes — NOT STARTED
+
+The "estimator" is four orthogonal things flattened into one string. C++ emits
+**26 distinct `fit$estimator` labels** (`ML ULS GLS WLS DWLS FIML ML2S GLSpw
+ML-Fisher ML-Fisher-SNLLS ML-IRLS ML-IRLS-SNLLS ULS-SNLLS GLS-SNLLS WLS-SNLLS
+PNTML SAM FCSEM-ML RBM-*×5 noniterative*×3`) while `api::EstimatorKind` has
+**7** entries. The gap is a cross-product:
+
+1. **Discrepancy** — what F is: `MomentQuadratic(W)`, normal likelihood,
+   pattern likelihood (FIML), two-level likelihood, catML, FC-SEM ML. ~5 things.
+2. **Moments** — what F eats: complete sample stats / ordinal (polychoric) /
+   EM-saturated / pairwise / raw. This is why `FIML` (= ML on raw),
+   `ML2S` (= any estimator on EM-completed moments) and `GLSpw` (= GLS on
+   pairwise stats) look like estimators. **FIML genuinely earns estimator
+   status** — per-pattern likelihood really is a different F. ML2S and GLSpw do
+   not: same F, different moments. The tell is that R has to synthesize
+   cross-product label strings (`ML2S_DWLS`, `ML2S_ADF`, `ML2S_DLS`).
+3. **Algorithm** — direct gradient, Fisher scoring, IRLS, SNLLS
+   (Golub-Pereyra), PSD-lifted, ridge continuation, two-stage EM. Currently
+   encoded *in the function name* (`fit_ml_irls_snlls`) and re-encoded in the
+   label string.
+4. **Post-fit correction** — MLM/MLR/SB. Already correctly excluded; R
+   hard-errors on `estimator = "MLM"`. This axis is the part that is right.
+
+So `ML-IRLS-SNLLS` is axis 1 × axis 3, and `FIML` is axis 1 × axis 2, and
+nothing in the type system says so.
+
+**Why this is not a C++-only change.** The R side is where the drift actually
+bites: five independent `estimator=` validation schemes, two disagreeing
+allow-lists (`model_data.R:2022` has `ML2S`, `prepared.R:162` does not),
+`evaluate_at()` defaulting to **ULS** while `magmaan()` defaults to **ML**, and
+the label stored twice (`fit$estimator` vs `fit$options$estimator`) with
+downstream readers picking inconsistently — some read one, some read `%||%`
+both. Continuous `DWLS` is reachable via `estimate()` but rejected by every
+continuous-LS post-fit gate. Doing the C++ half alone would leave all of that.
+
+**Also collapse the six overlapping estimator enums**: `api::EstimatorKind`,
+`estimate::Estimator`, `estimate::OrdinalWeightKind`, `data::OrdinalEstimatorKind`
+(the same three values as the previous one, in a *different declaration
+order* — a silent bug surface if either is ever cast), `robust::frontier::
+Discrepancy`, `fiml::TwoStageWeight`. Likewise `estimate::OrdinalParameterization`
+duplicates `data::OrdinalMomentParameterization`. And add `estimator_from_string`
+/ `estimator_name` mirroring the existing `estimate/backend_strings.hpp`, so R
+stops hand-rolling the mapping in three places.
+
+**Adjacent cleanups this would enable.** `api::OptimizerKind` is a strict
+5-of-11 subset of `estimate::Backend`, so PORT — the nlminb-parity backend,
+default-ON — is unreachable through the staged API. `api::Fit` hard-codes
+`fiml_pack_` / `fiml_h1_` members on the generic class, so a new estimator with
+cross-call state has no slot. The main `switch (estimator.kind)` at
+`src/api/sem.cpp:875` lists `FIML/DWLS/TwoLevelML` as empty `break` cases
+relying on unreachability comments, so a new enumerator falls through with
+`est` uninitialized rather than failing to compile.
+
+**Groundwork already done.** The weight is now a structured type
+(`gmm::BlockWeight`), so `DWLS` is `diagonal(Γ)` rather than a name, and
+`EstimatorSpec::ordinal_moments` is explicit rather than inferred from
+`weight.empty()` — the first slice of the `moments` axis. See the
+continuous-whitening entry above.
+
 - **S — document the trace-form robust-test path so it is findable.** SB,
   mean-variance-adjusted and scaled-shifted need only `df`, `tr(M)` and
   `tr(M²)`, and magmaan has had that path for a long time:
