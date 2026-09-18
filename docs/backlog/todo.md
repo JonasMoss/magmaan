@@ -3182,6 +3182,45 @@ work lives in [`speculative.md`](speculative.md). Open work:
 - **S.** Keep the build-loop timings table in
   [docs/architecture/roadmap.md](../architecture/roadmap.md) current after major
   workflow changes.
+- **M. CONFIRMED PARITY BUG — `std_lv` + multi-group + `group_equal = Loadings`.**
+  When loadings are tied across groups, lavaan frees the latent variances in
+  groups 2..G; magmaan leaves all G fixed at 1.0. Verified against the pinned
+  lavaan 0.7.2, not inferred from source:
+
+  ```r
+  syn <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6"
+  lavaan::lavaanify(syn, std.lv = TRUE, ngroups = 2, group.equal = "loadings",
+                    auto = TRUE, model.type = "cfa")
+  #   f1 ~~ f1  group 1  free 0  ustart 1
+  #   f1 ~~ f1  group 2  free 13 ustart NA   <- FREE
+  magmaan::magmaan_core$lavaan_lavaanify(syn, std_lv = TRUE, n_groups = 2L,
+                                         group_equal = "loadings")
+  #   f1 ~~ f1  group 2  free 0  ustart 1    <- FIXED
+  ```
+
+  lavaan's rule (`lav_partable_flat.R`, "new in 0.6-4"): free the LV variances
+  for g > 1 when `std.lv && "loadings" %in% group.equal &&
+  !("lv.variances" %in% group.equal)`. The reason is substantive, not cosmetic —
+  with loadings tied, fixing every group's factor variance to 1 removes the
+  ability to detect group differences in factor variance and makes the std.lv
+  invariance model strictly more restrictive than its marker equivalent, so df
+  no longer matches across conventions. magmaan therefore reports
+  (G−1)·n_lv too few free parameters, with the wrong df and chi-square, silently.
+
+  Fix is in `apply_std_lv` / the `group_equal` pass in `src/spec/build.cpp`
+  (`apply_std_lv` at :510, the `will_be_free` guard at :1190). Note the ordering:
+  `apply_std_lv` runs per group inside `build_group_template`, so the release for
+  g > 1 has to happen after the group templates are stamped. **Gate it with a new
+  fixture first** — `tests/fixtures/fit_stdlv/` currently holds exactly one
+  single-group HS CFA, so nothing in the suite would have caught this.
+
+  Adjacent `std_lv` gaps found in the same audit, all untested and none yet
+  confirmed as divergences: two-level, `auto_fix_single`, composites (ignored by
+  design for HO composites, inert for FC-SEM), meanstructure/growth, and
+  `f ~~ start(2)*f` under `std_lv` (magmaan honours the start and fixes at 2.0,
+  lavaan's `ustart <- 1.0` is unconditional). Second-order and endogenous-latent
+  std_lv were *checked and are fine*: npar and fmin match the marker fit to 13+
+  digits on `soc_2nd` and `sem_2x2` across p ∈ {12,24,48}.
 - **S.** `measures::fit_measures` costs ~3.2 ms at p=96 (about 10% of the whole
   fit) and is both non-monotone in p and sensitive to n (2.96× over n
   200→50000), which is impossible for a pure function of three scalars plus
