@@ -1712,8 +1712,13 @@ an unconstrained gradient test to constrained solutions.
   `df`) by `two_stage_em_ml_inference`. The two-stage spectrum uses the
   saturated-moment EM sandwich ACOV as its meat and an expected normal-theory
   Satorra-Bentler weight built from the *unstructured* (sample/saturated h1)
-  moments as the U-metric; as under FIML, `_ug`/`_rls` are rejected. ML2S must
-  be dispatched before FIML
+  moments as the U-metric; as under FIML, `_ug` is rejected. Unsuffixed ML2S
+  FMG requests use the Stage-2 ML discrepancy. An explicit `_rls` suffix uses
+  `inference::frontier::rls_mean_cov_chi2()`, the full fitted-moment
+  normal-theory residual quadratic, including restricted means, with the same
+  ML2S UGamma spectrum. The covariance-only `inference::rls_chi2()` retains its
+  lavaan `browne.residual.nt.model` parity contract. ML2S must be dispatched
+  before FIML
   because a two-stage fit also carries a `magmaan_fiml_data` raw object. The
   two-stage scaling and SEs match lavaan's `missing = "robust.two.stage"`
   convention (Huber-White sandwich Stage-1 ACOV) to machine precision - base,
@@ -3069,6 +3074,31 @@ O(p)-column Jacobian — while fitted parameter vectors stayed bit-identical and
 gradient counts unchanged. `talks/oslo-psychometric-gathering-2026/tools/
 benchmark_ordinal_whitening.R` is the before/after harness and prints both the
 element-wise parity check and the fitted exponent pair.
+
+#### Cross-products (OPG) information performance
+
+`inference::casewise_scores` / `information_cross_products` no longer form the
+dense p*×p* normal-theory Γ_NT. The weight is applied through the trace identity
+Γ_NT⁻¹ = ½·Dᵀ(Σ̂⁻¹ ⊗ Σ̂⁻¹)D: the σ-segment of WΔ is assembled column by column
+from Σ̂⁻¹A_aΣ̂⁻¹ at O(p³) each, replacing an O(p⁶) Cholesky plus O(p⁴·n_free) of
+triangular solves. Columns whose block slice is entirely zero are skipped, which
+is what makes multi-group models cheap on this path. The PD check now guards Σ̂_b
+rather than Γ_NT(Σ̂_b), matching the contract the header already documented.
+
+Measured with `benchmarks/timing` (i7-1355U, `opt`, single-threaded, cfa_3f,
+N=1000): p=48 33.3 ms → 11.0 ms (3.0×), p=96 1037 ms → 89 ms (**11.6×**), and
+the 173 MB Γ_NT allocation at p=96 is gone. `information_expected` and
+`information_observed_analytic` are unchanged within noise, confirming the change
+is confined to this path. The residual cost is the Z_c·WΔ product at
+O(N·q·n_free), which is the necessary work for an OPG estimator — forming
+Z_cᵀZ_c first would be O(N·q²) and strictly worse whenever n_free < q, so the
+current multiplication order is already the right one.
+
+Guarded by `tests/unit/inference_test.cpp`'s "Γ_NT⁻¹·vech(A) matches the
+trace-identity form casewise_scores uses", which checks the substitution against
+a dense `data::gamma_nt` solve across p ∈ {1,2,3,5,8} to 1e-9 relative. The
+pre-existing asymptotic OPG-vs-expected test is far too loose to catch an error
+in this algebra.
 
 #### Ordinal DWLS Gamma performance
 

@@ -59,6 +59,29 @@ External cases such as Stata Press and Mplus examples use `fetch_data.R` to
 download raw data into the ignored cache. Cases whose terms are unclear should
 stay as metadata and manual-download notes until they are audited.
 
+## Complete-data modular timing
+
+`timing/` holds `magmaan_timing_bench`, the reusable harness for comparing
+algorithms, reparameterizations, and backends on complete-data linear SEM. It
+times each pipeline stage separately (spec, data reduction, problem
+construction, per-iteration primitives, optimize, post-fit) over a crossed
+structure x parameterization x p x n design and writes tidy long CSV. Seven
+model structures, p up to 96, populations constructed in closed form so the
+fitted model is correctly specified by construction.
+
+`timing/timing.hpp` is the shared timer — batch auto-calibration, arm rotation,
+median reporting, dead-code-elimination barriers. New timing work should include
+it rather than hand-rolling an eighth copy; see the retirement item in
+[docs/backlog/todo.md](../docs/backlog/todo.md#benchmarks). Full documentation in
+[timing/README.md](timing/README.md).
+
+```sh
+cmake --preset opt -DMAGMAAN_BUILD_BENCH=ON
+cmake --build --preset opt --target magmaan_timing_bench
+OMP_NUM_THREADS=1 ./build/opt/benchmarks/magmaan_timing_bench --p 12 --n 1000 --out /tmp/t.csv
+Rscript benchmarks/timing/summarize.R /tmp/t.csv
+```
+
 ## C++ memory profiling
 
 `magmaan_mem_profile` is a standalone C++ harness that measures the peak heap of

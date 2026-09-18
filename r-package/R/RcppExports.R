@@ -565,6 +565,10 @@ infer_rls_chi2 <- function(fit, implied) {
     .Call(`_magmaan_infer_rls_chi2`, fit, implied)
 }
 
+infer_rls_mean_cov_chi2 <- function(fit, implied) {
+    .Call(`_magmaan_infer_rls_mean_cov_chi2`, fit, implied)
+}
+
 infer_rls_chi2_sample <- function(sample_stats, implied) {
     .Call(`_magmaan_infer_rls_chi2_sample`, sample_stats, implied)
 }

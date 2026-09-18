@@ -251,6 +251,38 @@ rls_chi2(spec::LatentStructure       pt,
          const SampleStats&          samp,
          const Eigen::VectorXd&      theta);
 
+namespace frontier {
+
+// Full normal-theory moment RLS quadratic, including a modelled mean block:
+//
+//   T_mu  = sum_b n_b (xbar_b - muhat_b)' Sigmahat_b^-1
+//                         (xbar_b - muhat_b)
+//   T_cov = sum_b n_b/2 tr({Sigmahat_b^-1(S_b - Sigmahat_b)}^2)
+//
+// `rls_chi2()` above deliberately remains covariance-only for lavaan's
+// `browne.residual.nt.model` parity. This frontier result is the appropriate
+// Stage-2 residual statistic when the fitted model restricts means as well as
+// covariances. If either `samp.mean` or `implied.mu` is empty, means were not
+// part of the fitted moment structure and are treated as saturated (`mean` is
+// zero).
+struct RlsMeanCovChi2 {
+  double mean = 0.0;
+  double covariance = 0.0;
+  double statistic = 0.0;
+};
+
+post_expected<RlsMeanCovChi2>
+rls_mean_cov_chi2(const SampleStats&           samp,
+                  const model::ImpliedMoments& implied);
+
+post_expected<RlsMeanCovChi2>
+rls_mean_cov_chi2(spec::LatentStructure  pt,
+                  const model::MatrixRep& rep,
+                  const SampleStats&      samp,
+                  const Eigen::VectorXd&  theta);
+
+}  // namespace frontier
+
 // Browne's residual-based normal-theory test — full quadratic form with
 // model-space projected out. Matches lavaan's `test = "browne.residual.nt"`.
 // See the .cpp for the full derivation.

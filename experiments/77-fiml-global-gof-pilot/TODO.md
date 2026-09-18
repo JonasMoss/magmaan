@@ -66,6 +66,23 @@ is frozen.
   models. Regularization did not rescue the severe finite-sample liberality of
   the observed-sensitivity sandwich. Do not tune it or add it to the paper
   battery. See `notes/iteration-14-robust-score-regularization.md`.
+- [x] Smoke-test one-stage FIML residual quadratics using H1 observed, H0
+  observed, and H0 expected saturated-coordinate curvature. Across 3,596
+  usable fits, moving to H0 helped and the expected variant reduced exactly to
+  fitted-covariance RLS under complete data, but both H0 quadratics remained
+  more liberal than LR and the native expected-Fisher score. H0 observed
+  curvature was sometimes indefinite at small N. Do not promote a displacement
+  quadratic; see
+  `notes/iteration-16-fiml-h1-quadratic.md`.
+- [x] Cross the ML2S Stage-2 ML and fitted-moment RLS base statistics with
+  the same two-stage spectrum. RLS modestly improved small-N calibration,
+  especially under missingness: across normal complete/MCAR/MAR cells at
+  `n = 120`, SS mean absolute size error fell from .023 to .015. ML and RLS
+  were essentially tied by `n = 500`. If ML2S remains in the secondary story,
+  retain RLS with SS or the full mixture for broader validation. The frontier
+  implementation now includes both mean and covariance residuals; a 60-fit
+  growth-model smoke confirmed a nonzero, additive mean component. See
+  `notes/iteration-17-ml2s-rls.md`.
 - [x] Retire the incomplete `power-v1-20260821` Modal continuation without
   repairing its three partial focus cells. Collect and combine the available
   rows only as an explicitly incomplete exploratory snapshot. The next

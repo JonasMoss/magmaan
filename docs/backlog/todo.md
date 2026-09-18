@@ -168,19 +168,54 @@ naive `magmaan()` was 1396 ms against 178 ms for the staged path doing the same
 work. This is why the *naive* ordinal speedup decayed (8.8x at p=12 to 1.2x at
 p=50) while the pipeline speedup is flat.
 
-Remaining:
+Remaining: the other ~420 ms. `data_ordinal_stats_from_df(full_wls_weight =
+FALSE)` still costs 501.9 ms at p=50 against 81.3 ms for `prepare_data` +
+`prepare_weight(full = FALSE)`, because it materializes the full dense NACOV
+(`NACOV = n * B_inv * INNER * B_inv'` at `src/data/ordinal.cpp:4075`) where DWLS
+needs only its diagonal.
 
-- **M — route the naive ordinal branch through the diagonal Gamma
-  materialization plan** so DWLS and ULS never build the dense Gamma at all,
-  matching what `prepare_weight(full = FALSE)` already does. That is the
-  remaining ~420 ms: `data_ordinal_stats_from_df(full_wls_weight = FALSE)` is
-  501.9 ms against 81.3 ms for `prepare_data` + `prepare_weight(full = FALSE)`,
-  because it still materializes the full dense NACOV. The obstacle is that the
-  naive branch calls `fit_dwls_ordinal(spec, stats)`, which wants a
-  `magmaan_ordinal_data`, whereas the cheap route is `prepare_model` +
-  `prepare_data` + `prepare_weight` + `estimate`; reconciling the two means
-  checking that `bounds`, `optimizer`, `control` and group handling survive the
-  swap, and that `finalize_magmaan_fit` accepts the result shape.
+**Rerouting `magmaan()` through the staged handles was tried on 2026-09-17 and
+rejected.** It works and it is a large win at high p, but it is a regression at
+the sizes most models actually have, and it is not behaviour-preserving:
+
+| p (N=1000) | direct | staged | |
+|---|---|---|---|
+| 6 | 5.7 ms | 6.5 ms | 1.14x **slower** |
+| 12 | 13.4 ms | 13.9 ms | 1.04x slower |
+| 18 | 22.3 ms | 20.6 ms | 0.92x |
+| 30 | 72.0 ms | 46.7 ms | 0.65x |
+| 40 | 200.1 ms | 82.0 ms | 0.41x |
+
+Crossover is p ~ 14. The fixed cost is `prepare_model` (4.5 ms at p=6), which
+replaces model building that `fit_dwls_ordinal` does internally, leaving ~0.6 ms
+of extra object plumbing. Two further blockers, both verified:
+
+- `audit$active_set` changes length, from the full free-parameter vector (24 at
+  p=6) to the profiled one (6). All-zero in the cases tested, so nothing moved,
+  but it is an observable reporting change — and it reflects a **pre-existing
+  inconsistency between `estimate()` and `fit_dwls_ordinal()` that is worth
+  fixing on its own terms**.
+- `estimate()` rejects string bounds presets, while `magmaan(..., bounds =
+  "pos.var")` works today through `bounds_arg`. Resolving a preset needs the
+  augmented partable and, for `bounds_standard`, the sample statistics the fast
+  path deliberately does not build. A fallback would leave two routes with
+  different audit shapes selected by an argument.
+
+So the fix belongs in the stats constructor, not the caller:
+
+- **M — let `ordinal_stats_from_integer_data` assemble only the Gamma diagonal.**
+  The efficient local diagonal assembly already exists (landed 2026-09-09) but is
+  reachable only through the gamma-cache/prepared API, which consumes prepared
+  polychorics rather than raw integer data. Note the naive `diag(B_inv INNER
+  B_inv')` shortcut is still O(m³) and buys only ~2x; the real win needs the
+  block structure, since `A22_inv` is diagonal and `A11_inv` is block-diagonal
+  per item.
+- **S — reconcile the `active_set` audit shape** between the staged and direct
+  ordinal fit entry points.
+
+`talks/oslo-psychometric-gathering-2026/tools/check_naive_ordinal_route.R` is the
+behaviour gate used for the attempt: it snapshots whole fit objects across
+DWLS/ULS/WLS, binary, multi-group and listwise cases and diffs them recursively.
 
 ### Ordinal weighted-LS whitening — original diagnosis
 
@@ -3147,6 +3182,34 @@ work lives in [`speculative.md`](speculative.md). Open work:
 - **S.** Keep the build-loop timings table in
   [docs/architecture/roadmap.md](../architecture/roadmap.md) current after major
   workflow changes.
+- **S.** `measures::fit_measures` costs ~3.2 ms at p=96 (about 10% of the whole
+  fit) and is both non-monotone in p and sensitive to n (2.96× over n
+  200→50000), which is impossible for a pure function of three scalars plus
+  `samp`. Cause confirmed by reading: the RMSEA confidence interval runs
+  `bisect_zero` (`src/measures/fit_measures.cpp:53`) over
+  `noncentral_chisq_cdf` for each bound, so the iteration count tracks the
+  chi-square value rather than the dimension. **Deliberately not fixed here.**
+  RMSEA CI bounds are lavaan-gated, so any change to the root-finder tolerance,
+  its iteration cap, or the noncentral-chi-square algorithm has to be gated
+  against the lavaan RMSEA fixtures first; a speedup that shifts the third
+  decimal of a published CI is a regression, not a win. Pick this up only with
+  the parity fixtures in hand.
+- **S/M.** Retire the hand-rolled timing loops now that
+  `benchmarks/timing/timing.hpp` exists (batch auto-calibration, arm rotation,
+  median reporting, DCE barriers). Seven independent copies had accumulated
+  before it landed, each weaker in a different way: `benchmarks/score_primitives.R`
+  and `benchmarks/inference_reuse.R` (mean-of-15 over `proc.time()`/`system.time()`,
+  whose ~0.5 ms quantisation is a quarter of the ~2 ms workloads they time),
+  `benchmarks/r/bench_mi_lrt.R` (3 reps, no warmup), `benchmarks/r/run_benchmark.R`
+  (`bench::mark`, whole-fit only), `experiments/05-lavaan-speed-bench`,
+  `experiments/73-psd-ml-timing` (the best of the R set: batch calibration plus
+  `--repeats/--warmups`), `experiments/28-ordinal-stage2-pairwise`, and
+  `talks/oslo-psychometric-gathering-2026/tools/benchmark_score_shared.R` (the
+  best overall: `Sys.time()`, arm rotation, artifact hashing). Convert the C++
+  benches to include `timing/timing.hpp` first — that is mechanical. The R
+  scripts are a separate and lower-value job: unifying an R and a C++ timer buys
+  nothing, so the R-side target is a shared `benchmarks/r/timing.R` modelled on
+  the talks harness, not a binding to the C++ header. Do not add an eighth copy.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **S/M.** Continue extending benchmark coverage beyond the current

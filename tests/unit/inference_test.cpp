@@ -263,6 +263,57 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   CHECK(std::abs(*t_rls) < 1e-6);
 }
 
+TEST_CASE("rls_mean_cov_chi2: separates mean and covariance residuals") {
+  // With Sigma = diag(2, 4), covariance residual diag(1, -2), and mean
+  // residual (1, 2), the two per-observation quadratic forms are
+  //   1/2 tr{diag(1/2, -1/2)^2} = 1/4,
+  //   (1, 2)' diag(1/2, 1/4) (1, 2) = 3/2.
+  // At n = 40 this gives T_cov = 10, T_mean = 60, and T_total = 70.
+  SampleStats samp;
+  samp.S.push_back((Eigen::Matrix2d() << 3.0, 0.0, 0.0, 2.0).finished());
+  samp.mean.push_back((Eigen::Vector2d() << 2.0, 1.0).finished());
+  samp.n_obs.push_back(40);
+
+  magmaan::model::ImpliedMoments im;
+  im.sigma.push_back((Eigen::Matrix2d() << 2.0, 0.0, 0.0, 4.0).finished());
+  im.mu.push_back((Eigen::Vector2d() << 1.0, -1.0).finished());
+
+  auto t = magmaan::inference::frontier::rls_mean_cov_chi2(samp, im);
+  REQUIRE(t.has_value());
+  CHECK(t->mean == doctest::Approx(60.0));
+  CHECK(t->covariance == doctest::Approx(10.0));
+  CHECK(t->statistic == doctest::Approx(70.0));
+}
+
+TEST_CASE("rls_mean_cov_chi2: empty implied means retain covariance-only RLS") {
+  SampleStats samp;
+  samp.S.push_back((Eigen::Matrix2d() << 3.0, 0.0, 0.0, 2.0).finished());
+  samp.mean.push_back((Eigen::Vector2d() << 9.0, -7.0).finished());
+  samp.n_obs.push_back(40);
+
+  magmaan::model::ImpliedMoments im;
+  im.sigma.push_back((Eigen::Matrix2d() << 2.0, 0.0, 0.0, 4.0).finished());
+
+  auto full = magmaan::inference::frontier::rls_mean_cov_chi2(samp, im);
+  auto covariance_only = magmaan::inference::rls_chi2(samp, im);
+  REQUIRE(full.has_value());
+  REQUIRE(covariance_only.has_value());
+  CHECK(full->mean == 0.0);
+  CHECK(full->covariance == doctest::Approx(*covariance_only));
+  CHECK(full->statistic == doctest::Approx(*covariance_only));
+
+  // The converse is the same contract: an implied mean vector alone does not
+  // make means part of a covariance-only fit.
+  SampleStats covariance_fit = samp;
+  covariance_fit.mean.clear();
+  im.mu.push_back((Eigen::Vector2d() << 1.0, -1.0).finished());
+  auto no_sample_means =
+      magmaan::inference::frontier::rls_mean_cov_chi2(covariance_fit, im);
+  REQUIRE(no_sample_means.has_value());
+  CHECK(no_sample_means->mean == 0.0);
+  CHECK(no_sample_means->statistic == doctest::Approx(*covariance_only));
+}
+
 TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
   // Reference: lavaan with `test = "browne.residual.nt"` returns 77.9034
   // on this fit. This is the model-projected, S⁻¹-weighted residual-based
@@ -398,6 +449,71 @@ TEST_CASE("information_cross_products → information_expected on MVN data") {
   // realistic tolerance for a 1F CFA (saturated). Tighten if/when needed.
   const double rel = (I_XP - I_E).norm() / I_E.norm();
   CHECK(rel < 0.15);
+}
+
+TEST_CASE("Γ_NT⁻¹·vech(A) matches the trace-identity form casewise_scores uses") {
+  // `casewise_scores` applies the normal-theory weight to the σ-segment of Δ
+  // without forming Γ_NT: since Γ_NT⁻¹ = ½·Dᵀ(Σ⁻¹ ⊗ Σ⁻¹)D,
+  //
+  //   (Γ_NT⁻¹·vech(A))[(i,j)] = M(i,j)      i > j
+  //                           = ½·M(i,i)    i == j,     M = Σ⁻¹AΣ⁻¹.
+  //
+  // That turns an O(p⁶) factorization plus O(p⁴·n_free) of solves into O(p³)
+  // per column. This checks the substitution directly against a dense
+  // `data::gamma_nt` solve — it is the one algebraic claim the rewrite rests
+  // on, and the asymptotic OPG-vs-expected test above is far too loose to
+  // catch an error in it.
+  std::mt19937 rng(20260918);
+  std::normal_distribution<double> z(0.0, 1.0);
+
+  for (int p_i : {1, 2, 3, 5, 8}) {
+    const Eigen::Index p = p_i;
+
+    Eigen::MatrixXd B(p, p);
+    for (Eigen::Index i = 0; i < p; ++i)
+      for (Eigen::Index j = 0; j < p; ++j) B(i, j) = z(rng);
+    Eigen::MatrixXd Sigma = B * B.transpose();
+    Sigma.diagonal().array() += static_cast<double>(p);
+
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+    REQUIRE(llt.info() == Eigen::Success);
+    auto G_or = magmaan::data::gamma_nt(Sigma);
+    REQUIRE(G_or.has_value());
+    Eigen::LLT<Eigen::MatrixXd> gllt(*G_or);
+    REQUIRE(gllt.info() == Eigen::Success);
+
+    const Eigen::Index pstar = p * (p + 1) / 2;
+
+    for (int trial = 0; trial < 3; ++trial) {
+      Eigen::MatrixXd A(p, p);
+      for (Eigen::Index i = 0; i < p; ++i)
+        for (Eigen::Index j = i; j < p; ++j) {
+          A(i, j) = z(rng);
+          A(j, i) = A(i, j);
+        }
+
+      // vech(A) in column-major lower-triangle order, matching
+      // `dsigma_dtheta` and `data::gamma_nt`.
+      Eigen::VectorXd vA(pstar);
+      Eigen::Index    t = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j; i < p; ++i, ++t) vA[t] = A(i, j);
+
+      const Eigen::VectorXd ref = gllt.solve(vA);
+
+      const Eigen::MatrixXd X  = llt.solve(A);
+      const Eigen::MatrixXd Xt = X.transpose();
+      const Eigen::MatrixXd M  = llt.solve(Xt);
+      Eigen::VectorXd       got(pstar);
+      t = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j; i < p; ++i, ++t)
+          got[t] = (i == j) ? 0.5 * M(i, j) : M(i, j);
+
+      const double denom = ref.norm() > 1e-12 ? ref.norm() : 1.0;
+      CHECK((got - ref).norm() / denom < 1e-9);
+    }
+  }
 }
 
 TEST_CASE("browne_residual_adf: zero on saturated model") {

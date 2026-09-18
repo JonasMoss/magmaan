@@ -773,8 +773,9 @@ casewise_scores(spec::LatentStructure       pt,
     Eigen::Index pstar      = 0;
     Eigen::Index mu_off     = -1;     // start row in the stacked layout (-1 ⇒ no means)
     Eigen::Index row_offset = 0;      // σ-segment start row
-    Eigen::LLT<Eigen::MatrixXd> llt_gamma_nt;   // Cholesky of Γ_NT(Σ̂_b) (p* × p*)
-    Eigen::LLT<Eigen::MatrixXd> llt_sigma;      // Cholesky of Σ̂_b (used for the μ-block of W)
+    Eigen::LLT<Eigen::MatrixXd> llt_sigma;      // Cholesky of Σ̂_b (p × p); carries both
+                                                // the μ-block of W and, via the trace
+                                                // identity, the σ-block Γ_NT(Σ̂_b)⁻¹
   };
   std::vector<BlockGeom> blocks(n_blocks);
 
@@ -793,25 +794,18 @@ casewise_scores(spec::LatentStructure       pt,
     total_rows    += blk.pstar;
     sigma_vech_total += blk.pstar;
 
-    auto G_or = data::gamma_nt(Sigma_b);
-    if (!G_or.has_value()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "information_cross_products: gamma_nt failed for block " +
-              std::to_string(b) + ": " + G_or.error().detail));
-    }
-    blk.llt_gamma_nt = Eigen::LLT<Eigen::MatrixXd>(*G_or);
-    if (blk.llt_gamma_nt.info() != Eigen::Success) {
+    // Γ_NT(Σ̂_b) is never formed. Σ̂_b's own Cholesky carries it: the
+    // normal-theory weight satisfies Γ_NT⁻¹ = ½·Dᵀ(Σ̂⁻¹ ⊗ Σ̂⁻¹)D, so the
+    // σ-segment of WΔ is assembled column-by-column below from Σ̂⁻¹A_aΣ̂⁻¹ at
+    // O(p³) per column, instead of factoring a p*×p* matrix at O(p⁶) and
+    // solving against it at O(p⁴·n_free). Σ̂_b PD is also the condition this
+    // function documents, so checking it here rather than Γ_NT's Cholesky
+    // matches the declared contract.
+    blk.llt_sigma = Eigen::LLT<Eigen::MatrixXd>(Sigma_b);
+    if (blk.llt_sigma.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-          "information_cross_products: Γ_NT(Σ̂) is not positive definite in "
+          "information_cross_products: Σ̂ is not positive definite in "
           "block " + std::to_string(b)));
-    }
-    if (has_means) {
-      blk.llt_sigma = Eigen::LLT<Eigen::MatrixXd>(Sigma_b);
-      if (blk.llt_sigma.info() != Eigen::Success) {
-        return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-            "information_cross_products: Σ̂ is not positive definite in "
-            "block " + std::to_string(b)));
-      }
     }
   }
   if (J_sigma.rows() != sigma_vech_total) {
@@ -866,10 +860,33 @@ casewise_scores(spec::LatentStructure       pt,
       WDelta.middleRows(blk.mu_off, blk.p) =
           blk.llt_sigma.matrixU().solve(A_mu);
     }
-    const auto Dsig_b = Delta_full.middleRows(blk.row_offset, blk.pstar);
-    const Eigen::MatrixXd A_sig = blk.llt_gamma_nt.matrixL().solve(Dsig_b);
-    WDelta.middleRows(blk.row_offset, blk.pstar) =
-        blk.llt_gamma_nt.matrixU().solve(A_sig);
+    // σ-segment via the trace identity:
+    //   (Γ_NT⁻¹Δ)[:, a] = ½·Dᵀ·vec(Σ̂⁻¹·A_a·Σ̂⁻¹),   A_a = unvech(Δ[:, a]).
+    // Dᵀ sums each off-diagonal pair, so with M = Σ̂⁻¹A_aΣ̂⁻¹ symmetric the
+    // vech entry is M(i,j) strictly below the diagonal and ½·M(i,i) on it.
+    // Column-major lower-triangle order throughout, matching `dsigma_dtheta`
+    // and `data::gamma_nt`.
+    const Eigen::Index p = blk.p;
+    Eigen::MatrixXd A_a(p, p), X(p, p), Xt(p, p), M(p, p);
+    for (Eigen::Index a = 0; a < n_free; ++a) {
+      const auto col = Delta_full.col(a).segment(blk.row_offset, blk.pstar);
+      // A parameter that touches no moment of this block leaves its slice at
+      // zero. Skipping is what makes multi-group models cheap here.
+      if (col.isZero(0.0)) continue;
+      Eigen::Index t = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j; i < p; ++i, ++t) {
+          A_a(i, j) = col[t];
+          A_a(j, i) = col[t];
+        }
+      X  = blk.llt_sigma.solve(A_a);   // Σ̂⁻¹A_a
+      Xt = X.transpose();              // A_aΣ̂⁻¹  (A_a, Σ̂⁻¹ both symmetric)
+      M  = blk.llt_sigma.solve(Xt);    // Σ̂⁻¹A_aΣ̂⁻¹
+      t = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j; i < p; ++i, ++t)
+          WDelta(blk.row_offset + t, a) = (i == j) ? 0.5 * M(i, j) : M(i, j);
+    }
   }
 
   // Z_c — block-stacked casewise contributions (μ-cols then σ-vech cols per
@@ -954,6 +971,81 @@ wald_test(const Eigen::MatrixXd& R, const Eigen::VectorXd& q,
 
 using detail::gamma_p_series;
 using detail::gamma_q_cfrac;
+
+post_expected<frontier::RlsMeanCovChi2>
+frontier::rls_mean_cov_chi2(const SampleStats&           samp,
+                            const model::ImpliedMoments& implied) {
+  if (samp.S.size() != implied.sigma.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "rls_mean_cov_chi2: SampleStats and ImpliedMoments have different "
+        "covariance-block counts"));
+  }
+  const bool include_means = !samp.mean.empty() && !implied.mu.empty();
+  if (include_means && (samp.mean.size() != samp.S.size() ||
+                        implied.mu.size() != samp.S.size())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "rls_mean_cov_chi2: modelled mean blocks must match covariance blocks"));
+  }
+
+  RlsMeanCovChi2 out;
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    if (samp.n_obs.size() <= b || samp.n_obs[b] <= 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "rls_mean_cov_chi2: missing or non-positive block sample size"));
+    }
+    const auto& S = samp.S[b];
+    const auto& Sigma = implied.sigma[b];
+    if (S.rows() != Sigma.rows() || S.cols() != Sigma.cols() ||
+        S.rows() != S.cols()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "rls_mean_cov_chi2: block " + std::to_string(b) +
+              " S and Sigma have different or non-square shapes"));
+    }
+    const Eigen::MatrixXd Sigma_sym =
+        0.5 * (Sigma + Sigma.transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_sym);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "rls_mean_cov_chi2: block " + std::to_string(b) +
+              " implied Sigma is not positive definite"));
+    }
+
+    const double n_b = static_cast<double>(samp.n_obs[b]);
+    const Eigen::MatrixXd diff = S - Sigma_sym;
+    const Eigen::MatrixXd A = llt.solve(diff);
+    out.covariance += n_b * 0.5 * (A * A).trace();
+
+    if (include_means) {
+      if (samp.mean[b].size() != S.rows() ||
+          implied.mu[b].size() != S.rows()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "rls_mean_cov_chi2: block " + std::to_string(b) +
+                " mean and covariance shapes differ"));
+      }
+      const Eigen::VectorXd mean_diff = samp.mean[b] - implied.mu[b];
+      out.mean += n_b * mean_diff.dot(llt.solve(mean_diff));
+    }
+  }
+  out.statistic = out.mean + out.covariance;
+  return out;
+}
+
+post_expected<frontier::RlsMeanCovChi2>
+frontier::rls_mean_cov_chi2(spec::LatentStructure  pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats&      samp,
+                            const Eigen::VectorXd&  theta) {
+  Estimates est;
+  est.theta = theta;
+  auto ev_or = prepare_evaluator(pt, rep, samp, est);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+  auto im_or = ev_or->sigma(theta);
+  if (!im_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "rls_mean_cov_chi2: sigma(theta) failed: " + im_or.error().detail));
+  }
+  return rls_mean_cov_chi2(samp, *im_or);
+}
 
 post_expected<double>
 rls_chi2(const SampleStats&            samp,

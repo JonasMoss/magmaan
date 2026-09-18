@@ -346,16 +346,17 @@
 # fits the structured model to them by complete-data ML (Stage 2). The reference
 # law T_ML2 -> sum_j lambda_j chi^2_1 uses the same saturated-moment EM ACOV as
 # the meat (Gamma_TS) but the complete-data normal-theory weight as the U-metric,
-# with the Stage-2 ML chi-square as the base statistic. Both the df-dimensional
-# UGamma spectrum and the base statistic are already attached to the fit as
+# with the Stage-2 ML chi-square as the default base statistic. The
+# df-dimensional UGamma spectrum and ML base are attached to the fit as
 # `fit$ml2s` (eigvals, chisq, df) by `fit_ml2s()` /
-# `estimate_two_stage_em(kind = "ml")`, so an ML2S FMG test is just the
-# estimator-agnostic eigenvalue-tail transform applied to that
-# (chi-square, df, eigvals) triple --- exactly as on the ordinal and FIML paths.
+# `estimate_two_stage_em(kind = "ml")`. An explicit `_rls` suffix instead uses
+# the full normal-theory moment-residual quadratic evaluated at the Stage-2
+# fit, including the mean residual when the model restricts means. Both bases
+# use the same ML2S spectrum.
 #
 # Like FIML, the EM ACOV is itself the asymptotic Gamma, so the Du-Bentler
-# unbiased Gamma (`_ug`) is undefined; and the base is the Stage-2 ML statistic,
-# so the complete-data RLS base (`_rls`) is rejected.
+# unbiased Gamma (`_ug`) is undefined. Unsuffixed requests retain ML as their
+# default base.
 
 .fmg_is_ml2s <- function(fit) {
   grepl("^ML2S(_|$)", .fmg_fit_estimator(fit))
@@ -378,14 +379,10 @@
            "(test '", s$input, "').", call. = FALSE)
     }
     if (identical(s$base, "rls")) {
-      if (isTRUE(s$base_explicit)) {
-        stop("fmg_tests(): under ML2S only the Stage-2 ML base statistic is ",
-             "supported; the RLS (browne.residual.nt.model) base requires the ",
-             "classical complete-data normal-theory ML case (test '", s$input,
-             "').", call. = FALSE)
+      if (!isTRUE(s$base_explicit)) {
+        s$base <- "ml"
+        s$canonical <- sub("_rls$", "_ml", s$canonical)
       }
-      s$base <- "ml"
-      s$canonical <- sub("_rls$", "_ml", s$canonical)
     }
     s
   })
@@ -409,22 +406,29 @@
   sp
 }
 
-# ML2S result rows: the spectrum and the Stage-2 ML base chi-square come from the
-# two-stage inference already attached to the fit. Mirrors `.fmg_result_rows_fiml`
-# and `.fmg_result_rows_ordinal`.
+# ML2S result rows: the spectrum and Stage-2 ML base come from the two-stage
+# inference attached to the fit. Compute the full mean+covariance RLS base only
+# when explicitly requested. Mirrors `.fmg_result_rows_fiml` and
+# `.fmg_result_rows_ordinal`.
 .fmg_result_rows_ml2s <- function(fit, specs, h_step = 1e-4) {
   sp <- .fmg_ml2s_spectrum(fit, h_step)
   df <- sp$df
   eigvals <- sp$eigvals
+  base_statistics <- c(ml = sp$chisq)
+  if (any(vapply(specs, function(s) identical(s$base, "rls"), logical(1)))) {
+    base_statistics <- c(
+      base_statistics,
+      rls = infer_rls_mean_cov_chi2_fit(fit, model_implied(fit))$statistic)
+  }
   rows <- lapply(specs, function(s) {
-    res <- infer_fmg_test(sp$chisq, df, eigvals,
+    res <- infer_fmg_test(base_statistics[[s$base]], df, eigvals,
                           method = s$method,
                           param = .fmg_param_for_cpp(s$param))
     list(input = s$input,
          label = s$canonical,
          p_value = res$p_value,
          df = res$df,
-         base = "ml",
+         base = s$base,
          base_statistic = res$chi2_source,
          method = res$method,
          param = if (is.na(s$param)) NA_real_ else res$param,
@@ -870,14 +874,17 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #' Two-stage ML (ML2S) fits (`fit_ml2s()` / `magmaan(..., estimator = "ML2S")`)
 #' are supported the same way: the df-dimensional UGamma spectrum and the
 #' Stage-2 ML base chi-square are taken from the two-stage inference already
-#' attached to the fit (`fit$ml2s`), and the eigenvalue-tail transforms are
-#' applied to that triple. As under FIML, `_ug` and `_rls` are rejected.
+#' attached to the fit (`fit$ml2s`). Unsuffixed tests use that ML base; an
+#' explicit `_rls` suffix instead uses the full fitted-moment RLS residual
+#' quadratic, including restricted means, with the same spectrum. As under
+#' FIML, `_ug` is rejected.
 #'
 #' @param fit A fitted magmaan ML, continuous ULS/GLS/WLS, FIML, or ML2S model.
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
 #'   recommended defaults (complete-data or FIML-appropriate). Recognised types:
 #'   `std`, `sb`, `ss`, `mv`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
-#'   optionally suffixed `_ug` and `_ml` / `_rls` (complete-data only).
+#'   optionally suffixed `_ug` and `_ml` / `_rls`; availability depends on the
+#'   estimator as described above.
 #' @param data Optional complete raw data (complete-data fits only). Usually
 #'   unnecessary for new fits that retain `$raw_data`.
 #' @param weight The explicit fitting weight for a continuous WLS fit. Ignored

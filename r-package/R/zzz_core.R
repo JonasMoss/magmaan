@@ -226,6 +226,8 @@ inference_browne_residual_nt <- infer_browne_residual_nt
 inference_rls_chi2 <- infer_rls_chi2
 inference_rls_chi2_sample <- infer_rls_chi2_sample
 inference_rls_chi2_fit <- infer_rls_chi2_fit
+inference_rls_mean_cov_chi2 <- infer_rls_mean_cov_chi2
+inference_rls_mean_cov_chi2_fit <- infer_rls_mean_cov_chi2_fit
 
 robust_lr_test_satorra2000 <- infer_lr_test_satorra2000
 robust_lr_test_satorra2000_continuous_ls <-
@@ -428,6 +430,8 @@ magmaan_core <- local({
       "inference_rls_chi2",
       "inference_rls_chi2_sample",
       "inference_rls_chi2_fit",
+      "inference_rls_mean_cov_chi2",
+      "inference_rls_mean_cov_chi2_fit",
       "inference_modification_indices",
       "inference_score_tests",
       "inference_modification_indices_robust",
@@ -747,6 +751,7 @@ magmaan_core <- local({
       "infer_browne_residual_nt",
       "infer_rls_chi2",
       "infer_rls_chi2_sample",
+      "infer_rls_mean_cov_chi2",
       "infer_lr_test_satorra2000",
       "infer_continuous_ls_lr_test_satorra2000",
       "infer_ordinal_lr_test_satorra2000",
@@ -803,6 +808,7 @@ magmaan_core <- local({
       "infer_z_test_fit",
       "infer_wald_test_fit",
       "infer_rls_chi2_fit",
+      "infer_rls_mean_cov_chi2_fit",
       "infer_build_u_factor_fit",
       "infer_robust_se_fit",
       "infer_robust_se_raw_fit",

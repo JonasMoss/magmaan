@@ -2159,6 +2159,11 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       # p (770 ms of a 1400 ms fit at p = 50, N = 1000) and is pure waste for
       # DWLS and ULS, which need the diagonal and the identity respectively.
       want_full_wls <- identical(estimator, "WLS")
+      # NB: DWLS and ULS do not need the dense NACOV either, and this call
+      # materializes it unconditionally (490 ms of a 500 ms call at p = 50).
+      # Rerouting through prepare_model/prepare_data/prepare_weight(full=FALSE)
+      # was tried and rejected; see docs/backlog/todo.md for the measurements
+      # and the three reasons. The fix belongs in the stats constructor.
       data <- if (all_ordinal) {
         data_ordinal_stats_from_df(data, spec, group = group_var,
                                    missing = missing, pd_gamma = pd_gamma,
@@ -2345,6 +2350,13 @@ infer_wald_test_fit <- function(fit, R, vcov, q = NULL) {
 
 infer_rls_chi2_fit <- function(fit, implied) {
   infer_rls_chi2(fit, implied)
+}
+
+# Full normal-theory moment-residual RLS. Unlike the lavaan-compatible
+# covariance-only helper above, this includes xbar - muhat whenever the model
+# has a mean structure.
+infer_rls_mean_cov_chi2_fit <- function(fit, implied) {
+  infer_rls_mean_cov_chi2(fit, implied)
 }
 
 infer_build_u_factor_fit <- function(fit, bread = "expected", moments = "structured") {

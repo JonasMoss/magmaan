@@ -9011,6 +9011,31 @@ Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
 
+// infer_rls_mean_cov_chi2() — full normal-theory moment-residual RLS,
+// including the mean residual whenever the fitted model supplies implied
+// means. Kept separate from infer_rls_chi2(), whose covariance-only behavior
+// is the lavaan-compatible `browne.residual.nt.model` contract.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_rls_mean_cov_chi2(Rcpp::List fit, Rcpp::List implied) {
+  Ctx ctx = ctx_from_fit(fit);
+  lvm::ImpliedMoments im;
+  Rcpp::List sig(implied["sigma"]);
+  for (R_xlen_t b = 0; b < sig.size(); ++b)
+    im.sigma.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(sig[b])));
+  if (implied.containsElementNamed("mu") && !Rf_isNull(implied["mu"])) {
+    Rcpp::List m(implied["mu"]);
+    for (R_xlen_t b = 0; b < m.size(); ++b)
+      im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
+  }
+  auto s_or = magmaan::inference::frontier::rls_mean_cov_chi2(ctx.samp, im);
+  if (!s_or.has_value()) stop_post(s_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["statistic"] = s_or->statistic,
+      Rcpp::_["mean"] = s_or->mean,
+      Rcpp::_["covariance"] = s_or->covariance);
+}
+
 // infer_rls_chi2_sample() — primitive form of infer_rls_chi2(): sample moments
 // plus model-implied moments, without requiring a fit list.
 //

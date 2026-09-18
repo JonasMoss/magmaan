@@ -7,6 +7,19 @@ add_custom_target(magmaan_benchmark_scaffold
   COMMAND ${CMAKE_COMMAND} -E echo "Use Rscript benchmarks/r/check_sources.R for the benchmark scaffold."
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
+# ---------------------------------------------------------------------------
+# magmaan_timing_bench — reusable modular timing harness for complete-data
+# linear SEM. Times each pipeline stage separately over a crossed
+# structure x parameterization x p x n design. See timing/README.md.
+# ---------------------------------------------------------------------------
+add_executable(magmaan_timing_bench
+  timing/main.cpp
+  timing/catalog.cpp)
+
+target_link_libraries(magmaan_timing_bench PRIVATE magmaan::magmaan)
+
+target_compile_features(magmaan_timing_bench PRIVATE cxx_std_23)
+
 add_executable(magmaan_ordinal_workspace_bench
   ordinal_workspace_bench.cpp)
 
