@@ -214,7 +214,13 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             gamma_singular_detail(b, "stacked Gamma", inv_full)));
       }
-      W.push_back(std::move(inv_full.inverse));
+      {
+        auto bw = gmm::BlockWeight::dense(inv_full.inverse,
+            FitError::Kind::NumericIssue,
+            "dls_weight: block " + std::to_string(b));
+        if (!bw.has_value()) return std::unexpected(bw.error());
+        W.push_back(std::move(*bw));
+      }
       continue;
     }
 
@@ -236,7 +242,13 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           gamma_singular_detail(b, "mixed Gamma", inv_mix)));
     }
-    W.push_back(std::move(inv_mix.inverse));
+    {
+      auto bw = gmm::BlockWeight::dense(inv_mix.inverse,
+          FitError::Kind::NumericIssue,
+          "dls_weight: block " + std::to_string(b));
+      if (!bw.has_value()) return std::unexpected(bw.error());
+      W.push_back(std::move(*bw));
+    }
   }
   return W;
 }

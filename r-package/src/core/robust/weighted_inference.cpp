@@ -355,12 +355,12 @@ weight_block(const gmm::Weight& weight,
         "robust_continuous_ls: missing weight block " + std::to_string(b)));
   }
   const auto& W = weight[b];
-  if (W.rows() != layout.block_rows[b] || W.cols() != layout.block_rows[b]) {
+  if (!W.valid(layout.block_rows[b])) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_continuous_ls: weight dimension mismatch in block " +
             std::to_string(b)));
   }
-  return W;
+  return W.to_dense();
 }
 
 Eigen::MatrixXd gamma_nt_directional(const Eigen::MatrixXd& S,
@@ -514,7 +514,13 @@ empirical_wls_weight_from_rows(const std::vector<Eigen::MatrixXd>& rows,
         std::string(who) + " empirical Gamma block " + std::to_string(b);
     auto inv_or = inverse_sym_pd(Gamma, what.c_str());
     if (!inv_or.has_value()) return std::unexpected(inv_or.error());
-    out.push_back(std::move(*inv_or));
+    auto bw = gmm::BlockWeight::dense(*inv_or, FitError::Kind::NumericIssue,
+                                      what);
+    if (!bw.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+                                      bw.error().detail));
+    }
+    out.push_back(std::move(*bw));
   }
   return out;
 }
@@ -538,16 +544,18 @@ empirical_dwls_weight_from_rows(const std::vector<Eigen::MatrixXd>& rows,
     }
     const Eigen::RowVectorXd gamma =
         Z.array().square().colwise().mean().matrix();
-    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(Z.cols(), Z.cols());
+    // Structurally diagonal by construction — every off-diagonal entry of the
+    // DWLS weight is zero, so it never needs a dense q×q.
+    Eigen::VectorXd d(Z.cols());
     for (Eigen::Index k = 0; k < gamma.size(); ++k) {
       if (!(gamma(k) > 0.0) || !std::isfinite(gamma(k))) {
         return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
             std::string(who) + ": empirical Gamma diagonal is not positive "
             "in block " + std::to_string(b)));
       }
-      W(k, k) = 1.0 / gamma(k);
+      d(k) = 1.0 / gamma(k);
     }
-    out.push_back(std::move(W));
+    out.push_back(gmm::BlockWeight::diagonal(d));
   }
   return out;
 }

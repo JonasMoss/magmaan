@@ -94,3 +94,21 @@ target_link_options(magmaan_mem_profile PRIVATE
   -Wl,--wrap=realloc
   -Wl,--wrap=posix_memalign
   -Wl,--wrap=aligned_alloc)
+
+add_executable(magmaan_nt_factor_share_bench
+  nt_factor_share_bench.cpp)
+
+target_link_libraries(magmaan_nt_factor_share_bench PRIVATE magmaan::magmaan)
+
+target_include_directories(magmaan_nt_factor_share_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_compile_features(magmaan_nt_factor_share_bench PRIVATE cxx_std_23)
+
+add_executable(magmaan_expected_info_bench
+  expected_info_bench.cpp)
+
+target_link_libraries(magmaan_expected_info_bench PRIVATE magmaan::magmaan)
+
+target_include_directories(magmaan_expected_info_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_compile_features(magmaan_expected_info_bench PRIVATE cxx_std_23)

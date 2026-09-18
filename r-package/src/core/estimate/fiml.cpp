@@ -5446,12 +5446,12 @@ ml2s_weight_block(const gmm::Weight& weight,
             std::to_string(b)));
   }
   const auto& W = weight[b];
-  if (W.rows() != layout.block_rows[b] || W.cols() != layout.block_rows[b]) {
+  if (!W.valid(layout.block_rows[b])) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "two_stage_em_ml_inference: Stage-2 weight dimension mismatch in "
         "block " + std::to_string(b)));
   }
-  return W;
+  return W.to_dense();
 }
 
 Eigen::VectorXd
@@ -5851,6 +5851,80 @@ two_stage_stage2_weight_blocks(const SaturatedMoments& sm, TwoStageWeight kind,
   return blocks;
 }
 
+// The same Stage-2 weight as a structured `gmm::Weight`, for the fit and
+// sandwich paths that hand it to the moment-quadratic machinery.
+//
+// Every block is currently wrapped Dense, which is behaviour-identical to what
+// these callers did before `gmm::Weight` became structured. Two of the five
+// kinds are structurally free to upgrade — `Uls` builds `W.setIdentity()` and
+// `Dwls` builds a provably diagonal `W(i,i) = 1/d(i)` — and `Nt` is the
+// Kronecker form iff `data::gamma_nt(Σ)⁻¹ == ½·Dᵀ(Σ⁻¹ ⊗ Σ⁻¹)D` under
+// magmaan's vech convention, which wants pinning before it is assumed.
+// Tracked in docs/backlog/todo.md.
+post_expected<gmm::Weight>
+two_stage_stage2_weight_structured(const SaturatedMoments& sm,
+                                   TwoStageWeight kind,
+                                   TwoStageDlsOptions dls) {
+  // Three of the five kinds have a closed structural form and never need the
+  // dense q×q that `two_stage_stage2_weight_blocks` materializes.
+  //
+  //   Uls  → identity, by construction (`W.setIdentity()`).
+  //   Nt   → blockdiag(Σ⁻¹, Γ_NT(Σ)⁻¹), which is exactly BlockWeight::
+  //          NormalTheory(Σ, has_means): the mean block is Σ⁻¹ either way, and
+  //          Γ_NT(Σ)⁻¹ == ½·Dᵀ(Σ⁻¹ ⊗ Σ⁻¹)D is pinned in
+  //          tests/unit/gls_scalar_objective_test.cpp. Saves building Γ_NT
+  //          (O(p⁴)) and inverting it (O(p⁶)) in favour of a p×p Cholesky.
+  //   Dwls → provably diagonal (`W(i,i) = 1/d(i)`, every off-diagonal zero).
+  //          Γ_FIML is still formed, since its diagonal is the weight, but it
+  //          is not stored or factored.
+  //
+  // Adf and Dls are genuinely dense (full Γ⁻¹ and the Browne mix), so they
+  // keep the materialized path.
+  if (kind == TwoStageWeight::Uls) {
+    gmm::Weight out;
+    out.reserve(sm.cov.size());
+    for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+      const Eigen::Index p = sm.cov[b].rows();
+      out.push_back(gmm::BlockWeight::identity(p + vech_len(p)));
+    }
+    return out;
+  }
+
+  if (kind == TwoStageWeight::Nt) {
+    gmm::Weight out;
+    out.reserve(sm.cov.size());
+    for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+      auto bw = gmm::BlockWeight::normal_theory(
+          sm.cov[b], /*has_means=*/true, FitError::Kind::NumericIssue,
+          "two_stage_stage2_weight: block " + std::to_string(b));
+      if (!bw.has_value()) {
+        return std::unexpected(
+            fit_to_post(bw.error(), "two_stage_stage2_weight"));
+      }
+      out.push_back(std::move(*bw));
+    }
+    return out;
+  }
+
+  auto blocks = two_stage_stage2_weight_blocks(sm, kind, dls);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+
+  if (kind == TwoStageWeight::Dwls) {
+    gmm::Weight out;
+    out.reserve(blocks->size());
+    for (const auto& W : *blocks) out.push_back(
+        gmm::BlockWeight::diagonal(W.diagonal()));
+    return out;
+  }
+
+  auto w = gmm::dense_weight(*blocks, FitError::Kind::NumericIssue,
+                             "two_stage_stage2_weight");
+  if (!w.has_value()) {
+    return std::unexpected(fit_to_post(w.error(), "two_stage_stage2_weight"));
+  }
+  return std::move(*w);
+}
+
 post_expected<Eigen::MatrixXd>
 two_stage_stage2_weight(const SaturatedMoments& sm, TwoStageWeight kind,
                         TwoStageDlsOptions dls) {
@@ -5886,7 +5960,7 @@ two_stage_em_weighted_inference_from_sm(spec::LatentStructure pt,
                                         TwoStageBread bread) {
   SampleStats samp = sample_stats_from_saturated(sm);
 
-  auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+  auto weight_or = two_stage_stage2_weight_structured(sm, kind, dls);
   if (!weight_or.has_value()) return std::unexpected(weight_or.error());
 
   auto gamma_full_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
@@ -6031,7 +6105,7 @@ build_ml2s_ij_blocks(spec::LatentStructure pt,
   const Ml2sMomentLayout layout =
       ml2s_make_layout(samp, eval_or->moments);
 
-  auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+  auto weight_or = two_stage_stage2_weight_structured(sm, kind, dls);
   if (!weight_or.has_value()) return std::unexpected(weight_or.error());
   auto influence_or = saturated_em_moment_influence(raw, pack, h1, sm);
   if (!influence_or.has_value()) return std::unexpected(influence_or.error());
@@ -7345,8 +7419,14 @@ pattern_ntml_inference(spec::LatentStructure pt,
 
   Estimates metric_est = est;
   metric_est.fmin = chisq / (2.0 * N);
+  auto w_struct = gmm::dense_weight(*weight_or, FitError::Kind::NumericIssue,
+                                    "pattern_ntml_inference weight");
+  if (!w_struct.has_value()) {
+    return std::unexpected(
+        fit_to_post(w_struct.error(), "pattern_ntml_inference"));
+  }
   auto rr_or = robust_continuous_ls(std::move(pt), rep, samp, metric_est,
-                                    *weight_or, gamma,
+                                    *w_struct, gamma,
                                     robust::Information::Expected);
   if (!rr_or.has_value()) return std::unexpected(rr_or.error());
 
@@ -7894,7 +7974,7 @@ ml2s_profile_sandwich(spec::LatentStructure pt,
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(e.error());
   }
-  auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+  auto weight_or = two_stage_stage2_weight_structured(sm, kind, dls);
   if (!weight_or.has_value()) return std::unexpected(post_to_fit(weight_or.error()));
 
   auto con_or = build_eq_constraints(pt, true);
@@ -8803,7 +8883,7 @@ profile_lrt_scalar_ml2s(spec::LatentStructure pt,
         Bounds{}, backend, opts, constraint_tol, nullptr,
         ScalarProfileReference::Ordinary);
   } else {
-    auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+    auto weight_or = two_stage_stage2_weight_structured(sm, kind, dls);
     if (!weight_or.has_value()) {
       return std::unexpected(post_to_fit(weight_or.error()));
     }

@@ -870,6 +870,25 @@ an unconstrained gradient test to constrained solutions.
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
+- **Expected information via the whitened Jacobian (2026-09-18):**
+  `inference::information_expected_per_case_blocks` and
+  `expected_info_covariance_only` no longer materialize
+  `T[k][b] = Σ_b⁻¹·unvech(J[:,k])` for every free parameter × block. Both terms
+  of the expected information are the same bilinear form — the normal-theory
+  inner product `⟨X,Y⟩_A = ½·tr(A⁻¹XA⁻¹Y)` — which the NormalTheory
+  `estimate::gmm::BlockWeight` already carries in factored form, so with
+  `Y_b = Fᵀ[dμ/dθ ; dvech(Σ)/dθ]_b` the per-case block is exactly `Y_bᵀ Y_b`
+  with no residual scaling. One whitened Jacobian per block, built and
+  discarded in turn, plus one BLAS-3 syrk, replacing an
+  `n_free × n_blocks` array of p×p matrices and an
+  `n_free²·n_blocks·p²` elementwise reduction. Multi-group models benefit most,
+  since a parameter usually touches one group and the rest of that array was
+  explicitly-stored zeros: at p=48 with 4 groups, 14.4x faster and 27.0 MB →
+  3.45 MB (`benchmarks/expected_info_bench.cpp`, paired/rotated via `benchmarks/timing/timing.hpp`). Pinned against an independent
+  explicit-trace reference in `tests/unit/expected_info_whitened_test.cpp`.
+  This is the surviving half of the retired "share the p×p factor" backlog item;
+  the CPU-sharing half is measurably dead (ceiling 0.006% at p=48, see
+  `docs/backlog/todo.md`).
 - **Persistent continuous NTML inference (2026-09-16):** the existing
   U-factor shared phase is now the owning `robust::NTMLGeometry`, exposed by
   `prepare_ntml_geometry` and consumed by expected/observed U-factor tails.

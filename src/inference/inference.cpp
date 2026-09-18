@@ -16,6 +16,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/gmm/weight.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
@@ -111,10 +112,8 @@ expected_info_covariance_only(const SampleStats& samp,
             ": SampleStats and implied moments have different block counts"));
   }
 
-  std::vector<Eigen::MatrixXd> SigmaInv(n_blocks);
-  std::vector<double>          weight(n_blocks, 0.0);
-  std::vector<Eigen::Index>    p_dim(n_blocks, 0);
-  std::vector<Eigen::Index>    vech_off(n_blocks, 0);
+  std::vector<Eigen::Index> p_dim(n_blocks, 0);
+  std::vector<Eigen::Index> vech_off(n_blocks, 0);
 
   Eigen::Index running = 0;
   for (std::size_t b = 0; b < n_blocks; ++b) {
@@ -124,20 +123,9 @@ expected_info_covariance_only(const SampleStats& samp,
           std::string(who) + ": block " + std::to_string(b) +
               " S and Σ have different shapes"));
     }
-    const Eigen::MatrixXd Sigma_b =
-        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
-    const Eigen::Index p = Sigma_b.rows();
-    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_b);
-    if (llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          std::string(who) + ": implied Σ for block " +
-              std::to_string(b) + " is not positive definite at θ̂"));
-    }
-    SigmaInv[b] = llt.solve(Eigen::MatrixXd::Identity(p, p));
-    weight[b]   = static_cast<double>(samp.n_obs[b]) / 2.0;
-    p_dim[b]    = p;
+    p_dim[b]    = sm.sigma[b].rows();
     vech_off[b] = running;
-    running += vech_len(p);
+    running += vech_len(p_dim[b]);
   }
   if (J.rows() != running || J.cols() != n_free) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -147,39 +135,32 @@ expected_info_covariance_only(const SampleStats& samp,
             std::to_string(n_free)));
   }
 
-  std::vector<std::vector<Eigen::MatrixXd>> T(
-      static_cast<std::size_t>(n_free), std::vector<Eigen::MatrixXd>(n_blocks));
-  Eigen::MatrixXd M;
-  for (Eigen::Index k = 0; k < n_free; ++k) {
-    for (std::size_t b = 0; b < n_blocks; ++b) {
-      const Eigen::Index p = p_dim[b];
-      M.setZero(p, p);
-      for (Eigen::Index c = 0; c < p; ++c) {
-        for (Eigen::Index r = c; r < p; ++r) {
-          const double v = J(vech_off[b] + vech_index(p, r, c), k);
-          M(r, c) = v;
-          if (r != c) M(c, r) = v;
-        }
-      }
-      T[static_cast<std::size_t>(k)][b].noalias() = SigmaInv[b] * M;
-    }
-  }
-
+  // info = Σ_b (n_b/2)·tr(Σ_b⁻¹ Δ_a Σ_b⁻¹ Δ_c). The NormalTheory
+  // `BlockWeight` whitens by exactly that metric — (Fᵀd_a)·(Fᵀd_c) is
+  // ½·tr(Σ⁻¹D_a Σ⁻¹D_c) — so with Y_b = Fᵀ·J_b the block term is n_b·Y_bᵀY_b.
+  // See `information_expected_per_case_blocks` for why this beats holding an
+  // n_free × n_blocks array of p×p matrices.
   Eigen::MatrixXd info = Eigen::MatrixXd::Zero(n_free, n_free);
-  for (Eigen::Index a = 0; a < n_free; ++a) {
-    for (Eigen::Index b = a; b < n_free; ++b) {
-      double acc = 0.0;
-      for (std::size_t blk = 0; blk < n_blocks; ++blk) {
-        const auto& Ta = T[static_cast<std::size_t>(a)][blk];
-        const auto& Tb = T[static_cast<std::size_t>(b)][blk];
-        const double per_block =
-            (Ta.transpose().array() * Tb.array()).sum();
-        acc += weight[blk] * per_block;
-      }
-      info(a, b) = acc;
-      if (a != b) info(b, a) = acc;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = p_dim[b];
+    // Symmetrize before factoring — see the note in
+    // `information_expected_per_case_blocks`.
+    const Eigen::MatrixXd Sigma_b =
+        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
+    auto W = estimate::gmm::BlockWeight::normal_theory(
+        Sigma_b, /*has_means=*/false, FitError::Kind::NonPositiveDefiniteSigma,
+        std::string(who) + ": block " + std::to_string(b));
+    if (!W.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": implied Σ for block " +
+              std::to_string(b) + " is not positive definite at θ̂"));
     }
+    const Eigen::MatrixXd Y =
+        W->t_apply(1.0, J.middleRows(vech_off[b], vech_len(p)));
+    info.selfadjointView<Eigen::Lower>().rankUpdate(
+        Y.transpose(), static_cast<double>(samp.n_obs[b]));
   }
+  info.triangularView<Eigen::StrictlyUpper>() = info.transpose();
   return info;
 }
 
@@ -363,33 +344,21 @@ information_expected_per_case_blocks(spec::LatentStructure pt,
   const Eigen::MatrixXd& Jmu = *Jmu_or;
   const bool has_means = (Jmu.size() > 0);
 
-  // Per-block precompute: Σ_b⁻¹. Σ⁻¹ as dense — small p in v0; cheap.
-  std::vector<Eigen::MatrixXd> SigmaInv(n_blocks);
-  std::vector<Eigen::Index>    p_dim(n_blocks, 0);
-  std::vector<Eigen::Index>    vech_off(n_blocks, 0);
+  // Per-block shapes. Σ_b⁻¹ is never materialized: the whole per-block
+  // contraction below is the normal-theory metric induced by Σ_b, which
+  // `gmm::BlockWeight` already owns in factored form.
+  std::vector<Eigen::Index> p_dim(n_blocks, 0);
+  std::vector<Eigen::Index> vech_off(n_blocks, 0);
+  std::vector<Eigen::Index> mu_off(n_blocks, 0);
 
-  Eigen::Index running = 0;
+  Eigen::Index running   = 0;
+  Eigen::Index running_p = 0;
   for (std::size_t b = 0; b < n_blocks; ++b) {
-    // Symmetrize: Λ(I−B)⁻¹Ψ(I−B)⁻ᵀΛᵀ is mathematically symmetric, but
-    // float non-associativity in the chained products introduces O(1e-14)
-    // asymmetric noise that can flip a near-zero eigenvalue negative on
-    // saturated models. Averaging upper/lower triangles restores the
-    // symmetric part exactly without affecting well-conditioned cases.
-    const Eigen::MatrixXd Sigma_b = 0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
-    const Eigen::Index p = Sigma_b.rows();
-    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_b);
-    if (llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "implied Σ for block " + std::to_string(b) +
-              " is not positive definite at θ̂"));
-    }
-    SigmaInv[b] = llt.solve(Eigen::MatrixXd::Identity(p, p));
-    // n/2, not (n-1)/2 — matches lavaan's default `likelihood = "normal"`
-    // convention (vs Wishart's (n-1)/2). Determines both info scaling and
-    // the matching chi² formula below.
-    p_dim[b]    = p;
+    p_dim[b]    = sm.sigma[b].rows();
     vech_off[b] = running;
-    running += vech_len(p);
+    mu_off[b]   = running_p;
+    running   += vech_len(p_dim[b]);
+    running_p += p_dim[b];
   }
   if (J.rows() != running) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -397,71 +366,60 @@ information_expected_per_case_blocks(spec::LatentStructure pt,
             " ≠ total vech length " + std::to_string(running)));
   }
 
-  // For each free parameter k, materialize per-block T_{k,b} = Σ_b⁻¹ · M_{k,b}
-  // where M_{k,b} is the un-vech of J's column k restricted to block b.
-  std::vector<std::vector<Eigen::MatrixXd>> T(n_free,
-      std::vector<Eigen::MatrixXd>(n_blocks));
-  Eigen::MatrixXd M;  // reused buffer
-  for (std::size_t k = 0; k < n_free; ++k) {
-    for (std::size_t b = 0; b < n_blocks; ++b) {
-      const Eigen::Index p = p_dim[b];
-      M.setZero(p, p);
-      for (Eigen::Index c = 0; c < p; ++c) {
-        for (Eigen::Index r = c; r < p; ++r) {
-          const double v = J(vech_off[b] + vech_index(p, r, c),
-                             static_cast<Eigen::Index>(k));
-          M(r, c) = v;
-          if (r != c) M(c, r) = v;
-        }
-      }
-      T[k][b].noalias() = SigmaInv[b] * M;
+  // I_b[a,c] = ½·tr(Σ_b⁻¹ Δ_a Σ_b⁻¹ Δ_c) + ν_a' Σ_b⁻¹ ν_c  (per case; the
+  // n_b/2 and the mean term's factor 2 are folded into the ½ out front).
+  //
+  // Both terms are the *same* bilinear form — the normal-theory inner product
+  // induced by Σ_b — which is exactly what the NormalTheory `BlockWeight`
+  // whitens by. With Y_b = Fᵀ[ dμ/dθ ; dvech(Σ)/dθ ]_b and F Fᵀ = W_b:
+  //
+  //   cov rows :  (Fᵀd_a)·(Fᵀd_c) = ½·tr(Σ⁻¹D_a Σ⁻¹D_c)
+  //   mean rows:  (L⁻¹ν_a)·(L⁻¹ν_c) = ν_a' Σ⁻¹ ν_c
+  //
+  // so I_b = Y_bᵀ Y_b with no residual scaling. That replaces an
+  // n_free × n_blocks array of p×p matrices — of which all but one block per
+  // parameter is identically zero in a multi-group model — with one
+  // q_b × n_free whitened Jacobian per block, built and discarded in turn,
+  // and turns the n_free²·n_blocks·p² hand-rolled elementwise trace reduction
+  // into one BLAS-3 syrk per block.
+  std::vector<Eigen::MatrixXd> info_blocks;
+  info_blocks.reserve(n_blocks);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = p_dim[b];
+    // Symmetrize: Λ(I−B)⁻¹Ψ(I−B)⁻ᵀΛᵀ is mathematically symmetric, but
+    // float non-associativity in the chained products introduces O(1e-14)
+    // asymmetric noise that can flip a near-zero eigenvalue negative on
+    // saturated models. Averaging upper/lower triangles restores the
+    // symmetric part exactly without affecting well-conditioned cases.
+    const Eigen::MatrixXd Sigma_b =
+        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
+    auto W = estimate::gmm::BlockWeight::normal_theory(
+        Sigma_b, has_means, FitError::Kind::NonPositiveDefiniteSigma,
+        "information_expected: block " + std::to_string(b));
+    if (!W.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "implied Σ for block " + std::to_string(b) +
+              " is not positive definite at θ̂"));
     }
-  }
 
-  // Mean-structure precompute: η_{k,b} = Σ_b⁻¹ · ν_{k,b}, where
-  // ν_{k,b} is the block-b segment of Jmu's column k.
-  std::vector<Eigen::Index> mu_off(n_blocks, 0);
-  std::vector<std::vector<Eigen::VectorXd>> eta;
-  if (has_means) {
-    Eigen::Index running_p = 0;
-    for (std::size_t b = 0; b < n_blocks; ++b) {
-      mu_off[b] = running_p;
-      running_p += p_dim[b];
+    const Eigen::Index nf  = static_cast<Eigen::Index>(n_free);
+    const Eigen::Index pst = vech_len(p);
+    Eigen::MatrixXd Z((has_means ? p : 0) + pst, nf);
+    if (has_means) {
+      Z.topRows(p)    = Jmu.middleRows(mu_off[b], p);
+      Z.bottomRows(pst) = J.middleRows(vech_off[b], pst);
+    } else {
+      Z = J.middleRows(vech_off[b], pst);
     }
-    eta.assign(n_free, std::vector<Eigen::VectorXd>(n_blocks));
-    for (std::size_t k = 0; k < n_free; ++k) {
-      for (std::size_t b = 0; b < n_blocks; ++b) {
-        const Eigen::VectorXd nu_kb = Jmu.col(static_cast<Eigen::Index>(k))
-            .segment(mu_off[b], p_dim[b]);
-        eta[k][b].noalias() = SigmaInv[b] * nu_kb;
-      }
-    }
-  }
 
-  // Pairwise traces. trace(T_a · T_b) = Σ_{i,j} T_a(j,i) · T_b(i,j)
-  //                                   = (T_a.transpose().array() * T_b.array()).sum()
-  // Mean-structure term: ν_a' η_b carries a factor of 2 inside the (n/2) scale.
-  std::vector<Eigen::MatrixXd> info_blocks(
-      n_blocks, Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(n_free),
-                                      static_cast<Eigen::Index>(n_free)));
-  for (std::size_t a = 0; a < n_free; ++a) {
-    for (std::size_t b = a; b < n_free; ++b) {
-      for (std::size_t blk = 0; blk < n_blocks; ++blk) {
-        double per_block = (T[a][blk].transpose().array() * T[b][blk].array()).sum();
-        if (has_means) {
-          const Eigen::VectorXd nu_a = Jmu.col(static_cast<Eigen::Index>(a))
-              .segment(mu_off[blk], p_dim[blk]);
-          per_block += 2.0 * nu_a.dot(eta[b][blk]);
-        }
-        const double value = 0.5 * per_block;
-        info_blocks[blk](static_cast<Eigen::Index>(a),
-                         static_cast<Eigen::Index>(b)) = value;
-        if (a != b) {
-          info_blocks[blk](static_cast<Eigen::Index>(b),
-                           static_cast<Eigen::Index>(a)) = value;
-        }
-      }
-    }
+    const Eigen::MatrixXd Y  = W->t_apply(1.0, Z);
+    Eigen::MatrixXd       I_b = Eigen::MatrixXd::Zero(nf, nf);
+    I_b.selfadjointView<Eigen::Lower>().rankUpdate(Y.transpose());
+    // Not self-aliasing despite appearances: the destination is the *strict*
+    // upper triangle and every source element read is `I_b(c, r)` with c > r,
+    // i.e. strictly lower, which this assignment never writes.
+    I_b.triangularView<Eigen::StrictlyUpper>() = I_b.transpose();
+    info_blocks.push_back(std::move(I_b));
   }
   return info_blocks;
 }

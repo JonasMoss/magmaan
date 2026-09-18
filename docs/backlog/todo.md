@@ -229,6 +229,220 @@ element-wise parity of the fitted parameter vector against the pre-fix run;
 `talks/oslo-psychometric-gathering-2026/tools/benchmark_ordinal_whitening.R`
 does the before/after and prints the fitted-exponent pair.
 
+### Continuous moment-quadratic whitening is dense where a structured weight would do — IN PROGRESS
+
+The continuous analog of the ordinal whitening fix above, discovered while
+scoping estimator-API stabilization. The ordinal path got `WhitenFactor`
+(Identity/Diagonal/Dense); the continuous path
+(`gmm::Weight` -> `src/estimate/gmm/moment_quadratic.cpp`) never did, and
+neither path had the Kronecker case that GLS needs.
+
+`gmm::Weight` was `std::vector<Eigen::MatrixXd>` with empty as the ULS
+sentinel, so `weighted_jacobian` reached a dense `factors[b].transpose() * Jb`
+GEMM — O(q²·n_free) per iteration with q = p + p(p+1)/2 — for ULS, GLS,
+continuous DWLS and WLS alike, plus a one-off O(q³) Cholesky and q² doubles per
+block.
+
+**New:** `include/magmaan/estimate/gmm/weight.hpp` defines `gmm::BlockWeight`
+with four kinds — Identity / Diagonal / Dense / **NormalTheory**. NormalTheory
+stores `chol(A)` (p×p) and represents
+`W = blockdiag(A⁻¹, ½·Dᵀ(A⁻¹ ⊗ A⁻¹)D)` without materializing q×q; A = S gives
+GLS, A = Σ(θ_k) gives the Fisher/IRLS reweight. Validated to machine precision
+against the dense `normal_theory_weight` reference (quadratic form ~1e-16,
+`to_dense()` ~1e-17) for p ∈ {2,3,5,8} × means on/off.
+
+**The per-iteration win is mostly *not* in the LS shape.** Whitening a q×n_free
+Jacobian, n_free = 2p:
+
+| p | q | dense µs/it | NT µs/it | speedup | dense MB | NT MB |
+|---|---|---|---|---|---|---|
+| 10 | 65 | 4.7 | 10.1 | **0.5x** | 0.03 | 0.0008 |
+| 20 | 230 | 72 | 73 | 1.0x | 0.40 | 0.003 |
+| 30 | 495 | 489 | 286 | 1.7x | 1.87 | 0.007 |
+| 45 | 1080 | 3531 | 1050 | 3.4x | 8.90 | 0.015 |
+| 60 | 1890 | 15302 | 2336 | 6.6x | 27.25 | 0.028 |
+
+The asymptotic factor-of-p is real but constants dominate: dense whitening is
+one BLAS-3 GEMM, the NT apply is per-column triangular solves with vech packing
+(BLAS-2, poor locality), and below p≈20 it is a net loss. Memory is a clean
+~1000x and the O(q³) setup Cholesky disappears.
+
+**The real win is the scalar shape.** `optim::scalarize`
+(`src/optim/optimizers.cpp:53`) computes `grad = Jᵀr`, and — as the ordinal
+entry above already notes — *always* needs the gradient. `fit_gls` defaults to
+`Backend::NloptLbfgs`, a scalar optimizer, so GLS builds a full q×n_free
+whitened Jacobian every iteration purely to collapse it to a q-vector. The
+trace form never forms it:
+
+```
+f      = ½·tr(A⁻¹DA⁻¹D)                 one O(p³)
+grad_k = <G, ∂Σ/∂θ_k>,  G = A⁻¹DA⁻¹     O(p³) once, then O(p²) per parameter
+```
+
+O(p³ + p²·n_free) against the current O(p⁴·n_free) — ~650k flops at p=60
+against the 15 ms measured above.
+
+**Scalar trace path landed.** `gmm::normal_theory_objective` (declared in
+`estimate/gmm/moment_quadratic.hpp`) is the scalar (F, ∇F) GLS objective via
+the trace identity, and `fit_gls` routes every scalar-shaped backend through it
+plus `compose_scalar_ml` — structurally identical to `fit_ml`. `Backend::Ceres`
+/ `CeresBfgs` / `PortNls` genuinely drive the residual-and-Jacobian form (see
+`run_gmm`), so they keep the dense route.
+
+Measured on the `opt` preset, single-group CFA with 8 indicators per factor,
+N=500, optimizer held fixed at `NloptLbfgs` — "old" is the dense NT weight
+through `fit_gmm`, which is exactly what `fit_gls` used to do:
+
+| p | q | n_free | dense µs/eval | trace µs/eval | | old ms | new ms | | max abs dtheta |
+|---|---|---|---|---|---|---|---|---|---|
+| 16 | 136 | 33 | 32.2 | 3.7 | 8.7x | 1.7 | 0.2 | 10.2x | 2.2e-16 |
+| 24 | 300 | 51 | 195.6 | 9.6 | 20.3x | 12.5 | 0.7 | 17.8x | 2.8e-15 |
+| 32 | 528 | 70 | 743.9 | 20.3 | 36.6x | 57.6 | 1.9 | 30.7x | 5.1e-14 |
+| 40 | 820 | 90 | 2390.7 | 41.5 | 57.6x | 277.9 | 5.0 | 55.5x | 3.6e-13 |
+| 48 | 1176 | 111 | 6267.0 | 72.4 | **86.5x** | 584.8 | 9.0 | **64.9x** | 7.1e-13 |
+
+Empirical complexity exponent in p went 4.80 -> 2.71, matching the predicted
+O(p⁴·n_free) -> O(p³ + p²·n_free) with n_free ∝ p. `|Δfmin| ≤ 1.1e-16` and
+θ̂ agrees to 7e-13 at p=48 (accumulated along the optimizer path, not a
+per-evaluation difference — F and ∇F agree to 1e-11/1e-9 by
+`tests/unit/gls_scalar_objective_test.cpp`).
+
+**Structured weight type landed.** `gmm::Weight` is now
+`std::vector<BlockWeight>` rather than `std::vector<Eigen::MatrixXd>`, so each
+block carries its own whitening form and `residuals`' factoring loop is pure
+shape validation. Producers declare what they built: `normal_theory_weight`
+and `expected_information_weight` emit NormalTheory (p×p `chol`),
+`empirical_dwls_weight_from_rows` emits Diagonal (it was already building
+`Zero(n,n)` with only `(k,k)` written), and `fit_gls_pairwise` / `dls_weight` /
+`structured_gamma_weight` stay Dense because they genuinely are.
+
+`fit_ml_irls` was the big beneficiary, since it rebuilds
+`expected_information_weight` every outer iteration and re-entered `residuals`
+for a fresh O(q³) Cholesky each time. Same `opt` setup as the GLS table above:
+
+| p | n_free | before ms | after ms | | fmin before/after |
+|---|---|---|---|---|---|
+| 16 | 33 | 31.2 | 12.4 | 2.5x | 2.809e-02 both |
+| 24 | 51 | 223.5 | 37.3 | 6.0x | 7.367e-02 both |
+| 32 | 70 | 992.3 | 134.8 | 7.4x | 1.399e-01 both |
+| 40 | 90 | 3692.2 | 399.1 | 9.2x | 2.199e-01 both |
+| 48 | 111 | 11959.4 | 953.2 | **12.5x** | 3.133e-01 both |
+
+`fmin` is identical to every printed digit at every p, so convergence is
+unchanged; this is purely per-outer-iteration cost. The advertised fast Fisher
+path is no longer the most expensive thing here.
+
+Also fixed while materializing: the old `symmetric_vech_gls_weight` computed
+`(A1 * E2).trace()` per vech pair — a full O(p³) GEMM against a matrix with two
+nonzeros, so O(p⁷) overall. `BlockWeight::to_dense()` derives the same entries
+in closed form from `tr(A E1 A E2) = Σ_{T1×T2} A_bc·A_da`, O(1) per entry and
+O(p⁴) overall.
+
+Remaining:
+
+- ~~**Structured Stage-2 weights.**~~ **Done.** The
+  `data::gamma_nt(Σ)⁻¹ == ½·Dᵀ(Σ⁻¹ ⊗ Σ⁻¹)D` equivalence is pinned (<1e-9
+  relative, p ∈ {2,3,4,5,6,8,10}) in `gls_scalar_objective_test.cpp`, so
+  `two_stage_stage2_weight_structured` now emits `Uls` → Identity, `Nt` →
+  NormalTheory (skipping an O(p⁴) Γ_NT build plus an O(p⁶) inverse in favour of
+  a p×p Cholesky), `Dwls` → Diagonal. `Adf` and `Dls` stay Dense because they
+  genuinely are.
+- ~~**Share the p×p factor.**~~ **Retired as a performance item; the real defect
+  it was circling is fixed.** The item read: `½Dᵀ(A⁻¹⊗A⁻¹)D` is built
+  independently by the GLS weight (A=S), the IRLS reweight (A=Σ(θ_k)),
+  `inference::expected_information` (A=Σ(θ̂)), and the NT Γ behind SB
+  corrections, and ML already factors Σ(θ) every iteration and discards it.
+
+  That was written when a `gmm::Weight` block was a dense q×q, so sharing meant
+  sharing an **O(q³)** Cholesky. After the structured-weight work a NormalTheory
+  block stores `chol(A)` only, so the shareable quantity is a **p×p** Cholesky,
+  and the premise dissolved. Measured ceiling — the largest speedup *any* sharing
+  scheme could deliver, `(outer iterations × chol cost) / total IRLS fit time`,
+  `benchmarks/nt_factor_share_bench.cpp` on `opt`:
+
+  | p | n_free | chol ms | outer | fit ms | sharing ceiling |
+  |---|---|---|---|---|---|
+  | 6 | 12 | 0.0002 | 4 | 0.34 | 0.229% |
+  | 12 | 24 | 0.0006 | 5 | 2.86 | 0.100% |
+  | 24 | 48 | 0.0007 | 5 | 23.9 | 0.016% |
+  | 48 | 96 | 0.0041 | 6 | 411.9 | **0.006%** |
+
+  The ceiling *falls* with p, because the inner solve grows faster than the
+  factorization. Do not build plumbing to share it.
+
+  What the item was right about is that these sites each **hand-roll** the same
+  bilinear form — the normal-theory inner product `⟨X,Y⟩_A = ½·tr(A⁻¹XA⁻¹Y)` —
+  and one of them paid badly for it. `information_expected_per_case_blocks`
+  materialized `T[k][b] = Σ_b⁻¹·unvech(J[:,k])` for every free parameter and
+  every block, all live at once, then reduced each parameter pair with an
+  elementwise trace across every block. In a multi-group model a parameter
+  usually touches one group, so most of that array is explicitly-stored p×p
+  zeros that the pair loop then contracts against anyway.
+
+  Both terms of the expected information are that same form, which the
+  NormalTheory `BlockWeight` already whitens by, so with `Y_b = Fᵀ[dμ/dθ ;
+  dvech(Σ)/dθ]_b` the block is exactly `I_b = Y_bᵀ Y_b` — no residual scaling.
+  One q_b × n_free whitened Jacobian per block, built and discarded in turn, and
+  one BLAS-3 syrk instead of the n_free²·n_blocks·p² reduction.
+  `benchmarks/expected_info_bench.cpp` (`opt`, reference implementation carried
+  locally in the benchmark so the comparison needs no old checkout):
+
+  | p | groups | n_free | before ms | after ms | | T array MB | Y MB |
+  |---|---|---|---|---|---|---|---|
+  | 6 | 1 | 12 | 0.008 | 0.009 | 0.85x | 0.00 | 0.00 |
+  | 12 | 1 | 24 | 0.051 | 0.044 | 1.18x | 0.03 | 0.01 |
+  | 24 | 1 | 48 | 0.59 | 0.22 | 2.71x | 0.21 | 0.11 |
+  | 48 | 1 | 96 | 5.19 | 1.81 | 2.87x | 1.69 | 0.86 |
+  | 6 | 4 | 48 | 0.102 | 0.057 | 1.80x | 0.05 | 0.01 |
+  | 12 | 4 | 96 | 0.98 | 0.35 | 2.80x | 0.42 | 0.06 |
+  | 24 | 4 | 192 | 20.8 | 3.72 | 5.59x | 3.38 | 0.44 |
+  | 48 | 4 | 384 | 513.9 | 35.7 | **14.4x** | **27.0** | **3.45** |
+
+  Both the speedup and the memory ratio grow with group count, which is the
+  signature of the stored zeros. Single-group p=6 is 0.85x — the whitening setup
+  costs more than the tiny T array there — but that is 9 µs against 8 µs, and
+  the crossover is already passed by p=12. Not worth a size-switch.
+
+  Both benchmarks run on `benchmarks/timing/timing.hpp` rather than a private
+  timing loop, so the old/new arms are a rotated paired comparison and survive
+  DCE at `-O3 -march=native`. One trap worth knowing about that harness:
+  `StageStats::checksum` is the sum over the *calibrated batch*, and two arms
+  calibrate to different batch sizes, so the cross-arm checksum tripwire only
+  works after dividing by `StageStats::batch`. Raw checksums differ by the batch
+  ratio, which looks like a correctness failure and is not. `expected_info_covariance_only` (the FCSEM
+  path) carried the identical pattern and got the same treatment. The identity
+  is pinned against an independent explicit-trace reference over 1–4 groups,
+  with and without mean structure, in
+  `tests/unit/expected_info_whitened_test.cpp`.
+
+  Fallout worth recording: this moved the information matrix by ~1e-16, which
+  broke `score_robust_test.cpp`'s `mean_variance_relative_shift == 0.0`. That
+  assertion was knife-edge, not a real invariant — sweeping the data seed over
+  {1..7, 20260712} against the **pre-existing** implementation gives an exactly
+  zero shift for four seeds and 1.8e-16 – 2.7e-16 for the other four, and the
+  test's seed simply landed on a bit-exact one. The shift is insensitive to the
+  flip seed, confirming a fixed arithmetic-path difference rather than
+  resampling noise. The assertion now tests the property (V_flip agrees with
+  V_identity) at 1e-12 rather than pinning the arithmetic path.
+- **Continuous DWLS still arrives Dense from the R boundary.**
+  `prepared_weight_impl` hands `prepare_weight(method = "DWLS")` across as a
+  bare matrix, so it becomes a Dense block even though it is diagonal. Wants
+  the R glue to pass the diagonal through (and `r-package/src/prepared.hpp`
+  retyped) before the DWLS fit path sees the ~q = p²/2 whitening win. Not done
+  this pass because `r-package/` had unrelated in-flight edits.
+- **Converge `detail::WhitenFactor` and `gmm::BlockWeight`.** Deliberately left
+  separate: `WhitenFactor` represents the factor F and `BlockWeight` the weight
+  W, so the same-named `diagonal()` factory means `diag(F)` in one and
+  `diag(W)` in the other. Converging them while also changing the continuous
+  hot path would destabilize 53 working `ordinal.cpp` sites for no immediate
+  gain.
+- Batched-`trsm` LS-shape optimization: see
+  [speculative.md](speculative.md).
+
+Gated on `ctest` staying at 1138/1140 (the 2 failures are a pre-existing
+`corpus/textbook-corpus/cases/newsom_2015` checkout gap, identical with the
+changes stashed) plus element-wise θ̂ parity, as the ordinal fix did.
+
 ### Other estimation and inference follow-ups
 
 Small open items surfaced while fixing the standardized-solution and Kline/Guo

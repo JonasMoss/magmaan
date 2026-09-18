@@ -1589,9 +1589,22 @@ TEST_CASE("frontier score flips: affine ML pair is deterministic and standardize
   CHECK(a->min_variance_eigenvalue > 0.0);
   CHECK(a->max_variance_condition >= 1.0);
   CHECK(a->mean_variance_relative_shift >= 0.0);
-  CHECK(a->max_variance_relative_shift >= a->mean_variance_relative_shift);
-  CHECK(a->mean_variance_relative_shift == 0.0);
-  CHECK(a->max_variance_relative_shift == 0.0);
+  // The property: for the affine ML pair the flip variance does not depend on
+  // the flips, so V_flip and V_identity agree. They are computed by different
+  // arithmetic sequences, so they agree to rounding, not bit-exactly — asserting
+  // `== 0.0` pins the arithmetic path rather than the invariant. Sweeping the
+  // data seed over {1..7, 20260712} against the *pre-existing* implementation
+  // gives a relative shift of 0 for four seeds and 1.8e-16 – 2.7e-16 for the
+  // other four; this test's seed merely landed on a bit-exact one. The shift is
+  // completely insensitive to the flip seed, confirming it is a fixed
+  // arithmetic difference and not resampling noise.
+  constexpr double kShiftTol = 1e-12;
+  CHECK(a->mean_variance_relative_shift < kShiftTol);
+  CHECK(a->max_variance_relative_shift < kShiftTol);
+  // Same reason `max >= mean` is not exact here: with every resample producing
+  // the identical shift, `sum / n` can round to just above that common value.
+  CHECK(a->max_variance_relative_shift >=
+        a->mean_variance_relative_shift - kShiftTol);
   CHECK(a->setup_seconds >= 0.0);
   CHECK(a->resampling_score_seconds >= 0.0);
   CHECK(a->resampling_standardization_seconds >= 0.0);

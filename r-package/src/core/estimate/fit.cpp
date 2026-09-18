@@ -2150,6 +2150,27 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         Bounds bounds, Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gls");
   if (!pre.has_value()) return std::unexpected(pre.error());
+
+  // Ceres / CeresBfgs / PortNls drive the residual-and-Jacobian form directly
+  // (see `run_gmm`), so they need the materialized weight. Every other backend
+  // is scalar-shaped — `run_gmm` would immediately `optim::scalarize` the
+  // problem it just built — so it takes the trace identity instead, which
+  // never forms the q×q weight, its O(q³) Cholesky, or the q×n_free whitened
+  // Jacobian. Same F and ∇F either way; see
+  // tests/unit/gls_scalar_objective_test.cpp.
+  if (backend != Backend::Ceres && backend != Backend::CeresBfgs &&
+      backend != Backend::PortNls) {
+    auto obj_or = gmm::normal_theory_objective(pre->ev, samp, x0);
+    if (!obj_or.has_value()) return std::unexpected(obj_or.error());
+    const optim::ScalarProblem prob = std::move(*obj_or);
+    auto est = compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
+                                 opts, "fit_gls");
+    if (!est.has_value()) return est;
+    attach_diagnostics(*est, pt, *pre, bounds);
+    attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+    return est;
+  }
+
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
   if (!W.has_value()) return std::unexpected(W.error());
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds,
@@ -2235,7 +2256,13 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
       off = p;
     }
     Wb.block(off, off, pstar, pstar) = Wsigma;
-    W.push_back(std::move(Wb));
+    // Genuinely dense: the Hadamard `Ω ∘` in Γ_NT^pw breaks the Kronecker
+    // structure, which is exactly why this path exists separately from
+    // `fit_gls`.
+    auto bw = gmm::BlockWeight::dense(Wb, FitError::Kind::NumericIssue,
+        "fit_gls_pairwise: block " + std::to_string(b));
+    if (!bw.has_value()) return std::unexpected(bw.error());
+    W.push_back(std::move(*bw));
   }
 
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, W, bounds,
@@ -2311,7 +2338,7 @@ fiml::frontier::fit_ml2s_psd(
     return estimate::frontier::fit_ml_psd(
         std::move(pt), rep, sample, x0, backend, opts, psd_opts);
   }
-  auto weight_or = fiml::two_stage_stage2_weight_blocks(stage1, weight, dls);
+  auto weight_or = fiml::two_stage_stage2_weight_structured(stage1, weight, dls);
   if (!weight_or.has_value()) {
     return std::unexpected(post_to_fit(weight_or.error()));
   }
