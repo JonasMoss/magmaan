@@ -1158,6 +1158,33 @@ TEST_CASE("api score components reject a different ML sample") {
   CHECK_FALSE(magmaan::api::frontier::score_components(*fit, raw).has_value());
 }
 
+// Ordinal-vs-continuous is a property of the estimator spec, not something
+// inferred from whether a continuous weight happens to be empty. The old
+// predicate read `kind == DWLS || (kind == WLS && weight.empty())`, which is
+// what forced `ordinal_wls()` to masquerade as `kind = WLS` and made an empty
+// weight mean two incompatible things (identity in the moment-quadratic core,
+// "this is ordinal" here).
+TEST_CASE("api: ordinal moments are declared by the spec, not read off the weight") {
+  namespace api = magmaan::api;
+
+  CHECK(api::ordinal_dwls().ordinal_moments);
+  CHECK(api::ordinal_wls().ordinal_moments);
+  CHECK(api::dwls().ordinal_moments);
+
+  CHECK_FALSE(api::ml().ordinal_moments);
+  CHECK_FALSE(api::uls().ordinal_moments);
+  CHECK_FALSE(api::gls().ordinal_moments);
+  CHECK_FALSE(api::fiml().ordinal_moments);
+  CHECK_FALSE(api::twolevel_ml().ordinal_moments);
+  CHECK_FALSE(api::wls(magmaan::estimate::gmm::Weight{}).ordinal_moments);
+
+  // The decoupling proper: a continuous ULS spec and an ordinal WLS spec both
+  // carry an empty `weight`, so weight emptiness cannot distinguish them.
+  CHECK(api::uls().weight.empty());
+  CHECK(api::ordinal_wls().weight.empty());
+  CHECK(api::uls().ordinal_moments != api::ordinal_wls().ordinal_moments);
+}
+
 #undef REQUIRE_OK
 #undef REQUIRE_OK_OR
 #undef MAGMAAN_REQUIRE_OK_IMPL

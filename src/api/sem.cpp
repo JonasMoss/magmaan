@@ -128,8 +128,7 @@ bool is_continuous_ls(EstimatorKind kind) noexcept {
 }
 
 bool is_ordinal_estimator(const EstimatorSpec &spec) noexcept {
-  return spec.kind == EstimatorKind::DWLS ||
-         (spec.kind == EstimatorKind::WLS && spec.weight.empty());
+  return spec.ordinal_moments;
 }
 
 Result<estimate::gmm::Weight> ls_weight_for_fit(const Fit &fit) {
@@ -635,6 +634,7 @@ EstimatorSpec ordinal_dwls() {
   EstimatorSpec out;
   out.kind = EstimatorKind::DWLS;
   out.ordinal_weight = estimate::OrdinalWeightKind::DWLS;
+  out.ordinal_moments = true;
   return out;
 }
 
@@ -642,6 +642,7 @@ EstimatorSpec ordinal_wls() {
   EstimatorSpec out;
   out.kind = EstimatorKind::WLS;
   out.ordinal_weight = estimate::OrdinalWeightKind::WLS;
+  out.ordinal_moments = true;
   return out;
 }
 

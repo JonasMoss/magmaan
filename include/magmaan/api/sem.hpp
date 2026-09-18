@@ -267,6 +267,20 @@ struct EstimatorSpec {
       estimate::OrdinalWeightKind::DWLS;
   estimate::OrdinalParameterization ordinal_parameterization =
       estimate::OrdinalParameterization::Delta;
+  // Whether this spec estimates from *ordinal* moments (polychoric/polyserial)
+  // rather than continuous ones. Set by the `ordinal_*` factories.
+  //
+  // This used to be inferred as `kind == DWLS || (kind == WLS &&
+  // weight.empty())` — i.e. the data kind was read off the weight, which is
+  // why `ordinal_wls()` has to set `kind = WLS` and `dwls()` is an alias of
+  // `ordinal_dwls()`. Now that `gmm::Weight` carries its own structure, an
+  // empty weight means only "no explicit continuous weight supplied"; it says
+  // nothing about whether the moments are ordinal.
+  //
+  // This is the seed of the `moments` axis (complete / ordinal / EM-saturated
+  // / pairwise / raw) in the estimator-API decomposition; see
+  // docs/backlog/todo.md.
+  bool ordinal_moments = false;
 
   EstimatorSpec optimizer(OptimizerSpec optimizer) const;
   EstimatorSpec starts(StartSpec start) const;
