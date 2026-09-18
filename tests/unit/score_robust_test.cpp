@@ -525,7 +525,9 @@ TEST_CASE("frontier robust LS MI: DWLS raw path scales; sandwich matches primiti
   REQUIRE(G.has_value());
   Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
   for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
-  magmaan::estimate::gmm::Weight weight{W_dwls};
+  magmaan::estimate::gmm::Weight weight{
+      magmaan::estimate::gmm::BlockWeight::dense(
+          W_dwls, magmaan::FitError::Kind::NumericIssue, "W_dwls").value()};
 
   auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
   REQUIRE(est.has_value());
@@ -589,7 +591,9 @@ TEST_CASE("estimated-weight sandwich_ij: Fixed mode reduces to the fixed-weight 
   REQUIRE(G.has_value());
   Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
   for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
-  magmaan::estimate::gmm::Weight weight{W_dwls};
+  magmaan::estimate::gmm::Weight weight{
+      magmaan::estimate::gmm::BlockWeight::dense(
+          W_dwls, magmaan::FitError::Kind::NumericIssue, "W_dwls").value()};
   auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
   REQUIRE(est.has_value());
 
@@ -621,7 +625,9 @@ TEST_CASE("frontier robust LS MI: estimated-weight DWLS meat shifts the scaling"
   REQUIRE(G.has_value());
   Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
   for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
-  magmaan::estimate::gmm::Weight weight{W_dwls};
+  magmaan::estimate::gmm::Weight weight{
+      magmaan::estimate::gmm::BlockWeight::dense(
+          W_dwls, magmaan::FitError::Kind::NumericIssue, "W_dwls").value()};
   auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
   REQUIRE(est.has_value());
 

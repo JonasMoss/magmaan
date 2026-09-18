@@ -2026,7 +2026,7 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
         doctest::Approx(ml2s_obs->trace_ugamma /
                          static_cast<double>(ml2s_obs->df)));
 
-  auto w_adf = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+  auto w_adf = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
       *sm, magmaan::estimate::fiml::TwoStageWeight::Adf);
   REQUIRE(w_adf.has_value());
   auto est_adf = magmaan::test::fit_gmm(
@@ -2081,7 +2081,7 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
   CHECK((ml2s_adf_ij->eigvals - ml2s_adf_obs->eigvals).cwiseAbs().maxCoeff() <
         1e-10);
 
-  auto w_dwls = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+  auto w_dwls = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
       *sm, magmaan::estimate::fiml::TwoStageWeight::Dwls);
   REQUIRE(w_dwls.has_value());
   auto est_dwls = magmaan::test::fit_gmm(
@@ -2106,7 +2106,7 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
   CHECK((ml2s_dwls_ij->se - rr_dwls_ij->se).cwiseAbs().maxCoeff() < 1e-10);
 
   const magmaan::estimate::fiml::TwoStageDlsOptions dls_opts{0.35};
-  auto w_dls = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+  auto w_dls = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
       *sm, magmaan::estimate::fiml::TwoStageWeight::Dls, dls_opts);
   REQUIRE(w_dls.has_value());
   auto est_dls = magmaan::test::fit_gmm(
@@ -2160,7 +2160,7 @@ TEST_CASE("two_stage_em_ml_inference: missing-data non-NT observed bread uses "
   const auto check_kind =
       [&](magmaan::estimate::fiml::TwoStageWeight kind,
           magmaan::estimate::fiml::TwoStageDlsOptions dls) {
-        auto w = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+        auto w = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
             *sm, kind, dls);
         REQUIRE(w.has_value());
         auto est = magmaan::test::fit_gmm(
@@ -2294,7 +2294,7 @@ TEST_CASE("two_stage_casewise_influence_ij Gram reproduces the ML2S IJ vcov") {
   // Missing-data DWLS Stage-2: the complete-sandwich IJ carries a live
   // data-dependent-weight correction.
   const auto kind = magmaan::estimate::fiml::TwoStageWeight::Dwls;
-  auto w = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(*sm, kind, {});
+  auto w = magmaan::estimate::fiml::two_stage_stage2_weight_structured(*sm, kind, {});
   REQUIRE(w.has_value());
   auto est = magmaan::test::fit_gmm(
       *built.pt, *built.rep, samp, *w, {},
@@ -2933,13 +2933,13 @@ TEST_CASE("pattern NTML reduces exactly to ordinary NTML on complete data") {
   CHECK(*at_saturated == doctest::Approx(target->saturated_value).epsilon(1e-13));
 
   auto Wp = mff::pattern_ntml_information_blocks(*target, *stage1);
-  auto Wnt = mf::two_stage_stage2_weight_blocks(
+  auto Wnt = mf::two_stage_stage2_weight_structured(
       *stage1, mf::TwoStageWeight::Nt);
   REQUIRE(Wp.has_value());
   REQUIRE(Wnt.has_value());
   REQUIRE(Wp->size() == Wnt->size());
   for (std::size_t b = 0; b < Wp->size(); ++b) {
-    CHECK(((*Wp)[b] - (*Wnt)[b]).cwiseAbs().maxCoeff() < 1e-10);
+    CHECK(((*Wp)[b] - (*Wnt)[b].to_dense()).cwiseAbs().maxCoeff() < 1e-10);
   }
 
   magmaan::data::SampleStats samp;
@@ -3018,12 +3018,12 @@ TEST_CASE("pattern NTML analytic gradient and local information hold under MCAR"
   CHECK((vg->gradient - gfd).cwiseAbs().maxCoeff() < 2e-5);
 
   auto Wp = mff::pattern_ntml_information_blocks(*target, *stage1);
-  auto Wnt = mf::two_stage_stage2_weight_blocks(
+  auto Wnt = mf::two_stage_stage2_weight_structured(
       *stage1, mf::TwoStageWeight::Nt);
   REQUIRE(Wp.has_value());
   REQUIRE(Wnt.has_value());
   REQUIRE(Wp->size() == 1);
-  CHECK(((*Wp)[0] - (*Wnt)[0]).cwiseAbs().maxCoeff() > 1e-4);
+  CHECK(((*Wp)[0] - (*Wnt)[0].to_dense()).cwiseAbs().maxCoeff() > 1e-4);
 
   magmaan::optim::OptimOptions opts;
   opts.max_iter = 800;
@@ -3095,7 +3095,7 @@ TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT 
 
   // (1) The NT weight through the explicit-weight robust sandwich, at the SAME
   //     estimate, reproduces the NT-path UΓ spectrum (identical U, Γ, Δ).
-  auto w_nt = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Nt);
+  auto w_nt = mf::two_stage_stage2_weight_structured(*sm, mf::TwoStageWeight::Nt);
   REQUIRE(w_nt.has_value());
   auto rr_nt = magmaan::estimate::robust_continuous_ls(
       *built.pt, *built.rep, samp, *est, *w_nt, gamma);
@@ -3111,10 +3111,11 @@ TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT 
   CHECK(std::abs(rr_nt->satorra_bentler.scale_c - nt->scaling_factor) < 1e-7);
 
   // (2) ULS is the unweighted EM-moment quadratic.
-  auto w_uls = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Uls);
+  auto w_uls = mf::two_stage_stage2_weight_structured(*sm, mf::TwoStageWeight::Uls);
   REQUIRE(w_uls.has_value());
   for (const auto& W : *w_uls) {
-    CHECK(W.isApprox(Eigen::MatrixXd::Identity(W.rows(), W.cols()), 1e-12));
+    CHECK(W.to_dense().isApprox(
+        Eigen::MatrixXd::Identity(W.rows(), W.cols()), 1e-12));
   }
   auto rr_uls = magmaan::estimate::robust_continuous_ls(
       *built.pt, *built.rep, samp, *est, *w_uls, gamma);
@@ -3126,7 +3127,7 @@ TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT 
 
   // (3) ADF (W = Γ_FIML⁻¹): UΓ is a projector, so every eigenvalue is 1 and the
   //     robust scaling collapses to c = 1 — independent of the estimate.
-  auto w_adf = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Adf);
+  auto w_adf = mf::two_stage_stage2_weight_structured(*sm, mf::TwoStageWeight::Adf);
   REQUIRE(w_adf.has_value());
   auto rr_adf = magmaan::estimate::robust_continuous_ls(
       *built.pt, *built.rep, samp, *est, *w_adf, gamma);
@@ -3135,17 +3136,17 @@ TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT 
   CHECK(std::abs(rr_adf->satorra_bentler.scale_c - 1.0) < 1e-6);
 
   // (4) DLS endpoints: a = 0 recovers the NT weight, a = 1 recovers ADF.
-  auto w_dls0 = mf::two_stage_stage2_weight_blocks(
+  auto w_dls0 = mf::two_stage_stage2_weight_structured(
       *sm, mf::TwoStageWeight::Dls, {0.0});
-  auto w_dls1 = mf::two_stage_stage2_weight_blocks(
+  auto w_dls1 = mf::two_stage_stage2_weight_structured(
       *sm, mf::TwoStageWeight::Dls, {1.0});
   REQUIRE(w_dls0.has_value());
   REQUIRE(w_dls1.has_value());
   REQUIRE(w_dls0->size() == w_nt->size());
   REQUIRE(w_dls1->size() == w_adf->size());
   for (std::size_t bb = 0; bb < w_nt->size(); ++bb) {
-    CHECK(((*w_dls0)[bb] - (*w_nt)[bb]).cwiseAbs().maxCoeff() < 1e-7);
-    CHECK(((*w_dls1)[bb] - (*w_adf)[bb]).cwiseAbs().maxCoeff() < 1e-9);
+    CHECK(((*w_dls0)[bb].to_dense() - (*w_nt)[bb].to_dense()).cwiseAbs().maxCoeff() < 1e-7);
+    CHECK(((*w_dls1)[bb].to_dense() - (*w_adf)[bb].to_dense()).cwiseAbs().maxCoeff() < 1e-9);
   }
 }
 

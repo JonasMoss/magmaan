@@ -249,7 +249,9 @@ TEST_CASE("Mplus SEM continuous goldens match lavaan") {
               handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
               magmaan::estimate::Backend::NloptLbfgs, opt);
         } else if (estimator == "WLS") {
-          weight = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+          weight = magmaan::estimate::gmm::dense_weight(
+              matrices_from_blocks(fit["WLS.V"]),
+              magmaan::FitError::Kind::NumericIssue, "WLS.V").value();
           est_or = magmaan::test::fit_gmm(
               handles->pt, handles->rep, samp, weight,
               magmaan::estimate::Bounds{}, magmaan::estimate::Backend::NloptLbfgs,

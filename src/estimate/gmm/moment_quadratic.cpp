@@ -136,74 +136,6 @@ struct NtScalarCache {
   Layout                       layout;
 };
 
-// W_kl = tr(S⁻¹ E_k S⁻¹ E_l) for symmetric lower-vech basis matrices E_k —
-// the normal-theory GLS weight on the covariance moments.
-Eigen::MatrixXd symmetric_vech_gls_weight(const Eigen::MatrixXd& Sinv) {
-  const Eigen::Index p = Sinv.rows();
-  const Eigen::Index pstar = vech_len(p);
-  Eigen::MatrixXd W(pstar, pstar);
-  W.setZero();
-
-  for (Eigen::Index c1 = 0; c1 < p; ++c1) {
-    for (Eigen::Index r1 = c1; r1 < p; ++r1) {
-      const Eigen::Index k1 = vech_index(p, r1, c1);
-      Eigen::MatrixXd E1 = Eigen::MatrixXd::Zero(p, p);
-      E1(r1, c1) = 1.0;
-      E1(c1, r1) = 1.0;
-      const Eigen::MatrixXd A1 = Sinv * E1 * Sinv;
-
-      for (Eigen::Index c2 = 0; c2 < p; ++c2) {
-        for (Eigen::Index r2 = c2; r2 < p; ++r2) {
-          const Eigen::Index k2 = vech_index(p, r2, c2);
-          Eigen::MatrixXd E2 = Eigen::MatrixXd::Zero(p, p);
-          E2(r2, c2) = 1.0;
-          E2(c2, r2) = 1.0;
-          W(k1, k2) = (A1 * E2).trace();
-        }
-      }
-    }
-  }
-  return W;
-}
-
-// Lower-Cholesky factor L of W (W = L Lᵀ). Falls back to a clamped
-// eigendecomposition when W is only positive *semi*definite.
-fit_expected<Eigen::MatrixXd>
-llt_factor_for_weight(const Eigen::MatrixXd& W, FitError::Kind kind,
-                      const std::string& detail) {
-  if (W.rows() != W.cols()) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        detail + ": weight matrix is not square"));
-  }
-  if (!W.allFinite()) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        detail + ": weight matrix contains non-finite entries"));
-  }
-  if (!W.isApprox(W.transpose(), 1e-10)) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        detail + ": weight matrix is not symmetric"));
-  }
-  Eigen::LLT<Eigen::MatrixXd> llt(W);
-  if (llt.info() != Eigen::Success) {
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (W + W.transpose()));
-    if (es.info() != Eigen::Success) {
-      return std::unexpected(make_err(kind,
-          detail + ": weight matrix eigendecomposition failed"));
-    }
-    Eigen::VectorXd vals = es.eigenvalues();
-    const double tol = 1e-10 * std::max<double>(1.0, W.cwiseAbs().maxCoeff());
-    for (Eigen::Index i = 0; i < vals.size(); ++i) {
-      if (vals(i) < -tol) {
-        return std::unexpected(make_err(kind,
-            detail + ": weight matrix is not positive semidefinite"));
-      }
-      vals(i) = std::sqrt(std::max(0.0, vals(i)));
-    }
-    return es.eigenvectors() * vals.asDiagonal();
-  }
-  return Eigen::MatrixXd(llt.matrixL());
-}
-
 // Stacked moment delta for block b: [μ_b(θ) − m̄_b ; vech(Σ_b(θ) − S_b)].
 Eigen::VectorXd block_moment_delta(const SampleStats& s,
                                    const model::ImpliedMoments& m,
@@ -225,15 +157,17 @@ Eigen::VectorXd block_moment_delta(const SampleStats& s,
   return d;
 }
 
-// Whitened residual: per block, √(n_b/N) · Lᵀ·d. Empty `factors` ⇒ identity
-// whitening (the ULS fast path — no matmul).
+// Whitened residual: per block, √(n_b/N) · Fᵀ·d with F Fᵀ = W_b. Empty
+// `weight` ⇒ identity whitening (the ULS fast path — no matmul). Each
+// `BlockWeight` dispatches on its own structure, so Identity copies, Diagonal
+// scales rows, NormalTheory does two p×p triangular solves, and only Dense
+// reaches a GEMM.
 fit_expected<Eigen::VectorXd>
 weighted_residuals(const SampleStats& s, const model::ImpliedMoments& m,
-                   const Layout& layout,
-                   const std::vector<Eigen::MatrixXd>& factors) {
+                   const Layout& layout, const Weight& weight) {
   auto N = total_n_obs(s);
   if (!N.has_value()) return std::unexpected(N.error());
-  const bool identity = factors.empty();
+  const bool identity = weight.empty();
 
   Eigen::VectorXd r(layout.n_rows);
   Eigen::Index out_off = 0;
@@ -244,8 +178,7 @@ weighted_residuals(const SampleStats& s, const model::ImpliedMoments& m,
     if (identity) {
       r.segment(out_off, layout.block_rows[b]) = sw * d;
     } else {
-      r.segment(out_off, layout.block_rows[b]) =
-          sw * (factors[b].transpose() * d);
+      r.segment(out_off, layout.block_rows[b]) = weight[b].t_apply(sw, d);
     }
     out_off += layout.block_rows[b];
   }
@@ -256,15 +189,14 @@ weighted_residuals(const SampleStats& s, const model::ImpliedMoments& m,
   return r;
 }
 
-// Whitened residual Jacobian: per block, √(n_b/N) · Lᵀ·[J_μ ; J_σ].
+// Whitened residual Jacobian: per block, √(n_b/N) · Fᵀ·[J_μ ; J_σ].
 fit_expected<Eigen::MatrixXd>
 weighted_jacobian(const SampleStats& s, const model::ImpliedMoments& m,
                   const Eigen::MatrixXd& J_sigma, const Eigen::MatrixXd& J_mu,
-                  const Layout& layout,
-                  const std::vector<Eigen::MatrixXd>& factors) {
+                  const Layout& layout, const Weight& weight) {
   auto N = total_n_obs(s);
   if (!N.has_value()) return std::unexpected(N.error());
-  const bool identity = factors.empty();
+  const bool identity = weight.empty();
 
   if (J_sigma.rows() != layout.n_sigma_rows) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -312,7 +244,7 @@ weighted_jacobian(const SampleStats& s, const model::ImpliedMoments& m,
       Jr.block(out_off, 0, layout.block_rows[b], n_free) = sw * Jb;
     } else {
       Jr.block(out_off, 0, layout.block_rows[b], n_free) =
-          sw * (factors[b].transpose() * Jb);
+          weight[b].t_apply(sw, Jb);
     }
     out_off += layout.block_rows[b];
   }
@@ -320,6 +252,20 @@ weighted_jacobian(const SampleStats& s, const model::ImpliedMoments& m,
 }
 
 }  // namespace
+
+fit_expected<Weight> dense_weight(const std::vector<Eigen::MatrixXd>& blocks,
+                                  FitError::Kind err_kind,
+                                  const std::string& detail) {
+  Weight out;
+  out.reserve(blocks.size());
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    auto bw = BlockWeight::dense(blocks[b], err_kind,
+                                 detail + ": block " + std::to_string(b));
+    if (!bw.has_value()) return std::unexpected(bw.error());
+    out.push_back(std::move(*bw));
+  }
+  return out;
+}
 
 fit_expected<optim::GmmProblem>
 residuals(MomentEvaluationFn evaluate, Eigen::Index n_param,
@@ -335,8 +281,9 @@ residuals(MomentEvaluationFn evaluate, Eigen::Index n_param,
   }
   const Layout layout = make_layout(samp, eval0->moments);
 
-  // Factor the weight once. Empty ⇒ identity (no whitening at all).
-  std::vector<Eigen::MatrixXd> factors;
+  // Each BlockWeight already carries its own whitening form — Dense factored
+  // at construction, Identity/Diagonal/NormalTheory needing no factorization
+  // at all — so this only checks shape. Empty ⇒ identity (no whitening).
   if (!weight.empty()) {
     if (weight.size() != samp.S.size()) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -345,20 +292,13 @@ residuals(MomentEvaluationFn evaluate, Eigen::Index n_param,
               " does not match sample block count " +
               std::to_string(samp.S.size())));
     }
-    factors.reserve(weight.size());
     for (std::size_t b = 0; b < weight.size(); ++b) {
-      if (weight[b].rows() != layout.block_rows[b] ||
-          weight[b].cols() != layout.block_rows[b]) {
+      if (!weight[b].valid(layout.block_rows[b])) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             "gmm::residuals: block " + std::to_string(b) +
                 " weight dimension does not match moment dimension " +
                 std::to_string(layout.block_rows[b])));
       }
-      auto L = llt_factor_for_weight(weight[b], FitError::Kind::NumericIssue,
-                                     "gmm::residuals: block " +
-                                         std::to_string(b));
-      if (!L.has_value()) return std::unexpected(L.error());
-      factors.push_back(std::move(*L));
     }
   }
 
@@ -366,33 +306,33 @@ residuals(MomentEvaluationFn evaluate, Eigen::Index n_param,
   prob.n_resid = layout.n_rows;
   prob.n_param = n_param;
   prob.expand  = std::move(expand);
-  prob.r = [evaluate, samp, layout, factors](
+  prob.r = [evaluate, samp, layout, weight](
                const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
     auto e = evaluate(x, false, false);
     if (!e.has_value()) {
       return std::unexpected(e.error());
     }
-    return weighted_residuals(samp, e->moments, layout, factors);
+    return weighted_residuals(samp, e->moments, layout, weight);
   };
-  prob.J = [evaluate, samp, layout, factors](
+  prob.J = [evaluate, samp, layout, weight](
                const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
     auto e = evaluate(x, true, layout.has_means);
     if (!e.has_value()) {
       return std::unexpected(e.error());
     }
     return weighted_jacobian(samp, e->moments, e->J_sigma, e->J_mu, layout,
-                             factors);
+                             weight);
   };
-  prob.eval = [evaluate, samp, layout, factors](
+  prob.eval = [evaluate, samp, layout, weight](
                   const Eigen::VectorXd& x) -> fit_expected<optim::LsEvaluation> {
     auto e = evaluate(x, true, layout.has_means);
     if (!e.has_value()) {
       return std::unexpected(e.error());
     }
-    auto r = weighted_residuals(samp, e->moments, layout, factors);
+    auto r = weighted_residuals(samp, e->moments, layout, weight);
     if (!r.has_value()) return std::unexpected(r.error());
     auto J = weighted_jacobian(samp, e->moments, e->J_sigma, e->J_mu, layout,
-                               factors);
+                               weight);
     if (!J.has_value()) return std::unexpected(J.error());
     return optim::LsEvaluation{std::move(*r), std::move(*J)};
   };
@@ -436,30 +376,18 @@ normal_theory_weight(const model::ModelEvaluator& ev,
   Weight W;
   W.reserve(samp.S.size());
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
-    const Eigen::Index p = samp.S[b].rows();
     if (!samp.S[b].allFinite()) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "gmm::normal_theory_weight: block " + std::to_string(b) +
               " sample covariance contains non-finite entries"));
     }
-    Eigen::LLT<Eigen::MatrixXd> s_llt(samp.S[b]);
-    if (s_llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSample,
-          "gmm::normal_theory_weight: block " + std::to_string(b) +
-              " sample covariance is not positive definite"));
-    }
-    const Eigen::MatrixXd Sinv = s_llt.solve(Eigen::MatrixXd::Identity(p, p));
-    const Eigen::MatrixXd Wcov = symmetric_vech_gls_weight(Sinv);
-
-    Eigen::MatrixXd Wb(layout.block_rows[b], layout.block_rows[b]);
-    Wb.setZero();
-    Eigen::Index off = 0;
-    if (layout.has_means) {
-      Wb.block(0, 0, p, p) = Sinv;
-      off = p;
-    }
-    Wb.block(off, off, vech_len(p), vech_len(p)) = 0.5 * Wcov;
-    W.push_back(std::move(Wb));
+    // Structured: stores chol(S_b) only. `to_dense()` reproduces the q×q form
+    // this used to materialize (pinned in gls_scalar_objective_test.cpp).
+    auto bw = BlockWeight::normal_theory(
+        samp.S[b], layout.has_means, FitError::Kind::NonPositiveDefiniteSample,
+        "gmm::normal_theory_weight: block " + std::to_string(b));
+    if (!bw.has_value()) return std::unexpected(bw.error());
+    W.push_back(std::move(*bw));
   }
   return W;
 }
@@ -600,25 +528,15 @@ expected_information_weight(const model::ModelEvaluator& ev,
           "gmm::expected_information_weight: block " + std::to_string(b) +
               " implied Sigma contains non-finite entries"));
     }
-    Eigen::LLT<Eigen::MatrixXd> sigma_llt(Sigma_b);
-    if (sigma_llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
-          "gmm::expected_information_weight: block " + std::to_string(b) +
-              " implied Sigma is not positive definite"));
-    }
-    const Eigen::MatrixXd Sigma_inv =
-        sigma_llt.solve(Eigen::MatrixXd::Identity(p, p));
-    const Eigen::MatrixXd Wcov = symmetric_vech_gls_weight(Sigma_inv);
-
-    Eigen::MatrixXd Wb(layout.block_rows[b], layout.block_rows[b]);
-    Wb.setZero();
-    Eigen::Index off = 0;
-    if (layout.has_means) {
-      Wb.block(0, 0, p, p) = Sigma_inv;
-      off = p;
-    }
-    Wb.block(off, off, vech_len(p), vech_len(p)) = 0.5 * Wcov;
-    W.push_back(std::move(Wb));
+    // Same Kronecker structure as the GLS weight with A = Σ(θ) instead of S.
+    // `fit_ml_irls` rebuilds this every outer iteration, so keeping it
+    // structured turns an O(q³) refactor into a p×p Cholesky.
+    auto bw = BlockWeight::normal_theory(
+        Sigma_b, layout.has_means, FitError::Kind::NonPositiveDefiniteSigma,
+        "gmm::expected_information_weight: block " + std::to_string(b));
+    if (!bw.has_value()) return std::unexpected(bw.error());
+    (void)p;
+    W.push_back(std::move(*bw));
   }
   return W;
 }

@@ -80,9 +80,9 @@ OneFactorFixture one_factor_fixture(bool meanstructure = false) {
                           std::move(*samp)};
 }
 
-std::vector<Eigen::MatrixXd> wls_weights_from_sample(
+magmaan::estimate::gmm::Weight wls_weights_from_sample(
     const magmaan::data::SampleStats& samp) {
-  std::vector<Eigen::MatrixXd> out;
+  magmaan::estimate::gmm::Weight out;
   out.reserve(samp.S.size());
   for (const auto& S : samp.S) {
     auto G = magmaan::data::gamma_nt(S);
@@ -90,7 +90,9 @@ std::vector<Eigen::MatrixXd> wls_weights_from_sample(
     Eigen::LDLT<Eigen::MatrixXd> ldlt(*G);
     REQUIRE(ldlt.info() == Eigen::Success);
     REQUIRE(ldlt.isPositive());
-    out.push_back(ldlt.solve(Eigen::MatrixXd::Identity(G->rows(), G->cols())));
+    out.push_back(magmaan::estimate::gmm::BlockWeight::dense(
+        ldlt.solve(Eigen::MatrixXd::Identity(G->rows(), G->cols())),
+        magmaan::FitError::Kind::NumericIssue, "wls").value());
   }
   return out;
 }
@@ -263,8 +265,9 @@ magmaan::estimate::gmm::Weight adf_weight_from_rows(
     Eigen::LDLT<Eigen::MatrixXd> ldlt(Gamma);
     REQUIRE(ldlt.info() == Eigen::Success);
     REQUIRE(ldlt.isPositive());
-    out.push_back(ldlt.solve(
-        Eigen::MatrixXd::Identity(Gamma.rows(), Gamma.cols())));
+    out.push_back(magmaan::estimate::gmm::BlockWeight::dense(
+        ldlt.solve(Eigen::MatrixXd::Identity(Gamma.rows(), Gamma.cols())),
+        magmaan::FitError::Kind::NumericIssue, "adf").value());
   }
   return out;
 }
@@ -276,12 +279,12 @@ magmaan::estimate::gmm::Weight dwls_weight_from_rows(
   for (const auto& Z : rows) {
     const Eigen::RowVectorXd gamma =
         Z.array().square().colwise().mean().matrix();
-    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(Z.cols(), Z.cols());
+    Eigen::VectorXd d(Z.cols());
     for (Eigen::Index k = 0; k < gamma.size(); ++k) {
       REQUIRE(gamma(k) > 0.0);
-      W(k, k) = 1.0 / gamma(k);
+      d(k) = 1.0 / gamma(k);
     }
-    out.push_back(std::move(W));
+    out.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(d));
   }
   return out;
 }
@@ -512,7 +515,7 @@ Eigen::VectorXd test_ls_gradient(const magmaan::model::ModelEvaluator& ev,
     const Eigen::VectorXd d_b =
         test_residual_block(samp, eval->moments, layout, b);
     const double w_b = static_cast<double>(samp.n_obs[b]) / N_total;
-    g.noalias() += w_b * (Jb.transpose() * weight[b] * d_b);
+    g.noalias() += w_b * (Jb.transpose() * weight[b].to_dense() * d_b);
   }
   return g;
 }
@@ -540,7 +543,8 @@ Eigen::MatrixXd finite_gls_weight_correction(
     minus.S[b] -= eps * dS;
     const auto Wp = gls_weight(pt, rep, plus, theta);
     const auto Wm = gls_weight(pt, rep, minus, theta);
-    correction.row(i) = -residual.transpose() * ((Wp[b] - Wm[b]) / (2.0 * eps));
+    correction.row(i) = -residual.transpose() *
+        ((Wp[b].to_dense() - Wm[b].to_dense()) / (2.0 * eps));
   }
   return correction;
 }
@@ -1465,7 +1469,7 @@ TEST_CASE("robust_continuous_ls_gls_ij matches finite-difference weight influenc
         test_residual_block(fx.samp, eval->moments, layout, b);
     blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
         .jacobian = Jb,
-        .weight = W[b],
+        .weight = W[b].to_dense(),
         .moment_influence = rows[b],
         .weight_correction = finite_gls_weight_correction(
             fx.pt, fx.rep, fx.samp, est->theta, layout, d_b, rows[b], b),
@@ -1617,7 +1621,7 @@ TEST_CASE("robust_continuous_ls_wls_ij matches finite-difference empirical "
     const magmaan::estimate::gmm::Weight W_fit = adf_weight_from_rows(rows);
     REQUIRE(W_fit.size() == W.size());
     for (std::size_t b = 0; b < W.size(); ++b) {
-      CHECK(W_fit[b].isApprox(W[b], 1e-12));
+      CHECK(W_fit[b].to_dense().isApprox(W[b].to_dense(), 1e-12));
     }
 
     auto con = magmaan::estimate::build_eq_constraints(fx.pt);
@@ -1642,7 +1646,7 @@ TEST_CASE("robust_continuous_ls_wls_ij matches finite-difference empirical "
           test_residual_block(fx.samp, eval->moments, layout, b);
       blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
           .jacobian = Jb,
-          .weight = W_fit[b],
+          .weight = W_fit[b].to_dense(),
           .moment_influence = rows[b],
           .weight_correction = finite_wls_weight_correction(
               fx.raw, layout, d_b, rows[b], b),
@@ -1695,7 +1699,7 @@ TEST_CASE("robust_continuous_ls_dwls_ij matches finite-difference diagonal "
     const magmaan::estimate::gmm::Weight W_fit = dwls_weight_from_rows(rows);
     REQUIRE(W_fit.size() == W.size());
     for (std::size_t b = 0; b < W.size(); ++b) {
-      CHECK(W_fit[b].isApprox(W[b], 1e-12));
+      CHECK(W_fit[b].to_dense().isApprox(W[b].to_dense(), 1e-12));
     }
 
     auto con = magmaan::estimate::build_eq_constraints(fx.pt);
@@ -1720,7 +1724,7 @@ TEST_CASE("robust_continuous_ls_dwls_ij matches finite-difference diagonal "
           test_residual_block(fx.samp, eval->moments, layout, b);
       blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
           .jacobian = Jb,
-          .weight = W_fit[b],
+          .weight = W_fit[b].to_dense(),
           .moment_influence = rows[b],
           .weight_correction = finite_dwls_weight_correction(
               fx.raw, layout, d_b, rows[b], b),
@@ -1776,7 +1780,7 @@ TEST_CASE("robust_continuous_ls_dls_ij matches finite-difference mixed "
     const magmaan::estimate::gmm::Weight W_fit = *W_fit_or;
     REQUIRE(W_fit.size() == W.size());
     for (std::size_t b = 0; b < W.size(); ++b) {
-      CHECK(W_fit[b].isApprox(W[b], 1e-12));
+      CHECK(W_fit[b].to_dense().isApprox(W[b].to_dense(), 1e-12));
     }
 
     auto con = magmaan::estimate::build_eq_constraints(fx.pt);
@@ -1801,7 +1805,7 @@ TEST_CASE("robust_continuous_ls_dls_ij matches finite-difference mixed "
           test_residual_block(fx.samp, eval->moments, layout, b);
       blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
           .jacobian = Jb,
-          .weight = W_fit[b],
+          .weight = W_fit[b].to_dense(),
           .moment_influence = rows[b],
           .weight_correction = finite_dls_weight_correction(
               fx.raw, layout, d_b, rows[b], b, dls_opts.a),

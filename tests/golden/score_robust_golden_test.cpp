@@ -149,9 +149,10 @@ TEST_CASE("robust LS release-score matches the lavaan-internals oracle (DWLS)") 
   // gamma denominator convention (a uniform scale, < 2e-3 at n = 600).
   auto G = magmaan::data::empirical_gamma(raw.X[0]);
   REQUIRE(G.has_value());
-  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(G->rows(), G->cols());
-  for (Eigen::Index k = 0; k < G->rows(); ++k) W(k, k) = 1.0 / (*G)(k, k);
-  magmaan::estimate::gmm::Weight weight{W};
+  Eigen::VectorXd Wd(G->rows());
+  for (Eigen::Index k = 0; k < G->rows(); ++k) Wd(k) = 1.0 / (*G)(k, k);
+  magmaan::estimate::gmm::Weight weight{
+      magmaan::estimate::gmm::BlockWeight::diagonal(Wd)};
 
   auto est = magmaan::test::fit_gmm(f.pt, f.rep, *samp, weight);
   REQUIRE(est.has_value());

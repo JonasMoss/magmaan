@@ -56,30 +56,51 @@ class BlockWeight {
     return w;
   }
 
-  // W = diag(d), d > 0 (DWLS). Stores √d, so whitening is a row scaling.
+  // W = diag(d), d ≥ 0 (DWLS). Keeps diag(W) for `to_dense` and √diag(W) for
+  // whitening, so the hot path is a row scaling rather than a GEMM.
   static BlockWeight diagonal(const Eigen::VectorXd& d) {
     BlockWeight w;
-    w.kind_ = Kind::Diagonal;
-    w.dim_  = d.size();
-    w.diag_ = d.cwiseMax(0.0).cwiseSqrt();
+    w.kind_   = Kind::Diagonal;
+    w.dim_    = d.size();
+    w.w_diag_ = d;
+    w.f_diag_ = d.cwiseMax(0.0).cwiseSqrt();
     return w;
   }
 
   // W dense and symmetric PSD (WLS / ADF / DLS). Factors once here — the same
   // Cholesky-with-clamped-eigendecomposition fallback `gmm::residuals` used to
   // do per call — so the hot path only ever sees the triangular factor.
+  //
+  // W is kept alongside its factor so `to_dense()` returns it exactly rather
+  // than reconstructing L Lᵀ. That is memory-neutral against the status quo:
+  // `residuals` already held the caller's W and its own `factors` copy at the
+  // same time.
   static fit_expected<BlockWeight> dense(const Eigen::MatrixXd& W,
                                          FitError::Kind err_kind,
                                          const std::string& detail) {
+    if (W.rows() != W.cols()) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          detail + ": weight matrix is not square"});
+    }
+    if (!W.allFinite()) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          detail + ": weight matrix contains non-finite entries"});
+    }
+    if (!W.isApprox(W.transpose(), 1e-10)) {
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          detail + ": weight matrix is not symmetric"});
+    }
     BlockWeight w;
-    w.kind_ = Kind::Dense;
-    w.dim_  = W.rows();
+    w.kind_    = Kind::Dense;
+    w.dim_     = W.rows();
+    w.w_dense_ = W;
     Eigen::LLT<Eigen::MatrixXd> llt(W);
     if (llt.info() == Eigen::Success) {
-      w.dense_ = Eigen::MatrixXd(llt.matrixL());
+      w.f_dense_ = Eigen::MatrixXd(llt.matrixL());
       return w;
     }
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(W);
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+        0.5 * (W + W.transpose()));
     if (es.info() != Eigen::Success) {
       return std::unexpected(
           FitError{err_kind, detail + ": weight matrix eigendecomposition failed"});
@@ -93,7 +114,7 @@ class BlockWeight {
       }
       vals(i) = std::sqrt(std::max(0.0, vals(i)));
     }
-    w.dense_ = es.eigenvectors() * vals.asDiagonal();
+    w.f_dense_ = es.eigenvectors() * vals.asDiagonal();
     return w;
   }
 
@@ -133,9 +154,10 @@ class BlockWeight {
     if (dim_ != n) return false;
     switch (kind_) {
       case Kind::Identity: return true;
-      case Kind::Diagonal: return diag_.size() == n && diag_.allFinite();
+      case Kind::Diagonal: return f_diag_.size() == n && f_diag_.allFinite();
       case Kind::Dense:
-        return dense_.rows() == n && dense_.cols() == n && dense_.allFinite();
+        return f_dense_.rows() == n && f_dense_.cols() == n &&
+               f_dense_.allFinite();
       case Kind::NormalTheory: return chol_.allFinite();
     }
     return false;
@@ -156,8 +178,8 @@ class BlockWeight {
       double s, const Eigen::MatrixBase<Derived>& X) const {
     switch (kind_) {
       case Kind::Identity: return s * X;
-      case Kind::Diagonal: return s * (diag_.asDiagonal() * X);
-      case Kind::Dense:    return s * (dense_.transpose() * X);
+      case Kind::Diagonal: return s * (f_diag_.asDiagonal() * X);
+      case Kind::Dense:    return s * (f_dense_.transpose() * X);
       case Kind::NormalTheory: return t_apply_nt(s, X);
     }
     return typename Derived::PlainObject();
@@ -165,17 +187,17 @@ class BlockWeight {
 
   // Materialize W. Only for callers that genuinely need the dense form
   // (Satorra-Bentler corrections, Γ spectra); never on a gradient path.
+  // Identity / Diagonal / Dense return W exactly as supplied.
   Eigen::MatrixXd to_dense() const {
     switch (kind_) {
       case Kind::Identity:
         return Eigen::MatrixXd::Identity(dim_, dim_);
       case Kind::Diagonal:
-        return Eigen::MatrixXd(diag_.cwiseProduct(diag_).asDiagonal());
+        return Eigen::MatrixXd(w_diag_.asDiagonal());
       case Kind::Dense:
-        return dense_ * dense_.transpose();
+        return w_dense_;
       case Kind::NormalTheory:
         return nt_to_dense();
-      default: break;
     }
     return Eigen::MatrixXd();
   }
@@ -235,24 +257,40 @@ class BlockWeight {
     W.setZero();
     if (has_means_) W.block(0, 0, p, p) = Ainv;
 
-    // ½·tr(A⁻¹ E_{k1} A⁻¹ E_{k2}) with E_k the symmetric basis matrix, i.e.
-    // exactly ½·symmetric_vech_gls_weight(A⁻¹).
-    Eigen::MatrixXd E1 = Eigen::MatrixXd::Zero(p, p);
-    Eigen::MatrixXd E2 = Eigen::MatrixXd::Zero(p, p);
+    // ½·tr(A⁻¹ E_{k1} A⁻¹ E_{k2}) with E_k the symmetric lower-vech basis
+    // matrix. Expanding the basis matrices (each has at most two nonzeros) and
+    // using tr(A e_a e_bᵀ A e_c e_dᵀ) = A_bc·A_da collapses the entry to a
+    // handful of scalar lookups:
+    //
+    //   tr(A E1 A E2) = Σ_{(a,b)∈T1} Σ_{(c,d)∈T2} A_bc · A_da
+    //
+    // with T1 = {(r1,c1)} when r1 == c1 and {(r1,c1),(c1,r1)} otherwise. That
+    // is O(1) per entry, so O(p⁴) overall rather than the O(p⁷) an explicit
+    // `(A·E1·A·E2).trace()` per pair costs.
+    const auto basis_terms = [](Eigen::Index r, Eigen::Index c,
+                                Eigen::Index (&t)[2][2]) -> int {
+      t[0][0] = r; t[0][1] = c;
+      if (r == c) return 1;
+      t[1][0] = c; t[1][1] = r;
+      return 2;
+    };
     Eigen::Index k1 = 0;
     for (Eigen::Index c1 = 0; c1 < p; ++c1) {
       for (Eigen::Index r1 = c1; r1 < p; ++r1, ++k1) {
-        E1.setZero();
-        E1(r1, c1) = 1.0;
-        E1(c1, r1) = 1.0;
-        const Eigen::MatrixXd A1 = Ainv * E1 * Ainv;
+        Eigen::Index t1[2][2];
+        const int n1 = basis_terms(r1, c1, t1);
         Eigen::Index k2 = 0;
         for (Eigen::Index c2 = 0; c2 < p; ++c2) {
           for (Eigen::Index r2 = c2; r2 < p; ++r2, ++k2) {
-            E2.setZero();
-            E2(r2, c2) = 1.0;
-            E2(c2, r2) = 1.0;
-            W(off + k1, off + k2) = 0.5 * (A1 * E2).trace();
+            Eigen::Index t2[2][2];
+            const int n2 = basis_terms(r2, c2, t2);
+            double acc = 0.0;
+            for (int i = 0; i < n1; ++i) {
+              for (int j = 0; j < n2; ++j) {
+                acc += Ainv(t1[i][1], t2[j][0]) * Ainv(t2[j][1], t1[i][0]);
+              }
+            }
+            W(off + k1, off + k2) = 0.5 * acc;
           }
         }
       }
@@ -263,17 +301,26 @@ class BlockWeight {
 
   Kind kind_ = Kind::Identity;
   Eigen::Index dim_ = 0;
-  Eigen::VectorXd diag_;   // Diagonal: √diag(W)
-  Eigen::MatrixXd dense_;  // Dense: lower factor L, W = L Lᵀ
-  Eigen::MatrixXd chol_;   // NormalTheory: chol(A) lower
+  Eigen::VectorXd w_diag_;   // Diagonal: diag(W)
+  Eigen::VectorXd f_diag_;   // Diagonal: √diag(W)
+  Eigen::MatrixXd w_dense_;  // Dense: W
+  Eigen::MatrixXd f_dense_;  // Dense: lower factor L, W = L Lᵀ
+  Eigen::MatrixXd chol_;     // NormalTheory: chol(A) lower
   bool has_means_ = false;
 };
 
-// NOTE: `gmm::Weight` is still `std::vector<Eigen::MatrixXd>`, declared in
-// moment_quadratic.hpp. Retyping it to `std::vector<BlockWeight>` is a
-// separate change — it touches the five weight-producing functions, two
-// dense-indexing consumers (`robust/weighted_inference.cpp`,
-// `estimate/fiml.cpp`), and the R boundary (`r-package/src/prepared.hpp`).
-// Tracked in docs/backlog/todo.md under the continuous-whitening entry.
+// Per-block weight, aligned to the stacked [mean ; vech(cov)] moment vector of
+// each block. An empty vector means identity in every block (ULS) — the
+// historical sentinel, preserved so existing callers keep their meaning.
+using Weight = std::vector<BlockWeight>;
+
+// Legacy adapter: wrap per-block dense matrices as Dense blocks. Fails exactly
+// where `gmm::residuals` used to fail, when a block is not symmetric PSD.
+// Callers that know their structure should use the named `BlockWeight`
+// constructors instead — this exists for the paths that genuinely produce a
+// dense Γ̂⁻¹ (ADF/WLS) and for the R boundary, which receives a bare matrix.
+fit_expected<Weight> dense_weight(const std::vector<Eigen::MatrixXd>& blocks,
+                                  FitError::Kind err_kind,
+                                  const std::string& detail);
 
 }  // namespace magmaan::estimate::gmm

@@ -230,7 +230,10 @@ structured_gamma_weight(const model::ModelEvaluator& ev,
           ", lambda_min=" + std::to_string(inv.min_eval) + ")."));
     }
     Eigen::MatrixXd Wsym = 0.5 * (inv.inverse + inv.inverse.transpose());
-    W.push_back(std::move(Wsym));
+    auto bw = gmm::BlockWeight::dense(Wsym, FitError::Kind::NumericIssue,
+        "structured_gamma_weight: block " + std::to_string(b));
+    if (!bw.has_value()) return std::unexpected(bw.error());
+    W.push_back(std::move(*bw));
   }
   return W;
 }

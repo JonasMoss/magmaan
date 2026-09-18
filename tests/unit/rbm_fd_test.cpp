@@ -693,7 +693,7 @@ void run_ml2s_fd_case(std::string_view label,
   samp.mean = sm->mean;
   samp.n_obs = sm->n_obs;
   const fiml::TwoStageDlsOptions dls{};
-  auto w = fiml::two_stage_stage2_weight_blocks(*sm, kind, dls);
+  auto w = fiml::two_stage_stage2_weight_structured(*sm, kind, dls);
   REQUIRE(w.has_value());
   auto est = magmaan::test::fit_gmm(*built.pt, *built.rep, samp, *w);
   if (!est.has_value()) { FAIL(est.error().detail); return; }

@@ -2255,7 +2255,13 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
       off = p;
     }
     Wb.block(off, off, pstar, pstar) = Wsigma;
-    W.push_back(std::move(Wb));
+    // Genuinely dense: the Hadamard `Ω ∘` in Γ_NT^pw breaks the Kronecker
+    // structure, which is exactly why this path exists separately from
+    // `fit_gls`.
+    auto bw = gmm::BlockWeight::dense(Wb, FitError::Kind::NumericIssue,
+        "fit_gls_pairwise: block " + std::to_string(b));
+    if (!bw.has_value()) return std::unexpected(bw.error());
+    W.push_back(std::move(*bw));
   }
 
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, W, bounds,
@@ -2331,7 +2337,7 @@ fiml::frontier::fit_ml2s_psd(
     return estimate::frontier::fit_ml_psd(
         std::move(pt), rep, sample, x0, backend, opts, psd_opts);
   }
-  auto weight_or = fiml::two_stage_stage2_weight_blocks(stage1, weight, dls);
+  auto weight_or = fiml::two_stage_stage2_weight_structured(stage1, weight, dls);
   if (!weight_or.has_value()) {
     return std::unexpected(post_to_fit(weight_or.error()));
   }

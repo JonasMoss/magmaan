@@ -700,7 +700,7 @@ noniterative_inference_impl(const spec::LatentStructure& pt,
     auto w = estimate::gmm::expected_information_weight(*ev, samp, theta);
     if (!w.has_value() || w->empty())
       return perr("non-iterative inference: NTML weight build failed");
-    const Eigen::MatrixXd& W0 = (*w)[0];
+    const Eigen::MatrixXd W0 = (*w)[0].to_dense();
     if (W0.rows() == pstar) V = W0;
     else if (W0.rows() > pstar) V = W0.bottomRightCorner(pstar, pstar);
     else return perr("non-iterative inference: NTML weight smaller than p*");
@@ -1220,7 +1220,8 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
     auto w = estimate::gmm::expected_information_weight(*ev, samp, theta);
     if (!w.has_value() || w->size() != nblk)
       return perr("grouped inference: NTML weight build failed");
-    Wntml = std::move(*w);
+    Wntml.reserve(w->size());
+    for (const auto& bw : *w) Wntml.push_back(bw.to_dense());
   }
 
   // Per-block moment offsets in the stacked vech vector.
@@ -1545,7 +1546,8 @@ noniterative_inference_grouped_restricted(
     auto w = estimate::gmm::expected_information_weight(*ev, samp, theta);
     if (!w.has_value() || w->size() != nblk)
       return perr("restricted grouped inference: NTML weight build failed");
-    Wntml = std::move(*w);
+    Wntml.reserve(w->size());
+    for (const auto& bw : *w) Wntml.push_back(bw.to_dense());
   }
 
   std::vector<Eigen::Index> pstar_b(nblk), offset(nblk);

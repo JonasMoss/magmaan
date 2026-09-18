@@ -263,6 +263,57 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   CHECK(std::abs(*t_rls) < 1e-6);
 }
 
+TEST_CASE("rls_mean_cov_chi2: separates mean and covariance residuals") {
+  // With Sigma = diag(2, 4), covariance residual diag(1, -2), and mean
+  // residual (1, 2), the two per-observation quadratic forms are
+  //   1/2 tr{diag(1/2, -1/2)^2} = 1/4,
+  //   (1, 2)' diag(1/2, 1/4) (1, 2) = 3/2.
+  // At n = 40 this gives T_cov = 10, T_mean = 60, and T_total = 70.
+  SampleStats samp;
+  samp.S.push_back((Eigen::Matrix2d() << 3.0, 0.0, 0.0, 2.0).finished());
+  samp.mean.push_back((Eigen::Vector2d() << 2.0, 1.0).finished());
+  samp.n_obs.push_back(40);
+
+  magmaan::model::ImpliedMoments im;
+  im.sigma.push_back((Eigen::Matrix2d() << 2.0, 0.0, 0.0, 4.0).finished());
+  im.mu.push_back((Eigen::Vector2d() << 1.0, -1.0).finished());
+
+  auto t = magmaan::inference::frontier::rls_mean_cov_chi2(samp, im);
+  REQUIRE(t.has_value());
+  CHECK(t->mean == doctest::Approx(60.0));
+  CHECK(t->covariance == doctest::Approx(10.0));
+  CHECK(t->statistic == doctest::Approx(70.0));
+}
+
+TEST_CASE("rls_mean_cov_chi2: empty implied means retain covariance-only RLS") {
+  SampleStats samp;
+  samp.S.push_back((Eigen::Matrix2d() << 3.0, 0.0, 0.0, 2.0).finished());
+  samp.mean.push_back((Eigen::Vector2d() << 9.0, -7.0).finished());
+  samp.n_obs.push_back(40);
+
+  magmaan::model::ImpliedMoments im;
+  im.sigma.push_back((Eigen::Matrix2d() << 2.0, 0.0, 0.0, 4.0).finished());
+
+  auto full = magmaan::inference::frontier::rls_mean_cov_chi2(samp, im);
+  auto covariance_only = magmaan::inference::rls_chi2(samp, im);
+  REQUIRE(full.has_value());
+  REQUIRE(covariance_only.has_value());
+  CHECK(full->mean == 0.0);
+  CHECK(full->covariance == doctest::Approx(*covariance_only));
+  CHECK(full->statistic == doctest::Approx(*covariance_only));
+
+  // The converse is the same contract: an implied mean vector alone does not
+  // make means part of a covariance-only fit.
+  SampleStats covariance_fit = samp;
+  covariance_fit.mean.clear();
+  im.mu.push_back((Eigen::Vector2d() << 1.0, -1.0).finished());
+  auto no_sample_means =
+      magmaan::inference::frontier::rls_mean_cov_chi2(covariance_fit, im);
+  REQUIRE(no_sample_means.has_value());
+  CHECK(no_sample_means->mean == 0.0);
+  CHECK(no_sample_means->statistic == doctest::Approx(*covariance_only));
+}
+
 TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
   // Reference: lavaan with `test = "browne.residual.nt"` returns 77.9034
   // on this fit. This is the model-projected, S⁻¹-weighted residual-based

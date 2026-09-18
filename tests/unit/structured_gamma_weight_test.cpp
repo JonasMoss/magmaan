@@ -67,7 +67,7 @@ double max_block_diff(const magmaan::estimate::gmm::Weight& a,
   double d = 0.0;
   for (std::size_t i = 0; i < a.size(); ++i) {
     REQUIRE(a[i].rows() == b[i].rows());
-    d = std::max(d, (a[i] - b[i]).cwiseAbs().maxCoeff());
+    d = std::max(d, (a[i].to_dense() - b[i].to_dense()).cwiseAbs().maxCoeff());
   }
   return d;
 }
@@ -93,8 +93,9 @@ TEST_CASE("structured_gamma_weight: returns a WLS-ready weight") {
   REQUIRE(weight.size() == 1);
   REQUIRE(weight[0].rows() == 10);
   REQUIRE(weight[0].cols() == 10);
-  CHECK((weight[0] - weight[0].transpose()).cwiseAbs().maxCoeff() < 1e-10);
-  Eigen::LLT<Eigen::MatrixXd> llt(weight[0]);
+  const Eigen::MatrixXd W0 = weight[0].to_dense();
+  CHECK((W0 - W0.transpose()).cwiseAbs().maxCoeff() < 1e-10);
+  Eigen::LLT<Eigen::MatrixXd> llt(W0);
   CHECK(llt.info() == Eigen::Success);
 
   auto out = magmaan::test::fit_gmm(m.pt, m.rep, *samp, weight);

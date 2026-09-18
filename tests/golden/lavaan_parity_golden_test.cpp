@@ -684,7 +684,9 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
                                       magmaan::estimate::Backend::NloptLbfgs, opt);
       }
       magmaan::estimate::gmm::Weight w;
-      if (!is_uls) w = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+      if (!is_uls) w = magmaan::estimate::gmm::dense_weight(
+              matrices_from_blocks(fit["WLS.V"]),
+              magmaan::FitError::Kind::NumericIssue, "WLS.V").value();
       return magmaan::test::fit_gmm(*pt, *mr, samp, w,
                                     magmaan::estimate::Bounds{},
                                     magmaan::estimate::Backend::NloptLbfgs, opt);
@@ -739,7 +741,9 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
       REQUIRE(w.has_value());
       weight = *w;
     } else if (!is_uls) {
-      weight = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+      weight = magmaan::estimate::gmm::dense_weight(
+              matrices_from_blocks(fit["WLS.V"]),
+              magmaan::FitError::Kind::NumericIssue, "WLS.V").value();
     }
     double chisq = 0.0;
     auto c = magmaan::estimate::continuous_ls_chisq(samp, *pt, *mr, est, weight);

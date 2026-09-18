@@ -47,6 +47,48 @@ using magmaan::parse::Parser;
 using magmaan::spec::build;
 namespace gmm = magmaan::estimate::gmm;
 
+// Independent dense reference for the normal-theory weight, written the way
+// `gmm::normal_theory_weight` used to build it: an explicit
+// W_kl = tr(A⁻¹ E_k A⁻¹ E_l) double loop over the symmetric lower-vech basis,
+// halved on the covariance block, with A⁻¹ on the mean block.
+//
+// This must stay a *separate* implementation from `BlockWeight::nt_to_dense`,
+// which now derives the same entries in closed form. Comparing the structured
+// weight against `normal_theory_weight` alone would be circular, since that
+// function returns a NormalTheory block itself.
+Eigen::MatrixXd dense_nt_reference(const Eigen::MatrixXd& A, bool has_means) {
+  const Eigen::Index p = A.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  const Eigen::Index off = has_means ? p : 0;
+  Eigen::LLT<Eigen::MatrixXd> llt(A);
+  const Eigen::MatrixXd Ainv = llt.solve(Eigen::MatrixXd::Identity(p, p));
+
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(off + pstar, off + pstar);
+  if (has_means) W.block(0, 0, p, p) = Ainv;
+
+  auto vech_index = [p](Eigen::Index r, Eigen::Index c) {
+    return c * p - (c * (c - 1)) / 2 + (r - c);
+  };
+  for (Eigen::Index c1 = 0; c1 < p; ++c1) {
+    for (Eigen::Index r1 = c1; r1 < p; ++r1) {
+      Eigen::MatrixXd E1 = Eigen::MatrixXd::Zero(p, p);
+      E1(r1, c1) = 1.0;
+      E1(c1, r1) = 1.0;
+      const Eigen::MatrixXd A1 = Ainv * E1 * Ainv;
+      for (Eigen::Index c2 = 0; c2 < p; ++c2) {
+        for (Eigen::Index r2 = c2; r2 < p; ++r2) {
+          Eigen::MatrixXd E2 = Eigen::MatrixXd::Zero(p, p);
+          E2(r2, c2) = 1.0;
+          E2(c2, r2) = 1.0;
+          W(off + vech_index(r1, c1), off + vech_index(r2, c2)) =
+              0.5 * (A1 * E2).trace();
+        }
+      }
+    }
+  }
+  return W;
+}
+
 // A perturbation of each implied block as the sample statistic, so the
 // residual is nonzero (a saturated-fit S would make every gradient vanish and
 // pin nothing). Blocks come from the model's own implied moments, so the
@@ -170,10 +212,15 @@ TEST_CASE("BlockWeight::NormalTheory reproduces the dense normal-theory weight")
     const Eigen::Index nf = static_cast<Eigen::Index>(ev.n_free());
     const Eigen::VectorXd x0 = Eigen::VectorXd::Constant(nf, 0.8);
     SampleStats samp = make_stats(ev, x0, 23);
+    const Eigen::MatrixXd Wref = dense_nt_reference(samp.S[0], meanstructure);
+
+    // The weight the fit path actually builds is now structured; it must still
+    // materialize to the reference.
     auto W = gmm::normal_theory_weight(ev, samp, x0);
     REQUIRE_OK(W);
     REQUIRE(W->size() == 1u);
-    const Eigen::MatrixXd& Wref = (*W)[0];
+    CHECK((*W)[0].kind() == gmm::BlockWeight::Kind::NormalTheory);
+    CHECK(((*W)[0].to_dense() - Wref).cwiseAbs().maxCoeff() < 1e-10);
 
     auto bw = gmm::BlockWeight::normal_theory(
         samp.S[0], meanstructure, magmaan::FitError::Kind::NumericIssue,
@@ -181,7 +228,7 @@ TEST_CASE("BlockWeight::NormalTheory reproduces the dense normal-theory weight")
     REQUIRE_OK(bw);
     REQUIRE(bw->rows() == Wref.rows());
 
-    // Dense materialization agrees with what the fit path builds today.
+    // Closed-form materialization agrees with the explicit trace double loop.
     CHECK((bw->to_dense() - Wref).cwiseAbs().maxCoeff() < 1e-10);
 
     // And the whitening reproduces the quadratic form without forming q×q.

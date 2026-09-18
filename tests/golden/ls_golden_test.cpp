@@ -57,7 +57,9 @@ magmaan::estimate::gmm::Weight ls_estimator_weight(
     const magmaan::estimate::Estimates& est) {
   if (estimator == "ULS") return {};
   if (estimator == "WLS") {
-    return magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+    return magmaan::estimate::gmm::dense_weight(
+          matrices_from_blocks(fit["WLS.V"]),
+          magmaan::FitError::Kind::NumericIssue, "WLS.V").value();
   }
   auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
   REQUIRE(ev.has_value());
@@ -159,7 +161,9 @@ fit_ls_estimator(const std::string& estimator,
   }
   return magmaan::test::fit_gmm(
       handles.pt, handles.rep, samp,
-      magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"])),
+      magmaan::estimate::gmm::dense_weight(
+          matrices_from_blocks(fit["WLS.V"]),
+          magmaan::FitError::Kind::NumericIssue, "WLS.V").value(),
       magmaan::estimate::Bounds{}, backend, opt);
 }
 
@@ -179,8 +183,9 @@ fit_snlls_estimator(const std::string& estimator,
   }
   magmaan::estimate::gmm::Weight weight;
   if (estimator == "WLS") {
-    weight = magmaan::estimate::gmm::Weight(
-        matrices_from_blocks(fit["WLS.V"]));
+    weight = magmaan::estimate::gmm::dense_weight(
+        matrices_from_blocks(fit["WLS.V"]),
+        magmaan::FitError::Kind::NumericIssue, "WLS.V").value();
   }
   return magmaan::estimate::fit_snlls(
       handles.pt, handles.rep, samp, *x0, std::move(weight), backend, opt);

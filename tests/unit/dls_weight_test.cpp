@@ -89,7 +89,7 @@ double max_block_diff(const magmaan::estimate::gmm::Weight& a,
   double d = 0.0;
   for (std::size_t i = 0; i < a.size(); ++i) {
     REQUIRE(a[i].rows() == b[i].rows());
-    d = std::max(d, (a[i] - b[i]).cwiseAbs().maxCoeff());
+    d = std::max(d, (a[i].to_dense() - b[i].to_dense()).cwiseAbs().maxCoeff());
   }
   return d;
 }
@@ -153,7 +153,7 @@ TEST_CASE("normal_theory_weight: mean-structure GLS uses lavaan block scaling") 
   const Eigen::Index pstar = p * (p + 1) / 2;
   const Eigen::MatrixXd Sinv = s_llt.solve(Eigen::MatrixXd::Identity(p, p));
   const Eigen::MatrixXd Wcov = expected_symmetric_vech_gls_weight(Sinv);
-  const Eigen::MatrixXd& W = nt->at(0);
+  const Eigen::MatrixXd W = nt->at(0).to_dense();
 
   REQUIRE(W.rows() == p + pstar);
   CHECK((W.block(0, 0, p, p) - Sinv).cwiseAbs().maxCoeff() < 1e-12);
@@ -205,7 +205,7 @@ TEST_CASE("dls_weight: a=1 covariance block is the ADF (empirical) weight") {
       llt.solve(Eigen::MatrixXd::Identity(g_adf->rows(), g_adf->cols()));
 
   // No mean structure ⇒ the whole block is the covariance weight.
-  CHECK((dls->at(0) - w_adf).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK((dls->at(0).to_dense() - w_adf).cwiseAbs().maxCoeff() < 1e-9);
 }
 
 // ============================================================================
@@ -268,7 +268,7 @@ TEST_CASE("dls_weight: a=1 with meanstructure reproduces Browne-1984 full NACOV"
   auto g_adf_full = magmaan::data::empirical_gamma_with_means(raw.X[0]);
   REQUIRE(g_adf_full.has_value());
 
-  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0));
+  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0).to_dense());
   REQUIRE(llt.info() == Eigen::Success);
   const Eigen::MatrixXd gamma_back =
       llt.solve(Eigen::MatrixXd::Identity(dls->at(0).rows(),
@@ -308,7 +308,7 @@ TEST_CASE("dls_weight: intermediate a with meanstructure interpolates the "
   const Eigen::MatrixXd gamma_mix =
       (1.0 - a) * gamma_nt_full + a * (*g_adf_full);
 
-  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0));
+  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0).to_dense());
   REQUIRE(llt.info() == Eigen::Success);
   const Eigen::MatrixXd gamma_back =
       llt.solve(Eigen::MatrixXd::Identity(dls->at(0).rows(),
@@ -343,7 +343,7 @@ TEST_CASE("dls_weight: intermediate a mixes the two Gamma matrices") {
   const Eigen::MatrixXd gamma_mix = (1.0 - a) * (*g_nt) + a * (*g_adf);
 
   // Inverting the returned weight block recovers the mixed Γ.
-  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0));
+  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0).to_dense());
   REQUIRE(llt.info() == Eigen::Success);
   const Eigen::MatrixXd gamma_back =
       llt.solve(Eigen::MatrixXd::Identity(dls->at(0).rows(),
@@ -352,8 +352,9 @@ TEST_CASE("dls_weight: intermediate a mixes the two Gamma matrices") {
 
   // Every block is symmetric positive definite.
   for (const auto& Wb : *dls) {
-    CHECK((Wb - Wb.transpose()).cwiseAbs().maxCoeff() < 1e-10);
-    Eigen::LLT<Eigen::MatrixXd> wllt(Wb);
+    const Eigen::MatrixXd Wbd = Wb.to_dense();
+    CHECK((Wbd - Wbd.transpose()).cwiseAbs().maxCoeff() < 1e-10);
+    Eigen::LLT<Eigen::MatrixXd> wllt(Wbd);
     CHECK(wllt.info() == Eigen::Success);
   }
 }

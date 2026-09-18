@@ -237,7 +237,8 @@ TEST_CASE("SNLLS: GLS and WLS agree with full LS on a feasible 1F covariance") {
   REQUIRE(gls.has_value());
   CHECK(gls->fmin < 1e-10);
 
-  magmaan::estimate::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
+  magmaan::estimate::gmm::Weight wls{
+      magmaan::estimate::gmm::BlockWeight::identity(6)};
   auto wls_est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, wls,
                                               Backend::NloptLbfgs, snlls_opts());
   REQUIRE(wls_est.has_value());
@@ -570,7 +571,8 @@ TEST_CASE("SNLLS: full-coordinate stationarity agrees with the original LS gradi
         REQUIRE(w.has_value());
         weight = *w;
       } else if (kind == 2) {
-        weight = {2.0 * Eigen::MatrixXd::Identity(10, 10)};
+        weight = {magmaan::estimate::gmm::BlockWeight::diagonal(
+            Eigen::VectorXd::Constant(10, 2.0))};
       }
       auto fit = kind == 1
           ? magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,

@@ -309,7 +309,9 @@ TEST_CASE("frontier estimated-weight residuals: Fixed mode == hand-built "
   REQUIRE(G.has_value());
   Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
   for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
-  magmaan::estimate::gmm::Weight weight{W_dwls};
+  magmaan::estimate::gmm::Weight weight{
+      magmaan::estimate::gmm::BlockWeight::dense(
+          W_dwls, magmaan::FitError::Kind::NumericIssue, "W_dwls").value()};
 
   auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
   REQUIRE(est.has_value());
@@ -374,7 +376,9 @@ TEST_CASE("frontier estimated-weight residuals: DWLS weight correction shifts "
   REQUIRE(G.has_value());
   Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
   for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
-  magmaan::estimate::gmm::Weight weight{W_dwls};
+  magmaan::estimate::gmm::Weight weight{
+      magmaan::estimate::gmm::BlockWeight::dense(
+          W_dwls, magmaan::FitError::Kind::NumericIssue, "W_dwls").value()};
 
   auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
   REQUIRE(est.has_value());

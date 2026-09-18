@@ -616,6 +616,15 @@ two_stage_stage2_weight_blocks(const SaturatedMoments& sm,
                                TwoStageWeight kind,
                                TwoStageDlsOptions dls = {});
 
+// The same weight as a structured `gmm::Weight`, for the Stage-2 fit and
+// sandwich paths that hand it to the moment-quadratic machinery. Currently
+// wraps every block Dense, i.e. behaviour-identical to passing the dense
+// blocks; see the definition for which kinds are free to upgrade.
+post_expected<gmm::Weight>
+two_stage_stage2_weight_structured(const SaturatedMoments& sm,
+                                   TwoStageWeight kind,
+                                   TwoStageDlsOptions dls = {});
+
 // The same weight assembled as one Q×Q block-diagonal matrix, for the
 // saturated-moment-space difference-test cores (`compute_fiml_satorra2000`).
 post_expected<Eigen::MatrixXd>

@@ -1159,7 +1159,7 @@ rbm_explicit_two_stage(spec::LatentStructure pt,
   if (!sm.has_value()) return std::unexpected(post_to_fit(sm.error(),
       "rbm_explicit_two_stage: saturated moments"));
   data::SampleStats samp = sample_stats_from_saturated(*sm);
-  auto w = fiml::two_stage_stage2_weight_blocks(*sm, weight, dls);
+  auto w = fiml::two_stage_stage2_weight_structured(*sm, weight, dls);
   if (!w.has_value()) return std::unexpected(post_to_fit(w.error(),
       "rbm_explicit_two_stage: stage-2 weight"));
   auto ctx = ls_context(pt, rep, samp, base.theta, *w,
@@ -1188,7 +1188,7 @@ rbm_implicit_two_stage(spec::LatentStructure pt,
   if (!sm.has_value()) return std::unexpected(post_to_fit(sm.error(),
       "rbm_implicit_two_stage: saturated moments"));
   data::SampleStats samp = sample_stats_from_saturated(*sm);
-  auto w = fiml::two_stage_stage2_weight_blocks(*sm, weight, dls);
+  auto w = fiml::two_stage_stage2_weight_structured(*sm, weight, dls);
   if (!w.has_value()) return std::unexpected(post_to_fit(w.error(),
       "rbm_implicit_two_stage: stage-2 weight"));
   auto ctx = ls_context(pt, rep, samp, start.theta, *w,

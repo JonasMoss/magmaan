@@ -373,7 +373,7 @@ TEST_CASE("api continuous LS fits dispatch estimator-aware chi-square") {
   CHECK(std::isfinite(gls_t->statistic));
 
   magmaan::estimate::gmm::Weight weight;
-  weight.push_back(Eigen::MatrixXd::Identity(10, 10));
+  weight.push_back(magmaan::estimate::gmm::BlockWeight::identity(10));
   auto wls_fit = magmaan::api::fit(
       *model, *data, magmaan::api::wls(std::move(weight)).auto_variance_bounds());
   REQUIRE_OK(wls_fit);

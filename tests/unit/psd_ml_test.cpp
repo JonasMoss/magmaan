@@ -816,7 +816,7 @@ TEST_CASE("PSD ML2S composes unchanged EM moments with every Stage-2 weight") {
           pt, *rep, sample, *start, {}, Backend::NloptLbfgs,
           strict_options());
     } else {
-      auto W = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+      auto W = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
           *stage1, weight, {});
       REQUIRE_MESSAGE(W.has_value(), "ML2S Stage-2 weight failed: "
           << (W.has_value() ? std::string{} : W.error().detail));
@@ -1058,7 +1058,7 @@ TEST_CASE("PSD fixed-weight GMM objective and equality Jacobian match central "
   magmaan::estimate::gmm::Weight weight;
   Eigen::VectorXd diagonal(9);
   diagonal << 0.7, 1.1, 1.4, 0.8, 1.2, 1.6, 0.9, 1.3, 1.7;
-  weight.push_back(diagonal.asDiagonal());
+  weight.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(diagonal));
   auto probe = magmaan::estimate::psd_test::psd_gmm_derivative_probe(
       pt, *rep, samp, *start, weight);
   REQUIRE_MESSAGE(probe.has_value(), "PSD GMM derivative probe failed: "
@@ -1115,7 +1115,7 @@ TEST_CASE("PSD ULS GLS and fixed WLS agree with ordinary interior fits") {
   }
   SUBCASE("fixed WLS") {
     Eigen::VectorXd diagonal = Eigen::VectorXd::LinSpaced(10, 0.6, 1.8);
-    weight.push_back(diagonal.asDiagonal());
+    weight.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(diagonal));
     auto ordinary = magmaan::estimate::fit_gmm(
         pt, *rep, samp, *start, weight, {}, Backend::NloptLbfgs,
         strict_options());

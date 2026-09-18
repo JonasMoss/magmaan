@@ -7,6 +7,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/gmm/weight.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/problem.hpp"
 
@@ -17,16 +18,13 @@
 //   ULS  → empty weight (identity; no whitening matmul)
 //   GLS  → normal_theory_weight(...)        (W from S⁻¹)
 //   WLS  → caller-supplied full weight
-//   DWLS → caller-supplied diagonal weight, as a (dense) Weight
+//   DWLS → caller-supplied diagonal weight
 //
-// `residuals` packages the objective as an optim::GmmProblem; the weight is
-// Cholesky-factored once at build time.
+// `residuals` packages the objective as an optim::GmmProblem. The weight is a
+// `std::vector<BlockWeight>` (see gmm/weight.hpp) which already carries its
+// own whitening form, so nothing is factored here.
 
 namespace magmaan::estimate::gmm {
-
-// Per-block weight, aligned to the stacked [mean ; vech(cov)] moment vector
-// of each block. Empty ⇒ identity weight (ULS). Each entry is symmetric PD.
-using Weight = std::vector<Eigen::MatrixXd>;
 
 // Estimator-neutral implied-moment callback. Transformed parameterizations
 // such as the frontier PSD lift use this overload to supply moments and their
