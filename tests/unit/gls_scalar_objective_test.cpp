@@ -194,6 +194,45 @@ TEST_CASE("GLS scalar trace objective matches the dense moment-quadratic path") 
   SUBCASE("2 factors, 2 groups + means") { check_equivalence(two_factor, 2, true,  17); }
 }
 
+// The closed-form materialization is new math (the old path ran an explicit
+// tr(A E_k A E_l) double loop), and the basis-expansion multiplicity differs
+// between diagonal and off-diagonal vech entries. Pin it directly over a range
+// of p, without needing a model to produce the covariance.
+TEST_CASE("BlockWeight::NormalTheory closed-form to_dense matches the trace loop") {
+  std::mt19937 rng(4242);
+  std::normal_distribution<double> nd(0.0, 1.0);
+  for (Eigen::Index p : {2, 3, 4, 5, 6, 7, 8, 9, 11, 14}) {
+    for (bool has_means : {false, true}) {
+      CAPTURE(p);
+      CAPTURE(has_means);
+      Eigen::MatrixXd B(p, p);
+      for (Eigen::Index i = 0; i < p; ++i) {
+        for (Eigen::Index j = 0; j < p; ++j) B(i, j) = nd(rng);
+      }
+      const Eigen::MatrixXd A =
+          B * B.transpose() +
+          static_cast<double>(p) * Eigen::MatrixXd::Identity(p, p);
+
+      auto bw = gmm::BlockWeight::normal_theory(
+          A, has_means, magmaan::FitError::Kind::NumericIssue, "closed-form");
+      REQUIRE_OK(bw);
+
+      const Eigen::MatrixXd Wref = dense_nt_reference(A, has_means);
+      REQUIRE(bw->rows() == Wref.rows());
+      CHECK((bw->to_dense() - Wref).cwiseAbs().maxCoeff() < 1e-12);
+
+      // ...and the whitening reproduces the same quadratic form.
+      for (int t = 0; t < 10; ++t) {
+        Eigen::VectorXd d(Wref.rows());
+        for (Eigen::Index i = 0; i < d.size(); ++i) d(i) = nd(rng);
+        const Eigen::VectorXd r = bw->t_apply(1.0, d);
+        CHECK(r.squaredNorm() ==
+              doctest::Approx(d.dot(Wref * d)).epsilon(1e-10));
+      }
+    }
+  }
+}
+
 TEST_CASE("BlockWeight::NormalTheory reproduces the dense normal-theory weight") {
   for (bool meanstructure : {false, true}) {
     CAPTURE(meanstructure);
