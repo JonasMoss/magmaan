@@ -3263,16 +3263,33 @@ work lives in [`speculative.md`](speculative.md). Open work:
   the oracle pin to lavaan 0.7-2, because both changed and *no test noticed*:
 
   - `tests/fixtures/twolevel/*.json` → `sampstat.{within_cov,between_cov,between_mean}`.
-    lavaan's two-level `S.PW.start` / `S.B.start` decomposition shifted between
-    versions (same data, same N=1000, same J=80, and identical for
-    `do.fit=FALSE`/`TRUE`, so it is an algorithm change in the iterative
-    decomposition, not optimizer noise): `between_cov` by up to 3.5e-3 relative,
-    `between_mean` by 3.8e-4, `within_cov` by 1.4e-5. Nothing in C++ reads these.
-    `cluster_stats_test.cpp` checks only the *within* covariance, against
-    hardcoded constants from small balanced/unbalanced fixtures where
-    `S.PW.start == SSW/(N−J)` in closed form — so it is unaffected by design and
-    the between-covariance is **untested against any oracle**. Worth wiring up:
-    it is a two-level sufficient statistic magmaan computes independently.
+    Read by nothing in C++. **Correcting an earlier version of this entry: these
+    are NOT sufficient statistics and are not worth wiring up.** The name is
+    literal — `lavInspect(fit, "sampstat")` on a two-level fit returns lavaan's
+    `S.PW.start` / `S.B.start`, i.e. *starting values* for the iteration. The
+    two-level ML likelihood is evaluated per cluster on the raw data; there is no
+    within/between covariance pair that it consumes. magmaan's actual two-level
+    sufficient statistics (SSW, grand mean, per-size cluster-mean sums) *are*
+    lavaan-gated, in `cluster_stats_test.cpp`.
+
+    What the shift actually propagated into is worth knowing, though, and is
+    recorded here because it bounds how tightly the two-level goldens can ever be
+    held. Across the 0.7-1 → 0.7-2 bump the **model** side is unmoved — `fmin`
+    identical exactly, model `logl` to 1e-12, `est` identical on `twolevel_1f4`,
+    `se` to 1.6e-9 — while the **saturated (h1) log-likelihood** moved 1.0e-4
+    (1f4), 3.8e-4 (2f6), 8.3e-5 (ri3). χ² = 2·(ll_h1 − ll_model) then inherits
+    exactly twice that: 2.07e-4 and 7.53e-4, which is 2× the h1 shifts to three
+    figures. Cause: the unstructured two-level model has no closed form, so
+    lavaan fits it iteratively and converges it only to ~1e-4; different starting
+    values land it in a slightly different place.
+
+    Consequence: magmaan's two-level χ² is gated against an oracle number lavaan
+    itself only pins to ~1e-4, and `twolevel_golden_test`'s `epsilon(1e-4)` on a
+    χ² of 6.37 allows ~6.4e-4 — about 3× the observed oracle noise. That
+    tolerance is therefore set by the *oracle's* convergence slop, not by
+    magmaan's precision, and tightening it would make the test fail on lavaan's
+    own irreproducibility. Do not tighten it without an independent reference for
+    the saturated two-level likelihood.
   - `tests/fixtures/fiml/*.json` → `mlr_*_robust` / `ml2s_*_robust`. 0.7-2 now
     returns NA for robust CFI/TLI on `0001_one_factor_hs_fiml` (a perfect-fit
     model where the correction is degenerate; it was 0.999999999997366 before),
