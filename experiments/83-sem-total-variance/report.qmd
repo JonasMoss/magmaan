@@ -33,9 +33,14 @@ information scaling with practical default starts? Can we answer this in seconds
 all 220 fits passed the existing audits, but diagonal preconditioning increased
 median evaluations in every setting. Of 110 paired datasets, 109 reached matching
 objectives and boundary classifications. One stressed mediation draw reached two
-different audited stationary endpoints; cross-restarts retained that difference.
+different audited stationary endpoints; unchanged cross-restarts retained that
+difference. A targeted boundary diagnostic now explains and escapes the worse one.
 The full comparison took 2.83 seconds. The earlier benefit from reference-assisted
-Bollen starts does not generalize to native starts in this pilot.
+Bollen starts does not generalize to native starts in this pilot. **The unresolved mediation case is a boundary
+identification problem:** a zero mediator disturbance makes direct and mediated
+paths interchangeable. A score-guided move among equivalent parameters followed
+by reopening that variance reaches the lower objective with both solver settings.
+Random perturbations were less dependable in this single-case check.
 
 **The Bollen follow-up separates coordinate scaling from PSD boundaries.** On the
 original data and ten matched Gaussian draws, eight cases have matching interior
@@ -128,6 +133,72 @@ The reported counts exclude that unmatched pair from the work comparison but
 retain it in the denominator. Single-pass timings and every fit, failure, and
 paired objective gap remain in `results/native-structures/`. These timings are
 sufficient to establish a cheap iteration loop, not stable speed ratios.
+
+### Why the mediation endpoint can be escaped
+
+Write the structural part as
+
+$$
+f_2=a f_1+\zeta_2,\qquad f_3=c f_1+b f_2+\zeta_3.
+$$
+
+At the worse endpoint, $\operatorname{Var}(\zeta_2)=0$. Only $c+ab$ matters:
+changing $b$ by $\delta$ and $c$ by $-a\delta$ leaves the entire implied observed
+covariance unchanged. The separate paths are unidentifiable there. The better
+endpoint instead has a small positive mediator disturbance (0.002315) and zero
+outcome disturbance, with large compensating paths ($b=17.95$, $c=-16.79$).
+Neither solution is a regular interior point.
+
+The derivative for opening the mediator variance depends on the otherwise
+unidentified $b$. At the same implied covariance, it is positive at $b=0$
+(0.1136) but negative at $b=1$ ($-0.1410$). The numerical check preserves covariance
+to $9\times10^{-16}$, verifies the analytic derivative by finite differences,
+and agrees with native objective evaluation before and after opening the variance.
+Thus the worse covariance has an explicit admissible descent path after choosing
+an equivalent parameter representation. Passing the first-order audit at the
+original representation does not certify optimality over all nearby attainable
+covariances at this singular point.
+
+The diagnostic restart examines four compensated shifts, $\pm1$ and $\pm2$
+in units of the fitted total latent standard-deviation ratio. It chooses the
+most negative variance derivative, opens small variances to 1% of their marginal
+variance, and refits. Selection uses the current fit and data only; the lower
+endpoint is used solely to score the experiment's outcome afterward.
+
+```{r}
+mediation_path <- "results/mediation-boundary/fits.csv"
+if (file.exists(mediation_path)) {
+  md <- read.csv(mediation_path)
+  lower <- min(md$objective[md$accepted])
+  md <- md[md$endpoint == "diagonal" & !grepl("^ridge_", md$policy), ]
+  md$policy[grepl("^jitter_", md$policy)] <- "Random perturbation"
+  md$policy[md$policy == "unchanged"] <- "Unchanged restart"
+  md$policy[md$policy == "reopen"] <- "Reopen variances only"
+  md$policy[md$policy == "score_guided"] <- "Score-guided equivalent start"
+  md$reached <- md$accepted & abs(md$objective-lower) < 1e-7
+  tab <- aggregate(reached ~ policy + preconditioning, md,
+                   function(x) sprintf("%d/%d",sum(x),length(x)))
+  tab <- reshape(tab,idvar="policy",timevar="preconditioning",direction="wide")
+  tab <- tab[c("policy", "reached.none", "reached.diagonal")]
+  knitr::kable(tab, row.names=FALSE,
+    col.names=c("Restart from Worse Endpoint", "Unscaled", "Diagonal"),
+    caption="Restarts reaching the lower observed objective; all fits passed the existing audits.")
+}
+```
+
+All 42 diagnostic fits passed the existing audits in about 0.6 seconds. Both
+score-guided fits reached 0.05939. Random perturbations reached it in 1/6 unscaled
+and 3/6 scaled attempts; reopening variances alone failed to escape. Perturbing
+the better endpoint returned to its objective in all twelve random trials.
+These are results for one selected difficult dataset, not success-rate estimates
+for SEMs generally, and the lower objective is not proven globally optimal.
+
+The immediate candidate is a **boundary identification diagnostic plus a targeted
+restart**, rather than additional generic scaling. The compensation used here
+requires both paths to be freely adjustable and the mediator disturbance to be
+zero; it must not be applied blindly to other graphs, correlated disturbances,
+or constrained paths. The procedure remains experiment-local, with no change
+to native fitting defaults or its audit tolerances.
 
 ### Bollen: information scaling helps in the interior
 
@@ -307,12 +378,17 @@ Run the native-start structural comparison and inspect any discrepant endpoints:
 Rscript scripts/native_structure_probe.R --dry-run-plan
 Rscript scripts/native_structure_probe.R
 Rscript scripts/native_restart_probe.R
+Rscript scripts/mediation_boundary_probe.R
 ```
 
 The main comparison runs 220 fits under a 30-second soft budget, checked between
 fits; each fit has a 1000-evaluation limit. `--smoke` runs 40 fits. The restart
 runner requires saved discrepancies and runs four fits per discrepancy under its
-own 30-second soft budget. Native results are independent of the earlier R-chart
+own 30-second soft budget. The mediation diagnostic consumes the saved stressed
+mediation draw-4 endpoints; it runs 42 fits (22 with `--smoke`) with six seeded
+random perturbations per endpoint and a separate 30-second soft budget. Its
+geometry checks and all restart results live in `results/mediation-boundary/`.
+Native results are independent of the earlier R-chart
 runs. Synthetic syntax is validated against its known population covariance
 before fitting; validation discrepancies are below $2\times10^{-29}$ in ULS.
 
@@ -471,6 +547,9 @@ R bindings. It runs 44 fits with a 30-second soft budget and no timing batches;
 `--smoke` runs 12 fits. Use
 `frontier_fit_ml_psd(model, data, preconditioning = "diagonal")` to opt in.
 The native-start comparison above now covers all six structures. Its results
-support retaining the unscaled default. A useful next diagnostic is whether
-constraint scaling and starting-point curvature explain the extra work; a more
-expensive scaling scheme is not justified by the current result alone.
+support retaining the unscaled default. The mediation diagnostic identifies a
+more immediate optimization issue: loss of path identification at a zero
+mediator disturbance. Validate its targeted restart on fresh draws before
+promoting a general policy. Constraint scaling and starting-point curvature remain
+possible explanations for the extra work, but a more expensive preconditioner
+is not justified by the current result alone.

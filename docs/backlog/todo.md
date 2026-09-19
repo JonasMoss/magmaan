@@ -4184,6 +4184,15 @@ work until a concrete downstream consumer appears.
     cross-restarts. Keep the unscaled default. Investigate start curvature and
     equality scaling before adding more expensive preconditioners; first-order
     cone acceptance does not establish a common or global optimum.
+    The mediation diagnostic now explains the worse endpoint: zero mediator
+    disturbance makes direct/mediated paths interchangeable at fixed covariance.
+    Compensated path shifts expose a negative variance-opening derivative;
+    a score-guided restart reaches the lower objective in both solver modes.
+    Among six random perturbations of the worse endpoint, only 1/6 unscaled and
+    3/6 scaled do so; reopening variances alone does not. All 42 diagnostic fits
+    pass audits (~0.6s). This is a single-case, experiment-local policy: validate
+    fresh draws and graph/constraint eligibility before promoting it. The lower
+    endpoint has zero outcome disturbance and is not proven globally optimal.
   - Add practical matched starts and a second optimizer before a native chart
     implementation. Feedback, fixed loading models and cross-group/shared
     constraints need explicit transformation contracts before inclusion.
