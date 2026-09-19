@@ -204,7 +204,18 @@ ordinal_fit_json <- function(fit) {
 # applies a WLSMV-style scaling correction. Store the pieces, not just the
 # clipped RMSEA, so parity failures are diagnosable.
 ordinal_catml_dwls_rmsea_json <- function(fit) {
-  x <- lavaan:::lav_fit_catml_dwls(fit, check_pd = TRUE)
+  # `nonpd = "na"` is lavaan 0.7-2's spelling of what was `check.pd = TRUE` in
+  # 0.6-22 and `check_pd = TRUE` in 0.7-1: return all-NA when any group's
+  # polychoric correlation matrix is not positive definite, instead of smoothing
+  # it and refitting. Verified by reading both bodies — the 0.7-2 `nonpd == "na"`
+  # branch is the same eigenvalue loop the old `check.pd` branch ran, and the
+  # regenerated fixtures are byte-identical across the rename.
+  #
+  # Passed explicitly even though "na" is the 0.7-2 default: this argument has
+  # been renamed twice already, and relying on the default would let a future
+  # default flip (e.g. to "smooth") silently rewrite these fixtures instead of
+  # failing loudly.
+  x <- lavaan:::lav_fit_catml_dwls(fit, nonpd = "na")
   fm <- fitMeasures(fit, c("rmsea.robust"))
   list(XX3 = as.numeric(x$XX3),
        df3 = as.integer(x$df3),

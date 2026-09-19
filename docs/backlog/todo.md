@@ -3217,6 +3217,28 @@ work lives in [`speculative.md`](speculative.md). Open work:
   propagated instead. magmaan already matches the net behaviour exactly
   (npar/df/χ² 38/20/38.94709 on HS 1939, both libraries). Reading that source
   comment alone would lead you to break parity.
+- **S. Two fixture fields are written but read by nothing** — found while bumping
+  the oracle pin to lavaan 0.7-2, because both changed and *no test noticed*:
+
+  - `tests/fixtures/twolevel/*.json` → `sampstat.{within_cov,between_cov,between_mean}`.
+    lavaan's two-level `S.PW.start` / `S.B.start` decomposition shifted between
+    versions (same data, same N=1000, same J=80, and identical for
+    `do.fit=FALSE`/`TRUE`, so it is an algorithm change in the iterative
+    decomposition, not optimizer noise): `between_cov` by up to 3.5e-3 relative,
+    `between_mean` by 3.8e-4, `within_cov` by 1.4e-5. Nothing in C++ reads these.
+    `cluster_stats_test.cpp` checks only the *within* covariance, against
+    hardcoded constants from small balanced/unbalanced fixtures where
+    `S.PW.start == SSW/(N−J)` in closed form — so it is unaffected by design and
+    the between-covariance is **untested against any oracle**. Worth wiring up:
+    it is a two-level sufficient statistic magmaan computes independently.
+  - `tests/fixtures/fiml/*.json` → `mlr_*_robust` / `ml2s_*_robust`. 0.7-2 now
+    returns NA for robust CFI/TLI on `0001_one_factor_hs_fiml` (a perfect-fit
+    model where the correction is degenerate; it was 0.999999999997366 before),
+    and `fit/0015_start_call` gained a `se_robust_huberwhite` where 0.7-1 gave
+    `null`. Both invisible to the suite.
+
+  Neither is a magmaan bug. The point is that a fixture field nothing asserts on
+  is not parity coverage, and the pin bump is what exposed it.
 - **S.** `measures::fit_measures` costs ~3.2 ms at p=96 (about 10% of the whole
   fit) and is both non-monotone in p and sensitive to n (2.96× over n
   200→50000), which is impossible for a pure function of three scalars plus

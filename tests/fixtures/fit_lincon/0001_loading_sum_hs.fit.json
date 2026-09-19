@@ -4,7 +4,7 @@
     "fixture_kind": "fit.lincon",
     "corpus_id": "0001_loading_sum_hs",
     "tool": "lavaan::cfa(+ linear == constraint)",
-    "lavaan_version": "0.7.1.2691"
+    "lavaan_version": "0.7.2"
   },
   "input": "visual =~ x1 + b2*x2 + b3*x3\nb2 + b3 == 1.5",
   "n_obs": 301,
