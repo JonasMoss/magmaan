@@ -3207,6 +3207,37 @@ work lives in [`speculative.md`](speculative.md). Open work:
   no longer matches across conventions. magmaan therefore reports
   (G−1)·n_lv too few free parameters, with the wrong df and chi-square, silently.
 
+  **Not a pin-bump regression, and provable without the oracle.** The rule landed
+  upstream in commit `fecaf6b7` (2019-06-27) and the block is byte-identical in
+  0.6-22; installing 0.6-22 side by side reproduces 0.7-2's partable exactly
+  (npar 40 / 38 in both). So this has been lavaan's behaviour for ~6 years and is
+  not something the 0.6-22 → 0.7-2 realign introduced.
+
+  The decisive evidence is magmaan's own reparameterization invariance, which
+  needs no reference to lavaan (HS 1939, `group = "school"`,
+  `group_equal = "loadings"`, `meanstructure = TRUE`):
+
+  | convention | lavaan npar/df/χ² | magmaan npar/df/χ² |
+  |---|---|---|
+  | marker | 38 / 20 / 38.94709 | 38 / 20 / 38.94709 |
+  | `std_lv` | 40 / 20 / 38.94709 | 38 / **22** / **39.11063** |
+
+  lavaan's std.lv χ² equals its own marker χ² to 5 decimals, as a change of
+  coordinates must. magmaan's std_lv χ² differs from magmaan's own marker χ², so
+  magmaan is fitting a strictly more restricted model (the 2 extra restrictions
+  are exactly the group-2 LV variances). A self-consistency test comparing
+  marker vs `std_lv` χ² on one multi-group model catches this with no fixture at
+  all, and is worth adding alongside the golden.
+
+  Related but **not** a magmaan bug: the sibling rule commented "marker indicator
+  if std.lv = FALSE (new in 0.6-20)" does fire — group 2's marker loadings leave
+  `lav_partable_flat` with `free=1, ustart=NA` — and is then undone downstream, so
+  the marker markers end up fixed at 1.0 in every group. Mechanism: `group.equal`
+  emits `==` rows only for loadings that are free in group 1 (6 rows under
+  std.lv, 4 under marker), and where group 1 is fixed the fixed value is
+  propagated instead. magmaan already matches the net behaviour. Do not "fix"
+  magmaan to free the marker on the strength of reading that source comment.
+
   Fix is in `apply_std_lv` / the `group_equal` pass in `src/spec/build.cpp`
   (`apply_std_lv` at :510, the `will_be_free` guard at :1190). Note the ordering:
   `apply_std_lv` runs per group inside `build_group_template`, so the release for
