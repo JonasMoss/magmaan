@@ -2449,7 +2449,8 @@ Rcpp::List frontier_fit_ml_psd_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    bool diagonal_preconditioning = false) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_ml_psd");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -2463,12 +2464,15 @@ Rcpp::List frontier_fit_ml_psd_impl(
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
+  psd_opts.diagonal_preconditioning = diagonal_preconditioning;
   auto e_or = magmaan::estimate::frontier::fit_ml_psd(
       ctx.pt, ctx.rep, ctx.samp, x0, backend, optim_opts_from(control),
       psd_opts);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return fit_result(ctx, est, &starts, "ML");
+  Rcpp::List out = fit_result(ctx, est, &starts, "ML");
+  out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
+  return out;
 }
 
 namespace {

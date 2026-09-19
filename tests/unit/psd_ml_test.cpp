@@ -563,6 +563,9 @@ TEST_CASE("PSD mixed ordinal ULS repairs an improper continuous residual") {
 
 TEST_CASE("PSD ML lifted objective and equality Jacobian match central "
           "finite differences") {
+  magmaan::estimate::frontier::PsdFitOptions psd_options;
+  SUBCASE("unscaled") {}
+  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
   BuildOptions options;
   options.meanstructure = true;
   auto pt = lavaanify(
@@ -588,9 +591,24 @@ TEST_CASE("PSD ML lifted objective and equality Jacobian match central "
   REQUIRE(start.has_value());
 
   auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start);
+      pt, *rep, samp, *start, 1e-6, psd_options);
   REQUIRE_MESSAGE(probe.has_value(), "PSD derivative probe failed: "
       << (probe.has_value() ? std::string{} : probe.error().detail));
+  if (psd_options.diagonal_preconditioning) {
+    REQUIRE(probe->coordinate_scale.size() == probe->x.size());
+    CHECK(probe->coordinate_scale.allFinite());
+    CHECK(probe->coordinate_scale.minCoeff() > 0.0);
+    CHECK((probe->coordinate_scale.array() - 1.0).abs().maxCoeff() > 0.1);
+    auto unscaled = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+        pt, *rep, samp, *start);
+    REQUIRE(unscaled.has_value());
+    CHECK(probe->x.cwiseProduct(probe->coordinate_scale).isApprox(unscaled->x, 1e-12));
+    CHECK(probe->objective == doctest::Approx(unscaled->objective).epsilon(1e-12));
+    CHECK(probe->analytic_gradient.isApprox(
+        unscaled->analytic_gradient.cwiseProduct(probe->coordinate_scale), 1e-11));
+    CHECK(probe->analytic_constraint_jacobian.isApprox(
+        unscaled->analytic_constraint_jacobian * probe->coordinate_scale.asDiagonal(), 1e-11));
+  }
   REQUIRE(probe->n_alpha > 0);
   REQUIRE(probe->n_lift > 0);
   REQUIRE(probe->constraints.size() > 0);
@@ -607,6 +625,9 @@ TEST_CASE("PSD ML lifted objective and equality Jacobian match central "
 }
 
 TEST_CASE("PSD ML honors shared covariances and a general linear equality") {
+  magmaan::estimate::frontier::PsdFitOptions psd_options;
+  SUBCASE("unscaled") {}
+  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
   auto pt = lavaanify(
       "f =~ 1*x1 + a*x2 + b*x3 + d*x4\n"
       "x1 ~~ c*x2\n"
@@ -630,7 +651,7 @@ TEST_CASE("PSD ML honors shared covariances and a general linear equality") {
   REQUIRE(start.has_value());
 
   auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start);
+      pt, *rep, samp, *start, 1e-6, psd_options);
   REQUIRE_MESSAGE(probe.has_value(),
       "shared/general-linear PSD derivative probe failed: "
           << (probe.has_value() ? std::string{} : probe.error().detail));
@@ -641,7 +662,7 @@ TEST_CASE("PSD ML honors shared covariances and a general linear equality") {
             .cwiseAbs().maxCoeff() < 3e-7);
 
   auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
   REQUIRE_MESSAGE(fit.has_value(), "shared/general-linear PSD fit failed: "
       << (fit.has_value() ? std::string{} : fit.error().detail));
   check_psd_terminal(*fit);
@@ -668,6 +689,9 @@ TEST_CASE("PSD ML honors shared covariances and a general linear equality") {
 }
 
 TEST_CASE("PSD ML honors a nonlinear equality") {
+  magmaan::estimate::frontier::PsdFitOptions psd_options;
+  SUBCASE("unscaled") {}
+  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
   auto pt = lavaanify(
       "f =~ 1*x1 + a*x2 + b*x3\n"
       "a == b^2");
@@ -684,7 +708,7 @@ TEST_CASE("PSD ML honors a nonlinear equality") {
   REQUIRE(start.has_value());
 
   auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
   REQUIRE_MESSAGE(fit.has_value(), "nonlinear-equality PSD fit failed: "
       << (fit.has_value() ? std::string{} : fit.error().detail));
   check_psd_terminal(*fit);
@@ -696,6 +720,9 @@ TEST_CASE("PSD ML honors a nonlinear equality") {
 }
 
 TEST_CASE("PSD ML handles independent multi-group covariance blocks") {
+  magmaan::estimate::frontier::PsdFitOptions psd_options;
+  SUBCASE("unscaled") {}
+  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
   BuildOptions options;
   options.n_groups = 2;
   auto pt = lavaanify("f =~ x1 + x2 + x3", options);
@@ -720,7 +747,7 @@ TEST_CASE("PSD ML handles independent multi-group covariance blocks") {
   REQUIRE(start.has_value());
 
   auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start);
+      pt, *rep, samp, *start, 1e-6, psd_options);
   REQUIRE_MESSAGE(probe.has_value(), "multi-group PSD derivative probe failed: "
       << (probe.has_value() ? std::string{} : probe.error().detail));
   CHECK((probe->analytic_gradient -
@@ -730,7 +757,7 @@ TEST_CASE("PSD ML handles independent multi-group covariance blocks") {
             .cwiseAbs().maxCoeff() < 3e-7);
 
   auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
   REQUIRE_MESSAGE(fit.has_value(), "multi-group PSD fit failed: "
       << (fit.has_value() ? std::string{} : fit.error().detail));
   check_psd_terminal(*fit);
@@ -740,6 +767,9 @@ TEST_CASE("PSD ML handles independent multi-group covariance blocks") {
 }
 
 TEST_CASE("PSD ML mean-structure fit agrees with ordinary interior ML") {
+  magmaan::estimate::frontier::PsdFitOptions psd_options;
+  SUBCASE("unscaled") {}
+  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
   BuildOptions options;
   options.meanstructure = true;
   auto pt = lavaanify("f =~ x1 + x2 + x3", options);
@@ -767,7 +797,7 @@ TEST_CASE("PSD ML mean-structure fit agrees with ordinary interior ML") {
 
   auto fit = magmaan::estimate::frontier::fit_ml_psd(
       pt, *rep, samp, ordinary->theta,
-      Backend::NloptSlsqp, strict_options());
+      Backend::NloptSlsqp, strict_options(), psd_options);
   REQUIRE_MESSAGE(fit.has_value(), "mean-structure PSD fit failed: "
       << (fit.has_value() ? std::string{} : fit.error().detail));
   check_psd_terminal(*fit);
@@ -1312,4 +1342,38 @@ TEST_CASE("PSD fitted-weight GMM repairs a negative-residual fixed point") {
       << (psd.has_value() ? std::string{} : psd.error().detail));
   check_psd_terminal(*psd);
   CHECK(psd->fmin > ordinary->fmin + 1e-6);
+}
+
+TEST_CASE("PSD ML diagonal preconditioning preserves the cone boundary solution") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d covariance;
+  covariance << 1.0, 0.7, 0.7, 0.7, 1.0, 0.3, 0.7, 0.3, 1.0;
+  auto samp = sample_stats(covariance, 80);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+  auto unscaled = magmaan::estimate::frontier::fit_ml_psd(
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
+  REQUIRE(unscaled.has_value());
+  magmaan::estimate::frontier::PsdFitOptions options;
+  options.diagonal_preconditioning = true;
+  auto scaled = magmaan::estimate::frontier::fit_ml_psd(
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), options);
+  REQUIRE_MESSAGE(scaled.has_value(), (scaled.has_value() ? "" : scaled.error().detail));
+  check_psd_terminal(*unscaled);
+  check_psd_terminal(*scaled);
+  CHECK(scaled->diagnostics.geometric_stationarity.covariance_nullity > 0);
+  CHECK(std::abs(scaled->fmin - unscaled->fmin) < 1e-8);
+  auto ev = magmaan::model::ModelEvaluator::build(pt, *rep);
+  REQUIRE(ev.has_value());
+  auto a = ev->evaluate(unscaled->theta, false, false);
+  auto b = ev->evaluate(scaled->theta, false, false);
+  REQUIRE(a.has_value());
+  REQUIRE(b.has_value());
+  CHECK(a->moments.sigma[0].isApprox(b->moments.sigma[0], 1e-5));
+  auto unsupported = magmaan::estimate::frontier::fit_gmm_psd(
+      pt, *rep, samp, *start, {}, Backend::NloptSlsqp, strict_options(), options);
+  REQUIRE_FALSE(unsupported.has_value());
+  CHECK(unsupported.error().detail.find("only for complete-data ML") != std::string::npos);
 }

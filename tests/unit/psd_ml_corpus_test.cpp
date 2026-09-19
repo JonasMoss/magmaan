@@ -178,7 +178,10 @@ bool covariance_row_value(const Handles& handles,
   return false;
 }
 
-void check_case(const nlohmann::json& c) {
+void check_case(const nlohmann::json& c, bool precondition) {
+  magmaan::estimate::frontier::PsdFitOptions options;
+  options.diagonal_preconditioning = precondition;
+  INFO("diagonal preconditioning: " << precondition);
   const std::string label =
       c.at("set").get<std::string>() + "::" + c.at("id").get<std::string>();
   INFO("PSD corpus geometry: " << label);
@@ -199,7 +202,7 @@ void check_case(const nlohmann::json& c) {
   }
   auto psd = magmaan::estimate::frontier::fit_ml_psd(
       handles.pt, handles.rep, stats, ordinary->theta, Backend::NloptSlsqp,
-      strict_options());
+      strict_options(), options);
   if (!psd.has_value()) {
     FAIL_CHECK("PSD ML failed: " << psd.error().detail);
     return;
@@ -308,6 +311,7 @@ TEST_CASE("compact corpus geometries distinguish ordinary ML from PSD ML") {
   REQUIRE(fixture.contains("cases"));
   REQUIRE(fixture.at("cases").size() == 4);
   for (const auto& c : fixture.at("cases")) {
-    check_case(c);
+    check_case(c, false);
+    check_case(c, true);
   }
 }

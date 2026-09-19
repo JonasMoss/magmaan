@@ -4171,6 +4171,12 @@ work until a concrete downstream consumer appears.
     fits; raw charts have residual audit failures. The start-information selector
     chooses marker, but its superiority to fixed total-plus-scaling is unproven.
     The boundary-aware routing replay is experiment-local, not a native API.
+  - Native complete-data PSD ML now has opt-in blockwise diagonal information
+    preconditioning with original-coordinate final audits. The Bollen native
+    probe accepted all 44 fits in 0.83s with paired objective gaps below `6e-12`.
+    Median evaluations fell 108→31 from reference-assisted common starts but
+    rose 114→152 from native starts. Keep it opt-in until
+    broader structures and practical starts establish a reliable benefit.
   - Add practical matched starts and a second optimizer before a native chart
     implementation. Feedback, fixed loading models and cross-group/shared
     constraints need explicit transformation contracts before inclusion.

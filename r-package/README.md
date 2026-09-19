@@ -288,6 +288,13 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
 - The high-level `magmaan()` helper dispatches to the same all-ordinal or
   mixed path for `estimator = "DWLS"` / `"WLS"` when `ordered =` is supplied
   with a data frame.
+- Complete-data covariance-honest ML uses `frontier_fit_ml_psd(model, data)`.
+  Its opt-in `preconditioning = "diagonal"` freezes separate expected-information
+  scales for original model coordinates and auxiliary covariance factors at the
+  start. The returned partable, objective and PSD domain are unchanged, and
+  terminal audits run in original coordinates. The default remains `"none"`;
+  this option is not exposed for other estimator families. Inspect
+  `fit$psd_preconditioning` for the selected mode.
 - Covariance-honest research fits are explicit. Use
   `frontier_fit_ml2s_psd()` for saturated-EM Stage 1 followed by PSD ML or a
   fixed ULS/DWLS/ADF/DLS Stage 2, and `frontier_fit_catml_psd()` for

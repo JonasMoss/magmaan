@@ -358,3 +358,50 @@ constraints in every solver. The useful first classification is **unit scaling,
 remaining parameter coupling, near-boundary behavior, or identification trouble**,
 with numerical diagnostics supporting the labels. It is too early to learn a
 universal mapping from a model's diagram to its best parameterization.
+
+### Native PSD diagonal preconditioning
+
+The complete-data native PSD ML fitter now exposes an optional frozen diagonal
+information scale. It retains the existing model and covariance-factor links;
+gradients and equality Jacobians transform together. Final feasibility and
+cone-stationarity checks use the original coordinates. The default is unchanged.
+
+```{r}
+native_path <- "results/native/fits.csv"
+if (file.exists(native_path)) {
+  native <- read.csv(native_path)
+  native_summary <- aggregate(cbind(evaluations, seconds) ~ start + preconditioning,
+                              native, median)
+  native_summary$milliseconds <- round(1000 * native_summary$seconds, 2)
+  native_summary$seconds <- NULL
+  knitr::kable(native_summary, caption = "Native Bollen fits: medians across eleven datasets.")
+  native_pairs <- reshape(native[c("replicate", "start", "preconditioning", "objective")],
+                          idvar=c("replicate", "start"), timevar="preconditioning",
+                          direction="wide")
+  cat(sprintf("\nAccepted fits: %d/%d. Maximum paired objective gap: %.2g.\n",
+              sum(native$accepted), nrow(native),
+              max(abs(native_pairs$objective.none-native_pairs$objective.diagonal))))
+}
+```
+
+The first run accepted all 44 fits, including the same three boundary datasets,
+and completed in 0.83 seconds. Common starts reduced median objective evaluations
+from 108 to 31; native starts increased them from 114 to 152. Common starts here
+are reference-assisted, so their improvement is not evidence for a default policy.
+Single-pass timings include setup but are too short to establish a stable speed
+ratio. Evaluation counts likewise omit constraint and derivative costs.
+
+The implementation uses ordinary SEM information for the original parameter
+block and lifted information for covariance-factor coordinates. Original
+covariance coordinates have zero lifted-objective derivatives because they act
+through the links; using those zeros as their scale would be inappropriate.
+Zero-sensitivity coordinates retain unit scale, and nonzero inverse-square-root
+scales are capped at $[10^{-4},10^4]$. No covariance eigenvalue floor is imposed
+on the final solution by this scaling.
+
+Reproduce with `Rscript scripts/native_psd_probe.R` after installing the updated
+R bindings. It runs 44 fits with a 30-second soft budget and no timing batches;
+`--smoke` runs 12 fits. Use
+`frontier_fit_ml_psd(model, data, preconditioning = "diagonal")` to opt in.
+The next comparison should extend native-start fits across the six structures
+before considering a default change or more expensive block scaling.

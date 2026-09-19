@@ -155,6 +155,9 @@ struct ExtraNonlinearEqConstraints {
 struct PsdFitOptions {
   double start_eigen_floor = 1e-6;
   double feasibility_tol = 1e-6;
+  // Complete-data ML only. Freeze blockwise diagonal expected-information
+  // scaling at the lifted start; final audits remain in original coordinates.
+  bool diagonal_preconditioning = false;
 };
 
 // Scalar function used by profile-LR helpers. `value(theta)` returns g(θ).

@@ -1314,8 +1314,10 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
 frontier_fit_ml_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
-    missing = c("listwise", "error")) {
+    missing = c("listwise", "error"),
+    preconditioning = c("none", "diagonal")) {
   missing <- match.arg(missing)
+  preconditioning <- match.arg(preconditioning)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model)
   }
@@ -1324,7 +1326,8 @@ frontier_fit_ml_psd <- function(
     partable_arg(model), sample_stats_arg(data),
     optimizer = optimizer, control = control,
     start_eigen_floor = start_eigen_floor,
-    feasibility_tol = feasibility_tol
+    feasibility_tol = feasibility_tol,
+    diagonal_preconditioning = identical(preconditioning, "diagonal")
   )
   attach_complete_raw_data(fit, data)
 }

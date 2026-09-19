@@ -31,6 +31,7 @@ struct PsdDerivativeProbe {
   Eigen::MatrixXd finite_difference_constraint_jacobian;
   Eigen::Index n_alpha = 0;
   Eigen::Index n_lift = 0;
+  Eigen::VectorXd coordinate_scale;
 };
 
 fit_expected<PsdDerivativeProbe>

@@ -125,6 +125,19 @@ constraint-Jacobian rank under `fit$audit`. Boundary fits are reported by the
 existing covariance diagnostics; ordinary interior information-matrix
 inference is not yet promoted as valid at a rank-deficient component solution.
 
+Complete-data `frontier::fit_ml_psd` also has opt-in diagonal preconditioning
+(`PsdFitOptions::diagonal_preconditioning`, R `preconditioning = "diagonal"`).
+It freezes per-observation expected-information scales at the PSD start. Ordinary
+SEM sensitivities supply the equality-reduced original-parameter block; lifted
+sensitivities supply the covariance-factor block. This avoids assigning infinite
+scales to original covariance coordinates whose lifted-objective columns vanish.
+Zero-sensitivity coordinates retain unit scale; nonzero scales are capped at
+`[1e-4, 1e4]`. The caps affect coordinates only, not covariance eigenvalues or the
+admissible domain. Objective gradients and constraint Jacobian columns transform
+together, and the fitted point is mapped back before original link feasibility,
+partable round-trip, and cone-stationarity audits. The default remains unscaled;
+other PSD estimator entry points reject this option rather than ignore it.
+
 Fit finalization supplies the authoritative common numerical verdict through
 `estimate::fit_verdict(estimates)`, independently of optimizer termination or
 the driven-coordinate `fit$audit`. It verifies the original half-discrepancy

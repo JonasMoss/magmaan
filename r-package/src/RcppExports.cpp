@@ -149,8 +149,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_ml_psd_impl
-Rcpp::List frontier_fit_ml_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaan_frontier_fit_ml_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_ml_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning);
+RcppExport SEXP _magmaan_frontier_fit_ml_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -160,7 +160,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< bool >::type diagonal_preconditioning(diagonal_preconditioningSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4219,7 +4220,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_bounds_loading_impl", (DL_FUNC) &_magmaan_bounds_loading_impl, 2},
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
-    {"_magmaan_frontier_fit_ml_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_psd_impl, 6},
+    {"_magmaan_frontier_fit_ml_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_psd_impl, 7},
     {"_magmaan_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_uls_psd_impl, 6},
     {"_magmaan_frontier_fit_gls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_gls_psd_impl, 6},
     {"_magmaan_frontier_fit_wls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_wls_psd_impl, 7},

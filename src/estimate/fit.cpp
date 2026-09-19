@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1100,6 +1101,121 @@ psd_constraint_callbacks(const EqConstraints& con,
   return out;
 }
 
+// Per-observation expected-information diagonal, without constructing a dense
+// parameter information matrix. Frobenius norms keep each contribution >= 0.
+fit_expected<Eigen::VectorXd>
+psd_information_diagonal(const model::Evaluation& eval,
+                         const SampleStats& samp) {
+  auto total = sample_n_total(samp, "PSD ML preconditioning");
+  if (!total.has_value()) return std::unexpected(total.error());
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(eval.J_sigma.cols());
+  Eigen::Index sigma_offset = 0;
+  Eigen::Index mu_offset = 0;
+  for (std::size_t b = 0; b < eval.moments.sigma.size(); ++b) {
+    const auto& sigma = eval.moments.sigma[b];
+    const Eigen::Index p = sigma.rows();
+    const Eigen::Index n_vech = detail::vech_len(p);
+    Eigen::LLT<Eigen::MatrixXd> llt(sigma);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(fit_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "PSD ML preconditioning requires PD implied covariance at start"));
+    }
+    const bool has_mean = b < eval.moments.mu.size() &&
+        eval.moments.mu[b].size() > 0 && eval.J_mu.rows() > 0;
+    const double weight = static_cast<double>(samp.n_obs[b]) / *total;
+    Eigen::MatrixXd derivative(p, p);
+    for (Eigen::Index k = 0; k < out.size(); ++k) {
+      const Eigen::VectorXd column =
+          eval.J_sigma.col(k).segment(sigma_offset, n_vech);
+      detail::vech_unpack(column, p, derivative);
+      const Eigen::MatrixXd left = llt.matrixL().solve(derivative);
+      const Eigen::MatrixXd white = llt.matrixL().solve(left.transpose());
+      out(k) += 0.5 * weight * white.squaredNorm();
+      if (has_mean) {
+        const Eigen::VectorXd mu_column = eval.J_mu.col(k).segment(mu_offset, p);
+        const Eigen::VectorXd white_mu = llt.matrixL().solve(mu_column);
+        out(k) += weight * white_mu.squaredNorm();
+      }
+    }
+    sigma_offset += n_vech;
+    if (has_mean) mu_offset += p;
+  }
+  if (!out.allFinite()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "PSD ML preconditioning produced non-finite information"));
+  }
+  return out;
+}
+
+fit_expected<Eigen::VectorXd>
+psd_ml_coordinate_scale(const model::ModelEvaluator& ev,
+                         const model::MatrixRep& rep,
+                         const EqConstraints& con,
+                         const PsdLiftLayout& layout,
+                         const SampleStats& samp,
+                         const Eigen::VectorXd& start) {
+  auto lifted = psd_lifted_evaluation(ev, rep, con, layout, ev.param_locations(),
+      psd_sigma_offsets(rep), start, true, true);
+  if (!lifted.has_value()) return std::unexpected(lifted.error());
+  auto diagonal = psd_information_diagonal(*lifted, samp);
+  if (!diagonal.has_value()) return std::unexpected(diagonal.error());
+
+  // Original covariance coordinates have zero lifted-objective derivatives:
+  // their meaning lives in the links. Use ordinary model sensitivities for
+  // the alpha block, including the covariance columns, at the same PSD start.
+  auto original = ev.evaluate_with_covariance_overrides(
+      con.expand(start.head(layout.n_alpha)),
+      covariance_overrides_from_x(rep, layout, start), true, true);
+  if (!original.has_value()) return std::unexpected(model_to_fit(
+      original.error(), "PSD ML preconditioning"));
+  original->J_sigma = (original->J_sigma * con.K()).eval();
+  if (original->J_mu.size() > 0) {
+    original->J_mu = (original->J_mu * con.K()).eval();
+  }
+  auto alpha_diagonal = psd_information_diagonal(*original, samp);
+  if (!alpha_diagonal.has_value()) return std::unexpected(alpha_diagonal.error());
+  diagonal->head(layout.n_alpha) = *alpha_diagonal;
+
+  Eigen::VectorXd scale(diagonal->size());
+  for (Eigen::Index k = 0; k < scale.size(); ++k) {
+    // A zero derivative is not evidence for an arbitrarily large step. Keep
+    // unit scaling there; cap extreme nonzero scales without changing the model.
+    scale(k) = (*diagonal)(k) > 0.0
+        ? std::clamp(1.0 / std::sqrt((*diagonal)(k)), 1e-4, 1e4) : 1.0;
+  }
+  return scale;
+}
+
+optim::ScalarProblem
+psd_scaled_objective(const optim::ScalarProblem& prob,
+                      const Eigen::VectorXd& scale) {
+  optim::ScalarProblem out;
+  out.n_param = prob.n_param;
+  out.expand = [expand = prob.expand, scale](const Eigen::VectorXd& z) {
+    return expand(z.cwiseProduct(scale));
+  };
+  out.f = [f = prob.f, scale](const Eigen::VectorXd& z, Eigen::VectorXd& grad) {
+    const double value = f(z.cwiseProduct(scale), grad);
+    grad.array() *= scale.array();
+    return value;
+  };
+  return out;
+}
+
+PsdConstraintCallbacks
+psd_scaled_constraints(const PsdConstraintCallbacks& constraints,
+                         const Eigen::VectorXd& scale) {
+  PsdConstraintCallbacks out;
+  out.n_constraint = constraints.n_constraint;
+  out.h = [h = constraints.h, scale](const Eigen::VectorXd& z) {
+    return h(z.cwiseProduct(scale));
+  };
+  out.jacobian = [jacobian = constraints.jacobian, scale](const Eigen::VectorXd& z) {
+    return Eigen::MatrixXd(jacobian(z.cwiseProduct(scale)) * scale.asDiagonal());
+  };
+  return out;
+}
+
 fit_expected<Prelude>
 prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
@@ -1404,6 +1520,16 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
                      std::move(*cache));
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  if (options.diagonal_preconditioning) {
+    auto scale = psd_ml_coordinate_scale(pre->ev, rep, pre->con, *layout, samp, *start);
+    if (!scale.has_value()) return std::unexpected(scale.error());
+    auto probe = probe_callbacks(psd_scaled_objective(objective, *scale),
+        psd_scaled_constraints(constraints, *scale), start->cwiseQuotient(*scale),
+        layout->n_alpha, layout->n_lift, finite_difference_step,
+        "psd_ml_derivative_probe");
+    if (probe.has_value()) probe->coordinate_scale = *scale;
+    return probe;
+  }
   return probe_callbacks(objective, constraints, *start, layout->n_alpha,
                          layout->n_lift, finite_difference_step,
                          "psd_ml_derivative_probe");
@@ -1980,6 +2106,10 @@ enum class FisherStepKind { Full, SchurSnlls };
 fit_expected<void>
 validate_psd_fit_options(const frontier::PsdFitOptions& psd_opts,
                          const char* who) {
+  if (psd_opts.diagonal_preconditioning && std::string_view(who) != "fit_ml_psd") {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": diagonal preconditioning is supported only for complete-data ML"));
+  }
   if (!(psd_opts.feasibility_tol > 0.0) ||
       !std::isfinite(psd_opts.feasibility_tol)) {
     return std::unexpected(fit_err(
@@ -2001,10 +2131,28 @@ drive_psd_problem(const optim::ScalarProblem& prob,
                   const Bounds& diagnostic_bounds,
                   Backend backend, OptimOptions opts,
                   const frontier::PsdFitOptions& psd_opts,
-                  const char* who) {
-  auto result = run_scalar_constrained(
-      prob, constraints.h, constraints.jacobian,
-      constraints.n_constraint, start, driven_bounds, backend, opts, who);
+                  const char* who,
+                  const Eigen::VectorXd& coordinate_scale = Eigen::VectorXd{}) {
+  const bool scaled = coordinate_scale.size() > 0;
+  auto result = [&]() -> fit_expected<optim::OptimResult> {
+    if (!scaled) {
+      return run_scalar_constrained(prob, constraints.h, constraints.jacobian,
+          constraints.n_constraint, start, driven_bounds, backend, opts, who);
+    }
+    const auto driven_problem = psd_scaled_objective(prob, coordinate_scale);
+    const auto driven_constraints = psd_scaled_constraints(constraints, coordinate_scale);
+    const Eigen::VectorXd driven_start = start.cwiseQuotient(coordinate_scale);
+    Bounds bounds = driven_bounds;
+    if (!bounds.empty()) {
+      bounds.lower.array() /= coordinate_scale.array();
+      bounds.upper.array() /= coordinate_scale.array();
+    }
+    auto out = run_scalar_constrained(driven_problem, driven_constraints.h,
+        driven_constraints.jacobian, driven_constraints.n_constraint,
+        driven_start, bounds, backend, opts, who);
+    if (out.has_value()) out->x.array() *= coordinate_scale.array();
+    return out;
+  }();
   if (!result.has_value()) return std::unexpected(result.error());
 
   const Eigen::VectorXd residual = constraints.h(result->x);
@@ -2067,6 +2215,8 @@ drive_psd_problem(const optim::ScalarProblem& prob,
       : driven_bounds.upper;
   result->audit = optim::audit_equality_constrained_terminal_iterate(
       roundtrip_problem, roundtrip_x, roundtrip_fmin, lower, upper);
+  if (scaled) result->grad_inf_norm = roundtrip_gradient.size() > 0
+      ? roundtrip_gradient.cwiseAbs().maxCoeff() : 0.0;
 
   Estimates est{
       pre.con.expand(*alpha),
@@ -2413,9 +2563,15 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
                      std::move(*cache));
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
+  Eigen::VectorXd coordinate_scale;
+  if (psd_opts.diagonal_preconditioning) {
+    auto scale = psd_ml_coordinate_scale(pre->ev, rep, pre->con, *layout, samp, *start);
+    if (!scale.has_value()) return std::unexpected(scale.error());
+    coordinate_scale = std::move(*scale);
+  }
   auto est = drive_psd_problem(prob, pt, *pre, *layout, constraints, *start,
                                Bounds{}, Bounds{}, backend, opts, psd_opts,
-                               "fit_ml_psd");
+                               "fit_ml_psd", coordinate_scale);
   if (!est.has_value()) return est;
   auto full_problem = estimate::ml_objective(pre->ev, samp);
   if (full_problem.has_value()) {
