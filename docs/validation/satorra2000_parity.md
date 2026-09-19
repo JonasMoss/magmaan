@@ -338,3 +338,107 @@ Evidence: `experiments/81-score-vs-lrt/diagnose_trace_sb_nested.R`, which also
 records that `pEBA4` collapses onto `pall` exactly when `df_diff <= 4` (the
 EBA-j blocks become singletons once `j >= m`), so a nested design meant to
 exercise pEBA4 as a distinct method needs `df_diff > 4`.
+
+## Geometry of the exact-vs-delta gap (2026-09-19)
+
+Why the two restriction maps differ, and what decides whether it matters. Three
+results below are verified; one hypothesis is recorded as refuted so it does not
+get re-tried.
+
+**1. `U` depends on `A` only through `ker(A)`.** In equation 23 the factor
+`Pi = P^-1 A' (A P^-1 A')^- A` is idempotent with range `col(P^-1 A')` and
+kernel `ker(A)`: it is *the* `P`-orthogonal projector annihilating `ker(A)`.
+Replacing `A` by `BA` for invertible `B` leaves it unchanged. So the restriction
+map is not "a matrix" in any meaningful sense -- it is the choice of which
+`m`-dimensional subspace of H1's tangent space at the fitted point counts as
+forbidden. `exact` reads that subspace off the analytic constraint function;
+`delta` infers it as `col(ginv(Delta1) Delta0)`, comparing two tangent planes
+fitted at *two different points* (`Delta1` at `theta1_hat`, `Delta0` at
+`theta0_hat`).
+
+**2. The whole issue is invisible under normality.** Since `V = Gamma_NT^-1`,
+setting `Gamma = Gamma_NT` gives
+`tr(U Gamma_NT) = tr(Pi P) = tr((A P^-1 A')^-1 A P^-1 A') = m`, hence `c = 1`
+for *any* `A` whatsoever. Confirmed numerically on the worst HS case
+(`textual =~ x5 == x6`): empirical Gamma gives `c_exact = 1.446238` vs
+`c_delta = 1.280963` (-11.4%), while normal-theory Gamma gives both as
+`1.000000000`, agreeing to 4.4e-16. The exact/delta choice is therefore a pure
+non-normality phenomenon, and `A` itself never sees Gamma -- `nested_factor_2000`
+uses only `WLS.V`, `delta`, and `inverted.information`.
+
+**3. Subspace misalignment is linear in the restriction displacement.** The max
+principal angle between `ker(A_exact)` and `ker(A_delta)` tracks
+`disp = ||theta1_hat - theta0_hat||_P ~= sqrt(T_diff / n)`. Two-factor CFA,
+8 indicators, restriction `x6 == x7`, one replication per cell:
+
+| population | n | `T_diff` | `disp` | angle | angle/`disp` |
+|---|---:|---:|---:|---:|---:|
+| H0 true  | 300   | 1.603    | 0.0731 | 9.24 deg  | 126 |
+| H0 true  | 1200  | 2.329    | 0.0441 | 3.68 deg  | 84  |
+| H0 true  | 4800  | 0.161    | 0.0058 | 0.49 deg  | 85  |
+| H0 true  | 19200 | 0.233    | 0.0035 | 0.29 deg  | 83  |
+| H0 false | 300   | 20.553   | 0.2617 | 20.92 deg | 80  |
+| H0 false | 1200  | 74.123   | 0.2485 | 19.23 deg | 77  |
+| H0 false | 4800  | 391.844  | 0.2857 | 22.43 deg | 78  |
+| H0 false | 19200 | 1617.774 | 0.2902 | 23.80 deg | 82  |
+
+The ratio is stable at 77-85 (the 126 is single-replication noise), so
+`angle ~= kappa * disp` with a restriction-specific `kappa` -- the embedding
+curvature of the moment manifold in that restriction's direction. Across the five
+HS restrictions `kappa` ranges 43-320, which is why the HS cross-section looks
+unordered: comparing different restrictions varies `kappa` and `disp` at once.
+Under a true H0 the angle vanishes; under a violated one it persists at fixed
+size no matter how large `n` gets.
+
+So the gap is a product of two independent factors: **(curvature x displacement)**
+setting how far apart the two subspaces are, and **anisotropy of the
+non-normality spectrum `eig(V Gamma)`** setting what a rotation costs. On HS that
+spectrum spans 0.216-2.881 (13.3x), which is how 7.6 degrees becomes 11.4% in `c`.
+Either factor at zero and the choice is moot.
+
+**4. Calibration is insensitive to `A.method`; only the reported statistic moves.**
+This follows from (3): the null distribution is evaluated where the restriction
+nearly holds, which is exactly where the two maps agree to first order. Confirmed
+at `df_diff = 8`, `n = 400`, 400 replications, kurtosis `c(7,7,0,0,7,7,0,0)`
+deliberately straddling the tied parameters so the restricted subspace has
+strongly direction-dependent excess kurtosis:
+
+| test | H1 correct: exact / delta | H1 misspecified: exact / delta |
+|---|---:|---:|
+| `sb_ml`    | 0.050 / 0.052 | 0.045 / 0.045 |
+| `ss_ml`    | 0.033 / 0.030 | 0.030 / 0.028 |
+| `peba4_ml` | 0.037 / 0.040 | 0.043 / 0.040 |
+| `pall_ml`  | 0.037 / 0.040 | 0.043 / 0.040 |
+
+All differences <= 0.003, i.e. one replication in 400. **Refuted hypothesis:** the
+right-hand column tested the prediction that a misspecified H1 (population adds
+`x1 ~~ 0.25*x5`, which neither model includes, while all 8 ties stay true in the
+population) would hold `disp` away from zero under a true restriction and so make
+calibration `A.method`-sensitive. It does not -- an omitted residual covariance
+does not perturb the loading ratios enough to make the ties bind. Do not re-run
+this design expecting a difference.
+
+Also note `df_diff = 1` cannot discriminate at all: with a single eigenvalue the
+reference is `c * chisq_1`, so changing `A` rescales the statistic monotonically
+and size-adjusted power is *identically* equal. Only `df_diff > 1` changes the
+spectrum's shape rather than just its mean.
+
+**Consequence for the project decision.** Neither map "performs better" in any
+operating-characteristic sense we can measure, which is why lavaan can default to
+`delta` and magmaan to `exact` without either being wrong, and why this does not
+warrant a simulation study. The deciding factors are not statistical:
+
+- *Generality* favours `delta` -- it only needs moment nesting, so it survives
+  cases `exact` cannot express at all (see the `group_equal = "intercepts"` caveat
+  above).
+- *Stability and interpretability* favour `exact` -- it is Satorra's `A`, it is
+  analytic, and it does not drift with wherever H0 happened to land.
+- *Numerical robustness* favours `exact` -- `delta` needs `MASS::ginv` plus a rank
+  decision inside `lav_matrix_orthogonal_complement`, both of which are fragile
+  under weak identification.
+- *Oracle matching* favours whatever the comparator hardcodes, which is why nested
+  FMG parity must pass `A.method = "delta"`.
+
+Build-if trigger for revisiting: a design where `disp` stays bounded away from zero
+*while the restriction under test is true*. The obvious candidate (misspecified H1)
+is refuted above.
