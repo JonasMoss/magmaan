@@ -59,7 +59,7 @@ struct NonIterativeInference {
   double          p_meanvar        = 0.0;    // Satterthwaite mean-and-variance
   double          p_scaled_shifted = 0.0;
   double          p_mixture        = 0.0;    // exact Σλⱼχ²₁ tail
-  double          rls_check        = 0.0;    // NTML cross-check via rls_chi2 (NaN for ULS)
+  double          rls_check        = 0.0;    // NTML cross-check via nt_moment_quadratic (NaN for ULS)
 
   // Retained pieces the nested tests need.
   Eigen::MatrixXd J, Delta, M, V, Gamma, U;  // U = M'VM

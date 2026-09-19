@@ -201,20 +201,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     //     Build the implied Σ̂ from our θ̂ via the evaluator (mirroring fit()'s
     //     fixed.x resolution) and feed it to rls_chi2.
     if (exp.contains("rls_chi2") && !exp["rls_chi2"].is_null()) {
-      magmaan::spec::LatentStructure pt_res = *pt;
-      (void)magmaan::estimate::resolve_fixed_x_from_sample(pt_res, *mr, samp);
-      auto ev_or = magmaan::model::ModelEvaluator::build(pt_res, *mr);
-      if (!ev_or.has_value()) {
-        failures.push_back(e.id + ": rls_chi2 build_evaluator — " +
-                           ev_or.error().detail);
-        continue;
-      }
-      auto im_or = ev_or->sigma(est.theta);
-      if (!im_or.has_value()) {
-        failures.push_back(e.id + ": rls_chi2 sigma — " + im_or.error().detail);
-        continue;
-      }
-      auto rls_or = magmaan::inference::rls_chi2(samp, *im_or);
+      auto rls_or = magmaan::inference::rls_chi2(*pt, *mr, samp, est.theta);
       if (!rls_or.has_value()) {
         failures.push_back(e.id + ": rls_chi2 — " + rls_or.error().detail);
         continue;

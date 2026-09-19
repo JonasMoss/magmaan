@@ -70,7 +70,7 @@ Model-dependent post-fit helpers expose primitive-shaped entry points such as
 `magmaan_core$inference_vcov_partable(info, partable)`,
 `magmaan_core$inference_z_test_theta(theta, se)`,
 `magmaan_core$inference_wald_test_theta(theta, R, vcov)`,
-`magmaan_core$inference_rls_chi2_sample(sample_stats, implied)`,
+`magmaan_core$inference_nt_moment_quadratic_sample(sample_stats, implied)`,
 `magmaan_core$robust_build_u_factor_parts(partable, sample_stats, theta)`, and
 `magmaan_core$robust_reduced_gamma_sample_zc(...)` /
 `magmaan_core$robust_reduced_gamma_sample_gamma(...)`,

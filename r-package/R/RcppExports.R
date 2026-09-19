@@ -565,12 +565,12 @@ infer_rls_chi2 <- function(fit, implied) {
     .Call(`_magmaan_infer_rls_chi2`, fit, implied)
 }
 
-infer_rls_mean_cov_chi2 <- function(fit, implied) {
-    .Call(`_magmaan_infer_rls_mean_cov_chi2`, fit, implied)
+infer_nt_moment_quadratic <- function(fit, implied) {
+    .Call(`_magmaan_infer_nt_moment_quadratic`, fit, implied)
 }
 
-infer_rls_chi2_sample <- function(sample_stats, implied) {
-    .Call(`_magmaan_infer_rls_chi2_sample`, sample_stats, implied)
+infer_nt_moment_quadratic_sample <- function(sample_stats, implied) {
+    .Call(`_magmaan_infer_nt_moment_quadratic_sample`, sample_stats, implied)
 }
 
 frontier_is_std_lv_admissible_impl <- function(marker_partable, std_lv_partable) {
@@ -1096,3 +1096,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+

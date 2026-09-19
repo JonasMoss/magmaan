@@ -2348,15 +2348,17 @@ infer_wald_test_fit <- function(fit, R, vcov, q = NULL) {
   infer_wald_test(fit, R, vcov, q)
 }
 
+# lavaan's `test = "browne.residual.nt.model"`, correct for mean structures.
+# `implied` is accepted and ignored; see the C++ export for why.
 infer_rls_chi2_fit <- function(fit, implied) {
   infer_rls_chi2(fit, implied)
 }
 
-# Full normal-theory moment-residual RLS. Unlike the lavaan-compatible
-# covariance-only helper above, this includes xbar - muhat whenever the model
-# has a mean structure.
-infer_rls_mean_cov_chi2_fit <- function(fit, implied) {
-  infer_rls_mean_cov_chi2(fit, implied)
+# The unprojected normal-theory moment quadratic, mean block included when the
+# model has one. NOT a lavaan test statistic: it omits the model-space
+# projection that makes the RLS helper above chi-square(df).
+infer_nt_moment_quadratic_fit <- function(fit, implied) {
+  infer_nt_moment_quadratic(fit, implied)
 }
 
 infer_build_u_factor_fit <- function(fit, bread = "expected", moments = "structured") {

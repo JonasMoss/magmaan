@@ -232,18 +232,24 @@ double chi2_pvalue(double chi2, int df) noexcept;
 // `pchisq(x, df, ncp)`.) Used for the RMSEA confidence interval.
 double noncentral_chisq_cdf(double x, double df, double ncp) noexcept;
 
-// Reweighted least-squares (RLS) chi² — Browne's quadratic-form residual
-// test in its model-based normal-theory form. Per block:
+// Reweighted least-squares (RLS) chi² — lavaan's
+// `test = "browne.residual.nt.model"`: Browne's residual statistic with Γ
+// evaluated at the fitted moments. Implemented as
+// `browne_residual_nt(…, GammaAt::Model)`; the formula is documented there.
 //
-//   F_RLS_b = ½·tr((Σ̂_b⁻¹·(S_b − Σ̂_b))²)
-//   T_RLS   = Σ_b n_b · F_RLS_b
+// Correct for mean structures. The mean residual enters through the shared
+// residual vector, so there is no separate mean-aware entry point.
 //
-// Asymptotically equivalent to T_ML = N·F_ML; numerically differs in finite
-// samples. Matches lavaan's `test = "browne.residual.nt.model"`.
-post_expected<double>
-rls_chi2(const SampleStats&            samp,
-         const model::ImpliedMoments&  implied);
-
+// There is deliberately **no (samp, implied) overload**. The statistic needs
+// the model Jacobian for its projection term, which cannot be recovered from
+// the moments alone. An earlier moments-only overload computed
+// ½·tr((Σ̂⁻¹(S−Σ̂))²) per block and was documented as matching
+// `browne.residual.nt.model`; that identity holds only when the residual is
+// already Γ-orthogonal to the model tangent space — true at the ML optimum for
+// covariance-only or saturated-mean models, false as soon as the mean structure
+// is restricted, where it was wrong by tens of percent. The unprojected
+// quadratic it actually computed now lives under its own name in
+// `frontier::nt_moment_quadratic`.
 post_expected<double>
 rls_chi2(spec::LatentStructure       pt,
          const model::MatrixRep&     rep,
@@ -252,44 +258,70 @@ rls_chi2(spec::LatentStructure       pt,
 
 namespace frontier {
 
-// Full normal-theory moment RLS quadratic, including a modelled mean block:
+// The unprojected normal-theory moment quadratic, N·r'Γ(Σ̂)⁻¹r:
 //
-//   T_mu  = sum_b n_b (xbar_b - muhat_b)' Sigmahat_b^-1
-//                         (xbar_b - muhat_b)
-//   T_cov = sum_b n_b/2 tr({Sigmahat_b^-1(S_b - Sigmahat_b)}^2)
+//   mean       = Σ_b n_b (x̄_b − μ̂_b)' Σ̂_b⁻¹ (x̄_b − μ̂_b)
+//   covariance = Σ_b n_b/2 · tr({Σ̂_b⁻¹(S_b − Σ̂_b)}²)
+//   statistic  = mean + covariance
 //
-// `rls_chi2()` above deliberately remains covariance-only for lavaan's
-// `browne.residual.nt.model` parity. This frontier result is the appropriate
-// Stage-2 residual statistic when the fitted model restricts means as well as
-// covariances. If either `samp.mean` or `implied.mu` is empty, means were not
-// part of the fitted moment structure and are treated as saturated (`mean` is
-// zero).
-struct RlsMeanCovChi2 {
+// This is the first of the two terms in Browne's residual statistic, without
+// the model-space projection b'A⁻¹b. It is **not** a lavaan test statistic and
+// is not χ²(df) in general — `rls_chi2` above is the lavaan contract. Use this
+// where the projection is supplied elsewhere (e.g. as the base statistic under
+// an eigenvalue-spectrum correction) or where a Jacobian-free moment distance
+// is genuinely what is wanted.
+//
+// The mean block participates whenever both `samp.mean` and `implied.mu` are
+// non-empty; otherwise `mean` is zero and `statistic == covariance`.
+struct NtMomentQuadratic {
   double mean = 0.0;
   double covariance = 0.0;
   double statistic = 0.0;
 };
 
-post_expected<RlsMeanCovChi2>
-rls_mean_cov_chi2(const SampleStats&           samp,
-                  const model::ImpliedMoments& implied);
+post_expected<NtMomentQuadratic>
+nt_moment_quadratic(const SampleStats&           samp,
+                    const model::ImpliedMoments& implied);
 
-post_expected<RlsMeanCovChi2>
-rls_mean_cov_chi2(spec::LatentStructure  pt,
-                  const model::MatrixRep& rep,
-                  const SampleStats&      samp,
-                  const Eigen::VectorXd&  theta);
+post_expected<NtMomentQuadratic>
+nt_moment_quadratic(spec::LatentStructure   pt,
+                    const model::MatrixRep& rep,
+                    const SampleStats&      samp,
+                    const Eigen::VectorXd&  theta);
 
 }  // namespace frontier
 
+// Where the normal-theory Γ is evaluated. This is the *only* thing that
+// separates lavaan's two NT residual tests:
+//
+//   Sample → Γ(S)  ≡ `test = "browne.residual.nt"`
+//   Model  → Γ(Σ̂)  ≡ `test = "browne.residual.nt.model"`  (the RLS statistic)
+//
+// The residual vector, the model-space projection, the fixed.x row dropping and
+// the equality-constraint reduction are identical in both.
+enum class GammaAt { Sample, Model };
+
 // Browne's residual-based normal-theory test — full quadratic form with
-// model-space projected out. Matches lavaan's `test = "browne.residual.nt"`.
-// See the .cpp for the full derivation.
+// model-space projected out:
+//
+//   T = Σ_b N_b · (r' Γ⁻¹ r − b' A⁻¹ b),   b = Δ'Γ⁻¹r,  A = Δ'Γ⁻¹Δ
+//
+// where r stacks [x̄_b − μ̂_b ; vech(S_b − Σ̂_b)] over blocks — the mean block is
+// present whenever the model carries a mean structure, so this is correct for
+// mean structures without any separate code path.
+//
+// The projection term b'A⁻¹b is what makes this Browne's statistic rather than
+// a bare moment quadratic. It vanishes only when the residual is already
+// Γ-orthogonal to the model tangent space, which holds at the ML optimum for a
+// covariance-only or saturated-mean model and fails as soon as the mean
+// structure is genuinely restricted. See `nt_moment_quadratic` below for the
+// unprojected form, which is a different statistic and not a lavaan test.
 post_expected<double>
 browne_residual_nt(spec::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
-                   const Estimates&          est);
+                   const Estimates&          est,
+                   GammaAt                   gamma_at = GammaAt::Sample);
 
 // Browne's residual-based ADF test — same model-space projection as
 // `browne_residual_nt`, but the block weight is the empirical fourth-moment

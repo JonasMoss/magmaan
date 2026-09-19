@@ -973,33 +973,33 @@ wald_test(const Eigen::MatrixXd& R, const Eigen::VectorXd& q,
 using detail::gamma_p_series;
 using detail::gamma_q_cfrac;
 
-post_expected<frontier::RlsMeanCovChi2>
-frontier::rls_mean_cov_chi2(const SampleStats&           samp,
+post_expected<frontier::NtMomentQuadratic>
+frontier::nt_moment_quadratic(const SampleStats&           samp,
                             const model::ImpliedMoments& implied) {
   if (samp.S.size() != implied.sigma.size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "rls_mean_cov_chi2: SampleStats and ImpliedMoments have different "
+        "nt_moment_quadratic: SampleStats and ImpliedMoments have different "
         "covariance-block counts"));
   }
   const bool include_means = !samp.mean.empty() && !implied.mu.empty();
   if (include_means && (samp.mean.size() != samp.S.size() ||
                         implied.mu.size() != samp.S.size())) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "rls_mean_cov_chi2: modelled mean blocks must match covariance blocks"));
+        "nt_moment_quadratic: modelled mean blocks must match covariance blocks"));
   }
 
-  RlsMeanCovChi2 out;
+  NtMomentQuadratic out;
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     if (samp.n_obs.size() <= b || samp.n_obs[b] <= 0) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "rls_mean_cov_chi2: missing or non-positive block sample size"));
+          "nt_moment_quadratic: missing or non-positive block sample size"));
     }
     const auto& S = samp.S[b];
     const auto& Sigma = implied.sigma[b];
     if (S.rows() != Sigma.rows() || S.cols() != Sigma.cols() ||
         S.rows() != S.cols()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "rls_mean_cov_chi2: block " + std::to_string(b) +
+          "nt_moment_quadratic: block " + std::to_string(b) +
               " S and Sigma have different or non-square shapes"));
     }
     const Eigen::MatrixXd Sigma_sym =
@@ -1007,7 +1007,7 @@ frontier::rls_mean_cov_chi2(const SampleStats&           samp,
     Eigen::LLT<Eigen::MatrixXd> llt(Sigma_sym);
     if (llt.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "rls_mean_cov_chi2: block " + std::to_string(b) +
+          "nt_moment_quadratic: block " + std::to_string(b) +
               " implied Sigma is not positive definite"));
     }
 
@@ -1020,7 +1020,7 @@ frontier::rls_mean_cov_chi2(const SampleStats&           samp,
       if (samp.mean[b].size() != S.rows() ||
           implied.mu[b].size() != S.rows()) {
         return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "rls_mean_cov_chi2: block " + std::to_string(b) +
+            "nt_moment_quadratic: block " + std::to_string(b) +
                 " mean and covariance shapes differ"));
       }
       const Eigen::VectorXd mean_diff = samp.mean[b] - implied.mu[b];
@@ -1031,8 +1031,8 @@ frontier::rls_mean_cov_chi2(const SampleStats&           samp,
   return out;
 }
 
-post_expected<frontier::RlsMeanCovChi2>
-frontier::rls_mean_cov_chi2(spec::LatentStructure  pt,
+post_expected<frontier::NtMomentQuadratic>
+frontier::nt_moment_quadratic(spec::LatentStructure  pt,
                             const model::MatrixRep& rep,
                             const SampleStats&      samp,
                             const Eigen::VectorXd&  theta) {
@@ -1043,42 +1043,9 @@ frontier::rls_mean_cov_chi2(spec::LatentStructure  pt,
   auto im_or = ev_or->sigma(theta);
   if (!im_or.has_value()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "rls_mean_cov_chi2: sigma(theta) failed: " + im_or.error().detail));
+        "nt_moment_quadratic: sigma(theta) failed: " + im_or.error().detail));
   }
-  return rls_mean_cov_chi2(samp, *im_or);
-}
-
-post_expected<double>
-rls_chi2(const SampleStats&            samp,
-         const model::ImpliedMoments&  implied) {
-  if (samp.S.size() != implied.sigma.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "rls_chi2: SampleStats and ImpliedMoments have different block counts"));
-  }
-  double total = 0.0;
-  for (std::size_t b = 0; b < samp.S.size(); ++b) {
-    const auto& S     = samp.S[b];
-    const auto& Sigma = implied.sigma[b];
-    if (S.rows() != Sigma.rows() || S.cols() != Sigma.cols()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "rls_chi2: block " + std::to_string(b) +
-              " S and Σ have different shapes"));
-    }
-    const Eigen::MatrixXd Sigma_sym =
-        0.5 * (Sigma + Sigma.transpose());
-    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_sym);
-    if (llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "rls_chi2: block " + std::to_string(b) +
-              " implied Σ is not positive definite"));
-    }
-    const Eigen::MatrixXd diff = S - Sigma_sym;
-    const Eigen::MatrixXd A    = llt.solve(diff);
-    const double tr_A2 = (A * A).trace();
-    const double F_b   = 0.5 * tr_A2;
-    total += static_cast<double>(samp.n_obs[b]) * F_b;
-  }
-  return total;
+  return nt_moment_quadratic(samp, *im_or);
 }
 
 post_expected<double>
@@ -1088,21 +1055,15 @@ rls_chi2(spec::LatentStructure       pt,
          const Eigen::VectorXd&      theta) {
   Estimates est;
   est.theta = theta;
-  auto ev_or = prepare_evaluator(pt, rep, samp, est);
-  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
-  auto im_or = ev_or->sigma(theta);
-  if (!im_or.has_value()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "rls_chi2: sigma(theta) failed: " + im_or.error().detail));
-  }
-  return rls_chi2(samp, *im_or);
+  return browne_residual_nt(std::move(pt), rep, samp, est, GammaAt::Model);
 }
 
 post_expected<double>
 browne_residual_nt(spec::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
-                   const Estimates&          est) {
+                   const Estimates&          est,
+                   GammaAt                   gamma_at) {
   auto ev_or = prepare_evaluator(pt, rep, samp, est);
   if (!ev_or.has_value()) return std::unexpected(ev_or.error());
   auto& ev = *ev_or;
@@ -1166,15 +1127,19 @@ browne_residual_nt(spec::LatentStructure        pt,
           "browne_residual_nt: block " + std::to_string(b) +
               " implied Σ̂ shape mismatch with S"));
     }
-    const Eigen::MatrixXd S_sym =
-        0.5 * (samp.S[b] + samp.S[b].transpose());
-    Eigen::LLT<Eigen::MatrixXd> llt_S(S_sym);
-    if (llt_S.info() != Eigen::Success) {
+    // Γ is built from S for `browne.residual.nt` and from Σ̂ for
+    // `browne.residual.nt.model`. Nothing else about the statistic differs.
+    const bool model_based = (gamma_at == GammaAt::Model);
+    const Eigen::MatrixXd& G_src = model_based ? im_or->sigma[b] : samp.S[b];
+    const Eigen::MatrixXd  G_sym = 0.5 * (G_src + G_src.transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt_G(G_sym);
+    if (llt_G.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "browne_residual_nt: block " + std::to_string(b) +
-              " sample S is not positive definite"));
+              (model_based ? " implied Σ̂ is not positive definite"
+                           : " sample S is not positive definite")));
     }
-    blk[b].W = llt_S.solve(Eigen::MatrixXd::Identity(p, p));
+    blk[b].W = llt_G.solve(Eigen::MatrixXd::Identity(p, p));
     for (std::size_t i = 0; i < pt.size(); ++i) {
       if (pt.exo[i] != 1 || pt.free[i] != 0) continue;
       const std::int32_t g = i < pt.group.size() ? pt.group[i] : 1;

@@ -707,7 +707,9 @@ noniterative_inference_impl(const spec::LatentStructure& pt,
     else return perr("non-iterative inference: NTML weight smaller than p*");
     model::ImpliedMoments im;
     im.sigma = {Sigma_hat};
-    if (auto rc = inference::rls_chi2(samp, im); rc.has_value()) rls_check = *rc;
+    if (auto rc = inference::frontier::nt_moment_quadratic(samp, im);
+        rc.has_value())
+      rls_check = rc->covariance;
   }
 
   const double N = total_n(samp);
@@ -1341,7 +1343,9 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
       // Covariance-only cross-check: ν_g = m_g saturates the mean, so drop the
       // mean from the RLS χ² comparator (its ImpliedMoments carries no μ).
       if (!has_means && !samp.mean.empty()) one.mean = {samp.mean[b]};
-      if (auto rc = inference::rls_chi2(one, im); rc.has_value()) rls += *rc;
+      if (auto rc = inference::frontier::nt_moment_quadratic(one, im);
+          rc.has_value())
+        rls += rc->covariance;
     }
   }
 
@@ -1650,7 +1654,9 @@ noniterative_inference_grouped_restricted(
       one.S = {samp.S[b]};
       one.n_obs = {samp.n_obs[b]};
       if (!has_means && !samp.mean.empty()) one.mean = {samp.mean[b]};
-      if (auto rc = inference::rls_chi2(one, im); rc.has_value()) rls += *rc;
+      if (auto rc = inference::frontier::nt_moment_quadratic(one, im);
+          rc.has_value())
+        rls += rc->covariance;
     }
   }
 

@@ -2159,27 +2159,27 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// infer_rls_mean_cov_chi2
-Rcpp::List infer_rls_mean_cov_chi2(Rcpp::List fit, Rcpp::List implied);
-RcppExport SEXP _magmaan_infer_rls_mean_cov_chi2(SEXP fitSEXP, SEXP impliedSEXP) {
+// infer_nt_moment_quadratic
+Rcpp::List infer_nt_moment_quadratic(Rcpp::List fit, Rcpp::List implied);
+RcppExport SEXP _magmaan_infer_nt_moment_quadratic(SEXP fitSEXP, SEXP impliedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type implied(impliedSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_rls_mean_cov_chi2(fit, implied));
+    rcpp_result_gen = Rcpp::wrap(infer_nt_moment_quadratic(fit, implied));
     return rcpp_result_gen;
 END_RCPP
 }
-// infer_rls_chi2_sample
-Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied);
-RcppExport SEXP _magmaan_infer_rls_chi2_sample(SEXP sample_statsSEXP, SEXP impliedSEXP) {
+// infer_nt_moment_quadratic_sample
+Rcpp::List infer_nt_moment_quadratic_sample(Rcpp::List sample_stats, Rcpp::List implied);
+RcppExport SEXP _magmaan_infer_nt_moment_quadratic_sample(SEXP sample_statsSEXP, SEXP impliedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type implied(impliedSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_rls_chi2_sample(sample_stats, implied));
+    rcpp_result_gen = Rcpp::wrap(infer_nt_moment_quadratic_sample(sample_stats, implied));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4350,8 +4350,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_wald_test_theta", (DL_FUNC) &_magmaan_infer_wald_test_theta, 4},
     {"_magmaan_infer_browne_residual_nt", (DL_FUNC) &_magmaan_infer_browne_residual_nt, 1},
     {"_magmaan_infer_rls_chi2", (DL_FUNC) &_magmaan_infer_rls_chi2, 2},
-    {"_magmaan_infer_rls_mean_cov_chi2", (DL_FUNC) &_magmaan_infer_rls_mean_cov_chi2, 2},
-    {"_magmaan_infer_rls_chi2_sample", (DL_FUNC) &_magmaan_infer_rls_chi2_sample, 2},
+    {"_magmaan_infer_nt_moment_quadratic", (DL_FUNC) &_magmaan_infer_nt_moment_quadratic, 2},
+    {"_magmaan_infer_nt_moment_quadratic_sample", (DL_FUNC) &_magmaan_infer_nt_moment_quadratic_sample, 2},
     {"_magmaan_frontier_is_std_lv_admissible_impl", (DL_FUNC) &_magmaan_frontier_is_std_lv_admissible_impl, 2},
     {"_magmaan_frontier_partable_marker_to_std_lv_impl", (DL_FUNC) &_magmaan_frontier_partable_marker_to_std_lv_impl, 1},
     {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},

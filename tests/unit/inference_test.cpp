@@ -205,26 +205,13 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  // Fit so we have Σ̂; reuse the converged θ̂ to compute implied moments.
+  // Fit so we have θ̂; the statistic needs the model Jacobian, so it takes the
+  // structure rather than pre-built moments.
   auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
-  auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
-  auto im_or = ev.sigma(est.theta);
-  REQUIRE(im_or.has_value());
-  // Copy out of the evaluator's internal buffer — rls_chi2 doesn't mutate
-  // it but the API contract is "view into ev"; the copy keeps the test
-  // resilient if implementation details shift later.
-  magmaan::model::ImpliedMoments im;
-  im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
-  im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = magmaan::inference::rls_chi2(samp, im);
+  auto t_rls = magmaan::inference::rls_chi2(*h.pt, *h.rep, samp, est.theta);
   REQUIRE(t_rls.has_value());
   CHECK(*t_rls == doctest::Approx(81.3677).epsilon(1e-3));
-
-  auto t_rls_theta = magmaan::inference::rls_chi2(
-      *h.pt, *h.rep, samp, est.theta);
-  REQUIRE(t_rls_theta.has_value());
-  CHECK(*t_rls_theta == doctest::Approx(*t_rls).epsilon(1e-12));
 }
 
 TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
@@ -251,19 +238,13 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
   auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
-  auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
-  auto im_or = ev.sigma(est.theta);
-  REQUIRE(im_or.has_value());
-  magmaan::model::ImpliedMoments im;
-  im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
-  im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = magmaan::inference::rls_chi2(samp, im);
+  auto t_rls = magmaan::inference::rls_chi2(*h.pt, *h.rep, samp, est.theta);
   REQUIRE(t_rls.has_value());
   CHECK(std::abs(*t_rls) < 1e-6);
 }
 
-TEST_CASE("rls_mean_cov_chi2: separates mean and covariance residuals") {
+TEST_CASE("nt_moment_quadratic: separates mean and covariance residuals") {
   // With Sigma = diag(2, 4), covariance residual diag(1, -2), and mean
   // residual (1, 2), the two per-observation quadratic forms are
   //   1/2 tr{diag(1/2, -1/2)^2} = 1/4,
@@ -278,14 +259,14 @@ TEST_CASE("rls_mean_cov_chi2: separates mean and covariance residuals") {
   im.sigma.push_back((Eigen::Matrix2d() << 2.0, 0.0, 0.0, 4.0).finished());
   im.mu.push_back((Eigen::Vector2d() << 1.0, -1.0).finished());
 
-  auto t = magmaan::inference::frontier::rls_mean_cov_chi2(samp, im);
+  auto t = magmaan::inference::frontier::nt_moment_quadratic(samp, im);
   REQUIRE(t.has_value());
   CHECK(t->mean == doctest::Approx(60.0));
   CHECK(t->covariance == doctest::Approx(10.0));
   CHECK(t->statistic == doctest::Approx(70.0));
 }
 
-TEST_CASE("rls_mean_cov_chi2: empty implied means retain covariance-only RLS") {
+TEST_CASE("nt_moment_quadratic: empty implied means drop the mean block") {
   SampleStats samp;
   samp.S.push_back((Eigen::Matrix2d() << 3.0, 0.0, 0.0, 2.0).finished());
   samp.mean.push_back((Eigen::Vector2d() << 9.0, -7.0).finished());
@@ -294,13 +275,15 @@ TEST_CASE("rls_mean_cov_chi2: empty implied means retain covariance-only RLS") {
   magmaan::model::ImpliedMoments im;
   im.sigma.push_back((Eigen::Matrix2d() << 2.0, 0.0, 0.0, 4.0).finished());
 
-  auto full = magmaan::inference::frontier::rls_mean_cov_chi2(samp, im);
-  auto covariance_only = magmaan::inference::rls_chi2(samp, im);
+  // Σ = diag(2, 4), S = diag(3, 2) ⇒ A = Σ⁻¹(S − Σ) = diag(½, −½), so the
+  // per-observation covariance form is ½·tr(A²) = ¼ and T_cov = 40·¼ = 10.
+  constexpr double kCovOnly = 10.0;
+
+  auto full = magmaan::inference::frontier::nt_moment_quadratic(samp, im);
   REQUIRE(full.has_value());
-  REQUIRE(covariance_only.has_value());
   CHECK(full->mean == 0.0);
-  CHECK(full->covariance == doctest::Approx(*covariance_only));
-  CHECK(full->statistic == doctest::Approx(*covariance_only));
+  CHECK(full->covariance == doctest::Approx(kCovOnly));
+  CHECK(full->statistic == doctest::Approx(kCovOnly));
 
   // The converse is the same contract: an implied mean vector alone does not
   // make means part of a covariance-only fit.
@@ -308,10 +291,10 @@ TEST_CASE("rls_mean_cov_chi2: empty implied means retain covariance-only RLS") {
   covariance_fit.mean.clear();
   im.mu.push_back((Eigen::Vector2d() << 1.0, -1.0).finished());
   auto no_sample_means =
-      magmaan::inference::frontier::rls_mean_cov_chi2(covariance_fit, im);
+      magmaan::inference::frontier::nt_moment_quadratic(covariance_fit, im);
   REQUIRE(no_sample_means.has_value());
   CHECK(no_sample_means->mean == 0.0);
-  CHECK(no_sample_means->statistic == doctest::Approx(*covariance_only));
+  CHECK(no_sample_means->statistic == doctest::Approx(kCovOnly));
 }
 
 TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
@@ -649,13 +632,13 @@ TEST_CASE("wald_test: shape-mismatch inputs all error") {
   }
 }
 
-TEST_CASE("rls_chi2: SampleStats/ImpliedMoments block mismatch errors") {
+TEST_CASE("nt_moment_quadratic: SampleStats/ImpliedMoments block mismatch errors") {
   std::mt19937 rng(3);
   SampleStats samp;
   samp.S.push_back(random_pd(rng, 3));
   samp.n_obs.push_back(100);
   magmaan::model::ImpliedMoments im;   // zero implied blocks
-  auto r = magmaan::inference::rls_chi2(samp, im);
+  auto r = magmaan::inference::frontier::nt_moment_quadratic(samp, im);
   REQUIRE_FALSE(r.has_value());
 }
 

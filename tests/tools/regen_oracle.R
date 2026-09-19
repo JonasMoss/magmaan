@@ -254,6 +254,29 @@ mat_to_pascal <- function(m) {
          NA_character_)
 }
 
+# Fit under `cfa` treating a warning as non-fatal.
+#
+# lavaan emits informational warnings that accompany a perfectly valid,
+# converged fit — most commonly "using a single label per parameter in a
+# multiple group setting implies imposing equality constraints", which is
+# exactly what a scalar-invariance fixture intends. Catching those as failures
+# silently drops whole blocks of oracle values: before this helper existed,
+# `warning = function(w) NULL` nulled all seven test statistics for 4 of 19
+# fixtures (0013, 0015, 0018, 0023), and 0023 was the only fixture with a
+# restricted mean structure — the one case that distinguishes a covariance-only
+# RLS statistic from the mean-inclusive one lavaan actually reports.
+#
+# So: retry without catching, and let only an error be an error. Callers still
+# check `inherits(f, "error")` and `lavInspect(f, "converged")` themselves.
+fit_or_error <- function(args) {
+  f <- tryCatch(do.call(cfa, args),
+                error = function(e) e, warning = function(w) w)
+  if (inherits(f, "warning")) {
+    f <- tryCatch(suppressWarnings(do.call(cfa, args)), error = function(e) e)
+  }
+  f
+}
+
 cell_to_json <- function(row) {
   mat <- mat_to_pascal(row$mat)
   used <- !is.na(mat)
@@ -467,8 +490,7 @@ for (m in models) {
   # structure carry through.
   se_observed <- NULL
   obs_args    <- c(cfa_args, list(information = "observed"))
-  fit_obs <- tryCatch(do.call(cfa, obs_args),
-                      error = function(e) e, warning = function(w) NULL)
+  fit_obs <- fit_or_error(obs_args)
   if (!is.null(fit_obs) && !inherits(fit_obs, "error") &&
       lavInspect(fit_obs, "converged")) {
     pt_obs   <- parTable(fit_obs)
@@ -493,15 +515,7 @@ for (m in models) {
   se_robust_huberwhite <- NULL
   gamma_hat            <- NULL
   mlm_args <- c(cfa_args, list(estimator = "MLM"))
-  fit_mlm  <- tryCatch(do.call(cfa, mlm_args),
-                       error = function(e) e, warning = function(w) w)
-  if (inherits(fit_mlm, "warning")) {
-    # Retry without catching the warning — lavaan often emits informational
-    # warnings (e.g. shared-label-implies-equality-constraint) while still
-    # producing a valid fit. Failing then is the error case.
-    fit_mlm <- tryCatch(suppressWarnings(do.call(cfa, mlm_args)),
-                        error = function(e) e)
-  }
+  fit_mlm  <- fit_or_error(mlm_args)
   if (!is.null(fit_mlm) && !inherits(fit_mlm, "error") &&
       lavInspect(fit_mlm, "converged")) {
     pt_m   <- parTable(fit_mlm)
@@ -527,8 +541,7 @@ for (m in models) {
   }
   if (n_groups <= 1) {
     mlr_args <- c(cfa_args, list(estimator = "MLR"))
-    fit_mlr  <- tryCatch(do.call(cfa, mlr_args),
-                         error = function(e) e, warning = function(w) NULL)
+    fit_mlr  <- fit_or_error(mlr_args)
     if (!is.null(fit_mlr) && !inherits(fit_mlr, "error") &&
         lavInspect(fit_mlr, "converged")) {
       pt_r   <- parTable(fit_mlr)
@@ -547,8 +560,7 @@ for (m in models) {
                                "satorra.bentler",
                                "mean.var.adjusted",
                                "scaled.shifted")))
-  fit_tests <- tryCatch(do.call(cfa, test_args),
-                        error = function(e) e, warning = function(w) NULL)
+  fit_tests <- fit_or_error(test_args)
   browne_nt_chi2     <- NULL
   rls_chi2_value     <- NULL
   sb_chi2            <- NULL

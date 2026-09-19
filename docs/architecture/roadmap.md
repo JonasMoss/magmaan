@@ -911,6 +911,39 @@ an unconstrained gradient test to constrained solutions.
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
+- **RLS is Browne's statistic with a model-based Γ (2026-09-19):**
+  `inference::rls_chi2()` claimed lavaan `browne.residual.nt.model` parity but
+  computed `Σ_b n_b·½·tr((Σ̂_b⁻¹(S_b−Σ̂_b))²)` from moments alone. Reading
+  `lav_test_browne.R`, lavaan's statistic is
+  `N·(r'Γ⁻¹r − b'A⁻¹b)` with `b = Δ'Γ⁻¹r`, `A = Δ'Γ⁻¹Δ`, over a residual `r`
+  that **includes the mean block** whenever the model has a mean structure, and
+  `browne.residual.nt` vs `.model` differ *only* in whether Γ is built at `S` or
+  at `Σ̂`. The trace form equals that projected quadratic only when `r` is
+  already Γ-orthogonal to the model tangent space — true at the ML optimum for
+  covariance-only or **saturated-mean** models, false once means are genuinely
+  restricted, where it was wrong by 24-50%.
+  - Fix: `browne_residual_nt` gained an `inference::GammaAt {Sample, Model}`
+    parameter (the only behavioural difference), and `rls_chi2` is now
+    `browne_residual_nt(…, GammaAt::Model)`. Mean structures are handled by the
+    shared residual vector, so no separate mean-aware entry point exists:
+    `frontier::rls_mean_cov_chi2` is retired.
+  - The moments-only overload is **removed**, not fixed: the projection cannot
+    be recovered without the Jacobian. What it actually computed — the
+    unprojected `N·r'Γ(Σ̂)⁻¹r`, mean block included — survives under an honest
+    name as `frontier::nt_moment_quadratic`, which is a legitimate primitive
+    (the closed-form CFA `rls_check` and `noniterative_cfa_test` want exactly
+    the trace form) but is **not** a lavaan test statistic and not χ²(df).
+  - Why it went unnoticed: every fixture carrying an `rls_chi2` oracle value had
+    saturated or absent means, where the two formulas agree exactly. The only
+    restricted-mean fixture, `0023_scalar_invariance_3f_hs`, had *null* oracle
+    values because `regen_oracle.R` used `tryCatch(…, warning = function(w)
+    NULL)`, and that fixture emits the benign "a single label per parameter in a
+    multiple group setting implies imposing equality constraints" warning — which
+    is precisely what the fixture intends. One informational warning silently
+    nulled 7 statistics for 4 of 19 fixtures (0013, 0015, 0018, 0023). Replaced
+    by a shared `fit_or_error()` helper that retries under `suppressWarnings`
+    and treats only errors as errors; the restored 0023 now gates the
+    restricted-mean case, and RLS there is 187.339 vs the old 115.586.
 - **Expected information via the whitened Jacobian (2026-09-18):**
   `inference::information_expected_per_case_blocks` and
   `expected_info_covariance_only` no longer materialize
@@ -1755,11 +1788,12 @@ an unconstrained gradient test to constrained solutions.
   Satorra-Bentler weight built from the *unstructured* (sample/saturated h1)
   moments as the U-metric; as under FIML, `_ug` is rejected. Unsuffixed ML2S
   FMG requests use the Stage-2 ML discrepancy. An explicit `_rls` suffix uses
-  `inference::frontier::rls_mean_cov_chi2()`, the full fitted-moment
-  normal-theory residual quadratic, including restricted means, with the same
-  ML2S UGamma spectrum. The covariance-only `inference::rls_chi2()` retains its
-  lavaan `browne.residual.nt.model` parity contract. ML2S must be dispatched
-  before FIML
+  `inference::rls_chi2()` with the same ML2S UGamma spectrum — the same helper
+  the FIML and nested paths use, so `ml` and `rls` are now commensurable bases
+  (both model-projected) under one spectrum. This previously routed to a
+  separate `frontier::rls_mean_cov_chi2()` because `rls_chi2()` was
+  covariance-only; that split is gone (see the RLS entry below). ML2S must be
+  dispatched before FIML
   because a two-stage fit also carries a `magmaan_fiml_data` raw object. The
   two-stage scaling and SEs match lavaan's `missing = "robust.two.stage"`
   convention (Huber-White sandwich Stage-1 ACOV) to machine precision - base,

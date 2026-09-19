@@ -154,7 +154,7 @@ one_rep <- function(cell, rep_id) {
     if (is.null(fit$ml2s$eigvals)) stop("ML2S spectrum is unavailable")
 
     statistic_ml <- as.numeric(fit$ml2s$chisq)
-    rls <- magmaan:::infer_rls_mean_cov_chi2_fit(
+    rls <- magmaan:::infer_nt_moment_quadratic_fit(
       fit, magmaan:::model_implied(fit))
     statistic_rls <- rls$statistic
     df <- as.integer(fit$ml2s$df)

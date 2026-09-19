@@ -8996,33 +8996,34 @@ Rcpp::List infer_browne_residual_nt(Rcpp::List fit) {
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
 
-// infer_rls_chi2() — mirrors rls_chi2(samp, implied). `implied` is a
-// model_implied() result. Returns just the statistic.
+// infer_rls_chi2() — lavaan's `test = "browne.residual.nt.model"`, correct for
+// mean structures. Needs the model Jacobian, so it goes through the structure
+// rather than pre-built moments.
+//
+// `implied` is accepted and ignored. Every caller passes `model_implied(fit)`,
+// i.e. exactly the moments this recomputes from the fit's own θ̂, so dropping
+// it from the signature would churn call sites for no behavioural gain.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
+  (void)implied;
   Ctx ctx = ctx_from_fit(fit);
-  lvm::ImpliedMoments im;
-  Rcpp::List sig(implied["sigma"]);
-  for (R_xlen_t b = 0; b < sig.size(); ++b)
-    im.sigma.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(sig[b])));
-  if (implied.containsElementNamed("mu") && !Rf_isNull(implied["mu"])) {
-    Rcpp::List m(implied["mu"]);
-    for (R_xlen_t b = 0; b < m.size(); ++b)
-      im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
-  }
-  auto s_or = magmaan::inference::rls_chi2(ctx.samp, im);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto s_or =
+      magmaan::inference::rls_chi2(ctx.pt, ctx.rep, ctx.samp, est.theta);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
 
-// infer_rls_mean_cov_chi2() — full normal-theory moment-residual RLS,
-// including the mean residual whenever the fitted model supplies implied
-// means. Kept separate from infer_rls_chi2(), whose covariance-only behavior
-// is the lavaan-compatible `browne.residual.nt.model` contract.
+// infer_nt_moment_quadratic() — the unprojected normal-theory moment quadratic
+// N·r'Γ(Σ̂)⁻¹r, with the mean block included whenever the fit supplies implied
+// means. This is NOT a lavaan test statistic: it omits the model-space
+// projection that makes `infer_rls_chi2()` above χ²(df). Retained because the
+// projection is sometimes supplied elsewhere (e.g. under an eigenvalue-spectrum
+// correction).
 //
 // [[Rcpp::export]]
-Rcpp::List infer_rls_mean_cov_chi2(Rcpp::List fit, Rcpp::List implied) {
+Rcpp::List infer_nt_moment_quadratic(Rcpp::List fit, Rcpp::List implied) {
   Ctx ctx = ctx_from_fit(fit);
   lvm::ImpliedMoments im;
   Rcpp::List sig(implied["sigma"]);
@@ -9033,7 +9034,7 @@ Rcpp::List infer_rls_mean_cov_chi2(Rcpp::List fit, Rcpp::List implied) {
     for (R_xlen_t b = 0; b < m.size(); ++b)
       im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
   }
-  auto s_or = magmaan::inference::frontier::rls_mean_cov_chi2(ctx.samp, im);
+  auto s_or = magmaan::inference::frontier::nt_moment_quadratic(ctx.samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(
       Rcpp::_["statistic"] = s_or->statistic,
@@ -9041,11 +9042,15 @@ Rcpp::List infer_rls_mean_cov_chi2(Rcpp::List fit, Rcpp::List implied) {
       Rcpp::_["covariance"] = s_or->covariance);
 }
 
-// infer_rls_chi2_sample() — primitive form of infer_rls_chi2(): sample moments
-// plus model-implied moments, without requiring a fit list.
+// infer_nt_moment_quadratic_sample() — primitive form of
+// infer_nt_moment_quadratic(): sample moments plus model-implied moments,
+// without requiring a fit list. Jacobian-free, so like its fit-based sibling it
+// is the unprojected quadratic and not a lavaan test statistic. There is no
+// moments-only form of the RLS statistic, which needs the model Jacobian.
 //
 // [[Rcpp::export]]
-Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied) {
+Rcpp::List infer_nt_moment_quadratic_sample(Rcpp::List sample_stats,
+                                            Rcpp::List implied) {
   if (!sample_stats.containsElementNamed("S") || !sample_stats.containsElementNamed("nobs"))
     Rcpp::stop("magmaan: `sample_stats` must be a list with $S and $nobs");
   magmaan::data::SampleStats samp;
@@ -9078,9 +9083,12 @@ Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied) {
     for (R_xlen_t b = 0; b < m.size(); ++b)
       im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
   }
-  auto s_or = magmaan::inference::rls_chi2(samp, im);
+  auto s_or = magmaan::inference::frontier::nt_moment_quadratic(samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
-  return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
+  return Rcpp::List::create(
+      Rcpp::_["statistic"] = s_or->statistic,
+      Rcpp::_["mean"] = s_or->mean,
+      Rcpp::_["covariance"] = s_or->covariance);
 }
 
 // ---- frontier: marker <-> std_lv identification swap --------------------

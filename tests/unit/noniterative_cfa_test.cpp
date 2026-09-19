@@ -735,7 +735,8 @@ TEST_CASE("noniterative empirical SE-only path matches dense Gamma inference") {
 
 TEST_CASE("NTML GOF statistic equals the RLS chi-square (model-implied weight)") {
   // Perturb S so the CFA cannot fit it exactly; then T_NTML must equal
-  // N·½tr((Σ̂⁻¹(S−Σ̂))²) = rls_chi2. This fails if V uses the sample GLS weight.
+  // N·½tr((Σ̂⁻¹(S−Σ̂))²) = nt_moment_quadratic's covariance term. This fails if
+  // V uses the sample GLS weight.
   Built b = build(kTwoFactor);
   Eigen::MatrixXd S = two_factor_cov();
   S(0, 4) += 0.15; S(4, 0) += 0.15;   // a cross-factor residual the model omits

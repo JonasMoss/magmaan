@@ -407,9 +407,15 @@
 }
 
 # ML2S result rows: the spectrum and Stage-2 ML base come from the two-stage
-# inference attached to the fit. Compute the full mean+covariance RLS base only
-# when explicitly requested. Mirrors `.fmg_result_rows_fiml` and
-# `.fmg_result_rows_ordinal`.
+# inference attached to the fit. Compute the RLS base only when explicitly
+# requested. Mirrors `.fmg_result_rows_fiml` and `.fmg_result_rows_ordinal`.
+#
+# The RLS base is `infer_rls_chi2_fit`, the same helper the FIML and nested
+# paths use. It previously called the unprojected moment quadratic here,
+# because the RLS helper was covariance-only and this path has a mean
+# structure; the RLS helper now handles mean structures correctly, so the
+# special case is gone. This also makes the two bases commensurable: `ml` and
+# `rls` share one spectrum, and both are now model-projected statistics.
 .fmg_result_rows_ml2s <- function(fit, specs, h_step = 1e-4) {
   sp <- .fmg_ml2s_spectrum(fit, h_step)
   df <- sp$df
@@ -418,7 +424,7 @@
   if (any(vapply(specs, function(s) identical(s$base, "rls"), logical(1)))) {
     base_statistics <- c(
       base_statistics,
-      rls = infer_rls_mean_cov_chi2_fit(fit, model_implied(fit))$statistic)
+      rls = infer_rls_chi2_fit(fit, model_implied(fit))$statistic)
   }
   rows <- lapply(specs, function(s) {
     res <- infer_fmg_test(base_statistics[[s$base]], df, eigvals,

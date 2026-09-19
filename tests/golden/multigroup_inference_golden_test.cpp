@@ -186,22 +186,7 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
     // skip silently if the fixture didn't carry oracle values (older
     // fixtures pre-dating the regen-script change).
     if (exp.contains("rls_chi2") && !exp["rls_chi2"].is_null()) {
-      magmaan::model::ImpliedMoments im;
-      // Reconstruct implied moments from our fit's θ̂ via a fresh evaluator.
-      auto ev_or = magmaan::model::ModelEvaluator::build(*pt, *mr);
-      if (!ev_or.has_value()) {
-        failures.push_back(e.id + ": evaluator build — " +
-                           ev_or.error().detail);
-        continue;
-      }
-      auto im_view = ev_or->sigma(est.theta);
-      if (!im_view.has_value()) {
-        failures.push_back(e.id + ": sigma — " + im_view.error().detail);
-        continue;
-      }
-      im.sigma.assign(im_view->sigma.begin(), im_view->sigma.end());
-      im.mu.assign(im_view->mu.begin(), im_view->mu.end());
-      auto rls = magmaan::inference::rls_chi2(samp, im);
+      auto rls = magmaan::inference::rls_chi2(*pt, *mr, samp, est.theta);
       if (!rls.has_value()) {
         failures.push_back(e.id + ": rls_chi2 — " + rls.error().detail);
         continue;

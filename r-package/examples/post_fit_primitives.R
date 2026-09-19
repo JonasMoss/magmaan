@@ -32,13 +32,18 @@ wald_fit <- core$inference_wald_test_fit(fit, R, vc_parts)
 wald_theta <- core$inference_wald_test_theta(fit$theta, R, vc_parts)
 stopifnot(same_list(wald_theta, wald_fit, c("chi2", "df", "pvalue")))
 
+# The RLS statistic (lavaan's browne.residual.nt.model) is the moment quadratic
+# minus a model-space projection. At the ML optimum of a covariance-only model
+# the residual is already Gamma-orthogonal to the model tangent space, so the
+# projection vanishes and the two coincide — which is what this model is and
+# what these identities pin. They would NOT hold under a restricted mean
+# structure, where the projection is the whole point.
 rls_fit <- core$inference_rls_chi2_fit(fit, implied)
-rls_sample <- core$inference_rls_chi2_sample(ss, implied)
-stopifnot(same_list(rls_sample, rls_fit, "statistic"))
-rls_mean_cov <- core$inference_rls_mean_cov_chi2_fit(fit, implied)
-stopifnot(close(rls_mean_cov$statistic,
-                rls_mean_cov$mean + rls_mean_cov$covariance),
-          close(rls_mean_cov$covariance, rls_fit$statistic))
+quad_sample <- core$inference_nt_moment_quadratic_sample(ss, implied)
+quad_fit <- core$inference_nt_moment_quadratic_fit(fit, implied)
+stopifnot(close(quad_fit$statistic, quad_fit$mean + quad_fit$covariance),
+          close(quad_sample$statistic, quad_fit$statistic),
+          close(quad_fit$covariance, rls_fit$statistic))
 
 res <- core$measures_residuals(fit)
 std_res <- core$measures_standardized_residuals(fit)
