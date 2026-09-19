@@ -245,7 +245,9 @@ magmaan::estimate::gmm::Weight continuous_ls_weight_from_arg(
     Rcpp::stop("magmaan: continuous WLS nested tests require the explicit "
                "fitting `weight`");
   }
-  magmaan::estimate::gmm::Weight out;
+  // Collected dense first, then converted in one place (internal.hpp). The
+  // wording below is this entry point's own and deliberately not shared.
+  std::vector<Eigen::MatrixXd> out;
   const std::size_t n_blocks = ctx.samp.S.size();
   out.reserve(n_blocks);
   if (Rf_isMatrix(weight)) {
@@ -269,7 +271,7 @@ magmaan::estimate::gmm::Weight continuous_ls_weight_from_arg(
   } else {
     Rcpp::stop("magmaan: WLS `weight` must be a matrix or list of matrices");
   }
-  return out;
+  return magmaanr::dense_weight_or_stop(out, "magmaan: WLS `weight`");
 }
 
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {

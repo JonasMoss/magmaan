@@ -1383,7 +1383,10 @@ Rcpp::List rbm_metadata_to_r(
       Rcpp::_["warnings"] = Rcpp::wrap(r.warnings));
 }
 
-magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
+// Parse R's matrix / list-of-matrices weight argument into dense blocks.
+// `prepare_weight` needs this dense form (it validates it and hands it back to
+// R); everything else wants the structured Weight from wls_from_arg below.
+std::vector<Eigen::MatrixXd> wls_dense_from_arg(SEXP W, std::size_t n_blocks) {
   std::vector<Eigen::MatrixXd> weights;
   weights.reserve(n_blocks);
   if (Rf_isMatrix(W)) {
@@ -1404,13 +1407,15 @@ magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
   return weights;
 }
 
+// R supplies a genuinely dense Gamma-hat inverse, so Dense is the right
+// BlockWeight kind here; see internal.hpp for why the conversion is shared.
+magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
+  return dense_weight_or_stop(wls_dense_from_arg(W, n_blocks),
+                              "magmaan: WLS weights");
+}
+
 SEXP weight_to_r(const magmaan::estimate::gmm::Weight& W) {
-  if (W.size() == 1) return Rcpp::wrap(W[0]);
-  Rcpp::List out(static_cast<R_xlen_t>(W.size()));
-  for (std::size_t b = 0; b < W.size(); ++b) {
-    out[static_cast<R_xlen_t>(b)] = Rcpp::wrap(W[b]);
-  }
-  return out;
+  return weight_to_r_dense(W);
 }
 
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
@@ -6429,7 +6434,7 @@ SEXP estimate_structured_gamma(Rcpp::List fit, SEXP raw_data) {
   auto G_or = magmaan::estimate::frontier::structured_gamma_matrix(
       *ev_or, ctx.rep, ctx.samp, raw, est.theta);
   if (!G_or.has_value()) stop_fit(G_or.error());
-  return weight_to_r(*G_or);
+  return dense_blocks_to_r(*G_or);
 }
 
 // estimate_structured_gamma_weight() — explicit MI4 / structured-ADF working

@@ -139,6 +139,9 @@ SEXP dataset(SEXP model_ptr, SEXP X, std::string kind, Rcpp::List ordered) {
 Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
   const auto& d = get<Data>(data_ptr, "magmaan_prepared_data");
   Weight w; w.method = method;
+  // Dense per-block W for the R-visible return. Stays empty on the ordinal /
+  // mixed paths, which is what `Rcpp::wrap` saw before too (an empty list).
+  std::vector<Eigen::MatrixXd> W_dense;
   if (method != "DWLS" && method != "WLS" && method != "ULS") Rcpp::stop("magmaan: weight method must be ULS, DWLS or WLS");
   if (d.kind == "ordinal" || d.kind == "mixed") {
     if (!Rf_isNull(W)) Rcpp::stop("magmaan: custom ordinal weights are not supported here");
@@ -176,14 +179,22 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
       w.mixed.ov_names = d.names;
     }
   } else if (d.kind == "moments") {
+    // Two forms are kept deliberately. `dense` is what the validation below
+    // checks and what R gets back, exactly as before. `w.continuous` carries the
+    // *structured* gmm::BlockWeight the fit consumes — Identity for ULS and
+    // Diagonal for DWLS instead of a q x q matrix, which is the point of the
+    // BlockWeight retype. Materializing `dense` is not a regression: this
+    // function already returned dense blocks to R.
+    std::vector<Eigen::MatrixXd> dense;
+    std::vector<Eigen::VectorXd> dwls_diag;  // non-empty ⇒ derived DWLS path
     if (method == "ULS") {
       if (!Rf_isNull(W)) Rcpp::stop("magmaan: ULS does not accept a custom W");
       for (const auto& S : d.sample.S) {
         const auto p = S.rows();
         const auto size = p * (p + 1) / 2 + (d.meanstructure ? p : 0);
-        w.continuous.emplace_back(Eigen::MatrixXd::Identity(size, size));
+        dense.emplace_back(Eigen::MatrixXd::Identity(size, size));
       }
-    } else if (!Rf_isNull(W)) w.continuous = wls_from_arg(W, d.sample.S.size());
+    } else if (!Rf_isNull(W)) dense = wls_dense_from_arg(W, d.sample.S.size());
     else {
       if (d.raw.X.empty()) Rcpp::stop("magmaan: empirical weights require raw data or explicit W");
       for (const auto& X : d.raw.X) {
@@ -192,27 +203,44 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
         if (method == "DWLS") {
           if (!gamma->diagonal().allFinite() || (gamma->diagonal().array() <= 0).any())
             Rcpp::stop("magmaan: non-positive Gamma diagonal");
-          w.continuous.emplace_back(gamma->diagonal().cwiseInverse().asDiagonal());
+          Eigen::VectorXd dinv = gamma->diagonal().cwiseInverse();
+          dense.emplace_back(dinv.asDiagonal());
+          dwls_diag.push_back(std::move(dinv));
         } else {
           Eigen::LLT<Eigen::MatrixXd> llt(*gamma);
           if (llt.info() != Eigen::Success) Rcpp::stop("magmaan: empirical Gamma is not positive definite");
-          w.continuous.push_back(llt.solve(Eigen::MatrixXd::Identity(gamma->rows(), gamma->cols())));
+          dense.push_back(llt.solve(Eigen::MatrixXd::Identity(gamma->rows(), gamma->cols())));
         }
       }
     }
-    if (w.continuous.size() != d.sample.S.size()) Rcpp::stop("magmaan: weight block count mismatch");
-    for (std::size_t b = 0; b < w.continuous.size(); ++b) {
+    if (dense.size() != d.sample.S.size()) Rcpp::stop("magmaan: weight block count mismatch");
+    for (std::size_t b = 0; b < dense.size(); ++b) {
       const auto p = d.sample.S[b].rows();
       const auto size = p * (p + 1) / 2 + (d.meanstructure ? p : 0);
-      const auto& Wb = w.continuous[b];
+      const auto& Wb = dense[b];
       if (Wb.rows() != size || Wb.cols() != size || !Wb.allFinite() || !Wb.isApprox(Wb.transpose()))
         Rcpp::stop("magmaan: W must be finite, symmetric and match the moment dimensions");
+      // gmm::dense_weight would accept a positive *semi*definite block. This
+      // surface has always required positive definite, so keep the stricter
+      // check here rather than silently inheriting the looser one.
       Eigen::LLT<Eigen::MatrixXd> llt(Wb);
       if (llt.info() != Eigen::Success) Rcpp::stop("magmaan: W must be positive definite");
     }
+    if (method == "ULS") {
+      for (const auto& Wb : dense)
+        w.continuous.push_back(estimate::gmm::BlockWeight::identity(Wb.rows()));
+    } else if (!dwls_diag.empty()) {
+      for (const auto& dg : dwls_diag)
+        w.continuous.push_back(estimate::gmm::BlockWeight::diagonal(dg));
+    } else {
+      // User-supplied W, or an empirical dense Gamma inverse.
+      w.continuous =
+          magmaanr::dense_weight_or_stop(dense, "magmaan: prepare_weight W");
+    }
+    W_dense = std::move(dense);
   } else Rcpp::stop("magmaan: weights require moment data");
   // Keep the dataset alive and reject accidentally reusing its weight elsewhere.
-  Rcpp::List out = Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(w.continuous));
+  Rcpp::List out = Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(W_dense));
   if (d.kind == "ordinal") out["stats"] = ordinal_stats_to_r(w.ordinal);
   if (d.kind == "mixed") out["stats"] = mixed_ordinal_stats_to_r(w.mixed);
   Rcpp::RObject ptr(handle(std::move(w), "magmaan_prepared_weight"));

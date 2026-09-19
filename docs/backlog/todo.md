@@ -4106,3 +4106,25 @@ work until a concrete downstream consumer appears.
     variable-table support.
   - [ ] **Cross-loadings, residual covariances, std.lv identification** — the map
     rejects all three today (simple-structure, marker-only).
+- **S. Two `r-package/examples/` failures from semTests 1.0.0 API drift.** Not
+  magmaan bugs; both need a decision about what the example should compare
+  against, which is why they were left failing rather than quietly repointed.
+
+  - `fmg.R` — `semTests::pvalues_nested(..., "peba4_rls" / "peba4_ug_rls")` on a
+    nested pair with `df_diff = 1` now aborts: *"pEBA cannot use more blocks than
+    the test degrees of freedom (1)"*. The message is semTests', not ours. Either
+    drop the `peba4_*` entries from `nested_parity_tests` or move that block to a
+    nested pair with ≥ 4 df — a question about what the parity cell is meant to
+    cover.
+  - `nested_test_2001.R` — calls `semTests:::ugamma_nested(., method = "2001")`,
+    which **no longer exists** in 1.0.0. The surviving neighbours are
+    `lav_ugamma_nested_2000` and `ugamma_nested_reference`. Do not guess: the
+    example is a parity check against the Satorra-Bentler 2001 projector
+    specifically (Satorra & Bentler 2001 p.510), and pointing it at a
+    similarly-named internal with different semantics would turn a real gate into
+    a silently-wrong one.
+
+  Already fixed in passing: `fmg.R` passed `tests = as.list(parity_tests)`, and
+  1.0.0's `validate_tests()` requires `is.character(tests)`. With that one word
+  removed the FMG-vs-semTests parity cell passes at max|Δp| = 2.0e-11 over 50
+  cells. 52 of the other 53 examples pass.

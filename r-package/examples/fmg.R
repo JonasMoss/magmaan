@@ -295,7 +295,9 @@ if (requireNamespace("semTests", quietly = TRUE) &&
                       paste(c(r[["type"]], if (identical(r[["ug"]], "TRUE")) "ug",
                               r[["base"]]), collapse = "_")))
   pv_m <- fmg_pvalues(fit, tests = parity_tests)
-  pv_s <- semTests::pvalues(fit_l, tests = as.list(parity_tests))
+  # semTests 1.0.0's validate_tests() requires is.character(tests); earlier
+  # versions tolerated a list. `parity_tests` is already a character vector.
+  pv_s <- semTests::pvalues(fit_l, tests = parity_tests)
   common <- intersect(names(pv_m), names(pv_s))
   stopifnot(setequal(names(pv_m), names(pv_s)))
   stopifnot(max(abs(pv_m[common] - pv_s[common])) < 1e-6)

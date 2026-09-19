@@ -26,6 +26,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
+#include "magmaan/estimate/gmm/weight.hpp"       // BlockWeight / Weight / dense_weight
 #include "magmaan/estimate/fiml.hpp"             // SaturatedMoments
 #include "magmaan/estimate/backend_strings.hpp"  // backend_from_string
 #include "magmaan/estimate/ordinal.hpp"
@@ -1181,6 +1182,57 @@ profile_lrt_to_list(const magmaan::estimate::WeightedProfileLRTResult& r) {
       Rcpp::_["ntotal"] = static_cast<double>(r.ntotal),
       Rcpp::_["n_groups"] = static_cast<int>(r.n_groups),
       Rcpp::_["warnings"] = warnings_to_r(r.warnings));
+}
+
+// --- moment-weight boundary ------------------------------------------------
+//
+// `gmm::Weight` is `std::vector<gmm::BlockWeight>`, a *structured* per-block
+// weight (Identity / Diagonal / Dense / NormalTheory) that stores only a factor
+// and never materializes the q x q form on a gradient path. R hands us bare
+// dense matrices and expects bare dense matrices back, so the two conversions
+// live here rather than being open-coded per call site — they were previously
+// duplicated in fit.cpp and lr_test_satorra.cpp, which is why retyping
+// `gmm::Weight` broke both.
+//
+// Only the *type* knowledge is shared. Argument validation and its wording stay
+// at each call site, because the R-visible error messages differ by entry point
+// and are part of that surface.
+
+// Dense per-block matrices -> Weight. `gmm::dense_weight` rejects a block that
+// is not square / finite / symmetric PSD; that check used to happen later inside
+// `gmm::residuals`, so this only moves the same failure earlier with a clearer
+// message.
+inline magmaan::estimate::gmm::Weight dense_weight_or_stop(
+    const std::vector<Eigen::MatrixXd>& blocks, const char* what) {
+  auto w = magmaan::estimate::gmm::dense_weight(
+      blocks, magmaan::FitError::Kind::NumericIssue, what);
+  if (!w.has_value()) Rcpp::stop("%s", w.error().detail.c_str());
+  return std::move(*w);
+}
+
+// Per-block dense matrices -> R, with the same one-block-unwraps convention.
+// For things that are genuinely a list of matrices rather than a weight — e.g.
+// `structured_gamma_matrix`, which returns Gamma itself. That used to be routed
+// through the weight path purely because `gmm::Weight` happened to be the same
+// type; it is not a weight and should not pretend to be one.
+inline SEXP dense_blocks_to_r(const std::vector<Eigen::MatrixXd>& blocks) {
+  if (blocks.size() == 1) return Rcpp::wrap(blocks[0]);
+  Rcpp::List out(static_cast<R_xlen_t>(blocks.size()));
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    out[static_cast<R_xlen_t>(b)] = Rcpp::wrap(blocks[b]);
+  }
+  return out;
+}
+
+// Weight -> R. `to_dense()` is the documented non-hot-path accessor. A single
+// block unwraps to a bare matrix, matching the shape R callers already get.
+inline SEXP weight_to_r_dense(const magmaan::estimate::gmm::Weight& W) {
+  if (W.size() == 1) return Rcpp::wrap(W[0].to_dense());
+  Rcpp::List out(static_cast<R_xlen_t>(W.size()));
+  for (std::size_t b = 0; b < W.size(); ++b) {
+    out[static_cast<R_xlen_t>(b)] = Rcpp::wrap(W[b].to_dense());
+  }
+  return out;
 }
 
 }  // namespace magmaanr
