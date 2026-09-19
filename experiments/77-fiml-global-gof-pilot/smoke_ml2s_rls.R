@@ -14,9 +14,17 @@ set_single_threaded_math()
 usage <- function() cat(
   "Usage: Rscript smoke_ml2s_rls.R [options]\n\n",
   "Crosses the ML2S Stage-2 ML and fitted-model RLS base statistics with the\n",
-  "same two-stage UGamma spectrum. Both statistics use the same saturated-EM\n",
-  "moments and the same fitted SEM; only the discrepancy value changes.\n\n",
+  "same two-stage UGamma spectrum, and adds the global score-flip test as a\n",
+  "third arm. All three come from ONE fit per replication: the saturated-EM\n",
+  "moments, the Stage-2 SEM and the spectrum are computed once and shared, so\n",
+  "only the discrepancy value and the flip draws differ.\n\n",
+  "The RLS base is lavaan's browne.residual.nt.model. `statistic_rls_unproj`\n",
+  "is the unprojected moment quadratic, retained as a diagnostic: with free\n",
+  "intercepts the means are saturated and the two must agree exactly.\n\n",
   "  --reps N             Replications per cell (default 200).\n",
+  "  --flips N            Score-flip draws per replication (default 500;\n",
+  "                       0 disables the score arm, which is the dominant\n",
+  "                       per-replication cost).\n",
   "  --n CSV              Sample sizes (default 120,500).\n",
   "  --cores N            Parallel cell workers (default up to 4).\n",
   "  --model ID           SEM model id (default one_factor_6).\n",
@@ -28,6 +36,7 @@ usage <- function() cat(
 
 opts <- list(
   reps = 200L,
+  flips = 500L,
   n = c(120L, 500L),
   cores = min(4L, max(1L, parallel::detectCores() - 2L)),
   model = "one_factor_6",
@@ -48,6 +57,7 @@ while (i <= length(args)) {
     usage()
     quit(save = "no", status = 0L)
   } else if (arg == "--reps") opts$reps <- as.integer(take())
+  else if (arg == "--flips") opts$flips <- as.integer(take())
   else if (arg == "--n") opts$n <- as.integer(parse_csv_arg(take()))
   else if (arg == "--cores") opts$cores <- as.integer(take())
   else if (arg == "--model") opts$model <- take()
@@ -63,6 +73,7 @@ while (i <= length(args)) {
 
 stopifnot(
   opts$reps > 0L,
+  opts$flips >= 0L,
   all(opts$n >= 80L),
   opts$cores > 0L,
   all(opts$distributions %in% c("normal", "vm1", "ig1", "vm2", "ig2")),
@@ -116,8 +127,12 @@ one_rep <- function(cell, rep_id) {
     df = NA_integer_,
     statistic_ml = NA_real_,
     statistic_rls = NA_real_,
+    statistic_rls_unproj = NA_real_,
     statistic_rls_mean = NA_real_,
     statistic_rls_covariance = NA_real_,
+    projection_gap = NA_real_,
+    statistic_score = NA_real_,
+    p_score = NA_real_,
     difference_rls_minus_ml = NA_real_,
     ratio_rls_to_ml = NA_real_,
     p_standard_ml = NA_real_,
@@ -154,19 +169,42 @@ one_rep <- function(cell, rep_id) {
     if (is.null(fit$ml2s$eigvals)) stop("ML2S spectrum is unavailable")
 
     statistic_ml <- as.numeric(fit$ml2s$chisq)
-    rls <- magmaan:::infer_nt_moment_quadratic_fit(
-      fit, magmaan:::model_implied(fit))
-    statistic_rls <- rls$statistic
+    implied <- magmaan:::model_implied(fit)
+    # Primary RLS base: lavaan's browne.residual.nt.model, evaluated at the
+    # Stage-2 fit against the Stage-1 saturated-EM moments.
+    statistic_rls <- magmaan:::infer_rls_chi2_fit(fit, implied)$statistic
+    # Diagnostic only: the unprojected moment quadratic. With free intercepts
+    # the mean structure is saturated, the projection term vanishes, and this
+    # must equal statistic_rls. A nonzero gap means the means are restricted.
+    rls_q <- magmaan:::infer_nt_moment_quadratic_fit(fit, implied)
     df <- as.integer(fit$ml2s$df)
     eigenvalues <- as.numeric(fit$ml2s$eigvals)
     if (length(eigenvalues) != df) stop("ML2S spectrum and df disagree")
+
+    # Third arm. Reuses the same fit; the flip draws are the only new cost.
+    p_score <- NA_real_
+    statistic_score <- NA_real_
+    if (opts$flips > 0L) {
+      score <- magmaan::global_score_flip_test(
+        fit,
+        n_flips = opts$flips,
+        seed = seed + 900001L,
+        multiplier = "rademacher",
+        sensitivity = "expected")
+      p_score <- as.numeric(score$p_value)
+      statistic_score <- as.numeric(score$statistic_effective)
+    }
 
     list(
       df = df,
       statistic_ml = statistic_ml,
       statistic_rls = statistic_rls,
-      statistic_rls_mean = rls$mean,
-      statistic_rls_covariance = rls$covariance,
+      statistic_rls_unproj = rls_q$statistic,
+      statistic_rls_mean = rls_q$mean,
+      statistic_rls_covariance = rls_q$covariance,
+      projection_gap = statistic_rls - rls_q$statistic,
+      statistic_score = statistic_score,
+      p_score = p_score,
       difference_rls_minus_ml = statistic_rls - statistic_ml,
       ratio_rls_to_ml = statistic_rls / statistic_ml,
       p_standard_ml = fmg_p(statistic_ml, df, eigenvalues, "standard"),
@@ -188,7 +226,11 @@ one_rep <- function(cell, rep_id) {
     out$error <- conditionMessage(ans)
   } else {
     for (name in names(ans)) out[[name]] <- ans[[name]]
-    out$ok <- all(is.finite(unlist(ans)))
+    # The score arm is optional (`--flips 0`), so its columns are legitimately
+    # NA and must not condemn an otherwise-good replication.
+    checked <- ans
+    if (opts$flips <= 0L) checked[c("statistic_score", "p_score")] <- NULL
+    out$ok <- all(is.finite(unlist(checked)))
     if (!out$ok) out$error <- "non-finite statistic or diagnostic"
   }
   out$seconds <- proc.time()[["elapsed"]] - begin
@@ -250,6 +292,14 @@ summarize_cell <- function(z) {
     rejection_peba4_rls = mean(z$p_peba4_rls <= 0.05),
     rejection_all_ml = mean(z$p_all_ml <= 0.05),
     rejection_all_rls = mean(z$p_all_rls <= 0.05),
+    rejection_score = if (any(is.finite(z$p_score))) {
+      mean(z$p_score[is.finite(z$p_score)] <= 0.05)
+    } else NA_real_,
+    score_usable = sum(is.finite(z$p_score)),
+    # Must be 0: free intercepts saturate the means, so the RLS projection term
+    # vanishes and the projected and unprojected bases coincide. A nonzero max
+    # means the run is exercising a restricted mean structure.
+    max_abs_projection_gap = max(abs(z$projection_gap)),
     mean_eigen = mean(z$eigen_mean),
     mean_eigen_cv = mean(z$eigen_cv),
     mean_realized_missing = mean(z$realized_missing),
@@ -265,6 +315,7 @@ summary <- summary[order(summary$n, summary$distribution, summary$missingness), 
 write_csv(summary, file.path(results, "summary.csv"))
 write_metadata(file.path(results, "metadata.csv"), list(
   reps = opts$reps,
+  flips = opts$flips,
   sample_sizes = paste(opts$n, collapse = ","),
   model = model$model_id,
   distributions = paste(opts$distributions, collapse = ","),
@@ -272,8 +323,10 @@ write_metadata(file.path(results, "metadata.csv"), list(
   seed_base = opts$seed_base,
   failures = sum(!raw$ok),
   runtime_wall_seconds = proc.time()[["elapsed"]] - begin,
-  base_statistics = "ML2S Stage-2 ML discrepancy; fitted-model mean+covariance RLS",
-  reference_spectrum = "common ML2S UGamma spectrum"),
+  base_statistics = paste("ML2S Stage-2 ML discrepancy;",
+                          "RLS (lavaan browne.residual.nt.model);",
+                          "global score-flip test"),
+  reference_spectrum = "common ML2S UGamma spectrum (ML and RLS bases)"),
   packages = "magmaan")
 
 cat(sprintf(
