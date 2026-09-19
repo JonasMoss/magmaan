@@ -1,0 +1,241 @@
+---
+title: "Total-variance scaling across SEM structures"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+if (!file.exists("results/fits.csv"))
+  stop("Run Rscript run_experiment.R --smoke --stress first")
+f <- read.csv("results/fits.csv")
+v <- read.csv("results/validation.csv")
+tm <- read.csv("results/timing.csv")
+meta <- read.csv("results/metadata.csv")
+mv <- function(key) meta$value[match(key, meta$key)]
+```
+
+## Question
+
+Does fixing **total latent variance** improve SEM optimization across different
+structural models, when all parameterizations start at the same model and search
+the same admissible interior? Can we answer that in seconds rather than hours?
+
+## Short answer
+
+**Total-variance scaling is a viable candidate, not a universal winner.** The
+initial stress pilot improves information conditioning substantially for mediation
+with a highly predictable mediator and for a higher-order factor model. Disturbance
+scaling remains better in the correlated-disturbance example. Structural variety
+changes the answer even with nearly constant indicator count.
+
+The current run completed **`r nrow(f)` fits in
+`r round(as.numeric(mv("elapsed_seconds")), 2)` seconds**, across
+`r length(unique(f$case))` structures. Completion status is
+**`r mv("complete")`**. This is a small comparison prototype, not evidence of native
+library speed or finite-sample failure rates. Ten-draw follow-ups also finished within a minute, but exposed near-boundary
+stalls that the stationarity audit rejects. Practical starts and better boundary
+handling are needed before drawing conclusions about failure rates.
+
+## Evidence
+
+### Different structures favor different scales
+
+```{r}
+w <- reshape(v[, c("case", "chart", "condition")], idvar = "case",
+             timevar = "chart", direction = "wide")
+names(w) <- sub("condition\\.", "", names(w))
+knitr::kable(w, digits = 1, col.names = c("Model", "Marker", "Disturbance", "Total"),
+  caption = "Expected-information condition numbers at the controlled population or empirical reference fit; smaller is better. Controlled models use the stress setting when requested. These are coordinate-dependent diagnostics, not an ordering of statistical models.")
+```
+
+All charts reproduce the same starting observed covariance to
+`r format(max(v$covariance_error), scientific = TRUE, digits = 2)`; analytic covariance
+derivatives agree with central differences to maximum relative error
+`r format(max(v$derivative_error), scientific = TRUE, digits = 2)`.
+The empirical reference objective is checked independently against lavaan before
+fitting. The maximum attained objective discrepancy from the available population
+or lavaan reference is
+`r format(max(abs(f$objective - f$reference_objective), na.rm = TRUE), scientific = TRUE, digits = 2)`.
+
+A fit is not accepted merely because its optimizer returns success. There are
+`r sum(!f$stationary)` rows failing the common information-metric stationarity
+threshold, and `r sum(!f$admissible)` failing the component covariance audit in this
+run. The paired fit gaps are descriptive; neither their minimum nor agreement
+between three charts proves a global optimum.
+
+### Iteration costs seconds
+
+```{r}
+z <- aggregate(seconds ~ stage, tm, sum)
+knitr::kable(z, digits = 3, col.names = c("Work", "Seconds"),
+  caption = "Measured work in the current run. Total elapsed time additionally includes orchestration and checkpoint writes; process startup is excluded.")
+```
+
+The previous experiment's cost arm repeatedly timed model construction, fitting,
+and back-conversion **inside every Monte Carlo replication**. Each timer requested
+five batches of at least 50 ms, after calibration. Its default smoke cost grid has
+960 rows: a nominal 12 minutes of measurement alone. Its full grid has 72,000 rows:
+a nominal **15 hours**. The batch-count cap can shorten very cheap operations;
+calibration, warmup, and other arms add time. These are workload calculations, not
+measurements of a historical full run.
+
+A fresh isolated probe on this machine, with one p=6 / loading=.3 / replication /
+backend cell and all three charts, took **4.05 s** for cost, **1.80 s** for
+back-conversion, **0.37 s** for geometry, and **0.34–0.39 s** for each of structural,
+convergence, and inference. These timings include R startup. Thus repeated timing
+is a demonstrated source of the long runtime; there is no saved historical profile
+to attribute every second of the earlier run. Dense curvature calculations can
+also grow expensive with model size, but they did not dominate this small probe.
+
+The ten-draw follow-ups completed 198 fits each in **26.9 s** (ordinary) and
+**31.0 s** (stress), with all planned chart triples present. These two runs were
+launched concurrently, so these are iteration wall budgets, not comparative speed
+measurements. Some Bollen draws and stressed controlled draws approach singular
+disturbance covariances; the largest paired objective gap was .348, and every gap
+above $10^{-7}$ was rejected by the stationarity audit. These are unresolved
+near-boundary optimization cases, not evidence that any chart found a certified
+optimum. They are retained in `results/ordinary` and `results/iteration`.
+
+This experiment constructs each case once, validates first derivatives once per
+chart, draws sample covariances directly, and fits each chart once per draw. It
+prints and checkpoints each fit and stops between fits at a declared soft time
+budget. It does not run repeated microbenchmarks or second-derivative curvature
+calculations in the replication loop.
+
+## Caveats
+
+- Six selected structures and a few draws cannot establish a generally best chart.
+  Population conditioning is deterministic; convergence frequency is not.
+- All three charts use the same small R optimization prototype with analytic
+  derivatives. Its timing includes R overhead and must not be used to claim a
+  speedup in magmaan. Native backend comparisons follow only after choosing a
+  promising map.
+- Starts are perturbations of the controlled population or empirical reference fit,
+  transformed exactly into each chart. This isolates coordinates but is
+  deliberately reference-assisted. Native start heuristics need a separate arm.
+- The comparison admits only strictly positive-definite disturbance and measurement
+  covariance matrices. Boundary optima and unrestricted Heywood estimates are
+  outside this pilot. Rejected steps are counted; rejection-based optimization can
+  struggle near a boundary and is not a proposed production constraint method.
+- An optimizer success flag, a small gradient in raw coordinates, and an admissible
+  covariance are distinct properties. The report keeps them separate. The
+  information-metric gradient threshold is a pilot diagnostic, not a proof of
+  optimality or the library's authoritative fit verdict.
+- The initial models are recursive, single-group, continuous, and covariance-only,
+  without shared parameter labels. Feedback, observed exogenous predictors,
+  multi-group equalities, fixed loading growth models, and mean structures require
+  additional mapping and identification checks before inclusion.
+- The private textbook corpus is not mounted in this checkout. The two empirical
+  cases use shared benchmark syntax and public lavaan datasets; the other four are
+  controlled structures. No sibling experiment or test fixture is consumed.
+- The time limit is checked between fits, not a hard process timeout. A single fit
+  is bounded by its iteration limit and can overrun the remaining wall budget.
+
+## Reproduce
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --dry-run-plan --smoke --stress
+Rscript run_experiment.R --smoke --stress
+quarto render report.qmd
+# Ordinary setting, kept separate from the rendered stress pilot:
+Rscript run_experiment.R --smoke --results-dir results/ordinary
+# Expand only the number of paired draws; no repeated timing batches:
+Rscript run_experiment.R --reps 10 --stress --budget-sec 60 --results-dir results/iteration
+```
+
+The runner writes `fits.csv`, `validation.csv`, `timing.csv`, and `metadata.csv`.
+The seed for each model/draw is stable when selecting a subset of cases.
+A budget-limited run exits with status 2 and flags incomplete chart triples.
+Changing `--results-dir` keeps separate runs; rendering reads the top-level
+`results/` run. Failures remain in the output instead of being silently dropped.
+
+The isolated legacy runtime probe can be repeated from the repository root:
+
+```sh
+# Repeat for geometry, cost, backconvert, structural, convergence, inference.
+/usr/bin/time -p Rscript experiments/82-latent-metric-geometry/run_experiment.R \
+  --arms cost --p 6 --curv-p 6 --bc-p 6 --lambda1 0.3 --struct-b 0.9 \
+  --conv-n 50 --reps 1 --backends nlopt-lbfgs --results-dir /tmp/latent-metric-cost
+```
+
+## Design and next decisions
+
+### Initial model selection
+
+| Model | Distinctive feature | Stress change |
+|---|---|---|
+| Holzinger–Swineford | Three correlated CFA factors; control where disturbance and total scaling coincide | None; observed-data sentinel |
+| Mediation | Direct and indirect paths through three factors | Mediator predictability about .94 |
+| Correlated predictors | Two correlated latent causes of one latent outcome | Predictor correlation .95 |
+| Higher-order | One higher-order cause of three measured first-order factors | Strong higher-order paths and small first-order disturbances |
+| Correlated disturbances | Two endogenous factors with correlated innovations, plus correlated indicator errors | Innovation correlation .80 |
+| Bollen political democracy | Empirical mediation with unequal observed scales and several correlated indicator errors | None; observed-data sentinel |
+
+The controlled models all have nine observed variables. The higher-order model has
+four latents rather than three; Bollen has eleven observed variables. This makes
+structural differences central instead of disguising a size sweep as generality.
+For each model, draw 0 uses its population or observed covariance. Additional draws
+are Gaussian samples from its controlled or reference-fitted population, with the
+same covariance draw shared across charts. The default sample size is 400 for
+controlled cases and the original sample size for empirical cases.
+
+### Three equivalent interior parameterizations
+
+For $\eta=B\eta+\zeta$, let $A=(I-B)^{-1}$ and $C=A\Psi A^\top$.
+The three conventions are marker loadings fixed to one, disturbance variances fixed
+to one, and total latent variances fixed to one. Higher-order marker anchors are
+loadings on lower-order factors. Latent signs use the same positive anchor
+orientation at initialization.
+
+Total scaling does not need a general equality-constrained optimizer for these
+models. With $\Psi_{\mathrm{off}}$ containing only off-diagonal disturbances, solve
+
+$$
+(A\circ A)d=\mathbf 1-\operatorname{diag}
+  (A\Psi_{\mathrm{off}}A^\top),\qquad
+\Psi=\Psi_{\mathrm{off}}+\operatorname{diag}(d).
+$$
+
+Here $\circ$ denotes elementwise multiplication. This eliminates one disturbance
+variance per latent while freeing its marker loading, preserving parameter count.
+For recursive models the solve is nonsingular after a topological permutation.
+The formula includes correlated disturbances; a shortcut such as $1-R^2$ without
+the covariance terms would not suffice. Feedback models would additionally need
+the invertibility of this elimination map checked, beyond invertibility of $I-B$.
+
+All three maps retain the same structural zeros, the same observed covariance
+likelihood, and the same positive-definite component domain. The full information
+rank is checked; a singular matrix is never made to look well-conditioned by
+silently dropping its smallest eigenvalues.
+
+### What would justify a larger run?
+
+First require covariance and derivative checks below $10^{-8}$ and $10^{-6}$,
+respectively, full information rank, and agreement with empirical reference
+objectives where the reference lies in the common domain. Record model-level
+objective gaps, information-scaled gradient norms, rejected steps, evaluations,
+and total elapsed time. An objective gap above $10^{-7}$ warrants investigation;
+it is not automatically a chart failure or an oracle defect.
+
+The first ten-draw follow-up in both settings is complete. Resolve its
+near-boundary stalls before estimating convergence rates or declaring a winning
+chart. Compare
+optimizer work only among admissible, stationary complete pairs, while separately
+reporting every failure and budget truncation. Do not pool model structures into
+one headline failure rate. If a difference survives, add practical common starts
+and a second optimizer before moving the candidate into the native library.
+
+A later timing arm should use at most a few representative datasets per structure,
+with a fixed per-operation timing budget, separately from replications. Any later
+curvature arm should likewise be opt-in and evaluated once at selected reference
+points. The previous CFA curvature ratio is not an optimality certificate for all
+possible SEM parameterizations.

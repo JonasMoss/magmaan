@@ -480,16 +480,18 @@ an unconstrained gradient test to constrained solutions.
   two-group model both ways and requires equal df/chi²/fmin — an oracle-free
   check, and the cheapest guard against any future scaling convention silently
   changing the fitted model rather than its coordinates.
-  Which convention is *numerically* preferable, and whether a better one exists,
-  is settled in [docs/design/parameterization-geometry.md](../design/parameterization-geometry.md)
-  and measured by `experiments/82-latent-metric-geometry`. Summary: a convention
-  is a gauge choice, `marker` is the only one that can degenerate on ordinary data
-  (its slice is anchored by λ₁, so conditioning and parameter-effects curvature
-  blow up as the marker indicator weakens — pseudo-condition 25 → 34594 and
-  PE/IN 0.82 → 4.10 as λ₁ goes 0.9 → 0.3 at p=12), and `std_lv` already sits at
-  the intrinsic-curvature floor (PE/IN ≈ 0.57, flat in λ₁), so no reparameterization
-  can buy materially more. It is not a clean win: std_lv does *not* fix Heywood
-  cases, it relocates them from latent to observed variances.
+  Numerical scaling remains a research question. The one-factor measurements in
+  [docs/design/parameterization-geometry.md](../design/parameterization-geometry.md)
+  and experiment 82 show marker sensitivity to a weak indicator; they do not
+  establish a globally optimal chart. For endogenous latents, `std_lv` fixes
+  disturbance variance, which can make coordinates extreme at high explained
+  variance. Experiment 83 compares marker, disturbance-unit, and total-variance-unit
+  coordinates across six recursive structures using an experiment-local R
+  prototype, common starts, analytic derivatives, and the same strictly PD
+  component domain. Native fitting behavior is unchanged. Boundary solutions,
+  practical starts, feedback and shared/equality-constrained parameters remain
+  outside that pilot; a fit gap across unequal admissible domains is not evidence
+  of optimizer failure.
 - Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
   for the ML, GMM/GLS, and bounded ordinal LS paths; per-θ box bounds fold onto
   the reduced α for the pure-merge case.

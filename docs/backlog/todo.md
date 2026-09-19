@@ -4150,8 +4150,32 @@ work until a concrete downstream consumer appears.
     against an independent dense `Eigen::EigenSolver` oracle in
     `tests/unit/satorra2000_test.cpp`. Upstream's verdict is about power, not
     correctness, so prefer `"2000"` when both apply.
-- **S. Per-chart start values, not chart geometry, explain most of the std_lv
-  optimizer-work advantage.** Findings and framework in
+- **S. Total latent variance scaling across SEM structures — experiment 83 pilot.**
+  `experiments/83-sem-total-variance` now compares marker, disturbance-unit and
+  total-unit coordinates on HS CFA, mediation, correlated predictors, higher-order
+  factors, correlated disturbances, and Bollen SEM. Common reference-assisted
+  starts, analytic derivative checks, component-PD feasibility, full-rank
+  information checks and information-metric terminal gradients isolate chart
+  effects. A 36-fit stress smoke run takes about five seconds in the R prototype;
+  this is not a native-library speed claim. The private corpus is currently absent,
+  so empirical sentinels consume shared benchmark syntax and public lavaan data.
+  - Ten paired draws in each setting are complete (198 fits each, about 27–31
+    seconds). All gaps above 1e-7 fail the stationarity audit; near-singular
+    disturbance matrices cause unresolved stalls, notably in Bollen draws.
+    Improve boundary handling before interpreting these as chart failure rates;
+    retain model-level failures and objective gaps.
+  - Add practical matched starts and a second optimizer before a native chart
+    implementation. Feedback, fixed loading models and cross-group/shared
+    constraints need explicit transformation contracts before inclusion.
+  - Keep calibrated timing outside replication loops. The previous full cost
+    grid requests nominally 15 hours of timed batches alone (cheap-operation
+    caps can reduce it); the new pilot records stages once and has a soft wall
+    budget, iteration caps, per-fit checkpoints and exact dry-run fit counts.
+  - Treat the earlier "no better convention" conclusion as unestablished beyond
+    the measured CFA comparison. Recheck high-R-squared fit gaps for common-domain
+    admissibility before calling them optimization failures.
+- **S. Test whether per-chart start values explain the std_lv optimizer-work
+  advantage beyond chart geometry.** Findings and framework in
   [docs/design/parameterization-geometry.md](../design/parameterization-geometry.md);
   measured by `experiments/82-latent-metric-geometry`, which supersedes
   `experiments/_archive/02-latent-metric-identification`.
@@ -4165,11 +4189,10 @@ work until a concrete downstream consumer appears.
   start-value arm to exp 82 (fixed common starts projected into each chart vs each
   chart's native heuristic) before touching `spec/start`.
 
-  Closed by the same work, recorded so they are not re-asked:
-  - *Is there a better convention?* No, not materially. `std_lv`'s PE curvature
-    sits below the intrinsic curvature and is flat in `lambda1`, so the removable
-    part is gone and the floor is gauge-invariant (a globally curvature-free chart
-    needs a flat Fisher-Rao metric, which SEM's is not).
+  Scope of the earlier findings:
+  - *Is there a better convention?* Still open outside the measured CFA models.
+    `std_lv`'s PE curvature sits below intrinsic curvature there, but that does
+    not prove numerical optimality; experiment 83 tests structural alternatives.
   - *Should the numerics lever be the chart?* No, the optimizer's metric. Full
     Newton / Fisher scoring is affine-invariant, so linear conditioning is free;
     nothing absorbs PE curvature. This is why `effect_coding` beating `std_lv` on

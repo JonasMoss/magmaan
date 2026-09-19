@@ -4,6 +4,16 @@
 `experiments/82-latent-metric-geometry`, which supersedes
 `experiments/_archive/02-latent-metric-identification`.
 
+**Scope correction (2026-09-19):** the original conclusions below are exploratory
+measurements, not a proof that no materially better chart exists. A PE/IN ratio
+below one does not establish numerical optimality. The structural fit gaps also
+need a common-domain audit: marker fits can admit negative disturbance variances
+that a fixed-positive-disturbance chart cannot represent. Experiment 83 now tests
+six recursive structures with matched starts and a common strictly PD component
+domain. Its R prototype implements total-variance elimination and analytic
+derivatives; it makes no native-library speed claim. The earlier statement that
+identification bounds total variance away from zero is not a general theorem.
+
 Why this exists: "std.lv works best" circulates as folklore, the repo had partial
 and partly contradictory evidence for it, and there was no framework for deciding
 whether a *better* convention exists. This records the framework, the measured
