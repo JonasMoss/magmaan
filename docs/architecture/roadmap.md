@@ -490,8 +490,11 @@ an unconstrained gradient test to constrained solutions.
   prototype, common starts, analytic derivatives, and the same strictly PD
   component domain. Native fitting behavior is unchanged. Boundary solutions,
   practical starts, feedback and shared/equality-constrained parameters remain
-  outside that pilot; a fit gap across unequal admissible domains is not evidence
-  of optimizer failure.
+  outside the initial pilot; a fit gap across unequal admissible domains is not
+  evidence of optimizer failure. Its Bollen follow-up adds diagonal/frozen full
+  information scaling, a local chart selector, and existing native PSD references
+  from two starts. It distinguishes interior audit failures from matching
+  cone-stationary boundary candidates; no native parameterization policy changed.
 - Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
   for the ML, GMM/GLS, and bounded ordinal LS paths; per-θ box bounds fold onto
   the reduced α for the pure-merge case.

@@ -4164,6 +4164,13 @@ work until a concrete downstream consumer appears.
     disturbance matrices cause unresolved stalls, notably in Bollen draws.
     Improve boundary handling before interpreting these as chart failure rates;
     retain model-level failures and objective gaps.
+  - Bollen follow-up: original data plus ten paired draws separates eight interior
+    cases from three PSD-boundary candidates (draws 2, 5, 8). Native PSD fits from
+    common and native starts agree and pass cone audits in all eleven. Diagonal
+    and frozen full-information scaling resolve all eight interior prototype
+    fits; raw charts have residual audit failures. The start-information selector
+    chooses marker, but its superiority to fixed total-plus-scaling is unproven.
+    The boundary-aware routing replay is experiment-local, not a native API.
   - Add practical matched starts and a second optimizer before a native chart
     implementation. Feedback, fixed loading models and cross-group/shared
     constraints need explicit transformation contracts before inclusion.

@@ -28,6 +28,14 @@ the same admissible interior? Can we answer that in seconds rather than hours?
 
 ## Short answer
 
+**The Bollen follow-up separates coordinate scaling from PSD boundaries.** On the
+original data and ten matched Gaussian draws, eight cases have matching interior
+reference solutions; three have matching PSD-boundary reference solutions.
+Information scaling resolves the interior audit failures. The existing magmaan
+PSD fitter handles all eleven from two starts, including the three boundary
+cases, using the appropriate cone-stationarity check. These are locally audited
+reference candidates, not proofs of global optimality.
+
 **Total-variance scaling is a viable candidate, not a universal winner.** The
 initial stress pilot improves information conditioning substantially for mediation
 with a highly predictable mediator and for a higher-order factor model. Disturbance
@@ -38,9 +46,9 @@ The current run completed **`r nrow(f)` fits in
 `r round(as.numeric(mv("elapsed_seconds")), 2)` seconds**, across
 `r length(unique(f$case))` structures. Completion status is
 **`r mv("complete")`**. This is a small comparison prototype, not evidence of native
-library speed or finite-sample failure rates. Ten-draw follow-ups also finished within a minute, but exposed near-boundary
-stalls that the stationarity audit rejects. Practical starts and better boundary
-handling are needed before drawing conclusions about failure rates.
+library speed or finite-sample failure rates. Ten-draw follow-ups also finished within a minute. Their near-boundary stalls
+motivated the Bollen classification below; practical starts and more model
+structures remain necessary before drawing conclusions about failure rates.
 
 ## Evidence
 
@@ -68,6 +76,78 @@ A fit is not accepted merely because its optimizer returns success. There are
 threshold, and `r sum(!f$admissible)` failing the component covariance audit in this
 run. The paired fit gaps are descriptive; neither their minimum nor agreement
 between three charts proves a global optimum.
+
+### Bollen: information scaling helps in the interior
+
+```{r}
+bollen_ready <- all(file.exists(file.path("results/bollen",
+  c("fits.csv", "references.csv", "metadata.csv", "routing.csv"))))
+if (bollen_ready) {
+  bf <- read.csv("results/bollen/fits.csv")
+  br <- read.csv("results/bollen/references.csv")
+  bm <- read.csv("results/bollen/metadata.csv")
+  bi <- bf[bf$reference_class == "interior_candidate", ]
+  tab <- aggregate(evaluations ~ chart + method, bi, median)
+  count <- aggregate(I(classification == "matched_interior") ~ chart + method, bi, sum)
+  tab$accepted <- count[[3]][match(paste(tab$chart, tab$method), paste(count$chart, count$method))]
+  knitr::kable(tab, digits = 1,
+    col.names = c("Latent Scale", "Information Scaling", "Median Evaluations", "Interior Cases Accepted"))
+} else cat("Run `Rscript scripts/bollen_probe.R` to produce the Bollen follow-up.")
+```
+
+All coordinate choices start from the same model and use the same objective,
+analytic derivatives, and optimizer. Diagonal scaling removes differences in
+parameter units. Full scaling also removes their local coupling, using information
+at the starting point, held fixed throughout fitting. Both resolve all eight
+interior cases in this small run; unscaled coordinates miss the stationarity
+threshold in one or two cases per chart.
+
+The prototype selector compares three diagonally equilibrated information
+matrices at the start, chooses the least ill-conditioned, and applies full
+information scaling in that chart. It selects **marker** for Bollen. This choice
+uses no fitted outcomes. It is a heuristic, not an optimum certificate: total
+scaling with full information scaling has slightly fewer median evaluations in
+these draws. Most of the gain comes from information scaling; this does not yet
+justify a complicated chart classifier.
+
+### PSD boundaries require a different optimality check
+
+```{r}
+if (bollen_ready) {
+  boundary <- unique(bf$replicate[bf$reference_class == "psd_boundary_candidate"])
+  uu <- br[br$engine == "lavaan_unrestricted" & br$replicate %in% boundary, ]
+  pp <- br[br$engine == "magmaan_psd" & br$start == "common" & br$replicate %in% boundary, ]
+  pp <- pp[match(uu$replicate, pp$replicate), ]
+  knitr::kable(data.frame(Draw = uu$replicate, Unrestricted = uu$objective,
+      PSD = pp$objective, Nullity = pp$nullity, ConeStationary = pp$cone_stationary),
+    digits = 6, col.names = c("Draw", "Unrestricted Objective", "PSD Objective",
+      "Covariance Nullity", "Cone Stationary"))
+}
+```
+
+The two native PSD starts agree within $10^{-7}$ in all eleven cases and pass
+covariance admissibility and cone stationarity. The three boundary cases are draws
+2, 5, and 8; their unrestricted references are inadmissible. Thus a higher PSD
+objective is expected. Ordinary zero-gradient stationarity is not the appropriate
+acceptance criterion at these constrained solutions. The open-interior fits can
+approach the boundary without ever attaining it, or stall prematurely along the
+way. Better coordinates alone do not fix that missing boundary treatment.
+
+The native fitter represents each permitted covariance component as $LL^\top$,
+with constraints linking it to the original model entries. Singular factors are
+allowed. This preserves the specified covariance zeros, unlike simply freeing a
+dense triangular factor. It also avoids treating a singular covariance as an
+invalid statistical model merely because a strictly positive Cholesky diagonal
+cannot represent it. The common cone audit is essential: stationarity in squared
+factor coordinates alone is not sufficient at a zero factor.
+
+An experimental routing replay uses only the selected fit's feasibility,
+information-scaled gradient, and dimensionless boundary diagnostics. It accepts a
+regular interior fit; otherwise it requests the existing PSD solver from the
+original common start. Its decisions do not use the unrestricted or PSD reference
+objectives. The resulting paths are recorded in `results/bollen/routing.csv`.
+This is a prototype policy replay, not a new public fitting API or a justification
+for changing the user's covariance domain.
 
 ### Iteration costs seconds
 
@@ -98,9 +178,9 @@ The ten-draw follow-ups completed 198 fits each in **26.9 s** (ordinary) and
 launched concurrently, so these are iteration wall budgets, not comparative speed
 measurements. Some Bollen draws and stressed controlled draws approach singular
 disturbance covariances; the largest paired objective gap was .348, and every gap
-above $10^{-7}$ was rejected by the stationarity audit. These are unresolved
-near-boundary optimization cases, not evidence that any chart found a certified
-optimum. They are retained in `results/ordinary` and `results/iteration`.
+above $10^{-7}$ was rejected by the stationarity audit. The Bollen follow-up resolves its three difficult draws as matching,
+cone-stationary PSD-boundary candidates; the other structures' boundary cases
+remain open. They are retained in `results/ordinary` and `results/iteration`.
 
 This experiment constructs each case once, validates first derivatives once per
 chart, draws sample covariances directly, and fits each chart once per draw. It
@@ -119,9 +199,9 @@ calculations in the replication loop.
 - Starts are perturbations of the controlled population or empirical reference fit,
   transformed exactly into each chart. This isolates coordinates but is
   deliberately reference-assisted. Native start heuristics need a separate arm.
-- The comparison admits only strictly positive-definite disturbance and measurement
-  covariance matrices. Boundary optima and unrestricted Heywood estimates are
-  outside this pilot. Rejected steps are counted; rejection-based optimization can
+- The original chart comparison admits only strictly positive-definite disturbance and measurement
+  covariance matrices; the Bollen follow-up adds native PSD references. Boundary optima and unrestricted Heywood estimates are
+  outside that interior arm. Rejected steps are counted; rejection-based optimization can
   struggle near a boundary and is not a proposed production constraint method.
 - An optimizer success flag, a small gradient in raw coordinates, and an admissible
   covariance are distinct properties. The report keeps them separate. The
@@ -145,6 +225,8 @@ From this directory:
 Rscript run_experiment.R --help
 Rscript run_experiment.R --dry-run-plan --smoke --stress
 Rscript run_experiment.R --smoke --stress
+Rscript scripts/bollen_probe.R --smoke
+Rscript scripts/bollen_probe.R             # original data + ten draws, default 60s budget
 quarto render report.qmd
 # Ordinary setting, kept separate from the rendered stress pilot:
 Rscript run_experiment.R --smoke --results-dir results/ordinary
@@ -239,3 +321,40 @@ with a fixed per-operation timing budget, separately from replications. Any late
 curvature arm should likewise be opt-in and evaluated once at selected reference
 points. The previous CFA curvature ratio is not an optimality certificate for all
 possible SEM parameterizations.
+
+### Feasible first parameterization algorithm
+
+Given a supported model and a valid common starting point:
+
+1. Construct equivalent marker, disturbance-unit, and total-unit coordinates.
+   Reject unsupported constraints or a locally rank-deficient model explicitly.
+2. Compute expected information $I_0$ in each chart. Compare
+   $\operatorname{diag}(I_0)^{-1/2}I_0\operatorname{diag}(I_0)^{-1/2}$,
+   so a chart does not win simply by changing individual parameter units.
+3. Select the smallest condition number and hold that chart fixed. For
+   $I_0=R^\top R$, optimize in $\theta=\theta_0+R^{-1}z$.
+   The starting information in $z$ is identity. Diagonal scaling is a cheaper
+   alternative and nearly as effective in the current Bollen run.
+4. Preserve the requested PSD domain. An interior fast path needs a PSD fallback
+   when it cannot pass its audit; an always-PSD solver can instead carry this
+   scaling internally. A zero disturbance with positive total latent variance is
+   representable in marker or total coordinates, but not by fixing that
+   disturbance variance to one.
+5. Classify the outcome using covariance feasibility and the appropriate interior
+   or cone audit. Keep unresolved cases distinct from accepted boundary solutions.
+
+`R/precondition.R` supplies the coordinate selector. The Bollen runner validates
+its affine maps and replays the routing policy. These are separate from the
+existing native marker-to-std.lv identification helper; no production policy has
+changed. Full information scaling incurs a dense solve and is not necessarily the
+best choice for large models. Its usefulness must be judged including setup cost.
+In this R prototype, native PSD fits are already faster than the R optimization
+loop, so the experiment does not establish a speed advantage over simply using
+native PSD fitting throughout.
+
+The next test should use practical starts across the six structures, compare
+fixed total-plus-diagonal scaling against the selector, and preserve the same PSD
+constraints in every solver. The useful first classification is **unit scaling,
+remaining parameter coupling, near-boundary behavior, or identification trouble**,
+with numerical diagnostics supporting the labels. It is too early to learn a
+universal mapping from a model's diagram to its best parameterization.
