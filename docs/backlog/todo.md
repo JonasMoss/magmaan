@@ -4177,6 +4177,13 @@ work until a concrete downstream consumer appears.
     Median evaluations fell 108→31 from reference-assisted common starts but
     rose 114→152 from native starts. Keep it opt-in until
     broader structures and practical starts establish a reliable benefit.
+    The native-start follow-up now covers six structures/ten settings: all 220
+    fits pass audits in 2.83s, but diagonal scaling increases median evaluations
+    in every setting. 109/110 pairs agree within `6e-12`; stressed mediation
+    draw 4 has distinct stationary objectives (gap 0.00519), retained on four
+    cross-restarts. Keep the unscaled default. Investigate start curvature and
+    equality scaling before adding more expensive preconditioners; first-order
+    cone acceptance does not establish a common or global optimum.
   - Add practical matched starts and a second optimizer before a native chart
     implementation. Feedback, fixed loading models and cross-group/shared
     constraints need explicit transformation contracts before inclusion.

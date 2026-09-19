@@ -24,9 +24,18 @@ mv <- function(key) meta$value[match(key, meta$key)]
 
 Does fixing **total latent variance** improve SEM optimization across different
 structural models, when all parameterizations start at the same model and search
-the same admissible interior? Can we answer that in seconds rather than hours?
+the same admissible interior? Does native PSD fitting benefit from diagonal
+information scaling with practical default starts? Can we answer this in seconds?
 
 ## Short answer
+
+**Keep native PSD ML unscaled by default.** Across six structures and ten settings,
+all 220 fits passed the existing audits, but diagonal preconditioning increased
+median evaluations in every setting. Of 110 paired datasets, 109 reached matching
+objectives and boundary classifications. One stressed mediation draw reached two
+different audited stationary endpoints; cross-restarts retained that difference.
+The full comparison took 2.83 seconds. The earlier benefit from reference-assisted
+Bollen starts does not generalize to native starts in this pilot.
 
 **The Bollen follow-up separates coordinate scaling from PSD boundaries.** On the
 original data and ten matched Gaussian draws, eight cases have matching interior
@@ -76,6 +85,49 @@ A fit is not accepted merely because its optimizer returns success. There are
 threshold, and `r sum(!f$admissible)` failing the component covariance audit in this
 run. The paired fit gaps are descriptive; neither their minimum nor agreement
 between three charts proves a global optimum.
+
+### Native starts: diagonal scaling does not reduce optimizer work
+
+```{r}
+structure_path <- "results/native-structures/pairs.csv"
+if (file.exists(structure_path)) {
+  sp <- read.csv(structure_path)
+  comparable <- sp[!is.na(sp$comparable) & sp$comparable, ]
+  work <- aggregate(cbind(evaluations.none, evaluations.diagonal) ~ case, comparable, median)
+  counts <- aggregate(comparable ~ case, sp, function(x) sprintf("%d/%d", sum(x), length(x)))
+  work <- merge(work, counts, by="case")
+  labels <- c(hs_3factor_cfa="HS CFA", mediation="Mediation",
+    correlated_predictors="Correlated predictors", higher_order="Higher order",
+    correlated_disturbances="Correlated disturbances", bollen_democracy_sem="Bollen SEM")
+  work$case <- unname(labels[work$case])
+  names(work) <- c("Structure", "Unscaled Evaluations", "Diagonal Evaluations", "Matched Pairs")
+  knitr::kable(work, digits=1,
+    caption="Median evaluations among audited pairs with matching objectives and nullities.")
+}
+```
+
+Each empirical model uses its observed covariance and ten matched Gaussian draws.
+Each synthetic model uses both ordinary and stressed settings, with population
+moments and ten matched draws per setting. Both methods receive the same default
+native starts and evaluation budget. The synthetic rows summarize both settings;
+diagonal scaling increases median evaluations in each setting separately as well.
+No reference estimates are supplied as optimizer starts. Population or fitted
+reference moments define the simulated data only.
+
+All 220 fits passed feasibility and cone-stationarity checks. The 109 matching
+pairs differ in objective by less than $6\times10^{-12}$. Stressed mediation draw
+4 differs by 0.00519: the unscaled endpoint has objective 0.05939 and the scaled
+endpoint 0.06458. Both initially have covariance nullity one. Restarting either
+method from either endpoint preserves its objective, so merely changing scaling
+at termination does not resolve the discrepancy. This is evidence of distinct
+stationary endpoints, not proof that either is globally optimal. One restart's
+nullity changes from one to zero at essentially the same objective, emphasizing
+that numerical rank classifications near the boundary depend on tolerance.
+
+The reported counts exclude that unmatched pair from the work comparison but
+retain it in the denominator. Single-pass timings and every fit, failure, and
+paired objective gap remain in `results/native-structures/`. These timings are
+sufficient to establish a cheap iteration loop, not stable speed ratios.
 
 ### Bollen: information scaling helps in the interior
 
@@ -249,6 +301,21 @@ The isolated legacy runtime probe can be repeated from the repository root:
   --conv-n 50 --reps 1 --backends nlopt-lbfgs --results-dir /tmp/latent-metric-cost
 ```
 
+Run the native-start structural comparison and inspect any discrepant endpoints:
+
+```sh
+Rscript scripts/native_structure_probe.R --dry-run-plan
+Rscript scripts/native_structure_probe.R
+Rscript scripts/native_restart_probe.R
+```
+
+The main comparison runs 220 fits under a 30-second soft budget, checked between
+fits; each fit has a 1000-evaluation limit. `--smoke` runs 40 fits. The restart
+runner requires saved discrepancies and runs four fits per discrepancy under its
+own 30-second soft budget. Native results are independent of the earlier R-chart
+runs. Synthetic syntax is validated against its known population covariance
+before fitting; validation discrepancies are below $2\times10^{-29}$ in ULS.
+
 ## Design and next decisions
 
 ### Initial model selection
@@ -403,5 +470,7 @@ Reproduce with `Rscript scripts/native_psd_probe.R` after installing the updated
 R bindings. It runs 44 fits with a 30-second soft budget and no timing batches;
 `--smoke` runs 12 fits. Use
 `frontier_fit_ml_psd(model, data, preconditioning = "diagonal")` to opt in.
-The next comparison should extend native-start fits across the six structures
-before considering a default change or more expensive block scaling.
+The native-start comparison above now covers all six structures. Its results
+support retaining the unscaled default. A useful next diagnostic is whether
+constraint scaling and starting-point curvature explain the extra work; a more
+expensive scaling scheme is not justified by the current result alone.
