@@ -3217,10 +3217,21 @@ work lives in [`speculative.md`](speculative.md). Open work:
   error. Second-order and endogenous-latent `std_lv` match the marker fit to 13+
   digits on `soc_2nd` and `sem_2x2` across p ∈ {12,24,48}.
 
-  **A multi-group `fit_stdlv` golden is still the one open item** — the fix is
-  gated self-consistently (marker vs std_lv must agree on df/χ²/fmin) rather than
-  against a lavaan fixture, and `tests/fixtures/fit_stdlv/` holds exactly one
-  single-group HS CFA. Cheap to add now that the pin is at 0.7-2.
+  **The multi-group `fit_stdlv` golden is DONE.**
+  `fit_stdlv/0002_three_factor_hs_2group_loadings` (HS 1939, `group = "school"`,
+  `group.equal = "loadings"`, `meanstructure = FALSE`, npar 45 / df 54) now gates
+  the fix directly against lavaan 0.7-2 on θ̂, SE, χ², and df, on top of the
+  self-consistency check. Confirmed to have teeth: with Step 8a-bis disabled it
+  fails with an n_free deficit of exactly (G−1)·n_lv.
+
+  One judgement call recorded there: the θ̂ bound had to go 5e-6 → 1e-5 (the
+  2-group fit runs in a rotated 36-dim α-space under 9 cross-group equalities, so
+  it has more flat directions; measured displacement 8.5e-6). That is a genuinely
+  flat direction rather than a wrong answer — over the same fits the χ² agrees to
+  2.6e-9 / 3.9e-9, i.e. nine significant figures of objective agreement against
+  an 8.5e-6 parameter move. So the χ² bound was tightened 1e-3 → 1e-6 in the same
+  change, which leaves the golden strictly sharper than before rather than
+  looser.
 
   **Do not "fix" the marker case.** lavaan's sibling rule, commented "marker
   indicator if std.lv = FALSE (new in 0.6-20)", *does* fire — group 2's marker

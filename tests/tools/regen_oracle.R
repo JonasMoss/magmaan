@@ -1665,14 +1665,34 @@ stdlv_models <- list(
   list(id    = "0001_three_factor_hs",
        model = paste("visual =~ x1 + x2 + x3",
                      "textual =~ x4 + x5 + x6",
-                     "speed =~ x7 + x8 + x9", sep = "\n"))
+                     "speed =~ x7 + x8 + x9", sep = "\n")),
+  # Multi-group metric invariance under std.lv. This is the case that caught a
+  # magmaan bug: `apply_std_lv` fixed `lv ~~ lv` at 1.0 in *every* group, but
+  # with the loadings tied across groups lavaan frees the latent variances for
+  # g > 1 (otherwise a group difference in factor variance is inestimable and
+  # the std.lv model is strictly more restrictive than its marker twin).
+  # Covariance-only (meanstructure = FALSE) so the fixture stays a pure
+  # Sigma-per-group comparison; the mean-structure variant is a separate case.
+  list(id          = "0002_three_factor_hs_2group_loadings",
+       model       = paste("visual =~ x1 + x2 + x3",
+                           "textual =~ x4 + x5 + x6",
+                           "speed =~ x7 + x8 + x9", sep = "\n"),
+       group       = "school",
+       group_equal = "loadings")
 )
 
 regenerated_stdlv <- character(0)
 for (m in stdlv_models) {
   id <- m$id; model <- m$model
-  fit <- tryCatch(cfa(model, data = HolzingerSwineford1939, std.lv = TRUE),
-                  error = function(e) e)
+  grouped <- !is.null(m$group)
+  cfa_args <- list(model = model, data = HolzingerSwineford1939,
+                   std.lv = TRUE)
+  if (grouped) {
+    cfa_args$group         <- m$group
+    cfa_args$group.equal   <- m$group_equal
+    cfa_args$meanstructure <- FALSE
+  }
+  fit <- tryCatch(do.call(cfa, cfa_args), error = function(e) e)
   if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
     cat("  skip ", id, " (std.lv cfa error / no convergence)\n", sep = "")
     next
@@ -1683,25 +1703,40 @@ for (m in stdlv_models) {
   fm       <- fitMeasures(fit)
   sampstat <- lavInspect(fit, "sampstat")
 
+  # Single group: lavInspect returns one $cov. Multi-group: a per-group list.
+  cov_blocks <- if (grouped) lapply(sampstat, function(s) s$cov) else
+                             list(sampstat$cov)
   payload <- list(
     `_meta` = list(
       format_version = 1L,
       fixture_kind   = "fit.stdlv",
       corpus_id      = id,
-      tool           = "lavaan::cfa(std.lv=TRUE)",
+      tool           = if (grouped)
+        "lavaan::cfa(std.lv=TRUE, group=, group.equal=, meanstructure=FALSE)"
+        else "lavaan::cfa(std.lv=TRUE)",
       lavaan_version = installed
     ),
     input      = model,
     std_lv     = TRUE,
-    n_obs      = as.integer(lavInspect(fit, "ntotal")),
+    # Scalar for the single-group case (unchanged), per-group vector otherwise.
+    n_obs      = if (grouped) as.integer(unlist(lavInspect(fit, "nobs")))
+                 else as.integer(lavInspect(fit, "ntotal")),
     # Free parameter estimates / SEs in partable-free-index order (1..n_free).
     theta_hat  = as.numeric(free_rows$est),
     se         = as.numeric(free_rows$se),
     chi2       = as.numeric(fm["chisq"]),
     df         = as.integer(fm["df"]),
-    sample_cov = list(list(block  = 0L,
-                           matrix = unname(as.matrix(sampstat$cov))))
+    sample_cov = lapply(seq_along(cov_blocks), function(b)
+      list(block = as.integer(b - 1L),
+           matrix = unname(as.matrix(cov_blocks[[b]]))))
   )
+  if (grouped) {
+    payload$n_groups     <- length(cov_blocks)
+    payload$group_var    <- m$group
+    payload$group_labels <- as.character(lavInspect(fit, "group.label"))
+    payload$group_equal  <- m$group_equal
+    payload$meanstructure <- FALSE
+  }
 
   out_path <- file.path(stdlv_dir, paste0(id, ".fit.json"))
   write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
