@@ -97,6 +97,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 80 | [Savalei-Falk-2014 matrix choices](80-savalei-falk-2014-ml2s-information/report.qmd) | replication | complete | Which Yuan-Bentler-style matrix choice gives rejection behavior most similar to Savalei and Falk, without claiming an exact EQS replication? |
 
 | 81 | [score-vs-lrt](81-score-vs-lrt/report.qmd) | benchmark | active | Do score-based SB and pEBA tests calibrate better than LR-based tests, and how long does the paired simulation take? |
+| 82 | [latent-metric-geometry](82-latent-metric-geometry/report.qmd) | benchmark | active | Which latent scaling convention should a SEM library use internally, is there a better one than the named three, and does the answer survive the move from CFA to structural models? |
 
 ## Archived
 

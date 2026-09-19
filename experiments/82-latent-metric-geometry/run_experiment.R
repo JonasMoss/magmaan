@@ -51,6 +51,36 @@
 #           correctness check -- it must be numerical noise. Any Wald/LRT gap is
 #           then attributable to the chart alone.
 #
+# backcvt   Whether a library can fit in a better chart internally and hand back
+#           the user's chart. Exactness first because it is disqualifying, then
+#           cost for BOTH point estimates (O(p)) and the vcov delta-method
+#           sandwich (dense O(p^3)) -- the second is what exp 02 never counted,
+#           and a user who asks for the marker chart wants marker standard
+#           errors and not just marker point estimates.
+#
+# converge  Small n, where conditioning should actually bite. Every chart sees the
+#           SAME dataset per cell, so charts are compared per draw: a draw where
+#           one chart fails and another succeeds is a dominance statement, much
+#           stronger than comparing aggregate failure rates.
+#
+# struct    The arm that reverses the CFA verdict. Everything above is CFA, where
+#           every latent is exogenous and the Psi diagonal is the TOTAL latent
+#           variance. For an ENDOGENOUS latent it is the RESIDUAL variance, which
+#           is what std_lv actually fixes to 1 -- so std_lv does not standardise
+#           endogenous latents (implied total variance reaches 50 at R^2 = 0.98)
+#           and, worse, the residual variance is NOT bounded away from zero. As
+#           R^2 -> 1 the gauge loses its grip and std_lv acquires exactly marker's
+#           failure mode with a different trigger. Sweeps R^2 and records the
+#           attained fmin, since both charts parameterise the same manifold and
+#           any disagreement means an optimizer failed.
+#
+# Growth models are deliberately absent. With every loading user-fixed there is
+# nothing to absorb the rescaling, so std_lv is not a reparameterization at all:
+# lavaan and magmaan agree that Demo.growth goes npar 9 -> 7, df 5 -> 7, chi-square
+# 8.07 -> 106.85. That is a different model, pinned by the "std.lv on all-fixed
+# loadings adds constraints, not coordinates" case in tests/unit/lavaanify_test.cpp,
+# and it is a spec-level fact rather than anything this experiment can measure.
+#
 # The three charts are implemented twice on purpose. The cost and inference arms
 # drive magmaan's own `model_spec(std_lv=, effect_coding=)` fits. The geometry arm
 # needs Sigma(theta) at arbitrary theta in unconstrained coordinates (effect
@@ -98,6 +128,24 @@ time_per_call <- function(f, min_time = 0.05, batches = 5L, warmup = 2L) {
   c(median = stats::median(ts), iqr = stats::IQR(ts), batch_k = k)
 }
 
+# Progress heartbeat. The cost and structural arms run calibrated timing batches and
+# can take tens of minutes; a runner must not sit silent inside one loop.
+progress <- function(label, done, total, t0) {
+  if (!is.finite(total) || total <= 0L) return(invisible(NULL))
+  el <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+  eta <- if (done > 0L) el / done * (total - done) else NA_real_
+  tty <- isatty(stdout())
+  # On a terminal, redraw one line. Piped to a log, \r would concatenate every
+  # tick onto a single unreadable line, so emit a real line and only every 10th
+  # tick (plus the last) to keep logs short.
+  if (!tty && done != total && done %% 10L != 0L) return(invisible(NULL))
+  cat(sprintf("%s  %-11s %5d/%-5d  %6.0fs elapsed  ETA %6.0fs   %s",
+              if (tty) "\r" else "", label, done, total, el, eta,
+              if (tty && done < total) "" else "\n"))
+  utils::flush.console()
+  invisible(NULL)
+}
+
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
@@ -105,11 +153,14 @@ usage <- function() {
     "Options:\n",
     "  --smoke            Quick run. Default.\n",
     "  --full             Paper-grade run.\n",
-    "  --arms LIST        geometry,cost,inference. Default: all three.\n",
+    "  --arms LIST        geometry,cost,inference,backconvert,convergence,\n",
+    "                     structural. Default: all six.\n",
     "  --charts LIST      marker,std_lv,effect. Default: all three.\n",
     "  --bc-p LIST        p values for the back-conversion arm. Default: 6,12,24,48\n",
     "  --conv-n LIST      Sample sizes for the convergence arm.\n",
     "                     Default: 50,75,100,150,400\n",
+    "  --struct-b LIST    Structural coefficients (R^2 = b^2) for the structural\n",
+    "                     arm. Default: 0.1,0.3,0.5,0.7,0.9,0.95,0.99\n",
     "  --lambda1 LIST     Marker-indicator loadings. Default: 0.3,0.5,0.7,0.9\n",
     "  --p LIST           Indicator counts. Default smoke: 6,12; full: 6,12,24\n",
     "  --curv-p LIST      p values for the O(p^4) curvature split. Default: 6,12\n",
@@ -125,10 +176,12 @@ usage <- function() {
 
 parse_args <- function(args) {
   o <- list(smoke = TRUE,
-            arms = c("geometry", "cost", "inference", "backconvert", "convergence"),
+            arms = c("geometry", "cost", "inference", "backconvert", "convergence",
+                     "structural"),
             charts = c("marker", "std_lv", "effect"),
             lambda1 = c(0.3, 0.5, 0.7, 0.9), p = NULL, curv_p = c(6L, 12L),
             bc_p = c(6L, 12L, 24L, 48L), conv_n = c(50L, 75L, 100L, 150L, 400L),
+            struct_b = c(0.1, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99),
             n = 400L, reps = NULL, backends = c("nlopt-lbfgs", "port"),
             seed_base = 20260919L, results_dir = NULL)
   i <- 1L
@@ -144,6 +197,7 @@ parse_args <- function(args) {
     else if (a == "--curv-p") o$curv_p <- as.integer(parse_csv_numeric(nxt()))
     else if (a == "--bc-p") o$bc_p <- as.integer(parse_csv_numeric(nxt()))
     else if (a == "--conv-n") o$conv_n <- as.integer(parse_csv_numeric(nxt()))
+    else if (a == "--struct-b") o$struct_b <- parse_csv_numeric(nxt())
     else if (a == "--n") o$n <- as.integer(nxt())
     else if (a == "--reps") o$reps <- as.integer(nxt())
     else if (a == "--backends") o$backends <- parse_csv_arg(nxt())
@@ -154,7 +208,8 @@ parse_args <- function(args) {
   }
   if (is.null(o$p)) o$p <- if (o$smoke) c(6L, 12L) else c(6L, 12L, 24L)
   if (is.null(o$reps)) o$reps <- if (o$smoke) 20L else 1000L
-  bad <- setdiff(o$arms, c("geometry", "cost", "inference", "backconvert", "convergence"))
+  bad <- setdiff(o$arms, c("geometry", "cost", "inference", "backconvert",
+                          "convergence", "structural"))
   if (length(bad)) stop("unknown arm(s): ", paste(bad, collapse = ","), call. = FALSE)
   bad <- setdiff(o$charts, c("marker", "std_lv", "effect"))
   if (length(bad)) stop("unknown chart(s): ", paste(bad, collapse = ","), call. = FALSE)
@@ -350,6 +405,8 @@ backconvert_to_marker <- function(theta, p, chart) {
 
 run_cost <- function(opts) {
   rows <- list()
+  total <- length(opts$p) * length(opts$lambda1) * opts$reps
+  done <- 0L; t0 <- Sys.time()
   for (p in opts$p) for (l1 in opts$lambda1) {
     pop <- population(p, l1); syn <- syntax_1f(p)
     S <- pop$Sigma; dimnames(S) <- list(ov(p), ov(p))
@@ -388,6 +445,107 @@ run_cost <- function(opts) {
           pipeline_sec = ts[["median"]] + tf[["median"]] + tb[["median"]],
           stringsAsFactors = FALSE)
       }
+      done <- done + 1L; progress("cost", done, total, t0)
+    }
+  }
+  do.call(rbind, rows)
+}
+
+# ------------------------------------------------------------- arm: structural
+# Everything above is CFA, where every latent is exogenous and the Psi diagonal is
+# the latent's TOTAL variance. In a structural model that is no longer true: for an
+# ENDOGENOUS latent the Psi diagonal is the RESIDUAL variance, and `std_lv` fixes
+# that to 1 rather than the total variance. (Confirmed: under std_lv the implied
+# total variance of a latent regressed on another reaches 10.3 at R^2 = 0.90 and
+# 50.3 at R^2 = 0.98, so std_lv does not standardise endogenous latents at all.)
+#
+# That flips the transversality argument. The gauge slice is reached by rescaling
+# the latent by c, and conditioning degrades with the size of c. For an exogenous
+# latent, `phi = 1` is reached with c near 1 because identification keeps the total
+# variance away from zero. For an endogenous latent the anchor is the residual
+# variance, which is NOT bounded away from zero: it goes to zero as R^2 goes to 1,
+# so c blows up exactly the way the marker chart's c = 1/lambda_1 blows up when the
+# marker indicator is weak. Same failure mode, different trigger.
+#
+# So this arm sweeps R^2 of an endogenous latent and asks whether std_lv stops being
+# the better chart. `fmin` is the outcome that matters, not speed: both charts
+# describe the same manifold, so any disagreement in the attained fmin means an
+# optimizer failed, and the failure can be silent.
+structural_population <- function(b) {
+  lam <- rep(0.8, 3L); r <- 1 - b^2
+  Phi <- matrix(c(1, b, b, b^2 + r), 2L, 2L)
+  L <- matrix(0, 6L, 2L); L[1:3, 1L] <- lam; L[4:6, 2L] <- lam
+  S <- L %*% Phi %*% t(L) + diag(rep(1 - 0.64, 6L))
+  dimnames(S) <- list(paste0("x", 1:6), paste0("x", 1:6))
+  list(Sigma = S, b = b, r2 = b^2, resid = r)
+}
+
+pcond_of <- function(M, tol = 1e-12) {
+  e <- sort(abs(eigen(M, symmetric = TRUE, only.values = TRUE)$values), decreasing = TRUE)
+  e <- e[e > tol * e[1L]]
+  e[1L] / e[length(e)]
+}
+
+run_structural <- function(opts) {
+  syn <- "f1 =~ x1+x2+x3\nf2 =~ x4+x5+x6\nf2 ~ f1"
+  charts <- intersect(opts$charts, c("marker", "std_lv"))
+  rows <- list()
+  total <- length(opts$struct_b) * opts$reps
+  done <- 0L; t0 <- Sys.time()
+  for (b in opts$struct_b) {
+    pop <- structural_population(b)
+
+    # Deterministic: conditioning at the population moments.
+    cond <- stats::setNames(rep(NA_real_, length(charts)), charts)
+    tot <- cond
+    dfr0 <- exact_cov_data(pop$Sigma, 2000L)
+    for (ch in charts) {
+      spec <- if (ch == "marker") model_spec(syn) else model_spec(syn, std_lv = TRUE)
+      f <- tryCatch(magmaan:::fit_ml(spec, df_to_data(dfr0, spec)), error = function(e) NULL)
+      if (is.null(f)) next
+      V <- tryCatch({
+        core <- magmaan::magmaan_core
+        as.matrix(core$inference_vcov_fit(core$inference_information_expected(f), f))
+      }, error = function(e) NULL)
+      if (!is.null(V)) cond[[ch]] <- pcond_of(V)
+    }
+
+    # Finite-sample: do the two charts actually reach the same optimum?
+    for (r in seq_len(opts$reps)) {
+      set.seed(opts$seed_base + 137L + as.integer(1000 * b) + r)
+      X <- tryCatch(MASS::mvrnorm(opts$n, rep(0, 6L), pop$Sigma), error = function(e) NULL)
+      if (is.null(X)) next
+      colnames(X) <- paste0("x", 1:6); dfr <- as.data.frame(X)
+      for (be in opts$backends) {
+        got <- list()
+        for (ch in charts) {
+          spec <- if (ch == "marker") model_spec(syn) else model_spec(syn, std_lv = TRUE)
+          dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
+          f <- if (is.null(dd)) NULL else
+            tryCatch(magmaan:::fit_ml(spec, dd, optimizer = be), error = function(e) NULL)
+          got[[ch]] <- f
+        }
+        fm <- vapply(charts, function(ch) {
+          f <- got[[ch]]; if (is.null(f) || !is.finite(f$fmin)) NA_real_ else f$fmin
+        }, numeric(1))
+        best <- if (all(is.na(fm))) NA_real_ else min(fm, na.rm = TRUE)
+        for (ch in charts) {
+          f <- got[[ch]]
+          rows[[length(rows) + 1L]] <- data.frame(
+            b = b, r2 = pop$r2, resid_var = pop$resid, chart = ch, backend = be,
+            replicate = r, n = opts$n, pcond_population = cond[[ch]],
+            errored = is.null(f),
+            converged = if (is.null(f)) FALSE else isTRUE(f$converged),
+            fmin = if (is.null(f)) NA_real_ else f$fmin,
+            # The load-bearing column. Both charts parameterise the same manifold,
+            # so a positive gap is an optimizer failure, and `converged` can still
+            # be TRUE while it happens.
+            fmin_gap_from_best = if (is.null(f)) NA_real_ else f$fmin - best,
+            f_evals = if (is.null(f)) NA_integer_ else (f$f_evals %||% NA_integer_),
+            stringsAsFactors = FALSE)
+        }
+      }
+      done <- done + 1L; progress("structural", done, total, t0)
     }
   }
   do.call(rbind, rows)
@@ -425,6 +583,8 @@ jacobian_stdlv_to_marker <- function(theta, p) {
 
 run_backconvert <- function(opts) {
   rows <- list()
+  total <- length(opts$bc_p) * length(opts$lambda1)
+  done <- 0L; t0 <- Sys.time()
   for (p in opts$bc_p) for (l1 in opts$lambda1) {
     pop <- population(p, l1); syn <- syntax_1f(p)
     set.seed(opts$seed_base + 31L + 1000L * p + as.integer(1000 * l1))
@@ -490,6 +650,7 @@ run_backconvert <- function(opts) {
         bc_vcov_pct_of_fit = 100 * t_vcov / t_fit[["median"]],
         stringsAsFactors = FALSE)
     }
+    done <- done + 1L; progress("backconvert", done, total, t0)
   }
   do.call(rbind, rows)
 }
@@ -505,6 +666,8 @@ run_backconvert <- function(opts) {
 # concrete win rather than an aggregate one.
 run_convergence <- function(opts) {
   rows <- list()
+  total <- length(opts$p) * length(opts$lambda1) * length(opts$conv_n) * opts$reps
+  done <- 0L; t0 <- Sys.time()
   for (p in opts$p) for (l1 in opts$lambda1) for (nn in opts$conv_n) {
     pop <- population(p, l1); syn <- syntax_1f(p)
     for (r in seq_len(opts$reps)) {
@@ -536,6 +699,7 @@ run_convergence <- function(opts) {
           improper = if (length(vars)) any(vars <= 0, na.rm = TRUE) else NA,
           stringsAsFactors = FALSE)
       }
+      done <- done + 1L; progress("convergence", done, total, t0)
     }
   }
   do.call(rbind, rows)
@@ -548,6 +712,8 @@ run_convergence <- function(opts) {
 # any Wald spread is then attributable to the chart.
 run_inference <- function(opts) {
   rows <- list()
+  total <- length(opts$p) * length(opts$lambda1) * opts$reps
+  done <- 0L; t0 <- Sys.time()
   for (p in opts$p) for (l1 in opts$lambda1) {
     pop <- population(p, l1)
     nm <- ov(p); a <- nm[p - 1L]; b <- nm[p]
@@ -602,6 +768,7 @@ run_inference <- function(opts) {
           improper = if (length(vars)) any(vars <= 0, na.rm = TRUE) else NA,
           stringsAsFactors = FALSE)
       }
+      done <- done + 1L; progress("inference", done, total, t0)
     }
   }
   do.call(rbind, rows)
@@ -633,6 +800,19 @@ if ("cost" %in% opts$arms) {
   write_csv(cc, file.path(res_dir, "cost.csv"))
   cat(sprintf("cost: %d rows -> cost.csv\n", nrow(cc)))
 }
+if ("structural" %in% opts$arms) {
+  st <- run_structural(opts)
+  write_csv(st, file.path(res_dir, "structural.csv"))
+  cat(sprintf("structural: %d rows -> structural.csv\n", nrow(st)))
+  bad <- st[is.finite(st$fmin_gap_from_best) & st$fmin_gap_from_best > 1e-8, ]
+  if (nrow(bad)) {
+    agg <- tapply(bad$converged, bad$chart, function(x) sum(as.logical(x)))
+    cat(sprintf("  optimizer failures (fmin above the best chart's by >1e-8): %d rows\n",
+                nrow(bad)))
+    for (nm in names(agg)) cat(sprintf("    %-8s %d, of which %d reported converged=TRUE\n",
+        nm, sum(bad$chart == nm), agg[[nm]]))
+  } else cat("  no optimizer failures\n")
+}
 if ("backconvert" %in% opts$arms) {
   bcr <- run_backconvert(opts)
   write_csv(bcr, file.path(res_dir, "backconvert.csv"))
@@ -660,6 +840,7 @@ write_metadata(file.path(res_dir, "metadata.csv"),
                 curv_p = paste(opts$curv_p, collapse = ","),
                 bc_p = paste(opts$bc_p, collapse = ","),
                 conv_n = paste(opts$conv_n, collapse = ","),
+                struct_b = paste(opts$struct_b, collapse = ","),
                 lambda1 = paste(opts$lambda1, collapse = ","),
                 n = opts$n, reps = opts$reps,
                 backends = paste(opts$backends, collapse = ","),

@@ -177,6 +177,88 @@ admissibility and says nothing about the exp 03 Heywood finding below. Loadings 
 with `psi = 0.51` are not extreme enough. A harder population is needed before the two
 results can be put on one grid.
 
+## Structural models reverse the verdict
+
+Everything above is CFA, where every latent is exogenous and the `Psi` diagonal is the
+latent's **total** variance. In a structural model that stops being true, and the
+consequence is not a caveat but a reversal.
+
+`std_lv` works mechanically. On `f3 ~ f1 + f2` over three measured factors, marker and
+`std_lv` give identical `fmin` (0.1417035245), chi-square (85.3055) and df (24), so it
+is still a reparameterization. Second-order factors (`g =~ f1 + f2 + f3`) likewise
+agree to all digits. No implementation gap.
+
+The problem is *what* it fixes. For an endogenous latent, `f ~~ f` is the **residual**
+variance, not the total variance, so `std_lv` pins the residual to 1 and the latent is
+not standardised at all. Its implied total variance reaches **10.3 at R² = 0.90 and
+50.3 at R² = 0.98**. And unlike a total variance, a residual variance is **not bounded
+away from zero**: it goes to zero as R² goes to one. So the gauge loses its grip, and
+`std_lv` acquires precisely marker's failure mode with a different trigger. Marker
+degenerates when the marker indicator is weak; `std_lv` degenerates when the
+endogenous latent is well explained.
+
+Conditioning of the expected information, one latent regressed on another:
+
+| R² | residual var | marker | std_lv | ratio |
+|---:|---:|---:|---:|---:|
+| 0.01 | 0.990 | 11.05 | 4.75 | 0.43 |
+| 0.25 | 0.750 | 11.49 | 9.93 | 0.86 |
+| 0.49 | 0.510 | 12.83 | 23.7 | **1.85** |
+| 0.81 | 0.190 | 23.23 | 373 | 16.1 |
+| 0.90 | 0.098 | 30.91 | 3627 | 117 |
+| 0.98 | 0.020 | 41.43 | **1.53e6** | **36887** |
+
+**The crossover is near R² = 0.4**, which is an ordinary value in published structural
+models, not a corner case. Marker's conditioning barely moves across the whole sweep.
+
+At R² = 0.98 this stops being about speed. Roughly **10 percent of `std_lv` fits land
+at a worse optimum than the marker fit on the same data**, and both charts parameterise
+the same manifold, so that is unambiguously an optimizer failure. On one such draw:
+
+| engine / chart | converged | fmin |
+|---|---|---:|
+| marker, all three magmaan backends | TRUE | 0.0166472682 |
+| lavaan, marker | TRUE | 0.0166472682 |
+| `std_lv`, nlopt-lbfgs | **TRUE** | **0.0171836769** |
+| `std_lv`, port | FALSE | 0.0171376063 |
+| `std_lv`, nlopt-slsqp | error | -- |
+| lavaan, `std.lv` | failed | "a solution has NOT been found", negative lv variances |
+
+So it is not a magmaan weakness: lavaan fails on the same cell, louder. But note the
+third row. magmaan's `nlopt-lbfgs` reports success at a point 3.2 percent above the
+optimum in `fmin` (chi-square 13.75 against 13.32), and the terminal audit agrees:
+`stationary = TRUE`, `grad_inf_norm = 2.51e-05` against a `stationarity_rhs` of 1e-3,
+`verdict$stationarity = "passed"`.
+
+That is **not a broken check**. With a condition number near 1e6 the objective really
+is flat there, so the point genuinely is stationary to that tolerance while sitting far
+from the minimum in function value. A gradient-norm criterion cannot distinguish the
+two. Which is the sharpest available argument for taking conditioning seriously: bad
+conditioning does not merely cost iterations, it silently corrupts the answer and
+defeats the stationarity audit that exists to catch exactly this.
+
+**Practical rule.** `std_lv` is safe for exogenous latents and risky for endogenous
+ones with high R². The natural repair is a chart that fixes the latent's **total**
+variance rather than its residual, which would be well-conditioned in both roles. That
+is not what lavaan's `std.lv` does, and it cannot be expressed by fixing a single
+parameter, because the total variance involves the structural coefficients. It is a
+*nonlinear* gauge condition, so magmaan's existing nonlinear equality-constraint
+machinery could express it. Speculative, and it would need its own conditioning study
+before anyone believed it.
+
+## Growth models: not a reparameterization at all
+
+The user-remembered difficulty. With every loading user-fixed there is nothing to
+absorb the rescaling, so fixing the latent variances adds real restrictions instead of
+renaming coordinates. On `Demo.growth`, both magmaan and lavaan go **npar 9 to 7, df 5
+to 7, chi-square 8.0687 to 106.8532**. magmaan reproduces lavaan exactly, so this is
+faithful rather than a bug, and it is pinned by the "std.lv on all-fixed loadings adds
+constraints, not coordinates" case in `tests/unit/lavaanify_test.cpp`.
+
+The general condition: `std_lv` is a change of coordinates exactly when the latent's
+scale is otherwise free, meaning at least one loading on it is free to absorb the
+rescaling. Growth models violate that by construction.
+
 ## Two things that were wrong
 
 **"The Fisher-orthogonal slice is the optimal gauge."** Nonsense. Moving along a gauge
@@ -196,15 +278,27 @@ reads every estimated variance rather than the latent one.
 
 ## Standing verdict
 
-std_lv wins conditioning, curvature, optimizer work, wall-clock fit time (0.43 of
-marker at `p = 24`), and small-n convergence (strictly dominant, 7-0 across matched
-draws). It loses on admissibility, where it relocates Heywood cases rather than
-removing them. It does **not** tie on end-to-end speed, which was exp 02's conclusion
-and is superseded: the back-conversion costs about three percent against a 30 to 57
-percent saving.
+**Split by whether the latent is exogenous. There is no single answer.**
+
+*Exogenous latents (so: all of CFA).* `std_lv` wins conditioning, curvature, optimizer
+work, wall-clock fit time (0.43 of marker at `p = 24`), and small-n convergence
+(strictly dominant, 7-0 across matched draws). It loses on admissibility, where it
+relocates Heywood cases rather than removing them. It does **not** tie on end-to-end
+speed, which was exp 02's conclusion and is superseded: the back-conversion costs about
+three percent against a 30 to 57 percent saving.
+
+*Endogenous latents.* The ranking reverses above **R² ≈ 0.4**, because `std_lv` pins
+the residual variance rather than the total variance and a residual variance is not
+bounded away from zero. By R² = 0.98 it produces wrong fits, one in ten of them
+reporting success. So `std_lv` is not a safe blanket internal default for structural
+models, and anything that adopted it as one would need to condition on the latent's
+role and its explained variance.
+
+*Growth or any all-fixed-loadings block.* Not a reparameterization at all. Do not treat
+it as an internal substitution under any circumstances.
 
 The reported parameterization should still stay whatever the user asked for, because
-the case for std_lv is about internal numerics and not interpretation, and the
+the case for `std_lv` is about internal numerics and not interpretation, and the
 back-conversion is exact to 1e-15 so nothing is lost by honouring the request.
 
 ## "standardized" in the closed-form work is a different axis
