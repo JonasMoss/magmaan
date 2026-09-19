@@ -4106,25 +4106,47 @@ work until a concrete downstream consumer appears.
     variable-table support.
   - [ ] **Cross-loadings, residual covariances, std.lv identification** — the map
     rejects all three today (simple-structure, marker-only).
-- **S. Two `r-package/examples/` failures from semTests 1.0.0 API drift.** Not
-  magmaan bugs; both need a decision about what the example should compare
-  against, which is why they were left failing rather than quietly repointed.
+- **S. `pEBA-k` silently clamps `k` to `df_diff`; decide whether it should warn.**
+  On a nested pair with `df_diff = 1`, `fmg_nested(tests = "peba4_rls")` returns
+  the pEBA-1 value, which is exactly the scaled-shifted statistic — verified
+  identical to `ss_rls` to 1e-12 in `r-package/examples/fmg.R`. semTests ≤ 0.6
+  degenerated the same way (which is why parity used to pass), but **1.0.0 now
+  hard-errors**: *"pEBA cannot use more blocks than the test degrees of freedom"*.
 
-  - `fmg.R` — `semTests::pvalues_nested(..., "peba4_rls" / "peba4_ug_rls")` on a
-    nested pair with `df_diff = 1` now aborts: *"pEBA cannot use more blocks than
-    the test degrees of freedom (1)"*. The message is semTests', not ours. Either
-    drop the `peba4_*` entries from `nested_parity_tests` or move that block to a
-    nested pair with ≥ 4 df — a question about what the parity cell is meant to
-    cover.
-  - `nested_test_2001.R` — calls `semTests:::ugamma_nested(., method = "2001")`,
-    which **no longer exists** in 1.0.0. The surviving neighbours are
-    `lav_ugamma_nested_2000` and `ugamma_nested_reference`. Do not guess: the
-    example is a parity check against the Satorra-Bentler 2001 projector
-    specifically (Satorra & Bentler 2001 p.510), and pointing it at a
-    similarly-named internal with different semantics would turn a real gate into
-    a silently-wrong one.
+  So magmaan is now deliberately the lenient one. Clamping is defensible, but
+  returning the `ss` number under a `peba4_rls` label with no signal is the kind
+  of thing that silently pollutes a simulation grid — a cell labelled pEBA-4 that
+  is not pEBA-4. Options: (a) keep clamping silently, (b) attach a warning to the
+  returned row, (c) match upstream and refuse. (b) is the cheap middle and does
+  not break callers. Not urgent; the behaviour is now asserted in `fmg.R` so it
+  cannot drift unnoticed.
 
-  Already fixed in passing: `fmg.R` passed `tests = as.list(parity_tests)`, and
-  1.0.0's `validate_tests()` requires `is.character(tests)`. With that one word
-  removed the FMG-vs-semTests parity cell passes at max|Δp| = 2.0e-11 over 50
-  cells. 52 of the other 53 examples pass.
+  Resolved in passing while investigating (all 54 examples now pass):
+  - `fmg.R` passed `tests = as.list(parity_tests)`; 1.0.0's `validate_tests()`
+    requires `is.character(tests)`. One word. Non-nested parity: max|Δp| =
+    2.0e-11 over 50 cells.
+  - `fmg.R` **nested** parity was comparing magmaan's default `A.method =
+    "exact"` restriction map against semTests' delta-based `a`
+    (`nested_factor_2000` → `get_a_matrix`). Apples-to-oranges: up to 13% per
+    eigenvalue, ~6% in trace, ~4e-4 in the nested tails — which the old
+    *absolute* `< 1e-3` tolerance hid completely once the p-values were
+    themselves ~1e-4 (e.g. `sb_ml` 3.96e-4 vs 2.15e-4, an 84% relative miss
+    passing a 1e-3 absolute gate). Passing `A.method = "delta"` takes the grid to
+    **2.5e-9**, and the tolerance is now `1e-7`, which has teeth in the tail.
+    The parity pair also moved to a `df_diff = 5` H0 so the `peba4_*` cells are
+    comparable at all.
+  - `nested_test_2001.R` — `semTests:::ugamma_nested(., method = "2001")` is gone
+    and **not renamed**: 1.0.0's NEWS.md says *"Nested method 2001 is withdrawn
+    because of its poor performance"*, and both survivors
+    (`lav_ugamma_nested_2000`, `ugamma_nested_reference`) are method-2000
+    constructions. The parity block was dropped rather than aimed at a
+    differently-defined internal, and replaced with self-consistency checks.
+    magmaan **keeps** `ud_method = "2001"`: it is the documented fallback when
+    SB2010 cannot run (method 2000 needs a same-parameter restriction map, 2001
+    needs only the two fits — see `src/robust/lr_test_satorra.cpp`), and it is
+    gated transitively per AGENTS.md — `U0`/`U1` come from the lavaan-gated
+    single-model spectrum machinery (`ugamma_eigvals_nt`,
+    `mlr_trace_ugamma{,_h0,_h1}`) and the difference plus eigen-solve is checked
+    against an independent dense `Eigen::EigenSolver` oracle in
+    `tests/unit/satorra2000_test.cpp`. Upstream's verdict is about power, not
+    correctness, so prefer `"2000"` when both apply.

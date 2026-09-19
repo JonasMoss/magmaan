@@ -108,6 +108,14 @@ stopifnot(identical(tab_nested$ug,
 stopifnot(identical(fmg_nested(fit, fit_h0_complete, data = df,
                               tests = "sb")$label,
                     "sb_ml"))
+# This pair has df_diff = 1, fewer degrees of freedom than pEBA-4 has blocks.
+# magmaan clamps the block count to df, so peba4 degenerates to pEBA-1, which is
+# exactly the scaled-shifted statistic. Asserted so the degeneration is documented
+# behaviour rather than an accident. NOTE: semTests 1.0.0 now hard-errors on this
+# case instead ("pEBA cannot use more blocks than the test degrees of freedom"),
+# so magmaan is deliberately the lenient one here; see docs/backlog/todo.md.
+stopifnot(abs(tab_nested$p_value[tab_nested$label == "peba4_rls"] -
+              tab_nested$p_value[tab_nested$label == "ss_rls"]) < 1e-12)
 cat("Nested complete-data biased/unbiased ML/RLS FMG workflow: ok\n")
 
 # Continuous ULS/GLS/WLS model pairs use the estimator's quadratic-form
@@ -304,23 +312,44 @@ if (requireNamespace("semTests", quietly = TRUE) &&
   cat(sprintf("FMG vs semTests parity: ok (%d cells, max|d| = %.1e)\n",
               length(common), max(abs(pv_m[common] - pv_s[common]))))
 
+  # The nested parity pair is deliberately NOT `model_h0_complete`, which has
+  # df_diff = 1. semTests 1.0.0 refuses pEBA with more blocks than degrees of
+  # freedom ("pEBA cannot use more blocks than the test degrees of freedom"), so
+  # peba4 needs df_diff >= 4 to be comparable at all. Tying the two free loadings
+  # in each factor (3) plus two residual variances (2) gives df_diff = 5.
+  model_h0_parity <- "visual  =~ x1 + a*x2 + a*x3
+                      textual =~ x4 + b*x5 + b*x6
+                      speed   =~ x7 + c*x8 + c*x9
+                      x1 ~~ d*x1
+                      x2 ~~ d*x2
+                      x3 ~~ d*x3"
+  fit_h0_parity <- magmaan(model_h0_parity, df, estimator = "ML",
+                           se = "none", test = "none")
   lav_h1 <- lavaan::sem(model, df, estimator = "MLM",
                         meanstructure = FALSE)
-  lav_h0 <- lavaan::sem(model_h0_complete, df, estimator = "MLM",
+  lav_h0 <- lavaan::sem(model_h0_parity, df, estimator = "MLM",
                         meanstructure = FALSE)
   nested_parity_tests <- c("std_ml", "std_rls", "sb_ml", "sb_ug_ml",
                            "ss_rls", "peba4_rls", "peba4_ug_rls",
                            "pall_ml", "all_ml")
-  pv_nested_m <- stats::setNames(tab_nested$p_value[
-    match(nested_parity_tests, tab_nested$label)], nested_parity_tests)
+  # A.method MUST be "delta" here. magmaan's `fmg_nested` defaults to the exact
+  # parameter-nesting restriction map, whereas semTests builds its `a` through
+  # lavaan's delta machinery (`nested_factor_2000` -> `get_a_matrix`). Comparing
+  # exact against delta is apples-to-oranges: it moves the spectrum by up to 13%
+  # per eigenvalue (~6% in trace) and the nested tails by ~4e-4 absolute, which
+  # an absolute p-value tolerance hides completely once the p-values are
+  # themselves ~1e-4. Matching the convention takes this grid from 4.3e-4 to
+  # 2.5e-9, so the tolerance below has real teeth in the tail.
+  tab_nested_parity <- fmg_nested(fit, fit_h0_parity, data = df,
+                                  tests = nested_parity_tests,
+                                  A.method = "delta")
+  pv_nested_m <- stats::setNames(tab_nested_parity$p_value[
+    match(nested_parity_tests, tab_nested_parity$label)], nested_parity_tests)
   pv_nested_s <- stats::setNames(vapply(nested_parity_tests, function(test) {
     unname(semTests::pvalues_nested(lav_h0, lav_h1, method = "2000",
                                     tests = test)[[1L]])
   }, numeric(1L)), nested_parity_tests)
-  # The restriction-map spectrum is assembled independently from magmaan and
-  # lavaan fit geometry; the source-statistic checks are much tighter, while
-  # the transformed nested tails agree to the established millesimal tolerance.
-  stopifnot(max(abs(pv_nested_m - pv_nested_s)) < 1e-3)
+  stopifnot(max(abs(pv_nested_m - pv_nested_s)) < 1e-7)
   cat(sprintf("Nested FMG ML/RLS vs semTests parity: ok (max|d| = %.1e)\n",
               max(abs(pv_nested_m - pv_nested_s))))
 }
