@@ -1,0 +1,178 @@
+---
+title: "Latent Metric Parameterization: Geometry, Cost, and Inference"
+format: html
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+cand <- unique(c(getwd(), dirname(getwd())))
+rd <- cand[file.exists(file.path(cand, "results", "geometry.csv"))]
+rd <- if (length(rd)) file.path(rd[[1L]], "results") else file.path(getwd(), "results")
+need <- c("geometry.csv", "cost.csv", "inference.csv", "metadata.csv")
+miss <- need[!file.exists(file.path(rd, need))]
+if (length(miss)) stop("missing: ", paste(miss, collapse = ", "),
+                       ". Run: Rscript run_experiment.R")
+geom <- utils::read.csv(file.path(rd, "geometry.csv"))
+cost <- utils::read.csv(file.path(rd, "cost.csv"))
+infr <- utils::read.csv(file.path(rd, "inference.csv"))
+meta <- utils::read.csv(file.path(rd, "metadata.csv"))
+mv <- function(k, d = "?") { r <- meta$value[meta$key == k]; if (length(r)) r[[1L]] else d }
+wide <- function(d, val, id = "lambda1") {
+  w <- stats::reshape(d[, c(id, "chart", val)], idvar = id, timevar = "chart",
+                      direction = "wide")
+  names(w) <- sub(paste0("^", val, "\\."), "", names(w))
+  w[order(w[[id]]), ]
+}
+kb <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
+skew <- function(x) { x <- x[is.finite(x)]; if (length(x) < 3L) return(NA_real_)
+  m <- mean(x); mean((x - m)^3) / mean((x - m)^2)^1.5 }
+PMAX <- max(geom$p)
+```
+
+Mode **`r mv("mode")`**, reps **`r mv("reps")`**, n **`r mv("n")`**, p **`r mv("p")`**,
+λ₁ **`r mv("lambda1")`**, backends **`r mv("backends")`**.
+
+This supersedes `experiments/_archive/02-latent-metric-identification`, which timed
+marker against std_lv on the golden-fixture models and found a fit-only ratio of
+0.839 that decayed to 0.996 once the back-conversion was counted. That result was
+inconclusive for three reasons, each addressed here: there was no marker-strength
+axis even though marker strength controls the entire effect, wall time was the only
+outcome at model sizes where timing is noise, and no statistical quality measure
+was recorded at all.
+
+## What a chart can and cannot move
+
+A latent scaling convention is a gauge choice. The scaling indeterminacy is a group
+orbit `c -> (c*lambda, phi/c^2)`, and each convention is a hypersurface cutting
+those orbits. Nothing gauge-invariant can move.
+
+```{r}
+inv <- do.call(rbind, lapply(split(infr, paste(infr$p, infr$lambda1, infr$replicate)),
+  function(d) data.frame(chisq = diff(range(d$chisq_h1)),
+                         lrt = diff(range(d$lrt_p)),
+                         df = diff(range(d$df_h1)))))
+kb(data.frame(quantity = c("chi-square (H1)", "LRT p-value", "df"),
+              `max across-chart spread` = c(
+                format(max(inv$chisq, na.rm = TRUE), digits = 3),
+                format(max(inv$lrt, na.rm = TRUE), digits = 3),
+                format(max(inv$df, na.rm = TRUE), digits = 3)),
+              check.names = FALSE),
+   caption = "Invariance check. All three charts fit the same manifold, so these must be numerical noise. This is a correctness gate on the whole run, not a finding.")
+```
+
+## Geometry
+
+Bates and Watts (1980) split the second-derivative array of the moment map into a
+component tangent to the model manifold, the parameter-effects curvature, and a
+component normal to it, the intrinsic curvature. The tangent part depends on the
+chart and is in principle removable. The normal part is a property of the manifold
+and is invariant, which is why its agreement across charts below is a second
+correctness gate. The ratio PE/IN is the headroom: a chart whose PE has been driven
+down to the order of IN has essentially nothing left to gain from any further
+reparameterization.
+
+```{r}
+g <- geom[geom$p == PMAX, ]
+kb(wide(g, "pe_over_in"), digits = 3,
+   caption = sprintf("PE/IN by chart (p = %d). Lower is better, and IN is the floor.", PMAX))
+kb(wide(g, "pcond_info"), digits = 4,
+   caption = sprintf("Pseudo-condition number of the expected information (p = %d).", PMAX))
+kb(data.frame(check = c("closed-form chart map vs population Sigma",
+                        "magmaan's implied Sigma vs population Sigma",
+                        "IN agreement across charts (max relative spread)"),
+              `max abs` = c(format(max(geom$validate_own_map, na.rm = TRUE), digits = 3),
+                            format(max(geom$validate_vs_magmaan, na.rm = TRUE), digits = 3),
+                            format(max(unlist(lapply(
+                              split(geom$curv_in, paste(geom$p, geom$lambda1)),
+                              function(x) diff(range(x)) / mean(x))), na.rm = TRUE), digits = 3)),
+              check.names = FALSE),
+   caption = "Validation. The geometry arm uses explicit closed-form chart maps because effect coding's raw parameter vector lives on a constraint surface and cannot be differenced in place. Those maps are pinned to magmaan's own moment map here.")
+```
+
+Two readings. First, **marker degrades with marker strength and the other two do
+not**: std_lv and effect coding are flat in λ₁ to three digits, while marker's PE/IN
+and conditioning both blow up as λ₁ falls. That is the transversality mechanism. The
+marker chart anchors the gauge with λ₁, so its slice becomes tangent to the gauge
+orbit as λ₁ goes to zero, while std_lv anchors on a factor variance and effect coding
+on a sum of loadings, neither of which can approach zero in an identified model.
+
+Second, **std_lv and effect coding trade places depending on the axis**. std_lv has
+the lower parameter-effects curvature, which is the part a second-order optimizer
+cannot absorb. Effect coding has the better linear conditioning at moderate to strong
+λ₁, which is the part full Newton and Fisher scoring are affine-invariant to and
+therefore get for free. Neither dominates, and the practical implication is that the
+choice between them is close to immaterial.
+
+## Cost
+
+`f_evals` is the primary outcome rather than wall time. The models here fit in a few
+hundred microseconds, which is inside timing noise, and that is what made exp 02
+inconclusive.
+
+```{r}
+be <- if ("nlopt-lbfgs" %in% cost$backend) "nlopt-lbfgs" else cost$backend[[1L]]
+a <- stats::aggregate(f_evals ~ chart + lambda1 + p, cost[cost$backend == be, ], median)
+w <- stats::reshape(a, idvar = c("p", "lambda1"), timevar = "chart", direction = "wide")
+names(w) <- sub("^f_evals\\.", "", names(w))
+kb(w[order(w$p, w$lambda1), ], caption = sprintf("Median f_evals (%s).", be))
+
+r <- stats::aggregate(f_evals ~ chart + backend, cost, median)
+rw <- stats::reshape(r, idvar = "backend", timevar = "chart", direction = "wide")
+names(rw) <- sub("^f_evals\\.", "", names(rw))
+if (all(c("marker", "std_lv") %in% names(rw))) rw$`marker/std_lv` <- rw$marker / rw$std_lv
+kb(rw, digits = 2, caption = "Median f_evals by backend. A more metric-aware optimizer should be less exposed to a badly conditioned chart.")
+
+bc <- cost[cost$chart != "marker" & is.finite(cost$backconvert_sec), ]
+if (nrow(bc)) {
+  b <- stats::aggregate(cbind(fit_sec, backconvert_sec) ~ p + chart, bc, median)
+  b$`backconvert % of fit` <- 100 * b$backconvert_sec / b$fit_sec
+  kb(b[order(b$chart, b$p), c("p", "chart", "backconvert % of fit")], digits = 3,
+     caption = "Back-convert cost relative to the fit. This is the exp 02 question: a library wanting a better internal chart must still report the user's chart, and the back-convert is O(p) while the fit is superlinear, so the overhead should shrink as p grows.")
+}
+```
+
+std_lv costs roughly a third of marker's function evaluations, and the advantage does
+not disappear at strong markers. That is more than the geometry tables predict on
+their own, since at λ₁ = 0.9 marker is competitive on both curvature and conditioning
+yet still needs several times more evaluations. **Start values are the obvious
+remaining suspect and are not controlled here.** That is the clearest follow-up this
+experiment leaves open, and it matters because it is the one part of the cost gap
+that better geometry does not explain.
+
+The back-convert overhead falls as p grows, which supports the internal-chart idea on
+the cost side. exp 02 measured it at roughly 18 percent of the fit and concluded the
+substitution was a wash. Here it is smaller and shrinking.
+
+## Inference
+
+The restriction under test ties the loadings of the last two indicators, which is
+true in the population, so rejection is Type-I error.
+
+```{r}
+i2 <- infr[infr$p == PMAX, ]
+s <- stats::aggregate(loading_a ~ chart + lambda1, i2, skew)
+kb(wide(s, "loading_a"), digits = 3,
+   caption = sprintf("Skewness of the fitted loading in each chart's own coordinates (p = %d). These are deliberately different functionals, since reshaping them is exactly what a chart is allowed to do.", PMAX))
+im <- stats::aggregate(improper ~ chart + lambda1, i2, function(x) mean(as.logical(x), na.rm = TRUE))
+kb(wide(im, "improper"), digits = 3,
+   caption = "Improper-solution rate, read off every estimated variance in the chart. exp 03 found std_lv relocates a Heywood case from the latent variance to the observed ones rather than removing it, so the detector cannot look at the latent variance alone.")
+mn <- stats::aggregate(min_est_var ~ chart + lambda1, i2, median)
+kb(wide(mn, "min_est_var"), digits = 4,
+   caption = "Median smallest estimated variance. Distance to the admissibility boundary.")
+```
+
+```{r}
+if (as.integer(mv("reps", "0")) < 200L) {
+  cat("> **The skewness and improper-rate tables above are not evidence at this replication count.** Rejection rates and third moments need several hundred replications before they separate. Run `--full` before reading them. The geometry arm needs no replication, because those are population quantities, and the invariance gates are exact, so both are trustworthy from a smoke run.\n")
+}
+```
+
+## Status
+
+Trustworthy from any run: the invariance gates, the validation table, and the whole
+geometry arm, which is deterministic. Needs `--full`: skewness, improper rates, and
+anything else averaged over replications. Open: the start-value confound in the cost
+arm, which is the one result here that the geometry does not account for.

@@ -480,6 +480,16 @@ an unconstrained gradient test to constrained solutions.
   two-group model both ways and requires equal df/chi²/fmin — an oracle-free
   check, and the cheapest guard against any future scaling convention silently
   changing the fitted model rather than its coordinates.
+  Which convention is *numerically* preferable, and whether a better one exists,
+  is settled in [docs/design/parameterization-geometry.md](../design/parameterization-geometry.md)
+  and measured by `experiments/82-latent-metric-geometry`. Summary: a convention
+  is a gauge choice, `marker` is the only one that can degenerate on ordinary data
+  (its slice is anchored by λ₁, so conditioning and parameter-effects curvature
+  blow up as the marker indicator weakens — pseudo-condition 25 → 34594 and
+  PE/IN 0.82 → 4.10 as λ₁ goes 0.9 → 0.3 at p=12), and `std_lv` already sits at
+  the intrinsic-curvature floor (PE/IN ≈ 0.57, flat in λ₁), so no reparameterization
+  can buy materially more. It is not a clean win: std_lv does *not* fix Heywood
+  cases, it relocates them from latent to observed variances.
 - Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
   for the ML, GMM/GLS, and bounded ordinal LS paths; per-θ box bounds fold onto
   the reduced α for the pure-merge case.

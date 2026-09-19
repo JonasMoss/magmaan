@@ -4150,3 +4150,45 @@ work until a concrete downstream consumer appears.
     against an independent dense `Eigen::EigenSolver` oracle in
     `tests/unit/satorra2000_test.cpp`. Upstream's verdict is about power, not
     correctness, so prefer `"2000"` when both apply.
+- **S. Per-chart start values, not chart geometry, explain most of the std_lv
+  optimizer-work advantage.** Findings and framework in
+  [docs/design/parameterization-geometry.md](../design/parameterization-geometry.md);
+  measured by `experiments/82-latent-metric-geometry`, which supersedes
+  `experiments/_archive/02-latent-metric-identification`.
+
+  exp 82's cost arm has `std_lv` at roughly a third of `marker`'s `f_evals`, and
+  the gap **persists at `lambda1 = 0.9`** (66 vs 19 at p=12) where marker is
+  competitive on both conditioning (25.1 vs 28.0) and parameter-effects curvature
+  (0.82 vs 0.57). Geometry does not account for that, so magmaan's per-chart start
+  heuristics are the remaining suspect. Worth chasing because it is free speed on
+  the default (marker) path, which is the one users actually take. Add a
+  start-value arm to exp 82 (fixed common starts projected into each chart vs each
+  chart's native heuristic) before touching `spec/start`.
+
+  Closed by the same work, recorded so they are not re-asked:
+  - *Is there a better convention?* No, not materially. `std_lv`'s PE curvature
+    sits below the intrinsic curvature and is flat in `lambda1`, so the removable
+    part is gone and the floor is gauge-invariant (a globally curvature-free chart
+    needs a flat Fisher-Rao metric, which SEM's is not).
+  - *Should the numerics lever be the chart?* No, the optimizer's metric. Full
+    Newton / Fisher scoring is affine-invariant, so linear conditioning is free;
+    nothing absorbs PE curvature. This is why `effect_coding` beating `std_lv` on
+    conditioning while losing on curvature is not worth acting on.
+  - *exp 02's back-convert wash.* A small-p artifact. The back-convert falls from
+    5.7% of the fit at p=6 to 3.6% at p=12 against exp 02's ~18%, so the
+    internal-chart substitution looks better than exp 02 concluded. Needs the p=24
+    arm and a `--full` run to state properly.
+  - *Does `std_lv` fix Heywood cases?* No. It relocates them from latent to
+    observed variances (exp 03: 0/3 admissible without bounds; marker + `pos.var`
+    is the winner at 2/3). exp 82's detector therefore reads every estimated
+    variance.
+- **S. exp 58 has an unexploited `equal`/`unequal` indicator-scale slice.** The
+  `standardized` composite in the Guttman/omega recipe is pinned as a fixed
+  setting in `experiments/58-guttman-rmse-coverage/results/paper-full`, with no
+  composite-vs-composite arm anywhere at evidence-grade reps (exp 55 map probe is
+  `reps=8`, exp 59 is `reps=5`), and `Remark 2` of `guttman-inference.tex` concedes
+  the choice is a declaration. The `scale` factor already in the 2592-row grid is
+  exactly where a standardized composite should earn its keep, since it rescales
+  by `diag(S)^{-1/2}`. Slicing the existing results costs nothing and either
+  supports the recipe or shows the knob is inert. Note `standardized` there is the
+  *composite-weight* axis, not `std.lv`.
