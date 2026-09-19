@@ -1149,6 +1149,46 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
    }
   }
 
+  // Step 8a-bis: under `std.lv`, release the latent variances in groups 2..G
+  // when loadings are tied across groups but latent variances are not.
+  //
+  // `apply_std_lv` runs per group inside `build_group_template`, so every group
+  // arrives here with `lv ~~ lv` fixed at 1.0. That is over-restrictive once the
+  // loadings are tied: with Λ common across groups, fixing every group's factor
+  // variance to 1 removes the ability to detect group differences in factor
+  // variance, and makes the std.lv invariance model strictly more restrictive
+  // than its marker-parameterized equivalent — so df would no longer match
+  // across scaling conventions, even though the two are supposed to be the same
+  // model in different coordinates. lavaan frees them (`lav_partable_flat.R`,
+  // "new in 0.6-4", upstream fecaf6b7 2019-06-27); we mirror that.
+  //
+  // Runs before Step 8b so the released rows are visible to `will_be_free`.
+  // That only matters defensively: `LvVariances` is absent from `group_equal`
+  // whenever this fires, so the labelling pass skips these rows either way.
+  //
+  // Only rows that `apply_std_lv` itself fixed are released (`auto_fixed &&
+  // !user_explicit`), so an explicit `f ~~ 1*f` still wins, matching lavaan's
+  // `user == 0L` guard. lavaan additionally exempts EFA-block latents; magmaan
+  // has no EFA blocks yet, so there is nothing to exempt.
+  if (opts.std_lv && opts.n_groups > 1) {
+    auto in_group_equal = [&](GroupEqual f) {
+      return std::find(opts.group_equal.begin(), opts.group_equal.end(), f) !=
+             opts.group_equal.end();
+    };
+    if (in_group_equal(GroupEqual::Loadings) &&
+        !in_group_equal(GroupEqual::LvVariances)) {
+      for (auto& r : rows) {
+        if (r.group <= 1) continue;
+        if (r.op != parse::Op::Covariance || r.lhs != r.rhs) continue;
+        if (!v.lv.contains(r.lhs)) continue;
+        if (r.user_explicit || !r.auto_fixed || !r.user_fixed_value) continue;
+        r.user_fixed_value = false;
+        r.fixed_value      = kNaN;
+        r.auto_fixed       = false;
+      }
+    }
+  }
+
   // Step 8b: `group.equal` / `group.partial`. Tie the requested families across
   // groups by giving the corresponding rows a shared synthetic label, reusing
   // the same `compute_eq_groups` merge the explicit-`equal(...)`/shared-label

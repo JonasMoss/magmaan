@@ -3182,76 +3182,41 @@ work lives in [`speculative.md`](speculative.md). Open work:
 - **S.** Keep the build-loop timings table in
   [docs/architecture/roadmap.md](../architecture/roadmap.md) current after major
   workflow changes.
-- **M. CONFIRMED PARITY BUG — `std_lv` + multi-group + `group_equal = Loadings`.**
-  When loadings are tied across groups, lavaan frees the latent variances in
-  groups 2..G; magmaan leaves all G fixed at 1.0. Verified against the pinned
-  lavaan 0.7.2, not inferred from source:
+- **M. Remaining `std_lv` coverage gaps.** The multi-group +
+  `group_equal = Loadings` divergence is **FIXED** (Step 8a-bis in
+  `src/spec/build.cpp`, gated by "std.lv multi-group metric invariance agrees
+  with marker scaling" in `tests/unit/constraints_test.cpp`); see the roadmap for
+  the contract. Still untested, and none yet confirmed as divergences:
 
-  ```r
-  syn <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6"
-  lavaan::lavaanify(syn, std.lv = TRUE, ngroups = 2, group.equal = "loadings",
-                    auto = TRUE, model.type = "cfa")
-  #   f1 ~~ f1  group 1  free 0  ustart 1
-  #   f1 ~~ f1  group 2  free 13 ustart NA   <- FREE
-  magmaan::magmaan_core$lavaan_lavaanify(syn, std_lv = TRUE, n_groups = 2L,
-                                         group_equal = "loadings")
-  #   f1 ~~ f1  group 2  free 0  ustart 1    <- FIXED
-  ```
+  - two-level under `std_lv` (zero mentions in the two-level sources),
+  - `auto_fix_single`,
+  - meanstructure / growth,
+  - `f ~~ start(2)*f` under `std_lv` — magmaan honours the start and fixes at
+    2.0, whereas lavaan's `ustart <- 1.0` is unconditional. Most likely a real
+    divergence; needs confirming before it is called one.
 
-  lavaan's rule (`lav_partable_flat.R`, "new in 0.6-4"): free the LV variances
-  for g > 1 when `std.lv && "loadings" %in% group.equal &&
-  !("lv.variances" %in% group.equal)`. The reason is substantive, not cosmetic —
-  with loadings tied, fixing every group's factor variance to 1 removes the
-  ability to detect group differences in factor variance and makes the std.lv
-  invariance model strictly more restrictive than its marker equivalent, so df
-  no longer matches across conventions. magmaan therefore reports
-  (G−1)·n_lv too few free parameters, with the wrong df and chi-square, silently.
+  Composites are ignored by design (Henseler-Ogasawara marks composite variances
+  `user_explicit`, FC-SEM is inert), and `effect_coding + std_lv` is a tested hard
+  error. Second-order and endogenous-latent `std_lv` were *checked and are fine*:
+  npar and fmin match the marker fit to 13+ digits on `soc_2nd` and `sem_2x2`
+  across p ∈ {12,24,48}.
 
-  **Not a pin-bump regression, and provable without the oracle.** The rule landed
-  upstream in commit `fecaf6b7` (2019-06-27) and the block is byte-identical in
-  0.6-22; installing 0.6-22 side by side reproduces 0.7-2's partable exactly
-  (npar 40 / 38 in both). So this has been lavaan's behaviour for ~6 years and is
-  not something the 0.6-22 → 0.7-2 realign introduced.
+  **A multi-group `fit_stdlv` golden is still worth adding** — the fix is
+  currently gated self-consistently rather than against lavaan, and
+  `tests/fixtures/fit_stdlv/` holds exactly one single-group HS CFA. Blocked on
+  the oracle pin: `tests/fixtures/lavaan_version.txt` says `0.7-1.2691` but the
+  installed lavaan is `0.7-2`, so regenerating would silently bump the pin. Do it
+  as part of a deliberate pin realign, not as a side effect.
 
-  The decisive evidence is magmaan's own reparameterization invariance, which
-  needs no reference to lavaan (HS 1939, `group = "school"`,
-  `group_equal = "loadings"`, `meanstructure = TRUE`):
-
-  | convention | lavaan npar/df/χ² | magmaan npar/df/χ² |
-  |---|---|---|
-  | marker | 38 / 20 / 38.94709 | 38 / 20 / 38.94709 |
-  | `std_lv` | 40 / 20 / 38.94709 | 38 / **22** / **39.11063** |
-
-  lavaan's std.lv χ² equals its own marker χ² to 5 decimals, as a change of
-  coordinates must. magmaan's std_lv χ² differs from magmaan's own marker χ², so
-  magmaan is fitting a strictly more restricted model (the 2 extra restrictions
-  are exactly the group-2 LV variances). A self-consistency test comparing
-  marker vs `std_lv` χ² on one multi-group model catches this with no fixture at
-  all, and is worth adding alongside the golden.
-
-  Related but **not** a magmaan bug: the sibling rule commented "marker indicator
-  if std.lv = FALSE (new in 0.6-20)" does fire — group 2's marker loadings leave
-  `lav_partable_flat` with `free=1, ustart=NA` — and is then undone downstream, so
-  the marker markers end up fixed at 1.0 in every group. Mechanism: `group.equal`
-  emits `==` rows only for loadings that are free in group 1 (6 rows under
-  std.lv, 4 under marker), and where group 1 is fixed the fixed value is
-  propagated instead. magmaan already matches the net behaviour. Do not "fix"
-  magmaan to free the marker on the strength of reading that source comment.
-
-  Fix is in `apply_std_lv` / the `group_equal` pass in `src/spec/build.cpp`
-  (`apply_std_lv` at :510, the `will_be_free` guard at :1190). Note the ordering:
-  `apply_std_lv` runs per group inside `build_group_template`, so the release for
-  g > 1 has to happen after the group templates are stamped. **Gate it with a new
-  fixture first** — `tests/fixtures/fit_stdlv/` currently holds exactly one
-  single-group HS CFA, so nothing in the suite would have caught this.
-
-  Adjacent `std_lv` gaps found in the same audit, all untested and none yet
-  confirmed as divergences: two-level, `auto_fix_single`, composites (ignored by
-  design for HO composites, inert for FC-SEM), meanstructure/growth, and
-  `f ~~ start(2)*f` under `std_lv` (magmaan honours the start and fixes at 2.0,
-  lavaan's `ustart <- 1.0` is unconditional). Second-order and endogenous-latent
-  std_lv were *checked and are fine*: npar and fmin match the marker fit to 13+
-  digits on `soc_2nd` and `sem_2x2` across p ∈ {12,24,48}.
+  **Do not "fix" the marker case.** lavaan's sibling rule, commented "marker
+  indicator if std.lv = FALSE (new in 0.6-20)", *does* fire — group 2's marker
+  loadings leave `lav_partable_flat` with `free=1, ustart=NA` — and is then undone
+  downstream, so markers end up fixed at 1.0 in every group. Mechanism:
+  `group.equal` emits `==` rows only for loadings that are free in group 1 (6 rows
+  under std.lv, 4 under marker), and where group 1 is fixed the fixed value is
+  propagated instead. magmaan already matches the net behaviour exactly
+  (npar/df/χ² 38/20/38.94709 on HS 1939, both libraries). Reading that source
+  comment alone would lead you to break parity.
 - **S.** `measures::fit_measures` costs ~3.2 ms at p=96 (about 10% of the whole
   fit) and is both non-monotone in p and sensitive to n (2.96× over n
   200→50000), which is impossible for a pure function of three scalars plus

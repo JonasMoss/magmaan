@@ -449,6 +449,24 @@ an unconstrained gradient test to constrained solutions.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding
   identification, lavaan-style single-indicator residual fixing, start hints,
   and linear equality constraints.
+- **Scaling conventions are changes of coordinates, and are held to that.** The
+  marker and `std_lv` parameterizations of the same model must reach the same
+  optimum, hence the same df and chi-square; only the raw parameter count moves.
+  The one place this is not automatic is multi-group `group_equal = Loadings`:
+  `apply_std_lv` fixes `lv ~~ lv` at 1.0 per group, which with Λ tied across
+  groups also forbids group differences in factor variance, making the std.lv
+  invariance model strictly more restrictive than its marker twin. Step 8a-bis in
+  `spec/build` therefore releases the latent variances in groups 2..G when
+  `Loadings ∈ group_equal` and `LvVariances ∉ group_equal`, matching lavaan
+  (`lav_partable_flat.R`, upstream `fecaf6b7`, 2019-06-27 — behaviour stable from
+  0.6-4 through 0.7-2). Net effect: df unchanged across conventions, raw npar
+  higher by (G−1)·n_lv under `std_lv`, the surplus absorbed by the extra
+  cross-group loading equalities. Gated *self-consistently* rather than against a
+  fixture, by "std.lv multi-group metric invariance agrees with marker scaling"
+  (`tests/unit/constraints_test.cpp`), which fits one deliberately misspecified
+  two-group model both ways and requires equal df/chi²/fmin — an oracle-free
+  check, and the cheapest guard against any future scaling convention silently
+  changing the fitted model rather than its coordinates.
 - Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
   for the ML, GMM/GLS, and bounded ordinal LS paths; per-θ box bounds fold onto
   the reduced α for the pure-merge case.

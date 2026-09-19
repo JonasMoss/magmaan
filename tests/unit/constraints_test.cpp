@@ -1405,6 +1405,99 @@ TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the
   CHECK(inf_ec.chi2 == doctest::Approx(inf_m.chi2).epsilon(1e-6));
 }
 
+TEST_CASE("std.lv multi-group metric invariance agrees with marker scaling") {
+  // A scaling convention is a change of coordinates, so the marker and std.lv
+  // parameterizations of the *same* metric-invariance model must land on the
+  // same df and the same chi-square. That makes this an oracle-free gate: it
+  // needs no lavaan fixture, because magmaan is checked against itself.
+  //
+  // It is also the regression test for the bug it caught. `apply_std_lv` fixes
+  // `lv ~~ lv` at 1.0 in every group; under `group_equal = Loadings` that is
+  // over-restrictive, and magmaan used to report (G−1)·n_lv too few free
+  // parameters, df too large by 2 here, and an inflated chi-square (39.11 vs
+  // the correct 38.95 on HS 1939) — while lavaan's own std.lv chi-square
+  // matched its marker chi-square exactly.
+  //
+  // Two 2-factor populations, one per group. They differ in factor variance —
+  // precisely what fixing every group's factor variance to 1 cannot represent —
+  // and *also* in the loadings, so the tied-loadings model is misspecified and
+  // both parameterizations carry a strictly positive chi-square. That matters:
+  // with a correctly specified population both chi-squares are 0 and agreeing
+  // on 0 would prove nothing.
+  auto cov2f = [](const Eigen::Vector3d& l1, const Eigen::Vector3d& l2,
+                  double psi1, double psi2, double phi) -> Eigen::MatrixXd {
+    Eigen::MatrixXd lam = Eigen::MatrixXd::Zero(6, 2);
+    lam.block<3, 1>(0, 0) = l1;
+    lam.block<3, 1>(3, 1) = l2;
+    Eigen::Matrix2d phi_m;
+    phi_m << psi1, phi * std::sqrt(psi1 * psi2),
+             phi * std::sqrt(psi1 * psi2), psi2;
+    Eigen::VectorXd th(6);
+    th << 0.6, 0.5, 0.7, 0.55, 0.45, 0.65;
+    return lam * phi_m * lam.transpose() + th.asDiagonal().toDenseMatrix();
+  };
+  SampleStats samp;
+  samp.S = {cov2f({1.0, 0.80, 0.65}, {1.0, 0.75, 0.70}, 1.3, 1.6, 0.35),
+            cov2f({1.0, 0.95, 0.55}, {1.0, 0.60, 0.85}, 2.1, 0.9, 0.35)};
+  samp.n_obs = {240, 210};
+
+  const char* syntax = "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6";
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 20000, .ftol = 1e-14, .gtol = 1e-10};
+
+  auto run = [&](bool std_lv) {
+    BuildOptions opts;
+    opts.n_groups       = 2;
+    opts.group_equal    = {magmaan::spec::GroupEqual::Loadings};
+    opts.std_lv         = std_lv;
+    opts.auto_fix_first = !std_lv;
+    auto pt  = must_lavaanify(syntax, opts);
+    auto rep = build_matrix_rep(pt).value();
+    auto est = magmaan::test::fit(pt, rep, samp, {},
+                                  magmaan::estimate::Backend::NloptLbfgs, opt);
+    REQUIRE_MESSAGE(est.has_value(), "multi-group fit failed (std_lv="
+        << std_lv << "): " << (est.has_value() ? "" : est.error().detail));
+    auto inf = expected_inference(pt, rep, samp, *est);
+    REQUIRE(inf.has_value());
+    const std::int32_t npar = pt.n_free();
+    return std::tuple{std::move(pt), inf->df, inf->chi2, est->fmin, npar};
+  };
+
+  auto [pt_marker, df_marker, chi2_marker, fmin_marker, npar_marker] = run(false);
+  auto [pt_stdlv,  df_stdlv,  chi2_stdlv,  fmin_stdlv,  npar_stdlv]  = run(true);
+
+  // Guard the guard: if the population fit the tied-loadings model exactly,
+  // both chi-squares would be 0 and the agreement below would be vacuous.
+  REQUIRE(chi2_marker > 1.0);
+
+  CHECK(df_stdlv == df_marker);
+  CHECK(chi2_stdlv == doctest::Approx(chi2_marker).epsilon(1e-8));
+  CHECK(fmin_stdlv == doctest::Approx(fmin_marker).epsilon(1e-8));
+
+  // std.lv carries (G−1)·n_lv more raw free parameters than marker: it frees
+  // every loading (vs marker's G fixed markers per latent) and fixes only
+  // group 1's latent variances. The extra free params are absorbed by the extra
+  // cross-group loading equalities, which is why df is unchanged. lavaan shows
+  // the same gap on HS 1939 with a mean structure: npar 40 (std.lv) vs 38
+  // (marker), df 20 for both.
+  CHECK(npar_stdlv - npar_marker == 2);
+
+  // The structural half of the claim: group 1 keeps its unit-variance scaling,
+  // groups 2..G are released so a group difference in factor variance is
+  // estimable. Without the release both groups read `free == 0`.
+  int g1_fixed = 0, g2_free = 0;
+  for (std::size_t i = 0; i < pt_stdlv.op.size(); ++i) {
+    if (pt_stdlv.op[i] != magmaan::parse::Op::Covariance) continue;
+    const std::int32_t lv = pt_stdlv.lhs_var[i];
+    if (lv < 0 || lv != pt_stdlv.rhs_var[i]) continue;  // diagonal only
+    if (!pt_stdlv.is_user_latent[static_cast<std::size_t>(lv)]) continue;
+    if (pt_stdlv.group[i] == 1 && pt_stdlv.free[i] == 0) ++g1_fixed;
+    if (pt_stdlv.group[i] == 2 && pt_stdlv.free[i] != 0) ++g2_free;
+  }
+  CHECK(g1_fixed == 2);
+  CHECK(g2_free == 2);
+}
+
 TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterization") {
   // Two groups; the two non-marker loadings carry bare shared labels, so they
   // are equated across groups (cross-group metric invariance). fit_bounded's
