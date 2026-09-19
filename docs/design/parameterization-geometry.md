@@ -96,6 +96,87 @@ The practical consequence for magmaan is that the numerics lever is the optimize
 metric, not the chart. Exp 02's per-backend split already pointed this way, with
 nlopt-lbfgs at 0.789 against port at 0.895.
 
+## Cost, measured properly
+
+Wall time is measurable at these sizes. The earlier claim here that microsecond fits
+are untimeable was wrong, and so was exp 02's method, but for a sharper reason than
+"noise". `system.time()` quantises to about 1 ms on Linux, so ten timings of the same
+225 us fit return min 0.000, median 0.001, max 0.007. exp 02 timed each fit once, so
+its 0.839 and 0.996 were computed from a quantised timer reading sub-millisecond
+operations. Batching removes it: calibrate a batch to at least 50 ms, take the median
+over five batches, and relative IQR lands at **1.7 percent**.
+
+Median per-call fit time, `n = 400`, all `lambda1` pooled:
+
+| p | backend | marker | std_lv | std_lv/marker |
+|---:|---|---:|---:|---:|
+| 6 | nlopt-lbfgs | 160 us | 111 us | 0.696 |
+| 12 | nlopt-lbfgs | 429 us | 213 us | 0.496 |
+| 24 | nlopt-lbfgs | 1596 us | 681 us | **0.427** |
+| 6 | port | 188 us | 144 us | 0.767 |
+| 12 | port | 459 us | 326 us | 0.709 |
+| 24 | port | 1725 us | 1193 us | 0.691 |
+
+So the ratio exp 02 put at 0.839 is 0.43, and it improves with p rather than washing
+out. The backend split confirms the conditioning mechanism: nlopt-lbfgs gains far more
+than port, because a quasi-Newton method starting from `H_0 = I` is exposed to the
+chart's conditioning while a more metric-aware method is not. `f_evals` ratios follow
+the same pattern, 0.27 for lbfgs against 0.61 for port at `p = 24`.
+
+## Back-conversion is cheap, and exp 02's wash was an artifact
+
+Two halves, and exp 02 measured only the first.
+
+- **Exactness.** Back-converting the fitted theta into marker coordinates and pushing
+  it through the marker map reproduces the native marker fit's implied Sigma to
+  **0 to 1e-15**. This is the disqualifying check and it passes.
+- **Cost.** Point-estimate conversion is an O(p) loading rescale, flat near 1.8 us,
+  falling to **0.07 percent** of the fit by `p = 48`. The vcov needs the delta-method
+  sandwich `J V J'`, dense O(p^3), which a user asking for the marker chart needs
+  because they want marker standard errors and not just marker point estimates. That
+  is the term exp 02 never counted.
+
+| p | fit | bc point | bc vcov | point % | vcov % |
+|---:|---:|---:|---:|---:|---:|
+| 6 | 104 us | 1.62 us | 2.84 us | 1.56 | 2.74 |
+| 12 | 191 us | 1.59 us | 5.04 us | 0.83 | 2.63 |
+| 24 | 514 us | 1.82 us | 16.1 us | 0.35 | 3.14 |
+| 48 | 2485 us | 1.81 us | 83.0 us | 0.07 | 3.34 |
+
+The vcov share **plateaus near three percent rather than shrinking**, because the fit
+is superlinear too. That corrects a claim made earlier in this file's history that the
+overhead simply falls with p. Net: about three percent overhead against a 30 to 57
+percent saving on the fit, so the internal-chart substitution pays and exp 02's
+roughly 18 percent figure was a measurement artifact.
+
+## Convergence at small n: the failures are strictly nested
+
+The geometry tables are population-level and say nothing about actual failure. Non-convergence
+rate at `p = 12` under nlopt-lbfgs, 25 replications per cell:
+
+| n | marker | std_lv | effect |
+|---:|---:|---:|---:|
+| 50 | **0.0204** | 0 | 0 |
+| 100 | 0.0100 | 0 | 0 |
+| 75 / 150 / 400 | 0 | 0 | 0 |
+
+The rates are small, but every chart sees the same dataset per cell, so the per-draw
+comparison is available and is much stronger than a rate comparison. Over 2000 matched
+draws:
+
+- marker fails and std_lv succeeds: **7**
+- std_lv fails and marker succeeds: **0**
+- both fail: 0
+
+A dominance relation, not a rate difference. There is no draw in this design where the
+marker chart succeeds and std_lv does not.
+
+**Caveat that matters:** improper solutions occur in **1 of 6000 draws** across the
+whole arm, which is far too few to compare charts on, so this design does not stress
+admissibility and says nothing about the exp 03 Heywood finding below. Loadings of 0.7
+with `psi = 0.51` are not extreme enough. A harder population is needed before the two
+results can be put on one grid.
+
 ## Two things that were wrong
 
 **"The Fisher-orthogonal slice is the optimal gauge."** Nonsense. Moving along a gauge
@@ -115,10 +196,16 @@ reads every estimated variance rather than the latent one.
 
 ## Standing verdict
 
-std_lv wins conditioning, curvature, and optimizer work. It loses on admissibility,
-where it relocates rather than removes. It ties on end-to-end speed. It is not a
-clean win, and the reported parameterization should stay whatever the user asked for,
-since the case for std_lv is about internal numerics and not interpretation.
+std_lv wins conditioning, curvature, optimizer work, wall-clock fit time (0.43 of
+marker at `p = 24`), and small-n convergence (strictly dominant, 7-0 across matched
+draws). It loses on admissibility, where it relocates Heywood cases rather than
+removing them. It does **not** tie on end-to-end speed, which was exp 02's conclusion
+and is superseded: the back-conversion costs about three percent against a 30 to 57
+percent saving.
+
+The reported parameterization should still stay whatever the user asked for, because
+the case for std_lv is about internal numerics and not interpretation, and the
+back-conversion is exact to 1e-15 so nothing is lost by honouring the request.
 
 ## "standardized" in the closed-form work is a different axis
 

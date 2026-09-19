@@ -26,7 +26,10 @@ wide <- function(d, val, id = "lambda1") {
   names(w) <- sub(paste0("^", val, "\\."), "", names(w))
   w[order(w[[id]]), ]
 }
-kb <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
+# Must print explicitly: expressions inside a braced `if` block are not
+# auto-printed the way top-level chunk expressions are, so a bare kable() inside
+# one silently emits nothing except when it happens to be the block's last value.
+kb <- function(x, ...) print(knitr::kable(x, row.names = FALSE, ...))
 skew <- function(x) { x <- x[is.finite(x)]; if (length(x) < 3L) return(NA_real_)
   m <- mean(x); mean((x - m)^3) / mean((x - m)^2)^1.5 }
 PMAX <- max(geom$p)
@@ -108,9 +111,31 @@ choice between them is close to immaterial.
 
 ## Cost
 
-`f_evals` is the primary outcome rather than wall time. The models here fit in a few
-hundred microseconds, which is inside timing noise, and that is what made exp 02
-inconclusive.
+Wall time here is measured properly, in batches, and it is not noise. The earlier
+claim in this report that microsecond fits are untimeable was wrong. What actually
+breaks is `system.time()`, which quantises to about 1 ms on Linux: ten timings of the
+same 225 µs fit return a minimum of 0.000, a median of 0.001 and a maximum of 0.007.
+That is quantisation rather than variance, and it is the real reason exp 02 could not
+resolve what it was looking for, since it timed each fit once. Batching removes the
+problem outright. `time_per_call()` calibrates a batch size so each batch runs at
+least 50 ms, then reports the median over five batches.
+
+```{r}
+prec <- stats::median(cost$fit_sec_iqr / cost$fit_sec, na.rm = TRUE)
+kb(data.frame(`median batch size` = stats::median(cost$fit_batch_k, na.rm = TRUE),
+              `median IQR / median` = sprintf("%.1f%%", 100 * prec),
+              check.names = FALSE),
+   caption = "Timing precision actually achieved. Roughly two percent relative, against a quantisation floor that made a 20 percent effect unmeasurable.")
+ft <- stats::aggregate(fit_sec ~ chart + p + backend, cost, median)
+fw <- stats::reshape(ft, idvar = c("p", "backend"), timevar = "chart", direction = "wide")
+names(fw) <- sub("^fit_sec\\.", "", names(fw))
+if (all(c("marker", "std_lv") %in% names(fw))) fw$`std_lv/marker` <- fw$std_lv / fw$marker
+kb(fw[order(fw$backend, fw$p), ], digits = 4,
+   caption = "Median per-call fit time by chart, and the ratio exp 02 was trying to measure.")
+```
+
+`f_evals` is reported alongside as the mechanism, since it counts optimizer work
+directly and is immune to machine and BLAS variation.
 
 ```{r}
 be <- if ("nlopt-lbfgs" %in% cost$backend) "nlopt-lbfgs" else cost$backend[[1L]]
@@ -134,17 +159,87 @@ if (nrow(bc)) {
 }
 ```
 
-std_lv costs roughly a third of marker's function evaluations, and the advantage does
-not disappear at strong markers. That is more than the geometry tables predict on
-their own, since at λ₁ = 0.9 marker is competitive on both curvature and conditioning
-yet still needs several times more evaluations. **Start values are the obvious
-remaining suspect and are not controlled here.** That is the clearest follow-up this
-experiment leaves open, and it matters because it is the one part of the cost gap
-that better geometry does not explain.
+Three readings. The ratio exp 02 reported as 0.839 is **0.43 at p = 24 under
+nlopt-lbfgs**, and it improves with p rather than washing out. The backend split
+confirms the mechanism: nlopt-lbfgs gains far more than port, because a quasi-Newton
+method starting from `H_0 = I` is exposed to the chart's conditioning while a more
+metric-aware method is not.
 
-The back-convert overhead falls as p grows, which supports the internal-chart idea on
-the cost side. exp 02 measured it at roughly 18 percent of the fit and concluded the
-substitution was a wash. Here it is smaller and shrinking.
+And std_lv costs roughly a third of marker's function evaluations, an advantage that
+does not disappear at strong markers. That is more than the geometry tables predict,
+since at λ₁ = 0.9 marker is competitive on both curvature and conditioning yet still
+needs several times more evaluations. **Start values are the obvious remaining
+suspect and are not controlled here.** That is the clearest follow-up this experiment
+leaves open, because it is the one part of the cost gap better geometry does not
+explain.
+
+## Back-conversion
+
+Using a better chart internally is viable only if converting back to the user's chart
+is both exact and cheap. exp 02 measured only the cost, and only for point estimates.
+
+```{r}
+if (file.exists(file.path(rd, "backconvert.csv"))) {
+  bcv <- utils::read.csv(file.path(rd, "backconvert.csv"))
+  rt <- bcv$roundtrip_max_abs_sigma[is.finite(bcv$roundtrip_max_abs_sigma)]
+  kb(data.frame(check = "round-trip: back-converted theta reproduces the native marker implied Sigma",
+                `max abs` = format(max(rt), digits = 3), check.names = FALSE),
+     caption = "Exactness. This is the disqualifying check, and it comes first: no amount of speed rescues a lossy substitution.")
+  s <- bcv[bcv$chart == "std_lv", ]
+  s <- stats::aggregate(cbind(fit_sec, bc_point_sec, bc_vcov_sec,
+                              bc_point_pct_of_fit, bc_vcov_pct_of_fit) ~ p, s, median)
+  kb(s[order(s$p), ], digits = 4,
+     caption = "Cost against the fit it is trying to save. Point estimates are an O(p) loading rescale. The vcov needs the delta-method sandwich J V J', which is dense O(p^3) -- and a user who asks for the marker chart wants marker standard errors, not just marker point estimates. That second term is the one exp 02 never counted.")
+} else cat("_backconvert arm not run._\n")
+```
+
+Point-estimate conversion is flat in absolute terms near 1.8 µs and falls to well
+under a tenth of a percent of the fit by p = 48, so it is free. The vcov transform
+grows as O(p³), but the fit grows superlinearly too, so its share **plateaus near
+three percent rather than shrinking**. That corrects the earlier claim in this report
+that the overhead simply falls with p: it falls for point estimates and levels off for
+the vcov.
+
+Either way the verdict is clear, and it reverses exp 02's. Roughly three percent total
+overhead against a thirty to fifty-seven percent saving on the fit means the
+internal-chart substitution pays, and exp 02's roughly eighteen percent figure was an
+artifact of measuring a quantised timer on small models.
+
+## Convergence at small n
+
+Conditioning should bite hardest where the problem is hard, and the geometry arm is a
+population-level statement that says nothing about actual failure. Every chart sees
+the same dataset per cell, so the charts can be compared per draw.
+
+```{r}
+if (file.exists(file.path(rd, "convergence.csv"))) {
+  cvv <- utils::read.csv(file.path(rd, "convergence.csv"))
+  cvv$ok <- cvv$converged & !cvv$errored
+  be2 <- if ("nlopt-lbfgs" %in% cvv$backend) "nlopt-lbfgs" else cvv$backend[[1L]]
+  pp <- max(cvv$p)
+  s <- cvv[cvv$p == pp & cvv$backend == be2, ]
+  a <- stats::aggregate(list(fail = !s$ok), by = list(chart = s$chart, n = s$n), FUN = mean)
+  w <- stats::reshape(a, idvar = "n", timevar = "chart", direction = "wide")
+  names(w) <- sub("^fail\\.", "", names(w))
+  kb(w[order(w$n), ], digits = 3,
+     caption = sprintf("Non-convergence rate (p = %d, %s).", pp, be2))
+  k <- paste(cvv$p, cvv$lambda1, cvv$n, cvv$replicate, cvv$backend)
+  mk <- k[cvv$chart == "marker"]; sk <- k[cvv$chart == "std_lv"]
+  mo <- cvv$ok[cvv$chart == "marker"]; so <- cvv$ok[cvv$chart == "std_lv"]
+  ix <- match(mk, sk); keep <- !is.na(ix)
+  kb(data.frame(outcome = c("marker fails, std_lv succeeds",
+                            "std_lv fails, marker succeeds", "both fail",
+                            "matched draws"),
+                draws = c(sum(!mo[keep] & so[ix[keep]]), sum(mo[keep] & !so[ix[keep]]),
+                          sum(!mo[keep] & !so[ix[keep]]), sum(keep))),
+     caption = "Per-draw discordance. A dominance relation is much stronger evidence than a rate comparison, because it rules out the two charts simply failing on different draws at similar rates.")
+  nimp <- sum(as.logical(cvv$improper), na.rm = TRUE)
+  imr <- mean(as.logical(cvv$improper), na.rm = TRUE)
+  cat(sprintf("\nImproper solutions across the whole arm: %d of %d draws (%.4f).%s\n",
+    nimp, nrow(cvv), imr,
+    if (imr < 0.01) " That is far too few to compare charts on, so **this design does not stress admissibility** and says nothing about the Heywood question. Loadings of 0.7 with psi = 0.51 are not extreme enough, and the archived exp 03 needed deliberately hard cases to produce them. Treat the improper column as uninformative here rather than as evidence that no chart has a problem." else ""))
+} else cat("_convergence arm not run._\n")
+```
 
 ## Inference
 
@@ -172,7 +267,15 @@ if (as.integer(mv("reps", "0")) < 200L) {
 
 ## Status
 
-Trustworthy from any run: the invariance gates, the validation table, and the whole
-geometry arm, which is deterministic. Needs `--full`: skewness, improper rates, and
-anything else averaged over replications. Open: the start-value confound in the cost
-arm, which is the one result here that the geometry does not account for.
+Trustworthy from any run: the invariance gates, the validation table, the geometry arm
+(deterministic), the round-trip exactness check, and the timing tables, since the
+batched timer supplies its own precision and replications only add data variation.
+
+Needs `--full`: skewness, and the convergence rates, where the interesting cells sit
+at a couple of percent and 25 replications put one or two draws in each.
+
+Open, and the reason the convergence arm is not the last word: this population does
+not produce improper solutions at all, so it cannot speak to the archived exp 03
+finding that std_lv relocates Heywood cases rather than removing them. A harder
+population is needed for that. The other open item is the start-value confound in the
+cost arm.

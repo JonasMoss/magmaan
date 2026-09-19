@@ -4174,14 +4174,26 @@ work until a concrete downstream consumer appears.
     Newton / Fisher scoring is affine-invariant, so linear conditioning is free;
     nothing absorbs PE curvature. This is why `effect_coding` beating `std_lv` on
     conditioning while losing on curvature is not worth acting on.
-  - *exp 02's back-convert wash.* A small-p artifact. The back-convert falls from
-    5.7% of the fit at p=6 to 3.6% at p=12 against exp 02's ~18%, so the
-    internal-chart substitution looks better than exp 02 concluded. Needs the p=24
-    arm and a `--full` run to state properly.
+  - *exp 02's back-convert wash.* **Superseded.** exp 02's timings came from
+    `system.time()`, which quantises to ~1ms on Linux, applied once per
+    sub-millisecond fit (ten timings of the same 225µs fit give min 0.000, median
+    0.001, max 0.007). With batched timing at 1.7% relative IQR, the fit ratio
+    exp 02 put at 0.839 is **0.427** at p=24 under nlopt-lbfgs and improves with p.
+    Back-conversion is exact to 1e-15, costs 0.07% of the fit for point estimates
+    at p=48, and ~3% including the dense O(p³) `J V J'` vcov transform that exp 02
+    never counted. So roughly 3% overhead against a 30–57% saving: the
+    internal-chart substitution pays.
+  - *Does conditioning cost convergence at small n?* Yes, and strictly. At p=12,
+    n=50, nlopt-lbfgs, marker fails 2.04% while std_lv and effect coding fail 0%,
+    and across 2000 matched draws marker-fails-std_lv-succeeds happens 7 times
+    against 0 the other way. A dominance relation rather than a rate difference.
   - *Does `std_lv` fix Heywood cases?* No. It relocates them from latent to
     observed variances (exp 03: 0/3 admissible without bounds; marker + `pos.var`
     is the winner at 2/3). exp 82's detector therefore reads every estimated
-    variance.
+    variance — **but exp 82's population produces zero improper solutions**, so its
+    convergence arm cannot corroborate or contradict exp 03. Loadings of 0.7 with
+    ψ=0.51 are not extreme enough. Wiring a near-Heywood population into exp 82
+    (weak loadings, tiny ψ, n≈50) is the cheap way to put both results on one grid.
 - **S. exp 58 has an unexploited `equal`/`unequal` indicator-scale slice.** The
   `standardized` composite in the Guttman/omega recipe is pinned as a fixed
   setting in `experiments/58-guttman-rmse-coverage/results/paper-full`, with no

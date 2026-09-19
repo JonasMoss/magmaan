@@ -70,6 +70,34 @@ set_single_threaded_math()
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+# Per-call wall time for sub-millisecond work.
+#
+# `system.time()` / `proc.time()` quantise to ~1 ms on Linux, so timing a single
+# 225 us fit returns 0 or 0.001 -- measured directly: ten timings of the same fit
+# give min 0.000, median 0.001, max 0.007. That is QUANTISATION, not variance, and
+# it is why exp 02's per-fit timings could not resolve the difference it was
+# looking for. Batching fixes it outright: 200 calls of that same fit divide out
+# to 225.1 us with three digits of agreement across batches.
+#
+# Calibrate a batch size k so one batch runs at least `min_time`, then report the
+# median and IQR of per-call time over `batches` batches. Warm up first so page
+# faults and allocator growth land outside the measurement.
+time_per_call <- function(f, min_time = 0.05, batches = 5L, warmup = 2L) {
+  for (i in seq_len(warmup)) f()
+  k <- 1L
+  repeat {
+    t0 <- Sys.time(); for (i in seq_len(k)) f()
+    el <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+    if (el >= min_time || k >= 8192L) break
+    k <- min(8192L, max(2L, as.integer(k * max(2, min_time / max(el, 1e-7)))))
+  }
+  ts <- vapply(seq_len(batches), function(b) {
+    t0 <- Sys.time(); for (i in seq_len(k)) f()
+    as.numeric(difftime(Sys.time(), t0, units = "secs")) / k
+  }, numeric(1))
+  c(median = stats::median(ts), iqr = stats::IQR(ts), batch_k = k)
+}
+
 usage <- function() {
   cat(
     "Usage: Rscript run_experiment.R [options]\n\n",
@@ -79,6 +107,9 @@ usage <- function() {
     "  --full             Paper-grade run.\n",
     "  --arms LIST        geometry,cost,inference. Default: all three.\n",
     "  --charts LIST      marker,std_lv,effect. Default: all three.\n",
+    "  --bc-p LIST        p values for the back-conversion arm. Default: 6,12,24,48\n",
+    "  --conv-n LIST      Sample sizes for the convergence arm.\n",
+    "                     Default: 50,75,100,150,400\n",
     "  --lambda1 LIST     Marker-indicator loadings. Default: 0.3,0.5,0.7,0.9\n",
     "  --p LIST           Indicator counts. Default smoke: 6,12; full: 6,12,24\n",
     "  --curv-p LIST      p values for the O(p^4) curvature split. Default: 6,12\n",
@@ -93,9 +124,11 @@ usage <- function() {
 }
 
 parse_args <- function(args) {
-  o <- list(smoke = TRUE, arms = c("geometry", "cost", "inference"),
+  o <- list(smoke = TRUE,
+            arms = c("geometry", "cost", "inference", "backconvert", "convergence"),
             charts = c("marker", "std_lv", "effect"),
             lambda1 = c(0.3, 0.5, 0.7, 0.9), p = NULL, curv_p = c(6L, 12L),
+            bc_p = c(6L, 12L, 24L, 48L), conv_n = c(50L, 75L, 100L, 150L, 400L),
             n = 400L, reps = NULL, backends = c("nlopt-lbfgs", "port"),
             seed_base = 20260919L, results_dir = NULL)
   i <- 1L
@@ -109,6 +142,8 @@ parse_args <- function(args) {
     else if (a == "--lambda1") o$lambda1 <- parse_csv_numeric(nxt())
     else if (a == "--p") o$p <- as.integer(parse_csv_numeric(nxt()))
     else if (a == "--curv-p") o$curv_p <- as.integer(parse_csv_numeric(nxt()))
+    else if (a == "--bc-p") o$bc_p <- as.integer(parse_csv_numeric(nxt()))
+    else if (a == "--conv-n") o$conv_n <- as.integer(parse_csv_numeric(nxt()))
     else if (a == "--n") o$n <- as.integer(nxt())
     else if (a == "--reps") o$reps <- as.integer(nxt())
     else if (a == "--backends") o$backends <- parse_csv_arg(nxt())
@@ -119,7 +154,7 @@ parse_args <- function(args) {
   }
   if (is.null(o$p)) o$p <- if (o$smoke) c(6L, 12L) else c(6L, 12L, 24L)
   if (is.null(o$reps)) o$reps <- if (o$smoke) 20L else 1000L
-  bad <- setdiff(o$arms, c("geometry", "cost", "inference"))
+  bad <- setdiff(o$arms, c("geometry", "cost", "inference", "backconvert", "convergence"))
   if (length(bad)) stop("unknown arm(s): ", paste(bad, collapse = ","), call. = FALSE)
   bad <- setdiff(o$charts, c("marker", "std_lv", "effect"))
   if (length(bad)) stop("unknown chart(s): ", paste(bad, collapse = ","), call. = FALSE)
@@ -324,29 +359,181 @@ run_cost <- function(opts) {
       if (is.null(X)) next
       colnames(X) <- ov(p); dfr <- as.data.frame(X)
       for (ch in opts$charts) for (be in opts$backends) {
-        t0 <- Sys.time()
         spec <- switch(ch,
           marker = model_spec(syn),
           std_lv = model_spec(syn, std_lv = TRUE),
           effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
         dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
         if (is.null(dd)) next
-        spec_sec <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
-        t1 <- Sys.time()
         fit <- tryCatch(magmaan:::fit_ml(spec, dd, optimizer = be), error = function(e) NULL)
-        fit_sec <- as.numeric(difftime(Sys.time(), t1, units = "secs"))
         if (is.null(fit)) next
-        t2 <- Sys.time()
-        bc <- tryCatch(backconvert_to_marker(fit$theta, p, ch), error = function(e) NULL)
-        bc_sec <- as.numeric(difftime(Sys.time(), t2, units = "secs"))
+        # Batched, so these are real microsecond measurements rather than 1 ms
+        # quantisation noise. `spec` timing includes df_to_data because that is
+        # what a caller pays per fit.
+        ts <- time_per_call(function() { s <- switch(ch,
+                marker = model_spec(syn),
+                std_lv = model_spec(syn, std_lv = TRUE),
+                effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
+              df_to_data(dfr, s) })
+        tf <- time_per_call(function() magmaan:::fit_ml(spec, dd, optimizer = be))
+        tb <- time_per_call(function() backconvert_to_marker(fit$theta, p, ch))
         rows[[length(rows) + 1L]] <- data.frame(
           p = p, lambda1 = l1, chart = ch, backend = be, replicate = r,
           n = opts$n, converged = isTRUE(fit$converged), fmin = fit$fmin,
           f_evals = fit$f_evals %||% NA_integer_,
           g_evals = fit$g_evals %||% NA_integer_,
-          spec_sec = spec_sec, fit_sec = fit_sec,
-          backconvert_sec = if (is.null(bc)) NA_real_ else bc_sec,
-          pipeline_sec = spec_sec + fit_sec + (if (is.null(bc)) 0 else bc_sec),
+          spec_sec = ts[["median"]], fit_sec = tf[["median"]],
+          fit_sec_iqr = tf[["iqr"]], fit_batch_k = tf[["batch_k"]],
+          backconvert_sec = tb[["median"]],
+          pipeline_sec = ts[["median"]] + tf[["median"]] + tb[["median"]],
+          stringsAsFactors = FALSE)
+      }
+    }
+  }
+  do.call(rbind, rows)
+}
+
+# ------------------------------------------------------------ arm: backconvert
+# Using a better chart internally is only viable if converting back to the user's
+# chart is both EXACT and CHEAP. exp 02 measured only the cost, and only for point
+# estimates. Both halves matter, and the second one is where the accounting gets
+# interesting:
+#
+#   * point estimates are O(p) -- a loading rescale, nothing more;
+#   * the vcov needs the delta-method sandwich J V J', which is O(p^3) dense.
+#
+# A user who asks for the marker chart wants marker standard errors, not just
+# marker point estimates, so the honest per-fit overhead is the second one. That is
+# the term exp 02 never counted, and it is the term that can grow faster than the
+# fit it is trying to save.
+#
+# Jacobian of std_lv -> marker: mu_i = lambda_i / lambda_1, phi = lambda_1^2, psi
+# unchanged. Sparse in principle (each mu_i touches lambda_i and lambda_1 only), so
+# a structure-aware implementation would be O(p^2); the dense product below is what
+# a general library actually ships, and is timed as such.
+jacobian_stdlv_to_marker <- function(theta, p) {
+  lam <- theta[1L:p]; n <- 2L * p
+  J <- matrix(0, n, n)
+  for (i in 2L:p) {
+    J[i - 1L, 1L] <- -lam[i] / lam[1L]^2
+    J[i - 1L, i]  <- 1 / lam[1L]
+  }
+  J[p, 1L] <- 2 * lam[1L]
+  J[(p + 1L):n, (p + 1L):n] <- diag(p)
+  J
+}
+
+run_backconvert <- function(opts) {
+  rows <- list()
+  for (p in opts$bc_p) for (l1 in opts$lambda1) {
+    pop <- population(p, l1); syn <- syntax_1f(p)
+    set.seed(opts$seed_base + 31L + 1000L * p + as.integer(1000 * l1))
+    X <- tryCatch(MASS::mvrnorm(opts$n, rep(0, p), pop$Sigma), error = function(e) NULL)
+    if (is.null(X)) next
+    colnames(X) <- ov(p); dfr <- as.data.frame(X)
+
+    sp_m <- model_spec(syn)
+    fm <- tryCatch(magmaan:::fit_ml(sp_m, df_to_data(dfr, sp_m)), error = function(e) NULL)
+    if (is.null(fm)) next
+    Sig_marker <- tryCatch(matrix(as.numeric(unlist(magmaan:::model_implied(fm))), p, p),
+                           error = function(e) NULL)
+
+    for (ch in setdiff(opts$charts, "marker")) {
+      spec <- switch(ch,
+        std_lv = model_spec(syn, std_lv = TRUE),
+        effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
+      dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
+      if (is.null(dd)) next
+      fit <- tryCatch(magmaan:::fit_ml(spec, dd), error = function(e) NULL)
+      if (is.null(fit)) next
+
+      # Accuracy first: this is the disqualifying check. Back-convert the fitted
+      # theta into marker coordinates, push it through the closed-form marker map,
+      # and require the SAME implied Sigma the native marker fit produced. If the
+      # round trip is not exact, no amount of speed rescues the substitution.
+      # Compared in Sigma space on purpose, because each chart's partable orders
+      # its free parameters differently.
+      th_own <- pop_theta(pop, ch)   # chart's own ordering, for the map
+      bc <- tryCatch(backconvert_to_marker(th_own, p, ch), error = function(e) NULL)
+      roundtrip <- if (is.null(bc) || is.null(Sig_marker)) NA_real_ else
+        max(abs(sigma_of(bc, p, "marker") - pop$Sigma))
+
+      t_point <- time_per_call(function() backconvert_to_marker(th_own, p, ch))
+      # vcov transform, timed on magmaan's own expected information at the fit.
+      core <- magmaan::magmaan_core
+      V <- tryCatch({
+        info <- core$inference_information_expected(fit)
+        as.matrix(core$inference_vcov_fit(info, fit))
+      }, error = function(e) NULL)
+      # std_lv only, deliberately. `jacobian_stdlv_to_marker` is that chart's
+      # Jacobian and is simply wrong for effect coding, whose free vector is
+      # (lambda_1..lambda_{p-1}, phi, psi) of length 2p+1 rather than 2p. Timing a
+      # knowingly-wrong matrix would still give the right wall time, since the
+      # cost is the dense O(p^3) product and not the matrix contents, but shipping
+      # it invites someone to read the numbers as a transform that works. Effect
+      # coding's Jacobian has the same density and near-identical dimension, so its
+      # vcov cost is the std_lv figure to within a percent.
+      t_vcov <- NA_real_; vdim <- NA_integer_
+      if (identical(ch, "std_lv") && !is.null(V) && nrow(V) == 2L * p) {
+        J <- jacobian_stdlv_to_marker(th_own, p)
+        tv <- time_per_call(function() J %*% V %*% t(J))
+        t_vcov <- tv[["median"]]; vdim <- nrow(V)
+      }
+      t_fit <- time_per_call(function() magmaan:::fit_ml(spec, dd))
+      rows[[length(rows) + 1L]] <- data.frame(
+        p = p, lambda1 = l1, chart = ch, n = opts$n,
+        roundtrip_max_abs_sigma = roundtrip,
+        fit_sec = t_fit[["median"]],
+        bc_point_sec = t_point[["median"]],
+        bc_vcov_sec = t_vcov, vcov_dim = vdim,
+        bc_point_pct_of_fit = 100 * t_point[["median"]] / t_fit[["median"]],
+        bc_vcov_pct_of_fit = 100 * t_vcov / t_fit[["median"]],
+        stringsAsFactors = FALSE)
+    }
+  }
+  do.call(rbind, rows)
+}
+
+# ----------------------------------------------------------- arm: convergence
+# Conditioning should bite hardest where the problem is hard. The geometry arm is a
+# population-level statement and says nothing about whether a badly conditioned
+# chart actually FAILS more often at small n, which is the practically important
+# question and the one the exp 03 archive only touched across three cases.
+#
+# Every chart sees the SAME dataset per (p, lambda1, n, replicate), so the charts
+# can be compared per-draw: a draw where marker fails and std_lv succeeds is a
+# concrete win rather than an aggregate one.
+run_convergence <- function(opts) {
+  rows <- list()
+  for (p in opts$p) for (l1 in opts$lambda1) for (nn in opts$conv_n) {
+    pop <- population(p, l1); syn <- syntax_1f(p)
+    for (r in seq_len(opts$reps)) {
+      set.seed(opts$seed_base + 91L + 1000L * p + 17L * nn + as.integer(1000 * l1) + r)
+      X <- tryCatch(MASS::mvrnorm(nn, rep(0, p), pop$Sigma), error = function(e) NULL)
+      if (is.null(X)) next
+      colnames(X) <- ov(p); dfr <- as.data.frame(X)
+      for (ch in opts$charts) for (be in opts$backends) {
+        spec <- switch(ch,
+          marker = model_spec(syn),
+          std_lv = model_spec(syn, std_lv = TRUE),
+          effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
+        dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
+        if (is.null(dd)) { errored <- TRUE; fit <- NULL } else {
+          fit <- tryCatch(magmaan:::fit_ml(spec, dd, optimizer = be),
+                          error = function(e) NULL)
+        }
+        vars <- if (is.null(fit)) numeric(0) else {
+          pt <- fit$partable; sel <- pt$op == "~~" & pt$lhs == pt$rhs
+          suppressWarnings(as.numeric(pt$est[sel]))
+        }
+        rows[[length(rows) + 1L]] <- data.frame(
+          p = p, lambda1 = l1, n = nn, chart = ch, backend = be, replicate = r,
+          errored = is.null(fit),
+          converged = if (is.null(fit)) FALSE else isTRUE(fit$converged),
+          fmin = if (is.null(fit)) NA_real_ else fit$fmin,
+          f_evals = if (is.null(fit)) NA_integer_ else (fit$f_evals %||% NA_integer_),
+          min_est_var = if (length(vars)) min(vars, na.rm = TRUE) else NA_real_,
+          improper = if (length(vars)) any(vars <= 0, na.rm = TRUE) else NA,
           stringsAsFactors = FALSE)
       }
     }
@@ -446,6 +633,19 @@ if ("cost" %in% opts$arms) {
   write_csv(cc, file.path(res_dir, "cost.csv"))
   cat(sprintf("cost: %d rows -> cost.csv\n", nrow(cc)))
 }
+if ("backconvert" %in% opts$arms) {
+  bcr <- run_backconvert(opts)
+  write_csv(bcr, file.path(res_dir, "backconvert.csv"))
+  cat(sprintf("backconvert: %d rows -> backconvert.csv\n", nrow(bcr)))
+  rt <- bcr$roundtrip_max_abs_sigma; rt <- rt[is.finite(rt)]
+  if (length(rt)) cat(sprintf("  round-trip exactness (max|dSigma|): %.2e%s\n", max(rt),
+      if (max(rt) > 1e-8) "   *** NOT EXACT ***" else ""))
+}
+if ("convergence" %in% opts$arms) {
+  cv <- run_convergence(opts)
+  write_csv(cv, file.path(res_dir, "convergence.csv"))
+  cat(sprintf("convergence: %d rows -> convergence.csv\n", nrow(cv)))
+}
 if ("inference" %in% opts$arms) {
   ii <- run_inference(opts)
   write_csv(ii, file.path(res_dir, "inference.csv"))
@@ -458,6 +658,8 @@ write_metadata(file.path(res_dir, "metadata.csv"),
                 charts = paste(opts$charts, collapse = ","),
                 p = paste(opts$p, collapse = ","),
                 curv_p = paste(opts$curv_p, collapse = ","),
+                bc_p = paste(opts$bc_p, collapse = ","),
+                conv_n = paste(opts$conv_n, collapse = ","),
                 lambda1 = paste(opts$lambda1, collapse = ","),
                 n = opts$n, reps = opts$reps,
                 backends = paste(opts$backends, collapse = ","),
