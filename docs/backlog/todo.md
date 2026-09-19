@@ -3224,14 +3224,31 @@ work lives in [`speculative.md`](speculative.md). Open work:
   self-consistency check. Confirmed to have teeth: with Step 8a-bis disabled it
   fails with an n_free deficit of exactly (G−1)·n_lv.
 
-  One judgement call recorded there: the θ̂ bound had to go 5e-6 → 1e-5 (the
-  2-group fit runs in a rotated 36-dim α-space under 9 cross-group equalities, so
-  it has more flat directions; measured displacement 8.5e-6). That is a genuinely
-  flat direction rather than a wrong answer — over the same fits the χ² agrees to
-  2.6e-9 / 3.9e-9, i.e. nine significant figures of objective agreement against
-  an 8.5e-6 parameter move. So the χ² bound was tightened 1e-3 → 1e-6 in the same
-  change, which leaves the golden strictly sharper than before rather than
-  looser.
+  **All three numeric bounds there are now scale-free**, `|ours − ref| /
+  max(1, |ref|)`, instead of absolute. The absolute forms were quietly
+  fixture-specific: an absolute 1e-6 on χ² is ~8e-9 relative at these fixtures'
+  χ² ≈ 85/124, but ~2e-10 relative for a fixture with χ² ≈ 5000 — tighter than a
+  different BLAS or `-march` reproduces, so it would have failed for reasons
+  unrelated to SEM. Converting can only relax a bound (denominator ≥ 1), so it
+  cannot mask a regression the absolute form would have caught.
+
+  Measured scaled discrepancies and the bounds chosen, with headroom:
+
+  | quantity | 0001 | 0002 | bound | headroom |
+  |---|---|---|---|---|
+  | n_free / df | — | — | exact | — |
+  | χ² | 3.10e-11 | 3.16e-11 | 1e-8 | ~300× |
+  | SE | 2.79e-07 | 9.59e-07 | 1e-4 | ~100× |
+  | θ̂ | 3.21e-06 | 6.76e-06 | 3e-5 | ~4× |
+
+  θ̂ is the loose one on purpose. It and χ² *both* detect a different local
+  minimum — χ² is a function of θ̂, so it is not optimizer-independent, and an
+  earlier note here framing it that way was wrong. The real difference is dynamic
+  range: θ̂'s noise floor from benign convergence wobble is ~7e-6, only ~3 orders
+  below a real defect, while χ²'s is ~3e-11, some 7-8 orders below. So χ² is the
+  sharp basin-change detector and θ̂ is kept as a coarse cross-check. Note 1e-5 on
+  θ̂ would have left only 1.5× headroom over observed noise — measured, not
+  guessed, after the scale-free conversion lowered the numbers.
 
   **Do not "fix" the marker case.** lavaan's sibling rule, commented "marker
   indicator if std.lv = FALSE (new in 0.6-20)", *does* fire — group 2's marker

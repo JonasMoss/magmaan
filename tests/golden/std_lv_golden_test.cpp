@@ -77,6 +77,26 @@ bool group_equal_from_string(const std::string& s,
   return false;
 }
 
+// Scale-free discrepancy: relative to the oracle value, with an absolute floor
+// of 1 in the denominator.
+//
+//   |ref| <= 1  ->  denominator 1, i.e. a plain absolute difference
+//   |ref| >  1  ->  a relative difference
+//
+// Every bound in this test used to be absolute, which silently made each one
+// fixture-specific. An absolute 1e-6 on chi-square is ~8e-9 relative at the
+// chi-square of ~124 these fixtures have, but ~2e-10 relative for a fixture
+// with chi-square ~5000 — below what a different BLAS or `-march` reproduces,
+// so it would start failing for reasons unrelated to SEM. Same trap for theta
+// and SE once a fixture carries a variable on a scale much larger than 1.
+//
+// Note this direction can only ever *relax* a bound relative to the old
+// absolute form (the denominator is >= 1), so converting cannot mask a
+// regression that the absolute version would have caught.
+double scaled_diff(double ours, double ref) {
+  return std::abs(ours - ref) / std::max(1.0, std::abs(ref));
+}
+
 // Apply a fixture's group axis to BuildOptions. `err` is set (and false
 // returned) when the fixture names a group.equal family we cannot map.
 bool apply_group_options(const nlohmann::json& exp,
@@ -181,19 +201,28 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     //    different points on the flat section of the ML surface (objective
     //    equal to machine precision; see fit_theta_golden_test.cpp's note).
     //    Under std.lv the loadings are O(1) rather than O(residual-variance),
-    //    so the absolute disagreement is larger than in the marker goldens.
-    //    Measured: 3.6e-6 single-group, 8.5e-6 for the 2-group metric-
-    //    invariance fit (45 raw parameters under 9 cross-group equalities, so
-    //    the search runs in a rotated 36-dim α-space with more flat
-    //    directions). 1e-5 covers both.
+    //    so the disagreement is larger than in the marker goldens. Measured
+    //    (scaled): 3.2e-6 single-group, 6.8e-6 for the 2-group metric-
+    //    invariance fit — 45 raw parameters under 9 cross-group equalities, so
+    //    the search runs in a rotated 36-dim α-space with more flat directions.
+    //    Bound 3e-5, i.e. ~4x headroom over the worst observed value; 1e-5
+    //    would leave only 1.5x, which is not enough to survive a different BLAS
+    //    or -march. It still catches a different local minimum by ~3 orders of
+    //    magnitude, which is all this check is for.
     //
     //    This bound is deliberately NOT the sharp part of the test. Over the
     //    same two fits the χ² agrees to 2.6e-9 and 3.9e-9 — nine significant
     //    figures of objective agreement against an 8.5e-6 parameter
     //    displacement, which is what "flat direction" means quantitatively.
-    //    So the χ² bound below carries the discriminating power and is set
-    //    1000x tighter than the marker goldens' 1e-3 rather than being
-    //    inherited from them.
+    //    So the χ² bound below carries the discriminating power and is set far
+    //    tighter than the marker goldens' 1e-3 rather than inherited from it.
+    //
+    //    Both θ̂ and χ² do detect a different local minimum — χ² is a function
+    //    of θ̂, so it is not optimizer-independent. The difference is dynamic
+    //    range: θ̂'s noise floor from benign wobble is 8.5e-6, only ~3 orders
+    //    below a real defect, while χ²'s is ~4e-9, some 7-8 orders below. χ² is
+    //    therefore the better basin-change detector, and θ̂ is kept as a coarse
+    //    cross-check rather than dropped.
     const auto& th = exp["theta_hat"];
     if (static_cast<std::size_t>(est.theta.size()) != th.size()) {
       // Worth reporting both counts: a multi-group std.lv n_free deficit of
@@ -205,10 +234,10 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     }
     double max_th = 0.0;
     for (Eigen::Index k = 0; k < est.theta.size(); ++k)
-      max_th = std::max(max_th,
-          std::abs(est.theta(k) - th[static_cast<std::size_t>(k)].get<double>()));
-    if (max_th > 1e-5) {
-      std::snprintf(buf, sizeof(buf), "max |θ̂ - θ̂_lavaan| = %.3e", max_th);
+      max_th = std::max(max_th, scaled_diff(
+          est.theta(k), th[static_cast<std::size_t>(k)].get<double>()));
+    if (max_th > 3e-5) {
+      std::snprintf(buf, sizeof(buf), "max scaled |θ̂ - θ̂_lavaan| = %.3e", max_th);
       failures.push_back(id + ": " + buf); ok = false;
     }
 
@@ -219,27 +248,30 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
       failures.push_back(id + ": " + buf); ok = false;
     }
 
-    // 3) χ² — ≤ 1e-6 absolute. Observed 2.6e-9 / 3.9e-9, so this keeps ~250x
-    //    headroom while still being the sharpest assertion in the test.
+    // 3) χ² — ≤ 1e-8 scaled, the sharpest assertion in the test. Observed
+    //    3.0e-11 and 3.2e-11 on these two fixtures (absolute 2.6e-9 / 3.9e-9 at
+    //    χ² of 85.3 and 124.0), so ~300x headroom, and it stays meaningful at
+    //    any χ² magnitude a future fixture brings.
     const double chi2_lavaan = exp["chi2"].get<double>();
-    const double chi2_diff = std::abs(chi2 - chi2_lavaan);
-    if (chi2_diff > 1e-6) {
-      std::snprintf(buf, sizeof(buf), "|χ² - lavaan| = %.3e (ours=%.6f, lavaan=%.6f)",
+    const double chi2_diff = scaled_diff(chi2, chi2_lavaan);
+    if (chi2_diff > 1e-8) {
+      std::snprintf(buf, sizeof(buf),
+                    "scaled |χ² - lavaan| = %.3e (ours=%.9f, lavaan=%.9f)",
                     chi2_diff, chi2, chi2_lavaan);
       failures.push_back(id + ": " + buf); ok = false;
     }
 
-    // 4) SE — max abs diff ≤ 1e-4.
+    // 4) SE — max scaled diff ≤ 1e-4 (observed 2.8e-7 / 9.6e-7, ~100x headroom).
     const auto& se_arr = exp["se"];
     if (static_cast<std::size_t>(se_v.size()) != se_arr.size()) {
       failures.push_back(id + ": se length mismatch"); continue;
     }
     double max_se = 0.0;
     for (Eigen::Index k = 0; k < se_v.size(); ++k)
-      max_se = std::max(max_se,
-          std::abs(se_v(k) - se_arr[static_cast<std::size_t>(k)].get<double>()));
+      max_se = std::max(max_se, scaled_diff(
+          se_v(k), se_arr[static_cast<std::size_t>(k)].get<double>()));
     if (max_se > 1e-4) {
-      std::snprintf(buf, sizeof(buf), "max |se - lavaan| = %.3e", max_se);
+      std::snprintf(buf, sizeof(buf), "max scaled |se - lavaan| = %.3e", max_se);
       failures.push_back(id + ": " + buf); ok = false;
     }
 
