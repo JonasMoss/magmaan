@@ -449,10 +449,23 @@ an unconstrained gradient test to constrained solutions.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding
   identification, lavaan-style single-indicator residual fixing, start hints,
   and linear equality constraints.
-- **Scaling conventions are changes of coordinates, and are held to that.** The
-  marker and `std_lv` parameterizations of the same model must reach the same
-  optimum, hence the same df and chi-square; only the raw parameter count moves.
-  The one place this is not automatic is multi-group `group_equal = Loadings`:
+- **Scaling conventions are changes of coordinates, and are held to that —
+  wherever the loadings are actually free to move.** The marker and `std_lv`
+  parameterizations of the same model then reach the same optimum, hence the same
+  df and chi-square; only the raw parameter count moves. Pinned for two-level
+  (per-level application, npar unchanged), single-indicator latents (`std_lv` and
+  `auto_fix_single` are orthogonal, npar unchanged), second-order and
+  endogenous-latent models (fmin to 13+ digits), and multi-group metric
+  invariance. **The exception is a model whose loadings are all user-fixed**:
+  `std_lv` does not override a user fix, so it pins the latent variances without
+  freeing anything in exchange, and the result is a strictly more restricted
+  model. `growth(std_lv = TRUE)` is the case that bites — lavaan itself goes npar
+  9 → 7, df 5 → 7, χ² 8.07 → 106.85 on `Demo.growth`, silently. magmaan matches
+  that, so this is faithful behaviour rather than a bug, but "std_lv is just a
+  reparameterization" is false there and the mean structure is never
+  standardized by `std_lv` at all.
+  The one place the coordinate-change property is not automatic is multi-group
+  `group_equal = Loadings`:
   `apply_std_lv` fixes `lv ~~ lv` at 1.0 per group, which with Λ tied across
   groups also forbids group differences in factor variance, making the std.lv
   invariance model strictly more restrictive than its marker twin. Step 8a-bis in

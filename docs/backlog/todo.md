@@ -3182,31 +3182,45 @@ work lives in [`speculative.md`](speculative.md). Open work:
 - **S.** Keep the build-loop timings table in
   [docs/architecture/roadmap.md](../architecture/roadmap.md) current after major
   workflow changes.
-- **M. Remaining `std_lv` coverage gaps.** The multi-group +
-  `group_equal = Loadings` divergence is **FIXED** (Step 8a-bis in
-  `src/spec/build.cpp`, gated by "std.lv multi-group metric invariance agrees
+- **M. `std_lv` audit — CLOSED, one bug fixed, the rest were false alarms.**
+  The multi-group + `group_equal = Loadings` divergence is **FIXED** (Step 8a-bis
+  in `src/spec/build.cpp`, gated by "std.lv multi-group metric invariance agrees
   with marker scaling" in `tests/unit/constraints_test.cpp`); see the roadmap for
-  the contract. Still untested, and none yet confirmed as divergences:
+  the contract. All four remaining gaps were then characterized against lavaan
+  0.7-2 and pinned by tests in `tests/unit/lavaanify_test.cpp`. **magmaan already
+  matched lavaan in every one** — no further divergences:
 
-  - two-level under `std_lv` (zero mentions in the two-level sources),
-  - `auto_fix_single`,
-  - meanstructure / growth,
-  - `f ~~ start(2)*f` under `std_lv` — magmaan honours the start and fixes at
-    2.0, whereas lavaan's `ustart <- 1.0` is unconditional. Most likely a real
-    divergence; needs confirming before it is called one.
+  - **two-level** — std.lv applies per block/level; every latent variance in
+    every level fixed at 1, `auto_fix_first` suppressed everywhere. Exact
+    reparameterization (lavaan npar 15 both ways, identical loglik).
+  - **`auto_fix_single`** — orthogonal to std.lv; both rules fire. `x4 ~~ x4`
+    still pinned at 0, `f2 ~~ f2` pinned at 1, the lone loading carries the
+    scale. npar unchanged (8 vs 8).
+  - **meanstructure / growth** — std.lv never touches the mean structure; latent
+    means follow `int_lv_free` regardless. See the roadmap caveat: because std.lv
+    does not override *user*-fixed loadings, `growth(std.lv = TRUE)` adds real
+    restrictions (lavaan npar 9→7, df 5→7, χ² 8.07→106.85) and is **not** a
+    reparameterization.
+  - **`f ~~ start(2)*f`** — **the earlier note here was wrong.** It claimed
+    lavaan's `ustart <- 1.0` is unconditional and magmaan diverged by honouring
+    the start. Both halves were wrong: lavaan gives `free=0, ustart=2` (it
+    promotes the start to a hard fix at its own value), and magmaan does the
+    same. The mechanism is that `ustart` doubles as "start when free" / "value
+    when fixed", and std.lv zeroes `free` without rewriting `ustart` — so
+    `start(2)*` and `2*` are indistinguishable in the result. Verified by running
+    both, not by reading either source. Full rule now pinned by "std.lv vs
+    explicit modifiers on the latent variance row": only `NA*` keeps the row
+    free; a bare label does **not** protect it.
 
   Composites are ignored by design (Henseler-Ogasawara marks composite variances
   `user_explicit`, FC-SEM is inert), and `effect_coding + std_lv` is a tested hard
-  error. Second-order and endogenous-latent `std_lv` were *checked and are fine*:
-  npar and fmin match the marker fit to 13+ digits on `soc_2nd` and `sem_2x2`
-  across p ∈ {12,24,48}.
+  error. Second-order and endogenous-latent `std_lv` match the marker fit to 13+
+  digits on `soc_2nd` and `sem_2x2` across p ∈ {12,24,48}.
 
-  **A multi-group `fit_stdlv` golden is still worth adding** — the fix is
-  currently gated self-consistently rather than against lavaan, and
-  `tests/fixtures/fit_stdlv/` holds exactly one single-group HS CFA. Blocked on
-  the oracle pin: `tests/fixtures/lavaan_version.txt` says `0.7-1.2691` but the
-  installed lavaan is `0.7-2`, so regenerating would silently bump the pin. Do it
-  as part of a deliberate pin realign, not as a side effect.
+  **A multi-group `fit_stdlv` golden is still the one open item** — the fix is
+  gated self-consistently (marker vs std_lv must agree on df/χ²/fmin) rather than
+  against a lavaan fixture, and `tests/fixtures/fit_stdlv/` holds exactly one
+  single-group HS CFA. Cheap to add now that the pin is at 0.7-2.
 
   **Do not "fix" the marker case.** lavaan's sibling rule, commented "marker
   indicator if std.lv = FALSE (new in 0.6-20)", *does* fire — group 2's marker

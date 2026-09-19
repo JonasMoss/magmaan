@@ -778,3 +778,218 @@ TEST_CASE("lavaanify: a user-written exogenous-latent covariance is not auto-dup
     if (pt.free[i] > n_free) n_free = pt.free[i];
   CHECK(n_free == 21);
 }
+
+TEST_CASE("lavaanify: std.lv vs explicit modifiers on the latent variance row") {
+  // lavaan's rule for `lv ~~ lv` under std.lv = TRUE, verified against the
+  // pinned 0.7-2 (`cfa("f =~ x1 + x2 + x3\n<modifier>", std.lv = TRUE)`):
+  //
+  //   modifier       free  ustart   npar
+  //   (none)            0     1        6
+  //   start(2)*         0     2        6   <- start PROMOTED to a hard fix at 2
+  //   2*                0     2        6   <- indistinguishable from start(2)
+  //   NA*            != 0    NaN       7   <- the escape hatch: stays free
+  //   v*  (label)       0     1        6   <- a bare label does NOT protect
+  //
+  // The mechanism is that lavaan's `ustart` doubles as "start value when free"
+  // and "fixed value when free == 0", and std.lv zeroes `free` without
+  // rewriting `ustart` — so whatever number the user supplied survives as the
+  // fixed value. Only a modifier that sets `ustart` to NA keeps the row free.
+  BuildOptions opts;
+  opts.std_lv         = true;
+  opts.auto_fix_first = false;   // what cfa(std.lv = TRUE) does
+
+  auto lv_var = [](const LavaanParTable& pt) {
+    const std::size_t i = find_row(pt, "f", Op::Covariance, "f");
+    REQUIRE(i < pt.size());
+    return i;
+  };
+  auto npar = [](const LavaanParTable& pt) {
+    int n = 0;
+    for (std::size_t i = 0; i < pt.size(); ++i)
+      if (pt.free[i] > n) n = pt.free[i];
+    return n;
+  };
+  const std::string base = "f =~ x1 + x2 + x3";
+
+  SUBCASE("no modifier is fixed at 1") {
+    auto pt = must_lavaanify(base, opts);
+    const auto i = lv_var(pt);
+    CHECK(pt.free[i] == 0);
+    CHECK(pt.ustart[i] == 1.0);
+    CHECK(npar(pt) == 6);
+  }
+  SUBCASE("a hard fix wins and keeps its own value") {
+    auto pt = must_lavaanify(base + "\nf ~~ 2*f", opts);
+    const auto i = lv_var(pt);
+    CHECK(pt.free[i] == 0);
+    CHECK(pt.ustart[i] == 2.0);
+    CHECK(npar(pt) == 6);
+  }
+  SUBCASE("NA* keeps the variance free") {
+    auto pt = must_lavaanify(base + "\nf ~~ NA*f", opts);
+    const auto i = lv_var(pt);
+    CHECK(pt.free[i] != 0);
+    CHECK(npar(pt) == 7);
+  }
+  SUBCASE("a bare label does not protect the row from std.lv") {
+    auto pt = must_lavaanify(base + "\nf ~~ v*f", opts);
+    const auto i = lv_var(pt);
+    CHECK(pt.free[i] == 0);
+    CHECK(pt.ustart[i] == 1.0);
+    CHECK(npar(pt) == 6);
+  }
+  SUBCASE("start(2) is promoted to a hard fix at 2, as lavaan does") {
+    auto pt = must_lavaanify(base + "\nf ~~ start(2)*f", opts);
+    const auto i = lv_var(pt);
+    CHECK(pt.free[i] == 0);
+    CHECK(pt.ustart[i] == 2.0);
+    CHECK(npar(pt) == 6);
+  }
+}
+
+TEST_CASE("lavaanify: std.lv on all-fixed loadings adds constraints, not coordinates") {
+  // The important exception to "a scaling convention is only a change of
+  // coordinates". std.lv frees the loadings and fixes the latent variances —
+  // but it does NOT override *user*-fixed loadings. In a growth model every
+  // loading is user-fixed (1,1,1,1 / 0,1,2,3), so nothing gets freed and the
+  // two `lv ~~ lv` fixes are pure added restrictions.
+  //
+  // lavaan 0.7-2 on Demo.growth agrees, and shows it is a different model
+  // rather than a reparameterization:
+  //   growth(..., std.lv = FALSE)  npar 9  df 5  chisq   8.0687
+  //   growth(..., std.lv = TRUE)   npar 7  df 7  chisq 106.8532
+  // So `growth(std.lv = TRUE)` is a substantively misspecified model, silently.
+  const std::string g = "i =~ 1*t1 + 1*t2 + 1*t3 + 1*t4\n"
+                        "s =~ 0*t1 + 1*t2 + 2*t3 + 3*t4";
+  auto npar = [](const LavaanParTable& pt) {
+    int n = 0;
+    for (std::size_t i = 0; i < pt.size(); ++i)
+      if (pt.free[i] > n) n = pt.free[i];
+    return n;
+  };
+  auto lv_var_free = [](const LavaanParTable& pt, std::string_view lv) {
+    const std::size_t i = find_row(pt, lv, Op::Covariance, lv);
+    REQUIRE(i < pt.size());
+    return pt.free[i];
+  };
+
+  // `growth()` is not a flag in BuildOptions — it is exactly this combination
+  // of the three mean-structure flags (cf. model_spec()'s model_type = growth).
+  BuildOptions marker;
+  marker.meanstructure = true;
+  marker.int_ov_free   = false;
+  marker.int_lv_free   = true;
+
+  BuildOptions stdlv   = marker;
+  stdlv.std_lv         = true;
+  stdlv.auto_fix_first = false;
+
+  auto pt_m = must_lavaanify(g, marker);
+  auto pt_s = must_lavaanify(g, stdlv);
+
+  // Latent variances: free under marker, fixed at 1 under std.lv.
+  CHECK(lv_var_free(pt_m, "i") != 0);
+  CHECK(lv_var_free(pt_m, "s") != 0);
+  CHECK(lv_var_free(pt_s, "i") == 0);
+  CHECK(lv_var_free(pt_s, "s") == 0);
+
+  // All eight loadings stay user-fixed under BOTH conventions — std.lv frees
+  // nothing here, which is exactly why it is not a reparameterization.
+  for (const auto* t : {"t1", "t2", "t3", "t4"}) {
+    for (const auto* lv : {"i", "s"}) {
+      const std::size_t im = find_row(pt_m, lv, Op::Measurement, t);
+      const std::size_t is = find_row(pt_s, lv, Op::Measurement, t);
+      REQUIRE(im < pt_m.size());
+      REQUIRE(is < pt_s.size());
+      CHECK(pt_m.free[im] == 0);
+      CHECK(pt_s.free[is] == 0);
+    }
+  }
+
+  // Net: std.lv removes 2 free parameters instead of relocating them (lavaan
+  // npar 9 -> 7 on the same model).
+  CHECK(npar(pt_m) - npar(pt_s) == 2);
+}
+
+TEST_CASE("lavaanify: std.lv and auto.fix.single are orthogonal") {
+  // A single-indicator latent. auto.fix.single fixes `x4 ~~ x4` at 0; std.lv
+  // fixes `f2 ~~ f2` at 1 and frees the lone `f2 =~ x4` loading, which then
+  // carries the whole scale. lavaan 0.7-2 fires BOTH rules and keeps npar
+  // unchanged (8 either way) — it does not special-case single-indicator
+  // latents under std.lv.
+  const std::string src = "f1 =~ x1 + x2 + x3\nf2 =~ x4";
+  auto npar = [](const LavaanParTable& pt) {
+    int n = 0;
+    for (std::size_t i = 0; i < pt.size(); ++i)
+      if (pt.free[i] > n) n = pt.free[i];
+    return n;
+  };
+
+  BuildOptions marker;                       // auto_fix_single defaults true
+  BuildOptions stdlv;
+  stdlv.std_lv         = true;
+  stdlv.auto_fix_first = false;
+
+  auto pt_m = must_lavaanify(src, marker);
+  auto pt_s = must_lavaanify(src, stdlv);
+
+  const std::size_t res_m = find_row(pt_m, "x4", Op::Covariance, "x4");
+  const std::size_t res_s = find_row(pt_s, "x4", Op::Covariance, "x4");
+  REQUIRE(res_m < pt_m.size());
+  REQUIRE(res_s < pt_s.size());
+  // auto.fix.single still fires under std.lv: residual pinned at 0.
+  CHECK(pt_m.free[res_m] == 0);
+  CHECK(pt_m.ustart[res_m] == 0.0);
+  CHECK(pt_s.free[res_s] == 0);
+  CHECK(pt_s.ustart[res_s] == 0.0);
+
+  const std::size_t load_s = find_row(pt_s, "f2", Op::Measurement, "x4");
+  const std::size_t var_s  = find_row(pt_s, "f2", Op::Covariance, "f2");
+  REQUIRE(load_s < pt_s.size());
+  REQUIRE(var_s < pt_s.size());
+  CHECK(pt_s.free[load_s] != 0);     // the loading carries the scale
+  CHECK(pt_s.free[var_s] == 0);      // variance pinned at 1
+  CHECK(pt_s.ustart[var_s] == 1.0);
+
+  CHECK(npar(pt_m) == npar(pt_s));   // a reparameterization: lavaan 8 vs 8
+}
+
+TEST_CASE("lavaanify: std.lv applies per level in a two-level model") {
+  // lavaan 0.7-2 applies std.lv independently per block: every latent variance
+  // in every level is fixed at 1 and auto.fix.first is suppressed everywhere.
+  // It is an exact reparameterization — npar 15 both ways on Demo.twolevel,
+  // identical loglik.
+  const std::string src = "level: 1\n  fw =~ y1 + y2 + y3\n"
+                          "level: 2\n  fb =~ y1 + y2 + y3";
+  auto npar = [](const LavaanParTable& pt) {
+    int n = 0;
+    for (std::size_t i = 0; i < pt.size(); ++i)
+      if (pt.free[i] > n) n = pt.free[i];
+    return n;
+  };
+
+  BuildOptions marker;
+  BuildOptions stdlv;
+  stdlv.std_lv         = true;
+  stdlv.auto_fix_first = false;
+
+  auto pt_m = must_lavaanify(src, marker);
+  auto pt_s = must_lavaanify(src, stdlv);
+
+  for (const auto* lv : {"fw", "fb"}) {
+    const std::size_t im = find_row(pt_m, lv, Op::Covariance, lv);
+    const std::size_t is = find_row(pt_s, lv, Op::Covariance, lv);
+    REQUIRE(im < pt_m.size());
+    REQUIRE(is < pt_s.size());
+    CHECK(pt_m.free[im] != 0);        // marker: latent variance free
+    CHECK(pt_s.free[is] == 0);        // std.lv: fixed at 1, in BOTH levels
+    CHECK(pt_s.ustart[is] == 1.0);
+  }
+  // First loading of each level: fixed under marker, free under std.lv.
+  CHECK(pt_m.free[find_row(pt_m, "fw", Op::Measurement, "y1")] == 0);
+  CHECK(pt_m.free[find_row(pt_m, "fb", Op::Measurement, "y1")] == 0);
+  CHECK(pt_s.free[find_row(pt_s, "fw", Op::Measurement, "y1")] != 0);
+  CHECK(pt_s.free[find_row(pt_s, "fb", Op::Measurement, "y1")] != 0);
+
+  CHECK(npar(pt_m) == npar(pt_s));   // exact reparameterization
+}
