@@ -7,7 +7,10 @@ slice; the broader coverage inventory follows it. Execution tasks live in
 
 The existing case registry and R harness provide lavaan-backed smoke comparisons.
 The newer [C++ timing harness](../../benchmarks/timing/README.md) provides modular
-complete-data measurements. Neither yet implements the public report below.
+complete-data measurements. The first matched-workload slice is now an experiment, with a shared R timer,
+raw/prepared/post-fit boundaries, native lavaan pEBA-4 checks, and an experiment-local
+report. Publication and controlled evaluator/backend attribution remain open;
+no existing benchmark files have been retired.
 
 ## Proposed public speed report (2026-09-20)
 

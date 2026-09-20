@@ -100,6 +100,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 82 | [latent-metric-geometry](82-latent-metric-geometry/report.qmd) | benchmark | active | Which latent scaling convention should a SEM library use internally, is there a better one than the named three, and does the answer survive the move from CFA to structural models? |
 
 | 83 | [sem-total-variance](83-sem-total-variance/report.qmd) | benchmark | complete | Engineering decision: retain unscaled native PSD ML; diagonal scaling stays opt-in and boundary-specific restarts remain experimental. |
+| 84 | [speed-attribution](84-speed-attribution/report.qmd) | benchmark | active | How much of matched ML + GOF/Wald runtime is preparation, fitting, or inference, and which comparisons pass numerical agreement before a public speed claim? |
 
 ## Archived
 

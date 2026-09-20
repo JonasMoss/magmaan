@@ -3310,17 +3310,20 @@ work lives in [`speculative.md`](speculative.md). Open work:
   against the lavaan RMSEA fixtures first; a speedup that shifts the third
   decimal of a published CI is a regression, not a win. Pick this up only with
   the parity fixtures in hand.
-- **M. Public speed report and lavaan cost attribution.** Implement the
-  [2026-09-20 design](../validation/benchmark_plan.md#proposed-public-speed-report-2026-09-20):
-  continuous ML first, directly timed raw/prepared/inference workloads for
-  SB and explicit ML-based pEBA-4 GOF plus Wald intervals. Installed lavaan
-  0.7-2 supports native `peba4_ml`; validate it as the direct comparator.
-  Separate exclusive setup/finalization stages, fixed-input callback costs,
-  common-driver work, and native backend/start effects. Do not interpret
-  sums of component medians as measured pipeline time or the unexplained gap
-  as pure R overhead. Start with HS/PoliticalDemocracy and one shared R timer;
-  then consolidate duplicate benchmark loops and produce a report reading
-  only its own frozen results. Pinned SNLLS handoffs remain reproducible.
+- **M. Public speed report and lavaan cost attribution.** The first experiment
+  implements matched raw/prepared/post-fit ML workloads on HS CFA and
+  PoliticalDemocracy, one shared R batch timer, fresh serial sessions, and
+  output/adapter gates. The full
+  [design](../validation/benchmark_plan.md#proposed-public-speed-report-2026-09-20)
+  remains the publication target. The pilot is experiment 84 (benchmark,
+  active), indexed in the experiment collection; it is not a public speed
+  claim. Native lavaan 0.7-2 `peba4_ml` and magmaan disagree in the HS tail
+  even with identical statistic/eigenvalues (about 7% relative p-value
+  difference); resolve the calibration discrepancy before accepting those
+  timing ratios. SB and covariance checks are separate. Next: matched native
+  evaluator replay/common driver, reliable exclusive stage attribution,
+  broader cases and independent reproduction. Pinned SNLLS bundles and old
+  runners remain untouched until their replacements cover their consumers.
 - **S/M.** Retire the hand-rolled timing loops now that
   `benchmarks/timing/timing.hpp` exists (batch auto-calibration, arm rotation,
   median reporting, DCE barriers). Seven independent copies had accumulated

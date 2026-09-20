@@ -973,6 +973,15 @@ an unconstrained gradient test to constrained solutions.
     by a shared `fit_or_error()` helper that retries under `suppressWarnings`
     and treats only errors as errors; the restored 0023 now gates the
     restricted-mean case, and RLS there is 187.339 vs the old 115.586.
+- **Matched ML speed pilot (2026-09-20):** `benchmarks/r/timing.R` now supplies
+  shared adaptive batching, balanced arm order, and raw batch records for R
+  workloads. The experiment collection contains a two-case continuous-ML
+  pilot with directly timed raw/prepared/post-fit boundaries and separate
+  covariance, SB, pEBA-4, and adapter checks. The HS native pEBA-4 comparison
+  remains rejected on relative tail agreement even at identical statistic and
+  spectrum; this is an unresolved calibration discrepancy, not an oracle-defect
+  claim. Controlled cross-engine evaluator/backend attribution and public
+  promotion remain open under `docs/validation/benchmark_plan.md`.
 - **Expected information via the whitened Jacobian (2026-09-18):**
   `inference::information_expected_per_case_blocks` and
   `expected_info_covariance_only` no longer materialize

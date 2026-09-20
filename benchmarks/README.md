@@ -87,6 +87,18 @@ OMP_NUM_THREADS=1 ./build/opt/benchmarks/magmaan_timing_bench --p 12 --n 1000 --
 Rscript benchmarks/timing/summarize.R /tmp/t.csv
 ```
 
+## Shared R timing
+
+`r/timing.R` supplies `time_paired(arms, batches, target_ms, warmups, session)`
+for named R callbacks. It warms and calibrates each arm, rotates comparable
+arms by batch/session, and returns raw batch duration, per-call time, call
+count, and execution order. Forced GC occurs before each batch; natural GC
+inside the batch remains timed. The caller owns correctness checks, fresh
+process sessions, metadata, and output storage. Time unrelated stages in
+separate invocations rather than interpreting their medians as an additive
+pipeline profile. Historical runners retain their original loops until their
+workloads and consumers are migrated.
+
 ## C++ memory profiling
 
 `magmaan_mem_profile` is a standalone C++ harness that measures the peak heap of
