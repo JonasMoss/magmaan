@@ -295,6 +295,10 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   terminal audits run in original coordinates. The default remains `"none"`;
   this option is not exposed for other estimator families. Inspect
   `fit$psd_preconditioning` for the selected mode.
+  The recommended baseline is the default native starts and `nlopt-slsqp`
+  with no preconditioning. There is no automatic chart selection or targeted
+  restart. A passing numerical verdict checks feasibility and stationarity;
+  it does not certify a local or global optimum at singular boundaries.
 - Covariance-honest research fits are explicit. Use
   `frontier_fit_ml2s_psd()` for saturated-EM Stage 1 followed by PSD ML or a
   fixed ULS/DWLS/ADF/DLS Stage 2, and `frontier_fit_catml_psd()` for

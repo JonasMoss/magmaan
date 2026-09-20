@@ -99,7 +99,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 81 | [score-vs-lrt](81-score-vs-lrt/report.qmd) | benchmark | active | Do score-based SB and pEBA tests calibrate better than LR-based tests, and how long does the paired simulation take? |
 | 82 | [latent-metric-geometry](82-latent-metric-geometry/report.qmd) | benchmark | active | Which latent scaling convention should a SEM library use internally, is there a better one than the named three, and does the answer survive the move from CFA to structural models? |
 
-| 83 | [sem-total-variance](83-sem-total-variance/report.qmd) | benchmark | active | Can latent scaling and information preconditioning improve fits across CFA/SEM structures, and which failures require PSD boundary treatment? |
+| 83 | [sem-total-variance](83-sem-total-variance/report.qmd) | benchmark | complete | Engineering decision: retain unscaled native PSD ML; diagonal scaling stays opt-in and boundary-specific restarts remain experimental. |
 
 ## Archived
 

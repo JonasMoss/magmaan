@@ -9,6 +9,34 @@ failure) appears.
 
 ## Estimation / inference
 
+### SEM PSD optimization beyond the engineering baseline
+
+**Gap.** A first-order PSD-cone audit at a singular parameter representation
+need not rule out improvement through equivalent parameters. Experiment 83
+found a zero mediator disturbance with interchangeable direct and mediated
+paths; a compensated shift followed by reopening the variance escaped the worse
+endpoint. Its targeted restart is validated only on that selected dataset.
+Automatic chart selection, more elaborate preconditioning and general boundary
+restarts remain unproven as engineering improvements.
+
+**Alternative already available.** Complete-data `frontier_fit_ml_psd()` with
+native starts, NLopt SLSQP and `preconditioning = "none"`, preserving original
+SEM constraints and permitting singular PSD components. The completed
+`experiments/83-sem-total-variance` benchmark found no evaluation-count advantage
+for diagonal scaling from native starts in any of ten settings. The unscaled
+baseline reached the better solution in the sole discrepant pair. Explicit
+preconditioning and experiment-local restart tools remain available for methods
+work; they are not automatic fitting policy.
+
+**Build if.** A supported downstream model supplies a reproducible material
+objective miss, unresolved fit or measured runtime bottleneck in that baseline.
+Preserve the case, then demonstrate an improvement on fresh relevant datasets
+with all failures/timeouts retained and setup/retry cost included. Boundary
+restarts additionally require explicit graph/equality eligibility; scaling
+changes require repeatable native-start benefits without degraded objective
+quality. Global certification is a separate project only if a concrete consumer
+requires a rigorous bound. No further runs or implementation are currently queued.
+
 ### `spectral_truncate` weight policy for degenerate ADF/WLS Γ̂
 
 An optional non-default pseudo-inverse weight policy for degenerate saturated

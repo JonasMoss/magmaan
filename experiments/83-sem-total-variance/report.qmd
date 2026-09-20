@@ -29,6 +29,21 @@ information scaling with practical default starts? Can we answer this in seconds
 
 ## Short answer
 
+**Closed for engineering defaults (2026-09-20).** For supported complete-data
+PSD ML, use the existing native fitter with its default starts, `nlopt-slsqp`,
+and `preconditioning = "none"`. Preserve the supplied model identification,
+zeros, fixed values and equalities, permit PSD boundary solutions, and retain
+the existing objective, feasibility and cone-stationarity audits. Diagonal
+scaling remains an explicit research option. Automatic chart selection,
+preconditioning and targeted restarts are not adopted.
+
+This is a decision to retain a fast, tested baseline, not a claim of global
+optimality or a measured rare-failure guarantee. All 220 fits in the structural
+pilot passed the audits; diagonal scaling increased median evaluations in all
+ten settings, and the default unscaled fit reached the better endpoint in the
+one discrepant pair. That evidence does not justify extra default machinery.
+The singular-boundary limitation remains documented below.
+
 **Keep native PSD ML unscaled by default.** Across six structures and ten settings,
 all 220 fits passed the existing audits, but diagonal preconditioning increased
 median evaluations in every setting. Of 110 paired datasets, 109 reached matching
@@ -36,7 +51,7 @@ objectives and boundary classifications. One stressed mediation draw reached two
 different audited stationary endpoints; unchanged cross-restarts retained that
 difference. A targeted boundary diagnostic now explains and escapes the worse one.
 The full comparison took 2.83 seconds. The earlier benefit from reference-assisted
-Bollen starts does not generalize to native starts in this pilot. **The unresolved mediation case is a boundary
+Bollen starts does not generalize to native starts in this pilot. **The discrepant mediation case is a boundary
 identification problem:** a zero mediator disturbance makes direct and mediated
 paths interchangeable. A score-guided move among equivalent parameters followed
 by reopening that variance reaches the lower objective with both solver settings.
@@ -193,8 +208,8 @@ the better endpoint returned to its objective in all twelve random trials.
 These are results for one selected difficult dataset, not success-rate estimates
 for SEMs generally, and the lower objective is not proven globally optimal.
 
-The immediate candidate is a **boundary identification diagnostic plus a targeted
-restart**, rather than additional generic scaling. The compensation used here
+The **boundary identification diagnostic and targeted restart** remain an
+experimental explanation and recovery tool. The compensation used here
 requires both paths to be freely adjustable and the mediator disturbance to be
 zero; it must not be applied blindly to other graphs, correlated disturbances,
 or constrained paths. The procedure remains experiment-local, with no change
@@ -392,7 +407,7 @@ Native results are independent of the earlier R-chart
 runs. Synthetic syntax is validated against its known population covariance
 before fitting; validation discrepancies are below $2\times10^{-29}$ in ULS.
 
-## Design and next decisions
+## Design and deferred alternatives
 
 ### Initial model selection
 
@@ -442,32 +457,25 @@ likelihood, and the same positive-definite component domain. The full informatio
 rank is checked; a singular matrix is never made to look well-conditioned by
 silently dropping its smallest eigenvalues.
 
-### What would justify a larger run?
+### Conditions for reopening
 
-First require covariance and derivative checks below $10^{-8}$ and $10^{-6}$,
-respectively, full information rank, and agreement with empirical reference
-objectives where the reference lies in the common domain. Record model-level
-objective gaps, information-scaled gradient norms, rejected steps, evaluations,
-and total elapsed time. An objective gap above $10^{-7}$ warrants investigation;
-it is not automatically a chart failure or an oracle defect.
+No further simulation or global-certificate project is required to close this
+default decision. Reopen it if a supported downstream workload supplies a
+reproducible, materially worse or unresolved unscaled PSD fit, or a measured
+runtime bottleneck. Preserve that case and compare an explicit candidate against
+the frozen baseline on fresh data. Count every failure and timeout, retain
+original-model feasibility checks, and compare objective quality before speed.
 
-The first ten-draw follow-up in both settings is complete. Resolve its
-near-boundary stalls before estimating convergence rates or declaring a winning
-chart. Compare
-optimizer work only among admissible, stationary complete pairs, while separately
-reporting every failure and budget truncation. Do not pool model structures into
-one headline failure rate. If a difference survives, add practical common starts
-and a second optimizer before moving the candidate into the native library.
+A boundary-specific restart would additionally need graph and constraint
+eligibility checks and evidence beyond the selected mediation dataset. A new
+scaling default would need repeatable benefit from native starts across relevant
+structures, including setup cost, without worse solution quality. Keep timing
+batches separate from replications. These are promotion conditions, not queued
+implementation tasks.
 
-A later timing arm should use at most a few representative datasets per structure,
-with a fixed per-operation timing budget, separately from replications. Any later
-curvature arm should likewise be opt-in and evaluated once at selected reference
-points. The previous CFA curvature ratio is not an optimality certificate for all
-possible SEM parameterizations.
+### Experimental parameterization algorithm, not adopted
 
-### Feasible first parameterization algorithm
-
-Given a supported model and a valid common starting point:
+The following prototype remains available for research. Given a supported model and a valid common starting point:
 
 1. Construct equivalent marker, disturbance-unit, and total-unit coordinates.
    Reject unsupported constraints or a locally rank-deficient model explicitly.
@@ -495,12 +503,9 @@ In this R prototype, native PSD fits are already faster than the R optimization
 loop, so the experiment does not establish a speed advantage over simply using
 native PSD fitting throughout.
 
-The next test should use practical starts across the six structures, compare
-fixed total-plus-diagonal scaling against the selector, and preserve the same PSD
-constraints in every solver. The useful first classification is **unit scaling,
-remaining parameter coupling, near-boundary behavior, or identification trouble**,
-with numerical diagnostics supporting the labels. It is too early to learn a
-universal mapping from a model's diagram to its best parameterization.
+The prototype does not establish a universal mapping from a model diagram to
+its best coordinates. It is retained as a reproducible alternative, with no
+scheduled classifier or chart-selection work.
 
 ### Native PSD diagonal preconditioning
 
@@ -546,10 +551,8 @@ Reproduce with `Rscript scripts/native_psd_probe.R` after installing the updated
 R bindings. It runs 44 fits with a 30-second soft budget and no timing batches;
 `--smoke` runs 12 fits. Use
 `frontier_fit_ml_psd(model, data, preconditioning = "diagonal")` to opt in.
-The native-start comparison above now covers all six structures. Its results
-support retaining the unscaled default. The mediation diagnostic identifies a
-more immediate optimization issue: loss of path identification at a zero
-mediator disturbance. Validate its targeted restart on fresh draws before
-promoting a general policy. Constraint scaling and starting-point curvature remain
-possible explanations for the extra work, but a more expensive preconditioner
-is not justified by the current result alone.
+The native-start comparison above covers all six structures and supports the
+unscaled default. Loss of path identification at a zero mediator disturbance is
+a known limitation of first-order acceptance at a single representation. It does
+not justify installing the selected-case restart as a general default. Further
+work is conditional on the reopening criteria above.

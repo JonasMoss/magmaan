@@ -4150,59 +4150,20 @@ work until a concrete downstream consumer appears.
     against an independent dense `Eigen::EigenSolver` oracle in
     `tests/unit/satorra2000_test.cpp`. Upstream's verdict is about power, not
     correctness, so prefer `"2000"` when both apply.
-- **S. Total latent variance scaling across SEM structures — experiment 83 pilot.**
-  `experiments/83-sem-total-variance` now compares marker, disturbance-unit and
-  total-unit coordinates on HS CFA, mediation, correlated predictors, higher-order
-  factors, correlated disturbances, and Bollen SEM. Common reference-assisted
-  starts, analytic derivative checks, component-PD feasibility, full-rank
-  information checks and information-metric terminal gradients isolate chart
-  effects. A 36-fit stress smoke run takes about five seconds in the R prototype;
-  this is not a native-library speed claim. The private corpus is currently absent,
-  so empirical sentinels consume shared benchmark syntax and public lavaan data.
-  - Ten paired draws in each setting are complete (198 fits each, about 27–31
-    seconds). All gaps above 1e-7 fail the stationarity audit; near-singular
-    disturbance matrices cause unresolved stalls, notably in Bollen draws.
-    Improve boundary handling before interpreting these as chart failure rates;
-    retain model-level failures and objective gaps.
-  - Bollen follow-up: original data plus ten paired draws separates eight interior
-    cases from three PSD-boundary candidates (draws 2, 5, 8). Native PSD fits from
-    common and native starts agree and pass cone audits in all eleven. Diagonal
-    and frozen full-information scaling resolve all eight interior prototype
-    fits; raw charts have residual audit failures. The start-information selector
-    chooses marker, but its superiority to fixed total-plus-scaling is unproven.
-    The boundary-aware routing replay is experiment-local, not a native API.
-  - Native complete-data PSD ML now has opt-in blockwise diagonal information
-    preconditioning with original-coordinate final audits. The Bollen native
-    probe accepted all 44 fits in 0.83s with paired objective gaps below `6e-12`.
-    Median evaluations fell 108→31 from reference-assisted common starts but
-    rose 114→152 from native starts. Keep it opt-in until
-    broader structures and practical starts establish a reliable benefit.
-    The native-start follow-up now covers six structures/ten settings: all 220
-    fits pass audits in 2.83s, but diagonal scaling increases median evaluations
-    in every setting. 109/110 pairs agree within `6e-12`; stressed mediation
-    draw 4 has distinct stationary objectives (gap 0.00519), retained on four
-    cross-restarts. Keep the unscaled default. Investigate start curvature and
-    equality scaling before adding more expensive preconditioners; first-order
-    cone acceptance does not establish a common or global optimum.
-    The mediation diagnostic now explains the worse endpoint: zero mediator
-    disturbance makes direct/mediated paths interchangeable at fixed covariance.
-    Compensated path shifts expose a negative variance-opening derivative;
-    a score-guided restart reaches the lower objective in both solver modes.
-    Among six random perturbations of the worse endpoint, only 1/6 unscaled and
-    3/6 scaled do so; reopening variances alone does not. All 42 diagnostic fits
-    pass audits (~0.6s). This is a single-case, experiment-local policy: validate
-    fresh draws and graph/constraint eligibility before promoting it. The lower
-    endpoint has zero outcome disturbance and is not proven globally optimal.
-  - Add practical matched starts and a second optimizer before a native chart
-    implementation. Feedback, fixed loading models and cross-group/shared
-    constraints need explicit transformation contracts before inclusion.
-  - Keep calibrated timing outside replication loops. The previous full cost
-    grid requests nominally 15 hours of timed batches alone (cheap-operation
-    caps can reduce it); the new pilot records stages once and has a soft wall
-    budget, iteration caps, per-fit checkpoints and exact dry-run fit counts.
-  - Treat the earlier "no better convention" conclusion as unestablished beyond
-    the measured CFA comparison. Recheck high-R-squared fit gaps for common-domain
-    admissibility before calling them optimization failures.
+- **Completed 2026-09-20: SEM scaling / PSD optimization defaults (experiment 83).**
+  Retain native complete-data PSD ML with native starts, NLopt SLSQP and no
+  preconditioning; preserve the requested identification and original SEM
+  constraints. Diagonal information scaling stays opt-in. No automatic chart
+  selector or targeted restart is adopted. Across six structures/ten settings,
+  all 220 fits passed audits in 2.83s; diagonal scaling increased median
+  evaluations in every setting. 109/110 paired objectives agreed within `6e-12`;
+  the default unscaled fit attained the lower objective in the discrepant
+  mediation pair. Its boundary identification mechanism and a successful
+  model-specific restart are documented in the completed experiment report.
+  First-order acceptance is not a local/global optimum certificate at singular
+  representations. This limitation is retained, not a blocker for the default
+  decision. Further candidates and explicit reopening conditions live in
+  `speculative.md` under "SEM PSD optimization beyond the engineering baseline".
 - **S. Test whether per-chart start values explain the std_lv optimizer-work
   advantage beyond chart geometry.** Findings and framework in
   [docs/design/parameterization-geometry.md](../design/parameterization-geometry.md);
@@ -4221,7 +4182,7 @@ work until a concrete downstream consumer appears.
   Scope of the earlier findings:
   - *Is there a better convention?* Still open outside the measured CFA models.
     `std_lv`'s PE curvature sits below intrinsic curvature there, but that does
-    not prove numerical optimality; experiment 83 tests structural alternatives.
+    not prove numerical optimality; completed experiment 83 compared structural alternatives without changing the PSD default.
   - *Should the numerics lever be the chart?* No, the optimizer's metric. Full
     Newton / Fisher scoring is affine-invariant, so linear conditioning is free;
     nothing absorbs PE curvature. This is why `effect_coding` beating `std_lv` on

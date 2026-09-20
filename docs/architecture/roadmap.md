@@ -138,6 +138,17 @@ together, and the fitted point is mapped back before original link feasibility,
 partable round-trip, and cone-stationarity audits. The default remains unscaled;
 other PSD estimator entry points reject this option rather than ignore it.
 
+The engineering default decision from completed experiment 83 is to retain native
+starts, NLopt SLSQP and no preconditioning for supported complete-data PSD ML.
+The supplied identification and SEM constraints are retained; automatic chart
+selection and boundary-targeted restarts are not adopted. The six-structure,
+ten-setting comparison found increased median evaluations under diagonal scaling
+in every setting. A known limitation remains: at a zero mediator disturbance,
+equivalent path parameters can expose a descent direction unavailable to the
+first-order check at the returned representation. Audit acceptance is therefore
+not a local/global optimality certificate at singular points. Further optimization
+policies are deferred to concrete downstream failures or performance needs.
+
 Fit finalization supplies the authoritative common numerical verdict through
 `estimate::fit_verdict(estimates)`, independently of optimizer termination or
 the driven-coordinate `fit$audit`. It verifies the original half-discrepancy
