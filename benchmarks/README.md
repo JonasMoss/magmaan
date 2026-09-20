@@ -1,5 +1,10 @@
 # magmaan SEM Zoo Benchmarks
 
+The proposed [public speed report and lavaan cost-attribution design](../docs/validation/benchmark_plan.md#proposed-public-speed-report-2026-09-20)
+connects the modular C++ timings, matched R workflows, robust GOF/Wald inference,
+and cleanup of duplicate runners. It is a design proposal, not a new timing
+result; the existing entry points below remain in place.
+
 ## Numerical acceptance
 
 New fit comparisons use `estimate::fit_verdict(est).status == FitCheck::Passed`

@@ -1,14 +1,282 @@
 # Benchmark Plan
 
-This is the full benchmarking design — tiers, datasets, workload levels, and
-public-reporting shape. The scaffold described under Execution Methodology now
-exists (`benchmarks/cases.yml`, the `benchmarks/r/` harness, and active
-lavaan-backed cases spanning complete-data ML, controlled-missingness FIML,
-and continuous ULS/GLS smoke paths); the actionable near-term slice is tracked
-in `docs/backlog/todo.md` §2. The lavaan-parity test layer
-(`tests/golden/lavaan_parity_golden_test.cpp`, `tests/fixtures/parity/`) is the
-concrete realization of the correctness gating this document calls for. Public
-headline benchmarking still waits on a more mature R package API.
+This is the benchmark design: workload contracts, attribution, datasets, and
+public reporting. The 2026-09-20 proposal below is the next implementation
+slice; the broader coverage inventory follows it. Execution tasks live in
+[the active backlog](../backlog/todo.md), not in a separate roadmap.
+
+The existing case registry and R harness provide lavaan-backed smoke comparisons.
+The newer [C++ timing harness](../../benchmarks/timing/README.md) provides modular
+complete-data measurements. Neither yet implements the public report below.
+
+## Proposed public speed report (2026-09-20)
+
+### Scope and questions
+
+Start with complete-data continuous ML. Ordinal, FIML, and SNLLS get separate
+extensions with their own setup and statistical contracts. The initial report
+should answer three questions independently:
+
+1. How long does the same requested analysis take through each R interface?
+2. Where does each implementation spend that time?
+3. How much of the difference comes from numerical evaluations, optimizer work,
+   and interface/setup/finalization work?
+
+Do not call the third quantity a pure language effect. R matrix operations
+already call compiled numerical libraries, and R's `nlminb` uses compiled PORT
+routines ([R documentation](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/nlminb.html)).
+The defensible attribution is to these implementations, algorithms, data
+representations, and call boundaries. Compiler/BLAS differences remain part of
+the recorded environment.
+
+### What the inspection established
+
+- `benchmarks/timing/` already covers parsing, model construction, sample
+  statistics, starts, constraints, evaluator/objective construction, implied
+  moments/Jacobians, objective/gradient, L-BFGS, and conventional post-fit work.
+  Its `pipeline_total` and `staged_fit_ml` are **sums of stage medians**, not
+  directly measured complete analyses. Its per-evaluation probes use theta-hat;
+  SB, pEBA-4, and robust Wald intervals are missing from that stage catalog.
+- The talk's `benchmark_talk_speed.R` distinguishes prepared and raw-input
+  workloads, but a call supplying lavaan slots still runs through lavaan's fit
+  orchestration. It is not an optimizer-only measurement.
+- The installed lavaan 0.7-2 has native FMG tests. A local HS three-factor CFA
+  probe with `se="robust.sem"`, `test=c("satorra.bentler","peba4_ml")`, and
+  `baseline=FALSE` returned both requested tests and a converged fit. Prefer
+  this direct comparator; the talk's older lavaan + semTests path is historical.
+- That installation exposes `lav_step*` functions, `lav_model_objective`,
+  `lav_model_grad`, and an object `timing` slot. These are candidates for a
+  version-pinned adapter, not stable cross-version APIs. The old talk's slot
+  argument spelling also differs from the current formal arguments.
+- `benchmarks/inference_reuse.R` and `score_primitives.R` cover useful staged
+  inference, but use older timing loops. They should contribute workloads to
+  the common runner rather than become additional public timing authorities.
+
+### Matched statistical outputs
+
+Use named workload contracts, each returning a small common result schema.
+Run every workload directly from syntax and raw data, and separately from
+prepared model/data inputs where reuse is meaningful.
+
+| Workload | Required outputs |
+|---|---|
+| `fit` | estimates, normalized objective, convergence/acceptance diagnostics |
+| `wald_nt` | fit + conventional covariance, SEs, 95% normal Wald intervals |
+| `sb_wald` | fit + SB-scaled ML GOF (statistic, df, scaling, p) + robust sandwich covariance and 95% Wald intervals |
+| `peba4_wald` | fit + ML-based pEBA-4 GOF + the same robust Wald outputs |
+| `sb_peba4_wald` | fit + both GOF calibrations + robust Wald outputs, reusing shared inference ingredients |
+
+Use explicit `peba4_ml`, not suffixless `peba4` or `fmg`: the reference base
+statistic must be identical. Score/RLS GOF is a different workload and can be
+added separately. Restrict the pEBA-4 headline cells to df >= 4. Match covariance
+normalization, mean structure, fixed-x treatment, information/bread choice,
+empirical meat, finite-sample factors, and interval convention. In particular,
+SB GOF and robust covariance are distinct outputs; requesting one does not
+stand in for the other. Lavaan's MLM pairs robust SEs with SB GOF
+([lavaan estimator documentation](https://lavaan.ugent.be/tutorial/est.html)).
+
+No baseline model, CFI/TLI/RMSEA, standardized estimates, or printing is required
+by these contracts. Disable unrequested work where supported. If a requested
+output forces additional reference work, retain it in the interface total and
+identify it in the stage account. Add fit indices later as an explicit workload.
+Native defaults may be shown in a separate convenience panel, never mixed with
+matched-output ratios.
+
+### Timing boundaries and setup decomposition
+
+Record independently measured boundaries:
+
+- **Raw to report:** syntax/raw observations to all contracted outputs.
+- **Prepared to report:** retained model and sample/data structures to all
+  outputs; charge starts, optimization, finalization, and any inference setup
+  that is not explicitly retained.
+- **Fit to inference:** an estimate-only fit plus the retained fitting data to
+  covariance, intervals, and GOF. Do not start from a fit already carrying those
+  results. Include first-use/lazy computation and state exactly what is cached.
+- **Repeated calibration:** already prepared quadratic/spectrum to p-values;
+  useful as a marginal cost, never presented as full GOF cost.
+
+Within a traced call, use mutually exclusive top-level stages: input/options
+and parsing; data conversion/grouping; sample statistics; partable/model
+construction; starts/bounds/constraints; evaluator/cache/problem preparation;
+optimization; terminal validation and fit-object assembly; inference; requested
+output extraction. Keep H1/baseline work separate if it is actually performed.
+
+Inference sub-stages should identify fitted geometry/Jacobian, bread,
+casewise contributions or empirical moment covariance, sandwich assembly,
+GOF projection, trace or eigenspectrum, calibration, and interval formatting.
+Shared inputs are charged once in `sb_peba4_wald`; SB-only should not be forced
+to compute a pEBA spectrum. Measure the complete bundle as well as isolated
+primitives; overlapping public functions are not additive stages.
+
+Use native timing/trace information first to identify boundaries, then a
+benchmark-local, version-pinned adapter for finer probes. Check installed
+function signatures, inputs, and results before using an adapter. Never patch
+the user's installed lavaan. Instrumentation runs and uninstrumented headline
+runs are separate; quantify instrumentation perturbation and retain an
+unattributed residual. Sampling profiles can locate work but do not price
+sub-millisecond stages reliably.
+
+Only stack exclusive durations from the **same call**. Keep nested callback
+measurements nested under optimization. A whole-call time minus the sum of
+independently measured medians is not an identified object-construction cost;
+it also reflects caching, allocation, sharing, and measurement differences.
+Retain such reconstructions as diagnostics with explicit labels. The existing
+C++ `pipeline_total` should become `pipeline_sum_of_medians` when its consumers
+are migrated, with a new direct timer for the real pipeline.
+
+### Separating evaluation cost from optimizer behavior
+
+“Cost per iteration” is insufficient: an iteration can make multiple function,
+gradient, or joint calls. Report iterations when available, actual callback
+counts, and callback cost separately.
+
+**Fixed-input evaluator experiment.** Export a canonical parameter map and a
+bank of valid points: common start, early/middle optimization points, and final
+fit, drawn from both trajectories. Replay identical points through both
+implementations. Time implied moments, full moment Jacobian, scalar objective,
+gradient, and combined objective/gradient where available. A gradient path
+that avoids materializing the full Jacobian remains the production path; do
+not force it through an artificial Jacobian to make the implementations alike.
+Count joint callbacks distinctly to avoid double charging shared work.
+Validate values/derivatives after coordinate and objective-scale alignment.
+Measure cache-hit repetition separately from changing-theta replay.
+
+**Common-driver experiment.** Drive both evaluators with the same R `nlminb`,
+analytic gradients, common coordinates, starts, bounds, scaling, and controls.
+The C++ evaluator needs a small benchmark-only bridge with a retained native
+context, outside the public R API. Context creation is a separate setup cost.
+Both callbacks cross an R function boundary; the C++ callback also crosses
+`.Call`. Record bridge-only probes, but do not subtract a no-op timing and
+claim a pure language speedup. Batch replay inside C++ additionally gives
+native evaluation cost without the per-call R bridge.
+
+**Native-driver experiment.** Hold the C++ evaluator fixed and compare the
+R-driven callback route, native PORT, and native NLopt L-BFGS. R `nlminb` versus
+native PORT is not automatically an identical-driver experiment: audit PORT
+variants, scaling, bounds, tolerances, and stopping behavior. If they cannot be
+matched, label the result a backend/adapter comparison. Differences between
+PORT and L-BFGS include algorithmic work, not merely dispatch overhead.
+
+Finally compare production defaults separately, including native start
+heuristics. Keep common-start and native-start arms distinct. For constrained
+models, use an explicit common reduced-coordinate map or exclude them from
+the first common-driver study. Use the same independent terminal objective and
+stationarity screen for both engines; backend success alone does not establish
+comparable accuracy. Report callback counts, convergence/admissibility failures,
+and objective discrepancies even when the corresponding speed ratio is absent.
+There is no generally valid additive or multiplicative decomposition of the
+headline speedup from these interventions.
+
+### Cases, repetitions, and correctness
+
+Pilot: HS three-factor CFA and PoliticalDemocracy SEM, with paired raw input,
+prepared input, and inference bundles. Revalidate both first; the old zoo
+README lists historical optimizer failures that should not silently exclude
+hard cases or be treated as current results.
+
+Then use the existing synthetic catalog for p = 6/12/24/48/96 where supported,
+with a limited N ladder and several fixed datasets per cell. Start with marker
+identification; show other charts as a separate controlled study. Record p,
+latent dimension, free/reduced parameter count, group count, df, and model
+structure. Include a bounded multi-group/equality validation extension before
+making broader claims. Normal and finite-moment nonnormal draws exercise the
+robust inference route; repeat timings on a dataset separately from drawing
+new datasets.
+
+For an N-cost isolation experiment, hold moments and theta fixed or replicate
+rows with the chosen normalization documented. Redrawing at each N can change
+conditioning and optimizer work, so differing fit time is not automatically
+a timing defect. Empirical robust inference requires the raw-data contribution
+work even when complete-data estimation consumes only sample moments.
+
+Use `timing/timing.hpp` for native probes and one shared `r/timing.R` for R
+workloads: warmup, adaptive batching, balanced arm order, raw batch samples,
+and explicit GC policy. Start with at least seven paired batches in each of
+three fresh process sessions; extend unstable cells rather than multiplying
+the entire design. Calibrate R batches to roughly 100 ms rather than timing
+single sub-millisecond fits. Retain natural GC inside whole workflows; report
+allocation separately. Launch with one BLAS/OpenMP thread before loading R.
+Keep compilation, data generation/download, validation, profiling, and report
+rendering outside the timing run. Package startup is a separate optional cost.
+
+Isolate dissimilar stages in fresh/reset workers for absolute stage costs.
+Rotate comparable arms within a stage, not every stage against every other
+stage: the existing harness documents allocator interference from such a
+rotation. Fix and report cache-reset semantics. Save process/run/batch IDs,
+call counts, clock/batch duration, arm order, seeds, options, input hashes,
+source/library hashes, CPU, compiler flags, BLAS, and package versions.
+
+Predeclare mixed absolute/relative tolerances per quantity using existing
+parity contracts. Check named estimates, implied moments, normalized objective,
+stationarity, covariance/SEs, interval endpoints, GOF statistic/df/scaling, and
+p-values. Compare spectrum/trace ingredients when available. Keep failures and
+unsupported cells in the report denominator. Validate adapters outside timing,
+and spot-check timed results. A checksum prevents elimination; it is not a
+correctness test. Publish paired ratios/distributions and session variability;
+any uncertainty interval from timing repeats describes timing uncertainty,
+not sampling uncertainty across statistical datasets.
+
+### Public artifact and ownership
+
+Proposed entry point: `benchmarks/report/speed.qmd`, rendering a standalone HTML
+report from **its own** `benchmarks/report/results/<run-id>/`. A runner writes
+canonical inputs, raw samples, validation, counts, metadata, and summaries
+there; rendering performs no benchmarking. Existing ignored exploratory
+`benchmarks/results/` remains scratch. Track a small redistributable frozen
+report snapshot and provide the full run bundle with checksums for reproduction.
+The report must not source scripts or read results from a paper, experiment,
+or talk. Extract reusable harness code downward into `benchmarks/`; retain
+historical talk assets unchanged.
+
+The public report needs four views:
+
+1. Absolute time and paired ratio for each complete workload, with correctness
+   and failure counts immediately visible.
+2. Exclusive setup/fit/inference stage account and direct total, with unresolved
+   time visible rather than assigned to “R overhead”.
+3. Callback cost versus callback count, followed by controlled backend results.
+4. Incremental SB, pEBA-4, and Wald costs, plus the measured shared bundle.
+
+Put environment, precise contracts, reproducible commands, and full numerical
+checks behind those views. Avoid a single pooled “X times faster” claim.
+A first local report may be marked machine-specific; satisfy the independent
+reproduction criterion below before promoting a general public headline.
+
+### Cleanup proposal
+
+Do cleanup after replacement workload smoke checks, preserving reproduction
+paths. This design does not delete or move benchmark code.
+
+| Existing material | Proposed disposition |
+|---|---|
+| `timing/`, case registry, `cases/`, R data/reference helpers | Keep as reusable infrastructure; extend the timer/output contracts |
+| `r/run_benchmark.R` | Keep the zoo smoke entry point; use the common timer and separate public workload runner |
+| `score_primitives.R`, `inference_reuse.R`, `r/bench_mi_lrt.R` | Migrate useful workloads to shared runner; then retire duplicate timing loops, retaining thin entry points only if consumed |
+| Top-level `*_bench.cpp` and memory-profiler helpers | Inventory distinct workload/consumer first; migrate active diagnostics under `micro/` and memory tools under `memory/`, preserving CMake target names |
+| `snlls-current/` | Classify as historical implementation investigation; index it and archive only after checking links/consumers |
+| `snlls-handoff/`, `snlls-handoff-current/` | Preserve pinned reproduction bundles; replace “current” ambiguity with a revision/status index before considering relocation |
+| Talk timing scripts/data | Preserve as talk evidence; promote reusable logic into benchmarks without importing talk dependencies |
+| Old build/install commands and stale “R-first scaffold only” text | Update alongside the replacement entry points and a clear active/historical index |
+
+The SNLLS packaging scripts embed directory paths, so a directory move is a
+functional change, not tidying. Audit tracked and local artifact references,
+update consumers, and smoke packaging before any such move. Delete only
+superseded duplicate implementations after their distinct checks/outputs are
+accounted for. Keep historical conclusions with their source revisions; never
+mix those numbers into a new report.
+
+### Implementation order
+
+1. Shared R timing/output schema and two-case matched-workload pilot, including
+   direct totals and correctness gates for native lavaan pEBA-4.
+2. Lavaan stage adapter, comparable magmaan stage account, and direct inference
+   bundles; quantify instrumentation and closure/cache effects.
+3. Fixed-point/trajectory replay and common-driver bridge, then native backend
+   and native-start comparisons.
+4. Consolidate benchmark entry points and retire duplicate loops with consumer
+   checks; populate and render the public report from a frozen run bundle.
+5. Broaden cases and reproduce elsewhere before promoting headline claims.
 
 ## Goals
 
