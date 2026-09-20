@@ -979,8 +979,11 @@ an unconstrained gradient test to constrained solutions.
   pilot with directly timed raw/prepared/post-fit boundaries and separate
   covariance, SB, pEBA-4, and adapter checks. The HS native pEBA-4 comparison
   remains rejected on relative tail agreement even at identical statistic and
-  spectrum; this is an unresolved calibration discrepancy, not an oracle-defect
-  claim. Controlled cross-engine evaluator/backend attribution and public
+  spectrum. Follow-up isolates lavaan's default absolute integration tolerance:
+  a tighter tail integral and an independent high-precision Erlang-chain
+  reference agree with magmaan. The timing rejection remains until an
+  accuracy-matched reference route is timed; there is no statistical-convention
+  discrepancy. Controlled cross-engine evaluator/backend attribution and public
   promotion remain open under `docs/validation/benchmark_plan.md`.
 - **Expected information via the whitened Jacobian (2026-09-18):**
   `inference::information_expected_per_case_blocks` and

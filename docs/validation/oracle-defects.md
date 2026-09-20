@@ -155,6 +155,36 @@ Upstream: not filed. Found 2026-06-27 (multi-group two-level finish-up).
 
 ## Investigated — not a defect
 
+### Native lavaan pEBA-4: absolute integration accuracy in a tiny tail (2026-09-20)
+
+Lavaan 0.7-2's HS three-factor NTML example yields `T = 85.305521769973225`,
+`df = 24`, and default `peba4_ml` p-value `1.642986754424314e-7`.
+With the **identical** statistic and spectrum, magmaan gives
+`1.529608811641211e-7`. Both use expected information; parameter estimates,
+covariances, and the spectrum are not the source of this discrepancy.
+
+The native `lav_test_fmg_imhof` uses `epsabs = epsrel = 1e-6` for an integral
+whose probability is recovered as `0.5 + integral/pi`. Relative accuracy in
+the integral does not imply relative accuracy in this small probability.
+Tightening both tolerances to `1e-13` gives `1.529608875672217e-7`.
+The default difference is about `1.13e-8` in absolute probability, within the
+requested absolute integration accuracy; it is about 6.9% of the default
+reported probability. This is a numerical precision limitation, not a change
+of robust test, Hessian convention, or a proven integration-algorithm defect.
+
+Independent reference: all four penalized pEBA weights occur six times.
+Thus each block is `w * chi-square(6) = Erlang(shape=3, rate=1/(2w))`.
+The sum is the absorption time of a twelve-phase exponential chain. Form the
+upper-bidiagonal transient generator with diagonal `-rate_i` and superdiagonal
+`rate_i`; its survival is `e_1' exp(Q*T) 1`. At 70 decimal digits this gives
+`1.52960890009620744e-7`; a separate 50-digit computation agrees to more than
+40 relative decimal places. This calculation uses neither Imhof quadrature
+nor magmaan's positive-series implementation. The reproducible tail audit is
+kept with experiment 84, under its `scripts/` directory and experiment-local
+results. The benchmark retains its original rejected rows pending a timed
+accuracy-matched comparator; no statistical parity gate is waived.
+
+
 - **Satorra-2000 scaled-difference parity** (2026-05-17): a divergence first
   suspected to be a lavaan bug was resolved as a magmaan-side issue / convention.
   See [`satorra2000_parity.md`](satorra2000_parity.md). Kept here as a reminder

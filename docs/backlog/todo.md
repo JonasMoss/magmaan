@@ -3319,8 +3319,13 @@ work lives in [`speculative.md`](speculative.md). Open work:
   active), indexed in the experiment collection; it is not a public speed
   claim. Native lavaan 0.7-2 `peba4_ml` and magmaan disagree in the HS tail
   even with identical statistic/eigenvalues (about 7% relative p-value
-  difference); resolve the calibration discrepancy before accepting those
-  timing ratios. SB and covariance checks are separate. Next: matched native
+  difference). Follow-up: the cause is lavaan's default `1e-6` absolute Imhof
+  tolerance on a `1.53e-7` tail. Tightening to `1e-13` agrees with magmaan
+  and an independent 70-digit Erlang-chain calculation. This is numerical
+  tail accuracy, not an information-matrix convention or method mismatch.
+  Time an accuracy-matched route before accepting those ratios; do not
+  retroactively substitute a corrected p-value into the default timing rows.
+  SB and covariance checks are separate. Next: matched native
   evaluator replay/common driver, reliable exclusive stage attribution,
   broader cases and independent reproduction. Pinned SNLLS bundles and old
   runners remain untouched until their replacements cover their consumers.

@@ -11,6 +11,7 @@ execute:
   message: false
 params:
   run: pilot
+  audit: tail-audit
 ---
 
 ```{r}
@@ -33,6 +34,12 @@ wide <- reshape(same,idvar='case',timevar='engine',direction='wide')
 wide$relative_gap <- abs(wide$value.magmaan/wide$value.lavaan-1)
 worst <- wide[which.max(wide$relative_gap),]
 failed <- unique(c[c$comparison=='cross_engine' & !c$passed,c('case','workload','metric')])
+audit_path <- file.path('results',params$audit)
+has_audit <- file.exists(file.path(audit_path,'independent.csv'))
+if(has_audit) {
+  audit <- read.csv(file.path(audit_path,'tolerance-sweep.csv'))
+  independent <- read.csv(file.path(audit_path,'independent.csv'))
+}
 ```
 
 ## Question
@@ -52,8 +59,7 @@ The numerical screen also found a pEBA-4 discrepancy. For
 `r unname(case_labels[worst$case])`, the p-values differ by
 `r sprintf('%.1f%%',100*worst$relative_gap)` even with the same fitted statistic
 and eigenvalues. Ratios for workloads failing the numerical screen are withheld.
-The experiment therefore establishes a usable timing protocol and a specific
-calibration issue to resolve before a public report.
+`r if(has_audit) 'A follow-up calculation identifies the cause as numerical integration tolerance in the tiny upper tail, not a different fit or information-matrix convention. Tightening lavaan’s tolerance agrees with magmaan and an independent reference.' else 'The experiment establishes a usable timing protocol and a calibration discrepancy requiring a follow-up check.'`
 
 ## Evidence
 
@@ -86,8 +92,21 @@ knitr::kable(data.frame(Model=unname(case_labels[wide$case]),
 ```
 
 This table holds the statistic and spectrum identical, so the remaining
-difference arises after their construction. It does not establish which
-implementation is correct. The complete checks include parameter estimates,
+difference arises after their construction.
+
+```{r results='asis'}
+if(has_audit) {
+  cat('The follow-up audit holds those inputs fixed and tightens only the tail integration tolerances. An independent high-precision calculation gives **',
+      sprintf('%.10g',independent$p_value),
+      '**. Magmaan gives ',sprintf('%.10g',audit$magmaan_p[1]),
+      '; lavaan at tolerance 1e-13 gives ',sprintf('%.10g',tail(audit$lavaan_p,1)),
+      '. The default lavaan value is ',sprintf('%.10g',audit$lavaan_p[1]),
+      ', an absolute difference of about 1.13e-8. Its default absolute integration tolerance is 1e-6.\n\n',sep='')
+  cat('This is a numerical precision limitation in an extreme tail. The independent reference sums twelve exponential waiting times, which is exactly the same distribution as this four-block pEBA law; calculations at 50 and 70 decimal digits agree. The original timing ratios remain withheld because a tighter-accuracy reference route must be timed before an accuracy-matched speed claim.\n\n')
+} else cat('The same-input comparison alone does not establish which implementation is correct.\n\n')
+```
+
+ The complete checks include parameter estimates,
 objective values, covariance matrices, interval endpoints, SB scaling and
 statistic, GOF degrees of freedom, spectra, and log p-values. The log-p check
 prevents an absolute tolerance from concealing a disagreement in a small tail.
@@ -132,7 +151,7 @@ parameters agree.
 Package and runner fingerprints, raw batches, options, inputs, checks, errors
 (if any), and session information are retained under this report's result
 folder. No historical benchmark timings enter these results. General public
-claims still require broader cases, resolved numerical discrepancies, a
+claims still require broader cases, timings at matched tail accuracy, a
 controlled evaluator/backend comparison, and independent-machine reproduction.
 
 ## Reproduce
@@ -155,3 +174,11 @@ it performs no fitting or timing. `summary.csv` contains all five workloads;
 `samples.csv` retains every batch and arm order, and `checks.csv` retains every
 numerical check, including failures. The setup and fitted-point probes are
 also in `summary.csv`, with no cross-engine ratio.
+
+The optional tail audit uses the pilot's saved inputs and requires Python's
+`mpmath` package. It neither changes installed lavaan nor rewrites timing results:
+
+```sh
+Rscript experiments/84-speed-attribution/scripts/audit_tail.R pilot tail-audit
+quarto render experiments/84-speed-attribution/report.qmd -P run:pilot -P audit:tail-audit
+```
