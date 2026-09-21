@@ -160,3 +160,56 @@ validation of every estimator. It still lacks multi-group invariance, growth,
 feedback, non-Gaussian/missing-data and published-data models. It is held out
 from the earlier option choice, but becomes development evidence once used
 for subsequent tuning. Do not tune and describe these same cases as held out.
+
+## Growth, feedback, multi-group and published-data panel
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/advanced-new 60 advanced
+python3 tests/checks/interior_newton/summarize_advanced.py tests/checks/interior_newton/results/advanced-new
+```
+
+`advanced.cpp` shares this check's Newton helpers, independently builds each
+model and uses the same three fixed validation profiles. Synthetic designs:
+
+- Linear growth at 4 and 8 occasions, fixed intercept/slope loadings 1 and
+  0,...,p-1; latent means (1,.2), covariance [[1,.15],[.15,.2]], residuals .7.
+  Observed intercepts are fixed zero and both latent means are free.
+- Four-factor feedback with three indicators per factor. f3 <- .2*f4+.5*f1,
+  f4 <- .25*f3+.4*f2, independent unit disturbances and exogenous factors;
+  exclusion restrictions provide separate predictors of the feedback pair.
+  Marker loadings 1, other loadings .8, residual variances .7. I-B is invertible.
+- Two-group CFA with configural, metric and scalar restrictions, plus a
+  five-group metric model with unequal group sizes. Three factors, four
+  indicators each, loadings 1/.8, latent correlations .3, residuals .7.
+  Group covariance g (zero-based) is (1+.2*g) times the base covariance;
+  common observed means are .1,.2,...,1.2. These populations satisfy all the
+  fitted loading/intercept equalities.
+
+For each: base n=50/200/1000/10000, two replications, global scales .1/1/10.
+Balanced groups each have base n observations. Unbalanced group g has
+max(p+2,floor(n/(g+1))); the floor avoids singular empirical covariance in
+this regular-ML panel. Both total N and every group size are recorded.
+Independent group samples use a continuous RNG stream from the recorded seed.
+
+Published-data fits read existing test-owned summary-statistic fixtures:
+Bollen political democracy and Holzinger–Swineford from `tests/fixtures/parity/`,
+and all four Kline/Guo invariance exports from
+`tests/fixtures/textbook_corpus/case_exports.json`. No fitted parameters or
+oracle starts are used. Covariances are used exactly as exported, with no
+additional n/(n-1) conversion. Models/options follow those fixtures. Published
+fits use original sample sizes and three unit scales, not simulated replications.
+The four Guo specifications share the same observations. No private corpus or
+sibling experiment/paper dependency is introduced.
+
+There are 504 synthetic and 54 published-data fits: 558 total, 186 per profile.
+`advanced-summary.json` retains failures/exclusions and `case-metadata.json`
+records pre-fit descriptors for later paired option comparisons. Group counts
+are not independent model samples, and no model-specific optimizer rules have
+been selected. First complete run: `results/advanced-2026-09-21-v2/`.
+The initial run stopped at the singular smallest unbalanced-group covariance;
+that incomplete run is retained separately, not included in the results.
+
+Observed information uses total N across groups. Thirty-four directional
+finite differences independently check the normalization and equality reduction
+at unit scale, including all corpus models. Build inputs, source snapshots and
+fixture SHA-256 hashes are saved with the completed local run.

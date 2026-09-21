@@ -122,8 +122,19 @@ semantics · **XL** statistical design/research track before implementation.
   panel that the cheap settings are near-settled defaults. Both conservative
   failures have mixed scales. Preserve the .01 target, investigate conditional
   polishing/scaling rather than relax it. Before a package-wide default claim,
-  add multi-group invariance, growth, regular feedback and published fixtures;
-  use fresh validation cases after tuning. See the research note for coverage.
+  the subsequent panel below supplies multi-group invariance, growth, feedback
+  and published fixtures; use fresh validation cases after tuning. See the research note for coverage.
+  The previously missing growth, feedback, multi-group and published-fixture
+  panel is now added (558 fits; same fixed profiles). Growth and all six
+  published specifications pass under every profile; conservative controls pass
+  all eligible multi-group cases. Feedback at scale 10 exposes five eligible
+  conservative failures (d=.419–3.324), plus one nonpositive-curvature endpoint;
+  one fit reaches the evaluation cap. Investigate that mechanism before defaults.
+  Later, as requested, examine option performance by model family, p, free
+  parameter count, n, group count/imbalance and measurement scale. Metadata is
+  saved; use paired comparisons, keep failures/exclusions, account for dependent
+  scale/specification variants, and validate any adaptive routing on fresh cases.
+  Do not infer a routing policy or tune one from these small descriptive counts.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal

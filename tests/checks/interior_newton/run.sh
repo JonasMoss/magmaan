@@ -16,16 +16,18 @@ elif [[ "${2:-10}" != 10 ]]; then
   exit 2
 fi
 printf '%s\n' "${2:-10}" > "$run_dir/backtracking-limit.txt"
+check_source=tests/checks/interior_newton/check.cpp
+if [[ "${3:-}" == advanced ]]; then check_source=tests/checks/interior_newton/advanced.cpp; fi
 clang++ -std=c++23 -O3 -DNDEBUG -march=native -fno-exceptions -fno-rtti \
  -DEIGEN_NO_EXCEPTIONS=1 -DEIGEN_MAX_ALIGN_BYTES=64 -DEIGEN_DONT_PARALLELIZE=1 \
  -DEIGEN_NO_AUTOMATIC_RESIZING=1 -DEIGEN_RUNTIME_NO_MALLOC=1 \
- -Iinclude -isystem build/fast/_deps/eigen3-src -Ibuild/opt/_deps/nlopt-src/src/api \
- tests/checks/interior_newton/check.cpp "${extra_objects[@]}" build/opt/libmagmaan.a \
+ -Ibuild/opt/_deps/nlohmann_json-src/single_include -Iinclude -isystem build/fast/_deps/eigen3-src -Ibuild/opt/_deps/nlopt-src/src/api \
+ "$check_source" "${extra_objects[@]}" build/opt/libmagmaan.a \
  build/opt/_deps/nlopt-build/libnlopt.a build/opt/libquadpack.a build/opt/libport.a \
  -lm -o "$run_dir/check"
 git rev-parse HEAD > "$run_dir/source-parent.txt"
-sha256sum tests/checks/interior_newton/check.cpp tests/checks/interior_newton/run.sh \
+sha256sum "$check_source" tests/checks/interior_newton/check.cpp tests/checks/interior_newton/run.sh \
  build/opt/libmagmaan.a build/opt/_deps/nlopt-build/libnlopt.a > "$run_dir/hashes.txt"
 mode_args=()
-if [[ "${3:-}" == refine || "${3:-}" == options || "${3:-}" == validate ]]; then mode_args+=("$3"); elif [[ -n "${3:-}" ]]; then exit 2; fi
+if [[ "${3:-}" == refine || "${3:-}" == options || "${3:-}" == validate ]]; then mode_args+=("$3"); elif [[ -n "${3:-}" && "${3:-}" != advanced ]]; then exit 2; fi
 "$run_dir/check" "$run_dir/raw.csv" "${mode_args[@]}" > "$run_dir/stdout.log" 2> "$run_dir/progress.log"

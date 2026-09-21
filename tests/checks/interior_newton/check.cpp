@@ -178,6 +178,7 @@ void refinement_checks(){
  require(result.status=="qualified"&&result.point.a.norm()<1e-12,"quadratic refinement");
  require((newton_step(initial)+x).norm()<1e-12,"quadratic Newton correction");
 }
+#ifndef INTERIOR_NEWTON_NO_MAIN
 int main(int argc,char** argv){
  const bool smoke=argc==3&&std::string(argv[2])=="refine";
  const bool options=argc==3&&std::string(argv[2])=="options";
@@ -289,3 +290,5 @@ int main(int argc,char** argv){
   std::cerr<<"Completed "<<c.name<<'\n';out.flush();
  }
 }
+
+#endif

@@ -517,3 +517,85 @@ Checks: complete unique paired design; ten analytic-Hessian directional checks;
 positive-definite generating covariances; exact quadratic/affine/normalization
 checks. Raw data, executable/source hashes and model-level summaries are in
 `tests/checks/interior_newton/results/validation-2026-09-21/` locally.
+
+## Additional structures and published-data fixtures
+
+A further fixed-control panel adds seven synthetic designs (growth at four and
+eight occasions, a four-factor feedback system with exclusion restrictions,
+two-group configural/metric/scalar invariance, five-group unbalanced metric
+invariance) and six published-data specifications (Bollen political democracy,
+Holzinger–Swineford, and Kline/Guo configural, weak, strong and partial-strong
+invariance). Sources are the existing test-owned parity and textbook-corpus
+summary-statistic fixtures; oracle fitted parameters and starts are not used.
+This preserves the dependency rule and needs no private raw-data access.
+Exact design and fixture paths are documented in the check README.
+
+Synthetic base n is 50/200/1000/10000 with two replications and .1/1/10 global
+scales. In balanced multi-group models n is per group, not total N; the raw
+records contain group sizes and total N. The five-group model uses
+max(p+2,floor(n/(g+1))) observations in group g (zero-based). The minimum was
+added after the initial incomplete run exposed singular sample covariance in
+the smallest group. It is a regular-domain design correction, not tolerance
+tuning; the incomplete run is retained. Models, profiles and audit target were
+otherwise unchanged. There are 558 completed fits (186 per profile).
+
+| Model family/specification | Attempts per profile | Current pass/eligible | Cheap pass/eligible | Conservative pass/eligible |
+|---|---:|---:|---:|---:|
+| Growth, four occasions | 24 | 24/24 | 24/24 | 24/24 |
+| Growth, eight occasions | 24 | 24/24 | 24/24 | 24/24 |
+| Feedback | 24 | 18/21 | 18/21 | 18/23 |
+| Two-group configural | 24 | 23/24 | 24/24 | 24/24 |
+| Two-group metric | 24 | 23/24 | 24/24 | 24/24 |
+| Two-group scalar | 24 | 24/24 | 24/24 | 24/24 |
+| Five-group unbalanced metric | 24 | 16/18 | 16/18 | 18/18 |
+| Bollen political democracy | 3 | 3/3 | 3/3 | 3/3 |
+| Holzinger–Swineford | 3 | 3/3 | 3/3 | 3/3 |
+| Each of four Kline/Guo specifications | 3 each | 3/3 | 3/3 | 3/3 |
+| **Total** | **186** | **170/177** | **172/177** | **174/179** |
+
+Denominators differ: six noninterior endpoints per profile occur in the
+five-group model; feedback adds three unavailable-curvature cases for current
+and cheap settings, and one for conservative settings. Thus simple comparisons
+of conditional pass percentages are not paired comparisons on a common eligible
+set. All attempted cases remain recorded. No unavailable audit counts as success.
+
+The conservative profile's five eligible failures are feedback fits at scale
+10, with d=.419/.483/1.032/3.306/3.324. One reaches the nominal 5000-evaluation
+cap (NLopt reports 5001 evaluations); four return FTOL_REACHED after thousands
+of evaluations. These are substantial failures of the accuracy target, not
+rounding disagreements. The remaining feedback case at that scale has
+nonpositive curvature. This panel does not identify the mechanism; investigate
+scaling, starts and the feedback objective before prescribing tighter controls.
+The scale variants within each replication must not be treated as independent
+evidence about prevalence.
+
+Total evaluations are 22740/23607/44014, medians 90.5/93/109.5. Feedback failures
+make unconditional cost comparisons particularly important. All published-data
+specifications pass in all three unit systems. The four Guo specifications share
+data, and their three scales are re-expressions, not independent replications.
+Likewise this is not a systematic corpus-wide success-rate study.
+
+Validation: 558 unique paired rows; expected model/profile/replication coverage;
+34 directional observed-Hessian checks, maximum relative error 1.23e-9, including
+multi-group total-N normalization and corpus equality reduction; exact
+quadratic/affine/scaling checks. The source and fixture hashes, local raw results,
+summary and metadata are retained in `results/advanced-2026-09-21-v2/` within the
+check. Production defaults, manuscript results and the .01 target are unchanged.
+
+### Later option subgroups
+
+The author requested later investigation of settings that work better for
+particular kinds of model. Preserve pre-fit characteristics: model family, p,
+number of factors, equality-reduced parameter count, sample size, group count,
+minimum/maximum group size, imbalance and measurement scale. `case-metadata.json`
+is the initial export. Combine panels and compare profiles on the same cases,
+reporting both audit success among all attempts and conditional interior results,
+with evaluations/cost. Eligibility can itself change with controls.
+
+Treat dataset and model family as clusters: scale variants and Guo invariance
+variants are dependent. Exploratory subgroup patterns are hypotheses, not routing
+rules. Distinguish pre-fit descriptors suitable for choosing options from
+post-fit curvature/gradient diagnostics suitable for deciding whether to polish.
+Any selected adaptive policy must be tested on fresh model/data cases rather
+than evaluated on the cases that suggested it. No subgroup-specific tuning or
+adaptive policy was performed here.
