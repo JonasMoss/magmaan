@@ -599,3 +599,67 @@ post-fit curvature/gradient diagnostics suitable for deciding whether to polish.
 Any selected adaptive policy must be tested on fresh model/data cases rather
 than evaluated on the cases that suggested it. No subgroup-specific tuning or
 adaptive policy was performed here.
+
+## Feedback failure isolation: starts versus parameter coordinates
+
+The eight feedback datasets were rerun at all three unit scales under three
+arms, with conservative controls fixed (72 fits). Native controls exactly
+reproduce all 24 previous endpoints, evaluation counts and return codes.
+
+Source inspection explains a scale dependence in the starts:
+`src/estimate/start_values.cpp` initializes genuine latent variances to .05;
+residual variances use half the sample indicator variance. In
+`src/estimate/start_fabin.cpp`, FABIN replaces only free loadings and retains
+the other simple starts. Consequently at observation scale 10 the residual
+variance starts grow by 100 but the four latent variance starts stay .05.
+Regressions and covariance off-diagonals start at zero. The loading starts are
+scale invariant up to rounding. This follows the current simple-start scheme;
+it is not evidence of a derivative or feedback-model implementation defect.
+
+For this marker-identified model, correctly transporting a unit-1 parameter
+vector to scale u multiplies Psi and Theta by u^2, leaving Lambda and Beta
+unchanged. Transported latent variance starts are .0005/.05/5 for scales
+.1/1/10. The experiment compares:
+
+1. Canonical native FABIN starts at each scale.
+2. Unit-1 FABIN starts transported to the target scale, with ordinary optimizer
+   coordinates. This changes the initial latent variances materially, not the
+   fitted model, optimizer controls or objective.
+3. The same transported start, with theta=D*z so the optimizer works in unit-1
+   coordinates. The analytic gradient is transformed by D. This isolates the
+   remaining effect of parameter-coordinate scaling.
+
+| Scale 10, eight datasets | Pass/attempted | Median evaluations | Maximum available d |
+|---|---:|---:|---:|
+| Native FABIN | 2/8 | 3387.5 | 3.324 |
+| Transported starts only | 8/8 | 208.5 | .000513 |
+| Transported starts and coordinates | 8/8 | 50 | .00000164 |
+
+Native unit-1 fits also pass 8/8 with median 49.5 evaluations. Every transported
+arm passes at scales .1 and 1 as well. All transported-arm objectives agree
+with their unit-1 native reference to within 6.60e-10 in per-observation
+half-discrepancy. This is objective agreement, not a claim of unique parameter
+estimates or global optimality. One scale-10 coordinate-transformed fit takes
+120 evaluations rather than 50, so numerical paths are not exactly invariant.
+
+For N=10000, replication 1, scale 10: native starts give f=.11066 and d=3.306
+after 4722 evaluations; transporting starts gives f=.00193035 and d=.000290
+after 256 evaluations; transporting coordinates as well gives the same f and
+d approximately 1e-6 in 46 evaluations. The unit-1 native run takes 46 too.
+Thus the start inconsistency is sufficient to explain the pass/fail problem
+in this panel, while coordinate scaling explains much of the remaining cost.
+This does not establish the detailed path mechanism or eliminate the separate
+stock-NLopt backtracking issue; all arms still use the diagnostic patch.
+
+Checks: full paired design, 696 parameter-start records, initial objective and
+gradient transformation identities, all 24 native controls reproduced exactly,
+and terminal objective agreement. Sources and results are retained locally in
+`tests/checks/interior_newton/results/feedback-starts-2026-09-21/`.
+No production start values, default tolerances or parameterization were changed.
+
+Next engineering question: a data-derived scale-aware start/coordinate policy
+that does not require privileged access to an unscaled dataset. Respect marker
+versus std.lv identification, fixed values, user hints, equality constraints and
+multi-group structure. Keep the existing compatibility start policy explicit;
+do not silently replace it with this model-specific experiment. Test any general
+policy across the broader panel, with fresh validation after development.

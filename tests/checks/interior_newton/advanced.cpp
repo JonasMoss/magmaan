@@ -49,6 +49,7 @@ std::vector<Design> designs(){
  }
  return ds;
 }
+#ifndef INTERIOR_NEWTON_NO_ADVANCED_MAIN
 int main(int argc,char** argv){
  require(argc==2,"usage: advanced output.csv");exact_checks();std::ofstream out(argv[1]);require(bool(out),"output");out<<std::setprecision(17);
  out<<"model,family,source,n_base,n_total,group_sizes,rep,units,seed,profile,p,factors,groups,free_parameters,imbalance,rc,evals,interior,status,distance,condition,fmin,fit_ms,hessian_ms,hessian_fd_rel\n";
@@ -96,3 +97,5 @@ int main(int argc,char** argv){
   run(d,samp,0,1,0);std::cerr<<"Completed "<<d.id<<'\n';
  }
 }
+
+#endif

@@ -213,3 +213,31 @@ Observed information uses total N across groups. Thirty-four directional
 finite differences independently check the normalization and equality reduction
 at unit scale, including all corpus models. Build inputs, source snapshots and
 fixture SHA-256 hashes are saved with the completed local run.
+
+## Feedback starts and parameter coordinates
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/feedback-starts-new 60 starts
+python3 tests/checks/interior_newton/summarize_starts.py tests/checks/interior_newton/results/feedback-starts-new
+```
+
+This reproduces the eight feedback datasets from the advanced panel (same seed,
+RNG order and population). Three unit scales and three arms give 72 fits:
+canonical FABIN starts; correctly transformed unit-1 FABIN starts; and those
+transformed starts with the optimizer working in unit-1 parameter coordinates.
+All use conservative controls and diagnostic mred=60. This is an isolation
+experiment, not an implemented general-purpose scaling policy.
+
+For this marker-identified, covariance-only model, multiplying observations by
+u leaves Lambda and Beta unchanged and multiplies Psi and Theta by u^2. There
+are no equality constraints in this model. Mapped coordinates use theta=D*z,
+where D has u^2 on covariance parameters and 1 elsewhere; the gradient passed
+to NLopt is D times the theta gradient. Initial objective and gradient
+transformation identities are checked. Final audits use original coordinates.
+
+`raw.csv.starts.csv` records all 29 parameter starts, their matrix cells, and
+values transformed back to unit-1 scale. `starts-summary.json` verifies design,
+which starts differ, accuracy and objective agreement with the unit-1 results.
+The only material native/mapped differences are four latent variance starts.
+The 24 native control fits exactly reproduce the preceding advanced run.
+First completed run: `results/feedback-starts-2026-09-21/`.

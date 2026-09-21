@@ -135,6 +135,17 @@ semantics · **XL** statistical design/research track before implementation.
   saved; use paired comparisons, keep failures/exclusions, account for dependent
   scale/specification variants, and validate any adaptive routing on fresh cases.
   Do not infer a routing policy or tune one from these small descriptive counts.
+  Feedback start isolation is complete (72 fits): canonical FABIN retains
+  scale-independent .05 latent variance starts from the simple scheme while
+  residual starts scale with sample variances. Transporting unit-1 starts to
+  scale 10 (latent variances 5 instead of .05) changes passes from 2/8 to 8/8;
+  median evaluations fall from 3387.5 to 208.5. Transporting optimizer
+  coordinates as well reduces median evaluations to 50, still 8/8 passes.
+  High priority: design a data-derived scale-aware start/coordinate policy,
+  respecting identification, fixed values, user hints and equalities; keep
+  compatibility starts explicit. The experiment is model-specific and uses
+  diagnostic backtracking, not a production fix. Validate on the full panel
+  and fresh cases before selecting defaults; do not simply tighten tolerances.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal
