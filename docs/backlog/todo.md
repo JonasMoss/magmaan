@@ -13,6 +13,25 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+### L-BFGS line-search domain recovery
+
+- **M — make domain recovery robust to parameter scale.** NLopt's Luksan
+  L-BFGS hard-codes ten line-search reductions. With the objective contract
+  returning infinity outside the covariance domain, all trial evaluations can
+  remain invalid and the solver aborts after 12 evaluations at its initial
+  point. Increasing the overall evaluation budget does not change this limit.
+  The standalone variance-likelihood probe
+  `tests/checks/nlopt_lbfgs_domain.c` reproduces the mechanism without SEM.
+  Provide configurable safeguarded backtracking or a portable adapter-level
+  recovery policy; do not fix individual datasets by changing their units.
+  Validate across units, equality-reduced models, box bounds, and invalid
+  starts, checking the original objective and terminal audit. Preserve the
+  ability to distinguish pure L-BFGS from an SLSQP recovery. The existing
+  `nlopt-lbfgs-slsqp-fallback` is an available interim policy, but currently
+  retries on optimizer failure/non-clean status, not every failed model-level
+  stationarity verdict. Do not substitute PSD fitting for ordinary optimization
+  when diagnosing this numerical failure: that changes the feasible set.
+
 ### Score/inference adapter follow-ups
 
 The first-class ML/FIML/NT-ML2S score primitives, R inference snapshots,

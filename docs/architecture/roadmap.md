@@ -2397,6 +2397,12 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   start if L-BFGS fails or returns a non-clean optimizer status. NLopt is a
   required dependency in the ordinary build, so both pieces of the fallback are
   always available.
+  Known limitation: the NLopt Luksan L-BFGS line search allows ten step
+  reductions, which can be insufficient to reach a finite objective from a
+  valid start when parameter scales produce a large gradient. This can abort
+  after 12 evaluations regardless of the overall evaluation budget. The
+  standalone variance probe in `tests/checks/nlopt_lbfgs_domain.c` isolates the
+  issue; the domain-recovery task is tracked in `docs/backlog/todo.md`.
 - `Backend::Port` is the trust-region cross-check: vendored PORT (Bell Labs)
   `drmngb_` (TOMS 611 Dennis-Gay-Welsch model-Hessian trust region; the
   algorithm behind R's `nlminb`), supports bounds natively. Vendored at
