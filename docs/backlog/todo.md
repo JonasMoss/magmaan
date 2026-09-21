@@ -55,6 +55,19 @@ semantics · **XL** statistical design/research track before implementation.
   and standardized changes in parameters and implied moments. Use held-out
   cases to choose a numerical-accuracy target; do not choose the threshold
   retrospectively to favor a method. See `docs/design/terminal-audit.md`.
+  The September 21 literature/pilot follow-up narrows the next work:
+  - Declare a dimensionless metric and test fixed-point unit/basis invariance
+    before interpreting residual cutoffs across models.
+  - Expose/calibrate primal-dual complementarity near PSD boundaries; an
+    active-eigenvalue threshold alone does not control multiplier products.
+    Compare with a metric projected-gradient mapping on convex restrictions.
+  - Add optional local curvature/step diagnostics in identifiable interiors;
+    no unqualified pseudoinverse or global-optimum claim.
+  - Calibrate against explicit likelihood, standardized parameter and moment
+    budgets, including aggregate block RMS and worst-component changes.
+    Require qualified same-domain references; otherwise accuracy is unresolved.
+  - Freeze candidate controls/targets and validate on held-out model families,
+    units and ranks. The small two-model pilot is not default validation.
 
 ### Score/inference adapter follow-ups
 

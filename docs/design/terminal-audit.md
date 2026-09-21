@@ -193,19 +193,14 @@ struct TerminalAuditOptions {
 - `stationarity_mode` selects the shape of the stationarity test.
 
   - **Absolute (v1 default)**: `‖Pg‖_∞ ≤ absolute_tol`. The default
-    `absolute_tol = 1e-3` matches lavaan's `optim.dx.tol` default (lavaan's
-    `check.gradient = TRUE` path applies the same KKT-aware projected-
-    gradient check at that tolerance). v1 ships Absolute so that magmaan's
-    convergence verdict is on the same yardstick as lavaan's, which makes
-    cross-package comparisons honest without an internal calibration study
-    we don't yet have. NOTE: since the `fmin = ½·F` unification (see
-    [numerical-conventions.md](numerical-conventions.md)) the audit sees a
-    gradient on the `½F` (discrepancy-half) scale for EVERY estimator,
-    matching lavaan (which minimises `½F` for ML too). Before that change ML/NT
-    presented the audit a full-`F` gradient — 2× lavaan's — so `1e-3` was
-    effectively 2× too tight for ML; it is now genuinely apples-to-apples. The
-    `absolute_tol` value itself is unchanged and still a defensive cross-package
-    match, not a calibrated choice.
+    `absolute_tol = 1e-3` was motivated by lavaan's `optim.dx.tol`.
+    This is a historical choice, not an equivalence claim: optimizer
+    coordinates, parameter scaling, bound treatment, and which termination
+    paths receive the check can differ. In particular, the inspected lavaan
+    0.7-2 implementation excludes selected exact-bound coordinates rather
+    than implementing our full covariance-cone audit. The common half-
+    discrepancy objective scale is necessary but insufficient for numerical
+    comparability. The current full-model L2 criterion is different again.
   - **Relative**: `‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|)`. The shape an
     earlier revision shipped as the default. The argument for Relative is
     that `|f|` spans many orders of magnitude across the SEM corpus, so an
@@ -539,6 +534,67 @@ stricter objective stopping recovered eight failed stationarity checks in a
 polishing, not evidence of finding a different likelihood maximum. Keep the
 current residual and threshold visible pending calibration; do not silently
 relax acceptance or replace the audit by a solver's success flag.
+
+### Accuracy interpretation and boundary follow-up (2026-09-21)
+
+A normal-cone stationarity residual is naturally a **backward error**: at a
+feasible point in a closed convex set, it measures the smallest linear
+perturbation of the objective gradient that makes that point stationary,
+in the chosen metric. It is not a bound on parameter error. In a flat
+quadratic, arbitrarily small gradients coexist with appreciable parameter
+error. Accordingly, call the current result approximate first-order
+stationarity at a declared tolerance, not an accuracy or minimum certificate.
+
+A candidate revised assessment should distinguish:
+
+- normalized feasibility, gradient/normal residual, projection reliability,
+  and primal/dual complementarity;
+- a dimensionless model metric with an explicit reference-scale convention;
+- local accuracy diagnostics and conditioning, when available;
+- optimizer termination and any separate recovery policy.
+
+Near a PSD boundary, selecting an approximate nullspace by an eigenvalue
+cutoff implicitly approximates complementarity. It does not bound
+`trace(Z P)` independently of the dual multiplier magnitude. Record and
+calibrate complementarity as well as primal/dual feasibility. In the scalar
+variance problem `f(t) = (log(1+t) + .5/(1+t))/2`, `t >= 0`, the optimum is
+zero; at `t=1e-10` its strict interior gradient is about `.25`. Thus the
+exact normal residual can remain large while the parameter error vanishes.
+A metric projected-gradient mapping is a candidate that avoids this hard
+active-set discontinuity for convex restrictions, but requires a declared
+step scale and an accurately solved joint projection. It is not yet an
+implemented replacement, and nonlinear constraints need separate treatment.
+
+In identifiable regular reduced coordinates, a positive-definite Hessian
+`H` yields a local predicted step `-H^{-1}g` and predicted objective gap
+`g' H^{-1} g / 2`. With our per-observation ML objective,
+`N * g' H^{-1} g` approximates both squared displacement in information
+units and the remaining twice-log-likelihood improvement. This is a local
+approximation, not a global error bound. Inspect the standardized step as
+well as the decrement; do not erase unidentified directions with an
+unqualified pseudoinverse. Boundary and arbitrary-discrepancy cases do not
+inherit the regular ML statistical interpretation.
+
+For calibration, compare likelihood gaps, maximum standardized parameter
+and moment changes, and block RMS/Frobenius changes against qualified
+same-domain references. The maximum protects against dilution of a single
+unstable component; aggregate block errors describe overall movement.
+Illustrative budgets `2N*delta_f <= 1e-3` and standardized changes below
+`1e-4` are exploratory reporting targets, not approved defaults. Reference
+fits require tighter polishing and independent optimizer agreement; if
+these fail, label numerical accuracy unresolved. Self-comparison to the
+lowest objective returned by a failing portfolio is not accuracy evidence.
+Freeze targets and controls before held-out model/unit/rank validation.
+
+Sources: [Dennis and Schnabel, chapter 7](https://doi.org/10.1137/1.9781611971200.ch7),
+[Boyd and Vandenberghe, section 9.5](https://web.stanford.edu/~boyd/cvxbook/),
+[Bates and Watts (1981)](https://doi.org/10.2307/1268035), and
+[Ceres' projected-gradient stopping rule](https://ceres-solver.readthedocs.io/latest/nnls_solving.html).
+The inspected current lme4 `checkConv` additionally takes componentwise
+minima of raw and scaled gradients and skips remaining gradient checks on
+singular fits; its procedure is not a drop-in PSD-boundary audit.
+
+### Remaining historical implementation items
 
 5. **`fit$converged` boolean semantics:** unchanged.
 6. **`snlls_profile_fallback` plumbing:** the flag exists on
