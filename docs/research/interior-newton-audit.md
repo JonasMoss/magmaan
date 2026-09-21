@@ -663,3 +663,77 @@ versus std.lv identification, fixed values, user hints, equality constraints and
 multi-group structure. Keep the existing compatibility start policy explicit;
 do not silently replace it with this model-specific experiment. Test any general
 policy across the broader panel, with fresh validation after development.
+
+## Matched starts, std.lv and sample-based optimizer scaling (2026-09-22)
+
+The earlier CFA parameterization experiment suggested a std.lv advantage but
+used each chart's own start heuristic. A new local check separates those effects:
+five covariance-only models, N=50/200/1000, two fresh replications and three
+measurement scales, 90 paired cases, six arms (540 fits). Models include p=6 and
+p=24 CFA, p=12 weak-marker and unequal-indicator-scale CFA, and p=12 feedback.
+Every arm retains the conservative L-BFGS controls and diagnostic backtracking.
+
+Both native FABIN3 starting solutions are transported to both parameterizations.
+Transport changes Lambda, Beta and Psi consistently; std.lv fixes disturbance
+variances, not endogenous total variances. Starting objective agreement and
+roundtrip parameter recovery are checked. All final audits are evaluated after
+transport to the common marker parameterization, and terminal objectives agree
+under transport. This avoids conflating chart-dependent observed Hessians away
+from stationarity with achieved accuracy. The common positive interior is the
+comparison domain; ambient search domains are not identical because marker
+allows negative disturbance variances. This is not a common-PSD-domain study.
+
+The third optimizer representation keeps marker identification and uses a
+frozen diagonal scale derived solely from the current sample. Observed scales
+are sample SDs; latent scales are the SDs of their marker indicators. These
+induce units for loadings, covariances and regression coefficients. In theta=D*z,
+the objective is unchanged and gradients transform by D. Unlike the previous
+feedback isolation, this needs no privileged unscaled dataset.
+
+| Originating starting solution | Optimizer representation | Pass/eligible | Median evaluations | Total evaluations |
+|---|---|---:|---:|---:|
+| Marker FABIN3 | Marker | 83/87 | 145.5 | 28846 |
+| Marker FABIN3 | std.lv | 84/87 | 136.5 | 15844 |
+| Marker FABIN3 | Marker, sample-based scaling | 87/87 | 55.5 | 10019 |
+| std.lv FABIN3 | Marker | 86/87 | 142 | 14731 |
+| std.lv FABIN3 | std.lv | 87/87 | 114.5 | 9740 |
+| std.lv FABIN3 | Marker, sample-based scaling | 87/87 | 30 | 4253 |
+
+Each arm has 90 attempts. Three common noninterior feedback endpoints are
+excluded from the accuracy interpretation, not counted as successes. All
+attempts count toward evaluation costs. Among fits passing the common audit,
+maximum objective spread within a dataset/unit case is 2.17e-7 in per-observation
+half-discrepancy. This is not a claim of global optimality or identical parameters.
+
+The native-std.lv versus transported-std.lv-start comparison isolates coordinates:
+keeping the same starting model, marker plus sample scaling uses 56% fewer total
+evaluations than unscaled std.lv (4253 versus 9740). Start quality also matters:
+with marker plus sample scaling, transporting the std.lv start reduces total
+evaluations from 10019 to 4253. Hence neither identification nor starts alone
+explains all the earlier performance differences.
+
+Model differences remain useful. With std.lv-originating starts, weak-marker CFA
+uses fewer total evaluations in std.lv than scaled marker (1525 versus 1690),
+even though the scaled-marker median is lower (89.5 versus 109.5). Thus pooled
+results do not establish dominance on every model/cost measure. Feedback passes
+12/15 eligible cases in either unscaled chart when initialized from marker
+starts, but 15/15 with std.lv-originating starts or scaled marker coordinates.
+On unequal-scale CFA, transporting starts alone still leaves one marker accuracy
+failure; coordinate scaling removes it in this panel.
+
+Working candidate: retain user-facing marker identification, obtain a stronger
+scale-aware measurement start via std.lv FABIN3 and transport, then optimize in
+sample-based parameter coordinates. This is promising development evidence,
+not an adopted default or a general implementation. Fixed loadings, user hints,
+means, equality constraints, multi-group identification and boundary domains
+require explicit handling; arbitrary switching to std.lv is not equivalent for
+all those models. Compare a complete Guttman CFA start under the same coordinate
+policy next, rather than conflating start and optimizer choices. Validate any
+selected policy on fresh cases and stock/backtracking-repaired production code.
+No core defaults or manuscript results changed.
+
+Raw output, design and checks: `tests/checks/interior_newton/README.md`, local
+`results/chart-starts-2026-09-22/`. The 540-row paired design, initial roundtrip
+and objective identities, terminal objective transport, and existing exact
+quadratic/scaling checks passed. Evaluation counts exclude preparation and
+back-conversion time; do not present them as end-to-end speed ratios.

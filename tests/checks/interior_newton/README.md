@@ -241,3 +241,43 @@ which starts differ, accuracy and objective agreement with the unit-1 results.
 The only material native/mapped differences are four latent variance starts.
 The 24 native control fits exactly reproduce the preceding advanced run.
 First completed run: `results/feedback-starts-2026-09-21/`.
+
+## Matched marker/std.lv starts and data-derived coordinates
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/chart-starts-new 60 charts
+python3 tests/checks/interior_newton/summarize_charts.py tests/checks/interior_newton/results/chart-starts-new
+```
+
+Five covariance-only models: one-factor p=6, three-factor p=24, three-factor
+p=12 with weak markers (.3 versus other loadings .8), three-factor p=12 with
+indicator multipliers spanning .1–10, and the four-factor p=12 feedback design.
+N=50/200/1000, two fresh replications, global units .1/1/10 yield 90 paired cases.
+Each uses six arms: two originating starts (native marker FABIN3 and native
+std.lv FABIN3), transported to marker and std.lv identification; each marker
+arm is also run with frozen data-derived diagonal parameter scaling. Thus 540
+fits, all with ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000, automatic memory,
+default internal gradient tolerance and diagnostic mred=60.
+
+Latent rescaling transforms Lambda, Beta and Psi consistently. Unit disturbance
+variances identify std.lv; nonzero marker loadings identify marker coordinates.
+Initial objective equality and parameter roundtrips are checked. All terminal
+objectives are checked after transport; all acceptance decisions use the SAME
+marker-coordinate observed Hessian and .01 audit, not each chart's potentially
+different far-from-stationary Hessian. Native chart distances are also recorded.
+These models have no means, fixed nonmarker loadings or equality constraints.
+The parameterizations agree on the regular positive-disturbance region; marker
+can search negative disturbance variances that std.lv cannot represent. This
+experiment does not impose a common PSD search domain.
+
+For coordinate scaling, observed scales are sample standard deviations and each
+latent scale is its marker's sample SD. Parameter scales are s_i/t_j for Lambda,
+s_i*s_j for Theta, t_i*t_j for Psi and t_i/t_j for Beta. Optimize theta=D*z and
+transform the gradient by D. This uses only the current sample; no known global
+unit multiplier, population parameter or reference optimum enters the scaling.
+It is an advisory implementation limited to these unconstrained models.
+
+First run: `results/chart-starts-2026-09-22/`. All exclusions and failures remain
+in raw output. The summary reports both evaluations summed over all attempts
+and medians; claims about speed are evaluation-count comparisons, not calibrated
+end-to-end timings. Construction/conversion costs are not included in fit_ms.

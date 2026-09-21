@@ -146,6 +146,16 @@ semantics · **XL** statistical design/research track before implementation.
   compatibility starts explicit. The experiment is model-specific and uses
   diagnostic backtracking, not a production fix. Validate on the full panel
   and fresh cases before selecting defaults; do not simply tighten tolerances.
+  Matched marker/std.lv starts plus sample-derived coordinate scaling pilot
+  complete (540 fits, five models, 90 cases). All acceptance uses the common
+  marker-coordinate audit. Native marker passes 83/87 eligible; native std.lv
+  87/87; transported std.lv starts with scaled marker coordinates also 87/87,
+  with total evaluations 4253 versus 9740 for native std.lv. Weak-marker CFA
+  remains a counterexample to uniform cost dominance (std.lv totals smaller).
+  The approach uses current-sample SDs, not known unit multipliers. Promising
+  candidate only: add full Guttman CFA starts under the same metric, handle
+  fixed values/hints/equalities/means/groups, and validate fresh cases before
+  defaults. Ambient chart domains differ outside positive disturbance variances.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal
