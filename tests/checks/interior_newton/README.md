@@ -68,3 +68,41 @@ The note distinguishes retrieved versions from unavailable published PDFs.
 The .01 candidate is an accuracy budget relative to sampling uncertainty,
 not a cutoff calibrated from this experiment's pass rate. Its interpretation
 as actual remaining error still depends on the local quadratic approximation.
+
+## Refined-reference smoke
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/refinement-new 60 refine
+python3 tests/checks/interior_newton/summarize_refinement.py tests/checks/interior_newton/results/refinement-new
+```
+
+This mode evaluates 90 natural endpoints: seven models, N=100/1000, rep=1,
+three measurement units, legacy/current and candidate L-BFGS settings, plus
+cfa12 N=100000 rep=3 in all three units under both settings. It also evaluates
+56 controlled local probes: seven models at N=1000 and unit scale 1, two
+directions (a fixed sine vector and the smallest-information-eigenvalue
+vector), and distances .003/.01/.03/.1 from a refined anchor. Directions are
+normalized in the anchor information metric; their choice is exploratory.
+
+References use analytic-Hessian Newton refinement with backtracking and
+recomputed objective/gradient/curvature. They must remain eligible interior
+points and reach distance <=1e-8 within 20 accepted steps. Trials must reduce
+distance and may increase per-observation objective by no more than the
+explicit roundoff allowance 64*machine_epsilon*(1+abs(f)). This handles
+objective cancellation near the minimum; it is not evidence of ascent at
+statistically meaningful scale. Unqualified references are retained, not
+silently dropped. The reference is a much more accurate numerical solution,
+not an exact optimum or independent derivative implementation.
+
+Measured displacement and Newton prediction use the same **initial-point**
+information metric. The vector-error column also checks direction, not merely
+length. Distance ratios are suppressed unless initial d exceeds 100 times
+max(1e-8, reference d). Objective-gain ratios require predicted twice-loglik
+improvement to exceed 100 times the declared floating-point subtraction floor.
+Probe refinements additionally report agreement with their originating anchor.
+Exact quadratic checks exercise the refinement and Newton correction.
+
+First completed run: `results/refinement-smoke-2026-09-21-v2/`; `v2` adds
+quadratic checks and anchor-agreement telemetry to the initial smoke. Both
+runs are retained. This checks the local error prediction; it does not select
+an accuracy budget or establish uniform guarantees, coverage or globality.

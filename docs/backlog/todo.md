@@ -112,7 +112,12 @@ semantics · **XL** statistical design/research track before implementation.
   candidates independently of raw status.
   Deferred PSD work: dimensionless primal/dual/complementarity assessment,
   active-eigenvalue sensitivity, and metric projected-gradient alternatives.
-  Lowest-priority practical follow-up: qualify same-domain reference fits,
+  A bounded refined-reference smoke is now complete: 84 eligible natural
+  endpoints and 56 local probes, all with reference d<=1e-8. At nominal .01,
+  measured/predicted lengths agree within .42%, with tiny hard-threshold
+  disagreements documented in the study note. This is not a uniform error
+  certificate; see `tests/checks/interior_newton/README.md` for reproduction.
+  Remaining lowest-priority practical follow-up: broaden same-domain references,
   compare standardized parameter/moment changes, and freeze targets before
   held-out model/unit/rank validation. Neither the existing two-model pilot
   nor this prioritization selects a replacement default cutoff.

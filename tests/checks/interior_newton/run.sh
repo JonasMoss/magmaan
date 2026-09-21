@@ -26,4 +26,6 @@ clang++ -std=c++23 -O3 -DNDEBUG -march=native -fno-exceptions -fno-rtti \
 git rev-parse HEAD > "$run_dir/source-parent.txt"
 sha256sum tests/checks/interior_newton/check.cpp tests/checks/interior_newton/run.sh \
  build/opt/libmagmaan.a build/opt/_deps/nlopt-build/libnlopt.a > "$run_dir/hashes.txt"
-"$run_dir/check" "$run_dir/raw.csv" > "$run_dir/stdout.log" 2> "$run_dir/progress.log"
+mode_args=()
+if [[ "${3:-}" == refine ]]; then mode_args+=(refine); elif [[ -n "${3:-}" ]]; then exit 2; fi
+"$run_dir/check" "$run_dir/raw.csv" "${mode_args[@]}" > "$run_dir/stdout.log" 2> "$run_dir/progress.log"

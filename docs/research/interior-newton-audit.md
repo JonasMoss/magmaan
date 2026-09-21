@@ -318,3 +318,77 @@ R summary execution, shell syntax and whitespace checks passed. The repository-
 wide layering checker reported existing references in unchanged paper trees
 (including the ignored pinned checkout); no finding named this new harness.
 Those unrelated paper paths were not changed by this investigation.
+
+## Refined-reference smoke (2026-09-21)
+
+At the author's request, performed a bounded first check of predicted versus
+measured numerical error; broader practical calibration remains deferred.
+Reproduction and complete design are in the advisory check's README, using
+its `refine` mode and `summarize_refinement.py`. Results are local to
+`tests/checks/interior_newton/results/refinement-smoke-2026-09-21-v2/`.
+No production optimizer/audit default or manuscript success rate changed.
+
+The check uses 90 natural L-BFGS endpoints (45 per control profile), across
+seven settings, N=100/1000, three measurement units and one replication,
+plus the previously problematic cfa12 N=100000 rep=3 fixture. Six endpoints
+are improper weak8 N=100 fits, three units under each profile. All 84 eligible
+endpoints refined to d <=1e-8 in at most two accepted Newton steps. References
+use recomputed analytic curvature and gradient and safeguarded Newton steps;
+they are numerical reference solutions, not exact/global optima. The fitting
+stage uses the diagnostic extended-backtracking build, not stock NLopt.
+
+Most natural endpoints were already very accurate. Distance ratios are
+therefore reported for 25 legacy and 14 candidate endpoints with enough
+separation from the reference tolerance; the others are not used to claim
+relative prediction accuracy. The actual/predicted distance ranges were
+0.999925–1.001817 for legacy and indistinguishable from 1 at six decimals
+for the candidate profile. There were no .003/.01/.03 pass/fail disagreements
+among the qualified natural endpoints. Their scarcity near the thresholds
+motivated deliberately placed local probes.
+
+There are 56 probes around the seven N=1000, unit-scale-1 reference fits:
+two directions and four nominal information-distance targets. Each was
+independently refined, and all returned within 5.9e-9 information-distance
+of the originating anchor. Direction selection and the single replication
+are exploratory, not a representative model or direction sample.
+
+| Nominal probe distance | Probes | Measured / predicted distance | Largest relative vector error |
+|---|---:|---:|---:|
+| .003 | 14 | .998749–1.000061 | .181% |
+| .01 | 14 | .995880–1.000203 | .603% |
+| .03 | 14 | .988064–1.000608 | 1.82% |
+| .1 | 14 | .965600–1.002030 | 6.13% |
+
+Both distances use observed information at the initial probe. Vector error
+is the information norm of (measured correction minus Newton correction),
+divided by the norm of the measured correction. At the proposed .01 scale,
+the length prediction is within .42% in these probes and the vector prediction
+within .61%. Predicted twice-loglik improvement agrees to within .28% there.
+Natural-endpoint likelihood-gain ratios are assessable in only 12 legacy and
+two candidate cases; subtracting nearly equal objectives is unreliable below
+the declared floating-point floor.
+
+This is still an approximation: five probes centred on the .01 target fall
+on different sides of the exact .01 pass boundary under predicted and measured
+distance. Four are conservatively rejected by prediction; one predicts a pass
+while measured distance exceeds .01 by 1.8e-6 SE units. Corresponding effects
+occur at .003/.03. Reporting continuous distance matters; the results do not
+turn a hard cutoff into a mathematical certificate.
+
+The previous conspicuous legacy endpoint has predicted d=.254176 and measured
+distance .254638 after refinement, a .182% length discrepancy. Predicted
+remaining twice-loglik improvement is .0646054; measured improvement is
+.0646836. This supports the diagnostic's substantive warning for that endpoint.
+
+Interpretation: the local Newton approximation is encouraging at .01 in this
+small interior check. It supports trying the accuracy budget, not claiming
+that .01 is uniquely optimal or validating finite-sample RMSE/coverage bounds.
+Remaining questions are heterogeneous/weakly identified interiors, additional
+replications and directions, and independently qualified references. PSD
+boundaries remain outside this experiment.
+
+Validation: exact quadratic/refinement checks passed; all 146 output rows have
+unique design keys, the prescribed 90 natural endpoints and 56 probes, and
+references/precision flags are preserved. Source/library hashes and executed
+source snapshots accompany the local results. No Monte Carlo error or timing
+precision claim is made from this smoke.
