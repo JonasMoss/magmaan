@@ -594,6 +594,26 @@ The inspected current lme4 `checkConv` additionally takes componentwise
 minima of raw and scaled gradients and skips remaining gradient checks on
 singular fits; its procedure is not a drop-in PSD-boundary audit.
 
+### Regular-interior candidate profile (2026-09-21)
+
+The advisory C++ prototype in `tests/checks/interior_newton/` uses the
+canonical observed information and original ML gradient after linear-equality
+reduction. Proposed accuracy budget: Newton distance
+`d=sqrt(N*g' H^{-1}g) <= .01`, equivalently total-negative-log-likelihood
+EDM <=5e-5. This is a local accuracy approximation, not a new authoritative
+verdict. Ineligible boundary/improper points and unreliable curvature remain
+separate outcomes. The prototype's numerical conditioning/solve guards are
+provisional and do not establish identification.
+
+The paired study covers seven Gaussian model/settings, three sample sizes,
+three repetitions, three measurement units, and nine L-BFGS control profiles,
+with stock and extended backtracking (3,402 fits). A candidate control profile
+is `ftol_rel=1e-12`, `xtol_rel=1e-10`, internal `tolg` default and automatic
+memory. The wrapper's current `gtol` names the step test; its `history` is not
+forwarded. Stock line-search domain failure is a separate unresolved issue.
+No production defaults changed. Full findings and limits are in
+[the study note](../research/interior-newton-audit.md).
+
 ### Remaining historical implementation items
 
 5. **`fit$converged` boolean semantics:** unchanged.

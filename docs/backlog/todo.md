@@ -62,6 +62,20 @@ semantics · **XL** statistical design/research track before implementation.
   information-standardized parameter displacement. Retain independent
   feasibility/objective checks and report this diagnostic unavailable when
   interior/curvature conditions fail. See `docs/design/terminal-audit.md`.
+  Advisory prototype and 3,402-fit paired L-BFGS control study are complete:
+  `tests/checks/interior_newton/`; findings in
+  `docs/research/interior-newton-audit.md`. Candidate audit budget is
+  `d=sqrt(N*g' H^{-1}g) <= .01` (total EDM <=5e-5), with .003/.03
+  sensitivity. Candidate backend stopping is ftol_rel=1e-12 and
+  xtol_rel=1e-10, retaining internal tolg=1e-8 and automatic memory. These
+  are recommendations, not deployed defaults. Extended-backtracking runs
+  passed all 180 eligible interior cases at .003; stock backtracking still
+  failed on small measurement units. One old-audit pass had d=.254 and
+  stopped on xtol; reducing ftol alone did not help.
+  Remaining immediate jobs: expose an opt-in interior diagnostic in core,
+  distinguish step tolerance from NLopt's separate tolg, and make automatic
+  versus explicit vector storage visible (`history` is currently ignored by
+  this adapter). Preserve terminal candidates independently of raw status.
   Deferred PSD work: dimensionless primal/dual/complementarity assessment,
   active-eigenvalue sensitivity, and metric projected-gradient alternatives.
   Lowest-priority practical follow-up: qualify same-domain reference fits,
