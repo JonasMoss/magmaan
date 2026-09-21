@@ -481,46 +481,65 @@ fixed by tolerance tuning.
    may emerge from the "Tolerance calibration" study below if ML / GLS /
    ULS / DWLS / FIML show systematically different gradient noise floors.
 
-## Tolerance calibration (open follow-up)
+## Tolerance calibration (high-priority follow-up)
 
-v1 ships Absolute mode at `absolute_tol = 1e-3` because that matches
-lavaan's `check.gradient` default and makes cross-package convergence
-comparisons honest without a magmaan-specific calibration study. The
-default is therefore defensive, not calibrated — the real question is:
-*what stationarity threshold reliably predicts that downstream inference
-gives the same answer on this iterate that it would at the geometric
-optimum?* That question doesn't have a model-independent answer, and it's
-the same question whether the threshold is absolute or relative. Until a
-study answers it, matching lavaan is the conservative cross-package choice.
+The full-model model-Frobenius dual L2 cutoff of `1e-3` is a convention,
+not a calibrated accuracy guarantee. The older L1 infinity-norm default was
+motivated by a lavaan gradient check; reusing that number for the L2 audit
+neither reproduces lavaan's criterion nor establishes comparable accuracy
+across models. In particular, model-Frobenius geometry removes dependence on
+the optimizer's Cholesky coordinates but does not remove measurement units,
+objective scaling, dimension, or curvature from the numerical problem.
 
-Sketch of a study that would pin it down:
+A scalar example is sufficient: for the half Gaussian discrepancy
+`F(v) = (log(v/s) + s/v - 1)/2`, changing units by `y_new = c*y` sends
+`v_new = c^2*v` and the gradient to `g_new = g/c^2`, while leaving the
+statistical fit and discrepancy unchanged. A fixed absolute gradient cutoff
+can therefore change its verdict solely because the measurement unit changes.
+Feasibility tolerances and active-eigenvalue decisions need analogous review.
 
-1. **Salvage-candidate gallery.** Across our corpora (geiser, kline, brown,
-   mplus, little, newsom, paper, textbook) under each estimator, identify
-   fits where (a) the optimizer's primary return is a soft failure AND
-   (b) at least one other backend (or lavaan) converges cleanly. That's the
-   population where salvage actually has a chance to matter.
-2. **Record both `θ_failed` and `θ_true`.** Per candidate, capture the
-   recomputed `‖Pg‖∞`, the function gap, `‖θ_f − θ_t‖`, SE deltas, χ² /
-   RMSEA / CFI deltas.
-3. **Threshold = the largest `T`** such that every candidate with
-   either `‖Pg‖∞ ≤ T` (Absolute mode) or `‖Pg‖∞ ≤ T·(1+|f|)` (Relative
-   mode) has inferential deltas under (say) 1% relative. The mode itself
-   is part of what the study should decide.
-4. **Stratify by estimator.** Distinct evaluators carry distinct
-   cancellation floors (the Newsom GLS investigation already showed GLS's
-   floor is materially worse than ML's). The right answer may be a vector
-   indexed by estimator.
-5. **Distribution-aware reporting.** A density plot of "true-optimum
-   `‖Pg‖∞`" per estimator across the corpus gives the natural calibration
-   band; the threshold should sit a comfortable margin above the upper
-   whisker.
+The useful optimization practice is to separate feasibility, stationarity,
+and solver termination and declare their scales. For example,
+[Ipopt's termination documentation](https://coin-or.github.io/Ipopt/OPTIONS.html#OPT_Termination)
+distinguishes scaled overall optimality from separate unscaled feasibility,
+dual, and complementarity tolerances. This is guidance on the structure of an
+audit, not a reason to borrow Ipopt's numerical defaults for a different norm.
+[lme4's convergence guidance](https://lme4.github.io/lme4/reference/convergence.html)
+recommends checking tighter tolerances, scaling, derivatives, restarts, and
+agreement across optimizers; it also discusses the limitations of Hessian-based
+gradient scaling. No universal scalar threshold follows from either source.
 
-The infrastructure for step 1-2 is what the corpus-survey and
-convergence-sim scripts already do; adding the audit fields to their
-output yields the per-candidate data essentially for free. The study
-becomes a small Quarto report that re-runs as the corpus grows — a living
-calibration rather than a one-shot.
+Calibration work should proceed as follows:
+
+1. Keep the original full-model domain and objective normalization explicit.
+   Record continuous stationarity residuals, feasibility violations, projection
+   status, and solver status. Unchecked projection is not failure or success.
+2. Test equivalent parameter representations and changes of units on fixed
+   fitted points, separately from refitting. Evaluate a declared dimensionless
+   scaling convention. An information/curvature metric is a candidate on
+   regular identifiable interiors, not an automatic solution at singular or
+   PSD-boundary points.
+3. Compare candidate residuals against high-accuracy reference fits from
+   tightened optimization and independent backends. These are reference fits,
+   not known global optima. Inspect objective gaps, standardized parameter
+   changes, and implied means/covariances; tiny objective changes alone can
+   hide parameter changes in flat directions.
+4. Report sensitivity across several tolerances without changing the
+   prespecified primary cutoff after seeing which method benefits. Distinguish
+   solver return, approximate stationarity at the stated accuracy, admissibility,
+   and downstream stability. First-order stationarity does not prove a minimum.
+5. Calibrate a practical point-estimation accuracy target on one collection
+   and validate on held-out models, units, sample sizes, and boundary ranks.
+   Extend to inferential stability only in a separate inference study; the
+   current fitting-only experiments do not validate SEs or tests.
+
+The September 2026 SLSQP control diagnostic illustrates why this matters:
+stricter objective stopping recovered eight failed stationarity checks in a
+30-sample subset, with objective changes at most `1.6e-9`. That is numerical
+polishing, not evidence of finding a different likelihood maximum. Keep the
+current residual and threshold visible pending calibration; do not silently
+relax acceptance or replace the audit by a solver's success flag.
+
 5. **`fit$converged` boolean semantics:** unchanged.
 6. **`snlls_profile_fallback` plumbing:** the flag exists on
    `FitDiagnostics` and surfaces to R, but the v1 SNLLS expand site leaves

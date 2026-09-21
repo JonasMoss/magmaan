@@ -35,6 +35,26 @@ semantics · **XL** statistical design/research track before implementation.
   retries on optimizer failure/non-clean status, not every failed model-level
   stationarity verdict. Do not substitute PSD fitting for ordinary optimization
   when diagnosing this numerical failure: that changes the feasible set.
+- **High priority / M — calibrate SLSQP stopping against the independent
+  stationarity audit.** A 30-sample repeated-measures diagnostic returned fits
+  in every case, but eight missed the audit with default `ftol=1e-10`.
+  Changing only `ftol` to `1e-14` recovered those eight; changing only the step
+  tolerance did not. Validate across model scales and ordinary/PSD problems
+  before adopting a blanket tolerance change. Keep audit thresholds fixed,
+  retain nonstationary returns as failures, and measure the extra fitting cost.
+  The NLopt adapter currently passes `OptimOptions::gtol` to `xtol_rel`, not
+  to a gradient stopping test; make this distinction explicit in controls and
+  documentation when hardening defaults.
+- **High priority / M — calibrate the full-model audit, not just solver
+  stopping.** The model-Frobenius dual L2 cutoff `1e-3` is uncalibrated and is
+  not equivalent to lavaan's coordinatewise gradient criterion. Test changes
+  of measurement units, parameter basis, objective normalization, model size,
+  and covariance-boundary rank. Retain the declared domain and independent
+  feasibility/objective checks. Compare residual distributions and tolerance
+  sensitivity with tighter refits, independent optimizers, objective gaps,
+  and standardized changes in parameters and implied moments. Use held-out
+  cases to choose a numerical-accuracy target; do not choose the threshold
+  retrospectively to favor a method. See `docs/design/terminal-audit.md`.
 
 ### Score/inference adapter follow-ups
 
