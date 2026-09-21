@@ -15,6 +15,26 @@ semantics · **XL** statistical design/research track before implementation.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
+- **High priority / M — expose and clarify optimizer controls across estimator
+  paths.** Author priority (2026-09-21): start with NLopt L-BFGS and SLSQP,
+  then PORT (scalar and residual interfaces); include remaining backends in
+  the same pass where the mappings are straightforward, and inventory any
+  deferred mappings explicitly. Cover both direct optimizer callers and
+  estimator wrappers, including profiled/inner solves and fallback paths.
+  Name objective-change, step-change and gradient tolerances distinctly;
+  distinguish absolute/relative criteria and iteration/evaluation budgets.
+  Document backend defaults, disabled/default sentinel values, the logic
+  combining stopping conditions, and any unexposed backend limitations.
+  Resolve the NLopt `gtol` -> `xtol_rel` misnomer with explicit compatibility
+  handling; expose L-BFGS `tolg` separately and distinguish automatic vector
+  storage from explicit memory (`history` is currently ignored). Inventory
+  PORT, PORT-NLS, remaining NLopt algorithms, Ceres and IPOPT without assuming
+  that identically named controls have identical meanings. Reject unsupported
+  options instead of silently ignoring them. Return effective controls and
+  the backend stopping reason, separately from the independent audit verdict.
+  Check forwarding through the C++ and thin R interfaces with focused tests.
+  Clarifying/exposing controls does not itself authorize changing defaults;
+  retain backend-specific settings rather than inventing a universal `gtol`.
 - **High priority / M — make domain recovery robust to parameter scale.**
   Reliable defaults are required even if PSD fitting becomes the default:
   ordinary fitting and the ordinary-first/PSD-recovery policy must remain
@@ -72,6 +92,22 @@ semantics · **XL** statistical design/research track before implementation.
   passed all 180 eligible interior cases at .003; stock backtracking still
   failed on small measurement units. One old-audit pass had d=.254 and
   stopped on xtol; reducing ftol alone did not help.
+  **Tolerance rationale still to settle:** .01 is a proposed numerical-error
+  budget (one hundredth of an information-based SE in any linear contrast
+  under the local quadratic approximation), not a literature-mandated cutoff
+  or a value estimated by counting passes. Choose acceptable downstream
+  accuracy first, then assess whether stopping controls deliver it at a
+  reasonable cost. Report continuous d and sensitivity at .003/.01/.03;
+  distinguish validation of the Newton approximation from the choice of an
+  acceptable error budget. Immediate evaluation remains analytic quadratic
+  identities, objective/sample-size normalization, coordinate invariance and
+  curvature eligibility. Later, at the already agreed lowest priority,
+  compare predicted displacement and likelihood improvement with accurately
+  refined same-domain solutions, and check whether substantive conclusions
+  change across budgets. A high pass rate alone validates neither the
+  approximation nor the cutoff. For non-ML discrepancies, establish the
+  estimator's objective and covariance scaling before claiming SE units;
+  exposing its optimizer controls does not transfer the ML audit calibration.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   distinguish step tolerance from NLopt's separate tolg, and make automatic
   versus explicit vector storage visible (`history` is currently ignored by
