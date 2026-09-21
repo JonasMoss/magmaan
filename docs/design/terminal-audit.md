@@ -609,8 +609,11 @@ The paired study covers seven Gaussian model/settings, three sample sizes,
 three repetitions, three measurement units, and nine L-BFGS control profiles,
 with stock and extended backtracking (3,402 fits). A candidate control profile
 is `ftol_rel=1e-12`, `xtol_rel=1e-10`, internal `tolg` default and automatic
-memory. The wrapper's current `gtol` names the step test; its `history` is not
-forwarded. Stock line-search domain failure is a separate unresolved issue.
+memory. Legacy `gtol` names the step test and legacy `history` is not
+forwarded to NLopt. Explicit `OptimOptions::nlopt` controls now expose
+`xtol_rel`, `tolg` and `vector_storage` independently; see
+[optimizer controls](../reference/optimizer-controls.md). Stock line-search
+domain failure is a separate unresolved issue.
 No production defaults changed. Full findings and limits are in
 [the study note](../research/interior-newton-audit.md).
 

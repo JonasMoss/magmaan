@@ -25,18 +25,10 @@ enum class NloptAlgorithm {
   Lbfgs,   // NLOPT_LD_LBFGS             — NLopt's own L-BFGS
 };
 
-// NLopt's tuning maps onto the shared `OptimOptions` knobs, so callers can
-// swap optimizer backends without rewriting their option blocks:
-//
-//   max_iter ↔ nlopt_set_maxeval     (evaluation budget)
-//   ftol     ↔ nlopt_set_ftol_rel    (relative objective-change stop)
-//   gtol     ↔ nlopt_set_xtol_rel    (relative parameter-step stop — NLopt has
-//                                     no gradient-norm criterion; the step
-//                                     tolerance is the closest analogue and
-//                                     the one SLSQP actually honors)
-//
-// `history` is unused here — BOBYQA / TNEWTON have their own internal sizing,
-// VAR2 is full BFGS, and NLopt's L-BFGS uses NLopt's internal default.
+// Explicit controls live in OptimOptions::nlopt; see docs/reference/optimizer-controls.md.
+// Legacy max_iter/ftol/gtol map to maxeval/ftol_rel/xtol_rel respectively.
+// In particular, legacy gtol is NOT the Luksan gradient tolerance (tolg).
+// Legacy history remains unused; nlopt.vector_storage selects memory explicitly.
 
 // NloptOptimizer — wraps an NLopt scalar minimization algorithm selected at
 // construction. The single adapter parameterises over `nlopt_algorithm`

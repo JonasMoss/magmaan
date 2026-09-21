@@ -267,12 +267,19 @@ solve_ipopt(const ConstrainedScalarProblem& prob,
       !add_str_option(nlp, "sb", "yes") ||
       !add_int_option(nlp, "print_level", 0) ||
       !add_int_option(nlp, "max_iter", opts.max_iter) ||
-      !add_int_option(nlp, "limited_memory_max_history", opts.history) ||
-      !add_num_option(nlp, "tol", opts.gtol) ||
-      !add_num_option(nlp, "acceptable_tol", std::max(opts.ftol, opts.gtol))) {
+      !add_int_option(nlp, "limited_memory_max_history", opts.ipopt.limited_memory_max_history.value_or(opts.history)) ||
+      !add_num_option(nlp, "tol", opts.ipopt.tol.value_or(opts.gtol)) ||
+      !add_num_option(nlp, "acceptable_tol", opts.ipopt.acceptable_tol.value_or(std::max(opts.ftol, opts.gtol)))) {
     free_nlp();
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "IpoptOptimizer: failed to set IPOPT options"));
+  }
+
+  if (opts.ipopt.acceptable_iter &&
+      !add_int_option(nlp, "acceptable_iter", *opts.ipopt.acceptable_iter)) {
+    free_nlp();
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "IpoptOptimizer: invalid acceptable_iter"));
   }
 
   std::vector<ipnumber> x(static_cast<std::size_t>(n));

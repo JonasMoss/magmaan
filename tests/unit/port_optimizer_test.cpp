@@ -418,4 +418,23 @@ TEST_CASE("PortNlsOptimizer — non-positive residual count is an error value") 
   CHECK(out.error().kind == FitError::Kind::NumericIssue);
 }
 
+TEST_CASE("PORT explicit controls override legacy function tolerance") {
+  auto f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2 * x;
+    return 10000 + x.squaredNorm();
+  };
+  magmaan::optim::OptimOptions legacy, named;
+  legacy.ftol = 1e-12;
+  named.ftol = .1;
+  named.port.rel_f_tol = legacy.ftol;
+  auto a = PortOptimizer(legacy).minimize(f, Eigen::VectorXd::Ones(3));
+  auto b = PortOptimizer(named).minimize(f, Eigen::VectorXd::Ones(3));
+  REQUIRE(a.has_value());
+  REQUIRE(b.has_value());
+  CHECK(a->f_evals == b->f_evals);
+  CHECK(a->fmin == b->fmin);
+  named.port.x_tol = -1;
+  CHECK_FALSE(PortOptimizer(named).minimize(f, Eigen::VectorXd::Ones(3)).has_value());
+}
+
 #endif  // MAGMAAN_WITH_PORT

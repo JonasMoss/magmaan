@@ -2,6 +2,7 @@
 #include "magmaan/optim/optimizers.hpp"
 
 #include <limits>
+#include <cmath>
 #include <string>
 #include <utility>
 
@@ -244,11 +245,21 @@ nlopt_lbfgs_slsqp_fallback(const ScalarProblem& prob,
                            const Eigen::VectorXd& x0,
                            const Bounds& bounds,
                            OptimOptions opts) {
+  // Invalid stage-specific settings must not be hidden by recovery.
+  if ((opts.nlopt.tolg && (!std::isfinite(*opts.nlopt.tolg) || *opts.nlopt.tolg < 0)) ||
+      (opts.nlopt.vector_storage && *opts.nlopt.vector_storage < 0)) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "L-BFGS fallback: invalid tolg or vector_storage", 0, 0.0});
+  }
   auto first = nlopt_lbfgs(prob, x0, bounds, opts);
   if (first.has_value() && first->status == OptimStatus::Converged) {
     return first;
   }
 
+  // Luksan-only controls apply to the first stage. Common f/x/evaluation
+  // controls continue to apply to both stages of this explicit policy.
+  opts.nlopt.tolg.reset();
+  opts.nlopt.vector_storage.reset();
   auto second = nlopt_slsqp(prob, x0, bounds, opts);
   if (second.has_value()) return second;
   if (first.has_value()) return first;

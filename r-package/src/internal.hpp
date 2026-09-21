@@ -395,6 +395,40 @@ inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structu
   return folded_df;
 }
 
+// Backend sublists are deliberately strict; the outer control list also
+// carries estimator-specific knobs, so it is validated by their owners.
+inline void check_optim_control_names(const Rcpp::List& x,
+                                      std::initializer_list<const char*> allowed) {
+  if (x.size() == 0) return;
+  if (Rf_isNull(x.names())) Rcpp::stop("optimizer controls must be named");
+  Rcpp::CharacterVector names = x.names();
+  for (R_xlen_t i = 0; i < names.size(); ++i) {
+    if (Rcpp::CharacterVector::is_na(names[i]))
+      Rcpp::stop("optimizer controls must be named");
+    const std::string key = Rcpp::as<std::string>(names[i]);
+    bool found = false;
+    for (const auto* candidate : allowed) if (key == candidate) found = true;
+    if (!found) Rcpp::stop("unknown optimizer control: " + key);
+    for (R_xlen_t j = 0; j < i; ++j)
+      if (key == Rcpp::as<std::string>(names[j]))
+        Rcpp::stop("duplicate optimizer control: " + key);
+  }
+}
+
+template <typename T>
+inline void read_optim_control(const Rcpp::List& x, const char* key,
+                               std::optional<T>& value) {
+  if (!x.containsElementNamed(key)) return;
+  Rcpp::NumericVector v = Rcpp::as<Rcpp::NumericVector>(x[key]);
+  if (v.size() != 1 || !std::isfinite(v[0]) || v[0] < 0)
+    Rcpp::stop(std::string(key) + " must be a finite nonnegative scalar");
+  if constexpr (std::is_same_v<T, int>) {
+    if (v[0] != std::floor(v[0]) || v[0] > std::numeric_limits<int>::max())
+      Rcpp::stop(std::string(key) + " must be an integer in range");
+  }
+  value = static_cast<T>(v[0]);
+}
+
 inline magmaan::optim::OptimOptions optim_opts_from(Rcpp::Nullable<Rcpp::List> control) {
   magmaan::optim::OptimOptions o;  // struct defaults
   if (control.isNotNull()) {
@@ -403,6 +437,42 @@ inline magmaan::optim::OptimOptions optim_opts_from(Rcpp::Nullable<Rcpp::List> c
     if (l.containsElementNamed("ftol"))     o.ftol     = Rcpp::as<double>(l["ftol"]);
     if (l.containsElementNamed("gtol"))     o.gtol     = Rcpp::as<double>(l["gtol"]);
     if (l.containsElementNamed("history"))  o.history  = Rcpp::as<int>(l["history"]);
+    if (l.containsElementNamed("nlopt")) {
+      Rcpp::List c = Rcpp::as<Rcpp::List>(l["nlopt"]);
+      check_optim_control_names(c, {"ftol_rel", "ftol_abs", "xtol_rel", "xtol_abs", "max_eval", "tolg", "vector_storage", "constraint_tol"});
+      read_optim_control(c, "ftol_rel", o.nlopt.ftol_rel);
+      read_optim_control(c, "ftol_abs", o.nlopt.ftol_abs);
+      read_optim_control(c, "xtol_rel", o.nlopt.xtol_rel);
+      read_optim_control(c, "xtol_abs", o.nlopt.xtol_abs);
+      read_optim_control(c, "max_eval", o.nlopt.max_eval);
+      read_optim_control(c, "tolg", o.nlopt.tolg);
+      read_optim_control(c, "vector_storage", o.nlopt.vector_storage);
+      read_optim_control(c, "constraint_tol", o.nlopt.constraint_tol);
+    }
+    if (l.containsElementNamed("port")) {
+      Rcpp::List c = Rcpp::as<Rcpp::List>(l["port"]);
+      check_optim_control_names(c, {"rel_f_tol", "abs_f_tol", "x_tol", "false_conv_tol", "max_eval"});
+      read_optim_control(c, "rel_f_tol", o.port.rel_f_tol);
+      read_optim_control(c, "abs_f_tol", o.port.abs_f_tol);
+      read_optim_control(c, "x_tol", o.port.x_tol);
+      read_optim_control(c, "false_conv_tol", o.port.false_conv_tol);
+      read_optim_control(c, "max_eval", o.port.max_eval);
+    }
+    if (l.containsElementNamed("ipopt")) {
+      Rcpp::List c = Rcpp::as<Rcpp::List>(l["ipopt"]);
+      check_optim_control_names(c, {"tol", "acceptable_tol", "acceptable_iter", "limited_memory_max_history"});
+      read_optim_control(c, "tol", o.ipopt.tol);
+      read_optim_control(c, "acceptable_tol", o.ipopt.acceptable_tol);
+      read_optim_control(c, "acceptable_iter", o.ipopt.acceptable_iter);
+      read_optim_control(c, "limited_memory_max_history", o.ipopt.limited_memory_max_history);
+    }
+    if (l.containsElementNamed("ceres")) {
+      Rcpp::List c = Rcpp::as<Rcpp::List>(l["ceres"]);
+      check_optim_control_names(c, {"function_tolerance", "gradient_tolerance", "parameter_tolerance"});
+      read_optim_control(c, "function_tolerance", o.ceres.function_tolerance);
+      read_optim_control(c, "gradient_tolerance", o.ceres.gradient_tolerance);
+      read_optim_control(c, "parameter_tolerance", o.ceres.parameter_tolerance);
+    }
   }
   return o;
 }

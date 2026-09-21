@@ -37,6 +37,18 @@ The lavaanified model contract is the triple:
 from `LavaanParTable`, which is the compatibility format used by R bindings and
 golden `parTable()` fixtures.
 
+### Optimizer control semantics
+
+`OptimOptions` exposes optional backend blocks for NLopt, PORT, IPOPT and
+Ceres. The thin R interface accepts matching named sublists in `control`.
+Explicit settings override legacy mappings while preserving existing defaults;
+NLopt gradient/step tolerances, memory and evaluation budgets are distinct,
+as are PORT step/function criteria and evaluation/iteration budgets. See
+[optimizer controls](../reference/optimizer-controls.md) for support, sentinel
+values and compatibility rules. These settings govern search termination;
+they do not alter the independent terminal audit. Effective-control and raw
+stopping-code reporting across fitted results remains backlog work.
+
 ### Admissible covariance-model contract
 
 For each group, the continuous complete-data model uses the reduced-LISREL

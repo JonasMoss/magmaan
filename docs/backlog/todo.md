@@ -15,26 +15,17 @@ semantics · **XL** statistical design/research track before implementation.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
-- **High priority / M — expose and clarify optimizer controls across estimator
-  paths.** Author priority (2026-09-21): start with NLopt L-BFGS and SLSQP,
-  then PORT (scalar and residual interfaces); include remaining backends in
-  the same pass where the mappings are straightforward, and inventory any
-  deferred mappings explicitly. Cover both direct optimizer callers and
-  estimator wrappers, including profiled/inner solves and fallback paths.
-  Name objective-change, step-change and gradient tolerances distinctly;
-  distinguish absolute/relative criteria and iteration/evaluation budgets.
-  Document backend defaults, disabled/default sentinel values, the logic
-  combining stopping conditions, and any unexposed backend limitations.
-  Resolve the NLopt `gtol` -> `xtol_rel` misnomer with explicit compatibility
-  handling; expose L-BFGS `tolg` separately and distinguish automatic vector
-  storage from explicit memory (`history` is currently ignored). Inventory
-  PORT, PORT-NLS, remaining NLopt algorithms, Ceres and IPOPT without assuming
-  that identically named controls have identical meanings. Reject unsupported
-  options instead of silently ignoring them. Return effective controls and
-  the backend stopping reason, separately from the independent audit verdict.
-  Check forwarding through the C++ and thin R interfaces with focused tests.
-  Clarifying/exposing controls does not itself authorize changing defaults;
-  retain backend-specific settings rather than inventing a universal `gtol`.
+- **M — finish optimizer-control reporting and specialized-path inventory.**
+  Explicit backend control blocks now cover NLopt L-BFGS/SLSQP/VAR2/TNEWTON/
+  BOBYQA, PORT scalar/NLS, IPOPT, and Ceres estimator bridges, with legacy
+  defaults preserved; see `docs/reference/optimizer-controls.md`. Remaining:
+  carry effective controls and raw backend stopping reasons through fitted
+  results (separately from audit verdicts); inventory specialized scoring/EM/
+  IRLS outer-loop controls and distinguish them from inner-solver controls.
+  Decide a deprecation policy for legacy `gtol`/`history` without silently
+  changing existing calls. Explicit `nlopt.vector_storage` now selects memory;
+  legacy `history` remains ignored by NLopt for compatibility. Backend-specific
+  blocks permit fallback configurations; unused blocks are inactive.
 - **High priority / M — make domain recovery robust to parameter scale.**
   Reliable defaults are required even if PSD fitting becomes the default:
   ordinary fitting and the ordinary-first/PSD-recovery policy must remain
@@ -109,9 +100,9 @@ semantics · **XL** statistical design/research track before implementation.
   estimator's objective and covariance scaling before claiming SE units;
   exposing its optimizer controls does not transfer the ML audit calibration.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
-  distinguish step tolerance from NLopt's separate tolg, and make automatic
-  versus explicit vector storage visible (`history` is currently ignored by
-  this adapter). Preserve terminal candidates independently of raw status.
+  complete effective-control/stopping-reason reporting now that explicit
+  NLopt step/tolg/vector-storage controls are available. Preserve terminal
+  candidates independently of raw status.
   Deferred PSD work: dimensionless primal/dual/complementarity assessment,
   active-eigenvalue sensitivity, and metric projected-gradient alternatives.
   Lowest-priority practical follow-up: qualify same-domain reference fits,

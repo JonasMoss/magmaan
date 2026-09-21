@@ -11,12 +11,9 @@
 
 namespace magmaan::optim {
 
-// PORT tuning reuses `OptimOptions` for interface parity with the other
-// adapters (the public option-vocabulary across magmaan's optimizers is one
-// shared struct). PORT carries its own well-tuned step-control defaults
-// internally; only `max_iter` (mapped to PORT's IV(MXITER)) is forwarded,
-// matching the cross-backend convention that the option struct's tolerance
-// fields tune scalar optimizers by default.
+// Explicit controls live in OptimOptions::port; see docs/reference/optimizer-controls.md.
+// Legacy positive ftol overrides RFCTOL; max_iter sets MXITER and, unless
+// overridden, MXFCAL = 10*max_iter. Legacy gtol/history are unused.
 
 // PortOptimizer — wraps PORT's `drmngb_` (Dennis-Gay-Welsch model-Hessian
 // trust region with simple bounds; TOMS 611). PORT is the algorithm behind

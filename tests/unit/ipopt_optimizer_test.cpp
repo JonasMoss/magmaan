@@ -95,4 +95,25 @@ TEST_CASE("IPOPT optimizer enforces a nonlinear equality constraint") {
   CHECK(out->fmin < 0.1);
 }
 
+TEST_CASE("IPOPT explicit controls override legacy optimality settings") {
+  ScalarProblem prob;
+  prob.n_param = 2;
+  prob.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = x;
+    return .5 * x.squaredNorm();
+  };
+  OptimOptions opts;
+  opts.gtol = -1;
+  opts.history = -1;
+  opts.ipopt.tol = 1e-10;
+  opts.ipopt.acceptable_tol = 1e-8;
+  opts.ipopt.acceptable_iter = 0;
+  opts.ipopt.limited_memory_max_history = 5;
+  auto out = magmaan::optim::ipopt(prob, Eigen::Vector2d::Ones(), {}, opts);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-12);
+  opts.ipopt.acceptable_iter = -1;
+  CHECK_FALSE(magmaan::optim::ipopt(prob, Eigen::Vector2d::Ones(), {}, opts).has_value());
+}
+
 #endif  // MAGMAAN_WITH_IPOPT

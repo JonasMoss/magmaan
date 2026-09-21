@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <Eigen/Core>
@@ -109,11 +110,45 @@ enum class OptimStatus {
   Unknown,              // backend did not report a refined status
 };
 
+// Explicit backend controls override the legacy fields below when present.
+// Empty optionals preserve existing adapter/backend defaults. These are search
+// controls, not tolerances for the independent terminal audit.
+struct NloptControls {
+  std::optional<double> ftol_rel = {}, ftol_abs = {};
+  std::optional<double> xtol_rel = {}, xtol_abs = {};
+  std::optional<int> max_eval = {};
+  std::optional<double> tolg = {}; // Luksan L-BFGS/VAR2/TNEWTON only; 0 = default
+  std::optional<int> vector_storage = {}; // Luksan methods; 0 = automatic
+  std::optional<double> constraint_tol = {}; // constrained SLSQP only
+};
+
+struct PortControls {
+  std::optional<double> rel_f_tol = {}; // V(RFCTOL)
+  std::optional<double> abs_f_tol = {}; // V(AFCTOL), absolute objective size
+  std::optional<double> x_tol = {};     // V(XCTOL), scaled relative step
+  std::optional<double> false_conv_tol = {}; // V(XFTOL)
+  std::optional<int> max_eval = {}; // IV(MXFCAL), separate from max_iter
+};
+
+struct IpoptControls {
+  std::optional<double> tol = {}, acceptable_tol = {};
+  std::optional<int> acceptable_iter = {}, limited_memory_max_history = {};
+};
+
+struct CeresControls {
+  std::optional<double> function_tolerance = {}, gradient_tolerance = {};
+  std::optional<double> parameter_tolerance = {};
+};
+
 struct OptimOptions {
-  int    max_iter = 1000;
-  double ftol     = 1e-10;   // matches lavaan's optim.ftol default
-  double gtol     = 1e-7;    // matches lavaan's optim.gradtol default
-  int    history  = 10;      // optimizer history where supported
+  int    max_iter = 1000; // legacy NLopt evaluation budget; iterations otherwise
+  double ftol = 1e-10; // legacy mapping is backend-specific; see optimizer-controls.md
+  double gtol = 1e-7;  // NLopt step tolerance, IPOPT optimality, ignored by PORT
+  int    history = 10; // legacy IPOPT history; ignored by NLopt and PORT
+  NloptControls nlopt = {};
+  PortControls port = {};
+  IpoptControls ipopt = {};
+  CeresControls ceres = {};
 };
 
 // --- Terminal audit -------------------------------------------------------

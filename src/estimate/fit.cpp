@@ -137,8 +137,9 @@ run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
 #ifdef MAGMAAN_WITH_CERES
     optim::CeresOptions copts;
     copts.max_iter = opts.max_iter;
-    copts.ftol     = opts.ftol;
-    copts.gtol     = opts.gtol;
+    copts.ftol     = opts.ceres.function_tolerance.value_or(opts.ftol);
+    copts.gtol     = opts.ceres.gradient_tolerance.value_or(opts.gtol);
+    copts.ptol     = opts.ceres.parameter_tolerance.value_or(copts.ptol);
     if (backend == Backend::CeresBfgs) {
       if (!bounds.empty()) {
         return std::unexpected(fit_err(FitError::Kind::NumericIssue,

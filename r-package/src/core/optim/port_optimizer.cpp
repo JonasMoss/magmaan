@@ -96,6 +96,23 @@ constexpr int kV_F         = 9;   // V(10)  — current function value (R)
 //   V(33) XCTOL  (relative step),  V(34) XFTOL  (relative x-or-f).
 constexpr int kV_RfcTol    = 31;  // V(32) — relative fmin tolerance (= ftol)
 
+std::optional<std::string> configure_controls(
+    const OptimOptions& opts, std::vector<int>& iv, std::vector<double>& v) {
+  const auto& c = opts.port;
+  for (const auto& value : {c.rel_f_tol, c.abs_f_tol, c.x_tol, c.false_conv_tol}) {
+    if (value && (!std::isfinite(*value) || *value < 0))
+      return "PORT tolerances must be finite and nonnegative";
+  }
+  if (c.max_eval && *c.max_eval <= 0)
+    return "PORT max_eval must be positive";
+  if (c.rel_f_tol) v[31] = *c.rel_f_tol;
+  if (c.abs_f_tol) v[30] = *c.abs_f_tol;
+  if (c.x_tol) v[32] = *c.x_tol;
+  if (c.false_conv_tol) v[33] = *c.false_conv_tol;
+  if (c.max_eval) iv[kIv_MxFCal] = *c.max_eval;
+  return {};
+}
+
 // PORT requires bounds; "unbounded" means a sentinel near double limits.
 // 1e308 is well inside the dynamic range and matches the convention used in
 // the AMPL/ASL test harnesses; choosing infinity would risk overflow in
@@ -183,6 +200,9 @@ PortOptimizer::minimize(Objective f,
   if (opts_.ftol > 0.0) v[kV_RfcTol] = opts_.ftol;
   iv[kIv_MxIter] = opts_.max_iter;
   iv[kIv_MxFCal] = opts_.max_iter * 10;  // generous; PORT lifts this only if max_iter is otherwise binding
+  if (auto error = configure_controls(opts_, iv, v)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue, *error));
+  }
 
   // Reverse-communication loop. PORT sets `iv[0]` to PORT_REQUEST_F or
   // PORT_REQUEST_G, we compute the requested quantity, and call drmngb_
@@ -408,6 +428,9 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
   if (opts_.ftol > 0.0) v[kV_RfcTol] = opts_.ftol;
   iv[kIv_MxIter] = opts_.max_iter;
   iv[kIv_MxFCal] = opts_.max_iter * 10;
+  if (auto error = configure_controls(opts_, iv, v)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue, *error));
+  }
 
   // Whole residual vector on each call (`nd = n`, `n1 = 1`, `n2 = n`); NL2SOL
   // documents this as the simplest mode. nd<n chunking is reserved for huge

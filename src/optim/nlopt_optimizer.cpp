@@ -17,6 +17,39 @@
 
 namespace {
 
+std::optional<std::string> configure_controls(
+    nlopt_opt opt, const magmaan::optim::OptimOptions& opts,
+    magmaan::optim::NloptAlgorithm algo, bool constrained) {
+  using magmaan::optim::NloptAlgorithm;
+  const auto& c = opts.nlopt;
+  const bool luksan = algo == NloptAlgorithm::Lbfgs ||
+      algo == NloptAlgorithm::Var2 || algo == NloptAlgorithm::Tnewton;
+  if (c.tolg && !luksan)
+    return "NLopt tolg is supported only by L-BFGS, VAR2 and TNEWTON";
+  if (c.vector_storage && !luksan)
+    return "NLopt vector_storage is supported only by L-BFGS, VAR2 and TNEWTON";
+  if (c.constraint_tol && !constrained)
+    return "NLopt constraint_tol requires the constrained SLSQP entry point";
+  for (const auto& v : {c.ftol_rel, c.ftol_abs, c.xtol_rel, c.xtol_abs,
+                       c.tolg, c.constraint_tol}) {
+    if (v && (!std::isfinite(*v) || *v < 0))
+      return "NLopt tolerances must be finite and nonnegative";
+  }
+  if ((c.max_eval && *c.max_eval <= 0) ||
+      (c.vector_storage && *c.vector_storage < 0))
+    return "NLopt max_eval must be positive and vector_storage nonnegative";
+  if (nlopt_set_ftol_rel(opt, c.ftol_rel.value_or(opts.ftol)) < 0 ||
+      nlopt_set_xtol_rel(opt, c.xtol_rel.value_or(opts.gtol)) < 0 ||
+      nlopt_set_maxeval(opt, c.max_eval.value_or(opts.max_iter)) < 0 ||
+      (c.ftol_abs && nlopt_set_ftol_abs(opt, *c.ftol_abs) < 0) ||
+      (c.xtol_abs && nlopt_set_xtol_abs1(opt, *c.xtol_abs) < 0) ||
+      (c.tolg && nlopt_set_param(opt, "tolg", *c.tolg) < 0) ||
+      (c.vector_storage && nlopt_set_vector_storage(opt, static_cast<unsigned>(*c.vector_storage)) < 0))
+    return "NLopt rejected optimizer controls";
+  return {};
+}
+
+
 constexpr double kInvalidConstraintResidual = 1e20;
 
 struct NloptConstraintData {
@@ -237,9 +270,10 @@ NloptOptimizer::minimize(Objective f,
   nlopt_set_lower_bounds(opt, lower.data());
   nlopt_set_upper_bounds(opt, upper.data());
 
-  nlopt_set_ftol_rel(opt, opts_.ftol);
-  nlopt_set_xtol_rel(opt, opts_.gtol);
-  nlopt_set_maxeval(opt, opts_.max_iter);
+  if (auto error = configure_controls(opt, opts_, algo_, false)) {
+    nlopt_destroy(opt);
+    return std::unexpected(make_err(FitError::Kind::NumericIssue, *error));
+  }
 
   // Project x0 into the box defensively (callers from fit_* already supply
   // feasible starts; SLSQP and BOBYQA hard-require a feasible start, others
@@ -337,7 +371,7 @@ NloptOptimizer::minimize_constrained(const ConstrainedScalarProblem& prob,
 
   NloptConstraintData cdata{&prob};
   const Eigen::VectorXd tol =
-      Eigen::VectorXd::Constant(m, std::max(opts_.gtol, 1e-12));
+      Eigen::VectorXd::Constant(m, opts_.nlopt.constraint_tol.value_or(std::max(opts_.gtol, 1e-12)));
   const nlopt_result constraint_rc = nlopt_add_equality_mconstraint(
       opt, n_con, &magmaan_nlopt_equality_mconstraint, &cdata, tol.data());
   if (constraint_rc < 0) {
@@ -348,9 +382,10 @@ NloptOptimizer::minimize_constrained(const ConstrainedScalarProblem& prob,
             ": failed to add equality constraints to SLSQP"));
   }
 
-  nlopt_set_ftol_rel(opt, opts_.ftol);
-  nlopt_set_xtol_rel(opt, opts_.gtol);
-  nlopt_set_maxeval(opt, opts_.max_iter);
+  if (auto error = configure_controls(opt, opts_, algo_, true)) {
+    nlopt_destroy(opt);
+    return std::unexpected(make_err(FitError::Kind::NumericIssue, *error));
+  }
 
   Eigen::VectorXd theta = x0.cwiseMax(lower).cwiseMin(upper);
   double fmin = std::numeric_limits<double>::quiet_NaN();

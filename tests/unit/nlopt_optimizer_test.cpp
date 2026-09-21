@@ -8,6 +8,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/optim/nlopt_optimizer.hpp"
+#include "magmaan/optim/optimizers.hpp"
 
 using magmaan::FitError;
 using magmaan::optim::ConstrainedScalarProblem;
@@ -416,4 +417,81 @@ TEST_CASE("NloptOptimizer — OptimOutput is populated on a clean solve") {
   CHECK(out->grad_inf_norm >= 0.0);
   CHECK(out->audit.stationary);
   CHECK(out->status == magmaan::optim::OptimStatus::Converged);
+}
+
+TEST_CASE("NLopt explicit controls preserve legacy mapping and override it") {
+  magmaan::optim::OptimOptions legacy;
+  legacy.ftol = 1e-12;
+  legacy.gtol = 1e-10;
+  magmaan::optim::OptimOptions named;
+  named.ftol = .1;
+  named.gtol = .1;
+  named.max_iter = 1;
+  named.nlopt.ftol_rel = legacy.ftol;
+  named.nlopt.xtol_rel = legacy.gtol;
+  named.nlopt.max_eval = legacy.max_iter;
+  Eigen::VectorXd x0(2); x0 << -1.2, 1;
+  for (auto algo : {NloptAlgorithm::Lbfgs, NloptAlgorithm::Slsqp}) {
+    auto a = NloptOptimizer(legacy, algo).minimize(rosenbrock_objective(), x0);
+    auto b = NloptOptimizer(named, algo).minimize(rosenbrock_objective(), x0);
+    REQUIRE(a.has_value());
+    REQUIRE(b.has_value());
+    CHECK(a->f_evals == b->f_evals);
+    CHECK(a->fmin == b->fmin);
+    CHECK((a->theta_hat - b->theta_hat).norm() == 0);
+  }
+}
+
+TEST_CASE("NLopt rejects unsupported or invalid explicit controls") {
+  const Eigen::VectorXd x0 = Eigen::VectorXd::Zero(3);
+  const Eigen::Vector3d c(1, 2, 3);
+  magmaan::optim::OptimOptions opts;
+  opts.nlopt.tolg = 1e-10;
+  CHECK_FALSE(NloptOptimizer(opts, NloptAlgorithm::Slsqp)
+                  .minimize(quadratic_objective(c), x0).has_value());
+  opts.nlopt.tolg.reset();
+  opts.nlopt.xtol_abs = std::numeric_limits<double>::quiet_NaN();
+  CHECK_FALSE(NloptOptimizer(opts).minimize(quadratic_objective(c), x0).has_value());
+  opts.nlopt.xtol_abs.reset();
+  opts.nlopt.vector_storage = 5;
+  CHECK_FALSE(NloptOptimizer(opts).minimize(quadratic_objective(c), x0).has_value());
+  CHECK(NloptOptimizer(opts, NloptAlgorithm::Lbfgs)
+            .minimize(quadratic_objective(c), x0).has_value());
+}
+
+TEST_CASE("NLopt Luksan gradient tolerance controls stopping independently") {
+  magmaan::optim::OptimOptions opts;
+  opts.nlopt.ftol_rel = 0;
+  opts.nlopt.xtol_rel = 0;
+  opts.nlopt.tolg = 100;
+  Eigen::VectorXd x0 = Eigen::VectorXd::Zero(3);
+  const Eigen::Vector3d c(1, 2, 3);
+  auto early = NloptOptimizer(opts, NloptAlgorithm::Lbfgs)
+                   .minimize(quadratic_objective(c), x0);
+  opts.nlopt.tolg = 1e-10;
+  auto accurate = NloptOptimizer(opts, NloptAlgorithm::Lbfgs)
+                      .minimize(quadratic_objective(c), x0);
+  REQUIRE(early.has_value());
+  REQUIRE(accurate.has_value());
+  CHECK(early->fmin > accurate->fmin);
+  CHECK(early->f_evals < accurate->f_evals);
+}
+
+TEST_CASE("NLopt fallback scopes Luksan controls to the first stage") {
+  magmaan::optim::OptimOptions opts;
+  opts.nlopt.tolg = 1e-12;
+  opts.nlopt.vector_storage = 5;
+  opts.nlopt.max_eval = 1;
+  ScalarProblem prob;
+  prob.f = rosenbrock_objective();
+  prob.n_param = 2;
+  Eigen::VectorXd x0(2); x0 << -1.2, 1;
+  auto result = magmaan::optim::nlopt_lbfgs_slsqp_fallback(prob, x0, {}, opts);
+  REQUIRE_FALSE(result.has_value());
+  CHECK(result.error().detail.find("SLSQP fallback") != std::string::npos);
+  CHECK(result.error().detail.find("supported only") == std::string::npos);
+  opts.nlopt.tolg = -1;
+  auto invalid = magmaan::optim::nlopt_lbfgs_slsqp_fallback(prob, x0, {}, opts);
+  REQUIRE_FALSE(invalid.has_value());
+  CHECK(invalid.error().detail.find("invalid tolg") != std::string::npos);
 }
