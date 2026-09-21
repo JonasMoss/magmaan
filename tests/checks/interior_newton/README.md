@@ -60,3 +60,11 @@ geometric audit, and can partly be reused for observed-information inference.
 Results and design interpretation: `docs/research/interior-newton-audit.md`.
 The stock and extended local runs are under this directory's ignored
 `results/`; use a new directory for every subsequent execution.
+
+Methodological references and the threshold rationale are recorded in the
+study note: Dennis, Gay & Welsch (1981), DOI 10.1145/355958.355965, section 6;
+James's MINUIT manual 94.1; and the documented Stata/iminuit stopping rules.
+The note distinguishes retrieved versions from unavailable published PDFs.
+The .01 candidate is an accuracy budget relative to sampling uncertainty,
+not a cutoff calibrated from this experiment's pass rate. Its interpretation
+as actual remaining error still depends on the local quadratic approximation.

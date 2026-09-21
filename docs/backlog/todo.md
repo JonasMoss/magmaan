@@ -83,6 +83,13 @@ semantics · **XL** statistical design/research track before implementation.
   passed all 180 eligible interior cases at .003; stock backtracking still
   failed on small measurement units. One old-audit pass had d=.254 and
   stopped on xtol; reducing ftol alone did not help.
+  Literature/accuracy rationale is now expanded in
+  `docs/research/interior-newton-audit.md`: Dennis–Gay–Welsch's all-contrast
+  criterion, the exact .01 conversion of MINUIT manual 94.1's nominal default,
+  and conditional RMSE/Gaussian-reference interpretations. Available reference
+  files and failed-download receipts are retained under ignored `external/refs/`.
+  Remaining: adopt an explicit accuracy budget and validate predicted versus
+  actual error; the literature does not remove that distinction.
   **Tolerance rationale still to settle:** .01 is a proposed numerical-error
   budget (one hundredth of an information-based SE in any linear contrast
   under the local quadratic approximation), not a literature-mandated cutoff

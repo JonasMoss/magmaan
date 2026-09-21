@@ -138,6 +138,162 @@ was 5.08e-10 in the stock run. Coverage and paired seeds match exactly. The
 local corrected summaries and paired control differences are under
 `tests/checks/interior_newton/results/extended/`.
 
+## Literature collected and source status (2026-09-21)
+
+Local reference files and URL/SHA-256 receipts are in the ignored
+`external/refs/interior-newton/` directory. They are not experiment inputs.
+
+- Dennis, J. E., Jr., Gay, D. M., and Welsch, R. E. (1981).
+  *An Adaptive Nonlinear Least-Squares Algorithm*. ACM TOMS 7(3), 348–368.
+  DOI: [10.1145/355958.355965](https://doi.org/10.1145/355958.355965).
+  Section 6, equations (6.8)–(6.9), motivates small steps relative to SEs
+  and then maximizes the standardized displacement over linear contrasts.
+  This is the direct methodological precedent for our accuracy scale.
+  The published PDF returned HTTP 403. The public article text was inspected
+  through the browser's [indexed full-text rendering](https://www.scribd.com/document/45401126/An-Adaptive-Nonlinear-Least-squares-Algorithm);
+  the locally downloaded HTML contains only a preview, not the complete paper.
+  A scanned [1977 NBER working-paper version](https://www.nber.org/system/files/working_papers/w0196/w0196.pdf)
+  was downloaded as `dennis-gay-welsch-1977-nber.pdf`; it is not assumed to
+  contain the published version's equation numbering or all of its discussion.
+- Pratt, J. W. (1977). *When to stop a quasi-Newton search for a maximum
+  likelihood estimate*. Harvard School of Business Working Paper 77-16.
+  Not obtained or read directly. Dennis et al. attribute their all-contrasts
+  criterion to this paper; cite that attribution as secondary evidence only.
+- Belsley, D. A. (1980). *On the efficient computation of the nonlinear
+  full-information maximum-likelihood estimator*. Journal of Econometrics
+  14(2), 203–225. DOI: [10.1016/0304-4076(80)90091-3](https://doi.org/10.1016/0304-4076(80)90091-3).
+  Abstract verified; published PDF returned HTTP 403 and no open full copy
+  was located. Its reported weighted-gradient criterion is relevant, but we
+  do not attribute a numerical threshold to it without the full text.
+- James, F., and Roos, M. (1975). *Minuit—a system for function minimization
+  and analysis of the parameter errors and correlations*. Computer Physics
+  Communications 10(6), 343–367. DOI:
+  [10.1016/0010-4655(75)90039-9](https://doi.org/10.1016/0010-4655(75)90039-9).
+  The [public CERN record](https://repository.cern/records/g64tm-4s433)
+  has a full-text link, but this environment's download received HTTP 403.
+  Instead, obtained James's [1994 MINUIT reference manual, version 94.1](https://root.cern/download/minuit.pdf),
+  `minuit-reference-manual.pdf`. This is a distinct source, not the 1975 paper.
+- Also saved the [Stata maximize manual](https://www.stata.com/manuals/rmaximize.pdf)
+  and [iminuit reference](https://scikit-hep.org/iminuit/reference.html#iminuit.Minuit.tol).
+  Software thresholds below are attributed to these particular documents,
+  not retroactively to the original papers.
+
+For a total negative log likelihood, our conversions are:
+
+| Source | Documented nominal criterion | Equivalent distance d |
+|---|---|---:|
+| MINUIT manual 94.1, MIGRAD command | EDM < .001 × tolerance × UP, default tolerance .1, UP=.5 for negative log likelihood | .01 |
+| iminuit 2.33.0 documentation, MIGRAD | EDM < .002 × tolerance × errordef, default tolerance .1, errordef=.5 | .01414 |
+| Stata maximize manual, nrtolerance | Hessian-scaled gradient quadratic form < 1e-5 | .003162 |
+
+The historical MINUIT criterion therefore matches the proposed .01 exactly
+under this normalization. This is a precedent, not an independent proof of
+adequacy. Modern iminuit documents possible factor-ten EDM exceptions; Stata
+also requires a step/function test and checks actual curvature after a
+quasi-Newton criterion passes. Their complete stopping policies differ.
+
+## Choosing a budget rather than fitting a cutoff
+
+The following derivations are our accuracy interpretation, not numerical
+recommendations claimed from the papers. A tolerance is an accuracy contract:
+mathematics can translate a declared error budget into a cutoff, but cannot
+select the acceptable budget without a scientific or numerical convention.
+
+Let F be the total negative log likelihood, G its gradient, and I its positive
+observed Hessian in identified, equality-reduced coordinates. Write
+
+$$
+ s=-I^{-1}G,\qquad V=I^{-1},\qquad
+ d=\sqrt{G^\top I^{-1}G}.
+$$
+
+Then an exact algebraic identity for the *predicted Newton step* is
+
+$$
+ \sup_{a\ne0}\frac{|a^\top s|}{\sqrt{a^\top Va}}
+ =\sqrt{s^\top V^{-1}s}=d.
+$$
+
+Thus this is already relative error: relative to information-based sampling
+uncertainty, uniformly over linear contrasts. Dividing by a coefficient's
+magnitude instead is unstable near zero and depends on the parameter origin.
+The identity is invariant under nonsingular linear changes of coordinates;
+nonlinear reparameterizations supply only a local interpretation.
+
+### A conservative RMSE contract
+
+For a fixed contrast, let T be its exact estimator, theta its target, and
+sigma a fixed reference sampling-error scale. Suppose the *actual* numerical
+error e satisfies root-mean-square(e) <= epsilon sigma. The L2 triangle
+inequality gives, without independence or zero mean of numerical error,
+
+$$
+ \operatorname{RMSE}(T+e)
+ \le \operatorname{RMSE}(T)+\epsilon\sigma.
+$$
+
+When sigma equals the exact estimator's RMSE, epsilon=.01 permits at most
+1% inflation of RMSE, or 2.01% inflation of MSE. More generally it bounds
+added RMSE by .01 of the declared scale; identification of that scale with
+an SE requires the usual regular, approximately unbiased model-based regime.
+If the desired contract is at most r relative MSE inflation, it suffices to
+choose epsilon <= sqrt(1+r)-1; r=.02 gives epsilon approximately .00995.
+
+A per-fit actual-error bound in the fixed covariance metric implies the
+contrastwise RMS premise. Replacing that fixed covariance with estimated
+information and replacing actual error with the Newton prediction makes
+this a local/asymptotic design rationale, **not an established finite-sample
+risk guarantee**. In particular, d=.01 does not imply merely .01% extra MSE:
+the cross term between numerical and sampling errors need not vanish.
+Do not apply this unconditional argument to a selected subset of converged
+replications without separately examining selection.
+
+### A distributional interpretation, without choosing one downstream test
+
+For Gaussian reference distributions with identical covariance V and centres
+separated by an *actual* displacement e, set D=sqrt(e' V^-1 e). Whitening and
+projection onto the displacement direction yield the exact identity
+
+$$
+ \operatorname{TV}\{N(\theta,V),N(\theta+e,V)\}
+ =2\Phi(D/2)-1.
+$$
+
+D=.01 corresponds to .003989 total variation: probabilities of any fixed
+measurable event differ by at most about .4 percentage points between these
+two Gaussian references. A chosen probability budget eta gives
+D <= 2 Phi^-1((1+eta)/2). This is an optional interpretation of approximation
+accuracy, not a guarantee about actual p-values, repeated-sampling coverage,
+a changing covariance estimate, or the true likelihood's non-Gaussian shape.
+Using predicted d in place of D introduces the same Newton-accuracy question.
+
+### What would turn the prediction into a bound?
+
+Positive curvature at one point alone is insufficient. Suppose a stationary
+point exists nearby, and every Hessian along the segment from the current
+point to that stationary point lies between (1-rho)I and (1+rho)I in Loewner
+order, with rho < 1. Integrating the gradient along the segment then gives
+
+$$
+ \|\theta_{\mathrm{current}}-\theta_{\mathrm{stationary}}\|_I
+ \le \frac{d}{1-\rho}.
+$$
+
+Consequently, a *verified* rho bound would allow d <= (1-rho)epsilon to
+certify the declared displacement budget. We do not currently have such a
+bound for general SEM. An observed Hessian at the terminal point, or a few
+extra evaluations, does not by itself establish it. Boundary extensions,
+verified neighbourhood analysis, and practical refined-solution comparisons
+remain deferred; self-concordant convex guarantees cannot simply be assumed
+for the nonlinear SEM objective.
+
+Recommendation: retain .01 as a proposed one-percent sampling-error-scale
+budget, supported by the exact historical MINUIT precedent. Keep .003 and
+.03 sensitivity and continuous distance reporting. Validate the Newton
+prediction separately from selecting the acceptable error budget. No default
+or existing success classification changes in this literature update.
+
+
 ## Precedent and scope of the recommendation
 
 [MINUIT/MIGRAD's EDM](https://scikit-hep.org/iminuit/reference.html#iminuit.Minuit.tol)
@@ -151,7 +307,8 @@ attained accuracy.
 The proposed profile worked across these controlled settings, not a broad
 empirical corpus. Immediate next implementation jobs are (1) an opt-in
 regular-interior Newton diagnostic with explicit objective normalization,
-(2) accurately named/exposed L-BFGS controls and a documented candidate profile,
+(2) effective-control and stopping-reason reporting (explicit backend controls
+are now implemented; see `docs/reference/optimizer-controls.md`),
 and (3) portable domain-recovery/backtracking handling. Neither this check nor
 the candidate settings silently replaces the authoritative existing audit.
 Boundary extensions and practical verification remain deferred.
