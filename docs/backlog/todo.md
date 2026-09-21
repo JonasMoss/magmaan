@@ -13,9 +13,13 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-### L-BFGS line-search domain recovery
+### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
-- **M — make domain recovery robust to parameter scale.** NLopt's Luksan
+- **High priority / M — make domain recovery robust to parameter scale.**
+  Reliable defaults are required even if PSD fitting becomes the default:
+  ordinary fitting and the ordinary-first/PSD-recovery policy must remain
+  numerically sound. PSD constraints do not excuse optimizer failures.
+  NLopt's Luksan
   L-BFGS hard-codes ten line-search reductions. With the objective contract
   returning infinity outside the covariance domain, all trial evaluations can
   remain invalid and the solver aborts after 12 evaluations at its initial
