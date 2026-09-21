@@ -45,29 +45,29 @@ semantics · **XL** statistical design/research track before implementation.
   The NLopt adapter currently passes `OptimOptions::gtol` to `xtol_rel`, not
   to a gradient stopping test; make this distinction explicit in controls and
   documentation when hardening defaults.
-- **High priority / M — calibrate the full-model audit, not just solver
-  stopping.** The model-Frobenius dual L2 cutoff `1e-3` is uncalibrated and is
-  not equivalent to lavaan's coordinatewise gradient criterion. Test changes
-  of measurement units, parameter basis, objective normalization, model size,
-  and covariance-boundary rank. Retain the declared domain and independent
-  feasibility/objective checks. Compare residual distributions and tolerance
-  sensitivity with tighter refits, independent optimizers, objective gaps,
-  and standardized changes in parameters and implied moments. Use held-out
-  cases to choose a numerical-accuracy target; do not choose the threshold
-  retrospectively to favor a method. See `docs/design/terminal-audit.md`.
-  The September 21 literature/pilot follow-up narrows the next work:
-  - Declare a dimensionless metric and test fixed-point unit/basis invariance
-    before interpreting residual cutoffs across models.
-  - Expose/calibrate primal-dual complementarity near PSD boundaries; an
-    active-eigenvalue threshold alone does not control multiplier products.
-    Compare with a metric projected-gradient mapping on convex restrictions.
-  - Add optional local curvature/step diagnostics in identifiable interiors;
-    no unqualified pseudoinverse or global-optimum claim.
-  - Calibrate against explicit likelihood, standardized parameter and moment
-    budgets, including aggregate block RMS and worst-component changes.
-    Require qualified same-domain references; otherwise accuracy is unresolved.
-  - Freeze candidate controls/targets and validate on held-out model families,
-    units and ranks. The small two-model pilot is not default validation.
+- **High priority / M — regular-interior curvature diagnostics for the
+  full-model audit.** Author priority (2026-09-21): implement and understand
+  regular identifiable interiors first; defer PSD-boundary extensions;
+  practical verification by tighter refits, restarts, independent optimizers
+  and held-out empirical calibration is lowest priority for later.
+  The model-Frobenius dual L2 cutoff `1e-3` is uncalibrated and is not
+  equivalent to lavaan's coordinatewise gradient criterion. First assess
+  the reduced-coordinate observed Hessian, predicted Newton correction,
+  and Newton decrement on the original objective scale. Distinguish a local
+  accuracy approximation from a global error bound. Resolve linear equality
+  constraints before checking positive definiteness; do not silently use a
+  pseudoinverse in unidentified directions. Test scaling identities and
+  analytic quadratic cases. For per-observation ML, record the relation
+  between `N*g' H^{-1}g`, predicted twice-log-likelihood improvement, and
+  information-standardized parameter displacement. Retain independent
+  feasibility/objective checks and report this diagnostic unavailable when
+  interior/curvature conditions fail. See `docs/design/terminal-audit.md`.
+  Deferred PSD work: dimensionless primal/dual/complementarity assessment,
+  active-eigenvalue sensitivity, and metric projected-gradient alternatives.
+  Lowest-priority practical follow-up: qualify same-domain reference fits,
+  compare standardized parameter/moment changes, and freeze targets before
+  held-out model/unit/rank validation. Neither the existing two-model pilot
+  nor this prioritization selects a replacement default cutoff.
 
 ### Score/inference adapter follow-ups
 
