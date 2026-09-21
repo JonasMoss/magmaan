@@ -113,6 +113,17 @@ semantics · **XL** statistical design/research track before implementation.
   polishing with tighter controls is a proposed next step, not yet tested.
   Same exploratory datasets and diagnostic extended backtracking: no default
   changed and no held-out reliability claim. Domain recovery remains prerequisite.
+  Broader fixed-control validation is complete (720 fits): ten new settings,
+  p=6–48, 12–162 free parameters, N=50/200/1000/10000, two replications,
+  three unit scales. Adds large CFAs, a structural chain, cross-loadings,
+  residual correlations and mixed indicator scales. Current/cheap/conservative
+  controls pass 198/201/218 of 220 eligible fits; 20 noninterior endpoints per
+  profile remain excluded. This supersedes any inference from the smaller
+  panel that the cheap settings are near-settled defaults. Both conservative
+  failures have mixed scales. Preserve the .01 target, investigate conditional
+  polishing/scaling rather than relax it. Before a package-wide default claim,
+  add multi-group invariance, growth, regular feedback and published fixtures;
+  use fresh validation cases after tuning. See the research note for coverage.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal

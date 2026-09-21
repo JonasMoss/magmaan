@@ -72,7 +72,7 @@ const std::vector<Profile> option_profiles={
  {"current",1e-10,1e-7,0,0},{"x8",1e-10,1e-8,0,0},
  {"x9",1e-10,1e-9,0,0},{"x10",1e-10,1e-10,0,0},
  {"f11_x9",1e-11,1e-9,0,0},{"f12_x10",1e-12,1e-10,0,0}};
-struct Case{const char* name;int p,factors;bool weak,equal,means,structural,misspecified;};
+struct Case{const char* name;int p,factors;bool weak,equal,means,structural,misspecified; int variant=0;};
 const std::vector<Case> cases={
  {"cfa4",4,1,false,false,false,false,false},
  {"cfa12",12,1,false,false,false,false,false},
@@ -81,6 +81,21 @@ const std::vector<Case> cases={
  {"equal8_means",8,2,false,true,true,false,false},
  {"structural8",8,2,false,false,true,true,false},
  {"misspecified4",4,1,false,false,false,false,true}};
+// Validation cases and controls are fixed before inspecting their results.
+const std::vector<Case> validation_cases={
+ {"hold_cfa6",6,1,false,false,false,false,false},
+ {"hold_cfa16",16,4,false,false,false,false,false},
+ {"hold_cfa32",32,8,false,false,false,false,false},
+ {"hold_cfa48",48,12,false,false,false,false,false},
+ {"hold_chain12",12,3,false,false,true,true,false},
+ {"hold_cross12",12,3,false,false,false,false,false,1},
+ {"hold_residual12",12,3,false,false,false,false,false,2},
+ {"hold_equal24",24,6,false,true,true,false,false},
+ {"hold_weak12",12,3,true,false,false,false,false},
+ {"hold_mixed16",16,4,false,false,true,false,false,3}};
+const std::vector<Profile> validation_profiles={
+ {"current",1e-10,1e-7,0,0},{"x8",1e-10,1e-8,0,0},
+ {"f12_x10",1e-12,1e-10,0,0}};
 // Refined-reference smoke: separate from the original control study.
 struct Point {
  VectorXd a, gradient;
@@ -166,27 +181,47 @@ void refinement_checks(){
 int main(int argc,char** argv){
  const bool smoke=argc==3&&std::string(argv[2])=="refine";
  const bool options=argc==3&&std::string(argv[2])=="options";
- require(argc==2||smoke||options,"usage: check output.csv [refine|options]");exact_checks();if(smoke)refinement_checks();std::ofstream out(argv[1]);require(bool(out),"output");
+ const bool validation=argc==3&&std::string(argv[2])=="validate";
+ require(argc==2||smoke||options||validation,"usage: check output.csv [refine|options|validate]");exact_checks();if(smoke)refinement_checks();std::ofstream out(argv[1]);require(bool(out),"output");
  out<<std::setprecision(17);
  if(smoke)out<<"model,n,rep,units,seed,source,target,direction,rc,evals,interior,status,predicted,condition,reference_status,refinement_steps,reference_distance,actual,actual_over_predicted,step_relative_error,twice_loglik_gain,gain_over_predicted,distance_resolved,gain_resolved,refinement_ms,anchor_agreement\n";
- else out<<"model,n,rep,units,seed,profile,ftol,xtol,tolg,memory,rc,evals,fmin,old_residual,interior,status,distance,edm_total,condition,solve_error,step_raw_max,fit_ms,hessian_audit_ms,hessian_fd_rel\n";
- for(size_t ci=0;ci<cases.size();++ci){const auto& c=cases[ci];
+ else out<<"model,n,rep,units,seed,profile,ftol,xtol,tolg,memory,rc,evals,fmin,old_residual,interior,status,distance,edm_total,condition,solve_error,step_raw_max,fit_ms,hessian_audit_ms,hessian_fd_rel"<<(validation?",p,factors,free_parameters":"")<<'\n';
+ const auto& selected_cases=validation?validation_cases:cases;
+ for(size_t ci=0;ci<selected_cases.size();++ci){const auto& c=selected_cases[ci];
   std::string syntax;int per=c.p/c.factors;
   for(int j=0;j<c.factors;++j){syntax+="f"+std::to_string(j+1)+" =~ ";for(int k=0;k<per;++k){if(k)syntax+=" + ";if(c.equal&&k)syntax+="a"+std::to_string(k)+"*";syntax+="x"+std::to_string(j*per+k+1);}syntax+='\n';}
-  if(c.structural)syntax+="f2 ~ f1\n";
+  if(c.structural){
+   for(int j=1;j<c.factors;++j)syntax+="f"+std::to_string(j+1)+" ~ f"+std::to_string(j)+"\n";
+  }
+  if(c.variant==1)syntax+="f2 =~ x4\nf3 =~ x8\n";
+  if(c.variant==2)syntax+="x1 ~~ x2\nx5 ~~ x6\nx9 ~~ x10\n";
   auto parsed=parse::Parser::parse(syntax);require(bool(parsed),"parse");spec::BuildOptions bo;bo.meanstructure=c.means;bo.fixed_x=false;
   auto pt=spec::build(*parsed,bo);require(bool(pt),"build");auto rep=model::build_matrix_rep(*pt);require(bool(rep),"rep");
   auto ev=model::ModelEvaluator::build(*pt,*rep);require(bool(ev),"evaluator");auto con=estimate::build_eq_constraints(*pt);require(bool(con),"constraints");
   MatrixXd L=MatrixXd::Zero(c.p,c.factors);for(int j=0;j<c.factors;++j)for(int k=0;k<per;++k)L(j*per+k,j)=k==0?1:(.85-.025*k);
   MatrixXd P=MatrixXd::Identity(c.factors,c.factors)*(c.weak?.12:1);
-  if(c.factors==2)P(0,1)=P(1,0)=c.weak?.10:.4;
-  if(c.structural){P(0,1)=P(1,0)=.3;P(1,1)=1.09;}
+  if(validation){
+   for(int j=0;j<c.factors;++j)for(int k=0;k<j;++k)P(j,k)=P(k,j)=c.weak?.10:.3;
+  }else if(c.factors==2)P(0,1)=P(1,0)=c.weak?.10:.4;
+  if(c.structural){
+   MatrixXd A=MatrixXd::Identity(c.factors,c.factors);
+   for(int j=1;j<c.factors;++j)for(int k=0;k<j;++k)A(j,k)=.3*A(j-1,k);
+   P=A*A.transpose();
+  }
+  if(c.variant==1){L(3,1)=.25;L(7,2)=.25;}
   MatrixXd Sigma=L*P*L.transpose()+MatrixXd::Identity(c.p,c.p)*.7;
   if(c.misspecified)Sigma(0,1)=Sigma(1,0)=Sigma(0,1)+.15;
-  MatrixXd root=Sigma.llt().matrixL();
-  for(int n:{100,1000,100000})for(int r=1;r<=3;++r){
+  if(c.variant==2)for(int j:{0,4,8}){Sigma(j,j+1)+=.15;Sigma(j+1,j)+=.15;}
+  if(c.variant==3){
+   VectorXd scale(c.p);for(int j=0;j<c.p;++j)scale(j)=std::pow(10.,-1.+2.*j/(c.p-1.));
+   Sigma=scale.asDiagonal()*Sigma*scale.asDiagonal();
+  }
+  Eigen::LLT<MatrixXd> population_chol(Sigma);require(population_chol.info()==Eigen::Success,"population covariance PD");
+  MatrixXd root=population_chol.matrixL();
+  const std::vector<int> sizes=validation?std::vector<int>{50,200,1000,10000}:std::vector<int>{100,1000,100000};
+  for(int n:sizes)for(int r=1;r<=(validation?2:3);++r){
    if(smoke && !((n!=100000&&r==1)||(ci==1&&n==100000&&r==3)))continue;
-   unsigned seed=260922+100000*ci+13*n+r;std::mt19937 rng(seed);std::normal_distribution<double> norm;
+   unsigned seed=(validation?760921:260922)+100000*ci+13*n+r;std::mt19937 rng(seed);std::normal_distribution<double> norm;
    MatrixXd X(n,c.p);for(int i=0;i<n;++i)for(int j=0;j<c.p;++j)X(i,j)=norm(rng);
    X=(X*root.transpose()).eval();VectorXd mean=X.colwise().mean();
    MatrixXd centered=X.rowwise()-mean.transpose();MatrixXd S=centered.transpose()*centered/n;
@@ -195,7 +230,7 @@ int main(int argc,char** argv){
     data::SampleStats samp;samp.S={units*units*S};samp.n_obs={n};if(c.means)samp.mean={units*mean};
     auto start=estimate::fabin_start_values(*pt,*rep,samp,{});require(bool(start),"start");
     auto obj=estimate::ml_objective(*ev,samp);require(bool(obj),"objective");Context ctx{&*obj,&*con};
-    for(const auto& pr:(options?option_profiles:profiles)){
+    for(const auto& pr:(validation?validation_profiles:(options?option_profiles:profiles))){
      if(smoke&&std::string(pr.name)!="current"&&std::string(pr.name)!="f12_x10")continue;
      VectorXd a=con->contract(*start);nlopt_opt opt=nlopt_create(NLOPT_LD_LBFGS,a.size());require(opt,"nlopt");
      nlopt_set_min_objective(opt,callback,&ctx);nlopt_set_ftol_rel(opt,pr.ftol);nlopt_set_xtol_rel(opt,pr.xtol);nlopt_set_maxeval(opt,5000);
@@ -245,7 +280,9 @@ int main(int argc,char** argv){
        fdrel=(fd-analytic).norm()/(1+analytic.norm());require(fdrel<1e-5,"analytic Hessian normalization/direction");
       }
      }
-     out<<c.name<<','<<n<<','<<r<<','<<units<<','<<seed<<','<<pr.name<<','<<pr.ftol<<','<<pr.xtol<<','<<pr.tolg<<','<<pr.memory<<','<<rc<<','<<evals<<','<<f<<','<<old<<','<<interior<<','<<audit.status<<','<<audit.distance<<','<<audit.edmtotal<<','<<audit.condition<<','<<audit.relative_solve<<','<<audit.step_max<<','<<fitms<<','<<hms<<','<<fdrel<<'\n';
+     out<<c.name<<','<<n<<','<<r<<','<<units<<','<<seed<<','<<pr.name<<','<<pr.ftol<<','<<pr.xtol<<','<<pr.tolg<<','<<pr.memory<<','<<rc<<','<<evals<<','<<f<<','<<old<<','<<interior<<','<<audit.status<<','<<audit.distance<<','<<audit.edmtotal<<','<<audit.condition<<','<<audit.relative_solve<<','<<audit.step_max<<','<<fitms<<','<<hms<<','<<fdrel;
+     if(validation)out<<','<<c.p<<','<<c.factors<<','<<a.size();
+     out<<'\n';
     }
    }
   }

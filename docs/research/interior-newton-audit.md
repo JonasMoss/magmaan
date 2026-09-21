@@ -446,3 +446,74 @@ Reproduction and local results: `tests/checks/interior_newton/README.md`,
 1,134-row design and seven analytic-Hessian directional checks. Executable
 quadratic/affine/scaling checks also passed. Source snapshots, hashes and the
 raw terminal candidates are retained in that local results directory.
+
+## Model-coverage review and fixed-control validation
+
+The original seven cases only span p=4–12 and one or two factors. Despite
+variation in means, equality constraints, weak signal and misspecification,
+this is too narrow to settle optimizer defaults. The expanded panel was fixed
+before inspecting results, with the three current/cheap/conservative profiles
+unchanged. It contains ten new model/settings, p=6–48, one to twelve factors,
+and 12–162 free parameters after equality reduction. N=50/200/1000/10000,
+two independent samples per model/N and three global unit scales yield 240
+paired cases, 720 fits. These are not 240 independent samples: scale variants
+share the same data. The original panel retains the very-large-N=100000 check.
+
+Added structure: larger correlated-factor CFAs; a three-factor regression
+chain with means; cross-loadings; correlated residuals; a larger equality-linked
+model with means; weak factors; and unequal indicator scales spanning a factor
+of 100. All populations have positive-definite covariance. N=50,p=48 deliberately
+approaches the sample covariance rank limit. Exact generating parameters and
+reproduction are in the check README; raw output records p, factors and reduced
+parameter count. Backtracking is still the diagnostic mred=60 version.
+
+| New model | p | Free parameters | Current pass/eligible | Cheap pass/eligible | Conservative pass/eligible |
+|---|---:|---:|---:|---:|---:|
+| One-factor CFA | 6 | 12 | 24/24 | 24/24 | 24/24 |
+| Four-factor CFA | 16 | 38 | 23/24 | 24/24 | 24/24 |
+| Eight-factor CFA | 32 | 92 | 23/24 | 23/24 | 24/24 |
+| Twelve-factor CFA | 48 | 162 | 13/21 | 13/21 | 21/21 |
+| Regression chain, means | 12 | 38 | 23/24 | 24/24 | 24/24 |
+| Cross-loadings | 12 | 29 | 24/24 | 24/24 | 24/24 |
+| Correlated residuals | 12 | 30 | 18/18 | 18/18 | 18/18 |
+| Equality-linked loadings, means | 24 | 72 | 24/24 | 24/24 | 24/24 |
+| Weak factors | 12 | 27 | 10/13 | 10/13 | 13/13 |
+| Unequal indicator scales, means | 16 | 54 | 16/24 | 17/24 | 22/24 |
+| **Total** | | | **198/220** | **201/220** | **218/220** |
+
+Each model/profile has 24 attempts. Twenty endpoints per profile are outside
+the primitive covariance interior and are not counted as audit successes.
+Some of those also have nonpositive curvature. None hit the 5000-evaluation
+budget. Total evaluations are 33295/34550/46041; medians are 119/121/137.
+Thus the conservative profile costs about 33% more total evaluations than the
+cheap one on this panel, but its accuracy advantage is substantial. A median
+alone understates the cost difference on difficult fits.
+
+The conservative profile's two eligible failures both involve unequal scales
+at global multiplier .1: N=200, replication 2 (d=.01510, FTOL_REACHED), and
+N=1000, replication 1 (d=.01327, generic negative return). Cheap-profile
+failures also occur at N=10000 (8 of 60 eligible fits): large samples do not
+remove the need to calibrate numerical accuracy relative to sampling precision.
+No threshold was relaxed and no settings were changed to remove these failures.
+
+**Updated conclusion:** withdraw the cheap profile as a near-settled default.
+Retain it as a possible first stage of an audit-and-polish policy; that policy
+still requires testing. The conservative profile is the stronger standalone
+candidate, but does not guarantee .01 accuracy either. The larger models and
+mixed scales were consequential omissions, and a separate accuracy audit remains
+necessary. Production defaults are unchanged.
+
+Coverage is now useful for continued single-group ML development, not sufficient
+for a package-wide default claim. Before deployment, add multi-group equality/
+invariance, a growth model with fixed loadings, a regular feedback model, and
+published-data/corpus fixtures owned by this check. Non-ML and missing-data
+objectives require their own scaling/coverage work. More replications would
+estimate frequencies better; they do not replace these missing model classes.
+The new panel was held out from the preceding tolerance comparison; once used
+for further tuning it is development data, and another frozen validation set
+will be needed for that policy.
+
+Checks: complete unique paired design; ten analytic-Hessian directional checks;
+positive-definite generating covariances; exact quadratic/affine/normalization
+checks. Raw data, executable/source hashes and model-level summaries are in
+`tests/checks/interior_newton/results/validation-2026-09-21/` locally.

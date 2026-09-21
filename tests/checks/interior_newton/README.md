@@ -124,3 +124,39 @@ reuse, not held-out validation. The standard-library Python summary checks
 paired design coverage and finite-difference checks, retains failures, and
 reports evaluation counts alongside descriptive single-run timings. The first
 run is `results/options-2026-09-21/`. Full interpretation is in the study note.
+
+## Broader validation panel
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/validation-new 60 validate
+python3 tests/checks/interior_newton/summarize_validation.py tests/checks/interior_newton/results/validation-new
+```
+
+Ten new settings, fixed before inspecting results: CFAs with p=6/16/32/48
+and 1/4/8/12 factors; a three-factor regression chain with means; a CFA with
+two cross-loadings; a CFA with three correlated residual pairs; a six-factor
+model with equality-linked loadings and means (p=24); a weak-factor CFA;
+and p=16 with means and unequal measurement scales. The latter multiplies
+indicator scales by a log-spaced sequence from .1 to 10. It is additional to
+the global .1/1/10 multipliers applied to every setting.
+
+N=50/200/1000/10000, two replications, three global unit scales: 240 paired
+cases, fitted under current, x8 and f12_x10 settings (720 fits). Fresh seed
+base 760921; populations are explicitly positive definite. Ordinary CFAs have
+population factor correlations .3; the weak model has variances .12 and
+covariances .10; chain paths are .3 with unit disturbance variances;
+cross-loadings are .25; residual covariances are .15. Other loadings and
+residual variances follow the original generator. Actual equality-reduced
+parameter counts are recorded. N=50,p=48 intentionally approaches the
+sample-covariance rank limit without crossing it.
+
+The summary checks design coverage, ten directional Hessian checks and reports
+all attempts, eligibility, audit failures and evaluation counts. Exclusions
+are not successes. Scale variants share a dataset and are not independent
+replications. First results: `results/validation-2026-09-21/`.
+
+This is an expanded synthetic single-group complete-data ML panel, not broad
+validation of every estimator. It still lacks multi-group invariance, growth,
+feedback, non-Gaussian/missing-data and published-data models. It is held out
+from the earlier option choice, but becomes development evidence once used
+for subsequent tuning. Do not tune and describe these same cases as held out.
