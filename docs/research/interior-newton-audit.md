@@ -6,7 +6,7 @@ by restarts/independent optimizers remain deferred, as requested.
 
 ## Candidate choices
 
-Use a candidate default **maximum Newton distance d = 0.01**. In regular ML,
+The agreed regular-interior accuracy target is **maximum Newton distance d = 0.01**. In regular ML,
 this measures predicted remaining displacement in joint information-standard-
 error units. Equivalently, require predicted improvement in twice the total
 log likelihood below 1e-4, or total-negative-log-likelihood EDM below 5e-5.
@@ -23,7 +23,7 @@ continuous distance and curvature status. Sensitivity targets are .003 and
 .03. Do not gate an indefinite or numerically singular Hessian by a
 pseudoinverse or a repaired positive-definite matrix.
 
-The best balanced **candidate L-BFGS stopping profile** in this study is
+The original conservative **candidate L-BFGS stopping profile** in this study is
 `ftol_rel=1e-12`, `xtol_rel=1e-10`, retaining NLopt's internal gradient default
 and automatic memory setting. This is not yet the production default. The
 line-search/domain-recovery defect must be addressed independently; the
@@ -392,3 +392,57 @@ unique design keys, the prescribed 90 natural endpoints and 56 probes, and
 references/precision flags are preserved. Source/library hashes and executed
 source snapshots accompany the local results. No Monte Carlo error or timing
 precision claim is made from this smoke.
+
+
+## Intermediate L-BFGS options after agreeing the .01 target
+
+The author has accepted .01 as the regular-interior accuracy budget. It remains
+an approximate statistical-scale accuracy target, not a universal bound. The
+next question is search efficiency at that fixed target, not selecting a cutoff
+from success rates.
+
+A further paired run uses the same 189 datasets/unit combinations and six
+profiles (1,134 fits). It retains automatic memory, internal gradient tolerance
+1e-8, and maxeval=5000. As before, it uses diagnostic extended backtracking
+(mred=60); this is not available through the production options interface.
+Nine weak-model endpoints per profile are improper and excluded from interior
+interpretation. All profiles have the same 180 eligible cases.
+
+| Relative function tolerance | Relative step tolerance | Pass .01 | Maximum d | Median evaluations | Total evaluations |
+|---|---|---:|---:|---:|---:|
+| 1e-10 | 1e-7 (current) | 179/180 | .2542 | 68 | 14575 |
+| 1e-10 | 1e-8 | 180/180 | .00503 | 72 | 15122 |
+| 1e-10 | 1e-9 | 180/180 | .00503 | 72 | 15245 |
+| 1e-10 | 1e-10 | 180/180 | .00503 | 72 | 15245 |
+| 1e-11 | 1e-9 | 180/180 | .00231 | 75 | 16257 |
+| 1e-12 | 1e-10 | 180/180 | .00231 | 77 | 17054 |
+
+The cheapest successful tested profile is ftol_rel=1e-10, xtol_rel=1e-8:
+3.8% more total evaluations than current controls, versus 17.0% for the original
+conservative candidate. The latter consumes 12.8% more evaluations than the
+cheaper profile. These comparisons count all attempted fits. Single-run median
+fit times were .298, .300, .288, .287, .309 and .319 ms respectively; fixed order
+and very short fits make these descriptive only. Evaluation counts support the
+cost comparison more clearly.
+
+Working recommendation: evaluate the cheaper profile as a first-pass candidate,
+with the separate .01 Newton audit deciding achieved accuracy. Retain the
+conservative profile as a candidate polishing setting when the audit fails;
+that conditional continuation policy has not been implemented or tested here.
+Do not infer that either search tolerance guarantees an audit pass. This panel
+reuses the exploratory datasets, so it does not establish held-out reliability
+or justify a production default change by itself. Internal gradient tightening
+and fixed memory had no useful benefit in the earlier comparison and remain
+unchanged. The evaluation cap was held fixed, not calibrated by this run.
+
+The domain/backtracking issue must be resolved separately before deployment.
+A positive solver code alone is insufficient (the current profile's failing
+case returns XTOL_REACHED), and a negative code alone must not discard an
+accurate candidate. No production controls, public audit, manuscript results,
+or boundary treatment changed.
+
+Reproduction and local results: `tests/checks/interior_newton/README.md`,
+`results/options-2026-09-21/` within that check. The summary validates the paired
+1,134-row design and seven analytic-Hessian directional checks. Executable
+quadratic/affine/scaling checks also passed. Source snapshots, hashes and the
+raw terminal candidates are retained in that local results directory.

@@ -68,6 +68,10 @@ const std::vector<Profile> profiles={
  {"x10",1e-10,1e-10,0,0},{"f12_x10",1e-12,1e-10,0,0},
  {"grad10",0,0,1e-10,0},{"grad12",0,0,1e-12,0},
  {"memory10",1e-12,1e-10,0,10},{"memory20",1e-12,1e-10,0,20}};
+const std::vector<Profile> option_profiles={
+ {"current",1e-10,1e-7,0,0},{"x8",1e-10,1e-8,0,0},
+ {"x9",1e-10,1e-9,0,0},{"x10",1e-10,1e-10,0,0},
+ {"f11_x9",1e-11,1e-9,0,0},{"f12_x10",1e-12,1e-10,0,0}};
 struct Case{const char* name;int p,factors;bool weak,equal,means,structural,misspecified;};
 const std::vector<Case> cases={
  {"cfa4",4,1,false,false,false,false,false},
@@ -161,7 +165,8 @@ void refinement_checks(){
 }
 int main(int argc,char** argv){
  const bool smoke=argc==3&&std::string(argv[2])=="refine";
- require(argc==2||smoke,"usage: check output.csv [refine]");exact_checks();if(smoke)refinement_checks();std::ofstream out(argv[1]);require(bool(out),"output");
+ const bool options=argc==3&&std::string(argv[2])=="options";
+ require(argc==2||smoke||options,"usage: check output.csv [refine|options]");exact_checks();if(smoke)refinement_checks();std::ofstream out(argv[1]);require(bool(out),"output");
  out<<std::setprecision(17);
  if(smoke)out<<"model,n,rep,units,seed,source,target,direction,rc,evals,interior,status,predicted,condition,reference_status,refinement_steps,reference_distance,actual,actual_over_predicted,step_relative_error,twice_loglik_gain,gain_over_predicted,distance_resolved,gain_resolved,refinement_ms,anchor_agreement\n";
  else out<<"model,n,rep,units,seed,profile,ftol,xtol,tolg,memory,rc,evals,fmin,old_residual,interior,status,distance,edm_total,condition,solve_error,step_raw_max,fit_ms,hessian_audit_ms,hessian_fd_rel\n";
@@ -190,7 +195,7 @@ int main(int argc,char** argv){
     data::SampleStats samp;samp.S={units*units*S};samp.n_obs={n};if(c.means)samp.mean={units*mean};
     auto start=estimate::fabin_start_values(*pt,*rep,samp,{});require(bool(start),"start");
     auto obj=estimate::ml_objective(*ev,samp);require(bool(obj),"objective");Context ctx{&*obj,&*con};
-    for(const auto& pr:profiles){
+    for(const auto& pr:(options?option_profiles:profiles)){
      if(smoke&&std::string(pr.name)!="current"&&std::string(pr.name)!="f12_x10")continue;
      VectorXd a=con->contract(*start);nlopt_opt opt=nlopt_create(NLOPT_LD_LBFGS,a.size());require(opt,"nlopt");
      nlopt_set_min_objective(opt,callback,&ctx);nlopt_set_ftol_rel(opt,pr.ftol);nlopt_set_xtol_rel(opt,pr.xtol);nlopt_set_maxeval(opt,5000);

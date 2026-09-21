@@ -106,3 +106,21 @@ First completed run: `results/refinement-smoke-2026-09-21-v2/`; `v2` adds
 quadratic checks and anchor-agreement telemetry to the initial smoke. Both
 runs are retained. This checks the local error prediction; it does not select
 an accuracy budget or establish uniform guarantees, coverage or globality.
+
+
+## Intermediate stopping options
+
+After fixing the desired audit budget at .01, compare cheaper intermediate
+function/step tolerances on the original paired panel:
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/options-new 60 options
+python3 tests/checks/interior_newton/summarize_options.py tests/checks/interior_newton/results/options-new
+```
+
+Six profiles, 189 cases each (1,134 fits); unchanged datasets, starts, internal
+gradient tolerance, automatic memory and evaluation cap. This is exploratory
+reuse, not held-out validation. The standard-library Python summary checks
+paired design coverage and finite-difference checks, retains failures, and
+reports evaluation counts alongside descriptive single-run timings. The first
+run is `results/options-2026-09-21/`. Full interpretation is in the study note.

@@ -77,7 +77,7 @@ semantics · **XL** statistical design/research track before implementation.
   `tests/checks/interior_newton/`; findings in
   `docs/research/interior-newton-audit.md`. Candidate audit budget is
   `d=sqrt(N*g' H^{-1}g) <= .01` (total EDM <=5e-5), with .003/.03
-  sensitivity. Candidate backend stopping is ftol_rel=1e-12 and
+  sensitivity. Original conservative candidate backend stopping is ftol_rel=1e-12 and
   xtol_rel=1e-10, retaining internal tolg=1e-8 and automatic memory. These
   are recommendations, not deployed defaults. Extended-backtracking runs
   passed all 180 eligible interior cases at .003; stock backtracking still
@@ -88,9 +88,9 @@ semantics · **XL** statistical design/research track before implementation.
   criterion, the exact .01 conversion of MINUIT manual 94.1's nominal default,
   and conditional RMSE/Gaussian-reference interpretations. Available reference
   files and failed-download receipts are retained under ignored `external/refs/`.
-  Remaining: adopt an explicit accuracy budget and validate predicted versus
-  actual error; the literature does not remove that distinction.
-  **Tolerance rationale still to settle:** .01 is a proposed numerical-error
+  The author has accepted .01 as the regular-interior accuracy budget.
+  Broader validation of predicted versus actual error remains separate.
+  **Agreed tolerance rationale:** .01 is a numerical-error
   budget (one hundredth of an information-based SE in any linear contrast
   under the local quadratic approximation), not a literature-mandated cutoff
   or a value estimated by counting passes. Choose acceptable downstream
@@ -106,6 +106,13 @@ semantics · **XL** statistical design/research track before implementation.
   approximation nor the cutoff. For non-ML discrepancies, establish the
   estimator's objective and covariance scaling before claiming SE units;
   exposing its optimizer controls does not transfer the ML audit calibration.
+  Intermediate option study (1,134 further paired fits) found that ftol_rel=1e-10,
+  xtol_rel=1e-8 also passed all 180 eligible cases at .01, with 3.8% more total
+  evaluations than legacy controls versus 17.0% for the conservative candidate.
+  Evaluate this cheaper first-pass candidate with the separate audit; conditional
+  polishing with tighter controls is a proposed next step, not yet tested.
+  Same exploratory datasets and diagnostic extended backtracking: no default
+  changed and no held-out reliability claim. Domain recovery remains prerequisite.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal
@@ -120,7 +127,7 @@ semantics · **XL** statistical design/research track before implementation.
   Remaining lowest-priority practical follow-up: broaden same-domain references,
   compare standardized parameter/moment changes, and freeze targets before
   held-out model/unit/rank validation. Neither the existing two-model pilot
-  nor this prioritization selects a replacement default cutoff.
+  nor this prioritization establishes a production convergence policy.
 
 ### Score/inference adapter follow-ups
 
