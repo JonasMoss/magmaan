@@ -1947,6 +1947,23 @@ Remaining work:
     `*_rbm_parts` (weighted families) or via the explicit base-swap (ML/FIML);
     `base.f(θ)` is rebuilt from each family's public objective constructor.
     13 cases, all green.
+  - **Performance and regular-region checks (inspection 2026-09-22).**
+    Complete-data implicit ML finite-differences the full adjusted objective in
+    full theta coordinates: `1 + 2*n_free` parts rebuilds per optimizer
+    value/gradient callback, even when equalities reduce the search dimension.
+    Each rebuild includes observed information and raw empirical scores; the
+    base likelihood's analytic gradient is computed and discarded. Add a
+    value-only ML penalty/parts interface so external derivative audits need
+    not invoke a complete explicit correction to read the penalty. Retain the
+    analytic base gradient, differentiate the adjustment in reduced coordinates,
+    and investigate model/sample-feature reuse and analytic trace derivatives.
+    The existing trace solve checks LU invertibility, not positive curvature;
+    finite indefinite-information endpoints can have large negative trace
+    adjustments. Specify conditioning/curvature acceptance and a documented
+    regular-region search policy before treating such returned endpoints as
+    validated inference estimates. Preserve the distinction between search
+    restrictions, estimator definition, and solver return status. Benchmark
+    fitting and independent audit separately before scaling up simulations.
   - **M — magmaan-owned paper rerun.** Experiment
     `38-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
     paper's main two-factor and growth-curve examples from the authors' OSF
