@@ -1947,7 +1947,11 @@ Remaining work:
     `*_rbm_parts` (weighted families) or via the explicit base-swap (ML/FIML);
     `base.f(θ)` is rebuilt from each family's public objective constructor.
     13 cases, all green.
-  - **Performance and regular-region checks (inspection 2026-09-22).**
+  - **Deferred — performance and regular-region checks (2026-09-22).**
+    RBM has been dropped from the current inference-study expansion at the
+    author's request. The optimization prototype was reverted; no new RBM
+    implementation or search restriction is shipped. Reopen only for an
+    explicitly renewed RBM consumer.
     Complete-data implicit ML finite-differences the full adjusted objective in
     full theta coordinates: `1 + 2*n_free` parts rebuilds per optimizer
     value/gradient callback, even when equalities reduce the search dimension.
@@ -1957,6 +1961,11 @@ Remaining work:
     not invoke a complete explicit correction to read the penalty. Retain the
     analytic base gradient, differentiate the adjustment in reduced coordinates,
     and investigate model/sample-feature reuse and analytic trace derivatives.
+    For complete-data Gaussian scores, cache centered linear/quadratic data
+    features (or their empirical cross-product when smaller) once per fit;
+    preserve empirical meat rather than replacing it by a normal expectation.
+    Independently verify off-optimum scores, means, equality reduction and
+    small/large-N branches before accepting that optimization.
     The existing trace solve checks LU invertibility, not positive curvature;
     finite indefinite-information endpoints can have large negative trace
     adjustments. Specify conditioning/curvature acceptance and a documented
