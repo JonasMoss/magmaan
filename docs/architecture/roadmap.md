@@ -171,6 +171,30 @@ first-order check at the returned representation. Audit acceptance is therefore
 not a local/global optimality certificate at singular points. Further optimization
 policies are deferred to concrete downstream failures or performance needs.
 
+The frontier multi-information penalty is the soft counterpart of that
+covariance domain (`include/magmaan/estimate/frontier/multiinfo_penalty.hpp`;
+`estimate::frontier::fit_ml_multiinfo`, `estimate::fiml::frontier::fit_fiml_multiinfo`;
+R `frontier_fit_ml_multiinfo()` / `frontier_fit_fiml_multiinfo()`). It maximizes
+`l(theta) + lambda * sum_b log det Corr(v_K)`, where `v = [eta; y]` is the complete
+latent-plus-observed vector in RAM form and `K` keeps every variable whose
+residual-variance cell is free or fixed nonzero. Fixed.x covariates stay in `K`,
+because dropping them removes the barrier on every equation that regresses on
+them. Phantom observed copies and zero-variance latents drop out. The penalty is
+scale invariant, so marker and std.lv give the same implied `Sigma`, and it is
+bounded above by zero. For recursive `B` it equals `sum log(1 - R2_i) + log det
+Corr(S_KK)` with lavaan's `R2_i = 1 - S_ii / C_ii`, so it tends to minus infinity
+exactly as `S_KK` loses rank. The penalized estimate is therefore a point on the
+interior-point central path of PSD-ML at barrier parameter `lambda / N`.
+Nonrecursive models are fitted and flagged (`penalty$recursive`). The fit returns
+the unpenalized half-discrepancy as `fmin`, so chi-square and fit measures read
+the ordinary criterion at the penalized estimate. Standard errors are ordinary
+information SEs at that point. The default is `lambda = 0.25` (`eta = 1.25`).
+Experiment 85 found that any `lambda > 0` removes all improper, boundary, and
+failed fits, that `lambda = 0.25` matches or beats PSD-ML accuracy with near-PSD-ML
+chi-square and Wald calibration at `N = 50`, and that the originally proposed
+`lambda = 1` over-shrinks high-R2 equations and correlations near one. SNLLS,
+LS/ordinal paths, and two-level models are out of scope.
+
 Fit finalization supplies the authoritative common numerical verdict through
 `estimate::fit_verdict(estimates)`, independently of optimizer termination or
 the driven-coordinate `fit$audit`. It verifies the original half-discrepancy

@@ -816,6 +816,31 @@ when they next change.
      needs an explicit policy. Parameter-space bounds or penalties remain a
      separate speculative estimator project.
 
+- **M — multi-information penalty (frontier) follow-ups.** Landed
+  2026-09-22: `estimate::frontier::fit_ml_multiinfo`,
+  `estimate::fiml::frontier::fit_fiml_multiinfo`, and R
+  `frontier_fit_ml_multiinfo()` / `frontier_fit_fiml_multiinfo()`. The
+  penalty is `lambda * log det Corr(v_K)` over the complete latent-plus-observed
+  vector. It has an analytic gradient through the RAM derivative, finite-
+  difference, brute-force, closed-form, invariance, O(1/N), barrier,
+  exclusion, fixed.x, nonrecursive, and FIML-equals-ML gates, and a default
+  `lambda = 0.25` set by experiment 85. Remaining, in order:
+  1. Misspecification stress. Run a population whose pseudo-true value is
+     improper and check that the penalized estimate converges to the PSD-ML
+     boundary as N grows. A barrier hides this diagnostic, so an ordinary-ML
+     audit must stay the documented companion.
+  2. Inference at the penalized estimate. Compare the current ordinary
+     information SEs with a penalized-Hessian sandwich, `(H + lambda P'')^-1`
+     bread, when `lambda / N` is not negligible (N <= 100 near the boundary).
+  3. Weight selection. Test whether a model-level rule (a fixed `lambda`, or
+     `lambda` tied to the number of equations in `K`) generalizes beyond
+     experiment 85's five designs, including larger p, multi-group, and FIML
+     with MAR missingness.
+  4. Scope. LS/ordinal paths need a discrepancy-specific scaling in place of
+     `l = -N * fmin`. Nonrecursive models have a proved barrier only when the
+     zero-residual variables are sinks. The characterization in the header
+     comment should be promoted to a note before any paper claim.
+
 - **XL — covariance-honest SEM paper and optional uniform parameter
   inference.** The independent exploratory paper project is
   `papers/covariance-honest-sem/`. Its required contribution is the existing

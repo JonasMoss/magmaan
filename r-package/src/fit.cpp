@@ -21,6 +21,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/evaluate.hpp"
+#include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -2499,6 +2500,95 @@ Rcpp::List frontier_fit_ml_psd_impl(
   Rcpp::List out = fit_result(ctx, est, &starts, "ML");
   out["ml_start_policy"] = start_policy;
   out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
+  return out;
+}
+
+namespace {
+
+magmaan::estimate::frontier::MultiInfoPenaltyOptions multiinfo_options_from(
+    double eta, Rcpp::Nullable<Rcpp::NumericVector> weight) {
+  magmaan::estimate::frontier::MultiInfoPenaltyOptions out;
+  out.eta = eta;
+  if (weight.isNotNull()) {
+    Rcpp::NumericVector w(weight.get());
+    if (w.size() != 1) Rcpp::stop("magmaan: `weight` must be NULL or a single number");
+    out.weight = w[0];
+  }
+  return out;
+}
+
+// Per-variable log(1 − R²_i) terms keyed by the extended latent / observed
+// names, plus the scalar pieces of the penalized fit.
+Rcpp::List multiinfo_penalty_to_r(
+    const Ctx& ctx, const magmaan::estimate::frontier::PenalizedFit& fit) {
+  const auto& report = fit.penalty;
+  const R_xlen_t nt = static_cast<R_xlen_t>(report.terms.size());
+  Rcpp::IntegerVector block(nt);
+  Rcpp::CharacterVector kind(nt), variable(nt);
+  Rcpp::NumericVector log_term(nt), r2(nt);
+  for (R_xlen_t i = 0; i < nt; ++i) {
+    const auto& t = report.terms[static_cast<std::size_t>(i)];
+    const auto b = static_cast<std::size_t>(t.block);
+    const auto j = static_cast<std::size_t>(t.index);
+    block[i] = t.block + 1;
+    kind[i] = t.latent ? "latent" : "observed";
+    const auto& names = t.latent ? ctx.rep.lv_names : ctx.rep.ov_names;
+    variable[i] = b < names.size() && j < names[b].size() ? names[b][j] : "";
+    log_term[i] = t.log_one_minus_r2;
+    r2[i] = 1.0 - std::exp(t.log_one_minus_r2);
+  }
+  return Rcpp::List::create(
+      Rcpp::_["type"] = "multiinfo",
+      Rcpp::_["weight"] = fit.weight,
+      Rcpp::_["value"] = report.value,
+      Rcpp::_["penalized_fmin"] = fit.penalized_fmin,
+      Rcpp::_["n_total"] = fit.n_total,
+      Rcpp::_["recursive"] = report.recursive,
+      Rcpp::_["start_repaired"] = fit.start_repaired,
+      Rcpp::_["block_value"] = Rcpp::wrap(report.block_value),
+      Rcpp::_["residual_log_det_corr"] = Rcpp::wrap(report.residual_log_det_corr),
+      Rcpp::_["terms"] = Rcpp::DataFrame::create(
+          Rcpp::_["block"] = block, Rcpp::_["kind"] = kind,
+          Rcpp::_["variable"] = variable,
+          Rcpp::_["log_one_minus_r2"] = log_term, Rcpp::_["r2"] = r2,
+          Rcpp::_["stringsAsFactors"] = false));
+}
+
+}  // namespace
+
+// Complete-data ML plus the frontier multi-information (complete-data
+// correlation log-determinant) penalty. `fmin` is the UNPENALIZED ½F at the
+// penalized estimate; `penalty` carries λ, P(θ̃), and per-equation terms.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_ml_multiinfo_impl(
+    SEXP partable, Rcpp::List sample_stats, double eta = 1.25,
+    Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_ml_multiinfo");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(
+      std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  std::string start_policy = "scaled-fabin";
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("start"))
+      start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
+                                          "fit_ml", "scaled-fabin");
+  }
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+  auto r = magmaan::estimate::frontier::fit_ml_multiinfo(
+      ctx.pt, ctx.rep, ctx.samp, x0, multiinfo_options_from(eta, weight),
+      bounds_from_nullable(bounds), backend,
+      optim_opts_from(control, magmaan::estimate::ml_optim_options()));
+  if (!r.has_value()) stop_fit(r.error());
+  Rcpp::List out = fit_result(ctx, r->estimates, &starts, "ML");
+  out["ml_start_policy"] = start_policy;
+  out["penalty"] = multiinfo_penalty_to_r(ctx, *r);
   return out;
 }
 
@@ -5285,6 +5375,55 @@ Rcpp::List frontier_fit_fiml_psd_impl(
   Rcpp::List out = fiml_fit_result(ctx, raw, est, &starts);
   out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
   out["covariance_policy"] = "psd";
+  return out;
+}
+
+// Casewise FIML plus the multi-information penalty (N = number of cases).
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_fiml_multiinfo_impl(
+    SEXP partable, SEXP raw_data, double eta = 1.25,
+    Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_fiml_multiinfo");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty())
+    Rcpp::stop("magmaan: model has no observed variables");
+
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  if (auto e = magmaan::estimate::fiml::validate_fiml_fixed_x_missing_policy(
+          ctx.pt, raw); !e.has_value()) {
+    stop_fit(e.error());
+  }
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
+  ctx.samp = pack_or->start_stats;
+  ctx.ov_names = ctx.rep.ov_names[0];
+  ctx.meanstructure = has_meanstructure(ctx.pt);
+  if (!ctx.meanstructure) ctx.samp.mean.clear();
+
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull()
+          ? magmaan::estimate::Backend::NloptLbfgs
+          : fiml_backend_from_optimizer_arg(optimizer);
+  auto r = magmaan::estimate::fiml::frontier::fit_fiml_multiinfo(
+      ctx.pt, ctx.rep, raw, x0, *pack_or, multiinfo_options_from(eta, weight),
+      bounds_from_nullable(bounds), backend, optim_opts_from(control));
+  if (!r.has_value()) stop_fit(r.error());
+  Rcpp::List out = fiml_fit_result(ctx, raw, r->estimates, &starts);
+  out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
+  out["penalty"] = multiinfo_penalty_to_r(ctx, *r);
   return out;
 }
 

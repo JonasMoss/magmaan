@@ -1,0 +1,219 @@
+---
+title: "Multi-information penalty against improper solutions"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+res <- file.path("results", "full")
+need <- file.path(res, c("fits.csv", "params.csv", "design.csv"))
+if (!all(file.exists(need))) {
+  stop("Missing results. Run: Rscript run_experiment.R --full", call. = FALSE)
+}
+fits <- read.csv(need[[1]], stringsAsFactors = FALSE)
+params <- read.csv(need[[2]], stringsAsFactors = FALSE)
+design <- read.csv(need[[3]], stringsAsFactors = FALSE)
+truth <- setNames(design$key_truth, design$design)
+fits$err <- fits$key_est - truth[fits$design]
+params$cover <- abs(params$est - params$truth) <= 1.96 * params$se
+
+design_label <- c(
+  f1_p3 = "One factor, 3 indicators (.9, .3, .9)",
+  f1_p5 = "One factor, 5 indicators (.9, .3, .9, .3, .9)",
+  f2_r90 = "Two factors, r = .90",
+  f2_r97 = "Two factors, r = .97",
+  path_r2_90 = "Three-latent path, R²(f3) = .90")
+key_label <- c(
+  f1_p3 = "smallest residual variance", f1_p5 = "smallest residual variance",
+  f2_r90 = "factor correlation", f2_r97 = "factor correlation",
+  path_r2_90 = "R² of f3")
+
+pct <- function(x) sprintf("%.1f", 100 * x)
+num <- function(x) sprintf("%.3f", x)
+cell <- function(d, n, m) fits[fits$design == d & fits$n == n & fits$method == m, ]
+rate <- function(d, n, m, f) {
+  s <- cell(d, n, m)
+  mean(f(s), na.rm = TRUE)
+}
+key_rmse <- function(d, n, m) sqrt(mean(cell(d, n, m)$err^2, na.rm = TRUE))
+key_bias <- function(d, n, m) mean(cell(d, n, m)$err, na.rm = TRUE)
+reject <- function(d, n, m) rate(d, n, m, function(s) s$pvalue < 0.05)
+min_cover <- function(d, n, m) {
+  s <- params[params$design == d & params$n == n & params$method == m, ]
+  min(tapply(s$cover, s$param, mean, na.rm = TRUE))
+}
+improper <- function(d, n, m) rate(d, n, m, function(s) s$classification == "improper")
+boundary <- function(d, n, m) rate(d, n, m, function(s) s$classification == "boundary")
+failed <- function(d, n, m) rate(d, n, m, function(s) s$status != "ok" | !s$converged)
+designs <- names(design_label)
+pens <- c("pen_l010", "pen_l025", "pen_l050", "pen_l100", "pen_l200")
+pen_all <- fits[fits$method %in% pens, ]
+```
+
+## Question
+
+Improper SEM solutions (negative residual variances, latent correlations
+beyond one, latent R² of one) all say that some equation has no error. The
+multi-information penalty adds λ times log det of the complete-data
+correlation matrix to the log-likelihood. For recursive models that is
+Σ log(1 − R²) over every structural equation plus the log-determinant of the
+residual correlations, so it is a scale-invariant log barrier on every improper
+direction at once. Does it remove improper and boundary solutions without
+costing the accuracy and calibration of ML, and how large should λ be?
+
+## Short answer
+
+Any λ > 0 does what the barrier promises. Across
+`r format(nrow(pen_all), big.mark = ",")` penalized fits there were
+`r sum(pen_all$classification != "interior" | pen_all$status != "ok", na.rm = TRUE)`
+improper, boundary, or failed solutions. At N = 50, by contrast, ordinary ML was
+improper in up to `r pct(improper("f1_p3", 50, "ml"))`% of samples. Variance
+bounds removed Heywood cases but left
+`r pct(improper("f2_r97", 50, "ml_bounded"))`% of the r = .97 fits with a
+factor correlation above one. PSD-constrained ML was never improper, but it
+sat on the covariance boundary in `r pct(boundary("f1_p3", 50, "psd"))`% of the
+three-indicator samples.
+
+The weight matters. λ = 0.25 (η = 1.25, now the default) matched or beat
+PSD-ML on the key quantity in every cell except r = .97 at N ≤ 100
+(`r num(key_rmse("f2_r97", 50, "pen_l025"))` vs
+`r num(key_rmse("f2_r97", 50, "psd"))` RMSE at N = 50), and it was far better in the
+Heywood-prone one-factor design
+(`r num(key_rmse("f1_p3", 50, "pen_l025"))` vs
+`r num(key_rmse("f1_p3", 50, "psd"))`). Its χ² rejection rates and worst
+parameter coverage stayed within about two points of PSD-ML. The η = 2 weight
+from the original proposal (λ = 1) over-shrinks correlations near one and
+high-R² equations at N ≤ 100. With r = .97 at N = 50 its factor correlation is
+biased by `r num(key_bias("f2_r97", 50, "pen_l100"))`, the factor covariance
+covers only `r pct(min_cover("f2_r97", 50, "pen_l100"))`% of the time, and the
+unpenalized χ² at the penalized estimate rejects in
+`r pct(reject("f2_r97", 50, "pen_l100"))`% of samples, against
+`r pct(reject("f2_r97", 50, "psd"))`% for PSD-ML.
+
+## Evidence
+
+### The barrier removes every improper and boundary solution
+
+Share of samples at N = 50 (%). "Penalized" pools all five weights.
+
+```{r admissibility}
+tab <- data.frame(
+  Design = design_label[designs],
+  `ML improper` = sapply(designs, function(d) pct(improper(d, 50, "ml"))),
+  `ML failed` = sapply(designs, function(d) pct(failed(d, 50, "ml"))),
+  `Bounded ML improper` = sapply(designs, function(d) pct(improper(d, 50, "ml_bounded"))),
+  `PSD-ML boundary` = sapply(designs, function(d) pct(boundary(d, 50, "psd"))),
+  `Penalized improper, boundary, or failed` = sapply(designs, function(d) {
+    s <- pen_all[pen_all$design == d & pen_all$n == 50, ]
+    pct(mean(s$classification != "interior" | s$status != "ok" | !s$converged,
+             na.rm = TRUE))
+  }),
+  check.names = FALSE, row.names = NULL)
+knitr::kable(tab, align = "lrrrrr")
+```
+
+### Small λ keeps the accuracy, large λ shrinks
+
+RMSE of each design's key quantity at N = 50. The ML column is dominated by
+wild Heywood estimates in the three-indicator design.
+
+```{r accuracy}
+cols <- c(ml = "ML", psd = "PSD-ML", pen_l010 = "λ = 0.1", pen_l025 = "λ = 0.25",
+          pen_l050 = "λ = 0.5", pen_l100 = "λ = 1", pen_l200 = "λ = 2")
+tab <- data.frame(Design = design_label[designs], `Key quantity` = key_label[designs],
+                  check.names = FALSE, row.names = NULL)
+for (m in names(cols)) tab[[cols[[m]]]] <- sapply(designs, function(d) num(key_rmse(d, 50, m)))
+knitr::kable(tab, align = paste0("ll", strrep("r", length(cols))))
+```
+
+By N = 400 no weight up to λ = 1 is worse than PSD-ML by more than 0.003 on
+the key quantity, while λ = 2 still shrinks correlations near one. The penalty's bias is toward zero
+correlation and zero R², and it grows roughly with 1/(1 − R²). It is therefore
+largest exactly where the population is closest to the boundary.
+
+### Calibration follows λ
+
+χ² rejection at the 5% level and the worst coverage of a nominal 95% Wald
+interval over the free parameters, N = 50 (%). The three-indicator one-factor
+model has no degrees of freedom and is omitted from the χ² columns.
+
+```{r calibration}
+ms <- c(ml = "ML", psd = "PSD-ML", pen_l025 = "λ = 0.25", pen_l100 = "λ = 1")
+tab <- data.frame(Design = design_label[designs], check.names = FALSE, row.names = NULL)
+for (m in names(ms)) {
+  tab[[paste("χ² reject,", ms[[m]])]] <- sapply(designs, function(d) {
+    if (d == "f1_p3") "–" else pct(reject(d, 50, m))
+  })
+}
+for (m in names(ms)) {
+  tab[[paste("Worst coverage,", ms[[m]])]] <- sapply(designs, function(d) pct(min_cover(d, 50, m)))
+}
+knitr::kable(tab, align = paste0("l", strrep("r", 2 * length(ms))))
+```
+
+The penalized fits report the unpenalized χ² and expected-information standard
+errors at the penalized estimate. At λ = 0.25 the shift is small enough that
+both stay close to PSD-ML. At λ = 1 the shift inflates the χ² and
+undercovers the latent variances and covariances it shrinks most.
+
+### The gain comes from samples where ML is improper
+
+RMSE of the key quantity for N ≤ 100, split by whether ordinary ML was improper
+on the same sample.
+
+```{r conditional}
+ml_class <- fits[fits$method == "ml", c("design", "n", "rep", "classification")]
+names(ml_class)[4] <- "ml_class"
+g <- merge(fits[fits$n <= 100, ], ml_class, by = c("design", "n", "rep"))
+g$ml_state <- ifelse(!is.na(g$ml_class) & g$ml_class == "improper",
+                     "ML improper", "ML proper")
+ms <- c(psd = "PSD-ML", pen_l025 = "λ = 0.25", pen_l100 = "λ = 1")
+rows <- expand.grid(state = c("ML improper", "ML proper"), design = designs,
+                    stringsAsFactors = FALSE)
+rows <- rows[!(rows$design == "f1_p5" & rows$state == "ML improper"), ]
+tab <- data.frame(Design = design_label[rows$design], Samples = rows$state,
+                  check.names = FALSE, row.names = NULL)
+for (m in names(ms)) {
+  tab[[ms[[m]]]] <- mapply(function(d, st) {
+    s <- g[g$design == d & g$ml_state == st & g$method == m, ]
+    num(sqrt(mean(s$err^2, na.rm = TRUE)))
+  }, rows$design, rows$state)
+}
+knitr::kable(tab, align = "llrrr")
+```
+
+On improper-ML samples λ = 0.25 cuts the error of the PSD-ML boundary
+estimate by a quarter to a half. λ = 1 overshoots at r = .97 and does worse than
+PSD-ML even there. On proper-ML samples PSD-ML equals ML. The penalty still
+helps the residual-variance quantity, which ML underestimates, but it costs
+accuracy on correlations and R² near one: at most 0.009 for λ = 0.25 and up to
+0.044 for λ = 1.
+
+## Caveats
+
+- Data are multivariate normal and every model is correctly specified. Improper
+  solutions caused by misspecification are exactly where a barrier hides a
+  diagnostic, and this run does not test them. Fitting ordinary ML alongside the
+  penalized fit keeps that diagnostic available.
+- The default λ = 0.25 was chosen on this grid. It is a reasoned default, not an
+  optimized one. Other models, larger p, or nonrecursive structures may favor a
+  different weight.
+- Standard errors are unpenalized expected-information errors evaluated at the
+  penalized estimate. No penalized sandwich or bias-corrected interval was
+  tried.
+- Each design reports one key quantity. The all-parameter RMSE and coverage are
+  in `results/full/params.csv`.
+
+## Reproduce
+
+```sh
+just r-dev
+Rscript experiments/85-multiinfo-penalty-improper/run_experiment.R --full
+quarto render experiments/85-multiinfo-penalty-improper/report.qmd
+```

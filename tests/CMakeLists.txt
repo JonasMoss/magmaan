@@ -102,6 +102,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/optimizer_crosscheck_test.cpp
   unit/psd_ml_test.cpp
   unit/psd_ml_corpus_test.cpp
+  unit/multiinfo_penalty_test.cpp
   unit/ls_path_test.cpp
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp

@@ -75,6 +75,13 @@ the χ² fit test, uncontaminated, so the GOF stays valid. Closes with a
 penalized-sandwich SE `Cov(θ̂) = (H + P_ρ'')⁻¹ V (H + P_ρ'')⁻¹` and an effective-df
 correction for the fit test.
 
+**Status 2026-09-22.** Penalty (a) is superseded by the landed frontier
+multi-information penalty (`frontier_fit_ml_multiinfo()`). That penalty is a
+scale-invariant log barrier on every structural equation and on the joint
+residual correlations, not only on diagonal variances; see
+[todo.md](todo.md) and experiment 85. Penalty (b) and the penalized-sandwich
+SE remain speculative.
+
 **Alternative already available.** Covariance-space conditioning already covers
 the convergence case: `data::frontier` covariance shrinkage (`S_a = (1-λ)S + λT`),
 `estimate::frontier::fit_ml_ridge_continuation()` (warm-started continuation to

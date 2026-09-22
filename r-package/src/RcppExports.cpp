@@ -165,6 +165,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_fit_ml_multiinfo_impl
+Rcpp::List frontier_fit_ml_multiinfo_impl(SEXP partable, Rcpp::List sample_stats, double eta, Rcpp::Nullable<Rcpp::NumericVector> weight, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_frontier_fit_ml_multiinfo_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP etaSEXP, SEXP weightSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_multiinfo_impl(partable, sample_stats, eta, weight, optimizer, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_fit_uls_psd_impl
 Rcpp::List frontier_fit_uls_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
 RcppExport SEXP _magmaan_frontier_fit_uls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
@@ -891,6 +908,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
     rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_psd_impl(partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_fit_fiml_multiinfo_impl
+Rcpp::List frontier_fit_fiml_multiinfo_impl(SEXP partable, SEXP raw_data, double eta, Rcpp::Nullable<Rcpp::NumericVector> weight, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_frontier_fit_fiml_multiinfo_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP etaSEXP, SEXP weightSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_multiinfo_impl(partable, raw_data, eta, weight, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4221,6 +4255,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
     {"_magmaan_frontier_fit_ml_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_psd_impl, 7},
+    {"_magmaan_frontier_fit_ml_multiinfo_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_multiinfo_impl, 7},
     {"_magmaan_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_uls_psd_impl, 6},
     {"_magmaan_frontier_fit_gls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_gls_psd_impl, 6},
     {"_magmaan_frontier_fit_wls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_wls_psd_impl, 7},
@@ -4259,6 +4294,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
     {"_magmaan_frontier_fit_pattern_ntml_impl", (DL_FUNC) &_magmaan_frontier_fit_pattern_ntml_impl, 5},
     {"_magmaan_frontier_fit_fiml_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_fiml_psd_impl, 6},
+    {"_magmaan_frontier_fit_fiml_multiinfo_impl", (DL_FUNC) &_magmaan_frontier_fit_fiml_multiinfo_impl, 7},
     {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 3},
     {"_magmaan_regularize_saturated_stage1_impl", (DL_FUNC) &_magmaan_regularize_saturated_stage1_impl, 2},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},

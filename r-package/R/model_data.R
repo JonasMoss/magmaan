@@ -1332,6 +1332,41 @@ frontier_fit_ml_psd <- function(
   attach_complete_raw_data(fit, data)
 }
 
+# Frontier complete-data ML plus the multi-information penalty
+# lambda * log det Corr(v_K), where v_K stacks the latent and observed variables
+# with a non-structurally-zero residual variance and lambda = eta - 1 (or
+# `weight`; default lambda = 0.25, see experiment 85). The penalty is scale invariant, bounded above by zero, and for
+# recursive models equals sum log(1 - R^2) over structural equations plus the
+# residual log-determinant of correlation, so it is a log barrier on every
+# improper direction. `fit$fmin` is the UNPENALIZED criterion at the penalized
+# estimate (chi-square and fit indices read from it); `fit$penalty` carries the
+# weight, P(theta), the penalized criterion, and per-variable log(1 - R^2).
+frontier_fit_ml_multiinfo <- function(
+    model, data, eta = 1.25, weight = NULL, optimizer = "nlopt-lbfgs",
+    control = NULL, bounds = NULL, missing = c("listwise", "error")) {
+  missing <- match.arg(missing)
+  if (is.character(model) && length(model) == 1L) {
+    model <- model_spec(model)
+  }
+  if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
+  b <- bounds_arg(bounds, model, data, "frontier_fit_ml_multiinfo")
+  fit <- frontier_fit_ml_multiinfo_impl(
+    partable_arg(model), sample_stats_arg(data), eta = eta, weight = weight,
+    optimizer = optimizer, control = control, bounds = b
+  )
+  .warn_nonrecursive_multiinfo(fit, "frontier_fit_ml_multiinfo")
+  attach_complete_raw_data(fit, data)
+}
+
+.warn_nonrecursive_multiinfo <- function(fit, caller) {
+  if (!isTRUE(fit$penalty$recursive)) {
+    warning(caller, "(): nonrecursive model; the multi-information penalty ",
+            "is still <= 0 but its barrier characterization is unproven here",
+            call. = FALSE)
+  }
+  invisible(fit)
+}
+
 # Frontier continuous ULS over PSD primitive LISREL covariance matrices.
 frontier_fit_uls_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
@@ -1617,6 +1652,29 @@ frontier_fit_fiml_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
+}
+
+# Frontier casewise FIML plus the multi-information penalty; see
+# frontier_fit_ml_multiinfo(). N in the penalty scaling is the number of cases.
+frontier_fit_fiml_multiinfo <- function(
+    model, data, eta = 1.25, weight = NULL, optimizer = "nlopt-lbfgs",
+    control = NULL, bounds = NULL) {
+  if (is.character(model) && length(model) == 1L) {
+    model <- model_spec(model, meanstructure = TRUE)
+  } else if (inherits(model, "magmaan_model_spec") &&
+             !.model_spec_has_meanstructure(model)) {
+    model <- .rebuild_model_spec(
+      model, overrides = list(meanstructure = TRUE),
+      caller = "frontier_fit_fiml_multiinfo"
+    )
+  }
+  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
+  b <- bounds_arg(bounds, model, NULL, "frontier_fit_fiml_multiinfo")
+  fit <- frontier_fit_fiml_multiinfo_impl(
+    partable_arg(model), fiml_data_arg(data), eta = eta, weight = weight,
+    optimizer = optimizer, control = control, bounds = b
+  )
+  .warn_nonrecursive_multiinfo(fit, "frontier_fit_fiml_multiinfo")
 }
 
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,

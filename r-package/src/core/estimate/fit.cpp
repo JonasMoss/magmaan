@@ -20,6 +20,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
@@ -2425,68 +2426,237 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
   return est;
 }
 
+namespace {
+
+// The validated complete-data ML driver: optional sample-based coordinate
+// scaling on the constraint-reduced problem, else the generic scalar composer.
+// `prob` is any θ-space ½F-scale objective over `pre.ev` (ordinary ML, or ML
+// plus a frontier penalty).
+fit_expected<Estimates>
+drive_ml_scalar(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                const Prelude& pre, const SampleStats& samp,
+                const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
+                const Bounds& bounds, Backend backend, const OptimOptions& opts,
+                const char* who) {
+  const bool supported_backend = backend == Backend::NloptLbfgs ||
+      backend == Backend::NloptSlsqp || backend == Backend::NloptLbfgsSlsqpFallback;
+  // General affine bounds and nonlinear constraints retain their established
+  // adapter. Scaling never drops or approximates an imposed constraint.
+  if (!opts.ml_sample_scaling || !supported_backend || pre.nl.active() ||
+      pre.con.n_alpha == 0 || (!bounds.empty() && pre.con.group.empty()))
+    return compose_scalar_ml(prob, pre.con, pre.nl, x0, bounds, backend,
+                             opts, who);
+  auto scale = ml_coordinate_scale(pt, rep, pre.con, samp);
+  if (!scale) return std::unexpected(scale.error());
+  const auto reduced = optim::reparameterize(prob, pre.con);
+  optim::ScalarProblem driven;
+  driven.n_param = pre.con.n_alpha;
+  driven.expand = [](const Eigen::VectorXd& z) { return z; };
+  driven.f = [&reduced, &scale](const Eigen::VectorXd& z, Eigen::VectorXd& g) {
+    const double f = reduced.f(scale->cwiseProduct(z), g);
+    g.array() *= scale->array();
+    return f;
+  };
+  Bounds original_bounds = bounds.empty() ? Bounds{} :
+      optim::fold_alpha_bounds(pre.con, bounds);
+  Bounds scaled_bounds = original_bounds;
+  Eigen::VectorXd alpha = pre.con.contract(x0);
+  if (!original_bounds.empty()) {
+    alpha = alpha.cwiseMax(original_bounds.lower).cwiseMin(original_bounds.upper);
+    scaled_bounds.lower.array() /= scale->array();
+    scaled_bounds.upper.array() /= scale->array();
+  }
+  auto result = run_scalar(driven, alpha.cwiseQuotient(*scale), scaled_bounds,
+                           backend, opts);
+  if (!result) return std::unexpected(result.error());
+  alpha = scale->cwiseProduct(result->x);
+  Eigen::VectorXd gradient;
+  const double f = reduced.f(alpha, gradient);
+  const double infinity = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower = original_bounds.empty()
+      ? Eigen::VectorXd::Constant(alpha.size(), -infinity) : original_bounds.lower;
+  const Eigen::VectorXd upper = original_bounds.empty()
+      ? Eigen::VectorXd::Constant(alpha.size(), infinity) : original_bounds.upper;
+  auto audit = optim::audit_terminal_iterate(reduced.f, alpha, f, lower, upper);
+  Estimates scaled_est{pre.con.expand(alpha), f, result->iterations,
+      result->f_evals, result->g_evals, result->status,
+      gradient.size() ? gradient.cwiseAbs().maxCoeff() : 0.0, std::move(audit)};
+  scaled_est.ml_sample_scaling_applied = true;
+  return scaled_est;
+}
+
+}  // namespace
+
 fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds,
        Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  const model::ModelEvaluator& ev = pre->ev;
 
-  auto obj_or = estimate::ml_objective(ev, samp);
+  auto obj_or = estimate::ml_objective(pre->ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  auto est = [&]() -> fit_expected<Estimates> {
-    const bool supported_backend = backend == Backend::NloptLbfgs ||
-        backend == Backend::NloptSlsqp || backend == Backend::NloptLbfgsSlsqpFallback;
-    // General affine bounds and nonlinear constraints retain their established
-    // adapter. Scaling never drops or approximates an imposed constraint.
-    if (!opts.ml_sample_scaling || !supported_backend || pre->nl.active() ||
-        pre->con.n_alpha == 0 || (!bounds.empty() && pre->con.group.empty()))
-      return compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
-                               opts, "fit_ml");
-    auto scale = ml_coordinate_scale(pt, rep, pre->con, samp);
-    if (!scale) return std::unexpected(scale.error());
-    const auto reduced = optim::reparameterize(prob, pre->con);
-    optim::ScalarProblem driven;
-    driven.n_param = pre->con.n_alpha;
-    driven.expand = [](const Eigen::VectorXd& z) { return z; };
-    driven.f = [&reduced, &scale](const Eigen::VectorXd& z, Eigen::VectorXd& g) {
-      const double f = reduced.f(scale->cwiseProduct(z), g);
-      g.array() *= scale->array();
-      return f;
-    };
-    Bounds original_bounds = bounds.empty() ? Bounds{} :
-        optim::fold_alpha_bounds(pre->con, bounds);
-    Bounds scaled_bounds = original_bounds;
-    Eigen::VectorXd alpha = pre->con.contract(x0);
-    if (!original_bounds.empty()) {
-      alpha = alpha.cwiseMax(original_bounds.lower).cwiseMin(original_bounds.upper);
-      scaled_bounds.lower.array() /= scale->array();
-      scaled_bounds.upper.array() /= scale->array();
-    }
-    auto result = run_scalar(driven, alpha.cwiseQuotient(*scale), scaled_bounds,
-                             backend, opts);
-    if (!result) return std::unexpected(result.error());
-    alpha = scale->cwiseProduct(result->x);
-    Eigen::VectorXd gradient;
-    const double f = reduced.f(alpha, gradient);
-    const double infinity = std::numeric_limits<double>::infinity();
-    const Eigen::VectorXd lower = original_bounds.empty()
-        ? Eigen::VectorXd::Constant(alpha.size(), -infinity) : original_bounds.lower;
-    const Eigen::VectorXd upper = original_bounds.empty()
-        ? Eigen::VectorXd::Constant(alpha.size(), infinity) : original_bounds.upper;
-    auto audit = optim::audit_terminal_iterate(reduced.f, alpha, f, lower, upper);
-    Estimates scaled_est{pre->con.expand(alpha), f, result->iterations,
-        result->f_evals, result->g_evals, result->status,
-        gradient.size() ? gradient.cwiseAbs().maxCoeff() : 0.0, std::move(audit)};
-    scaled_est.ml_sample_scaling_applied = true;
-    return scaled_est;
-  }();
+  auto est = drive_ml_scalar(pt, rep, *pre, samp, prob, x0, bounds, backend,
+                             opts, "fit_ml");
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
   return est;
+}
+
+namespace {
+
+struct MultiInfoStart {
+  Eigen::VectorXd theta;
+  bool repaired = false;
+};
+
+// The barrier objective is +∞ outside the complete-data PD region, so the
+// optimizer must start inside it. Ordinary starts almost always are; otherwise
+// floor non-positive free variances and shrink free residual covariances toward
+// zero, re-imposing linear equalities after each move.
+fit_expected<MultiInfoStart>
+multiinfo_start(const optim::ScalarProblem& prob,
+                const frontier::MultiInfoPenaltyLayout& layout,
+                const EqConstraints& con,
+                const std::vector<Eigen::MatrixXd>& sample_cov,
+                const Eigen::VectorXd& x0, const char* who) {
+  Eigen::VectorXd scratch;
+  if (std::isfinite(prob.f(x0, scratch))) return MultiInfoStart{x0, false};
+  Eigen::VectorXd floored = x0;
+  for (Eigen::Index k = 0; k < x0.size(); ++k) {
+    const auto& loc = layout.locations[static_cast<std::size_t>(k)];
+    if (loc.row != loc.col || floored(k) > 0.0) continue;
+    if (loc.mat == model::MatId::Theta) {
+      const auto b = static_cast<std::size_t>(loc.block);
+      const double s = b < sample_cov.size() ? sample_cov[b](loc.row, loc.row) : 1.0;
+      floored(k) = 0.5 * (s > 0.0 ? s : 1.0);
+    } else if (loc.mat == model::MatId::Psi) {
+      floored(k) = 0.05;
+    }
+  }
+  for (int step = 0; step <= 10; ++step) {
+    const double t = step == 10 ? 0.0 : std::pow(0.5, step);
+    Eigen::VectorXd trial = floored;
+    for (Eigen::Index k = 0; k < x0.size(); ++k) {
+      const auto& loc = layout.locations[static_cast<std::size_t>(k)];
+      const bool covariance = loc.row != loc.col &&
+          (loc.mat == model::MatId::Theta || loc.mat == model::MatId::Psi);
+      if (covariance) trial(k) *= t;
+    }
+    if (con.active()) trial = con.expand(con.contract(trial));
+    if (std::isfinite(prob.f(trial, scratch))) {
+      return MultiInfoStart{std::move(trial), true};
+    }
+  }
+  return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+      std::string(who) + ": no start inside the multi-information barrier "
+      "domain (complete-data covariance not positive definite)"));
+}
+
+// Swap the penalized optimum value for the unpenalized ½F so χ² and fit
+// measures read the ordinary criterion at θ̃, and attach the penalty report.
+fit_expected<frontier::PenalizedFit>
+finish_multiinfo(Estimates est, const optim::ScalarProblem& base,
+                 const frontier::MultiInfoPenaltyLayout& layout,
+                 const model::ModelEvaluator& ev, double weight,
+                 double n_total, bool repaired, const char* who) {
+  Eigen::VectorXd scratch;
+  const double unpenalized = base.f(est.theta, scratch);
+  if (!std::isfinite(unpenalized)) {
+    return std::unexpected(fit_err(FitError::Kind::NonFiniteObjective,
+        std::string(who) + ": unpenalized objective is non-finite at the "
+        "penalized estimate"));
+  }
+  auto report = frontier::multiinfo_penalty_report(layout, ev, est.theta);
+  if (!report.has_value()) return std::unexpected(report.error());
+  frontier::PenalizedFit out;
+  out.weight = weight;
+  out.n_total = n_total;
+  out.penalized_fmin = unpenalized - weight / n_total * report->value;
+  out.start_repaired = repaired;
+  est.fmin = unpenalized;
+  out.estimates = std::move(est);
+  out.penalty = std::move(*report);
+  return out;
+}
+
+}  // namespace
+
+fit_expected<frontier::PenalizedFit>
+frontier::fit_ml_multiinfo(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const SampleStats& samp, const Eigen::VectorXd& x0,
+                           MultiInfoPenaltyOptions options, Bounds bounds,
+                           Backend backend, OptimOptions opts) {
+  constexpr const char* who = "fit_ml_multiinfo";
+  auto weight = multiinfo_penalty_weight(options);
+  if (!weight.has_value()) return std::unexpected(weight.error());
+  auto pre = prelude(pt, rep, samp, x0, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  double n_total = 0.0;
+  for (const auto n : samp.n_obs) n_total += static_cast<double>(n);
+  if (!(n_total > 0.0)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": sample size must be positive"));
+  }
+  auto base_or = estimate::ml_objective(pre->ev, samp);
+  if (!base_or.has_value()) return std::unexpected(base_or.error());
+  const optim::ScalarProblem base = std::move(*base_or);
+  auto layout = multiinfo_penalty_layout(pre->ev, x0);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  const optim::ScalarProblem prob = multiinfo_penalized_problem(
+      base, *layout, pre->ev, *weight, n_total);
+  auto start = multiinfo_start(prob, *layout, pre->con, samp.S, x0, who);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto est = drive_ml_scalar(pt, rep, *pre, samp, prob, start->theta, bounds,
+                             backend, opts, who);
+  if (!est.has_value()) return std::unexpected(est.error());
+  attach_diagnostics(*est, pt, *pre, bounds);
+  attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *weight,
+                          n_total, start->repaired, who);
+}
+
+fit_expected<frontier::PenalizedFit>
+fiml::frontier::fit_fiml_multiinfo(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::RawData& raw,
+                                   const Eigen::VectorXd& x0,
+                                   const fiml::FIMLPack& pack,
+                                   estimate::frontier::MultiInfoPenaltyOptions options,
+                                   Bounds bounds, Backend backend,
+                                   OptimOptions opts) {
+  constexpr const char* who = "fit_fiml_multiinfo";
+  if (auto ok = fiml::validate_fiml_fixed_x_missing_policy(pt, raw);
+      !ok.has_value()) return std::unexpected(ok.error());
+  auto weight = estimate::frontier::multiinfo_penalty_weight(options);
+  if (!weight.has_value()) return std::unexpected(weight.error());
+  auto pre = prelude(pt, rep, pack.start_stats, x0, who);
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  double n_total = 0.0;
+  for (const auto& X : raw.X) n_total += static_cast<double>(X.rows());
+  if (!(n_total > 0.0)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": sample size must be positive"));
+  }
+  const optim::ScalarProblem base =
+      full_fiml_problem(pre->ev, raw, pack.cache, fiml::FIML{});
+  auto layout = estimate::frontier::multiinfo_penalty_layout(pre->ev, x0);
+  if (!layout.has_value()) return std::unexpected(layout.error());
+  const optim::ScalarProblem prob = estimate::frontier::multiinfo_penalized_problem(
+      base, *layout, pre->ev, *weight, n_total);
+  auto start = multiinfo_start(prob, *layout, pre->con, pack.start_stats.S, x0,
+                               who);
+  if (!start.has_value()) return std::unexpected(start.error());
+  auto est = compose_scalar_ml(prob, pre->con, pre->nl, start->theta, bounds,
+                               backend, opts, who);
+  if (!est.has_value()) return std::unexpected(est.error());
+  attach_diagnostics(*est, pt, *pre, bounds);
+  attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *weight,
+                          n_total, start->repaired, who);
 }
 
 fit_expected<Estimates>
