@@ -4,6 +4,24 @@
 or public audit contract changes. Boundary audits and practical verification
 by restarts/independent optimizers remain deferred, as requested.
 
+## Working decision after SLSQP validation (2026-09-22)
+
+Close this research round with the experimental tolerances unchanged: relative
+objective tolerance 1e-12, relative step tolerance 1e-10, 5000 evaluations, and
+regular-interior Newton distance at most .01. For SLSQP, prefer transported
+std.lv FABIN starts where supported (native starts otherwise), with
+sample-derived reduced-coordinate scaling for ordinary ML and the existing
+lifted expected-information scaling for PSD ML. Keep PSD constraint tolerance
+1e-8. These are working experimental policies, not deployed defaults.
+
+Use Newton accuracy at regular feasible interiors; use the existing cone check
+at PSD boundaries without assigning it an information-SE accuracy meaning.
+Keep the old interior cone residual as telemetry, not an additional accuracy
+veto. A native-start, unscaled PSD retry is a reasonable recovery candidate;
+paired replay supports one rescue, but an adaptive retry has not been
+implemented or independently validated. The expanded results and limitations
+are recorded at the end of this note.
+
 ## Candidate choices
 
 The agreed regular-interior accuracy target is **maximum Newton distance d = 0.01**. In regular ML,
@@ -922,3 +940,74 @@ The consequential feedback endpoint is reproduced separately in
 The 648-row unique paired design is checked. Canonical core routines provide
 PSD lifting and constraints; no replacement PSD solver was written. No
 production settings or manuscript results changed.
+
+
+## Frozen SLSQP validation: provisional close (2026-09-22)
+
+The follow-up holds all settings fixed on 15 synthetic model structures,
+N=50/500/5000, three fresh replications and unit multipliers .1/1/10, plus six
+published specifications in the three unit systems. Seed base is 19222026.
+There are 423 paired cases and four policies, hence 1692 fits. Published data
+are repeated checks; the synthetic samples are fresh, but model families were
+used in policy development. Unit variants are not independent datasets.
+
+| Policy | Interior pass/eligible | Boundary cone pass | Accepted/attempted | Median evaluations |
+|---|---:|---:|---:|---:|
+| Ordinary native | 387/389 | — | 387/423 | 201 |
+| Ordinary improved + sample scaling | 396/396 | — | 396/423 | 49 |
+| PSD native | 390/392 | 26/26 | 416/423 | 142 |
+| PSD improved + information scaling | 396/396 | 24/24 | 420/423 | 40 |
+
+Acceptance here requires feasibility and the .01 Newton target with usable
+positive-definite observed curvature at regular interiors; PSD also requires
+covariance feasibility. At PSD boundaries it requires feasibility and the
+existing cone audit. Thus the PSD total combines two different diagnostics,
+not a single calibrated accuracy guarantee. Ordinary noninterior outcomes are
+retained but excluded from interior acceptance. Three improved ordinary fits
+reach the evaluation limit, all outside the eligible-interior category.
+
+The four eligible-interior misses occur under native policies: mixed-scale CFA
+at N=50, replication 3, units 10 (d about .032), and N=500, replication 1,
+units 10 (d about .029), for both ordinary and PSD fits. Improved policies
+have no eligible-interior misses. Paired ordinary acceptance gains nine cases
+and loses none; PSD gains five and loses one.
+
+The summary initially combined the old cone residual cutoff with Newton
+accuracy at PSD interiors. That is not the intended interior/boundary split:
+we retain the old combined counts (415 native, 419 improved) in
+`legacy_cone_and_newton`, and report both residual disagreements explicitly.
+The improved mixed-scale CFA fit at N=50, replication 2, units .1 has
+Newton distance 3.21e-6 but cone residual .001018, narrowly above .001.
+The corresponding native disagreement at replication 3 has d=1.56e-5 and
+residual .001174. Both are feasible regular interiors. No threshold was
+changed; the summary now uses the agreed Newton criterion for interior
+accuracy and preserves the old residual diagnostically.
+
+The improved PSD policy exhausts its budget for one weak-factor CFA sample
+(N=50, replication 1, seed 20422677) in all three unit systems. Native PSD
+also fails for that sample at units .1 and 10, but returns an accepted boundary
+point at units 1. Replaying a native fallback therefore yields a union of
+421/423 accepted cases, not 423/423. This is paired evidence for a retry, not
+a tested adaptive implementation. Failed public PSD calls provide no endpoint
+or evaluation count, so total known evaluations omit two native and three
+improved failed calls; the medians above concern returned endpoints.
+
+Four returned PSD pairs differ by more than one unit of twice log likelihood,
+all feedback models at units 10 and all favoring the improved policy. Gains
+are about 78 and 126 at N=500, and 1059 and 1195 at N=5000. One worse native
+point is a cone-passing boundary endpoint; three are interiors without
+positive-definite observed curvature. Cone stationarity does not establish
+local or global optimality. Ordinary objective differences include a reversal
+on a noninterior weak-factor case; no universal objective dominance is claimed.
+
+This is enough to settle the current research round, without increasing budgets
+or loosening accuracy. Production integration remains separate: opt-in policy
+selection, explicit user-start preservation, constraints/adapter coverage,
+stopping-reason reporting, and retention of failed terminal candidates.
+Boundary accuracy calibration remains deferred. This panel does not erase
+earlier contrary PSD scaling cost findings under different starts and controls.
+
+Reproduce with `sqp_validate` and `summarize_sqp_validation.py` as documented
+in the check README. Local outputs, all endpoint records, summaries and source
+hashes are in `tests/checks/interior_newton/results/sqp-validation-2026-09-22/`.
+No production defaults or manuscript results were changed.

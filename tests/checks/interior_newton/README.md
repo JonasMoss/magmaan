@@ -386,3 +386,32 @@ The endpoint JSONL stores full initial and terminal parameter vectors for later
 boundary diagnostics. Future full SQP runs also save these vectors. The first
 648-fit smoke predates endpoint serialization; its executed source is retained
 with its provenance. The targeted reproduction checks the consequential case.
+
+## Frozen SLSQP validation follow-up
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/sqp-validation-new 10 sqp_validate
+python3 tests/checks/interior_newton/summarize_sqp_validation.py tests/checks/interior_newton/results/sqp-validation-new
+```
+
+Hold all tolerances and metrics from the smoke fixed. Use fresh synthetic
+seed base 19222026, N=50/500/5000, three replications, three global unit scales,
+the same 15 synthetic model structures, and six original-data specifications.
+The four policies are ordinary native, ordinary improved+sample scaling,
+PSD native, and PSD improved+information scaling. Start-only arms were isolated
+in the preceding smoke and are omitted here. This gives 423 cases and 1692
+fits, all with endpoint vectors saved. Published fixtures are repeated checks,
+not fresh data. Model families were previously explored; samples are held out
+from the preceding policy selection. No policy is tuned on this run.
+
+The summary reports interior accuracy and boundary cone diagnostics separately,
+paired acceptance, and objective differences within a domain. Interior
+acceptance uses feasibility and Newton accuracy (also covariance feasibility
+for PSD); boundary acceptance uses the existing cone audit. The old cone
+residual is retained as interior telemetry, with the former combined gate
+reported under `legacy_cone_and_newton` and disagreements listed separately.
+Differences above
+one unit of twice-loglik are flagged descriptively, not used as an acceptance
+cutoff or an inference procedure. A passing cone check does not establish
+optimality. Initialization/fit/audit costs remain recorded; lost endpoints on
+public PSD errors remain explicit. First run: `results/sqp-validation-2026-09-22/`.

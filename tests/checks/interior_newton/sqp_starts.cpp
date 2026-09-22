@@ -4,13 +4,14 @@
 #include <optional>
 #include "magmaan/estimate/fit.hpp"
 int main(int argc,char** argv){
- require(argc==2||(argc==3&&std::string(argv[2])=="feedback"),"usage sqp output.csv [feedback]");const bool targeted=argc==3;std::ofstream endpoints(std::string(argv[1])+".endpoints.jsonl");exact_checks();std::ofstream out(argv[1]),errors(std::string(argv[1])+".errors.txt");out<<std::setprecision(17);
+ require(argc==2||(argc==3&&(std::string(argv[2])=="feedback"||std::string(argv[2])=="validate")),"usage sqp output.csv [feedback]");const bool targeted=argc==3&&std::string(argv[2])=="feedback";const bool validation=argc==3&&std::string(argv[2])=="validate";std::ofstream endpoints(std::string(argv[1])+".endpoints.jsonl");exact_checks();std::ofstream out(argv[1]),errors(std::string(argv[1])+".errors.txt");out<<std::setprecision(17);
  out<<"model,n_base,n_total,rep,seed,units,policy,branch,returned,raw_rc,optimizer_status,evals,interior,newton_status,distance,fmin,feasible,covariance_feasible,cone_stationary,cone_residual,nullity,prep_ms,fit_ms,total_ms,p,groups,free_parameters\n";
  auto run=[&](const Design& d,const data::SampleStats& original,int nbase,int replication,unsigned seed){
   if(targeted&&(d.id!="feedback12"||nbase!=200))return;
   auto begin=Clock::now();auto parsed=parse::Parser::parse(d.syntax);require(bool(parsed),"parse");auto pt=spec::build(*parsed,d.options);require(bool(pt),"build");auto rep=model::build_matrix_rep(*pt);require(bool(rep),"rep");auto ev=model::ModelEvaluator::build(*pt,*rep);require(bool(ev),"evaluator");auto con=estimate::build_eq_constraints(*pt);require(bool(con),"constraints");auto layout=broad_layout(*pt,*rep,*con);double sharedms=ms(begin);int n=std::accumulate(original.n_obs.begin(),original.n_obs.end(),0);
   for(double units:{.1,1.,10.}){if(targeted&&units!=10)continue;auto samp=original;for(auto& S:samp.S)S*=units*units;for(auto& m:samp.mean)m*=units;
    for(const std::string policy:{"ordinary_native","ordinary_start","ordinary_scaled","psd_native","psd_start","psd_information"}){
+    if(validation&&(policy=="ordinary_start"||policy=="psd_start"))continue;
     auto prep=Clock::now();bool psd=policy.starts_with("psd"),native=policy.ends_with("native");auto initial=estimate::fabin_start_values(*pt,*rep,samp,{});require(bool(initial),"start");std::string branch="native";
     if(!native&&layout.supported){auto so=d.options;so.std_lv=true;auto sp=spec::build(*parsed,so);require(bool(sp),"std build");auto sr=model::build_matrix_rep(*sp);require(bool(sr),"std rep");auto se=model::ModelEvaluator::build(*sp,*sr);require(bool(se),"std evaluator");auto ss=estimate::fabin_start_values(*sp,*sr,samp,{});require(bool(ss),"std start");*initial=broad_marker(*ss,*se,*pt,*rep,layout);branch="transported";}else if(!native)branch="native_fallback";
     auto obj=estimate::ml_objective(*ev,samp);require(bool(obj),"objective");Context ctx{&*obj,&*con};VectorXd metric=policy=="ordinary_scaled"?broad_scale(*pt,*rep,*con,samp):VectorXd::Ones(con->n_alpha);double prepms=ms(prep);auto t=Clock::now();VectorXd terminal;int rc=0,status=-1,evals=-1;bool returned=true;
@@ -42,8 +43,9 @@ int main(int argc,char** argv){
  d.mean=VectorXd::Zero(p);ds.push_back(d);
  }
  for(size_t ci=0;ci<ds.size();++ci){auto& d=ds[ci];
-  for(int n:{50,200})for(int r=1;r<=1;++r){
-   unsigned seed=9222026+ci*100000+13*n+r;std::mt19937 rng(seed);std::normal_distribution<double> normal;data::SampleStats samp;
+  const std::vector<int> sizes=validation?std::vector<int>{50,500,5000}:std::vector<int>{50,200};
+  for(int n:sizes)for(int r=1;r<=(validation?3:1);++r){
+   unsigned seed=(validation?19222026:9222026)+ci*100000+13*n+r;std::mt19937 rng(seed);std::normal_distribution<double> normal;data::SampleStats samp;
    for(int g=0;g<d.groups;++g){int p=d.sigma.rows();int ng=d.imbalance?std::max(p+2,n/(g+1)):n;MatrixXd S=d.sigma*(1+.2*g);Eigen::LLT<MatrixXd> chol(S);require(chol.info()==Eigen::Success,"advanced population PD");MatrixXd X(ng,p);for(int i=0;i<ng;++i)for(int j=0;j<p;++j)X(i,j)=normal(rng);X=(X*MatrixXd(chol.matrixL()).transpose()).eval();VectorXd m=X.colwise().mean();MatrixXd centered=X.rowwise()-m.transpose();samp.S.push_back(centered.transpose()*centered/ng);samp.n_obs.push_back(ng);if(d.options.meanstructure)samp.mean.push_back(m+d.mean);}
    run(d,samp,n,r,seed);
   }std::cerr<<"Completed "<<d.id<<'\n';

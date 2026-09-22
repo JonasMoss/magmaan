@@ -178,8 +178,19 @@ semantics · **XL** statistical design/research track before implementation.
   endpoint at N=200, scale 10 passes the cone audit with nullity 3 but has
   f=.21609 versus .11002 from improved starts. Preserve/inspect that endpoint;
   do not infer local/global optimality or fix it by tuning the audit cutoff.
-  Broaden PSD scaling validation before defaults; earlier structural PSD cost
-  findings were different. Ordinary and lifted-PSD scaling are distinct methods.
+  Frozen larger validation complete: 1692 fits, 423 cases per policy, fresh
+  synthetic N=50/500/5000 samples. Improved ordinary and PSD policies each
+  pass all 396 eligible interiors; accepted totals are ordinary 396/423 and
+  PSD 420/423 (24 boundary cone passes), versus native 387 and 416.
+  Keep ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000 and interior d<=.01.
+  Use Newton accuracy for regular interiors, cone checks at PSD boundaries;
+  retain the old interior cone residual as telemetry, not an extra veto.
+  Research round provisionally closed; production defaults unchanged.
+  Improved PSD fails on one weak-factor sample in three unit systems;
+  paired native replay rescues one, leaving two. Consider native/unscaled
+  retry during integration, without claiming a validated adaptive policy.
+  Earlier structural PSD cost findings were different. Ordinary and
+  lifted-PSD scaling remain distinct methods.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal
