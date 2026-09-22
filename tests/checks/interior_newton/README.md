@@ -331,3 +331,58 @@ unavailable endpoints. Timing includes initialization and common-audit work,
 but runs overlap and are not calibrated timing benchmarks; evaluation counts
 are the primary work measure. The candidate's fallback is explicitly labeled
 in every row. Source and fixture hashes are retained locally.
+
+## SLSQP, ordinary and PSD smoke
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/sqp-new 10 sqp
+python3 tests/checks/interior_newton/summarize_sqp.py tests/checks/interior_newton/results/sqp-new
+```
+
+First SLSQP comparison: the same 15 synthetic models and six published
+specifications as the broad start panel, restricted to N=50/200, replication 1,
+and .1/1/10 units. This yields 108 cases and six arms, 648 fits. Seeds/data
+match that subset of the L-BFGS panel; no new tuning is done on these outcomes.
+
+Ordinary arms are native starts; transported std.lv starts where supported
+(native fallback otherwise); and those starts with sample-based reduced
+coordinate scaling. They use direct NLopt SLSQP and retain every raw endpoint.
+PSD arms use production `fit_ml_psd` with native starts; improved starts; and
+improved starts plus the existing diagonal expected-information scaling of
+internal lifted Cholesky coordinates. The latter is NOT the ordinary sample
+scaling policy. Canonical PSD lifting, equality handling and start projection
+are unchanged. Both paths use ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000;
+PSD constraint tolerance is explicitly 1e-8, with default PSD start floor and
+feasibility tolerance. The Luksan backtracking patch is irrelevant to SLSQP;
+use stock linkage (second argument 10).
+
+Returned fits get a fresh audit in original parameter coordinates. Ordinary
+regular-interior success uses d<=.01. For PSD fits, report interior Newton
+accuracy only when no active covariance nullity is detected. Boundary fits
+instead retain the existing feasibility and true-cone stationarity diagnostics
+(default stationarity tolerance .001 and covariance eigen tolerance 1e-8).
+These are different criteria: no boundary SE-error interpretation is claimed.
+Boundary accuracy calibration remains deferred. All cone diagnostics, nullity,
+interior status and objective gaps are retained, not collapsed to one success
+percentage. Cone first-order checks do not establish a global optimum.
+
+PSD hard errors are rows with returned=0 and details in `raw.csv.errors.txt`;
+the public wrapper does not expose their endpoints/evaluation counts. PSD
+raw_rc=0 is a placeholder, not a backend return code; optimizer_status records
+the wrapper enum. Ordinary raw_rc is the actual NLopt code. Known evaluation
+sums must be labeled incomplete if PSD errors occur. PSD fit timing includes
+its production finalization, unlike direct ordinary timing; compare costs
+within a domain rather than treating those as equivalent timing pipelines.
+First run: `results/sqp-starts-2026-09-22/`.
+
+The notable feedback endpoint can be reproduced and retained separately:
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/sqp-feedback-new 10 sqp_feedback
+```
+
+This restricts fitting to feedback N=200, replication 1, scale 10 (six arms).
+The endpoint JSONL stores full initial and terminal parameter vectors for later
+boundary diagnostics. Future full SQP runs also save these vectors. The first
+648-fit smoke predates endpoint serialization; its executed source is retained
+with its provenance. The targeted reproduction checks the consequential case.

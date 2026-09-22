@@ -170,6 +170,16 @@ semantics · **XL** statistical design/research track before implementation.
   for bounds/nonlinear constraints/adapter recovery before default adoption.
   Full Guttman-start comparison remains deferred. See the study note for costs,
   unsupported std.lv cases, invariance checks and source/result provenance.
+  SLSQP ordinary/PSD smoke complete (648 fits, 108 cases per arm). All
+  eligible interiors pass .01; improved starts plus sample scaling reduce
+  ordinary evaluations 33009->6773. PSD improved starts plus existing lifted
+  information scaling reduce 22950->8393; all boundary points pass the existing
+  cone audit (not a .01 accuracy certificate). One native-start feedback PSD
+  endpoint at N=200, scale 10 passes the cone audit with nullity 3 but has
+  f=.21609 versus .11002 from improved starts. Preserve/inspect that endpoint;
+  do not infer local/global optimality or fix it by tuning the audit cutoff.
+  Broaden PSD scaling validation before defaults; earlier structural PSD cost
+  findings were different. Ordinary and lifted-PSD scaling are distinct methods.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal

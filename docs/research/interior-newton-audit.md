@@ -839,3 +839,86 @@ nonlinear constraints, bounds and production-adapter recovery still need their
 own handling/tests before default adoption. Stock backend evidence here is not
 a test of the full production adapter's acceptance/recovery logic. A complete
 Guttman-start comparison remains deferred rather than blocking that integration.
+
+## Sequential quadratic programming, with and without PSD (2026-09-22)
+
+The first NLopt SLSQP comparison uses the 21-model broad panel subset with
+N=50/200, replication 1, units .1/1/10 and the original published-data samples:
+108 cases per arm, 648 fits. This is a bounded smoke, not a replication of the
+full five-replication L-BFGS study. The optimizer settings are held fixed at
+ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000; no tolerance grid is tuned here.
+Stock linkage is used; the Luksan backtracking issue is specific to L-BFGS.
+
+Ordinary SLSQP compares native starts, improved starts without scaling, and
+improved starts with sample-based scaling in the original reduced coordinates.
+PSD SLSQP uses canonical production `fit_ml_psd`, with native starts, improved
+starts, and improved starts plus its existing expected-information diagonal
+preconditioning of lifted Cholesky variables. This is a DIFFERENT scaling
+method from the ordinary arm. PSD constraint tolerance is explicitly 1e-8;
+other PSD start-floor and feasibility settings remain their defaults. Model
+constraints and the canonical PSD start projection are unchanged.
+
+All returned points are audited in original coordinates. Interior accuracy
+uses the .01 Newton distance. PSD boundary fits use the existing feasibility
+and cone-stationarity checks, with default geometric stationarity tolerance
+.001; no boundary information-SE accuracy interpretation is attached. Interior
+and boundary results must remain separate.
+
+| Domain and policy | Interior pass/eligible | PSD boundary cone pass | Median evaluations | Total evaluations |
+|---|---:|---:|---:|---:|
+| Ordinary, native starts | 96/96 | — | 213 | 33009 |
+| Ordinary, improved starts | 99/99 | — | 184.5 | 23395 |
+| Ordinary, improved starts + sample scaling | 99/99 | — | 51.5 | 6773 |
+| PSD, native starts | 98/98 | 10/10 | 138.5 | 22950 |
+| PSD, improved starts | 99/99 | 9/9 | 133.5 | 21079 |
+| PSD, improved starts + information scaling | 99/99 | 9/9 | 46 | 8393 |
+
+Every arm attempted and returned 108 fits; no public PSD hard errors occurred.
+Remaining ordinary endpoints are outside the reported regular-interior category.
+All 324 PSD endpoints pass the existing feasibility/cone audit, but this must
+not be confused with finding the best objective. Sample scaling reduces total
+ordinary evaluations about 79% relative to native starts; the distinct PSD
+information scaling plus improved starts reduces PSD evaluations about 63%.
+These are within-domain evaluation comparisons. PSD fitting includes production
+finalization and its lift/constraint machinery, whereas ordinary fitting uses
+direct callbacks, so raw cross-domain fit times are not equivalent pipelines.
+
+### A worse boundary point passes the existing PSD audit
+
+Feedback, N=200, replication 1, unit multiplier 10 is consequential:
+
+| PSD policy | Half-discrepancy f | Covariance nullity | Evaluations |
+|---|---:|---:|---:|
+| Native starts | .2160944854 | 3 | 1098 |
+| Improved starts | .1100208538 | 0 | 218 |
+| Improved starts + information scaling | .1100208535 | 0 | 29 |
+
+The worse native endpoint has cone residual about 5.98e-9 and passes the
+existing audit. The better interior endpoints pass the .01 Newton check.
+The difference in twice log likelihood is about 42.43. No claim is made that
+the worse endpoint is a local minimum, that the cone audit is a global
+certificate, or that the better endpoint is the global optimum. This exposes
+a boundary/optimization-path limitation worth inspecting; changing the audit
+tolerance is not justified by this comparison. Ordinary native SLSQP also
+reaches a worse noninterior endpoint on this case. Improved starts matter for
+the attained objective, not only iteration count.
+
+Apart from this PSD case, the largest spread among cone-passing policies on
+a paired dataset is about 1.60e-7 in f. For ordinary fits passing the common
+interior audit the largest spread is 3.71e-7. Neither number establishes
+uniform agreement or validates the boundary audit's accuracy interpretation.
+
+Working conclusion: SLSQP already meets the interior target for every eligible
+fit in this smoke. Better starts plus scaling primarily reduce work, and better
+starts avoid the problematic feedback boundary endpoint. The PSD information
+scaling option merits a broader paired test, not immediate default adoption;
+this uses a different panel/control setup from the earlier PSD engineering
+study and does not erase its contrary cost findings. Boundary-aware quantitative
+accuracy calibration remains a separate project.
+
+Raw runs and summary: `tests/checks/interior_newton/results/sqp-starts-2026-09-22/`.
+The consequential feedback endpoint is reproduced separately in
+`results/sqp-feedback-2026-09-22/`, retaining full starting/terminal vectors.
+The 648-row unique paired design is checked. Canonical core routines provide
+PSD lifting and constraints; no replacement PSD solver was written. No
+production settings or manuscript results changed.
