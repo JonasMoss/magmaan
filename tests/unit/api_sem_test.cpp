@@ -1188,3 +1188,17 @@ TEST_CASE("api: ordinal moments are declared by the spec, not read off the weigh
 #undef REQUIRE_OK
 #undef REQUIRE_OK_OR
 #undef MAGMAAN_REQUIRE_OK_IMPL
+
+TEST_CASE("ML optimizer selection inherits controls only when omitted") {
+  auto selected=magmaan::api::ml().optimizer(magmaan::api::nlopt_slsqp());
+  CHECK(selected.optimizer_spec.options.ml_sample_scaling);
+  CHECK(*selected.optimizer_spec.options.nlopt.max_eval==5000);
+  magmaan::optim::OptimOptions options;
+  options.nlopt.max_eval=17;
+  auto explicit_options=magmaan::api::ml().optimizer(magmaan::api::nlopt_slsqp(options));
+  CHECK_FALSE(explicit_options.optimizer_spec.options.ml_sample_scaling);
+  CHECK(*explicit_options.optimizer_spec.options.nlopt.max_eval==17);
+  auto gls=magmaan::api::gls().optimizer(magmaan::api::nlopt_slsqp());
+  CHECK_FALSE(gls.optimizer_spec.options.ml_sample_scaling);
+  CHECK_FALSE(gls.optimizer_spec.options.nlopt.max_eval.has_value());
+}

@@ -150,6 +150,8 @@ struct OptimOptions {
   PortControls port = {};
   IpoptControls ipopt = {};
   CeresControls ceres = {};
+  // Complete-data ML only; scale equality-reduced search coordinates.
+  bool ml_sample_scaling = false;
 };
 
 // --- Terminal audit -------------------------------------------------------

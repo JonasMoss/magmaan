@@ -1,0 +1,37 @@
+#pragma once
+
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/start_values.hpp"
+#include "magmaan/optim/problem.hpp"
+
+namespace magmaan::estimate {
+
+// Complete-data ML profile validated with NLopt L-BFGS and SLSQP. Explicit
+// options remain authoritative; OptimOptions{} is the legacy generic profile.
+inline optim::OptimOptions ml_optim_options() {
+  optim::OptimOptions out;
+  out.nlopt.max_eval = 5000;
+  out.nlopt.ftol_rel = 1e-12;
+  out.nlopt.xtol_rel = 1e-10;
+  out.ml_sample_scaling = true;
+  return out;
+}
+
+enum class MlStartBranch { NativeFabin, TransportedStdLv };
+struct MlStarts {
+  Eigen::VectorXd theta;
+  MlStartBranch branch = MlStartBranch::NativeFabin;
+};
+
+// Safe marker models use std.lv FABIN starts transported to their original
+// chart. Other specifications use native FABIN. Finite user hints always win.
+// No model identification, fixed value, or equality constraint is changed.
+fit_expected<MlStarts> ml_start_values(
+    const spec::LatentStructure&, const model::MatrixRep&,
+    const data::SampleStats&, const spec::Starts& = {});
+
+fit_expected<Eigen::VectorXd> ml_coordinate_scale(
+    const spec::LatentStructure&, const model::MatrixRep&,
+    const EqConstraints&, const data::SampleStats&);
+
+} // namespace magmaan::estimate

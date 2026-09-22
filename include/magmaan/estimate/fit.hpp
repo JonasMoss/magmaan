@@ -20,6 +20,7 @@
 #include "magmaan/data/pairwise_cov.hpp"
 #include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/estimate/ml_numerics.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -70,6 +71,7 @@ struct Estimates {
   // See `docs/design/snlls-fast-alpha-solve.md` for the gate semantics.
   std::int32_t          n_alpha_solve_fast     = -1;
   std::int32_t          n_alpha_solve_fallback = -1;
+  bool ml_sample_scaling_applied = false;
 };
 
 // Consumers use this common verdict; optimizer_status explains termination.
@@ -159,6 +161,18 @@ struct PsdFitOptions {
   // scaling at the lifted start; final audits remain in original coordinates.
   bool diagonal_preconditioning = false;
 };
+
+inline OptimOptions ml_psd_optim_options() {
+  auto out = ml_optim_options();
+  out.nlopt.constraint_tol = 1e-8;
+  return out;
+}
+
+inline PsdFitOptions ml_psd_options() {
+  PsdFitOptions out;
+  out.diagonal_preconditioning = true;
+  return out;
+}
 
 // Scalar function used by profile-LR helpers. `value(theta)` returns g(θ).
 // `gradient(theta)` may be left empty; the implementation then uses a central
@@ -264,7 +278,7 @@ struct ScalarProfileCiResult {
 fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},
-       Backend backend = Backend::NloptLbfgs, OptimOptions opts = {});
+       Backend backend = Backend::NloptLbfgs, OptimOptions opts = ml_optim_options());
 
 namespace frontier {
 
@@ -289,7 +303,8 @@ fit_expected<Estimates>
 fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
            const SampleStats& samp, const Eigen::VectorXd& x0,
            Backend backend = Backend::NloptSlsqp,
-           OptimOptions opts = {}, PsdFitOptions psd_opts = {});
+           OptimOptions opts = ml_psd_optim_options(),
+           PsdFitOptions psd_opts = ml_psd_options());
 
 // Fixed-weight moment-quadratic estimation over the same LISREL-honest
 // covariance domain. Empty `weight` gives ULS; a caller-supplied fixed weight

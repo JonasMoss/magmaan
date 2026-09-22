@@ -41,13 +41,23 @@ golden `parTable()` fixtures.
 
 `OptimOptions` exposes optional backend blocks for NLopt, PORT, IPOPT and
 Ceres. The thin R interface accepts matching named sublists in `control`.
-Explicit settings override legacy mappings while preserving existing defaults;
+Explicit settings override legacy mappings;
 NLopt gradient/step tolerances, memory and evaluation budgets are distinct,
 as are PORT step/function criteria and evaluation/iteration budgets. See
 [optimizer controls](../reference/optimizer-controls.md) for support, sentinel
 values and compatibility rules. These settings govern search termination;
 they do not alter the independent terminal audit. Effective-control and raw
 stopping-code reporting across fitted results remains backlog work.
+
+Complete-data ML now defaults to the validated NLopt profile (5000 evaluations,
+relative objective/step tolerances 1e-12/1e-10). High-level ML uses transported
+std.lv FABIN starts where safe, with native fallback and user-hint preservation.
+Ordinary L-BFGS/SLSQP ML uses sample-derived equality-reduced scaling on
+supported constraints; PSD ML defaults to existing lifted information scaling
+and constraint tolerance 1e-8. Generic controls and explicit unscaled policies
+remain available. Search scaling is reported and terminal diagnostics are
+recomputed in original coordinates. This does not deploy the Newton accuracy
+verdict or add a PSD recovery policy; see the optimizer-controls reference.
 
 ### Admissible covariance-model contract
 

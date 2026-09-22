@@ -1,9 +1,9 @@
 # Optimizer search controls
 
 Search termination and the independent terminal audit are separate. Neither a
-small step nor a backend success flag guarantees stationarity. This interface
-cleanup preserves existing numerical defaults; the proposed interior Newton
-budget is not deployed.
+small step nor a backend success flag guarantees stationarity. The generic optimizer defaults remain available; complete-data ML uses the
+validated profile below. The proposed interior Newton budget is not deployed
+as a production acceptance rule.
 
 `OptimOptions` retains its four legacy fields for source compatibility.
 Explicit backend fields override the corresponding legacy setting. In R, the
@@ -24,6 +24,51 @@ options.nlopt.vector_storage = 0; // automatic, not memory 10
 control <- list(nlopt = list(ftol_rel = 1e-12, xtol_rel = 1e-10))
 # Pass control to the selected fitting entry point.
 ```
+
+## Complete-data ML defaults (2026-09-22)
+
+Bare C++ `fit_ml`, `frontier::fit_ml_psd`, the staged `api::ml()` factory,
+and their R wrappers now use the validated ML numerical profile:
+
+- NLopt relative objective tolerance 1e-12, relative step tolerance 1e-10,
+  and maximum 5000 objective evaluations. Luksan gradient tolerance and
+  memory remain backend defaults. PSD ML uses constraint tolerance 1e-8.
+- High-level ML starts use `ml_start_values`: std.lv FABIN starts transported
+  to the original marker chart when safe, native FABIN otherwise. Fixed values,
+  linear/nonlinear equalities, unsupported marker layouts and failed transport
+  cause native fallback. Finite user hints override transported values.
+  Low-level fitters continue to use the caller's explicit start vector.
+  R `ml_start_policy` reports transported, fallback, or explicitly selected starts.
+- Ordinary ML with L-BFGS, SLSQP or their existing fallback adapter uses
+  sample-derived scaling in equality-reduced coordinates. Pure-merge bounds
+  are transformed exactly; nonlinear constraints and general affine
+  constraints combined with bounds retain the existing unscaled adapter.
+  `Estimates::ml_sample_scaling_applied` (R: `ml_sample_scaling`) reports
+  the branch actually used. Diagnostics are evaluated in original coordinates.
+- PSD ML enables its existing lifted expected-information diagonal scaling.
+  It does not add a retry or change the PSD feasible set.
+
+Explicit C++ `OptimOptions` replace the default argument: `{}` retains generic
+legacy controls and disables ordinary ML scaling. To customize the new policy,
+start with `ml_optim_options()` or `frontier::ml_psd_optim_options()` and edit
+its backend fields. An explicit `api::OptimizerSpec` likewise replaces that
+factory's optimizer options; use the ML profile when constructing it. Selecting
+a backend without controls, e.g. `ml().optimizer(nlopt_slsqp())`, inherits the
+ML profile. Passing `nlopt_slsqp(OptimOptions{})` explicitly opts out.
+For PSD scaling, the default argument is `ml_psd_options()`; an explicit
+`PsdFitOptions{}` retains its former unscaled behavior.
+
+In R, `control=list(start="fabin3", ml_sample_scaling=FALSE)` selects native
+starts and unscaled ordinary ML. `control$start` also accepts `scaled-fabin`,
+`simple` and the existing named start methods. Use `preconditioning="none"`
+for unscaled PSD ML. Legacy `max_iter`, `ftol` and `gtol` explicitly override
+profile defaults; a supplied nested NLopt field overrides the corresponding
+legacy field. Other estimators retain their existing start/control defaults.
+
+These search changes do not implement the research Newton audit, change the
+production fit verdict, or make PSD fitting the default estimator. The
+validation and remaining boundary/fallback limitations are documented in
+[the numerical study](../research/interior-newton-audit.md).
 
 ## NLopt: L-BFGS, SLSQP, VAR2, TNEWTON and BOBYQA
 

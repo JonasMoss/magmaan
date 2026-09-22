@@ -46,16 +46,6 @@ semantics · **XL** statistical design/research track before implementation.
   retries on optimizer failure/non-clean status, not every failed model-level
   stationarity verdict. Do not substitute PSD fitting for ordinary optimization
   when diagnosing this numerical failure: that changes the feasible set.
-- **High priority / M — calibrate SLSQP stopping against the independent
-  stationarity audit.** A 30-sample repeated-measures diagnostic returned fits
-  in every case, but eight missed the audit with default `ftol=1e-10`.
-  Changing only `ftol` to `1e-14` recovered those eight; changing only the step
-  tolerance did not. Validate across model scales and ordinary/PSD problems
-  before adopting a blanket tolerance change. Keep audit thresholds fixed,
-  retain nonstationary returns as failures, and measure the extra fitting cost.
-  The NLopt adapter currently passes `OptimOptions::gtol` to `xtol_rel`, not
-  to a gradient stopping test; make this distinction explicit in controls and
-  documentation when hardening defaults.
 - **High priority / M — regular-interior curvature diagnostics for the
   full-model audit.** Author priority (2026-09-21): implement and understand
   regular identifiable interiors first; defer PSD-boundary extensions;
@@ -165,9 +155,12 @@ semantics · **XL** statistical design/research track before implementation.
   635/648. All 648 candidate eligible interiors pass; 45 noninterior endpoints
   are retained. Fixed-loading/equality fallback passes all 276 eligible cases.
   No baseline-only passes on either backend; not a universal guarantee.
-  Diagnostic round complete. Next: opt-in production integration with explicit
-  policy/branch reporting, independent audit, user-hint preservation and tests
-  for bounds/nonlinear constraints/adapter recovery before default adoption.
+  Diagnostic round complete. Complete-data ML defaults are now promoted:
+  NLopt control profile, transported/native FABIN starts, ordinary reduced
+  sample scaling and lifted PSD information scaling. Explicit user options
+  and hints remain authoritative; ordinary scaling reports its applied branch.
+  Remaining: production Newton diagnostic, extended constrained-coordinate
+  scaling, detailed effective-control reporting and adaptive PSD recovery.
   Full Guttman-start comparison remains deferred. See the study note for costs,
   unsupported std.lv cases, invariance checks and source/result provenance.
   SLSQP ordinary/PSD smoke complete (648 fits, 108 cases per arm). All
@@ -185,7 +178,7 @@ semantics · **XL** statistical design/research track before implementation.
   Keep ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000 and interior d<=.01.
   Use Newton accuracy for regular interiors, cone checks at PSD boundaries;
   retain the old interior cone residual as telemetry, not an extra veto.
-  Research round provisionally closed; production defaults unchanged.
+  Research round provisionally closed; complete-data ML defaults promoted.
   Improved PSD fails on one weak-factor sample in three unit systems;
   paired native replay rescues one, leaving two. Consider native/unscaled
   retry during integration, without claiming a validated adaptive policy.
@@ -4364,9 +4357,10 @@ work until a concrete downstream consumer appears.
     `tests/unit/satorra2000_test.cpp`. Upstream's verdict is about power, not
     correctness, so prefer `"2000"` when both apply.
 - **Completed 2026-09-20: SEM scaling / PSD optimization defaults (experiment 83).**
-  Retain native complete-data PSD ML with native starts, NLopt SLSQP and no
-  preconditioning; preserve the requested identification and original SEM
-  constraints. Diagonal information scaling stays opt-in. No automatic chart
+  Historical decision, superseded for complete-data ML defaults on 2026-09-22
+  by the broader fixed-control start/scaling validation described above. The
+  original native-start comparison favored no preconditioning; retain these
+  findings as a scope limitation, not the current default policy. No automatic chart
   selector or targeted restart is adopted. Across six structures/ten settings,
   all 220 fits passed audits in 2.83s; diagonal scaling increased median
   evaluations in every setting. 109/110 paired objectives agreed within `6e-12`;

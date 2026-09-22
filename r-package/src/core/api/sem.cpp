@@ -30,6 +30,11 @@ Result<Eigen::VectorXd> start_values(const spec::LatentStructure &pt,
 
   fit_expected<Eigen::VectorXd> out;
   switch (spec.kind) {
+  case StartKind::MlScaled: {
+    auto value = estimate::ml_start_values(pt, rep, stats, starts);
+    if (!value) return std::unexpected(make_error(ErrorStage::Fit, value.error()));
+    return std::move(value->theta);
+  }
   case StartKind::Simple:
     out = estimate::simple_start_values(pt, rep, stats, starts);
     break;
@@ -568,6 +573,8 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
 
 EstimatorSpec EstimatorSpec::optimizer(OptimizerSpec optimizer) const {
   auto out = *this;
+  if (kind == EstimatorKind::ML && optimizer.inherit_estimator_controls)
+    optimizer.options = estimate::ml_optim_options();
   out.optimizer_spec = std::move(optimizer);
   return out;
 }
@@ -602,6 +609,8 @@ EstimatorSpec EstimatorSpec::parameterization(
 EstimatorSpec ml() {
   EstimatorSpec out;
   out.kind = EstimatorKind::ML;
+  out.start_spec = ml_starts();
+  out.optimizer_spec.options = estimate::ml_optim_options();
   return out;
 }
 

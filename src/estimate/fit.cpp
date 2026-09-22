@@ -2435,8 +2435,53 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  auto est = compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
+  auto est = [&]() -> fit_expected<Estimates> {
+    const bool supported_backend = backend == Backend::NloptLbfgs ||
+        backend == Backend::NloptSlsqp || backend == Backend::NloptLbfgsSlsqpFallback;
+    // General affine bounds and nonlinear constraints retain their established
+    // adapter. Scaling never drops or approximates an imposed constraint.
+    if (!opts.ml_sample_scaling || !supported_backend || pre->nl.active() ||
+        pre->con.n_alpha == 0 || (!bounds.empty() && pre->con.group.empty()))
+      return compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
                                opts, "fit_ml");
+    auto scale = ml_coordinate_scale(pt, rep, pre->con, samp);
+    if (!scale) return std::unexpected(scale.error());
+    const auto reduced = optim::reparameterize(prob, pre->con);
+    optim::ScalarProblem driven;
+    driven.n_param = pre->con.n_alpha;
+    driven.expand = [](const Eigen::VectorXd& z) { return z; };
+    driven.f = [&reduced, &scale](const Eigen::VectorXd& z, Eigen::VectorXd& g) {
+      const double f = reduced.f(scale->cwiseProduct(z), g);
+      g.array() *= scale->array();
+      return f;
+    };
+    Bounds original_bounds = bounds.empty() ? Bounds{} :
+        optim::fold_alpha_bounds(pre->con, bounds);
+    Bounds scaled_bounds = original_bounds;
+    Eigen::VectorXd alpha = pre->con.contract(x0);
+    if (!original_bounds.empty()) {
+      alpha = alpha.cwiseMax(original_bounds.lower).cwiseMin(original_bounds.upper);
+      scaled_bounds.lower.array() /= scale->array();
+      scaled_bounds.upper.array() /= scale->array();
+    }
+    auto result = run_scalar(driven, alpha.cwiseQuotient(*scale), scaled_bounds,
+                             backend, opts);
+    if (!result) return std::unexpected(result.error());
+    alpha = scale->cwiseProduct(result->x);
+    Eigen::VectorXd gradient;
+    const double f = reduced.f(alpha, gradient);
+    const double infinity = std::numeric_limits<double>::infinity();
+    const Eigen::VectorXd lower = original_bounds.empty()
+        ? Eigen::VectorXd::Constant(alpha.size(), -infinity) : original_bounds.lower;
+    const Eigen::VectorXd upper = original_bounds.empty()
+        ? Eigen::VectorXd::Constant(alpha.size(), infinity) : original_bounds.upper;
+    auto audit = optim::audit_terminal_iterate(reduced.f, alpha, f, lower, upper);
+    Estimates scaled_est{pre->con.expand(alpha), f, result->iterations,
+        result->f_evals, result->g_evals, result->status,
+        gradient.size() ? gradient.cwiseAbs().maxCoeff() : 0.0, std::move(audit)};
+    scaled_est.ml_sample_scaling_applied = true;
+    return scaled_est;
+  }();
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);

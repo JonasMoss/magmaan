@@ -1315,7 +1315,7 @@ frontier_fit_ml_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
     missing = c("listwise", "error"),
-    preconditioning = c("none", "diagonal")) {
+    preconditioning = c("diagonal", "none")) {
   missing <- match.arg(missing)
   preconditioning <- match.arg(preconditioning)
   if (is.character(model) && length(model) == 1L) {

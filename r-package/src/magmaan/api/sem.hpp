@@ -195,26 +195,43 @@ enum class OptimizerKind : std::uint8_t {
 struct OptimizerSpec {
   OptimizerKind kind = OptimizerKind::NloptLbfgs;
   optim::OptimOptions options;
+  bool inherit_estimator_controls = false;
 };
 
-inline OptimizerSpec ceres(optim::OptimOptions options = {}) {
+inline OptimizerSpec ceres() {
+  return OptimizerSpec{OptimizerKind::Ceres, {}, true};
+}
+
+inline OptimizerSpec ceres(optim::OptimOptions options) {
   return OptimizerSpec{OptimizerKind::Ceres, options};
 }
 
-inline OptimizerSpec nlopt_slsqp(optim::OptimOptions options = {}) {
+inline OptimizerSpec nlopt_slsqp() {
+  return OptimizerSpec{OptimizerKind::NloptSlsqp, {}, true};
+}
+
+inline OptimizerSpec nlopt_slsqp(optim::OptimOptions options) {
   return OptimizerSpec{OptimizerKind::NloptSlsqp, options};
 }
 
-inline OptimizerSpec nlopt_lbfgs_slsqp_fallback(
-    optim::OptimOptions options = {}) {
+inline OptimizerSpec nlopt_lbfgs_slsqp_fallback() {
+  return OptimizerSpec{OptimizerKind::NloptLbfgsSlsqpFallback, {}, true};
+}
+
+inline OptimizerSpec nlopt_lbfgs_slsqp_fallback(optim::OptimOptions options) {
   return OptimizerSpec{OptimizerKind::NloptLbfgsSlsqpFallback, options};
 }
 
-inline OptimizerSpec ipopt(optim::OptimOptions options = {}) {
+inline OptimizerSpec ipopt() {
+  return OptimizerSpec{OptimizerKind::Ipopt, {}, true};
+}
+
+inline OptimizerSpec ipopt(optim::OptimOptions options) {
   return OptimizerSpec{OptimizerKind::Ipopt, options};
 }
 
 enum class StartKind : std::uint8_t {
+  MlScaled,
   Simple,
   Fabin,
   Guttman,
@@ -228,6 +245,7 @@ struct StartSpec {
   Eigen::VectorXd theta;
 };
 
+inline StartSpec ml_starts() { return StartSpec{StartKind::MlScaled, {}}; }
 inline StartSpec simple_starts() { return StartSpec{StartKind::Simple, {}}; }
 inline StartSpec fabin_starts() { return StartSpec{StartKind::Fabin, {}}; }
 inline StartSpec guttman_starts() { return StartSpec{StartKind::Guttman, {}}; }

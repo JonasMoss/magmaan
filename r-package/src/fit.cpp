@@ -85,7 +85,7 @@ std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
       name == "fabin") {
     return "fabin3";
   }
-  if (name == "simple" || name == "fabin2" || name == "fabin3" ||
+  if (name == "scaled-fabin" || name == "simple" || name == "fabin2" || name == "fabin3" ||
       name == "guttman" || name == "guttman1952" ||
       name == "bentler" || name == "bentler1982" ||
       name == "jamesstein" || name == "james-stein" || name == "js") {
@@ -103,9 +103,18 @@ std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
 // default to FABIN3 (Hägglund 1982), matching lavaan's default.
 Eigen::VectorXd start_values_or_stop(const Ctx& ctx,
                                      const magmaan::spec::Starts& starts,
-                                     const std::string& start_name = "fabin3") {
+                                     const std::string& start_name = "fabin3",
+                                     std::string* applied_policy = nullptr) {
   magmaan::fit_expected<Eigen::VectorXd> x;
-  if (start_name == "simple") {
+  if (applied_policy) *applied_policy = start_name;
+  if (start_name == "scaled-fabin") {
+    auto value = magmaan::estimate::ml_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
+    if (!value) stop_fit(value.error());
+    if (applied_policy) *applied_policy =
+        value->branch == magmaan::estimate::MlStartBranch::TransportedStdLv
+            ? "transported-std-lv-fabin" : "native-fabin-fallback";
+    return std::move(value->theta);
+  } else if (start_name == "simple") {
     x = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp,
                                                starts);
   } else if (start_name == "fabin2") {
@@ -1199,6 +1208,7 @@ Rcpp::List fit_result(Ctx& ctx,
       Rcpp::_["fmin"]          = est.fmin,
       Rcpp::_["iterations"]    = est.iterations,
       Rcpp::_["f_evals"]       = est.f_evals,
+      Rcpp::_["ml_sample_scaling"] = est.ml_sample_scaling_applied,
       Rcpp::_["g_evals"]       = est.g_evals,
       Rcpp::_["npar"]          = static_cast<int>(ctx.pt.n_free()),
       Rcpp::_["ngroups"]       = static_cast<int>(nb),
@@ -2430,13 +2440,22 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  std::string start_policy = "scaled-fabin";
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("start"))
+      start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
+                                          "fit_ml", "scaled-fabin");
+  }
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0,
-      bounds_from_nullable(bounds), backend, optim_opts_from(control));
+      bounds_from_nullable(bounds), backend, optim_opts_from(control, magmaan::estimate::ml_optim_options()));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return fit_result(ctx, est, &starts, "ML");
+  Rcpp::List out = fit_result(ctx, est, &starts, "ML");
+  out["ml_start_policy"] = start_policy;
+  return out;
 }
 
 // Complete-data ML with PSD primitive LISREL covariance matrices. The
@@ -2450,13 +2469,20 @@ Rcpp::List frontier_fit_ml_psd_impl(
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
     double feasibility_tol = 1e-6,
-    bool diagonal_preconditioning = false) {
+    bool diagonal_preconditioning = true) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_ml_psd");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  std::string start_policy = "scaled-fabin";
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("start"))
+      start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
+                                          "fit_ml", "scaled-fabin");
+  }
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
   const magmaan::estimate::Backend backend =
       optimizer.isNull()
           ? magmaan::estimate::Backend::NloptSlsqp
@@ -2466,11 +2492,12 @@ Rcpp::List frontier_fit_ml_psd_impl(
   psd_opts.feasibility_tol = feasibility_tol;
   psd_opts.diagonal_preconditioning = diagonal_preconditioning;
   auto e_or = magmaan::estimate::frontier::fit_ml_psd(
-      ctx.pt, ctx.rep, ctx.samp, x0, backend, optim_opts_from(control),
+      ctx.pt, ctx.rep, ctx.samp, x0, backend, optim_opts_from(control, magmaan::estimate::frontier::ml_psd_optim_options()),
       psd_opts);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "ML");
+  out["ml_start_policy"] = start_policy;
   out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
   return out;
 }

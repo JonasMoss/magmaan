@@ -429,13 +429,14 @@ inline void read_optim_control(const Rcpp::List& x, const char* key,
   value = static_cast<T>(v[0]);
 }
 
-inline magmaan::optim::OptimOptions optim_opts_from(Rcpp::Nullable<Rcpp::List> control) {
-  magmaan::optim::OptimOptions o;  // struct defaults
+inline magmaan::optim::OptimOptions optim_opts_from(
+    Rcpp::Nullable<Rcpp::List> control, magmaan::optim::OptimOptions o = {}) {
   if (control.isNotNull()) {
     Rcpp::List l(control.get());
-    if (l.containsElementNamed("max_iter")) o.max_iter = Rcpp::as<int>(l["max_iter"]);
-    if (l.containsElementNamed("ftol"))     o.ftol     = Rcpp::as<double>(l["ftol"]);
-    if (l.containsElementNamed("gtol"))     o.gtol     = Rcpp::as<double>(l["gtol"]);
+    if (l.containsElementNamed("max_iter")) { o.max_iter = Rcpp::as<int>(l["max_iter"]); o.nlopt.max_eval.reset(); }
+    if (l.containsElementNamed("ftol")) { o.ftol = Rcpp::as<double>(l["ftol"]); o.nlopt.ftol_rel.reset(); }
+    if (l.containsElementNamed("gtol")) { o.gtol = Rcpp::as<double>(l["gtol"]); o.nlopt.xtol_rel.reset(); }
+    if (l.containsElementNamed("ml_sample_scaling")) o.ml_sample_scaling = Rcpp::as<bool>(l["ml_sample_scaling"]);
     if (l.containsElementNamed("history"))  o.history  = Rcpp::as<int>(l["history"]);
     if (l.containsElementNamed("nlopt")) {
       Rcpp::List c = Rcpp::as<Rcpp::List>(l["nlopt"]);

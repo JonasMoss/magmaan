@@ -1,7 +1,8 @@
 # Regular-interior Newton audit and L-BFGS controls
 
-2026-09-21. Advisory implementation and control study. No production default
-or public audit contract changes. Boundary audits and practical verification
+2026-09-21. Advisory implementation and control study. The frozen research
+runs preceded default promotion, recorded in the final section (2026-09-22).
+The public audit contract is unchanged. Boundary audits and practical verification
 by restarts/independent optimizers remain deferred, as requested.
 
 ## Working decision after SLSQP validation (2026-09-22)
@@ -1011,3 +1012,27 @@ Reproduce with `sqp_validate` and `summarize_sqp_validation.py` as documented
 in the check README. Local outputs, all endpoint records, summaries and source
 hashes are in `tests/checks/interior_newton/results/sqp-validation-2026-09-22/`.
 No production defaults or manuscript results were changed.
+
+
+## Promotion to complete-data ML defaults (2026-09-22)
+
+Following author approval, the validated control/start/scaling policy is now
+promoted to complete-data ML defaults. This is an implementation change after
+the frozen validation above; the archived runs are not retroactively relabeled.
+See `docs/reference/optimizer-controls.md` for explicit opt-outs and scope.
+Low-level fits retain their supplied starts. High-level starts preserve finite
+user hints and fall back to native FABIN on unsupported structures. Ordinary
+scaling handles equality reductions and pure-merge bounds, retaining existing
+adapters for nonlinear constraints and affine equalities with bounds. The
+existing terminal audit is recomputed without the search-coordinate scaling;
+the research Newton threshold is not yet a production fit-verdict gate.
+PSD scaling uses the existing implementation, without an automatic retry.
+
+
+Promotion checks: the optimized estimation suite passes 388 tests (9326
+assertions), including five new numerical-policy tests; the staged API suite
+passes 18 tests (403 assertions). R default/override/PSD opt-out checks,
+existing optimizer-control checks, and existing common-verdict checks pass
+against a locally built package. The global layering check still reports
+pre-existing paper-to-test references; no finding concerns the changed files.
+The canonical C++ sources were re-vendored into the portable R package.
