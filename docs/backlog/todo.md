@@ -156,6 +156,20 @@ semantics · **XL** statistical design/research track before implementation.
   candidate only: add full Guttman CFA starts under the same metric, handle
   fixed values/hints/equalities/means/groups, and validate fresh cases before
   defaults. Ambient chart domains differ outside positive disturbance variances.
+  Broad frozen-policy validation complete: 15 synthetic models, six published
+  specifications, five fresh replications per N=50/200/1000, three unit scales;
+  693 cases, 3594 executed fits across stock and extended NLopt. Candidate uses
+  transported std.lv FABIN starts where supported, otherwise native starts;
+  sample-derived scaling acts in the unchanged equality-reduced coordinates.
+  Stock baseline/candidate passes: 453/648 out of 693 attempts; extended:
+  635/648. All 648 candidate eligible interiors pass; 45 noninterior endpoints
+  are retained. Fixed-loading/equality fallback passes all 276 eligible cases.
+  No baseline-only passes on either backend; not a universal guarantee.
+  Diagnostic round complete. Next: opt-in production integration with explicit
+  policy/branch reporting, independent audit, user-hint preservation and tests
+  for bounds/nonlinear constraints/adapter recovery before default adoption.
+  Full Guttman-start comparison remains deferred. See the study note for costs,
+  unsupported std.lv cases, invariance checks and source/result provenance.
   Remaining immediate jobs: expose an opt-in interior diagnostic in core,
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal

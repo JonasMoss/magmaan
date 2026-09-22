@@ -737,3 +737,105 @@ Raw output, design and checks: `tests/checks/interior_newton/README.md`, local
 and objective identities, terminal objective transport, and existing exact
 quadratic/scaling checks passed. Evaluation counts exclude preparation and
 back-conversion time; do not present them as end-to-end speed ratios.
+
+## Broad frozen-policy validation (2026-09-22)
+
+The candidate was frozen before the broader run: use native std.lv FABIN3 starts
+transported into the supplied marker model where the transport is supported;
+otherwise retain native FABIN3 starts. Apply frozen sample-derived parameter
+scales in the original equality-reduced coordinates in both branches. Baseline
+is native FABIN3 with ordinary marker coordinates. The third comparator fits
+native std.lv only where the model-preserving transport is supported. All use
+ftol_rel=1e-12, xtol_rel=1e-10, automatic memory, default internal gradient
+stopping and maxeval=5000. None of these changes are production defaults.
+
+The advisory transport now covers ordinary free means and independent groups.
+It rejects active equalities, missing/multiple fixed unit markers, and other
+nonzero fixed entries. Consequently growth and equality-constrained models
+use the explicit native-start fallback. No model is silently changed or
+constraint discarded. For the optimizer metric, full parameter units include
+Nu and Alpha; latent units use a fixed-loading indicator where possible, or
+mean observed SD otherwise. For theta=theta0+K*alpha, coordinate j is scaled by
+1/norm(diag(1/full_units)*K.col(j)); K and theta0 remain untouched. This makes
+scaling available with general linear equality constraints without pretending
+that a literal std.lv option is equivalent.
+
+Fifteen synthetic models cover growth, feedback, two- and five-group invariance,
+p=6/24/48 CFA, cross-loadings, correlated residuals, weak factors, unequal units,
+and equality-linked loadings. N=50/200/1000, five fresh replications and .1/1/10
+units give 675 dataset/unit cases. Six published specifications at three units
+add 18 cases. This is 693 design cases per policy per backend, with 282 explicit
+unsupported std.lv rows. There are 1797 executed fits per backend, 3594 across
+unmodified NLopt backtracking and the diagnostic extended version. This expands
+structure and independent samples, but is not a rare-failure probability study.
+The earlier very-large-N checks remain separate; the new grid stops at N=1000.
+
+| Backend / policy | Attempts | Eligible interior | Pass .01 | Total evaluations |
+|---|---:|---:|---:|---:|
+| Stock / baseline | 693 | 464 | 453 | 112558 |
+| Stock / candidate | 693 | 648 | 648 | 47294 |
+| Extended / baseline | 693 | 648 | 635 | 168386 |
+| Extended / candidate | 693 | 648 | 648 | 69246 |
+
+Paired stock results: 453 pass both policies, 195 pass only the candidate,
+zero pass only the baseline. Extended results: 635 pass both, 13 only the
+candidate, zero only the baseline. These are observed counts, not a universal
+dominance guarantee. Candidate stock reduces total evaluations about 58%; the
+extended comparison reduces them about 59%. Neither candidate reaches the
+evaluation cap. Extra work under extended backtracking includes work on
+noninterior cases, so compare totals on all attempts, not only successful fits.
+
+All 45 remaining candidate endpoints are noninterior. Two stock endpoints among
+these also lack positive curvature; none lack it under extended backtracking.
+They are retained as non-successes for this regular-interior policy; the study
+does not establish that all those endpoints are accurately converged improper
+solutions. This remains ordinary fitting, not PSD optimization.
+
+The candidate's transported branch passes 372 of 372 eligible cases among 411
+attempts. Its native-start fallback passes 276 of 276 eligible cases among 282
+attempts. This holds under both backtracking versions. Thus the extension to
+fixed-loading growth and equality constraints has direct evidence, rather than
+an implicit claim that std.lv applies to those models. All six published-data
+specifications pass under the candidate in all three unit systems.
+
+Native std.lv alone is less robust to the stock line search: 251 audit passes
+among 411 supported attempts (333 interior/curvature-eligible). Extended
+backtracking raises that to 372/372 eligible, with 39 noninterior endpoints.
+Its unsupported 282 cases must not be included as optimizer failures or omitted
+without explanation. These findings favor separating the start and numerical
+coordinate policy from user-facing identification.
+
+Maximum objective spread among passing policies on a shared case is 1.55e-8
+(stock) and 6.21e-7 (extended), in per-observation half-discrepancy. This supports
+agreement at the chosen accuracy scale, not global optimality or uniqueness.
+
+Initialization and total diagnostic times are recorded, including specification,
+starts, chart setup/transport where needed, fit, conversion and common audit.
+Preparation costs more for the candidate; the preliminary complete stock run
+recorded about 86 ms total versus 33 ms baseline. Runs overlap and individual
+fits are short, so no calibrated wall-time speed ratio is claimed. Summed
+objective evaluations remain the primary cost evidence, while timings ensure
+that initialization overhead is visible rather than silently excluded.
+
+Validation: 2079 unique design rows per backend, exact intended n/replication/
+unit coverage, explicit unsupported rows, 51 directional transformed-gradient
+checks per backend (maximum relative errors 1.36e-9 and 1.25e-9), fixed-value
+checks during transport, start/terminal std.lv objective equivalence and
+terminal equality checks. Final instrumented runs reproduce all 4158 previous
+complete-run numerical design/outcome rows exactly. An initial incomplete run
+exposed an empty-Alpha assumption in the advisory harness; it is retained and
+excluded from summaries. No core implementation changed.
+
+Final result directories within the check:
+`results/broad-starts-stock-2026-09-22-final/` and
+`results/broad-starts-extended-2026-09-22-final/`. Source snapshots, helper and
+fixture hashes, raw records and JSON summaries are retained locally.
+
+**Decision:** this completes the current diagnostic/validation round and
+supports an opt-in production integration next. Preserve compatibility starts,
+user hints, fixed values and constraints; expose which start/scaling branch was
+used; retain the independent terminal audit. Arbitrary explicit user hints,
+nonlinear constraints, bounds and production-adapter recovery still need their
+own handling/tests before default adoption. Stock backend evidence here is not
+a test of the full production adapter's acceptance/recovery logic. A complete
+Guttman-start comparison remains deferred rather than blocking that integration.

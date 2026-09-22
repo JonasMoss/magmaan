@@ -281,3 +281,53 @@ First run: `results/chart-starts-2026-09-22/`. All exclusions and failures remai
 in raw output. The summary reports both evaluations summed over all attempts
 and medians; claims about speed are evaluation-count comparisons, not calibrated
 end-to-end timings. Construction/conversion costs are not included in fit_ms.
+
+## Broad frozen-policy validation
+
+```sh
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/broad-stock-new 10 broad
+bash tests/checks/interior_newton/run.sh tests/checks/interior_newton/results/broad-extended-new 60 broad
+python3 tests/checks/interior_newton/summarize_broad.py tests/checks/interior_newton/results/broad-stock-new tests/checks/interior_newton/results/broad-extended-new
+```
+
+`broad_starts.cpp` and `broad_helpers.hpp` freeze three policies with unchanged
+conservative L-BFGS settings: native FABIN baseline; native std.lv when the
+transport is supported; and candidate transported std.lv starts plus sample
+coordinate scaling, falling back to native starts plus scaling elsewhere.
+These are direct backend diagnostics, not production adapter/default changes.
+
+Transport is intentionally conservative: no active equalities; exactly one
+fixed unit marker per latent; no other nonzero fixed matrix entries. It handles
+means and multiple independent groups, and transforms Alpha with the latent
+scale. Growth and equality-constrained models therefore use native starts.
+Unsupported std.lv comparisons emit explicit rows and are never fitted as an
+altered model. User start hints are absent in this panel; preserving arbitrary
+hints under a general start policy remains unimplemented.
+
+The coordinate policy preserves theta=theta0+K*alpha. Full parameter units are
+computed from sample SDs, with latent units taken from the first nonzero fixed
+loading; a latent without one uses its block's mean observed SD. Mean/intercept
+units are included. Reduced coordinate j has scale
+1 / norm(diag(1/full_parameter_units)*K.col(j)). The optimizer changes only
+alpha=D*z, leaving K, theta0, fixed values and all equalities untouched. Native
+starts are contracted by the existing equality reduction. Directional finite
+differences check the scaled reduced gradient; terminal equalities are checked.
+
+Fifteen synthetic models: the seven advanced designs plus p=6/24/48 CFAs,
+cross-loadings, correlated residuals, weak factors, mixed units and an
+equality-linked p=24 CFA. N=50/200/1000, five fresh replications, .1/1/10 units;
+seed base 9222026. The previous high-N diagnostics remain separate. Six existing
+published fixture specifications add original-data tests at three units each.
+Total 693 dataset/unit cases per policy; 2079 design rows per backend version,
+of which 282 std.lv rows are unsupported. Thus 1797 executed fits per version,
+3594 across stock and extended backtracking. Unit variants share samples.
+
+Final local runs: `results/broad-starts-stock-2026-09-22-final/` and
+`results/broad-starts-extended-2026-09-22-final/`. Earlier runs are retained,
+including an incomplete harness run that exposed an empty-Alpha assumption;
+the final runs include 51 directional gradient checks per version and terminal
+std.lv objective-transport checks. Summary scripts retain all noninterior and
+unavailable endpoints. Timing includes initialization and common-audit work,
+but runs overlap and are not calibrated timing benchmarks; evaluation counts
+are the primary work measure. The candidate's fallback is explicitly labeled
+in every row. Source and fixture hashes are retained locally.
