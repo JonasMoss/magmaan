@@ -224,8 +224,9 @@ knitr::kable(data.frame(Input = cov$feature,
                         check.names = FALSE), row.names = FALSE)
 ```
 
-Composite (`<~`) models and inequality constraints fail on both routes through
-the R interface.
+Composite (`<~`) syntax fails inside `magmaan()` on both routes. Composites
+fit through the separate `magmaan_fcsem()` route, which has no sphere version.
+Inequality constraints are unsupported everywhere.
 
 ## Caveats
 
@@ -235,8 +236,10 @@ the R interface.
   next experiment (Ernst-type small-sample designs across estimators).
 - **Least squares.** The two LS misses show that the sphere chart does not
   make least squares convex. Both came from particular starting values. The
-  sphere solution currently depends on the user's identification only through
-  those starting values.
+  sphere problem is the same under every identification of a model, but its
+  starting values (and the orientation of its coordinates) still come from the
+  identification the user wrote. A start built in the sphere itself would
+  remove that dependence.
 - **Bounds.** `bounds = "standard"` bounds every loading, which keeps every
   latent off the sphere. A bounded fit therefore runs entirely in the user's
   identification.
@@ -252,7 +255,8 @@ the R interface.
     loadings only. lavaan's `effect.coding = TRUE` also codes the intercepts.
     The fit is identical but the mean parameters differ, so the comparison
     uses lavaan's `effect.coding = "loadings"`.
-  - **Composites.** Composite models do not fit through the R entry points.
+  - **Composites.** `magmaan()` fails on composite syntax with an optimizer
+    error instead of pointing to `magmaan_fcsem()`.
 
 ## Reproduce
 

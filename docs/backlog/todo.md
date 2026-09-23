@@ -2002,22 +2002,83 @@ Remaining work, tiered:
   too; FIML case 0014 is flat enough that the sweep uses a 1e-4 theta
   tolerance there (same objective to 1e-10). Found by experiment 87 and to
   settle before promotion:
-  - **Chart-invariant start.** The sphere solution depends on the user's
-    identification only through the translated start values. Two LS
-    population fits (1 ULS, 1 GLS in 32 each) stopped at non-global
-    stationary points from one identification's start while recovering from
-    the others. A start built in the sphere chart itself would make the
-    sphere route exactly identification-invariant.
+  - **Sphere-native start (land before the step-two simulation).** Today two
+    things in the sphere route depend on how the user wrote the
+    identification:
+    - **Start values.** `x0` comes from the user partable's start policy
+      (`scaled-fabin` for ML), and `start_u` maps it onto the sphere with the
+      same implied Sigma. Marker, std.lv and effect-coding starts are
+      different points.
+    - **Internal coordinates.** Each unit's `Q` is the QR of `D^-1 basis`,
+      and `basis` is built from the user's gauge constraints (the SVD of `M`
+      plus the level direction). Identifications of the same model share the
+      span but not the orthonormal basis. L-BFGS is rotation-equivariant in
+      exact arithmetic, but bounds, PORT scaling and rounding are not.
+
+    The internal problem is otherwise identical: the same free parameters,
+    objective and metric.
+
+    **Evidence.** Experiment 87 found two LS population fits (1 ULS, 1 GLS,
+    in 32 each) that stopped at non-global stationary points from one
+    identification's start, while the same sphere problem started from the
+    other three identifications recovered the population.
+
+    **Plan.**
+    1. Canonical `Q` per unit, a function of the span `W` and `D` only (for
+       example the orthonormal basis of the projector onto `D^-1 W`, and the
+       identity when `W` is all of R^p).
+    2. Start values computed on the gauge-free internal partable, which is
+       the same for every identification of the same model. Use a
+       data-driven loading direction per unit (the leading eigenvector of the
+       unit's standardized indicator block, projected into `W` and onto the
+       model's restrictions) and derive the latent (co)variances and paths
+       from it.
+    3. Keep the user-chart start as a fallback, or as a second canonical
+       start.
+
+    **Gates.**
+    - A property test: `reidentify(fit_sphere(marker), std.lv)` equals
+      `fit_sphere(std.lv)` exactly, over the golden corpus.
+    - The step-two simulation compares the native start against the current
+      one on success rates.
+
+    **Scope.** Invariance covers sphere units only. Passthrough latents keep
+    the user's identification by design, and whether a latent passes through
+    can depend on how the model is written (a second-order marker, for
+    example).
   - **Bounds switch the sphere off.** `bounds = "standard"` box-bounds every
     loading, so every latent stays in the user's chart. Decide whether sphere
     fits translate loading boxes (they are not scale-invariant) or document
     the interaction.
   - **Coverage for a default.** The sphere route refuses ordinal data, ML2S,
-    two-level models and PSD for non-ML estimators. A default needs either
-    those siblings or a documented ordinary-route fallback.
-- **v1, S.** Small-N evidence on the Ernst design across estimators (step two
-  after experiment 87), including how often LS sphere fits land in a
-  different basin than the ordinary fit from the same data.
+    two-level models and PSD for non-ML estimators. Composites run through
+    the FC-SEM route (`magmaan_fcsem()`), which has no sphere. A default
+    needs either those siblings or a documented ordinary-route fallback.
+- **v1, M. Step two: an Ernst-type simulation across estimators.** This
+  follows experiment 87, and the sphere-native start should land first so
+  the run measures the version that would be promoted.
+  - **Designs:**
+    - the Ernst SEM and CFA forms (3 indicators, loadings 1/.8/.6, beta in
+      {0, .25, .5});
+    - a weak marker (lambda_1 in {.1, .3});
+    - a high-R2 endogenous latent (R2 in {.9, .98}), where experiment 82's
+      std.lv reversal sits;
+    - a small two-group metric-invariance design.
+  - **Grid:**
+    - N in {10, 20, 50, 100, 200};
+    - ML, PSD-ML, ULS, GLS, and FIML under 10% MCAR;
+    - marker and std.lv identifications.
+  - **Outcomes, per draw:**
+    - error;
+    - success, meaning convergence at the best objective any route of the
+      same family found, with a multistart reference;
+    - a silent wrong answer (reported converged, worse than the best);
+    - flagged outside the identification;
+    - largest parameter and wall time.
+    - For LS, how often the sphere and ordinary fits land in different basins
+      from the same data.
+  - **Cost.** Estimate from a `--smoke` timing trial before choosing reps,
+    with Modal or Saga if the grid needs it.
 - **Literature scope.** PSD LS/FIML siblings, ML2S, multi-information penalty,
   two-level slots, higher-order loadings when the lower-order factor is itself
   a unit, partial invariance via nested spheres, SNLLS (sphere in the nonlinear
@@ -4018,6 +4079,10 @@ Remaining:
   R frontier slices stay green and only if lavaan handles them cleanly, including
   `group.equal = "composite.weights"`.
 - **S, after parity fixtures are green.** Add composite benchmark cases.
+- **S — `magmaan()` with `<~` fails opaquely.** Composite syntax passed to
+  `magmaan()` (and so to `frontier_fit_sphere()`) ends in a non-finite
+  objective from the optimizer. It should route to, or point at,
+  `magmaan_fcsem()` (found by experiment 87).
 
 Deferred beyond the lavaan-validated single-group ML slice: ordinal composites,
 FIML/LS composites, robust corrections for composites, and composite
