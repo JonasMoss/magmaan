@@ -26,8 +26,8 @@
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/optim/problem.hpp"
 
-// MAGMAAN_TEST_SPHERE_ROUTE: route `fit`, `fit_bounded`, `fit_gmm` and
-// `fit_gls` through the frontier sphere chart
+// MAGMAAN_TEST_SPHERE_ROUTE: route `fit`, `fit_bounded`, `fit_gmm`,
+// `fit_gls` and `fit_fiml` through the frontier sphere chart
 // (estimate/frontier/sphere.hpp). Every golden compiled with the define then
 // checks that the sphere route reproduces the ordinary user-chart estimate.
 #ifdef MAGMAAN_TEST_SPHERE_ROUTE
@@ -164,8 +164,13 @@ fit_fiml(const Pt& pt, const Rep& rep, const Raw& raw,
   if (!samp.has_value()) return std::unexpected(samp.error());
   auto x0 = estimate::simple_start_values(pt, rep, *samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
+#ifdef MAGMAAN_TEST_SPHERE_ROUTE
+  return detail::sphere_result(estimate::frontier::fit_fiml_sphere(
+      pt, rep, raw, *x0, backend, opts));
+#else
   return estimate::fit_fiml(pt, rep, raw, *x0, estimate::fiml::FIML{},
                             backend, opts);
+#endif
 }
 
 // Ordinal DWLS / WLS. `parameterization` selects Delta (default) or Theta.

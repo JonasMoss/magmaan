@@ -199,6 +199,7 @@ magmaan_add_test_target(magmaan_test_parity parity
 magmaan_add_test_target(magmaan_test_sphere_route sphere_route
   golden/fit_theta_golden_test.cpp
   golden/ls_golden_test.cpp
+  golden/fiml_golden_test.cpp
   golden/lin_constraint_golden_test.cpp
   golden/inference_golden_test.cpp
   golden/multigroup_inference_golden_test.cpp
