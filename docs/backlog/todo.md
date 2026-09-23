@@ -2059,7 +2059,56 @@ Remaining work, tiered:
     two-level models and PSD for non-ML estimators. Composites run through
     the FC-SEM route (`magmaan_fcsem()`), which has no sphere. A default
     needs either those siblings or a documented ordinary-route fallback.
-- **v1, M. Step two: an Ernst-type simulation across estimators.** This
+  - **The switch itself (D1).** Proposed: `magmaan()` uses the sphere by
+    default (`chart = "sphere"`, with `chart = "ordinary"` as the opt-out).
+    Inputs the sphere does not cover (the coverage list above) fall back to
+    the ordinary route automatically, and the fit records the fallback and
+    its reason. Switching the default must never break a model that
+    `magmaan()` fits today. Also decide:
+    - what `fit$gauge` shows on the ordinary route;
+    - whether a fit outside the user's identification should be an error
+      (the `magmaan_user_chart_singular` condition) or a warning plus the
+      sphere solution when it is the default.
+  - **Scalar invariance alongside.** Fix the continuous `group.equal`
+    intercepts release around the same time (the "M/L — continuous scalar
+    `group.equal` release" entry in the ordinal invariance section: group
+    2+ latent means stay fixed, npar 60 against lavaan's 63). Invariance
+    users are a main audience of a sphere default, and experiment 87 had to
+    free those means by hand.
+  - **Multiple local optima (probe of 2026-09-23).** Single-start success
+    is overstated when judged against the best of a few fits.
+    `papers/global-gauge-sem/work/probes/psd_multistart.R` reruns the Ernst
+    probe draws (N = 10 and 20, 200 each) against 20 random free-sign
+    starts.
+    - **PSD-ML.** The canonical sphere reaches the best optimum in 83.5 to
+      93.5% of draws, where the earlier probe reported 97 to 100%. The
+      ordinary PSD marker route reaches it in 76 to 89%.
+      - About half the N = 10 draws (47%) and 28% of N = 20 draws have two
+        or more distinct optima.
+      - The optima sit on different boundary faces: which indicator gets a
+        zero residual (the factor collapses onto it), a zero factor
+        variance, or a factor correlation of ±1. 89 of 92 misses are on a
+        different face from the best.
+      - These are genuine constrained local minima. The polish does not
+        move them, and the marker route finds them too.
+      - Fit gaps are small: median Δχ² 0.6, 90% under 3.1, max 7.2. The
+        estimates differ completely, though.
+    - **Cheap remedies fall short.** Adding the user start gains 1 to 2.5
+      points. Nine sphere fits, one for every marker placement, gain nothing
+      more. The face is set by the sign and scale pattern of the start, not
+      by the reference indicator. Twenty random starts reach 98 to 100%.
+    - **ML.** Against the same reference, the canonical ML sphere succeeds
+      in 49.5 to 68.5% of draws (marker 42.5 to 62.5%).
+      - Converged canonical fits miss the best in 16 to 21.5% of draws
+        (median Δχ² 0.14).
+      - Unverified whether those better points are local minima or ridge
+        points where no ML optimum exists.
+      - At N = 10, no fit from any start converged in 14 to 15% of draws.
+    - **Decide.** Is a single-start miss rate acceptable for a default? The
+      marker route misses more, so it is no regression. Should sphere fits
+      get an opt-in multistart (random free-sign starts, best objective)?
+      For PSD a face-aware start is a research question.
+- **v1, M. Step two: an Ernst-type simulation (experiment 88).** This
   follows experiment 87 and uses the canonical start.
   - **Designs:**
     - the Ernst SEM and CFA forms (3 indicators, loadings 1/.8/.6, beta in
@@ -2070,12 +2119,19 @@ Remaining work, tiered:
     - a small two-group metric-invariance design.
   - **Grid:**
     - N in {10, 20, 50, 100, 200};
-    - ML, PSD-ML, ULS, GLS, and FIML under 10% MCAR;
+    - ML, plus at most one least-squares estimator (the author's call on
+      2026-09-23, possibly ML alone). GLS is the candidate, since the
+      collapse points showed up there. PSD-ML, ULS and FIML drop out of
+      the grid.
     - marker and std.lv identifications.
   - **Outcomes, per draw:**
     - error;
-    - success, meaning convergence at the best objective any route of the
-      same family found, with a multistart reference;
+    - success, meaning convergence at the best objective of a 20-start
+      random free-sign multistart plus every route's own fit. The
+      multistart probe above shows that a best-of-routes reference
+      overstates success.
+    - for ML, the type of the best point (interior local minimum or a ridge
+      toward nonexistence), classified before a miss is counted;
     - a silent wrong answer (reported converged, worse than the best);
     - flagged outside the identification;
     - largest parameter and wall time.

@@ -236,7 +236,11 @@ agree across identifications to optimizer precision. Least-squares fits start
 from the sphere ML solution, because without ML's log-determinant barrier the
 symmetric sphere lets LS reach points where a factor collapses onto one
 indicator (points the marker chart keeps at infinity). Explicit start values
-select the user's start instead. `reidentify` translates any
+select the user's start instead. Every fit is still single-start and local.
+On the Ernst N = 10 and 20 draws, PSD-ML has several optima on different
+boundary faces in 28 to 47% of draws. There, one canonical start misses the
+best optimum in 6.5 to 16.5% of draws (the marker route in 11 to 24%). Evidence for
+promoting the sphere therefore uses a multistart reference. `reidentify` translates any
 fit between identifications of the same model (marker on any indicator, std.lv,
 effect coding) and refuses when the target partable describes another model.
 The `sphere_route` and `sphere_route_parity` test executables compile the
