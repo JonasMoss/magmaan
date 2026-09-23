@@ -103,6 +103,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 84 | [speed-attribution](84-speed-attribution/report.qmd) | benchmark | active | How much of matched ML + GOF/Wald runtime is preparation, fitting, or inference, and which comparisons pass numerical agreement before a public speed claim? |
 | 85 | [multiinfo-penalty-improper](85-multiinfo-penalty-improper/report.qmd) | benchmark | active | Does the complete-data multi-information penalty remove improper and boundary solutions without costing ML's accuracy and calibration, and how large should its weight be? |
 | 86 | [multiinfo-jeffreys-posterior](86-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? |
+| 87 | [sphere-chart-sanity](87-sphere-chart-sanity/report.qmd) | probe | active | Does the sphere chart reproduce the standard fit across identification conventions, invariance, constraint syntax and estimators, recover known populations in every identification that holds them, and flag the ones that cannot? |
 
 ## Archived
 

@@ -221,8 +221,15 @@ restarted from it, so the result is the ordinary estimate under the ordinary
 convergence criteria whenever that estimate exists. The polish matters: without
 it, stationarity checked in a near-pole user chart rejected 103 of 107
 optimal sphere fits on the Ernst N = 10 draws, while the median polish moves
-parameters by about 1e-10. A marker at a pole (|l(a)| below `pole_tol`)
-returns `user_chart = false` with the sphere report. `reidentify` translates any
+parameters by about 1e-10. A marker at a pole (|l(a)| below `pole_tol`),
+or a fixed-variance latent whose sphere-chart variance falls below `pole_tol`
+times its fixed value (the std.lv pole, for example an endogenous latent with a
+vanishing residual variance), returns `user_chart = false` with the sphere
+report. Experiment 87 checks the R surface deterministically: 68
+fits of 37 models reproduce the ordinary results and lavaan, exact population
+moments are recovered in every identification that holds them and flagged in
+every one that does not, and translations between identifications match the
+direct fits. `reidentify` translates any
 fit between identifications of the same model (marker on any indicator, std.lv,
 effect coding) and refuses when the target partable describes another model.
 The `sphere_route` and `sphere_route_parity` test executables compile the

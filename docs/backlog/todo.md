@@ -675,6 +675,16 @@ contract and fitted-result schema; experiment-specific simulation checkpoints
 should copy `fit$diagnostics$admissibility$admissible` into their result rows
 when they next change.
 
+- **S — `effect_coding = TRUE` with a mean structure codes loadings only.**
+  lavaan's `effect.coding = TRUE` means `c("loadings", "intercepts")`: per
+  factor the indicator intercepts sum to zero and the latent means are free.
+  magmaan's `effect_coding` adds only the loading rows, so with a mean
+  structure (FIML, `meanstructure = TRUE`) the fit and df agree with lavaan
+  but the intercept and latent-mean estimates are in a different chart
+  (found by experiment 87; magmaan matches `effect.coding = "loadings"` to
+  5e-7). Decide whether `effect_coding` should accept lavaan's character
+  form, and gate the intercept chart against lavaan.
+
 - **S — complete covariance-admissibility validation plumbing.** Add a
   deterministic lavaan warning-status fixture for an improper complete-data
   solution, and thread the audit flag into simulation result checkpoints when
@@ -1972,12 +1982,42 @@ Remaining work, tiered:
   condition, `frontier_reidentify()`, `fit$gauge`, and sphere refits in
   `case_rerun()` / `modification_indices_lrt()`. (`robust_nested_lrt()` takes
   two fits and never refits.)
+- **Done 2026-09-23.** Deterministic sanity experiment
+  (`experiments/87-sphere-chart-sanity`):
+  - **Recovery.** 37 models / 68 fits across ML, ULS, GLS, WLS, FIML and
+    PSD-ML reproduce the ordinary fit, including SEs, robust SEs, the
+    standardized solution, fit measures, MIs and `:=`. Both routes are equally
+    close to lavaan. The gauge classification matched the design in 68/68.
+  - **Population recovery.** Exact population moments, including populations
+    outside the marker, std.lv or effect-coding charts, are recovered in every
+    chart that holds them (sphere ML 24/24, PSD 21/21) and flagged in every
+    chart that does not (8/8, 7/7).
+  - **Chart invariance.** 48/48 translations between identifications match
+    the direct fit.
+  - **Bug fixed.** It found and fixed a sphere bug: std.lv-type units were not
+    checked against `pole_tol`, so a vanishing endogenous residual variance
+    returned a "converged" std.lv fit with a slope near 3.7e4.
 - **Open.** Promote to `magmaan(chart = "sphere")` once the author decides the
   surface (plan decision D1). The FIML goldens run through the sphere seam
   too; FIML case 0014 is flat enough that the sweep uses a 1e-4 theta
-  tolerance there (same objective to 1e-10).
-- **v1, S.** Small-N evidence on the Ernst design and one more CFA through the
-  R surface (paper probes).
+  tolerance there (same objective to 1e-10). Found by experiment 87 and to
+  settle before promotion:
+  - **Chart-invariant start.** The sphere solution depends on the user's
+    identification only through the translated start values. Two LS
+    population fits (1 ULS, 1 GLS in 32 each) stopped at non-global
+    stationary points from one identification's start while recovering from
+    the others. A start built in the sphere chart itself would make the
+    sphere route exactly identification-invariant.
+  - **Bounds switch the sphere off.** `bounds = "standard"` box-bounds every
+    loading, so every latent stays in the user's chart. Decide whether sphere
+    fits translate loading boxes (they are not scale-invariant) or document
+    the interaction.
+  - **Coverage for a default.** The sphere route refuses ordinal data, ML2S,
+    two-level models and PSD for non-ML estimators. A default needs either
+    those siblings or a documented ordinary-route fallback.
+- **v1, S.** Small-N evidence on the Ernst design across estimators (step two
+  after experiment 87), including how often LS sphere fits land in a
+  different basin than the ordinary fit from the same data.
 - **Literature scope.** PSD LS/FIML siblings, ML2S, multi-information penalty,
   two-level slots, higher-order loadings when the lower-order factor is itself
   a unit, partial invariance via nested spheres, SNLLS (sphere in the nonlinear
