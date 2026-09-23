@@ -130,10 +130,11 @@ struct UserChartScales {
 // Scales that move a point into the user's chart. For Linear units the sign
 // is free; it is chosen so that the loadings agree with `sign_reference`
 // (row values, e.g. the user-chart start), else so that the largest loading
-// is positive. An Affine unit is outside the chart when l(a) = 0; with
-// `pole_tol > 0` it is also treated as outside when |direction_level| is
-// below `pole_tol` (the user-chart point is then not representable to
-// working precision).
+// is positive. An Affine unit is outside the chart when l(a) = 0, a Linear
+// unit when its released variance is not positive. With `pole_tol > 0` a unit
+// is also treated as outside when |direction_level| (Affine) or
+// direction_level (Linear) is below `pole_tol`: the user-chart point is then
+// not representable to working precision.
 UserChartScales
 scales_to_user_chart(const GaugePlan& plan,
                      const Eigen::Ref<const Eigen::VectorXd>& rows,

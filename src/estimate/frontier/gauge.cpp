@@ -673,7 +673,11 @@ scales_to_user_chart(const GaugePlan& plan,
       const double psi = rows(unit.variance_row);
       const double ratio = psi / unit.variance_value;
       out.direction_level(u) = ratio;
-      if (!(ratio > 0.0) || !std::isfinite(ratio)) {
+      // A released variance at zero is the std.lv pole: the user chart would
+      // need a scale of 0 (for example an endogenous latent whose residual
+      // variance vanishes). Same tolerance as the affine level.
+      const bool near_pole = pole_tol > 0.0 && !(ratio >= pole_tol);
+      if (!(ratio > 0.0) || !std::isfinite(ratio) || near_pole) {
         out.singular_units.push_back(static_cast<std::int32_t>(u));
         continue;
       }
@@ -788,8 +792,8 @@ reidentify(const spec::LatentStructure& pt_from,
   if (!scales.singular_units.empty()) {
     return std::unexpected(gauge_err(
         "reidentify: the target chart does not contain this point (a marker "
-        "loading is numerically zero or a fixed-variance latent has "
-        "non-positive variance)"));
+        "loading is numerically zero or a fixed-variance latent has a "
+        "numerically zero or negative variance)"));
   }
   const Eigen::VectorXd rows_to = rescale_rows(*plan_to, rows_to_sph, scales.scales);
 

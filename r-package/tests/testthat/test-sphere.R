@@ -120,3 +120,31 @@ test_that("refitting helpers refit a sphere fit through the sphere", {
   key <- function(x) x[order(x$lhs, x$rhs), c("mi", "lrt")]
   expect_equal(key(mi_s), key(mi_o), tolerance = 1e-5, ignore_attr = TRUE)
 })
+
+test_that("a vanishing endogenous residual variance is the std.lv pole", {
+  # Y = 0.8 X exactly: std.lv's fixed residual variance cannot hold the point,
+  # the marker identification can.
+  L <- rbind(cbind(c(1, 0.8, 0.6), 0), cbind(0, c(1, 0.8, 0.6)))
+  Phi <- matrix(c(1, 0.8, 0.8, 0.64), 2)
+  S <- L %*% Phi %*% t(L) + diag(0.5, 6)
+  # Data whose sample covariance is S exactly.
+  set.seed(11)
+  z <- scale(matrix(rnorm(400 * 6), 400), scale = FALSE)
+  z <- z %*% solve(chol(cov(z))) %*% chol(S)
+  dat <- as.data.frame(z)
+  names(dat) <- c("x1", "x2", "x3", "y1", "y2", "y3")
+  cond <- tryCatch(frontier_fit_sphere(ernst, dat, std_lv = TRUE),
+                   magmaan_user_chart_singular = function(e) e)
+  expect_s3_class(cond, "magmaan_user_chart_singular")
+  expect_true(cond$gauge$units$singular[cond$gauge$units$latent == "Y"])
+  expect_lt(cond$gauge$fmin_sphere, 1e-8)
+  moved <- frontier_reidentify(cond, ernst)
+  expect_lt(max(abs(moved$theta)), 10)
+})
+
+test_that("unsupported inputs are refused, not fitted in the user chart", {
+  dat <- ernst_sim()
+  expect_error(frontier_fit_sphere(ernst, dat, cluster = "g"), "two-level")
+  expect_error(frontier_fit_sphere(ernst, dat, estimator = "ULS", psd = TRUE),
+               "supports estimator = 'ML' only")
+})

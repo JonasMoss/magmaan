@@ -1376,7 +1376,7 @@ frontier_fit_ml_multiinfo <- function(
 # estimate meets the ordinary convergence criteria in the model's own chart;
 # `fit$gauge$polish` records how far it moved.
 frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
-                                ..., ordered = NULL,
+                                ..., cluster = NULL, ordered = NULL,
                                 parameterization = "delta", psd = FALSE,
                                 missing = c("listwise", "error"),
                                 W = NULL, optimizer = NULL, control = NULL,
@@ -1401,6 +1401,9 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
   }
   if (length(ordered)) {
     stop("frontier_fit_sphere(): ordinal data are not supported")
+  }
+  if (!is.null(cluster)) {
+    stop("frontier_fit_sphere(): two-level models are not supported")
   }
   dots <- list(...)
   prep <- .magmaan_prepare_spec(model, data, estimator, groups, dots,
@@ -1457,7 +1460,8 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
   msg <- paste0(
     caller, "(): the fitted point lies outside the model's identification ",
     "for latent(s) ", paste(bad, collapse = ", "), ": a marker loading is ",
-    "numerically zero or a fixed-variance latent has a non-positive variance, ",
+    "numerically zero or a fixed-variance latent has a numerically zero or ",
+    "negative variance, ",
     "so estimates in this parameterization do not exist. The sphere-chart ",
     "solution is in the condition's `gauge` field; frontier_reidentify() ",
     "re-expresses it under another identification.")

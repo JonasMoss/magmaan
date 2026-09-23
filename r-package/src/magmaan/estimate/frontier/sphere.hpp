@@ -54,9 +54,11 @@ struct SphereOptions {
   // conditioning only.
   double       pin_weight = 1.0;
   SphereMetric metric = SphereMetric::UnitFree;
-  // A marker-type unit whose loading direction has |l(a)| below this value is
-  // reported as outside the user's chart: the translated estimate would carry
-  // loadings of order 1 / pole_tol. 0 disables the tolerance (exact zero only).
+  // A marker-type unit whose loading direction has |l(a)| below this value,
+  // or a fixed-variance unit whose sphere-chart variance over its fixed value
+  // is below it, is reported as outside the user's chart: the translated
+  // estimate would carry parameters that grow without bound. 0 disables the
+  // tolerance (exact zero only).
   double       pole_tol = 1e-6;
   // Finish with the ordinary user-chart fit started at the translated sphere
   // solution. The sphere chart locates the optimum; the polish reports it to

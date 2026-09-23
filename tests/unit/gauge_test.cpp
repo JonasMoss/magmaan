@@ -546,6 +546,36 @@ TEST_CASE("sphere ML: a marker at a pole is reported outside the user chart") {
   CHECK(sph->report.internal_theta.cwiseAbs().maxCoeff() < 10.0);
 }
 
+TEST_CASE("sphere ML: an endogenous latent with no residual variance is the std.lv pole") {
+  // Y = beta X exactly, so the residual variance std.lv fixes to 1 is zero at
+  // the optimum: the std.lv estimate does not exist, the marker one does.
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(6, 2);
+  L.col(0).head(3) << 1.0, 0.8, 0.6;
+  L.col(1).tail(3) << 1.0, 0.8, 0.6;
+  const double beta = 0.8;
+  Eigen::Matrix2d Phi;
+  Phi << 1.0, beta, beta, beta * beta;
+  Eigen::MatrixXd S = L * Phi * L.transpose();
+  S.diagonal().array() += 0.5;
+  const std::string_view m = "X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X";
+
+  BuildOptions o;
+  o.std_lv = true;
+  auto f = setup(m, {S}, o);
+  auto sph = fr::fit_ml_sphere(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(sph);
+  CHECK_FALSE(sph->user_chart);
+  REQUIRE(sph->report.scales.singular_units.size() == 1);
+  CHECK(sph->report.scales.direction_level(1) < 1e-6);
+  CHECK(sph->report.fmin_internal < 1e-10);
+
+  auto marker = setup(m, {S});
+  auto to_marker = fr::reidentify(sph->report.internal_pt,
+                                  sph->report.internal_theta, marker.pt);
+  REQUIRE_OK(to_marker);
+  CHECK(to_marker->theta.cwiseAbs().maxCoeff() < 10.0);
+}
+
 TEST_CASE("sphere FIML: reproduces the ordinary FIML estimate with missing data") {
   std::mt19937 rng(20260923);
   std::normal_distribution<double> z;
