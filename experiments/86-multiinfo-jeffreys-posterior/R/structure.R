@@ -33,6 +33,9 @@ phi_labels <- function(st) {
 latent_phi <- function(st, B, cors) {
   m <- st$m
   Phi <- diag(m)
+  if (!all(is.finite(B)) || !all(is.finite(cors))) {
+    return(list(Phi = Phi, r2 = rep(0, m), ok = FALSE))
+  }
   if (length(cors)) {
     Phi[st$exo_cor] <- cors
     Phi[st$exo_cor[, 2:1, drop = FALSE]] <- cors
@@ -72,6 +75,9 @@ unpack_phi <- function(st, phi) {
 
 # Sigma(phi) plus admissibility. Cheap: this is called once per MCMC step.
 build_std <- function(st, phi) {
+  if (!all(is.finite(phi))) {
+    return(list(Sigma = NULL, ok = FALSE))
+  }
   u <- unpack_phi(st, phi)
   lat <- latent_phi(st, u$B, u$cors)
   ok <- lat$ok && all(u$theta >= 0) &&

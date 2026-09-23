@@ -37,6 +37,16 @@ n_values <- sort(unique(fits$n))
 pct <- function(x) sprintf("%.0f", 100 * x)
 num <- function(x) sprintf("%.3f", x)
 
+bar_path <- file.path(res, "params_barriers.csv")
+has_bar <- file.exists(bar_path)
+if (has_bar) {
+  bar <- read.csv(bar_path, stringsAsFactors = FALSE)
+  bar$lower <- NA_real_
+  bar$upper <- NA_real_
+  params <- rbind(params, bar[, names(params)])
+  bar_fits <- read.csv(file.path(res, "fits_barriers.csv"), stringsAsFactors = FALSE)
+}
+
 post$pass <- with(post, !is.na(rhat_key) & rhat_key <= 1.05 & ess_key >= 400 &
                     jeffreys_ess >= 200)
 key <- params[params$key, ]
@@ -97,6 +107,22 @@ excess <- sapply(designs, function(d) {
 })
 cov_range <- range(sapply(designs, function(d) sapply(n_values, function(n) cover(d, n, "jeff_mean"))))
 path_done <- "path_r2_90" %in% designs
+layer_gap <- function(m, layer, target = "jeff_mean", nmax = 100) {
+  ref <- keyp[keyp$method == target, c("design", "n", "rep", "quantity", "est")]
+  names(ref)[5] <- "ref"
+  s <- merge(keyp[keyp$method == m & keyp$n <= nmax, ], ref,
+             by = c("design", "n", "rep", "quantity"))
+  s <- s[if (layer == "var") grepl("~~ x", s$quantity) else !grepl("~~ x", s$quantity), ]
+  sqrt(mean((s$est - s$ref)^2, na.rm = TRUE))
+}
+if (has_bar) {
+  rfit_gap <- {
+    a <- keyp[keyp$method == "rfit_multi_l025", c("design", "n", "rep", "quantity", "est")]
+    b <- keyp[keyp$method == "pen_l025", c("design", "n", "rep", "quantity", "est")]
+    m <- merge(a, b, by = c("design", "n", "rep", "quantity"))
+    max(abs(m$est.x - m$est.y))
+  }
+}
 ```
 
 ## Question
@@ -133,6 +159,8 @@ sampler in R, against `r sprintf("%.0f", ms_pen)` ms for one barrier fit. The
 cheap alternative that needs no λ, a normal around ML cut at the wall, fails on
 exactly the samples it is meant for: its RMSE on the Heywood-prone design is
 `r sprintf("%.1f", rmse("f1_p3", n_small, "trunc_normal"))`.
+`r if (has_bar) paste0("A single-matrix alternative, the log-determinant of the latents' standardized covariance given the data (the latent-determinacy barrier), behaves like the multi-information barrier with slightly less shrinkage of correlations at the same weight (RMSE ", num(rmse("f2_r97", n_small, "det_l100")), " against ", num(rmse("f2_r97", n_small, "pen_l100")), " at λ = 1 and r = .97). It does not remove the tension: its best weight is still about 1 for residual variances and 0.5 for correlations. A two-weight multi-information barrier (1 on indicator terms, 0.5 on latent terms) tracks the posterior mean best overall.") else ""`
+
 `r if (!path_done) "The path design (latent R²) has not been run yet; the correlation results above come from the two-factor designs alone." else ""`
 
 ## Evidence
@@ -205,6 +233,33 @@ for (n in n_values) {
 knitr::kable(tab, align = paste0("l", strrep("r", 2 * length(n_values))))
 ```
 
+```{r variants, results = "asis", eval = has_bar}
+cat("### A single-matrix alternative: the latent-determinacy barrier\n\n")
+cat(paste(
+  "The multi-information barrier splits into a latent part, the observed",
+  "correlations, and the information the indicators carry about the latents.",
+  "Dropping the observed part leaves one log-determinant: the covariance of the",
+  "standardized latents given all the data. It is singular exactly when some",
+  "latent direction is fully determined, by the data (a Heywood case) or by",
+  "other latents (a correlation of one). The table compares it with the",
+  "multi-information barrier. Distances are root-mean-square distances to the",
+  paste0("Jeffreys posterior mean at N ≤ 100; RMSE is against the truth at N = ",
+         n_small, ".\n\n")))
+ms <- c(pen_l025 = "Multi-information, λ = 0.25", pen_l050 = "Multi-information, λ = 0.5",
+        pen_l100 = "Multi-information, λ = 1",
+        two_weight = "Two-weight (1 indicators, 0.5 latent)",
+        det_l025 = "Determinacy, λ = 0.25", det_l050 = "Determinacy, λ = 0.5",
+        det_l100 = "Determinacy, λ = 1", det_l200 = "Determinacy, λ = 2",
+        jeff_median = "Jeffreys median")
+ms <- ms[names(ms) %in% unique(keyp$method)]
+tab <- data.frame(Estimator = unname(ms),
+                  `To posterior mean: variances` = sapply(names(ms), function(m) num(layer_gap(m, "var"))),
+                  `To posterior mean: correlations` = sapply(names(ms), function(m) num(layer_gap(m, "cor"))),
+                  check.names = FALSE, row.names = NULL)
+for (d in designs) tab[[paste("RMSE,", design_label[[d]])]] <- sapply(names(ms), function(m) num(rmse(d, n_small, m)))
+print(knitr::kable(tab, align = paste0("l", strrep("r", ncol(tab) - 1))))
+```
+
 ## Caveats
 
 - The sampler moves in standardized-latent coordinates with a flat prior there.
@@ -218,6 +273,8 @@ knitr::kable(tab, align = paste0("l", strrep("r", 2 * length(n_values))))
 - "Flat" is flat in one particular coordinate system. The Jeffreys prior is the
   coordinate-free reference; the flat column shows how much the choice of prior
   matters.
+- The barrier variants were fitted by a separate optimizer in standardized
+  coordinates. `r if (has_bar) paste0("Refitting the default barrier this way from a different start reproduces magmaan's estimates to ", signif(rfit_gap, 2), ".") else ""`
 - Data are multivariate normal and the models are correctly specified.
 - `r max(fits$rep)` replications per cell. RMSE differences in the third decimal
   are within noise.
@@ -227,5 +284,6 @@ knitr::kable(tab, align = paste0("l", strrep("r", 2 * length(n_values))))
 ```sh
 just r-dev
 Rscript experiments/86-multiinfo-jeffreys-posterior/run_experiment.R --full
+Rscript experiments/86-multiinfo-jeffreys-posterior/scripts/determinacy.R --profile full
 quarto render experiments/86-multiinfo-jeffreys-posterior/report.qmd
 ```
