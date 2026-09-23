@@ -237,9 +237,8 @@ Inequality constraints are unsupported everywhere.
 - **Least squares.** The two LS misses show that the sphere chart does not
   make least squares convex. Both came from particular starting values. The
   sphere problem is the same under every identification of a model, but its
-  starting values (and the orientation of its coordinates) still come from the
-  identification the user wrote. A start built in the sphere itself would
-  remove that dependence.
+  starting values still come from the identification the user wrote. A start
+  built in the sphere itself would remove that dependence.
 - **Bounds.** `bounds = "standard"` bounds every loading, which keeps every
   latent off the sphere. A bounded fit therefore runs entirely in the user's
   identification.

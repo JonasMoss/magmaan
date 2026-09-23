@@ -2002,45 +2002,40 @@ Remaining work, tiered:
   too; FIML case 0014 is flat enough that the sweep uses a 1e-4 theta
   tolerance there (same objective to 1e-10). Found by experiment 87 and to
   settle before promotion:
-  - **Sphere-native start (land before the step-two simulation).** Today two
-    things in the sphere route depend on how the user wrote the
-    identification:
-    - **Start values.** `x0` comes from the user partable's start policy
-      (`scaled-fabin` for ML), and `start_u` maps it onto the sphere with the
-      same implied Sigma. Marker, std.lv and effect-coding starts are
-      different points.
-    - **Internal coordinates.** Each unit's `Q` is the QR of `D^-1 basis`,
-      and `basis` is built from the user's gauge constraints (the SVD of `M`
-      plus the level direction). Identifications of the same model share the
-      span but not the orthonormal basis. L-BFGS is rotation-equivariant in
-      exact arithmetic, but bounds, PORT scaling and rounding are not.
+  - **Sphere-native start (land before the step-two simulation).** The only
+    effective dependence of the sphere route on how the user wrote the
+    identification is the start. `x0` comes from the user partable's start
+    policy (`scaled-fabin` for ML), and `start_u` carries it onto the sphere
+    with the same implied Sigma. Marker, std.lv and effect-coding starts are
+    different points on the same sphere problem.
 
-    The internal problem is otherwise identical: the same free parameters,
-    objective and metric.
+    **Orientation is not an issue.** Each unit's internal axes do come from
+    the user's constraints (`Q` is the QR of `D^-1 basis`). But with a shared
+    start, marker- and effect-coding-oriented fits agree to about 1e-15 under
+    L-BFGS, PORT and SLSQP (checked 2026-09-23), so the axes need no
+    canonicalizing.
 
-    **Evidence.** Experiment 87 found two LS population fits (1 ULS, 1 GLS,
-    in 32 each) that stopped at non-global stationary points from one
-    identification's start, while the same sphere problem started from the
-    other three identifications recovered the population.
+    **Evidence.**
+    - **Benign case.** With different starts, HS one-factor sphere solutions
+      differ by about 1e-8, which is optimizer tolerance.
+    - **Substantive case.** Experiment 87's two LS population misses (1 ULS,
+      1 GLS, in 32 each) stopped at non-global stationary points from one
+      identification's start, while the other three starts recovered the
+      population.
 
-    **Plan.**
-    1. Canonical `Q` per unit, a function of the span `W` and `D` only (for
-       example the orthonormal basis of the projector onto `D^-1 W`, and the
-       identity when `W` is all of R^p).
-    2. Start values computed on the gauge-free internal partable, which is
-       the same for every identification of the same model. Use a
-       data-driven loading direction per unit (the leading eigenvector of the
-       unit's standardized indicator block, projected into `W` and onto the
-       model's restrictions) and derive the latent (co)variances and paths
-       from it.
-    3. Keep the user-chart start as a fallback, or as a second canonical
-       start.
+    **Plan.** Compute starts on the gauge-free internal partable, which is
+    the same for every identification of a model. Use a data-driven loading
+    direction per unit (the leading eigenvector of the unit's standardized
+    indicator block, projected into `W` and onto the model's restrictions),
+    and derive the latent (co)variances and paths from it.
 
     **Gates.**
     - A property test: `reidentify(fit_sphere(marker), std.lv)` equals
-      `fit_sphere(std.lv)` exactly, over the golden corpus.
+      `fit_sphere(std.lv)` over the golden corpus.
     - The step-two simulation compares the native start against the current
-      one on success rates.
+      one on success rates. If one canonical start is worse, use a small
+      fixed set of canonical starts, not the user's start, which would
+      reintroduce the dependence.
 
     **Scope.** Invariance covers sphere units only. Passthrough latents keep
     the user's identification by design, and whether a latent passes through
