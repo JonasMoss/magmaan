@@ -121,8 +121,10 @@ add_library(magmaan STATIC
   src/estimate/start_bentler.cpp
   src/estimate/start_jamesstein.cpp
   src/estimate/frontier/communality.cpp
+  src/estimate/frontier/gauge.cpp
   src/estimate/frontier/multiinfo_penalty.cpp
   src/estimate/frontier/noniterative_cfa.cpp
+  src/estimate/frontier/sphere.cpp
   src/estimate/cfa_utils.cpp
   src/estimate/resolve_fixed_x.cpp
   src/estimate/constraints.cpp
@@ -164,6 +166,7 @@ add_library(magmaan STATIC
   src/measures/reliability.cpp
   src/optim/nlopt_optimizer.cpp
   src/optim/optimizers.cpp
+  src/optim/parameter_map.cpp
   src/optim/reparameterize.cpp
   src/optim/terminal_audit.cpp)
 add_library(magmaan::magmaan ALIAS magmaan)

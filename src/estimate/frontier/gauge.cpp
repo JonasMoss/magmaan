@@ -1,0 +1,835 @@
+#include "magmaan/estimate/frontier/gauge.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <limits>
+#include <map>
+#include <set>
+#include <string>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <Eigen/SVD>
+
+#include "magmaan/error.hpp"
+#include "magmaan/parse/op.hpp"
+
+namespace magmaan::estimate::frontier {
+
+namespace {
+
+using parse::Op;
+
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+constexpr double kInf = std::numeric_limits<double>::infinity();
+constexpr double kSupportTol = 1e-12;
+
+PostError gauge_err(std::string detail) {
+  return PostError{PostError::Kind::NumericIssue, std::move(detail)};
+}
+
+std::size_t idx(std::int32_t i) { return static_cast<std::size_t>(i); }
+
+struct DisjointSet {
+  std::vector<std::int32_t> parent;
+  explicit DisjointSet(std::int32_t n) : parent(idx(n < 0 ? 0 : n)) {
+    for (std::int32_t i = 0; i < n; ++i) parent[idx(i)] = i;
+  }
+  std::int32_t find(std::int32_t x) {
+    while (parent[idx(x)] != x) {
+      parent[idx(x)] = parent[idx(parent[idx(x)])];
+      x = parent[idx(x)];
+    }
+    return x;
+  }
+  void unite(std::int32_t a, std::int32_t b) {
+    a = find(a);
+    b = find(b);
+    if (a != b) parent[idx(std::max(a, b))] = std::min(a, b);
+  }
+};
+
+struct Slot {
+  std::int32_t              latent = -1;
+  std::int32_t              block  = 0;
+  std::vector<std::int32_t> rows;   // loading rows in partable order
+  std::vector<std::int32_t> rhs;    // indicator var ids, same order
+  bool                      demoted = false;
+  std::string               reason;
+};
+
+void demote(Slot& s, const std::string& why) {
+  if (s.demoted) return;
+  s.demoted = true;
+  s.reason  = why;
+}
+
+bool user_latent(const spec::LatentStructure& pt, std::int32_t v) {
+  return v >= 0 && v < pt.n_vars &&
+         idx(v) < pt.is_user_latent.size() && pt.is_user_latent[idx(v)] != 0;
+}
+
+// A candidate unit: a tie group of slots of one latent.
+struct Group {
+  std::vector<std::int32_t> slots;   // ascending block order
+  bool                      demoted = false;
+  GaugeKind                 kind = GaugeKind::Affine;
+  Eigen::MatrixXd           basis;
+  Eigen::VectorXd           level;
+  std::int32_t              variance_row = -1;
+  double                    variance_value = 0.0;
+};
+
+struct Analysis {
+  const spec::LatentStructure& pt;
+  const EqConstraints&         con;
+  std::vector<Slot>            slots;
+  std::map<std::pair<std::int32_t, std::int32_t>, std::int32_t> slot_of;
+  std::vector<std::int32_t>    loading_slot_of_row;   // -1 unless a loading row
+  std::vector<std::vector<std::int32_t>> rows_of_param;
+  std::vector<std::vector<std::int32_t>> components;  // A_eq components (params)
+  std::vector<Group>           groups;
+  std::vector<std::int32_t>    group_of_slot;
+
+  std::int32_t slot_for(std::int32_t var, std::int32_t block) const {
+    auto it = slot_of.find({var, block});
+    return it == slot_of.end() ? -1 : it->second;
+  }
+};
+
+void demote_group(Analysis& a, std::int32_t g, const std::string& why) {
+  auto& grp = a.groups[idx(g)];
+  if (grp.demoted) return;
+  grp.demoted = true;
+  for (auto s : grp.slots) demote(a.slots[idx(s)], why);
+}
+
+// Weight of each row under the current unit assignment (unit = group index of
+// a non-demoted group; -1 for demoted or absent slots).
+std::vector<GaugeWeight> row_weights(const Analysis& a) {
+  const auto& pt = a.pt;
+  std::vector<GaugeWeight> out(pt.size());
+  auto unit_of = [&](std::int32_t var, std::int32_t block) -> std::int32_t {
+    if (!user_latent(pt, var)) return -1;
+    const std::int32_t s = a.slot_for(var, block);
+    if (s < 0) return -1;
+    const std::int32_t g = a.group_of_slot[idx(s)];
+    if (g < 0 || a.groups[idx(g)].demoted) return -1;
+    return g;
+  };
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.is_constraint_row(i)) continue;
+    const std::int32_t b = pt.block_of(i);
+    const std::int32_t lhs = pt.lhs_var[i];
+    const std::int32_t rhs = pt.rhs_var[i];
+    std::map<std::int32_t, std::int32_t> acc;
+    auto add = [&](std::int32_t var, std::int32_t e) {
+      const std::int32_t u = unit_of(var, b);
+      if (u >= 0) acc[u] += e;
+    };
+    switch (pt.op[i]) {
+      case Op::Measurement:
+        add(lhs, +1);
+        add(rhs, -1);
+        break;
+      case Op::Covariance:
+        add(lhs, -1);
+        add(rhs, -1);
+        break;
+      case Op::Regression:
+        add(lhs, -1);
+        add(rhs, +1);
+        break;
+      case Op::Intercept:
+        add(lhs, -1);
+        break;
+      default:
+        break;
+    }
+    for (auto [u, e] : acc)
+      if (e != 0) out[i].emplace_back(u, e);
+  }
+  return out;
+}
+
+// Affine loading set of a slot: offset v and direction matrix M (rows =
+// loadings in slot order, columns = alpha coordinates).
+std::pair<Eigen::VectorXd, Eigen::MatrixXd>
+affine_loading_set(const Analysis& a, const Slot& s, bool& ok) {
+  const auto& pt = a.pt;
+  const auto n = static_cast<Eigen::Index>(s.rows.size());
+  Eigen::VectorXd v(n);
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(n, a.con.n_alpha);
+  ok = true;
+  for (Eigen::Index j = 0; j < n; ++j) {
+    const auto i = idx(s.rows[idx(static_cast<std::int32_t>(j))]);
+    if (pt.free[i] > 0) {
+      const Eigen::Index p = pt.free[i] - 1;
+      v(j) = a.con.theta0.size() > p ? a.con.theta0(p) : 0.0;
+      if (a.con.n_alpha > 0) M.row(j) = a.con.Kmat.row(p);
+    } else {
+      v(j) = pt.fixed_value[i];
+      if (!std::isfinite(v(j))) ok = false;
+    }
+  }
+  return {v, M};
+}
+
+void classify_group(Analysis& a, std::int32_t g) {
+  auto& grp = a.groups[idx(g)];
+  const auto& pt = a.pt;
+  const Slot& rep = a.slots[idx(grp.slots.front())];
+  bool ok = true;
+  auto [v, M] = affine_loading_set(a, rep, ok);
+  if (!ok) {
+    demote_group(a, g, "a loading is fixed at an unresolved value");
+    return;
+  }
+  const Eigen::Index n = v.size();
+  Eigen::MatrixXd U;
+  Eigen::Index r = 0;
+  if (M.cols() > 0 && n > 0) {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(M, Eigen::ComputeThinU);
+    const auto& sv = svd.singularValues();
+    const double smax = sv.size() ? sv(0) : 0.0;
+    const double tol = 1e-10 * std::max(1.0, smax);
+    for (Eigen::Index k = 0; k < sv.size(); ++k)
+      if (sv(k) > tol) ++r;
+    U = svd.matrixU().leftCols(r);
+  } else {
+    U = Eigen::MatrixXd(n, 0);
+  }
+  Eigen::VectorXd res = v;
+  if (r > 0) res -= U * (U.transpose() * v);
+  const double scale = std::max(1.0, v.norm());
+  if (res.norm() > 1e-9 * scale) {
+    grp.kind = GaugeKind::Affine;
+    grp.basis.resize(n, r + 1);
+    if (r > 0) grp.basis.leftCols(r) = U;
+    grp.basis.col(r) = res / res.norm();
+    grp.level = res / res.squaredNorm();
+  } else {
+    grp.kind = GaugeKind::Linear;
+    grp.basis = U;
+    grp.level.resize(0);
+  }
+  if (grp.basis.cols() <= 1) {
+    demote_group(a, g, "loading direction is fixed by the model");
+    return;
+  }
+  if (grp.kind == GaugeKind::Linear) {
+    std::int32_t fixed_row = -1;
+    int n_fixed = 0;
+    for (auto s : grp.slots) {
+      const auto& sl = a.slots[idx(s)];
+      for (std::size_t i = 0; i < pt.size(); ++i) {
+        if (pt.op[i] != Op::Covariance) continue;
+        if (pt.lhs_var[i] != sl.latent || pt.rhs_var[i] != sl.latent) continue;
+        if (pt.block_of(i) != sl.block) continue;
+        if (pt.free[i] == 0) {
+          ++n_fixed;
+          fixed_row = static_cast<std::int32_t>(i);
+        }
+      }
+    }
+    if (n_fixed == 0) {
+      demote_group(a, g, "no scale fix: loadings are homogeneous and no "
+                         "latent variance is fixed");
+      return;
+    }
+    if (n_fixed > 1) {
+      demote_group(a, g, "latent variance fixed in more than one tied block");
+      return;
+    }
+    const double val = pt.fixed_value[idx(fixed_row)];
+    if (!(val > 0.0) || !std::isfinite(val)) {
+      demote_group(a, g, "latent variance fixed at a non-positive value");
+      return;
+    }
+    grp.variance_row = fixed_row;
+    grp.variance_value = val;
+  }
+}
+
+// One pass of the gauge-covariance checks. Returns true if anything was
+// demoted.
+bool covariance_pass(Analysis& a, const GaugeAnalysisOptions& opts) {
+  const auto& pt = a.pt;
+  const auto weights = row_weights(a);
+  const std::int32_t npar = pt.n_free();
+
+  // Exempt rows: loading rows of live units and the released variance rows.
+  std::vector<char> exempt(pt.size(), 0);
+  for (std::size_t g = 0; g < a.groups.size(); ++g) {
+    const auto& grp = a.groups[g];
+    if (grp.demoted) continue;
+    for (auto s : grp.slots)
+      for (auto i : a.slots[idx(s)].rows) exempt[idx(i)] = 1;
+    if (grp.variance_row >= 0) exempt[idx(grp.variance_row)] = 1;
+  }
+
+  std::set<std::int32_t> doomed;
+  std::map<std::int32_t, std::string> why;
+  auto doom = [&](const GaugeWeight& w, const std::string& reason) {
+    for (auto [u, e] : w) {
+      (void)e;
+      if (doomed.insert(u).second) why[u] = reason;
+    }
+  };
+  auto doom_unit = [&](std::int32_t u, const std::string& reason) {
+    if (u >= 0 && doomed.insert(u).second) why[u] = reason;
+  };
+  auto unit_of_loading_row = [&](std::int32_t i) -> std::int32_t {
+    const std::int32_t s = a.loading_slot_of_row[idx(i)];
+    if (s < 0) return -1;
+    const std::int32_t g = a.group_of_slot[idx(s)];
+    return (g >= 0 && !a.groups[idx(g)].demoted) ? g : -1;
+  };
+
+  // (a) fixed nonzero values on nonzero-weight rows.
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.is_constraint_row(i) || exempt[i] || pt.free[i] != 0) continue;
+    if (weights[i].empty()) continue;
+    if (!(pt.fixed_value[i] == 0.0)) {
+      doom(weights[i], "a fixed nonzero value depends on this latent's scale");
+    }
+  }
+
+  // (b) linear constraint components.
+  for (const auto& comp : a.components) {
+    bool any_weight = false;
+    for (auto p : comp)
+      for (auto i : a.rows_of_param[idx(p)])
+        if (!exempt[idx(i)] && !weights[idx(i)].empty()) any_weight = true;
+    if (!any_weight) continue;
+    const GaugeWeight* ref = nullptr;
+    bool mixed = false;
+    bool inhomogeneous = false;
+    GaugeWeight all;
+    for (auto p : comp) {
+      for (auto i : a.rows_of_param[idx(p)]) {
+        if (exempt[idx(i)]) continue;
+        const auto& w = weights[idx(i)];
+        all.insert(all.end(), w.begin(), w.end());
+        if (!ref) ref = &w;
+        else if (*ref != w) mixed = true;
+        if (!w.empty()) {
+          const double t0 =
+              a.con.theta0.size() > p ? a.con.theta0(p) : 0.0;
+          if (std::abs(t0) > 1e-10) inhomogeneous = true;
+        }
+      }
+    }
+    if (mixed) doom(all, "a linear constraint mixes parameters of different "
+                         "scale weight");
+    else if (inhomogeneous) doom(all, "an inhomogeneous linear constraint "
+                                      "depends on this latent's scale");
+  }
+
+  // (c) nonlinear constraints.
+  for (const auto& nl : pt.nl_constraints) {
+    GaugeWeight touched;
+    std::vector<std::int32_t> loading_units;
+    for (const auto& node : nl.nodes) {
+      if (node.kind != spec::NlExprNode::Kind::Param || node.free_idx < 0) continue;
+      if (node.free_idx >= npar) continue;
+      for (auto i : a.rows_of_param[idx(node.free_idx)]) {
+        const auto& w = weights[idx(i)];
+        touched.insert(touched.end(), w.begin(), w.end());
+        loading_units.push_back(unit_of_loading_row(i));
+      }
+    }
+    const std::string reason =
+        "a nonlinear constraint involves this latent's scale";
+    doom(touched, reason);
+    for (auto u : loading_units) doom_unit(u, reason);
+  }
+
+  // (d) bounds.
+  if (!opts.bounds.empty()) {
+    for (std::int32_t p = 0; p < npar && p < opts.bounds.lower.size(); ++p) {
+      const double lo = opts.bounds.lower(p);
+      const double hi = opts.bounds.upper(p);
+      for (auto i : a.rows_of_param[idx(p)]) {
+        const std::int32_t lu = unit_of_loading_row(i);
+        if (lu >= 0) {
+          if (lo != -kInf || hi != kInf)
+            doom_unit(lu, "a loading carries a box bound");
+          continue;
+        }
+        if (exempt[idx(i)] || weights[idx(i)].empty()) continue;
+        const bool lo_ok = lo == -kInf || lo == 0.0;
+        const bool hi_ok = hi == kInf || hi == 0.0;
+        if (!lo_ok || !hi_ok)
+          doom(weights[idx(i)], "a box bound other than a sign bound depends "
+                                "on this latent's scale");
+      }
+    }
+  }
+
+  for (auto u : doomed) demote_group(a, u, why[u]);
+  return !doomed.empty();
+}
+
+}  // namespace
+
+post_expected<GaugePlan>
+analyze_gauge(const spec::LatentStructure& pt,
+              const GaugeAnalysisOptions& opts) {
+  if (!pt.composite_blocks.empty()) {
+    return std::unexpected(gauge_err(
+        "analyze_gauge: FC-SEM composite blocks are not supported"));
+  }
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
+  if (!con_or.has_value()) {
+    return std::unexpected(gauge_err("analyze_gauge: " + con_or.error().detail));
+  }
+  const EqConstraints& con = *con_or;
+  const std::int32_t npar = pt.n_free();
+
+  Analysis a{pt, con, {}, {}, {}, {}, {}, {}, {}};
+  a.loading_slot_of_row.assign(pt.size(), -1);
+  a.rows_of_param.assign(idx(npar), {});
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] > 0 && pt.free[i] <= npar)
+      a.rows_of_param[idx(pt.free[i] - 1)].push_back(static_cast<std::int32_t>(i));
+  }
+
+  // Slots: one per (latent, block) with measurement rows.
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Measurement) continue;
+    const std::int32_t k = pt.lhs_var[i];
+    if (!user_latent(pt, k)) continue;
+    const std::int32_t b = pt.block_of(i);
+    auto [it, fresh] = a.slot_of.try_emplace(
+        {k, b}, static_cast<std::int32_t>(a.slots.size()));
+    if (fresh) {
+      Slot s;
+      s.latent = k;
+      s.block  = b;
+      a.slots.push_back(std::move(s));
+    }
+    Slot& s = a.slots[idx(it->second)];
+    s.rows.push_back(static_cast<std::int32_t>(i));
+    s.rhs.push_back(pt.rhs_var[i]);
+    a.loading_slot_of_row[i] = it->second;
+    if (user_latent(pt, pt.rhs_var[i]))
+      demote(s, "higher-order loadings (a latent indicator)");
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Composite) continue;
+    const std::int32_t s = a.slot_for(pt.lhs_var[i], pt.block_of(i));
+    if (s >= 0) demote(a.slots[idx(s)], "composite row");
+  }
+
+  // Constraint components over free parameters, from the stacked A_eq system.
+  {
+    DisjointSet dsu(npar);
+    std::vector<char> constrained(idx(npar), 0);
+    for (Eigen::Index r = 0; r < con.A_eq.rows(); ++r) {
+      std::int32_t first = -1;
+      for (Eigen::Index c = 0; c < con.A_eq.cols(); ++c) {
+        if (std::abs(con.A_eq(r, c)) <= kSupportTol) continue;
+        const auto p = static_cast<std::int32_t>(c);
+        constrained[idx(p)] = 1;
+        if (first < 0) first = p;
+        else dsu.unite(first, p);
+      }
+    }
+    std::map<std::int32_t, std::vector<std::int32_t>> by_root;
+    for (std::int32_t p = 0; p < npar; ++p)
+      if (constrained[idx(p)]) by_root[dsu.find(p)].push_back(p);
+    for (auto& [root, members] : by_root) {
+      (void)root;
+      a.components.push_back(std::move(members));
+    }
+  }
+
+  // Isolation and ties: a constraint component touching loading parameters
+  // must touch only loadings; loadings of several slots in one component tie
+  // those slots.
+  DisjointSet tie(static_cast<std::int32_t>(a.slots.size()));
+  for (const auto& comp : a.components) {
+    std::set<std::int32_t> slots_in;
+    bool other = false;
+    for (auto p : comp) {
+      for (auto i : a.rows_of_param[idx(p)]) {
+        const std::int32_t s = a.loading_slot_of_row[idx(i)];
+        if (s >= 0) slots_in.insert(s);
+        else other = true;
+      }
+    }
+    if (slots_in.empty()) continue;
+    if (other) {
+      for (auto s : slots_in)
+        demote(a.slots[idx(s)],
+               "a loading is constrained together with a non-loading parameter");
+    }
+    for (auto s : slots_in) tie.unite(*slots_in.begin(), s);
+  }
+
+  // Groups from ties.
+  a.group_of_slot.assign(a.slots.size(), -1);
+  {
+    std::map<std::int32_t, std::int32_t> group_of_root;
+    for (std::size_t s = 0; s < a.slots.size(); ++s) {
+      const std::int32_t root = tie.find(static_cast<std::int32_t>(s));
+      auto [it, fresh] = group_of_root.try_emplace(
+          root, static_cast<std::int32_t>(a.groups.size()));
+      if (fresh) a.groups.emplace_back();
+      a.groups[idx(it->second)].slots.push_back(static_cast<std::int32_t>(s));
+      a.group_of_slot[s] = it->second;
+    }
+    for (auto& grp : a.groups) {
+      std::sort(grp.slots.begin(), grp.slots.end(),
+                [&](std::int32_t x, std::int32_t y) {
+                  return a.slots[idx(x)].block < a.slots[idx(y)].block;
+                });
+    }
+  }
+
+  for (std::size_t g = 0; g < a.groups.size(); ++g) {
+    auto& grp = a.groups[g];
+    const auto gi = static_cast<std::int32_t>(g);
+    bool any_demoted = false;
+    std::string first_reason;
+    for (auto s : grp.slots) {
+      if (a.slots[idx(s)].demoted) {
+        if (!any_demoted) first_reason = a.slots[idx(s)].reason;
+        any_demoted = true;
+      }
+    }
+    if (any_demoted) {
+      demote_group(a, gi, first_reason);
+      continue;
+    }
+    const Slot& s0 = a.slots[idx(grp.slots.front())];
+    bool bad = false;
+    std::string reason;
+    for (std::size_t m = 1; m < grp.slots.size() && !bad; ++m) {
+      const Slot& sm = a.slots[idx(grp.slots[m])];
+      if (sm.latent != s0.latent) {
+        bad = true;
+        reason = "loadings are constrained across latents";
+      } else if (sm.rhs != s0.rhs) {
+        bad = true;
+        reason = "tied blocks measure different indicator sets";
+      } else {
+        bool ok0 = true, okm = true;
+        auto [v0, M0] = affine_loading_set(a, s0, ok0);
+        auto [vm, Mm] = affine_loading_set(a, sm, okm);
+        const double tol = 1e-10 * std::max(1.0, v0.cwiseAbs().maxCoeff());
+        if (!ok0 || !okm || (v0 - vm).cwiseAbs().maxCoeff() > tol ||
+            (M0.size() && (M0 - Mm).cwiseAbs().maxCoeff() > 1e-10)) {
+          bad = true;
+          reason = "loadings are tied across blocks only in part "
+                   "(partial invariance)";
+        }
+      }
+    }
+    if (bad) {
+      demote_group(a, gi, reason);
+      continue;
+    }
+    classify_group(a, gi);
+  }
+
+  while (covariance_pass(a, opts)) {
+  }
+
+  GaugePlan plan;
+  std::vector<std::int32_t> unit_index(a.groups.size(), -1);
+  for (std::size_t g = 0; g < a.groups.size(); ++g) {
+    const auto& grp = a.groups[g];
+    if (grp.demoted) continue;
+    unit_index[g] = static_cast<std::int32_t>(plan.units.size());
+    GaugeUnit u;
+    u.latent = a.slots[idx(grp.slots.front())].latent;
+    for (auto s : grp.slots) {
+      u.blocks.push_back(a.slots[idx(s)].block);
+      u.loading_rows.push_back(a.slots[idx(s)].rows);
+    }
+    u.kind = grp.kind;
+    u.basis = grp.basis;
+    u.level = grp.level;
+    u.variance_row = grp.variance_row;
+    u.variance_value = grp.variance_value;
+    plan.units.push_back(std::move(u));
+  }
+  for (const auto& s : a.slots) {
+    if (!s.demoted) continue;
+    plan.passthrough.push_back({s.latent, s.block, s.reason});
+  }
+  auto weights = row_weights(a);
+  for (auto& w : weights)
+    for (auto& [u, e] : w) {
+      (void)e;
+      u = unit_index[idx(u)];
+    }
+  plan.row_weight = std::move(weights);
+  return plan;
+}
+
+Eigen::VectorXd row_values(const spec::LatentStructure& pt,
+                           const Eigen::Ref<const Eigen::VectorXd>& theta) {
+  Eigen::VectorXd out(static_cast<Eigen::Index>(pt.size()));
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto k = static_cast<Eigen::Index>(i);
+    if (pt.is_constraint_row(i)) {
+      out(k) = kNaN;
+    } else if (pt.free[i] > 0) {
+      const Eigen::Index p = pt.free[i] - 1;
+      out(k) = p < theta.size() ? theta(p) : kNaN;
+    } else {
+      out(k) = pt.fixed_value[i];
+    }
+  }
+  return out;
+}
+
+Eigen::VectorXd rescale_rows(const GaugePlan& plan,
+                             const Eigen::Ref<const Eigen::VectorXd>& rows,
+                             const Eigen::Ref<const Eigen::VectorXd>& scales) {
+  Eigen::VectorXd out = rows;
+  for (std::size_t i = 0; i < plan.row_weight.size(); ++i) {
+    const auto k = static_cast<Eigen::Index>(i);
+    if (k >= out.size()) break;
+    double f = 1.0;
+    for (auto [u, e] : plan.row_weight[i]) {
+      const double c = scales(u);
+      if (e > 0) for (int t = 0; t < e; ++t) f *= c;
+      else       for (int t = 0; t < -e; ++t) f /= c;
+    }
+    out(k) *= f;
+  }
+  return out;
+}
+
+namespace {
+
+Eigen::VectorXd unit_loadings(const GaugeUnit& u,
+                              const Eigen::Ref<const Eigen::VectorXd>& rows) {
+  const auto& r0 = u.loading_rows.front();
+  Eigen::VectorXd lam(static_cast<Eigen::Index>(r0.size()));
+  for (std::size_t j = 0; j < r0.size(); ++j)
+    lam(static_cast<Eigen::Index>(j)) = rows(r0[j]);
+  return lam;
+}
+
+}  // namespace
+
+post_expected<Eigen::VectorXd>
+scales_to_sphere(const GaugePlan& plan,
+                 const Eigen::Ref<const Eigen::VectorXd>& rows,
+                 const std::vector<Eigen::VectorXd>& metric) {
+  const auto n_units = static_cast<Eigen::Index>(plan.units.size());
+  Eigen::VectorXd c(n_units);
+  for (Eigen::Index u = 0; u < n_units; ++u) {
+    const auto& unit = plan.units[idx(static_cast<std::int32_t>(u))];
+    Eigen::VectorXd lam = unit_loadings(unit, rows);
+    if (idx(static_cast<std::int32_t>(u)) < metric.size() &&
+        metric[idx(static_cast<std::int32_t>(u))].size() == lam.size()) {
+      lam = lam.cwiseQuotient(metric[idx(static_cast<std::int32_t>(u))]);
+    }
+    const double n = lam.norm();
+    if (!(n > 0.0) || !std::isfinite(n)) {
+      return std::unexpected(gauge_err(
+          "scales_to_sphere: a gauge unit has a zero or non-finite loading "
+          "vector"));
+    }
+    c(u) = 1.0 / n;
+  }
+  return c;
+}
+
+UserChartScales
+scales_to_user_chart(const GaugePlan& plan,
+                     const Eigen::Ref<const Eigen::VectorXd>& rows,
+                     const Eigen::VectorXd* sign_reference,
+                     double pole_tol) {
+  const auto n_units = static_cast<Eigen::Index>(plan.units.size());
+  UserChartScales out;
+  out.scales = Eigen::VectorXd::Constant(n_units, kNaN);
+  out.direction_level = Eigen::VectorXd::Constant(n_units, kNaN);
+  for (Eigen::Index u = 0; u < n_units; ++u) {
+    const auto& unit = plan.units[idx(static_cast<std::int32_t>(u))];
+    const Eigen::VectorXd lam = unit_loadings(unit, rows);
+    if (unit.kind == GaugeKind::Affine) {
+      const double t = unit.level.dot(lam);
+      const double n = lam.norm();
+      out.direction_level(u) = n > 0.0 ? t / n : kNaN;
+      const double c = 1.0 / t;
+      const bool near_pole =
+          pole_tol > 0.0 && !(std::abs(out.direction_level(u)) >= pole_tol);
+      if (t == 0.0 || !std::isfinite(c) || !std::isfinite(t) || near_pole) {
+        out.singular_units.push_back(static_cast<std::int32_t>(u));
+        continue;
+      }
+      out.scales(u) = c;
+    } else {
+      const double psi = rows(unit.variance_row);
+      const double ratio = psi / unit.variance_value;
+      out.direction_level(u) = ratio;
+      if (!(ratio > 0.0) || !std::isfinite(ratio)) {
+        out.singular_units.push_back(static_cast<std::int32_t>(u));
+        continue;
+      }
+      double c = std::sqrt(ratio);
+      double orient = 0.0;
+      if (sign_reference && sign_reference->size() == rows.size()) {
+        const Eigen::VectorXd ref = unit_loadings(unit, *sign_reference);
+        for (Eigen::Index j = 0; j < lam.size(); ++j)
+          if (std::isfinite(ref(j)) && std::isfinite(lam(j)))
+            orient += ref(j) * lam(j);
+      }
+      if (orient == 0.0 && lam.size() > 0) {
+        Eigen::Index jmax = 0;
+        lam.cwiseAbs().maxCoeff(&jmax);
+        orient = lam(jmax);
+      }
+      if (orient < 0.0) c = -c;
+      out.scales(u) = c;
+    }
+  }
+  return out;
+}
+
+Eigen::VectorXd theta_from_rows(const spec::LatentStructure& pt,
+                                const Eigen::Ref<const Eigen::VectorXd>& rows) {
+  Eigen::VectorXd theta = Eigen::VectorXd::Constant(pt.n_free(), kNaN);
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] <= 0 || pt.is_constraint_row(i)) continue;
+    const Eigen::Index p = pt.free[i] - 1;
+    if (std::isnan(theta(p))) theta(p) = rows(static_cast<Eigen::Index>(i));
+  }
+  return theta;
+}
+
+ChartResidual chart_residual(const spec::LatentStructure& pt,
+                             const EqConstraints& con,
+                             const Eigen::Ref<const Eigen::VectorXd>& rows) {
+  ChartResidual out;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.is_constraint_row(i) || pt.free[i] != 0) continue;
+    const double fv = pt.fixed_value[i];
+    if (!std::isfinite(fv)) continue;
+    const double r = rows(static_cast<Eigen::Index>(i));
+    const double rel = std::abs(r - fv) / std::max(1.0, std::abs(fv));
+    out.fixed_rows = std::max(out.fixed_rows, std::isfinite(rel) ? rel : kInf);
+  }
+  if (con.rank > 0) {
+    const Eigen::VectorXd theta = theta_from_rows(pt, rows);
+    const double scale =
+        std::max(1.0, theta.size() ? theta.cwiseAbs().maxCoeff() : 0.0);
+    const Eigen::VectorXd r = con.A_eq * theta - con.b_eq;
+    const double m = r.size() ? r.cwiseAbs().maxCoeff() / scale : 0.0;
+    out.linear_constraints = std::isfinite(m) ? m : kInf;
+  }
+  return out;
+}
+
+namespace {
+
+using RowKey = std::tuple<int, std::int32_t, std::int32_t, std::int32_t>;
+
+RowKey row_key(const spec::LatentStructure& pt, std::size_t i) {
+  return {static_cast<int>(pt.op[i]), pt.lhs_var[i], pt.rhs_var[i],
+          pt.block_of(i)};
+}
+
+}  // namespace
+
+post_expected<Reidentified>
+reidentify(const spec::LatentStructure& pt_from,
+           const Eigen::Ref<const Eigen::VectorXd>& theta_from,
+           const spec::LatentStructure& pt_to) {
+  if (theta_from.size() != pt_from.n_free()) {
+    return std::unexpected(gauge_err(
+        "reidentify: theta size does not match the source partable"));
+  }
+  if (pt_from.n_vars != pt_to.n_vars || pt_from.var_role != pt_to.var_role) {
+    return std::unexpected(gauge_err(
+        "reidentify: the two partables have different variable tables"));
+  }
+  auto plan_from = analyze_gauge(pt_from);
+  if (!plan_from) return std::unexpected(plan_from.error());
+  auto plan_to = analyze_gauge(pt_to);
+  if (!plan_to) return std::unexpected(plan_to.error());
+
+  // Units must coincide (same latent and blocks) across the two charts.
+  std::map<std::pair<std::int32_t, std::vector<std::int32_t>>, std::int32_t>
+      from_unit;
+  for (std::size_t u = 0; u < plan_from->units.size(); ++u)
+    from_unit[{plan_from->units[u].latent, plan_from->units[u].blocks}] =
+        static_cast<std::int32_t>(u);
+  if (plan_from->units.size() != plan_to->units.size()) {
+    return std::unexpected(gauge_err(
+        "reidentify: the two charts have different gauge units"));
+  }
+  for (const auto& u : plan_to->units) {
+    if (!from_unit.contains({u.latent, u.blocks})) {
+      return std::unexpected(gauge_err(
+          "reidentify: a latent is a gauge unit in only one chart"));
+    }
+  }
+
+  const Eigen::VectorXd rows_from = row_values(pt_from, theta_from);
+  auto c_sph = scales_to_sphere(*plan_from, rows_from);
+  if (!c_sph) return std::unexpected(c_sph.error());
+  const Eigen::VectorXd rows_sph = rescale_rows(*plan_from, rows_from, *c_sph);
+
+  std::map<RowKey, std::size_t> from_row;
+  for (std::size_t i = 0; i < pt_from.size(); ++i)
+    if (!pt_from.is_constraint_row(i)) from_row.try_emplace(row_key(pt_from, i), i);
+  Eigen::VectorXd rows_to_sph =
+      Eigen::VectorXd::Constant(static_cast<Eigen::Index>(pt_to.size()), kNaN);
+  Eigen::VectorXd ref =
+      Eigen::VectorXd::Constant(static_cast<Eigen::Index>(pt_to.size()), kNaN);
+  for (std::size_t i = 0; i < pt_to.size(); ++i) {
+    if (pt_to.is_constraint_row(i)) continue;
+    auto it = from_row.find(row_key(pt_to, i));
+    if (it == from_row.end()) {
+      return std::unexpected(gauge_err(
+          "reidentify: a row of the target partable has no counterpart in the "
+          "source partable"));
+    }
+    rows_to_sph(static_cast<Eigen::Index>(i)) =
+        rows_sph(static_cast<Eigen::Index>(it->second));
+    ref(static_cast<Eigen::Index>(i)) =
+        rows_from(static_cast<Eigen::Index>(it->second));
+  }
+
+  const auto scales = scales_to_user_chart(*plan_to, rows_to_sph, &ref);
+  if (!scales.singular_units.empty()) {
+    return std::unexpected(gauge_err(
+        "reidentify: the target chart does not contain this point (a marker "
+        "loading is zero or a fixed-variance latent has non-positive "
+        "variance)"));
+  }
+  const Eigen::VectorXd rows_to = rescale_rows(*plan_to, rows_to_sph, scales.scales);
+
+  auto con_to = build_eq_constraints(pt_to, /*allow_nonlinear=*/true);
+  if (!con_to) return std::unexpected(con_to.error());
+  Reidentified out;
+  out.residual = chart_residual(pt_to, *con_to, rows_to);
+  out.direction_level = scales.direction_level;
+  constexpr double tol = 1e-6;
+  if (out.residual.fixed_rows > tol || out.residual.linear_constraints > tol) {
+    return std::unexpected(gauge_err(
+        "reidentify: the translated point violates a restriction of the "
+        "target partable (fixed-row residual " +
+        std::to_string(out.residual.fixed_rows) + ", linear residual " +
+        std::to_string(out.residual.linear_constraints) +
+        "); the partables describe different models"));
+  }
+  Eigen::VectorXd theta = theta_from_rows(pt_to, rows_to);
+  if (con_to->active() && con_to->n_alpha > 0)
+    theta = con_to->expand(con_to->contract(theta));
+  out.theta = std::move(theta);
+  return out;
+}
+
+}  // namespace magmaan::estimate::frontier

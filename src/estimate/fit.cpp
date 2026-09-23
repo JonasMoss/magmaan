@@ -40,6 +40,7 @@
 #include "detail_psd_probe.hpp"
 #include "detail_ordinal_psd.hpp"
 #include "detail_vech.hpp"
+#include "detail_backend_dispatch.hpp"
 
 // Convenience composers: package the data → objective → constraints →
 // optimizer pipeline into a single non-template call. These are the
@@ -1421,6 +1422,34 @@ prelude_fcsem(spec::LatentStructure& pt, const Eigen::VectorXd& x0,
 }
 
 }  // namespace
+
+namespace backend_dispatch {
+
+fit_expected<optim::OptimResult>
+dispatch_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
+                const Bounds& bounds, Backend backend, OptimOptions opts) {
+  return run_scalar(prob, x0, bounds, backend, std::move(opts));
+}
+
+fit_expected<optim::OptimResult>
+dispatch_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
+             const Bounds& bounds, Backend backend, OptimOptions opts) {
+  return run_gmm(prob, x0, bounds, backend, std::move(opts));
+}
+
+fit_expected<optim::OptimResult>
+dispatch_scalar_constrained(const optim::ScalarProblem& prob,
+                            const optim::ConstraintFn& h,
+                            const optim::ConstraintJacFn& J_h,
+                            Eigen::Index n_constraint,
+                            const Eigen::VectorXd& x0, const Bounds& bounds,
+                            Backend backend, OptimOptions opts,
+                            const char* who) {
+  return run_scalar_constrained(prob, h, J_h, n_constraint, x0, bounds,
+                                backend, std::move(opts), who);
+}
+
+}  // namespace backend_dispatch
 
 #ifdef MAGMAAN_ENABLE_TEST_PROBES
 namespace psd_test {

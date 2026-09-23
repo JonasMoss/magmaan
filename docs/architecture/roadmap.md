@@ -195,6 +195,39 @@ chi-square and Wald calibration at `N = 50`, and that the originally proposed
 `lambda = 1` over-shrinks high-R2 equations and correlations near one. SNLLS,
 LS/ordinal paths, and two-level models are out of scope.
 
+The frontier sphere chart (`include/magmaan/estimate/frontier/gauge.hpp`,
+`sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the
+chart the optimizer walks in, not the estimator. `analyze_gauge` reads the
+partable and, per (latent, block), decides whether the latent's scale can be
+re-sliced by a unit-norm loading direction without changing the model. Each
+row carries a scale weight (loading +1, latent variance -2, latent covariance
+-1 per side, regression -1 on the outcome and +1 on the predictor, latent
+intercept -1). A unit's admissible loadings form an affine set A. A marker,
+effect coding or fixed loading ratio gives 0 not in A, and the sphere runs in
+span(A). A std.lv latent gives a linear A plus one fixed variance, which is
+released. Metric invariance ties group copies into one unit. Every other
+restriction must be scale covariant: fixed nonzero values only on weight-0
+rows, linear constraints only among equal weights, and only sign bounds on
+scale-dependent rows. Anything else demotes the latent to its user chart, with
+a stated reason, iterated to a fixpoint. No model is rejected.
+`fit_ml_sphere`, `fit_gmm_sphere`, `fit_gls_sphere` and `fit_fiml_sphere`
+drive the unit-norm direction through `optim::reparameterize(problem,
+ParameterMap)`, the nonlinear sibling of the affine reduction, with the gauge
+pin `rho (||beta||^2 - 1)^2`. `fit_ml_psd_sphere` instead hands the sphere to
+`fit_ml_psd` as one smooth equality per unit. The metric is unit-free by
+default (sum lambda^2 / s_jj = 1). The fitted point is translated to the
+user's chart and finalized there, so the result is the ordinary estimate
+whenever that estimate exists. A marker at a pole (|l(a)| below `pole_tol`)
+returns `user_chart = false` with the sphere report. `reidentify` translates any
+fit between identifications of the same model (marker on any indicator, std.lv,
+effect coding) and refuses when the target partable describes another model.
+The `sphere_route` and `sphere_route_parity` test executables compile the
+lavaan goldens with `MAGMAAN_TEST_SPHERE_ROUTE`, which routes the
+`tests/test_fit.hpp` seam through the sphere. Every case matches lavaan. Out of
+scope for now: two-level, SNLLS, ordinal, composites, partial invariance via
+nested spheres, the PSD LS/FIML siblings, and Wald inference when the user
+chart is singular.
+
 Fit finalization supplies the authoritative common numerical verdict through
 `estimate::fit_verdict(estimates)`, independently of optimizer termination or
 the driven-coordinate `fit$audit`. It verifies the original half-discrepancy

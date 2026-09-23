@@ -103,6 +103,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/psd_ml_test.cpp
   unit/psd_ml_corpus_test.cpp
   unit/multiinfo_penalty_test.cpp
+  unit/gauge_test.cpp
   unit/ls_path_test.cpp
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp
@@ -190,6 +191,30 @@ magmaan_add_test_target(magmaan_test_parity parity
   golden/mplus_sem_golden_test.cpp
   golden/paper_corpus_golden_test.cpp
   golden/textbook_corpus_golden_test.cpp)
+
+# Sphere-chart route (frontier estimate/frontier/sphere.hpp): the same
+# lavaan goldens, fitted through the sphere chart via the test_fit.hpp seam.
+# Every case must reproduce the ordinary user-chart estimate. Label
+# `sphere_route`; the real-data set is its own executable, like `parity`.
+magmaan_add_test_target(magmaan_test_sphere_route sphere_route
+  golden/fit_theta_golden_test.cpp
+  golden/ls_golden_test.cpp
+  golden/lin_constraint_golden_test.cpp
+  golden/inference_golden_test.cpp
+  golden/multigroup_inference_golden_test.cpp
+  golden/fit_measures_golden_test.cpp
+  golden/std_lv_golden_test.cpp
+  golden/standardized_golden_test.cpp
+  golden/score_robust_golden_test.cpp)
+target_compile_definitions(magmaan_test_sphere_route PRIVATE
+  MAGMAAN_TEST_SPHERE_ROUTE=1)
+
+magmaan_add_test_target(magmaan_test_sphere_route_parity sphere_route_parity
+  golden/lavaan_parity_golden_test.cpp
+  golden/mplus_sem_golden_test.cpp
+  golden/textbook_corpus_golden_test.cpp)
+target_compile_definitions(magmaan_test_sphere_route_parity PRIVATE
+  MAGMAAN_TEST_SPHERE_ROUTE=1)
 
 # Robust-polychoric sanity suite: magmaan's bivariate ordinal estimators vs
 # the canonical robcat R package. Frozen JSON fixtures (tests/fixtures/robcat/,

@@ -1,0 +1,174 @@
+#pragma once
+
+// Latent-scale gauge analysis and chart translation (frontier; not a lavaan
+// feature). Design: papers/global-gauge-sem/work/notes/2026-09-23-implementation-plan.md
+//
+// Every latent has a one-dimensional scale freedom per block. Rescaling latent
+// k by c multiplies each partable row by a monomial c^w: a loading `k =~ i`
+// has w = +1, the latent variance -2, a covariance with another latent -1, a
+// regression `k ~ l` -1 on k and +1 on l, a latent intercept -1. Observed-side
+// rows (Theta, nu, thresholds) have weight 0. A user identification (marker,
+// effect coding, std.lv) is one slice of each scale orbit.
+//
+// `analyze_gauge` reads a partable and decides, per (latent, block) slot,
+// whether the latent's scale can be re-sliced by a unit-norm loading
+// direction without changing the model. Eligible slots are grouped into gauge
+// units (slots of one latent tied by full metric invariance share a unit).
+// Every other slot passes through with a stated reason; nothing is rejected.
+//
+// Per unit, the admissible loadings form an affine set A (the user's fixed
+// loadings and linear loading constraints). Two shapes qualify:
+//   Affine  0 is not in A (marker, effect coding, fixed ratios). The unit's
+//           loading span W = span(A) has dim A + 1 and A = {w in W : l(w) = 1}
+//           for a linear functional l.
+//   Linear  A is a linear subspace and exactly one block fixes the latent
+//           (residual) variance at a positive value (std.lv). W = A and that
+//           variance is released.
+// Everything beyond the one scale fix is kept as a genuine restriction and
+// must be gauge covariant: fixed nonzero values and inhomogeneous linear
+// constraints only on weight-0 rows, linear constraints only among rows of
+// identical weight, no nonlinear constraint on a nonzero-weight row, and only
+// sign bounds (0 or infinite) on nonzero-weight rows. Violations demote the
+// involved units, iterated to a fixpoint.
+//
+// Translation between charts acts on per-row values (see `row_values`): pick
+// per-unit scales c, multiply each row by prod_u c_u^w. The user's chart
+// contains a point iff l(a) != 0 (Affine) or the released variance is
+// positive (Linear); no numerical threshold enters that decision.
+
+#include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/spec/partable.hpp"
+
+namespace magmaan::estimate::frontier {
+
+enum class GaugeKind : std::uint8_t { Affine, Linear };
+
+// One gauge unit: a latent together with the blocks whose loading vectors it
+// shares (one block unless tied by full metric invariance).
+struct GaugeUnit {
+  std::int32_t              latent = -1;   // var id
+  std::vector<std::int32_t> blocks;        // 1-based blocks, ascending
+  GaugeKind                 kind = GaugeKind::Affine;
+  // loading_rows[m][j]: partable row of the j-th loading of member block m.
+  // Rows correspond across members by position (same indicator).
+  std::vector<std::vector<std::int32_t>> loading_rows;
+  // Orthonormal basis (n_ind x dim) of the loading span W, raw coordinates.
+  Eigen::MatrixXd           basis;
+  // Affine: l(lambda) = level . lambda. Empty for Linear.
+  Eigen::VectorXd           level;
+  // Linear: the fixed latent (residual) variance row and its value.
+  std::int32_t              variance_row = -1;
+  double                    variance_value = 0.0;
+};
+
+struct GaugePassthrough {
+  std::int32_t latent = -1;
+  std::int32_t block  = 0;
+  std::string  reason;
+};
+
+// Sparse gauge weight of one partable row: (unit index, exponent) pairs,
+// sorted by unit, zero exponents dropped.
+using GaugeWeight = std::vector<std::pair<std::int32_t, std::int32_t>>;
+
+struct GaugePlan {
+  std::vector<GaugeUnit>        units;
+  std::vector<GaugePassthrough> passthrough;
+  std::vector<GaugeWeight>      row_weight;   // size pt.size()
+
+  bool empty() const noexcept { return units.empty(); }
+};
+
+struct GaugeAnalysisOptions {
+  // Box bounds in the user's free-parameter coordinates (empty: none). A
+  // nonzero-weight row may carry only sign bounds (0 or infinite).
+  Bounds bounds;
+};
+
+// Decide the gauge units. Errors only on models the analysis cannot read
+// (FC-SEM composite blocks, malformed constraints).
+post_expected<GaugePlan>
+analyze_gauge(const spec::LatentStructure& pt,
+              const GaugeAnalysisOptions& opts = {});
+
+// Per-row values of a partable at a free-parameter vector: theta for free
+// rows, `fixed_value` for fixed rows, NaN for constraint rows.
+Eigen::VectorXd row_values(const spec::LatentStructure& pt,
+                           const Eigen::Ref<const Eigen::VectorXd>& theta);
+
+// Multiply each row by prod_u scales(u)^w. NaN rows stay NaN.
+Eigen::VectorXd rescale_rows(const GaugePlan& plan,
+                             const Eigen::Ref<const Eigen::VectorXd>& rows,
+                             const Eigen::Ref<const Eigen::VectorXd>& scales);
+
+// Scales that put every unit's loading vector on the unit sphere of the
+// metric sum_j (lambda_j / metric_j)^2. `metric[u]` holds per-indicator
+// scales for unit u (empty: all ones). Errors on a zero loading vector.
+post_expected<Eigen::VectorXd>
+scales_to_sphere(const GaugePlan& plan,
+                 const Eigen::Ref<const Eigen::VectorXd>& rows,
+                 const std::vector<Eigen::VectorXd>& metric = {});
+
+struct UserChartScales {
+  Eigen::VectorXd           scales;          // valid where not singular
+  std::vector<std::int32_t> singular_units;  // units outside the user chart
+  // Affine: l at the unit-norm loading direction (small => near a pole).
+  // Linear: the released variance divided by its user-chart value.
+  Eigen::VectorXd           direction_level;
+};
+
+// Scales that move a point into the user's chart. For Linear units the sign
+// is free; it is chosen so that the loadings agree with `sign_reference`
+// (row values, e.g. the user-chart start), else so that the largest loading
+// is positive. An Affine unit is outside the chart when l(a) = 0; with
+// `pole_tol > 0` it is also treated as outside when |direction_level| is
+// below `pole_tol` (the user-chart point is then not representable to
+// working precision).
+UserChartScales
+scales_to_user_chart(const GaugePlan& plan,
+                     const Eigen::Ref<const Eigen::VectorXd>& rows,
+                     const Eigen::VectorXd* sign_reference = nullptr,
+                     double pole_tol = 0.0);
+
+// Free-parameter vector of `pt` read off row values (theta[free-1] = row).
+Eigen::VectorXd theta_from_rows(const spec::LatentStructure& pt,
+                                const Eigen::Ref<const Eigen::VectorXd>& rows);
+
+// Residual audit of row values against a partable's restrictions: the largest
+// relative violation of a fixed row, and of the linear equality system after
+// reading theta off the rows.
+struct ChartResidual {
+  double fixed_rows = 0.0;
+  double linear_constraints = 0.0;
+};
+ChartResidual chart_residual(const spec::LatentStructure& pt,
+                             const EqConstraints& con,
+                             const Eigen::Ref<const Eigen::VectorXd>& rows);
+
+// Re-express a point of `pt_from` in the identification of `pt_to`, a
+// partable of the same model under another scale convention (marker on
+// another indicator, std.lv, effect coding). Rows are matched by
+// (op, lhs, rhs, block). Every latent must be a gauge unit in both charts.
+// Errors when the target chart does not contain the point, or when the
+// translated point violates a restriction of `pt_to` (the partables then
+// describe different models).
+struct Reidentified {
+  Eigen::VectorXd theta;          // free parameters of pt_to
+  ChartResidual   residual;
+  Eigen::VectorXd direction_level;
+};
+post_expected<Reidentified>
+reidentify(const spec::LatentStructure& pt_from,
+           const Eigen::Ref<const Eigen::VectorXd>& theta_from,
+           const spec::LatentStructure& pt_to);
+
+}  // namespace magmaan::estimate::frontier

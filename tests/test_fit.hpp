@@ -26,6 +26,16 @@
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/optim/problem.hpp"
 
+// MAGMAAN_TEST_SPHERE_ROUTE: route `fit`, `fit_bounded`, `fit_gmm` and
+// `fit_gls` through the frontier sphere chart
+// (estimate/frontier/sphere.hpp). Every golden compiled with the define then
+// checks that the sphere route reproduces the ordinary user-chart estimate.
+#ifdef MAGMAAN_TEST_SPHERE_ROUTE
+#include <cstdio>
+
+#include "magmaan/estimate/frontier/sphere.hpp"
+#endif
+
 namespace magmaan::test {
 
 namespace detail {
@@ -43,6 +53,36 @@ auto_bounds(const spec::LatentStructure& pt, estimate::Bounds b) {
   return *d;
 }
 
+#ifdef MAGMAAN_TEST_SPHERE_ROUTE
+// Tally of sphere-route fits: how many ran and how many carried at least one
+// gauge unit (the rest ran entirely in the user chart). Printed at exit.
+struct SphereRouteTally {
+  long fits = 0;
+  long with_units = 0;
+  long units = 0;
+  ~SphereRouteTally() {
+    std::fprintf(stderr,
+                 "[sphere route] fits: %ld, with gauge units: %ld, units: %ld\n",
+                 fits, with_units, units);
+  }
+};
+inline SphereRouteTally sphere_route_tally;
+
+inline fit_expected<estimate::Estimates>
+sphere_result(fit_expected<estimate::frontier::SphereFit> r) {
+  if (!r.has_value()) return std::unexpected(r.error());
+  ++sphere_route_tally.fits;
+  const auto n = static_cast<long>(r->report.plan.units.size());
+  if (n > 0) ++sphere_route_tally.with_units;
+  sphere_route_tally.units += n;
+  if (!r->user_chart) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "sphere route: the estimate lies outside the user's chart", 0, 0.0});
+  }
+  return std::move(r->estimates);
+}
+#endif
+
 }  // namespace detail
 
 // Normal-theory ML. `backend` selects the optimizer (default NLopt L-BFGS; the
@@ -55,7 +95,12 @@ fit(const Pt& pt, const Rep& rep, const Samp& samp,
     optim::OptimOptions opts = {}) {
   auto x0 = estimate::simple_start_values(pt, rep, samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
+#ifdef MAGMAAN_TEST_SPHERE_ROUTE
+  return detail::sphere_result(estimate::frontier::fit_ml_sphere(
+      pt, rep, samp, *x0, std::move(bounds), backend, opts));
+#else
   return estimate::fit_ml(pt, rep, samp, *x0, std::move(bounds), backend, opts);
+#endif
 }
 
 // Normal-theory ML with box bounds; an empty `bounds` auto-derives
@@ -81,8 +126,13 @@ fit_gmm(const Pt& pt, const Rep& rep, const Samp& samp,
   if (!x0.has_value()) return std::unexpected(x0.error());
   auto b = detail::auto_bounds(pt, std::move(bounds));
   if (!b.has_value()) return std::unexpected(b.error());
+#ifdef MAGMAAN_TEST_SPHERE_ROUTE
+  return detail::sphere_result(estimate::frontier::fit_gmm_sphere(
+      pt, rep, samp, *x0, std::move(weight), std::move(*b), backend, opts));
+#else
   return estimate::fit_gmm(pt, rep, samp, *x0, std::move(weight),
                            std::move(*b), backend, opts);
+#endif
 }
 
 // Generalized least squares (normal-theory weight built from S).
@@ -96,7 +146,12 @@ fit_gls(const Pt& pt, const Rep& rep, const Samp& samp,
   if (!x0.has_value()) return std::unexpected(x0.error());
   auto b = detail::auto_bounds(pt, std::move(bounds));
   if (!b.has_value()) return std::unexpected(b.error());
+#ifdef MAGMAAN_TEST_SPHERE_ROUTE
+  return detail::sphere_result(estimate::frontier::fit_gls_sphere(
+      pt, rep, samp, *x0, std::move(*b), backend, opts));
+#else
   return estimate::fit_gls(pt, rep, samp, *x0, std::move(*b), backend, opts);
+#endif
 }
 
 // Full-information ML over raw continuous data.

@@ -1956,6 +1956,32 @@ Remaining work:
   `alpha_correction` needs the lavaan SSC/weighted-SE convention documented
   before implementation.
 
+## Sphere chart / global latent-scale gauge (frontier)
+
+Design and evidence: `papers/global-gauge-sem` (implementation plan of
+2026-09-23). The C++ core landed: `analyze_gauge`, `reidentify`, the nonlinear
+`optim::reparameterize(problem, ParameterMap)`, and `fit_ml_sphere`,
+`fit_gmm_sphere`, `fit_gls_sphere`, `fit_fiml_sphere`, `fit_ml_psd_sphere`.
+Every lavaan golden routed through the sphere (`sphere_route`,
+`sphere_route_parity`) matches.
+
+Remaining work, tiered:
+
+- **v1, M.** R surface: a frontier fit entry with `gauge = "sphere"`, a classed
+  R condition carrying the sphere solution when the user chart is singular,
+  `frontier_reidentify()`, and a `fit$gauge` report. Record the route on the
+  fit so that refitting helpers (`case_rerun`, `.lrt_refit`,
+  `robust_nested_lrt`) refit through the same chart.
+- **v1, S.** Small-N evidence on the Ernst design and one more CFA through the
+  R surface (paper probes).
+- **Literature scope.** PSD LS/FIML siblings, ML2S, multi-information penalty,
+  two-level slots, higher-order loadings when the lower-order factor is itself
+  a unit, partial invariance via nested spheres, SNLLS (sphere in the nonlinear
+  block), ordinal, sphere-chart Wald SEs through the constrained information.
+- **Research questions.** Closure of translated nonlinear restrictions,
+  Henseler-Ogasawara composites under the sphere, existence for SNLLS on the
+  compact outer problem, mediator-chain structural nonexistence.
+
 ## Misspecification-robust SE for the moment-quadratic family (frontier)
 
 - **Reduced-bias estimation (RBM) frontier.** V1 landed 2026-06 for raw-data
