@@ -34,6 +34,7 @@ ok_n <- function(route) {
   paste(sum(d$ok), "of", nrow(d))
 }
 mx <- function(x) { x <- x[is.finite(x)]; if (length(x)) max(x) else NA_real_ }
+inv_by_case <- tapply(inv$d_sphere_point_vs_marker, inv$case, max)
 ```
 
 ## Question
@@ -71,23 +72,34 @@ effect-coding identification can hold.
 - **Ordinary ML:** recovered 20 of the 24, with three wrong points and one
   error. In the 8 cells that cannot hold the population, it three times
   reported convergence to a point that is not the optimum.
-- **Least squares:** ULS and GLS each met one non-global stationary point in
-  32 cells. The sphere removes identification poles, not the non-convexity of
-  least squares.
+- **Least squares:** sphere ULS and GLS also recovered all 24 cells and
+  flagged the other 8.
 
-**The answer does not depend on how the user identified the model.** Four
-data sets, each fitted under four identifications, gave the same sphere
-solution within each data set. In
+**The answer does not depend on how the user identified the model.** The
+sphere route starts from a point computed on the model with its scale fixes
+removed, which is the same whichever identification the user wrote. Four data
+sets, each fitted under four identifications, gave the same sphere solution
+within each data set: to `r sci(max(inv_by_case[names(inv_by_case) != "pd_free"]))`
+on three of them, and to `r sci(inv_by_case[["pd_free"]])` on the flat
+PoliticalDemocracy objective, whose objective values agree to
+`r sci(max(inv$d_fmin_vs_marker))`. In
 all 48 translations between identifications, the translated result matched a
 direct ordinary fit to `r sci(mx(ireid$d_vs_ordinary))`. Ordinal data, ML2S,
 two-level models and PSD for non-ML estimators are refused with a clear error.
 
-The checks found one sphere bug, fixed before this run. A latent whose
+The checks found one sphere bug, fixed before this run, and one design gap,
+also fixed. A latent whose
 variance is fixed by std.lv was not tolerance-checked against its pole. At a
 population with a vanishing residual variance, the fit reported convergence
 with a regression slope near 37,000 instead of flagging the identification.
-The checks also surfaced three pre-existing magmaan gaps unrelated to the
-sphere (see Caveats).
+The design gap was the start. In a first run, the sphere took its starting
+values from the user's identification, and in 2 of 64 least-squares cells one
+identification's start led to a non-global stationary point where the other
+three recovered the population. A start computed without reference to the
+identification removed both, with least-squares fits starting from the sphere
+ML fit. The checks
+also surfaced three pre-existing magmaan gaps unrelated to the sphere (see
+Caveats).
 
 ## Evidence
 
@@ -184,15 +196,9 @@ knitr::kable(out, row.names = FALSE)
   relative to the largest parameter. The worst recovered case is
   `r sci(mx(pop$err_rel[pop$outcome == "recovered"]))`. The standardized
   solution matches too (`r sci(mx(pop$err_std[pop$outcome == "recovered"]))`).
-- **The two least-squares misses** are start-dependent:
-  - **GLS:** zero marker, effect coding. The ordinary GLS fit fails there
-    too.
-  - **ULS:** two-group zero marker, std.lv. The ordinary ULS fit succeeds
-    there. Sphere ULS stops where the factor loads on the pure-noise
-    indicator alone.
 - **Translation between identifications:** translating each sphere result
   into the other three identifications succeeded, or was refused, exactly as
-  the population dictates, except for the translations of the two LS misses:
+  the population dictates:
   - ML: `r ok_n("sphere_ML")` translations correct;
   - PSD-ML: `r ok_n("sphere_PSD")`;
   - ULS: `r ok_n("sphere_ULS")`;
@@ -234,11 +240,13 @@ Inequality constraints are unsupported everywhere.
   population moments, one fit each. They show the machinery is right. They
   say nothing about how often the sphere helps on sampled data. That is the
   next experiment (Ernst-type small-sample designs across estimators).
-- **Least squares.** The two LS misses show that the sphere chart does not
-  make least squares convex. Both came from particular starting values. The
-  sphere problem is the same under every identification of a model, but its
-  starting values still come from the identification the user wrote. A start
-  built in the sphere itself would remove that dependence.
+- **Least squares.** The sphere does not make least squares convex. On the
+  sphere every indicator is equally reachable, including points where a
+  factor collapses onto one indicator, which least squares (unlike ML) does
+  not penalize. Starting least squares from the sphere ML fit avoided both
+  first-run misses here. How often sphere and
+  ordinary fits land in different basins on sampled data is for the next
+  experiment.
 - **Bounds.** `bounds = "standard"` bounds every loading, which keeps every
   latent off the sphere. A bounded fit therefore runs entirely in the user's
   identification.

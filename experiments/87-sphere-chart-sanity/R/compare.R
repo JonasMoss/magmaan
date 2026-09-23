@@ -241,6 +241,7 @@ run_recovery_case <- function(case, estimator, data) {
                                  ord$partable$est[free_idx(ord$partable)]) else NA_real_
   row$lav_d_ord <- lavaan_diff(ord, lav)
   row$lav_d_sph <- lavaan_diff(sph, lav)
+  row$sph_start <- if (is_fit(sph)) sph$gauge$start %||% NA_character_ else NA_character_
   row$polish_shift <- if (is_fit(sph)) sph$gauge$polish$shift else NA_real_
   row$pin_residual <- if (is_fit(sph)) sph$gauge$pin_residual else NA_real_
   row$time_ord <- o$time

@@ -218,12 +218,14 @@ run_population <- function(pop_id, pop) {
                         route = route, chart_holds = holds,
                         outcome = NA_character_, converged = NA, fmin = NA_real_,
                         err_truth = NA_real_, err_rel = NA_real_, err_std = NA_real_,
-                        max_abs_param = NA_real_, error = err_msg(f),
+                        max_abs_param = NA_real_, start = NA_character_,
+                        error = err_msg(f),
                         time = r$time, stringsAsFactors = FALSE)
       source_obj <- NULL
       if (inherits(f, "magmaan_user_chart_singular")) {
         row$outcome <- "outside chart"
         row$fmin <- f$gauge$fmin_sphere
+        row$start <- f$gauge$start %||% NA_character_
         source_obj <- f
       } else if (is_fit(f)) {
         est <- read_params(f$partable)
@@ -231,6 +233,7 @@ run_population <- function(pop_id, pop) {
         row$fmin <- f$fmin
         row$err_truth <- truth_error(est, truth)
         row$max_abs_param <- max(abs(f$theta))
+        if (!is.null(f$gauge)) row$start <- f$gauge$start %||% NA_character_
         vc <- safe(model_vcov(f, "ML"))
         if (!inherits(vc, "condition")) {
           s <- safe(standardized(f, vc))
