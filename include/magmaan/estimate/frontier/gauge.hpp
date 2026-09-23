@@ -156,11 +156,13 @@ ChartResidual chart_residual(const spec::LatentStructure& pt,
 
 // Re-express a point of `pt_from` in the identification of `pt_to`, a
 // partable of the same model under another scale convention (marker on
-// another indicator, std.lv, effect coding). Rows are matched by
-// (op, lhs, rhs, block). Every latent must be a gauge unit in both charts.
-// Errors when the target chart does not contain the point, or when the
-// translated point violates a restriction of `pt_to` (the partables then
-// describe different models).
+// another indicator, std.lv, effect coding). `pt_from` may also be a
+// gauge-free partable such as `SphereReport::internal_pt`. Rows are matched by
+// (op, lhs, rhs, block). Errors when the target chart does not contain the
+// point, or when the translated point violates a restriction of `pt_to` (the
+// partables then describe different models). `pole_tol` is as in
+// `scales_to_user_chart`: a marker-type unit whose direction level falls
+// below it counts as outside the target chart.
 struct Reidentified {
   Eigen::VectorXd theta;          // free parameters of pt_to
   ChartResidual   residual;
@@ -169,6 +171,7 @@ struct Reidentified {
 post_expected<Reidentified>
 reidentify(const spec::LatentStructure& pt_from,
            const Eigen::Ref<const Eigen::VectorXd>& theta_from,
-           const spec::LatentStructure& pt_to);
+           const spec::LatentStructure& pt_to,
+           double pole_tol = 1e-6);
 
 }  // namespace magmaan::estimate::frontier

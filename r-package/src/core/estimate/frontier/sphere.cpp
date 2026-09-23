@@ -441,7 +441,9 @@ using Finalizer =
 fit_expected<SphereFit>
 finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
        const optim::OptimResult& r, const optim::ScalarProblem& internal_obj,
-       const Finalizer& finalize, double pole_tol, const char* who) {
+       const Finalizer& finalize, const Finalizer& polish,
+       const SphereOptions& sopts, const char* who) {
+  const double pole_tol = sopts.pole_tol;
   SphereFit out;
   auto& rep_out = out.report;
   rep_out.plan = s->plan;
@@ -482,6 +484,26 @@ finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
           "translated user-chart estimate is not finite"));
     }
   }
+  if (sopts.polish && polish) {
+    auto polished = polish(theta);
+    if (polished) {
+      double shift = 0.0;
+      for (Eigen::Index p = 0; p < theta.size(); ++p) {
+        shift = std::max(shift, std::abs(polished->theta(p) - theta(p)) /
+                                    std::max(1.0, std::abs(theta(p))));
+      }
+      rep_out.polished = true;
+      rep_out.polish_iterations = polished->iterations;
+      rep_out.polish_shift = shift;
+      polished->iterations += r.iterations;
+      polished->f_evals += r.f_evals;
+      polished->g_evals += r.g_evals;
+      out.estimates = std::move(*polished);
+      out.user_chart = true;
+      return out;
+    }
+    rep_out.polish_error = polished.error().detail;
+  }
   auto est = finalize(theta);
   if (!est) return std::unexpected(est.error());
   est->iterations = r.iterations;
@@ -519,6 +541,7 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!u0) return std::unexpected(u0.error());
   auto ub = driven_bounds(**s, bounds, *u0, who);
   if (!ub) return std::unexpected(ub.error());
+  const OptimOptions user_opts = opts;
   opts.ml_sample_scaling = false;
   auto r = run_driven(**s, map, &*obj, nullptr, *u0, *ub, backend, opts, who);
   if (!r) return std::unexpected(r.error());
@@ -526,7 +549,10 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   Finalizer finalize = [&](const Eigen::VectorXd& theta) {
     return evaluate_at(pt_user, rep, samp, theta, Estimator::ML, {}, bounds);
   };
-  return finish(*s, x0, *r, *obj, finalize, sphere.pole_tol, who);
+  Finalizer polish = [&](const Eigen::VectorXd& theta) {
+    return fit_ml(pt_user, rep, samp, theta, bounds, backend, user_opts);
+  };
+  return finish(*s, x0, *r, *obj, finalize, polish, sphere, who);
 }
 
 fit_expected<SphereProblem>
@@ -606,7 +632,11 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   Finalizer finalize = [&](const Eigen::VectorXd& theta) {
     return evaluate_at(pt_user, rep, samp, theta, est, final_weight, bounds);
   };
-  return finish(*s, x0, *r, internal_obj, finalize, sphere.pole_tol, who);
+  Finalizer polish = [&](const Eigen::VectorXd& theta) {
+    return gls ? fit_gls(pt_user, rep, samp, theta, bounds, backend, opts)
+               : fit_gmm(pt_user, rep, samp, theta, weight, bounds, backend, opts);
+  };
+  return finish(*s, x0, *r, internal_obj, finalize, polish, sphere, who);
 }
 
 }  // namespace
@@ -695,7 +725,10 @@ fit_fiml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
                          Bounds{});
     return est;
   };
-  return finish(*s, x0, *r, obj, finalize, sphere.pole_tol, who);
+  Finalizer polish = [&](const Eigen::VectorXd& theta) {
+    return fit_fiml(setup.pt_user, rep, raw, theta, fiml::FIML{}, backend, opts);
+  };
+  return finish(*s, x0, *r, obj, finalize, polish, sphere, who);
 }
 
 namespace {
@@ -904,7 +937,10 @@ fit_ml_psd_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
                          Bounds{}, StationarityDomain::Psd);
     return est;
   };
-  auto out = finish(*s, x0, r, *obj_int, finalize, sphere.pole_tol, who);
+  Finalizer polish = [&](const Eigen::VectorXd& theta) {
+    return fit_ml_psd(setup.pt_user, rep, samp, theta, backend, opts, psd_opts);
+  };
+  auto out = finish(*s, x0, r, *obj_int, finalize, polish, sphere, who);
   if (out) {
     // The sphere is an equality constraint here, not a pin: report its
     // residual in the pin slot.

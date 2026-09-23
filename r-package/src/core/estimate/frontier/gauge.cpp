@@ -746,7 +746,7 @@ RowKey row_key(const spec::LatentStructure& pt, std::size_t i) {
 post_expected<Reidentified>
 reidentify(const spec::LatentStructure& pt_from,
            const Eigen::Ref<const Eigen::VectorXd>& theta_from,
-           const spec::LatentStructure& pt_to) {
+           const spec::LatentStructure& pt_to, double pole_tol) {
   if (theta_from.size() != pt_from.n_free()) {
     return std::unexpected(gauge_err(
         "reidentify: theta size does not match the source partable"));
@@ -755,32 +755,14 @@ reidentify(const spec::LatentStructure& pt_from,
     return std::unexpected(gauge_err(
         "reidentify: the two partables have different variable tables"));
   }
-  auto plan_from = analyze_gauge(pt_from);
-  if (!plan_from) return std::unexpected(plan_from.error());
   auto plan_to = analyze_gauge(pt_to);
   if (!plan_to) return std::unexpected(plan_to.error());
 
-  // Units must coincide (same latent and blocks) across the two charts.
-  std::map<std::pair<std::int32_t, std::vector<std::int32_t>>, std::int32_t>
-      from_unit;
-  for (std::size_t u = 0; u < plan_from->units.size(); ++u)
-    from_unit[{plan_from->units[u].latent, plan_from->units[u].blocks}] =
-        static_cast<std::int32_t>(u);
-  if (plan_from->units.size() != plan_to->units.size()) {
-    return std::unexpected(gauge_err(
-        "reidentify: the two charts have different gauge units"));
-  }
-  for (const auto& u : plan_to->units) {
-    if (!from_unit.contains({u.latent, u.blocks})) {
-      return std::unexpected(gauge_err(
-          "reidentify: a latent is a gauge unit in only one chart"));
-    }
-  }
-
+  // Any point on a scale orbit maps into the target chart directly, so the
+  // source chart's own gauge structure is irrelevant; the residual check
+  // below decides whether the source point belongs to the target model.
   const Eigen::VectorXd rows_from = row_values(pt_from, theta_from);
-  auto c_sph = scales_to_sphere(*plan_from, rows_from);
-  if (!c_sph) return std::unexpected(c_sph.error());
-  const Eigen::VectorXd rows_sph = rescale_rows(*plan_from, rows_from, *c_sph);
+  const Eigen::VectorXd& rows_sph = rows_from;
 
   std::map<RowKey, std::size_t> from_row;
   for (std::size_t i = 0; i < pt_from.size(); ++i)
@@ -803,12 +785,12 @@ reidentify(const spec::LatentStructure& pt_from,
         rows_from(static_cast<Eigen::Index>(it->second));
   }
 
-  const auto scales = scales_to_user_chart(*plan_to, rows_to_sph, &ref);
+  const auto scales = scales_to_user_chart(*plan_to, rows_to_sph, &ref, pole_tol);
   if (!scales.singular_units.empty()) {
     return std::unexpected(gauge_err(
         "reidentify: the target chart does not contain this point (a marker "
-        "loading is zero or a fixed-variance latent has non-positive "
-        "variance)"));
+        "loading is numerically zero or a fixed-variance latent has "
+        "non-positive variance)"));
   }
   const Eigen::VectorXd rows_to = rescale_rows(*plan_to, rows_to_sph, scales.scales);
 

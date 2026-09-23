@@ -20,6 +20,21 @@
               "estimator ML/ULS/GLS only; got '", estimator, "'", call. = FALSE))
 }
 
+# A refit function that reuses a sphere-chart fit's chart options.
+.sphere_refit_fun <- function(fit, estimator) {
+  co <- fit$options$chart_options %||% list()
+  function(model, data) {
+    frontier_fit_sphere(model, data, estimator = estimator,
+                        psd = isTRUE(co$psd),
+                        metric = co$metric %||% "unit_free",
+                        pin_weight = co$pin_weight %||% 1,
+                        pole_tol = co$pole_tol %||% 1e-6,
+                        polish = co$polish %||% TRUE,
+                        optimizer = co$optimizer, control = co$control,
+                        bounds = co$bounds, W = co$W)
+  }
+}
+
 .case_estimator <- function(fit) {
   est <- fit$estimator %||% fit$options$estimator %||% NA_character_
   toupper(as.character(est)[1L])
@@ -145,6 +160,10 @@ case_rerun <- function(fit, data = NULL, to_rerun = NULL, warm_start = TRUE) {
   }
   estimator <- .case_estimator(fit)
   fit_fun <- .case_fit_fun(estimator)
+  if (identical(fit$options$chart, "sphere")) {
+    # Refit through the same chart the fit was estimated in.
+    fit_fun <- .sphere_refit_fun(fit, estimator)
+  }
   spec_warm <- .case_warm_spec(fit, warm_start)
   group_var <- fit$group_var %||% ""
 

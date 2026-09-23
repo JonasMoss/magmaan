@@ -397,6 +397,21 @@ print.magmaan_score_lrt <- function(x, ...) {
   mo <- fit$options$model_options %||% list()
   mo <- mo[intersect(names(mo), valid)]
   partial <- unique(c(model$group_partial, extra_partial))
+  if (identical(fit$options$chart, "sphere")) {
+    # Refit through the same chart the anchor was estimated in.
+    co <- fit$options$chart_options %||% list()
+    return(do.call(frontier_fit_sphere, c(
+      list(model = syntax, data = data,
+           estimator = toupper(fit$estimator %||% "ML"),
+           groups = fit$group_var,
+           group_equal = model$group_equal,
+           group_partial = if (length(partial)) partial else NULL,
+           psd = isTRUE(co$psd), metric = co$metric %||% "unit_free",
+           pin_weight = co$pin_weight %||% 1, pole_tol = co$pole_tol %||% 1e-6,
+           polish = co$polish %||% TRUE),
+      if (!is.null(weight)) list(W = weight),
+      mo)))
+  }
   do.call(magmaan, c(
     list(model = syntax, data = data,
          estimator = toupper(fit$estimator %||% "ML"),

@@ -618,3 +618,39 @@ TEST_CASE("sphere PSD-ML: a Heywood-prone sample stays admissible and bounded") 
   CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-5));
   CHECK(sph->report.internal_theta.cwiseAbs().maxCoeff() < 20.0);
 }
+
+TEST_CASE("reidentify: the sphere solution at a marker pole reports in another chart") {
+  Eigen::MatrixXd S = one_factor_sigma();
+  for (Eigen::Index j = 1; j < 4; ++j) {
+    S(0, j) = 0.0;
+    S(j, 0) = 0.0;
+  }
+  auto f = setup("f =~ x1 + x2 + x3 + x4", {S});
+  auto sph = fr::fit_ml_sphere(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(sph);
+  REQUIRE_FALSE(sph->user_chart);
+  const Eigen::MatrixXd sigma =
+      implied(sph->report.internal_pt, f.rep, sph->report.internal_theta);
+
+  // The marker chart on x1 cannot hold the point; a marker on x2 can.
+  CHECK_FALSE(fr::reidentify(sph->report.internal_pt, sph->report.internal_theta,
+                             f.pt).has_value());
+  BuildOptions nf;
+  nf.fixed_x = false;
+  const auto pt_x2 = lavaanify("f =~ NA*x1 + 1*x2 + x3 + x4", nf);
+  auto to_x2 = fr::reidentify(sph->report.internal_pt,
+                              sph->report.internal_theta, pt_x2);
+  REQUIRE_OK(to_x2);
+  CHECK((implied(pt_x2, f.rep, to_x2->theta) - sigma).cwiseAbs().maxCoeff() < 1e-10);
+}
+
+TEST_CASE("reidentify: a sphere fit's internal point maps back to the user estimate") {
+  auto f = setup("X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X",
+                 {two_factor_sigma()});
+  auto sph = fr::fit_ml_sphere(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(sph);
+  REQUIRE(sph->user_chart);
+  auto back = fr::reidentify(sph->report.internal_pt, sph->report.internal_theta, f.pt);
+  REQUIRE_OK(back);
+  CHECK(max_abs_diff(back->theta, sph->estimates.theta) < 1e-9);
+}

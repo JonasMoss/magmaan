@@ -22,6 +22,7 @@
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
+#include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -2501,6 +2502,292 @@ Rcpp::List frontier_fit_ml_psd_impl(
   out["ml_start_policy"] = start_policy;
   out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
   return out;
+}
+
+namespace {
+
+magmaan::estimate::frontier::SphereOptions sphere_options_from(
+    const std::string& metric, double pin_weight, double pole_tol,
+    bool polish) {
+  magmaan::estimate::frontier::SphereOptions out;
+  if (metric == "unit_free") {
+    out.metric = magmaan::estimate::frontier::SphereMetric::UnitFree;
+  } else if (metric == "raw") {
+    out.metric = magmaan::estimate::frontier::SphereMetric::Raw;
+  } else {
+    Rcpp::stop("magmaan: `metric` must be \"unit_free\" or \"raw\"");
+  }
+  out.pin_weight = pin_weight;
+  out.pole_tol = pole_tol;
+  out.polish = polish;
+  return out;
+}
+
+// The sphere report: gauge units, latents left in the user chart, and the
+// sphere-chart solution as a partable of the internal (gauge-free) model.
+Rcpp::List gauge_report_to_r(const Ctx& ctx,
+                             const magmaan::estimate::frontier::SphereFit& fit,
+                             const std::string& metric) {
+  const auto& report = fit.report;
+  const auto& plan = report.plan;
+  auto name_of = [&ctx](std::int32_t v) -> std::string {
+    return (v >= 0 && static_cast<std::size_t>(v) < ctx.names.var_name.size())
+               ? ctx.names.var_name[static_cast<std::size_t>(v)]
+               : std::string();
+  };
+  const R_xlen_t nu = static_cast<R_xlen_t>(plan.units.size());
+  Rcpp::CharacterVector latent(nu), kind(nu), blocks(nu);
+  Rcpp::IntegerVector dim(nu);
+  Rcpp::NumericVector level(nu);
+  Rcpp::LogicalVector singular(nu);
+  for (R_xlen_t u = 0; u < nu; ++u) {
+    const auto& unit = plan.units[static_cast<std::size_t>(u)];
+    latent[u] = name_of(unit.latent);
+    kind[u] = unit.kind == magmaan::estimate::frontier::GaugeKind::Affine
+                  ? "affine" : "linear";
+    std::string b;
+    for (std::size_t k = 0; k < unit.blocks.size(); ++k) {
+      if (k) b += ",";
+      b += std::to_string(unit.blocks[k]);
+    }
+    blocks[u] = b;
+    dim[u] = static_cast<int>(unit.basis.cols());
+    level[u] = u < report.scales.direction_level.size()
+                   ? report.scales.direction_level(u) : NA_REAL;
+    singular[u] = std::find(report.scales.singular_units.begin(),
+                            report.scales.singular_units.end(),
+                            static_cast<std::int32_t>(u)) !=
+                  report.scales.singular_units.end();
+  }
+  Rcpp::DataFrame units = Rcpp::DataFrame::create(
+      Rcpp::_["latent"] = latent, Rcpp::_["blocks"] = blocks,
+      Rcpp::_["kind"] = kind, Rcpp::_["span_dim"] = dim,
+      Rcpp::_["direction_level"] = level, Rcpp::_["singular"] = singular,
+      Rcpp::_["stringsAsFactors"] = false);
+
+  const R_xlen_t np = static_cast<R_xlen_t>(plan.passthrough.size());
+  Rcpp::CharacterVector pl(np), reason(np);
+  Rcpp::IntegerVector pb(np);
+  for (R_xlen_t k = 0; k < np; ++k) {
+    const auto& p = plan.passthrough[static_cast<std::size_t>(k)];
+    pl[k] = name_of(p.latent);
+    pb[k] = p.block;
+    reason[k] = p.reason;
+  }
+  Rcpp::DataFrame passthrough = Rcpp::DataFrame::create(
+      Rcpp::_["latent"] = pl, Rcpp::_["block"] = pb, Rcpp::_["reason"] = reason,
+      Rcpp::_["stringsAsFactors"] = false);
+
+  magmaan::estimate::Estimates internal;
+  internal.theta = report.internal_theta;
+  Rcpp::DataFrame sphere_partable =
+      partable_df(report.internal_pt, ctx.names, internal, nullptr);
+
+  return Rcpp::List::create(
+      Rcpp::_["chart"] = "sphere",
+      Rcpp::_["metric"] = metric,
+      Rcpp::_["user_chart"] = fit.user_chart,
+      Rcpp::_["units"] = units,
+      Rcpp::_["passthrough"] = passthrough,
+      Rcpp::_["sphere_partable"] = sphere_partable,
+      Rcpp::_["fmin_sphere"] = report.fmin_internal,
+      Rcpp::_["pin_residual"] = report.pin_residual,
+      Rcpp::_["residual"] = Rcpp::List::create(
+          Rcpp::_["fixed_rows"] = report.residual.fixed_rows,
+          Rcpp::_["linear_constraints"] = report.residual.linear_constraints),
+      Rcpp::_["optimizer_status"] = optim_status_to_r(report.optimizer_status),
+      Rcpp::_["iterations"] = report.iterations,
+      Rcpp::_["polish"] = Rcpp::List::create(
+          Rcpp::_["polished"] = report.polished,
+          Rcpp::_["iterations"] = report.polish_iterations,
+          Rcpp::_["shift"] = report.polish_shift,
+          Rcpp::_["error"] = report.polish_error));
+}
+
+}  // namespace
+
+// Sphere-chart estimation (frontier). The optimizer walks unit-norm loading
+// directions; the result is translated to and finalized in the user's chart,
+// so it is the ordinary estimate whenever that estimate exists. When the user
+// chart does not contain the fitted point, the return value is a bare list
+// with `user_chart = FALSE` and the `gauge` report; the R wrapper turns that
+// into a classed condition.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_sphere_impl(
+    SEXP partable, Rcpp::List sample_stats, std::string estimator = "ML",
+    bool psd = false, SEXP W = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
+    std::string metric = "unit_free", double pin_weight = 1.0,
+    double pole_tol = 1e-6, double start_eigen_floor = 1e-6,
+    double feasibility_tol = 1e-6, bool diagonal_preconditioning = false,
+    bool polish = true) {
+  namespace fr = magmaan::estimate::frontier;
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_sphere");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(
+      std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  const fr::SphereOptions sopts =
+      sphere_options_from(metric, pin_weight, pole_tol, polish);
+
+  Eigen::VectorXd x0;
+  if (estimator == "ML") {
+    std::string start_policy = "scaled-fabin";
+    if (control.isNotNull()) {
+      Rcpp::List ctl(control.get());
+      if (ctl.containsElementNamed("start"))
+        start_policy = start_name_from_arg(
+            Rcpp::Nullable<Rcpp::String>(ctl["start"]), "fit_ml", "scaled-fabin");
+    }
+    x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  } else {
+    x0 = start_values_or_stop(ctx, starts);
+  }
+
+  magmaan::fit_expected<fr::SphereFit> r;
+  if (psd) {
+    if (estimator != "ML") {
+      Rcpp::stop("magmaan: frontier_fit_sphere(psd = TRUE) supports estimator = \"ML\" only");
+    }
+    if (bounds.isNotNull()) {
+      Rcpp::stop("magmaan: frontier_fit_sphere(psd = TRUE) does not take `bounds`");
+    }
+    const magmaan::estimate::Backend backend =
+        optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
+                           : backend_from_optimizer_arg(optimizer);
+    fr::PsdFitOptions psd_opts;
+    psd_opts.start_eigen_floor = start_eigen_floor;
+    psd_opts.feasibility_tol = feasibility_tol;
+    psd_opts.diagonal_preconditioning = diagonal_preconditioning;
+    r = fr::fit_ml_psd_sphere(
+        ctx.pt, ctx.rep, ctx.samp, x0, backend,
+        optim_opts_from(control, fr::ml_psd_optim_options()), psd_opts, sopts);
+  } else {
+    const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+    const magmaan::estimate::Bounds b = bounds_from_nullable(bounds);
+    if (estimator == "ML") {
+      r = fr::fit_ml_sphere(ctx.pt, ctx.rep, ctx.samp, x0, b, backend,
+          optim_opts_from(control, magmaan::estimate::ml_optim_options()), sopts);
+    } else if (estimator == "ULS") {
+      r = fr::fit_gmm_sphere(ctx.pt, ctx.rep, ctx.samp, x0, {}, b, backend,
+                             optim_opts_from(control), sopts);
+    } else if (estimator == "GLS") {
+      r = fr::fit_gls_sphere(ctx.pt, ctx.rep, ctx.samp, x0, b, backend,
+                             optim_opts_from(control), sopts);
+    } else if (estimator == "WLS") {
+      if (Rf_isNull(W)) Rcpp::stop("magmaan: continuous WLS requires explicit `W`");
+      r = fr::fit_gmm_sphere(ctx.pt, ctx.rep, ctx.samp, x0,
+                             wls_from_arg(W, ctx.samp.S.size()), b, backend,
+                             optim_opts_from(control), sopts);
+    } else {
+      Rcpp::stop("magmaan: frontier_fit_sphere() supports estimator = ML, ULS, "
+                 "GLS, WLS (complete data) or FIML");
+    }
+  }
+  if (!r.has_value()) stop_fit(r.error());
+  if (!r->user_chart) {
+    return Rcpp::List::create(Rcpp::_["user_chart"] = false,
+                              Rcpp::_["gauge"] = gauge_report_to_r(ctx, *r, metric));
+  }
+  Rcpp::List out = fit_result(ctx, r->estimates, &starts, estimator.c_str());
+  out["gauge"] = gauge_report_to_r(ctx, *r, metric);
+  if (psd) out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_fiml_sphere_impl(
+    SEXP partable, SEXP raw_data,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    std::string metric = "unit_free", double pin_weight = 1.0,
+    double pole_tol = 1e-6, bool polish = true) {
+  namespace fr = magmaan::estimate::frontier;
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_sphere");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty())
+    Rcpp::stop("magmaan: model has no observed variables");
+
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
+  ctx.samp = pack_or->start_stats;
+  ctx.ov_names = ctx.rep.ov_names[0];
+  ctx.meanstructure = has_meanstructure(ctx.pt);
+  if (!ctx.meanstructure) ctx.samp.mean.clear();
+
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      fiml_backend_from_optimizer_arg(optimizer);
+  auto r = fr::fit_fiml_sphere(ctx.pt, ctx.rep, raw, x0, backend,
+                               optim_opts_from(control),
+                               sphere_options_from(metric, pin_weight, pole_tol,
+                                                   polish));
+  if (!r.has_value()) stop_fit(r.error());
+  if (!r->user_chart) {
+    return Rcpp::List::create(Rcpp::_["user_chart"] = false,
+                              Rcpp::_["gauge"] = gauge_report_to_r(ctx, *r, metric));
+  }
+  Rcpp::List out = fiml_fit_result(ctx, raw, r->estimates, &starts);
+  out["gauge"] = gauge_report_to_r(ctx, *r, metric);
+  auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(
+      raw, *pack_or, fiml_h1_opts_from(control));
+  if (!h1_or.has_value()) stop_fit(h1_or.error());
+  out["fiml_h1"] = fiml_h1_xptr(std::move(*h1_or));
+  out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
+  return out;
+}
+
+// Re-express a fitted partable (with an `est` column) under the
+// identification of another partable of the same model. The source may be a
+// sphere report's gauge-free `sphere_partable`.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_reidentify_impl(SEXP from_partable, SEXP to_partable,
+                                    double pole_tol = 1e-6) {
+  namespace fr = magmaan::estimate::frontier;
+  Rcpp::DataFrame from_df(from_partable);
+  if (!from_df.containsElementNamed("est") || !from_df.containsElementNamed("free")) {
+    Rcpp::stop("magmaan: frontier_reidentify() needs a fitted partable with "
+               "`free` and `est` columns");
+  }
+  magmaan::compat::lavaan::ParsedLavaanParTable from =
+      partable_from_arg(from_partable, "frontier_reidentify");
+  magmaan::compat::lavaan::ParsedLavaanParTable to =
+      partable_from_arg(to_partable, "frontier_reidentify");
+  Rcpp::IntegerVector free = from_df["free"];
+  Rcpp::NumericVector est = from_df["est"];
+  Eigen::VectorXd theta = Eigen::VectorXd::Constant(
+      from.structure.n_free(), std::numeric_limits<double>::quiet_NaN());
+  for (R_xlen_t i = 0; i < free.size(); ++i) {
+    const int f = free[i];
+    if (f > 0 && f <= theta.size()) theta(f - 1) = est[i];
+  }
+  if (!theta.allFinite()) {
+    Rcpp::stop("magmaan: frontier_reidentify(): the source partable has "
+               "missing estimates");
+  }
+  auto r = fr::reidentify(from.structure, theta, to.structure, pole_tol);
+  if (!r.has_value()) stop_post(r.error());
+  magmaan::estimate::Estimates out_est;
+  out_est.theta = r->theta;
+  return Rcpp::List::create(
+      Rcpp::_["partable"] = partable_df(to.structure, to.names, out_est, &to.starts),
+      Rcpp::_["theta"] = Rcpp::wrap(r->theta),
+      Rcpp::_["direction_level"] = Rcpp::wrap(r->direction_level),
+      Rcpp::_["residual"] = Rcpp::List::create(
+          Rcpp::_["fixed_rows"] = r->residual.fixed_rows,
+          Rcpp::_["linear_constraints"] = r->residual.linear_constraints));
 }
 
 namespace {

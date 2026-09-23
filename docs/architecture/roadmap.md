@@ -216,14 +216,27 @@ ParameterMap)`, the nonlinear sibling of the affine reduction, with the gauge
 pin `rho (||beta||^2 - 1)^2`. `fit_ml_psd_sphere` instead hands the sphere to
 `fit_ml_psd` as one smooth equality per unit. The metric is unit-free by
 default (sum lambda^2 / s_jj = 1). The fitted point is translated to the
-user's chart and finalized there, so the result is the ordinary estimate
-whenever that estimate exists. A marker at a pole (|l(a)| below `pole_tol`)
+user's chart, and by default (`SphereOptions::polish`) the ordinary fit is
+restarted from it, so the result is the ordinary estimate under the ordinary
+convergence criteria whenever that estimate exists. The polish matters: without
+it, stationarity checked in a near-pole user chart rejected 103 of 107
+optimal sphere fits on the Ernst N = 10 draws, while the median polish moves
+parameters by about 1e-10. A marker at a pole (|l(a)| below `pole_tol`)
 returns `user_chart = false` with the sphere report. `reidentify` translates any
 fit between identifications of the same model (marker on any indicator, std.lv,
 effect coding) and refuses when the target partable describes another model.
 The `sphere_route` and `sphere_route_parity` test executables compile the
 lavaan goldens with `MAGMAAN_TEST_SPHERE_ROUTE`, which routes the
-`tests/test_fit.hpp` seam through the sphere. Every case matches lavaan. Out of
+`tests/test_fit.hpp` seam through the sphere. Every case matches lavaan.
+R exposes `frontier_fit_sphere(model, data, estimator, groups, ..., psd)` for
+ML, ULS, GLS, WLS and FIML (psd = TRUE for ML). It shares `magmaan()`'s model
+and data preparation (`.magmaan_prepare_spec`), returns a finalized
+`magmaan_fit` with `fit$gauge` (units, pass-through reasons, the sphere-chart
+partable) and `fit$options$chart = "sphere"`. It signals a classed
+`magmaan_user_chart_singular` condition carrying the sphere solution when the
+user chart does not hold the point. `frontier_reidentify(fit, model)` wraps
+`reidentify`. `case_rerun()` and `modification_indices_lrt()` refit sphere fits
+through the sphere. Out of
 scope for now: two-level, SNLLS, ordinal, composites, partial invariance via
 nested spheres, the PSD LS/FIML siblings, and Wald inference when the user
 chart is singular.

@@ -570,6 +570,8 @@ magmaan_core <- local({
       "frontier_backconvert_std_lv_to_marker",
       "frontier_fit_ml_auto_identification",
       "frontier_fit_ml_psd",
+      "frontier_fit_sphere",
+      "frontier_reidentify",
       "frontier_fit_pattern_ntml",
       "frontier_fit_ml2s_psd",
       "frontier_ml2s_information_choices",

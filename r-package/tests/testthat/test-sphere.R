@@ -1,0 +1,122 @@
+# Frontier sphere chart: frontier_fit_sphere() reproduces the ordinary fit
+# whenever the model's identification contains the estimate, signals a classed
+# condition when it does not, and frontier_reidentify() re-expresses fits.
+
+sphere_sim <- function(n = 300L, seed = 7L, loadings = c(1, 0.8, 0.6, 0.7)) {
+  set.seed(seed)
+  eta <- rnorm(n, sd = 1.1)
+  x <- sapply(seq_along(loadings), function(j)
+    0.1 * j + loadings[j] * eta + rnorm(n, sd = 0.7))
+  colnames(x) <- paste0("x", seq_along(loadings))
+  as.data.frame(x)
+}
+
+ernst_sim <- function(n = 200L, seed = 3L) {
+  set.seed(seed)
+  X <- rnorm(n)
+  Y <- 0.4 * X + rnorm(n)
+  lam <- c(1, 0.8, 0.6)
+  out <- cbind(sapply(lam, function(l) l * X + rnorm(n)),
+               sapply(lam, function(l) l * Y + rnorm(n)))
+  colnames(out) <- c("x1", "x2", "x3", "y1", "y2", "y3")
+  as.data.frame(out)
+}
+
+ernst <- "X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X"
+
+test_that("sphere ML reproduces the ordinary ML fit", {
+  dat <- ernst_sim()
+  ord <- magmaan(ernst, dat)
+  sph <- frontier_fit_sphere(ernst, dat)
+  expect_s3_class(sph, "magmaan_fit")
+  expect_true(sph$converged)
+  expect_equal(sph$options$chart, "sphere")
+  expect_equal(nrow(sph$gauge$units), 2L)
+  expect_equal(nrow(sph$gauge$passthrough), 0L)
+  expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
+  expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
+  expect_lt(sph$gauge$pin_residual, 1e-6)
+})
+
+test_that("std.lv and multi-group metric invariance round-trip", {
+  dat <- ernst_sim()
+  ord <- magmaan(ernst, dat, std_lv = TRUE)
+  sph <- frontier_fit_sphere(ernst, dat, std_lv = TRUE)
+  expect_equal(sph$gauge$units$kind, c("linear", "linear"))
+  expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
+
+  g <- rbind(cbind(sphere_sim(seed = 1L), g = "a"),
+             cbind(sphere_sim(seed = 2L, loadings = c(1, 0.8, 0.6, 0.7) * 1.2),
+                   g = "b"))
+  m <- "f =~ x1 + x2 + x3 + x4"
+  ord <- magmaan(m, g, groups = "g", group_equal = "loadings")
+  sph <- frontier_fit_sphere(m, g, groups = "g", group_equal = "loadings")
+  expect_equal(sph$gauge$units$blocks, "1,2")
+  expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
+})
+
+test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
+  dat <- ernst_sim()
+  for (est in c("ULS", "GLS")) {
+    ord <- magmaan(ernst, dat, estimator = est)
+    sph <- frontier_fit_sphere(ernst, dat, estimator = est)
+    expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
+  }
+  miss <- dat
+  miss$x2[seq(3, nrow(miss), by = 7)] <- NA
+  miss$y3[seq(5, nrow(miss), by = 11)] <- NA
+  ord <- magmaan(ernst, miss, estimator = "FIML")
+  sph <- frontier_fit_sphere(ernst, miss, estimator = "FIML")
+  expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
+  expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-4)
+
+  psd <- frontier_fit_ml_psd(ernst, dat, preconditioning = "none")
+  sph <- frontier_fit_sphere(ernst, dat, psd = TRUE)
+  expect_equal(sph$fmin, psd$fmin, tolerance = 1e-7)
+  expect_equal(sph$partable$est, psd$partable$est, tolerance = 1e-4)
+})
+
+test_that("a marker at a pole signals a classed condition with the sphere solution", {
+  dat <- sphere_sim()
+  set.seed(99)
+  dat$x1 <- rnorm(nrow(dat))
+  S <- stats::cov(dat)
+  S[1, -1] <- S[-1, 1] <- 0
+  data <- list(S = list(S), nobs = nrow(dat))
+  cond <- tryCatch(frontier_fit_sphere("f =~ x1 + x2 + x3 + x4", data),
+                   magmaan_user_chart_singular = function(e) e)
+  expect_s3_class(cond, "magmaan_user_chart_singular")
+  expect_true(cond$gauge$units$singular)
+  expect_lt(abs(cond$gauge$units$direction_level), 1e-6)
+
+  moved <- frontier_reidentify(cond, "f =~ NA*x1 + 1*x2 + x3 + x4")
+  expect_true(all(is.finite(moved$theta)))
+  expect_error(frontier_reidentify(cond, "f =~ x1 + x2 + x3 + x4"),
+               "does not contain")
+})
+
+test_that("frontier_reidentify moves a fit between identifications", {
+  dat <- ernst_sim()
+  ord <- magmaan(ernst, dat)
+  std <- frontier_reidentify(ord, ernst, std_lv = TRUE)
+  direct <- magmaan(ernst, dat, std_lv = TRUE)
+  expect_equal(std$partable$est, direct$partable$est, tolerance = 1e-5)
+  expect_error(frontier_reidentify(ord, "X =~ x1 + 0.5*x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X"),
+               "different models")
+})
+
+test_that("refitting helpers refit a sphere fit through the sphere", {
+  dat <- ernst_sim(n = 120L)
+  ord <- magmaan(ernst, dat)
+  sph <- frontier_fit_sphere(ernst, dat)
+  cr_s <- case_rerun(sph, dat, to_rerun = 1:3)
+  cr_o <- case_rerun(ord, dat, to_rerun = 1:3)
+  expect_true(all(vapply(cr_s$rerun, function(f) identical(f$options$chart, "sphere"),
+                         logical(1))))
+  expect_equal(sapply(cr_s$rerun, `[[`, "theta"), sapply(cr_o$rerun, `[[`, "theta"),
+               tolerance = 1e-5)
+  mi_s <- modification_indices_lrt(sph, dat, candidates = "loadings", robust = FALSE)
+  mi_o <- modification_indices_lrt(ord, dat, candidates = "loadings", robust = FALSE)
+  key <- function(x) x[order(x$lhs, x$rhs), c("mi", "lrt")]
+  expect_equal(key(mi_s), key(mi_o), tolerance = 1e-5, ignore_attr = TRUE)
+})

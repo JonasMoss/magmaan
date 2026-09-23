@@ -1967,11 +1967,14 @@ Every lavaan golden routed through the sphere (`sphere_route`,
 
 Remaining work, tiered:
 
-- **v1, M.** R surface: a frontier fit entry with `gauge = "sphere"`, a classed
-  R condition carrying the sphere solution when the user chart is singular,
-  `frontier_reidentify()`, and a `fit$gauge` report. Record the route on the
-  fit so that refitting helpers (`case_rerun`, `.lrt_refit`,
-  `robust_nested_lrt`) refit through the same chart.
+- **Done 2026-09-23.** R surface: `frontier_fit_sphere()` (ML, ULS, GLS, WLS,
+  FIML, `psd = TRUE` for ML), the classed `magmaan_user_chart_singular`
+  condition, `frontier_reidentify()`, `fit$gauge`, and sphere refits in
+  `case_rerun()` / `modification_indices_lrt()`. (`robust_nested_lrt()` takes
+  two fits and never refits.)
+- **Open.** Promote to `magmaan(chart = "sphere")` once the author decides the
+  surface (plan decision D1). Route the FIML and multi-group goldens through
+  the sphere seam as well (`fit_fiml` is not yet switched).
 - **v1, S.** Small-N evidence on the Ernst design and one more CFA through the
   R surface (paper probes).
 - **Literature scope.** PSD LS/FIML siblings, ML2S, multi-information penalty,

@@ -1358,6 +1358,142 @@ frontier_fit_ml_multiinfo <- function(
   attach_complete_raw_data(fit, data)
 }
 
+# Frontier sphere-chart estimation (design: papers/global-gauge-sem).
+# The estimator is unchanged. The optimizer walks unit-norm loading directions
+# (a global slice of each latent's scale orbit) instead of the model's marker
+# or std.lv convention, and the result is translated back to the model's own
+# identification. Whenever the ordinary estimate exists, the returned fit is
+# that estimate, and every post-fit call applies as usual. `fit$gauge`
+# reports which latents ran on the sphere, which stayed in the model's chart
+# and why, and the sphere-chart solution. When the model's chart does not
+# contain the fitted point (a marker loading of zero, or a non-positive
+# variance for a std.lv latent), the call signals a
+# `magmaan_user_chart_singular` error whose `gauge` field carries the sphere
+# solution; frontier_reidentify() re-expresses it under another
+# identification. `psd = TRUE` composes the sphere with the covariance-honest
+# domain of frontier_fit_ml_psd(). With `polish = TRUE` (default) the ordinary
+# fit is restarted from the translated sphere solution, so the reported
+# estimate meets the ordinary convergence criteria in the model's own chart;
+# `fit$gauge$polish` records how far it moved.
+frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
+                                ..., ordered = NULL,
+                                parameterization = "delta", psd = FALSE,
+                                missing = c("listwise", "error"),
+                                W = NULL, optimizer = NULL, control = NULL,
+                                bounds = NULL,
+                                metric = c("unit_free", "raw"),
+                                pin_weight = 1, pole_tol = 1e-6,
+                                polish = TRUE,
+                                start_eigen_floor = 1e-6,
+                                feasibility_tol = 1e-6,
+                                preconditioning = c("none", "diagonal")) {
+  missing <- match.arg(missing)
+  metric <- match.arg(metric)
+  preconditioning <- match.arg(preconditioning)
+  estimator <- toupper(as.character(estimator)[1L])
+  allowed <- c("ML", "ULS", "GLS", "WLS", "FIML")
+  if (!length(estimator) || is.na(estimator) || !estimator %in% allowed) {
+    stop("frontier_fit_sphere(): `estimator` must be one of ",
+         paste(allowed, collapse = ", "))
+  }
+  if (isTRUE(psd) && !identical(estimator, "ML")) {
+    stop("frontier_fit_sphere(): `psd = TRUE` supports estimator = 'ML' only")
+  }
+  if (length(ordered)) {
+    stop("frontier_fit_sphere(): ordinal data are not supported")
+  }
+  dots <- list(...)
+  prep <- .magmaan_prepare_spec(model, data, estimator, groups, dots,
+                                ordered = NULL,
+                                parameterization = parameterization,
+                                caller = "frontier_fit_sphere")
+  spec <- prep$spec
+  group_var <- prep$group_var
+  if (length(spec$ordered)) {
+    stop("frontier_fit_sphere(): ordinal data are not supported")
+  }
+
+  if (identical(estimator, "FIML")) {
+    if (!bounds_is_none(bounds)) {
+      stop("frontier_fit_sphere(): `bounds` are not supported for estimator = 'FIML'")
+    }
+    if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
+    fit <- frontier_fit_fiml_sphere_impl(
+      partable_arg(spec), fiml_data_arg(data),
+      optimizer = optimizer %||% "nlopt-lbfgs-slsqp-fallback",
+      control = control, metric = metric, pin_weight = pin_weight,
+      pole_tol = pole_tol, polish = isTRUE(polish))
+  } else {
+    if (is.data.frame(data)) {
+      data <- df_to_data(data, spec, group = group_var, missing = missing)
+    }
+    b <- bounds_arg(bounds, spec, data, "frontier_fit_sphere")
+    fit <- frontier_fit_sphere_impl(
+      partable_arg(spec), sample_stats_arg(data), estimator = estimator,
+      psd = isTRUE(psd), W = W, optimizer = optimizer, control = control,
+      bounds = b, metric = metric, pin_weight = pin_weight,
+      pole_tol = pole_tol, start_eigen_floor = start_eigen_floor,
+      feasibility_tol = feasibility_tol,
+      diagonal_preconditioning = identical(preconditioning, "diagonal"),
+      polish = isTRUE(polish))
+  }
+  if (identical(fit$user_chart, FALSE)) {
+    .stop_user_chart_singular(fit$gauge, spec, "frontier_fit_sphere")
+  }
+  if (!identical(estimator, "FIML")) fit <- attach_complete_raw_data(fit, data)
+  fit <- finalize_magmaan_fit(fit, spec, estimator, missing, "none", "none")
+  fit$options$chart <- "sphere"
+  fit$options$chart_options <- list(
+    psd = isTRUE(psd), metric = metric, pin_weight = pin_weight,
+    pole_tol = pole_tol, polish = isTRUE(polish),
+    optimizer = optimizer, control = control,
+    bounds = bounds, W = W, groups = groups)
+  fit
+}
+
+.stop_user_chart_singular <- function(gauge, spec, caller) {
+  units <- gauge$units
+  bad <- unique(units$latent[units$singular])
+  msg <- paste0(
+    caller, "(): the fitted point lies outside the model's identification ",
+    "for latent(s) ", paste(bad, collapse = ", "), ": a marker loading is ",
+    "numerically zero or a fixed-variance latent has a non-positive variance, ",
+    "so estimates in this parameterization do not exist. The sphere-chart ",
+    "solution is in the condition's `gauge` field; frontier_reidentify() ",
+    "re-expresses it under another identification.")
+  cond <- structure(
+    class = c("magmaan_user_chart_singular", "error", "condition"),
+    list(message = msg, call = NULL, gauge = gauge, model = spec))
+  stop(cond)
+}
+
+# Re-express a fitted solution under another identification of the same
+# model: `fit` is a magmaan fit, a fitted partable data.frame, a sphere
+# report (`fit$gauge`), or a `magmaan_user_chart_singular` condition. `model`
+# is the target: a model spec, or syntax passed to model_spec() with `...`
+# (for example `std_lv = TRUE`). Errors when the target identification does
+# not contain the point, or when `model` describes a different model.
+frontier_reidentify <- function(fit, model, ..., pole_tol = 1e-6) {
+  from <- if (inherits(fit, "magmaan_user_chart_singular")) {
+    fit$gauge$sphere_partable
+  } else if (is.data.frame(fit)) {
+    fit
+  } else if (!is.null(fit$sphere_partable)) {
+    fit$sphere_partable
+  } else if (!is.null(fit$partable)) {
+    fit$partable
+  } else {
+    stop("frontier_reidentify(): `fit` must be a fit, a fitted partable, a ",
+         "sphere report or a magmaan_user_chart_singular condition")
+  }
+  target <- if (is.character(model) && length(model) == 1L) {
+    model_spec(model, ...)
+  } else {
+    model
+  }
+  frontier_reidentify_impl(from, partable_arg(target), pole_tol = pole_tol)
+}
+
 .warn_nonrecursive_multiinfo <- function(fit, caller) {
   if (!isTRUE(fit$penalty$recursive)) {
     warning(caller, "(): nonrecursive model; the multi-information penalty ",
@@ -2060,6 +2196,87 @@ frontier_fit_mixed_ordinal_psd <- function(
   )
 }
 
+# Shared front half of magmaan() and frontier_fit_sphere(): resolve the
+# grouping column, build (or validate) the model spec, and force a mean
+# structure for FIML/ML2S. Messages are prefixed with `caller`.
+.magmaan_prepare_spec <- function(model, data, estimator, groups, dots,
+                                  ordered, parameterization,
+                                  caller = "magmaan") {
+  caller_prefix <- paste0(caller, "(): ")
+  group_var <- if (is.null(groups)) NULL else as.character(groups)[1L]
+  group_labels <- NULL
+  if (is.data.frame(data) && !is.null(group_var) && nzchar(group_var)) {
+    if (!group_var %in% names(data)) {
+      stop(caller_prefix, "grouping column not found: ", group_var)
+    }
+    g <- data[[group_var]]
+    if (anyNA(g)) stop(caller_prefix, "grouping column contains missing values")
+    # Group order follows lavaan: data-appearance order (unique()), ignoring
+    # factor levels, so magmaan and lavaan index groups identically. Explicit
+    # ordering is still available via the model spec's `group_labels`.
+    group_labels <- unique(as.character(g))
+    group_labels <- as.character(group_labels)
+  }
+
+  fiml_auto_meanstructure <- estimator %in% c("FIML", "ML2S")
+  if (estimator %in% c("FIML", "ML2S")) {
+    if ("meanstructure" %in% names(dots) && !isTRUE(dots$meanstructure)) {
+      stop(caller_prefix, "estimator = '", estimator, "' requires a mean structure; omit ",
+           "`meanstructure` or set it to TRUE.", call. = FALSE)
+    }
+  }
+  if (inherits(model, "magmaan_model_spec")) {
+    if (length(dots)) {
+      stop(caller_prefix, "model option arguments are only accepted when `model` is a syntax string")
+    }
+    spec <- model
+    if (!is.null(ordered)) {
+      spec$ordered <- as.character(ordered)
+      attr(spec$partable, "magmaan.ordered") <- spec$ordered
+    }
+  } else if (is.character(model) && length(model) == 1L) {
+    model_dots <- dots
+    if (fiml_auto_meanstructure) model_dots$meanstructure <- TRUE
+    spec <- do.call(
+      model_spec,
+      c(list(syntax = model,
+             group = group_var,
+             group_labels = group_labels,
+             ordered = ordered,
+             parameterization = parameterization),
+        model_dots)
+    )
+  } else {
+    if (length(dots) || !is.null(ordered) || !is.null(groups)) {
+      stop(caller_prefix, "model options require a syntax string or magmaan_model_spec")
+    }
+    spec <- as_magmaan_model_spec(model)
+  }
+
+  spec_group_labels <- spec$group_labels %||% character()
+  needs_group_rebuild <- !is.null(group_var) && !identical(group_var, "") &&
+    !is.null(spec$syntax) &&
+    (!identical(spec$group_var, group_var) ||
+       (!is.null(group_labels) && !identical(as.character(spec_group_labels), group_labels)))
+  if (needs_group_rebuild) {
+    spec <- .rebuild_model_spec(
+      spec,
+      group = group_var,
+      group_labels = group_labels %||% spec$group_labels,
+      caller = caller)
+  }
+
+  if (estimator %in% c("FIML", "ML2S") && !.model_spec_has_meanstructure(spec)) {
+    spec <- .rebuild_model_spec(
+      spec,
+      group = group_var,
+      group_labels = group_labels %||% spec$group_labels,
+      overrides = list(meanstructure = TRUE),
+      caller = caller)
+  }
+  list(spec = spec, group_var = group_var)
+}
+
 magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     cluster = NULL,
                     ordered = NULL, parameterization = "delta",
@@ -2092,78 +2309,11 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     stop("magmaan(): native FC-SEM model/data objects require magmaan_fcsem()")
   }
 
-  group_var <- if (is.null(groups)) NULL else as.character(groups)[1L]
-  group_labels <- NULL
-  if (is.data.frame(data) && !is.null(group_var) && nzchar(group_var)) {
-    if (!group_var %in% names(data)) {
-      stop("magmaan(): grouping column not found: ", group_var)
-    }
-    g <- data[[group_var]]
-    if (anyNA(g)) stop("magmaan(): grouping column contains missing values")
-    # Group order follows lavaan: data-appearance order (unique()), ignoring
-    # factor levels, so magmaan and lavaan index groups identically. Explicit
-    # ordering is still available via the model spec's `group_labels`.
-    group_labels <- unique(as.character(g))
-    group_labels <- as.character(group_labels)
-  }
-
   dots <- list(...)
-  fiml_auto_meanstructure <- estimator %in% c("FIML", "ML2S")
-  if (estimator %in% c("FIML", "ML2S")) {
-    if ("meanstructure" %in% names(dots) && !isTRUE(dots$meanstructure)) {
-      stop("magmaan(): estimator = '", estimator, "' requires a mean structure; omit ",
-           "`meanstructure` or set it to TRUE.", call. = FALSE)
-    }
-  }
-  if (inherits(model, "magmaan_model_spec")) {
-    if (length(dots)) {
-      stop("magmaan(): model option arguments are only accepted when `model` is a syntax string")
-    }
-    spec <- model
-    if (!is.null(ordered)) {
-      spec$ordered <- as.character(ordered)
-      attr(spec$partable, "magmaan.ordered") <- spec$ordered
-    }
-  } else if (is.character(model) && length(model) == 1L) {
-    model_dots <- dots
-    if (fiml_auto_meanstructure) model_dots$meanstructure <- TRUE
-    spec <- do.call(
-      model_spec,
-      c(list(syntax = model,
-             group = group_var,
-             group_labels = group_labels,
-             ordered = ordered,
-             parameterization = parameterization),
-        model_dots)
-    )
-  } else {
-    if (length(dots) || !is.null(ordered) || !is.null(groups)) {
-      stop("magmaan(): model options require a syntax string or magmaan_model_spec")
-    }
-    spec <- as_magmaan_model_spec(model)
-  }
-
-  spec_group_labels <- spec$group_labels %||% character()
-  needs_group_rebuild <- !is.null(group_var) && !identical(group_var, "") &&
-    !is.null(spec$syntax) &&
-    (!identical(spec$group_var, group_var) ||
-       (!is.null(group_labels) && !identical(as.character(spec_group_labels), group_labels)))
-  if (needs_group_rebuild) {
-    spec <- .rebuild_model_spec(
-      spec,
-      group = group_var,
-      group_labels = group_labels %||% spec$group_labels,
-      caller = "magmaan")
-  }
-
-  if (estimator %in% c("FIML", "ML2S") && !.model_spec_has_meanstructure(spec)) {
-    spec <- .rebuild_model_spec(
-      spec,
-      group = group_var,
-      group_labels = group_labels %||% spec$group_labels,
-      overrides = list(meanstructure = TRUE),
-      caller = "magmaan")
-  }
+  prep <- .magmaan_prepare_spec(model, data, estimator, groups, dots,
+                                ordered, parameterization, caller = "magmaan")
+  spec <- prep$spec
+  group_var <- prep$group_var
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
     inherits(data, "magmaan_mixed_ordinal_data")

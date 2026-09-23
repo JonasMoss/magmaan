@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -56,6 +57,12 @@ struct SphereOptions {
   // reported as outside the user's chart: the translated estimate would carry
   // loadings of order 1 / pole_tol. 0 disables the tolerance (exact zero only).
   double       pole_tol = 1e-6;
+  // Finish with the ordinary user-chart fit started at the translated sphere
+  // solution. The sphere chart locates the optimum; the polish reports it to
+  // the ordinary precision and under the ordinary convergence criteria, which
+  // are not chart invariant near a pole. When the polish errors, the
+  // translated sphere solution is finalized as is.
+  bool         polish = true;
 };
 
 struct SphereReport {
@@ -73,6 +80,12 @@ struct SphereReport {
   int                   g_evals = 0;
   double                grad_inf_norm = -1.0;
   optim::TerminalAudit  driven_audit = {};
+  // User-chart polish: whether it ran, its iterations, the largest relative
+  // parameter change it made, and its error message if it failed.
+  bool                  polished = false;
+  int                   polish_iterations = 0;
+  double polish_shift = std::numeric_limits<double>::quiet_NaN();
+  std::string           polish_error;
 };
 
 struct SphereFit {
