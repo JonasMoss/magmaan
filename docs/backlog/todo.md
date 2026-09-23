@@ -840,7 +840,10 @@ when they next change.
      median was the most accurate estimator on every design at N = 50, at about
      13 s per dataset in R against 2 ms for a barrier fit. Next: a two-weight
      barrier (one weight on the observed-indicator `log(1 - R^2)` terms, one on
-     the latent terms), which keeps scale invariance and the barrier. The path
+     the latent and residual-dependence layers), which keeps scale invariance
+     and the barrier; see `docs/research/notes/multiinfo_barrier_family.md` for
+     the layer identity, the admissible splits, and the wider family. Score
+     variants against experiment 86's stored posterior summaries (no MCMC). The path
      design (latent R^2) cells of experiment 86 are still to run
      (`run_experiment.R --full --resume`). Generalization to larger p,
      multi-group, and FIML with MAR missingness remains open.
