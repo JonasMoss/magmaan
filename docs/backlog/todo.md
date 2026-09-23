@@ -832,10 +832,18 @@ when they next change.
   2. Inference at the penalized estimate. Compare the current ordinary
      information SEs with a penalized-Hessian sandwich, `(H + lambda P'')^-1`
      bread, when `lambda / N` is not negligible (N <= 100 near the boundary).
-  3. Weight selection. Test whether a model-level rule (a fixed `lambda`, or
-     `lambda` tied to the number of equations in `K`) generalizes beyond
-     experiment 85's five designs, including larger p, multi-group, and FIML
-     with MAR missingness.
+  3. Weight selection. Experiment 86 benchmarks the barrier against the
+     Jeffreys posterior over admissible solutions (4 Metropolis chains per
+     dataset, Jeffreys by reweighting). No single `lambda` tracks it:
+     `lambda = 1` reproduces the posterior mean on indicator residual
+     variances, `lambda ~ 0.5` on factor correlations. The Jeffreys posterior
+     median was the most accurate estimator on every design at N = 50, at about
+     13 s per dataset in R against 2 ms for a barrier fit. Next: a two-weight
+     barrier (one weight on the observed-indicator `log(1 - R^2)` terms, one on
+     the latent terms), which keeps scale invariance and the barrier. The path
+     design (latent R^2) cells of experiment 86 are still to run
+     (`run_experiment.R --full --resume`). Generalization to larger p,
+     multi-group, and FIML with MAR missingness remains open.
   4. Scope. LS/ordinal paths need a discrepancy-specific scaling in place of
      `l = -N * fmin`. Nonrecursive models have a proved barrier only when the
      zero-residual variables are sinks. The characterization in the header

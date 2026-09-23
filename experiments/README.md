@@ -102,6 +102,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 83 | [sem-total-variance](83-sem-total-variance/report.qmd) | benchmark | complete | Engineering decision: retain unscaled native PSD ML; diagonal scaling stays opt-in and boundary-specific restarts remain experimental. |
 | 84 | [speed-attribution](84-speed-attribution/report.qmd) | benchmark | active | How much of matched ML + GOF/Wald runtime is preparation, fitting, or inference, and which comparisons pass numerical agreement before a public speed claim? |
 | 85 | [multiinfo-penalty-improper](85-multiinfo-penalty-improper/report.qmd) | benchmark | active | Does the complete-data multi-information penalty remove improper and boundary solutions without costing ML's accuracy and calibration, and how large should its weight be? |
+| 86 | [multiinfo-jeffreys-posterior](86-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? |
 
 ## Archived
 
