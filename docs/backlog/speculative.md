@@ -37,6 +37,30 @@ changes require repeatable native-start benefits without degraded objective
 quality. Global certification is a separate project only if a concrete consumer
 requires a rigorous bound. No further runs or implementation are currently queued.
 
+### Global latent-scale gauge (unit-norm loading chart)
+
+**Gap.** Marker and std.lv identification are local gauge slices. The marker
+chart has a pole at a zero marker loading (huge but finite estimates), and the
+std.lv chart has folds at infinity (for example |corr| = 1 in latent
+regressions), where ML estimates fail to exist with positive probability. An
+internal estimation chart with unit-norm loading directions and a free, signed
+latent covariance is a global slice. On the Ernst small-N design it removed all
+PSD-ML optimizer errors (4.5% to 0% at N = 10) and kept every parameter
+bounded. For ordinary ML the gain was small, because the remaining failures are
+model-intrinsic hub poles that no chart removes. The design and evidence live
+in the `papers/global-gauge-sem` project (origin note of 2026-09-23).
+
+**Alternative already available.** Users can write the chart today as syntax,
+freeing the marker loadings and adding `a1^2 + a2^2 + a3^2 == 1` with
+`optimizer = "nlopt-slsqp"`. The covariance domain (`frontier_fit_ml_psd()`)
+already removes the hub poles.
+
+**Build if.** That project reaches its v1 (proofs plus a lavaan-parity gate
+whenever the marker estimate exists), or a supported downstream model shows a
+reproducible marker-pole failure that the syntax workaround cannot reach
+(linear constraints forced onto SLSQP, the SNLLS path, or multi-group partial
+invariance).
+
 ### `spectral_truncate` weight policy for degenerate ADF/WLS Γ̂
 
 An optional non-default pseudo-inverse weight policy for degenerate saturated
