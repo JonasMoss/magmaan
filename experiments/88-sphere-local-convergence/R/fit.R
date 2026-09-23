@@ -5,15 +5,22 @@
 # Global optimality is not assessed.
 
 fit_route <- function(route, ident, data, optimizer = NULL, psd = FALSE) {
+  if (identical(route, "sphere")) {
+    args <- c(list(model_syntax, data), identifications[[ident]])
+    if (!is.null(optimizer)) args$optimizer <- optimizer
+    if (psd) args$psd <- TRUE
+    return(do.call(frontier_fit_sphere, args))
+  }
+  if (psd) {
+    spec <- do.call(model_spec, c(list(model_syntax), identifications[[ident]]))
+    return(frontier_fit_ml_psd(spec, data, optimizer = optimizer %||% "nlopt-slsqp"))
+  }
   args <- c(list(model_syntax, data), identifications[[ident]])
   if (!is.null(optimizer)) args$optimizer <- optimizer
-  if (identical(route, "sphere")) {
-    if (psd) args$psd <- TRUE
-    do.call(frontier_fit_sphere, args)
-  } else {
-    do.call(magmaan, args)
-  }
+  do.call(magmaan, args)
 }
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
 
 # A stop far out on a ridge (where the likelihood keeps improving toward
 # infinity and no estimate exists) can still pass a stationarity test. The
@@ -102,38 +109,51 @@ classify_failure <- function(route, ident, data, f_fail, f_psd) {
   list(type = "unclassified", fixed_by = "")
 }
 
+# The fits of one draw: ML and PSD-ML, ordinary and sphere, marker and
+# std.lv. On the sphere route the identification only sets the reporting
+# scale (the fit itself is the same). ML failures are labelled by
+# classify_failure. PSD-ML has a closed domain, so an estimate exists; a
+# PSD-ML failure is labelled "optimizer" when another PSD-ML route reaches a
+# certified local optimum on the same draw.
 run_draw <- function(design, n, rep, seed) {
   d <- designs_all()[[design]]
   data <- draw_data(design_sigma(d), n, seed)
-  f_psd <- NULL
-  psd_min <- function() {
-    if (is.null(f_psd)) {
-      p <- outcome(fit_route("sphere", "marker", data, psd = TRUE))
-      f_psd <<- if (success(p$status)) p$f else NA_real_
-    }
-    f_psd
-  }
+  row <- function(estimator, ident, route, o, failure = "", fixed_by = "", f_psd = NA_real_)
+    data.frame(design = design, n = n, rep = rep, seed = seed, estimator = estimator,
+               ident = ident, route = route, status = o$status,
+               success = success(o$status), error = o$error, f = o$f, f_psd = f_psd,
+               failure = failure, fixed_by = fixed_by, max_abs = o$max_abs,
+               runaway = o$runaway, admissible = o$admissible, time = o$time,
+               stringsAsFactors = FALSE)
   rows <- list()
+  psd_out <- list()
+  for (ident in names(identifications)) for (route in c("ordinary", "sphere")) {
+    psd_out[[paste(ident, route)]] <- outcome(fit_route(route, ident, data, psd = TRUE))
+  }
+  psd_ok <- vapply(psd_out, function(o) success(o$status), logical(1))
+  sph <- psd_out[["marker sphere"]]
+  f_psd <- if (success(sph$status)) sph$f else NA_real_
+  for (k in names(psd_out)) {
+    o <- psd_out[[k]]
+    parts <- strsplit(k, " ")[[1]]
+    fl <- if (success(o$status)) "" else if (any(psd_ok)) "optimizer" else "unclassified"
+    rows[[length(rows) + 1L]] <- row("PSD-ML", parts[1], parts[2], o, failure = fl)
+  }
   for (ident in names(identifications)) for (route in c("ordinary", "sphere")) {
     o <- outcome(fit_route(route, ident, data))
     ft <- list(type = "", fixed_by = "")
-    fp <- NA_real_
-    if (!success(o$status)) {
-      fp <- psd_min()
-      ft <- classify_failure(route, ident, data, o$f, fp)
-    }
-    rows[[length(rows) + 1L]] <- data.frame(
-      design = design, n = n, rep = rep, seed = seed, ident = ident, route = route,
-      status = o$status, success = success(o$status), error = o$error,
-      f = o$f, f_psd = fp, failure = ft$type, fixed_by = ft$fixed_by,
-      max_abs = o$max_abs, runaway = o$runaway, admissible = o$admissible, time = o$time,
-      stringsAsFactors = FALSE)
+    if (!success(o$status)) ft <- classify_failure(route, ident, data, o$f, f_psd)
+    rows[[length(rows) + 1L]] <- row("ML", ident, route, o, ft$type, ft$fixed_by,
+                                     if (success(o$status)) NA_real_ else f_psd)
   }
   out <- do.call(rbind, rows)
   # Descriptive only: how far a successful fit sits above the lowest local
-  # optimum any of the four fits reached on the same data.
-  ok <- out$success & is.finite(out$f)
-  best <- if (any(ok)) min(out$f[ok]) else NA_real_
-  out$gap_to_best <- ifelse(ok, out$f - best, NA_real_)
+  # optimum any fit of the same estimator reached on the same data.
+  out$gap_to_best <- NA_real_
+  for (est in unique(out$estimator)) {
+    i <- out$estimator == est
+    ok <- i & out$success & is.finite(out$f)
+    if (any(ok)) out$gap_to_best[ok] <- out$f[ok] - min(out$f[ok])
+  }
   out
 }

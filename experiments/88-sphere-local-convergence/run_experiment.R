@@ -21,7 +21,7 @@ source(experiment_path("R", "fit.R"))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--full] [options]\n\n",
-  "Local convergence of ML fits, ordinary route vs sphere route, under the\n",
+  "Local convergence of ML and PSD-ML fits, ordinary vs sphere route, under the\n",
   "marker and std.lv identifications. Success is a certified local optimum\n",
   "(or, on the sphere route, a local optimum reported as lying outside the\n",
   "identification). Every failure is refitted with PORT and SLSQP and\n",
@@ -79,7 +79,7 @@ main <- function() {
                       stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE)
   grid$seed <- opts$seed_base + 1000000L * match(grid$design, names(designs_all())) +
     1000L * grid$n + grid$rep
-  cat(sprintf("magmaan %s | profile %s | %d draws x 4 fits | %d cores\n",
+  cat(sprintf("magmaan %s | profile %s | %d draws x 8 fits | %d cores\n",
               as.character(utils::packageVersion("magmaan")), opts$profile,
               nrow(grid), opts$cores))
   t0 <- proc.time()[["elapsed"]]

@@ -1,5 +1,5 @@
 ---
-title: "88: Local convergence, ordinary vs sphere route (small version)"
+title: "88: Local convergence of ML and PSD-ML, ordinary vs sphere route (small version)"
 format:
   html:
     embed-resources: true
@@ -14,7 +14,9 @@ execute:
 res_dir <- file.path("results", "full")
 fits_path <- file.path(res_dir, "fits.csv")
 if (!file.exists(fits_path)) stop("run `Rscript run_experiment.R --full` first")
-x <- read.csv(fits_path, stringsAsFactors = FALSE)
+all_fits <- read.csv(fits_path, stringsAsFactors = FALSE)
+x <- all_fits[all_fits$estimator == "ML", ]
+psd <- all_fits[all_fits$estimator == "PSD-ML", ]
 meta <- read.csv(file.path(res_dir, "metadata.csv"), stringsAsFactors = FALSE)
 x$cell <- paste(x$ident, x$route)
 cells <- c("marker ordinary", "marker sphere", "std_lv ordinary", "std_lv sphere")
@@ -37,11 +39,11 @@ fl <- wide("is_flagged", x[x$route == "sphere", ])
 
 ## Question
 
-With the canonical start and the scaled driven run, how often does ML reach
-a **local** optimum on the ordinary route and on the sphere route, under the
-marker and std.lv identifications? When no route reaches one, is that the
-optimizer's fault or is there no estimate to find? Global optimality is not
-assessed.
+With the canonical start and the scaled driven run, how often do ML and
+PSD-ML reach a **local** optimum on the ordinary route and on the sphere
+route, under the marker and std.lv identifications? When no route reaches
+one, is that the optimizer's fault or is there no estimate to find? Global
+optimality is not assessed.
 
 ## Short answer
 
@@ -51,7 +53,27 @@ af <- aggregate(success ~ design + n, all_fail, pct)
 opt_fail <- table(x$cell[x$failure == "optimizer"])
 ```
 
-- **The identification no longer matters on the sphere route.** The marker
+```{r psd-short}
+psd$cell <- paste(psd$ident, psd$route)
+psd_rate <- tapply(psd$success, psd$cell, pct)
+psd_cell_min <- aggregate(success ~ design + n + cell, psd, pct)
+psd_min <- tapply(psd_cell_min$success, psd_cell_min$cell, min)
+psd_flag <- pct(psd$status[psd$cell == "std_lv sphere"] == "flagged")
+```
+
+- **PSD-ML on the sphere converges essentially always.**
+  - The sphere PSD-ML fit reaches a certified local optimum in
+    `r psd_rate[["marker sphere"]]`% of all draws (lowest cell
+    `r psd_min[["marker sphere"]]`%).
+  - Reported in the std.lv identification it is always a success, though
+    `r psd_flag`% of those optima lie outside std.lv.
+  - The ordinary PSD-ML routes stall at their identification's pole. The
+    marker route drops to `r psd_min[["marker ordinary"]]`% with a weak
+    marker. The std.lv route drops to `r psd_min[["std_lv ordinary"]]`%
+    with high R², where the PSD optimum puts Y's disturbance variance at
+    zero in half the draws. 494 of its 500 failures are draws where the
+    sphere reports the optimum as outside std.lv.
+- **For ML, the identification no longer matters on the sphere route.** The marker
   and std.lv sphere columns agree within about one point in every cell.
 - **Against the ordinary marker route, the sphere gains up to 10 points.**
   The gain is largest with a weak marker. Against the ordinary std.lv route
@@ -79,7 +101,7 @@ opt_fail <- table(x$cell[x$failure == "optimizer"])
 
 ## Evidence
 
-### Success rate
+### ML success rate
 
 Share of draws (%) ending at a certified local optimum that is not a runaway
 (for the sphere route: or flagged outside the identification). N = 100 is in
@@ -95,7 +117,24 @@ names(sr) <- c("Design", "N", "Marker, ordinary", "Marker, sphere",
 knitr::kable(sr)
 ```
 
-### How the fits end
+### PSD-ML success rate
+
+Share of draws (%) ending at a certified local optimum, pooled over
+N = 10 to 100, with the lowest single-N cell in parentheses. Every draw had
+at least one PSD-ML route succeed, so an estimate always existed.
+
+```{r psd-success}
+pr <- aggregate(success ~ design + cell, psd, pct)
+pm <- aggregate(success ~ design + cell, psd_cell_min, min)
+pr$txt <- sprintf("%.1f (%.1f)", pr$success, pm$success[match(paste(pr$design, pr$cell), paste(pm$design, pm$cell))])
+pw <- reshape(pr[, c("design", "cell", "txt")], idvar = "design", timevar = "cell", direction = "wide")
+names(pw) <- sub("^txt\\.", "", names(pw))
+pw <- pw[, c("design", cells)]
+names(pw) <- c("Design", "Marker, ordinary", "Marker, sphere", "std.lv, ordinary", "std.lv, sphere")
+knitr::kable(pw, row.names = FALSE)
+```
+
+### How the ML fits end
 
 All designs pooled, N = 10 and 20 (%).
 
@@ -134,8 +173,10 @@ knitr::kable(ends)
 
 ## Design
 
-- **Model.** `X =~ x1 + x2 + x3`, `Y =~ y1 + y2 + y3`, `Y ~ X`, normal-theory
-  ML with the default optimizer, fitted to the same data four ways:
+- **Model.** `X =~ x1 + x2 + x3`, `Y =~ y1 + y2 + y3`, `Y ~ X`. Normal-theory
+  ML with the default optimizer, and PSD-ML (ML with every covariance
+  matrix positive semidefinite) with SLSQP. Each is fitted to the same data
+  four ways:
   - the ordinary fit, with the marker or the std.lv identification;
   - the sphere fit, with the marker or the std.lv identification.
 - **Populations.** `var(X) = 1` and unit residual variances throughout.
@@ -149,8 +190,8 @@ knitr::kable(ends)
   measure does not depend on the identification, and across all returned
   fits it is bimodal: most lie below 1.5, and a separate cluster lies
   between 30 and 1000.
-- **Failure labels.** Each failure is refitted with PORT and SLSQP, same
-  route and start policy.
+- **Failure labels (ML).** Each ML failure is refitted with PORT and SLSQP,
+  same route and start policy.
   - Optimizer failure: a refit stops cleanly at a certified, non-runaway
     local optimum.
   - No estimate: no refit does, and the failing point fits better than the
@@ -159,8 +200,7 @@ knitr::kable(ends)
 
 ## Caveats
 
-- **Scope.** One model family, three populations, 200 replications, ML
-  only. Tomorrow's expansion adds designs, a least-squares estimator and N.
+- **Scope.** One model family, three populations, 200 replications. Tomorrow's expansion adds designs, a least-squares estimator and N.
 - **Labels are inferred.** "No estimate" relies on two alternative
   optimizers failing and on a single-start PSD-ML fit. The runaway bound is
   a heuristic, made robust by the bimodal measure.
@@ -175,7 +215,7 @@ knitr::kable(ends)
 
 ```sh
 cd experiments/88-sphere-local-convergence
-Rscript run_experiment.R --full        # about 35 s on 6 cores
+Rscript run_experiment.R --full        # about 70 s on 6 cores
 quarto render report.qmd
 ```
 

@@ -2184,8 +2184,8 @@ Remaining work, tiered:
       - for PSD, whether a face-aware start is feasible (a research
         question).
 - **Done 2026-09-23 — experiment 88, small version**
-  (`experiments/88-sphere-local-convergence`, about 35 s).
-  - **Setup.** ML only; the Ernst, weak-marker and high-R² populations;
+  (`experiments/88-sphere-local-convergence`, about 70 s).
+  - **Setup.** ML and PSD-ML; the Ernst, weak-marker and high-R² populations;
     N = 10 to 100; 200 replications. Ordinary and sphere routes, each under
     marker and std.lv.
   - **Success.** A certified local optimum, or on the sphere route a flagged
@@ -2209,6 +2209,15 @@ Remaining work, tiered:
       outside the std.lv identification. On 352 of those 366 draws, ordinary
       std.lv reports a certified but worse local optimum: the best its
       identification can reach.
+    - **PSD-ML, added the same evening.**
+      - The sphere PSD-ML fit reaches a certified local optimum in 99.8% of
+        all 2400 draws (lowest cell 99%). Every draw has an estimate.
+      - Ordinary PSD-ML stalls at its identification's pole. The marker
+        route drops to 75% with the weak marker. The std.lv route drops to
+        50% with high R², where the PSD optimum has Y's disturbance variance
+        at zero in half the draws. 494 of its 500 failures are draws the
+        sphere flags as outside std.lv.
+      - The full grid runs in about 70 s.
   - **Two issues found.** Both are listed below.
 - **v1, S. Sphere flags at runaway stops.** The
   `magmaan_user_chart_singular` condition is raised without checking the
