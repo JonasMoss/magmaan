@@ -2506,10 +2506,30 @@ Rcpp::List frontier_fit_ml_psd_impl(
 
 namespace {
 
+// `start`: "canonical" (the identification-invariant sphere start) or
+// "user". Explicit start values in the model, or an explicit start policy in
+// `control`, are written in the user's identification, so they select the user
+// start.
 magmaan::estimate::frontier::SphereOptions sphere_options_from(
     const std::string& metric, double pin_weight, double pole_tol,
-    bool polish) {
+    bool polish, std::string start = "canonical",
+    const magmaan::spec::Starts* starts = nullptr,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
   magmaan::estimate::frontier::SphereOptions out;
+  if (start != "canonical" && start != "user") {
+    Rcpp::stop("magmaan: `start` must be \"canonical\" or \"user\"");
+  }
+  if (starts) {
+    for (double h : starts->hint)
+      if (std::isfinite(h)) start = "user";
+  }
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("start") && !Rf_isNull(ctl["start"])) start = "user";
+  }
+  out.start = start == "canonical"
+                  ? magmaan::estimate::frontier::SphereStart::Canonical
+                  : magmaan::estimate::frontier::SphereStart::User;
   if (metric == "unit_free") {
     out.metric = magmaan::estimate::frontier::SphereMetric::UnitFree;
   } else if (metric == "raw") {
@@ -2597,6 +2617,7 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
           Rcpp::_["linear_constraints"] = report.residual.linear_constraints),
       Rcpp::_["optimizer_status"] = optim_status_to_r(report.optimizer_status),
       Rcpp::_["iterations"] = report.iterations,
+      Rcpp::_["start"] = report.start_used,
       Rcpp::_["polish"] = Rcpp::List::create(
           Rcpp::_["polished"] = report.polished,
           Rcpp::_["iterations"] = report.polish_iterations,
@@ -2623,15 +2644,15 @@ Rcpp::List frontier_fit_sphere_impl(
     std::string metric = "unit_free", double pin_weight = 1.0,
     double pole_tol = 1e-6, double start_eigen_floor = 1e-6,
     double feasibility_tol = 1e-6, bool diagonal_preconditioning = false,
-    bool polish = true) {
+    bool polish = true, std::string start = "canonical") {
   namespace fr = magmaan::estimate::frontier;
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_sphere");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
-  const fr::SphereOptions sopts =
-      sphere_options_from(metric, pin_weight, pole_tol, polish);
+  const fr::SphereOptions sopts = sphere_options_from(
+      metric, pin_weight, pole_tol, polish, start, &starts, control);
 
   Eigen::VectorXd x0;
   if (estimator == "ML") {
@@ -2704,7 +2725,7 @@ Rcpp::List frontier_fit_fiml_sphere_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     std::string metric = "unit_free", double pin_weight = 1.0,
-    double pole_tol = 1e-6, bool polish = true) {
+    double pole_tol = 1e-6, bool polish = true, std::string start = "canonical") {
   namespace fr = magmaan::estimate::frontier;
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_sphere");
@@ -2732,7 +2753,7 @@ Rcpp::List frontier_fit_fiml_sphere_impl(
   auto r = fr::fit_fiml_sphere(ctx.pt, ctx.rep, raw, x0, backend,
                                optim_opts_from(control),
                                sphere_options_from(metric, pin_weight, pole_tol,
-                                                   polish));
+                                                   polish, start, &starts, control));
   if (!r.has_value()) stop_fit(r.error());
   if (!r->user_chart) {
     return Rcpp::List::create(Rcpp::_["user_chart"] = false,

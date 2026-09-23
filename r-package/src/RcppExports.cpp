@@ -166,8 +166,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_sphere_impl
-Rcpp::List frontier_fit_sphere_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, bool psd, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string metric, double pin_weight, double pole_tol, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning, bool polish);
-RcppExport SEXP _magmaan_frontier_fit_sphere_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP psdSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP metricSEXP, SEXP pin_weightSEXP, SEXP pole_tolSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP, SEXP polishSEXP) {
+Rcpp::List frontier_fit_sphere_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, bool psd, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string metric, double pin_weight, double pole_tol, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning, bool polish, std::string start);
+RcppExport SEXP _magmaan_frontier_fit_sphere_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP psdSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP metricSEXP, SEXP pin_weightSEXP, SEXP pole_tolSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP, SEXP polishSEXP, SEXP startSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -186,13 +186,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
     Rcpp::traits::input_parameter< bool >::type diagonal_preconditioning(diagonal_preconditioningSEXP);
     Rcpp::traits::input_parameter< bool >::type polish(polishSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_sphere_impl(partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish));
+    Rcpp::traits::input_parameter< std::string >::type start(startSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_sphere_impl(partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish, start));
     return rcpp_result_gen;
 END_RCPP
 }
 // frontier_fit_fiml_sphere_impl
-Rcpp::List frontier_fit_fiml_sphere_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, std::string metric, double pin_weight, double pole_tol, bool polish);
-RcppExport SEXP _magmaan_frontier_fit_fiml_sphere_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP metricSEXP, SEXP pin_weightSEXP, SEXP pole_tolSEXP, SEXP polishSEXP) {
+Rcpp::List frontier_fit_fiml_sphere_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, std::string metric, double pin_weight, double pole_tol, bool polish, std::string start);
+RcppExport SEXP _magmaan_frontier_fit_fiml_sphere_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP metricSEXP, SEXP pin_weightSEXP, SEXP pole_tolSEXP, SEXP polishSEXP, SEXP startSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -204,7 +205,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type pin_weight(pin_weightSEXP);
     Rcpp::traits::input_parameter< double >::type pole_tol(pole_tolSEXP);
     Rcpp::traits::input_parameter< bool >::type polish(polishSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_sphere_impl(partable, raw_data, optimizer, control, metric, pin_weight, pole_tol, polish));
+    Rcpp::traits::input_parameter< std::string >::type start(startSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_sphere_impl(partable, raw_data, optimizer, control, metric, pin_weight, pole_tol, polish, start));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4311,8 +4313,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
     {"_magmaan_frontier_fit_ml_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_psd_impl, 7},
-    {"_magmaan_frontier_fit_sphere_impl", (DL_FUNC) &_magmaan_frontier_fit_sphere_impl, 15},
-    {"_magmaan_frontier_fit_fiml_sphere_impl", (DL_FUNC) &_magmaan_frontier_fit_fiml_sphere_impl, 8},
+    {"_magmaan_frontier_fit_sphere_impl", (DL_FUNC) &_magmaan_frontier_fit_sphere_impl, 16},
+    {"_magmaan_frontier_fit_fiml_sphere_impl", (DL_FUNC) &_magmaan_frontier_fit_fiml_sphere_impl, 9},
     {"_magmaan_frontier_reidentify_impl", (DL_FUNC) &_magmaan_frontier_reidentify_impl, 3},
     {"_magmaan_frontier_fit_ml_multiinfo_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_multiinfo_impl, 7},
     {"_magmaan_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaan_frontier_fit_uls_psd_impl, 6},

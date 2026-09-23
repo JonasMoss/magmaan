@@ -45,12 +45,12 @@ frontier_fit_ml_psd_impl <- function(partable, sample_stats, optimizer = NULL, c
     .Call(`_magmaan_frontier_fit_ml_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning)
 }
 
-frontier_fit_sphere_impl <- function(partable, sample_stats, estimator = "ML", psd = FALSE, W = NULL, optimizer = NULL, control = NULL, bounds = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = FALSE, polish = TRUE) {
-    .Call(`_magmaan_frontier_fit_sphere_impl`, partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish)
+frontier_fit_sphere_impl <- function(partable, sample_stats, estimator = "ML", psd = FALSE, W = NULL, optimizer = NULL, control = NULL, bounds = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = FALSE, polish = TRUE, start = "canonical") {
+    .Call(`_magmaan_frontier_fit_sphere_impl`, partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish, start)
 }
 
-frontier_fit_fiml_sphere_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, polish = TRUE) {
-    .Call(`_magmaan_frontier_fit_fiml_sphere_impl`, partable, raw_data, optimizer, control, metric, pin_weight, pole_tol, polish)
+frontier_fit_fiml_sphere_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, polish = TRUE, start = "canonical") {
+    .Call(`_magmaan_frontier_fit_fiml_sphere_impl`, partable, raw_data, optimizer, control, metric, pin_weight, pole_tol, polish, start)
 }
 
 frontier_reidentify_impl <- function(from_partable, to_partable, pole_tol = 1e-6) {

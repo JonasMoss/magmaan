@@ -408,7 +408,8 @@ print.magmaan_score_lrt <- function(x, ...) {
            group_partial = if (length(partial)) partial else NULL,
            psd = isTRUE(co$psd), metric = co$metric %||% "unit_free",
            pin_weight = co$pin_weight %||% 1, pole_tol = co$pole_tol %||% 1e-6,
-           polish = co$polish %||% TRUE),
+           polish = co$polish %||% TRUE,
+           start = co$start %||% "canonical"),
       if (!is.null(weight)) list(W = weight),
       mo)))
   }

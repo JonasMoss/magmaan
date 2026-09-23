@@ -30,6 +30,7 @@
                         pin_weight = co$pin_weight %||% 1,
                         pole_tol = co$pole_tol %||% 1e-6,
                         polish = co$polish %||% TRUE,
+                        start = co$start %||% "canonical",
                         optimizer = co$optimizer, control = co$control,
                         bounds = co$bounds, W = co$W)
   }

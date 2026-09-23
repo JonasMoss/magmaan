@@ -23,6 +23,7 @@
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
+#include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/optimizers.hpp"
@@ -72,6 +73,7 @@ struct SphereSetup {
   Eigen::Index              n_rest = 0;
   Eigen::Index              n_u = 0;
   double                    pin_scale = 0.0;  // sqrt(2 rho)
+  std::string               start_used = "user";
 };
 
 // Internal gauge-free partable: loadings of gauge units whose span row is not
@@ -332,13 +334,11 @@ optim::ParameterMap make_map(const std::shared_ptr<SphereSetup>& s) {
   return map;
 }
 
-// Start in u from user-chart start values.
+// Start in u from row values of any identification of the model (every unit
+// loading vector nonzero).
 fit_expected<Eigen::VectorXd>
-start_u(const SphereSetup& s, const Eigen::VectorXd& x0_user, const char* who) {
-  Eigen::VectorXd x0 = x0_user;
-  if (s.con_user.active() && s.con_user.n_alpha > 0)
-    x0 = s.con_user.expand(s.con_user.contract(x0));
-  const Eigen::VectorXd rows0 = row_values(s.pt_user, x0);
+start_u_from_rows(const SphereSetup& s, const Eigen::VectorXd& rows0,
+                  const char* who) {
   std::vector<Eigen::VectorXd> metric;
   for (const auto& um : s.units) metric.push_back(um.D);
   auto c = scales_to_sphere(s.plan, rows0, metric);
@@ -375,6 +375,115 @@ start_u(const SphereSetup& s, const Eigen::VectorXd& x0_user, const char* who) {
   return u;
 }
 
+// Start in u from user-chart start values.
+fit_expected<Eigen::VectorXd>
+start_u(const SphereSetup& s, const Eigen::VectorXd& x0_user, const char* who) {
+  Eigen::VectorXd x0 = x0_user;
+  if (s.con_user.active() && s.con_user.n_alpha > 0)
+    x0 = s.con_user.expand(s.con_user.contract(x0));
+  return start_u_from_rows(s, row_values(s.pt_user, x0), who);
+}
+
+// Row values of the canonical start: FABIN on the gauge-free model with each
+// unit identified by a data-chosen marker. That model is the same whichever
+// identification the user wrote. The marker is the unit's indicator most
+// correlated with the others (sum of absolute correlations in the unit's
+// first block, ties to the first), never an indicator the loading span
+// excludes. FABIN uses the fixed loading as its reference indicator, so the
+// start does not inherit a weak or pure-noise first indicator as reference,
+// which is the marker pole in another guise. The marker is fixed in every
+// tied block. Free parameters are renumbered in row order and the equality
+// structure dropped: `start_u_from_rows` projects onto the span and
+// contracts the ties.
+fit_expected<Eigen::VectorXd>
+canonical_start_rows(const SphereSetup& s, const SampleStats& samp) {
+  auto fail = [](std::string why) {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(why), 0, 0.0});
+  };
+  spec::LatentStructure c = s.pt_int;
+  for (const auto& u : s.plan.units) {
+    const auto& first = u.loading_rows.front();
+    const std::size_t b = idx(u.blocks.front() - 1);
+    if (b >= samp.S.size()) return fail("no sample covariance for a unit's block");
+    const Eigen::MatrixXd& S = samp.S[b];
+    const Eigen::Index k = static_cast<Eigen::Index>(first.size());
+    // Position of each indicator in S (as in `unit_metric`; the matrix cell
+    // of a loading is a Beta cell in the reduced LISREL form).
+    std::vector<Eigen::Index> ov(first.size(), -1);
+    for (std::size_t j = 0; j < first.size(); ++j) {
+      const std::int32_t var = c.rhs_var[idx(first[j])];
+      if (var < 0 || idx(var) >= c.ov_pos.size()) continue;
+      const std::int32_t pos = c.ov_pos[idx(var)];
+      if (pos >= 0 && pos < S.rows()) ov[j] = pos;
+    }
+    Eigen::Index best = -1;
+    double best_score = -1.0;
+    for (Eigen::Index j = 0; j < k; ++j) {
+      if (ov[idx(static_cast<std::int32_t>(j))] < 0) continue;
+      if (u.basis.row(j).cwiseAbs().maxCoeff() < 1e-12) continue;
+      const Eigen::Index oj = ov[idx(static_cast<std::int32_t>(j))];
+      double score = 0.0;
+      for (Eigen::Index m = 0; m < k; ++m) {
+        const Eigen::Index om = ov[idx(static_cast<std::int32_t>(m))];
+        if (m == j || om < 0) continue;
+        const double den = std::sqrt(S(oj, oj) * S(om, om));
+        if (den > 0.0 && std::isfinite(den)) score += std::abs(S(oj, om)) / den;
+      }
+      if (score > best_score) {
+        best_score = score;
+        best = j;
+      }
+    }
+    if (best < 0) return fail("a sphere latent has no usable reference indicator");
+    for (const auto& member : u.loading_rows) {
+      const auto row = idx(member[idx(static_cast<std::int32_t>(best))]);
+      c.free[row] = 0;
+      c.fixed_value[row] = 1.0;
+    }
+  }
+  std::int32_t next = 0;
+  for (auto& f : c.free) if (f > 0) f = ++next;
+  c.eq_groups.resize(idx(next));
+  for (std::int32_t k = 0; k < next; ++k) c.eq_groups[idx(k)] = k;
+  c.lin_constraint_R.clear();
+  c.lin_constraint_d.clear();
+  c.nonlinear_eq_rows.clear();
+  c.nl_constraints.clear();
+  auto crep = model::build_matrix_rep(c);
+  if (!crep) return fail("canonical model: " + crep.error().detail);
+  auto th = fabin_start_values(c, *crep, samp);
+  if (!th) return fail("canonical FABIN: " + th.error().detail);
+  const Eigen::VectorXd rows = row_values(c, *th);
+  for (const auto& u : s.plan.units)
+    for (auto r : u.loading_rows.front())
+      if (!std::isfinite(rows(r))) return fail("canonical start is not finite");
+  return rows;
+}
+
+// The driven start: canonical unless the caller asked for its own start or
+// the canonical one is unavailable. Records the choice in `s.start_used`.
+fit_expected<Eigen::VectorXd>
+initial_u(SphereSetup& s, const SampleStats& samp, const Eigen::VectorXd& x0_user,
+          const SphereOptions& sopts, const char* who) {
+  if (sopts.start == SphereStart::Canonical && !s.plan.units.empty()) {
+    auto rows = canonical_start_rows(s, samp);
+    if (rows) {
+      auto u = start_u_from_rows(s, *rows, who);
+      if (u && u->allFinite()) {
+        s.start_used = "canonical";
+        return u;
+      }
+      s.start_used = "user (canonical start unavailable: " +
+                     (u ? std::string("not finite") : u.error().detail) + ")";
+    } else {
+      s.start_used = "user (canonical start unavailable: " + rows.error().detail + ")";
+    }
+  } else {
+    s.start_used = s.plan.units.empty() ? "user (no sphere latents)" : "user";
+  }
+  return start_u(s, x0_user, who);
+}
+
 fit_expected<Bounds> driven_bounds(const SphereSetup& s, const Bounds& bounds,
                                    Eigen::VectorXd& u0, const char* who) {
   if (bounds.empty()) return Bounds{};
@@ -409,10 +518,10 @@ fit_expected<Bounds> driven_bounds(const SphereSetup& s, const Bounds& bounds,
 }
 
 fit_expected<optim::OptimResult>
-run_driven(const SphereSetup& s, const optim::ParameterMap& map,
-           const optim::ScalarProblem* scalar, const optim::GmmProblem* ls,
-           const Eigen::VectorXd& u0, const Bounds& ub, Backend backend,
-           OptimOptions opts, const char* who) {
+run_driven_once(const SphereSetup& s, const optim::ParameterMap& map,
+                const optim::ScalarProblem* scalar, const optim::GmmProblem* ls,
+                const Eigen::VectorXd& u0, const Bounds& ub, Backend backend,
+                OptimOptions opts, const char* who) {
   if (s.nl_int.active()) {
     const optim::ScalarProblem sp =
         scalar ? optim::reparameterize(*scalar, map)
@@ -431,6 +540,37 @@ run_driven(const SphereSetup& s, const optim::ParameterMap& map,
   }
   return backend_dispatch::dispatch_gmm(optim::reparameterize(*ls, map), u0, ub, backend,
                               std::move(opts));
+}
+
+// The driven fit, in two stages. First the caller's tolerances; then, from
+// that solution, a refinement two orders tighter. The polish reports the
+// result under the ordinary stopping rules but cannot improve a point that
+// already meets them (relative objective change), so without the refinement
+// the translated point can be less accurate than an ordinary fit. Tight
+// tolerances from the start fail more often in flat, near-pole landscapes,
+// so the refinement is kept only when it succeeds without raising the
+// objective.
+fit_expected<optim::OptimResult>
+run_driven(const SphereSetup& s, const optim::ParameterMap& map,
+           const optim::ScalarProblem* scalar, const optim::GmmProblem* ls,
+           const Eigen::VectorXd& u0, const Bounds& ub, Backend backend,
+           OptimOptions opts, const char* who) {
+  auto first = run_driven_once(s, map, scalar, ls, u0, ub, backend, opts, who);
+  if (!first) return first;
+  OptimOptions tight = opts;
+  if (tight.nlopt.ftol_rel) tight.nlopt.ftol_rel = std::max(*tight.nlopt.ftol_rel * 1e-2, 1e-15);
+  if (tight.nlopt.xtol_rel) tight.nlopt.xtol_rel = std::max(*tight.nlopt.xtol_rel * 1e-2, 1e-15);
+  tight.ftol = std::max(tight.ftol * 1e-2, 1e-15);
+  tight.gtol = std::max(tight.gtol * 1e-2, 1e-15);
+  auto refined = run_driven_once(s, map, scalar, ls, first->x, ub, backend, tight, who);
+  if (refined && refined->x.allFinite() && std::isfinite(refined->fmin) &&
+      refined->fmin <= first->fmin + 1e-12 * std::max(1.0, std::abs(first->fmin))) {
+    refined->iterations += first->iterations;
+    refined->f_evals += first->f_evals;
+    refined->g_evals += first->g_evals;
+    return refined;
+  }
+  return first;
 }
 
 using Finalizer =
@@ -463,6 +603,7 @@ finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
   rep_out.g_evals = r.g_evals;
   rep_out.grad_inf_norm = r.grad_inf_norm;
   rep_out.driven_audit = r.audit;
+  rep_out.start_used = s->start_used;
 
   const Eigen::VectorXd rows_int = row_values(s->pt_int, rep_out.internal_theta);
   const Eigen::VectorXd rows_ref = row_values(s->pt_user, x0_user);
@@ -536,7 +677,7 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj = ml_objective(*ev, samp);
   if (!obj) return std::unexpected(obj.error());
   const optim::ParameterMap map = make_map(*s);
-  auto u0 = start_u(**s, x0, who);
+  auto u0 = initial_u(**s, samp, x0, sphere, who);
   if (!u0) return std::unexpected(u0.error());
   auto ub = driven_bounds(**s, bounds, *u0, who);
   if (!ub) return std::unexpected(ub.error());
@@ -572,7 +713,7 @@ ml_sphere_problem(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto ev = std::make_shared<model::ModelEvaluator>(std::move(*ev_or));
   auto obj = ml_objective(*ev, samp);
   if (!obj) return std::unexpected(obj.error());
-  auto u0 = start_u(**s, x0, who);
+  auto u0 = initial_u(**s, samp, x0, sphere, who);
   if (!u0) return std::unexpected(u0.error());
   const optim::ParameterMap map = make_map(*s);
   optim::ScalarProblem driven = optim::reparameterize(*obj, map);
@@ -608,8 +749,29 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
     return std::unexpected(sphere_err(who, "ModelEvaluator::build failed: " +
                                                ev.error().detail));
   }
-  auto u0 = start_u(**s, x0, who);
+  auto u0 = initial_u(**s, samp, x0, sphere, who);
   if (!u0) return std::unexpected(u0.error());
+  const optim::ParameterMap map = make_map(*s);
+  auto ub = driven_bounds(**s, bounds, *u0, who);
+  if (!ub) return std::unexpected(ub.error());
+  if ((*s)->start_used == "canonical") {
+    // Least squares has no log-determinant barrier. On the sphere every
+    // indicator is equally reachable, including points where a factor
+    // collapses onto one indicator with a Heywood residual, which the marker
+    // chart keeps at infinity; from a FABIN start LS can stop there. Start
+    // from the sphere ML solution instead: it is canonical too, and ML and LS
+    // estimate the same point under a correct model. Without a usable ML fit
+    // (for example S not positive definite) the FABIN start stays.
+    auto ml = ml_objective(*ev, samp);
+    if (ml) {
+      auto rml = run_driven(**s, map, &*ml, nullptr, *u0, *ub, backend,
+                            ml_optim_options(), who);
+      if (rml && rml->x.allFinite() && std::isfinite(rml->fmin)) {
+        *u0 = rml->x;
+        (*s)->start_used = "canonical (via ML)";
+      }
+    }
+  }
   const Eigen::VectorXd theta0 = expand_u(**s, *u0);
   if (gls) {
     auto W = gmm::normal_theory_weight(*ev, samp, theta0);
@@ -619,9 +781,6 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto prob = gmm::residuals(*ev, samp, theta0, weight);
   if (!prob) return std::unexpected(prob.error());
   const optim::ScalarProblem internal_obj = optim::scalarize(*prob);
-  const optim::ParameterMap map = make_map(*s);
-  auto ub = driven_bounds(**s, bounds, *u0, who);
-  if (!ub) return std::unexpected(ub.error());
   auto r = run_driven(**s, map, nullptr, &*prob, *u0, *ub, backend, opts, who);
   if (!r) return std::unexpected(r.error());
   const Estimator est = gls ? Estimator::GLS
@@ -694,7 +853,7 @@ fit_fiml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   }
   const optim::ScalarProblem obj = fiml_objective(*ev, raw, *cache);
   const optim::ParameterMap map = make_map(*s);
-  auto u0 = start_u(**s, x0, who);
+  auto u0 = initial_u(**s, *start_samp, x0, sphere, who);
   if (!u0) return std::unexpected(u0.error());
   auto r = run_driven(**s, map, &obj, nullptr, *u0, Bounds{}, backend, opts, who);
   if (!r) return std::unexpected(r.error());
@@ -863,8 +1022,8 @@ fit_ml_psd_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   }
   auto s = build_setup(pt, rep, samp, {}, sphere, who);
   if (!s) return std::unexpected(s.error());
+  auto u0 = initial_u(**s, samp, x0, sphere, who);
   const auto& setup = **s;
-  auto u0 = start_u(setup, x0, who);
   if (!u0) return std::unexpected(u0.error());
   const Eigen::VectorXd theta0 = expand_u(setup, *u0);
   const spec::LatentStructure pt_c = constrained_internal_partable(setup);

@@ -48,6 +48,19 @@ enum class SphereMetric : std::uint8_t {
   Raw,       // sum_j lambda_j^2 = 1
 };
 
+enum class SphereStart : std::uint8_t {
+  // FABIN on the gauge-free model, each unit identified by a data-chosen
+  // marker (its indicator most correlated with the others). That model is the
+  // same for every identification of the user's model, so the start (and
+  // with it the sphere solution) does not depend on which identification the
+  // user wrote. Least-squares fits then start from the sphere ML solution
+  // (itself canonical). Falls back to `User` when the canonical model cannot
+  // be formed.
+  Canonical,
+  // The caller's user-chart `x0`, carried onto the sphere.
+  User,
+};
+
 struct SphereOptions {
   // rho in rho * (||beta||^2 - 1)^2, on the objective's 0.5 F scale. Affects
   // conditioning only.
@@ -65,6 +78,7 @@ struct SphereOptions {
   // are not chart invariant near a pole. When the polish errors, the
   // translated sphere solution is finalized as is.
   bool         polish = true;
+  SphereStart  start = SphereStart::Canonical;
 };
 
 struct SphereReport {
@@ -88,6 +102,10 @@ struct SphereReport {
   int                   polish_iterations = 0;
   double polish_shift = std::numeric_limits<double>::quiet_NaN();
   std::string           polish_error;
+  // "canonical", "canonical (via ML)" (least squares), "user", "user (no
+  // sphere latents)", or "user" with the reason the canonical start was
+  // unavailable.
+  std::string           start_used;
 };
 
 struct SphereFit {

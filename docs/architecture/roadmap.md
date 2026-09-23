@@ -229,7 +229,14 @@ report. Experiment 87 checks the R surface deterministically: 68
 fits of 37 models reproduce the ordinary results and lavaan, exact population
 moments are recovered in every identification that holds them and flagged in
 every one that does not, and translations between identifications match the
-direct fits. `reidentify` translates any
+direct fits. The driven start is canonical by default: FABIN on the gauge-free model,
+with each unit identified by its most inter-correlated indicator. That model
+is the same whichever identification the user wrote, so sphere solutions
+agree across identifications to optimizer precision. Least-squares fits start
+from the sphere ML solution, because without ML's log-determinant barrier the
+symmetric sphere lets LS reach points where a factor collapses onto one
+indicator (points the marker chart keeps at infinity). Explicit start values
+select the user's start instead. `reidentify` translates any
 fit between identifications of the same model (marker on any indicator, std.lv,
 effect coding) and refuses when the target partable describes another model.
 The `sphere_route` and `sphere_route_parity` test executables compile the

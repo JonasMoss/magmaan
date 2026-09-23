@@ -682,5 +682,103 @@ TEST_CASE("reidentify: a sphere fit's internal point maps back to the user estim
   REQUIRE(sph->user_chart);
   auto back = fr::reidentify(sph->report.internal_pt, sph->report.internal_theta, f.pt);
   REQUIRE_OK(back);
-  CHECK(max_abs_diff(back->theta, sph->estimates.theta) < 1e-9);
+  // The internal point is the sphere optimizer's; the estimate is polished in
+  // the user chart, which moves it within optimizer tolerance.
+  CHECK(max_abs_diff(back->theta, sph->estimates.theta) < 1e-6);
+  CHECK(sph->report.polish_shift < 1e-6);
+}
+
+TEST_CASE("sphere start: the canonical start makes the fit identification-invariant") {
+  // One model under four identifications. The canonical start is the same
+  // point for all four, so the sphere solutions coincide, and translating the
+  // marker fit into each identification reproduces that identification's fit.
+  BuildOptions std_lv;
+  std_lv.std_lv = true;
+  BuildOptions effect;
+  effect.effect_coding = true;
+  const std::string_view marker = "X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X";
+  const std::string_view marker2 =
+      "X =~ NA*x1 + 1*x2 + x3\n Y =~ NA*y1 + 1*y2 + y3\n Y ~ X";
+  std::vector<Fitted> fits;
+  fits.push_back(setup(marker, {two_factor_sigma()}));
+  fits.push_back(setup(marker2, {two_factor_sigma()}));
+  fits.push_back(setup(marker, {two_factor_sigma()}, std_lv));
+  fits.push_back(setup(marker, {two_factor_sigma()}, effect));
+  std::vector<fr::SphereFit> sph;
+  for (auto& f : fits) {
+    auto r = fr::fit_ml_sphere(f.pt, f.rep, f.samp, f.x0);
+    REQUIRE_OK(r);
+    REQUIRE(r->user_chart);
+    CHECK(r->report.start_used == "canonical");
+    sph.push_back(std::move(*r));
+  }
+  // The driven start and so the sphere solution agree up to the orientation
+  // of each unit's coordinates, which the optimizer does not see. Compare by
+  // partable row (the internal free indices are ordered differently).
+  auto sphere_rows = [](const fr::SphereFit& x) {
+    return fr::row_values(x.report.internal_pt, x.report.internal_theta);
+  };
+  const Eigen::VectorXd ref = sphere_rows(sph[0]);
+  for (std::size_t k = 1; k < sph.size(); ++k) {
+    const Eigen::VectorXd rk = sphere_rows(sph[k]);
+    double worst = 0.0;
+    for (Eigen::Index i = 0; i < std::min(ref.size(), rk.size()); ++i) {
+      if (sph[0].report.internal_pt.is_constraint_row(static_cast<std::size_t>(i)))
+        continue;
+      if (std::isfinite(ref(i)) && std::isfinite(rk(i)))
+        worst = std::max(worst, std::abs(std::abs(rk(i)) - std::abs(ref(i))));
+    }
+    CHECK(worst < 1e-10);
+  }
+  for (std::size_t k = 1; k < fits.size(); ++k) {
+    auto moved = fr::reidentify(sph[0].report.internal_pt,
+                                sph[0].report.internal_theta, fits[k].pt);
+    REQUIRE_OK(moved);
+    CHECK(max_abs_diff(moved->theta, sph[k].estimates.theta) < 1e-6);
+  }
+
+  // The user start remains available and is reported as such.
+  fr::SphereOptions user;
+  user.start = fr::SphereStart::User;
+  auto r = fr::fit_ml_sphere(fits[3].pt, fits[3].rep, fits[3].samp, fits[3].x0, {},
+                             magmaan::estimate::Backend::NloptLbfgs,
+                             magmaan::estimate::ml_optim_options(), user);
+  REQUIRE_OK(r);
+  CHECK(r->report.start_used == "user");
+}
+
+TEST_CASE("sphere start: least squares starts from the sphere ML solution") {
+  auto f = setup("X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X",
+                 {two_factor_sigma()});
+  auto gls = fr::fit_gls_sphere(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(gls);
+  CHECK(gls->report.start_used == "canonical (via ML)");
+  auto ord = magmaan::estimate::fit_gls(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(ord);
+  CHECK(gls->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-8));
+  auto uls = fr::fit_gmm_sphere(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(uls);
+  CHECK(uls->report.start_used == "canonical (via ML)");
+}
+
+TEST_CASE("sphere start: canonical in the reduced LISREL form (mean structure plus regression)") {
+  // With a mean structure and a structural regression the observed variables
+  // are phantom latents and loadings sit in Beta; the canonical start must
+  // still find each indicator's sample variance.
+  BuildOptions o;
+  o.meanstructure = true;
+  o.fixed_x = false;
+  const auto pt = lavaanify("X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X", o);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  SampleStats ss = stats({two_factor_sigma()});
+  ss.mean.push_back(Eigen::VectorXd::Zero(6));
+  auto x0 = magmaan::estimate::simple_start_values(pt, *rep, ss, {});
+  REQUIRE(x0.has_value());
+  auto r = fr::fit_ml_sphere(pt, *rep, ss, *x0);
+  REQUIRE_OK(r);
+  CHECK(r->report.start_used == "canonical");
+  auto ord = magmaan::estimate::fit_ml(pt, *rep, ss, *x0);
+  REQUIRE_OK(ord);
+  CHECK(r->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-8));
 }

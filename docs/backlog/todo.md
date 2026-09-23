@@ -2002,57 +2002,55 @@ Remaining work, tiered:
   too; FIML case 0014 is flat enough that the sweep uses a 1e-4 theta
   tolerance there (same objective to 1e-10). Found by experiment 87 and to
   settle before promotion:
-  - **Sphere-native start (land before the step-two simulation).** The only
+  - **Done 2026-09-23 — sphere-native (canonical) start.** The only
     effective dependence of the sphere route on how the user wrote the
-    identification is the start. `x0` comes from the user partable's start
-    policy (`scaled-fabin` for ML), and `start_u` carries it onto the sphere
-    with the same implied Sigma. Marker, std.lv and effect-coding starts are
-    different points on the same sphere problem.
-
-    **Orientation is not an issue.** Each unit's internal axes do come from
-    the user's constraints (`Q` is the QR of `D^-1 basis`). But with a shared
-    start, marker- and effect-coding-oriented fits agree to about 1e-15 under
-    L-BFGS, PORT and SLSQP (checked 2026-09-23), so the axes need no
-    canonicalizing.
-
-    **Evidence.**
-    - **Benign case.** With different starts, HS one-factor sphere solutions
-      differ by about 1e-8, which is optimizer tolerance.
-    - **Substantive case.** Experiment 87's two LS population misses (1 ULS,
-      1 GLS, in 32 each) stopped at non-global stationary points from one
-      identification's start, while the other three starts recovered the
-      population.
-
-    **What the default starts already do.** ML's `scaled-fabin` builds std.lv
-    FABIN starts and transports them into safe single-group marker models.
-    So on HS, marker, second-indicator marker and std.lv start from the same
-    point, while effect coding's start differs by 0.92. Everything else uses
-    native FABIN3 in the user's identification: ULS, GLS, WLS, FIML, and ML
-    models outside the safe-marker branch. On HS, FABIN3 gives std.lv a start
-    0.92 away from marker's. At experiment 87's two-group population, the
-    four identifications start at implied Sigmas 0.8 to 1.4 apart under both
-    policies. Both LS misses came from FABIN3 starts.
-
-    **Plan.** Generalize the transported-std.lv idea to every estimator,
-    identification and constrained or multi-group model, with the sphere as
-    the transport target. Compute starts on the gauge-free internal partable,
-    which is the same for every identification of a model. Use a data-driven loading
-    direction per unit (the leading eigenvector of the unit's standardized
-    indicator block, projected into `W` and onto the model's restrictions),
-    and derive the latent (co)variances and paths from it.
-
-    **Gates.**
-    - A property test: `reidentify(fit_sphere(marker), std.lv)` equals
-      `fit_sphere(std.lv)` over the golden corpus.
-    - The step-two simulation compares the native start against the current
-      one on success rates. If one canonical start is worse, use a small
-      fixed set of canonical starts, not the user's start, which would
-      reintroduce the dependence.
-
-    **Scope.** Invariance covers sphere units only. Passthrough latents keep
-    the user's identification by design, and whether a latent passes through
-    can depend on how the model is written (a second-order marker, for
-    example).
+    identification was the start. `x0` came from the user partable's start
+    policy and was carried onto the sphere, and marker, std.lv and
+    effect-coding starts were different points.
+    - **Orientation was checked and dropped.** Each unit's internal axes come
+      from the user's constraints, but with a shared start, marker- and
+      effect-coding-oriented fits agree to about 1e-15 under L-BFGS, PORT and
+      SLSQP.
+    - **What the start is now.** `SphereOptions::start = Canonical` (the
+      default) runs FABIN on the gauge-free internal model. Each unit there
+      is identified by a data-chosen marker, fixed in every tied block: the
+      unit's indicator with the largest sum of absolute correlations with
+      the others, never one the span excludes. That model is the same for
+      every identification.
+    - **Why a data-chosen marker.** Fixing a variance instead makes FABIN
+      reference the first indicator, which re-imports the marker pole: a
+      pure-noise first indicator sent GLS to a collapsed point under every
+      identification.
+    - **Least squares starts from sphere ML.** ULS, GLS and WLS then start
+      from the sphere ML solution, which is canonical too.
+      - **Why.** LS has no log-determinant barrier. On the sphere every
+        indicator is equally reachable, including points where a factor
+        collapses onto one indicator with a Heywood residual. The marker
+        chart keeps collapse onto a non-marker indicator at infinity.
+      - **Evidence.** From FABIN, sphere GLS on two-group HS stopped at such
+        a point (fmin 0.182 against 0.163), with either start. From the ML
+        solution it reaches 0.163. The golden `0002_multigroup_3f_school`
+        GLS now passes through the sphere.
+    - **Staged refinement.** The sphere run uses the caller's tolerances,
+      then refines from that solution two orders tighter. The refinement is
+      kept only if it succeeds without raising the objective.
+      - **Why.** The polish cannot improve a point that already meets the
+        ordinary stopping rule. The HS real-data ML golden needed the
+        refinement to stay within 1e-6.
+      - **Why staged.** Tight tolerances from the start raised the Ernst
+        N = 20 error rate from 5% to 14%.
+    - **Fallback.** Explicit `start()` values or `control$start` select the
+      user start. `fit$gauge$start` records which start was used.
+    - **Evidence (experiment 87 rerun).**
+      - Sphere ML, ULS and GLS recover 24/24 populations in the
+        identifications that hold them. PSD recovers 21/21.
+      - The earlier user-start run missed once each in ULS and GLS.
+      - All population translations are correct.
+      - Across four identifications, sphere solutions agree to 1e-14, and
+        to 5e-7 on the flat PoliticalDemocracy objective, whose objective
+        values agree to 3e-12.
+    - **Scope.** Invariance covers sphere units only. Passthrough latents
+      keep the user's identification by design.
   - **Bounds switch the sphere off.** `bounds = "standard"` box-bounds every
     loading, so every latent stays in the user's chart. Decide whether sphere
     fits translate loading boxes (they are not scale-invariant) or document
@@ -2062,8 +2060,7 @@ Remaining work, tiered:
     the FC-SEM route (`magmaan_fcsem()`), which has no sphere. A default
     needs either those siblings or a documented ordinary-route fallback.
 - **v1, M. Step two: an Ernst-type simulation across estimators.** This
-  follows experiment 87, and the sphere-native start should land first so
-  the run measures the version that would be promoted.
+  follows experiment 87 and uses the canonical start.
   - **Designs:**
     - the Ernst SEM and CFA forms (3 indicators, loadings 1/.8/.6, beta in
       {0, .25, .5});

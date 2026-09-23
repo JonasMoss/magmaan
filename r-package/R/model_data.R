@@ -1384,11 +1384,13 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
                                 metric = c("unit_free", "raw"),
                                 pin_weight = 1, pole_tol = 1e-6,
                                 polish = TRUE,
+                                start = c("canonical", "user"),
                                 start_eigen_floor = 1e-6,
                                 feasibility_tol = 1e-6,
                                 preconditioning = c("none", "diagonal")) {
   missing <- match.arg(missing)
   metric <- match.arg(metric)
+  start <- match.arg(start)
   preconditioning <- match.arg(preconditioning)
   estimator <- toupper(as.character(estimator)[1L])
   allowed <- c("ML", "ULS", "GLS", "WLS", "FIML")
@@ -1425,7 +1427,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
       partable_arg(spec), fiml_data_arg(data),
       optimizer = optimizer %||% "nlopt-lbfgs-slsqp-fallback",
       control = control, metric = metric, pin_weight = pin_weight,
-      pole_tol = pole_tol, polish = isTRUE(polish))
+      pole_tol = pole_tol, polish = isTRUE(polish), start = start)
   } else {
     if (is.data.frame(data)) {
       data <- df_to_data(data, spec, group = group_var, missing = missing)
@@ -1438,7 +1440,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
       pole_tol = pole_tol, start_eigen_floor = start_eigen_floor,
       feasibility_tol = feasibility_tol,
       diagonal_preconditioning = identical(preconditioning, "diagonal"),
-      polish = isTRUE(polish))
+      polish = isTRUE(polish), start = start)
   }
   if (identical(fit$user_chart, FALSE)) {
     .stop_user_chart_singular(fit$gauge, spec, "frontier_fit_sphere")
@@ -1448,7 +1450,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
   fit$options$chart <- "sphere"
   fit$options$chart_options <- list(
     psd = isTRUE(psd), metric = metric, pin_weight = pin_weight,
-    pole_tol = pole_tol, polish = isTRUE(polish),
+    pole_tol = pole_tol, polish = isTRUE(polish), start = start,
     optimizer = optimizer, control = control,
     bounds = bounds, W = W, groups = groups)
   fit

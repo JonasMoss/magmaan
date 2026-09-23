@@ -148,3 +148,24 @@ test_that("unsupported inputs are refused, not fitted in the user chart", {
   expect_error(frontier_fit_sphere(ernst, dat, estimator = "ULS", psd = TRUE),
                "supports estimator = 'ML' only")
 })
+
+test_that("the canonical start gives one sphere solution for every identification", {
+  dat <- ernst_sim(n = 150L)
+  m2 <- "X =~ NA*x1 + 1*x2 + x3\n Y =~ NA*y1 + 1*y2 + y3\n Y ~ X"
+  fits <- list(marker = frontier_fit_sphere(ernst, dat),
+               marker2 = frontier_fit_sphere(m2, dat),
+               std_lv = frontier_fit_sphere(ernst, dat, std_lv = TRUE),
+               effect = frontier_fit_sphere(ernst, dat, effect_coding = TRUE))
+  for (f in fits) expect_identical(f$gauge$start, "canonical")
+  sphere_abs <- function(f) {
+    p <- f$gauge$sphere_partable
+    abs(p$est[p$free > 0 & p$op != "=="][order(paste(p$lhs, p$op, p$rhs)[p$free > 0 & p$op != "=="])])
+  }
+  for (f in fits[-1]) expect_equal(sphere_abs(f), sphere_abs(fits$marker), tolerance = 1e-9)
+  moved <- frontier_reidentify(fits$marker, ernst, std_lv = TRUE)
+  expect_equal(moved$theta, fits$std_lv$theta, tolerance = 1e-6)
+  # Explicit start values are in the user's identification: user start.
+  hinted <- frontier_fit_sphere("X =~ x1 + start(0.8)*x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X", dat)
+  expect_identical(hinted$gauge$start, "user")
+  expect_identical(frontier_fit_sphere(ernst, dat, start = "user")$gauge$start, "user")
+})
