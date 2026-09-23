@@ -46,6 +46,25 @@ semantics · **XL** statistical design/research track before implementation.
   retries on optimizer failure/non-clean status, not every failed model-level
   stationarity verdict. Do not substitute PSD fitting for ordinary optimization
   when diagnosing this numerical failure: that changes the feasible set.
+  - **Clean reproduction (2026-09-23): Little's polynomial bullying growth
+    model** (30 indicators, 16 latents, effect coding, higher-order growth;
+    the covariance-honest-sem example).
+    - **Setup.** Samples drawn from its accepted PSD population.
+    - **Failure.** Default ML converges on the raw data. Multiplied by 3,
+      the data fail on all 40 samples tried (N = 50 to 1132), with
+      LineSearchFailed after 12 evaluations at the start objective. Factors
+      2, 5 and 10 fail too on the one N = 300 sample tried.
+    - **Others succeed.** lavaan (nlminb) and magmaan PORT converge on the
+      ten ×3 samples at N = 300. SLSQP and the L-BFGS-to-SLSQP fallback
+      converge on all 40 standardized samples, where default ML fails on
+      all 40.
+    - **The start is not scale-equivariant.** All 16 latent variances start
+      at the constant 0.05 under every policy (scaled-fabin, fabin3,
+      simple). The start objective grows from 43 (×1) to 200 (×10), while
+      the optimum stays 0.64.
+    - **Fixes to consider.** Scale constant latent-variance starts to the
+      data, and fix the domain recovery above. The paper's pre-refresh bank
+      (all 700 L-BFGS fits failing) was probably the same edge.
 - **High priority / M — regular-interior curvature diagnostics for the
   full-model audit.** Author priority (2026-09-21): implement and understand
   regular identifiable interiors first; defer PSD-boundary extensions;
@@ -2075,6 +2094,31 @@ Remaining work, tiered:
     2+ latent means stay fixed, npar 60 against lavaan's 63). Invariance
     users are a main audience of a sphere default, and experiment 87 had to
     free those means by hand.
+  - **The driven run drops the ML coordinate scaling (bug, 2026-09-23).**
+    `fit_ml_sphere` sets `ml_sample_scaling = false` for the driven problem,
+    while `fit_ml` scales the constraint-reduced coordinates by
+    `ml_coordinate_scale`.
+    - **Evidence.** On Little's bullying growth model, the sphere route with
+      default L-BFGS failed on all 40 raw-data samples tried (N = 50 to
+      1132). The ordinary route converged on all of them. The model has no
+      sphere units, so both routes solve the same problem.
+    - **Why the scaling is the likely cause.** On a standardized sample,
+      where the scaling is nearly the identity, both routes fail at the
+      same objective. On the raw sample the sphere route converges with
+      SLSQP or PORT.
+    - **Fix.**
+      - With no units, run the ordinary fit and attach the report.
+      - Otherwise scale the rest coordinates by `ml_coordinate_scale` of
+        the internal model, leaving the unit directions unscaled.
+    - **Gate.** Sphere-route and ordinary-route convergence agree on models
+      without units.
+  - **Models outside the v1 analyzer.** In the bullying growth model all 16
+    latents pass through:
+    - the five wave factors per process share loading labels across
+      latents within one group;
+    - the growth factors load on latents.
+    Supporting it needs a unit spanning several tied latents together with
+    their higher-order factors (literature scope below).
   - **Multiple local optima (probe of 2026-09-23).** Single-start success
     is overstated when judged against the best of a few fits.
     `papers/global-gauge-sem/work/probes/psd_multistart.R` reruns the Ernst
@@ -2104,10 +2148,16 @@ Remaining work, tiered:
       - Unverified whether those better points are local minima or ridge
         points where no ML optimum exists.
       - At N = 10, no fit from any start converged in 14 to 15% of draws.
-    - **Decide.** Is a single-start miss rate acceptable for a default? The
-      marker route misses more, so it is no regression. Should sphere fits
-      get an opt-in multistart (random free-sign starts, best objective)?
-      For PSD a face-aware start is a research question.
+    - **Parked (author, 2026-09-23).** Global optimality is a later,
+      separate question. Experiment 88 judges convergence to a local
+      optimum. The probe stays in the paper repo as the seed of a future
+      experiment. When it is picked up, decide:
+      - whether a single start's miss rate is acceptable for a default
+        (the marker route misses more);
+      - whether sphere fits get an opt-in multistart (random free-sign
+        starts, best objective);
+      - for PSD, whether a face-aware start is feasible (a research
+        question).
 - **v1, M. Step two: an Ernst-type simulation (experiment 88).** This
   follows experiment 87 and uses the canonical start.
   - **Designs:**
@@ -2124,15 +2174,15 @@ Remaining work, tiered:
       collapse points showed up there. PSD-ML, ULS and FIML drop out of
       the grid.
     - marker and std.lv identifications.
-  - **Outcomes, per draw:**
-    - error;
-    - success, meaning convergence at the best objective of a 20-start
-      random free-sign multistart plus every route's own fit. The
-      multistart probe above shows that a best-of-routes reference
-      overstates success.
-    - for ML, the type of the best point (interior local minimum or a ridge
-      toward nonexistence), classified before a miss is counted;
-    - a silent wrong answer (reported converged, worse than the best);
+  - **Outcomes, per draw.** The first business is convergence to a local
+    optimum, not global optimality (author, 2026-09-23). Success means
+    reaching a certified local optimum:
+    - no error;
+    - the domain-specific stationarity audit passes;
+    - either in the user's chart or correctly flagged outside it.
+    Also recorded:
+    - the error type (line search, iteration limit, nonexistence ridge);
+    - a silent wrong answer (reported converged, audit fails);
     - flagged outside the identification;
     - largest parameter and wall time.
     - For LS, how often the sphere and ordinary fits land in different basins
@@ -2141,7 +2191,8 @@ Remaining work, tiered:
     with Modal or Saga if the grid needs it.
 - **Literature scope.** PSD LS/FIML siblings, ML2S, multi-information penalty,
   two-level slots, higher-order loadings when the lower-order factor is itself
-  a unit, partial invariance via nested spheres, SNLLS (sphere in the nonlinear
+  a unit, units spanning several latents tied within a group (longitudinal
+  invariance, as in Little's bullying growth model), partial invariance via nested spheres, SNLLS (sphere in the nonlinear
   block), ordinal, sphere-chart Wald SEs through the constrained information.
 - **Research questions.** Closure of translated nonlinear restrictions,
   Henseler-Ogasawara composites under the sphere, existence for SNLLS on the
