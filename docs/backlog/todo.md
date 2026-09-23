@@ -2094,24 +2094,49 @@ Remaining work, tiered:
     2+ latent means stay fixed, npar 60 against lavaan's 63). Invariance
     users are a main audience of a sphere default, and experiment 87 had to
     free those means by hand.
-  - **The driven run drops the ML coordinate scaling (bug, 2026-09-23).**
-    `fit_ml_sphere` sets `ml_sample_scaling = false` for the driven problem,
-    while `fit_ml` scales the constraint-reduced coordinates by
-    `ml_coordinate_scale`.
-    - **Evidence.** On Little's bullying growth model, the sphere route with
-      default L-BFGS failed on all 40 raw-data samples tried (N = 50 to
-      1132). The ordinary route converged on all of them. The model has no
-      sphere units, so both routes solve the same problem.
-    - **Why the scaling is the likely cause.** On a standardized sample,
-      where the scaling is nearly the identity, both routes fail at the
-      same objective. On the raw sample the sphere route converges with
-      SLSQP or PORT.
-    - **Fix.**
-      - With no units, run the ordinary fit and attach the report.
-      - Otherwise scale the rest coordinates by `ml_coordinate_scale` of
-        the internal model, leaving the unit directions unscaled.
-    - **Gate.** Sphere-route and ordinary-route convergence agree on models
-      without units.
+  - **Done 2026-09-23 — the driven ML run is scaled like `fit_ml`.**
+    - **The bug.** `fit_ml_sphere` switched off the sample-based coordinate
+      scaling for its driven problem, while `fit_ml` scales the
+      constraint-reduced coordinates by `ml_coordinate_scale`.
+    - **Evidence.** On Little's bullying growth model, which has no sphere
+      units, the sphere route with default L-BFGS failed on all 40 raw-data
+      samples tried (N = 50 to 1132). The ordinary route converged on all.
+    - **The fix.** The driven run now takes the same scale for the rest
+      coordinates, read off `ml_coordinate_scale` of the internal model per
+      kernel column. Unit directions stay unscaled. The scale applies under
+      the same conditions as in `fit_ml`, and it also covers the ML stage of
+      the least-squares fits.
+      - The point, gradient norm and terminal audit are reported in
+        unscaled coordinates. `SphereReport::driven_scaled` and
+        `fit$gauge$driven_scaled` record the choice.
+      - The bullying sphere route now converges on all 40 samples.
+    - **Test.** `gauge_test` has a three-wave effect-coded growth model with
+      no units. At data scale 0.1 the unscaled driven run fails, while the
+      scaled one matches `fit_ml`.
+    - **Unchanged elsewhere.**
+      - Experiment 87 is unchanged: recovery 68/68 and every population
+        recovered or flagged. Cross-identification agreement is 1e-12, and
+        1e-7 on PoliticalDemocracy, where it was 6e-7.
+      - The Ernst probe moves by at most 2.5 points in any cell.
+      - Identifications now agree to about 5e-9 along the flattest
+        direction, with the same objective to 1e-15.
+  - **What the remaining Ernst ML errors are (2026-09-23).** At N = 10,
+    27 to 35.5% of sphere ML fits fail (a line-search error or an uncertified
+    stop), and 13.5 to 14% at N = 20. Of those 180 failures:
+    - 178 sit below the PSD-ML minimum, so the likelihood keeps improving
+      into the improper region;
+    - L-BFGS, SLSQP and PORT all fail on 163. The uncertified stops examined have
+      parameters up to 3.4e3. These are nonexistence ridges (structural
+      poles), which no chart removes and PSD-ML closes.
+    - PORT certifies 15, so those are optimizer failures.
+    - Against the unscaled run, 39 draws flipped from converged to failed
+      and 36 the other way, almost all on such ridges. Whether a ridge stop
+      certifies is a matter of the stopping rule.
+    - One case where a finite optimum exists and the sphere misses it:
+      N = 10, draw 125, SEM form. Ordinary ML converges to an improper
+      point (negative disturbance variance, largest parameter 2.8), and the
+      CFA form's sphere fit finds it too. The SEM form's sphere fit runs off
+      along a ridge at a higher objective.
   - **Models outside the v1 analyzer.** In the bullying growth model all 16
     latents pass through:
     - the five wave factors per process share loading labels across
@@ -2181,7 +2206,10 @@ Remaining work, tiered:
     - the domain-specific stationarity audit passes;
     - either in the user's chart or correctly flagged outside it.
     Also recorded:
-    - the error type (line search, iteration limit, nonexistence ridge);
+    - the error type. The protocol from the classification above: refit
+      with PORT and SLSQP; a certified optimum there means an optimizer
+      failure; otherwise an objective below the PSD-ML minimum with growing
+      parameters means a nonexistence ridge;
     - a silent wrong answer (reported converged, audit fails);
     - flagged outside the identification;
     - largest parameter and wall time.

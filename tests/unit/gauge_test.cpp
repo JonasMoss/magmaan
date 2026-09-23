@@ -782,3 +782,55 @@ TEST_CASE("sphere start: canonical in the reduced LISREL form (mean structure pl
   REQUIRE_OK(ord);
   CHECK(r->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-8));
 }
+
+namespace {
+
+// Three waves of an effect-coded factor with loadings tied across waves and
+// linear growth on the wave factors: no latent is a gauge unit (cross-latent
+// ties and higher-order loadings), so the sphere route drives the ordinary
+// problem. `c` rescales the data.
+Eigen::MatrixXd longitudinal_growth_sigma(double c) {
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(9, 3);
+  for (int t = 0; t < 3; ++t) L.block(3 * t, t, 3, 1) << 0.8, 1.0, 1.2;
+  Eigen::MatrixXd G(3, 2);
+  G << 1, 0, 1, 1, 1, 2;
+  Eigen::Matrix2d Phi;
+  Phi << 1.0, 0.1, 0.1, 0.2;
+  Eigen::MatrixXd PsiF = G * Phi * G.transpose();
+  PsiF.diagonal().array() += 0.3;
+  Eigen::MatrixXd S = L * PsiF * L.transpose();
+  S.diagonal().array() += 0.4;
+  return c * c * perturb(S, 0.03);
+}
+
+constexpr const char* longitudinal_growth_model =
+    "F1 =~ l1*a1 + l2*b1 + l3*c1\n"
+    "F2 =~ l1*a2 + l2*b2 + l3*c2\n"
+    "F3 =~ l1*a3 + l2*b3 + l3*c3\n"
+    "l1 + l2 + l3 == 3\n"
+    "i =~ 1*F1 + 1*F2 + 1*F3\n"
+    "s =~ 0*F1 + 1*F2 + 2*F3\n";
+
+}  // namespace
+
+TEST_CASE("sphere ML: without gauge units the driven run is scaled like fit_ml") {
+  // At c = 0.1 the unscaled driven run (ml_sample_scaling off) fails with an
+  // L-BFGS line-search error from this start, while fit_ml converges.
+  BuildOptions o;
+  o.auto_fix_first = false;
+  for (double c : {1.0, 0.1}) {
+    CAPTURE(c);
+    Fitted f = setup(longitudinal_growth_model, {longitudinal_growth_sigma(c)}, o);
+    auto x0 = magmaan::estimate::ml_start_values(f.pt, f.rep, f.samp);
+    REQUIRE(x0.has_value());
+    auto ord = magmaan::estimate::fit_ml(f.pt, f.rep, f.samp, x0->theta);
+    REQUIRE_OK(ord);
+    auto sph = fr::fit_ml_sphere(f.pt, f.rep, f.samp, x0->theta);
+    REQUIRE_OK(sph);
+    CHECK(sph->report.plan.units.empty());
+    CHECK(sph->report.driven_scaled);
+    CHECK(sph->report.driven_audit.stationary);
+    CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-9));
+    CHECK(max_abs_diff(sph->estimates.theta, ord->theta) < 1e-5 * c * c);
+  }
+}

@@ -2618,6 +2618,7 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
       Rcpp::_["optimizer_status"] = optim_status_to_r(report.optimizer_status),
       Rcpp::_["iterations"] = report.iterations,
       Rcpp::_["start"] = report.start_used,
+      Rcpp::_["driven_scaled"] = report.driven_scaled,
       Rcpp::_["polish"] = Rcpp::List::create(
           Rcpp::_["polished"] = report.polished,
           Rcpp::_["iterations"] = report.polish_iterations,

@@ -161,7 +161,13 @@ test_that("the canonical start gives one sphere solution for every identificatio
     p <- f$gauge$sphere_partable
     abs(p$est[p$free > 0 & p$op != "=="][order(paste(p$lhs, p$op, p$rhs)[p$free > 0 & p$op != "=="])])
   }
-  for (f in fits[-1]) expect_equal(sphere_abs(f), sphere_abs(fits$marker), tolerance = 1e-9)
+  # Same objective to rounding; parameters to optimizer precision along the
+  # flattest direction.
+  for (f in fits[-1]) {
+    expect_equal(f$gauge$fmin_sphere, fits$marker$gauge$fmin_sphere, tolerance = 1e-12)
+    expect_equal(sphere_abs(f), sphere_abs(fits$marker), tolerance = 1e-7)
+  }
+  for (f in fits) expect_true(f$gauge$driven_scaled)
   moved <- frontier_reidentify(fits$marker, ernst, std_lv = TRUE)
   expect_equal(moved$theta, fits$std_lv$theta, tolerance = 1e-6)
   # Explicit start values are in the user's identification: user start.

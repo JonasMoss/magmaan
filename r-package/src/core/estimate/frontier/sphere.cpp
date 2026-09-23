@@ -21,6 +21,7 @@
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/ml_numerics.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
@@ -552,10 +553,10 @@ run_driven_once(const SphereSetup& s, const optim::ParameterMap& map,
 // so the refinement is kept only when it succeeds without raising the
 // objective.
 fit_expected<optim::OptimResult>
-run_driven(const SphereSetup& s, const optim::ParameterMap& map,
-           const optim::ScalarProblem* scalar, const optim::GmmProblem* ls,
-           const Eigen::VectorXd& u0, const Bounds& ub, Backend backend,
-           OptimOptions opts, const char* who) {
+run_driven_stages(const SphereSetup& s, const optim::ParameterMap& map,
+                  const optim::ScalarProblem* scalar, const optim::GmmProblem* ls,
+                  const Eigen::VectorXd& u0, const Bounds& ub, Backend backend,
+                  OptimOptions opts, const char* who) {
   auto first = run_driven_once(s, map, scalar, ls, u0, ub, backend, opts, who);
   if (!first) return first;
   OptimOptions tight = opts;
@@ -572,6 +573,83 @@ run_driven(const SphereSetup& s, const optim::ParameterMap& map,
     return refined;
   }
   return first;
+}
+
+// The sample-based coordinate scaling fit_ml applies to its equality-reduced
+// ML problem (ml_coordinate_scale), carried to the driven coordinates. Each
+// rest coordinate takes the scale of its kernel column. Unit directions stay
+// unscaled: they live on the unit sphere of the unit-free metric already.
+// Empty wherever fit_ml would not scale either, so a model without gauge
+// units is driven exactly like the ordinary fit.
+Eigen::VectorXd driven_ml_scale(const SphereSetup& s, const model::MatrixRep& rep,
+                                const SampleStats& samp, const Bounds& bounds,
+                                Backend backend, const OptimOptions& opts) {
+  const bool supported = backend == Backend::NloptLbfgs ||
+                         backend == Backend::NloptSlsqp ||
+                         backend == Backend::NloptLbfgsSlsqpFallback;
+  if (!opts.ml_sample_scaling || !supported || s.nl_int.active() || s.n_u == 0 ||
+      (!bounds.empty() && s.con_int.group.empty()))
+    return {};
+  auto col = ml_coordinate_scale(s.pt_int, rep, s.con_int, samp);
+  if (!col) return {};
+  Eigen::VectorXd out = Eigen::VectorXd::Ones(s.n_u);
+  for (Eigen::Index k = 0; k < s.n_rest; ++k)
+    out(k) = (*col)(s.rest_cols[idx(static_cast<std::int32_t>(k))]);
+  return out;
+}
+
+// u = scale .* z.
+optim::ParameterMap scaled_map(const optim::ParameterMap& map,
+                               const Eigen::VectorXd& scale) {
+  optim::ParameterMap out;
+  out.n_param = map.n_param;
+  out.expand = [map, scale](const Eigen::VectorXd& z) {
+    return map.expand(scale.cwiseProduct(z));
+  };
+  out.jacobian = [map, scale](const Eigen::VectorXd& z) {
+    return Eigen::MatrixXd(map.jacobian(scale.cwiseProduct(z)) * scale.asDiagonal());
+  };
+  if (map.has_penalty()) {
+    out.penalty_residual = [map, scale](const Eigen::VectorXd& z) {
+      return map.penalty_residual(scale.cwiseProduct(z));
+    };
+    out.penalty_jacobian = [map, scale](const Eigen::VectorXd& z) {
+      return Eigen::MatrixXd(map.penalty_jacobian(scale.cwiseProduct(z)) *
+                             scale.asDiagonal());
+    };
+  }
+  return out;
+}
+
+// The staged driven fit, in scaled coordinates when `scale` is nonempty. The
+// returned point, gradient norm and terminal audit are in the unscaled
+// driven coordinates.
+fit_expected<optim::OptimResult>
+run_driven(const SphereSetup& s, const optim::ParameterMap& map,
+           const optim::ScalarProblem* scalar, const optim::GmmProblem* ls,
+           const Eigen::VectorXd& u0, const Bounds& ub, Backend backend,
+           OptimOptions opts, const char* who, const Eigen::VectorXd& scale = {}) {
+  if (scale.size() == 0)
+    return run_driven_stages(s, map, scalar, ls, u0, ub, backend, std::move(opts), who);
+  Bounds zb = ub;
+  if (!zb.empty()) {
+    zb.lower.array() /= scale.array();
+    zb.upper.array() /= scale.array();
+  }
+  auto r = run_driven_stages(s, scaled_map(map, scale), scalar, ls,
+                             u0.cwiseQuotient(scale), zb, backend, std::move(opts), who);
+  if (!r) return r;
+  r->x = scale.cwiseProduct(r->x);
+  const optim::ScalarProblem f = scalar
+      ? optim::reparameterize(*scalar, map)
+      : optim::scalarize(optim::reparameterize(*ls, map));
+  Eigen::VectorXd g;
+  const double fx = f.f(r->x, g);
+  const Eigen::VectorXd lower = ub.empty() ? Eigen::VectorXd::Constant(s.n_u, -kInf) : ub.lower;
+  const Eigen::VectorXd upper = ub.empty() ? Eigen::VectorXd::Constant(s.n_u, kInf) : ub.upper;
+  r->audit = optim::audit_terminal_iterate(f.f, r->x, fx, lower, upper);
+  r->grad_inf_norm = r->audit.grad_inf_norm;
+  return r;
 }
 
 using Finalizer =
@@ -683,8 +761,9 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto ub = driven_bounds(**s, bounds, *u0, who);
   if (!ub) return std::unexpected(ub.error());
   const OptimOptions user_opts = opts;
+  const Eigen::VectorXd scale = driven_ml_scale(**s, rep, samp, bounds, backend, user_opts);
   opts.ml_sample_scaling = false;
-  auto r = run_driven(**s, map, &*obj, nullptr, *u0, *ub, backend, opts, who);
+  auto r = run_driven(**s, map, &*obj, nullptr, *u0, *ub, backend, opts, who, scale);
   if (!r) return std::unexpected(r.error());
   const auto& pt_user = (*s)->pt_user;
   Finalizer finalize = [&](const Eigen::VectorXd& theta) {
@@ -693,7 +772,9 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   Finalizer polish = [&](const Eigen::VectorXd& theta) {
     return fit_ml(pt_user, rep, samp, theta, bounds, backend, user_opts);
   };
-  return finish(*s, x0, *r, *obj, finalize, polish, sphere, who);
+  auto out = finish(*s, x0, *r, *obj, finalize, polish, sphere, who);
+  if (out) out->report.driven_scaled = scale.size() > 0;
+  return out;
 }
 
 fit_expected<SphereProblem>
@@ -765,8 +846,9 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
     // (for example S not positive definite) the FABIN start stays.
     auto ml = ml_objective(*ev, samp);
     if (ml) {
-      auto rml = run_driven(**s, map, &*ml, nullptr, *u0, *ub, backend,
-                            ml_optim_options(), who);
+      const OptimOptions ml_opts = ml_optim_options();
+      auto rml = run_driven(**s, map, &*ml, nullptr, *u0, *ub, backend, ml_opts, who,
+                            driven_ml_scale(**s, rep, samp, bounds, backend, ml_opts));
       if (rml && rml->x.allFinite() && std::isfinite(rml->fmin)) {
         *u0 = rml->x;
         (*s)->start_used = "canonical (via ML)";

@@ -97,6 +97,10 @@ struct SphereReport {
   int                   g_evals = 0;
   double                grad_inf_norm = -1.0;
   optim::TerminalAudit  driven_audit = {};
+  // Whether the driven ML run used the sample-based coordinate scaling of
+  // fit_ml (rest coordinates only). Point, gradient and audit above are in
+  // unscaled driven coordinates either way.
+  bool                  driven_scaled = false;
   // User-chart polish: whether it ran, its iterations, the largest relative
   // parameter change it made, and its error message if it failed.
   bool                  polished = false;

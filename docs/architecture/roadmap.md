@@ -236,7 +236,10 @@ agree across identifications to optimizer precision. Least-squares fits start
 from the sphere ML solution, because without ML's log-determinant barrier the
 symmetric sphere lets LS reach points where a factor collapses onto one
 indicator (points the marker chart keeps at infinity). Explicit start values
-select the user's start instead. Every fit is still single-start and local.
+select the user's start instead. The driven ML run uses `fit_ml`'s
+sample-based coordinate scaling on the non-unit coordinates, so a model
+without gauge units is driven like the ordinary fit. Every fit is still
+single-start and local.
 On the Ernst N = 10 and 20 draws, PSD-ML has several optima on different
 boundary faces in 28 to 47% of draws. There, one canonical start misses the
 best optimum in 6.5 to 16.5% of draws (the marker route in 11 to 24%). Global
