@@ -2023,8 +2023,20 @@ Remaining work, tiered:
       identification's start, while the other three starts recovered the
       population.
 
-    **Plan.** Compute starts on the gauge-free internal partable, which is
-    the same for every identification of a model. Use a data-driven loading
+    **What the default starts already do.** ML's `scaled-fabin` builds std.lv
+    FABIN starts and transports them into safe single-group marker models.
+    So on HS, marker, second-indicator marker and std.lv start from the same
+    point, while effect coding's start differs by 0.92. Everything else uses
+    native FABIN3 in the user's identification: ULS, GLS, WLS, FIML, and ML
+    models outside the safe-marker branch. On HS, FABIN3 gives std.lv a start
+    0.92 away from marker's. At experiment 87's two-group population, the
+    four identifications start at implied Sigmas 0.8 to 1.4 apart under both
+    policies. Both LS misses came from FABIN3 starts.
+
+    **Plan.** Generalize the transported-std.lv idea to every estimator,
+    identification and constrained or multi-group model, with the sphere as
+    the transport target. Compute starts on the gauge-free internal partable,
+    which is the same for every identification of a model. Use a data-driven loading
     direction per unit (the leading eigenvector of the unit's standardized
     indicator block, projected into `W` and onto the model's restrictions),
     and derive the latent (co)variances and paths from it.
