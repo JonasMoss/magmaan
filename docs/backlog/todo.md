@@ -843,7 +843,11 @@ when they next change.
      the latent and residual-dependence layers), which keeps scale invariance
      and the barrier; see `docs/research/notes/multiinfo_barrier_family.md` for
      the layer identity, the admissible splits, and the wider family. Score
-     variants against experiment 86's stored posterior summaries (no MCMC). The path
+     variants against experiment 86's stored posterior summaries (no MCMC);
+     `scripts/determinacy.R` does this for the latent-determinacy barrier
+     `log det Var(eta | y)` (standardized latents: same barrier, slightly less
+     correlation shrinkage, same variance/correlation weight tension) and for
+     the two-weight barrier (the best tracker of the posterior mean). The path
      design (latent R^2) cells of experiment 86 are still to run
      (`run_experiment.R --full --resume`). Generalization to larger p,
      multi-group, and FIML with MAR missingness remains open.
