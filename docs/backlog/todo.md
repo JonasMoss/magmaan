@@ -2183,8 +2183,55 @@ Remaining work, tiered:
         starts, best objective);
       - for PSD, whether a face-aware start is feasible (a research
         question).
-- **v1, M. Step two: an Ernst-type simulation (experiment 88).** This
-  follows experiment 87 and uses the canonical start.
+- **Done 2026-09-23 — experiment 88, small version**
+  (`experiments/88-sphere-local-convergence`, about 35 s).
+  - **Setup.** ML only; the Ernst, weak-marker and high-R² populations;
+    N = 10 to 100; 200 replications. Ordinary and sphere routes, each under
+    marker and std.lv.
+  - **Success.** A certified local optimum, or on the sphere route a flagged
+    one with a stationary sphere run, whose standardized solution stays
+    within 10.
+  - **Results.**
+    - The two sphere columns agree within about one point.
+    - The sphere beats the ordinary marker route by up to 10 points (weak
+      marker). It is level with ordinary std.lv from N = 20 and up to 5.5
+      points ahead at N = 10.
+    - Most failures have no estimate to find. All four routes fail on the
+      same draw in up to 38.5% of Ernst draws and 61% of weak-marker draws
+      at N = 10, still 38% for the weak marker at N = 100.
+    - Optimizer failures (another optimizer finds a certified local
+      optimum) are rare: 51 draws for ordinary marker, 22 for sphere marker,
+      5 for ordinary std.lv and 21 for sphere std.lv, of 2400 each.
+    - Routes differ in how they fail on ridges. Ordinary marker errors. The
+      ordinary std.lv route reports convergence at a runaway point in up to
+      54% of draws. The sphere sits in between.
+    - With high R², the sphere flags 40 to 52% of draws at every N as lying
+      outside the std.lv identification. On 352 of those 366 draws, ordinary
+      std.lv reports a certified but worse local optimum: the best its
+      identification can reach.
+  - **Two issues found.** Both are listed below.
+- **v1, S. Sphere flags at runaway stops.** The
+  `magmaan_user_chart_singular` condition is raised without checking the
+  driven optimizer status. With PORT on the std.lv identification (Ernst
+  and weak-marker draws), stops reported as `noisy_objective`, with
+  sphere-chart parameters of 500 to 84,000, were flagged. Require a clean
+  or audited driven stop before flagging, and otherwise report
+  non-convergence. `fit$gauge$driven_stationary` now exposes the driven
+  audit.
+- **v1, M. Convergence verdicts accept runaway ridge points (both routes).**
+  In experiment 88, fits reported `converged = TRUE` while a standardized
+  loading, residual ratio or factor correlation exceeded 10, typically 30 to
+  1000.
+  - Ordinary std.lv: 31.5% of Ernst draws and 44.5 to 54% of weak-marker
+    draws.
+  - Sphere and ordinary marker routes: fewer.
+  The stationarity audit's relative tests pass far out on nonexistence
+  ridges. Decide whether the verdict (or a separate diagnostic) should
+  flag such stops. The measure is identification-free (the standardized
+  solution), and its distribution is bimodal, so a bound is easy to
+  choose.
+- **v1, M. Step two: expand experiment 88 to the full Ernst-type
+  simulation.** This follows experiment 87 and uses the canonical start.
   - **Designs:**
     - the Ernst SEM and CFA forms (3 indicators, loadings 1/.8/.6, beta in
       {0, .25, .5});
