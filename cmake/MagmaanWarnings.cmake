@@ -23,6 +23,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
       -Wdouble-promotion
       -Wformat=2
       -Wno-unknown-pragmas
+    >
+    # GCC 12 and 13 report false -Warray-bounds positives inside libstdc++'s
+    # std::string (memcpy in string_fortified.h), which -Werror turns fatal.
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,14>>:
+      -Wno-array-bounds
     >)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   target_compile_options(magmaan_warnings INTERFACE

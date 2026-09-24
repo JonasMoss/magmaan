@@ -42,17 +42,17 @@ GmmProblem reparameterize(const GmmProblem& prob, const ParameterMap& map) {
   auto stack_r = [map](const Eigen::VectorXd& u, Eigen::VectorXd r) {
     if (!map.has_penalty()) return r;
     const Eigen::VectorXd rp = map.penalty_residual(u);
-    Eigen::VectorXd out(r.size() + rp.size());
-    out << r, rp;
-    return out;
+    Eigen::VectorXd stacked(r.size() + rp.size());
+    stacked << r, rp;
+    return stacked;
   };
   auto stack_J = [map](const Eigen::VectorXd& u, const Eigen::MatrixXd& Jt) {
     Eigen::MatrixXd Ju = Jt * map.jacobian(u);
     if (!map.has_penalty()) return Ju;
     const Eigen::MatrixXd Jp = map.penalty_jacobian(u);
-    Eigen::MatrixXd out(Ju.rows() + Jp.rows(), Ju.cols());
-    out << Ju, Jp;
-    return out;
+    Eigen::MatrixXd stacked(Ju.rows() + Jp.rows(), Ju.cols());
+    stacked << Ju, Jp;
+    return stacked;
   };
 
   out.r = [r = prob.r, map, stack_r](

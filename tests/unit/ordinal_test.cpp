@@ -4840,8 +4840,8 @@ TEST_CASE("Ordinal stage-2 weights reuse observed Gamma and expose DLS endpoints
   const double nan = std::numeric_limits<double>::quiet_NaN();
   Eigen::MatrixXd X(24, 2);
   for (Eigen::Index r = 0; r < X.rows(); ++r) {
-    X(r, 0) = (r % 2) + 1;
-    X(r, 1) = ((r / 2) % 2) + 1;
+    X(r, 0) = static_cast<double>((r % 2) + 1);
+    X(r, 1) = static_cast<double>(((r / 2) % 2) + 1);
   }
   X(3, 0) = nan;
   X(7, 1) = nan;
@@ -6213,9 +6213,9 @@ TEST_CASE("Ordinal stats: empty marginal categories are explicit errors") {
 TEST_CASE("Ordinal stats: near-empty categories stay finite") {
   Eigen::MatrixXd X(200, 3);
   for (Eigen::Index r = 0; r < X.rows(); ++r) {
-    X(r, 0) = r == 0 ? 1 : (r + 1 == X.rows() ? 5 : 2 + (r % 3));
-    X(r, 1) = 1 + ((2 * r + r / 7) % 5);
-    X(r, 2) = 1 + ((3 * r + r / 11) % 5);
+    X(r, 0) = static_cast<double>(r == 0 ? 1 : (r + 1 == X.rows() ? 5 : 2 + (r % 3)));
+    X(r, 1) = static_cast<double>(1 + ((2 * r + r / 7) % 5));
+    X(r, 2) = static_cast<double>(1 + ((3 * r + r / 11) % 5));
   }
 
   auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
