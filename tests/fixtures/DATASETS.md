@@ -58,15 +58,38 @@ If you redistribute this repository, keep this file with it.
 - **License:** psych / psychTools are distributed under the GPL (>= 2). The SAPA
   / IPIP items are made freely available for research and teaching.
 
+### Demo.twolevel
+
+- **Fixtures:** `tests/fixtures/twolevel/` (the first 80 clusters, n = 1000;
+  see `tests/tools/regen_oracle_twolevel.R`).
+- **Source:** a simulated two-level demonstration dataset created by the lavaan
+  authors.
+- **Obtained from:** the `Demo.twolevel` data object in the lavaan R package.
+- **License:** lavaan is distributed under the GPL (>= 2).
+
+### semfindr `pa_dat`
+
+- **Fixtures:** `tests/fixtures/case_influence/path_pa.json` (n = 100, 4
+  observed variables). Its sibling `cfa_hs.json` uses HolzingerSwineford1939
+  (above).
+- **Obtained from:** the `pa_dat` example dataset in the
+  [semfindr](https://CRAN.R-project.org/package=semfindr) R package; see
+  `tests/tools/regen_semfindr_fixtures.R`.
+- **License:** semfindr is distributed under the GPL (>= 3).
+
 ## Fixtures that are *not* third-party data
 
 - **Synthetic fixtures.** `tests/fixtures/ordinal/`,
   `tests/fixtures/mixed_ordinal/`, and `tests/fixtures/score/` use data
   simulated specifically for these tests (descriptive case names, round sample
   sizes). They carry no third-party rights.
-- **Summary-statistic-only fixtures.** `tests/fixtures/textbook_corpus/` and
-  `tests/fixtures/paper_corpus/` carry only *derived* summary statistics
-  (`sample_cov`, `sample_mean`, fitted results) for their cases — never raw
-  casewise rows. The raw textbook corpora those statistics were computed from are
-  a private, optional dependency (see [`corpus/README.md`](../../corpus/README.md))
-  and are not included in this repository.
+- **Summary-statistic-only fixtures.** `tests/fixtures/little/`,
+  `tests/fixtures/newsom/`, `tests/fixtures/geiser/`,
+  `tests/fixtures/mplus_sem/`, `tests/fixtures/textbook_corpus/`, and
+  `tests/fixtures/paper_corpus/` carry model syntax, *derived* summary
+  statistics (`sample_cov`, `sample_mean`, `n_obs`) and fitted lavaan results
+  for their cases, never raw casewise rows. The textbook data those statistics
+  were computed from are publicly downloadable from the books' companion sites;
+  the original files live in the optional corpus mount (see
+  [`corpus/README.md`](../../corpus/README.md)), not in this repository.
+  `paper_corpus/` is derived from a public OSF project.

@@ -18,7 +18,9 @@ historical archaeology, not current guidance.
 - **C++23**, built with `-fno-exceptions -fno-rtti`. Eigen runs under
   `EIGEN_NO_EXCEPTIONS`. Failures are values: `std::expected<T, Error>`. The
   C++23 floor is carried by exactly that one feature — `std::expected` is the
-  error model — a deliberate single-feature dependency (GCC 13 / Clang 17).
+  error model — a deliberate single-feature dependency (GCC 13; Clang 19 with
+  libstdc++, Clang 17 with libc++; enforced by a compile probe in
+  `cmake/MagmaanCompilerCheck.cmake`).
 - **No virtual functions on the hot path.** Extension is via free function
   templates over structural (duck-typed) interfaces: `Discrepancy`,
   `Optimizer`, `StandardErrorMethod`, and `FitIndex` are documented
@@ -27,7 +29,7 @@ historical archaeology, not current guidance.
 - **Lavaan is the oracle.** Parser, partable, point estimates, SEs, and
   chi-square statistics match installed lavaan output to documented
   tolerances. New fixtures are regenerated via `tests/tools/regen_oracle.R`; CI
-  itself never invokes R. The rare exception: when lavaan (or another oracle) is
+  never runs lavaan, it only reads the checked-in fixtures. The rare exception: when lavaan (or another oracle) is
   *provably* wrong, do not gate against its output — gate transitively or by an
   independent reference, and record the case in
   [docs/validation/oracle-defects.md](docs/validation/oracle-defects.md) with

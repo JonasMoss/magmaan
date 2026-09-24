@@ -3481,11 +3481,24 @@ landed; remaining open items:
   [oracle-defects.md](../validation/oracle-defects.md): each must carry a
   calibration proof in the target regime or convert to a tracked bug. This raises
   the oracle-defects standard of proof.
-- **M, later.** Layer CI on top only after the local commands are useful: run
-  `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
-  parity/optional optimizer lanes less often, and coverage as an artifact before
-  considering badges. Avoid coverage-percentage gates until the report has been
-  calibrated by real maintenance work.
+- **M — grow CI past its first lanes.** `.github/workflows/ci.yml` runs the
+  layering check, vendor sync plus two R testthat files, a GCC 13 library
+  build, and a clang 19 (apt.llvm.org) Debug build with the full `ctest` on
+  ubuntu-24.04. Runs from 2026-06-02 on all failed: stock ubuntu-24.04 clang
+  18 cannot compile libstdc++'s `<expected>`, and two corpus golden checks
+  required the gitignored corpus mount. The workflow now takes clang 19 and
+  those checks skip without the mount. Remaining: `R CMD check` in place of the two hand-picked testthat
+  files, sanitizer validation on main or a schedule, heavy parity/optional
+  optimizer lanes less often, and coverage as an artifact before considering
+  badges. Avoid coverage-percentage gates until the report has been calibrated
+  by real maintenance work.
+- **S — export the two corpus-mount golden cases.** The at-θ implied-moment
+  checks for `newsom_2015_ex9_3` and `little_2013_ch3_fig_3_6_1indicator`
+  (`tests/golden/textbook_corpus_golden_test.cpp`) still read the optional
+  `corpus/textbook-corpus` mount and skip without it. They need no data, only
+  model syntax, options, and lavaan's θ and implied moments: add them to
+  `tests/tools/regen_textbook_case_fixtures.R` from a machine with the corpus
+  mounted and point the tests at the checked-in export.
 
 ## Simulation primitives
 
