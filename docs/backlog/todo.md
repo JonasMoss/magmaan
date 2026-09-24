@@ -226,6 +226,18 @@ semantics · **XL** statistical design/research track before implementation.
   compare standardized parameter/moment changes, and freeze targets before
   held-out model/unit/rank validation. Neither the existing two-model pilot
   nor this prioritization establishes a production convergence policy.
+- **M — the Newton verdict can pass points on a divergent path (found
+  2026-09-24).** When ordinary ML has no maximum (a uniqueness running to
+  minus infinity along a ray), the gradient and the curvature along the ray
+  both vanish, and d = sqrt(G' I^-1 G) tends to zero with distance along
+  it. A point far enough out passes d <= .01 although no optimum exists.
+  Seen in the covariance paper's factor-analysis examples: Emmett with five
+  factors, 1 of 16 L-BFGS starts passed at d = .008 with a communality of
+  33, and three more stopped at d = .014 to .018. The certificate is locally
+  true (the remaining improvement is tiny), but "converged" reads as
+  "attained". Consider an escape flag: an improper estimate with a parameter
+  norm far beyond the data scale, or a step history still moving along one
+  direction. Report it beside the verdict rather than folding it in.
 - **Done 2026-09-24 — make the Newton check part of the default
   convergence verdict (author, 2026-09-24).** Landed as specified below:
   complete-data ML paths (ordinary, equality-constrained, PSD, Fisher
