@@ -217,6 +217,13 @@ semantics · **XL** statistical design/research track before implementation.
   candidates independently of raw status.
   Deferred PSD work: dimensionless primal/dual/complementarity assessment,
   active-eigenvalue sensitivity, and metric projected-gradient alternatives.
+  The boundary verdict is still first-order only (cone residual <= 1e-3,
+  uncalibrated, no accuracy statement). A second-order analogue: fix the
+  numerical rank of each singular primitive block, compute the Newton
+  distance within that face (reduced Hessian of the Lagrangian on the face's
+  tangent space), and require the cone multipliers to have the right sign.
+  That would give boundary fits the same d <= .01 meaning as interior ones.
+  It changes the verdict, so papers pinning it would need a rerun.
   A bounded refined-reference smoke is now complete: 84 eligible natural
   endpoints and 56 local probes, all with reference d<=1e-8. At nominal .01,
   measured/predicted lengths agree within .42%, with tiny hard-threshold
