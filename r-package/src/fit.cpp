@@ -21,6 +21,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/evaluate.hpp"
+#include "magmaan/estimate/frontier/ml_psd_fallback.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
@@ -2527,6 +2528,85 @@ Rcpp::List frontier_fit_ml_psd_impl(
   Rcpp::List out = fit_result(ctx, est, &starts, "ML");
   out["ml_start_policy"] = start_policy;
   out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_ml_psd_fallback_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::String> ordinary_optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> psd_optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> ordinary_control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> psd_control = R_NilValue,
+    double start_eigen_floor = 1e-6, double feasibility_tol = 1e-6,
+    bool diagonal_preconditioning = true) {
+  namespace ef = magmaan::estimate::frontier;
+  auto parsed = partable_from_arg(partable, "frontier_fit_ml_psd_fallback");
+  auto starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(
+      std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  std::string start_policy = "scaled-fabin";
+  if (ordinary_control.isNotNull()) {
+    Rcpp::List ctl(ordinary_control.get());
+    if (ctl.containsElementNamed("start"))
+      start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
+          "frontier_fit_ml_psd_fallback", "scaled-fabin");
+  }
+  if (psd_control.isNotNull() && Rcpp::List(psd_control.get()).containsElementNamed("start"))
+    Rcpp::stop("set the initial start policy in ordinary_control; PSD uses the ordinary estimates or that original start");
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  ef::MlPsdFallbackOptions options;
+  options.ordinary_backend = backend_from_optimizer_arg(ordinary_optimizer);
+  if (psd_optimizer.isNotNull())
+    options.psd_backend = backend_from_optimizer_arg(psd_optimizer);
+  options.ordinary = optim_opts_from(ordinary_control, options.ordinary);
+  options.psd = optim_opts_from(psd_control, options.psd);
+  options.covariance.start_eigen_floor = start_eigen_floor;
+  options.covariance.feasibility_tol = feasibility_tol;
+  options.covariance.diagonal_preconditioning = diagonal_preconditioning;
+  const auto result = ef::fit_ml_psd_fallback(ctx.pt, ctx.rep, ctx.samp, x0, options);
+  auto attempt = [&](const magmaan::fit_expected<magmaan::estimate::Estimates>& value,
+                     bool psd) {
+    Rcpp::List row = Rcpp::List::create(
+        Rcpp::_["fit"] = R_NilValue, Rcpp::_["error"] = R_NilValue);
+    if (value.has_value()) {
+      Rcpp::List fit = fit_result(ctx, *value, &starts, "ML");
+      fit["ml_start_policy"] = psd && result.warm_start_used ? "ordinary-estimates" : start_policy;
+      if (psd) fit["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
+      row["fit"] = fit;
+    } else {
+      const auto& error = value.error();
+      row["error"] = Rcpp::List::create(
+          Rcpp::_["kind"] = fit_error_kind(error.kind),
+          Rcpp::_["detail"] = error.detail,
+          Rcpp::_["iterations"] = error.iterations,
+          Rcpp::_["f_value"] = error.f_value);
+    }
+    return row;
+  };
+  const char* reason = "none";
+  switch (result.reason) {
+    case ef::PsdFallbackReason::None: break;
+    case ef::PsdFallbackReason::OrdinaryError: reason = "ordinary-error"; break;
+    case ef::PsdFallbackReason::OrdinaryRejected: reason = "ordinary-rejected"; break;
+    case ef::PsdFallbackReason::OrdinaryInadmissible: reason = "ordinary-inadmissible"; break;
+  }
+  Rcpp::List ordinary = attempt(result.ordinary, false);
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["fit"] = R_NilValue,
+      Rcpp::_["converged"] = result.accepted_fit() != nullptr,
+      Rcpp::_["ordinary"] = ordinary,
+      Rcpp::_["psd"] = R_NilValue,
+      Rcpp::_["fallback_used"] = result.psd.has_value(),
+      Rcpp::_["fallback_reason"] = reason,
+      Rcpp::_["warm_start_used"] = result.warm_start_used);
+  if (result.psd.has_value()) {
+    Rcpp::List psd = attempt(*result.psd, true);
+    out["psd"] = psd;
+    if (result.accepted_fit()) out["fit"] = psd["fit"];
+  } else if (result.accepted_fit()) {
+    out["fit"] = ordinary["fit"];
+  }
   return out;
 }
 

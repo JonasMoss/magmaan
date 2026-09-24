@@ -799,6 +799,17 @@ when they next change.
   the ordinary `MatrixRep` finalizer and need a separate attachment decision.
 
 - **M — harden the frontier PSD-ML slice after the correctness seed.**
+  Completed 2026-09-24: an explicit core ordinary-first recovery entry point,
+  `estimate::frontier::fit_ml_psd_fallback`, with thin R wrapper
+  `frontier_fit_ml_psd_fallback()`. Accept ordinary L-BFGS only when accuracy
+  and admissibility pass; otherwise try PSD-SLSQP once, warm-starting from
+  usable ordinary estimates or using the original start after an error.
+  Both attempts and failure reasons remain inspectable; neither rejected
+  estimates nor failed PSD recovery are reported as accepted fits. Ordinary
+  defaults are unchanged. C++ branch/acceptance tests and the R example
+  cover the contract. Broader performance and reliability comparisons of
+  this policy remain separate empirical work.
+
   `estimate::frontier::fit_ml_psd` and R's `frontier_fit_ml_psd()` now solve
   complete-data ML with Cholesky-lifted `Theta`/`Psi` blocks through SLSQP; the
   compact gates cover an interior ordinary-ML equivalence, a deterministic

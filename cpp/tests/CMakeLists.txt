@@ -101,6 +101,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/port_optimizer_test.cpp
   unit/optimizer_crosscheck_test.cpp
   unit/psd_ml_test.cpp
+  unit/ml_psd_fallback_test.cpp
   unit/psd_ml_corpus_test.cpp
   unit/multiinfo_penalty_test.cpp
   unit/gauge_test.cpp

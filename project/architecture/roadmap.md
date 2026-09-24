@@ -77,8 +77,24 @@ Ordinary L-BFGS/SLSQP ML uses sample-derived equality-reduced scaling on
 supported constraints; PSD ML defaults to existing lifted information scaling
 and constraint tolerance 1e-8. Generic controls and explicit unscaled policies
 remain available. Search scaling is reported and terminal diagnostics are
-recomputed in original coordinates. No PSD recovery policy is added; see the
-optimizer-controls reference.
+recomputed in original coordinates; see the optimizer-controls reference.
+Explicit complete-data ML recovery is available as
+`estimate::frontier::fit_ml_psd_fallback` (header
+`estimate/frontier/ml_psd_fallback.hpp`) and R's
+`frontier_fit_ml_psd_fallback()`. It accepts ordinary L-BFGS only when the
+common fit verdict and covariance admissibility both pass; otherwise it
+runs PSD-SLSQP once. A finite ordinary return with PD implied covariance and
+satisfied model equalities supplies parameter starts, even if its accuracy
+check fails or primitive covariances are improper. Hard errors or unusable
+returns fall back to the original start. The PSD initializer projects factor
+starts, not final estimates; initial link equalities may be violated. The
+policy preserves both attempts as estimates or errors and returns no accepted
+fit if recovery fails its verdict/admissibility checks. R exposes the selected
+fit separately from the attempts, trigger reason, and warm-start flag. Both
+stages retain independent optimizer controls. Ordinary ML defaults and the
+separate ordinary L-BFGS-to-SLSQP backend remain unchanged. Focused C++/R
+gates cover skipping, improper warm recovery, ordinary errors, inaccurate
+ordinary returns, and failed recovery; this is not a global-optimality policy.
 Complete-data ML fits (ordinary, equality-constrained, PSD, Fisher scoring
 and IRLS; not penalized fits) carry the Newton accuracy check in
 `FitDiagnostics::newton_accuracy` (R `fit$diagnostics$newton_accuracy`):

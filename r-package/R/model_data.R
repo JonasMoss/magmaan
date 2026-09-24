@@ -1332,6 +1332,31 @@ frontier_fit_ml_psd <- function(
   attach_complete_raw_data(fit, data)
 }
 
+# Explicit ordinary-first PSD recovery; selection and warm-start policy live in C++.
+# fit is NULL unless an attempt passes both accuracy and admissibility checks.
+# Both attempts retain their fit or structured error, even when recovery fails.
+frontier_fit_ml_psd_fallback <- function(
+    model, data, ordinary_optimizer = "nlopt-lbfgs",
+    psd_optimizer = "nlopt-slsqp", ordinary_control = NULL, psd_control = NULL,
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
+    missing = c("listwise", "error"), preconditioning = c("diagonal", "none")) {
+  missing <- match.arg(missing)
+  preconditioning <- match.arg(preconditioning)
+  if (is.character(model) && length(model) == 1L) model <- model_spec(model)
+  if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
+  out <- frontier_fit_ml_psd_fallback_impl(
+    partable_arg(model), sample_stats_arg(data), ordinary_optimizer, psd_optimizer,
+    ordinary_control, psd_control, start_eigen_floor, feasibility_tol,
+    identical(preconditioning, "diagonal"))
+  for (stage in c("ordinary", "psd")) {
+    if (!is.null(out[[stage]]$fit))
+      out[[stage]]$fit <- attach_complete_raw_data(out[[stage]]$fit, data)
+  }
+  if (isTRUE(out$converged))
+    out$fit <- if (out$fallback_used) out$psd$fit else out$ordinary$fit
+  out
+}
+
 # Frontier complete-data ML plus the multi-information penalty
 # lambda * log det Corr(v_K), where v_K stacks the latent and observed variables
 # with a non-structurally-zero residual variance and lambda = eta - 1 (or

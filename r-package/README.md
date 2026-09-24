@@ -289,16 +289,34 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   mixed path for `estimator = "DWLS"` / `"WLS"` when `ordered =` is supplied
   with a data frame.
 - Complete-data covariance-honest ML uses `frontier_fit_ml_psd(model, data)`.
-  Its opt-in `preconditioning = "diagonal"` freezes separate expected-information
+  Its default `preconditioning = "diagonal"` freezes separate expected-information
   scales for original model coordinates and auxiliary covariance factors at the
   start. The returned partable, objective and PSD domain are unchanged, and
-  terminal audits run in original coordinates. The default remains `"none"`;
+  terminal audits run in original coordinates. Set `"none"` to disable scaling;
   this option is not exposed for other estimator families. Inspect
   `fit$psd_preconditioning` for the selected mode.
-  The recommended baseline is the default native starts and `nlopt-slsqp`
-  with no preconditioning. There is no automatic chart selection or targeted
+  The default uses transported std.lv FABIN starts where supported and
+  `nlopt-slsqp`. There is no automatic chart selection or targeted
   restart. A passing numerical verdict checks feasibility and stationarity;
   it does not certify a local or global optimum at singular boundaries.
+- `frontier_fit_ml_psd_fallback(model, data)` explicitly tries ordinary
+  L-BFGS first and accepts it only if both the common accuracy verdict and
+  covariance admissibility pass. Otherwise it runs PSD-SLSQP once. Finite
+  ordinary estimates with a valid implied covariance and satisfied model
+  equalities supply the warm start; after an error or unusable return it uses
+  the original initializer. A warm start transfers parameter values, not
+  optimizer state. PSD factor initialization repairs covariance starts; the
+  link equalities can initially be violated and are enforced during fitting.
+  The two stages have separate `ordinary_control` and `psd_control` lists
+  and `ordinary_optimizer` / `psd_optimizer` selections. Initial start-policy
+  selection belongs in `ordinary_control$start`.
+  Inspect `result$fit` for the accepted fit (NULL if neither attempt passes),
+  `converged`, `fallback_used`, `fallback_reason`, and `warm_start_used`.
+  `result$ordinary` and `result$psd` retain each attempt's `fit` or structured
+  `error`; `psd` is NULL if skipped. Parsing/data/start-construction errors
+  still raise ordinary R errors before the policy can run. This explicit
+  policy leaves `magmaan()` and ordinary ML defaults unchanged, and does not
+  add automatic post-fit inference.
 - Covariance-honest research fits are explicit. Use
   `frontier_fit_ml2s_psd()` for saturated-EM Stage 1 followed by PSD ML or a
   fixed ULS/DWLS/ADF/DLS Stage 2, and `frontier_fit_catml_psd()` for
