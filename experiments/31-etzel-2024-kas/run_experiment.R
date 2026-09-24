@@ -79,7 +79,7 @@ suppressPackageStartupMessages({
 })
 
 group_labels <- c("technicians", "chem_lab_assistants", "industrial_clerks")
-data_rel <- file.path("external", "paper_data", "Etzel-2024",
+data_rel <- file.path("external", "paper-downloads", "Etzel-2024",
                       "osfstorage-archive",
                       "2024_OSF_DATA_PK_KAS_VET_named.csv")
 data_path <- file.path(root, data_rel)
@@ -170,7 +170,7 @@ number_from_line <- function(line) {
 }
 
 parse_mplus_fit <- function(rel_path) {
-  path <- file.path(root, "external", "paper_data", "Etzel-2024",
+  path <- file.path(root, "external", "paper-downloads", "Etzel-2024",
                     "osfstorage-archive", rel_path)
   if (!file.exists(path)) {
     return(data.frame(mplus_file = rel_path, mplus_npar = NA_integer_,

@@ -8,7 +8,7 @@
 # measures (standardized, residuals, factor_scores, vcov, fit_measures,
 # parameter_table) apply. Derivations: the guttman-inference paper notes
 # (noniterative_cfa_tests, noniterative_fit_indices) and
-# docs/research/notes/guttman_cfa_asymptotics.tex.
+# guttman_cfa_asymptotics.tex.
 
 #' Estimate the diagonal of the Guttman H matrix.
 #'

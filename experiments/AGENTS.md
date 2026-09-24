@@ -19,9 +19,9 @@ or fixtures, but they are not themselves parity gates.
 references no paper and no other experiment. The only shared experiment sibling
 is `experiments/_support` (path / metadata / IO helpers, no SEM logic); an
 experiment may also consume the core library, `r-package`, `benchmarks`, and the
-`corpus/` submodule. To share statistical code, lift it into core, the
+optional textbook corpus. To share statistical code, lift it into core, the
 `r-package`, or `experiments/_support` - never `source()`/`sys.source()` another
-experiment or a paper. Enforced by `tests/tools/check_layering.sh`
+experiment or a paper. Enforced by `cpp/tests/tools/check_layering.sh`
 (`just check-layering`).
 
 ## Index And Lifecycle
@@ -235,5 +235,5 @@ cost-aware when optimizer or simulation work is involved, and separate
 statistical conclusions from engineering diagnostics.
 
 When a finding changes implementation state, validation expectations, or the
-active backlog, update `docs/architecture/roadmap.md` or
-`docs/backlog/todo.md` as appropriate.
+active backlog, update `project/architecture/roadmap.md` or
+`project/backlog/todo.md` as appropriate.

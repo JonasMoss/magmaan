@@ -4,8 +4,8 @@ root := "../.."
 build_dir := "build"
 bin := build_dir / "ordinal_dwls_profile_lrt_sim"
 cxx := env_var_or_default("CXX", "clang++")
-libdir := root / "build/opt"
-eigen := root / "build/fast/_deps/eigen3-src"
+libdir := root / "cpp/build/opt"
+eigen := root / "cpp/build/fast/_deps/eigen3-src"
 
 default:
     @just --list

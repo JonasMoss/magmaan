@@ -1,0 +1,1414 @@
+#pragma once
+
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/expected.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/measures/fit_measures.hpp"
+#include "magmaan/optim/problem.hpp"
+#include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/start_values.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
+
+namespace magmaan::estimate {
+struct WeightedProfileRMSEAResult;
+struct WeightedProfileLRTResult;
+struct CasewiseInfluenceIJ;
+struct WeightedMomentRBMParts;
+}  // namespace magmaan::estimate
+
+namespace magmaan::estimate::fiml {
+
+using data::RawData;
+using data::SampleStats;
+using estimate::Estimates;
+using estimate::EqConstraints;
+using estimate::build_eq_constraints;
+using estimate::resolve_fixed_x_from_sample;
+using estimate::simple_start_values;
+using measures::BaselineFit;
+
+struct FIMLPattern {
+  std::size_t block = 0;
+  std::vector<Eigen::Index> observed;
+  std::int64_t n_obs = 0;
+  Eigen::VectorXd mean;
+  Eigen::MatrixXd cov;
+};
+
+struct FIMLCache {
+  std::vector<FIMLPattern> patterns;
+  std::vector<Eigen::Index> sigma_offsets;
+  std::vector<Eigen::Index> mu_offsets;
+  std::vector<Eigen::Index> block_p;
+  std::int64_t n_total = 0;
+};
+
+// The cross-call FIML pack: the immutable pattern cache plus the
+// pairwise-complete start statistics that every post-fit helper needs. Build
+// once per dataset via `fiml_pack` and thread through the pack overloads
+// below; the raw-only signatures rebuild it internally on every call.
+struct FIMLPack {
+  FIMLCache cache;
+  SampleStats start_stats;
+};
+
+struct FIMLH1Options {
+  int    max_iter = 10000;
+  // Lavaan-style absolute max update in the saturated H1 parameters
+  // (mu, vech(Sigma)). This is the primary EM convergence gate because the
+  // resulting moments are reused by downstream robust tests and fit measures.
+  double parameter_tol = 1e-5;
+  // Objective-change tolerance is tracked as a diagnostic only; objective
+  // flatness is not enough to declare the saturated moments converged.
+  double objective_tol = 1e-6;
+  double covariance_floor = 1e-6;
+  double covariance_warn = 1e-5;
+  bool   error_on_nonconvergence = true;
+};
+
+// Saturated (H1) EM moments plus the converged H1 objective value, computed
+// by one EM run per block via `fiml_h1_moments` and shared by every post-fit
+// consumer (likelihood accounting, SRMR, robust traces, saturated
+// information). `value` is the per-observation-averaged observed-pattern H1
+// deviance kernel; `mu`/`sigma` are the per-block EM moments (complete-data
+// blocks carry the sample moments).
+struct FIMLH1 {
+  std::vector<Eigen::VectorXd> mu;
+  std::vector<Eigen::MatrixXd> sigma;
+  std::vector<std::string> warnings;
+  double value = 0.0;
+};
+
+struct FIMLValueGradient {
+  double value = 0.0;
+  Eigen::VectorXd gradient;
+};
+
+struct FIMLExtras {
+  double       logl              = 0.0;
+  double       unrestricted_logl = 0.0;
+  double       chi2              = 0.0;
+  double       aic               = 0.0;
+  double       bic               = 0.0;
+  double       bic2              = 0.0;
+  // Bentler-type SRMR of the model-implied moments against the FIML
+  // saturated (H1, EM) moments — the missing-data analogue of the
+  // complete-data `fit_extras().srmr`.
+  double       srmr              = 0.0;
+  int          npar              = 0;
+  std::int64_t ntotal            = 0;
+};
+
+// Saturated (H1) ML/EM moments under missingness, packaged as a
+// methods-developer surface for the Savalei-Bentler (2009) two-stage approach.
+// Per block, η_b = (μ_b, vech(Σ_b)) with column-major lower-triangle vech (the
+// same layout `fiml_saturated_scores_block` and `robust::casewise_contributions`
+// use with `include_means = true`). The block-stacked η has
+// `Σ_b (p_b + p_b·(p_b+1)/2)` entries; `H` and `J` are block-diagonal across
+// blocks because multi-group observations are independent.
+//
+// Convention: `H` and `J` are reported in *log-likelihood* (not deviance) units.
+//   H_b = -∂² logL_b / ∂η_b ∂η_bᵀ  (summed over rows of block b)
+//   J_b = Σ_r (∂logL_r / ∂η_b)(∂logL_r / ∂η_b)ᵀ
+//   acov = H⁻¹ J H⁻¹ — the sandwich asymptotic covariance of η̂_S; in finite
+//   samples it carries 1/n_total units, matching the standard
+//   `√n (η̂_S - η_S) → N(0, n·acov)` interpretation.
+struct SaturatedMoments {
+  std::vector<Eigen::VectorXd> mean;   // μ̂_S per block (size p_b)
+  std::vector<Eigen::MatrixXd> cov;    // Σ̂_S per block (p_b × p_b)
+  std::vector<std::int64_t>    n_obs;  // rows per block
+  std::vector<std::string>     warnings;
+  Eigen::MatrixXd              H;      // block-diagonal saturated information
+  Eigen::MatrixXd              J;      // block-diagonal saturated score covariance
+  Eigen::MatrixXd              acov;   // sandwich ACOV(η̂_S) = H⁻¹ J H⁻¹
+};
+
+enum class Stage1RegularizationTarget : std::uint8_t {
+  Diagonal,        // T = diag(S)
+  ScaledIdentity,  // T = tr(S) / p * I
+  Identity,        // T = I
+};
+
+struct Stage1RegularizationOptions {
+  bool enabled = false;
+  Stage1RegularizationTarget target = Stage1RegularizationTarget::Diagonal;
+
+  // Fixed shrinkage intensity when finite; otherwise the smallest intensity in
+  // [0, 1] that satisfies `condition_max` / `min_eigenvalue` is selected.
+  double intensity = std::numeric_limits<double>::quiet_NaN();
+  double condition_max = std::numeric_limits<double>::infinity();
+  double min_eigenvalue = 0.0;
+
+  // Relative central-difference step for the delta-method Jacobian of the
+  // moment transformation, including any data-adaptive intensity selection.
+  double jacobian_step = 1e-7;
+};
+
+struct Stage1RegularizationBlockDiagnostic {
+  std::string target;
+  double raw_min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double raw_max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double raw_condition = std::numeric_limits<double>::quiet_NaN();
+  double min_eigen = std::numeric_limits<double>::quiet_NaN();
+  double max_eigen = std::numeric_limits<double>::quiet_NaN();
+  double condition = std::numeric_limits<double>::quiet_NaN();
+  double intensity = 0.0;
+  bool applied = false;
+};
+
+struct Stage1RegularizedMoments {
+  SaturatedMoments moments;
+  std::vector<Stage1RegularizationBlockDiagnostic> block_diagnostics;
+};
+
+struct FIMLRobustMLR {
+  Eigen::MatrixXd vcov;
+  Eigen::VectorXd se;
+  Eigen::VectorXd eigvals;
+  double       chisq_scaled      = std::numeric_limits<double>::quiet_NaN();
+  double       scaling_factor    = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma      = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma_h1   = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma_h0   = std::numeric_limits<double>::quiet_NaN();
+  int          df                = 0;
+  std::int64_t ntotal            = 0;
+};
+
+struct FIMLCorrectedFitMeasures {
+  double xx3 = std::numeric_limits<double>::quiet_NaN();
+  int    df3 = 0;
+  double c_hat3 = std::numeric_limits<double>::quiet_NaN();
+  double xx3_scaled = std::numeric_limits<double>::quiet_NaN();
+
+  double xx3_null = std::numeric_limits<double>::quiet_NaN();
+  int    df3_null = 0;
+  double c_hat3_null = std::numeric_limits<double>::quiet_NaN();
+  double xx3_null_scaled = std::numeric_limits<double>::quiet_NaN();
+
+  measures::RobustFitMeasures indices;
+};
+
+struct TwoStageEMMLInference {
+  Eigen::MatrixXd vcov;
+  Eigen::VectorXd se;
+  Eigen::VectorXd eigvals;
+  double       chisq             = std::numeric_limits<double>::quiet_NaN();
+  double       chisq_scaled      = std::numeric_limits<double>::quiet_NaN();
+  double       scaling_factor    = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma      = std::numeric_limits<double>::quiet_NaN();
+  int          df                = 0;
+  std::int64_t ntotal            = 0;
+};
+
+struct TwoStageFitMeasures {
+  measures::BaselineFit baseline;
+  measures::RobustFitMeasures indices;
+};
+
+// The full missing-data UΓ spectrum for FMG goodness-of-fit tests under FIML.
+// Unlike `FIMLRobustMLR` (which carries only the first cumulant via a trace
+// difference and the q parameter-space eigenvalues of H⁻¹·meat), this returns
+// the df nonzero eigenvalues of U·Γ_mis in the *saturated-moment* space — the
+// reference law T → Σ λ_j χ²_1 that every FMG eigenvalue-tail transform consumes.
+// Built first-principles from H1 information (V), the saturated-moment ACOV
+// (Γ_mis = H⁻¹JH⁻¹), and the model Jacobian Δ = ∂η_model/∂θ:
+// U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV. No lavaan-UGamma-rescaling hack. The H1 information V
+// is always the saturated normal-theory observed information — the FMG-spectrum
+// convention, and PD by second-order optimality at the saturated optimum. (A
+// selectable structured-at-θ̂ variant was removed 2026-06-24: not asymptotically
+// advantageous and the model-implied curvature is not guaranteed PD off H₀; see
+// project/architecture/roadmap.md.)
+struct FIMLUGammaSpectrum {
+  Eigen::VectorXd eigvals;          // df nonzero eigenvalues of U·Γ_mis, ascending
+  double          chi2_lrt = 0.0;   // FIML LRT (the FMG base statistic under FIML)
+  int             df       = 0;
+  double          trace_xcheck = 0.0;  // Σ eigvals
+};
+
+struct FIMLEtaJacobian {
+  // Δ = ∂[μ_1; vech(Σ_1); μ_2; vech(Σ_2); ...] / ∂θ in the same saturated
+  // eta layout used by `saturated_em_moments`.
+  Eigen::MatrixXd Delta_theta;
+};
+
+// Full-information ML over raw continuous data with arbitrary observed-value
+// patterns. The optimized scalar is the per-observation observed-pattern
+// normal-theory deviance without saturated/H1 constants:
+//
+//   sum_patterns (n_r / N) * [log|Σ_oo| + tr(Σ_oo^-1 (S_r + dd'))]
+//
+// where d = xbar_r - μ_o and S_r is the N-divisor covariance inside the
+// pattern. This is the right objective for point estimation; saturated/H1 and
+// baseline likelihood accounting are handled by the post-fit helpers below.
+struct FIML {
+  static constexpr std::string_view name = "FIML";
+
+  fit_expected<FIMLCache>
+  prepare(const RawData& raw) const;
+
+  fit_expected<double>
+  value(const RawData& raw, const FIMLCache& cache,
+        const model::ImpliedMoments& moments) const;
+
+  fit_expected<Eigen::VectorXd>
+  gradient(const RawData& raw, const FIMLCache& cache,
+           const model::ImpliedMoments& moments,
+           const Eigen::MatrixXd& J_sigma,
+           const Eigen::MatrixXd& J_mu) const;
+
+  fit_expected<FIMLValueGradient>
+  value_gradient(const RawData& raw, const FIMLCache& cache,
+                 const model::ImpliedMoments& moments,
+                 const Eigen::MatrixXd& J_sigma,
+                 const Eigen::MatrixXd& J_mu) const;
+};
+
+// Build the cross-call pack: pattern grouping (FIML::prepare) plus the
+// pairwise-complete start statistics, in one pass each over the raw data.
+fit_expected<FIMLPack>
+fiml_pack(const RawData& raw);
+
+// Run the saturated (H1) EM once per block and return moments + objective
+// value together. This is the single expensive missing-data precomputation;
+// everything downstream (extras, robust MLR, UGamma spectrum, baseline,
+// saturated information) consumes the result.
+fit_expected<FIMLH1>
+fiml_h1_moments(const RawData& raw, const FIMLPack& pack);
+fit_expected<FIMLH1>
+fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
+                FIMLH1Options options);
+
+// Start-value and fixed.x helper for FIML. Means use all observed values in
+// each column; covariances use pairwise observed rows with an N divisor.
+fit_expected<SampleStats>
+fiml_start_sample_stats(const RawData& raw);
+
+// First public FIML fixed.x policy: observed exogenous variables may be fixed
+// from complete raw data, but missing values in those variables are not yet
+// supported because lavaan's conditional fixed.x likelihood accounting is a
+// separate contract from the joint observed-data FIML objective.
+fit_expected<void>
+validate_fiml_fixed_x_missing_policy(const spec::LatentStructure& pt,
+                                     const RawData& raw);
+
+// Post-fit likelihood accounting for continuous raw-data FIML. The optimizer
+// minimizes only the observed-pattern deviance without constants; this helper
+// adds the normal constants and fits the saturated/H1 observed-data normal
+// model so logl, unrestricted.logl, chi-square, and information criteria use
+// lavaan-compatible missing-data likelihood accounting.
+post_expected<FIMLExtras>
+fiml_extras(spec::LatentStructure pt,
+            const model::MatrixRep& rep,
+            const RawData& raw,
+            const Estimates& est,
+            FIML discrepancy = {});
+
+post_expected<FIMLExtras>
+fiml_extras(spec::LatentStructure pt,
+            const model::MatrixRep& rep,
+            const RawData& raw,
+            const Estimates& est,
+            const FIMLPack& pack,
+            const FIMLH1& h1);
+
+// Expected FIML information in theta space. For each observed-data pattern,
+// this uses the conditional Gaussian Fisher information
+//
+//   I_ab = n_r { dmu_a' Sigma_oo^-1 dmu_b
+//                + 1/2 tr(Sigma_oo^-1 dSigma_a
+//                         Sigma_oo^-1 dSigma_b) }.
+//
+// It is lavaan's `information = "expected"` convention. Unlike the observed
+// Hessian below, it contains neither realized pattern moments nor the
+// second-order chain-rule curvature of the structural moment map.
+post_expected<Eigen::MatrixXd>
+fiml_expected_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          FIML discrepancy = {});
+
+post_expected<Eigen::MatrixXd>
+fiml_expected_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack);
+
+// Observed-H1 FIML information in theta space: the realized observed-pattern
+// moment Hessian, evaluated at the model-implied moments and projected through
+// the first-order eta Jacobian Delta. This is lavaan's
+// `information = "observed", observed.information = "h1"` convention. It
+// differs from `fiml_observed_information` by omitting the residual-contracted
+// second derivatives of eta(theta).
+post_expected<Eigen::MatrixXd>
+fiml_observed_h1_information(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            FIML discrepancy = {});
+
+post_expected<Eigen::MatrixXd>
+fiml_observed_h1_information(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            const FIMLPack& pack);
+
+// Observed FIML information matrix — the npar × npar `−∂²logl/∂θ²` for a
+// continuous raw-data FIML fit, computed as `(N/2)·H` where `H` is the
+// analytic Hessian of the per-observation-averaged deviance: the per-pattern
+// moment-space Hessian chained through the model Jacobian, plus the
+// pattern-aggregated moment gradient contracted with the closed-form LISREL
+// second derivatives. Its inverse (via `inference::vcov`, which folds in any
+// equality constraints) is the *non-robust* missing-data standard error — the
+// `se = "standard"` counterpart to `fiml_robust_mlr`'s sandwich SEs. `h_step`
+// is retained for source compatibility and validated when supplied, but no
+// longer tunes the Hessian.
+post_expected<Eigen::MatrixXd>
+fiml_observed_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          FIML discrepancy = {},
+                          double h_step = 1e-4);
+
+post_expected<Eigen::MatrixXd>
+fiml_observed_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack);
+
+// Robust missing-data reporting for lavaan's continuous FIML MLR corner
+// (`missing = "fiml", estimator = "MLR"`). The sandwich meat is built from
+// observed-pattern casewise deviance gradients, and the bread is the analytic
+// observed FIML Hessian (`h_step` retained for source compatibility only).
+post_expected<FIMLRobustMLR>
+fiml_robust_mlr(spec::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const RawData& raw,
+                const Estimates& est,
+                int df,
+                double chisq,
+                FIML discrepancy = {},
+                double h_step = 1e-4);
+
+post_expected<FIMLRobustMLR>
+fiml_robust_mlr(spec::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const RawData& raw,
+                const Estimates& est,
+                int df,
+                double chisq,
+                const FIMLPack& pack,
+                const FIMLH1& h1);
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            FIML discrepancy = {});
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            const FIMLPack& pack,
+                            const FIMLH1& h1);
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            const FIMLPack& pack,
+                            const FIMLH1& h1,
+                            const SaturatedMoments& sm);
+
+// Shared sandwich ingredients for the FIML MLR corner: the analytic
+// per-observation-averaged deviance Hessian `H` (the bare averaged Hessian, so
+// the observed information is `(N/2)·H`) and the casewise observed-pattern
+// deviance gradients `∂(deviance_i)/∂θ` (`n_total × q`). Both are returned in
+// full θ-space with NO equality-constraint projection — callers that
+// reparameterize apply `K` themselves. `colSums(scores) = N·∂F̄/∂θ` and
+// `scoresᵀscores` is the MLR meat (`/N`). `pt` must already be
+// fixed.x-resolved (call `resolve_fixed_x_from_sample` with `pack.start_stats`).
+// Consumed by `fiml_robust_mlr` and the FIML robust score tests.
+struct FIMLScoreMeatBread {
+  Eigen::MatrixXd hessian;  // H = ∂²F̄/∂θ² (averaged deviance), q × q
+  Eigen::MatrixXd scores;   // casewise ∂(deviance_i)/∂θ, n_total × q
+};
+
+// Casewise observed-pattern deviance gradients in full theta space, without
+// requiring or constructing an observed Hessian. This also supports complete
+// covariance-only ML models and is the row-score source for sign-flip tests.
+post_expected<Eigen::MatrixXd>
+fiml_casewise_deviance_scores(const spec::LatentStructure& pt,
+                              const model::MatrixRep& rep,
+                              const RawData& raw,
+                              const FIMLPack& pack,
+                              const Estimates& est);
+
+// Casewise observed-pattern deviance gradients in saturated moment space,
+// evaluated at caller-supplied moments. Columns are block-stacked covariance
+// vechs followed by block-stacked means, matching ModelEvaluator's J_sigma and
+// J_mu row layouts. `include_means` requires one p-vector per covariance block.
+// This is the direct likelihood-score ingredient for global curved-model
+// multiplier tests; it does not run the saturated H1 EM estimator.
+post_expected<Eigen::MatrixXd>
+fiml_saturated_casewise_deviance_scores(
+    const RawData& raw, const FIMLPack& pack,
+    const model::ImpliedMoments& moments, bool include_means);
+
+// Realized saturated-moment sensitivity, `-d score / d eta'`, evaluated at
+// caller-supplied moments. Its column order and total-sample likelihood scale
+// match `fiml_saturated_casewise_deviance_scores`: block-stacked covariance
+// vechs followed by block-stacked means. This is not the saturated H1 Hessian
+// unless `moments` are the fitted H1 moments.
+post_expected<Eigen::MatrixXd>
+fiml_saturated_observed_information(
+    const RawData& raw, const FIMLPack& pack,
+    const model::ImpliedMoments& moments, bool include_means);
+
+post_expected<FIMLScoreMeatBread>
+fiml_score_meat_bread(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const RawData& raw,
+                      const FIMLPack& pack,
+                      const Estimates& est);
+
+// Saturated (H1) ML/EM moments — runs the EM iteration that already drives
+// FIML's H1 likelihood accounting, then aggregates per-block scores and
+// analytic observed-row Hessians into a block-diagonal `(H, J, H⁻¹JH⁻¹)`.
+// Multi-group safe; takes raw data only (no `LatentStructure` is needed because
+// the saturated model has no structural restrictions). See `SaturatedMoments`
+// for the η layout and scaling conventions. `h_step` is retained for source
+// compatibility and validated when supplied, but no longer tunes the saturated
+// H1 information.
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw, FIMLH1Options options,
+                     double h_step = 1e-4);
+
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1);
+
+// Optional frontier conditioning for ML2S Stage-1 saturated moments. It
+// regularizes the covariance input S used by Stage 2 and propagates the same
+// moment map through `acov` by delta method. `H`/`J` remain the raw saturated
+// information/score covariance and should not be used as the metric for the
+// transformed moments.
+post_expected<Stage1RegularizedMoments>
+regularize_saturated_stage1(const SaturatedMoments& sm,
+                            Stage1RegularizationOptions options);
+
+// Casewise influence rows for the saturated EM moment estimator eta_S. Rows are
+// stacked by raw block, columns use the same block-stacked [mu; vech(Sigma)]
+// layout as `SaturatedMoments`. With `SaturatedMoments::H` and log-likelihood
+// scores s_i, the returned rows are s_i' H^{-1}, so
+// `influence.transpose() * influence` equals `SaturatedMoments::acov`.
+// Complete data reduces to centered sample moment rows divided by the block
+// sample size.
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw, double h_step = 1e-4);
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw,
+                              const FIMLPack& pack,
+                              const FIMLH1& h1);
+
+post_expected<Eigen::MatrixXd>
+saturated_em_moment_influence(const RawData& raw,
+                              const FIMLPack& pack,
+                              const FIMLH1& h1,
+                              const SaturatedMoments& sm);
+
+// Hybrid mixed continuous/ordinal observed-data first stage. Ordinal
+// thresholds/polychorics and ordinal-continuous polyserial correlations use
+// observed-pair support; the continuous mean/covariance block uses saturated
+// continuous FIML. The returned MixedOrdinalStats carries coherent casewise
+// moment influence and empirical estimated-weight Gamma influence rows.
+post_expected<data::MixedOrdinalStats>
+mixed_ordinal_stats_hybrid_fiml_from_observed_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    bool full_wls_weight = true,
+    double h_step = 1e-4);
+
+// Convert the saturated EM ACOV to the two-stage moment meat used by
+// robust.two.stage. `se_weighted = true` gives the parameter-vcov convention;
+// `false` gives the test-statistic UGamma convention.
+post_expected<Eigen::MatrixXd>
+two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted);
+
+// Per-case influence n·dΓ_b/dw_i of the Stage-1 saturated-FIML sandwich
+// Γ_b = n·H⁻¹JH⁻¹ for raw block `block`, the estimated-weight channel that the
+// non-NT ML2S correction contracts for missing data. `Analytic` is the
+// production closed form (direct + θ-movement of the saturated fit);
+// `FiniteDifference` is the case-reweight central difference kept as the
+// validation oracle. The two agree to the finite-difference tolerance on both
+// complete and missing data. Frontier / validation surface.
+enum class GammaInfluenceRegime { Analytic, FiniteDifference };
+post_expected<Eigen::MatrixXd>
+two_stage_saturated_gamma_influence(const RawData& raw, std::size_t block,
+                                    Eigen::Index row,
+                                    GammaInfluenceRegime regime);
+
+// Stage-2 weight family for two-stage (ML2S) estimation. The Stage-2 fit to the
+// saturated EM moments may weight its moment residuals by any of these; the
+// robust correction restores test validity for all of them, so the choice is an
+// efficiency/stability knob, not a validity one. Built per block over the
+// [mean ; vech(cov)] layout from the complete-data normal-theory moment ACOV
+// Γ_NT = blockdiag(Σ, gamma_nt(Σ)) and the missingness-aware Stage-1 ACOV
+// Γ_FIML = n·acov (the `se_weighted=false` convention of `two_stage_gamma_from_acov`):
+//   Nt   → V = Γ_NT⁻¹             (normal-theory; lavaan robust.two.stage default)
+//   Uls  → V = I                  (unweighted EM moment quadratic)
+//   Dwls → V = diag(Γ_FIML)⁻¹     (missingness-aware diagonal; the polychoric analog)
+//   Adf  → V = Γ_FIML⁻¹           (full optimal / asymptotically distribution-free)
+//   Dls  → V = ((1-a)Γ_NT + a Γ_FIML)⁻¹  (Browne mix over the full block; a=0≡Nt, a=1≡Adf)
+// NT weighting is blind to the missingness pattern that governs Γ_FIML; it is
+// only licensed when Γ_FIML ≈ Γ_NT (complete, near-normal data). The non-NT
+// members are frontier research surface; Nt is the lavaan-parity default.
+enum class TwoStageWeight { Nt, Uls, Dwls, Adf, Dls };
+
+struct TwoStageDlsOptions {
+  double a = 0.5;  // DLS mixing scalar in [0, 1]; ignored unless kind == Dls.
+  // (An empirical-Bayes choice of `a` from the Γ_FIML-vs-Γ_NT departure needs
+  // casewise saturated-score fourth moments not carried by `SaturatedMoments`;
+  // left as a future hook. Callers pass a fixed `a` for now.)
+};
+
+// Bread used in the Stage-2 robust sandwich. Expected is the lavaan
+// robust.two.stage/default path; Observed is the misspecification-robust
+// moment-quadratic regime used by the Hall-Inoue grid before adding any
+// estimated-weight IJ terms.
+enum class TwoStageBread { Expected, Observed };
+
+// Per-block Stage-2 weight, in the `gmm::Weight` layout: one q_b×q_b matrix per
+// block, q_b = p_b + vech_len(p_b), aligned to [mean ; vech(cov)]. `Nt`
+// reproduces the implicit normal-theory weight used by
+// `two_stage_em_ml_inference` / `ml2s_nt_weight_from_saturated`.
+post_expected<std::vector<Eigen::MatrixXd>>
+two_stage_stage2_weight_blocks(const SaturatedMoments& sm,
+                               TwoStageWeight kind,
+                               TwoStageDlsOptions dls = {});
+
+// The same weight as a structured `gmm::Weight`, for the Stage-2 fit and
+// sandwich paths that hand it to the moment-quadratic machinery. Currently
+// wraps every block Dense, i.e. behaviour-identical to passing the dense
+// blocks; see the definition for which kinds are free to upgrade.
+post_expected<gmm::Weight>
+two_stage_stage2_weight_structured(const SaturatedMoments& sm,
+                                   TwoStageWeight kind,
+                                   TwoStageDlsOptions dls = {});
+
+// The same weight assembled as one Q×Q block-diagonal matrix, for the
+// saturated-moment-space difference-test cores (`compute_fiml_satorra2000`).
+post_expected<Eigen::MatrixXd>
+two_stage_stage2_weight(const SaturatedMoments& sm,
+                        TwoStageWeight kind,
+                        TwoStageDlsOptions dls = {});
+
+// Savalei-Bentler two-stage inference for a Stage-2 fit to the saturated EM
+// moments. The point estimate is supplied by the caller; this helper consumes
+// Stage-1 `(H, J, ACOV)` to build corrected sandwich SEs and the scaled
+// chi-square. `kind` selects the Stage-2 weight: `Nt` (the lavaan
+// robust.two.stage default) reproduces the normal-theory path bit-for-bit; the
+// non-NT weights route through the explicit-weight moment-quadratic robust
+// sandwich and REQUIRE `est` to be the matching weighted fit (`fit_gmm` /
+// `fit_wls` with `two_stage_stage2_weight_blocks(sm, kind, dls)`), not the ML
+// fit. `bread` defaults to the lavaan-parity expected-information convention.
+// With raw data and `bread = Observed`, the non-NT weights include the
+// estimated-weight IJ covariance channel: complete data reuses the
+// continuous-LS IJ adapters, while missing data uses the analytic FIML
+// Stage-1 sandwich-Gamma influence (`two_stage_saturated_gamma_influence`).
+// Scaled-test fields remain on the fixed-weight robust sandwich.
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          double h_step = 1e-4,
+                          TwoStageWeight kind = TwoStageWeight::Nt,
+                          TwoStageDlsOptions dls = {},
+                          TwoStageBread bread = TwoStageBread::Expected);
+
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack,
+                          const FIMLH1& h1,
+                          TwoStageWeight kind = TwoStageWeight::Nt,
+                          TwoStageDlsOptions dls = {},
+                          TwoStageBread bread = TwoStageBread::Expected);
+
+// Inference straight from a precomputed Stage-1 `SaturatedMoments`: no raw
+// data, no EM, no observed-information rebuild. Bit-identical to the raw-based
+// overloads (the EM is deterministic) but skips the duplicate Stage-1 work.
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const Estimates& est,
+                          const SaturatedMoments& sm,
+                          TwoStageWeight kind = TwoStageWeight::Nt,
+                          TwoStageDlsOptions dls = {},
+                          TwoStageBread bread = TwoStageBread::Expected);
+
+// Per-case one-step misspecification-robust ("complete-sandwich") parameter
+// influences for a two-stage (ML2S) fit: the casewise dual of the estimated-
+// weight SE, and the missing-data member of the family. Each observation
+// influences theta-hat through two channels: how it moves the Stage-1 saturated
+// moments (the EM casewise influence `saturated_em_moment_influence`) and how it
+// moves the Stage-2 weight (the data-dependent-weight `IF(Ŵ)` term). The IJ
+// blocks are the SAME ones the observed-bread SE sandwich builds, so
+// `Σ_i c_i c_iᵀ` reproduces that vcov; `influence_naive` drops the weight term.
+// For the non-NT Stage-2 weights (DWLS/ADF/DLS) on complete data this routes
+// through `continuous_ls_casewise_influence_ij` (the SE's complete-data route);
+// otherwise (non-NT missing data, or NT — where lavaan robust.two.stage treats
+// the weight as fixed, so the correction is zero) it uses the shared IJ-block
+// assembly with the observed bread. Always observed-bread. Frontier.
+post_expected<CasewiseInfluenceIJ>
+two_stage_casewise_influence_ij(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const RawData& raw,
+                                const Estimates& est,
+                                const FIMLPack& pack,
+                                const FIMLH1& h1,
+                                TwoStageWeight kind = TwoStageWeight::Nt,
+                                TwoStageDlsOptions dls = {});
+
+post_expected<WeightedMomentRBMParts>
+two_stage_rbm_parts(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const FIMLH1& h1,
+                    TwoStageWeight kind = TwoStageWeight::Nt,
+                    TwoStageDlsOptions dls = {});
+
+post_expected<WeightedMomentRBMParts>
+two_stage_rbm_parts(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const RawData& raw,
+                    const Estimates& est,
+                    const FIMLPack& pack,
+                    const FIMLH1& h1,
+                    const SaturatedMoments& sm,
+                    TwoStageWeight kind = TwoStageWeight::Nt,
+                    TwoStageDlsOptions dls = {});
+
+// Fixed-misspecification profile-RMSEA / profile-LRT for the ML2S-NT
+// Stage-2 likelihood, over the saturated EM moment vector [mean; vech(cov)].
+// These are dense research primitives: they use the complete-data ML
+// two-metric profile Hessian with Γ supplied by the Stage-1 saturated ACOV
+// (`two_stage_gamma_from_acov(sm, false)`).
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& est,
+                           const SaturatedMoments& sm,
+                           double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& est,
+                           double h_step = 1e-4,
+                           double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+two_stage_nt_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& est,
+                           const FIMLPack& pack,
+                           const FIMLH1& h1,
+                           double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         const SaturatedMoments& sm,
+                         double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const RawData& raw,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         double h_step = 1e-4,
+                         double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+two_stage_nt_profile_lrt(spec::LatentStructure pt_H1,
+                         const model::MatrixRep& rep_H1,
+                         const RawData& raw,
+                         const Estimates& est_H1,
+                         spec::LatentStructure pt_H0,
+                         const model::MatrixRep& rep_H0,
+                         const Estimates& est_H0,
+                         const FIMLPack& pack,
+                         const FIMLH1& h1,
+                         double eig_tol = 1e-10);
+
+namespace frontier {
+
+// Patternwise normal-theory ML (PNTML), a two-stage frontier estimator for
+// incomplete continuous data. Stage 1 supplies one saturated Gaussian-FIML
+// target eta_hat = [mu; vech(Sigma)]. Stage 2 minimizes the frequency-weighted
+// sum of Gaussian ML discrepancies between every observed marginal of eta_hat
+// and the corresponding model-implied marginal. With complete data this is
+// ordinary NTML exactly; under normal MCAR its local metric is the observed-
+// pattern Fisher information, so it has the same first-order influence as
+// direct FIML. It is an objective family, not a TwoStageWeight member.
+//
+// `cache` retains only the observed-index/count design from the raw-data pack:
+// its pattern means/covariances are replaced by marginals of `stage1`.
+// `saturated_value` is the full-F discrepancy at eta_hat; the optimizer stores
+// half-F, so the PNTML goodness-of-fit statistic is
+//   N * (F(theta_hat) - saturated_value).
+struct PatternNTML {
+  FIMLCache cache;
+  double saturated_value = 0.0;
+
+  fit_expected<double>
+  value(const model::ImpliedMoments& moments) const;
+
+  fit_expected<FIMLValueGradient>
+  value_gradient(const model::ImpliedMoments& moments,
+                 const Eigen::MatrixXd& J_sigma,
+                 const Eigen::MatrixXd& J_mu) const;
+};
+
+fit_expected<PatternNTML>
+pattern_ntml_target(const FIMLPack& pack,
+                    const SaturatedMoments& stage1);
+
+// Per-group, per-observation local PNTML metric in [mu; vech(Sigma)] order.
+// No dense inverse of the full saturated ACOV is required: each block is a
+// sum of pulled-back ordinary normal-information contributions over patterns.
+post_expected<std::vector<Eigen::MatrixXd>>
+pattern_ntml_information_blocks(const PatternNTML& target,
+                                const SaturatedMoments& stage1);
+
+fit_expected<Estimates>
+fit_pattern_ntml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Eigen::VectorXd& x0,
+                 const FIMLPack& pack,
+                 const SaturatedMoments& stage1,
+                 Backend backend = Backend::NloptLbfgsSlsqpFallback,
+                 optim::OptimOptions opts = {});
+
+fit_expected<Estimates>
+fit_pattern_ntml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Eigen::VectorXd& x0,
+                 Backend backend = Backend::NloptLbfgsSlsqpFallback,
+                 optim::OptimOptions opts = {},
+                 FIMLH1Options h1_options = {});
+
+// Normal-theory null/correct-specification inference for a matching PNTML fit.
+// The Stage-1 law is Gamma_N = V_pattern^{-1}, where V_pattern is the same
+// pattern-normal expected information used by the objective. Thus U*Gamma_N
+// has exactly df unit eigenvalues and the scaled statistic equals the raw
+// PNTML statistic. Under normal MCAR this reaches the direct-FIML information
+// bound using expected information only. MAR-robust and nonnormal empirical-
+// sandwich variants are deliberately outside this first frontier contract.
+post_expected<TwoStageEMMLInference>
+pattern_ntml_inference(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const Estimates& est,
+                       const PatternNTML& target,
+                       const SaturatedMoments& stage1);
+
+// Equation-level diagnostic for the information choices in the
+// Savalei--Falk two-stage scaled statistic. The Stage-1 saturated-FIML
+// sandwich crosses saturated/structured evaluation, observed/expected breads,
+// and saturated/structured empirical score meat. Independently, the Stage-2
+// moment-space information H
+// in U = H - H Delta (Delta' H Delta)^-1 Delta' H crosses saturated versus
+// structured evaluation and expected versus observed information. Every row
+// uses the same Stage-1 estimate, Stage-2 estimate, and model Jacobian. This is
+// deliberately a single-group frontier surface for method-identification
+// experiments, not a replacement for the lavaan-parity ML2S default.
+struct TwoStageInformationChoice {
+  std::string name;
+  std::string stage1_information;
+  std::string stage1_bread_point;
+  std::string stage1_bread_kind;
+  std::string stage1_meat_point;
+  std::string stage2_information;
+  double trace_ugamma = std::numeric_limits<double>::quiet_NaN();
+  double scaling_factor = std::numeric_limits<double>::quiet_NaN();
+  double chisq_scaled = std::numeric_limits<double>::quiet_NaN();
+  double min_stage1_information_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double min_information_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double min_projector_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  Eigen::Index information_negative_eigenvalues = 0;
+  Eigen::Index stage1_information_negative_eigenvalues = 0;
+  Eigen::Index projector_negative_eigenvalues = 0;
+  Eigen::Index projector_rank = 0;
+};
+
+struct TwoStageInformationChoiceAudit {
+  std::vector<TwoStageInformationChoice> choices;
+  double chisq = std::numeric_limits<double>::quiet_NaN();
+  int df = 0;
+  Eigen::Index delta_rank = 0;
+  double saturated_expected_observed_max_abs =
+      std::numeric_limits<double>::quiet_NaN();
+  double stage1_expected_observed_max_abs =
+      std::numeric_limits<double>::quiet_NaN();
+};
+
+post_expected<TwoStageInformationChoiceAudit>
+two_stage_information_choices(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const RawData& raw,
+                              const Estimates& est,
+                              const SaturatedMoments& stage1,
+                              const FIMLPack& pack,
+                              double eigen_tol = 1e-9);
+
+// Exact Equation-37 FIML scaling choices in the Savalei--Rosseel taxonomy.
+// The residual metric crosses the four saturated/structured by
+// expected/observed-H1 choices plus the two observed full-Hessian variants.
+// The saturated-moment sandwich independently crosses four bread choices with
+// saturated versus structured empirical score meat. The historical
+// Savalei--Falk row is structured observed-H1 residual information with a
+// structured observed bread and structured meat under a literal reading of
+// their equations; the experiment intentionally tests that reading rather
+// than treating it as an implementation fact.
+struct FIMLInformationChoice {
+  std::string name;
+  std::string residual_information;
+  std::string omega_bread_point;
+  std::string omega_bread_kind;
+  std::string omega_meat_point;
+  double trace_ugamma = std::numeric_limits<double>::quiet_NaN();
+  double scaling_factor = std::numeric_limits<double>::quiet_NaN();
+  double chisq_scaled = std::numeric_limits<double>::quiet_NaN();
+  double min_residual_information_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double min_omega_bread_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  Eigen::Index residual_information_negative_eigenvalues = 0;
+  Eigen::Index omega_bread_negative_eigenvalues = 0;
+  Eigen::Index residual_rank = 0;
+};
+
+struct FIMLInformationChoiceAudit {
+  std::vector<FIMLInformationChoice> choices;
+  double chisq = std::numeric_limits<double>::quiet_NaN();
+  int df = 0;
+  Eigen::Index delta_rank = 0;
+};
+
+post_expected<FIMLInformationChoiceAudit>
+fiml_information_choices(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const RawData& raw,
+                         const Estimates& est,
+                         const SaturatedMoments& saturated,
+                         const FIMLPack& pack,
+                         double chisq,
+                         int df,
+                         double eigen_tol = 1e-9);
+
+// Raw-data FIML over PSD primitive LISREL covariance matrices. The optimizer
+// works in an internal Cholesky lift and returns the ordinary partable-shaped
+// parameter vector; every observed-pattern covariance must remain positive
+// definite for the likelihood to be finite.
+fit_expected<Estimates>
+fit_fiml_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const RawData& raw,
+             const Eigen::VectorXd& x0,
+             FIML discrepancy = {},
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
+// PSD-preserving Stage 2 for ML2S. Stage 1 is the ordinary saturated FIML/EM
+// estimate and is not projected or otherwise changed. `Nt` uses the ordinary
+// normal-theory likelihood on those moments; ULS/DWLS/ADF/DLS use their fixed
+// Stage-2 moment-quadratic weights. Inference is deliberately separate.
+fit_expected<Estimates>
+fit_ml2s_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const SaturatedMoments& stage1,
+             const Eigen::VectorXd& x0,
+             TwoStageWeight weight = TwoStageWeight::Nt,
+             TwoStageDlsOptions dls = {},
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
+fit_expected<Estimates>
+fit_ml2s_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const RawData& raw,
+             const Eigen::VectorXd& x0,
+             double h_step = 1e-4,
+             TwoStageWeight weight = TwoStageWeight::Nt,
+             TwoStageDlsOptions dls = {},
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
+fit_expected<Estimates>
+fit_fiml_psd(spec::LatentStructure pt,
+             const model::MatrixRep& rep,
+             const RawData& raw,
+             const Eigen::VectorXd& x0,
+             const FIMLPack& pack,
+             Backend backend = Backend::NloptSlsqp,
+             optim::OptimOptions opts = {},
+             estimate::frontier::PsdFitOptions psd_opts = {});
+
+fit_expected<Estimates>
+fit_fiml_constrained(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Eigen::VectorXd& x0,
+                     const FIMLPack& pack,
+                     estimate::frontier::ExtraNonlinearEqConstraints extra,
+                     Backend backend = Backend::NloptSlsqp,
+                     optim::OptimOptions opts = {});
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_scalar_fiml(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& unrestricted,
+                        const FIMLPack& pack,
+                        estimate::frontier::ScalarFunctional functional,
+                        double target,
+                        Backend backend = Backend::NloptSlsqp,
+                        optim::OptimOptions opts = {},
+                        double constraint_tol = 1e-6,
+                        estimate::frontier::ScalarProfileReference reference =
+                            estimate::frontier::ScalarProfileReference::Ordinary);
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_parameter_fiml(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const RawData& raw,
+                           const Estimates& unrestricted,
+                           const FIMLPack& pack,
+                           Eigen::Index parameter,
+                           double target,
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           double constraint_tol = 1e-6,
+                           estimate::frontier::ScalarProfileReference reference =
+                               estimate::frontier::ScalarProfileReference::Ordinary);
+
+fit_expected<estimate::frontier::ScalarProfileCiResult>
+profile_lrt_ci_parameter_fiml(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const RawData& raw,
+    const Estimates& unrestricted,
+    const FIMLPack& pack,
+    Eigen::Index parameter,
+    estimate::frontier::ScalarProfileCiOptions ci_options = {},
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    double constraint_tol = 1e-6);
+
+struct Ml2sProfileRobustOptions {
+  bool estimated_weight = false;
+  const RawData* raw = nullptr;
+  const FIMLPack* pack = nullptr;
+  const FIMLH1* h1 = nullptr;
+};
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_scalar_ml2s(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const Estimates& unrestricted,
+                        const SaturatedMoments& sm,
+                        estimate::frontier::ScalarFunctional functional,
+                        double target,
+                        TwoStageWeight kind = TwoStageWeight::Nt,
+                        TwoStageDlsOptions dls = {},
+                        Backend backend = Backend::NloptSlsqp,
+                        optim::OptimOptions opts = {},
+                        double constraint_tol = 1e-6,
+                        estimate::frontier::ScalarProfileReference reference =
+                            estimate::frontier::ScalarProfileReference::Ordinary,
+                        Ml2sProfileRobustOptions robust_options = {});
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_parameter_ml2s(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& unrestricted,
+                           const SaturatedMoments& sm,
+                           Eigen::Index parameter,
+                           double target,
+                           TwoStageWeight kind = TwoStageWeight::Nt,
+                           TwoStageDlsOptions dls = {},
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           double constraint_tol = 1e-6,
+                           estimate::frontier::ScalarProfileReference reference =
+                               estimate::frontier::ScalarProfileReference::Ordinary,
+                           Ml2sProfileRobustOptions robust_options = {});
+
+fit_expected<estimate::frontier::ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml2s(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const Estimates& unrestricted,
+    const SaturatedMoments& sm,
+    Eigen::Index parameter,
+    estimate::frontier::ScalarProfileCiOptions ci_options = {},
+    TwoStageWeight kind = TwoStageWeight::Nt,
+    TwoStageDlsOptions dls = {},
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    double constraint_tol = 1e-6,
+    Ml2sProfileRobustOptions robust_options = {});
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_scalar_ml2s_nt(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const Estimates& unrestricted,
+                           const SaturatedMoments& sm,
+                           estimate::frontier::ScalarFunctional functional,
+                           double target,
+                           Backend backend = Backend::NloptSlsqp,
+                           optim::OptimOptions opts = {},
+                           double constraint_tol = 1e-6,
+                           estimate::frontier::ScalarProfileReference reference =
+                               estimate::frontier::ScalarProfileReference::Ordinary);
+
+fit_expected<estimate::frontier::ScalarProfileLrtResult>
+profile_lrt_parameter_ml2s_nt(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const Estimates& unrestricted,
+                              const SaturatedMoments& sm,
+                              Eigen::Index parameter,
+                              double target,
+                              Backend backend = Backend::NloptSlsqp,
+                              optim::OptimOptions opts = {},
+                              double constraint_tol = 1e-6,
+                              estimate::frontier::ScalarProfileReference reference =
+                                  estimate::frontier::ScalarProfileReference::Ordinary);
+
+fit_expected<estimate::frontier::ScalarProfileCiResult>
+profile_lrt_ci_parameter_ml2s_nt(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const Estimates& unrestricted,
+    const SaturatedMoments& sm,
+    Eigen::Index parameter,
+    estimate::frontier::ScalarProfileCiOptions ci_options = {},
+    Backend backend = Backend::NloptSlsqp,
+    optim::OptimOptions opts = {},
+    double constraint_tol = 1e-6);
+
+}  // namespace frontier
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       double h_step = 1e-4,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       const FIMLPack& pack,
+                       const FIMLH1& h1,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const Estimates& est,
+                       const SaturatedMoments& sm,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
+// Fit measures from already-computed user-model ML2S inference. This keeps the
+// baseline correction but skips rebuilding the user UΓ spectrum.
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const SaturatedMoments& sm,
+                       const TwoStageEMMLInference& user,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
+namespace diagnostic {
+
+// Regression-only comparator for the old finite-difference saturated H1
+// information path. Do not expose this on the R surface; use it only to check
+// the analytic saturated information against the previous numeric route.
+post_expected<SaturatedMoments>
+saturated_em_moments_fd(const RawData& raw, double h_step = 1e-4);
+
+// Regression-only comparator for the old central-difference observed FIML
+// information path. Same contract as `fiml_observed_information`, but `H` is
+// the finite-difference Hessian of the analytic FIML gradient with step
+// `h_step`. Do not expose this on the R surface.
+post_expected<Eigen::MatrixXd>
+fiml_observed_information_fd(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const RawData& raw,
+                             const Estimates& est,
+                             FIML discrepancy = {},
+                             double h_step = 1e-4);
+
+}  // namespace diagnostic
+
+post_expected<FIMLEtaJacobian>
+fiml_eta_jacobian(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const RawData& raw,
+                  const Estimates& est,
+                  FIML discrepancy = {});
+
+post_expected<FIMLEtaJacobian>
+fiml_eta_jacobian(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const RawData& raw,
+                  const Estimates& est,
+                  const FIMLPack& pack);
+
+// First-principles FIML UΓ spectrum for FMG goodness-of-fit tests. Multi-group
+// safe (H/J/acov are block-diagonal across groups; Δ stacks per group). `df` and
+// `chi2_lrt` are passed in (the caller already has them from `infer_df_stat` /
+// `fiml_extras`) to avoid recomputation, mirroring `fiml_robust_mlr`. Returns the
+// df nonzero eigenvalues of U·Γ_mis. With the default saturated V, `trace_xcheck
+// = Σ eigvals` matches `fiml_robust_mlr(...).trace_ugamma` (validated in tests).
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     FIML discrepancy = {},
+                     double h_step = 1e-4);
+
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1);
+
+// As above, but reuses a precomputed Stage-1 `SaturatedMoments` (the EM moments
+// + H/J/acov = Γ_mis) instead of rebuilding it. `pack`/`h1` are still consumed
+// for the residual projector Δ.
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1,
+                     const SaturatedMoments& sm);
+
+// Single-model FIML residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV in the saturated
+// η-metric, with Δ the constraint-collapsed model Jacobian ∂[μ; vech Σ]/∂θ. The
+// weight V is caller-supplied (typically `saturated_em_moments(raw).H`) so that
+// a nested method-2001 difference U0 − U1 shares one common V; pair it with the
+// same `saturated_em_moments(raw).acov` as the common Γ. This is the building
+// block for `robust::lr_test_satorra2001_fiml_from_data`.
+post_expected<Eigen::MatrixXd>
+fiml_residual_projector(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        const Eigen::Ref<const Eigen::MatrixXd>& V,
+                        FIML discrepancy = {});
+
+// Fixed-misspecification profile-RMSEA / profile-LRT for raw-data FIML. The
+// saturated first-stage coordinate is η = [mean; vech(cov)] from EM H1; the
+// data Hessian is `SaturatedMoments::H / n_b`, the projection Hessian is the
+// model-implied observed-pattern H1 information per block, and Γ is the
+// n-scaled saturated ACOV (`two_stage_gamma_from_acov(sm, false)`). `chi2_lrt`
+// is the already-computed FIML model-vs-H1 likelihood-ratio statistic.
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   FIML discrepancy = {},
+                   double h_step = 1e-4,
+                   double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1,
+                   double eig_tol = 1e-10);
+
+post_expected<WeightedProfileRMSEAResult>
+fiml_profile_rmsea(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const RawData& raw,
+                   const Estimates& est,
+                   double chi2_lrt,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1,
+                   const SaturatedMoments& sm,
+                   double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 FIML discrepancy = {},
+                 double h_step = 1e-4,
+                 double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 const FIMLPack& pack,
+                 const FIMLH1& h1,
+                 double eig_tol = 1e-10);
+
+post_expected<WeightedProfileLRTResult>
+fiml_profile_lrt(spec::LatentStructure pt_H1,
+                 const model::MatrixRep& rep_H1,
+                 const RawData& raw,
+                 const Estimates& est_H1,
+                 double chi2_lrt_H1,
+                 spec::LatentStructure pt_H0,
+                 const model::MatrixRep& rep_H0,
+                 const Estimates& est_H0,
+                 double chi2_lrt_H0,
+                 const FIMLPack& pack,
+                 const FIMLH1& h1,
+                 const SaturatedMoments& sm,
+                 double eig_tol = 1e-10);
+
+// FIML independence/baseline chi-square for raw continuous data with missing
+// values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
+// diagonal normal model directly over observed-value patterns and compares it
+// to the FIML saturated/H1 likelihood.
+post_expected<BaselineFit>
+fiml_baseline_chi2(const RawData& raw,
+                   FIML discrepancy = {});
+
+post_expected<BaselineFit>
+fiml_baseline_chi2(const spec::LatentStructure& pt,
+                   const RawData& raw,
+                   FIML discrepancy = {});
+
+post_expected<BaselineFit>
+fiml_baseline_chi2(const spec::LatentStructure& pt,
+                   const RawData& raw,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1);
+
+// Full-information ML fit over raw continuous data. `backend` selects the
+// scalar optimizer (NLopt L-BFGS with SLSQP fallback by default, optional IPOPT
+// when enabled);
+// equality constraints are folded in via the θ = θ₀ + K·α reparameterization.
+fit_expected<Estimates>
+fit_fiml(spec::LatentStructure pt,
+         const model::MatrixRep& rep,
+         const RawData& raw,
+         const Eigen::VectorXd& x0,      // start values, size pt.n_free()
+         FIML discrepancy = {},
+         Backend backend = Backend::NloptLbfgsSlsqpFallback,
+         optim::OptimOptions opts = {});
+
+fit_expected<Estimates>
+fit_fiml(spec::LatentStructure pt,
+         const model::MatrixRep& rep,
+         const RawData& raw,
+         const Eigen::VectorXd& x0,      // start values, size pt.n_free()
+         const FIMLPack& pack,
+         Backend backend = Backend::NloptLbfgsSlsqpFallback,
+         optim::OptimOptions opts = {});
+
+}  // namespace magmaan::estimate::fiml
+
+namespace magmaan::estimate {
+
+using estimate::fiml::FIMLExtras;
+using estimate::fiml::SaturatedMoments;
+using estimate::fiml::TwoStageEMMLInference;
+using estimate::fiml::fit_fiml;
+using estimate::fiml::fiml_extras;
+using estimate::fiml::saturated_em_moments;
+using estimate::fiml::saturated_em_moment_influence;
+using estimate::fiml::two_stage_em_ml_inference;
+
+}  // namespace magmaan::estimate

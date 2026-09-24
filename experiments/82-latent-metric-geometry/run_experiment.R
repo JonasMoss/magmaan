@@ -78,7 +78,7 @@
 # nothing to absorb the rescaling, so std_lv is not a reparameterization at all:
 # lavaan and magmaan agree that Demo.growth goes npar 9 -> 7, df 5 -> 7, chi-square
 # 8.07 -> 106.85. That is a different model, pinned by the "std.lv on all-fixed
-# loadings adds constraints, not coordinates" case in tests/unit/lavaanify_test.cpp,
+# loadings adds constraints, not coordinates" case in cpp/tests/unit/lavaanify_test.cpp,
 # and it is a spec-level fact rather than anything this experiment can measure.
 #
 # The three charts are implemented twice on purpose. The cost and inference arms

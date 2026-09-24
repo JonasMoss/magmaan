@@ -1,0 +1,286 @@
+#pragma once
+
+#include <cstdint>
+#include <limits>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/estimate/frontier/communality.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/spec/partable.hpp"
+
+// Non-iterative CFA estimators as covariance maps τ: vech(S) ↦ θ, plus the
+// map Jacobian J = ∂τ/∂vech(S) that turns any such map into a
+// delta-method-inferable estimator. The configural Jacobian uses the analytic
+// regular-interior derivative of the Guttman map and falls back to central
+// differences at unsupported boundary/rank-changing points; restricted maps use
+// the analytic constrained-communality KKT / loading-projection derivative with
+// the same finite-difference fallback. Unlike the start-value producers in
+// start_values.hpp (which only fill free loadings and clamp), these return a
+// COMPLETE parameter vector (Λ, Φ, ψ) so σ(θ̂) and the residual r = vech(S) −
+// σ(θ̂) are well-defined; the theory is in the maintainer notes
+// noniterative_cfa_tests.tex and guttman_cfa_asymptotics.tex.
+//
+// Scope: multi-group (one block per group/level, fit independently and stacked),
+// pure CFA with marker (fixed unit loading) identification, continuous data, and
+// simple-structure indicators. Mean structure is supported for free intercepts
+// with latent means fixed at 0 (ν_g = m_g saturated); free latent means (true
+// scalar invariance) are handled by the reference-group mean map downstream, not
+// here. The ordinary map produces the configural (per-block unconstrained) θ̂;
+// `fit_noniterative_cfa_metric()` is the separate Sigma/H-level metric-shape
+// constrained estimator. General inference-side linear equality constraints are
+// imposed downstream by the minimum-distance projection in robust::frontier. The
+// `NonIterativeEstimator` enum is the generality seam: FABIN2/Bentler-1982/
+// James-Stein/MIIV-2SLS slot in as further maps without any change to the
+// residual-based inference bundle that consumes (τ, J).
+
+namespace magmaan::estimate::frontier {
+
+enum class NonIterativeEstimator : std::uint8_t {
+  GuttmanLavaan,   // legacy lavaan-like Spearman / incidence Guttman map (AR communality)
+  GuttmanAligned,  // block-GLS H diagonal plus aligned score reconstruction
+};
+
+enum class CompositeWeight : std::uint8_t {
+  EstimatorDefault,  // GuttmanLavaan -> Unit; GuttmanAligned -> Standardized
+  Unit,              // Z: unit-weight sums of raw indicators
+  Standardized,      // diag(S)^-1/2 Z: unit-weight sums of standardized indicators
+  Adaptive,          // H Z (Z'HZ)^-1, Gram-aligned before regression (data-dependent; retired)
+};
+
+enum class ScoreConditioningPolicy : std::uint8_t { Raw, Hard, Soft };
+
+struct ScoreConditioningConfig {
+  ScoreConditioningPolicy policy = ScoreConditioningPolicy::Raw;
+  double floor0 = 1.0;
+  double rate_exp = 0.5;
+};
+
+// Feasibility-only repair of the aligned H proxy before score construction.
+// Non-raw modes preserve diag(H), shrink its normalized spectrum toward I, and
+// are deliberately not yet admitted to analytic post-fit inference.
+enum class HConditioningPolicy : std::uint8_t { Raw, Hard, Soft };
+
+struct HConditioningConfig {
+  HConditioningPolicy policy = HConditioningPolicy::Raw;
+  double floor0 = 1.0;
+  double rate_exp = 0.5;
+};
+
+struct ScoreConditioningDiagnostics {
+  double target_floor = 0.0;
+  double raw_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double repaired_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double raw_normalized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double repaired_normalized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double shrinkage = 0.0;
+  bool hard_violation = false;
+  double min_score_variance = std::numeric_limits<double>::quiet_NaN();
+  double min_abs_marker = std::numeric_limits<double>::quiet_NaN();
+};
+
+struct HConditioningDiagnostics {
+  double target_floor = 0.0;
+  double raw_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double repaired_min_eigenvalue = std::numeric_limits<double>::quiet_NaN();
+  double raw_normalized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double repaired_normalized_min_eigenvalue =
+      std::numeric_limits<double>::quiet_NaN();
+  double shrinkage = 0.0;
+  bool hard_violation = false;
+  double min_h_variance = std::numeric_limits<double>::quiet_NaN();
+};
+
+CompositeWeight
+resolve_composite_weight(NonIterativeEstimator which, CompositeWeight composite);
+
+const char*
+composite_weight_name(CompositeWeight composite);
+
+const char*
+score_conditioning_policy_name(ScoreConditioningPolicy policy);
+
+const char*
+h_conditioning_policy_name(HConditioningPolicy policy);
+
+// The pure map τ: vech(samp.S) ↦ full θ̂ (size ev.n_free()). Deterministic given
+// (pt, rep, ev); reads only `samp.S`. `ev` supplies the free-parameter layout
+// (structural, S-independent) and is reused verbatim by
+// `estimator_map_jacobian`. Returns an error (never clamps) when the
+// interior-point assumptions fail (a factor with < 3 indicators, a singular
+// score covariance, a zero marker loading) or the model is out of scope (a
+// structural part, a cross-loading, a markerless factor, a residual covariance,
+// free latent means, or std.lv identification).
+fit_expected<Eigen::VectorXd>
+noniterative_cfa_theta(const spec::LatentStructure& pt,
+                       const model::MatrixRep& rep,
+                       const model::ModelEvaluator& ev,
+                       const data::SampleStats& samp,
+                       NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
+                       CompositeWeight composite = CompositeWeight::EstimatorDefault,
+                       AdmissibilityConfig admissibility = {},
+                       ScoreConditioningConfig score_conditioning = {},
+                       HConditioningConfig h_conditioning = {});
+
+// Diagnostic wrapper: builds the evaluator internally, returns θ̂ plus the clean
+// per-block matrices (Φ is the latent covariance = magmaan's Ψ; ψ is the
+// residual-variance diagonal = magmaan's Θ diagonal).
+struct NonIterativeFit {
+  Eigen::VectorXd              theta;
+  std::vector<Eigen::MatrixXd> Lambda;
+  std::vector<Eigen::MatrixXd> Phi;
+  std::vector<Eigen::VectorXd> psi;
+  std::vector<Eigen::Index> n_h2_clamped;
+  std::vector<ScoreConditioningDiagnostics> score_conditioning_diagnostics;
+  std::vector<HConditioningDiagnostics> h_conditioning_diagnostics;
+};
+
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa(const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep,
+                     const data::SampleStats& samp,
+                     NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
+                     CompositeWeight composite = CompositeWeight::EstimatorDefault,
+                     AdmissibilityConfig admissibility = {},
+                     ScoreConditioningConfig score_conditioning = {},
+                     HConditioningConfig h_conditioning = {});
+
+// Sigma/H-level metric-shape constrained estimator. This is an estimator map,
+// not an inference projection: it estimates a common standardized loading shape
+// across groups by a per-factor rank-one regression solve, then converts that
+// common shape into the marker chart carried by `pt`. The resulting full
+// configural θ vector satisfies marker-chart loading equality rows when
+// `group.equal = "loadings"` is present, but the fitted common covariance is
+// independent of which nonzero marker indicator is used for output.
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa_metric(const spec::LatentStructure& pt,
+                            const model::MatrixRep& rep,
+                            const data::SampleStats& samp,
+                            NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
+                            CompositeWeight composite = CompositeWeight::EstimatorDefault,
+                            AdmissibilityConfig admissibility = {},
+                            ScoreConditioningConfig score_conditioning = {},
+                            HConditioningConfig h_conditioning = {});
+
+// Sigma/H-level restricted estimator for linear equality constraints that are
+// separable into residual-variance rows and loading rows. Residual rows are
+// imposed in the communality h2 least-squares/GMM system before H is formed;
+// loading rows are imposed afterwards by a Sigma-only composite-metric
+// projection. Rows involving factor (co)variances, intercepts, latent means, or
+// rows that mix residual and loading parameters are rejected. The residual
+// diagonal reported in theta is the communality split diag(S) - diag(H), not a
+// post-hoc fitted leftover.
+fit_expected<NonIterativeFit>
+fit_noniterative_cfa_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which = NonIterativeEstimator::GuttmanAligned,
+    CommunalityMethod comm = CommunalityMethod::TriadWls,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault,
+    AdmissibilityConfig admissibility = {},
+    ScoreConditioningConfig score_conditioning = {},
+    HConditioningConfig h_conditioning = {});
+
+// J_block = ∂θ / ∂vech(S_block), shape q × p*_block (q = ev.n_free(),
+// p*_block = p_block(p_block+1)/2), for the multi-block map w.r.t. block
+// `block`'s covariance only. The regular path is analytic; `rel_step` is used
+// only by the finite-difference fallback. Column k is the
+// derivative w.r.t. the k-th lower-triangle column-major vech(S_block)
+// coordinate. Rows for parameters in other blocks are exactly zero (independent
+// blocks), so the inference layer slices out the rows with
+// param_location.block == block to form the per-block Jacobian. This ordering
+// matches ModelEvaluator::dsigma_dtheta and data::gamma_nt so J aligns with Δ
+// and Γ. `rel_step` scales the per-coordinate step by max(|S_rc|, 1).
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_block(const spec::LatentStructure& pt,
+                             const model::MatrixRep& rep,
+                             const model::ModelEvaluator& ev,
+                             const data::SampleStats& samp,
+                             NonIterativeEstimator which,
+                             std::size_t block, double rel_step = 1e-6,
+                             CompositeWeight composite =
+                                 CompositeWeight::EstimatorDefault,
+                             AdmissibilityConfig admissibility = {},
+                             ScoreConditioningConfig score_conditioning = {});
+
+// Analytic regular-interior configural Jacobian. Unlike
+// `estimator_map_jacobian_block()`, this does not fall back to finite
+// differences when a rank-changing pseudo-inverse or other boundary condition
+// is encountered.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_block_analytic(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    std::size_t block,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault,
+    AdmissibilityConfig admissibility = {},
+    ScoreConditioningConfig score_conditioning = {});
+
+// Single-block convenience wrapper (block 0), preserving the original signature.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian(const spec::LatentStructure& pt,
+                       const model::MatrixRep& rep,
+                       const model::ModelEvaluator& ev,
+                       const data::SampleStats& samp,
+                       NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
+                       double rel_step = 1e-6,
+                       CompositeWeight composite = CompositeWeight::EstimatorDefault,
+                       AdmissibilityConfig admissibility = {},
+                       ScoreConditioningConfig score_conditioning = {});
+
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_analytic(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which = NonIterativeEstimator::GuttmanLavaan,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault,
+    AdmissibilityConfig admissibility = {},
+    ScoreConditioningConfig score_conditioning = {});
+
+// Restricted-map analogue of `estimator_map_jacobian_block()`. The
+// regular-interior path differentiates the active residual communality KKT
+// system and loading projection; `rel_step` is used only by the
+// finite-difference fallback. Unlike the configural map, rows for parameters in
+// other blocks can be nonzero when equality constraints couple blocks.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted_block(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which,
+    std::size_t block,
+    double rel_step = 1e-6,
+    CommunalityMethod comm = CommunalityMethod::TriadWls,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault,
+    AdmissibilityConfig admissibility = {},
+    ScoreConditioningConfig score_conditioning = {});
+
+// Single-block convenience wrapper (block 0) for the restricted map.
+fit_expected<Eigen::MatrixXd>
+estimator_map_jacobian_restricted(
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const model::ModelEvaluator& ev,
+    const data::SampleStats& samp,
+    NonIterativeEstimator which = NonIterativeEstimator::GuttmanAligned,
+    double rel_step = 1e-6,
+    CommunalityMethod comm = CommunalityMethod::TriadWls,
+    CompositeWeight composite = CompositeWeight::EstimatorDefault,
+    AdmissibilityConfig admissibility = {},
+    ScoreConditioningConfig score_conditioning = {});
+
+}  // namespace magmaan::estimate::frontier

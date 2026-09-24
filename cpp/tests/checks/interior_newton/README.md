@@ -1,0 +1,417 @@
+# Interior Newton audit and NLopt L-BFGS controls
+
+Advisory, standalone diagnostic; no production audit or defaults changed.
+Consumes the canonical model, objective, constraints and observed-information
+APIs. Direct NLopt calls expose actual controls and preserve every terminal
+candidate, independently of the production adapter's return policy.
+
+From the repository root:
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/stock-new 10
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/extended-new 60
+TZ=Europe/Oslo Rscript cpp/tests/checks/interior_newton/summarize.R cpp/tests/checks/interior_newton/results/stock-new cpp/tests/checks/interior_newton/results/extended-new
+```
+
+Requires the existing opt CMake configuration and its Eigen/NLopt dependency
+sources, clang++, cc and R. `run.sh` builds the core, rejects existing output
+directories, and records source/library hashes. The second run compiles a
+local copy of NLopt `plis.c` with only `mred=10` changed to `mred=60`, then links
+that object into this executable. Neither dependency source nor installed
+library is edited. The extended version is a diagnostic, not stock NLopt.
+
+Design is fixed in `check.cpp`: seven model/settings, N=100/1000/100000,
+three replications, three global measurement-unit multipliers, nine control
+profiles: 1,701 fits per backtracking version. The same underlying dataset is
+used across profiles and units. Population covariance generators include
+one-factor CFA with 4 or 12 indicators; two-factor CFA with 8 indicators;
+a weak-loading/high-correlation variant; equality-linked loadings and means;
+a structural regression with means; and a misspecified one-factor model
+with an omitted residual covariance. These are diagnostic simulations, not
+published-data examples or a prevalence sample.
+
+Fit starts use canonical FABIN. Linear equalities use canonical reduction K.
+No bounds, PSD fitting, optimizer restarts, alternative optimizers, SEs, or
+tests are requested. Observed information is computed for the audit itself.
+No library default is altered. A candidate outside the positive-definite
+primitive covariance interior is ineligible for the proposed statistical
+interpretation even if its ambient Newton calculation is available.
+
+`assess` is an experimental interior diagnostic, not a public API. It uses
+G=N*gradient(f), I=observed total information, after linear equality reduction.
+Diagonal equilibration and LLT solve give d=sqrt(G'I^-1G), total EDM=d^2/2,
+and the predicted Newton step. Indefinite/singular or ill-conditioned
+curvature is unavailable, not repaired. The condition cap (1e12) and solve
+residual cap (1e-10) are explicit provisional numerical guards. Their behavior
+under arbitrary badly conditioned coordinate transforms is not established.
+
+Executable checks cover exact quadratic error, nonsingular affine changes,
+objective/sample-size scaling, and singular/indefinite rejection. Seven
+independent directional finite differences check the analytic Hessian's
+normalization and equality reduction in the SEM cases. The summary verifies
+coverage, exact paired design, and finite-difference error. Raw negative
+NLopt return codes are retained; they are not automatically numerical failures.
+
+Timings are single executions in fixed profile order and describe this pilot
+only. Evaluation counts are the more reliable cost comparison. The Hessian
+cost includes construction plus the experimental audit, excludes the older
+geometric audit, and can partly be reused for observed-information inference.
+
+Results and design interpretation: `project/validation/interior-newton-audit.md`.
+The stock and extended local runs are under this directory's ignored
+`results/`; use a new directory for every subsequent execution.
+
+Methodological references and the threshold rationale are recorded in the
+study note: Dennis, Gay & Welsch (1981), DOI 10.1145/355958.355965, section 6;
+James's MINUIT manual 94.1; and the documented Stata/iminuit stopping rules.
+The note distinguishes retrieved versions from unavailable published PDFs.
+The .01 candidate is an accuracy budget relative to sampling uncertainty,
+not a cutoff calibrated from this experiment's pass rate. Its interpretation
+as actual remaining error still depends on the local quadratic approximation.
+
+## Refined-reference smoke
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/refinement-new 60 refine
+python3 cpp/tests/checks/interior_newton/summarize_refinement.py cpp/tests/checks/interior_newton/results/refinement-new
+```
+
+This mode evaluates 90 natural endpoints: seven models, N=100/1000, rep=1,
+three measurement units, legacy/current and candidate L-BFGS settings, plus
+cfa12 N=100000 rep=3 in all three units under both settings. It also evaluates
+56 controlled local probes: seven models at N=1000 and unit scale 1, two
+directions (a fixed sine vector and the smallest-information-eigenvalue
+vector), and distances .003/.01/.03/.1 from a refined anchor. Directions are
+normalized in the anchor information metric; their choice is exploratory.
+
+References use analytic-Hessian Newton refinement with backtracking and
+recomputed objective/gradient/curvature. They must remain eligible interior
+points and reach distance <=1e-8 within 20 accepted steps. Trials must reduce
+distance and may increase per-observation objective by no more than the
+explicit roundoff allowance 64*machine_epsilon*(1+abs(f)). This handles
+objective cancellation near the minimum; it is not evidence of ascent at
+statistically meaningful scale. Unqualified references are retained, not
+silently dropped. The reference is a much more accurate numerical solution,
+not an exact optimum or independent derivative implementation.
+
+Measured displacement and Newton prediction use the same **initial-point**
+information metric. The vector-error column also checks direction, not merely
+length. Distance ratios are suppressed unless initial d exceeds 100 times
+max(1e-8, reference d). Objective-gain ratios require predicted twice-loglik
+improvement to exceed 100 times the declared floating-point subtraction floor.
+Probe refinements additionally report agreement with their originating anchor.
+Exact quadratic checks exercise the refinement and Newton correction.
+
+First completed run: `results/refinement-smoke-2026-09-21-v2/`; `v2` adds
+quadratic checks and anchor-agreement telemetry to the initial smoke. Both
+runs are retained. This checks the local error prediction; it does not select
+an accuracy budget or establish uniform guarantees, coverage or globality.
+
+
+## Intermediate stopping options
+
+After fixing the desired audit budget at .01, compare cheaper intermediate
+function/step tolerances on the original paired panel:
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/options-new 60 options
+python3 cpp/tests/checks/interior_newton/summarize_options.py cpp/tests/checks/interior_newton/results/options-new
+```
+
+Six profiles, 189 cases each (1,134 fits); unchanged datasets, starts, internal
+gradient tolerance, automatic memory and evaluation cap. This is exploratory
+reuse, not held-out validation. The standard-library Python summary checks
+paired design coverage and finite-difference checks, retains failures, and
+reports evaluation counts alongside descriptive single-run timings. The first
+run is `results/options-2026-09-21/`. Full interpretation is in the study note.
+
+## Broader validation panel
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/validation-new 60 validate
+python3 cpp/tests/checks/interior_newton/summarize_validation.py cpp/tests/checks/interior_newton/results/validation-new
+```
+
+Ten new settings, fixed before inspecting results: CFAs with p=6/16/32/48
+and 1/4/8/12 factors; a three-factor regression chain with means; a CFA with
+two cross-loadings; a CFA with three correlated residual pairs; a six-factor
+model with equality-linked loadings and means (p=24); a weak-factor CFA;
+and p=16 with means and unequal measurement scales. The latter multiplies
+indicator scales by a log-spaced sequence from .1 to 10. It is additional to
+the global .1/1/10 multipliers applied to every setting.
+
+N=50/200/1000/10000, two replications, three global unit scales: 240 paired
+cases, fitted under current, x8 and f12_x10 settings (720 fits). Fresh seed
+base 760921; populations are explicitly positive definite. Ordinary CFAs have
+population factor correlations .3; the weak model has variances .12 and
+covariances .10; chain paths are .3 with unit disturbance variances;
+cross-loadings are .25; residual covariances are .15. Other loadings and
+residual variances follow the original generator. Actual equality-reduced
+parameter counts are recorded. N=50,p=48 intentionally approaches the
+sample-covariance rank limit without crossing it.
+
+The summary checks design coverage, ten directional Hessian checks and reports
+all attempts, eligibility, audit failures and evaluation counts. Exclusions
+are not successes. Scale variants share a dataset and are not independent
+replications. First results: `results/validation-2026-09-21/`.
+
+This is an expanded synthetic single-group complete-data ML panel, not broad
+validation of every estimator. It still lacks multi-group invariance, growth,
+feedback, non-Gaussian/missing-data and published-data models. It is held out
+from the earlier option choice, but becomes development evidence once used
+for subsequent tuning. Do not tune and describe these same cases as held out.
+
+## Growth, feedback, multi-group and published-data panel
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/advanced-new 60 advanced
+python3 cpp/tests/checks/interior_newton/summarize_advanced.py cpp/tests/checks/interior_newton/results/advanced-new
+```
+
+`advanced.cpp` shares this check's Newton helpers, independently builds each
+model and uses the same three fixed validation profiles. Synthetic designs:
+
+- Linear growth at 4 and 8 occasions, fixed intercept/slope loadings 1 and
+  0,...,p-1; latent means (1,.2), covariance [[1,.15],[.15,.2]], residuals .7.
+  Observed intercepts are fixed zero and both latent means are free.
+- Four-factor feedback with three indicators per factor. f3 <- .2*f4+.5*f1,
+  f4 <- .25*f3+.4*f2, independent unit disturbances and exogenous factors;
+  exclusion restrictions provide separate predictors of the feedback pair.
+  Marker loadings 1, other loadings .8, residual variances .7. I-B is invertible.
+- Two-group CFA with configural, metric and scalar restrictions, plus a
+  five-group metric model with unequal group sizes. Three factors, four
+  indicators each, loadings 1/.8, latent correlations .3, residuals .7.
+  Group covariance g (zero-based) is (1+.2*g) times the base covariance;
+  common observed means are .1,.2,...,1.2. These populations satisfy all the
+  fitted loading/intercept equalities.
+
+For each: base n=50/200/1000/10000, two replications, global scales .1/1/10.
+Balanced groups each have base n observations. Unbalanced group g has
+max(p+2,floor(n/(g+1))); the floor avoids singular empirical covariance in
+this regular-ML panel. Both total N and every group size are recorded.
+Independent group samples use a continuous RNG stream from the recorded seed.
+
+Published-data fits read existing test-owned summary-statistic fixtures:
+Bollen political democracy and Holzinger–Swineford from `cpp/tests/fixtures/parity/`,
+and all four Kline/Guo invariance exports from
+`cpp/tests/fixtures/textbook_corpus/case_exports.json`. No fitted parameters or
+oracle starts are used. Covariances are used exactly as exported, with no
+additional n/(n-1) conversion. Models/options follow those fixtures. Published
+fits use original sample sizes and three unit scales, not simulated replications.
+The four Guo specifications share the same observations. No private corpus or
+sibling experiment/paper dependency is introduced.
+
+There are 504 synthetic and 54 published-data fits: 558 total, 186 per profile.
+`advanced-summary.json` retains failures/exclusions and `case-metadata.json`
+records pre-fit descriptors for later paired option comparisons. Group counts
+are not independent model samples, and no model-specific optimizer rules have
+been selected. First complete run: `results/advanced-2026-09-21-v2/`.
+The initial run stopped at the singular smallest unbalanced-group covariance;
+that incomplete run is retained separately, not included in the results.
+
+Observed information uses total N across groups. Thirty-four directional
+finite differences independently check the normalization and equality reduction
+at unit scale, including all corpus models. Build inputs, source snapshots and
+fixture SHA-256 hashes are saved with the completed local run.
+
+## Feedback starts and parameter coordinates
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/feedback-starts-new 60 starts
+python3 cpp/tests/checks/interior_newton/summarize_starts.py cpp/tests/checks/interior_newton/results/feedback-starts-new
+```
+
+This reproduces the eight feedback datasets from the advanced panel (same seed,
+RNG order and population). Three unit scales and three arms give 72 fits:
+canonical FABIN starts; correctly transformed unit-1 FABIN starts; and those
+transformed starts with the optimizer working in unit-1 parameter coordinates.
+All use conservative controls and diagnostic mred=60. This is an isolation
+experiment, not an implemented general-purpose scaling policy.
+
+For this marker-identified, covariance-only model, multiplying observations by
+u leaves Lambda and Beta unchanged and multiplies Psi and Theta by u^2. There
+are no equality constraints in this model. Mapped coordinates use theta=D*z,
+where D has u^2 on covariance parameters and 1 elsewhere; the gradient passed
+to NLopt is D times the theta gradient. Initial objective and gradient
+transformation identities are checked. Final audits use original coordinates.
+
+`raw.csv.starts.csv` records all 29 parameter starts, their matrix cells, and
+values transformed back to unit-1 scale. `starts-summary.json` verifies design,
+which starts differ, accuracy and objective agreement with the unit-1 results.
+The only material native/mapped differences are four latent variance starts.
+The 24 native control fits exactly reproduce the preceding advanced run.
+First completed run: `results/feedback-starts-2026-09-21/`.
+
+## Matched marker/std.lv starts and data-derived coordinates
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/chart-starts-new 60 charts
+python3 cpp/tests/checks/interior_newton/summarize_charts.py cpp/tests/checks/interior_newton/results/chart-starts-new
+```
+
+Five covariance-only models: one-factor p=6, three-factor p=24, three-factor
+p=12 with weak markers (.3 versus other loadings .8), three-factor p=12 with
+indicator multipliers spanning .1–10, and the four-factor p=12 feedback design.
+N=50/200/1000, two fresh replications, global units .1/1/10 yield 90 paired cases.
+Each uses six arms: two originating starts (native marker FABIN3 and native
+std.lv FABIN3), transported to marker and std.lv identification; each marker
+arm is also run with frozen data-derived diagonal parameter scaling. Thus 540
+fits, all with ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000, automatic memory,
+default internal gradient tolerance and diagnostic mred=60.
+
+Latent rescaling transforms Lambda, Beta and Psi consistently. Unit disturbance
+variances identify std.lv; nonzero marker loadings identify marker coordinates.
+Initial objective equality and parameter roundtrips are checked. All terminal
+objectives are checked after transport; all acceptance decisions use the SAME
+marker-coordinate observed Hessian and .01 audit, not each chart's potentially
+different far-from-stationary Hessian. Native chart distances are also recorded.
+These models have no means, fixed nonmarker loadings or equality constraints.
+The parameterizations agree on the regular positive-disturbance region; marker
+can search negative disturbance variances that std.lv cannot represent. This
+experiment does not impose a common PSD search domain.
+
+For coordinate scaling, observed scales are sample standard deviations and each
+latent scale is its marker's sample SD. Parameter scales are s_i/t_j for Lambda,
+s_i*s_j for Theta, t_i*t_j for Psi and t_i/t_j for Beta. Optimize theta=D*z and
+transform the gradient by D. This uses only the current sample; no known global
+unit multiplier, population parameter or reference optimum enters the scaling.
+It is an advisory implementation limited to these unconstrained models.
+
+First run: `results/chart-starts-2026-09-22/`. All exclusions and failures remain
+in raw output. The summary reports both evaluations summed over all attempts
+and medians; claims about speed are evaluation-count comparisons, not calibrated
+end-to-end timings. Construction/conversion costs are not included in fit_ms.
+
+## Broad frozen-policy validation
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/broad-stock-new 10 broad
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/broad-extended-new 60 broad
+python3 cpp/tests/checks/interior_newton/summarize_broad.py cpp/tests/checks/interior_newton/results/broad-stock-new cpp/tests/checks/interior_newton/results/broad-extended-new
+```
+
+`broad_starts.cpp` and `broad_helpers.hpp` freeze three policies with unchanged
+conservative L-BFGS settings: native FABIN baseline; native std.lv when the
+transport is supported; and candidate transported std.lv starts plus sample
+coordinate scaling, falling back to native starts plus scaling elsewhere.
+These are direct backend diagnostics, not production adapter/default changes.
+
+Transport is intentionally conservative: no active equalities; exactly one
+fixed unit marker per latent; no other nonzero fixed matrix entries. It handles
+means and multiple independent groups, and transforms Alpha with the latent
+scale. Growth and equality-constrained models therefore use native starts.
+Unsupported std.lv comparisons emit explicit rows and are never fitted as an
+altered model. User start hints are absent in this panel; preserving arbitrary
+hints under a general start policy remains unimplemented.
+
+The coordinate policy preserves theta=theta0+K*alpha. Full parameter units are
+computed from sample SDs, with latent units taken from the first nonzero fixed
+loading; a latent without one uses its block's mean observed SD. Mean/intercept
+units are included. Reduced coordinate j has scale
+1 / norm(diag(1/full_parameter_units)*K.col(j)). The optimizer changes only
+alpha=D*z, leaving K, theta0, fixed values and all equalities untouched. Native
+starts are contracted by the existing equality reduction. Directional finite
+differences check the scaled reduced gradient; terminal equalities are checked.
+
+Fifteen synthetic models: the seven advanced designs plus p=6/24/48 CFAs,
+cross-loadings, correlated residuals, weak factors, mixed units and an
+equality-linked p=24 CFA. N=50/200/1000, five fresh replications, .1/1/10 units;
+seed base 9222026. The previous high-N diagnostics remain separate. Six existing
+published fixture specifications add original-data tests at three units each.
+Total 693 dataset/unit cases per policy; 2079 design rows per backend version,
+of which 282 std.lv rows are unsupported. Thus 1797 executed fits per version,
+3594 across stock and extended backtracking. Unit variants share samples.
+
+Final local runs: `results/broad-starts-stock-2026-09-22-final/` and
+`results/broad-starts-extended-2026-09-22-final/`. Earlier runs are retained,
+including an incomplete harness run that exposed an empty-Alpha assumption;
+the final runs include 51 directional gradient checks per version and terminal
+std.lv objective-transport checks. Summary scripts retain all noninterior and
+unavailable endpoints. Timing includes initialization and common-audit work,
+but runs overlap and are not calibrated timing benchmarks; evaluation counts
+are the primary work measure. The candidate's fallback is explicitly labeled
+in every row. Source and fixture hashes are retained locally.
+
+## SLSQP, ordinary and PSD smoke
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/sqp-new 10 sqp
+python3 cpp/tests/checks/interior_newton/summarize_sqp.py cpp/tests/checks/interior_newton/results/sqp-new
+```
+
+First SLSQP comparison: the same 15 synthetic models and six published
+specifications as the broad start panel, restricted to N=50/200, replication 1,
+and .1/1/10 units. This yields 108 cases and six arms, 648 fits. Seeds/data
+match that subset of the L-BFGS panel; no new tuning is done on these outcomes.
+
+Ordinary arms are native starts; transported std.lv starts where supported
+(native fallback otherwise); and those starts with sample-based reduced
+coordinate scaling. They use direct NLopt SLSQP and retain every raw endpoint.
+PSD arms use production `fit_ml_psd` with native starts; improved starts; and
+improved starts plus the existing diagonal expected-information scaling of
+internal lifted Cholesky coordinates. The latter is NOT the ordinary sample
+scaling policy. Canonical PSD lifting, equality handling and start projection
+are unchanged. Both paths use ftol_rel=1e-12, xtol_rel=1e-10, maxeval=5000;
+PSD constraint tolerance is explicitly 1e-8, with default PSD start floor and
+feasibility tolerance. The Luksan backtracking patch is irrelevant to SLSQP;
+use stock linkage (second argument 10).
+
+Returned fits get a fresh audit in original parameter coordinates. Ordinary
+regular-interior success uses d<=.01. For PSD fits, report interior Newton
+accuracy only when no active covariance nullity is detected. Boundary fits
+instead retain the existing feasibility and true-cone stationarity diagnostics
+(default stationarity tolerance .001 and covariance eigen tolerance 1e-8).
+These are different criteria: no boundary SE-error interpretation is claimed.
+Boundary accuracy calibration remains deferred. All cone diagnostics, nullity,
+interior status and objective gaps are retained, not collapsed to one success
+percentage. Cone first-order checks do not establish a global optimum.
+
+PSD hard errors are rows with returned=0 and details in `raw.csv.errors.txt`;
+the public wrapper does not expose their endpoints/evaluation counts. PSD
+raw_rc=0 is a placeholder, not a backend return code; optimizer_status records
+the wrapper enum. Ordinary raw_rc is the actual NLopt code. Known evaluation
+sums must be labeled incomplete if PSD errors occur. PSD fit timing includes
+its production finalization, unlike direct ordinary timing; compare costs
+within a domain rather than treating those as equivalent timing pipelines.
+First run: `results/sqp-starts-2026-09-22/`.
+
+The notable feedback endpoint can be reproduced and retained separately:
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/sqp-feedback-new 10 sqp_feedback
+```
+
+This restricts fitting to feedback N=200, replication 1, scale 10 (six arms).
+The endpoint JSONL stores full initial and terminal parameter vectors for later
+boundary diagnostics. Future full SQP runs also save these vectors. The first
+648-fit smoke predates endpoint serialization; its executed source is retained
+with its provenance. The targeted reproduction checks the consequential case.
+
+## Frozen SLSQP validation follow-up
+
+```sh
+bash cpp/tests/checks/interior_newton/run.sh cpp/tests/checks/interior_newton/results/sqp-validation-new 10 sqp_validate
+python3 cpp/tests/checks/interior_newton/summarize_sqp_validation.py cpp/tests/checks/interior_newton/results/sqp-validation-new
+```
+
+Hold all tolerances and metrics from the smoke fixed. Use fresh synthetic
+seed base 19222026, N=50/500/5000, three replications, three global unit scales,
+the same 15 synthetic model structures, and six original-data specifications.
+The four policies are ordinary native, ordinary improved+sample scaling,
+PSD native, and PSD improved+information scaling. Start-only arms were isolated
+in the preceding smoke and are omitted here. This gives 423 cases and 1692
+fits, all with endpoint vectors saved. Published fixtures are repeated checks,
+not fresh data. Model families were previously explored; samples are held out
+from the preceding policy selection. No policy is tuned on this run.
+
+The summary reports interior accuracy and boundary cone diagnostics separately,
+paired acceptance, and objective differences within a domain. Interior
+acceptance uses feasibility and Newton accuracy (also covariance feasibility
+for PSD); boundary acceptance uses the existing cone audit. The old cone
+residual is retained as interior telemetry, with the former combined gate
+reported under `legacy_cone_and_newton` and disagreements listed separately.
+Differences above
+one unit of twice-loglik are flagged descriptively, not used as an acceptance
+cutoff or an inference procedure. A passing cone check does not establish
+optimality. Initialization/fit/audit costs remain recorded; lost endpoints on
+public PSD errors remain explicit. First run: `results/sqp-validation-2026-09-22/`.

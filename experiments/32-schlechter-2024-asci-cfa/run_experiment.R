@@ -105,7 +105,7 @@ suppressPackageStartupMessages({
   library(lavaan)
 })
 
-data_dir_rel <- file.path("external", "paper_data", "Schlechter-2024",
+data_dir_rel <- file.path("external", "paper-downloads", "Schlechter-2024",
                           "osfstorage-archive")
 data_dir <- file.path(root, data_dir_rel)
 if (!dir.exists(data_dir)) {

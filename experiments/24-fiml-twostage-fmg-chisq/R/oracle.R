@@ -28,7 +28,7 @@
 # model-implied moments, which left a 1-3% trace gap to robust.two.stage that
 # grew with non-normality; switching to the unstructured weight - the convention
 # lavaan two.stage/robust.two.stage forces and magmaan's FIML FMG spectrum
-# already follows - closed it exactly. See docs/backlog/todo.md.)
+# already follows - closed it exactly. See project/backlog/todo.md.)
 #
 # trace(UGamma) = E[T] remains an independent first-principles check: on normal
 # data ncp_hat = mean(base) - mean(trace) ~ 0 for both estimators

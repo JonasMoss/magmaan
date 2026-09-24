@@ -117,15 +117,15 @@ project_root <- repo_root()
 results <- ensure_results_dir()
 set_single_threaded_math()
 
-binary <- file.path(project_root, "build", args$preset, "benchmarks",
+binary <- file.path(project_root, "cpp", "build", args$preset, "benchmarks",
                     "magmaan_ordinal_inference_workspace_bench")
 workspace_csv <- file.path(results, "inference_workspace.csv")
 metadata_csv <- file.path(results, "metadata.csv")
 
 if (!isTRUE(args$skip_build)) {
-  run_cmd("cmake", c("--preset", args$preset, "-DMAGMAAN_BUILD_BENCH=ON"),
+  run_cmd("cmake", c("-S", "cpp", "--preset", args$preset, "-DMAGMAAN_BUILD_BENCH=ON"),
           project_root)
-  run_cmd("cmake", c("--build", "--preset", args$preset,
+  run_cmd("cmake", c("--build", file.path("cpp", "build", args$preset),
                      "--target", "magmaan_ordinal_inference_workspace_bench"),
           project_root)
 }

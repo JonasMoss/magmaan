@@ -1,9 +1,9 @@
 # magmaan dev tasks. `just` runs from the repo root regardless of cwd; bare
 # `just` lists the recipes.
 
-coverage_profiles := "build/coverage/profiles"
-coverage_profdata := "build/coverage/coverage.profdata"
-coverage_html := "build/coverage/html"
+coverage_profiles := "cpp/build/coverage/profiles"
+coverage_profdata := "cpp/build/coverage/coverage.profdata"
+coverage_html := "cpp/build/coverage/html"
 coverage_ignore := "(/_deps/|/third_party/|/tests/|/usr/)"
 
 # Locate the LLVM coverage tools. Debian/Ubuntu ship them versioned
@@ -38,55 +38,55 @@ default:
 
 # Configure the first-class local build trees (once, or after a preset change).
 configure:
-    cmake --preset fast
-    cmake --preset dev
-    cmake --preset opt
+    cmake -S cpp --preset fast
+    cmake -S cpp --preset dev
+    cmake -S cpp --preset opt
 
 # Build the fast local C++ tree (Debug, no sanitizers).
 fast:
-    cmake --build --preset fast --parallel {{jobs}}
+    cmake --build cpp/build/fast --parallel {{jobs}}
 
 # Build + run the fast local C++ test suite.
 test-fast: fast
-    ctest --preset fast
+    ctest --test-dir cpp/build/fast --output-on-failure
 
 # Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|api|sim|parity|robcat); optional 2nd arg filters test names by regex.
 test-area area regex="":
-    cmake --build --preset fast --target magmaan_test_{{area}} --parallel {{jobs}}
-    ctest --preset fast -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
+    cmake --build cpp/build/fast --target magmaan_test_{{area}} --parallel {{jobs}}
+    ctest --test-dir cpp/build/fast --output-on-failure -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
 
 # Build + run the fast suite minus the heavy real-data parity tests.
 test-quick: fast
-    ctest --preset fast -LE parity
+    ctest --test-dir cpp/build/fast --output-on-failure -LE parity
 
 # Build the sanitizer validation tree (Debug + AddressSanitizer + UBSan).
 dev:
-    cmake --build --preset dev --parallel {{jobs}}
+    cmake --build cpp/build/dev --parallel {{jobs}}
 
 # Build + run the sanitizer C++ test suite.
 test-dev: dev
-    ctest --preset dev
+    ctest --test-dir cpp/build/dev --output-on-failure
 
 # Build + run the LLVM source-coverage suite and print a terminal report.
 coverage:
     #!/usr/bin/env bash
     set -euo pipefail
-    cmake --preset coverage
-    cmake --build --preset coverage --target magmaan_tests --parallel {{jobs}}
+    cmake -S cpp --preset coverage
+    cmake --build cpp/build/coverage --target magmaan_tests --parallel {{jobs}}
     rm -rf {{coverage_profiles}} {{coverage_profdata}}
     mkdir -p {{coverage_profiles}}
-    LLVM_PROFILE_FILE="$PWD/{{coverage_profiles}}/%p-%m.profraw" ctest --preset coverage
+    LLVM_PROFILE_FILE="$PWD/{{coverage_profiles}}/%p-%m.profraw" ctest --test-dir cpp/build/coverage --output-on-failure
     {{llvm_profdata}} merge -sparse {{coverage_profiles}}/*.profraw -o {{coverage_profdata}}
     objects=(
-        build/coverage/tests/magmaan_test_smoke
-        build/coverage/tests/magmaan_test_spec
-        build/coverage/tests/magmaan_test_estimate
-        build/coverage/tests/magmaan_test_inference
-        build/coverage/tests/magmaan_test_ordinal
-        build/coverage/tests/magmaan_test_api
-        build/coverage/tests/magmaan_test_sim
-        build/coverage/tests/magmaan_test_parity
-        build/coverage/tests/magmaan_test_robcat
+        cpp/build/coverage/tests/magmaan_test_smoke
+        cpp/build/coverage/tests/magmaan_test_spec
+        cpp/build/coverage/tests/magmaan_test_estimate
+        cpp/build/coverage/tests/magmaan_test_inference
+        cpp/build/coverage/tests/magmaan_test_ordinal
+        cpp/build/coverage/tests/magmaan_test_api
+        cpp/build/coverage/tests/magmaan_test_sim
+        cpp/build/coverage/tests/magmaan_test_parity
+        cpp/build/coverage/tests/magmaan_test_robcat
     )
     object_args=()
     for obj in "${objects[@]:1}"; do
@@ -102,15 +102,15 @@ coverage-html: coverage
     set -euo pipefail
     rm -rf {{coverage_html}}
     objects=(
-        build/coverage/tests/magmaan_test_smoke
-        build/coverage/tests/magmaan_test_spec
-        build/coverage/tests/magmaan_test_estimate
-        build/coverage/tests/magmaan_test_inference
-        build/coverage/tests/magmaan_test_ordinal
-        build/coverage/tests/magmaan_test_api
-        build/coverage/tests/magmaan_test_sim
-        build/coverage/tests/magmaan_test_parity
-        build/coverage/tests/magmaan_test_robcat
+        cpp/build/coverage/tests/magmaan_test_smoke
+        cpp/build/coverage/tests/magmaan_test_spec
+        cpp/build/coverage/tests/magmaan_test_estimate
+        cpp/build/coverage/tests/magmaan_test_inference
+        cpp/build/coverage/tests/magmaan_test_ordinal
+        cpp/build/coverage/tests/magmaan_test_api
+        cpp/build/coverage/tests/magmaan_test_sim
+        cpp/build/coverage/tests/magmaan_test_parity
+        cpp/build/coverage/tests/magmaan_test_robcat
     )
     object_args=()
     for obj in "${objects[@]:1}"; do
@@ -125,19 +125,19 @@ coverage-html: coverage
 
 # Build the local optimized tree (Release + native CPU tuning).
 opt:
-    cmake --build --preset opt --parallel {{jobs}}
+    cmake --build cpp/build/opt --parallel {{jobs}}
 
 # Build + run the optimized C++ test suite.
 test-opt: opt
-    ctest --preset opt
+    ctest --test-dir cpp/build/opt --output-on-failure
 
 # Build the optional IPOPT optimizer tree (requires system IPOPT).
 ipopt:
-    cmake --build --preset ipopt --parallel {{jobs}}
+    cmake --build cpp/build/ipopt --parallel {{jobs}}
 
 # Build + run the optional IPOPT optimizer test suite.
 test-ipopt: ipopt
-    ctest --preset ipopt
+    ctest --test-dir cpp/build/ipopt --output-on-failure
 
 # Back-compatible alias for the normal local C++ build.
 build: fast
@@ -147,32 +147,32 @@ test: test-fast
 
 # Build + run the fast C++ test suite and write JUnit XML.
 test-report: fast
-    ctest --preset fast --output-junit "$PWD/build/fast/test-results.xml"
+    ctest --test-dir cpp/build/fast --output-on-failure --output-junit "$PWD/build/fast/test-results.xml"
 
 # Build + run the quick fast-suite and write JUnit XML.
 test-quick-report: fast
-    ctest --preset fast -LE parity --output-junit "$PWD/build/fast/test-quick-results.xml"
+    ctest --test-dir cpp/build/fast --output-on-failure -LE parity --output-junit "$PWD/build/fast/test-quick-results.xml"
 
 # Local maintainer health check: quick report plus source-coverage summary.
 health: test-quick-report coverage
-    @echo "Health reports: build/fast/test-quick-results.xml and build/coverage/"
+    @echo "Health reports: cpp/build/fast/test-quick-results.xml and cpp/build/coverage/"
 
 # === R bindings: fast dev loop vs portable ship ============================
 # `just r-dev` is the FAST daily loop; `just r-install` is the PORTABLE,
 # self-contained build (compiles the vendored C++ core, links a system NLopt)
 # that install_github / a tarball / an HPC scp would do. After any change under
-# src/ or include/, the vendored copies must be refreshed with `just vendor`.
+# cpp/src/ or cpp/include/, the vendored copies must be refreshed with `just vendor`.
 
 # Vendor the C++ core + PORT + QUADPACK into the self-contained r-package/src/.
 vendor:
-    dev/vendor-cpp.sh
+    r-package/tools/vendor-cpp.sh
 
-# Fail if the vendored copies drift from canonical (a src/ or include/ change
+# Fail if the vendored copies drift from canonical (a cpp/src/ or cpp/include/ change
 # without re-vendoring, or a hand-edited vendored copy). For CI / pre-commit.
 vendor-check: vendor
     #!/usr/bin/env bash
     set -euo pipefail
-    # Only the vendored trees, not the hand-written Makevars/glue at src/ top level.
+    # Only the vendored trees, not the hand-written Makevars/glue at cpp/src/ top level.
     paths="r-package/src/core r-package/src/magmaan r-package/src/third_party"
     if [ -n "$(git status --porcelain -- $paths)" ]; then
         echo "vendored r-package/src/{core,magmaan,third_party} out of sync — run 'just vendor' and commit:"
@@ -184,31 +184,31 @@ vendor-check: vendor
 # as install_github / a release builds it. Slower than r-dev; use it to validate
 # the shippable package or to install where there is no CMake build. NLopt comes
 # from pkg-config; override with NLOPT_CFLAGS / NLOPT_LIBS (or R_MAKEVARS_USER on
-# a cluster). See dev/saga/README.md.
+# a cluster). See r-package/tools/saga/README.md.
 r-install: vendor
     MAKEFLAGS="-j{{jobs}}" R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # FAST dev install (the daily loop). Compiles only the Rcpp glue and links the
-# prebuilt opt libmagmaan.a, via a throwaway build-rdev/ mirror with the dev-only
-# dev/r-makevars-dev swapped in — so the committed self-contained
+# prebuilt opt libmagmaan.a, via a throwaway r-package/build-rdev/ mirror with the dev-only
+# r-package/tools/r-makevars-dev swapped in — so the committed self-contained
 # r-package/src/Makevars is never touched. Optional backends:
 # `just r-dev ceres 1 0` or `just r-dev ipopt 0 1`.
 r-dev preset="opt" ceres="0" ipopt="0":
     #!/usr/bin/env bash
     set -euo pipefail
-    cmake --preset {{preset}}
-    cmake --build --preset {{preset}} --target magmaan --parallel {{jobs}}
+    cmake -S cpp --preset {{preset}}
+    cmake --build cpp/build/{{preset}} --target magmaan --parallel {{jobs}}
     root="$(pwd)"
     rsync -a --delete \
         --exclude='*.o' --exclude='*.so' \
         --exclude='/src/core' --exclude='/src/magmaan' --exclude='/src/third_party' \
-        --exclude='/examples' --exclude='/.RData' --exclude='/.Rhistory' --exclude='/.Rproj.user' \
-        r-package/ build-rdev/
-    cp dev/r-makevars-dev build-rdev/src/Makevars
+        --exclude='/build-rdev' --exclude='/tools' --exclude='/examples' --exclude='/.RData' --exclude='/.Rhistory' --exclude='/.Rproj.user' \
+        r-package/ r-package/build-rdev/
+    cp r-package/tools/r-makevars-dev r-package/build-rdev/src/Makevars
     MAGMAAN_ROOT="$root" MAGMAAN_PRESET={{preset}} \
         MAGMAAN_WITH_CERES_R={{ceres}} MAGMAAN_WITH_IPOPT_R={{ipopt}} \
         MAKEFLAGS="-j{{jobs}}" \
-        R CMD INSTALL --no-byte-compile --no-docs --no-help build-rdev
+        R CMD INSTALL --no-byte-compile --no-docs --no-help r-package/build-rdev
 
 # Back-compat aliases for the old fast/ceres/ipopt installs (now via r-dev).
 r-install-fast: (r-dev "fast")
@@ -229,77 +229,32 @@ r-check: r-dev r-examples
 
 # Force-clean the in-tree R build artifacts + the dev mirror.
 r-clean:
-    rm -rf build-rdev
+    rm -rf r-package/build-rdev
     rm -f r-package/src/*.o r-package/src/*.so r-package/src/.magmaan-build-config
 
 # Regenerate the lavaan oracle fixtures (needs R + the pinned lavaan version).
 regen-oracle:
-    Rscript tests/tools/regen_oracle.R
+    Rscript cpp/tests/tools/regen_oracle.R
 
 # Regenerate the robcat parity fixtures (needs R + the pinned robcat version).
 regen-robcat:
-    Rscript tests/tools/regen_robcat_fixtures.R
+    Rscript cpp/tests/tools/regen_robcat_fixtures.R
 
 # Regenerate the semfindr case-influence fixtures (needs R + the pinned semfindr).
 regen-semfindr:
-    Rscript tests/tools/regen_semfindr_fixtures.R
+    Rscript cpp/tests/tools/regen_semfindr_fixtures.R
 
 # Enforce the dependency-layering rule (leaves are sinks). Fast: no build, no R.
 check-layering:
-    bash tests/tools/check_layering.sh
+    bash cpp/tests/tools/check_layering.sh
 
 # Enforce what may be tracked: only magmaan content, no third-party binaries,
 # no session state, nothing over 1 MB. Checks the index, so run it before
 # committing new files.
 check-tracked:
-    bash tests/tools/check_tracked_files.sh
+    bash cpp/tests/tools/check_tracked_files.sh
 
 # Dependency layering + tracked content + vendor-drift + C++ tests + R smoke —
 # everything. The cheap structural lints (layering, tracked content, vendor
 # sync) run first so they fail fast before the slow build.
 check: check-layering check-tracked vendor-check test r-check
-
-notes_dir := "docs/research/notes"
-
-# Build one research note (named, or the most recently edited) and open the PDF.
-note-build name="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    dir="{{notes_dir}}"
-    if [ -n "{{name}}" ]; then
-        tex="$dir/$(basename "{{name}}" .tex).tex"
-    else
-        tex="$(ls -t "$dir"/*.tex 2>/dev/null | head -1 || true)"
-    fi
-    [ -n "${tex:-}" ] && [ -f "$tex" ] || { echo "no .tex note found in $dir"; exit 1; }
-    base="$(basename "$tex" .tex)"
-    cd "$dir"
-    pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null
-    pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null
-    rm -f "$base".{aux,log,out,toc}
-    if command -v xdg-open >/dev/null 2>&1; then opener=xdg-open; else opener=open; fi
-    if command -v setsid >/dev/null 2>&1; then
-        setsid "$opener" "$base.pdf" >/dev/null 2>&1 < /dev/null &
-    else
-        "$opener" "$base.pdf" >/dev/null 2>&1 &
-    fi
-    echo "built and opened $dir/$base.pdf"
-
-# Rebuild every research note (no viewer); report any that fail to compile.
-note-build-all:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    dir="{{notes_dir}}"
-    fail=0
-    shopt -s nullglob
-    for tex in "$dir"/*.tex; do
-        base="$(basename "$tex" .tex)"
-        if ( cd "$dir" && pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null 2>&1 \
-                       && pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null 2>&1 ); then
-            ( cd "$dir" && rm -f "$base".{aux,log,out,toc} )
-            echo "ok   $base"
-        else
-            echo "FAIL $base"; fail=1
-        fi
-    done
-    exit $fail

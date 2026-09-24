@@ -30,7 +30,7 @@ parse_args <- function(args) {
       cat(
         "Usage: Rscript run_experiment.R [--reps N] [--backend NAME] [--cases REGEX] [--latent-only]\n",
         "\n",
-        "Defaults: --reps 10 --backend nlopt-lbfgs --corpus ../../corpus/textbook-corpus\n",
+        "Defaults: --reps 10 --backend nlopt-lbfgs --corpus ../../external/textbook-corpus\n",
         sep = ""
       )
       quit(save = "no", status = 0L)
@@ -214,7 +214,7 @@ coverage_row <- function(case_id, label, source, primary_tag, tags, data_kind,
 }
 
 # (The former test-fixture loader was removed: experiments are sinks and must
-# not read tests/. exp01 now sources the textbook-corpus submodule directly via
+# not read cpp/tests/. exp01 now sources the textbook-corpus submodule directly via
 # load_corpus_experiment_cases below.)
 
 load_corpus_case <- function(corpus_dir, row, include_observed = TRUE) {
@@ -335,8 +335,8 @@ load_corpus_experiment_cases <- function(corpus_dir, case_regex = NULL,
     stop("Missing corpus manifest: ", manifest_path,
          "\n(The textbook-corpus real-data dependency is private and optional; ",
          "it is not part of the public repository. Mount it at ",
-         "corpus/textbook-corpus/, or pass --corpus <dir>, to run this ",
-         "experiment. See corpus/README.md.)",
+         "external/textbook-corpus/, or pass --corpus <dir>, to run this ",
+         "experiment. See project/reference/textbook-corpus.md.)",
          call. = FALSE)
   }
   manifest <- utils::read.csv(manifest_path, stringsAsFactors = FALSE)
@@ -375,13 +375,13 @@ load_corpus_experiment_cases <- function(corpus_dir, case_regex = NULL,
 load_experiment_cases <- function(repo_dir, corpus_dir = NULL, case_regex = NULL,
                                   include_observed = TRUE) {
   if (is.null(corpus_dir)) {
-    corpus_dir <- file.path(repo_dir, "corpus", "textbook-corpus")
+    corpus_dir <- file.path(repo_dir, "external", "textbook-corpus")
   }
   corpus_manifest <- file.path(corpus_dir, "manifest.csv")
   if (!file.exists(corpus_manifest)) {
     stop("textbook-corpus submodule not found at ", corpus_dir,
          " (expected manifest.csv). Initialise it with ",
-         "`git submodule update --init corpus/textbook-corpus`, ",
+         "`git submodule update --init external/textbook-corpus`, ",
          "or pass --corpus <path>.", call. = FALSE)
   }
   load_corpus_experiment_cases(

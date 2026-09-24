@@ -16,9 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check layering
-        run: bash tests/tools/check_layering.sh
+        run: bash cpp/tests/tools/check_layering.sh
       - name: Check tracked content
-        run: bash tests/tools/check_tracked_files.sh
+        run: bash cpp/tests/tools/check_tracked_files.sh
 
   r-boundary:
     name: R boundary + vendor sync
@@ -28,7 +28,7 @@ jobs:
 
       - name: Check vendored C++ sources
         run: |
-          bash dev/vendor-cpp.sh
+          bash r-package/tools/vendor-cpp.sh
           status="$(git status --porcelain -- r-package/src)"
           if [ -n "$status" ]; then
             printf '%s\n' "$status"
@@ -54,6 +54,9 @@ jobs:
           Rscript -e 'testthat::test_file("r-package/tests/testthat/test-nested-test.R", package = "magmaan")'
 
   build-gcc:
+    defaults:
+      run:
+        working-directory: cpp
     # Compiler diversity, not redundancy. The -Werror set is strict enough that
     # GCC rejects code clang accepts (-Wmisleading-indentation is the one that
     # bit us), and `remotes::install_github` builds the vendored core with
@@ -75,6 +78,9 @@ jobs:
         run: cmake --build --preset default --parallel 4
 
   build-test:
+    defaults:
+      run:
+        working-directory: cpp
     # Clang 19 is the clang floor against libstdc++: Ubuntu 24.04's stock clang
     # 18 cannot use libstdc++'s <expected> (it needs the C++20 concepts level
     # clang reports only from 19), so take clang 19 from apt.llvm.org.

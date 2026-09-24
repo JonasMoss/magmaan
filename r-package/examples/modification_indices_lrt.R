@@ -7,7 +7,7 @@
 ## observed-bread reference law (lrt_p_obs), and the EXACT refitted change
 ## (epc_lrt, plus its std.all standardization sepc_lrt). mi_screen() then adds the
 ## "modern MI" decision layer: BH multiplicity + a significant x substantial
-## verdict. See docs/research/notes/lrt_modification_indices.tex.
+## verdict. See lrt_modification_indices.tex.
 
 suppressMessages(library(magmaan))
 

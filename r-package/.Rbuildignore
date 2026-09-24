@@ -6,3 +6,5 @@
 ^src/.*\.o$
 ^src/.*\.so$
 ^src/\.magmaan-build-config$
+^tools$
+^build-rdev$

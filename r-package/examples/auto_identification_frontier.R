@@ -24,7 +24,7 @@ ref_path <- system.file("..", "..", "tests", "fixtures", "geiser",
                         "gls_reference.json", package = "magmaan")
 if (!file.exists(ref_path)) {
   # Running from the repo (the more common case during package development).
-  ref_path <- file.path("tests", "fixtures", "geiser", "gls_reference.json")
+  ref_path <- file.path("cpp", "tests", "fixtures", "geiser", "gls_reference.json")
 }
 stopifnot(file.exists(ref_path))
 ref <- jsonlite::read_json(ref_path, simplifyVector = FALSE)

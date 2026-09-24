@@ -23,14 +23,14 @@
 ## lavaan-gated (`ugamma_eigvals_nt` in the inference goldens,
 ## `mlr_trace_ugamma{,_h0,_h1}` in the FIML goldens), and the difference plus
 ## eigen-solve is checked against an independent dense `Eigen::EigenSolver`
-## oracle in tests/unit/satorra2000_test.cpp (including the indefinite case and
+## oracle in cpp/tests/unit/satorra2000_test.cpp (including the indefinite case and
 ## the negative-eigenvalue warning). U_D = U0 - U1 introduces no unvalidated
 ## quantity of its own.
 ##
 ## magmaan keeps `ud_method = "2001"` because it is the documented fallback when
 ## SB2010 cannot run: method 2000 needs a restriction map between same-parameter
 ## nested models, while 2001 needs only the two fitted models. See the error
-## text in src/robust/lr_test_satorra.cpp. Upstream's "poor performance" verdict
+## text in cpp/src/robust/lr_test_satorra.cpp. Upstream's "poor performance" verdict
 ## is about power, not correctness, so prefer `ud_method = "2000"` when both
 ## apply.
 

@@ -8,7 +8,7 @@
 ## estimates. Unlike the one-step score test, the refit isolates each release
 ## exactly even under structural misspecification elsewhere, and an existing
 ## group_partial baseline on the anchor gives conditional localization for free.
-## See docs/research/notes/lrt_modification_indices.tex.
+## See lrt_modification_indices.tex.
 
 suppressMessages(library(magmaan))
 

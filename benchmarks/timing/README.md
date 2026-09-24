@@ -21,8 +21,8 @@ exceed the quantity being measured.
 ## Build and run
 
 ```sh
-cmake --preset opt -DMAGMAAN_BUILD_BENCH=ON
-cmake --build --preset opt --target magmaan_timing_bench
+cmake -S cpp --preset opt -DMAGMAAN_BUILD_BENCH=ON
+cmake --build cpp/build/opt --target magmaan_timing_bench
 
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   ./build/opt/benchmarks/magmaan_timing_bench --p 12 --n 1000 --out /tmp/t.csv

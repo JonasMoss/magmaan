@@ -1,4 +1,4 @@
-# magmaan <img src="docs/assets/logo/logo_compact.png" align="right" height="85" />
+# magmaan <img src="project/assets/logo/logo_compact.png" align="right" height="85" />
 
 `magmaan` is the subterranean cousin of `lavaan`. It's C++23 toolkit for methods developers and simulation ethusiasts working on linear SEM, with a focus on modularity, extensibility, and full control over moving parts.
 
@@ -70,15 +70,28 @@ AddressSanitizer + UBSan. `just` wraps the usual loops: `just build`,
 
 magmaan is released under the [MIT License](LICENSE).
 
-Vendored third-party sources under `third_party/` (PORT, BSD-3-Clause;
+Vendored third-party sources under `cpp/third_party/` (PORT, BSD-3-Clause;
 QUADPACK, public domain) keep their own terms, recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Vendored third-party sources under `third_party/` keep their own licenses (see
+Vendored third-party sources under `cpp/third_party/` keep their own licenses (see
 each subdirectory's `LICENSE-*` and `README.md`). A handful of test fixtures
 embed well-known public SEM teaching datasets (Holzinger-Swineford,
 PoliticalDemocracy, bfi, ...) reproduced from their original distributions;
 their provenance and terms are documented in
-[`tests/fixtures/DATASETS.md`](tests/fixtures/DATASETS.md). Real-data corpora
+[`cpp/tests/fixtures/DATASETS.md`](cpp/tests/fixtures/DATASETS.md). Real-data corpora
 curated from copyrighted textbooks are a private, optional dependency and are
-**not** part of this repository (see [`corpus/README.md`](corpus/README.md)).
+**not** part of this repository (see [`project/reference/textbook-corpus.md`](project/reference/textbook-corpus.md)).
+
+## Navigate
+
+- [cpp/](cpp/): C++ source, headers, tests, fixtures, dependencies, and CMake.
+- [r-package/](r-package/): R bindings; build helpers are in `tools/`.
+- [project/](project/): architecture, backlog, grammar, design, and validation.
+- [experiments/](experiments/): numbered investigations and their reports.
+- [benchmarks/](benchmarks/): shared benchmark harness.
+- [external/](external/): optional source collections and reference material.
+- `papers/` and `private/`: independent local repositories, excluded from magmaan.
+
+Run `just configure`, `just build`, and `just test` from here. CMake presets
+live in `cpp/`; direct preset commands should run from that directory.

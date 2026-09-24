@@ -6,9 +6,9 @@ Working rules for coding agents in the magmaan repo.
 
 A C++23 library that ports lavaan's behavior for **linear SEM under
 complete-data normal-theory estimators**. The audience is methods developers,
-not end users. [docs/architecture/roadmap.md](docs/architecture/roadmap.md) is the current state and
-architecture summary; [docs/backlog/todo.md](docs/backlog/todo.md) is the active backlog of
-remaining SEM/parser/estimation work; [docs/backlog/simulation.md](docs/backlog/simulation.md)
+not end users. [project/architecture/roadmap.md](project/architecture/roadmap.md) is the current state and
+architecture summary; [project/backlog/todo.md](project/backlog/todo.md) is the active backlog of
+remaining SEM/parser/estimation work; [project/backlog/simulation.md](project/backlog/simulation.md)
 is the simulation-specific backlog and decision log. Read the roadmap and the
 relevant backlog before structural changes. The old external `latva` plan is
 historical archaeology, not current guidance.
@@ -20,7 +20,7 @@ historical archaeology, not current guidance.
   C++23 floor is carried by exactly that one feature — `std::expected` is the
   error model — a deliberate single-feature dependency (GCC 13; Clang 19 with
   libstdc++, Clang 17 with libc++; enforced by a compile probe in
-  `cmake/MagmaanCompilerCheck.cmake`).
+  `cpp/cmake/MagmaanCompilerCheck.cmake`).
 - **No virtual functions on the hot path.** Extension is via free function
   templates over structural (duck-typed) interfaces: `Discrepancy`,
   `Optimizer`, `StandardErrorMethod`, and `FitIndex` are documented
@@ -28,11 +28,11 @@ historical archaeology, not current guidance.
   deliberately uses no `concept`/`requires` constraints.
 - **Lavaan is the oracle.** Parser, partable, point estimates, SEs, and
   chi-square statistics match installed lavaan output to documented
-  tolerances. New fixtures are regenerated via `tests/tools/regen_oracle.R`; CI
+  tolerances. New fixtures are regenerated via `cpp/tests/tools/regen_oracle.R`; CI
   never runs lavaan, it only reads the checked-in fixtures. The rare exception: when lavaan (or another oracle) is
   *provably* wrong, do not gate against its output — gate transitively or by an
   independent reference, and record the case in
-  [docs/validation/oracle-defects.md](docs/validation/oracle-defects.md) with
+  [project/validation/oracle-defects.md](project/validation/oracle-defects.md) with
   the required standard of proof. A bare "magmaan differs" is almost always a
   magmaan bug, not an oracle defect; clear the high bar in that file before
   claiming otherwise. This is mostly relevant for less-popular features
@@ -47,7 +47,7 @@ historical archaeology, not current guidance.
   (`LavaanParTable`), which is what the R data.frame and golden `parTable()`
   fixtures compare against. Adding a feature means deciding what each of the
   three carries and what `matrix_rep` / `fit` honor.
-- **`docs/grammar/` is the parser source of truth.** `grammar.ebnf` is
+- **`project/grammar/` is the parser source of truth.** `grammar.ebnf` is
   normative; if the parser disagrees with the EBNF, the parser is wrong. Every
   parser/lexer function carries a `// production: name = ...` back-reference
   comment. When the grammar changes, edit the EBNF first, then the code, then
@@ -70,113 +70,111 @@ in its own git repository, outside magmaan's history.
   mirrors). Code is written from the formulas, not ported: describe lavaan
   agreement as behaviour ("matches lavaan's `lavResiduals()`"), never as a port
   of an internal function or a source file. The exceptions are the vendored
-  build dependencies in `third_party/` (with their licenses) and the public
-  teaching datasets listed in `tests/fixtures/DATASETS.md`; textbook-derived
+  build dependencies in `cpp/third_party/` (with their licenses) and the public
+  teaching datasets listed in `cpp/tests/fixtures/DATASETS.md`; textbook-derived
   fixtures carry derived summary statistics only.
 - **No session state, archives, or rendered output.** IDE and session files
   (`.Rproj.user/`, `.RData`, `__pycache__/`), archives, serialized objects
   (`.rds`, `.RData`), office documents, and rendered reports stay untracked.
 - **Stage explicit paths.** Never `git add -A` or `git add .`; name the files
-  you changed. Before committing a new file outside `src/`, `include/`,
-  `tests/`, or `r-package/`, check that it belongs here.
-- **Enforced.** `tests/tools/check_tracked_files.sh` (`just check-tracked`,
+  you changed. Before committing a new file outside `cpp/src/`, `cpp/include/`,
+  `cpp/tests/`, or `r-package/`, check that it belongs here.
+- **Enforced.** `cpp/tests/tools/check_tracked_files.sh` (`just check-tracked`,
   part of `just check` and CI) fails on unexpected top-level entries, anything
-  tracked inside `papers/`, `private/`, `external/`, or `corpus/`, archives and
-  serialized objects, PDFs outside `docs/research/notes/`, session state, and
+  tracked inside `papers/`, `private/`, `external/`, archives and
+  serialized objects, PDFs, session state, and
   files over 1 MB. A new top-level folder is a layout decision: add it to the
   checker and to this file deliberately.
 
 ## Where things live
 
-- `include/magmaan/` - public headers (stable surface).
-- `src/` - implementations plus private `detail_*.hpp`.
-- `tests/unit/` - focused unit tests, including finite-difference
+- `cpp/include/magmaan/` - public headers (stable surface).
+- `cpp/src/` - implementations plus private `detail_*.hpp`.
+- `cpp/tests/unit/` - focused unit tests, including finite-difference
   Jacobian/property checks (`property_test.cpp`).
-- `tests/golden/` - fixture-based parity checks against lavaan.
-- `tests/fixtures/` - checked-in JSON. Regenerate via `tests/tools/regen_oracle.R`.
-- `tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
-- `tests/checks/` - advisory local simulation checks, outside the default test suite.
+- `cpp/tests/golden/` - fixture-based parity checks against lavaan.
+- `cpp/tests/fixtures/` - checked-in JSON. Regenerate via `cpp/tests/tools/regen_oracle.R`.
+- `cpp/tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
+- `cpp/tests/checks/` - advisory local simulation checks, outside the default test suite.
 - `benchmarks/` - advisory benchmark harness; ignored data/results caches stay local.
-- `docs/research/` - tracked research notes (with their compiled PDFs) and
-  simulation scaffolds. Never third-party PDFs.
-- `docs/reference/` - policy for ignored external resources and source mirrors.
-- `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
-- `docs/architecture/roadmap.md` - current implementation state and design contracts.
-- `docs/backlog/todo.md` - active human-readable backlog and remaining milestones.
-- `docs/backlog/simulation.md` - simulation-specific TODO and decision log for
+- `project/` - public maintainer knowledge: architecture, backlog, grammar, design,
+  validation, reference, and assets. Research notes belong in independent private repositories.
+- `project/reference/` - policy for ignored external resources and source mirrors.
+- `project/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
+- `project/architecture/roadmap.md` - current implementation state and design contracts.
+- `project/backlog/todo.md` - active human-readable backlog and remaining milestones.
+- `project/backlog/simulation.md` - simulation-specific TODO and decision log for
   `magmaan::sim`, marginal generators, and simulation fixture policy.
-- `docs/backlog/speculative.md` - deferred may-never-build items; each entry
+- `project/backlog/speculative.md` - deferred may-never-build items; each entry
   names the gap, the cheaper alternative that already covers it, and the
   explicit build-if trigger. Promote to `todo.md` only when a concrete
   downstream consumer appears.
 - `external/` - ignored single "development help" folder: source mirrors for reading
   upstream code plus `external/refs/` reference PDFs. Never built, never committed.
-- `corpus/` - ignored mount point for the optional real-data textbook corpus;
-  see `corpus/README.md`.
+- `external/textbook-corpus/` - ignored optional real-data textbook collection;
+  see `project/reference/textbook-corpus.md`.
 - `papers/` - ignored; one nested git repository per manuscript (see
   `papers/AGENTS.md`).
 - `private/` - ignored; one nested git repository per non-magmaan project
   (talks, collaborator handoffs, allocation applications, paper evaluations such
   as `private/paper-evals/`, which the `/eval-paper` skill writes to). See
   `private/README.md`.
-- `third_party/` - tracked vendored third-party sources that participate in the
+- `cpp/third_party/` - tracked vendored third-party sources that participate in the
   build. Each subdirectory holds the verbatim upstream sources plus the upstream
   LICENSE files and a vendor README.md documenting source URL, commit, license,
-  and any local patches. Currently: `third_party/port/` (PORT optimizer
+  and any local patches. Currently: `cpp/third_party/port/` (PORT optimizer
   routines, AMPL/ASL + Fermi-LAT, BSD-3) — wired into the build via
-  `cmake/PortVendor.cmake`.
+  `cpp/cmake/PortVendor.cmake`.
 - `r-package/` - exploratory R bindings (Rcpp). Self-contained and portable:
-  the C++ core (plus `third_party/port` + `third_party/quadpack`) is **vendored**
-  into `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`
+  the C++ core (plus `cpp/third_party/port` + `cpp/third_party/quadpack`) is **vendored**
+  into `r-package/src/{core,magmaan,third_party}/` by `r-package/tools/vendor-cpp.sh`
   (`just vendor`) so `R CMD INSTALL` / `remotes::install_github` builds it with
   no CMake and no prebuilt library. NLopt is resolved from a system install
   (pkg-config) or, failing that, from the `nloptr` CRAN package, which bundles
   and self-builds NLopt (`LinkingTo`/`Imports: nloptr`) so no system NLopt module
   is needed. The vendored copies carry an `@generated` banner
-  and must never be hand-edited; edit canonical `src/`/`include/` and re-vendor
+  and must never be hand-edited; edit canonical `cpp/src/`/`cpp/include/` and re-vendor
   (`just vendor-check` guards drift). The **fast dev loop is `just r-dev`**, which
   compiles only the Rcpp glue and links the prebuilt `opt` `libmagmaan.a` via a
-  throwaway `build-rdev/` mirror with `dev/r-makevars-dev` swapped in.
+  throwaway `r-package/build-rdev/` mirror with `r-package/tools/r-makevars-dev` swapped in.
 
 ## Dependency layering
 
 Dependencies flow strictly downward; **leaves are sinks**. Each item depends
 only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
 
-- **T0 inputs**: `third_party/` (built), `external/` (ignored), `corpus/`
-  (ignored data mount).
-- **T1 core**: `include/`, `src/` - depend on T0 only.
+- **T0 inputs**: `cpp/third_party/` (built), `external/` (ignored source collections and reference material).
+- **T1 core**: `cpp/include/`, `cpp/src/` - depend on T0 only.
 - **T2**: `r-package/` (depends on core only); `experiments/_support/` (the
   `magmaan.experiments` harness package: depends on core/r-package only, carries
   **no SEM logic** and **no paper/experiment-specific references**); `benchmarks/`
   (shared benchmark harness that experiments may consume).
 - **T3 leaves / sinks**: each `papers/<name>/`, each `experiments/<NN>-*/`, and
-  `tests/`. A leaf consumes only lower tiers, is referenced by nothing, and never
+  `cpp/tests/`. A leaf consumes only lower tiers, is referenced by nothing, and never
   references a sibling leaf. `papers/_archive/` contains frozen retired paper
   trees; it is historical material, not an active T3 leaf or dependency source.
 - **Outside the DAG**: `private/<name>/` repositories are not magmaan. They may
   use magmaan freely; nothing tracked may reference them.
 
-Invariants (enforced by `tests/tools/check_layering.sh`, run via
+Invariants (enforced by `cpp/tests/tools/check_layering.sh`, run via
 `just check-layering`, folded into `just check`, and a hard-failing CI job):
 
-1. **Core never reaches up**: nothing in `include/`, `src/`, or `r-package/`
-   references `papers/`, `experiments/`, `benchmarks/`, or `tests/`.
+1. **Core never reaches up**: nothing in `cpp/include/`, `cpp/src/`, or `r-package/`
+   references `papers/`, `experiments/`, `benchmarks/`, or `cpp/tests/`.
 2. **Papers are private**: `papers/A/**` is referenced only from within
    `papers/A/` (each paper is its own nested git repo, gitignored by the outer
    repo). Trees moved under `papers/_archive/` are excluded from active-leaf
    scanning, while references to that archive from active code remain forbidden.
 3. **Experiments are endpoints**: an `experiments/<NN>/` references no paper and
    no other experiment; the only shared experiment sibling is
-   `experiments/_support`. Experiments may consume `benchmarks/` and the corpus
-   submodule.
+   `experiments/_support`. Experiments may consume `benchmarks/` and the optional textbook corpus.
 4. **No sibling-leaf edges**: paper-to-paper, experiment-to-experiment (except
    `_support`), paper-to-experiment, and tests-to-(papers/experiments) are all
    forbidden.
 5. **Shared code flows down, never sideways**: code two leaves both need goes
    into core, `r-package`, `experiments/_support`, or `benchmarks` - never
    sourced/loaded/included across a sibling boundary. (Running a built artifact,
-   e.g. `build/<preset>/benchmarks/<bin>`, is allowed; it is execution, not a
+   e.g. `cpp/build/<preset>/benchmarks/<bin>`, is allowed; it is execution, not a
    source dependency.)
 6. **Reports read only from their own `results/`**.
 7. **Private is invisible**: no tracked code references `private/`.
@@ -187,6 +185,7 @@ The checker scans code files only (`*.R/*.cpp/*.hpp/*.h/CMakeLists.txt/*.cmake/
 ## Build
 
 ```sh
+cd cpp
 cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev
@@ -220,12 +219,12 @@ optional test-name filter as a second arg — and `just test-quick` runs
 everything except the heavy real-data `parity` tests.
 
 The fast dev loop `just r-dev` links the prebuilt non-sanitized `opt`
-`libmagmaan.a` (via the `build-rdev/` mirror + `dev/r-makevars-dev`), so a C++
+`libmagmaan.a` (via the `r-package/build-rdev/` mirror + `r-package/tools/r-makevars-dev`), so a C++
 header change forces the glue to recompile against the new ABI; a full rebuild of
 the vendored core only happens on the portable `just r-install`. After editing
-`src/`/`include/`, run `just vendor` to refresh the vendored copies. If you ever
+`cpp/src/`/`cpp/include/`, run `just vendor` to refresh the vendored copies. If you ever
 see an `undefined symbol` at R load time, `just r-clean` and reinstall. To
-install on a cluster, see [dev/saga/README.md](dev/saga/README.md).
+install on a cluster, see [r-package/tools/saga/README.md](r-package/tools/saga/README.md).
 
 ## R Package Direction
 
@@ -254,7 +253,7 @@ must appear or disappear exactly as lavaan would for the requested model.
 
 ## Namespace Layout
 
-Each top-level namespace owns a domain; the directory under `include/magmaan/`
+Each top-level namespace owns a domain; the directory under `cpp/include/magmaan/`
 matches the namespace.
 
 - `parse` - lexer, parser, operator enums.
@@ -276,7 +275,7 @@ matches the namespace.
 
 ### Core vs frontier
 
-The public API is tiered (see [docs/design/ideas.md](docs/design/ideas.md)). `core` is the
+The public API is tiered (see [project/design/ideas.md](project/design/ideas.md)). `core` is the
 stable, lavaan-parity surface. `frontier` is the research / non-lavaan methods
 surface: it nests **per domain** - `estimate::frontier`, `data::frontier`,
 `robust::frontier`, and so on - never a single top-level `frontier` namespace.
@@ -287,7 +286,7 @@ domain's `frontier` sub-namespace.
 So far `api::frontier`, `estimate::frontier`, `robust::frontier`, and
 `measures::frontier` exist; their headers still sit in the domain directory
 rather than a `<domain>/frontier/` subdirectory, and the `data/` research
-headers are not yet retiered. See `docs/backlog/todo.md`.
+headers are not yet retiered. See `project/backlog/todo.md`.
 
 ## Conventions
 
@@ -295,24 +294,24 @@ headers are not yet retiered. See `docs/backlog/todo.md`.
   types; `kCamelCase` is not used; constants are `snake_case`
   (`version_major`, etc.).
 - Public headers include with `#include "magmaan/foo.hpp"`.
-- Private headers under `src/.../detail_*.hpp` include with relative paths.
+- Private headers under `cpp/src/.../detail_*.hpp` include with relative paths.
 - Comments only when the why is non-obvious. The roadmap and lavaan reference
   together cover the what.
-- Keep `docs/backlog/todo.md` as the main active backlog and
-  `docs/backlog/simulation.md` as the simulation-specific active backlog.
-  Treat `docs/backlog/simulation.md` as the design roadmap for the simulation
+- Keep `project/backlog/todo.md` as the main active backlog and
+  `project/backlog/simulation.md` as the simulation-specific active backlog.
+  Treat `project/backlog/simulation.md` as the design roadmap for the simulation
   sublibrary's generator/projection/calibration stack; keep only cross-domain
   summaries in the main roadmap/TODO.
-  Non-committed may-never-build ideas live in `docs/backlog/speculative.md`,
+  Non-committed may-never-build ideas live in `project/backlog/speculative.md`,
   not in `todo.md`; it is a trigger list, not a parallel roadmap.
-  Remove or fold stale finished planning docs into `docs/architecture/roadmap.md`,
-  `docs/backlog/todo.md`, or `docs/backlog/simulation.md` when a phase
+  Remove or fold stale finished planning docs into `project/architecture/roadmap.md`,
+  `project/backlog/todo.md`, or `project/backlog/simulation.md` when a phase
   completes; do not create parallel roadmaps.
-- Keep `docs/architecture/roadmap.md` current whenever a change alters implementation
+- Keep `project/architecture/roadmap.md` current whenever a change alters implementation
   state, architecture, contracts, boundaries, or validation expectations.
-- Keep `docs/backlog/todo.md` current whenever a change completes a milestone,
+- Keep `project/backlog/todo.md` current whenever a change completes a milestone,
   changes priorities, or reveals new remaining work.
-- Keep `docs/backlog/simulation.md` current whenever a change completes a
+- Keep `project/backlog/simulation.md` current whenever a change completes a
   simulation milestone, changes generator priorities, or reveals new
   simulation-specific work.
 - Commit every finished user request as a coherent completed change before
@@ -327,11 +326,11 @@ not depend on it. Fixture regeneration uses installed R packages at the pinned
 versions and writes checked-in JSON; C++ tests consume those fixtures only.
 When implementing a step, read the formulas (Bollen 1989, Mulaik 2009,
 Yuan-Bentler), not the R source. Use package output, not vendored code, as the
-oracle. See `docs/reference/external_resources.md`.
+oracle. See `project/reference/external_resources.md`.
 
 When a parity check fails, assume a magmaan bug first. If — and only if — you can
 clear the standard of proof in
-[`docs/validation/oracle-defects.md`](docs/validation/oracle-defects.md) (an
+[`project/validation/oracle-defects.md`](project/validation/oracle-defects.md) (an
 independent reference magmaan matches plus a first-principles property the oracle
 violates), record the case there and gate the affected test transitively or
 self-consistently rather than against the bad output. That ledger is also where

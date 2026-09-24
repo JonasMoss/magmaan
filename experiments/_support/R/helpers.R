@@ -17,7 +17,7 @@ script_path <- function(default = "run_experiment.R") {
 repo_root <- function(start = dirname(script_path())) {
   path <- normalizePath(start, mustWork = TRUE)
   repeat {
-    if (file.exists(file.path(path, "CMakeLists.txt")) &&
+    if (file.exists(file.path(path, "cpp", "CMakeLists.txt")) &&
         file.exists(file.path(path, "r-package", "DESCRIPTION"))) {
       return(path)
     }
@@ -41,13 +41,13 @@ support_path <- function(...) {
 
 # Path to the textbook-corpus real-data dependency. Pure path helper so
 # experiments read the corpus directly instead of borrowing another leaf's data
-# (tests/fixtures or a paper's bundle). The corpus is a private, optional mount
-# (see corpus/README.md); call corpus_available() before reading it.
+# (cpp/tests/fixtures or a paper's bundle). The corpus is a private, optional mount
+# (see project/reference/textbook-corpus.md); call corpus_available() before reading it.
 corpus_root <- function() {
-  file.path(repo_root(), "corpus", "textbook-corpus")
+  file.path(repo_root(), "external", "textbook-corpus")
 }
 
-# TRUE when the private textbook-corpus is mounted at corpus/textbook-corpus/.
+# TRUE when the private textbook-corpus is mounted at external/textbook-corpus/.
 # Corpus-dependent experiments and regenerators should skip cleanly when FALSE.
 corpus_available <- function(root = corpus_root()) {
   dir.exists(root) && file.exists(file.path(root, "manifest.csv"))

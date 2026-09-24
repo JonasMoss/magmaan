@@ -1,52 +1,17 @@
-# `external/` — development help
+# External material
 
-Everything under `external/` is **development help**: source mirrors and reference
-material you read while developing magmaan. It is **ignored by Git** (this README
-is the one tracked exception) — never built, not part of CI, and never a required
-test or build input. Anything here can be deleted and re-fetched at will.
+Optional local inputs, ignored by magmaan except this guide:
 
-This folder replaces the old split between `external/` and `resources/`; there is
-now a single place for "outside material you read."
+- `textbook-corpus/`: textbook datasets, cases, and raw downloads. See
+  [the corpus guide](../project/reference/textbook-corpus.md).
+- `paper-corpus/`: independent Git repository owning paper ingestion, derived
+  cases, validation, and exports.
+- `paper-downloads/`: source archives used by experiments 31 (Etzel) and 32
+  (Schlechter). These are still required by those experiments.
+- `refs/`: reference papers and books.
+- Other source mirrors may be placed here for reference; they are not built.
 
-## Layout
-
-```
-external/
-├── README.md        ← this file (tracked)
-├── lavaan/          ← source mirror: read lavaan's R implementation
-├── robcat/          ← source mirror: robust polychoric R package
-├── kreiberg/        ← reference: Kreiberg's Matlab SNLRLS/SNLLS code (cited in src comments)
-├── paper_corpus/    ← nested git repo for curated paper-corpus work (see below)
-└── refs/            ← flat stash of reference PDFs + local catalog
-```
-
-You won't have all of these on a fresh clone — add only what you need.
-
-## What goes where
-
-- **Source mirrors** (`lavaan/`, `robcat/`, `kreiberg/`) — upstream code checked out
-  locally to read implementation details. The mirror paths are referenced by name
-  from R fixture-regen tooling (`tests/tools/regen_*_fixtures.R`) and a source
-  comment in `include/magmaan/estimate/fit.hpp`, so keep these top-level names
-  stable if present.
-- **`paper_corpus/`** — a special ignored *nested* Git repository owning raw paper
-  downloads, derived data, and magmaan-facing JSON exports. magmaan consumes only
-  the copied export snapshots under `tests/fixtures/paper_corpus/`; the nested repo
-  itself is never read by the C++ tests.
-- **`refs/`** — a flat stash of reference PDFs (papers, textbooks) whose
-  redistribution terms are unclear or simply unneeded for the build, plus its
-  local catalog README. Nothing in code may depend on a file existing here.
-  Name PDFs `first-author-year-short-title.pdf` in lowercase kebab case. The
-  [`refs/README.md`](refs/README.md) catalog carries useful notes recovered from
-  the former topic READMEs.
-
-## What does NOT go here
-
-- **Textbook-corpus material** (raw Mplus/Brown/Geiser/Kline/Little/Newsom bundles)
-  lives under the `corpus/textbook-corpus` submodule at `corpus/textbook-corpus/raw/<book>/`.
-- **Self-generated test material** (smoke goldens, fixtures) belongs under `tests/`
-  — it is not "external." The live smokes are `tests/golden/` (C++) and
-  `r-package/examples/` (R).
-
-See `docs/reference/external_resources.md` for the full policy and the oracle model
-(fixtures come from installed R packages, not vendored source).
+C++ tests normally consume committed snapshots in `cpp/tests/fixtures/`.
+Two optional textbook checks also read the mounted case collection and skip
+when it is absent. Paper-corpus exports are copied by the bridge scripts in
+`cpp/tests/tools/`; moving the collections does not regenerate them.

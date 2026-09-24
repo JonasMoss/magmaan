@@ -61,7 +61,7 @@ fixed-weight trace as `eps` grows.
 
 ## Reproduce
 
-Build the optimized core once (`cmake --build --preset opt`), then:
+Build the optimized core once (`cmake --build cpp/build/opt`), then:
 
 ```sh
 just quick   # reps=300, fast smoke
@@ -69,7 +69,7 @@ just all     # reps=4000, tight
 ```
 
 Override the simulator directly:
-`build/ordinal_dwls_profile_lrt_sim --reps=… --seed=… --out=results/calibration.csv`.
+`cpp/build/ordinal_dwls_profile_lrt_sim --reps=… --seed=… --out=results/calibration.csv`.
 Columns: `lambda, eps, n, reps_used, pop_trace_fixed, pop_trace_full, mean_T`,
 then rejection rates `rej_{chi2,fixed,full}_{1,5,10}` (percent of the nominal
 level). Results in this folder are from `reps = 2000`.

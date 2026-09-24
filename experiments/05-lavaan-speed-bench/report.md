@@ -106,7 +106,7 @@ Rscript experiments/05-lavaan-speed-bench/run_experiment.R
 
 ## See also
 
-- [`docs/validation/lavaan_tutorial_parity.md`](../../docs/validation/lavaan_tutorial_parity.md)
+- [`project/validation/lavaan_tutorial_parity.md`](../../project/validation/lavaan_tutorial_parity.md)
   — central lavaan-tutorial parity audit.
 - [`benchmarks/README.md`](../../benchmarks/README.md) — the live
   magmaan-vs-lavaan harness this experiment is built on.

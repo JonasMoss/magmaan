@@ -82,7 +82,7 @@ independently to all eight indicators.
 For each replication, the same simulated data are analyzed twice:
 
 - `nominal`: the conventional nominal-\(N\) pairwise-deletion Gamma.
-- `overlap`: the support-overlap Gamma from `docs/research/notes/ordinal_pd_gamma.tex`.
+- `overlap`: the support-overlap Gamma from `ordinal_pd_gamma.tex`.
 
 The per-replication simulated p-values are in `results/p_values.csv`.
 

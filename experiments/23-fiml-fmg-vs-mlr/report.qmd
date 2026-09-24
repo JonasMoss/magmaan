@@ -160,7 +160,7 @@ runs also carried a *structured* variant evaluating $V$ at the model-implied
 moments $\eta(\hat\theta)$; it shared the same probability limit under the null,
 never improved on the unstructured convention here, and risked an indefinite $V$
 off $H_0$, so it was removed from magmaan (2026-06-24) and is no longer reported.
-Full derivations: `docs/research/notes/non_normal_fiml_mlr_information`.
+Full derivations: `non_normal_fiml_mlr_information`.
 
 ```{=latex}
 \newpage

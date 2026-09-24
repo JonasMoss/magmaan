@@ -3,7 +3,7 @@
 # the one-step score-test sweep, for cross-group loading-invariance releases.
 #
 # This is the Milestone-1 cost gate for LRT-based modification indices (see
-# docs/research/notes/lrt-modification-indices.tex). The LRT sweep refits one
+# lrt-modification-indices.tex). The LRT sweep refits one
 # released model per candidate constraint and runs a nested Satorra-2000
 # difference test; the one-step sweep (`score_tests`) evaluates a Lagrange-
 # multiplier statistic at the constrained fit in a single fit. We time both

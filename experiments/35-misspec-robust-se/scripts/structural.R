@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # Probe for the residual the observed-Hessian bread leaves behind: the influence
 # of the data-dependent weight Ŵ = diag(Γ̂)⁻¹, which in magmaan is the EMPIRICAL
-# two-stage sandwich (src/data/ordinal.cpp: NACOV = n·B_inv·INNER·B_inv'). The
+# two-stage sandwich (cpp/src/data/ordinal.cpp: NACOV = n·B_inv·INNER·B_inv'). The
 # observed bread fixes only the Hessian; the meat still uses Δ'W, omitting the
 # influence of the estimated variance Γ̂ -- an O(1)-under-misspecification term.
 #

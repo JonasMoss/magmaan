@@ -13,6 +13,6 @@ SystemRequirements: C++23, NLopt (a system NLopt, or the bundled NLopt from the
     nloptr package, which is used automatically when no system NLopt is found)
 Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
     interactive use. Self-contained: the C++ core (plus the vendored PORT and
-    QUADPACK routines) is compiled from sources vendored under src/ and linked
+    QUADPACK routines) is compiled from sources vendored under cpp/src/ and linked
     against a system NLopt, so the package installs without CMake or a prebuilt
     library. Not CRAN-bound.

@@ -1,5 +1,5 @@
 # Real-data SEM corpus loading from the textbook-corpus submodule
-# (corpus/textbook-corpus/). Experiment-local copy so this experiment is a sink
+# (external/textbook-corpus/). Experiment-local copy so this experiment is a sink
 # and does not source a paper. `corpus_root()` comes from experiments/_support.
 #
 # Each case lives at cases/<book>/<case_id>/ with meta.json (schema-v2),
@@ -195,8 +195,8 @@ corpus_cases <- function(root = corpus_root(),
     stop("Missing corpus manifest: ", manifest_path,
          "\n(The textbook-corpus real-data dependency is private and optional; ",
          "it is not part of the public repository. Mount it at ",
-         "corpus/textbook-corpus/ to run corpus-dependent experiments. ",
-         "See corpus/README.md.)",
+         "external/textbook-corpus/ to run corpus-dependent experiments. ",
+         "See project/reference/textbook-corpus.md.)",
          call. = FALSE)
   }
   manifest <- utils::read.csv(manifest_path, stringsAsFactors = FALSE,

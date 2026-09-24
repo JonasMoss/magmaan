@@ -2,7 +2,7 @@
 # Exercises the exported two-level surface -- fit_twolevel() and the
 # magmaan(cluster = ) one-call entry -- against lavaan::sem(..., cluster = ),
 # comparing theta-hat, SE, chi-square, and df. The exhaustive checks (including
-# the non-saturated and multi-group cases) live in tests/testthat/test-twolevel.R.
+# the non-saturated and multi-group cases) live in cpp/tests/testthat/test-twolevel.R.
 suppressMessages({
   library(magmaan)
   library(lavaan)

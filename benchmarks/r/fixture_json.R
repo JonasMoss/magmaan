@@ -1,7 +1,7 @@
 # fixture_json.R --- shared lavaan-to-JSON fixture helpers.
 #
-# Side-effect-free function definitions sourced by both tests/tools/regen_oracle.R
-# (synthetic corpus fixtures) and tests/tools/regen_parity_fixtures.R (real-data
+# Side-effect-free function definitions sourced by both cpp/tests/tools/regen_oracle.R
+# (synthetic corpus fixtures) and cpp/tests/tools/regen_parity_fixtures.R (real-data
 # parity fixtures). Keeping one copy avoids the two oracle scripts drifting
 # in how they serialize lavaan internals.
 #
@@ -312,7 +312,7 @@ defined_json <- function(fit) {
 # golden refits and gates magmaan's factor_scores_{ordinal,mixed_ordinal}
 # against these. Multi-group categorical scores are intentionally not emitted:
 # magmaan's per-group scorer currently diverges from lavaan for non-reference
-# groups (see docs/backlog/todo.md), so there is no gated surface to anchor.
+# groups (see project/backlog/todo.md), so there is no gated surface to anchor.
 ordinal_fscores_json <- function(fit, methods = "EBM") {
   out <- list()
   for (m in methods) out[[m]] <- as.numeric(lavPredict(fit, type = "lv",

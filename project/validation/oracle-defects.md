@@ -1,0 +1,194 @@
+# Oracle Defects Ledger
+
+`AGENTS.md` makes lavaan the oracle: magmaan matches installed lavaan output to
+documented tolerances. This file is the deliberate exception list — the small
+set of cases where lavaan (or another oracle: Mplus, semTests, robcat, ...) is
+**provably wrong** and magmaan is right. It exists so that:
+
+1. we do not re-litigate a known oracle defect every time a parity check
+   "fails";
+2. we do not gate a test against output we know to be incorrect (gate
+   transitively or self-consistently instead — see each entry);
+3. we have a written, reproducible case to file upstream (PR / bug report) when
+   we get around to it.
+
+This is the *opposite* of [`test_ledger.md`](test_ledger.md), which records
+magmaan bugs we fixed. Here magmaan is correct and the oracle is not.
+
+## Standard of proof
+
+"Lavaan is the oracle" is a non-negotiable, so the bar to declare an oracle
+defect is high. A bare "magmaan differs from lavaan" is **not** enough — that is
+almost always a magmaan bug. Require at least:
+
+- an **independent** reference (a from-scratch implementation of the textbook
+  definition, an analytic value, or a second tool) that magmaan matches and the
+  oracle does not; and
+- a **first-principles** argument for why the oracle output is wrong (e.g. it
+  violates a defining property: a posterior mode whose gradient is not zero, a
+  probability that does not integrate to one, a statistic that is not invariant
+  where it must be).
+
+For a **scaled or robust test statistic**, "defensible convention difference" is
+not defensible on a single-dataset comparison. magmaan and the oracle can use
+different finite-sample conventions that agree on one draw yet imply different
+rejection rates. Before exempting such a row, prove calibration in the target
+regime (nonnormal / missing / ordinal): a null Monte Carlo whose magmaan
+rejection rate tracks the oracle and sits near nominal. Normal-data calibration
+does not license a nonnormal-data method. The nested Satorra-2000 scaling was a
+near-miss: exempted here as "believed correct," it over-rejected 5x under
+nonnormality. See [calibration-parity.md](calibration-parity.md).
+
+If you investigate a divergence and the oracle turns out to be right (or the
+call is a defensible convention difference), record it in the **Investigated —
+not a defect** section so the next person does not redo the work.
+
+## Entry format
+
+```text
+Defect: <one-line symptom: which oracle, which feature, what is wrong>.
+Scope: <when it bites — versions, model shapes, options>.
+Proof: <the independent reference + first-principles property that magmaan
+        satisfies and the oracle violates; how to reproduce>.
+magmaan: <what magmaan does instead, and the test that protects it>.
+Upstream: <not filed / issue link / PR link / fixed-in-version>.
+```
+
+## Confirmed defects
+
+```text
+Defect: lavaan multi-group categorical lavPredict(type="lv", method="EBM")
+        returns a non-stationary point for non-reference groups (the returned
+        score is not the posterior mode).
+Scope: lavaan 0.7-1.2691 (and earlier); ordered/categorical multi-group fits.
+        The reference group is correct; group 2+ drift (~0.2 max|diff|,
+        corr ~0.996 on a 2-group 3-cat one-factor CFA) even with theta matched
+        to 1e-7. Single-group categorical EBM is correct.
+Proof: (1) magmaan's group-2 EBM matches an independent R optimize()
+        posterior-mode scorer built from lavaan's OWN extracted group-2
+        parameters to 1.9e-5; (2) at lavaan's group-2 score the posterior
+        gradient is O(1) and the posterior density is LOWER than at magmaan's
+        score (gradient ~1e-7) — lavaan is not at the mode (defining property of
+        EBM violated); (3) every scorer ingredient lavaan uses (VETAx prior,
+        THETA, TH(delta=FALSE), loadings, data, th.idx) is identical to
+        magmaan's. Consistent with the FIXME in lavaan R/lav_predict.R
+        (lav_predict_eta_ebm_ml) that categorical scores are "not identical (but
+        close) to Mplus". Repro: regenerate a 2-group ordinal CFA, compare
+        lavPredict(EBM)[[2]] to an optimize() over
+        [ordinal log-lik + log N(alpha, psi) prior] using lavInspect(.,"est").
+magmaan: factor_scores_ordinal / _mixed_ordinal compute the true posterior mode.
+        Because lavaan is not a usable oracle here, the multi-group scorer is
+        gated TRANSITIVELY: for an unconstrained two-group fixture the per-group
+        multi-group EBM equals an independent single-group fit on that group's
+        data (~3e-8), and single-group EBM is lavaan-gated. Test:
+        cpp/tests/golden/ordinal_golden_test.cpp
+        "ordinal/mixed factor scores (EBM/ML) match lavaan".
+Upstream: not filed. Found 2026-06-14.
+```
+
+```text
+Defect: semfindr::est_change_approx() (the one-step, no-refit case-influence
+        approximation) applies the finite-sample factor N/(N-1) twice to the
+        standardized change (DFTHETAS) and only once inside the approximate
+        generalized Cook's distance (gcd_approx) — one too many and one too
+        few, respectively. est_change_raw_approx() is correct (one factor).
+Scope: semfindr 0.2.0. Both errors are exactly O(1/N) constant factors, so they
+        are immaterial relative to the one-step approximation's own error, but
+        they have no first-principles basis. Affects only the *_approx engine,
+        not the exact leave-one-out est_change().
+Proof: the exact definitions are Pek & MacCallum (2011;
+        external/refs/pek-2011-case-influence-sem-sensitivity-analysis.pdf),
+        Eq. 7 (DFTHETAS = (θ̂ⱼ − θ̂ⱼ₍ᵢ₎) / SE(θ̂ⱼ₍ᵢ₎), the leave-one-out SE)
+        and Eq. 6 (gCD = Δ'[V̂AR(θ̂₍ᵢ₎)]⁻¹Δ, the reduced-
+        sample covariance). A one-step approximation must approximate these.
+        Influence-function derivation — removing case i gives
+        θ̂ − θ̂₍ᵢ₎ ≈ (N/(N-1))·V·s_i (one N/(N-1), the factor semfindr's
+        est_change_raw_approx already carries). Hence DFTHETAS = Δ/SE carries
+        exactly one such factor and gCD = Δ'V⁻¹Δ carries it squared. semfindr's
+        est_change_approx multiplies the already-factored raw change by N/(N-1)
+        AGAIN for DFTHETAS, and forms gcd_approx = (N-1)·xᵀ(V⁻¹/N)x =
+        (N/(N-1))·sᵀVs instead of (N/(N-1))²·sᵀVs. Independent reference: the
+        exact leave-one-out engine (est_change(), itself gated against
+        semfindr::est_change() to ~1e-5) — magmaan's corrected one-step tracks
+        the exact gcd marginally better than semfindr's (0.2643 vs 0.2654 on a
+        2-factor HS CFA, the rest being one-step error).
+magmaan: est_change_approx() uses the correct scaling (DFTHETAS = Δ/SE,
+        gcd_approx = Δ'V_sel⁻¹Δ with Δ = (N/(N-1))Vs). Gated transitively in
+        r-package/examples/case_influence_semfindr.R: matched up to the two
+        documented constant factors (dftheta_magmaan = dftheta_semfindr·(N-1)/N,
+        gcd_magmaan = gcd_semfindr·N/(N-1)) to machine precision, not against the
+        raw semfindr output.
+Upstream: not filed (PR to semfindr planned — see project/backlog/todo.md). Found
+        2026-06-23.
+```
+
+```text
+Defect: lavaan cannot fit a multi-group two-level model: sem(model, data,
+        cluster=, group=) on a `level:` model errors with "subscript out of
+        bounds" in lav_data_cl_patterns. lavaanify drops the group axis for
+        `level:` models (it emits only n_levels blocks, not n_groups*n_levels),
+        so no multigroup-twolevel oracle output exists at all.
+Scope: lavaan 0.7-1.2691. Any model combining `level:` (two-level) with a
+        grouping variable. Single-group two-level and single-level multi-group
+        both work; only the crossing breaks.
+Proof: not "wrong output" but "no output" — so magmaan is gated SELF-
+        CONSISTENTLY rather than against lavaan. First principles: with no
+        cross-group equality constraints a K-group fit is K independent fits,
+        so its likelihood is block-diagonal and (i) each group's θ̂/SE must
+        equal the lavaan-validated single-group fit on that group's data and
+        (ii) the LRT statistic and df both scale by K exactly. Independent
+        reference: the single-group two-level path, which IS lavaan-gated
+        (cpp/tests/golden/twolevel_golden_test.cpp first case + the *.json oracles).
+        Repro: lavaan::sem(level-syntax model, data, cluster="c", group="g").
+magmaan: multi-group two-level works end to end (the objective/H1/information
+        and level_block_pairs already loop over cs.groups; cluster_sample_stats
+        and data_from_cluster build one ClusterGroupStats per group; df =
+        Σ_g [p_g(p_g+1)+p_g] − q). Gated by a two-group-on-duplicated-data
+        self-consistency check: per-group θ̂/SE equal the single-group oracle
+        and the LRT/df double. Tests:
+        cpp/tests/golden/twolevel_golden_test.cpp
+        "twolevel multigroup: two-group self-consistency vs single-group oracle"
+        and r-package/tests/testthat/test-twolevel.R (the direct multigroup
+        lavaan-parity case skips with this reason). Mplus could serve as a
+        future oracle (see cpp/tests/tools/regen_oracle_twolevel_mplus.R).
+Upstream: not filed. Found 2026-06-27 (multi-group two-level finish-up).
+```
+
+## Investigated — not a defect
+
+### Native lavaan pEBA-4: absolute integration accuracy in a tiny tail (2026-09-20)
+
+Lavaan 0.7-2's HS three-factor NTML example yields `T = 85.305521769973225`,
+`df = 24`, and default `peba4_ml` p-value `1.642986754424314e-7`.
+With the **identical** statistic and spectrum, magmaan gives
+`1.529608811641211e-7`. Both use expected information; parameter estimates,
+covariances, and the spectrum are not the source of this discrepancy.
+
+The native `lav_test_fmg_imhof` uses `epsabs = epsrel = 1e-6` for an integral
+whose probability is recovered as `0.5 + integral/pi`. Relative accuracy in
+the integral does not imply relative accuracy in this small probability.
+Tightening both tolerances to `1e-13` gives `1.529608875672217e-7`.
+The default difference is about `1.13e-8` in absolute probability, within the
+requested absolute integration accuracy; it is about 6.9% of the default
+reported probability. This is a numerical precision limitation, not a change
+of robust test, Hessian convention, or a proven integration-algorithm defect.
+
+Independent reference: all four penalized pEBA weights occur six times.
+Thus each block is `w * chi-square(6) = Erlang(shape=3, rate=1/(2w))`.
+The sum is the absorption time of a twelve-phase exponential chain. Form the
+upper-bidiagonal transient generator with diagonal `-rate_i` and superdiagonal
+`rate_i`; its survival is `e_1' exp(Q*T) 1`. At 70 decimal digits this gives
+`1.52960890009620744e-7`; a separate 50-digit computation agrees to more than
+40 relative decimal places. This calculation uses neither Imhof quadrature
+nor magmaan's positive-series implementation. The reproducible tail audit is
+kept with experiment 84, under its `scripts/` directory and experiment-local
+results. The benchmark retains its original rejected rows pending a timed
+accuracy-matched comparator; no statistical parity gate is waived.
+
+
+- **Satorra-2000 scaled-difference parity** (2026-05-17): a divergence first
+  suspected to be a lavaan bug was resolved as a magmaan-side issue / convention.
+  See [`satorra2000_parity.md`](satorra2000_parity.md). Kept here as a reminder
+  that most "lavaan is wrong" hunches are not.
+- **ULS standard(Browne) vs robust(2N·fmin) test base**: lavaan-faithful, not a
+  bug (see the test ledger / numerical-conventions notes).

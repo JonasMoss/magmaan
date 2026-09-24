@@ -13,7 +13,7 @@
 # Both are thin compositions of magmaan() and the existing nested tests; they
 # carry no SEM logic of their own. The refit isolates each release exactly even
 # under structural misspecification elsewhere, where a one-step score statistic
-# leaks. See docs/research/notes/lrt_modification_indices.tex.
+# leaks. See lrt_modification_indices.tex.
 
 # ---- fixed/absent releases: the lavaan modindices() table, by LRT -----------
 

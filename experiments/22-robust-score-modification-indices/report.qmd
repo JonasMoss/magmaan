@@ -107,8 +107,8 @@ print(knitr::kable(s[, c("regime", "n", "reps_ok", "detect_naive",
 - No oracle: lavaan falls back to the ordinary statistic when `se != "standard"`,
   so the robust score test is a magmaan frontier feature with no external check.
   Correctness rests on the `c -> 1` reductions above plus the C++ unit/golden
-  coverage (`tests/unit/score_robust_test.cpp`,
-  `tests/golden/score_robust_golden_test.cpp`).
+  coverage (`cpp/tests/unit/score_robust_test.cpp`,
+  `cpp/tests/golden/score_robust_golden_test.cpp`).
 - The continuous-GLS robust statistic needs the raw fitting data for the
   empirical meat (`data=`). The exact `c = 1` reduction uses unstructured
   moments (meat `= Gamma_NT(S) = W^-1`); with the default structured moments the

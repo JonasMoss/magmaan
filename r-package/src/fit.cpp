@@ -7158,7 +7158,7 @@ Rcpp::DataFrame compute_defined_impl(std::string syntax,
 // infer_chi2_stat() — mirrors chi2_stat(samp, est). Returns 2·N_total·fmin =
 // N·F (the GOF χ²). This primitive does not need a fit object: sample_stats
 // supplies nobs and fmin is the optimizer's minimised objective ½·F (fit$fmin
-// when called after fit_fit()); see docs/design/numerical-conventions.md.
+// when called after fit_fit()); see project/design/numerical-conventions.md.
 //
 // [[Rcpp::export]]
 double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
@@ -9711,7 +9711,7 @@ Rcpp::NumericVector frontier_backconvert_std_lv_to_marker_impl(
 // ---------------------------------------------------------------------------
 // Non-iterative CFA estimators: goodness-of-fit, nested tests, standard errors.
 // Thin glue over estimate::frontier + robust::frontier (see the C++ headers and
-// docs/research/notes/noniterative_cfa_tests.tex).
+// project/research/notes/noniterative_cfa_tests.tex).
 // ---------------------------------------------------------------------------
 namespace {
 

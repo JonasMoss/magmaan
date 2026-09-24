@@ -140,7 +140,7 @@ stopifnot(max(abs(st_dwls$mi.scaled - st_dwls$mi)) < 1e-12)
 # loading by the latent SD only — recovering the true loading. The earlier
 # guard refused these calls because the generic path divided by the assembled
 # σ_rr (= λ²ψ + 1), shrinking a true .6 loading to ~.52; see
-# docs/backlog/todo.md.
+# project/backlog/todo.md.
 lv_std_dwls <- lavaan::standardizedSolution(lavaan_dwls)
 lv_load <- lv_std_dwls[lv_std_dwls$op == "=~", ]
 ld_rows <- which(fit_dwls$partable$op == "=~" & fit_dwls$partable$free > 0L)

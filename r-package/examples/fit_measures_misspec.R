@@ -4,7 +4,7 @@
 # CI that propagates the sampling variability of the estimated polychoric weight.
 #
 # There is no external oracle for these intervals (they are magmaan
-# constructions; see docs/research/notes/cfi_tli_misspec_inference.tex and the
+# constructions; see cfi_tli_misspec_inference.tex and the
 # RMSEA/CRMR notes). This example pins the wiring: the bundle's RMSEA equals the
 # standalone profile-RMSEA binding, SRMR is the CRMR statistic rescaled to the
 # vech denominator, the intervals are ordered and in range, and CFI is nearly

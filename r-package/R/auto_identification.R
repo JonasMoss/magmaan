@@ -1,7 +1,7 @@
 # Frontier / experimental: marker <-> std_lv identification swap.
 #
 # All three primitives delegate to C++ implementations in
-# src/model/auto_identification.cpp via Rcpp shims defined in
+# cpp/src/model/auto_identification.cpp via Rcpp shims defined in
 # r-package/src/fit.cpp (`frontier_*_impl`).
 #
 # Exposed to R only via the `frontier_*` aliases in r-package/R/zzz_core.R.

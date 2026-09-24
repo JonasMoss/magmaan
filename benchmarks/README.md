@@ -1,6 +1,6 @@
 # magmaan SEM Zoo Benchmarks
 
-The proposed [public speed report and lavaan cost-attribution design](../docs/validation/benchmark_plan.md#proposed-public-speed-report-2026-09-20)
+The proposed [public speed report and lavaan cost-attribution design](../project/validation/benchmark_plan.md#proposed-public-speed-report-2026-09-20)
 connects the modular C++ timings, matched R workflows, robust GOF/Wald inference,
 and cleanup of duplicate runners. It is a design proposal, not a new timing
 result; the existing entry points below remain in place.
@@ -17,7 +17,7 @@ comparison requirements. Unchecked fits are not accepted by default.
 The ordinal SNLLS driver exports `common_verdict`, its objective/stationarity
 components, the declared domain, stationarity residual/tolerance, and
 admissibility fields. Its `status=ok` means a fit returned, not that it passed
-the numerical screen. Use the common verdict contract for new studies. See `docs/design/terminal-audit.md`.
+the numerical screen. Use the common verdict contract for new studies. See `project/design/terminal-audit.md`.
 
 This directory is the staging area for repeatable benchmark cases. The harness
 is R-first because the public comparison target is lavaan and the exploratory R
@@ -75,12 +75,12 @@ fitted model is correctly specified by construction.
 `timing/timing.hpp` is the shared timer — batch auto-calibration, arm rotation,
 median reporting, dead-code-elimination barriers. New timing work should include
 it rather than hand-rolling an eighth copy; see the retirement item in
-[docs/backlog/todo.md](../docs/backlog/todo.md#benchmarks). Full documentation in
+[project/backlog/todo.md](../project/backlog/todo.md#benchmarks). Full documentation in
 [timing/README.md](timing/README.md).
 
 ```sh
-cmake --preset opt -DMAGMAAN_BUILD_BENCH=ON
-cmake --build --preset opt --target magmaan_timing_bench
+cmake -S cpp --preset opt -DMAGMAAN_BUILD_BENCH=ON
+cmake --build cpp/build/opt --target magmaan_timing_bench
 OMP_NUM_THREADS=1 ./build/opt/benchmarks/magmaan_timing_bench --p 12 --n 1000 --out /tmp/t.csv
 Rscript benchmarks/timing/summarize.R /tmp/t.csv
 ```
@@ -100,7 +100,7 @@ workloads and consumers are migrated.
 ## C++ memory profiling
 
 `magmaan_mem_profile` is a standalone C++ harness that measures the peak heap of
-four Gamma computations: the three reduced ones in `src/robust/robust.cpp` —
+four Gamma computations: the three reduced ones in `cpp/src/robust/robust.cpp` —
 `reduced_gamma_sample` (batched streaming), `reduced_gamma_sample_materialized`
 (the q×q reference), and `reduced_gamma_sample_streaming` (row-by-row) — plus a
 `dense` path that forms the full q×q Gamma and U and eigendecomposes the q×q
@@ -109,8 +109,8 @@ product, the computation standard SEM software performs.
 It is gated behind `MAGMAAN_BUILD_BENCH` and not built by default:
 
 ```sh
-cmake -S . -B build/bench -DMAGMAAN_BUILD_BENCH=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build/bench --target magmaan_mem_profile
+cmake -S . -B cpp/build/bench -DMAGMAAN_BUILD_BENCH=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build cpp/build/bench --target magmaan_mem_profile
 ./build/bench/benchmarks/magmaan_mem_profile {dense|materialized|batched|rowwise} [n] [p]
 ```
 
@@ -139,11 +139,11 @@ population misspecification. Other loadings and thresholds remain free. Parsing,
 model construction, and start preparation are outside these timings.
 
 ```sh
-cmake --preset opt -DMAGMAAN_BUILD_BENCH=ON
-cmake --build --preset opt --target magmaan_ordinal_gamma_influence_bench
-build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 300 18 2 5 23260716
-build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 1200 18 2 5 23260716
-build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 300 18 4 5 23260716
+cmake -S cpp --preset opt -DMAGMAAN_BUILD_BENCH=ON
+cmake --build cpp/build/opt --target magmaan_ordinal_gamma_influence_bench
+cpp/build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 300 18 2 5 23260716
+cpp/build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 1200 18 2 5 23260716
+cpp/build/opt/benchmarks/magmaan_ordinal_gamma_influence_bench 300 18 4 5 23260716
 ```
 
 Arguments are sample size, indicator count, category count, timed repetitions,
@@ -181,9 +181,9 @@ The before/after timing plan is deliberately small:
    timing assertions in CI.
 
 Completed measurements and numerical contracts live in the
-[roadmap](../docs/architecture/roadmap.md#ordinal-dwls-gamma-performance);
+[roadmap](../project/architecture/roadmap.md#ordinal-dwls-gamma-performance);
 remaining work lives in the
-[active backlog](../docs/backlog/todo.md#ordinal-dwls-gamma-influence-performance).
+[active backlog](../project/backlog/todo.md#ordinal-dwls-gamma-influence-performance).
 
 ## Outstanding
 

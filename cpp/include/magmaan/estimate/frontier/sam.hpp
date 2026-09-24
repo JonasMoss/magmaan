@@ -1,0 +1,132 @@
+#pragma once
+
+#include <cstdint>
+#include <limits>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/expected.hpp"
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
+
+namespace magmaan::estimate::frontier {
+
+// Structural-After-Measurement (SAM) two-step estimator (Rosseel & Loh
+// 2022/2024), a research surface. SAM fits the measurement model (Λ, Θ)
+// first, forms a bias-corrected latent covariance VETA (and, with a mean
+// structure, latent means EETA), then fits the structural model (B, Ψ)
+// against VETA/EETA as if they were latent-level sample statistics. Fitting the
+// measurement part first compartmentalizes structural misspecification away from
+// the loadings and is far better behaved than joint ML at small N.
+//
+// lavaan `sam()` is the parity oracle. The landed scope and remaining follow-ups
+// live in `project/architecture/roadmap.md` and `project/backlog/todo.md`.
+
+// Local (block-by-block) vs global (joint) measurement fit. Local SAM keeps
+// structural misspecification from leaking back into any measurement block;
+// global SAM fits one CFA over all indicators.
+enum class SamMethod : std::uint8_t { Local, Global };
+
+// Mapping matrix M with M·Λ = I, mapping observed indicators onto latents.
+//   ML  — Bartlett / maximum-likelihood: M = (ΛᵀΘ⁻¹Λ)⁻¹ ΛᵀΘ⁻¹.
+//   GLS — generalized least squares:     M = (ΛᵀS⁻¹Λ)⁻¹ ΛᵀS⁻¹.
+//   ULS — unweighted least squares:      M = (ΛᵀΛ)⁻¹ Λᵀ.
+enum class SamMapping : std::uint8_t { ML, GLS, ULS };
+
+// Standard-error method for the structural step. `Twostep`/`TwostepRobust`
+// mirror lavaan's default and Yuan-Chan (2002) corrections; `TwostepRobust` is
+// lavaan's nonnormality-robust raw-data correction, not a full estimated-weight
+// / misspecification-robust sandwich. `Standard` uses the structural-info inverse
+// without the step-1 correction term; `Naive` grabs the structural fit's own vcov
+// (treating VETA as raw data).
+enum class SamSe : std::uint8_t { None, Standard, Naive, Twostep, TwostepRobust };
+
+// Local-SAM VETA construction knobs (lavaan `local.options`).
+//   `mapping`           — the mapping-matrix method above.
+//   `lambda_correction` — Fuller smallest-root guard keeping VETA positive
+//                         definite (lavaan `lambda.correction`).
+//   `alpha_correction`  — the MTM downweighting count; 0 = local SAM / method of
+//                         moments (lavaan `alpha.correction`). Non-zero values
+//                         (FSR + Bartlett, SSC) are research-tier and deferred.
+struct SamLocalOptions {
+  SamMapping mapping           = SamMapping::ML;
+  bool       lambda_correction = true;
+  int        alpha_correction  = 0;
+};
+
+struct SamOptions {
+  SamMethod       method        = SamMethod::Local;
+  SamSe           se            = SamSe::Twostep;
+  SamLocalOptions local         = {};
+  bool            meanstructure = false;
+  Backend         mm_backend    = Backend::NloptLbfgs;   // measurement fit(s)
+  Backend         struc_backend = Backend::NloptLbfgs;   // structural fit
+  OptimOptions    mm_control    = {};
+  OptimOptions    struc_control = {};
+};
+
+// One fitted measurement block. For global SAM the `measurement` vector holds a
+// single element spanning all indicators. `Lambda`/`Theta` are the block's
+// assembled LISREL matrices at θ̂; `M` is the block mapping matrix; `vcov` is the
+// block's own parameter covariance (the Σ11 diagonal for twostep SEs).
+struct SamMeasurementBlock {
+  std::vector<std::int32_t> latents;      // lv_ext ids carried by this block
+  std::vector<std::int32_t> indicators;   // ov ids
+  Estimates                 estimates;    // block CFA fit
+  Eigen::MatrixXd           Lambda;       // p_b × m_b
+  Eigen::MatrixXd           Theta;        // p_b × p_b
+  Eigen::MatrixXd           M;            // m_b × p_b mapping (M·Λ = I)
+  Eigen::VectorXd           Nu;           // p_b intercepts; empty if cov-only
+  Eigen::MatrixXd           vcov;         // block parameter covariance
+};
+
+struct SamResult {
+  Estimates             structural;    // β̂, Ψ̂ (and α̂ with a mean structure)
+  Eigen::VectorXd       theta;         // full-model joint θ̂, lavaan free order
+  Eigen::MatrixXd       VETA;          // m × m bias-corrected latent covariance
+  Eigen::VectorXd       EETA;          // m latent means (empty if cov-only)
+  Eigen::MatrixXd       mapping;       // m × p full mapping M (block-diagonal
+                                       // for ML/ULS, dense over full S for GLS)
+  std::vector<SamMeasurementBlock> measurement;   // one element if global
+
+  data::SampleStats     latent_samp;   // synthetic latent-level step-2 stats
+  spec::LatentStructure structural_pt; // latents-promoted-to-observed sub-spec
+  model::MatrixRep      structural_rep;
+
+  Eigen::MatrixXd       vcov;          // joint free-parameter covariance
+  Eigen::VectorXd       se;            // sqrt(diag(vcov)), joint free order
+
+  std::vector<double>   reliability;   // per-latent diag(VETA)/diag(MSM)
+  double                lambda_star =
+      std::numeric_limits<double>::infinity();   // Fuller factor, ∞ if unused
+};
+
+// The mapping matrix M (m × p) with M·Λ = I, per `SamMapping`. `Theta` is used
+// only for ML, `S` only for GLS; both may be empty for ULS. Errors on a singular
+// ΛᵀWΛ or (for ML) a non-PD Θ (the Wall-Amemiya zero-Θ T-transform is deferred).
+fit_expected<Eigen::MatrixXd>
+mapping_matrix(const Eigen::MatrixXd& Lambda, const Eigen::MatrixXd& Theta,
+               const Eigen::MatrixXd& S, SamMapping method);
+
+// The SAM two-step fit. `pt`/`rep` are the full (joint) lavaanified model;
+// `names` is required to rebuild the measurement and structural sub-specs; `samp`
+// carries the observed sample covariance (and mean, for a mean structure).
+// Single-group only for now.
+fit_expected<SamResult>
+fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
+        const spec::LatentNames& names, const data::SampleStats& samp,
+        SamOptions opts = {});
+
+// Raw-data overload. Required for `SamSe::TwostepRobust`, which consumes the
+// empirical ADF Γ̂ of vech(S). The sample moments are derived with
+// `data::sample_stats_from_raw()` so covariance/mean conventions stay aligned.
+fit_expected<SamResult>
+fit_sam(spec::LatentStructure pt, const model::MatrixRep& rep,
+        const spec::LatentNames& names, const data::RawData& raw,
+        SamOptions opts = {});
+
+}  // namespace magmaan::estimate::frontier

@@ -3,15 +3,15 @@
 # libmagmaan.a, no reach-up to ../../{src,include} — so the package installs on
 # its own (remotes::install_github, a tarball, an HPC scp).
 #
-# The core/, magmaan/, and third_party/ trees are VENDORED by dev/vendor-cpp.sh
+# The core/, magmaan/, and third_party/ trees are VENDORED by r-package/tools/vendor-cpp.sh
 # (`just vendor`); every file there carries an @generated banner. Do NOT edit
-# them — edit the canonical sources under <repo>/src + <repo>/include and
-# re-vendor. The fast dev loop (`just r-dev`) uses dev/r-makevars-dev instead,
+# them — edit the canonical sources under <repo>/cpp/src + <repo>/cpp/include and
+# re-vendor. The fast dev loop (`just r-dev`) uses r-package/tools/r-makevars-dev instead,
 # which compiles only the Rcpp glue and links a prebuilt libmagmaan.a.
 #
 # Optimization flags are deliberately NOT set here: the package stays portable
 # (R's default -O2). Crank them per-machine via R_MAKEVARS_USER, e.g. on Saga
-# `R_MAKEVARS_USER=dev/saga/Makevars R CMD INSTALL r-package` for -O3 -march=native.
+# `R_MAKEVARS_USER=r-package/tools/saga/Makevars R CMD INSTALL r-package` for -O3 -march=native.
 
 CXX_STD = CXX23
 

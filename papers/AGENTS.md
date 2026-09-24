@@ -17,7 +17,7 @@ file, or other paper may `source`, `load`, `include`, or read
 `papers/<this>/**`. A paper depends only on the core library and `r-package`;
 shared infrastructure lives there or in `experiments/_support`, never across a
 paper boundary. Enforced (best-effort, since `papers/*` is gitignored) by
-`tests/tools/check_layering.sh`.
+`cpp/tests/tools/check_layering.sh`.
 
 Retired paper working trees live frozen under `papers/_archive/`. They are
 historical material rather than active paper leaves, so the layering checker
@@ -30,7 +30,7 @@ One paper folder holds one manuscript-in-progress aimed at a specific
 journal. It owns its bibliography, its simulation scripts, its helper R
 package, its online supplement, and a curated set of run outputs that the
 manuscript cites. It does not hold scratch that belongs in a separate
-experiments folder, nor library changes that belong in `src/`.
+experiments folder, nor library changes that belong in `cpp/src/`.
 
 ## Directory Shape
 
@@ -283,7 +283,7 @@ r-package/src/*.dll
 *.vrb
 *.xdv
 _minted-*/
-build/
+cpp/build/
 ```
 
 Placeholder `.gitkeep` files and per-folder `.gitignore` files may be

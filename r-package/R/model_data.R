@@ -2379,7 +2379,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       # NB: DWLS and ULS do not need the dense NACOV either, and this call
       # materializes it unconditionally (490 ms of a 500 ms call at p = 50).
       # Rerouting through prepare_model/prepare_data/prepare_weight(full=FALSE)
-      # was tried and rejected; see docs/backlog/todo.md for the measurements
+      # was tried and rejected; see project/backlog/todo.md for the measurements
       # and the three reasons. The fix belongs in the stats constructor.
       data <- if (all_ordinal) {
         data_ordinal_stats_from_df(data, spec, group = group_var,

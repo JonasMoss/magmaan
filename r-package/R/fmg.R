@@ -1210,7 +1210,7 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
 #' CFI carries a trustworthy interval and is largely robust to weight estimation;
 #' TLI's point is calibrated but its interval is conservative and unreliable at
 #' strong misfit (the generalized-df ratio is ill-conditioned). See
-#' `docs/research/notes/cfi_tli_misspec_inference.tex`.
+#' `cfi_tli_misspec_inference.tex`.
 #'
 #' @param fit A fitted all-ordinal DWLS magmaan object.
 #' @param ordinal_stats The categorical sample statistics used for the fit, with

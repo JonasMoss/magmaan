@@ -152,7 +152,7 @@ remain supported without deprecation warnings. `model_spec()` alone retains an R
 partable, not a compiled native model. Specialized ML2S, two-level, FC-SEM, SAM
 and frontier paths still use their existing entry points. Deprecation and removal
 wait for coverage and caller migration; see the
-[interface audit and rollout status](../docs/design/r-model-preparation.md).
+[interface audit and rollout status](../project/design/r-model-preparation.md).
 
 ## Sample-moment data
 

@@ -1,7 +1,7 @@
 // Does sharing the p×p normal-theory factor across the four NT sites buy
 // anything measurable?
 //
-// `docs/backlog/todo.md` carries a "share the p×p factor" item: ½D'(A⁻¹⊗A⁻¹)D
+// `project/backlog/todo.md` carries a "share the p×p factor" item: ½D'(A⁻¹⊗A⁻¹)D
 // is built independently by the GLS weight (A = S), the IRLS reweight
 // (A = Σ(θ_k)), `inference::expected_information` (A = Σ(θ̂)), and the NT Γ
 // behind the SB corrections, and ML already factors Σ(θ) every iteration for

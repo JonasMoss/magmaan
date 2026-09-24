@@ -219,7 +219,7 @@ summary_df <- rbind(aggregate_rejection(gof_df), aggregate_rejection(nested_df))
 # c is the alpha-quantile of the h0 p-values (the cutoff giving exact size alpha
 # there), and power_adj = P(p < c) under the alternative. This strips the power
 # an over-rejecting test borrows from a broken Type-I rate. gof <- gof_power,
-# nested <- nested_power. See docs/research/notes/non_normal_fiml_mlr_information.
+# nested <- nested_power. See non_normal_fiml_mlr_information.
 aggregate_power_adjusted <- function(d, alpha) {
   keys <- c("outcome", "method", "dist", "mech", "rate")
   if (is.null(d) || !nrow(d)) return(data.frame())
@@ -245,7 +245,7 @@ power_adjusted_df <- aggregate_power_adjusted(rbind(gof_df, nested_df), alpha)
 # complete data and grows with the missing RATE, but is essentially equal for
 # MCAR and MAR -- a finite-sample sandwich-trace bias under heavy non-normality,
 # not the MAR estimator-target bias (this weak sign-based MAR does not trigger
-# that; see docs/research/notes/non_normal_fiml_mlr_information). One row per rep,
+# that; see non_normal_fiml_mlr_information). One row per rep,
 # so restrict to a single method to avoid recounting the shared base stat.
 noncentrality_df <- local({
   d <- gof_df[gof_df$truth == "h0" & gof_df$method == "naive", ]

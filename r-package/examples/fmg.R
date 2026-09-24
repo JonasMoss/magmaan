@@ -113,7 +113,7 @@ stopifnot(identical(fmg_nested(fit, fit_h0_complete, data = df,
 # exactly the scaled-shifted statistic. Asserted so the degeneration is documented
 # behaviour rather than an accident. NOTE: semTests 1.0.0 now hard-errors on this
 # case instead ("pEBA cannot use more blocks than the test degrees of freedom"),
-# so magmaan is deliberately the lenient one here; see docs/backlog/todo.md.
+# so magmaan is deliberately the lenient one here; see project/backlog/todo.md.
 stopifnot(abs(tab_nested$p_value[tab_nested$label == "peba4_rls"] -
               tab_nested$p_value[tab_nested$label == "ss_rls"]) < 1e-12)
 cat("Nested complete-data biased/unbiased ML/RLS FMG workflow: ok\n")

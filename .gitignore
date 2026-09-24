@@ -26,15 +26,6 @@ papers/*
 private/*
 !private/README.md
 
-# The real-data textbook-corpus is a private, optional dependency: third-party
-# copyrighted datasets magmaan may not redistribute. Mount it at
-# corpus/textbook-corpus/ but never commit it. Only the README is tracked.
-# See corpus/README.md.
-corpus/*
-!corpus/README.md
-
-# Private working notes (not for publication).
-docs/research/human_notes/
 
 *.o
 *.obj
@@ -54,16 +45,6 @@ __pycache__/
 .Rhistory
 r-package/src/.magmaan-build-config
 
-# Private rslurm/Slurm scratch (R scripts, binary .RData/.RDS, job artifacts).
-dev/slurm/
 
-# LaTeX build intermediates for research notes (keep .tex and .pdf only).
-docs/research/notes/*.aux
-docs/research/notes/*.log
-docs/research/notes/*.out
-docs/research/notes/*.toc
-docs/research/notes/*.fls
-docs/research/notes/*.fdb_latexmk
-docs/research/notes/*.synctex.gz
-docs/research/notes/*.bbl
-docs/research/notes/*.blg
+cpp/build-previous/
+r-package/build-rdev/
