@@ -40,8 +40,14 @@ semantics · **XL** statistical design/research track before implementation.
   calibration and any deliberate default fit-verdict migration. Existing fits
   continue to use the compatibility policy. Active boxes/nonlinear equalities
   and extra callback constraints still lack Newton geometry; FCSEM and implicit
-  RBM still need dedicated adapters. ML2S Stage-1/outer weight-iteration checks
-  remain separate. Expand representative group/constraint/domain combinations
+  RBM still need dedicated adapters and are deferred behind ML2S composition.
+  **Next: two-stage reports.** Retain structured per-block Stage-1 EM telemetry;
+  audit the saturated likelihood endpoint independently; retain raw Hessians
+  separately from repaired `SaturatedMoments::H`; compose with Stage-2 evidence
+  and a verified or explicitly unverified input handoff. Preserve raw versus
+  transformed Stage-1 moments when regularization is used. See the concrete
+  contract in `project/design/terminal-audit.md`. Outer fitted-weight iterations
+  remain a separate follow-up. Expand representative group/constraint/domain combinations
   using the coverage matrix in `project/design/terminal-audit.md`.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery

@@ -230,6 +230,68 @@ required versus optional checks, objective mismatch, feasibility, unsupported
 bounds, nonpositive curvature, guard reassessment without callback evaluations,
 ambient versus PSD domains, LS artifact composition, and fit/post-fit ML parity.
 
+## Two-stage convergence composition: next implementation
+
+ML2S is the next coverage priority; native FCSEM and implicit RBM adapters can
+wait. This section specifies planned work, not an implemented two-stage report.
+Stage-2 Newton adapters already cover NT/ULS/DWLS/ADF/DLS.
+
+The proposed owning two-stage report contains three independently inspectable
+pieces: a Stage-1 saturated observed-data likelihood audit, a handoff record,
+and the Stage-2 convergence report. Assessment accepts separate stage policies.
+All required pieces must pass; a known required failure fails the composition;
+otherwise missing required evidence leaves it unchecked. Preserve the component
+reasons. This is a composition of convergence decisions, not a sum of Newton
+distances or a calibrated bound on final structural-parameter error.
+
+Stage 1 needs both solver telemetry and an independent endpoint audit:
+
+- Retain effective `FIMLH1Options`, per-block EM iteration count, final parameter
+  and objective changes, stopping reason, covariance-repair count and magnitude.
+  `H1EMResult` already computes these privately; `FIMLH1` currently retains only
+  moments, objective and warning strings. Complete-data moment solutions should
+  be labelled direct solves rather than assigned fictitious EM iterations.
+- Evaluate the original observed-pattern likelihood, its saturated score and
+  unmodified observed Hessian at the supplied final moments, without rerunning
+  EM. Public saturated score/information helpers already support supplied
+  moments. Preserve the ordering and normalization explicitly: the public
+  helpers use block-stacked covariance vechs followed by block-stacked means,
+  while `SaturatedMoments` uses blockwise `[mean; vech(cov)]`. Deviance scores
+  require the one-half conversion to total negative-log-likelihood gradient.
+- Keep EM stopping telemetry separate from endpoint acceptance. An iteration cap
+  is an algorithmic stop, not by itself an independent stationarity verdict;
+  externally supplied moments can still receive an endpoint audit without an
+  invented EM history. Runtime policy can additionally require solver evidence.
+- Preserve raw curvature separately from repaired inference matrices.
+  `saturated_em_moments_impl` may regularize `SaturatedMoments::H` before inversion
+  and sandwich construction. That matrix cannot silently stand in for the raw
+  likelihood Hessian in a convergence certificate. The public
+  `fiml_saturated_observed_information` returns unmodified analytic curvature at
+  supplied moments and can underpin the independent audit.
+
+The handoff must record the moments/counts and, where used, ACOV that actually
+feed Stage 2, together with the weight kind and DLS mixing value. A new composed
+fit can retain that input directly; arbitrary legacy fits lack proof of what
+was consumed. Recomputing their Stage-2 audit establishes convergence against
+supplied inputs, not historical provenance. Report an unverified handoff when
+that evidence is absent rather than infer it from successful stage verdicts.
+
+If `regularize_saturated_stage1` transforms moments/ACOV, retain the raw Stage-1
+solution, the transformation and its diagnostics, and the transformed Stage-2
+input separately. Do not test transformed moments for stationarity under the
+unmodified Stage-1 likelihood. A covariance floor inside EM also needs recorded
+repair evidence; do not silently reinterpret it as an explicitly constrained
+likelihood optimum. The endpoint audit should state the objective/domain it can
+actually establish.
+
+The first implementation should retain Stage-1 telemetry and raw curvature,
+expose the standalone saturated endpoint audit, then compose it with the existing
+Stage-2 report and explicit handoff evidence. Regression cases should include
+complete data, multiple groups with missingness, deliberately early-stopped EM,
+wrong Stage-2 inputs, information/covariance repair, and transformed Stage-1
+inputs. Propagating Stage-1 numerical error into final parameter accuracy is a
+separate extension; it is not required for the initial composed verdict.
+
 ## Coverage by applicable check
 
 This matrix distinguishes existing fit finalization from explicit, reusable
