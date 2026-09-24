@@ -14,10 +14,11 @@ It holds:
 
 - **Source mirrors** — `lavaan`, `robcat`, `kreiberg`, and similar checkouts read
   for implementation details.
-- **`external/refs/`** — local PDFs (papers, textbooks), textbook companion files,
-  and other reference artifacts whose redistribution terms are unclear or simply
-  unnecessary for the build. Do not link tests or scripts to files that must exist
-  under `external/refs/`.
+- **`external/refs/`** — a flat stash of local reference PDFs (papers, textbooks)
+  whose redistribution terms are unclear or simply unnecessary for the build,
+  plus a local catalog README. Do not link tests or scripts to files that must
+  exist under `external/refs/`. Name PDFs `first-author-year-short-title.pdf`
+  in lowercase kebab case; see the `external/refs/README.md` catalog.
 
 Tracked research notes and simulation scripts live under `docs/research/`.
 

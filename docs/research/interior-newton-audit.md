@@ -159,8 +159,9 @@ local corrected summaries and paired control differences are under
 
 ## Literature collected and source status (2026-09-21)
 
-Local reference files and URL/SHA-256 receipts are in the ignored
-`external/refs/interior-newton/` directory. They are not experiment inputs.
+Local reference PDFs are in the ignored `external/refs/` flat stash; source URLs
+and retrieval status are summarized in its `README.md`. They are not experiment
+inputs.
 
 - Dennis, J. E., Jr., Gay, D. M., and Welsch, R. E. (1981).
   *An Adaptive Nonlinear Least-Squares Algorithm*. ACM TOMS 7(3), 348–368.
@@ -170,10 +171,11 @@ Local reference files and URL/SHA-256 receipts are in the ignored
   This is the direct methodological precedent for our accuracy scale.
   The published PDF returned HTTP 403. The public article text was inspected
   through the browser's [indexed full-text rendering](https://www.scribd.com/document/45401126/An-Adaptive-Nonlinear-Least-squares-Algorithm);
-  the locally downloaded HTML contains only a preview, not the complete paper.
+  a downloaded preview was discarded; it did not contain the complete paper.
   A scanned [1977 NBER working-paper version](https://www.nber.org/system/files/working_papers/w0196/w0196.pdf)
-  was downloaded as `dennis-gay-welsch-1977-nber.pdf`; it is not assumed to
-  contain the published version's equation numbering or all of its discussion.
+  was downloaded as `dennis-1977-adaptive-nonlinear-least-squares.pdf`; it is
+  not assumed to contain the published version's equation numbering or all of
+  its discussion.
 - Pratt, J. W. (1977). *When to stop a quasi-Newton search for a maximum
   likelihood estimate*. Harvard School of Business Working Paper 77-16.
   Not obtained or read directly. Dennis et al. attribute their all-contrasts
@@ -191,7 +193,8 @@ Local reference files and URL/SHA-256 receipts are in the ignored
   The [public CERN record](https://repository.cern/records/g64tm-4s433)
   has a full-text link, but this environment's download received HTTP 403.
   Instead, obtained James's [1994 MINUIT reference manual, version 94.1](https://root.cern/download/minuit.pdf),
-  `minuit-reference-manual.pdf`. This is a distinct source, not the 1975 paper.
+  `james-1994-minuit-reference-manual.pdf`. This is a distinct source, not the
+  1975 paper.
 - Also saved the [Stata maximize manual](https://www.stata.com/manuals/rmaximize.pdf)
   and [iminuit reference](https://scikit-hep.org/iminuit/reference.html#iminuit.Minuit.tol).
   Software thresholds below are attributed to these particular documents,

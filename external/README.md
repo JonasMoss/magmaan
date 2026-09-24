@@ -17,7 +17,7 @@ external/
 ├── robcat/          ← source mirror: robust polychoric R package
 ├── kreiberg/        ← reference: Kreiberg's Matlab SNLRLS/SNLLS code (cited in src comments)
 ├── paper_corpus/    ← nested git repo for curated paper-corpus work (see below)
-└── refs/            ← reference PDFs + textbook companions you read, not source code
+└── refs/            ← flat stash of reference PDFs + local catalog
 ```
 
 You won't have all of these on a fresh clone — add only what you need.
@@ -33,9 +33,12 @@ You won't have all of these on a fresh clone — add only what you need.
   downloads, derived data, and magmaan-facing JSON exports. magmaan consumes only
   the copied export snapshots under `tests/fixtures/paper_corpus/`; the nested repo
   itself is never read by the C++ tests.
-- **`refs/`** — reference PDFs (papers, textbooks) and textbook companion files
-  whose redistribution terms are unclear or simply unneeded for the build. Read-only
-  reference; nothing in code may depend on a file existing here.
+- **`refs/`** — a flat stash of reference PDFs (papers, textbooks) whose
+  redistribution terms are unclear or simply unneeded for the build, plus its
+  local catalog README. Nothing in code may depend on a file existing here.
+  Name PDFs `first-author-year-short-title.pdf` in lowercase kebab case. The
+  [`refs/README.md`](refs/README.md) catalog carries useful notes recovered from
+  the former topic READMEs.
 
 ## What does NOT go here
 

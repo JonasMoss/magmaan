@@ -3404,7 +3404,7 @@ is now its Gram. Remaining:
   exact-LOO already validates the one-step semantics and the self-checks pin the
   math). Mixed ordinal-continuous case influence stays blocked on its
   estimated-weight SE (not yet wired). Ties to the model-free DOCR reference
-  (`external/refs/case-influence/`).
+  (`external/refs/jaffari-2024-model-free-case-influence-sem.pdf`).
 
 ## Local hardening and validation tooling
 

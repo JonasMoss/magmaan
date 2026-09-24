@@ -143,5 +143,5 @@ quarto render experiments/44-alpha-kc-coverage/report.qmd
 ```
 
 Background and the reference set (Kauermann-Carroll, Bell-McCaffrey,
-Imbens-Kolesár, Yuan-Bentler, Satterthwaite) live in
-`external/refs/corrections/`.
+Imbens-Kolesár, Yuan-Bentler, Satterthwaite) are listed in the flat local
+`external/refs/README.md` catalog.

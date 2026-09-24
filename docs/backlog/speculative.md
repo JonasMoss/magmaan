@@ -389,8 +389,9 @@ smooth covariance functional `g(S)`: Cronbach's alpha, the omega family
 (omega_total, omega_h, H, H_general), reliability differences, correlations, and
 standardized SEM parameters. Each has an ADF/influence SE `se^2 = var(v)/N` with
 `v_k = <grad g(S), d_k d_k' - S>` the per-case influence values; the plain Wald
-(z) interval undercovers at small N because, per Kauermann & Carroll (2001, JASA;
-PDF in `external/refs/corrections/`), the variance estimate is itself noisy with
+(z) interval undercovers at small N because, per Kauermann & Carroll (2001,
+JASA; [local PDF](../../external/refs/kauermann-2001-sandwich-covariance-estimation.pdf)),
+the variance estimate is itself noisy with
 undercoverage `= c_p * var(se^2)/se^4`, `c_p = phi(z_p)(z_p^3 + z_p)/8` (a
 Cornish-Fisher term), and `var(se^2)` is governed by the KURTOSIS of the
 influence values. The correction is a t reference on effective df
@@ -399,7 +400,7 @@ the Satterthwaite realization of their quantile adjustment, from the same
 influence values; no fit, no bootstrap. It is design-free, so it applies to every
 covariance functional, unlike the leverage-driven Bell-McCaffrey / Imbens-Kolesar
 df (inert for a plain functional). Reference set and the keystone derivation in
-[`external/refs/corrections/README.md`](../../external/refs/corrections/README.md)
+[`external/refs/README.md`](../../external/refs/README.md)
 (KC 2001, Bell-McCaffrey 2002, Imbens-Kolesar 2016, Yuan-Bentler 1997/1998,
 Satterthwaite 1946).
 
