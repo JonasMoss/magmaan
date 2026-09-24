@@ -98,6 +98,60 @@ research consumers that still read L1/backend flags. This section supersedes
 older statements below that treat the full-model audit as merely additive or
 an optimizer status as the authoritative fit verdict.
 
+## Reusable Newton computations (2026-09-24)
+
+The Newton calculation has an explicit owning C++ interface in
+`estimate/frontier/newton_accuracy.hpp`. Fitting retains the small diagnostic
+record as before; callers needing the underlying computation use
+`frontier::audit_newton_ml(pt, rep, sample, theta, domain, options)`. Its
+`NewtonAudit` owns derivatives, geometry, numerical solve preparation, the
+solution, effective options and diagnostics. No optimizer runs in this call.
+
+Each stage is independently callable:
+
+1. `evaluate_newton_ml` computes the per-observation objective plus the full
+   gradient and analytic observed Hessian on the total negative-log-likelihood
+   scale. It retains theta and the total sample size.
+2. `prepare_newton_geometry` consumes those derivatives and builds the equality
+   basis K and, for the PSD domain, tangent basis Z and full-coordinate
+   curvature correction Q. The reduced system is
+   `g = (K Z)' G`, `H = (K Z)' (I + Q) (K Z)`. I remains unchanged and available.
+3. `prepare_newton_system(H)` equilibrates and factorizes H. The owning result
+   can be reused for additional right-hand sides. `solve_newton_system` returns
+   the signed step `-H^{-1}g`, Newton distance, predicted gain and solve residual.
+4. `assess_newton_accuracy` applies the budget, condition-number guard and solve
+   residual guard. These decisions can be changed without evaluating the model
+   or factorizing again. Its `NewtonAudit` overload preserves domain and boundary
+   metadata. The geometry tolerance is a preparation input; changing it requires
+   rebuilding geometry and its dependent solve, not just reassessing.
+
+Low-level matrix stages also accept caller-supplied curvature. The caller must
+establish its objective, normalization and coordinates; accepting a matrix does
+not grant it the complete-data ML statistical interpretation. Reusing artifacts
+requires the same model, sample, parameter ordering and point. The full observed
+information can be passed to existing inference primitives; the PSD-adjusted
+matrix must not be substituted for it. There is no hidden cache or borrowed
+lifetime in the retained artifacts.
+
+For example, callers can retain the complete calculation and reuse the full
+information for a separately requested inference calculation:
+
+```cpp
+using namespace magmaan::estimate::frontier;
+auto audit = audit_newton_ml(pt, rep, sample, fit.theta, domain, options);
+// Check the artifact statuses before consuming numerical values.
+auto covariance = magmaan::inference::vcov(audit.derivatives.hessian, pt);
+auto stricter = audit.options;
+stricter.budget = 0.001;
+auto reassessed = assess_newton_accuracy(audit, stricter);
+```
+
+Existing `newton_accuracy_from`, `newton_accuracy_ml` and
+`newton_accuracy_ml_psd` remain summary convenience functions over these stages.
+This separates computation from assessment without changing the prescribed
+fit-level convergence criteria. General convergence-report composition and
+non-ML curvature adapters remain backlog work.
+
 ## Context
 
 magmaan's Newsom corpus speed survey turned up cases where the L-BFGS Full

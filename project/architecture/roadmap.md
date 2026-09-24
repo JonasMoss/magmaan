@@ -101,6 +101,21 @@ a divergent path (no attained maximum), where the remaining gain is tiny.
 `estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`
 recompute it with other options.
 
+Newton audit computations are also available as owning, reusable C++ artifacts
+under `estimate::frontier`: `evaluate_newton_ml` retains the full total-gradient
+and observed Hessian at a supplied theta; `prepare_newton_geometry` retains
+linear-equality and PSD tangent bases, the separate full-coordinate curvature
+correction and reduced system; `prepare_newton_system` retains equilibration and
+an LLT factorization; `solve_newton_system` returns the signed Newton correction.
+`assess_newton_accuracy` applies runtime accuracy and numerical-reliability
+budgets without recomputation. `audit_newton_ml` composes and retains every
+stage and its effective options; the existing summary-only wrappers use this
+same implementation. The full observed Hessian remains suitable as input to
+existing information-based post-fit primitives; PSD-adjusted reduced curvature
+is explicitly separate. Artifact reuse requires the same evaluation point,
+model, data, normalization and parameter ordering. R still exposes the small
+Newton diagnostics record, not these C++ owning artifacts.
+
 ### Admissible covariance-model contract
 
 For each group, the continuous complete-data model uses the reduced-LISREL

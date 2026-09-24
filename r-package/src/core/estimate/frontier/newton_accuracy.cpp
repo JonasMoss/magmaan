@@ -36,67 +36,116 @@ std::string_view to_string(NewtonAccuracyStatus s) noexcept {
 
 namespace magmaan::estimate::frontier {
 
-NewtonAccuracyDiagnostics
-newton_accuracy_from(const Eigen::VectorXd& G, const Eigen::MatrixXd& I,
-                     NewtonAccuracyOptions opts) {
+NewtonSystem prepare_newton_system(const Eigen::MatrixXd& H) {
+  NewtonSystem out;
+  if (H.rows() != H.cols() || !H.allFinite()) return out;
+  if (H.rows() == 0) {
+    out.status = NewtonAccuracyStatus::Available;
+    out.condition = 1.0;
+    return out;
+  }
+  if ((H.diagonal().array() <= 0.0).any()) {
+    out.status = NewtonAccuracyStatus::NonpositiveCurvature;
+    return out;
+  }
+  out.scale = H.diagonal().array().sqrt().inverse();
+  out.equilibrated_hessian = out.scale.asDiagonal() * H * out.scale.asDiagonal();
+  auto& C = out.equilibrated_hessian;
+  C = (0.5 * (C + C.transpose())).eval();
+  if (!C.allFinite()) return out;
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(C, Eigen::EigenvaluesOnly);
+  if (eig.info() != Eigen::Success || eig.eigenvalues().minCoeff() <= 0.0) {
+    out.status = NewtonAccuracyStatus::NonpositiveCurvature;
+    return out;
+  }
+  out.condition = eig.eigenvalues().maxCoeff() / eig.eigenvalues().minCoeff();
+  out.factorization.compute(C);
+  out.status = out.factorization.info() == Eigen::Success
+      ? NewtonAccuracyStatus::Available : NewtonAccuracyStatus::NonpositiveCurvature;
+  return out;
+}
+
+NewtonSolution solve_newton_system(const NewtonSystem& system,
+                                   const Eigen::VectorXd& gradient) {
+  NewtonSolution out;
+  out.condition = system.condition;
+  out.status = system.status;
+  if (out.status != NewtonAccuracyStatus::Available) return out;
+  out.status = NewtonAccuracyStatus::Unavailable;
+  if (gradient.size() != system.scale.size() || !gradient.allFinite()) return out;
+  if (gradient.size() == 0) {
+    out.status = NewtonAccuracyStatus::Available;
+    out.distance = out.predicted_gain = out.solve_residual = 0.0;
+    return out;
+  }
+  const Eigen::VectorXd b = system.scale.asDiagonal() * gradient;
+  const Eigen::VectorXd y = system.factorization.solve(b);
+  const auto& C = system.equilibrated_hessian;
+  out.step = -(system.scale.asDiagonal() * y);
+  out.solve_residual =
+      (C * y - b).norm() / (C.norm() * y.norm() + b.norm() + 1e-300);
+  const double d2 = b.dot(y);
+  if (!out.step.allFinite() || !std::isfinite(out.solve_residual) ||
+      !std::isfinite(d2)) return out;
+  if (d2 < 0.0) {
+    out.status = NewtonAccuracyStatus::NonpositiveCurvature;
+    return out;
+  }
+  out.status = NewtonAccuracyStatus::Available;
+  out.distance = std::sqrt(d2);
+  out.predicted_gain = 0.5 * d2;
+  return out;
+}
+
+NewtonAccuracyDiagnostics assess_newton_accuracy(
+    const NewtonSolution& solution, NewtonAccuracyOptions opts) {
   NewtonAccuracyDiagnostics a;
   a.checked = true;
   a.budget = opts.budget;
-  a.n_reduced = static_cast<std::int32_t>(G.size());
-  if (I.rows() != G.size() || I.cols() != G.size() || !G.allFinite() ||
-      !I.allFinite()) {
+  a.status = solution.status;
+  a.n_reduced = static_cast<std::int32_t>(solution.step.size());
+  a.condition = solution.condition;
+  a.solve_residual = solution.solve_residual;
+  if (!std::isfinite(opts.budget) || opts.budget < 0.0 ||
+      !std::isfinite(opts.max_condition) || opts.max_condition < 1.0 ||
+      !std::isfinite(opts.max_solve_residual) || opts.max_solve_residual < 0.0) {
+    a.status = NewtonAccuracyStatus::Unavailable;
     return a;
   }
-  if (G.size() == 0) {
-    a.status = NewtonAccuracyStatus::Available;
-    a.distance = a.predicted_gain = a.max_step = a.solve_residual = 0.0;
-    a.condition = 1.0;
-    a.passed = true;
+  if (a.status != NewtonAccuracyStatus::Available) return a;
+  if (!std::isfinite(a.condition) || !std::isfinite(a.solve_residual) ||
+      !std::isfinite(solution.distance) || !std::isfinite(solution.predicted_gain) ||
+      !solution.step.allFinite()) {
+    a.status = NewtonAccuracyStatus::Unavailable;
     return a;
   }
-  if ((I.diagonal().array() <= 0.0).any()) {
-    a.status = NewtonAccuracyStatus::NonpositiveCurvature;
-    return a;
-  }
-  // Diagonal equilibration makes the conditioning guard insensitive to
-  // diagonal changes of units. No inverse is formed.
-  const Eigen::VectorXd scale = I.diagonal().array().sqrt().inverse();
-  Eigen::MatrixXd C = scale.asDiagonal() * I * scale.asDiagonal();
-  C = (0.5 * (C + C.transpose())).eval();
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(C, Eigen::EigenvaluesOnly);
-  if (eig.info() != Eigen::Success || eig.eigenvalues().minCoeff() <= 0.0) {
-    a.status = NewtonAccuracyStatus::NonpositiveCurvature;
-    return a;
-  }
-  a.condition = eig.eigenvalues().maxCoeff() / eig.eigenvalues().minCoeff();
   if (a.condition > opts.max_condition) {
     a.status = NewtonAccuracyStatus::IllConditioned;
     return a;
   }
-  Eigen::LLT<Eigen::MatrixXd> chol(C);
-  if (chol.info() != Eigen::Success) {
-    a.status = NewtonAccuracyStatus::NonpositiveCurvature;
-    return a;
-  }
-  const Eigen::VectorXd b = scale.asDiagonal() * G;
-  const Eigen::VectorXd y = chol.solve(b);
-  a.solve_residual =
-      (C * y - b).norm() / (C.norm() * y.norm() + b.norm() + 1e-300);
   if (a.solve_residual > opts.max_solve_residual) {
     a.status = NewtonAccuracyStatus::SolveUnreliable;
     return a;
   }
-  const double d2 = b.dot(y);
-  if (!(d2 >= 0.0)) {
-    a.status = NewtonAccuracyStatus::NonpositiveCurvature;
-    return a;
-  }
-  a.status = NewtonAccuracyStatus::Available;
-  a.distance = std::sqrt(d2);
-  a.predicted_gain = 0.5 * d2;
-  a.max_step = (scale.asDiagonal() * y).cwiseAbs().maxCoeff();
+  a.distance = solution.distance;
+  a.predicted_gain = solution.predicted_gain;
+  a.max_step = solution.step.size() ? solution.step.cwiseAbs().maxCoeff() : 0.0;
   a.passed = a.distance <= opts.budget;
   return a;
+}
+
+NewtonAccuracyDiagnostics
+newton_accuracy_from(const Eigen::VectorXd& G, const Eigen::MatrixXd& I,
+                     NewtonAccuracyOptions opts) {
+  if (I.rows() != G.size() || I.cols() != G.size() || !G.allFinite()) {
+    auto out = assess_newton_accuracy(NewtonSolution{}, opts);
+    out.n_reduced = static_cast<std::int32_t>(G.size());
+    return out;
+  }
+  auto out = assess_newton_accuracy(
+      solve_newton_system(prepare_newton_system(I), G), opts);
+  out.n_reduced = static_cast<std::int32_t>(G.size());
+  return out;
 }
 
 namespace {
@@ -119,34 +168,78 @@ bool covariance_blocks_interior(const model::ModelEvaluator& ev,
 
 }  // namespace
 
+NewtonDerivatives evaluate_newton_ml(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Eigen::VectorXd& theta) {
+  NewtonDerivatives out;
+  out.theta = theta;
+  if (theta.size() != pt.n_free() || !theta.allFinite()) return out;
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) return out;
+  auto obj = ml_objective(*ev, samp);
+  if (!obj) return out;
+  out.n_obs = std::accumulate(samp.n_obs.begin(), samp.n_obs.end(), 0.0);
+  if (!(out.n_obs > 0.0) || !std::isfinite(out.n_obs)) return out;
+  out.objective = obj->f(theta, out.gradient);
+  out.gradient *= out.n_obs;
+  if (!std::isfinite(out.objective) || !out.gradient.allFinite()) return out;
+  Estimates est;
+  est.theta = theta;
+  auto info = inference::information_observed_analytic(pt, rep, samp, est);
+  if (!info) return out;
+  out.hessian = std::move(*info);
+  if (!out.gradient.allFinite() || !out.hessian.allFinite()) return out;
+  out.status = NewtonAccuracyStatus::Available;
+  return out;
+}
+
+NewtonAudit audit_newton_ml(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const SampleStats& samp, const Eigen::VectorXd& theta,
+    StationarityDomain domain, NewtonAccuracyOptions opts) {
+  NewtonAudit out;
+  out.options = opts;
+  out.derivatives = evaluate_newton_ml(pt, rep, samp, theta);
+  out.geometry = prepare_newton_geometry(pt, rep, out.derivatives, domain,
+                                         opts.interior_eigen_tol);
+  if (out.geometry.status == NewtonAccuracyStatus::Available) {
+    out.system = prepare_newton_system(out.geometry.reduced_hessian);
+    out.solution = solve_newton_system(out.system, out.geometry.reduced_gradient);
+  } else {
+    out.solution.status = out.geometry.status;
+  }
+  out.diagnostics = assess_newton_accuracy(out, opts);
+  return out;
+}
+
+NewtonAccuracyDiagnostics assess_newton_accuracy(const NewtonAudit& audit) {
+  return assess_newton_accuracy(audit, audit.options);
+}
+
+NewtonAccuracyDiagnostics assess_newton_accuracy(
+    const NewtonAudit& audit, NewtonAccuracyOptions opts) {
+  auto out = assess_newton_accuracy(audit.solution, opts);
+  out.n_reduced = static_cast<std::int32_t>(audit.geometry.reduced_gradient.size());
+  out.psd_domain = audit.geometry.domain == StationarityDomain::Psd;
+  out.covariance_interior = audit.geometry.covariance_interior;
+  out.null_directions = audit.geometry.null_directions;
+  out.constrained_directions = audit.geometry.constrained_directions;
+  out.min_multiplier = audit.geometry.min_multiplier;
+  return out;
+}
+
 NewtonAccuracyDiagnostics
 newton_accuracy_ml(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                    const SampleStats& samp, const Estimates& est,
                    NewtonAccuracyOptions opts) {
-  NewtonAccuracyDiagnostics fail;
-  fail.checked = true;
-  fail.budget = opts.budget;
-  if (build_nl_constraints(pt).active()) {
-    fail.status = NewtonAccuracyStatus::Unsupported;
-    return fail;
-  }
-  auto con = build_eq_constraints(pt);
-  auto ev = model::ModelEvaluator::build(pt, rep);
-  if (!con || !ev) return fail;
-  auto obj = ml_objective(*ev, samp);
-  if (!obj) return fail;
-  Eigen::VectorXd gradient;
-  const double f = obj->f(est.theta, gradient);
-  if (!std::isfinite(f) || !gradient.allFinite()) return fail;
-  auto info = inference::information_observed_analytic(pt, rep, samp, est);
-  if (!info) return fail;
-  const double n = std::accumulate(samp.n_obs.begin(), samp.n_obs.end(), 0.0);
-  const Eigen::VectorXd G = n * con->reduce_gradient(gradient);
-  const Eigen::MatrixXd I = con->K().transpose() * (*info) * con->K();
-  NewtonAccuracyDiagnostics a = newton_accuracy_from(G, I, opts);
-  a.covariance_interior =
-      covariance_blocks_interior(*ev, est.theta, opts.interior_eigen_tol);
-  return a;
+  return audit_newton_ml(pt, rep, samp, est.theta, StationarityDomain::Ambient, opts).diagnostics;
+}
+
+NewtonAccuracyDiagnostics
+newton_accuracy_ml_psd(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                       const SampleStats& samp, const Estimates& est,
+                       NewtonAccuracyOptions opts) {
+  return audit_newton_ml(pt, rep, samp, est.theta, StationarityDomain::Psd, opts).diagnostics;
 }
 
 }  // namespace magmaan::estimate::frontier
@@ -229,34 +322,46 @@ Eigen::MatrixXd stack_rows(const std::vector<Eigen::VectorXd>& rows,
 
 }  // namespace
 
-NewtonAccuracyDiagnostics
-newton_accuracy_ml_psd(const spec::LatentStructure& pt,
-                       const model::MatrixRep& rep, const SampleStats& samp,
-                       const Estimates& est, NewtonAccuracyOptions opts) {
-  NewtonAccuracyDiagnostics fail;
-  fail.checked = true;
-  fail.psd_domain = true;
-  fail.budget = opts.budget;
+NewtonGeometry prepare_newton_geometry(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const NewtonDerivatives& derivatives, StationarityDomain domain,
+    double interior_eigen_tol) {
+  NewtonGeometry fail;
+  fail.domain = domain;
+  fail.interior_eigen_tol = interior_eigen_tol;
   if (build_nl_constraints(pt).active()) {
     fail.status = NewtonAccuracyStatus::Unsupported;
     return fail;
   }
+  if (derivatives.status != NewtonAccuracyStatus::Available ||
+      derivatives.theta.size() != pt.n_free() ||
+      derivatives.gradient.size() != pt.n_free() ||
+      derivatives.hessian.rows() != pt.n_free() ||
+      derivatives.hessian.cols() != pt.n_free() ||
+      !derivatives.theta.allFinite() || !derivatives.gradient.allFinite() ||
+      !derivatives.hessian.allFinite() || !std::isfinite(interior_eigen_tol) ||
+      interior_eigen_tol < 0.0) return fail;
   auto con = build_eq_constraints(pt);
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!con || !ev) return fail;
-  auto obj = ml_objective(*ev, samp);
-  if (!obj) return fail;
-  Eigen::VectorXd gradient;
-  const double f = obj->f(est.theta, gradient);
-  if (!std::isfinite(f) || !gradient.allFinite()) return fail;
-  auto info = inference::information_observed_analytic(pt, rep, samp, est);
-  auto mats = ev->assembled(est.theta);
-  if (!info || !mats) return fail;
-  const Eigen::Index npar = est.theta.size();
-  const double n = std::accumulate(samp.n_obs.begin(), samp.n_obs.end(), 0.0);
+  const auto& theta = derivatives.theta;
+  const Eigen::Index npar = theta.size();
   const Eigen::MatrixXd K = con->K();
-  const Eigen::VectorXd G = n * con->reduce_gradient(gradient);
-  const Eigen::MatrixXd I = K.transpose() * (*info) * K;
+  const Eigen::VectorXd G = con->reduce_gradient(derivatives.gradient);
+  const Eigen::MatrixXd I = K.transpose() * derivatives.hessian * K;
+  NewtonGeometry out = fail;
+  out.equality_basis = K;
+  out.tangent_basis = Eigen::MatrixXd::Identity(K.cols(), K.cols());
+  out.curvature_correction = Eigen::MatrixXd::Zero(npar, npar);
+  if (domain == StationarityDomain::Ambient) {
+    out.reduced_gradient = G;
+    out.reduced_hessian = I;
+    out.covariance_interior = covariance_blocks_interior(*ev, theta, interior_eigen_tol);
+    out.status = NewtonAccuracyStatus::Available;
+    return out;
+  }
+  auto mats = ev->assembled(theta);
+  if (!mats) return fail;
 
   // Singular components of every primitive block.
   std::vector<FaceComponent> faces;
@@ -270,7 +375,7 @@ newton_accuracy_ml_psd(const spec::LatentStructure& pt,
       const Eigen::MatrixXd C = 0.5 * (raw + raw.transpose());
       const Eigen::Index dim = C.rows();
       const auto block = static_cast<std::int32_t>(b);
-      const double tol = opts.interior_eigen_tol *
+      const double tol = interior_eigen_tol *
           std::max(1.0, C.cwiseAbs().maxCoeff());
       // Structural pattern: free cells and fixed nonzero entries.
       Eigen::MatrixXi freecell = Eigen::MatrixXi::Zero(dim, dim);
@@ -345,7 +450,6 @@ newton_accuracy_ml_psd(const spec::LatentStructure& pt,
   }
   if (infeasible) return fail;
 
-  NewtonAccuracyDiagnostics out;
   Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(npar, npar);
   std::vector<Eigen::VectorXd> held = forced;
   std::int32_t null_dirs = 0, held_dirs = 0;
@@ -433,9 +537,11 @@ newton_accuracy_ml_psd(const spec::LatentStructure& pt,
     while (rank < sv.size() && sv(rank) > cut) ++rank;
     Z = svd.matrixV().rightCols(K.cols() - rank);
   }
-  out = newton_accuracy_from(Z.transpose() * G, Z.transpose() * H * Z, opts);
-  out.checked = true;
-  out.psd_domain = true;
+  out.reduced_gradient = Z.transpose() * G;
+  out.reduced_hessian = Z.transpose() * H * Z;
+  out.tangent_basis = std::move(Z);
+  out.curvature_correction = std::move(Q);
+  out.status = NewtonAccuracyStatus::Available;
   out.null_directions = null_dirs;
   out.constrained_directions = held_dirs;
   out.min_multiplier = min_multiplier;

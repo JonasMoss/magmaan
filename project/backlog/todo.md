@@ -29,6 +29,19 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+- **M — unify explicit post-fit convergence audits across estimator families.**
+  The Newton computation now has retainable derivative, geometry, factorization,
+  solution and assessment stages (see roadmap). Extend this composition pattern
+  to the common convergence report, with an explicit objective/domain context,
+  runtime check requests and acceptance policy. Inventory every iterative path;
+  require fit-time/post-fit agreement for the same problem and point. In
+  particular `evaluate_at(ML)` still lacks the fit-time Newton diagnostic and
+  its legacy `audit_options` do not configure the common verdict. Missing
+  required evidence must remain unresolved instead of silently choosing a
+  weaker criterion. Add thin R access to retained artifacts when the common
+  post-fit interface is exposed. Curvature extensions to other objectives
+  require their own mathematical interpretation and validation.
+
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
 - **M — finish optimizer-control reporting and specialized-path inventory.**

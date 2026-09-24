@@ -378,6 +378,21 @@ TEST_CASE("Newton accuracy: predicted gain matches the objective along a face") 
   CHECK(at_fit.null_directions == 1);
   CHECK(at_fit.constrained_directions == 1);
   CHECK(at_fit.distance < 1e-3);
+  const auto retained = magmaan::estimate::frontier::audit_newton_ml(
+      m.pt, m.rep, m.samp, th, magmaan::estimate::StationarityDomain::Psd);
+  REQUIRE(retained.diagnostics.status == NewtonAccuracyStatus::Available);
+  const auto& geometry = retained.geometry;
+  const Eigen::MatrixXd B = geometry.equality_basis * geometry.tangent_basis;
+  CHECK(geometry.curvature_correction.norm() > 0.0);
+  CHECK(geometry.reduced_hessian.isApprox(
+      B.transpose() * (retained.derivatives.hessian + geometry.curvature_correction) * B));
+  CHECK(geometry.reduced_gradient.isApprox(B.transpose() * retained.derivatives.gradient));
+  CHECK(retained.diagnostics.distance == doctest::Approx(at_fit.distance));
+  const auto reassessed = magmaan::estimate::frontier::assess_newton_accuracy(retained);
+  CHECK(reassessed.psd_domain);
+  CHECK(reassessed.constrained_directions == at_fit.constrained_directions);
+  CHECK(reassessed.distance == doctest::Approx(at_fit.distance));
+
 
   // Locate the factor covariance parameters and the rank-one factor of Psi.
   Eigen::Index v1 = -1, v2 = -1, c12 = -1;
@@ -433,4 +448,91 @@ TEST_CASE("Newton accuracy: a fixed zero variance holds its row on the face") {
   CHECK(na.checked);
   CHECK(na.psd_domain);
   CHECK(na.status == NewtonAccuracyStatus::Available);
+}
+
+TEST_CASE("Newton artifacts: reuse factorization and reassess retained solution") {
+  using namespace magmaan::estimate::frontier;
+  Eigen::Matrix2d H;
+  H << 4, 1, 1, 2;
+  Eigen::Vector2d displacement(0.1, -0.2);
+  const auto system = prepare_newton_system(H);
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  const auto first = solve_newton_system(system, H * displacement);
+  REQUIRE(first.status == NewtonAccuracyStatus::Available);
+  CHECK((first.step + displacement).norm() < 1e-14);
+  CHECK((H * first.step + H * displacement).norm() < 1e-14);
+  const auto second = solve_newton_system(system, 2 * H * displacement);
+  CHECK((second.step - 2 * first.step).norm() < 1e-14);
+  CHECK(second.distance == doctest::Approx(2 * first.distance));
+  CHECK_FALSE(assess_newton_accuracy(first).passed);
+  NewtonAccuracyOptions loose;
+  loose.budget = 1.0;
+  CHECK(assess_newton_accuracy(first, loose).passed);
+  loose.max_condition = 1.0;
+  CHECK(assess_newton_accuracy(first, loose).status == NewtonAccuracyStatus::IllConditioned);
+  CHECK(first.status == NewtonAccuracyStatus::Available);
+  CHECK(solve_newton_system(system, Eigen::VectorXd::Zero(3)).status ==
+        NewtonAccuracyStatus::Unavailable);
+  loose.budget = std::numeric_limits<double>::quiet_NaN();
+  CHECK(assess_newton_accuracy(first, loose).status == NewtonAccuracyStatus::Unavailable);
+  const auto empty = solve_newton_system(prepare_newton_system(Eigen::MatrixXd(0, 0)),
+                                         Eigen::VectorXd(0));
+  CHECK(assess_newton_accuracy(empty).passed);
+}
+
+TEST_CASE("Newton artifacts: full Hessian remains reusable after equality reduction") {
+  using namespace magmaan::estimate::frontier;
+  const Model m = exact_model("f =~ x1 + a*x2 + a*x3 + x4\nx2 ~~ v*x2\nx4 ~~ v*x4");
+  auto con = magmaan::estimate::build_eq_constraints(m.pt);
+  REQUIRE(con.has_value());
+  const Eigen::VectorXd theta = m.theta0 + con->K() *
+      Eigen::VectorXd::Constant(con->K().cols(), 1e-4);
+  NewtonAccuracyOptions options;
+  options.budget = 0.02;
+  const auto audit = audit_newton_ml(m.pt, m.rep, m.samp, theta,
+      magmaan::estimate::StationarityDomain::Ambient, options);
+  CHECK(assess_newton_accuracy(audit).budget == 0.02);
+  REQUIRE(audit.diagnostics.status == NewtonAccuracyStatus::Available);
+  const auto& d = audit.derivatives;
+  const auto& g = audit.geometry;
+  CHECK(d.theta.isApprox(theta));
+  CHECK(d.n_obs == 250);
+  const auto info = magmaan::inference::information_observed_analytic(m.pt, m.rep, m.samp, at(theta));
+  REQUIRE(info.has_value());
+  CHECK(d.hessian.isApprox(*info));
+  CHECK(g.curvature_correction.isZero());
+  CHECK(g.reduced_hessian.isApprox(con->K().transpose() * d.hessian * con->K()));
+  const Eigen::VectorXd full_step = g.equality_basis * g.tangent_basis * audit.solution.step;
+  CHECK((con->A_eq * full_step).norm() < 1e-12);
+  CHECK((g.reduced_hessian * audit.solution.step + g.reduced_gradient).norm() < 1e-10);
+  // Downstream inference accepts the retained full information directly.
+  const auto covariance = magmaan::inference::vcov(d.hessian, m.pt);
+  REQUIRE(covariance.has_value());
+  CHECK(covariance->rows() == theta.size());
+  const auto psd_geometry = prepare_newton_geometry(m.pt, m.rep, d,
+      magmaan::estimate::StationarityDomain::Psd);
+  REQUIRE(psd_geometry.status == NewtonAccuracyStatus::Available);
+  CHECK(psd_geometry.reduced_hessian.isApprox(g.reduced_hessian));
+  CHECK(psd_geometry.reduced_gradient.isApprox(g.reduced_gradient));
+  CHECK(newton_accuracy_ml(m.pt, m.rep, m.samp, at(theta)).distance ==
+        doctest::Approx(audit.diagnostics.distance));
+}
+
+TEST_CASE("Newton artifacts: rejected curvature retains derivatives and geometry") {
+  using namespace magmaan::estimate::frontier;
+  const Model m = exact_model("f =~ x1 + x2 + x3 + x4");
+  auto derivatives = evaluate_newton_ml(m.pt, m.rep, m.samp, m.theta0);
+  REQUIRE(derivatives.status == NewtonAccuracyStatus::Available);
+  // Inject unsuitable curvature as a caller supplying its own matrix can do.
+  derivatives.hessian = -Eigen::MatrixXd::Identity(m.theta0.size(), m.theta0.size());
+  const auto geometry = prepare_newton_geometry(m.pt, m.rep, derivatives);
+  REQUIRE(geometry.status == NewtonAccuracyStatus::Available);
+  const auto system = prepare_newton_system(geometry.reduced_hessian);
+  const auto solution = solve_newton_system(system, geometry.reduced_gradient);
+  CHECK(assess_newton_accuracy(solution).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  CHECK(derivatives.hessian.diagonal().maxCoeff() == -1.0);
+  CHECK(geometry.reduced_hessian.rows() > 0);
+  CHECK_FALSE(assess_newton_accuracy(solution).passed);
+  CHECK(evaluate_newton_ml(m.pt, m.rep, m.samp, Eigen::VectorXd::Zero(1)).status ==
+        NewtonAccuracyStatus::Unavailable);
 }
