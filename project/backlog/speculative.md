@@ -12,7 +12,7 @@ failure) appears.
 ### SEM PSD optimization beyond the engineering baseline
 
 **Gap.** A first-order PSD-cone audit at a singular parameter representation
-need not rule out improvement through equivalent parameters. Experiment 83
+need not rule out improvement through equivalent parameters. Experiment _archive/sem-total-variance
 found a zero mediator disturbance with interchangeable direct and mediated
 paths; a compensated shift followed by reopening the variance escaped the worse
 endpoint. Its targeted restart is validated only on that selected dataset.
@@ -22,7 +22,7 @@ restarts remain unproven as engineering improvements.
 **Alternative already available.** Complete-data `frontier_fit_ml_psd()` with
 native starts, NLopt SLSQP and `preconditioning = "none"`, preserving original
 SEM constraints and permitting singular PSD components. The completed
-`experiments/_archive/83-sem-total-variance` benchmark found no evaluation-count advantage
+`experiments/_archive/sem-total-variance` benchmark found no evaluation-count advantage
 for diagonal scaling from native starts in any of ten settings. The unscaled
 baseline reached the better solution in the sole discrepant pair. Explicit
 preconditioning and experiment-local restart tools remain available for methods
@@ -47,7 +47,7 @@ refusal.
 
 **Alternative already available.** The explicit refusal
 (`detail::symmetric_inverse_pd_gated`, returning dim/rank/rcond/λmin) plus the
-advisory `conditioned_adf_weight()` telemetry in `experiments/showcases/00-lavaan-parity`.
+advisory `conditioned_adf_weight()` telemetry in `experiments/showcases/01-lavaan-parity`.
 Convention documented in
 [project/design/numerical-conventions.md](../design/numerical-conventions.md).
 
@@ -79,13 +79,13 @@ correction for the fit test.
 multi-information penalty (`frontier_fit_ml_multiinfo()`). That penalty is a
 scale-invariant log barrier on every structural equation and on the joint
 residual correlations, not only on diagonal variances; see
-[todo.md](todo.md) and experiment 85. Penalty (b) and the penalized-sandwich
+[todo.md](todo.md) and experiment research/47. Penalty (b) and the penalized-sandwich
 SE remain speculative.
 
 **Alternative already available.** Covariance-space conditioning already covers
 the convergence case: `data::frontier` covariance shrinkage (`S_a = (1-λ)S + λT`),
 `estimate::frontier::fit_ml_ridge_continuation()` (warm-started continuation to
-α=0), and the `experiments/engineering/04-near-singular-ml-continuation` target/λ grid. Hard
+α=0), and the `experiments/engineering/02-near-singular-ml-continuation` target/λ grid. Hard
 parameter bounds are De Jonckere & Rosseel (2022) bounded estimation (the hard
 sibling of the log-barrier); Bayesian priors on θ are the MAP version. lavaan
 bounded estimation and `regsem` cover the practical case on a refit.
@@ -94,14 +94,14 @@ bounded estimation and `regsem` cover the practical case on a refit.
 regularization specifically, i.e. a case where covariance conditioning is
 insufficient, or where an honest (non-circular) structural-shrinkage estimator
 with a valid GOF test is required, most naturally a moment-space-vs-parameter-space
-convergence/bias/MSE study extending experiment 04. Sequencing: the variance
+convergence/bias/MSE study extending experiment engineering/02. Sequencing: the variance
 log-barrier first (smallest delta over bounded estimation, reuses its bound
 computation), then the structured Gaussian penalty, then the penalized-sandwich
 SE + effective-df. The ρ selector and the non-standard inference are research-tier
 ([[feedback-shortcut-variants]]). Do not ship the De Jonckere & Rosseel (2023)
 model-based *covariance* target as core: it biases the GOF toward the fitted
 model (shrinking S toward a model-shaped target); if added at all it belongs in
-experiment 04's target menu with that caveat documented.
+experiment engineering/02's target menu with that caveat documented.
 
 ### Regularized H1 references for two-stage and nested SEM
 
@@ -218,7 +218,7 @@ unconsumed.
 
 **Build if.** An ordinal/mixed model is large enough that the m×m Gamma
 materialization dominates robust reporting in a benchmark or paper grid
-(moment_dim ≳ 1000; experiment 13 measured full Gamma at ~100-200× the
+(moment_dim ≳ 1000; experiment _archive/ordinal-construction-boundary measured full Gamma at ~100-200× the
 diagonal's memory), or the ordinal-snlls paper's fit-plus-inference rows
 need the reduced route to make their cost story complete.
 
@@ -355,7 +355,7 @@ point estimates and delta-method SEs gated against lavaan `efa()` / `rotation=`
 (shipped since 0.6-13, so a real oracle exists). **Literature-scope** = multiple
 EFA blocks; multigroup ESEM with rotation (and rotation-based invariance); full CF
 family + promax + Jennrich-Bentler bifactor rotations; FIML; robust/MLR rotated
-SEs. **Research-tier** = rotated SEs under misspecification (sandwich / the exp-35
+SEs. **Research-tier** = rotated SEs under misspecification (sandwich / the exp-research/12
 robust bread), ESEM on the frontier robust/DPD estimators, ordinal/polychoric
 ESEM. Two design forks to settle before any code: (i) `frontier`-module vs
 supported track (recommend `frontier`, v1 still lavaan-gated); (ii) post-fit
@@ -404,7 +404,7 @@ df (inert for a plain functional). Reference set and the keystone derivation in
 (KC 2001, Bell-McCaffrey 2002, Imbens-Kolesar 2016, Yuan-Bentler 1997/1998,
 Satterthwaite 1946).
 
-**Proof of concept landed.** `experiments/research/44-alpha-kc-coverage` runs the 2x2
+**Proof of concept landed.** `experiments/research/19-alpha-kc-coverage` runs the 2x2
 {raw, transform} x {Wald z, KC eff-df t} on Cronbach's alpha (congeneric p=6,
 logit transform) and the Pearson correlation swept over rho (Fisher-z transform),
 under normal and contaminated-normal data. The rho sweep separates **two
@@ -436,7 +436,7 @@ wants one calibrated, fit-free, bootstrap-free interval recipe across several
 psychometric covariance functionals (alpha, the omega/H family, reliability
 differences, correlations), or a closed-form-omega referee pushes on small-N
 coverage hard enough to want more than logit-Wald. Sequencing: port the
-experiment-44 correction to the omega family on the closed-form-omega /
+experiment-research/19 correction to the omega family on the closed-form-omega /
 reliability harness first (same influence values), then add the HC2 meat-debiasing
 (Bell-McCaffrey) for the SE downward bias and a second-order functional bias
 correction for the point bias to close the N<=30 residual. The `kappa_hat`
@@ -446,7 +446,7 @@ profile-LR is the heavier alternative when df-widening underperforms (now scoped
 its own family-wide project, *Small-sample-corrected profile-LR confidence intervals
 for the reliability family*, in the Measures section below).
 
-Design cautions (author, 2026-06-30, after the experiment-44 2x2):
+Design cautions (author, 2026-06-30, after the experiment-research/19 2x2):
 
 - *Mix-and-match risk.* transform + KC effective-df + HC2 avar-debias is a stack
   of corrections that interact (the KC df and the HC2 meat-debias both bear on the
@@ -457,7 +457,7 @@ Design cautions (author, 2026-06-30, after the experiment-44 2x2):
 - *Do not target exactly 0.95 at tiny N.* Distribution-free inference cannot
   recover fourth-moment information the sample does not contain, so the honest goal
   at N<=30 (heavy tails) is calibration *improvement* and left/right *balance*, not
-  nominal coverage. experiment 44's `transform + KC t` already delivers that
+  nominal coverage. experiment research/19's `transform + KC t` already delivers that
   (near-nominal and balanced on normal data to N=20; the residual is heavy-tails x
   tiny-N, the avar-debias's territory).
 
@@ -656,7 +656,7 @@ regression at once. Hence a forward rank-1 sweep, not a hat matrix. The
 downstream deliverables are all reductions over the same `N` LOO vectors:
 (a) a **jackknife SE** `V_jack = ((N-1)/N) sum (theta-hat_{-i}-thetabar)(.)'`, a
 third distribution-free leg alongside delta-method-NT and delta-method-empirical-Gamma
-(exp-52 showed NT-Gamma SEs are asymptotically wrong on non-normal data and
+(exp-research/24 showed NT-Gamma SEs are asymptotically wrong on non-normal data and
 empirical-Gamma is calibrated -- does jackknife track empirical-Gamma at N=50?);
 (b) an **estimator-native LOO-CV discrepancy** `(1/N) sum_i F(S, Sigma(theta-hat_{-i}))`
 (ULS or NTML) for model comparison where AIC/BIC are documented-invalid for this
@@ -681,7 +681,7 @@ one of the incumbents does not cover: a **model-selection** need where the
 documented-invalid AIC/BIC leave a real hole (LOO-CV discrepancy is the
 likelihood-free answer, and the closed form is what makes it affordable -- the
 strength/weakness symmetry is the hook), a **jackknife-vs-empirical-Gamma SE**
-calibration study on the existing exp-52 harness, or **CV-debiased reliability**
+calibration study on the existing exp-research/24 harness, or **CV-debiased reliability**
 graduating the closed-form-omega lane. Cheapest probe (~40 lines, pure R over the
 landed post-fit surface): `loo_influence(fit)` = the first-order quadratic forms,
 validated against a brute-force exact refit sweep on Holzinger-Swineford; if they
@@ -747,14 +747,14 @@ multidimensional, omega_H stays nearly unbiased even when the bifactor model is
 itself wrong, the model-implied-vs-observed denominator choice barely matters, and
 fit indices only weakly track omega bias. This is the CFA-parameter object, distinct
 from the S-based coefficients (alpha, Guttman lambda6, Spearman-Guttman omega) in the
-in-flight `measures::frontier::reliability` module, and the same object as the exp-20
+in-flight `measures::frontier::reliability` module, and the same object as the exp-research/03
 omega-alpha thread in [todo.md](todo.md) (omega from a one-factor ML fit, alpha = omega
 of a ULS tau-equivalent fit) and the roadmap `infer_gamma_nt` omega.
 
 **Alternative already available.** magmaan already produces every input from a fitted
 CFA (`Lambda`, model-implied `Sigma-hat`), and the continuous C++ frontier surface now
 does this directly as `omega_from_fit` with robust delta SEs. The S-based glb-family
-coefficients and the exp-20 omega-alpha difference test cover the adjacent reliability
+coefficients and the exp-research/03 omega-alpha difference test cover the adjacent reliability
 questions.
 
 **Progress (2026-07-02).** The first ordinal proving slice landed in C++:
@@ -763,7 +763,7 @@ observed integer category-score covariance induced by thresholds and a latent-re
 correlation matrix, and `estimate::frontier::ordinal_observed_omega` applies that to a
 single-group all-ordinal DWLS/WLS/ULS fit with a complete IJ-sandwich delta SE. This
 addresses the "can the ordinal/DWLS stack report an observed-score reliability metric?"
-infrastructure question, but not the literal Green-Yang/Flora target. Experiment 48
+infrastructure question, but not the literal Green-Yang/Flora target. Experiment engineering/08
 (`ordinal-omega-target-audit`) compares this covariance omega to the direct one-factor
 ordinal true-score target `Var(sum E[Y_j | eta]) / Var(sum Y_j)`: tau-equivalent
 equal-threshold cells match, equal-threshold congeneric cells are nearly identical, and
@@ -772,19 +772,19 @@ settle the Bell-style misspecification bias study, omega_ho/maximal-reliability 
 extensions, multi-group target definition, direct Green-Yang/Flora coefficient
 implementation, or small-sample/profile-LR corrections. R exposure landed immediately
 after as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
-`experiments/engineering/46-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
+`experiments/engineering/07-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
 The no-integration latent-response/polychoric sibling is also exposed in R as
 `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it applies
 `omega_multidim` to `stats$R[[group]]` and reuses the ordinal `NACOV` correlation
 block for a robust delta SE. This is the simple ordinal-omega coefficient people
-actually report, not the observed-score Green-Yang/Flora target. Experiment 49
+actually report, not the observed-score Green-Yang/Flora target. Experiment research/22
 (`ordinal-polychoric-omega-coverage`) stress-tests that helper in correctly
 specified ordinal-probit data: with 200 reps per cell over `N in {50,100,250}`,
 balanced and threshold-extreme cuts had 95% coverage 0.915-0.965 among
 successful draws for the latent-response omega target 0.829. The only
 construction failures were 6/200 threshold-extreme `N=50` draws with an empty
 item category.
-Experiment 50 (`ordinal-polychoric-omega-stress`) extends that to skewed,
+Experiment research/23 (`ordinal-polychoric-omega-stress`) extends that to skewed,
 heavy-tailed, and locally dependent ordinal DGPs, targeting the large-sample
 pseudo-true polychoric omega. Mild/local-dependence cells remain near nominal,
 but skew/heavy-tail cells bend: skew-extreme gives 0.815/0.903/0.935 and
@@ -793,7 +793,7 @@ heavy-tail `N=50` construction failures. The no-integration delta path is not
 the small-N stress solution.
 
 **Build if.** A paper row or methods workflow needs model-based omega reported on a
-magmaan fit, most naturally the exp-20 omega-alpha thread graduating to core, or a
+magmaan fit, most naturally the exp-research/03 omega-alpha thread graduating to core, or a
 misspecification-bias study replicating Bell. The genuinely novel cell is the ordinal
 one beyond that first slice: Bell uses continuous normal data only and explicitly
 leaves polychoric-CFA omega under misspecification (scaled into the observed total-score
@@ -848,7 +848,7 @@ OLC, ~1000 for an OLSC, to reach 0.8) and carry pervasive negative weights, so t
 practical deliverable is a *model diagnostic*, not a scoring tool; ship the
 coefficient, not interpretive cutoffs.
 
-**Inference is the open part, and `experiments/research/43-li-savalei-2026-maximal-reliability-ci`
+**Inference is the open part, and `experiments/research/18-li-savalei-2026-maximal-reliability-ci`
 now scopes it.** The SEs/CIs the paper flags as future work are not free: over a
 1000-rep sweep of the correct orthogonal bifactor by ML, the textbook delta-method
 Wald CI is badly miscalibrated at realistic N (general-factor coverage falls to
@@ -891,7 +891,7 @@ conditional on an admissible (non-Heywood) fit.
 **Name: funLR (Functional profile-LR CI).** The engine is generic over any scalar
 functional `g(theta)`; reliability is the flagship application, not the scope. Use
 "funLR" as the short handle for this lane in commits, notes, and discussion.
-`experiments/research/45-profile-lr-reliability-ci` is its home.
+`experiments/research/20-profile-lr-reliability-ci` is its home.
 
 The likelihood-ratio (test-inversion) sibling of the Kauermann-Carroll Wald lane
 above: rather than widen a Wald interval's df, build the interval by inverting a
@@ -932,15 +932,15 @@ exclude the boundary case ("we do not consider this case ... nor that part of
 
 **The correction is the contribution, not a footnote.** Under correct normal theory
 the df-1 profile-LR is already mean-inflated at the N reliability is reported at
-(`E[LR] ~ 3-4` at N=50 in exp-43), so the plain `chi^2_1` interval under-covers; a
+(`E[LR] ~ 3-4` at N=50 in exp-research/18), so the plain `chi^2_1` interval under-covers; a
 Bartlett-type rescaling (an analytic Lawley 1956 factor, or a parametric-bootstrap
 `E[LR]`) is what restores nominal coverage. Without it the method fails in the regime
-that matters; with it, exp-43 shows nominal coverage at every N including 50, where
+that matters; with it, exp-research/18 shows nominal coverage at every N including 50, where
 robust-SE, logit, second-order bias correction, Cornish-Fisher, and the percentile
 bootstrap all fall short. The motivating contrast: Falk & Chen 2026 already found the
 *uncorrected* robust LR comparable to the percentile bootstrap, so a
 small-sample-corrected, range-aware version should pass bootstrap precisely in the
-small-N bounded regime where bootstrap is expensive and (per exp-43) frequently
+small-N bounded regime where bootstrap is expensive and (per exp-research/18) frequently
 non-convergent.
 
 **Build if.** A "small-sample reliability inference" paper or workflow wants one
@@ -948,13 +948,13 @@ calibrated interval recipe across the reliability family with a likelihood (fit-
 construction, rather than the fit-free KC Wald route above; or a downstream consumer
 needs CIs for a *bounded* reliability where Wald df-widening underperforms (high
 reliability near 1; reliability differences near 0). Sequencing: (1) generalize the
-exp-43 constrained-fit + Bartlett engine from the bifactor maximal-reliability
+exp-research/18 constrained-fit + Bartlett engine from the bifactor maximal-reliability
 constraint to a generic `g(theta)` over a `ModelEvaluator` (omega, omega_h, H first);
 (2) make the Bartlett factor operational without the oracle (analytic Lawley term or
 parametric-bootstrap `E[LR]`); (3) layer the robust (Satorra-2000) scaling for
 non-normal data, i.e. small-sample-correct Falk's R-LCI; (4) the 2-parameter
 confidence-region route (Pek-Wu 2015 sec 3) for reliability *differences* (ties to the
-exp-20 alpha-omega difference thread). Magmaan's core does the constrained fits
+exp-research/03 alpha-omega difference thread). Magmaan's core does the constrained fits
 cleanly, itself worth something given Falk & Chen document `semlbci` / forked-`lavaan`
 as finicky and optimizer-dependent. The robust + small-sample combination is
 research-tier with its own calibration ([[feedback-shortcut-variants]]); add arms one
@@ -983,8 +983,8 @@ misspecified regimes. Concrete decisions:
   block before the existing dispatch. The optimizer layer is untouched (SLSQP default,
   IPOPT fallback because SLSQP-based constrained fits are finicky per Falk & Chen). A
   boundary is rejected by the profile helper when the achieved scalar residual has
-  `|g(theta_con)-g0| > tol` (exp-43's NULL-if-infeasible guard, promoted). Because it
-  is a closure, the whole family can still prototype in the exp-45 R style (`nloptr`
+  `|g(theta_con)-g0| > tol` (exp-research/18's NULL-if-infeasible guard, promoted). Because it
+  is a closure, the whole family can still prototype in the exp-research/20 R style (`nloptr`
   + a generic `g`-closure); the C++ surface is productization, not the small-sample
   contribution.
 - *Functional interface = one value-and-gradient callable* returning
@@ -1011,7 +1011,7 @@ misspecified regimes. Concrete decisions:
   why it is the completeness tier and not the MVP. The Bartlett/small-sample correction
   composes on top of each tier.
 
-**Progress (2026-07-01): NT generic engine validated.** `experiments/research/45-profile-lr-reliability-ci`
+**Progress (2026-07-01): NT generic engine validated.** `experiments/research/20-profile-lr-reliability-ci`
 lands the generic-`g` profile-LR engine (a functional closure + `nloptr` constrained
 fit, zero core change, exactly the R-prototype path above) and checks it against
 `semlbci` (Wu-Neale). Wherever `semlbci` converges the engine reproduces its
@@ -1029,7 +1029,7 @@ experiment, `scripts/coverage.R`. Coverage of the population value is exactly
 correct model). Findings: (a) for `omega` the plain profile-LR is ALREADY near-exact
 (`E[T] ~ 1`, coverage 0.93-0.97), so the correction is a near-no-op; (b) for MAXIMAL
 RELIABILITY it collapses: bifactor general-factor `rho*` at N=50 gives `E[T] ~ 4.2` and
-coverage `0.61` (the exp-43 inflation, confirmed). The Bartlett rescaling of the
+coverage `0.61` (the exp-research/18 inflation, confirmed). The Bartlett rescaling of the
 threshold by `c = E[T]` is necessary and, at the ORACLE `c`, sufficient (0.61 -> 0.98).
 The crux: estimating `c` feasibly is hard for the near-ceiling functional. A
 parametric bootstrap from the fitted model underestimates because a small-N fitted DGP
@@ -1172,7 +1172,7 @@ then roots CIs on `T_scaled` when requested. This closes the cheap asymptotic-ro
 parameter proving slice across ML, fixed-weight GMM, and fitted-weight GMM, but not
 the hard funLR gate: complete weight-derivative / misspec references, functional
 callbacks, ordinal fitted-functionals, and Bartlett/calibrated constants remain open.
-Experiment 47 now carries the paired empirical probe: multivariate `t(5)` data,
+Experiment research/21 now carries the paired empirical probe: multivariate `t(5)` data,
 ULS/GMM loading CI inversion, fixed versus fitted profile weights, and ordinary
 versus robust-scaled references over `N in {100,200,500}`.
 
@@ -1184,7 +1184,7 @@ estimated-weight robust scaling with complete raw data. The new
 sample-normal-theory IJ weight mode, WLS uses the empirical-WLS IJ weight mode,
 and ULS remains the fixed-weight reference. R exposes this as
 `estimated_weight=TRUE` on the fixed GMM parameter LRT/CI wrappers, requiring
-`robust=TRUE` and `raw_data`. Experiment 47 now keeps the ULS fixed/fitted
+`robust=TRUE` and `raw_data`. Experiment research/21 now keeps the ULS fixed/fitted
 comparison and adds GLS/WLS fixed-profile rows for `ordinary`, `robust_fixed`,
 and `robust_estimated_weight`. This advances the continuous non-normal stress
 slice, but does not solve the funLR gate: fitted-weight derivative/misspec
@@ -1214,7 +1214,7 @@ targets remain open.
 
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
-with experiment 47 (`experiments/research/47-ml-parameter-profile-lrt`) as the small-N
+with experiment research/21 (`experiments/research/21-ml-parameter-profile-lrt`) as the small-N
 interior-parameter calibration check. At 200 reps over `N in {30,50,100,500}`,
 the ordinary `chi^2_1` reference is stable for the free loading baseline
 (`type1_05` 0.050-0.055, zero constrained-solve failures). This remains only
@@ -1253,7 +1253,7 @@ fits, robust/misspec scaling, and small-sample constants remain open.
    CI inversion; complete-data ML, fixed-weight GMM, fitted-weight GMM, and
    fixed-profile estimated-weight GLS/WLS parameter robust scaling; model-misspec
    scaled/mixture references for ML, continuous GMM, ordinal parameters, and
-   ordinal polychoric omega; R parameter/omega wrappers + experiment-47
+   ordinal polychoric omega; R parameter/omega wrappers + experiment-research/21
    interior-parameter calibration probe.
 
 **Progress (2026-07-04): ordinal finite-sample calibration lane scoped.** The
@@ -1261,8 +1261,8 @@ general Bartlett problem is now split from a specific categorical-limited-inform
 taxonomy. Working note `ordinal_profile_lrt_finite_sample_calibration.tex`
 defines the ordinal DWLS/WLS problem as a decomposition into LR inflation,
 reference-scale error, sparse-threshold/NACOV instability, omega point bias, and
-boundary/feasibility mass. Experiment 53
-(`experiments/research/53-ordinal-profile-lrt-calibration`) is the first taxonomy run:
+boundary/feasibility mass. Experiment research/25
+(`experiments/research/25-ordinal-profile-lrt-calibration`) is the first taxonomy run:
 all-ordinal one-factor probit data, polychoric/latent-response omega target,
 DWLS ordinary / robust-scaled / misspec-mixture profile tests, and the fit-free
 ordinal polychoric omega Wald interval as the baseline. The WLS robust-scaled
@@ -1435,7 +1435,7 @@ cells consumed by `papers/ordinal-snlls/`. No remaining trigger.
 
 ### Ordinal construction-boundary experiment: broader blocks
 
-Extend `experiments/_archive/13-ordinal-construction-boundary` beyond
+Extend `experiments/_archive/ordinal-construction-boundary` beyond
 all-ordinal synthetic blocks up to `p = 16`, `c = 5`.
 
 **Alternative already available.** The lazy opt pilot times fit-only ULS/DWLS
@@ -1460,7 +1460,7 @@ remaining committed work is the h-weighted polyserial item in
 
 ### Rhemtulla 2012 replication: nonnormal y* and asymmetric thresholds
 
-`experiments/replications/15-rhemtulla-2012` v1 covers only the symmetric-threshold,
+`experiments/replications/02-rhemtulla-2012` v1 covers only the symmetric-threshold,
 underlying-normal conditions (categories 2–7 × N). Deferred paper conditions:
 (1) nonnormal underlying `y*` (skew 2, kurtosis 7 in the paper's convention) —
 the C++ cubic Fleishman / Vale-Maurelli primitive covers it but the wiring

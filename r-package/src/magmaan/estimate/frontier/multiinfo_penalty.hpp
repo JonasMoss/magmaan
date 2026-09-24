@@ -49,7 +49,7 @@ namespace magmaan::estimate::frontier {
 
 // `weight`, when finite, is the raw λ and overrides `eta − 1`. The default
 // λ = 0.25 (a near-flat LKJ(1.25)) keeps the barrier while leaving χ² and Wald
-// calibration at the ordinary/PSD-ML level in experiment 85's N = 50..400 grid;
+// calibration at the ordinary/PSD-ML level in experiment research/47's N = 50..400 grid;
 // λ = 1 (η = 2) over-shrinks high-R² equations and correlations near 1 there.
 struct MultiInfoPenaltyOptions {
   double eta = 1.25;

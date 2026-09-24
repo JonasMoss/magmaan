@@ -1,14 +1,14 @@
 # Parameterization geometry: what a latent scaling convention can and cannot buy
 
 **Status:** findings recorded 2026-09-19. Measured by
-`experiments/research/82-latent-metric-geometry`, which supersedes
-`experiments/_archive/02-latent-metric-identification`.
+`experiments/research/46-latent-metric-geometry`, which supersedes
+`experiments/_archive/latent-metric-identification`.
 
 **Scope correction (2026-09-19):** the original conclusions below are exploratory
 measurements, not a proof that no materially better chart exists. A PE/IN ratio
 below one does not establish numerical optimality. The structural fit gaps also
 need a common-domain audit: marker fits can admit negative disturbance variances
-that a fixed-positive-disturbance chart cannot represent. Experiment 83 now tests
+that a fixed-positive-disturbance chart cannot represent. Experiment _archive/sem-total-variance now tests
 six recursive structures with matched starts and a common strictly PD component
 domain. Its R prototype implements total-variance elimination and analytic
 derivatives; it makes no native-library speed claim. The earlier statement that
@@ -29,7 +29,7 @@ convention is a hypersurface cutting those orbits, so the split is sharp:
   distribution, conditioning, optimizer work, and where the admissibility
   boundaries sit.
 
-Exp 82 gates the first list on every run. Across-chart spread comes out at 1.4e-09
+Exp research/46 gates the first list on every run. Across-chart spread comes out at 1.4e-09
 for chi-square and 1.1e-08 for the LRT p-value, so any across-chart difference in
 the second list is attributable to the chart alone.
 
@@ -103,15 +103,15 @@ no optimizer absorbs PE curvature. Quasi-Newton sits in between, since `H_0 = I`
 basis-dependent but the metric is learned. First-order methods are fully exposed.
 
 The practical consequence for magmaan is that the numerics lever is the optimizer's
-metric, not the chart. Exp 02's per-backend split already pointed this way, with
+metric, not the chart. Exp _archive/latent-metric-identification's per-backend split already pointed this way, with
 nlopt-lbfgs at 0.789 against port at 0.895.
 
 ## Cost, measured properly
 
 Wall time is measurable at these sizes. The earlier claim here that microsecond fits
-are untimeable was wrong, and so was exp 02's method, but for a sharper reason than
+are untimeable was wrong, and so was exp _archive/latent-metric-identification's method, but for a sharper reason than
 "noise". `system.time()` quantises to about 1 ms on Linux, so ten timings of the same
-225 us fit return min 0.000, median 0.001, max 0.007. exp 02 timed each fit once, so
+225 us fit return min 0.000, median 0.001, max 0.007. exp _archive/latent-metric-identification timed each fit once, so
 its 0.839 and 0.996 were computed from a quantised timer reading sub-millisecond
 operations. Batching removes it: calibrate a batch to at least 50 ms, take the median
 over five batches, and relative IQR lands at **1.7 percent**.
@@ -127,15 +127,15 @@ Median per-call fit time, `n = 400`, all `lambda1` pooled:
 | 12 | port | 459 us | 326 us | 0.709 |
 | 24 | port | 1725 us | 1193 us | 0.691 |
 
-So the ratio exp 02 put at 0.839 is 0.43, and it improves with p rather than washing
+So the ratio exp _archive/latent-metric-identification put at 0.839 is 0.43, and it improves with p rather than washing
 out. The backend split confirms the conditioning mechanism: nlopt-lbfgs gains far more
 than port, because a quasi-Newton method starting from `H_0 = I` is exposed to the
 chart's conditioning while a more metric-aware method is not. `f_evals` ratios follow
 the same pattern, 0.27 for lbfgs against 0.61 for port at `p = 24`.
 
-## Back-conversion is cheap, and exp 02's wash was an artifact
+## Back-conversion is cheap, and exp _archive/latent-metric-identification's wash was an artifact
 
-Two halves, and exp 02 measured only the first.
+Two halves, and exp _archive/latent-metric-identification measured only the first.
 
 - **Exactness.** Back-converting the fitted theta into marker coordinates and pushing
   it through the marker map reproduces the native marker fit's implied Sigma to
@@ -144,7 +144,7 @@ Two halves, and exp 02 measured only the first.
   falling to **0.07 percent** of the fit by `p = 48`. The vcov needs the delta-method
   sandwich `J V J'`, dense O(p^3), which a user asking for the marker chart needs
   because they want marker standard errors and not just marker point estimates. That
-  is the term exp 02 never counted.
+  is the term exp _archive/latent-metric-identification never counted.
 
 | p | fit | bc point | bc vcov | point % | vcov % |
 |---:|---:|---:|---:|---:|---:|
@@ -156,7 +156,7 @@ Two halves, and exp 02 measured only the first.
 The vcov share **plateaus near three percent rather than shrinking**, because the fit
 is superlinear too. That corrects a claim made earlier in this file's history that the
 overhead simply falls with p. Net: about three percent overhead against a 30 to 57
-percent saving on the fit, so the internal-chart substitution pays and exp 02's
+percent saving on the fit, so the internal-chart substitution pays and exp _archive/latent-metric-identification's
 roughly 18 percent figure was a measurement artifact.
 
 ## Convergence at small n: the failures are strictly nested
@@ -183,7 +183,7 @@ marker chart succeeds and std_lv does not.
 
 **Caveat that matters:** improper solutions occur in **1 of 6000 draws** across the
 whole arm, which is far too few to compare charts on, so this design does not stress
-admissibility and says nothing about the exp 03 Heywood finding below. Loadings of 0.7
+admissibility and says nothing about the exp _archive/heywood-box-constraints Heywood finding below. Loadings of 0.7
 with `psi = 0.51` are not extreme enough. A harder population is needed before the two
 results can be put on one grid.
 
@@ -278,12 +278,12 @@ direction is Fisher-orthogonal to the orbit and the criterion is vacuous. The
 defensible statement is the flat-metric one above.
 
 **"std_lv removes a class of improper solution because phi is pinned."** Refuted by
-`experiments/_archive/03-heywood-box-constraints`: *"std.lv without bounds, 0/3
+`experiments/_archive/heywood-box-constraints`: *"std.lv without bounds, 0/3
 std.lv regular-start cases admissible in both engines. The latent metric alone does
 not remove the Heywood behavior."* Under marker the damage lands in latent variances
 (-2.34, -0.21); under std_lv it relocates to observed variances (-0.0039, -53.7,
 -148.6). The winning recipe there is marker plus nonnegative variance bounds, 2/3.
-std_lv helps the optimizer, not admissibility, so exp 82's improperness detector
+std_lv helps the optimizer, not admissibility, so exp research/46's improperness detector
 reads every estimated variance rather than the latent one.
 
 ## Standing verdict
@@ -294,7 +294,7 @@ reads every estimated variance rather than the latent one.
 work, wall-clock fit time (0.43 of marker at `p = 24`), and small-n convergence
 (strictly dominant, 7-0 across matched draws). It loses on admissibility, where it
 relocates Heywood cases rather than removing them. It does **not** tie on end-to-end
-speed, which was exp 02's conclusion and is superseded: the back-conversion costs about
+speed, which was exp _archive/latent-metric-identification's conclusion and is superseded: the back-conversion costs about
 three percent against a 30 to 57 percent saving.
 
 *Endogenous latents.* The ranking reverses above **R² ≈ 0.4**, because `std_lv` pins
@@ -318,10 +318,10 @@ Worth stating because the names collide. In `papers/guttman-inference` and
 `A_std = diag(S)^{-1/2} Z`, a within-factor reweighting that changes the composite
 direction, not `std.lv`. The extraction metric there is UVI by construction with
 marker applied afterwards. The supporting evidence is thinner than the recipe's
-prominence suggests: exp 58's paper-grade run pins `aligned_composite = standardized`
-as a fixed setting with no composite-versus-composite arm, exp 55's map probe is
-`reps=8`, exp 59 is `reps=5`, and `Remark 2` of the paper says outright that the
-choice is a declaration. Exp 58 does carry an `equal`/`unequal` indicator-scale factor,
+prominence suggests: exp research/29's paper-grade run pins `aligned_composite = standardized`
+as a fixed setting with no composite-versus-composite arm, exp research/27's map probe is
+`reps=8`, exp research/30 is `reps=5`, and `Remark 2` of the paper says outright that the
+choice is a declaration. Exp research/29 does carry an `equal`/`unequal` indicator-scale factor,
 which is where the standardized composite should earn its keep, but no scale-sliced
 result has been written up.
 
@@ -330,7 +330,7 @@ result has been written up.
 For ML a convention is a coordinate change and the fit is invariant. For the
 closed-form estimators it is part of the estimator's *definition*:
 
-- `experiments/_archive/56-noniterative-constraint-charts` shows the marker chart is
+- `experiments/_archive/noniterative-constraint-charts` shows the marker chart is
   irrelevant to the closed-form fit, moving the implied covariance by 8.9e-16
   configural and 1.3e-15 metric-constrained while coordinates move by 1.32 and 0.90.
 - But `guttman_estimator_criterion.tex` records that *"marker-style scalings that
@@ -348,14 +348,14 @@ coordinates"` case in `cpp/tests/unit/lavaanify_test.cpp`.
 
 ## Open
 
-- **The start-value confound.** In exp 82's cost arm std_lv needs roughly a third of
+- **The start-value confound.** In exp research/46's cost arm std_lv needs roughly a third of
   marker's function evaluations, and the gap persists at `lambda_1 = 0.9` (66 against
   19 at `p = 12`) where marker is competitive on both curvature and conditioning.
   Geometry does not explain that, so magmaan's per-chart start heuristics are the
   remaining suspect. This is the most actionable item here.
 - **The p-scaling of the internal-chart substitution.** The back-convert falls from
-  5.7 percent of the fit at `p = 6` to 3.6 percent at `p = 12`, against exp 02's
-  roughly 18 percent, so the substitution looks better than exp 02 concluded. Needs
+  5.7 percent of the fit at `p = 6` to 3.6 percent at `p = 12`, against exp _archive/latent-metric-identification's
+  roughly 18 percent, so the substitution looks better than exp _archive/latent-metric-identification concluded. Needs
   the `p = 24` arm and a real `--full` run.
 - **Chart-free inference is the principled escape.** The LRT is already invariant to
   eight digits, so every gain from chart-hunting is bounded by the intrinsic-curvature

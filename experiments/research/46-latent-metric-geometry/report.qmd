@@ -1,0 +1,231 @@
+---
+title: "Latent Metric Parameterization"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+cand <- unique(c(getwd(), dirname(getwd())))
+rd <- cand[file.exists(file.path(cand, "results", "geometry.csv"))]
+rd <- if (length(rd)) file.path(rd[[1L]], "results") else file.path(getwd(), "results")
+if (!file.exists(file.path(rd, "geometry.csv")))
+  stop("Missing results. Run: Rscript run_experiment.R --smoke")
+rdcsv <- function(f) if (file.exists(file.path(rd, f)))
+  utils::read.csv(file.path(rd, f)) else NULL
+geom <- rdcsv("geometry.csv"); cost <- rdcsv("cost.csv"); infr <- rdcsv("inference.csv")
+bcv <- rdcsv("backconvert.csv"); cvv <- rdcsv("convergence.csv"); stt <- rdcsv("structural.csv")
+meta <- rdcsv("metadata.csv")
+mv <- function(k, d = "?") { r <- meta$value[meta$key == k]; if (length(r)) r[[1L]] else d }
+# Returns the kable rather than printing it: `print()` sends the markdown to stdout
+# as literal text and Quarto renders it as a code block. Each Evidence chunk emits
+# exactly one table as its last value, so auto-printing is what renders them.
+kb <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
+need <- function(x, nm) { if (is.null(x)) { cat(sprintf("_The %s arm was not run._\n", nm)); FALSE } else TRUE }
+```
+
+## Question
+
+Which latent scaling convention should a SEM library use internally, and is there a
+better one than the named three? "std.lv is better" is folklore with partial and
+partly contradictory support, and there was no criterion for deciding whether any
+convention is close to optimal.
+
+## Short answer
+
+**In CFA, std.lv wins on every axis we can measure, and no materially better
+convention exists. In structural models it reverses, and above an endogenous R² of
+roughly 0.4 it becomes the worse chart.**
+
+A convention is a gauge choice, so nothing invariant moves: chi-square, df and the
+LRT agree across charts to 1e-8 or better. What does move is conditioning. The marker
+chart anchors the gauge to one arbitrarily chosen loading, so it degrades as that
+indicator weakens: at p = 12 its information conditioning runs from 25 at λ₁ = 0.9 to
+**34594** at λ₁ = 0.3, while std.lv sits at 6.4 and is flat. It follows through to
+speed (std.lv takes **0.43** of marker's fit time at p = 24) and to small-n
+convergence, where marker fails 2.0% of draws at n = 50 while std.lv fails none, and
+the failures are strictly nested: **7 draws where marker fails and std.lv succeeds, 0
+the other way** across 2000 matched draws.
+
+On whether a better convention exists, the answer is no, and it is decidable rather
+than a matter of taste. Splitting the model's curvature into the part a chart can
+remove and the part it cannot, std.lv's removable curvature already sits below the
+irreducible floor (ratio 0.57, flat in λ₁) while marker carries up to 4.1 times it.
+Effect coding is comparable, never better on curvature.
+
+The structural case is the surprise and it reverses the recommendation. For an
+endogenous latent, std.lv fixes the *residual* variance to 1, not the total variance,
+so it does not standardise that latent at all: its implied total variance reaches 50
+at R² = 0.98. Worse, the residual variance is not bounded away from zero, so std.lv
+acquires exactly marker's failure mode with a different trigger. Conditioning crosses
+over near **R² = 0.4** and reaches **1.5e6** at R² = 0.98, where 10% of std.lv fits
+land at a worse optimum than the marker fit on the same data, **one of them reporting
+success while doing so**.
+
+## Evidence
+
+### Nothing gauge-invariant moves
+
+```{r}
+if (need(infr, "inference")) {
+  inv <- do.call(rbind, lapply(split(infr, paste(infr$p, infr$lambda1, infr$replicate)),
+    function(d) data.frame(chisq = diff(range(d$chisq_h1)), lrt = diff(range(d$lrt_p)),
+                           df = diff(range(d$df_h1)))))
+  kb(data.frame(Quantity = c("Chi-square", "LRT p-value", "Degrees of freedom"),
+                `Max Spread Across Charts` = c(
+                  format(max(inv$chisq, na.rm = TRUE), digits = 3),
+                  format(max(inv$lrt, na.rm = TRUE), digits = 3),
+                  format(max(inv$df, na.rm = TRUE), digits = 3)),
+                check.names = FALSE))
+}
+```
+
+This is a correctness gate rather than a finding. All three charts describe the same
+model, so anything above numerical noise here would invalidate the rest of the run.
+
+### CFA: marker degrades with marker strength, std.lv does not
+
+```{r}
+if (need(geom, "geometry")) {
+  PMAX <- max(geom$p)
+  g <- geom[geom$p == PMAX, c("lambda1", "chart", "pcond_info", "pe_over_in")]
+  w <- stats::reshape(g, idvar = "lambda1", timevar = "chart", direction = "wide")
+  o <- w[order(w$lambda1), ]
+  nm <- c("Marker Loading", "Cond. (marker)", "Cond. (std.lv)", "Cond. (effect)",
+          "Curv. (marker)", "Curv. (std.lv)", "Curv. (effect)")
+  sel <- c("lambda1", paste0("pcond_info.", c("marker", "std_lv", "effect")),
+           paste0("pe_over_in.", c("marker", "std_lv", "effect")))
+  sel <- sel[sel %in% names(o)]
+  out <- o[, sel]; names(out) <- nm[seq_along(sel)]
+  kb(out, digits = 3,
+     caption = sprintf("One-factor model, p = %d, only the marker indicator's loading varying. Conditioning is of the information matrix, lower is better. Curvature is the removable share relative to the irreducible floor, so 1.0 means nothing left to gain.", PMAX))
+}
+```
+
+Both columns tell the same story and it is a clean one. std.lv and effect coding are
+flat in marker strength to three digits. Marker is competitive when its indicator is
+strong and falls apart when it is weak, which is the practically common case nobody
+checks.
+
+### Speed, measured properly
+
+```{r}
+if (need(cost, "cost")) {
+  ft <- stats::aggregate(fit_sec ~ chart + p + backend, cost, stats::median)
+  fw <- stats::reshape(ft, idvar = c("p", "backend"), timevar = "chart", direction = "wide")
+  names(fw) <- sub("^fit_sec\\.", "", names(fw))
+  fw <- fw[order(fw$backend, fw$p), ]
+  out <- data.frame(`Indicators` = fw$p, Optimizer = fw$backend,
+                    `Marker (us)` = round(1e6 * fw$marker),
+                    `std.lv (us)` = round(1e6 * fw$std_lv),
+                    Ratio = round(fw$std_lv / fw$marker, 3), check.names = FALSE)
+  kb(out, caption = "Median per-call fit time. Timed in calibrated batches, because the standard R timer quantises to about a millisecond and these fits take a few hundred microseconds. Achieved precision is about two percent.")
+}
+```
+
+The equivalent number in the superseded experiment _archive/latent-metric-identification was 0.839 and looked like it
+washed out end to end. It is 0.43 at p = 24 and improves with model size. The gap
+between the two optimizers is the mechanism showing through: the one that learns less
+about the problem's scaling is the one the chart hurts more.
+
+### Converting back to the user's chart is exact and cheap
+
+```{r}
+if (need(bcv, "backconvert")) {
+  s <- bcv[bcv$chart == "std_lv", ]
+  a <- stats::aggregate(cbind(fit_sec, bc_point_sec, bc_vcov_sec) ~ p, s, stats::median)
+  a <- a[order(a$p), ]
+  out <- data.frame(`Indicators` = a$p,
+                    `Fit (us)` = round(1e6 * a$fit_sec),
+                    `Estimates (us)` = round(1e6 * a$bc_point_sec, 1),
+                    `Std. Errors (us)` = round(1e6 * a$bc_vcov_sec, 1),
+                    `Total Overhead` = sprintf("%.1f%%", 100 * (a$bc_point_sec + a$bc_vcov_sec) / a$fit_sec),
+                    check.names = FALSE)
+  kb(out, caption = sprintf("Cost of returning results in the user's requested chart, against the fit it saves. Exactness first: the conversion reproduces the natively fitted covariance to %s.", format(max(bcv$roundtrip_max_abs_sigma, na.rm = TRUE), digits = 2)))
+}
+```
+
+A user picks a chart for interpretation, so a library using a different one internally
+has to convert back, including the standard errors. That second half is what experiment
+02 left out. Converting estimates is free and gets freer with size; converting standard
+errors costs more but levels off near three percent because the fit grows too. Three
+percent against a thirty to fifty-seven percent saving.
+
+### Small samples: marker's failures are a subset of std.lv's
+
+```{r}
+if (need(cvv, "convergence")) {
+  cvv$ok <- cvv$converged & !cvv$errored
+  k <- paste(cvv$p, cvv$lambda1, cvv$n, cvv$replicate, cvv$backend)
+  mk <- k[cvv$chart == "marker"]; sk <- k[cvv$chart == "std_lv"]
+  mo <- cvv$ok[cvv$chart == "marker"]; so <- cvv$ok[cvv$chart == "std_lv"]
+  ix <- match(mk, sk); keep <- !is.na(ix)
+  kb(data.frame(Outcome = c("Marker fails, std.lv succeeds",
+                            "std.lv fails, marker succeeds", "Both fail",
+                            "Matched draws compared"),
+                Draws = c(sum(!mo[keep] & so[ix[keep]]), sum(mo[keep] & !so[ix[keep]]),
+                          sum(!mo[keep] & !so[ix[keep]]), sum(keep))),
+     caption = "Every chart sees the same dataset, so the comparison is per draw. A one-sided result like this is much stronger than comparing failure rates, because it rules out the charts simply failing on different draws.")
+}
+```
+
+### Structural models: the recommendation reverses
+
+```{r}
+if (need(stt, "structural")) {
+  d <- unique(stt[, c("r2", "resid_var", "chart", "pcond_population")])
+  w <- stats::reshape(d, idvar = c("r2", "resid_var"), timevar = "chart", direction = "wide")
+  names(w) <- sub("^pcond_population\\.", "", names(w))
+  stt$fail <- is.finite(stt$fmin_gap_from_best) & stt$fmin_gap_from_best > 1e-8
+  fr <- stats::aggregate(fail ~ chart + r2, stt, mean)
+  fw <- stats::reshape(fr, idvar = "r2", timevar = "chart", direction = "wide")
+  names(fw) <- sub("^fail\\.", "", names(fw))
+  m <- merge(w, fw, by = "r2", suffixes = c("", ".fail"))
+  m <- m[order(m$r2), ]
+  kb(data.frame(`Explained Variance` = round(m$r2, 3),
+                `Residual Variance` = round(m$resid_var, 3),
+                `Cond. (marker)` = signif(m$marker, 4),
+                `Cond. (std.lv)` = signif(m$std_lv, 4),
+                `std.lv Wrong-Optimum Rate` = sprintf("%.0f%%", 100 * m$std_lv.fail),
+                check.names = FALSE),
+     caption = "A latent regressed on another latent, sweeping how much of it is explained. std.lv fixes the residual variance, which shrinks toward zero as the regression strengthens, so the gauge loses its grip. The last column counts draws where std.lv settles at a worse fit than marker does on identical data.")
+}
+```
+
+Marker's conditioning barely moves across this sweep. std.lv's rises by five orders of
+magnitude, crosses marker near an explained variance of 0.4, and by 0.98 produces
+fits that are simply wrong. Plenty of published structural models have endogenous
+R² above 0.4, so this is not a corner case.
+
+## Caveats
+
+- The structural sweep uses a single latent regression with strong indicators. Where
+  exactly the crossover falls in a larger model with several endogenous latents is not
+  established, only that a crossover exists and is reached at ordinary values.
+- Skewness and the convergence rates are averaged over replications and are noisy at
+  the smoke setting; the interesting convergence cells sit at a couple of percent.
+  Run `--full` before quoting them. The conditioning and curvature results need no
+  replication, being population quantities, and the invariance and exactness gates
+  are exact.
+- This population almost never produces inadmissible solutions, so the run says
+  nothing about whether a chart helps with Heywood cases. A harder population is
+  needed for that question.
+- Only a one-factor CFA and a two-factor regression were examined. Growth models are
+  excluded deliberately because std.lv is not a reparameterization there at all: with
+  every loading fixed by the user, there is nothing to absorb the rescaling, and
+  fixing the latent variances adds real restrictions instead of renaming coordinates.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --smoke          # all arms, quick
+Rscript run_experiment.R --full           # paper-grade replication counts
+Rscript run_experiment.R --arms structural,geometry
+quarto render report.qmd
+```

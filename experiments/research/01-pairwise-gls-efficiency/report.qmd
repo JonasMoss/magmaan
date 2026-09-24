@@ -1,0 +1,335 @@
+---
+title: "Missing-data SEM estimators: MSE across designs and mechanisms"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path), dirname(getwd())))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "summary.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+summary_path  <- file.path(results_dir, "summary.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(summary_path)) {
+  stop("Missing results/summary.csv. Run: Rscript run_experiment.R")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  stop("The report requires ggplot2.")
+}
+library(ggplot2)
+summary_df <- utils::read.csv(summary_path, check.names = FALSE)
+summary_df$miss_label <- sprintf("%g%%", 100 * summary_df$miss_rate)
+metadata <- if (file.exists(metadata_path))
+  utils::read.csv(metadata_path, check.names = FALSE) else NULL
+meta_lookup <- function(key, default = "") {
+  if (is.null(metadata)) return(default)
+  row <- metadata[metadata$key == key, , drop = FALSE]
+  if (nrow(row) == 0L) default else as.character(row$value[[1L]])
+}
+n_reps     <- meta_lookup("reps", "?")
+seed_base  <- meta_lookup("seed_base", "?")
+
+# Estimator metadata, shared by tables and plots.
+ESTIMATORS <- data.frame(
+  key   = c("sigma", "gamma", "ml", "ts_ml", "fiml"),
+  label = c("Σ-only GLS", "Γ_NT^pw GLS", "Pairwise ML",
+            "Two-stage ML", "FIML (oracle)"),
+  colour = c("#e31a1c", "#1f78b4", "#fdbf6f", "#33a02c", "#6a3d9a"),
+  stringsAsFactors = FALSE)
+ESTIMATORS$label <- factor(ESTIMATORS$label, levels = ESTIMATORS$label)
+est_colours <- setNames(ESTIMATORS$colour, ESTIMATORS$label)
+
+MECHANISM_LABELS <- c(mcar_intact = "MCAR (intact x1)",
+                      mcar_strat  = "MCAR (stratified)",
+                      mar_sb2005  = "MAR (SB-2005)",
+                      mar_obs_value = "MAR (obs. value)")
+DESIGN_LABELS <- c(cfa_1f9i = "1f9i (Study-0)",
+                   cfa_1f5i = "1f5i (Brown)",
+                   cfa_3f9i = "3f9i (HS-1939)")
+summary_df$mech_label   <- MECHANISM_LABELS[summary_df$mechanism]
+summary_df$design_label <- DESIGN_LABELS[summary_df$design]
+```
+
+## Question
+
+Five estimators fit a CFA on incomplete continuous data:
+
+- **Σ-only GLS** — `fit_gls(samp.S = Ŝ_pw)`; quadratic-form pairwise
+  GLS with the Σ-only weight `Γ_NT(Ŝ_pw)⁻¹`.
+- **Pairwise ML** — `fit_ml(samp.S = Ŝ_pw)`; Savalei-Bentler (2005) /
+  Gold-Bentler-Kim (2003) pairwise covariance ML.
+- **Γ_NT^pw GLS** — `fit_gls_pairwise(raw, pw)`; the asymptotically
+  efficient pairwise quadratic form with `W = (Γ_NT^pw)⁻¹`.
+- **Two-stage ML** — `estimate_two_stage_em(raw, kind = "ml")`; Stage 1
+  saturated EM (μ̂_em, Σ̂_em), Stage 2 complete-data ML on the EM
+  moments. Savalei-Bentler (2009) point-estimate form.
+- **FIML (oracle)** — `fit_fiml(raw_data)`; direct missing-data ML on
+  the full incomplete-data likelihood. Asymptotic-efficiency reference
+  under MAR + normality.
+
+Three designs (std.lv parameterization throughout, so simulated truth
+matches the partable free-parameter coords directly):
+
+```{r design-summary, results = 'asis'}
+n_free_str <- meta_lookup("n_free_per_design", "")
+cat("- **cfa_1f9i** — 1 factor, 9 indicators (Study-0 calibration; loadings ~0.7).\n")
+cat("- **cfa_1f5i** — 1 factor, 5 indicators (Brown 2015 ch.5; heterogeneous loadings 0.5–0.9).\n")
+cat("- **cfa_3f9i** — 3 correlated factors × 3 indicators (Holzinger-Swineford 1939 shape; factor correlation 0.3).\n")
+if (nchar(n_free_str)) cat(sprintf("\nFree parameters: %s.\n", n_free_str))
+```
+
+Four missingness mechanisms × `r length(unique(summary_df$n))` sample
+sizes × `r length(unique(summary_df$miss_rate))` missing rates:
+
+- **mcar_intact** — SB-2005 calibration: x1 intact, MCAR rate on the
+  rest. Uniform Ω over pairs not involving x1.
+- **mcar_strat** — Stratified MCAR with per-column rates spread around
+  `rate`, no intact column. Breaks the uniform-Ω geometry.
+- **mar_sb2005** — Savalei-Bentler (2005) 3-rule MAR; predictors x1, x2
+  intact. Used in the original pairwise-robust SEM paper.
+- **mar_obs_value** — Standard textbook MAR: missingness logit linear
+  in standardized x1. Continuous selection, intercept calibrated to
+  hit the target marginal rate.
+
+Each cell uses `r n_reps` Monte Carlo replications (seed base
+`r seed_base`).
+
+## Headline
+
+```{r headline}
+# Geometric-mean MSE ratio of each pairwise estimator to FIML, across the
+# design × mechanism grid at the largest sample size. A ratio of 1.0 means
+# the estimator is on average as efficient as FIML in this corner of the
+# grid.
+n_target <- max(summary_df$n)
+hd <- summary_df[summary_df$n == n_target & summary_df$miss_rate > 0,
+                 c("design","mech_label",
+                   "trace_mse_sigma","trace_mse_gamma","trace_mse_ml",
+                   "trace_mse_ts_ml","trace_mse_fiml")]
+geo_mean <- function(x) exp(mean(log(x), na.rm = TRUE))
+ratios <- data.frame(
+  Estimator = c("Σ-only GLS","Γ_NT^pw GLS","Pairwise ML","Two-stage ML"),
+  "÷ FIML (geo mean)" = sprintf("%.3f", c(
+    geo_mean(hd$trace_mse_sigma  / hd$trace_mse_fiml),
+    geo_mean(hd$trace_mse_gamma  / hd$trace_mse_fiml),
+    geo_mean(hd$trace_mse_ml     / hd$trace_mse_fiml),
+    geo_mean(hd$trace_mse_ts_ml  / hd$trace_mse_fiml))),
+  check.names = FALSE)
+knitr::kable(
+  ratios,
+  caption = sprintf(
+    "Geometric-mean MSE ratio to FIML at n = %d (rate > 0 cells, all designs × mechanisms pooled). Ratio > 1 = less efficient than FIML.",
+    n_target))
+```
+
+Headline findings, observed consistently across the grid:
+
+- **Two-stage ML matches FIML to within a few percent on point
+  estimates.** Geo-mean MSE ratios sit in [0.999, 1.015] across every
+  design × mechanism cell at the largest sample size. The two share
+  the saturated EM moments as their (asymptotically sufficient)
+  input; stage 2's complete-data ML on those moments is essentially
+  equivalent to FIML in finite samples.
+- **Two-stage ML pays for that efficiency in wall time.** At n=1000
+  it averages ~125 ms per fit (dominated by stage 1's EM iteration)
+  versus ~4 ms for FIML. If you can afford FIML, FIML is faster
+  *and* equally efficient.
+- **The pairwise three (Σ-only / Γ_NT^pw / pairwise ML) form a
+  separate, lossier tier.** Their MSE-to-FIML ratios depend sharply
+  on the missingness mechanism:
+    - MCAR (both flavors): ratios ~1.17–1.41 across designs — a
+      uniform 20–40% efficiency loss.
+    - MAR-SB2005 (the literature default): ratios ~1.12–1.78 —
+      similar 10–80% loss.
+    - **MAR by observed value (continuous-anchor MAR): ratios 2.3
+      (cfa_3f9i) up to 11.3 (cfa_1f5i).** The pairwise summary
+      collapses against a textbook MAR design where missingness is a
+      continuous function of an observed variable. This is where the
+      "pairwise discards information" story has bite.
+- **Γ_NT^pw GLS is at most a marginal improvement over Σ-only GLS or
+  pairwise ML within the pairwise tier.** Across the grid the three
+  pairwise estimators sit within a few percent of each other in
+  absolute MSE; the asymptotic-efficiency advantage of Γ_NT^pw is
+  hard to detect in finite samples against this baseline. The
+  pairwise weight choice is much less consequential than the
+  pairwise-vs-full-information choice itself.
+- **Small-n + heavy missingness exposes a pairwise PD-pathology.**
+  At n=100 / rate=0.30 / mcar_strat / cfa_1f9i, the pairwise three
+  fail to produce a finite parameter vector in ~20–40% of
+  replications; FIML and two-stage ML converge 50/50. The failure
+  mode is `Ŝ_pw` becoming numerically rank-deficient — `cond(Γ_NT(Ŝ_pw))`
+  jumps to ~10¹⁷ (machine floor) in the failing reps vs ~10³ in the
+  successes, and the σ-only / Γ_NT^pw GLS failures are almost
+  perfectly nested (both built on the same per-pair overlap counts).
+  FIML and two-stage ML never construct `Ŝ_pw` — FIML works
+  pattern-by-pattern on raw data, two-stage ML uses EM-smoothed
+  moments that are PD by construction — so the pathology can't
+  reach them.
+
+## Evidence — full design × mechanism grid
+
+```{r grid-plot, fig.width=10, fig.height=8}
+plot_df <- summary_df[summary_df$miss_rate > 0, , drop = FALSE]
+plot_long <- do.call(rbind, lapply(seq_len(nrow(ESTIMATORS)), function(j) {
+  est <- ESTIMATORS[j, ]
+  data.frame(
+    design = plot_df$design,
+    design_label = plot_df$design_label,
+    mech_label = plot_df$mech_label,
+    n = plot_df$n, miss_rate = plot_df$miss_rate,
+    estimator = est$label,
+    trace = plot_df[[paste0("trace_mse_", est$key)]])
+}))
+plot_long$n_label <- factor(paste0("n = ", plot_long$n),
+                            levels = paste0("n = ",
+                                            sort(unique(plot_long$n))))
+plot_long$design_label <- factor(plot_long$design_label,
+                                 levels = DESIGN_LABELS)
+plot_long$mech_label <- factor(plot_long$mech_label,
+                               levels = MECHANISM_LABELS)
+ggplot(plot_long,
+       aes(x = factor(miss_rate), y = trace, fill = estimator)) +
+  geom_col(position = position_dodge(width = 0.85), width = 0.78) +
+  facet_grid(design_label + mech_label ~ n_label,
+             scales = "free_y", switch = "y") +
+  scale_fill_manual(values = est_colours) +
+  labs(x = "Missing rate", y = "Trace of empirical MSE", fill = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.text.y.left = element_text(angle = 0),
+        strip.text = element_text(size = 9))
+```
+
+Row strips: design × missingness mechanism. Column strips: sample
+size. Bars within each panel are the missing rates. Five estimators
+side-by-side per rate. Two-stage ML (green) and FIML (purple) are the
+two oracle-like rows; the pairwise three (red / blue / orange) split
+into a separate tier.
+
+## Evidence — table
+
+```{r grid-table}
+tbl <- summary_df[summary_df$miss_rate > 0,
+                  c("design_label","mech_label","n","miss_label",
+                    "trace_mse_fiml","trace_mse_ts_ml",
+                    "trace_mse_gamma","trace_mse_ml","trace_mse_sigma",
+                    "eff_ratio_mse_ts_ml_vs_fiml",
+                    "eff_ratio_mse_gamma_vs_fiml",
+                    "eff_ratio_mse_ml_vs_fiml",
+                    "eff_ratio_mse_sigma_vs_fiml")]
+tbl <- tbl[order(tbl$design_label, tbl$mech_label, tbl$n, tbl$miss_label), ]
+out <- data.frame(
+  Design     = tbl$design_label,
+  Mechanism  = tbl$mech_label,
+  n          = tbl$n,
+  "Missing %" = tbl$miss_label,
+  FIML       = round(tbl$trace_mse_fiml,  3),
+  "TS-ML"    = round(tbl$trace_mse_ts_ml, 3),
+  "Γ_NT^pw"  = round(tbl$trace_mse_gamma, 3),
+  "ML"       = round(tbl$trace_mse_ml,    3),
+  "Σ-only"   = round(tbl$trace_mse_sigma, 3),
+  "TS/FIML"  = sprintf("%.3f", tbl$eff_ratio_mse_ts_ml_vs_fiml),
+  "Γ/FIML"   = sprintf("%.3f", tbl$eff_ratio_mse_gamma_vs_fiml),
+  "ML/FIML"  = sprintf("%.3f", tbl$eff_ratio_mse_ml_vs_fiml),
+  "Σ/FIML"   = sprintf("%.3f", tbl$eff_ratio_mse_sigma_vs_fiml),
+  check.names = FALSE)
+knitr::kable(
+  out,
+  caption = paste(
+    "Trace of per-parameter empirical MSE and MSE ratios to FIML.",
+    "Ratios > 1 mean FIML is more efficient. rate = 0 cells omitted",
+    "(all estimators collapse to complete-data ML)."))
+```
+
+## Conditioning diagnostic
+
+```{r cond-plot, fig.width=9, fig.height=4.5}
+cplot <- summary_df[summary_df$miss_rate > 0, , drop = FALSE]
+cplot$cond_ratio <- cplot$median_cond_sigma / cplot$median_cond_gamma
+cplot$design_label <- factor(cplot$design_label, levels = DESIGN_LABELS)
+cplot$mech_label <- factor(cplot$mech_label, levels = MECHANISM_LABELS)
+cplot$n_label <- factor(paste0("n = ", cplot$n),
+                        levels = paste0("n = ", sort(unique(cplot$n))))
+ggplot(cplot,
+       aes(x = miss_rate, y = cond_ratio,
+           colour = mech_label, group = mech_label)) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.4) +
+  facet_grid(design_label ~ n_label, scales = "free_y") +
+  scale_x_continuous(labels = scales::percent) +
+  labs(x = "Missing rate",
+       y = "cond(Γ_NT(Ŝ_pw)) / cond(Γ_NT^pw)",
+       colour = "Mechanism") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "top")
+```
+
+Ratio of σ-only weight conditioning to Γ_NT^pw weight conditioning.
+Above 1 = Γ_NT^pw is better-conditioned. The Hadamard regularisation
+in Γ_NT^pw shows up most visibly under MCAR-intact (a single intact
+predictor concentrates Ω in a uniform block); stratified MCAR and the
+MAR mechanisms move the ratio closer to 1.
+
+## Caveats
+
+- **Parameterization.** All designs use the std.lv convention (factor
+  variances fixed = 1, all loadings free). With this choice the
+  simulated population values match the partable's free-parameter
+  positions directly; previous versions of this experiment used
+  auto.fix.first, which introduced a parameterization-truth mismatch
+  that inflated absolute MSE values.
+- **One factor structure per design family.** cfa_1f9i has uniform
+  loadings (~0.7), cfa_1f5i has wider spread (0.5–0.9), cfa_3f9i has
+  uniform within-block loadings + correlated factors. Crossing
+  loading heterogeneity with factor structure is left to a follow-up.
+- **Mean structure on.** All partables include intercepts (true value
+  0) so FIML and two-stage ML can run. The intercepts contribute
+  roughly uniformly to trace MSE across estimators and dilute the
+  loading/variance comparison slightly; separating structural from
+  intercept MSE is not done here.
+- **Continuous data, normal generators.** Robustness to non-normality
+  is a separate experiment.
+- **`r n_reps` replications per cell** (seed base `r seed_base`). The
+  small-n high-rate cells carry visible Monte Carlo noise; bump
+  `--reps` if a particular corner deserves more weight.
+- **Two-stage ML's stage 1 is the saturated EM**, which itself
+  iterates until convergence. The two-stage point estimate is not
+  algebraically identical to FIML — the two differ in stage 2's
+  weighting of the EM moments — but the small finite-sample gap is
+  expected.
+- **Singularity propagates algebraically.** `Ŝ_pw` singular implies
+  `Γ_NT(Ŝ_pw)` singular implies `Γ_NT^pw` singular. The conditioning
+  advantage of Γ_NT^pw under MCAR-intact is a happenstance of the
+  Hadamard factor Ω, not a generic theorem; the other three
+  mechanisms in this experiment make that explicit.
+
+## Reproduce
+
+```bash
+cd experiments/research/01-pairwise-gls-efficiency
+Rscript run_experiment.R           # full run (~minutes)
+Rscript run_experiment.R --smoke   # tiny smoke (3 reps, one design)
+Rscript run_experiment.R --reps 50 # medium run
+quarto render report.qmd
+```
+
+```bash
+# Subset selection:
+Rscript run_experiment.R --designs cfa_1f9i,cfa_3f9i
+Rscript run_experiment.R --mechanisms mcar_intact,mar_sb2005
+Rscript run_experiment.R --n-grid 200,1000 --miss-grid 0.0,0.30
+```

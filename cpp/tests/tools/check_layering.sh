@@ -5,7 +5,7 @@
 # A leaf consumes only lower tiers (core = cpp/include/ cpp/src/ r-package/, plus the
 # shared experiments/_support and build artifacts) and never references a
 # sibling leaf. Core never references any leaf. Retired experiments live frozen
-# under experiments/_archive/<NN>-*/ and are treated as one archive zone (a path
+# under experiments/_archive/<slug>/ and are treated as one archive zone (a path
 # token there truncates to experiments/_archive): an archived file may reference
 # within the archive but still not a paper, a live experiment, or tests. Retired
 # paper trees under papers/_archive/ are frozen historical material rather than

@@ -200,7 +200,7 @@ Validation:
 ## IG Generator Family: Draw Cost and Moment-Matching (2026-06-01)
 
 Findings from profiling the independent-generator (`sim_ig_*`) path while
-scaling experiment 17 (Foldnes-Moss-Gronneberg 2024) to the full grid.
+scaling experiment showcases/03 (Foldnes-Moss-Gronneberg 2024) to the full grid.
 
 **Cost shape.** The ML fit is trivial and N-independent (~2-9 ms at any p/N: the
 sample covariance is formed once, then optimization is on the p x p matrix). The
@@ -209,7 +209,7 @@ at p=40, with N; and (b) IG *data generation*. At p=40, N=3000 a single IG
 dataset draw costs ~2.0-2.2 s/rep, dwarfing everything else. So large-model runs
 are p-bound, and the IG generator is the single biggest line item at the corner.
 
-The focused weak-invariance experiment 63 adds a different calibration corner.
+The focused weak-invariance experiment research/33 adds a different calibration corner.
 At p=20, G=8, n=400/group and severe marginals, batched IG setup was about 2.2
 seconds per null/power cell, whereas PL setup was about 353-360 seconds because
 the runner calibrates each group covariance separately. That one-time PL cost,
@@ -218,7 +218,7 @@ reusing this design at larger grids, cache/deduplicate identical group
 calibrations (especially the equal-covariance null) and consider a cross-cell PL
 calibration cache keyed by the target correlation and marginal specification.
 Keep generator setup separate from per-replication inference timing in reports.
-Experiment 64 implements that experiment-layer policy without changing the
+Experiment research/34 implements that experiment-layer policy without changing the
 generator API: identical within-population group covariances are calibrated
 once, and complete calibrated population states are cached across sample-size
 and allocation cells. In its p=20 homogeneous PL smoke, within-group
@@ -228,7 +228,7 @@ target covariance, generator, and distribution targets, and the raw output
 records unique group calibrations and cache hits. A reusable cross-process/core
 cache remains worthwhile only if later grids show this leaf-local policy is
 insufficient.
-Experiment 65 reuses the same leaf-local idea for its single-group GOF probe:
+Experiment research/35 reuses the same leaf-local idea for its single-group GOF probe:
 one PL calibration/draw batch is shared by n=100 and n=400 within each
 `p x truth` DGP. In the 100-replication run, p=20 PL setup cost about 19--23
 seconds per null/power DGP, while the full four-worker experiment finished in
@@ -284,7 +284,7 @@ p=40, target `(skew 3, exkurt 21)` requires generator marginals ranging up to
 boundary -- a mix of SU points (now fixed) and SB points. Several SB-region
 generator targets (e.g. `(3.5, 26)`, `(2.14, 7.7)`, `(3.72, 17.6)`) still fail
 the quadrature SB solve, and any single failed marginal aborts the whole IG
-calibrate. So **experiment 17 stays on Pearson** for now; Johnson IG needs a
+calibrate. So **experiment showcases/03 stays on Pearson** for now; Johnson IG needs a
 robust SB moment-fit too (no elementary closed form -- candidates: AS99
 Hill-Holder SB branch, or higher/adaptive quadrature that returns its best fit
 instead of throwing). The orthogonal lever for IG draw speed is to spline the

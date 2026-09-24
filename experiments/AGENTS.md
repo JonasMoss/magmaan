@@ -26,7 +26,7 @@ experiment or a paper. Enforced by `cpp/tests/tools/check_layering.sh`
 
 ## Index And Lifecycle
 
-`experiments/README.md` is the tracked index of every experiment: number, slug,
+`experiments/README.md` is the tracked index of every experiment: category-local number (if live), slug,
 kind, lifecycle, and the one-line question. Adding an experiment means adding a
 row. This collection-level index is the one allowed exception to the "no README"
 rule below, which still holds for individual `NN-` folders.
@@ -34,7 +34,7 @@ rule below, which still holds for individual `NN-` folders.
 Store experiments under the matching purpose folder: `showcases/`,
 `replications/` (including reference studies), `research/`, or `engineering/`.
 `_archive/` holds retired studies and `_support/` remains the shared harness.
-The numbered experiment is the dependency leaf, not its category directory;
+Each individual experiment is the dependency leaf, not its category directory;
 two studies in the same category may not reference each other.
 
 Group the index by primary purpose: **showcase**, **replication/reference study**,
@@ -50,21 +50,40 @@ Also retain these two axes in the index:
   depend on; never delete), `benchmark` (speed or statistical efficiency), `probe`
   (a one-off engineering diagnostic).
 - **Lifecycle** - `active` (still rerun, extended, or load-bearing), `complete`
-  (finished, kept flat for reference value), `archived` (inert).
+  (finished, retained in its category for reference value), `archived` (inert).
 
-Archive an experiment only when it is an engineering `probe` whose answer is now
-baked into the core library and that nobody will rerun. Durable replications and
-reusable benchmarks stay in their purpose category (tagged `complete`) even when finished, and anything
-the active backlog still points at as pending evidence stays in its purpose category. Archived
-experiments move to `experiments/_archive/NN-slug/` and keep their number; numbers
-are permanent IDs, so never renumber and always take the next free number even when
-earlier ones are archived. When archiving, repoint the report's Reproduce commands
-and any doc cross-references to the `_archive/` path.
+## Engineering is a live decision workspace
+
+Engineering studies should support current implementation choices: default
+estimators, optimizers, starts, scaling, convergence rules, or performance
+tradeoffs. Keep each study focused on one decision and record the current default,
+alternatives, acceptance criteria, latest evidence, and a reopening trigger.
+A recurring benchmark belongs here when it can change an active decision.
+
+When the decision is settled, preserve its contract in maintained tests and
+project docs, then archive the study. Do not infer that an inherited `active`
+label already meets this standard; review the inventory during the next cleanup.
+Research may remain exploratory, with evolving questions and trial scripts;
+do not force it into the engineering decision format. Keep its evidence and
+reproduction paths, and never discard paper-supporting pipelines as cleanup.
+
+## Numbering and archives
+
+Number live studies from `01` independently within each purpose category.
+Use the next free number in that category when adding a study. Numbers are local
+navigation, not stable identifiers: cite a category-qualified slug, and update
+paths and the index whenever a deliberate renumbering is requested.
+
+Archived studies live at `experiments/_archive/<slug>/`, without numbers.
+Keep their sources and existing results; update reproduction paths and references
+when archiving. If a slug would collide, choose a descriptive unique slug.
+Frozen result metadata and external cloud app/volume identifiers may retain legacy
+numbers; do not rewrite evidence or rename remote storage as part of navigation.
 
 ## Directory Shape
 
-Use the next numeric prefix and a short kebab-case slug (literature replications use
-`author-year[-topic]`, e.g. `15-rhemtulla-2012`, `20-deng-chan-2017-alpha-omega`):
+Use a category-local two-digit prefix and a short kebab-case slug. Literature
+replications use `author-year[-topic]`, for example `02-rhemtulla-2012`.
 
 ```text
 experiments/

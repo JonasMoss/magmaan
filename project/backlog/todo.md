@@ -8,6 +8,13 @@ repository, then refresh magmaan fixture snapshots and run parity checks.
 The reorganization deliberately preserves existing fixture contents. Experiment
 classification and category-folder moves are complete; deeper cleanup and
 further archive decisions remain deferred (see `experiments/README.md`).
+Category-local numbering starts at 01; archived studies have unnumbered slugs.
+
+- [ ] Focus the engineering inventory on live implementation/default decisions:
+  state each current choice, alternatives, acceptance criteria, latest evidence,
+  and reopening trigger; retire settled studies after preserving their contracts.
+  Review inherited lifecycle labels rather than assuming they are current.
+  Research can remain exploratory; preserve paper-supporting work and results.
 
 Remaining-work backlog. Current state, architecture, and contracts live in
 [project/architecture/roadmap.md](../architecture/roadmap.md); this file only tracks
@@ -776,7 +783,7 @@ when they next change.
   magmaan's `effect_coding` adds only the loading rows, so with a mean
   structure (FIML, `meanstructure = TRUE`) the fit and df agree with lavaan
   but the intercept and latent-mean estimates are in a different chart
-  (found by experiment 87; magmaan matches `effect.coding = "loadings"` to
+  (found by experiment engineering/14; magmaan matches `effect.coding = "loadings"` to
   5e-7). Decide whether `effect_coding` should accept lavaan's character
   form, and gate the intercept chart against lavaan.
 
@@ -794,7 +801,7 @@ when they next change.
   checks all pass, fixed-zero reduced-LISREL structure, a shared residual
   variance, an optional SLSQP/IPOPT interior cross-check, and the R result
   contract.
-  Experiment 73 supplies the first timing panel for ordinary L-BFGS, direct
+  Experiment engineering/11 supplies the first timing panel for ordinary L-BFGS, direct
   PSD-SLSQP, and an ordinary-audit/warm-refit policy. On its deterministic
   interior CFA scaling cases, direct PSD fitting cost about 2.5x/6.9x/59x
   ordinary NTML at 3/6/12 indicators; an independent `p=12` replay gave 60x.
@@ -821,7 +828,7 @@ when they next change.
   R consumer. The runner is `cpp/tests/checks/psd_ml_corpus/`; the decision record
   is `psd_ml_corpus_audit.tex`.
   The De Jonckere--Rosseel / Ernst small-\(N\) benchmark now supplies the
-  convergence stress evidence (`experiments/research/74-psd-ml-small-n-convergence/`):
+  convergence stress evidence (`experiments/research/42-psd-ml-small-n-convergence/`):
   at \(N=10\), direct PSD-ML audit-converged in 96.8% of 1,000 replications
   versus 54.1% for ordinary L-BFGS NTML. The same-SLSQP comparison still
   strongly favors PSD-ML, ruling out a backend-only explanation. Do not
@@ -856,8 +863,8 @@ when they next change.
      fit, the Geiser second-order negative disturbance, and the Geiser
      joint-indefinite quadratic growth covariance. The full 97-case scan
      remains advisory and outside default CI.
-  3. **Completed 2026-07-30.** The opt-in IPOPT extensions to experiments 73
-     and 74 compare the same lifted model across backends. In the
+  3. **Completed 2026-07-30.** The opt-in IPOPT extensions to experiments engineering/11
+     and research/42 compare the same lifted model across backends. In the
      30-repetition deterministic panel, SLSQP and IPOPT reached the same
      admissible optima in all nine cases, but direct IPOPT cost a median 75.7x
      ordinary NTML across the interior CFA cases, versus 2.37x for
@@ -874,8 +881,8 @@ when they next change.
      principled finite-domain formulation and reuse solver/factorization setup;
      exact Lagrangian Hessians plus callback-stage and reliable IPOPT iteration
      telemetry are secondary follow-ups.
-  4. **Completed 2026-07-30.** Experiment 75
-     (`experiments/engineering/75-psd-ml-basin-audit/`) implements the self-contained
+  4. **Completed 2026-07-30.** Experiment engineering/12
+     (`experiments/engineering/12-psd-ml-basin-audit/`) implements the self-contained
      multistart audit on the \(N=10,20,50\) stress cells. The pilot screened
      1,000 datasets per cell and replayed the prespecified 100-dataset random
      core plus default failures and extreme estimates with at most 13 starts.
@@ -891,8 +898,8 @@ when they next change.
      competing feasible KKT basins and strong local-maximum evidence, not a
      proof that the best attained member is global. Small-\(N\) convergence
      reports must therefore separate return/KKT success from basin hit.
-  5. **Completed 2026-07-31.** Experiment 76
-     (`experiments/research/76-psd-ml-repair-risk/`) supplies a four-case repair-anatomy
+  5. **Completed 2026-07-31.** Experiment research/43
+     (`experiments/research/43-psd-ml-repair-risk/`) supplies a four-case repair-anatomy
      panel and a controlled primitive-boundary risk path without extending to
      another estimator. Its 4,000-dataset pilot keeps the observed covariance
      safely PD while varying the smallest latent-covariance eigenvalue over
@@ -907,7 +914,7 @@ when they next change.
      do not run the 1,000-replication full profile absent a new precision need.
   6. **Possible compact-multistart follow-up.** Design and validate a smaller
      deterministic portfolio on fresh held-out replications before exposing an
-     optional methods-developer R audit/refit helper. In experiment 75's pilot,
+     optional methods-developer R audit/refit helper. In experiment engineering/12's pilot,
      the cumulative best-attained hit rates at \(N=10,20,50\) were
      76%/94%/100% for the default alone, 90%/97%/100% after adding the PSD
      restart and one moderate perturbation, 99%/100%/100% after eight starts,
@@ -959,7 +966,7 @@ when they next change.
   vector. It has an analytic gradient through the RAM derivative, finite-
   difference, brute-force, closed-form, invariance, O(1/N), barrier,
   exclusion, fixed.x, nonrecursive, and FIML-equals-ML gates, and a default
-  `lambda = 0.25` set by experiment 85. Remaining, in order:
+  `lambda = 0.25` set by experiment research/47. Remaining, in order:
   1. Misspecification stress. Run a population whose pseudo-true value is
      improper and check that the penalized estimate converges to the PSD-ML
      boundary as N grows. A barrier hides this diagnostic, so an ordinary-ML
@@ -967,7 +974,7 @@ when they next change.
   2. Inference at the penalized estimate. Compare the current ordinary
      information SEs with a penalized-Hessian sandwich, `(H + lambda P'')^-1`
      bread, when `lambda / N` is not negligible (N <= 100 near the boundary).
-  3. Weight selection. Experiment 86 benchmarks the barrier against the
+  3. Weight selection. Experiment research/48 benchmarks the barrier against the
      Jeffreys posterior over admissible solutions (4 Metropolis chains per
      dataset, Jeffreys by reweighting). No single `lambda` tracks it:
      `lambda = 1` reproduces the posterior mean on indicator residual
@@ -978,12 +985,12 @@ when they next change.
      the latent and residual-dependence layers), which keeps scale invariance
      and the barrier; see `multiinfo_barrier_family.md` for
      the layer identity, the admissible splits, and the wider family. Score
-     variants against experiment 86's stored posterior summaries (no MCMC);
+     variants against experiment research/48's stored posterior summaries (no MCMC);
      `scripts/determinacy.R` does this for the latent-determinacy barrier
      `log det Var(eta | y)` (standardized latents: same barrier, slightly less
      correlation shrinkage, same variance/correlation weight tension) and for
      the two-weight barrier (the best tracker of the posterior mean). The path
-     design (latent R^2) cells of experiment 86 are still to run
+     design (latent R^2) cells of experiment research/48 are still to run
      (`run_experiment.R --full --resume`). Generalization to larger p,
      multi-group, and FIML with MAR missingness remains open.
   4. Scope. LS/ordinal paths need a discrepancy-specific scaling in place of
@@ -1019,7 +1026,7 @@ when they next change.
   agreement for all three objectives, repairs one exact-fit ULS Heywood case,
   and gates the R result schema. The broader stress program is specified below;
   it reuses NTML only as an anchor rather than silently copying the much larger
-  experiments 73--76 onto every estimator.
+  experiments engineering/11--76 onto every estimator.
 
   Ordered computational queue (point estimation only). PSD two-level ML and
   native FC-SEM are deliberately outside this extension: they are independent
@@ -1096,7 +1103,7 @@ when they next change.
   fit until an explicit boundary-aware policy is available.
 
 - **L — execute the broader covariance-honest point-estimation stress track.**
-  The independent `experiments/engineering/78-psd-estimator-stress/` leaf now owns the
+  The independent `experiments/engineering/13-psd-estimator-stress/` leaf now owns the
   common structural geometries, paired ordinary/PSD fits, selective restart
   logic, and result schema. Its first two-replication smoke completed 128 fit
   attempts across eight registered families: all 125 returned fits matched an
@@ -1237,7 +1244,7 @@ when they next change.
      not silently substituted or called an optimizer failure.
 
   Keep corpus breadth in a separate advisory
-  `cpp/tests/checks/psd_estimator_corpus/` runner rather than letting experiment 78
+  `cpp/tests/checks/psd_estimator_corpus/` runner rather than letting experiment engineering/13
   depend on the tests leaf. Reuse the 97 continuous sample-statistic summaries
   for LS/GMM where applicable, the 17 FIML fixtures plus the two raw-data bfi
   parity cases, the 20 ordinal and two mixed-ordinal fixtures, and the existing
@@ -1251,7 +1258,7 @@ when they next change.
   recomputation for every family; FIML-to-ML and all-observed NT-ML2S-to-ML
   reductions; groupwise objective additivity; and unchanged Stage-1 objects for
   ML2S, ordinal, mixed, and CatML. SLSQP is the production path. Use IPOPT only
-  on a small regular interior cross-check because experiments 73--74 already
+  on a small regular interior cross-check because experiments engineering/11--74 already
   show that its non-finite callback handling is a poor match to the lifted ML
   formulation. Promote each newly discovered deterministic failure to the
   smallest suitable unit/golden fixture, and keep the stochastic/corpus scan
@@ -1268,7 +1275,7 @@ when they next change.
 
 - **M/L — broaden and harden standardized score flips.** The frontier slice
   supports affine nested complete-data ML and direct-FIML pairs and is exercised
-  by experiments 62 and 66. Its production probe path can now take H1 as a
+  by experiments research/32 and research/36. Its production probe path can now take H1 as a
   model tangent plus the H0 fit, and independently select asymptotic-only,
   effective, standardized, or full flip calibration, so future stress grids do
   not refit H1 or compute unused resampling references. Direct FIML uses
@@ -1276,7 +1283,7 @@ when they next change.
   and conditional Fisher-information pattern strata; its all-observed reduction
   to complete ML is unit-gated. The tiny exact-enumeration kernel gate and independent dense
   per-case/hatted-nuisance oracle for the flip-specific covariance landed with
-  experiment 64; before treating the method as more than research, still probe
+  experiment research/34; before treating the method as more than research, still probe
   near-singular nuisance information. The first expanded probe already crosses
   1/4/8 restrictions, balanced/1:3 groups, skew/t5/normal data, and several
   group-information geometries. Its next design question is to hold restriction
@@ -1292,7 +1299,7 @@ when they next change.
   The direct efficient-meat sandwich comparator is now exposed and confirms the
   opposite finite-sample failure mode: full inversion is conservative and can
   be poorly conditioned even though its asymptotic reference is pivotal. The
-  first multiplier-law replay now targets experiment 62's eight difficult
+  first multiplier-law replay now targets experiment research/32's eight difficult
   8-df severe-copula cells (N=60/200, homogeneous/geometry, VM/PL; 200
   replications and 499 draws). It exactly reproduced the old Rademacher
   p-values and their 12.4% average rejection. Gaussian weights supplied the
@@ -1340,7 +1347,7 @@ when they next change.
   common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
   inverse. Gate either proposal on null size, matched-null power, and meat
   conditioning rather than one aggregate rejection rate.
-  Experiment 77 has now closed the simple version of that gate. It exposed the
+  Experiment research/44 has now closed the simple version of that gate. It exposed the
   projected score/metric/meat and compared raw and centered OPG, Hotelling, two
   predeclared vanishing meat shrinkages, and two analogous shrinkages of the
   observed sensitivity. At an exact three-df nonnormal-MAR pseudo-null the
@@ -1355,7 +1362,7 @@ when they next change.
   zero times under strong nonnormal MAR. Do not tune a fixed shrinkage constant
   or carry direct-sandwich variants into the planned paper battery; retain the
   new surfaces as frontier diagnostics only.
-  Experiment 71 now supplies the first projected-Satterthwaite gate for the
+  Experiment research/40 now supplies the first projected-Satterthwaite gate for the
   centered-meat pivotal GOF score. In a true five-indicator one-factor model
   (`df=5`, n=30/50/100/200), the centered-meat chi-square was liberal at low n
   (0.138 normal and 0.113 moderate VM at n=30), but matching the independently
@@ -1387,7 +1394,7 @@ when they next change.
   of the meat, or if the much simpler ordinary-Hotelling reference is
   replicated for nested robust scores; either route must report
   reference-moment convergence and `eta <= q-1` failures.
-  Experiment 72 now supplies the broader ordinary-Hotelling GOF gate:
+  Experiment research/41 now supplies the broader ordinary-Hotelling GOF gate:
   `q=2/5/9/20` crossed with `n=30/60/120/240`, normal and severe
   Vale--Maurelli data, and 2,000 replications per cell. Hotelling was closer to
   5% than the centered-score chi-square in all 32 cells. Its mean absolute size
@@ -1401,15 +1408,15 @@ when they next change.
   nested-score replay used the wrong linear map for the core's raw OPG.
   Correctly using
   `F=(n-q)Q_raw/[q(n-Q_raw)]` moves direct-sandwich rejection from 4.84% to
-  5.00% in experiment 62's dimension audit, 4.94% to 5.19% in experiment 63,
-  and 4.09% to 4.48% in experiment 66. Thus ordinary Hotelling does not
+  5.00% in experiment research/32's dimension audit, 4.94% to 5.19% in experiment research/33,
+  and 4.09% to 4.48% in experiment research/36. Thus ordinary Hotelling does not
   compound nested-score conservatism in those saved audits; the earlier
   2.59/3.50/2.97% replay was an algebra error. Keep the nested-score claim
   separate from the GOF grid because its score meat is raw rather than centered
   and its finite-sample behavior is still design-specific. The
   next publication-grade GOF gate, if needed, is a qualitatively different
   nonnormal generator or directional kurtosis, not a denser `n/q` grid.
-  Experiment 77 adds a direct-FIML global-GOF bridge in which a five-variable
+  Experiment research/44 adds a direct-FIML global-GOF bridge in which a five-variable
   independence model is nested affinely in the saturated covariance model, so
   the existing nested score/flip machinery is exactly a global GOF test. Its
   second iteration crosses seven outcome laws (Gaussian, finite-moment heavy
@@ -1433,7 +1440,7 @@ when they next change.
   pattern-conditional Fisher metric, with no H1 fit or per-draw refit. Keep MLR
   as the target, effective multipliers as the lead, score
   SB/pEBA4 as analytic alternatives, and LRT pEBA4/robust Wald as comparators.
-  Experiment 77's third iteration now preflights that latent-SEM panel without
+  Experiment research/44's third iteration now preflights that latent-SEM panel without
   pretending the projection exists: one-factor, two-factor, orthogonal
   bifactor, and linear-growth populations crossed with native normal/VM/IG
   generators and complete/30% MCAR data. At `n=120`, all 400 ten-rep smoke
@@ -1534,7 +1541,7 @@ when they next change.
   exclude this run from publication tables, and build the replacement
   production run for Slurm only after the design is frozen. The prospective
   paper has three explicit design gates recorded in
-  experiment 77's `TODO.md`. First, replace the implementation-oriented pilot
+  experiment research/44's `TODO.md`. First, replace the implementation-oriented pilot
   panel with five broad, sourceable models: one-factor, correlated three-factor,
   bifactor, latent mediation, and linear growth, all at 15 observed variables
   or fewer. Second, freeze literature-grounded MAR-L/MAR-L2/MAR-NL and
@@ -1553,7 +1560,7 @@ when they next change.
   completed diagnostics but do not expand it. Do not launch the publication
   grid until model parameters, source adaptations, missingness mappings, and
   the empirical screening rule are frozen.
-  The focused published-DGP follow-up (experiment 63) adds an important negative
+  The focused published-DGP follow-up (experiment research/33) adds an important negative
   result: with n=400 per homogeneous group, raising the weak-invariance rank to
   133 changed effective versus standardized decisions only twice in 3,200 null
   replications, while flip-specific standardization cost about 4.1 seconds per
@@ -1562,7 +1569,7 @@ when they next change.
   the restriction-to-sample ratio while holding rank fixed, and use the returned
   variance-displacement diagnostics as the proposed effect modifier.
   The corresponding fixed-rank design and budget-guarded Modal harness now live
-  in experiment 64: `G=8`, `df=28`, p=5 versus p=20 nuisance dimension,
+  in experiment research/34: `G=8`, `df=28`, p=5 versus p=20 nuisance dimension,
   n/group, allocation, information geometry, and normal/VM/IG/PL generators,
   followed by calibrated normal/PL power. Remaining work is to run and audit
   that experiment, then decide whether the standardization benefit clears its
@@ -1571,7 +1578,7 @@ when they next change.
   hardening test above remains a core prerequisite independent of the
   simulation outcome; exact enumeration and the dense covariance oracle are
   now gated.
-  The expanded FIML null gate is now complete in experiment 67. Its 240-cell,
+  The expanded FIML null gate is now complete in experiment research/37. Its 240-cell,
   500-attempt screen crosses normal/severe VM/IG/PL, n1=50/100/200/400,
   complete/MCAR/paper-MAR/strong-MAR data, and ranks 1/3/5; an independent
   11-cell confirmation uses 2,000 attempts and 999 signs. Effective versus
@@ -1593,7 +1600,7 @@ when they next change.
   Wald flip test is a distinct method and should not be hidden behind the score-
   test entry point. The biased RLS H0-minus-H1 comparator now available through
   `fmg_nested(..., tests = "*_rls")` does not supply casewise RLS scores and is
-  not such an extension. Experiment 65 now supplies the first concrete
+  not such an extension. Experiment research/35 now supplies the first concrete
   residual/RLS GOF estimating-function derivation, but its 100-replication gate
   argues against immediate core promotion: the projected effective flip was
   plausible at df=5 and liberal at df=170 relative to n; raw empirical
@@ -1603,7 +1610,7 @@ when they next change.
   tuned method with its own null and matched-power gate.
 
 - **XL — establish whether raw-label permutation is valid for ordinal
-  measurement-invariance tests.** Experiment 61's continuous studentized-Wald
+  measurement-invariance tests.** Experiment research/31's continuous studentized-Wald
   path is motivated by Chung and Romano: raw observations need not be exactly
   exchangeable when the recomputed test statistic is asymptotically pivotal.
   Its focused robust-score arm (`p=9`, partial loading rank `q=1/4/8`) confirms
@@ -1681,7 +1688,7 @@ when they next change.
   different choices in estimating the bread, the meat and the saturated-H1
   reference, and magmaan's defaults line up with neither lavaan variant
   consistently. Two-factor CFA, `N = 500`, 10% MCAR
-  (`experiments/research/81-score-vs-lrt/diagnose_trace_sb_nested.R --with-fiml`):
+  (`experiments/research/45-score-vs-lrt/diagnose_trace_sb_nested.R --with-fiml`):
   `fmg_tests(tests = "sb_ml")` sits 1.5e-04 from lavaan's `yuan.bentler.mplus`
   (the `estimator = "MLR"` test) but 9.2e-02 from `yuan.bentler` at `p = 20`,
   and 5.6e-03 from *both* at `p = 10`. So it is not simply "magmaan targets the
@@ -1894,8 +1901,8 @@ when they next change.
   delta-method SE from `robust_ordinal_ij` (including DWLS/WLS estimated-weight
   influence). R exposure is
   `magmaan_core$measures_reliability_ordinal_observed_omega`; experiment
-  `46-ordinal-observed-omega-dwls` is the smoke/calibration probe. Experiment
-  `48-ordinal-omega-target-audit` now shows this is an observed-score
+  `07-ordinal-observed-omega-dwls` is the smoke/calibration probe. Experiment
+  `08-ordinal-omega-target-audit` now shows this is an observed-score
   covariance omega, not literally the direct one-factor ordinal true-score
   target: tau-equivalent equal-threshold cells match, ordinary equal-threshold
   congeneric cells are near-identical, but heterogeneous thresholds reached a
@@ -1904,13 +1911,13 @@ when they next change.
   `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it computes
   `omega_multidim` on `stats$R[[group]]` and pads the ordinal `NACOV`
   correlation block into a full vech-correlation Gamma for the robust delta SE.
-  Experiment `49-ordinal-polychoric-omega-coverage` probes that no-integration
+  Experiment `22-ordinal-polychoric-omega-coverage` probes that no-integration
   coefficient under a correctly specified one-factor ordinal-probit generator:
   at 200 reps per cell, `N in {50,100,250}`, and balanced vs threshold-extreme
   cuts, the 95% robust delta interval had coverage 0.915-0.965 among successful
   draws for the latent-response omega target 0.829. The only construction
   failures were 6/200 threshold-extreme `N=50` draws with an empty item category.
-  Experiment `50-ordinal-polychoric-omega-stress` then uses large-sample
+  Experiment `23-ordinal-polychoric-omega-stress` then uses large-sample
   pseudo-targets for skewed one-factor, heavy-tailed one-factor, and normally
   locally dependent ordinal DGPs. The same interval covers the pseudo-true
   polychoric omega target at 0.907-0.950 in local-dependence cells, but bends
@@ -1938,7 +1945,7 @@ when they next change.
     constrained point. Observed-score / Green-Yang-like omega profiling and
     small-sample profile-LR corrections stay in the funLR lane until the
     calibrated-constant problem is solved. Experiment
-    `53-ordinal-profile-lrt-calibration` now includes the first fitted-model
+    `25-ordinal-profile-lrt-calibration` now includes the first fitted-model
     misspecification stress for the no-integration profile target: a locally
     dependent ordinal latent-response DGP fitted by the same one-factor DWLS
     model. At 1000 reps/cell, ordinary DWLS still undercovers, while
@@ -2108,7 +2115,7 @@ Remaining work, tiered:
   `case_rerun()` / `modification_indices_lrt()`. (`robust_nested_lrt()` takes
   two fits and never refits.)
 - **Done 2026-09-23.** Deterministic sanity experiment
-  (`experiments/engineering/87-sphere-chart-sanity`):
+  (`experiments/engineering/14-sphere-chart-sanity`):
   - **Recovery.** 37 models / 68 fits across ML, ULS, GLS, WLS, FIML and
     PSD-ML reproduce the ordinary fit, including SEs, robust SEs, the
     standardized solution, fit measures, MIs and `:=`. Both routes are equally
@@ -2125,7 +2132,7 @@ Remaining work, tiered:
 - **Open.** Promote to `magmaan(chart = "sphere")` once the author decides the
   surface (plan decision D1). The FIML goldens run through the sphere seam
   too; FIML case 0014 is flat enough that the sweep uses a 1e-4 theta
-  tolerance there (same objective to 1e-10). Found by experiment 87 and to
+  tolerance there (same objective to 1e-10). Found by experiment engineering/14 and to
   settle before promotion:
   - **Done 2026-09-23 — sphere-native (canonical) start.** The only
     effective dependence of the sphere route on how the user wrote the
@@ -2166,7 +2173,7 @@ Remaining work, tiered:
         N = 20 error rate from 5% to 14%.
     - **Fallback.** Explicit `start()` values or `control$start` select the
       user start. `fit$gauge$start` records which start was used.
-    - **Evidence (experiment 87 rerun).**
+    - **Evidence (experiment engineering/14 rerun).**
       - Sphere ML, ULS and GLS recover 24/24 populations in the
         identifications that hold them. PSD recovers 21/21.
       - The earlier user-start run missed once each in ULS and GLS.
@@ -2198,7 +2205,7 @@ Remaining work, tiered:
     intercepts release around the same time (the "M/L — continuous scalar
     `group.equal` release" entry in the ordinal invariance section: group
     2+ latent means stay fixed, npar 60 against lavaan's 63). Invariance
-    users are a main audience of a sphere default, and experiment 87 had to
+    users are a main audience of a sphere default, and experiment engineering/14 had to
     free those means by hand.
   - **Done 2026-09-23 — the driven ML run is scaled like `fit_ml`.**
     - **The bug.** `fit_ml_sphere` switched off the sample-based coordinate
@@ -2220,7 +2227,7 @@ Remaining work, tiered:
       no units. At data scale 0.1 the unscaled driven run fails, while the
       scaled one matches `fit_ml`.
     - **Unchanged elsewhere.**
-      - Experiment 87 is unchanged: recovery 68/68 and every population
+      - Experiment engineering/14 is unchanged: recovery 68/68 and every population
         recovered or flagged. Cross-identification agreement is 1e-12, and
         1e-7 on PoliticalDemocracy, where it was 6e-7.
       - The Ernst probe moves by at most 2.5 points in any cell.
@@ -2280,7 +2287,7 @@ Remaining work, tiered:
         points where no ML optimum exists.
       - At N = 10, no fit from any start converged in 14 to 15% of draws.
     - **Parked (author, 2026-09-23).** Global optimality is a later,
-      separate question. Experiment 88 judges convergence to a local
+      separate question. Experiment engineering/15 judges convergence to a local
       optimum. The probe stays in the paper repo as the seed of a future
       experiment. When it is picked up, decide:
       - whether a single start's miss rate is acceptable for a default
@@ -2289,8 +2296,8 @@ Remaining work, tiered:
         starts, best objective);
       - for PSD, whether a face-aware start is feasible (a research
         question).
-- **Done 2026-09-23 — experiment 88, small version**
-  (`experiments/engineering/88-sphere-local-convergence`, about 70 s).
+- **Done 2026-09-23 — experiment engineering/15, small version**
+  (`experiments/engineering/15-sphere-local-convergence`, about 70 s).
   - **Setup.** ML and PSD-ML; the Ernst, weak-marker and high-R² populations;
     N = 10 to 100; 200 replications. Ordinary and sphere routes, each under
     marker and std.lv.
@@ -2334,7 +2341,7 @@ Remaining work, tiered:
   non-convergence. `fit$gauge$driven_stationary` now exposes the driven
   audit.
 - **v1, M. Convergence verdicts accept runaway ridge points (both routes).**
-  In experiment 88, fits reported `converged = TRUE` while a standardized
+  In experiment engineering/15, fits reported `converged = TRUE` while a standardized
   loading, residual ratio or factor correlation exceeded 10, typically 30 to
   1000.
   - Ordinary std.lv: 31.5% of Ernst draws and 44.5 to 54% of weak-marker
@@ -2345,13 +2352,13 @@ Remaining work, tiered:
   flag such stops. The measure is identification-free (the standardized
   solution), and its distribution is bimodal, so a bound is easy to
   choose.
-- **v1, M. Step two: expand experiment 88 to the full Ernst-type
-  simulation.** This follows experiment 87 and uses the canonical start.
+- **v1, M. Step two: expand experiment engineering/15 to the full Ernst-type
+  simulation.** This follows experiment engineering/14 and uses the canonical start.
   - **Designs:**
     - the Ernst SEM and CFA forms (3 indicators, loadings 1/.8/.6, beta in
       {0, .25, .5});
     - a weak marker (lambda_1 in {.1, .3});
-    - a high-R2 endogenous latent (R2 in {.9, .98}), where experiment 82's
+    - a high-R2 endogenous latent (R2 in {.9, .98}), where experiment research/46's
       std.lv reversal sits;
     - a small two-group metric-invariance design.
   - **Grid:**
@@ -2396,7 +2403,7 @@ Remaining work, tiered:
     The likelihood keeps improving toward an improper solution.
   - **Sphere PSD fails.** Outside the theorem (structural cases such as the
     mediation chain), or a genuine optimizer failure.
-  - **Evidence (experiment 88).** Refitting in the other ordinary
+  - **Evidence (experiment engineering/15).** Refitting in the other ordinary
     identification is not a complete remedy. In 26 of 2400 PSD draws (weak
     marker and high R²) neither the ordinary marker nor the ordinary std.lv
     fit succeeds, while the sphere does.
@@ -2486,7 +2493,7 @@ Remaining work, tiered:
     restrictions, estimator definition, and solver return status. Benchmark
     fitting and independent audit separately before scaling up simulations.
   - **M — magmaan-owned paper rerun.** Experiment
-    `38-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
+    `06-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
     paper's main two-factor and growth-curve examples from the authors' OSF
     result objects. Remaining work is the independent magmaan rerun: implement
     the bounded-estimation choices needed for the paper design, rerun the
@@ -2506,7 +2513,7 @@ Remaining work, tiered:
   the observed bread; FIML's observed-information model vcov and MLR sandwich
   now use the same `vcov(fit, regime=)` keyword. Default stays `expected`
   (lavaan parity) where an expected-bread estimator exists.
-  Validation: experiment 35 (`35-misspec-robust-se`) -- under the correct model
+  Validation: experiment research/12 (`12-misspec-robust-se`) -- under the correct model
   the two breads coincide and both match the empirical sampling SD. Focal is a
   free loading on a cross-loading-distorted factor (raw + std.all), continuous
   ML, MCAR FIML, and ordinal DWLS. Under the omitted cross-loading the
@@ -2670,7 +2677,7 @@ Remaining work, tiered:
     `magmaan_core$data_mixed_ordinal_stats_hybrid_fiml_from_raw/_from_df`,
     with observed-pairwise companions and `robust_mixed_ordinal_ij`. Gated by
     C++ MCAR smoke tests and an R smoke. MCAR/MAR efficiency validated
-    2026-06-23 by `experiments/research/37-mixed-fiml-pairwise-efficiency`: the hybrid
+    2026-06-23 by `experiments/research/14-mixed-fiml-pairwise-efficiency`: the hybrid
     leaves the ordinal block bit-for-bit identical, modestly reduces continuous
     sampling variance under MCAR (grows with the missing rate), and removes the
     pairwise continuous-moment bias under MAR (worst continuous-parameter |bias|
@@ -2897,7 +2904,7 @@ Remaining work, tiered:
       for the correct-model robust reference. Still open: complete
       weight-derivative / misspecification scaling, functional R callbacks,
       ordinal fitted-functional constraints, and Bartlett/calibrated constants.
-      Experiment 47 now also carries the paired non-normal coverage probe:
+      Experiment research/21 now also carries the paired non-normal coverage probe:
       multivariate `t(5)` data, ULS/GMM parameter CI inversion, fixed versus
       fitted profile weights, and ordinary versus robust-scaled references over
       `N in {100,200,500}`.
@@ -2908,7 +2915,7 @@ Remaining work, tiered:
       sample-normal-theory IJ weight mode, WLS uses the empirical-WLS IJ mode,
       and ULS remains the fixed-weight reference. R exposes this as
       `estimated_weight=TRUE`, requiring `robust=TRUE` and complete `raw_data`.
-      Experiment 47's CI branch now keeps ULS fixed/fitted rows and adds GLS/WLS
+      Experiment research/21's CI branch now keeps ULS fixed/fitted rows and adds GLS/WLS
       fixed-profile `ordinary`, `robust_fixed`, and
       `robust_estimated_weight` rows. Still open: fitted-weight derivative /
       misspecification references, scalar functional callbacks, ordinal
@@ -2993,7 +3000,7 @@ Remaining work, tiered:
       `fiml_test.cpp` gates raw/precomputed parity for single-model RMSEA and
       nested LRT.
     - **Done 2026-06-22 (finite-sample calibration experiment).**
-      `experiments/research/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
+      `experiments/research/13-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
       On the exact C4 binary pseudo-null it shows the standard fixed-weight
       DWLS nested test (Satorra-2000) is anti-conservative under fixed
       misspecification of the larger model — rising to 10.5% rejection at a
@@ -3001,7 +3008,7 @@ Remaining work, tiered:
       profile law stays flat at ~4.2%. The empirical mean of the difference
       statistic tracks the full-profile trace, not the fixed-weight trace
       (2.63 vs 2.13 at the strongest setting). This is the nested-LRT companion
-      to experiment 35 / `papers/estimated-weight-se`.
+      to experiment research/12 / `papers/estimated-weight-se`.
     - **Done 2026-06-22 (population cross-check).** Advisory check
       `cpp/tests/checks/ordinal_dwls_profile/` reproduces the symmetry-protected C4
       binary pseudo-null of `ordinal_dwls_profile_exploration.tex` in magmaan
@@ -3177,7 +3184,7 @@ Remaining work, tiered:
     observed information or the existing MLR sandwich respectively, without a
     separate raw-data argument. `r-package/examples/fiml.R` checks the
     model-vs-robust route on a non-saturated FIML fit, and
-    experiment 35 includes an MCAR FIML cell under both correct and omitted
+    experiment research/12 includes an MCAR FIML cell under both correct and omitted
     cross-loading conditions.
   - A continuous-LS R `bread` binding for `vcov(fit, regime=)`; the
     single-source-of-truth refactor of `ordinal_block_residual`.
@@ -3216,7 +3223,7 @@ oracle from `cpp/tests/tools/regen_robust_score.R`, and the advisory
   normal-theory / WLS explicit) and taking `bread`/`moments`/`cov` plus the raw
   fitting data for the empirical meat. The `bread/moments/cov` -> `InferenceSpec`
   parsers moved to the shared `r-package/src/internal.hpp`. Concrete consumer:
-  `experiments/engineering/22-robust-score-modification-indices` (ordinal DWLS + continuous
+  `experiments/engineering/04-robust-score-modification-indices` (ordinal DWLS + continuous
   GLS misspecification demo, with the exact `c -> 1` reductions as correctness
   gates). Still open / only-when-needed: a C++ `api::frontier` entry point taking
   `api::Fit` for the LS tiers (the api `Fit`'s `EstimatorSpec.weight` is empty for
@@ -3591,7 +3598,7 @@ continuous-whitening entry above.
   scaling applied in R (the `sb_from_moments` helper copied across experiments
   07/15/16/19). It is exact, not an approximation: on complete-data continuous
   ML it reproduces `fmg_tests(tests = "sb_ml")` to 7e-16..1e-14
-  (`experiments/research/81-score-vs-lrt/diagnose_trace_sb_nested.R`), because the
+  (`experiments/research/45-score-vs-lrt/diagnose_trace_sb_nested.R`), because the
   reduced `M = BᵀΓ̂B` is exactly `df × df` so `Σλ = tr(M) = tr(UΓ̂)`.
   The problem is purely discoverability. Today the only pointer is a three-line
   comment in `r-package/R/zzz_core.R:266-268` referring to "the Maydeu
@@ -3620,7 +3627,7 @@ continuous-whitening entry above.
   `magmaan_fit`, and post-fit wrapper surface is otherwise sufficient for the
   next R exploration pass.
 - **S/M, experiment-motivated.** Decide whether the Deng-Chan reliability-
-  difference test (`experiments/research/20-deng-chan-2017-alpha-omega`) earns a home in
+  difference test (`experiments/research/03-deng-chan-2017-alpha-omega`) earns a home in
   core. The experiment already runs against the current surface (ML fits plus
   `infer_gamma_nt`/`infer_empirical_gamma`; Cronbach's alpha falls out as the
   omega of a ULS tau-equivalent fit) and diagnoses a genuine non-regularity:
@@ -3634,13 +3641,13 @@ continuous-whitening entry above.
   alpha, Guttman's lambda6, and Spearman-Guttman covariance omega with
   delta-method SEs, plus the exploratory R primitive
   `magmaan_core$measures_reliability_cov` and
-  `experiments/research/41-reliability-lambda6`. The non-regular joint
+  `experiments/research/16-reliability-lambda6`. The non-regular joint
   `omega - alpha` test and Imhof calibration remain unpromoted. Not required.
   Prior-art oracle for the Spearman-Guttman covariance omega is Hancock & An
   (2020) (closed-form single-factor omega; see
   the private paper eval `2020-hancock-closed-form-omega.md`): their
   Spearman-1927 ratio-of-sums loading aggregation is more numerically stable than
-  the average-of-ratios communality and is the parity target for exp 41. Their
+  the average-of-ratios communality and is the parity target for exp research/16. Their
   256-cell sim is the validation oracle. Open lane beyond Hancock & An (single
   factor only): the multi-factor / multi-group / weighted `ω_G(σ;w)` form and
   omega-hierarchical via a second-stage Schmid-Leiman centroid on `Φ_G` (k>=3),
@@ -3686,7 +3693,7 @@ continuous-whitening entry above.
   statistic for the documented `(n_g−1)/n_g` LS-weight gap), and
   configural→thresholds recorded as a df=0 χ²-equivalence because lavaan cannot
   form a positive-df `lavTestLRT` there. The explicit Mplus-style delta scalar
-  probe in `experiments/research/33-mplus-demo-wlsmv-difftest` also now passes: with
+  probe in `experiments/research/10-mplus-demo-wlsmv-difftest` also now passes: with
   overlap pairwise Gamma, magmaan's scaled-shifted restriction-map statistic is
   22.365850 on 22 df (p = 0.438242), matching Mplus Demo DIFFTEST 22.366000 on
   22 df (p = 0.438200). The remaining paper work is its own item below.
@@ -3793,14 +3800,14 @@ continuous-whitening entry above.
   `lr_test_satorra2000/2001_fiml_from_data` take an optional `sm_precomputed` and
   `infer_fiml_lr_test_satorra2000` reuses a fit's `$stage1`, and
   `fit_ml2s(stage1=)` skips the rung-independent Stage-1 EM; this is what
-  `experiments/research/25-fiml-invariance-fmg-power` uses to build one saturated EM per
+  `experiments/research/06-fiml-invariance-fmg-power` uses to build one saturated EM per
   masked dataset and thread it through both estimators, all four ladder rungs,
   every FMG battery, and every nested test (kills the ~72s-at-p=30 FIML-nested
   rebuild and the 4x ML2S Stage-1 redundancy; bit-identical, verified). Deferred
   residual: `fit_fiml` still recomputes its cheap mu/Sigma-only `fiml_h1_moments`
   per rung; eliminating it needs a `fit_fiml` h1-injection arg + a FIMLH1-from-R
   reconstructor (the structured optimization dominates, so it is low priority).
-- **Measurement-invariance nested run (exp 25) gaps.** Two items block the full
+- **Measurement-invariance nested run (exp research/06) gaps.** Two items block the full
   Brace-Savalei-style invariance Type-I run; the overnight run uses the p=6
   one-factor model with the weak + strict nested steps only.
   (1) **metric->scalar ("strong") nested test is not nestable**: the scalar model
@@ -3829,12 +3836,12 @@ continuous-whitening entry above.
   saturated/unstructured information), and the model-implied curvature is not
   guaranteed PD off H₀ with nothing guarding the sign of the retained spectrum
   fed to the FMG/pEBA mixture (which assumes `λᵢ ≥ 0`). No new sim was needed:
-  experiment 23 already carried both variants across its grid, so the
+  experiment research/04 already carried both variants across its grid, so the
   keep-or-ditch evaluation was in hand. Two things survive the removal: the
   `fiml_structured_h1_information` helper stays (the ML2S Stage-2 `W*` uses it),
   and magmaan's MLR/Yuan-Bentler reproduction is the independent
   `fiml_robust_mlr` (`estimate_fiml_robust_mlr`), which never used this knob.
-  Experiment 23's structured columns were dropped from the harness and the
+  Experiment research/04's structured columns were dropped from the harness and the
   variant is marked legacy in its report; `examples/fmg.R` and the
   `fiml_ugamma_spectrum` C++ test no longer exercise it.
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
@@ -3872,7 +3879,7 @@ continuous-whitening entry above.
     do the FMG transforms beat the WLSMV mean-variance adjustment anywhere (only
     possible where the spectrum spreads: binary items, larger models), or is
     WLSMV hard to beat for ordinal?
-  - **Chen-style pairwise-missing scalar probe (experiment 34, 2026-06).**
+  - **Chen-style pairwise-missing scalar probe (experiment research/11, 2026-06).**
     Full-spectrum p-values do not repair the WLSMV_PD inflation once the
     pairwise-missing ordinal summary statistics are already distorted. In a
     Mplus-free 10-indicator invariant scalar test (`N=1000`, symmetric
@@ -4053,7 +4060,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   PoliticalDemocracy, one shared R batch timer, fresh serial sessions, and
   output/adapter gates. The full
   [design](../validation/benchmark_plan.md#proposed-public-speed-report-2026-09-20)
-  remains the publication target. The pilot is experiment 84 (benchmark,
+  remains the publication target. The pilot is experiment showcases/08 (benchmark,
   active), indexed in the experiment collection; it is not a public speed
   claim. Native lavaan 0.7-2 `peba4_ml` and magmaan disagree in the HS tail
   even with identical statistic/eigenvalues (about 7% relative p-value
@@ -4074,9 +4081,9 @@ work lives in [`speculative.md`](speculative.md). Open work:
   and `benchmarks/inference_reuse.R` (mean-of-15 over `proc.time()`/`system.time()`,
   whose ~0.5 ms quantisation is a quarter of the ~2 ms workloads they time),
   `benchmarks/r/bench_mi_lrt.R` (3 reps, no warmup), `benchmarks/r/run_benchmark.R`
-  (`bench::mark`, whole-fit only), `experiments/showcases/05-lavaan-speed-bench`,
-  `experiments/engineering/73-psd-ml-timing` (the best of the R set: batch calibration plus
-  `--repeats/--warmups`), `experiments/research/28-ordinal-stage2-pairwise`, and
+  (`bench::mark`, whole-fit only), `experiments/showcases/02-lavaan-speed-bench`,
+  `experiments/engineering/11-psd-ml-timing` (the best of the R set: batch calibration plus
+  `--repeats/--warmups`), `experiments/research/08-ordinal-stage2-pairwise`, and
   `private/oslo-psychometric-gathering-2026/tools/benchmark_score_shared.R` (outside this repository; the
   best overall: `Sys.time()`, arm rotation, artifact hashing). Convert the C++
   benches to include `timing/timing.hpp` first — that is mechanical. The R
@@ -4101,7 +4108,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   (`estimate::fiml::saturated_em_moments` / `estimate_saturated_em_moments`) and
   Stage 2 (`estimate_two_stage_em(partable, raw_data, kind = c("ml","gls"))`)
   have landed and feed the MSE comparator in
-  `experiments/research/08-pairwise-gls-efficiency/`. The packaged ML2S path has also
+  `experiments/research/01-pairwise-gls-efficiency/`. The packaged ML2S path has also
   landed: `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` run Stage-2 ML on
   the saturated EM moments and attach Savalei-Bentler-style corrected SEs plus
   scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The C++ post-fit
@@ -4115,13 +4122,13 @@ work lives in [`speculative.md`](speculative.md). Open work:
   is applied to the df-dim two-stage UGamma spectrum + Stage-2 ML base on
   `fit$ml2s`. The two-stage scaling and SEs match lavaan's
   `missing="robust.two.stage"` (sandwich ACOV) convention to machine precision
-  (≲1e-4 across the exp-24 grid, typically ~1e-7; EM/optimizer-limited), and the
+  (≲1e-4 across the exp-research/05 grid, typically ~1e-7; EM/optimizer-limited), and the
   robust/scaled global indices are lavaan-gated to fixture tolerances. This is
   not the plain `missing="two.stage"`
   (normal-theory ACOV) scaling, which collapses under non-normality; the base
   matches both. `trace(UGamma) = E[T]` (normal-data ncp ~ 0) is an independent
   first-principles check. Calibration study + lavaan parity oracle:
-  `experiments/research/24-fiml-twostage-fmg-chisq`; unit gate:
+  `experiments/research/05-fiml-twostage-fmg-chisq`; unit gate:
   `two_stage_em_ml_inference` self-consistency in `cpp/tests/unit/fiml_test.cpp` and
   the `ml2s_*` rows of `cpp/tests/golden/fiml_golden_test.cpp`.
   - **Done 2026-06-28 — lavaan-like H1 edge behavior.** The saturated H1 EM now
@@ -4152,15 +4159,15 @@ work lives in [`speculative.md`](speculative.md). Open work:
     derivative, residual-projector, trace, scale, statistic, and df before any
     Monte Carlo comparison. Add explicitly named paper-era post-fit routes only
     after those same-data gates pass, preserving current MLR, FIML FMG, and ML2S
-    semantics. `experiments/replications/79-savalei-falk-2014-test-map` records the source map,
-    deterministic routing witness, and staged replication plan. Experiment 80
+    semantics. `experiments/replications/08-savalei-falk-2014-test-map` records the source map,
+    deterministic routing witness, and staged replication plan. Experiment replications/09
     now supplies the exhaustive diagnostic surface: 48 direct-FIML and 32 ML2S
     matrix-estimation combinations are evaluated on identical generated
     samples. Its targeted run identifies the two-stage candidate (11.5% versus
     the published 10.0%) but exposes a direct-FIML conflict: the literal
     all-structured observed row rejects only 36.5% among 935 usable tests, while
     the closest saturated-expected row rejects 61.9% versus the published 63.3%.
-    Before Experiment 77 consumes a direct-FIML route, compare the analytic
+    Before Experiment research/44 consumes a direct-FIML route, compare the analytic
     structured observed-H1 matrix against an independent EQS/symbolic oracle and
     determine whether EQS applied `SE=EXACT` to the robust test or only its
     standard errors. The ML2S candidate can proceed through the remaining
@@ -4174,7 +4181,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   remaining pairwise μ ACOV and pairwise Browne-unbiased items live in
   [`speculative.md`](speculative.md).
 - **M.** Extend the near-singular ML continuation experiment
-  (`experiments/engineering/04-near-singular-ml-continuation`) beyond the first
+  (`experiments/engineering/02-near-singular-ml-continuation`) beyond the first
   diagonal-ridge path: the first target/profile grid compares diagonal,
   scaled-identity, and raw-identity targets over several fixed lambda sequences;
   remaining work is direct ML vs ULS/GLS-start ladders and explicit
@@ -4440,7 +4447,7 @@ Remaining:
 - **S — `magmaan()` with `<~` fails opaquely.** Composite syntax passed to
   `magmaan()` (and so to `frontier_fit_sphere()`) ends in a non-finite
   objective from the optimizer. It should route to, or point at,
-  `magmaan_fcsem()` (found by experiment 87).
+  `magmaan_fcsem()` (found by experiment engineering/14).
 
 Deferred beyond the lavaan-validated single-group ML slice: ordinal composites,
 FIML/LS composites, robust corrections for composites, and composite
@@ -4480,7 +4487,7 @@ into `<domain>::frontier`. Canonical public headers now live under
   (`weighted_moment_profile_*`, `continuous_ls_profile_*`, `ml_profile_*`,
   `observed_moment_bread_fd` in `robust/weighted_inference`; `fiml_profile_*` /
   `two_stage_nt_profile_*` in `estimate/fiml`; `compute_profile_contrast_spectrum`
-  in `robust/satorra2000`), the pre-existing exp-35 misspec-SE machinery
+  in `robust/satorra2000`), the pre-existing exp-research/12 misspec-SE machinery
   (`robust_continuous_ls`, the Hall-Inoue `*_ij` family, `weighted_param_space_sandwich`
   and its estimated-weight MI counterparts `weighted_param_space_sandwich_ij` /
   `continuous_ls_param_space_sandwich_ij` / `ordinal_param_space_sandwich_ij`,
@@ -4504,7 +4511,7 @@ findings and next steps stay in `speculative.md`; nothing here is scheduled core
 work until a concrete downstream consumer appears.
 
 - **funLR — Functional profile-LR CI** (small-sample reliability CIs, JASA-target;
-  `experiments/research/45-profile-lr-reliability-ci`). Generic-`g` profile-LR (test-inversion)
+  `experiments/research/20-profile-lr-reliability-ci`). Generic-`g` profile-LR (test-inversion)
   engine validated vs `semlbci`; coverage + Bartlett characterized (omega near-nominal,
   bifactor maximal reliability `rho*` collapses to 0.61 @ N=50). **Key finding:** the
   small-sample factor must be a stable model-level **constant** — an analytic Lawley
@@ -4516,10 +4523,10 @@ work until a concrete downstream consumer appears.
   fitted-weight GMM, direct FIML, ML2S-NT, ordinal, and mixed ordinal, plus
   ordinal polychoric-omega profiles.
   The ordinal-specific calibration lane now has a working note
-  (`ordinal_profile_lrt_finite_sample_calibration.tex`) and experiment 53
+  (`ordinal_profile_lrt_finite_sample_calibration.tex`) and experiment research/25
   (`ordinal-profile-lrt-calibration`) to separate LR inflation, robust/misspec
   reference scaling, sparse ordinal summaries, and omega point bias before
-  choosing a correction. Next: run the full experiment-53 grid, then decide
+  choosing a correction. Next: run the full experiment-research/25 grid, then decide
   whether a cell/model-level constant is worth pursuing. See speculative.md for
   the full list.
 - **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
@@ -4531,7 +4538,7 @@ work until a concrete downstream consumer appears.
   `noniterative_cfa_tests` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`) and the shared
   `guttman_cfa_asymptotics.tex`).
-  **Validated** by `experiments/research/52-noniterative-cfa-tests` (SE coverage + GOF /
+  **Validated** by `experiments/research/24-noniterative-cfa-tests` (SE coverage + GOF /
   difference-test Type-I / power vs magmaan ML across normal / independent-
   component / ordinal-as-continuous generators, Dhaene-Rosseel 2024 style): the
   headline is that the empirical Gamma is calibrated everywhere while the
@@ -4561,7 +4568,7 @@ work until a concrete downstream consumer appears.
   returning `h2`, `diag(H)`, and the filled `H`. `extended_triad_ls` is the
   identity-weighted extended anchor-triad rule: one anchor stays in the target
   indicator's block, while the other may be cross-block.
-  `experiments/research/55-guttman-communality-estimators` now benchmarks the package
+  `experiments/research/27-guttman-communality-estimators` now benchmarks the package
   implementation directly. The promoted point-estimator lane landed as
   `guttman_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
@@ -4577,7 +4584,7 @@ work until a concrete downstream consumer appears.
   production default and is bit-for-bit behavior preserving; clamp derivatives
   are included in analytic SEs, and R fits record tuning values and per-block
   activation counts. Run and interpret
-  `experiments/engineering/60-guttman-admissibility-clamp` before changing the production
+  `experiments/engineering/10-guttman-admissibility-clamp` before changing the production
   default or choosing `(margin, beta0, rate)`. Making the configural and
   restricted Raw-path improper-split guards consistent remains a separate,
   announced behavior change.
@@ -4595,7 +4602,7 @@ work until a concrete downstream consumer appears.
   without these fields reconstruct raw conditioning, and nested pseudo-LRTs
   require matching configurations. Configural, metric, and restricted fits now
   all report the real communality-clamp activation counts.
-  Experiment 60 crosses the four communality-clamp finalists with hard/soft
+  Experiment engineering/10 crosses the four communality-clamp finalists with hard/soft
   score rates `{0.5,1}` and `delta_50 in {0.01,0.025,0.05,0.1}`, screens them
   under the predeclared success/PD/coverage/tail/benign/runtime gate, and can
   confirm the best two survivors. The completed 24-cell/300-rep screen on
@@ -4624,7 +4631,7 @@ work until a concrete downstream consumer appears.
   `noniterative_se*` primitives compute just `Omega = J Gamma J'/N`; empirical
   SEs stream casewise moment rows in parameter space, while full
   `noniterative_inference*` remains responsible for the residual GOF projector
-  and weighted-chi2 spectrum. A p = 25 configural probe of the experiment-58
+  and weighted-chi2 spectrum. A p = 25 configural probe of the experiment-research/29
   shape (`normal`, five factors, five indicators each) initially showed
   remaining 5 ms fixed Jacobian cost, not empirical meat: NT and empirical SE
   timings were nearly identical at n = 300, while n-scaling only made the
@@ -4694,7 +4701,7 @@ work until a concrete downstream consumer appears.
   **Quality verdict (2026-07-09): the aligned map is a decent success on
   RMSE; speed is now mostly an SE-coverage caveat, not a blocker.** Bad-boi
   worst-draw sanity (q=3, m=5,
-  rho=0.8, weak, n=150; single draw, exp-58 has the across-draws numbers):
+  rho=0.8, weak, n=150; single draw, exp-research/29 has the across-draws numbers):
   the recommended `extended_triad_ls` + `standardized` recipe lands loading
   RMSE at ~1.1x NTML (a dead heat on the parameters, in closed form on the
   worst draw), and `extended_triad_ls` beats `triad_wls` in every composite.
@@ -4726,7 +4733,7 @@ work until a concrete downstream consumer appears.
   still use the stacked KKT path, and methods whose SE is still direction-wise
   or finite-difference fallback (`triad_wls_joint`, `triad_mean`,
   `triad_pooled`).
-  **Experiment-58 paper lane (2026-07-11):** the completed 1,728-cell by
+  **Experiment-research/29 paper lane (2026-07-11):** the completed 1,728-cell by
   150-replication configural screen now includes raw and soft-clamped aligned
   maps. Factor correlation and loading strength interact sharply: under
   moderate loadings, the raw map's median common-covariance RMSE ratio versus ML
@@ -4775,10 +4782,10 @@ work until a concrete downstream consumer appears.
   constrained,scalar}_impl`;
   note `constrained_noniterative_cfa` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`); validated by
-  `experiments/research/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
+  `experiments/research/26-noniterative-invariance` (metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
-  `experiments/_archive/56-noniterative-constraint-charts` adds the marker-chart sanity
+  `experiments/_archive/noniterative-constraint-charts` adds the marker-chart sanity
   check for the estimator-side metric map: configural and metric-constrained
   implied covariances are marker-invariant at roundoff even off the metric
   surface; theta coordinates differ by chart, as expected.
@@ -4915,7 +4922,7 @@ work until a concrete downstream consumer appears.
     against an independent dense `Eigen::EigenSolver` oracle in
     `cpp/tests/unit/satorra2000_test.cpp`. Upstream's verdict is about power, not
     correctness, so prefer `"2000"` when both apply.
-- **Completed 2026-09-20: SEM scaling / PSD optimization defaults (experiment 83).**
+- **Completed 2026-09-20: SEM scaling / PSD optimization defaults (experiment _archive/sem-total-variance).**
   Historical decision, superseded for complete-data ML defaults on 2026-09-22
   by the broader fixed-control start/scaling validation described above. The
   original native-start comparison favored no preconditioning; retain these
@@ -4933,33 +4940,33 @@ work until a concrete downstream consumer appears.
 - **S. Test whether per-chart start values explain the std_lv optimizer-work
   advantage beyond chart geometry.** Findings and framework in
   [project/design/parameterization-geometry.md](../design/parameterization-geometry.md);
-  measured by `experiments/research/82-latent-metric-geometry`, which supersedes
-  `experiments/_archive/02-latent-metric-identification`.
+  measured by `experiments/research/46-latent-metric-geometry`, which supersedes
+  `experiments/_archive/latent-metric-identification`.
 
-  exp 82's cost arm has `std_lv` at roughly a third of `marker`'s `f_evals`, and
+  exp research/46's cost arm has `std_lv` at roughly a third of `marker`'s `f_evals`, and
   the gap **persists at `lambda1 = 0.9`** (66 vs 19 at p=12) where marker is
   competitive on both conditioning (25.1 vs 28.0) and parameter-effects curvature
   (0.82 vs 0.57). Geometry does not account for that, so magmaan's per-chart start
   heuristics are the remaining suspect. Worth chasing because it is free speed on
   the default (marker) path, which is the one users actually take. Add a
-  start-value arm to exp 82 (fixed common starts projected into each chart vs each
+  start-value arm to exp research/46 (fixed common starts projected into each chart vs each
   chart's native heuristic) before touching `spec/start`.
 
   Scope of the earlier findings:
   - *Is there a better convention?* Still open outside the measured CFA models.
     `std_lv`'s PE curvature sits below intrinsic curvature there, but that does
-    not prove numerical optimality; completed experiment 83 compared structural alternatives without changing the PSD default.
+    not prove numerical optimality; completed experiment _archive/sem-total-variance compared structural alternatives without changing the PSD default.
   - *Should the numerics lever be the chart?* No, the optimizer's metric. Full
     Newton / Fisher scoring is affine-invariant, so linear conditioning is free;
     nothing absorbs PE curvature. This is why `effect_coding` beating `std_lv` on
     conditioning while losing on curvature is not worth acting on.
-  - *exp 02's back-convert wash.* **Superseded.** exp 02's timings came from
+  - *exp _archive/latent-metric-identification's back-convert wash.* **Superseded.** exp _archive/latent-metric-identification's timings came from
     `system.time()`, which quantises to ~1ms on Linux, applied once per
     sub-millisecond fit (ten timings of the same 225µs fit give min 0.000, median
     0.001, max 0.007). With batched timing at 1.7% relative IQR, the fit ratio
-    exp 02 put at 0.839 is **0.427** at p=24 under nlopt-lbfgs and improves with p.
+    exp _archive/latent-metric-identification put at 0.839 is **0.427** at p=24 under nlopt-lbfgs and improves with p.
     Back-conversion is exact to 1e-15, costs 0.07% of the fit for point estimates
-    at p=48, and ~3% including the dense O(p³) `J V J'` vcov transform that exp 02
+    at p=48, and ~3% including the dense O(p³) `J V J'` vcov transform that exp _archive/latent-metric-identification
     never counted. So roughly 3% overhead against a 30–57% saving: the
     internal-chart substitution pays.
   - *Does conditioning cost convergence at small n?* Yes, and strictly. At p=12,
@@ -4967,17 +4974,17 @@ work until a concrete downstream consumer appears.
     and across 2000 matched draws marker-fails-std_lv-succeeds happens 7 times
     against 0 the other way. A dominance relation rather than a rate difference.
   - *Does `std_lv` fix Heywood cases?* No. It relocates them from latent to
-    observed variances (exp 03: 0/3 admissible without bounds; marker + `pos.var`
-    is the winner at 2/3). exp 82's detector therefore reads every estimated
-    variance — **but exp 82's population produces zero improper solutions**, so its
-    convergence arm cannot corroborate or contradict exp 03. Loadings of 0.7 with
-    ψ=0.51 are not extreme enough. Wiring a near-Heywood population into exp 82
+    observed variances (exp _archive/heywood-box-constraints: 0/3 admissible without bounds; marker + `pos.var`
+    is the winner at 2/3). exp research/46's detector therefore reads every estimated
+    variance — **but exp research/46's population produces zero improper solutions**, so its
+    convergence arm cannot corroborate or contradict exp _archive/heywood-box-constraints. Loadings of 0.7 with
+    ψ=0.51 are not extreme enough. Wiring a near-Heywood population into exp research/46
     (weak loadings, tiny ψ, n≈50) is the cheap way to put both results on one grid.
-- **S. exp 58 has an unexploited `equal`/`unequal` indicator-scale slice.** The
+- **S. exp research/29 has an unexploited `equal`/`unequal` indicator-scale slice.** The
   `standardized` composite in the Guttman/omega recipe is pinned as a fixed
-  setting in `experiments/research/58-guttman-rmse-coverage/results/paper-full`, with no
-  composite-vs-composite arm anywhere at evidence-grade reps (exp 55 map probe is
-  `reps=8`, exp 59 is `reps=5`), and `Remark 2` of `guttman-inference.tex` concedes
+  setting in `experiments/research/29-guttman-rmse-coverage/results/paper-full`, with no
+  composite-vs-composite arm anywhere at evidence-grade reps (exp research/27 map probe is
+  `reps=8`, exp research/30 is `reps=5`), and `Remark 2` of `guttman-inference.tex` concedes
   the choice is a declaration. The `scale` factor already in the 2592-row grid is
   exactly where a standardized composite should earn its keep, since it rescales
   by `diag(S)^{-1/2}`. Slicing the existing results costs nothing and either

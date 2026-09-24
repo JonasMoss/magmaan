@@ -1,0 +1,561 @@
+---
+title: "Total-variance scaling across SEM structures"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+if (!file.exists("results/fits.csv"))
+  stop("Run Rscript run_experiment.R --smoke --stress first")
+f <- read.csv("results/fits.csv")
+v <- read.csv("results/validation.csv")
+tm <- read.csv("results/timing.csv")
+meta <- read.csv("results/metadata.csv")
+mv <- function(key) meta$value[match(key, meta$key)]
+```
+
+## Question
+
+Does fixing **total latent variance** improve SEM optimization across different
+structural models, when all parameterizations start at the same model and search
+the same admissible interior? Does native PSD fitting benefit from diagonal
+information scaling with practical default starts? Can we answer this in seconds?
+
+## Short answer
+
+**Closed for engineering defaults (2026-09-20).** For supported complete-data
+PSD ML, use the existing native fitter with its default starts, `nlopt-slsqp`,
+and `preconditioning = "none"`. Preserve the supplied model identification,
+zeros, fixed values and equalities, permit PSD boundary solutions, and retain
+the existing objective, feasibility and cone-stationarity audits. Diagonal
+scaling remains an explicit research option. Automatic chart selection,
+preconditioning and targeted restarts are not adopted.
+
+This is a decision to retain a fast, tested baseline, not a claim of global
+optimality or a measured rare-failure guarantee. All 220 fits in the structural
+pilot passed the audits; diagonal scaling increased median evaluations in all
+ten settings, and the default unscaled fit reached the better endpoint in the
+one discrepant pair. That evidence does not justify extra default machinery.
+The singular-boundary limitation remains documented below.
+
+**Keep native PSD ML unscaled by default.** Across six structures and ten settings,
+all 220 fits passed the existing audits, but diagonal preconditioning increased
+median evaluations in every setting. Of 110 paired datasets, 109 reached matching
+objectives and boundary classifications. One stressed mediation draw reached two
+different audited stationary endpoints; unchanged cross-restarts retained that
+difference. A targeted boundary diagnostic now explains and escapes the worse one.
+The full comparison took 2.83 seconds. The earlier benefit from reference-assisted
+Bollen starts does not generalize to native starts in this pilot. **The discrepant mediation case is a boundary
+identification problem:** a zero mediator disturbance makes direct and mediated
+paths interchangeable. A score-guided move among equivalent parameters followed
+by reopening that variance reaches the lower objective with both solver settings.
+Random perturbations were less dependable in this single-case check.
+
+**The Bollen follow-up separates coordinate scaling from PSD boundaries.** On the
+original data and ten matched Gaussian draws, eight cases have matching interior
+reference solutions; three have matching PSD-boundary reference solutions.
+Information scaling resolves the interior audit failures. The existing magmaan
+PSD fitter handles all eleven from two starts, including the three boundary
+cases, using the appropriate cone-stationarity check. These are locally audited
+reference candidates, not proofs of global optimality.
+
+**Total-variance scaling is a viable candidate, not a universal winner.** The
+initial stress pilot improves information conditioning substantially for mediation
+with a highly predictable mediator and for a higher-order factor model. Disturbance
+scaling remains better in the correlated-disturbance example. Structural variety
+changes the answer even with nearly constant indicator count.
+
+The current run completed **`r nrow(f)` fits in
+`r round(as.numeric(mv("elapsed_seconds")), 2)` seconds**, across
+`r length(unique(f$case))` structures. Completion status is
+**`r mv("complete")`**. This is a small comparison prototype, not evidence of native
+library speed or finite-sample failure rates. Ten-draw follow-ups also finished within a minute. Their near-boundary stalls
+motivated the Bollen classification below; practical starts and more model
+structures remain necessary before drawing conclusions about failure rates.
+
+## Evidence
+
+### Different structures favor different scales
+
+```{r}
+w <- reshape(v[, c("case", "chart", "condition")], idvar = "case",
+             timevar = "chart", direction = "wide")
+names(w) <- sub("condition\\.", "", names(w))
+knitr::kable(w, digits = 1, col.names = c("Model", "Marker", "Disturbance", "Total"),
+  caption = "Expected-information condition numbers at the controlled population or empirical reference fit; smaller is better. Controlled models use the stress setting when requested. These are coordinate-dependent diagnostics, not an ordering of statistical models.")
+```
+
+All charts reproduce the same starting observed covariance to
+`r format(max(v$covariance_error), scientific = TRUE, digits = 2)`; analytic covariance
+derivatives agree with central differences to maximum relative error
+`r format(max(v$derivative_error), scientific = TRUE, digits = 2)`.
+The empirical reference objective is checked independently against lavaan before
+fitting. The maximum attained objective discrepancy from the available population
+or lavaan reference is
+`r format(max(abs(f$objective - f$reference_objective), na.rm = TRUE), scientific = TRUE, digits = 2)`.
+
+A fit is not accepted merely because its optimizer returns success. There are
+`r sum(!f$stationary)` rows failing the common information-metric stationarity
+threshold, and `r sum(!f$admissible)` failing the component covariance audit in this
+run. The paired fit gaps are descriptive; neither their minimum nor agreement
+between three charts proves a global optimum.
+
+### Native starts: diagonal scaling does not reduce optimizer work
+
+```{r}
+structure_path <- "results/native-structures/pairs.csv"
+if (file.exists(structure_path)) {
+  sp <- read.csv(structure_path)
+  comparable <- sp[!is.na(sp$comparable) & sp$comparable, ]
+  work <- aggregate(cbind(evaluations.none, evaluations.diagonal) ~ case, comparable, median)
+  counts <- aggregate(comparable ~ case, sp, function(x) sprintf("%d/%d", sum(x), length(x)))
+  work <- merge(work, counts, by="case")
+  labels <- c(hs_3factor_cfa="HS CFA", mediation="Mediation",
+    correlated_predictors="Correlated predictors", higher_order="Higher order",
+    correlated_disturbances="Correlated disturbances", bollen_democracy_sem="Bollen SEM")
+  work$case <- unname(labels[work$case])
+  names(work) <- c("Structure", "Unscaled Evaluations", "Diagonal Evaluations", "Matched Pairs")
+  knitr::kable(work, digits=1,
+    caption="Median evaluations among audited pairs with matching objectives and nullities.")
+}
+```
+
+Each empirical model uses its observed covariance and ten matched Gaussian draws.
+Each synthetic model uses both ordinary and stressed settings, with population
+moments and ten matched draws per setting. Both methods receive the same default
+native starts and evaluation budget. The synthetic rows summarize both settings;
+diagonal scaling increases median evaluations in each setting separately as well.
+No reference estimates are supplied as optimizer starts. Population or fitted
+reference moments define the simulated data only.
+
+All 220 fits passed feasibility and cone-stationarity checks. The 109 matching
+pairs differ in objective by less than $6\times10^{-12}$. Stressed mediation draw
+4 differs by 0.00519: the unscaled endpoint has objective 0.05939 and the scaled
+endpoint 0.06458. Both initially have covariance nullity one. Restarting either
+method from either endpoint preserves its objective, so merely changing scaling
+at termination does not resolve the discrepancy. This is evidence of distinct
+stationary endpoints, not proof that either is globally optimal. One restart's
+nullity changes from one to zero at essentially the same objective, emphasizing
+that numerical rank classifications near the boundary depend on tolerance.
+
+The reported counts exclude that unmatched pair from the work comparison but
+retain it in the denominator. Single-pass timings and every fit, failure, and
+paired objective gap remain in `results/native-structures/`. These timings are
+sufficient to establish a cheap iteration loop, not stable speed ratios.
+
+### Why the mediation endpoint can be escaped
+
+Write the structural part as
+
+$$
+f_2=a f_1+\zeta_2,\qquad f_3=c f_1+b f_2+\zeta_3.
+$$
+
+At the worse endpoint, $\operatorname{Var}(\zeta_2)=0$. Only $c+ab$ matters:
+changing $b$ by $\delta$ and $c$ by $-a\delta$ leaves the entire implied observed
+covariance unchanged. The separate paths are unidentifiable there. The better
+endpoint instead has a small positive mediator disturbance (0.002315) and zero
+outcome disturbance, with large compensating paths ($b=17.95$, $c=-16.79$).
+Neither solution is a regular interior point.
+
+The derivative for opening the mediator variance depends on the otherwise
+unidentified $b$. At the same implied covariance, it is positive at $b=0$
+(0.1136) but negative at $b=1$ ($-0.1410$). The numerical check preserves covariance
+to $9\times10^{-16}$, verifies the analytic derivative by finite differences,
+and agrees with native objective evaluation before and after opening the variance.
+Thus the worse covariance has an explicit admissible descent path after choosing
+an equivalent parameter representation. Passing the first-order audit at the
+original representation does not certify optimality over all nearby attainable
+covariances at this singular point.
+
+The diagnostic restart examines four compensated shifts, $\pm1$ and $\pm2$
+in units of the fitted total latent standard-deviation ratio. It chooses the
+most negative variance derivative, opens small variances to 1% of their marginal
+variance, and refits. Selection uses the current fit and data only; the lower
+endpoint is used solely to score the experiment's outcome afterward.
+
+```{r}
+mediation_path <- "results/mediation-boundary/fits.csv"
+if (file.exists(mediation_path)) {
+  md <- read.csv(mediation_path)
+  lower <- min(md$objective[md$accepted])
+  md <- md[md$endpoint == "diagonal" & !grepl("^ridge_", md$policy), ]
+  md$policy[grepl("^jitter_", md$policy)] <- "Random perturbation"
+  md$policy[md$policy == "unchanged"] <- "Unchanged restart"
+  md$policy[md$policy == "reopen"] <- "Reopen variances only"
+  md$policy[md$policy == "score_guided"] <- "Score-guided equivalent start"
+  md$reached <- md$accepted & abs(md$objective-lower) < 1e-7
+  tab <- aggregate(reached ~ policy + preconditioning, md,
+                   function(x) sprintf("%d/%d",sum(x),length(x)))
+  tab <- reshape(tab,idvar="policy",timevar="preconditioning",direction="wide")
+  tab <- tab[c("policy", "reached.none", "reached.diagonal")]
+  knitr::kable(tab, row.names=FALSE,
+    col.names=c("Restart from Worse Endpoint", "Unscaled", "Diagonal"),
+    caption="Restarts reaching the lower observed objective; all fits passed the existing audits.")
+}
+```
+
+All 42 diagnostic fits passed the existing audits in about 0.6 seconds. Both
+score-guided fits reached 0.05939. Random perturbations reached it in 1/6 unscaled
+and 3/6 scaled attempts; reopening variances alone failed to escape. Perturbing
+the better endpoint returned to its objective in all twelve random trials.
+These are results for one selected difficult dataset, not success-rate estimates
+for SEMs generally, and the lower objective is not proven globally optimal.
+
+The **boundary identification diagnostic and targeted restart** remain an
+experimental explanation and recovery tool. The compensation used here
+requires both paths to be freely adjustable and the mediator disturbance to be
+zero; it must not be applied blindly to other graphs, correlated disturbances,
+or constrained paths. The procedure remains experiment-local, with no change
+to native fitting defaults or its audit tolerances.
+
+### Bollen: information scaling helps in the interior
+
+```{r}
+bollen_ready <- all(file.exists(file.path("results/bollen",
+  c("fits.csv", "references.csv", "metadata.csv", "routing.csv"))))
+if (bollen_ready) {
+  bf <- read.csv("results/bollen/fits.csv")
+  br <- read.csv("results/bollen/references.csv")
+  bm <- read.csv("results/bollen/metadata.csv")
+  bi <- bf[bf$reference_class == "interior_candidate", ]
+  tab <- aggregate(evaluations ~ chart + method, bi, median)
+  count <- aggregate(I(classification == "matched_interior") ~ chart + method, bi, sum)
+  tab$accepted <- count[[3]][match(paste(tab$chart, tab$method), paste(count$chart, count$method))]
+  knitr::kable(tab, digits = 1,
+    col.names = c("Latent Scale", "Information Scaling", "Median Evaluations", "Interior Cases Accepted"))
+} else cat("Run `Rscript scripts/bollen_probe.R` to produce the Bollen follow-up.")
+```
+
+All coordinate choices start from the same model and use the same objective,
+analytic derivatives, and optimizer. Diagonal scaling removes differences in
+parameter units. Full scaling also removes their local coupling, using information
+at the starting point, held fixed throughout fitting. Both resolve all eight
+interior cases in this small run; unscaled coordinates miss the stationarity
+threshold in one or two cases per chart.
+
+The prototype selector compares three diagonally equilibrated information
+matrices at the start, chooses the least ill-conditioned, and applies full
+information scaling in that chart. It selects **marker** for Bollen. This choice
+uses no fitted outcomes. It is a heuristic, not an optimum certificate: total
+scaling with full information scaling has slightly fewer median evaluations in
+these draws. Most of the gain comes from information scaling; this does not yet
+justify a complicated chart classifier.
+
+### PSD boundaries require a different optimality check
+
+```{r}
+if (bollen_ready) {
+  boundary <- unique(bf$replicate[bf$reference_class == "psd_boundary_candidate"])
+  uu <- br[br$engine == "lavaan_unrestricted" & br$replicate %in% boundary, ]
+  pp <- br[br$engine == "magmaan_psd" & br$start == "common" & br$replicate %in% boundary, ]
+  pp <- pp[match(uu$replicate, pp$replicate), ]
+  knitr::kable(data.frame(Draw = uu$replicate, Unrestricted = uu$objective,
+      PSD = pp$objective, Nullity = pp$nullity, ConeStationary = pp$cone_stationary),
+    digits = 6, col.names = c("Draw", "Unrestricted Objective", "PSD Objective",
+      "Covariance Nullity", "Cone Stationary"))
+}
+```
+
+The two native PSD starts agree within $10^{-7}$ in all eleven cases and pass
+covariance admissibility and cone stationarity. The three boundary cases are draws
+2, 5, and 8; their unrestricted references are inadmissible. Thus a higher PSD
+objective is expected. Ordinary zero-gradient stationarity is not the appropriate
+acceptance criterion at these constrained solutions. The open-interior fits can
+approach the boundary without ever attaining it, or stall prematurely along the
+way. Better coordinates alone do not fix that missing boundary treatment.
+
+The native fitter represents each permitted covariance component as $LL^\top$,
+with constraints linking it to the original model entries. Singular factors are
+allowed. This preserves the specified covariance zeros, unlike simply freeing a
+dense triangular factor. It also avoids treating a singular covariance as an
+invalid statistical model merely because a strictly positive Cholesky diagonal
+cannot represent it. The common cone audit is essential: stationarity in squared
+factor coordinates alone is not sufficient at a zero factor.
+
+An experimental routing replay uses only the selected fit's feasibility,
+information-scaled gradient, and dimensionless boundary diagnostics. It accepts a
+regular interior fit; otherwise it requests the existing PSD solver from the
+original common start. Its decisions do not use the unrestricted or PSD reference
+objectives. The resulting paths are recorded in `results/bollen/routing.csv`.
+This is a prototype policy replay, not a new public fitting API or a justification
+for changing the user's covariance domain.
+
+### Iteration costs seconds
+
+```{r}
+z <- aggregate(seconds ~ stage, tm, sum)
+knitr::kable(z, digits = 3, col.names = c("Work", "Seconds"),
+  caption = "Measured work in the current run. Total elapsed time additionally includes orchestration and checkpoint writes; process startup is excluded.")
+```
+
+The previous experiment's cost arm repeatedly timed model construction, fitting,
+and back-conversion **inside every Monte Carlo replication**. Each timer requested
+five batches of at least 50 ms, after calibration. Its default smoke cost grid has
+960 rows: a nominal 12 minutes of measurement alone. Its full grid has 72,000 rows:
+a nominal **15 hours**. The batch-count cap can shorten very cheap operations;
+calibration, warmup, and other arms add time. These are workload calculations, not
+measurements of a historical full run.
+
+A fresh isolated probe on this machine, with one p=6 / loading=.3 / replication /
+backend cell and all three charts, took **4.05 s** for cost, **1.80 s** for
+back-conversion, **0.37 s** for geometry, and **0.34–0.39 s** for each of structural,
+convergence, and inference. These timings include R startup. Thus repeated timing
+is a demonstrated source of the long runtime; there is no saved historical profile
+to attribute every second of the earlier run. Dense curvature calculations can
+also grow expensive with model size, but they did not dominate this small probe.
+
+The ten-draw follow-ups completed 198 fits each in **26.9 s** (ordinary) and
+**31.0 s** (stress), with all planned chart triples present. These two runs were
+launched concurrently, so these are iteration wall budgets, not comparative speed
+measurements. Some Bollen draws and stressed controlled draws approach singular
+disturbance covariances; the largest paired objective gap was .348, and every gap
+above $10^{-7}$ was rejected by the stationarity audit. The Bollen follow-up resolves its three difficult draws as matching,
+cone-stationary PSD-boundary candidates; the other structures' boundary cases
+remain open. They are retained in `results/ordinary` and `results/iteration`.
+
+This experiment constructs each case once, validates first derivatives once per
+chart, draws sample covariances directly, and fits each chart once per draw. It
+prints and checkpoints each fit and stops between fits at a declared soft time
+budget. It does not run repeated microbenchmarks or second-derivative curvature
+calculations in the replication loop.
+
+## Caveats
+
+- Six selected structures and a few draws cannot establish a generally best chart.
+  Population conditioning is deterministic; convergence frequency is not.
+- All three charts use the same small R optimization prototype with analytic
+  derivatives. Its timing includes R overhead and must not be used to claim a
+  speedup in magmaan. Native backend comparisons follow only after choosing a
+  promising map.
+- Starts are perturbations of the controlled population or empirical reference fit,
+  transformed exactly into each chart. This isolates coordinates but is
+  deliberately reference-assisted. Native start heuristics need a separate arm.
+- The original chart comparison admits only strictly positive-definite disturbance and measurement
+  covariance matrices; the Bollen follow-up adds native PSD references. Boundary optima and unrestricted Heywood estimates are
+  outside that interior arm. Rejected steps are counted; rejection-based optimization can
+  struggle near a boundary and is not a proposed production constraint method.
+- An optimizer success flag, a small gradient in raw coordinates, and an admissible
+  covariance are distinct properties. The report keeps them separate. The
+  information-metric gradient threshold is a pilot diagnostic, not a proof of
+  optimality or the library's authoritative fit verdict.
+- The initial models are recursive, single-group, continuous, and covariance-only,
+  without shared parameter labels. Feedback, observed exogenous predictors,
+  multi-group equalities, fixed loading growth models, and mean structures require
+  additional mapping and identification checks before inclusion.
+- The private textbook corpus is not mounted in this checkout. The two empirical
+  cases use shared benchmark syntax and public lavaan datasets; the other four are
+  controlled structures. No sibling experiment or test fixture is consumed.
+- The time limit is checked between fits, not a hard process timeout. A single fit
+  is bounded by its iteration limit and can overrun the remaining wall budget.
+
+## Reproduce
+
+Archived on 2026-09-24; existing results are retained for provenance.
+Run the commands below from `experiments/_archive/sem-total-variance/`.
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --dry-run-plan --smoke --stress
+Rscript run_experiment.R --smoke --stress
+Rscript scripts/bollen_probe.R --smoke
+Rscript scripts/bollen_probe.R             # original data + ten draws, default 60s budget
+quarto render report.qmd
+# Ordinary setting, kept separate from the rendered stress pilot:
+Rscript run_experiment.R --smoke --results-dir results/ordinary
+# Expand only the number of paired draws; no repeated timing batches:
+Rscript run_experiment.R --reps 10 --stress --budget-sec 60 --results-dir results/iteration
+```
+
+The runner writes `fits.csv`, `validation.csv`, `timing.csv`, and `metadata.csv`.
+The seed for each model/draw is stable when selecting a subset of cases.
+A budget-limited run exits with status 2 and flags incomplete chart triples.
+Changing `--results-dir` keeps separate runs; rendering reads the top-level
+`results/` run. Failures remain in the output instead of being silently dropped.
+
+The isolated legacy runtime probe can be repeated from the repository root:
+
+```sh
+# Repeat for geometry, cost, backconvert, structural, convergence, inference.
+/usr/bin/time -p Rscript experiments/research/46-latent-metric-geometry/run_experiment.R \
+  --arms cost --p 6 --curv-p 6 --bc-p 6 --lambda1 0.3 --struct-b 0.9 \
+  --conv-n 50 --reps 1 --backends nlopt-lbfgs --results-dir /tmp/latent-metric-cost
+```
+
+Run the native-start structural comparison and inspect any discrepant endpoints:
+
+```sh
+Rscript scripts/native_structure_probe.R --dry-run-plan
+Rscript scripts/native_structure_probe.R
+Rscript scripts/native_restart_probe.R
+Rscript scripts/mediation_boundary_probe.R
+```
+
+The main comparison runs 220 fits under a 30-second soft budget, checked between
+fits; each fit has a 1000-evaluation limit. `--smoke` runs 40 fits. The restart
+runner requires saved discrepancies and runs four fits per discrepancy under its
+own 30-second soft budget. The mediation diagnostic consumes the saved stressed
+mediation draw-4 endpoints; it runs 42 fits (22 with `--smoke`) with six seeded
+random perturbations per endpoint and a separate 30-second soft budget. Its
+geometry checks and all restart results live in `results/mediation-boundary/`.
+Native results are independent of the earlier R-chart
+runs. Synthetic syntax is validated against its known population covariance
+before fitting; validation discrepancies are below $2\times10^{-29}$ in ULS.
+
+## Design and deferred alternatives
+
+### Initial model selection
+
+| Model | Distinctive feature | Stress change |
+|---|---|---|
+| Holzinger–Swineford | Three correlated CFA factors; control where disturbance and total scaling coincide | None; observed-data sentinel |
+| Mediation | Direct and indirect paths through three factors | Mediator predictability about .94 |
+| Correlated predictors | Two correlated latent causes of one latent outcome | Predictor correlation .95 |
+| Higher-order | One higher-order cause of three measured first-order factors | Strong higher-order paths and small first-order disturbances |
+| Correlated disturbances | Two endogenous factors with correlated innovations, plus correlated indicator errors | Innovation correlation .80 |
+| Bollen political democracy | Empirical mediation with unequal observed scales and several correlated indicator errors | None; observed-data sentinel |
+
+The controlled models all have nine observed variables. The higher-order model has
+four latents rather than three; Bollen has eleven observed variables. This makes
+structural differences central instead of disguising a size sweep as generality.
+For each model, draw 0 uses its population or observed covariance. Additional draws
+are Gaussian samples from its controlled or reference-fitted population, with the
+same covariance draw shared across charts. The default sample size is 400 for
+controlled cases and the original sample size for empirical cases.
+
+### Three equivalent interior parameterizations
+
+For $\eta=B\eta+\zeta$, let $A=(I-B)^{-1}$ and $C=A\Psi A^\top$.
+The three conventions are marker loadings fixed to one, disturbance variances fixed
+to one, and total latent variances fixed to one. Higher-order marker anchors are
+loadings on lower-order factors. Latent signs use the same positive anchor
+orientation at initialization.
+
+Total scaling does not need a general equality-constrained optimizer for these
+models. With $\Psi_{\mathrm{off}}$ containing only off-diagonal disturbances, solve
+
+$$
+(A\circ A)d=\mathbf 1-\operatorname{diag}
+  (A\Psi_{\mathrm{off}}A^\top),\qquad
+\Psi=\Psi_{\mathrm{off}}+\operatorname{diag}(d).
+$$
+
+Here $\circ$ denotes elementwise multiplication. This eliminates one disturbance
+variance per latent while freeing its marker loading, preserving parameter count.
+For recursive models the solve is nonsingular after a topological permutation.
+The formula includes correlated disturbances; a shortcut such as $1-R^2$ without
+the covariance terms would not suffice. Feedback models would additionally need
+the invertibility of this elimination map checked, beyond invertibility of $I-B$.
+
+All three maps retain the same structural zeros, the same observed covariance
+likelihood, and the same positive-definite component domain. The full information
+rank is checked; a singular matrix is never made to look well-conditioned by
+silently dropping its smallest eigenvalues.
+
+### Conditions for reopening
+
+No further simulation or global-certificate project is required to close this
+default decision. Reopen it if a supported downstream workload supplies a
+reproducible, materially worse or unresolved unscaled PSD fit, or a measured
+runtime bottleneck. Preserve that case and compare an explicit candidate against
+the frozen baseline on fresh data. Count every failure and timeout, retain
+original-model feasibility checks, and compare objective quality before speed.
+
+A boundary-specific restart would additionally need graph and constraint
+eligibility checks and evidence beyond the selected mediation dataset. A new
+scaling default would need repeatable benefit from native starts across relevant
+structures, including setup cost, without worse solution quality. Keep timing
+batches separate from replications. These are promotion conditions, not queued
+implementation tasks.
+
+### Experimental parameterization algorithm, not adopted
+
+The following prototype remains available for research. Given a supported model and a valid common starting point:
+
+1. Construct equivalent marker, disturbance-unit, and total-unit coordinates.
+   Reject unsupported constraints or a locally rank-deficient model explicitly.
+2. Compute expected information $I_0$ in each chart. Compare
+   $\operatorname{diag}(I_0)^{-1/2}I_0\operatorname{diag}(I_0)^{-1/2}$,
+   so a chart does not win simply by changing individual parameter units.
+3. Select the smallest condition number and hold that chart fixed. For
+   $I_0=R^\top R$, optimize in $\theta=\theta_0+R^{-1}z$.
+   The starting information in $z$ is identity. Diagonal scaling is a cheaper
+   alternative and nearly as effective in the current Bollen run.
+4. Preserve the requested PSD domain. An interior fast path needs a PSD fallback
+   when it cannot pass its audit; an always-PSD solver can instead carry this
+   scaling internally. A zero disturbance with positive total latent variance is
+   representable in marker or total coordinates, but not by fixing that
+   disturbance variance to one.
+5. Classify the outcome using covariance feasibility and the appropriate interior
+   or cone audit. Keep unresolved cases distinct from accepted boundary solutions.
+
+`R/precondition.R` supplies the coordinate selector. The Bollen runner validates
+its affine maps and replays the routing policy. These are separate from the
+existing native marker-to-std.lv identification helper; no production policy has
+changed. Full information scaling incurs a dense solve and is not necessarily the
+best choice for large models. Its usefulness must be judged including setup cost.
+In this R prototype, native PSD fits are already faster than the R optimization
+loop, so the experiment does not establish a speed advantage over simply using
+native PSD fitting throughout.
+
+The prototype does not establish a universal mapping from a model diagram to
+its best coordinates. It is retained as a reproducible alternative, with no
+scheduled classifier or chart-selection work.
+
+### Native PSD diagonal preconditioning
+
+The complete-data native PSD ML fitter now exposes an optional frozen diagonal
+information scale. It retains the existing model and covariance-factor links;
+gradients and equality Jacobians transform together. Final feasibility and
+cone-stationarity checks use the original coordinates. The default is unchanged.
+
+```{r}
+native_path <- "results/native/fits.csv"
+if (file.exists(native_path)) {
+  native <- read.csv(native_path)
+  native_summary <- aggregate(cbind(evaluations, seconds) ~ start + preconditioning,
+                              native, median)
+  native_summary$milliseconds <- round(1000 * native_summary$seconds, 2)
+  native_summary$seconds <- NULL
+  knitr::kable(native_summary, caption = "Native Bollen fits: medians across eleven datasets.")
+  native_pairs <- reshape(native[c("replicate", "start", "preconditioning", "objective")],
+                          idvar=c("replicate", "start"), timevar="preconditioning",
+                          direction="wide")
+  cat(sprintf("\nAccepted fits: %d/%d. Maximum paired objective gap: %.2g.\n",
+              sum(native$accepted), nrow(native),
+              max(abs(native_pairs$objective.none-native_pairs$objective.diagonal))))
+}
+```
+
+The first run accepted all 44 fits, including the same three boundary datasets,
+and completed in 0.83 seconds. Common starts reduced median objective evaluations
+from 108 to 31; native starts increased them from 114 to 152. Common starts here
+are reference-assisted, so their improvement is not evidence for a default policy.
+Single-pass timings include setup but are too short to establish a stable speed
+ratio. Evaluation counts likewise omit constraint and derivative costs.
+
+The implementation uses ordinary SEM information for the original parameter
+block and lifted information for covariance-factor coordinates. Original
+covariance coordinates have zero lifted-objective derivatives because they act
+through the links; using those zeros as their scale would be inappropriate.
+Zero-sensitivity coordinates retain unit scale, and nonzero inverse-square-root
+scales are capped at $[10^{-4},10^4]$. No covariance eigenvalue floor is imposed
+on the final solution by this scaling.
+
+Reproduce with `Rscript scripts/native_psd_probe.R` after installing the updated
+R bindings. It runs 44 fits with a 30-second soft budget and no timing batches;
+`--smoke` runs 12 fits. Use
+`frontier_fit_ml_psd(model, data, preconditioning = "diagonal")` to opt in.
+The native-start comparison above covers all six structures and supports the
+unscaled default. Loss of path identification at a zero mediator disturbance is
+a known limitation of first-order acceptance at a single representation. It does
+not justify installing the selected-case restart as a general default. Further
+work is conditional on the reopening criteria above.

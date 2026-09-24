@@ -49,7 +49,7 @@ the variance**, up to ~2× at ε = 0.24, so the fixed-weight CI is increasingly
 This is the large-γ contrast with CRMR (where the metric is fixed and the γ
 channel is only ~2–3%): for RMSEA the estimated weight matters a lot, and the
 correction *tightens* the interval to nominal rather than (as one might guess
-from the nested-test result, experiment 36) widening it. Same theme as the rest
+from the nested-test result, experiment research/13) widening it. Same theme as the rest
 of the program — the fixed-weight object is miscalibrated — but here the
 direction is conservative, not anti-conservative.
 

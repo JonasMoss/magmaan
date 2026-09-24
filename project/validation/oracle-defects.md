@@ -181,7 +181,7 @@ upper-bidiagonal transient generator with diagonal `-rate_i` and superdiagonal
 `1.52960890009620744e-7`; a separate 50-digit computation agrees to more than
 40 relative decimal places. This calculation uses neither Imhof quadrature
 nor magmaan's positive-series implementation. The reproducible tail audit is
-kept with experiment 84, under its `scripts/` directory and experiment-local
+kept with experiment showcases/08, under its `scripts/` directory and experiment-local
 results. The benchmark retains its original rejected rows pending a timed
 accuracy-matched comparator; no statistical parity gate is waived.
 

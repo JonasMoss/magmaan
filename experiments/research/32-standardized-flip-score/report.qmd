@@ -1,0 +1,926 @@
+---
+title: "Robust invariance testing: score bases, spectral shrinkage, and sandwich inversion"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+files <- file.path("results", c(
+  "summary.csv", "expansion_summary.csv", "expansion_replications.csv",
+  "expansion_metadata.csv", "timing_summary.csv", "power_summary.csv",
+  "power_replications.csv", "power_metadata.csv", "stress_summary.csv",
+  "dimension_summary.csv", "sandwich_power_replications.csv",
+  "dimension_sandwich_summary.csv", "multiplier_probe_summary.csv",
+  "multiplier_probe_replications.csv", "multiplier_probe_moments.csv",
+  "multiplier_probe_metadata.csv", "multiplier_refine_summary.csv",
+  "multiplier_refine_replications.csv", "multiplier_refine_moments.csv",
+  "multiplier_refine_metadata.csv", "multiplier_confirm_summary.csv",
+  "multiplier_confirm_replications.csv", "multiplier_confirm_moments.csv",
+  "multiplier_confirm_metadata.csv", "multiplier_power_summary.csv",
+  "multiplier_power_replications.csv", "multiplier_power_moments.csv",
+  "multiplier_power_metadata.csv"))
+if (any(!file.exists(files))) {
+  stop(paste(
+    "missing results; run run_experiment.R, run_expansion.R --probe,",
+    "run_expansion.R --power, --power-sandwich, and --stress,",
+    "run_dimension.R --big and --sandwich,",
+    "run_multiplier_probe.R --probe, --refine, --confirm, and",
+    "--confirm-power, and run_timing.R"))
+}
+s <- read.csv(files[[2L]])
+r <- read.csv(files[[3L]]); r_all_ok <- r$ok; r <- r[r$ok, , drop = FALSE]
+m <- read.csv(files[[4L]])
+timing <- read.csv(files[[5L]])
+power <- read.csv(files[[7L]]); power <- power[power$ok, , drop = FALSE]
+power_metadata <- read.csv(files[[8L]])
+stress <- read.csv(files[[9L]])
+dim_summary <- read.csv(files[[10L]])
+sandwich_power <- read.csv(files[[11L]])
+dim_sandwich <- read.csv(files[[12L]])
+multiplier_summary <- read.csv(files[[13L]])
+multiplier_reps <- read.csv(files[[14L]])
+multiplier_moments <- read.csv(files[[15L]])
+multiplier_metadata <- read.csv(files[[16L]])
+refine_summary <- read.csv(files[[17L]])
+refine_reps <- read.csv(files[[18L]])
+refine_moments <- read.csv(files[[19L]])
+refine_metadata <- read.csv(files[[20L]])
+confirm_summary <- read.csv(files[[21L]])
+confirm_reps <- read.csv(files[[22L]])
+confirm_moments <- read.csv(files[[23L]])
+confirm_metadata <- read.csv(files[[24L]])
+multiplier_power_summary <- read.csv(files[[25L]])
+multiplier_power_reps <- read.csv(files[[26L]])
+multiplier_power_moments <- read.csv(files[[27L]])
+multiplier_power_metadata <- read.csv(files[[28L]])
+
+# The one-flip replay uses the same deterministic cells and replications as the
+# original power grid; merge only the new asymptotic sandwich result.
+merge_keys <- c("rep", "df", "n_total", "balance", "heterogeneity",
+                "distribution", "alternative", "effect")
+sandwich_power <- sandwich_power[sandwich_power$ok,
+  c(merge_keys, "p_sandwich", "sandwich_available", "sandwich_condition")]
+power <- merge(power, sandwich_power, by = merge_keys, all.x = TRUE,
+               sort = FALSE)
+
+# Method naming: {flip | score | LR} x transform. Every method is built on the
+# same efficient score; what differs is how the reference is obtained (flip =
+# sign-flip resampling; score/LR = FMG spectrum transforms on the score
+# statistic's own eigenvalues, or on the Satorra-2000 LR construction).
+method_labels <- c(
+  p_effective    = "flip (effective)",
+  p_standardized = "flip (standardized)",
+  p_chisq        = "score: chi-square",
+  p_mean_scaled  = "score: SB",
+  p_sandwich     = "score: sandwich",
+  p_score_ss     = "score: SS",
+  p_score_mv     = "score: MV",
+  p_score_sf     = "score: SF",
+  p_score_peba4  = "score: pEBA4",
+  p_mixture      = "score: ALL",
+  p_fmg_sb       = "LR: SB",
+  p_fmg_ss       = "LR: SS",
+  p_fmg_mv       = "LR: MV",
+  p_fmg_sf       = "LR: SF",
+  p_fmg_peba4    = "LR: pEBA4",
+  p_fmg_all      = "LR: ALL")
+
+# Same FMG transform on two base statistics: score vs LR.
+fmg_transforms <- c("SB", "SS", "MV", "SF", "pEBA4", "ALL")
+score_cols <- c(SB = "p_mean_scaled", SS = "p_score_ss", MV = "p_score_mv",
+                SF = "p_score_sf", pEBA4 = "p_score_peba4", ALL = "p_mixture")
+lr_cols <- c(SB = "p_fmg_sb", SS = "p_fmg_ss", MV = "p_fmg_mv",
+             SF = "p_fmg_sf", pEBA4 = "p_fmg_peba4", ALL = "p_fmg_all")
+base_compare_reps <- function(data) data.frame(
+  Transform = fmg_transforms,
+  `Score base` = vapply(fmg_transforms,
+    function(t) mean(data[[score_cols[[t]]]] < .05, na.rm = TRUE), numeric(1L)),
+  `LR base` = vapply(fmg_transforms,
+    function(t) mean(data[[lr_cols[[t]]]] < .05, na.rm = TRUE), numeric(1L)),
+  check.names = FALSE, row.names = NULL)
+base_compare_summary <- function(data) data.frame(
+  Transform = fmg_transforms,
+  `Score base` = vapply(fmg_transforms, function(t)
+    mean(data[[sub("^p_", "rejection_", score_cols[[t]])]], na.rm = TRUE), numeric(1L)),
+  `LR base` = vapply(fmg_transforms, function(t)
+    mean(data[[sub("^p_", "rejection_", lr_cols[[t]])]], na.rm = TRUE), numeric(1L)),
+  check.names = FALSE, row.names = NULL)
+base_null <- base_compare_reps(r)
+base_stress <- base_compare_summary(stress[stress$df == 8L, , drop = FALSE])
+flip_std_overall <- mean(r$p_standardized < .05, na.rm = TRUE)
+score_null_by_df <- aggregate(
+  r[c("p_sandwich", "p_mean_scaled", "p_score_peba4", "p_mixture",
+      "p_standardized")] < .05,
+  r["df"], mean, na.rm = TRUE)
+names(score_null_by_df) <- c("df", "sandwich", "SB", "pEBA4", "ALL", "flip")
+sandwich_diag <- aggregate(
+  r[c("sandwich_condition", "score_eigen_cv")],
+  r[c("df", "n_total")], median, na.rm = TRUE)
+
+# Normal-data N-convergence: with no non-normality, any gap is small-sample.
+norm_conv <- do.call(rbind, lapply(c(60L, 100L, 200L), function(nn) {
+  sub <- r[r$distribution == "normal" & r$n_total == nn, , drop = FALSE]
+  data.frame(`Total N` = nn,
+    `score: SB` = mean(sub$p_mean_scaled < .05, na.rm = TRUE),
+    `score: sandwich` = mean(sub$p_sandwich < .05, na.rm = TRUE),
+    `LR: SB` = mean(sub$p_fmg_sb < .05, na.rm = TRUE),
+    `flip (standardized)` = mean(sub$p_standardized < .05, na.rm = TRUE),
+    check.names = FALSE)
+}))
+t5_lr_sb_n200 <- mean(r$p_fmg_sb[r$distribution == "t5" & r$n_total == 200L] < .05,
+                      na.rm = TRUE)
+
+# Severe-copula stress helpers.
+stress_cols <- c(
+  `flip (standardized)` = "rejection_standardized",
+  `score: SB`           = "rejection_mean_scaled",
+  `score: sandwich`     = "rejection_sandwich",
+  `score: ALL`          = "rejection_mixture",
+  `LR: SB`              = "rejection_fmg_sb",
+  `LR: pEBA4`           = "rejection_fmg_peba4")
+stress_row <- function(d, dff, het = NULL, nn = NULL) {
+  sub <- stress[stress$distribution == d & stress$df == dff, , drop = FALSE]
+  if (!is.null(het)) sub <- sub[sub$heterogeneity == het, , drop = FALSE]
+  if (!is.null(nn)) sub <- sub[sub$n_total == nn, , drop = FALSE]
+  vapply(stress_cols, function(cc) mean(sub[[cc]], na.rm = TRUE), numeric(1L))
+}
+
+# Dimension-scaling helpers.
+dim_cols <- c(`score: SB` = "rejection_score_sb",
+              `score: ALL` = "rejection_score_all",
+              `LR: SB` = "rejection_lr_sb",
+              `flip (standardized)` = "rejection_flip_standardized")
+dim_table <- function(adeq) {
+  sub <- dim_summary[dim_summary$adequacy == adeq, , drop = FALSE]
+  agg <- aggregate(sub[unname(dim_cols)], list(p = sub$p), mean)
+  names(agg) <- c("p", names(dim_cols)); agg
+}
+dim_adequate <- dim_table("adequate")
+dim_pick <- function(adeq, pp, col)
+  mean(dim_summary[dim_summary$adequacy == adeq & dim_summary$p == pp, col], na.rm = TRUE)
+dim_sandwich_table <- aggregate(
+  dim_sandwich[c("rejection_score_sandwich", "sandwich_available_rate",
+                 "median_sandwich_condition", "median_score_eigen_cv")],
+  dim_sandwich[c("adequacy", "p")], mean, na.rm = TRUE)
+
+# Standardization sub-study: decision changes by N and restriction count.
+by_ndf <- aggregate(
+  r[c("reject_effective", "reject_standardized", "changed_to_accept")],
+  r[c("n_total", "df")], mean)
+
+# Multiplier-law sanity check on the q=8 severe-copula cells where Rademacher
+# effective flips were most liberal. All rows use the same data and seeds as
+# the original stress block.
+multiplier_cols <- c(
+  Rademacher = "rejection_rademacher",
+  Mammen = "rejection_mammen",
+  Gaussian = "rejection_gaussian",
+  `centered exponential` = "rejection_centered_exponential",
+  sandwich = "rejection_sandwich",
+  pEBA4 = "rejection_peba4",
+  ALL = "rejection_all")
+multiplier_table <- multiplier_summary[
+  c("n_total", "distribution", "heterogeneity", unname(multiplier_cols))]
+names(multiplier_table) <- c(
+  "N", "copula", "geometry", names(multiplier_cols))
+multiplier_overall <- vapply(
+  unname(multiplier_cols),
+  function(v) mean(multiplier_summary[[v]], na.rm = TRUE),
+  numeric(1L))
+names(multiplier_overall) <- names(multiplier_cols)
+names(multiplier_moments) <- c(
+  "multiplier", "mean", "variance", "third moment", "fourth moment")
+refine_cols <- c(
+  `two-point gamma=0.50` = "rejection_two_point_0_50",
+  `two-point gamma=0.75` = "rejection_two_point_0_75",
+  `two-point gamma=0.90` = "rejection_two_point_0_90",
+  Mammen = "rejection_two_point_1_00",
+  `centered Mammen` = "rejection_mammen_centered",
+  `weighted-meat Mammen` = "rejection_mammen_weighted_meat",
+  `centered weighted-meat` =
+    "rejection_mammen_centered_weighted_meat",
+  sandwich = "rejection_sandwich",
+  pEBA4 = "rejection_peba4")
+refine_table <- refine_summary[
+  c("n_total", "distribution", "heterogeneity", unname(refine_cols))]
+names(refine_table) <- c("N", "copula", "geometry", names(refine_cols))
+refine_overall <- vapply(
+  unname(refine_cols),
+  function(v) mean(refine_summary[[v]], na.rm = TRUE),
+  numeric(1L))
+names(refine_overall) <- names(refine_cols)
+refine_rank <- data.frame(
+  method = names(refine_cols),
+  rejection = unname(refine_overall),
+  minimum = vapply(
+    unname(refine_cols), function(v) min(refine_summary[[v]]), numeric(1L)),
+  maximum = vapply(
+    unname(refine_cols), function(v) max(refine_summary[[v]]), numeric(1L)),
+  mean_absolute_error = vapply(
+    unname(refine_cols),
+    function(v) mean(abs(refine_summary[[v]] - .05)), numeric(1L)))
+refine_rank <- refine_rank[order(refine_rank$mean_absolute_error), ]
+
+# Independent centered-Mammen confirmation.
+confirm_cols <- c(
+  `raw Mammen` = "rejection_mammen",
+  `centered Mammen` = "rejection_mammen_centered",
+  sandwich = "rejection_sandwich",
+  pEBA4 = "rejection_peba4")
+confirm_rank <- data.frame(
+  method = names(confirm_cols),
+  rejection = vapply(
+    unname(confirm_cols),
+    function(v) mean(confirm_summary[[v]], na.rm = TRUE), numeric(1L)),
+  N60 = vapply(
+    unname(confirm_cols),
+    function(v) mean(confirm_summary[[v]][confirm_summary$n_total == 60L]),
+    numeric(1L)),
+  N200 = vapply(
+    unname(confirm_cols),
+    function(v) mean(confirm_summary[[v]][confirm_summary$n_total == 200L]),
+    numeric(1L)),
+  minimum = vapply(
+    unname(confirm_cols), function(v) min(confirm_summary[[v]]), numeric(1L)),
+  maximum = vapply(
+    unname(confirm_cols), function(v) max(confirm_summary[[v]]), numeric(1L)),
+  mean_absolute_error = vapply(
+    unname(confirm_cols),
+    function(v) mean(abs(confirm_summary[[v]] - .05)), numeric(1L)))
+confirm_rank <- confirm_rank[order(confirm_rank$mean_absolute_error), ]
+
+# Matched-empirical-null (size-adjusted) power.
+power_methods <- intersect(names(method_labels), names(power))
+empirical_critical <- function(x, alpha = .05) {
+  x <- x[is.finite(x)]
+  candidates <- sort(unique(x))
+  rates <- vapply(candidates, function(cut) mean(x < cut), numeric(1L))
+  valid <- candidates[rates <= alpha]
+  if (!length(valid)) -Inf else max(valid)
+}
+keys <- c("df", "n_total", "balance", "heterogeneity", "distribution")
+power_cells <- unique(power[c(keys, "alternative", "effect")])
+calibrated <- do.call(rbind, lapply(seq_len(nrow(power_cells)), function(i) {
+  cell <- power_cells[i, , drop = FALSE]
+  null_match <- rep(TRUE, nrow(r)); power_match <- rep(TRUE, nrow(power))
+  for (key in keys) {
+    null_match <- null_match & r[[key]] == cell[[key]]
+    power_match <- power_match & power[[key]] == cell[[key]]
+  }
+  power_match <- power_match & power$alternative == cell$alternative &
+    power$effect == cell$effect
+  do.call(rbind, lapply(power_methods, function(v) {
+    critical <- empirical_critical(r[[v]][null_match])
+    data.frame(cell, method = unname(method_labels[[v]]),
+      calibrated_power = mean(power[[v]][power_match] < critical, na.rm = TRUE))
+  }))
+}))
+calibrated_power <- aggregate(calibrated["calibrated_power"],
+  calibrated[c("alternative", "effect", "method")], mean)
+calibrated_power <- reshape(calibrated_power,
+  idvar = c("alternative", "effect"), timevar = "method", direction = "wide")
+names(calibrated_power) <- sub("^calibrated_power\\.", "", names(calibrated_power))
+power_show_cols <- function(tab) intersect(c(
+  "alternative", "effect", "flip (standardized)", "score: sandwich",
+  "score: SB", "score: MV",
+  "score: pEBA4", "LR: SB", "LR: MV", "LR: pEBA4"), names(tab))
+
+# The focused multiplier power gate uses the independent confirmation null,
+# cell-specific critical p-values, and the same four surviving methods.
+confirm_reps <- confirm_reps[confirm_reps$ok, , drop = FALSE]
+multiplier_power_reps <-
+  multiplier_power_reps[multiplier_power_reps$ok, , drop = FALSE]
+confirm_power_cols <- c(
+  `raw Mammen` = "p_mammen",
+  `centered Mammen` = "p_mammen_centered",
+  sandwich = "p_sandwich",
+  pEBA4 = "p_peba4")
+confirm_keys <- c(
+  "df", "n_total", "balance", "heterogeneity", "distribution")
+confirm_power_cells <- unique(multiplier_power_reps[
+  c(confirm_keys, "alternative", "effect")])
+matched_multiplier_power <- do.call(
+  rbind, lapply(seq_len(nrow(confirm_power_cells)), function(i) {
+    cell <- confirm_power_cells[i, , drop = FALSE]
+    null_match <- rep(TRUE, nrow(confirm_reps))
+    power_match <- rep(TRUE, nrow(multiplier_power_reps))
+    for (key in confirm_keys) {
+      null_match <- null_match & confirm_reps[[key]] == cell[[key]]
+      power_match <-
+        power_match & multiplier_power_reps[[key]] == cell[[key]]
+    }
+    power_match <-
+      power_match &
+      multiplier_power_reps$alternative == cell$alternative &
+      multiplier_power_reps$effect == cell$effect
+    do.call(rbind, lapply(names(confirm_power_cols), function(method) {
+      value <- confirm_power_cols[[method]]
+      critical <- empirical_critical(confirm_reps[[value]][null_match])
+      data.frame(
+        cell, method = method, critical = critical,
+        null_size = mean(confirm_reps[[value]][null_match] < critical),
+        nominal_power =
+          mean(multiplier_power_reps[[value]][power_match] < .05),
+        calibrated_power =
+          mean(multiplier_power_reps[[value]][power_match] < critical))
+    }))
+  }))
+matched_power_overall <- aggregate(
+  matched_multiplier_power[
+    c("null_size", "nominal_power", "calibrated_power")],
+  matched_multiplier_power["method"], mean)
+matched_power_overall <- matched_power_overall[
+  match(names(confirm_power_cols), matched_power_overall$method), ]
+names(matched_power_overall) <- c(
+  "method", "matched null size", "nominal power", "matched-null power")
+matched_power_cells <- reshape(
+  matched_multiplier_power[
+    c(confirm_keys, "method", "calibrated_power")],
+  idvar = confirm_keys, timevar = "method", direction = "wide")
+centered_raw_power_difference <-
+  matched_power_cells$`calibrated_power.centered Mammen` -
+  matched_power_cells$`calibrated_power.raw Mammen`
+
+# Timing.
+timing_ms <- timing
+for (name in grep("seconds$", names(timing), value = TRUE))
+  timing_ms[[sub("seconds$", "ms", name)]] <- 1000 * timing[[name]]
+timing_499 <- subset(timing_ms, scenario == "easy" & n_flips == 499,
+  select = c(df, median_setup_ms, median_resampling_score_ms,
+             median_standardization_ms, median_asymptotic_ms, median_core_total_ms))
+null_elapsed <- as.numeric(m$value[m$key == "elapsed_seconds"])
+```
+
+## Question
+
+When you test measurement invariance under non-normality, which robust test
+controls Type I error? We compare the sign-flip resampling test against the
+Foldnes-Moss-Grønneberg spectrum transforms (Satorra-Bentler `SB`,
+scaled-shifted `SS`, mean-variance `MV`, scaled-$F$ `SF`, `pEBA`, and the exact
+mixture `ALL`), each applied to two base statistics: the score/Lagrange-multiplier
+statistic, and the Satorra-2000 likelihood-ratio statistic that lavaan and Mplus
+use by default. We also include the direct sandwich-studentized score statistic
+$u^\top(G^\top\hat B G)^{-1}u$, whose asymptotic reference is $\chi_q^2$.
+The focused follow-up asks whether Mammen multiplier weights, with score rows
+recentered to impose the resampling null, improve the effective-score
+resampling reference without losing matched-null power.
+
+## Short answer
+
+The score base is substantially better behaved than the Satorra-2000 LR base,
+but the transform still matters. Score-SB's overall null rejection of
+`r sprintf("%.3f", mean(r$p_mean_scaled < .05, na.rm = TRUE))` looks almost
+perfect because it averages an exact one-df case with relatively spherical
+population spectra and because trace-only scaling regularizes noisy sample
+eigenvalues. At eight restrictions it rejects
+`r sprintf("%.3f", mean(r$p_mean_scaled[r$df == 8L] < .05, na.rm = TRUE))`;
+under the severe copulas it reaches about 0.08. It is not generally exact.
+
+The direct sandwich score test supplies the missing asymptotically pivotal
+comparison, but it moves too far in the other direction at small $N$: overall
+null rejection is `r sprintf("%.3f", mean(r$p_sandwich < .05, na.rm = TRUE))`
+and only `r sprintf("%.3f", mean(r$p_sandwich[r$df == 8L] < .05, na.rm = TRUE))`
+at eight restrictions. Full meat inversion amplifies estimation noise and can
+be poorly conditioned. In this probe pEBA4 gives the best compromise: it shrinks
+the spectrum without discarding all shape information or inverting the raw meat.
+
+Much of the score-versus-LR gap remains the familiar small-sample difference
+between LM and LR bases. The revised conclusion is about regularization, not a
+universally winning base or transform: score-SB is trace shrinkage, ALL is a
+noisy plug-in mixture, and direct sandwich inversion is asymptotically clean but
+finite-sample fragile.
+
+Centered Mammen is the promising resampling repair. In a fresh 12-cell
+normal/$t_5$/skew confirmation it rejects 5.2% overall, versus 4.5% for raw
+Mammen, 3.8% for direct sandwich, and 5.3% for pEBA4. After cellwise
+empirical-null calibration, its sparse-alternative power is 35.6%, essentially
+the same as raw Mammen's 35.3% and pEBA4's 36.0%. This is evidence for
+recentering rather than tuned multiplier moments, but only for complete-data
+affine ML at eight restrictions; it is not yet a general default.
+
+## Score base helps, but the transform still matters
+
+The Foldnes, Moss, and Grønneberg (2026) transforms exist because the two
+established robust nested tests fail in opposite directions under non-normality:
+Satorra-Bentler (`SB`) is chronically liberal and scaled-shifted (`SS`) is
+chronically conservative. `MV`, `SF`, and the eigenvalue-averaging families
+(`EBA`, `pEBA`) are the proposed repairs. All of them transform the eigenvalue
+spectrum of a weighted-chi-square limit.
+
+The score test carries its own spectrum. Its statistic
+$T = u^\top V^{-1} u$ over the efficient-score subspace has an asymptotic
+weighted-chi-square limit whose eigenvalues come straight from the model, so the
+identical transforms can be applied to those eigenvalues instead of to the
+Satorra-2000 construction. The table applies each transform to both bases, on the
+full null grid.
+
+```{r base-null}
+knitr::kable(base_null, digits = 3)
+```
+
+On the LR base every transform is liberal. On the score base the methods span a
+meaningful range: SB and pEBA4 sit near nominal overall, while SS, MV, SF, and
+ALL are conservative. The gap holds even at a single restriction, where the transforms
+collapse to nearly one scalar test: there the LR base still rejects about
+`r sprintf("%.2f", mean(r$p_fmg_sb[r$df == 1L] < .05, na.rm = TRUE))` for `SB`
+while the score base is already near
+`r sprintf("%.2f", mean(r$p_mean_scaled[r$df == 1L] < .05, na.rm = TRUE))`.
+
+### Why score-SB looked suspiciously good
+
+The normal-theory efficient-score statistic has limit
+$\sum_j\lambda_j\chi^2_{1,j}$. SB replaces every eigenvalue by their mean.
+This is exact at one df and for a spherical population spectrum, but its
+reference variance $2q\bar\lambda^2$ is smaller than the true
+$2\sum_j\lambda_j^2$ whenever the eigenvalues differ.
+
+Finite-sample eigenvalue noise reverses the practical comparison with ALL. At
+$N=200,q=8$, median estimated spectral CV remains about
+`r sprintf("%.2f", median(r$score_eigen_cv[r$n_total == 200L & r$df == 8L]))`.
+The plug-in ALL tail treats this noise as population heterogeneity and becomes
+conservative. SB retains only the more stable trace, acting as maximal spectral
+shrinkage. Disaggregating by df prevents the exact scalar case from hiding the
+joint-test behavior.
+
+```{r score-null-by-df}
+knitr::kable(score_null_by_df, digits = 3)
+```
+
+The direct sandwich statistic avoids the mixture approximation, but it must
+invert the full efficient meat. It is available in every successful main-grid
+fit, yet conditioning worsens rapidly with restriction dimension and shrinking
+sample size.
+
+```{r sandwich-diagnostics}
+knitr::kable(sandwich_diag, digits = 2)
+```
+
+The derivation, diagnostic values, and iteration checklist are preserved in
+[`notes/score-sb-audit.tex`](notes/score-sb-audit.tex).
+
+### How much of the base gap is small-sample
+
+The efficient-score construction is Neyman's C(α) test: the score of the tested
+parameters, orthogonalized against the nuisance parameters and standardized by
+the efficient information. In SEM that is exactly what a modification index
+computes, only univariate. Assembled into a joint test with a spectrum reference
+it is a robust Lagrange-multiplier test, and Lagrange-multiplier tests are the
+least liberal of the classical trio in small samples (the Berndt-Savin ordering
+places them below the likelihood-ratio and Wald statistics). So part of the
+score base's advantage is the documented small-sample over-rejection of the LR
+statistic, not robustness.
+
+The normal-data cells separate the two effects. With no non-normality to correct,
+any gap must be small-sample.
+
+```{r norm-convergence}
+knitr::kable(norm_conv, digits = 3)
+```
+
+Under normality the LR base falls from about 0.12 at $N=60$ toward nominal as $N$
+grows, while the score base stays flat near 0.05. Adequate sample size removes
+that part of the gap. What remains under non-normality is the genuine robustness
+margin: under $t_5$ the LR base is still about
+`r sprintf("%.2f", t5_lr_sb_n200)` at $N=200$, where the score base is near 0.05.
+That margin is smaller than the raw gap but does not wash out.
+
+As a validity check, the LR-base `SB`, `MV`, and `SS` values reproduce the
+independent nested-test scaled, mean-variance, and scaled-shifted routes to a
+maximum p-value gap of
+`r format(max(r$fmg_duplicate_max_gap, na.rm = TRUE), scientific = TRUE, digits = 2)`.
+
+## The copula, not the marginals
+
+Mild non-normality does not stress these tests: an elliptical $t_5$ or a
+coordinatewise skew stays close to asymptotic robustness. The lever that breaks
+them is the joint dependence structure, the copula, not the marginal skewness and
+kurtosis (Foldnes et al., 2026). Two data sets can share a covariance matrix and
+identical marginal moments yet differ in their copula, and normal-theory ML
+inference is not asymptotically robust to that difference.
+
+The stress block fixes the marginals at a severe level (skewness 3, excess
+kurtosis 21) and switches only the copula: Vale-Maurelli is a Gaussian copula,
+piecewise-linear is not. The table applies each transform to both bases at the
+8-df joint test, averaged over $N$ and the homogeneous and geometry populations.
+
+```{r base-stress}
+knitr::kable(base_stress, digits = 3)
+```
+
+The LR base fails most dramatically, but the score methods do not share one
+calibration. Score-SB rejects about 0.08, ALL about 0.03, and pEBA4 about 0.06.
+Direct sandwich ranges from about
+`r sprintf("%.2f", stress_row("pl", 8L)[["score: sandwich"]])` under PL to
+`r sprintf("%.2f", stress_row("vm", 8L)[["score: sandwich"]])` under VM; its
+mean cellwise meat condition numbers are roughly 251 and 96. The sign-flip test
+is more liberal still, about
+`r sprintf("%.2f", stress_row("vm", 8L)[["flip (standardized)"]])` to
+`r sprintf("%.2f", stress_row("pl", 8L)[["flip (standardized)"]])`, and
+standardization does not repair it: the score sign-symmetry it relies on is
+itself strained by a severe copula. pEBA4 is the only score method that remains
+consistently close to 0.05 across both severe copulas.
+
+The copula, not group heterogeneity, is the cause. In homogeneous populations,
+where the two groups share covariance and means exactly, the 8-df LR-`SB` test
+still rejects about
+`r sprintf("%.2f", stress_row("vm", 8L, "homogeneous")[["LR: SB"]])` under the
+Gaussian copula and
+`r sprintf("%.2f", stress_row("pl", 8L, "homogeneous")[["LR: SB"]])` under the
+non-Gaussian one. Piecewise-linear is uniformly harder than Vale-Maurelli, as the
+copula explanation predicts. The distortion shrinks with sample size but does not
+calibrate: for the hardest cell the LR-`SB` test goes
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 60L)[["LR: SB"]])`,
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 100L)[["LR: SB"]])`,
+`r sprintf("%.2f", stress_row("pl", 8L, "geometry", 200L)[["LR: SB"]])` at
+$N=60, 100, 200$. This is an asymptotic-robustness failure, not a small-sample
+one.
+
+## Dimension scaling
+
+Foldnes et al. (2026) show robust-test over-rejection grows with model dimension,
+so the score base's edge might be a low-dimensional artifact. This probe holds the
+tested restriction count fixed at 8 loadings and grows the ambient model from two
+to eight factors ($p = 10, 20, 30, 40$) under the severe copula, over both
+population geometries and both copulas, at a matched per-group
+sample-to-parameter ratio of about 6 and 1700 replications per cell. The table
+averages over geometry and copula.
+
+```{r dim-adequate}
+knitr::kable(dim_adequate, digits = 3)
+```
+
+The score base remains less liberal than the LR base, but its transforms bracket
+0.05 rather than agreeing: SB runs high at tight adequacy, while ALL runs low.
+Sample adequacy, not dimension alone, governs. Because a fixed ratio
+grows $N$ with $p$, the LR base's excess shrinks toward its residual robustness
+margin as the model grows, from about
+`r sprintf("%.2f", dim_pick("adequate", 10, "rejection_lr_sb"))` at $p=10$ to
+`r sprintf("%.2f", dim_pick("adequate", 40, "rejection_lr_sb"))` at $p=40$. The
+largest gaps sit at small $p$ and small $N$, where the small-sample
+likelihood-ratio effect is strongest: at an inadequate ratio near 2.5 the LR base
+reaches about `r sprintf("%.2f", dim_pick("tight", 10, "rejection_lr_sb"))` at
+$p=10$, falling to `r sprintf("%.2f", dim_pick("tight", 40, "rejection_lr_sb"))`
+at $p=40$ where the same ratio buys a larger $N$. Score-SB moves toward nominal
+as adequacy increases; pEBA4 is more stable around 0.05, whereas ALL remains
+conservative between about
+`r sprintf("%.2f", min(dim_summary$rejection_score_all, na.rm = TRUE))` and
+`r sprintf("%.2f", max(dim_summary$rejection_score_all, na.rm = TRUE))`.
+
+The direct-sandwich replay uses the same 32 design cells with 200 replications
+and one nominal flip per replication. It is intentionally separate from the
+1,700-replication spectrum study so the original precision is retained.
+
+```{r dim-sandwich}
+knitr::kable(dim_sandwich_table, digits = 3)
+```
+
+This tests asymptotic recovery directly: sandwich rejection should approach
+0.05 and meat conditioning should improve as adequacy and total information
+grow. At the tight end it is a diagnostic, not a recommended reference.
+
+## Power
+
+Nominal power ranks the LR base above the score base, but only because the LR
+base rejects more of everything. The honest comparison holds each method to its
+own realized null size: each method and matched null cell gets its own critical
+p-value (the largest cutoff whose observed null rejection does not exceed 0.05),
+and power is read off independent alternative replications.
+
+```{r calibrated-power}
+knitr::kable(calibrated_power[power_show_cols(calibrated_power)], digits = 3)
+```
+
+Once size is matched, the flip, spectrum-score, LR-base, and direct-sandwich
+tests are broadly similar for weak dense effects. Direct sandwich remains lower
+for the stronger alternatives even after size alignment, suggesting a power
+cost from noisy directional meat inversion rather than nominal conservatism
+alone. As
+expected, a sparse violation concentrated in one loading is easier to detect than
+the same norm spread across all tested loadings, and no single spectrum transform
+dominates once size is aligned.
+
+## Standardizing the sign-flip test
+
+Standardization is the original subject of this probe and it is a minor effect.
+Across `r format(nrow(r), big.mark = ",")` null replications it moved
+`r sum(r$changed_to_accept)` decisions from rejection to acceptance and
+`r sum(r$changed_to_reject)` the other way, always in the conservative direction.
+Its value concentrates at small $N$ with several restrictions.
+
+```{r n-df-table}
+tab <- by_ndf
+names(tab) <- c("total N", "df", "effective", "standardized",
+                "effective-only rejection")
+knitr::kable(tab, digits = 3)
+```
+
+At total $N=60$ standardization removes little for one restriction but a few
+tenths of a percentage point for four and eight, and it does not fully repair the
+liberal 8-df test. At $N=200$ the changes are negligible. Standardize by default
+because it is nearly free, but do not read it as a small-sample correction.
+
+## Changing the multiplier law
+
+The effective score reference does not mathematically require the multiplier to
+be a sign. For fixed fitted score rows, draw independent weights with
+$E(w_i)=0$ and $E(w_i^2)=1$ and recompute
+
+$$
+T^\ast =
+\left(n^{-1/2}\sum_i w_i\hat u_i\right)^\top
+\hat V^{-1}
+\left(n^{-1/2}\sum_i w_i\hat u_i\right).
+$$
+
+The first two moments preserve the conditional covariance, while the third and
+fourth moments control finite-sample skewness and tail thickness. We replayed
+only the eight 8-df severe-copula cells where Rademacher effective flips had
+performed poorly, using the original observations and random seeds, 200
+replications per cell, and 499 draws per law. The alternatives were:
+
+- Rademacher signs, the existing symmetric two-point law and the only option
+  with a sign-randomization interpretation;
+- Mammen's asymmetric two-point law, which matches a nonzero third moment while
+  keeping a modest fourth moment;
+- standard Gaussian weights, whose conditional quadratic-form law converges
+  exactly to score-ALL for the fitted score geometry;
+- centered unit-rate exponential weights, an intentionally highly skewed and
+  heavy-tailed stress case.
+
+```{r multiplier-moments}
+knitr::kable(multiplier_moments, digits = 0)
+```
+
+```{r multiplier-null}
+knitr::kable(multiplier_table, digits = 3)
+```
+
+Rademacher replayed the old effective-flip p-values exactly and remained badly
+liberal: its rejection rate averaged
+`r sprintf("%.3f", multiplier_overall[["Rademacher"]])`. Gaussian weights
+averaged `r sprintf("%.3f", multiplier_overall[["Gaussian"]])`, close to ALL's
+`r sprintf("%.3f", multiplier_overall[["ALL"]])`; their mean absolute p-value
+gap was
+`r sprintf("%.3f", mean(multiplier_reps$gaussian_all_abs_gap, na.rm = TRUE))`.
+That is the intended numerical checksum and shows that changing weights is
+changing the finite multiplier reference, not the observed numerator or fitted
+score geometry.
+
+Mammen is the only promising alternative in this small gate. It reduced average
+rejection to `r sprintf("%.3f", multiplier_overall[["Mammen"]])`, with cell
+rates between
+`r sprintf("%.3f", min(multiplier_summary$rejection_mammen))` and
+`r sprintf("%.3f", max(multiplier_summary$rejection_mammen))`. Centered
+exponential weights went much too far, averaging
+`r sprintf("%.3f", multiplier_overall[["centered exponential"]])`; their large
+fourth moment makes the conditional reference far too heavy-tailed here.
+
+This does not validate Mammen as a default. Unlike Rademacher it is a multiplier
+bootstrap, not an exact sign randomization, and the current flip-specific
+nuisance standardization relies on $w_i^2=1$. The implementation therefore
+allows non-Rademacher laws only for the nuisance-effective statistic.
+
+### Refining Mammen
+
+The first result suggests three distinct mechanisms.
+
+First, the zero-mean, unit-variance two-point family can be indexed by its third
+moment $\gamma$. If
+
+$$
+b_\gamma = \frac{\gamma + \sqrt{\gamma^2+4}}{2}, \qquad
+a_\gamma = -b_\gamma^{-1},
+$$
+
+and $P(w=a_\gamma)=b_\gamma^2/(1+b_\gamma^2)$, then
+$E(w^3)=\gamma$ and $E(w^4)=1+\gamma^2$. This is the smallest possible fourth
+moment at a given third moment. Rademacher is $\gamma=0$ and Mammen is
+$\gamma=1$, so intermediate values test whether Mammen's remaining
+conservatism is simply too much multiplier tail thickness.
+
+Second, the restricted-fit scores have zero population mean under the null but
+their tested-direction sample sum is the observed signal. A multiplier
+empirical process can impose the null by replacing each row in information
+stratum $s$ with
+$\tilde u_{is}=\hat u_{is}-\bar u_s$ before multiplication. This retains
+Mammen's moment matching and changes no observed numerator.
+
+Third, a bootstrap-$t$ attempt replaces the fixed metric in each draw with
+$\hat B^\ast=\sum_i w_i^2\tilde u_i\tilde u_i^\top$ and compares it with the
+observed raw-OPG sandwich statistic. This is more invasive: it changes both
+the resampled numerator law and its studentizer.
+
+The same eight cells, observations, seeds, 200 replications, and 499 draws give:
+
+```{r multiplier-refine-rank}
+knitr::kable(refine_rank, digits = 3)
+```
+
+The mechanism is unusually clear. Moving along the two-point moment boundary
+interpolates smoothly: $\gamma=.75$ remains liberal,
+`r sprintf("%.3f", refine_overall[["two-point gamma=0.75"]])`, while
+$\gamma=.90$ lands at
+`r sprintf("%.3f", refine_overall[["two-point gamma=0.90"]])`. But this is a
+tuned compromise and its cell rates still range from
+`r sprintf("%.3f", min(refine_summary$rejection_two_point_0_90))` to
+`r sprintf("%.3f", max(refine_summary$rejection_two_point_0_90))`.
+
+Score recentering is the stronger hypothesis. Centered Mammen averages
+`r sprintf("%.3f", refine_overall[["centered Mammen"]])` with cell rates
+`r sprintf("%.3f", min(refine_summary$rejection_mammen_centered))`--`r sprintf("%.3f", max(refine_summary$rejection_mammen_centered))`;
+it retains $\gamma=1$ rather than selecting a moment from these same cells.
+The weighted-meat idea fails in this form: uncentered and centered variants
+reject
+`r sprintf("%.3f", refine_overall[["weighted-meat Mammen"]])` and
+`r sprintf("%.3f", refine_overall[["centered weighted-meat"]])`. Their p-values
+correlate only about
+`r sprintf("%.2f", cor(refine_reps$p_two_point_1_00,
+                       refine_reps$p_mammen_weighted_meat))`
+with fixed-metric Mammen, confirming that this is not a small correction.
+
+The independent gate therefore carries only raw Mammen, centered Mammen, direct
+sandwich, and pEBA4 into a small normal/$t$/skew confirmation with more null
+replications, followed by method-specific null thresholds for power. The
+$\gamma=.90$ arm remains a mechanism check rather than a calibration constant
+selected on the discovery cells.
+
+### Independent confirmation and matched power
+
+The confirmation uses a fresh seed base and 500 null replications in each of
+12 cells: $q=8$, $N=60/200$, homogeneous or difficult information geometry,
+and normal, $t_5$, or independently skewed innovations. The four alternatives
+carried forward are deliberately distinct:
+
+- **raw Mammen** multiplies the fitted efficient-score rows by the unmodified
+  zero-mean, unit-variance Mammen two-point weights
+  ($Ew^3=1$, $Ew^4=2$);
+- **centered Mammen** first subtracts the score-row mean within each information
+  stratum, imposing the multiplier null while leaving the observed numerator
+  unchanged, then uses the same Mammen weights;
+- **sandwich** uses the direct efficient-meat quadratic with a
+  $\chi^2_q$ reference, so it is asymptotically pivotal but requires a noisy
+  matrix inverse;
+- **pEBA4** is the analytic score-spectrum approximation with order-four
+  eigenvalue shrinkage; it is neither a multiplier test nor direct sandwich
+  studentization.
+
+```{r multiplier-confirm}
+knitr::kable(confirm_rank, digits = 3)
+```
+
+Centered Mammen confirms at
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen_centered))` overall,
+with $N=60/200$ rates of
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen_centered[
+  confirm_summary$n_total == 60L]))` and
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen_centered[
+  confirm_summary$n_total == 200L]))`. Its cell range is
+`r sprintf("%.3f", min(confirm_summary$rejection_mammen_centered))`--`r sprintf("%.3f", max(confirm_summary$rejection_mammen_centered))`.
+Raw Mammen remains mildly conservative at
+`r sprintf("%.3f", mean(confirm_summary$rejection_mammen))`; sandwich is more
+conservative at `r sprintf("%.3f", mean(confirm_summary$rejection_sandwich))`;
+and pEBA4 is
+`r sprintf("%.3f", mean(confirm_summary$rejection_peba4))`. At 500
+replications the single-cell Monte Carlo standard error is about 0.010 near
+0.05, so the isolated 0.068 centered-Mammen cell is not evidence of a separate
+failure regime.
+
+The bounded power gate uses 300 fresh replications per matched cell. The
+alternative increases the first tested group-2 loading by 0.50; it is therefore
+a sparse loading-noninvariance alternative, not a broad power ranking. For each
+method and cell, the critical p-value is the largest cutoff whose rejection
+rate in the independent 500-replication null cell is no greater than 0.05.
+
+```{r multiplier-matched-power}
+knitr::kable(matched_power_overall, digits = 3)
+```
+
+After this forced size alignment, centered Mammen has power
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "centered Mammen"])`, versus
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "raw Mammen"])` for raw Mammen and
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "pEBA4"])` for pEBA4. Centering changes
+cellwise matched power by
+`r sprintf("%+.3f", mean(centered_raw_power_difference))` on average, with a
+range of
+`r sprintf("%+.3f", min(centered_raw_power_difference))` to
+`r sprintf("%+.3f", max(centered_raw_power_difference))`. Thus its null-size
+improvement is not purchased with a detectable power penalty in this gate.
+The direct sandwich remains lower at
+`r sprintf("%.3f", matched_power_overall[["matched-null power"]][
+  matched_power_overall$method == "sandwich"])`.
+
+This is enough to retain centered Mammen as the promising resampling candidate,
+but not enough to call it generally valid. The empirical cutoffs themselves
+have finite-null Monte Carlo error, all cells are complete-data affine ML at
+$q=8$, and Mammen weighting has no exact sign-randomization interpretation.
+The next useful step is theory and transport to FIML/ordinal score strata,
+not another large complete-data null grid.
+
+## Timing
+
+Cost is a few milliseconds and linear in the number of flips. At 499 flips,
+median core latency was about 2.3 ms at 1 df, 5.4 ms at 4 df, and 8.7 ms at 8 df,
+of which flip-specific standardization is roughly 0.7, 2.7, and 4.2 ms. The FMG
+transforms on the score eigenvalues are essentially free once the flip test has
+run, since the eigenvalues are already computed.
+
+```{r timing-df}
+names(timing_499) <- c("df", "setup ms", "resampling ms", "standardization ms",
+                       "asymptotic ms", "total core ms")
+knitr::kable(timing_499, digits = 3)
+```
+
+## Recommendation
+
+- Prefer the score/LM base to the Satorra-2000 LR base in this design, but do not
+  infer that this makes every score transform correct. The LR routes are liberal;
+  score-SB is trace shrinkage, and score-ALL is a conservative plug-in mixture.
+- pEBA4 is the best provisional compromise. It stays closest to 0.05 across the
+  main, severe-copula, and dimension probes by shrinking noisy eigenvalue shape
+  without collapsing fully to SB's common eigenvalue.
+- Keep direct sandwich score output as a theoretical benchmark and diagnostic,
+  not the small-sample default. It is asymptotically pivotal, but null rejection
+  falls to 0.024 at eight restrictions and its meat condition number becomes
+  large in small or severe cells.
+- Read the advantage correctly: much of the raw gap is the classic small-sample
+  over-rejection of likelihood-ratio tests, which adequate $N$ removes. The
+  genuine robustness margin under non-normality is smaller but real.
+- Keep `p_standardized` as a cheap resampling option, but it is not better
+  calibrated than the score-base asymptotics and is more strained by a severe
+  copula.
+- Retain centered Mammen as the experimental resampling candidate. Its
+  independent null rate is 5.2% overall (5.4% at $N=60$, 4.9% at $N=200$),
+  and its 35.6% matched-null power is indistinguishable from raw Mammen's 35.3%
+  and pEBA4's 36.0%. This supports score recentering, not a tuned
+  $\gamma=.90$ multiplier, but does not yet justify a default.
+- Do not compare nominal power without comparing null size. The matched-null
+  table is a forced size comparison, not evidence that a nominal reference is
+  valid.
+- Next: study shrinkage of the efficient meat itself, between SB's scalar trace
+  and the unregularized sandwich inverse, while varying nuisance leverage and
+  conditioning at fixed dimension and adequacy.
+
+## Design and caveats
+
+The null grid crosses 1/4/8 loading-equality restrictions, total $N=60/100/200$,
+1:1 and 1:3 allocation, three group-information geometries, and normal, $t_5$,
+and skewed innovations, at 200 replications and 499 flips per cell. Maximum cell
+fit-failure rate was `r sprintf("%.3f", max(s$failure_rate))`; there were
+`r sum(!r_all_ok)` failed fits overall. The power grid adds sparse and dense
+alternatives at two effect sizes.
+
+Two boundary probes sit outside the main grid so they do not unbalance it. The
+severe-copula stress block crosses two copulas at fixed severe marginals with
+1/8 restrictions, $N=60/100/200$, and two geometries. The dimension-scaling probe
+crosses two copulas and two geometries, $p=10/20/30/40$ at fixed 8-df
+restrictions, and two sample-to-parameter ratios (about 2.5 and 6), with $N$ set
+from the ratio so it grows with $p$, at 1700 replications per cell; the ratios are
+approximate because the parameter count is estimated. The direct-sandwich
+dimension replay uses 200 replications per cell and one flip because only the
+asymptotic comparator and conditioning diagnostics are consumed. The
+independent-generator
+copula was excluded because its marginal moment solve is infeasible at this
+severity.
+
+Monte Carlo and binomial uncertainty remain visible in cell-level 0.05 decisions.
+The smaller sandwich dimension replay has standard errors around 0.015 within a
+single cell; its aggregate trends are evidence for the next iteration, not a
+fine ranking.
+Score flipping here is a frontier method for affine, complete-data ML models. The
+results do not automatically transfer to FIML, ordinal, estimated-weight,
+clustered, boundary, or nonlinear-constraint tests.
+The multiplier-law discovery replay is narrower still: it covers only
+effective-score calibration at 8 df in the severe complete-data copula block.
+Its 200 replications give a single-cell Monte Carlo standard error of about 1.5
+percentage points near 0.05. The independent confirmation broadens the
+generators but remains complete-data affine ML at 8 df; its 500 null
+replications give a single-cell error of about 1.0 percentage point. The
+matched-power cutoffs are estimated rather than known, so their null-sample
+uncertainty is not reflected in the 300-replication alternative rates.
+
+## Reproduce
+
+```sh
+Rscript experiments/research/32-standardized-flip-score/run_experiment.R --probe
+Rscript experiments/research/32-standardized-flip-score/run_expansion.R --probe
+Rscript experiments/research/32-standardized-flip-score/run_expansion.R --power
+Rscript experiments/research/32-standardized-flip-score/run_expansion.R --power-sandwich
+Rscript experiments/research/32-standardized-flip-score/run_expansion.R --stress
+Rscript experiments/research/32-standardized-flip-score/run_dimension.R --big
+Rscript experiments/research/32-standardized-flip-score/run_dimension.R --sandwich
+Rscript experiments/research/32-standardized-flip-score/run_multiplier_probe.R --probe
+Rscript experiments/research/32-standardized-flip-score/run_multiplier_probe.R --refine
+Rscript experiments/research/32-standardized-flip-score/run_multiplier_probe.R --confirm
+Rscript experiments/research/32-standardized-flip-score/run_multiplier_probe.R --confirm-power
+Rscript experiments/research/32-standardized-flip-score/run_timing.R
+quarto render experiments/research/32-standardized-flip-score/report.qmd
+```

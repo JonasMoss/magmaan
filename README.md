@@ -12,7 +12,7 @@
 
 `magmaan` is heavily tested against `lavaan`, and the two libraries agree on a
 large corpus of models. See the
-[lavaan audit parity report](experiments/showcases/00-lavaan-parity/report.md) for the
+[lavaan audit parity report](experiments/showcases/01-lavaan-parity/report.md) for the
 current experiment summary. The
 [experiments index](experiments/README.md) maps every parity audit, literature
 replication, and benchmark.
@@ -42,7 +42,7 @@ selected post-fit reporting:
 | Mixed ordinal/continuous CFA fit | DWLS        | 2 ordinal + 2 continuous |      48.5 |       12.5 |    3.9× |
 
 See the
-[magmaan vs lavaan speed benchmark report](experiments/showcases/05-lavaan-speed-bench/report.md)
+[magmaan vs lavaan speed benchmark report](experiments/showcases/02-lavaan-speed-bench/report.md)
 for methodology, caveats, and the full benchmark slices.
 
 

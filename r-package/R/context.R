@@ -40,7 +40,7 @@ vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
   if (.is_noniterative(fit)) {
     # Delta-method covariance of the closed-form map. regime "model" -> the
     # normal-theory Gamma (model-correct); regime "robust" -> the empirical /
-    # distribution-free Gamma (needs raw data), which exp 52 found calibrated
+    # distribution-free Gamma (needs raw data), which exp research/24 found calibrated
     # under non-normality where the NT Gamma is asymptotically wrong.
     gamma <- if (identical(regime, "robust")) "empirical" else "nt"
     if (identical(gamma, "empirical") && is.null(data)) {

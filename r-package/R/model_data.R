@@ -1335,7 +1335,7 @@ frontier_fit_ml_psd <- function(
 # Frontier complete-data ML plus the multi-information penalty
 # lambda * log det Corr(v_K), where v_K stacks the latent and observed variables
 # with a non-structurally-zero residual variance and lambda = eta - 1 (or
-# `weight`; default lambda = 0.25, see experiment 85). The penalty is scale invariant, bounded above by zero, and for
+# `weight`; default lambda = 0.25, see experiment research/47). The penalty is scale invariant, bounded above by zero, and for
 # recursive models equals sum log(1 - R^2) over structural equations plus the
 # residual log-determinant of correlation, so it is a log barrier on every
 # improper direction. `fit$fmin` is the UNPENALIZED criterion at the penalized

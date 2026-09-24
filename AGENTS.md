@@ -96,9 +96,10 @@ in its own git repository, outside magmaan's history.
 - `cpp/tests/fixtures/` - checked-in JSON. Regenerate via `cpp/tests/tools/regen_oracle.R`.
 - `cpp/tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
 - `cpp/tests/checks/` - advisory local simulation checks, outside the default test suite.
-- `experiments/` - numbered studies grouped into `showcases/`, `replications/`,
+- `experiments/` - studies numbered from 01 within `showcases/`, `replications/`,
   `research/`, and `engineering/`; retired studies in `_archive/`, shared harness
-  in `_support/`. Categories are navigation, not shared dependency tiers.
+  in `_support/`. Archived folders are unnumbered. Categories are navigation, not
+  shared dependency tiers; engineering studies should inform live implementation choices.
 - `benchmarks/` - advisory benchmark harness; ignored data/results caches stay local.
 - `project/` - public maintainer knowledge: architecture, backlog, grammar, design,
   validation, reference, and assets. Research notes belong in independent private repositories.

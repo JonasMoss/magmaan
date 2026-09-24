@@ -142,7 +142,7 @@ so the reduced UΓ spectrum (SB scaling, FMG p-values, robust difference test) w
 off by up to ~1% for models with both unequal group sizes and a cross-group
 equality constraint. Masked for single-group, equal-group, and configural cases.
 Guard: `cpp/tests/unit/fiml_test.cpp` (metric-invariance Unstructured degeneracy
-~1e-6); `experiments/showcases/21-fiml-measurement-invariance-fmg --lavaan-parity`.
+~1e-6); `experiments/showcases/05-fiml-measurement-invariance-fmg --lavaan-parity`.
 Scope: Expected bread only (the FMG path); the Observed-bread spectrum tail is
 left as-is. `robust_se` uses its own w_b-weighted bread and was unaffected.
 
@@ -168,8 +168,8 @@ a delta-ordinal `y*` is unit-variance, so a true .6 loading came back ~.52; the
 path had been guarded to refuse ordinal fits. `standardize_all` now takes
 `ordinal_delta_unit` and standardizes ordinal-indicator loadings (the `Lambda`
 and all-y `Beta` slots) by the latent SD only (σ_rr = 1).
-Guard: `r-package/examples/ordinal_dwls_wls.R`; `experiments/replications/16-li-2021-mixed`
-and `19-li-2016-ordinal` `--lavaan-parity` (≤~1e-6 vs `standardizedSolution`).
+Guard: `r-package/examples/ordinal_dwls_wls.R`; `experiments/replications/03-li-2021-mixed`
+and `04-li-2016-ordinal` `--lavaan-parity` (≤~1e-6 vs `standardizedSolution`).
 Scope: checked standardized/defined-parameter goldens and a diagonal-Theta
 ordinal/mixed factor-score scorer have since landed; multi-factor categorical
 EAP and correlated residual-Theta scoring remain backlog/speculative work.
@@ -183,7 +183,7 @@ now skips the inverse for DWLS-only callers, and even when requested the inverse
 is non-fatal (a singular NACOV leaves `W_wls` empty; DWLS/robust proceed). Ported
 to the all-ordinal path too.
 Guard: `cpp/tests/golden/ordinal_golden_test.cpp` keeps the eager W_wls-vs-lavaan
-contract; `experiments/replications/19-li-2016-ordinal`.
+contract; `experiments/replications/04-li-2016-ordinal`.
 Scope: an explicit full-WLS fit on an empty weight reports it via
 `validate_stats` / `weight_factors`.
 
@@ -243,7 +243,7 @@ a rank-deficient Γ̂ returns `FitError::NumericIssue` with dim/rank/rcond/λmin
 Guard: `cpp/tests/unit/detail_linalg_test.cpp` (RNG-free muthen-spectrum pin);
 rank-deficient rejection in `dls_weight_test.cpp`.
 Scope: an optional `spectral_truncate` parity-restore policy is not built
-(backlog); `experiments/showcases/00-lavaan-parity` inverts the raw NACOV in R and is not
+(backlog); `experiments/showcases/01-lavaan-parity` inverts the raw NACOV in R and is not
 routed through the gate.
 
 **FMG unbiased-Gamma NT-term.**
@@ -476,8 +476,8 @@ Protected by:
 - `cpp/tests/golden/pairwise_golden_test.cpp`
 - `cpp/tests/golden/robcat_parity_golden_test.cpp`
 - `r-package/examples/ordinal_dwls_wls.R`
-- `experiments/_archive/10-ordinal-inference-cache-probe` and
-  `experiments/_archive/11-ordinal-snlls-speed`
+- `experiments/_archive/ordinal-inference-cache-probe` and
+  `experiments/_archive/ordinal-snlls-speed`
 
 Known weak spots: mixed robust scaled-test parity has loose guards, and lazy
 mixed WLS construction plus mixed theta SNLLS are still open.
