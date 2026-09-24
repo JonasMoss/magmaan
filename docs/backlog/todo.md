@@ -844,6 +844,27 @@ when they next change.
      return is not a globality certificate, while boundary inference still
      needs an explicit policy. Parameter-space bounds or penalties remain a
      separate speculative estimator project.
+  7. **Open (found 2026-09-24): PSD-SLSQP stalls, and a larger budget does
+     not help.** Ernst design, marker identification, N = 10, 1,000 draws at
+     `20c13c31` with the 2026-09-22 defaults (5,000 evaluations):
+     - All 28 PSD-SLSQP failures exhaust the evaluation budget (66 of 68
+       failures over N = 10 to 100).
+     - With 50,000 evaluations all 28 return after 5,000 to 12,600
+       evaluations, but none passes the cone or Newton certificate. Some
+       stop at a worse objective than the optimum other routes certify
+       (0.682 against 0.562). This looks like stalling in the Cholesky-lift
+       coordinates near singular faces.
+     - The same model under std.lv reaches a certified optimum in 18 of the
+       28. The other 10 optima have Y's disturbance variance at zero, which
+       std.lv cannot represent. The sphere PSD route (current HEAD)
+       reports convergence on all 28 by magmaan's own verdict. The
+       Newton/cone certificate was not applied to it.
+     - Std.lv has the opposite weakness. It fails, or certifies a drifting
+       point with |beta| of 340 to 13,554, whenever the optimum has a zero
+       latent residual variance: 14.6% of N = 10 draws.
+     - Next: characterize the stalled lift points (which L diagonals are
+       near zero, and their multipliers). Decide whether a stall should
+       trigger a refit in another identification or in the sphere.
 
 - **M — multi-information penalty (frontier) follow-ups.** Landed
   2026-09-22: `estimate::frontier::fit_ml_multiinfo`,
