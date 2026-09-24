@@ -486,8 +486,8 @@ So the fix belongs in the stats constructor, not the caller:
 - **S — reconcile the `active_set` audit shape** between the staged and direct
   ordinal fit entry points.
 
-`talks/oslo-psychometric-gathering-2026/tools/check_naive_ordinal_route.R` is the
-behaviour gate used for the attempt: it snapshots whole fit objects across
+`private/oslo-psychometric-gathering-2026/tools/check_naive_ordinal_route.R` (outside this
+repository) is the behaviour gate used for the attempt: it snapshots whole fit objects across
 DWLS/ULS/WLS, binary, multi-group and listwise cases and diffs them recursively.
 
 ### Ordinal weighted-LS whitening — original diagnosis
@@ -534,8 +534,8 @@ diagonal-aware whitening confined to `ordinal.cpp` (the 5-15x), Tier 3 give
 `data::OrdinalStats::W_dwls` and `OrdinalGammaCacheBlock::w_dwls` a diagonal
 storage type so the dense matrix is never built. Gate every tier on
 element-wise parity of the fitted parameter vector against the pre-fix run;
-`talks/oslo-psychometric-gathering-2026/tools/benchmark_ordinal_whitening.R`
-does the before/after and prints the fitted-exponent pair.
+`private/oslo-psychometric-gathering-2026/tools/benchmark_ordinal_whitening.R`
+(outside this repository) does the before/after and prints the fitted-exponent pair.
 
 ### Continuous moment-quadratic whitening is dense where a structured weight would do — IN PROGRESS
 
@@ -3629,7 +3629,7 @@ continuous-whitening entry above.
   `omega - alpha` test and Imhof calibration remain unpromoted. Not required.
   Prior-art oracle for the Spearman-Guttman covariance omega is Hancock & An
   (2020) (closed-form single-factor omega; see
-  [paper-eval](../research/paper-evals/2020-hancock-closed-form-omega.md)): their
+  the private paper eval `2020-hancock-closed-form-omega.md`): their
   Spearman-1927 ratio-of-sums loading aggregation is more numerically stable than
   the average-of-ratios communality and is the parity target for exp 41. Their
   256-cell sim is the validation oracle. Open lane beyond Hancock & An (single
@@ -4068,7 +4068,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   (`bench::mark`, whole-fit only), `experiments/05-lavaan-speed-bench`,
   `experiments/73-psd-ml-timing` (the best of the R set: batch calibration plus
   `--repeats/--warmups`), `experiments/28-ordinal-stage2-pairwise`, and
-  `talks/oslo-psychometric-gathering-2026/tools/benchmark_score_shared.R` (the
+  `private/oslo-psychometric-gathering-2026/tools/benchmark_score_shared.R` (outside this repository; the
   best overall: `Sys.time()`, arm rotation, artifact hashing). Convert the C++
   benches to include `timing/timing.hpp` first — that is mechanical. The R
   scripts are a separate and lower-value job: unifying an R and a C++ timer buys
@@ -4292,9 +4292,11 @@ work lives in [`speculative.md`](speculative.md). Open work:
   correctness repair for the documented approximation. Condition/rank
   telemetry and broader corpus calibration remain useful before freezing
   new speed claims. Details and the bounded publication/handoff proposal:
-  [SNLLS handoff review](../research/snlls-handoff-review.md).
+  the SNLLS handoff review (`private/snlls-handoff/REVIEW.md`, outside this
+  repository).
 - **S/M.** Extend the frozen common-verdict SNLLS handoff to the larger paper
-  grids. `benchmarks/snlls-handoff-current` pins core `6e7bdb38`, including
+  grids. The handoff bundle (`private/snlls-handoff/handoff-current`, outside
+  this repository) pins core `6e7bdb38`, including
   theta specialization and input guards, with fresh clean-source diagnostic
   comparisons and a manuscript evidence inventory. Full paper grids still need
   a rerun with balanced timing order and the common verdict; reconcile the
@@ -4308,7 +4310,8 @@ work lives in [`speculative.md`](speculative.md). Open work:
   bounded delta path; the full-moment objective alone does not establish
   profiled-path support. Performance follow-ups include mixed theta threshold
   elimination, Fisher Schur factor reuse, and clearer ordinal/IRLS inner-solve
-  telemetry. See `benchmarks/snlls-current/IMPLEMENTATION-AUDIT.md`.
+  telemetry. See `private/snlls-handoff/common-verdict-rerun-2026-09-13/`
+  `IMPLEMENTATION-AUDIT.md` (outside this repository).
 - **S/M.** Broaden theta threshold-profile eligibility only when needed.
   The independently free, unbounded-threshold/no-active-equality fast path is
   implemented, with ULS/DWLS direct reconstruction, a cached WLS QR Schur
@@ -4316,8 +4319,9 @@ work lives in [`speculative.md`](speculative.md). Open work:
   checks. Fixed/shared thresholds, constrained models, and mixed moments retain
   the generic path. Expanded cases need reduced-gradient, reconstruction and
   common-verdict checks before timing claims. See
-  `benchmarks/snlls-current/THETA-INVESTIGATION.md` and `THETA-FAST-PATH.md`
-  in that directory for the investigation and implementation results.
+  `THETA-INVESTIGATION.md` and `THETA-FAST-PATH.md` in
+  `private/snlls-handoff/common-verdict-rerun-2026-09-13/` (outside this
+  repository) for the investigation and implementation results.
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real cases
   (especially a Geiser/Eid LST covariance input and a documented MTMM variant)

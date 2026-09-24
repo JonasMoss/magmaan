@@ -53,6 +53,39 @@ historical archaeology, not current guidance.
   comment. When the grammar changes, edit the EBNF first, then the code, then
   regenerate fixtures.
 
+## What belongs in this repository
+
+The repository is public and holds magmaan: the library, its bindings, tests,
+fixtures, experiments, benchmarks, and maintainer docs. Everything else lives
+in its own git repository, outside magmaan's history.
+
+- **Not magmaan, not here.** Talks, collaborator handoffs and proposals,
+  funding or compute-allocation applications, evaluations of other people's
+  papers, and agent-to-agent handoff notes go to `private/<name>/`, each its own
+  nested git repository (see `private/README.md`). Manuscripts go to
+  `papers/<name>/`. When unsure whether something is magmaan, ask.
+- **No third-party material.** Never commit other people's papers,
+  supplements, datasets, or source code. Read them from the ignored
+  `external/` (`external/refs/` for PDFs, `external/<name>/` for source
+  mirrors). Code is written from the formulas, not ported: describe lavaan
+  agreement as behaviour ("matches lavaan's `lavResiduals()`"), never as a port
+  of an internal function or a source file. The exceptions are the vendored
+  build dependencies in `third_party/` (with their licenses) and the public
+  teaching datasets listed in `tests/fixtures/DATASETS.md`; textbook-derived
+  fixtures carry derived summary statistics only.
+- **No session state, archives, or rendered output.** IDE and session files
+  (`.Rproj.user/`, `.RData`, `__pycache__/`), archives, serialized objects
+  (`.rds`, `.RData`), office documents, and rendered reports stay untracked.
+- **Stage explicit paths.** Never `git add -A` or `git add .`; name the files
+  you changed. Before committing a new file outside `src/`, `include/`,
+  `tests/`, or `r-package/`, check that it belongs here.
+- **Enforced.** `tests/tools/check_tracked_files.sh` (`just check-tracked`,
+  part of `just check` and CI) fails on unexpected top-level entries, anything
+  tracked inside `papers/`, `private/`, `external/`, or `corpus/`, archives and
+  serialized objects, PDFs outside `docs/research/notes/`, session state, and
+  files over 1 MB. A new top-level folder is a layout decision: add it to the
+  checker and to this file deliberately.
+
 ## Where things live
 
 - `include/magmaan/` - public headers (stable surface).
@@ -64,11 +97,8 @@ historical archaeology, not current guidance.
 - `tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
 - `tests/checks/` - advisory local simulation checks, outside the default test suite.
 - `benchmarks/` - advisory benchmark harness; ignored data/results caches stay local.
-- `docs/research/` - tracked research notes and simulation scripts, not vendored PDFs.
-- `docs/research/paper-evals/` - short relevance-scored reads of recent SEM
-  papers (the PDFs live in ignored `external/refs/`). Each eval ends in a
-  verdict; actionable ones graduate to `backlog/speculative.md`, `todo.md`, or a
-  paper/experiment. See its `README.md` for the template and the `/eval-paper` skill.
+- `docs/research/` - tracked research notes (with their compiled PDFs) and
+  simulation scaffolds. Never third-party PDFs.
 - `docs/reference/` - policy for ignored external resources and source mirrors.
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
 - `docs/architecture/roadmap.md` - current implementation state and design contracts.
@@ -80,8 +110,15 @@ historical archaeology, not current guidance.
   explicit build-if trigger. Promote to `todo.md` only when a concrete
   downstream consumer appears.
 - `external/` - ignored single "development help" folder: source mirrors for reading
-  upstream code plus `external/refs/` reference PDFs. Never built. (Replaces the former
-  separate `resources/` folder.)
+  upstream code plus `external/refs/` reference PDFs. Never built, never committed.
+- `corpus/` - ignored mount point for the optional real-data textbook corpus;
+  see `corpus/README.md`.
+- `papers/` - ignored; one nested git repository per manuscript (see
+  `papers/AGENTS.md`).
+- `private/` - ignored; one nested git repository per non-magmaan project
+  (talks, collaborator handoffs, allocation applications, paper evaluations such
+  as `private/paper-evals/`, which the `/eval-paper` skill writes to). See
+  `private/README.md`.
 - `third_party/` - tracked vendored third-party sources that participate in the
   build. Each subdirectory holds the verbatim upstream sources plus the upstream
   LICENSE files and a vendor README.md documenting source URL, commit, license,
@@ -107,7 +144,7 @@ Dependencies flow strictly downward; **leaves are sinks**. Each item depends
 only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
 
 - **T0 inputs**: `third_party/` (built), `external/` (ignored), `corpus/`
-  (submodule data).
+  (ignored data mount).
 - **T1 core**: `include/`, `src/` - depend on T0 only.
 - **T2**: `r-package/` (depends on core only); `experiments/_support/` (the
   `magmaan.experiments` harness package: depends on core/r-package only, carries
@@ -117,6 +154,8 @@ only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
   `tests/`. A leaf consumes only lower tiers, is referenced by nothing, and never
   references a sibling leaf. `papers/_archive/` contains frozen retired paper
   trees; it is historical material, not an active T3 leaf or dependency source.
+- **Outside the DAG**: `private/<name>/` repositories are not magmaan. They may
+  use magmaan freely; nothing tracked may reference them.
 
 Invariants (enforced by `tests/tools/check_layering.sh`, run via
 `just check-layering`, folded into `just check`, and a hard-failing CI job):
@@ -140,6 +179,7 @@ Invariants (enforced by `tests/tools/check_layering.sh`, run via
    e.g. `build/<preset>/benchmarks/<bin>`, is allowed; it is execution, not a
    source dependency.)
 6. **Reports read only from their own `results/`**.
+7. **Private is invisible**: no tracked code references `private/`.
 
 The checker scans code files only (`*.R/*.cpp/*.hpp/*.h/CMakeLists.txt/*.cmake/
 *.sh/justfile`), with comments stripped, so prose and comments never trip it.

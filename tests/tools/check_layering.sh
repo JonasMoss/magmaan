@@ -10,6 +10,8 @@
 # within the archive but still not a paper, a live experiment, or tests. Retired
 # paper trees under papers/_archive/ are frozen historical material rather than
 # active leaves and are not scanned; active code still may not reference them.
+# private/<name>/ repos are not part of magmaan at all: they are never scanned
+# (they may use magmaan freely) and nothing tracked may reference them.
 # See AGENTS.md 'Dependency layering' and experiments/AGENTS.md / papers/AGENTS.md.
 #
 # Static, dependency-free (POSIX-ish bash + awk/grep/find). No R, no build.
@@ -23,7 +25,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || { echo "check_layering: cannot cd to repo root" >&2; exit 2; }
 
 DOC="see AGENTS.md 'Dependency layering'"
-SELF_SCRIPT="tests/tools/check_layering.sh"
+# Scripts that name leaf and mount paths as data, not as dependencies.
+SKIP_SCRIPTS=" tests/tools/check_layering.sh tests/tools/check_tracked_files.sh "
 status=0
 fail() { printf '%s:%s: %s; %s\n' "$1" "$2" "$3" "$DOC"; status=1; }
 
@@ -44,7 +47,7 @@ DENY_RE="$(deny_list | grep -vix magmaan | sort -u | paste -sd'|' -)"
 # Tokens that denote a leaf reference. Path forms catch source()/file.path()/
 # #include/sys.source; the quoted-"papers" form catches indirection like
 # repo_path("papers", ...); the pkg:: form catches paper namespaces.
-TOKEN_RE="papers/[A-Za-z0-9._-]+|experiments/[A-Za-z0-9._-]+|[\"']papers[\"']|benchmarks/|tests/|(${DENY_RE}):::?"
+TOKEN_RE="papers/[A-Za-z0-9._-]+|private/[A-Za-z0-9._-]*|experiments/[A-Za-z0-9._-]+|[\"'](papers|private)[\"']|benchmarks/|tests/|(${DENY_RE}):::?"
 
 # --- classify a file into a zone (sets Z and SELF) ----------------------------
 classify_zone() {
@@ -57,6 +60,7 @@ classify_zone() {
     experiments/*) Z=EXP;   SELF="experiments/$(printf '%s' "$1" | cut -d/ -f2)" ;;
     papers/_archive/*)                  Z=ARCHIVE ;;
     papers/*)      Z=PAPER; SELF="papers/$(printf '%s' "$1" | cut -d/ -f2)" ;;
+    private/*)                           Z=PRIVATE ;;
     benchmarks/*)                        Z=BENCH ;;
     tests/*)                             Z=TESTS ;;
     *)                                   Z=OTHER ;;
@@ -70,6 +74,8 @@ check_token() {
   t="${tok%\"}"; t="${t#\"}"; t="${t%\'}"; t="${t#\'}"
   case "$t" in
     experiments/_support*) return ;;                       # the one shared sibling
+    private/*|private)
+      fail "$f" "$ln" "$Z references private material '$t'" ;;
     papers/*|papers)
       [ "$Z" = PAPER ] && { [ -z "${SELF##$t}" ] || [ "$t" = papers ] ; } && return
       fail "$f" "$ln" "$Z leaf references paper '$t'" ;;
@@ -102,9 +108,9 @@ strip_comments() {  # $1 = iscpp(0/1); strips comments + build/ artifact paths
 }
 
 while IFS= read -r f; do
-  [ "$f" = "$SELF_SCRIPT" ] && continue
+  case "$SKIP_SCRIPTS" in *" $f "*) continue ;; esac
   classify_zone "$f"
-  case "$Z" in OTHER|ARCHIVE) continue ;; esac
+  case "$Z" in OTHER|ARCHIVE|PRIVATE) continue ;; esac
   case "$f" in *.cpp|*.hpp|*.h) iscpp=1 ;; *) iscpp=0 ;; esac
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
@@ -119,7 +125,8 @@ done < <(
       -o -name '*.h' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.sh' \
       -o -name 'justfile' \) \
     -not -path './build/*' -not -path './external/*' -not -path './third_party/*' \
-    -not -path './corpus/*' -not -path './.git/*' -not -path '*/.quarto/*' \
+    -not -path './corpus/*' -not -path './private/*' -not -path './.git/*' \
+    -not -path '*/.quarto/*' \
     -not -path '*/results/*' \
   | sed 's#^\./##' | sort
 )

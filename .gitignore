@@ -19,6 +19,13 @@ papers/*
 !papers/STYLE.md
 !papers/CLAUDE.md
 
+# Everything that is not magmaan (talks, collaborator handoffs, funding
+# applications, paper evaluations, ...) lives here, one independent nested git
+# repository per project. Only the convention doc is tracked. See
+# private/README.md and AGENTS.md 'What belongs in this repository'.
+private/*
+!private/README.md
+
 # The real-data textbook-corpus is a private, optional dependency: third-party
 # copyrighted datasets magmaan may not redistribute. Mount it at
 # corpus/textbook-corpus/ but never commit it. Only the README is tracked.

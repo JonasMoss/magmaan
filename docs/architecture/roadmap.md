@@ -3328,8 +3328,8 @@ The contract is that none of this moves a number. Estimation-only DWLS at
 N=1000 dropped from 838 ms to 52 ms at p=50 with the empirical complexity
 exponent in p falling from 4.47 to 3.00 — the floor for a dense O(p²)-row by
 O(p)-column Jacobian — while fitted parameter vectors stayed bit-identical and
-gradient counts unchanged. `talks/oslo-psychometric-gathering-2026/tools/
-benchmark_ordinal_whitening.R` is the before/after harness and prints both the
+gradient counts unchanged. The talk-side harness `private/oslo-psychometric-gathering-2026/tools/
+benchmark_ordinal_whitening.R` (outside this repository) is the before/after harness and prints both the
 element-wise parity check and the fitted exponent pair.
 
 #### Cross-products (OPG) information performance

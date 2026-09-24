@@ -257,9 +257,8 @@ paths. This design does not delete or move benchmark code.
 | `r/run_benchmark.R` | Keep the zoo smoke entry point; use the common timer and separate public workload runner |
 | `score_primitives.R`, `inference_reuse.R`, `r/bench_mi_lrt.R` | Migrate useful workloads to shared runner; then retire duplicate timing loops, retaining thin entry points only if consumed |
 | Top-level `*_bench.cpp` and memory-profiler helpers | Inventory distinct workload/consumer first; migrate active diagnostics under `micro/` and memory tools under `memory/`, preserving CMake target names |
-| `snlls-current/` | Classify as historical implementation investigation; index it and archive only after checking links/consumers |
-| `snlls-handoff/`, `snlls-handoff-current/` | Preserve pinned reproduction bundles; replace “current” ambiguity with a revision/status index before considering relocation |
-| Talk timing scripts/data | Preserve as talk evidence; promote reusable logic into benchmarks without importing talk dependencies |
+| `snlls-current/`, `snlls-handoff/`, `snlls-handoff-current/` | Done 2026-09-24: moved out of this repository into the private SNLLS handoff repository |
+| Talk timing scripts/data | Moved out with the talk (2026-09-24); promote reusable logic into benchmarks without importing talk dependencies |
 | Old build/install commands and stale “R-first scaffold only” text | Update alongside the replacement entry points and a clear active/historical index |
 
 The SNLLS packaging scripts embed directory paths, so a directory move is a

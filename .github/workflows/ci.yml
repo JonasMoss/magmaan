@@ -11,12 +11,14 @@ concurrency:
 
 jobs:
   layering:
-    name: dependency layering (fast)
+    name: dependency layering + tracked content (fast)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check layering
         run: bash tests/tools/check_layering.sh
+      - name: Check tracked content
+        run: bash tests/tools/check_tracked_files.sh
 
   r-boundary:
     name: R boundary + vendor sync

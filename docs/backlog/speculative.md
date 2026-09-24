@@ -68,8 +68,8 @@ on-target fix since the disease is Heywood cases (ψ_i → 0⁻); and (b) a stru
 Gaussian penalty `P_ρ(θ) = ρ(θ-θ⁰)'A(θ-θ⁰)` toward an idealized standardized model
 (all loadings 0.7, reliability 0.8), the non-circular parameter-space analog of
 the model-based *covariance* target of De Jonckere & Rosseel (2023, PDF in
-`external/refs/`, eval in
-[paper-evals](../research/paper-evals/2023-dejonckere-model-based-shrinkage-target.md)).
+`external/refs/`, private paper eval
+`2023-dejonckere-model-based-shrinkage-target.md`).
 Unlike that covariance target, penalizing θ leaves S, hence the reference law of
 the χ² fit test, uncontaminated, so the GOF stays valid. Closes with a
 penalized-sandwich SE `Cov(θ̂) = (H + P_ρ'')⁻¹ V (H + P_ρ'')⁻¹` and an effective-df
@@ -738,8 +738,8 @@ the numerator), and omega-higher-order `omega_ho` off a higher-order fit
 (`lambda_jk * gamma_k` products), with sigma_X^2 either model-implied (`1' Sigma-hat 1`)
 or observed (`1' S 1`), plus delta-method SEs reusing the gradient-times-Gamma
 path. Bell, Chalmers & Flora (2024, *EPM* 84:1, 5-39; PDF in `external/refs/`,
-eval in
-[paper-evals](../research/paper-evals/2024-bell-omega-misspecification.md)) is the
+private paper eval
+`2024-bell-omega-misspecification.md`) is the
 recent oracle for the bias-under-misspecification story: omega_u is strongly
 positively biased when error correlations are ignored or the population is
 multidimensional, omega_H stays nearly unbiased even when the bifactor model is
@@ -818,8 +818,8 @@ reliability `rho*_gj` (only that factor's items, eqs. 19-20 - the *correct*
 generalization of coefficient H), the corresponding OLC/OLSC weight vectors, and
 factor determinacy `FD = sqrt(rho*)`. Ordering: `rho*_grp,j >= rho*_gj >= omega_HS,j`
 and `rho_gen >= omega_H`, so this entry sits directly above the model-based omega
-entry. Li & Savalei (2026, *MBR* 61:3, 469-490; PDF in `external/refs/`, eval in
-[paper-evals](../research/paper-evals/2026-li-bifactor-maximal-reliability.md)) is
+entry. Li & Savalei (2026, *MBR* 61:3, 469-490; PDF in `external/refs/`, private paper eval
+`2026-li-bifactor-maximal-reliability.md`) is
 the reference: they show coefficient H as applied to bifactor models (Rodriguez et
 al. 2016, standardized bifactor loadings into the one-factor H formula) is the
 reliability of *no* composite and must be replaced by these, and they prove the
@@ -1317,8 +1317,8 @@ fits the measurement model with a saturated latent covariance to get Φ̂, Step 
 fits the hypothesized structural model treating the latents as observed. The
 deliverables are a structural chi-square test, structural RMSEA/CFI/SRMR, and
 CIs for all three. Zhang & Wu (2024, *SEM* 31:5, 863-881; PDF in
-`external/refs/`, eval in
-[paper-evals](../research/paper-evals/2024-zhang-structural-model-fit.md)) show
+`external/refs/`, private paper eval
+`2024-zhang-structural-model-fit.md`) show
 the naive structural chi-square has Type-I error above 80% in small
 low-reliability samples because Φ̂ is not Wishart (the statistic is a mixture of
 1-df chi-squares, not χ²_df), and supply a Satorra-Bentler-type mean correction

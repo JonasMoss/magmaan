@@ -398,9 +398,8 @@ quarto render experiments/43-li-savalei-2026-maximal-reliability-ci/report.qmd
 ```
 
 Smoke paths: add `--smoke` to either runner. This experiment is the finite-sample
-evidence behind the maximal-reliability entry in the project backlog; see the paper
-eval (`docs/research/paper-evals/2026-li-bifactor-maximal-reliability.md`) for
-context.
+evidence behind the maximal-reliability entry in the project backlog; the private paper
+eval `2026-li-bifactor-maximal-reliability.md` has the context.
 
 ```{r meta}
 show <- meta[c("model","loadings","coefficients","estimator","reps","ns","distributions")]
