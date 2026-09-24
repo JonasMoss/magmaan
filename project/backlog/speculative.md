@@ -22,7 +22,7 @@ restarts remain unproven as engineering improvements.
 **Alternative already available.** Complete-data `frontier_fit_ml_psd()` with
 native starts, NLopt SLSQP and `preconditioning = "none"`, preserving original
 SEM constraints and permitting singular PSD components. The completed
-`experiments/83-sem-total-variance` benchmark found no evaluation-count advantage
+`experiments/_archive/83-sem-total-variance` benchmark found no evaluation-count advantage
 for diagonal scaling from native starts in any of ten settings. The unscaled
 baseline reached the better solution in the sole discrepant pair. Explicit
 preconditioning and experiment-local restart tools remain available for methods

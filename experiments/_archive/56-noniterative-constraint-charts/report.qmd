@@ -135,6 +135,9 @@ covariances agree at roundoff, even under the deliberately misspecified
 
 ## Reproduce
 
+Archived on 2026-09-24; existing results are retained for provenance.
+Run the commands below from `experiments/_archive/56-noniterative-constraint-charts/`.
+
 ```sh
 Rscript run_experiment.R --smoke
 quarto render report.qmd

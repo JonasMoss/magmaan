@@ -21,6 +21,9 @@ Public maintainer knowledge lives under `project/`; research working notes
 are maintained independently and are not build or test dependencies. External
 textbook and paper collections share `external/`; tests retain frozen fixture
 snapshots. Benchmarks and experiments retain their existing dependency roles.
+Experiments 56 (marker-chart sanity) and 83 (PSD optimization defaults) are
+archived under `experiments/_archive/` as of 2026-09-24; their recorded findings
+remain historical evidence, with sources and local results preserved.
 
 ## Current State
 
@@ -957,7 +960,7 @@ an unconstrained gradient test to constrained solutions.
   over-rejects and the empirical Gamma restores the level, mirroring the ML
   NT-vs-robust split; the scalar Wald is exactly nominal on normal data, far more
   robust to non-normality, and delivers true scalar in one closed-form step where
-  the ML nested test cannot). `experiments/56-noniterative-constraint-charts`
+  the ML nested test cannot). `experiments/_archive/56-noniterative-constraint-charts`
   now targets the estimator-side metric map: both the configural and
   metric-constrained implied covariances are marker-chart invariant at roundoff,
   including deliberately off-surface metric-violation cells; the raw theta

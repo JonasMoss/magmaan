@@ -7,7 +7,7 @@ if ('--help' %in% args) {
   quit()
 }
 script <- normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1]))
-here <- dirname(dirname(script)); repo <- normalizePath(file.path(here,'../..'))
+here <- dirname(dirname(script)); repo <- normalizePath(file.path(here,'../../..'))
 source(file.path(repo,'experiments/_support/R/helpers.R')); set_single_threaded_math()
 results <- if(length(args)) args[1] else file.path(here,'results/native-structures')
 path <- file.path(results,'discrepancies.rds')

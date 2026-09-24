@@ -8,7 +8,7 @@ if ('--help' %in% args) {
   quit()
 }
 script <- normalizePath(sub('^--file=', '', grep('^--file=', commandArgs(FALSE), value=TRUE)[1]))
-here <- dirname(dirname(script)); repo <- normalizePath(file.path(here, '../..'))
+here <- dirname(dirname(script)); repo <- normalizePath(file.path(here, '../../..'))
 o <- list(reps=10L, budget_sec=30, seed_base=20260919L,
           results_dir=file.path(here,'results/native-structures'), plan=FALSE)
 i <- 1L

@@ -357,6 +357,9 @@ calculations in the replication loop.
 
 ## Reproduce
 
+Archived on 2026-09-24; existing results are retained for provenance.
+Run the commands below from `experiments/_archive/83-sem-total-variance/`.
+
 From this directory:
 
 ```sh

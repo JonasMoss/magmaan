@@ -17,7 +17,7 @@ if ("--help" %in% args) {
   quit(status = 0)
 }
 script <- normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))
-here <- dirname(script); repo <- normalizePath(file.path(here, "../.."))
+here <- dirname(script); repo <- normalizePath(file.path(here, "../../.."))
 o <- list(reps = 0L, cases = c("hs_3factor_cfa", "mediation", "correlated_predictors",
   "higher_order", "correlated_disturbances", "bollen_democracy_sem"), stress = FALSE,
   maxit = 200L, budget_sec = 60, seed_base = 20260919L,

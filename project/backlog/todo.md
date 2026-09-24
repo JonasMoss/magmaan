@@ -4776,7 +4776,7 @@ work until a concrete downstream consumer appears.
   `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
-  `experiments/56-noniterative-constraint-charts` adds the marker-chart sanity
+  `experiments/_archive/56-noniterative-constraint-charts` adds the marker-chart sanity
   check for the estimator-side metric map: configural and metric-constrained
   implied covariances are marker-invariant at roundoff even off the metric
   surface; theta coordinates differ by chart, as expected.

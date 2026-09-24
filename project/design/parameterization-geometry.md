@@ -330,7 +330,7 @@ result has been written up.
 For ML a convention is a coordinate change and the fit is invariant. For the
 closed-form estimators it is part of the estimator's *definition*:
 
-- `experiments/56-noniterative-constraint-charts` shows the marker chart is
+- `experiments/_archive/56-noniterative-constraint-charts` shows the marker chart is
   irrelevant to the closed-form fit, moving the implied covariance by 8.9e-16
   configural and 1.3e-15 metric-constrained while coordinates move by 1.32 and 0.90.
 - But `guttman_estimator_criterion.tex` records that *"marker-style scalings that

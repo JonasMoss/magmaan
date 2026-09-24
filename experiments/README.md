@@ -2,7 +2,7 @@
 
 A first-pass classification from the report questions, openings, and caveats
 (2026-09-24). These are **navigation categories**, not a quality ranking or a
-claim that a report is ready for publication. No folders have moved. Open the
+claim that a report is ready for publication. Experiments 56 and 83 were subsequently archived. Open the
 linked report for the evidence; this pass did not rerun or render the studies.
 
 | Purpose | What belongs here | Count |
@@ -10,8 +10,8 @@ linked report for the evidence; this pass did not rerun or render the studies.
 | [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
 | [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
 | [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 48 |
-| [Engineering checks](#engineering-checks) | Check implementation behavior, performance, robustness, or a library design/default decision. | 17 |
-| [Archived](#archived) | Already retired engineering investigations; kept for provenance. | 7 |
+| [Engineering checks](#engineering-checks) | Check implementation behavior, performance, robustness, or a library design/default decision. | 15 |
+| [Archived](#archived) | Already retired engineering investigations; kept for provenance. | 9 |
 
 The existing **kind** (`parity`, `replication`, `paper-sim`, `benchmark`, `probe`)
 and **lifecycle** (`active`, `complete`, `archived`) remain separate metadata.
@@ -39,11 +39,11 @@ Some deliberate borderline decisions:
 
 ## Possible archive candidates — later
 
-**83** is the clearest candidate: its report explicitly closes the engineering
-default decision. **14** is a completed convergence check; **56** is a bounded
-chart-invariance check. Review these three first during the full cleanup, checking
-that their conclusions are captured in maintained tests/docs and that no ongoing
-work needs to rerun them. This is a shortlist, not an archive decision.
+**56 and 83 are archived** under `_archive/` (2026-09-24): the bounded
+marker-chart check and the closed engineering-default decision are retained
+with their existing results for provenance. **14** remains a completed
+**Engineering check**; review it during the later cleanup before deciding
+whether its convergence study should also be archived.
 
 Do not archive **46/48** merely because they are small probes: they address
 implementation and estimand questions whose current resolution needs checking.
@@ -152,18 +152,17 @@ Check implementation behavior, performance, robustness, or a library design/defa
 | 46 | [ordinal-observed-omega-dwls](46-ordinal-observed-omega-dwls/report.qmd) | probe | active | Does observed-category-score omega from an all-ordinal DWLS fit run end-to-end with complete-sandwich delta SEs, and where do balanced vs threshold-extreme smoke cells first bend? |
 | 48 | [ordinal-omega-target-audit](48-ordinal-omega-target-audit/report.qmd) | probe | active | Does the current ordinal observed-score covariance omega equal the direct one-factor ordinal true-score target, or is it only on the same observed-score metric? |
 | 51 | [sam-efficiency-stability](51-sam-efficiency-stability/report.qmd) | benchmark | active | Under normal, native independent-generator, and pseudo-continuous ordinal stress data, how do local SAM and joint ML compare on SE calibration, failures, and runtime at small N? |
-| 56 | [noniterative-constraint-charts](56-noniterative-constraint-charts/report.qmd) | probe | active | Does the estimator-side metric Guttman map stay invariant to arbitrary marker-chart choices, on and off the constraint surface? |
 | 60 | [guttman-admissibility-clamp](60-guttman-admissibility-clamp/report.qmd) | benchmark | active | Which hard or soft finite-sample communality clamp best repairs inadmissible aligned Guttman draws without degrading loading RMSE or empirical-SE coverage relative to Raw and NTML? |
 | 73 | [psd-ml-timing](73-psd-ml-timing/report.qmd) | benchmark | active | What does covariance-honest complete-data NTML cost when run directly or only after an ordinary fit fails its covariance audit? |
 | 75 | [psd-ml-basin-audit](75-psd-ml-basin-audit/report.qmd) | benchmark | active | When PSD-ML returns an admissible KKT-stationary solution, how often does a multistart portfolio find a materially better basin? |
 | 78 | [psd-estimator-stress](78-psd-estimator-stress/report.qmd) | benchmark | active | Across the supported single-level estimator families, where do covariance-honest point fits remain correct, admissible, stable across starts, and computationally practical? |
-| 83 | [sem-total-variance](83-sem-total-variance/report.qmd) | benchmark | complete | Engineering decision: retain unscaled native PSD ML; diagonal scaling stays opt-in and boundary-specific restarts remain experimental. |
 | 87 | [sphere-chart-sanity](87-sphere-chart-sanity/report.qmd) | probe | active | Does the sphere chart reproduce the standard fit across identification conventions, invariance, constraint syntax and estimators, recover known populations in every identification that holds them, and flag the ones that cannot? |
 | 88 | [sphere-local-convergence](88-sphere-local-convergence/report.qmd) | probe | active | How often does ML reach a certified local optimum on the ordinary and sphere routes under marker and std.lv identification, and are the failures optimizer failures or missing estimates? |
 
 ## Archived
 
-Existing archive; no additional moves in this classification pass.
+Retired engineering investigations. Experiments 56 and 83 were archived on
+2026-09-24; their sources and local results were preserved.
 
 | # | Experiment | Question |
 |--:|------------|----------|
@@ -174,6 +173,8 @@ Existing archive; no additional moves in this classification pass.
 | 11 | [ordinal-snlls-speed](_archive/11-ordinal-snlls-speed/report.qmd) | Does ordinal SNLLS show the same speed pattern as continuous SNLLS once thresholds and ordinal weights are in the objective? |
 | 12 | [ordinal-threshold-constraints](_archive/12-ordinal-threshold-constraints/report.qmd) | Which ordinal fitting paths can handle equality constraints on thresholds? |
 | 13 | [ordinal-construction-boundary](_archive/13-ordinal-construction-boundary/report.qmd) | What does ordinal statistic construction (lazy vs eager) cost before fitting begins? |
+| 56 | [noniterative-constraint-charts](_archive/56-noniterative-constraint-charts/report.qmd) | Does the estimator-side metric Guttman map stay invariant to arbitrary marker-chart choices, on and off the constraint surface? |
+| 83 | [sem-total-variance](_archive/83-sem-total-variance/report.qmd) | Engineering decision: retain unscaled native PSD ML; diagonal scaling stays opt-in and boundary-specific restarts remain experimental. |
 
 `_support/` (path, metadata, and I/O helpers; no SEM logic) is the only shared
 sibling an experiment may consume. Numbers are permanent IDs; classifications

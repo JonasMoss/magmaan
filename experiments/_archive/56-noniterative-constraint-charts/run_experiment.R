@@ -11,7 +11,7 @@ suppressWarnings(suppressMessages(library(magmaan)))
 
 source(file.path(
   dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
-  "..", "_support", "R", "helpers.R"
+  "..", "..", "_support", "R", "helpers.R"
 ))
 
 set_single_threaded_math()
