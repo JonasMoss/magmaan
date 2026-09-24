@@ -29,6 +29,15 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+- **M, corpus fidelity.** Repair the Little LISREL translation before renewed
+  corpus performance claims: multiple references per `VA`, leading-dot numeric
+  values, residual `EQ` constraints, and `TY`/`AL` mean structure are currently
+  lost. Five Chapter 8 fixtures are demonstrably mistranslated. Audit affected
+  retained cases upstream, regenerate fixtures/dependent geometries, and
+  investigate default-start failures on corrected Figure 3b and Geiser's
+  structurally correct latent-path model. See
+  [source audit](../validation/textbook-translation-audit.md).
+
 The remaining explicit convergence-audit extensions are deferred to
 [speculative.md](speculative.md#convergence-audit-extensions). The implemented
 coverage and contracts live in [terminal-audit.md](../design/terminal-audit.md);

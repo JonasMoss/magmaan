@@ -659,7 +659,12 @@ validation track.
 
 The advisory continuous-corpus audit in
 `cpp/tests/checks/psd_ml_corpus/` re-estimates 97 checked-in textbook and paper
-model/data summaries by ordinary NTML and PSD-ML. Six ordinary solutions had
+model/data summaries by ordinary NTML and PSD-ML. **Source-fidelity caveat
+(2026-09-24):** five Little Chapter 8 fixtures have mistranslated loadings,
+residual constraints and means; these results characterize the stored inputs,
+not faithful versions of all published examples. See the
+[translation audit](../validation/textbook-translation-audit.md) before using
+the corpus for performance claims. Six ordinary solutions had
 inadmissible primitive covariance matrices; all six were repaired, while the
 other 91 PSD refits reproduced ordinary estimates to a maximum absolute
 parameter difference of \(3.21\times 10^{-6}\). The cases include negligible-fit
