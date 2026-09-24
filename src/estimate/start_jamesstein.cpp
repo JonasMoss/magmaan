@@ -20,8 +20,7 @@ using data::SampleStats;
 
 // jamesstein_start_values — James-Stein-type shrinkage start values for CFA
 // factor loadings (Burghgraeve, De Neve & Rosseel 2021), used as a start-value
-// producer. Port of lavaan's `lav_cfa_jamesstein` (the non-aggregated "JS"
-// variant).
+// producer: the non-aggregated "JS" variant, not the aggregated "JSA".
 //
 // For the non-aggregated estimator each non-marker loading is the OLS slope of
 // the indicator on a James-Stein conditional expectation E(η|y_marker). Since

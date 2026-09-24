@@ -862,7 +862,7 @@ build_group_template(const parse::FlatPartable& flat,
     }
   }
   if (opts.auto_cov_y) {
-    // Match lavaan's `lvov.names.y` (R/lav_partable_flat.R:227): pair up the
+    // Match lavaan's `auto.cov.y` behaviour: pair up the
     // *terminal* endogenous variables — latent or observed — and add
     // residual covariances between them. "Endogenous" = appears as LHS of a
     // Regression. "Terminal" = does NOT appear as RHS of any Regression.
@@ -1160,8 +1160,8 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // variance, and makes the std.lv invariance model strictly more restrictive
   // than its marker-parameterized equivalent — so df would no longer match
   // across scaling conventions, even though the two are supposed to be the same
-  // model in different coordinates. lavaan frees them (`lav_partable_flat.R`,
-  // "new in 0.6-4", upstream fecaf6b7 2019-06-27); we mirror that.
+  // model in different coordinates. lavaan frees them (since 0.6-4); we match
+  // that.
   //
   // Runs before Step 8b so the released rows are visible to `will_be_free`.
   // That only matters defensively: `LvVariances` is absent from `group_equal`

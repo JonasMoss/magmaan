@@ -95,9 +95,9 @@ double std_normal_quantile(double p) noexcept {
          (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0);
 }
 
-// Root-mean-square residual summary for one section (cov / mean / total) — a
-// direct port of lavaan's `lav_residuals_summary_rms` with the `lavResiduals`
-// defaults (se, zstat, pvalue, unbiased, unbiased.se/ci/zstat/pvalue all on).
+// Root-mean-square residual summary for one section (cov / mean / total).
+// Matches the summary lavaan's `lavResiduals()` reports under its defaults
+// (se, zstat, pvalue, unbiased, unbiased.se/ci/zstat/pvalue all on).
 // `stats` is the residual vector, `acov` its (cor.bentler) ACOV, `pstar` the
 // moment count the RMS averages over. An empty section returns rms = 0 with the
 // inferential fields left NaN (lavaan disables se/zstat/unbiased there).

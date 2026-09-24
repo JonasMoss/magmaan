@@ -31,9 +31,9 @@ struct Fabin1F {
   bool neg_triad = false;
 };
 
-// Closed-form 1-factor solution for <= 3 indicators — port of lavaan's
-// `lav_cfa_1fac_3ind` (lav_cfa_1fac.R). `S0` is the indicator submatrix with
-// the reference indicator at index 0.
+// Closed-form 1-factor solution for <= 3 indicators (the just-identified
+// triad solution). `S0` is the indicator submatrix with the reference
+// indicator at index 0.
 Fabin1F fabin_3ind(const Eigen::MatrixXd& S0, bool std_lv) {
   const Eigen::Index nvar = S0.rows();
   Eigen::Matrix3d S = Eigen::Matrix3d::Zero();
@@ -84,8 +84,8 @@ Fabin1F fabin_3ind(const Eigen::MatrixXd& S0, bool std_lv) {
   return out;
 }
 
-// 1-factor FABIN for >= 4 indicators — port of lavaan's `lav_cfa_1fac_fabin`
-// (FABIN3 / FABIN2). `S` is the indicator submatrix, reference at index 0.
+// 1-factor FABIN (Hägglund 1982; FABIN3 / FABIN2) for >= 4 indicators.
+// `S` is the indicator submatrix, reference at index 0.
 Fabin1F fabin_nfac(const Eigen::MatrixXd& S, FabinVariant variant,
                    bool std_lv) {
   const Eigen::Index nvar = S.rows();

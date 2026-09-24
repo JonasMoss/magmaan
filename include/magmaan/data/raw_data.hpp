@@ -101,8 +101,8 @@ empirical_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X);
 //   │      = cross.transpose()                  = `empirical_gamma(X)`  │
 //   └                                                                   ┘
 //
-// where D_i = vech((y_i − ȳ)(y_i − ȳ)ᵀ). Matches lavaan's
-// `lav_samplestats_gamma.R:374-407` with `gamma_n_minus_one = FALSE`.
+// where D_i = vech((y_i − ȳ)(y_i − ȳ)ᵀ). Matches lavaan's Gamma with
+// `gamma.n.minus.one = FALSE`.
 // Under multivariate normality the cross-block vanishes (third moments
 // = 0); under any skewed distribution it carries the population third
 // moments that proper Browne-1984 ADF requires. Use this whenever the

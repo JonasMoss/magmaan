@@ -109,8 +109,9 @@ void enlarge_cov(double& lo, double& hi, double range, const TypeRule& r) {
   }
 }
 
-// The shared lavaan `lav_partable_add_bounds` engine, parameterised by a
-// preset. Mirrors lavaan/R/lav_partable_bounds.R.
+// The shared engine behind the data-derived bound presets, parameterised by a
+// preset. Matches the bounds lavaan's `optim.bounds` / `bounds =` options
+// produce.
 post_expected<Bounds>
 compute_auto_bounds(const spec::LatentStructure& pt,
                     const data::SampleStats& samp, const Preset& preset) {

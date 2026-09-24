@@ -16,7 +16,7 @@
 #include "magmaan/spec/build.hpp"
 
 // Phase-1 stabilizer bound builders. The data-derived builders mirror lavaan's
-// `optim.bounds` algorithm (lavaan/R/lav_partable_bounds.R); the expected
+// `optim.bounds` behaviour; the expected
 // numbers below were cross-checked against lavaan 0.6.22's `cfa(..., bounds=)`
 // — see the oracle traced in the test comments. magmaan uses the sample
 // covariance directly as lavaan's internal (biased) `OV.VAR`, so a lavaan

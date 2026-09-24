@@ -21,11 +21,11 @@ namespace magmaan::estimate {
 using data::SampleStats;
 
 // guttman_start_values — Guttman's (1952) "multiple group method" for CFA
-// factor loadings, used as a start-value producer. Port of the non-force-pd
-// path of lavaan's `lav_cfa_guttman1952`. Equals `simple_start_values` for
-// every parameter except free loadings; a block it cannot handle (a
-// structural part, crossloadings, a factor without a marker or with fewer
-// than three indicators) keeps its simple-baseline loadings. Hints still win.
+// factor loadings, used as a start-value producer, with no positive-
+// definiteness repair. Equals `simple_start_values` for every parameter
+// except free loadings; a block it cannot handle (a structural part,
+// crossloadings, a factor without a marker or with fewer than three
+// indicators) keeps its simple-baseline loadings. Hints still win.
 fit_expected<Eigen::VectorXd>
 guttman_start_values(const spec::LatentStructure& pt,
                      const model::MatrixRep& rep,

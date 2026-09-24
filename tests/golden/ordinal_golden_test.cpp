@@ -117,9 +117,9 @@ std::string ordinal_syntax(const nlohmann::json& exp) {
   return src;
 }
 
-// lavaan's categorical LS test statistic is sum_g (n_g - 1) * F_g
-// (lav_model_objective.R: `group.fx = 0.5 * (nobs - 1)/nobs * group.fx` for
-// ULS/DWLS/WLS, combined by weighted.mean with weights n_g), while magmaan's
+// lavaan's categorical LS test statistic is sum_g (n_g - 1) * F_g (for
+// ULS/DWLS/WLS each group's objective carries a (n_g - 1)/n_g factor and the
+// groups are combined with weights n_g), while magmaan's
 // documented convention (docs/design/numerical-conventions.md) is
 // chisq = 2 * N * fmin = sum_g n_g * F_g. Rescale magmaan's statistic by the
 // global (N - G)/N before comparing; the per-group-vs-global residual is

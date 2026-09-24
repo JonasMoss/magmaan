@@ -127,7 +127,7 @@ empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X) {
   const double inv_n = 1.0 / static_cast<double>(n);
 
   // Stacked NACOV per Browne 1984 with meanstructure (matches lavaan's
-  // `lav_samplestats_gamma.R:374-407`): rows of the unstacked Z matrix
+  // Gamma with a mean structure): rows of the unstacked Z matrix
   // are [y_i ; vech((y_i − ȳ)(y_i − ȳ)ᵀ)]. After colMeans subtraction,
   // Zc = [Xc ; Dc] (Xc is centered y, Dc is centered vech outer product).
   // The four sub-blocks of (1/n)·Zcᵀ·Zc:

@@ -15,8 +15,8 @@
 
 namespace magmaan::estimate {
 
-// Per-variable residual variance via the Spearman communality heuristic —
-// port of lavaan's `lav_cfa_theta_spearman` with "wide" bounds. `S` should be
+// Per-variable residual variance via the Spearman communality heuristic,
+// with "wide" bounds. `S` should be
 // a single factor's indicator (co)variance submatrix. For < 3 indicators the
 // communality is undefined; falls back to 0.5 * variance.
 Eigen::VectorXd theta_spearman(const Eigen::MatrixXd& S);

@@ -3250,7 +3250,7 @@ oracle from `tests/tools/regen_robust_score.R`, and the advisory
   The cor.bentler residual ACOV is the existing raw-metric `acov_res`
   (`Q·acov_obs·Qᵀ` in `fill_residual_z`) congruence-scaled by the sample SDs
   (Ogasawara 2001 eq. 13; verified `GG·acov_raw·GG == lavaan cor.bentler acov` to
-  machine zero), so no new projection — just the RMS summary port of lavaan's
+  machine zero), so no new projection — just the RMS summary matching lavaan's
   `lav_residuals_summary_rms`. R: `lav_residuals(fit)` (exported) and
   `residuals(fit, standardized = TRUE)$summary` carry it; one C++ call.
   Gated full-precision vs lavaan 0.7.1.2691 in `tests/unit/residuals_test.cpp`

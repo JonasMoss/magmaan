@@ -15,10 +15,10 @@
 
 namespace magmaan::estimate::frontier {
 
-// Structural-After-Measurement (SAM) two-step estimator — a research-surface
-// port of lavaan's `sam()` (Rosseel & Loh 2022/2024). SAM fits the measurement
-// model (Λ, Θ) first, forms a bias-corrected latent covariance VETA (and, with
-// a mean structure, latent means EETA), then fits the structural model (B, Ψ)
+// Structural-After-Measurement (SAM) two-step estimator (Rosseel & Loh
+// 2022/2024), a research surface. SAM fits the measurement model (Λ, Θ)
+// first, forms a bias-corrected latent covariance VETA (and, with a mean
+// structure, latent means EETA), then fits the structural model (B, Ψ)
 // against VETA/EETA as if they were latent-level sample statistics. Fitting the
 // measurement part first compartmentalizes structural misspecification away from
 // the loadings and is far better behaved than joint ML at small N.

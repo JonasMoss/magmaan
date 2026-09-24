@@ -22,7 +22,7 @@ namespace magmaan::estimate {
 using data::SampleStats;
 
 // bentler1982_start_values — Bentler's (1982) non-iterative CFA estimator,
-// used as a start-value producer (ULS variant). Port of `lav_cfa_bentler1982`.
+// used as a start-value producer (ULS variant).
 // Equals `simple_start_values` for every parameter except free loadings; a
 // block it cannot handle (a structural part, crossloadings, a factor without a
 // marker, no non-marker indicators, a singular intermediate) keeps its

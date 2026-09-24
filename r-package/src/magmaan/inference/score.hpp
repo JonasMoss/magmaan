@@ -198,8 +198,8 @@ score_tests_fiml(spec::LatentStructure pt,
 
 // ── Robust (generalized / Satorra-Bentler-scaled) score tests ───────────────
 //
-// Frontier surface: goes beyond lavaan, which falls back to the ordinary
-// statistic when `se != "standard"` (see lav_test_score.R). For every fixed-row
+// Frontier surface: goes beyond lavaan, whose `lavTestScore()` falls back to
+// the ordinary statistic when `se != "standard"`. For every fixed-row
 // / equality-release candidate these report `mi` (the ordinary NT statistic) and
 // `mi_scaled = mi / c` with the per-direction scaling `c = gᵀB1g / gᵀA1g`, where
 // A1/B1 are the parameter-space sandwich bread/meat (`robust::param_space_sandwich`)
