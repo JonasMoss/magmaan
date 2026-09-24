@@ -226,6 +226,30 @@ semantics · **XL** statistical design/research track before implementation.
   compare standardized parameter/moment changes, and freeze targets before
   held-out model/unit/rank validation. Neither the existing two-model pilot
   nor this prioritization establishes a production convergence policy.
+- **High priority / M — make the Newton check part of the default
+  convergence verdict (author, 2026-09-24).** `common_fit_verdict` still
+  passes a fit on the first-order residual alone: the metric-dual L2 residual
+  at most 1e-3, ambient for ordinary fits and cone for PSD fits. The
+  author's validated policy is Newton accuracy at regular interiors and the
+  cone check only at PSD boundaries. The old interior residual becomes
+  telemetry, not an extra veto.
+  - **Change.** For complete-data ML, ordinary and PSD:
+    - an interior point passes when `newton_accuracy_ml` is available with
+      d <= .01;
+    - a PSD fit with a singular primitive block keeps the cone check.
+    This is the criterion the covariance paper already applies through its
+    own bridge. Decide how a nonpositive-curvature, ill-conditioned or
+    unsupported (nonlinear-constraint) Newton status maps to the verdict.
+    The paper counts them as not converged.
+  - **Scope.** LS, FIML, ordinal and two-level fits keep the first-order
+    verdict until each has its own curvature analogue: Gauss-Newton
+    information for LS, observed information for FIML.
+  - **Cost.** One analytic observed information per fit. Time it on the
+    large corpus models before making it unconditional.
+  - **Downstream.** Once this lands, re-pin `papers/covariance-honest-sem`,
+    drop its bridge (`project/analysis/cpp/newton_audit.cpp`) and rerun
+    every accepted study at the new revision. The paper plans this as one
+    final rerun.
 
 ### Score/inference adapter follow-ups
 
