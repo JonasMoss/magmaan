@@ -70,6 +70,67 @@ production fit verdict, or make PSD fitting the default estimator. The
 validation and remaining boundary/fallback limitations are documented in
 [the numerical study](../validation/interior-newton-audit.md).
 
+## Composable starting values
+
+Start construction and optimizer-coordinate scaling are separate operations.
+The public `estimate/start_pipeline.hpp` interface provides:
+
+- `construct_start_values(..., StartMethod, hints)` for native simple, FABIN2,
+  FABIN3, Guttman, Bentler-1982 and James–Stein constructors.
+- `prepare_std_lv_transport(target, rep)` to check eligibility and prepare the
+  auxiliary unit-latent-variance model. It does not use sample statistics.
+- `transport_start_values(plan, source_theta)` to transport any start producer's
+  vector into the original marker model. It preserves implied moments before
+  target-coordinate user hints are applied; it does not enforce PSD.
+- `start_values(..., StartPolicy, hints)` to compose these steps. `Native`
+  skips transport; `AutoStdLv` falls back to the same constructor in the target
+  model; `RequireStdLv` returns an error instead of falling back.
+  `ml_start_values` is the auto-transported FABIN3 shortcut.
+
+For example, after checking each returned `expected`, the explicit C++ steps are:
+
+```cpp
+auto plan = estimate::prepare_std_lv_transport(pt, rep);
+auto source = estimate::simple_start_values(plan->source, plan->source_rep, stats);
+auto target = estimate::transport_start_values(*plan, *source);
+```
+
+The equivalent shortcut is `start_values(pt, rep, stats,
+{StartMethod::Simple, StartTransport::RequireStdLv})`.
+The prepared source model and its representation can be passed directly to
+any existing start producer. Transport currently supports the conservative
+std.lv-to-marker route only; effect-coded, spherical and constrained layouts
+are not silently converted. Unsupported equalities, fixed values and marker
+layouts have distinct reasons from an invalid source vector, unusable marker
+scale, nonfinite transported values or fixed-value mismatch. A failed native
+constructor returns an error. Existing within-constructor fallbacks remain
+unchanged (for example FABIN3 uses FABIN2 for a singular instrument matrix
+and retains simple loadings outside its supported indicator layouts). Finite target-coordinate hints take precedence;
+changing those hints can change the implied moments after transport.
+
+Ordinary coordinate scaling remains `ml_coordinate_scale` plus the optimizer
+adapter that transforms parameters and derivatives. PSD information scaling
+remains part of its lifted optimizer. Neither operation is implemented by
+multiplying a start vector alone. Their existing defaults are unchanged.
+
+In R, omitted starts and `start="default"` now mean the same thing within each
+entry point. Complete-data ML and `magmaan_core$estimate_start_values()` use
+`scaled-fabin` by default. Explicit `simple`, `fabin2`, `fabin3` (also `lavaan`)
+and other method names retain native construction. The start-vector helper
+also accepts an independent `transport="auto"`, `"native"` or `"required"`:
+
+```r
+x0 <- magmaan_core$estimate_start_values(
+    model$partable, stats, start = "simple", transport = "auto")
+```
+
+The helper returns a numeric vector with `start_method`, `start_transport`
+and `start_fallback_reason` attributes. ML fit results retain `ml_start_policy`
+and add `ml_start_fallback_reason`; optimizer scaling is reported separately.
+The helper's former implicit `simple` default is an intentional interface
+change: request `start="simple"` explicitly to reproduce it. Other estimators'
+omitted defaults are unchanged.
+
 ## NLopt: L-BFGS, SLSQP, VAR2, TNEWTON and BOBYQA
 
 | Explicit field | Meaning | When absent |

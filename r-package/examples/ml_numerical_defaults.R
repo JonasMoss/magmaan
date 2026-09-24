@@ -25,3 +25,31 @@ stopifnot(identical(p$psd_preconditioning,'diagonal'))
 u <- frontier_fit_ml_psd(m,s,preconditioning='none')
 stopifnot(identical(u$psd_preconditioning,'none'),max(abs(p$theta-u$theta))<1e-4)
 cat('ML numerical default checks passed.\n')
+
+# Start construction, transport and optimizer scaling are independent.
+x0 <- magmaan_core$estimate_start_values(m$partable, s)
+xd <- magmaan_core$estimate_start_values(m$partable, s, start="default")
+stopifnot(identical(x0, xd), attr(x0, "start_transport") == "std-lv-to-marker",
+          attr(x0, "start_fallback_reason") == "none")
+d <- magmaan_core$fit_ml(m, s, control=list(start="default"))
+stopifnot(identical(a$theta, d$theta), d$ml_start_fallback_reason == "none")
+xs <- magmaan_core$estimate_start_values(m$partable, s, start="simple", transport="auto")
+xn <- magmaan_core$estimate_start_values(m$partable, s, start="simple", transport="native")
+stopifnot(attr(xs, "start_transport") == "std-lv-to-marker",
+          attr(xn, "start_transport") == "native", max(abs(xs-xn)) > .01)
+fixed <- model_spec('f =~ x1 + 2*x2 + x3 + x4')
+xf <- magmaan_core$estimate_start_values(fixed$partable, s)
+xfn <- magmaan_core$estimate_start_values(fixed$partable, s, start="fabin3")
+stopifnot(identical(as.numeric(xf), as.numeric(xfn)),
+          attr(xf, "start_fallback_reason") == "fixed-values-unsupported")
+required <- try(magmaan_core$estimate_start_values(fixed$partable, s, transport="required"), silent=TRUE)
+stopifnot(inherits(required, "try-error"))
+fallback_fit <- magmaan_core$fit_ml(fixed, s, optimizer="nlopt-slsqp")
+stopifnot(fallback_fit$ml_start_fallback_reason == "fixed-values-unsupported",
+          fallback_fit$ml_sample_scaling)
+cat('Composable start policy checks passed.\n')
+pd <- frontier_fit_ml_psd(m, s, control=list(start="default"))
+stopifnot(identical(p$theta, pd$theta), pd$ml_start_fallback_reason == "none")
+fb <- frontier_fit_ml_psd_fallback(m, s, ordinary_control=list(start="default"))
+stopifnot(fb$ordinary$ml_start_policy == a$ml_start_policy,
+          fb$ordinary$ml_start_fallback_reason == "none")

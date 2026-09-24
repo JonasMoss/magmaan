@@ -39,8 +39,9 @@ semantics · **XL** statistical design/research track before implementation.
   [source audit](../validation/textbook-translation-audit.md).
   Geiser's marker default-start failures are resolved by correcting Reduced
   representation handling in simple/FABIN starts. Remaining: std.lv L-BFGS
-  robustness, transported-start coverage for structural models, and the R
-  `start="default"` versus omitted-control mismatch. Do not conflate these
+  robustness and transported-start coverage for structural models. The start
+  pipeline now separates constructor/transport/scaling and reports fallback
+  reasons; R `start="default"` agrees with omission. Do not conflate these
   remaining issues with the repaired observed-parameter start mapping.
 
 The remaining explicit convergence-audit extensions are deferred to

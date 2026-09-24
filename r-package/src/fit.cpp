@@ -85,8 +85,8 @@ std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
     if (ch == '_') ch = '-';
     else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
   }
-  if (name.empty() || name == "default" || name == "lavaan" ||
-      name == "fabin") {
+  if (name.empty() || name == "default") return default_name;
+  if (name == "lavaan" || name == "fabin") {
     return "fabin3";
   }
   if (name == "scaled-fabin" || name == "simple" || name == "fabin2" || name == "fabin3" ||
@@ -96,51 +96,37 @@ std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
     return name;
   }
   Rcpp::stop("magmaan: %s(): unsupported start '%s' "
-             "(accepted: simple, fabin2, fabin3, guttman, bentler1982, jamesstein)",
+             "(accepted: default, scaled-fabin, simple, fabin2, fabin3, guttman, bentler1982, jamesstein)",
              caller, name.c_str());
   return default_name;
 }
 
-// The estimate::fit* core takes an explicit start vector. These helpers
-// compute the starting values from a parsed model and abort to R on failure.
-// The R-facing layer owns the choice of starting algorithm; ordinary fits
-// default to FABIN3 (Hägglund 1982), matching lavaan's default.
+magmaan::estimate::StartMethod start_method(const std::string& name) {
+  using M = magmaan::estimate::StartMethod;
+  if (name == "simple") return M::Simple;
+  if (name == "fabin2") return M::Fabin2;
+  if (name == "guttman" || name == "guttman1952") return M::Guttman;
+  if (name == "bentler" || name == "bentler1982") return M::Bentler1982;
+  if (name == "jamesstein" || name == "james-stein" || name == "js") return M::JamesStein;
+  return M::Fabin3;
+}
+
+// Thin composition over the core pipeline; coordinate scaling belongs to fit.
 Eigen::VectorXd start_values_or_stop(const Ctx& ctx,
                                      const magmaan::spec::Starts& starts,
                                      const std::string& start_name = "fabin3",
-                                     std::string* applied_policy = nullptr) {
-  magmaan::fit_expected<Eigen::VectorXd> x;
-  if (applied_policy) *applied_policy = start_name;
-  if (start_name == "scaled-fabin") {
-    auto value = magmaan::estimate::ml_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
-    if (!value) stop_fit(value.error());
-    if (applied_policy) *applied_policy =
-        value->branch == magmaan::estimate::MlStartBranch::TransportedStdLv
-            ? "transported-std-lv-fabin" : "native-fabin-fallback";
-    return std::move(value->theta);
-  } else if (start_name == "simple") {
-    x = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp,
-                                               starts);
-  } else if (start_name == "fabin2") {
-    x = magmaan::estimate::fabin_start_values(
-        ctx.pt, ctx.rep, ctx.samp, starts,
-        magmaan::estimate::FabinVariant::Fabin2);
-  } else if (start_name == "guttman" || start_name == "guttman1952") {
-    x = magmaan::estimate::guttman_start_values(ctx.pt, ctx.rep, ctx.samp,
-                                                starts);
-  } else if (start_name == "bentler" || start_name == "bentler1982") {
-    x = magmaan::estimate::bentler1982_start_values(ctx.pt, ctx.rep,
-                                                    ctx.samp, starts);
-  } else if (start_name == "jamesstein" || start_name == "james-stein" ||
-             start_name == "js") {
-    x = magmaan::estimate::jamesstein_start_values(ctx.pt, ctx.rep, ctx.samp,
-                                                   starts);
-  } else {
-    x = magmaan::estimate::fabin_start_values(ctx.pt, ctx.rep, ctx.samp,
-                                              starts);
-  }
-  if (!x.has_value()) stop_fit(x.error());
-  return std::move(*x);
+                                     std::string* applied_policy = nullptr,
+                                     std::string* fallback_reason = nullptr) {
+  namespace es = magmaan::estimate;
+  const es::StartPolicy policy{start_method(start_name), start_name == "scaled-fabin"
+      ? es::StartTransport::AutoStdLv : es::StartTransport::Native};
+  auto value = es::start_values(ctx.pt, ctx.rep, ctx.samp, policy, starts);
+  if (!value) stop_fit(value.error());
+  if (applied_policy) *applied_policy = start_name == "scaled-fabin"
+      ? (value->branch == es::MlStartBranch::TransportedStdLv
+          ? "transported-std-lv-fabin" : "native-fabin-fallback") : start_name;
+  if (fallback_reason) *fallback_reason = es::start_transport_reason(value->fallback_reason);
+  return std::move(value->theta);
 }
 
 Eigen::VectorXd ordinal_starts_or_stop(const Ctx& ctx,
@@ -2470,13 +2456,14 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
   std::string start_policy = "scaled-fabin";
+  std::string start_fallback_reason = "none";
   if (control.isNotNull()) {
     Rcpp::List ctl(control.get());
     if (ctl.containsElementNamed("start"))
       start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
                                           "fit_ml", "scaled-fabin");
   }
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0,
       bounds_from_nullable(bounds), backend, optim_opts_from(control, magmaan::estimate::ml_optim_options()));
@@ -2484,6 +2471,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "ML");
   out["ml_start_policy"] = start_policy;
+  out["ml_start_fallback_reason"] = start_fallback_reason;
   return out;
 }
 
@@ -2505,13 +2493,14 @@ Rcpp::List frontier_fit_ml_psd_impl(
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
   std::string start_policy = "scaled-fabin";
+  std::string start_fallback_reason = "none";
   if (control.isNotNull()) {
     Rcpp::List ctl(control.get());
     if (ctl.containsElementNamed("start"))
       start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
                                           "fit_ml", "scaled-fabin");
   }
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason);
   const magmaan::estimate::Backend backend =
       optimizer.isNull()
           ? magmaan::estimate::Backend::NloptSlsqp
@@ -2527,6 +2516,7 @@ Rcpp::List frontier_fit_ml_psd_impl(
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "ML");
   out["ml_start_policy"] = start_policy;
+  out["ml_start_fallback_reason"] = start_fallback_reason;
   out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
   return out;
 }
@@ -2546,6 +2536,7 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
   std::string start_policy = "scaled-fabin";
+  std::string start_fallback_reason = "none";
   if (ordinary_control.isNotNull()) {
     Rcpp::List ctl(ordinary_control.get());
     if (ctl.containsElementNamed("start"))
@@ -2554,7 +2545,7 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
   }
   if (psd_control.isNotNull() && Rcpp::List(psd_control.get()).containsElementNamed("start"))
     Rcpp::stop("set the initial start policy in ordinary_control; PSD uses the ordinary estimates or that original start");
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason);
   ef::MlPsdFallbackOptions options;
   options.ordinary_backend = backend_from_optimizer_arg(ordinary_optimizer);
   if (psd_optimizer.isNotNull())
@@ -2568,10 +2559,13 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
   auto attempt = [&](const magmaan::fit_expected<magmaan::estimate::Estimates>& value,
                      bool psd) {
     Rcpp::List row = Rcpp::List::create(
-        Rcpp::_["fit"] = R_NilValue, Rcpp::_["error"] = R_NilValue);
+        Rcpp::_["fit"] = R_NilValue, Rcpp::_["error"] = R_NilValue,
+        Rcpp::_["ml_start_policy"] = psd && result.warm_start_used ? "ordinary-estimates" : start_policy,
+        Rcpp::_["ml_start_fallback_reason"] = psd && result.warm_start_used ? "none" : start_fallback_reason);
     if (value.has_value()) {
       Rcpp::List fit = fit_result(ctx, *value, &starts, "ML");
       fit["ml_start_policy"] = psd && result.warm_start_used ? "ordinary-estimates" : start_policy;
+      fit["ml_start_fallback_reason"] = psd && result.warm_start_used ? "none" : start_fallback_reason;
       if (psd) fit["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
       row["fit"] = fit;
     } else {
@@ -2763,15 +2757,16 @@ Rcpp::List frontier_fit_sphere_impl(
       metric, pin_weight, pole_tol, polish, start, &starts, control);
 
   Eigen::VectorXd x0;
+  std::string start_policy = "scaled-fabin";
+  std::string start_fallback_reason = "none";
   if (estimator == "ML") {
-    std::string start_policy = "scaled-fabin";
     if (control.isNotNull()) {
       Rcpp::List ctl(control.get());
       if (ctl.containsElementNamed("start"))
         start_policy = start_name_from_arg(
             Rcpp::Nullable<Rcpp::String>(ctl["start"]), "fit_ml", "scaled-fabin");
     }
-    x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+    x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason);
   } else {
     x0 = start_values_or_stop(ctx, starts);
   }
@@ -2823,6 +2818,10 @@ Rcpp::List frontier_fit_sphere_impl(
   }
   Rcpp::List out = fit_result(ctx, r->estimates, &starts, estimator.c_str());
   out["gauge"] = gauge_report_to_r(ctx, *r, metric);
+  if (estimator == "ML") {
+    out["ml_start_policy"] = start_policy;
+    out["ml_start_fallback_reason"] = start_fallback_reason;
+  }
   if (psd) out["psd_preconditioning"] = diagonal_preconditioning ? "diagonal" : "none";
   return out;
 }
@@ -3009,13 +3008,14 @@ Rcpp::List frontier_fit_ml_multiinfo_impl(
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
   std::string start_policy = "scaled-fabin";
+  std::string start_fallback_reason = "none";
   if (control.isNotNull()) {
     Rcpp::List ctl(control.get());
     if (ctl.containsElementNamed("start"))
       start_policy = start_name_from_arg(Rcpp::Nullable<Rcpp::String>(ctl["start"]),
                                           "fit_ml", "scaled-fabin");
   }
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto r = magmaan::estimate::frontier::fit_ml_multiinfo(
       ctx.pt, ctx.rep, ctx.samp, x0, multiinfo_options_from(eta, weight, target),
@@ -3024,6 +3024,7 @@ Rcpp::List frontier_fit_ml_multiinfo_impl(
   if (!r.has_value()) stop_fit(r.error());
   Rcpp::List out = fit_result(ctx, r->estimates, &starts, "ML");
   out["ml_start_policy"] = start_policy;
+  out["ml_start_fallback_reason"] = start_fallback_reason;
   out["penalty"] = multiinfo_penalty_to_r(ctx, *r);
   return out;
 }
@@ -7012,19 +7013,36 @@ Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
 
 // fit_start_values() — returns a theta-ordered start vector (length npar).
 // `sample_stats` is as in fit_fit(); values are used verbatim. The default
-// remains "simple" for backward compatibility with the old helper.
+// matches complete-data ML: auto-transported FABIN3. Explicit simple/fabin3
+// retain their native meaning; transport can be selected independently.
 //
 // [[Rcpp::export]]
 Rcpp::NumericVector fit_start_values(
     SEXP partable, Rcpp::List sample_stats,
-    Rcpp::Nullable<Rcpp::String> start = R_NilValue) {
-  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
-  magmaan::spec::Starts starts = std::move(parsed.starts);
-  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
-                                  sample_stats);
-  const std::string start_name =
-      start_name_from_arg(start, "fit_start_values", "simple");
-  return Rcpp::wrap(start_values_or_stop(ctx, starts, start_name));
+    Rcpp::Nullable<Rcpp::String> start = R_NilValue,
+    Rcpp::Nullable<Rcpp::String> transport = R_NilValue) {
+  namespace es = magmaan::estimate;
+  auto parsed = partable_from_arg(partable, "fit_start_values");
+  auto starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  const auto name = start_name_from_arg(start, "fit_start_values", "scaled-fabin");
+  es::StartPolicy policy{start_method(name), name == "scaled-fabin"
+      ? es::StartTransport::AutoStdLv : es::StartTransport::Native};
+  if (transport.isNotNull()) {
+    const auto mode = Rcpp::as<std::string>(transport.get());
+    if (mode == "auto") policy.transport = es::StartTransport::AutoStdLv;
+    else if (mode == "native") policy.transport = es::StartTransport::Native;
+    else if (mode == "required") policy.transport = es::StartTransport::RequireStdLv;
+    else Rcpp::stop("transport must be auto, native or required");
+  }
+  auto value = es::start_values(ctx.pt, ctx.rep, ctx.samp, policy, starts);
+  if (!value) stop_fit(value.error());
+  Rcpp::NumericVector out = Rcpp::wrap(value->theta);
+  out.attr("start_method") = name == "scaled-fabin" ? "fabin3" : name;
+  out.attr("start_transport") = value->branch == es::MlStartBranch::TransportedStdLv
+      ? "std-lv-to-marker" : "native";
+  out.attr("start_fallback_reason") = es::start_transport_reason(value->fallback_reason);
+  return out;
 }
 
 // estimate_structured_gamma() — explicit MI4 / structured-ADF Gamma builder.

@@ -353,8 +353,8 @@ fit_wls_snlls_impl <- function(partable, sample_stats, W, optimizer = NULL, cont
     .Call(`_magmaan_fit_wls_snlls_impl`, partable, sample_stats, W, optimizer, control, bounds)
 }
 
-fit_start_values <- function(partable, sample_stats, start = NULL) {
-    .Call(`_magmaan_fit_start_values`, partable, sample_stats, start)
+fit_start_values <- function(partable, sample_stats, start = NULL, transport = NULL) {
+    .Call(`_magmaan_fit_start_values`, partable, sample_stats, start, transport)
 }
 
 estimate_structured_gamma <- function(fit, raw_data) {

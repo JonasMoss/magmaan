@@ -1,0 +1,51 @@
+#pragma once
+
+#include "magmaan/estimate/start_values.hpp"
+
+namespace magmaan::estimate {
+
+enum class StartMethod { Simple, Fabin2, Fabin3, Guttman, Bentler1982, JamesStein };
+enum class StartTransport { Native, AutoStdLv, RequireStdLv };
+enum class StartTransportIssue {
+  None, EqualityConstraints, FixedValues, MarkerLayout, SourceModel,
+  SourceStarts, InvalidScale, NonfiniteValues, FixedValueMismatch, InvalidVector
+};
+const char* start_transport_reason(StartTransportIssue);
+
+// A prepared identification transformation. Construct with prepare_std_lv_transport;
+// source and target must not be mutated afterwards. No sample statistics or start
+// algorithm are embedded here: any producer can supply the source vector.
+struct StdLvStartTransport {
+  spec::LatentStructure target, source;
+  model::MatrixRep target_rep, source_rep;
+  std::vector<std::vector<int>> markers;
+};
+std::expected<StdLvStartTransport, StartTransportIssue> prepare_std_lv_transport(
+    const spec::LatentStructure&, const model::MatrixRep&);
+std::expected<Eigen::VectorXd, StartTransportIssue> transport_start_values(
+    const StdLvStartTransport&, const Eigen::VectorXd& source);
+
+struct StartPolicy {
+  StartMethod method = StartMethod::Fabin3;
+  StartTransport transport = StartTransport::AutoStdLv;
+};
+enum class StartBranch { Native, TransportedStdLv, NativeFabin = Native };
+struct StartValues {
+  Eigen::VectorXd theta;
+  StartBranch branch = StartBranch::Native;
+  StartTransportIssue fallback_reason = StartTransportIssue::None;
+  StartMethod method = StartMethod::Fabin3;
+};
+
+fit_expected<Eigen::VectorXd> construct_start_values(
+    const spec::LatentStructure&, const model::MatrixRep&,
+    const data::SampleStats&, StartMethod, const spec::Starts& = {});
+
+// Compose constructor -> optional transport -> target-coordinate hints. Auto
+// falls back to the same native constructor; RequireStdLv returns an error.
+// Finite values are required, but PSD feasibility belongs to the fitter.
+fit_expected<StartValues> start_values(
+    const spec::LatentStructure&, const model::MatrixRep&,
+    const data::SampleStats&, const StartPolicy&, const spec::Starts& = {});
+
+} // namespace magmaan::estimate

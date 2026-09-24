@@ -73,6 +73,13 @@ stopping-code reporting across fitted results remains backlog work.
 Complete-data ML now defaults to the validated NLopt profile (5000 evaluations,
 relative objective/step tolerances 1e-12/1e-10). High-level ML uses transported
 std.lv FABIN starts where safe, with native fallback and user-hint preservation.
+The start pipeline separates native construction, preparation of an auxiliary
+identification and transport of a supplied vector (`estimate/start_pipeline.hpp`).
+Policies select native, automatic fallback or required transport; typed reasons
+distinguish unsupported layouts from numerical failures. Optimizer-coordinate
+scaling remains independent. R's ML and start-helper defaults agree on automatic
+transported FABIN3, and explicit `default` matches omission. Native method names
+remain available; start metadata reports the actual branch and fallback reason.
 Simple and FABIN starts interpret observed loadings, residual variances and
 intercepts by their model meaning even when Reduced LISREL stores them in
 Beta/Psi/Alpha phantom-state cells. This fixes skipped FABIN loadings,
