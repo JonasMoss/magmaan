@@ -2318,6 +2318,12 @@ Remaining work, tiered:
   - **Caveat.** At small N a near-zero marker loading is often sampling
     noise: the Ernst marker's true loading is 1. The message is "these data
     cannot set the scale through that item", not "wrong item".
+  - **Caveat: a failed fit can be a stall.** The diagnosis must check
+    whether the sphere optimum lies inside the user's identification. In
+    the Ernst PSD design at N = 10, all 28 marker failures were SLSQP stalls
+    at optima the marker identification contains (marker shares 0.005 to
+    0.84). Only then is the cause the optimizer, not the identification
+    (PSD-ML queue item 7).
   - **v1, M (after D1).** Report the cause on failed or flagged fits. The
     `magmaan_user_chart_singular` condition already names the unit that left
     the identification. Add the cause and the parameter at the boundary.
